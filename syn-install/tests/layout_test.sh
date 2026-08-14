@@ -779,6 +779,20 @@ check "the initramfs run calls mkinitcpio by ABSOLUTE path" "yes" \
 check "and never by bare name, which would hit the prompting shim" "no" \
     "$(in_code 'arch-chroot /mnt mkinitcpio -P')"
 
+# THE MODE OF grub.cfg. grub-mkconfig writes its output inside an unconditional
+# `umask 077`, so a file it has to CREATE — which is every fresh install — comes
+# out 0600 root:root. Nothing notices until something that is not root needs an
+# answer from it: syn-settings' Kernel pane reads grub.cfg as the user, got
+# "permission denied" for every question and recorded it as "no", so it reported
+# NO BOOT ENTRY about the kernel the machine was running and never offered to
+# change the boot default at all. Found in QEMU, 2026-08-13.
+check "the installer makes grub.cfg readable" "yes" \
+    "$(in_code 'chmod 0644 /mnt/boot/grub/grub.cfg')"
+# ...but not when it carries a password hash, which is why upstream's mode is
+# what it is.
+check "unless a GRUB password is configured in it" "yes" \
+    "$(in_code 'password(_pbkdf2)? ')"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"

@@ -882,6 +882,106 @@ if [ "$linux_here" = 1 ]; then
     unset STUBLOG
 fi
 
+# ── A config this pane may not READ ─────────────────────────────────────────
+#
+# THE BUG THESE EXIST FOR. grub-mkconfig writes grub.cfg inside an
+# unconditional `umask 077`, and syn-install creates it fresh in the chroot, so
+# /boot/grub/grub.cfg is 0600 root:root on every GRUB install — while the pane
+# reads it as the user. fopen returned NULL, the scanners called that "no", and
+# the pane reported NO BOOT ENTRY about the kernel the machine was RUNNING,
+# offered Make bootable for ever, and never once offered Make default, which is
+# gated on a definite yes.
+#
+# Every fixture in this file is mode 0644, which is exactly why the suite could
+# not see it: a permission the tests never pose cannot fail.
+mkdir -p "$bootfx/grubperm/boot/grub" "$bootfx/grubperm/etc/default" \
+         "$bootfx/grubperm/bin"
+printf "menuentry 'SynapseOS' \$menuentry_id_option 'gnulinux-simple-x' {\n linux /boot/vmlinuz-linux root=UUID=x\n}\n" \
+    > "$bootfx/grubperm/boot/grub/grub.cfg"
+printf 'GRUB_DEFAULT=0\n' > "$bootfx/grubperm/etc/default/grub"
+for stub in grub-mkconfig grub-set-default; do
+    printf '#!/bin/sh\nexit 0\n' > "$bootfx/grubperm/bin/$stub"
+    chmod +x "$bootfx/grubperm/bin/$stub"
+done
+
+# Mode 000 is how an unprivileged reader experiences a root-only file. It is
+# not how ROOT experiences one — root ignores the bits entirely — so the
+# privileged half is posed separately, at 0600, further down.
+if [ "$linux_here" = 1 ] && [ "$(id -u)" != 0 ]; then
+    chmod 000 "$bootfx/grubperm/boot/grub/grub.cfg"
+    st=$(boot_state "$bootfx/grubperm")
+    if [ "$st" = "installed, ENTRY UNKNOWN" ]; then
+        ok "boot: a config it may not read is not a config that says no"
+    else
+        bad "boot: unreadable config reported as '$st'"
+    fi
+
+    # And the row must still offer BOTH actions: on this very machine the
+    # action is what makes the config readable, so withholding it until the
+    # config can be read is a lock whose key is inside it.
+    act=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/grubperm" \
+          SYN_SETTINGS_RUNNING_RELEASE="0.0.0-synsettings-test" \
+          "$BIN" --rec kernel | awk -F'\t' '$1=="linux" {print $5}')
+    if printf '%s' "$act" | grep -q 'boot:linux' &&
+       printf '%s' "$act" | grep -q 'default:linux'; then
+        ok "boot: a blind row still offers the actions that would fix it"
+    else
+        bad "boot: blind row offered '$act'"
+    fi
+
+    # The dialogue must NAME the mode change. It is a privileged act, and the
+    # dry-run that fills the dialogue runs unprivileged against the one file it
+    # cannot read — so the step is stated with its condition rather than
+    # dropped from the list.
+    if SYN_SETTINGS_BOOT_ROOT="$bootfx/grubperm" PATH="$bootfx/grubperm/bin:$PATH" \
+       "$BIN" -n boot linux 2>/dev/null | grep -q '^step2	would write: mode 0644'; then
+        ok "boot: the confirmation names the mode change too"
+    else
+        bad "boot: the mode change was hidden from the confirmation"
+    fi
+else
+    ok "boot: skipped the unreadable-config checks (root, or no linux package)"
+fi
+
+# The repair, from the privileged half. 0600 is the faithful pose here: root
+# can read such a file, and the question is whether it puts the mode right.
+if [ "$linux_here" = 1 ]; then
+    chmod 600 "$bootfx/grubperm/boot/grub/grub.cfg"
+    SYN_SETTINGS_BOOT_ROOT="$bootfx/grubperm" PATH="$bootfx/grubperm/bin:$PATH" \
+        "$BIN" boot linux --as-root >/dev/null 2>&1
+    mode=$(stat -c %a "$bootfx/grubperm/boot/grub/grub.cfg")
+    if [ "$mode" = 644 ]; then
+        ok "boot: the privileged half makes grub.cfg readable"
+    else
+        bad "boot: grub.cfg left at $mode — the pane stays blind"
+    fi
+
+    # Once, and it STAYS: grub-mkconfig's last act truncates the existing file
+    # in place, which keeps the mode it already has. Only a file it has to
+    # CREATE comes back at 0600.
+    ( umask 077; cat "$bootfx/grubperm/boot/grub/grub.cfg" > "$bootfx/grubperm/boot/grub/grub.cfg" ) 2>/dev/null
+    if [ "$(stat -c %a "$bootfx/grubperm/boot/grub/grub.cfg")" = 644 ]; then
+        ok "boot: the widened mode survives a regeneration"
+    else
+        bad "boot: a regeneration took the mode back"
+    fi
+
+    # NOT DONE BLIND. A configured GRUB password lives in grub.cfg as a
+    # password_pbkdf2 hash; publishing that to every local account is a real
+    # loss for a pane's convenience.
+    printf "menuentry 'x' \$menuentry_id_option 'y' {\n linux /boot/vmlinuz-linux\n}\npassword_pbkdf2 root grub.pbkdf2.sha512.10000.DEADBEEF\n" \
+        > "$bootfx/grubperm/boot/grub/grub.cfg"
+    chmod 600 "$bootfx/grubperm/boot/grub/grub.cfg"
+    out=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/grubperm" PATH="$bootfx/grubperm/bin:$PATH" \
+          "$BIN" boot linux --as-root 2>&1)
+    if [ "$(stat -c %a "$bootfx/grubperm/boot/grub/grub.cfg")" = 600 ] &&
+       printf '%s' "$out" | grep -q 'GRUB password'; then
+        ok "boot: a configured GRUB password keeps grub.cfg root-only, and says so"
+    else
+        bad "boot: published a grub.cfg carrying a password hash"
+    fi
+fi
+
 # Each loader gets ITS OWN mechanism, and none of them is the other's.
 for pair in "limdef limine default_entry" "sdbdef systemd-boot bootctl" ; do
     set -- $pair
@@ -972,8 +1072,13 @@ fi
 
 # Each bootloader gets ITS OWN mechanism. Getting this wrong means running
 # grub-mkconfig on a limine machine, which succeeds and changes nothing.
+#
+# grub goes through this binary under pkexec rather than calling grub-mkconfig
+# directly, because generating the config is only half of the act — see the
+# mode work below — so what the dialogue must show is the STEP, not the
+# command. The step is produced by the code that performs it.
 if SYN_SETTINGS_BOOT_ROOT="$bootfx/grub" "$BIN" -n boot linux \
-     | grep -q '^command	pkexec grub-mkconfig -o '; then
+     | grep -q '^step1	would run: grub-mkconfig -o '; then
     ok "boot: grub gets grub-mkconfig"
 else
     bad "boot: wrong mechanism for grub"

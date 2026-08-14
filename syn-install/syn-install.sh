@@ -4307,6 +4307,30 @@ EOF
 
     [ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
 
+    # ── And make it READABLE ──────────────────────────────
+    #
+    # grub-mkconfig writes its output inside an unconditional `umask 077` — the
+    # temp file AND the final `cat grub.cfg.new > grub.cfg` — so a file it has
+    # to create comes out 0600 root:root. That stays invisible until something
+    # which is not root needs an answer out of it: syn-settings' Kernel pane
+    # reads grub.cfg as the user, so on a fresh install every question it asked
+    # came back "permission denied", and it recorded that as "no". The pane
+    # reported NO BOOT ENTRY about the kernel the machine was RUNNING, and
+    # never offered to change the default at all.
+    #
+    # Once is enough. grub-mkconfig's last act truncates the existing file in
+    # place, which keeps whatever mode it already has, so every later
+    # regeneration — the hook below, grub-btrfsd, syn-settings — preserves it.
+    #
+    # Skipped if a GRUB password is configured: that lives in grub.cfg as a
+    # password_pbkdf2 hash and is nobody else's business. Nothing here sets
+    # one, but this file is not the only thing that can.
+    if grep -qE '^[[:space:]]*password(_pbkdf2)? ' /mnt/boot/grub/grub.cfg; then
+        warn "grub.cfg carries a GRUB password — left root-only, so the settings app cannot report on boot entries"
+    else
+        chmod 0644 /mnt/boot/grub/grub.cfg
+    fi
+
     # ── Make FUTURE kernels bootable ──────────────────────
     #
     # grub-mkconfig above runs ONCE, here. Arch ships no hook that runs it

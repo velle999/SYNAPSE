@@ -276,6 +276,33 @@ else
     bad "could not mount the ESP"
 fi
 
+# grub.cfg lives on the ROOT filesystem — the ESP holds only grubx64.efi — and
+# its MODE is load-bearing. grub-mkconfig writes inside an unconditional
+# `umask 077`, so a file it has to create comes out 0600 root:root, while
+# syn-settings' Kernel pane reads it as the user. At 0600 every boot question
+# answered "permission denied", which the pane recorded as "no": it reported NO
+# BOOT ENTRY about the kernel the machine was RUNNING and never once offered to
+# change the boot default. Found in QEMU, 2026-08-13 — the ESP checks above
+# could not see it, because the file they would have to look at is not there.
+if [ "$LOADER" = grub ] && [ "$ENCRYPT" = no ]; then
+    rootdev=$(lsblk -rno NAME,FSTYPE "$NBD" |
+              awk '$2!="" && $2!="vfat" && $2!="swap" {print "/dev/"$1; exit}')
+    mkdir -p "$work/root"
+    if [ -n "$rootdev" ] &&
+       { sudo mount -o ro "$rootdev" "$work/root" 2>/dev/null ||
+         sudo mount -o ro,subvol=@ "$rootdev" "$work/root" 2>/dev/null; }; then
+        mode=$(sudo stat -c %a "$work/root/boot/grub/grub.cfg" 2>/dev/null)
+        case "$mode" in
+            "")      info "no /boot/grub/grub.cfg on the root filesystem to check" ;;
+            *[4567]) ok "grub.cfg is world-readable ($mode) — the Kernel pane can see its own boot entries" ;;
+            *)       bad "grub.cfg is mode $mode — the Kernel pane will report NO BOOT ENTRY for every kernel" ;;
+        esac
+        sudo umount "$work/root" 2>/dev/null
+    else
+        info "could not mount the root filesystem to check grub.cfg's mode"
+    fi
+fi
+
 # The firmware has to know. An unregistered install boots the media instead and
 # looks exactly like an install that never happened.
 if strings -el "$VARS" 2>/dev/null | grep -qiE "SynapseOS|Linux Boot Manager"; then

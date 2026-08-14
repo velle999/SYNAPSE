@@ -211,10 +211,21 @@ int pane_kernel(void)
 		int have_hdr = installed_version(hdr, hver, sizeof hver);
 
 		/* Bootable under ANY configured loader. On a machine with one — the
-		 * normal case — this is just that one's answer. */
+		 * normal case — this is just that one's answer.
+		 *
+		 * TRI-STATE, and the third value is the one that matters: -1 is "the
+		 * config is there and this process may not read it", which is what
+		 * every GRUB install looks like — grub-mkconfig leaves grub.cfg 0600
+		 * root:root. Folded into 0, it made the pane state, as a fact, that
+		 * the kernel the machine was RUNNING had no boot entry. One definite
+		 * yes from any loader wins; short of that, one blind answer means the
+		 * row cannot say no either. */
 		int bootable = 0;
-		for (int b = 0; have && !bootable && b < nloaders; b++)
-			bootable = syn_boot_has_entry(&loaders[b], kernels[i].pkg, release);
+		for (int b = 0; have && bootable != 1 && b < nloaders; b++) {
+			int r = syn_boot_has_entry(&loaders[b], kernels[i].pkg, release);
+			if (r == 1) bootable = 1;
+			else if (r < 0) bootable = -1;
+		}
 
 		/* And which one the machine will actually PICK. "Bootable" was still
 		 * only half the answer: a kernel can be installed, have an entry, and
@@ -228,11 +239,12 @@ int pane_kernel(void)
 
 		/* "installed" alone was the lie. A kernel on disk that the
 		 * bootloader has never heard of is not a kernel you can switch to. */
-		const char *state = !have      ? "not installed"
-		                  : is_running ? (is_default ? "running, default" : "running")
-		                  : !bootable  ? "installed, NO BOOT ENTRY"
-		                  : is_default ? "installed, boots by default"
-		                               : "installed, bootable";
+		const char *state = !have         ? "not installed"
+		                  : is_running    ? (is_default ? "running, default" : "running")
+		                  : bootable < 0  ? "installed, ENTRY UNKNOWN"
+		                  : !bootable     ? "installed, NO BOOT ENTRY"
+		                  : is_default    ? "installed, boots by default"
+		                                  : "installed, bootable";
 
 		/* A kernel from a repository this machine does not have. Said on the
 		 * row rather than discovered at the click: "not found in any
@@ -257,9 +269,13 @@ int pane_kernel(void)
 		         have && !have_hdr
 		           ? "  ⚠ headers MISSING — DKMS cannot build for it"
 		           : "",
-		         have && !is_running && !bootable
+		         have && !is_running && bootable == 0
 		           ? "  ⚠ no bootloader entry yet — use “Make bootable” before "
 		             "you reboot expecting a choice"
+		           : have && bootable < 0
+		           ? "  ⚠ the bootloader config is root-only, so this pane "
+		             "cannot say whether an entry exists — “Make bootable” "
+		             "regenerates it and makes it readable"
 		           : "");
 
 		/* WHAT YOU CAN DO TO THIS KERNEL — a list, and it is the whole list.
@@ -289,14 +305,18 @@ int pane_kernel(void)
 			n += snprintf(action + n, sizeof action - n, "install:%s",
 			              kernels[i].pkg);
 		} else {
-			if (!bootable && nloaders > 0)
+			/* Offered when the answer is no AND when it cannot be had: on a
+			 * root-only grub.cfg this action is the thing that makes the
+			 * config readable, so withholding it until the pane can read the
+			 * config is a lock whose key is inside it. */
+			if (bootable != 1 && nloaders > 0)
 				n += snprintf(action + n, sizeof action - n, "boot:%s",
 				              kernels[i].pkg);
 			/* Offered for the RUNNING kernel too. Booting it once is not the
 			 * same as it being what boots — this box ran linux-cachyos with
 			 * limine still set to pick the stock kernel, which is exactly the
 			 * gap this action closes. */
-			if (bootable && !is_default && nloaders > 0)
+			if (bootable != 0 && !is_default && nloaders > 0)
 				n += snprintf(action + n, sizeof action - n, "%sdefault:%s",
 				              n ? " " : "", kernels[i].pkg);
 			/* REMOVING WHAT YOU BOOTED is how a machine stops booting, so the

@@ -35,6 +35,8 @@
 #define _GNU_SOURCE
 #include "synsettings.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <fnmatch.h>
 #include <stdlib.h>
 #include <string.h>
@@ -240,7 +242,7 @@ static int limine_has_entry(const char *conf, const char *pkg,
                             const char *release)
 {
 	FILE *f = fopen(conf, "re");
-	if (!f) return 0;
+	if (!f) return errno == EACCES ? -1 : 0;
 
 	char line[4096];
 	int hit = 0;
@@ -447,11 +449,25 @@ static void limine_walk(const char *conf, const char *pkg, const char *release,
 	fclose(f);
 }
 
-/* Scan one file for either the image name or the kernel release. */
+/* Scan one file for either the image name or the kernel release.
+ * 1 yes, 0 no, -1 the file is there and this process may not read it.
+ *
+ * THAT THIRD ANSWER IS THE WHOLE POINT. grub-mkconfig writes grub.cfg inside
+ * an unconditional `umask 077` (grub 2.14, and syn-install creates the file
+ * fresh in the chroot), so /boot/grub/grub.cfg is mode 0600 root:root on every
+ * GRUB install — and this pane reads it as the user. Returning 0 there made
+ * "I am not allowed to look" indistinguishable from "there is no entry", which
+ * is how the pane came to report NO BOOT ENTRY about the kernel the machine
+ * was RUNNING, offer Make bootable for ever, and never once offer Make
+ * default (kernel.c gates that on a definite yes).
+ *
+ * A missing file is still a plain no: nothing to read is not the same as not
+ * being allowed to.
+ */
 static int file_names_kernel(const char *path, const char *img, const char *release)
 {
 	FILE *f = fopen(path, "re");
-	if (!f) return 0;
+	if (!f) return errno == EACCES ? -1 : 0;
 
 	char line[4096];
 	int hit = 0;
@@ -491,11 +507,13 @@ int syn_boot_has_entry(const struct syn_boot *bl, const char *pkg,
 		 * kernel-install writes `linux /<machine-id>/<release>/linux` — which
 		 * contains neither "vmlinuz" nor the package name. Hence the release. */
 		DIR *d = opendir(bl->conf);
-		if (!d) return 0;
+		if (!d) return errno == EACCES ? -1 : 0;
 
-		int hit = 0;
+		/* One yes settles it; short of that, one file we were not allowed to
+		 * read means the directory cannot answer no either. */
+		int hit = 0, blind = 0;
 		struct dirent *de;
-		while (!hit && (de = readdir(d))) {
+		while (hit != 1 && (de = readdir(d))) {
 			const char *dot = strrchr(de->d_name, '.');
 			if (!dot || strcmp(dot, ".conf")) continue;
 
@@ -504,9 +522,10 @@ int syn_boot_has_entry(const struct syn_boot *bl, const char *pkg,
 			    >= (int)sizeof path)
 				continue;
 			hit = file_names_kernel(path, img, release);
+			if (hit < 0) { blind = 1; hit = 0; }
 		}
 		closedir(d);
-		return hit;
+		return hit ? 1 : (blind ? -1 : 0);
 	}
 
 	default:
@@ -593,9 +612,9 @@ static int sdb_entry_boots(const struct syn_boot *bl, const char *want,
 	DIR *d = opendir(bl->conf);
 	if (!d) return 0;
 
-	int hit = 0;
+	int hit = 0, blind = 0;
 	struct dirent *de;
-	while (!hit && (de = readdir(d))) {
+	while (hit != 1 && (de = readdir(d))) {
 		const char *dot = strrchr(de->d_name, '.');
 		if (!dot || strcmp(dot, ".conf")) continue;
 
@@ -610,9 +629,10 @@ static int sdb_entry_boots(const struct syn_boot *bl, const char *want,
 		    >= (int)sizeof path)
 			continue;
 		hit = file_names_kernel(path, img, release);
+		if (hit < 0) { blind = 1; hit = 0; }
 	}
 	closedir(d);
-	return hit;
+	return hit ? 1 : (blind ? -1 : 0);
 }
 
 /* grub.cfg is a shell script, and the only structure worth reading out of it
@@ -659,6 +679,13 @@ static int grub_scan(const struct syn_boot *bl, const char *want,
 			if (is_submenu) {
 				snprintf(sub_id, sizeof sub_id, "%s", id);
 				in_sub = 1;
+				/* A submenu takes ONE slot in the numbering: `set default=2`
+				 * counts top-level items, and the entries nested inside one
+				 * are not reachable by a bare number at all. Counting them
+				 * made every index past the first submenu name the wrong
+				 * entry — and on a two-kernel machine everything except the
+				 * stock kernel lives inside that submenu. */
+				index++;
 				continue;
 			}
 			snprintf(cur_id, sizeof cur_id, "%s", id);
@@ -667,10 +694,10 @@ static int grub_scan(const struct syn_boot *bl, const char *want,
 			else
 				snprintf(cur_path, sizeof cur_path, "%s", cur_id);
 
-			index++;
+			if (!in_sub) index++;
 			in_entry = 1;
 			is_target = *want ? (!strcmp(cur_path, want) || !strcmp(cur_id, want))
-			                  : (index == want_idx);
+			                  : (!in_sub && index == want_idx);
 			continue;
 		}
 
@@ -720,7 +747,9 @@ static int sdb_entry_id(const struct syn_boot *bl, const char *img,
 		if (snprintf(path, sizeof path, "%s/%s", bl->conf, de->d_name)
 		    >= (int)sizeof path)
 			continue;
-		if (!file_names_kernel(path, img, release)) continue;
+		/* A DEFINITE yes. An entry file this process could not read is not one
+		 * to hand `bootctl set-default` on the strength of a guess. */
+		if (file_names_kernel(path, img, release) != 1) continue;
 
 		snprintf(out, cap, "%s", de->d_name);
 		break;
@@ -846,6 +875,165 @@ static int boot_refuse(const char *msg)
 	return 2;
 }
 
+/* ── Making grub.cfg readable ───────────────────────────────────────────────
+ *
+ * grub-mkconfig writes its output inside an unconditional `umask 077` — both
+ * the temp file and the final `cat grub.cfg.new > grub.cfg`. syn-install
+ * creates the file fresh in the chroot, so /boot/grub/grub.cfg is 0600
+ * root:root on every SynapseOS GRUB install, and this pane reads it as the
+ * user. Every boot question then answers "permission denied", which the code
+ * used to record as "no": the kernel the machine was RUNNING was reported as
+ * having no boot entry, Make bootable ran and changed nothing visible, and
+ * Make default was never offered at all because kernel.c gates it on a
+ * definite yes.
+ *
+ * Widening it ONCE is enough and it stays that way: grub-mkconfig's last act
+ * truncates the existing file in place, which keeps the mode it already has.
+ * Only a file that has to be created — a fresh install, or a deleted cfg —
+ * comes back at 0600, and this runs on every regeneration to catch that.
+ *
+ * NOT DONE BLIND. Upstream's mode is not an accident: a configured GRUB
+ * password lives in grub.cfg as a password_pbkdf2 hash, and handing that to
+ * every local account is a real loss for a pane's convenience. If one is in
+ * there the file is left exactly as it was and the caller says so out loud.
+ */
+static int stream_has_password(FILE *f)
+{
+	char line[4096];
+	int found = 0;
+	while (!found && fgets(line, sizeof line, f)) {
+		const char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		if (!strncmp(p, "password_pbkdf2 ", 16) || !strncmp(p, "password ", 9))
+			found = 1;
+	}
+	return found;
+}
+
+/* Read-only, for the dry-run: it decides what to PRINT and nothing acts on the
+ * name afterwards. toctou-ok: nothing is opened or modified on the strength of
+ * this — the write below resolves the name once, itself. */
+static int grub_cfg_has_password(const char *conf)
+{
+	FILE *f = fopen(conf, "re");
+	if (!f) return -1;
+	int found = stream_has_password(f);
+	fclose(f);
+	return found;
+}
+
+/* 1 widened, 0 left alone. `why_not` is set only when leaving it was a
+ * decision rather than "there was nothing to do".
+ *
+ * ONE descriptor for all three acts — is it world-readable, does it carry a
+ * password, change the mode. This runs as root over a path under /boot, so a
+ * stat(path) + chmod(path) pair would be two resolutions of one name with a
+ * window between them, which is the shape tools/check-toctou.sh exists to
+ * refuse: the mode would land on whatever the name meant by the time chmod
+ * asked. O_NOFOLLOW because a grub.cfg that is a symlink is not a file this
+ * should be relaxing on anyone's behalf.
+ */
+static int grub_widen_cfg(const char *conf, const char **why_not)
+{
+	if (why_not) *why_not = NULL;
+
+	int fd = open(conf, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0) return 0;
+
+	struct stat st;
+	if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || (st.st_mode & S_IROTH)) {
+		close(fd);
+		return 0;
+	}
+
+	FILE *f = fdopen(fd, "r");
+	if (!f) {
+		close(fd);
+		if (why_not) *why_not = "it could not be read to check for a GRUB password";
+		return 0;
+	}
+	if (stream_has_password(f)) {
+		fclose(f);
+		if (why_not) *why_not = "a GRUB password is configured in it";
+		return 0;
+	}
+
+	int ok = fchmod(fd, (st.st_mode & 07777) | S_IRGRP | S_IROTH) == 0;
+	fclose(f);
+	if (!ok && why_not) *why_not = "the mode could not be changed";
+	return ok;
+}
+
+/* The same, said or done depending on --dry-run, so the confirmation dialogue
+ * lists this step in the words of the code that performs it. */
+static void grub_widen_step(const char *conf)
+{
+	struct stat st;
+
+	if (g_dry_run) {
+		if (stat(conf, &st) != 0 || (st.st_mode & S_IROTH)) return;
+
+		/* The dry-run that fills the dialogue is run UNPRIVILEGED — on the one
+		 * machine where this step is needed, the config it would check for a
+		 * password is the config it may not read. So the condition is stated
+		 * rather than silently resolved: the privileged half re-checks and can
+		 * still decline, and a step that might not happen is described that
+		 * way instead of being left out of the list entirely. */
+		int pw = grub_cfg_has_password(conf);
+		if (pw > 0) return;
+		printf("would write: mode 0644 -> %s%s, so this pane can read which "
+		       "kernels have entries without being root\n", conf,
+		       pw < 0 ? " (skipped if a GRUB password is configured in it, "
+		                "which only the privileged half can check)"
+		              : "");
+		return;
+	}
+
+	const char *why_not = NULL;
+	if (grub_widen_cfg(conf, &why_not))
+		fprintf(stderr, "syn-settings: made %s readable (0644) — the pane could "
+		                "not see its own boot entries otherwise\n", conf);
+	else if (why_not)
+		fprintf(stderr, "syn-settings: left %s root-only: %s\n", conf, why_not);
+}
+
+/* This binary's own path, for the actions it re-runs under pkexec. Defined
+ * with the rest of the write machinery below; declared here because both
+ * halves — bootable and default — build such a command. */
+static const char *self_path(void);
+
+/* THE STEPS, when the command is this binary re-running itself.
+ *
+ * "pkexec syn-settings default linux --as-root" is a true description of what
+ * runs and tells you nothing about what it DOES — and what it does is edit
+ * /etc/default/grub, regenerate grub.cfg, widen its mode and set a saved
+ * entry: four privileged acts behind one opaque line. A confirmation dialogue
+ * that hides them is not a confirmation. Each is printed by the same code that
+ * will perform it, under --dry-run, so the list cannot drift from the work.
+ */
+static void print_plan_steps(char *const cmd[])
+{
+	if (!cmd[0] || !cmd[1] || strcmp(cmd[1], self_path())) return;
+
+	char *sub[12];
+	int s = 0;
+	sub[s++] = (char *)self_path();
+	sub[s++] = (char *)"-n";
+	for (int i = 2; cmd[i] && s < 11; i++) sub[s++] = cmd[i];
+	sub[s] = NULL;
+
+	char out[4096];
+	if (run_capture_quiet(sub, out, sizeof out) != 0) return;
+
+	int nstep = 0;
+	for (char *l = strtok(out, "\n"); l; l = strtok(NULL, "\n")) {
+		const char *t = strstr(l, "would run:");
+		if (!t) t = strstr(l, "would write:");
+		if (!t) continue;
+		printf("step%d\t%s\n", ++nstep, t);
+	}
+}
+
 /* Build the command that makes `pkg` bootable under `bl`.
  *
  * Each is the mechanism that bootloader's own ecosystem uses. None of them
@@ -863,14 +1051,24 @@ static int boot_command(const struct syn_boot *bl, const char *pkg,
 		/* grub-mkconfig regenerates from scratch and its 10_linux finds every
 		 * installed kernel by itself, so this needs no per-kernel argument. It
 		 * is also exactly what syn-install runs at install time, which makes
-		 * this the one action here with a proven precedent on this OS. */
+		 * this the one action here with a proven precedent on this OS.
+		 *
+		 * It is run through THIS BINARY under pkexec rather than called
+		 * directly, because generating the config is only half of it: what
+		 * grub-mkconfig leaves behind is a file mode 0600 root:root that this
+		 * pane cannot read, so the action would go on succeeding while the row
+		 * went on saying NO BOOT ENTRY. The second half needs somewhere to
+		 * live, and a `pkexec chmod` would be a root file-mode changer wearing
+		 * a settings app's name. */
 		*why = "grub-mkconfig regenerates grub.cfg; its 10_linux script finds "
 		       "every installed kernel";
 		argv[n++] = (char *)"pkexec";
-		argv[n++] = (char *)"grub-mkconfig";
-		argv[n++] = (char *)"-o";
-		snprintf(scratch, scap, "%s", bl->conf);
-		argv[n++] = scratch;
+		argv[n++] = (char *)self_path();
+		argv[n++] = (char *)"boot";
+		argv[n++] = (char *)pkg;
+		argv[n++] = (char *)"--loader";
+		argv[n++] = (char *)"grub";
+		argv[n++] = (char *)"--as-root";
 		break;
 
 	case SYN_BL_SYSTEMD:
@@ -966,10 +1164,15 @@ int do_boot(int argc, char **argv)
 
 	const char *pkg = argv[0];
 	const char *want_loader = NULL;
-	int confirmed = 0;
+	int confirmed = 0, as_root = 0;
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--confirm")) { confirmed = 1; continue; }
+		/* Set by the pkexec re-exec in boot_command(), never by a person —
+		 * same contract as `default --as-root`: you are the privileged child,
+		 * do the work yourself. It implies --confirm because the parent
+		 * already required it. */
+		if (!strcmp(argv[i], "--as-root")) { as_root = 1; confirmed = 1; continue; }
 		if (!strcmp(argv[i], "--loader")) {
 			if (++i >= argc) return boot_refuse("--loader needs a name");
 			want_loader = argv[i];
@@ -1013,6 +1216,34 @@ int do_boot(int argc, char **argv)
 	char release[128] = "";
 	syn_kernel_release(pkg, release, sizeof release);
 
+	/* The privileged half, for the loaders whose "make it bootable" is more
+	 * than one act. Everything is recomputed here rather than trusted from the
+	 * unprivileged parent. */
+	if (as_root) {
+		if (bl->kind != SYN_BL_GRUB)
+			return boot_refuse("--as-root is only for the loaders this app "
+			                   "performs itself");
+
+		if (!have_cmd("grub-mkconfig"))
+			return boot_refuse("grub-mkconfig is what performs this, and it is "
+			                   "missing");
+
+		char *mk[5];
+		int m = 0;
+		mk[m++] = (char *)"grub-mkconfig";
+		mk[m++] = (char *)"-o";
+		mk[m++] = (char *)bl->conf;
+		mk[m] = NULL;
+		int grc = run_or_show_progress(mk);
+		if (grc != 0)
+			return boot_refuse("grub-mkconfig failed — no entry was written");
+
+		/* AFTER the generation, because a config that had to be created comes
+		 * back at 0600 and this is the only moment we are root. */
+		grub_widen_step(bl->conf);
+		return 0;
+	}
+
 	char *cmd[8];
 	char scratch[512];
 	const char *why = NULL;
@@ -1045,6 +1276,7 @@ int do_boot(int argc, char **argv)
 		fputs("command\t", stdout);
 		for (int i = 0; cmd[i]; i++) printf("%s%s", i ? " " : "", cmd[i]);
 		putchar('\n');
+		print_plan_steps(cmd);
 		return 0;
 	}
 
@@ -1540,6 +1772,12 @@ int do_default(int argc, char **argv)
 				return boot_refuse("grub-mkconfig failed — the default was not "
 				                   "changed");
 
+			/* AFTER the generation: a config that had to be created comes back
+			 * at 0600, and being root here is the only moment this can be put
+			 * right. Without it the write below succeeds and the pane goes on
+			 * reporting that nothing happened. */
+			grub_widen_step(bl->conf);
+
 			/* And read the id out of the file mkconfig has JUST written. Ids
 			 * carry the kernel version, so a regeneration that picked up a new
 			 * kernel changes them; the one computed before this ran could name
@@ -1595,34 +1833,7 @@ int do_default(int argc, char **argv)
 		for (int i = 0; cmd[i]; i++) printf("%s%s", i ? " " : "", cmd[i]);
 		putchar('\n');
 
-		/* THE STEPS, when the command is this binary re-running itself.
-		 *
-		 * "pkexec syn-settings default linux --as-root" is a true description
-		 * of what runs and tells you nothing about what it DOES — and on grub
-		 * what it does is edit /etc/default/grub, regenerate grub.cfg and set
-		 * a saved entry, three privileged acts behind one opaque line. A
-		 * confirmation dialogue that hides them is not a confirmation. Each is
-		 * printed by the same code that will perform it, under --dry-run, so
-		 * the list cannot drift from the work. */
-		if (!strcmp(cmd[1], self_path())) {
-			char *sub[10];
-			int s = 0;
-			sub[s++] = (char *)self_path();
-			sub[s++] = (char *)"-n";
-			for (int i = 2; cmd[i]; i++) sub[s++] = cmd[i];
-			sub[s] = NULL;
-
-			char out[4096];
-			if (run_capture_quiet(sub, out, sizeof out) == 0) {
-				int nstep = 0;
-				for (char *l = strtok(out, "\n"); l; l = strtok(NULL, "\n")) {
-					const char *t = strstr(l, "would run:");
-					if (!t) t = strstr(l, "would write:");
-					if (!t) continue;
-					printf("step%d\t%s\n", ++nstep, t);
-				}
-			}
-		}
+		print_plan_steps(cmd);
 		return 0;
 	}
 
