@@ -196,7 +196,45 @@ struct win {
 
 	/* Frames committed whose fate is not yet known. */
 	feedback_ctx_t *outstanding;
+
+	/* ── deadline rendering ─────────────────────────────────────────────────
+	 *
+	 * `last_present_ns` and `refresh_ns` come from the presented event and are
+	 * the compositor's own account of when the last frame turned into light
+	 * and how long until the next refresh may occur. Together they predict the
+	 * next vblank, which is what makes rendering LATE possible.
+	 *
+	 * `paint_due_ns` is when the pending paint should happen — 0 for "nothing
+	 * scheduled". `paint_cost_ns` is a decaying average of what painting has
+	 * actually cost, so the margin is measured rather than guessed. */
+	uint64_t last_present_ns;
+	uint64_t refresh_ns;
+	uint64_t paint_due_ns;
+	uint64_t paint_cost_ns;
+	bool     deadline;        /* the mode is on (it can be turned off to A/B) */
+	uint64_t late;            /* paints that missed their own deadline */
+	uint64_t on_time;
 };
+
+/* The next vblank at or after `now`, or 0 when there is nothing to predict
+ * from — no presented event yet, or a compositor that reported refresh 0
+ * because the output has no constant rate.
+ *
+ * ⚠ Zero is a real answer and means "do not guess". A client that invents a
+ * 16.7 ms cadence because it assumes 60 Hz will be wrong on every 144 Hz
+ * monitor and on every variable-refresh one, and being wrong here does not
+ * degrade gracefully: it renders after the deadline and lands a whole frame
+ * late, which is the exact problem this is meant to fix. */
+static uint64_t next_vblank(const win_t *w, uint64_t now)
+{
+	if (!w->last_present_ns || !w->refresh_ns)
+		return 0;
+	if (now <= w->last_present_ns)
+		return w->last_present_ns + w->refresh_ns;
+	uint64_t elapsed = now - w->last_present_ns;
+	uint64_t periods = elapsed / w->refresh_ns + 1;
+	return w->last_present_ns + periods * w->refresh_ns;
+}
 
 static void feedback_unlink(feedback_ctx_t *ctx)
 {
@@ -302,7 +340,7 @@ static void fb_presented(void *data, struct wp_presentation_feedback *fb,
                          uint32_t tv_nsec, uint32_t refresh,
                          uint32_t seq_hi, uint32_t seq_lo, uint32_t flags)
 {
-	(void)refresh; (void)seq_hi; (void)seq_lo; (void)flags;
+	(void)seq_hi; (void)seq_lo; (void)flags;
 	feedback_ctx_t *ctx = data;
 	win_t *w = ctx->win;
 
@@ -319,6 +357,16 @@ static void fb_presented(void *data, struct wp_presentation_feedback *fb,
 		if (ctx->input_ns && shown > ctx->input_ns)
 			stat_add(&w->input_to_photon,
 			         (double)(shown - ctx->input_ns) / 1e6);
+
+		/* The cadence, straight from the compositor. `refresh` is its own
+		 * prediction of how long after this presentation the next refresh may
+		 * occur — the protocol says in as many words that it is there to help
+		 * clients target the next few vblanks, which is exactly what the
+		 * deadline mode does with it. */
+		if (shown > w->last_present_ns) {
+			w->last_present_ns = shown;
+			w->refresh_ns      = refresh;   /* 0 = no constant rate; see above */
+		}
 	}
 	feedback_unlink(ctx);
 	wp_presentation_feedback_destroy(fb);
@@ -379,11 +427,21 @@ static void paint(win_t *w)
 		return;
 	}
 
+	uint64_t t0 = now_ns();
 	st_render_grid(w->ren, w->g, b->px, b->w, b->w, b->h);
 	b->busy = true;
 	w->dirty = false;
 	w->frames++;
 	uint64_t commit_ns = now_ns();
+
+	/* What painting actually costs, as a decaying average. The margin below is
+	 * built from this rather than from a constant, because the honest answer
+	 * depends on the window size and the machine — a number picked here would
+	 * be too small on somebody's 4K screen, which is the direction that
+	 * fails. */
+	uint64_t cost = commit_ns - t0;
+	w->paint_cost_ns = w->paint_cost_ns
+		? (w->paint_cost_ns * 3 + cost) / 4 : cost;
 	if (!w->t_first_frame)
 		w->t_first_frame = commit_ns;
 
@@ -431,6 +489,58 @@ static void request_frame(win_t *w)
 	wl_surface_commit(w->surface);
 }
 
+/* ── the whole point of stage 3 ─────────────────────────────────────────────
+ *
+ * A client that paints when the frame callback fires paints at the START of
+ * the interval, committing to a state that any keystroke arriving a
+ * millisecond later is not part of — so that keystroke waits for the NEXT
+ * frame, and the person waits up to a whole refresh period for a character
+ * they have already typed.
+ *
+ * Painting as late as the deadline allows catches it in THIS frame. The
+ * deadline is the next vblank, less what painting costs and less a slack that
+ * covers getting the buffer to the compositor in time.
+ *
+ * ⚠ IT DEGRADES TO THE OLD BEHAVIOUR RATHER THAN TO A BROKEN ONE. With no
+ * presented event yet, or a compositor that reports no constant refresh rate,
+ * next_vblank() returns 0 and this paints immediately — which is exactly what
+ * every client does today. Being unable to predict the cadence must never be
+ * worse than not trying to. */
+static void schedule_paint(win_t *w)
+{
+	uint64_t now = now_ns();
+
+	if (!w->deadline) {
+		paint(w);
+		request_frame(w);
+		return;
+	}
+
+	uint64_t vb = next_vblank(w, now);
+	if (!vb) {
+		paint(w);
+		request_frame(w);
+		return;
+	}
+
+	/* The margin: what a paint costs, plus half again as slack, plus a floor.
+	 * Measured rather than assumed — see paint(). */
+	uint64_t margin = w->paint_cost_ns + w->paint_cost_ns / 2 + 1000000ull;
+	if (margin > w->refresh_ns / 2)
+		margin = w->refresh_ns / 2;   /* never give up more than half a frame */
+
+	uint64_t due = vb > margin ? vb - margin : now;
+	if (due <= now) {
+		/* Already past it — this frame is spoken for, so paint now and aim at
+		 * the next one rather than deliberately missing two. */
+		w->late++;
+		paint(w);
+		request_frame(w);
+		return;
+	}
+	w->paint_due_ns = due;
+}
+
 static void frame_done(void *data, struct wl_callback *cb, uint32_t t)
 {
 	(void)t;
@@ -439,10 +549,8 @@ static void frame_done(void *data, struct wl_callback *cb, uint32_t t)
 	w->frame = NULL;
 	w->needs_frame = false;
 
-	if (w->dirty) {
-		paint(w);
-		request_frame(w);
-	}
+	if (w->dirty)
+		schedule_paint(w);
 }
 
 /* ── xdg-shell ──────────────────────────────────────────────────────────── */
@@ -713,12 +821,14 @@ static const struct wl_registry_listener registry_listener = {
 /* ── the loop ───────────────────────────────────────────────────────────── */
 
 int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
-               st_render_t *ren, const char *title, st_win_stats_t *stats)
+               st_render_t *ren, const char *title, bool deadline,
+               st_win_stats_t *stats)
 {
 	win_t W = {0};
 	win_t *w = &W;
 	w->g = g; w->vt = vt; w->pty = pty; w->font = font; w->ren = ren;
 	w->pool_fd = -1;
+	w->deadline = deadline;
 	w->t_start = now_ns();
 
 	w->dpy = wl_display_connect(NULL);
@@ -781,7 +891,17 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			{ .fd = pty->fd,   .events = POLLIN },
 		};
 
-		if (poll(fds, 2, -1) < 0) {
+		/* Sleep until the deadline, if one is pending — and keep taking input
+		 * the whole way there, which is the entire trick. -1 means "no paint
+		 * scheduled, wake only for work". */
+		int timeout = -1;
+		if (w->paint_due_ns) {
+			uint64_t now = now_ns();
+			timeout = w->paint_due_ns > now
+				? (int)((w->paint_due_ns - now + 999999) / 1000000) : 0;
+		}
+
+		if (poll(fds, 2, timeout) < 0) {
 			wl_display_cancel_read(w->dpy);
 			if (errno == EINTR)
 				continue;
@@ -822,13 +942,21 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 				break;
 		}
 
-		/* Paint at most once per frame callback. With one outstanding, this
-		 * does nothing and the callback will do it — which is the whole of
-		 * the flood throttle. */
-		if (w->dirty && !w->needs_frame) {
+		/* The scheduled paint, now that everything readable has been read —
+		 * which is what makes waiting worth anything: a keystroke that arrived
+		 * during the wait is in the grid before this draws it. */
+		if (w->paint_due_ns && now_ns() >= w->paint_due_ns) {
+			w->paint_due_ns = 0;
+			w->on_time++;
 			paint(w);
 			request_frame(w);
 		}
+
+		/* Paint at most once per frame callback. With one outstanding, this
+		 * does nothing and the callback will do it — which is the whole of
+		 * the flood throttle. */
+		if (w->dirty && !w->needs_frame && !w->paint_due_ns)
+			schedule_paint(w);
 	}
 
 	if (stats) {
@@ -849,6 +977,13 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 		stats->input_max  = w->input_to_photon.max_ms;
 		stats->input_avg  = w->input_to_photon.n
 			? w->input_to_photon.sum_ms / (double)w->input_to_photon.n : 0.0;
+
+		stats->deadline_on   = w->deadline;
+		stats->deadline_used = w->on_time;
+		stats->deadline_late = w->late;
+		stats->refresh_ms    = w->refresh_ns / 1e6;
+		stats->margin_ms     = (w->paint_cost_ns + w->paint_cost_ns / 2
+		                        + 1000000ull) / 1e6;
 	}
 
 	/* The child's status is what this returns. The loop above ends either

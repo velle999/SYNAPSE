@@ -429,12 +429,25 @@ typedef struct {
 	double   commit_min, commit_max, commit_avg;
 	uint64_t input_n;
 	double   input_min, input_max, input_avg;
+
+	/* ── deadline rendering ─────────────────────────────────────────────────
+	 *
+	 * `deadline_used` counts paints that waited for the deadline and made it;
+	 * `deadline_late` counts the ones already past it when they were scheduled,
+	 * which fell back to painting immediately. A run that is mostly `late` is
+	 * one where the margin is too small for the machine, and it is worth
+	 * knowing rather than silently absorbing. */
+	bool     deadline_on;
+	uint64_t deadline_used, deadline_late;
+	double   refresh_ms;      /* the cadence the compositor reported, 0 if none */
+	double   margin_ms;       /* how early of the vblank a paint is aimed */
 } st_win_stats_t;
 
 /* Open a window and run until the child exits or it is closed. Everything it
  * needs is built by the caller, so this function owns no terminal state and
  * the headless paths above share every line of it. */
 int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
-               st_render_t *ren, const char *title, st_win_stats_t *stats);
+               st_render_t *ren, const char *title, bool deadline,
+               st_win_stats_t *stats);
 
 #endif /* SYNTTY_H */

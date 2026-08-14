@@ -606,6 +606,37 @@ else
     [ -n "$fr" ] && [ "$((dis + pres))" -ge 1 ] && [ "$((dis + pres))" -le "$fr" ] \
         && ok "every committed frame is accounted for (${pres} shown, ${dis} superseded of ${fr})" \
         || bad "every committed frame is accounted for (${pres}+${dis} vs ${fr})"
+
+    # ── deadline rendering ──────────────────────────────────────────────────
+    #
+    # ⚠ WHAT CANNOT BE TESTED HERE, stated so nobody assumes it was. The whole
+    # POINT of deadline rendering — that a keystroke arriving after the frame
+    # callback still makes it into that frame — needs a real display (something
+    # must actually be scanned out) and a real person (input is never
+    # synthesised). Neither exists in this file. A headless cage reports no
+    # constant refresh rate at all, so what runs here is the FALLBACK.
+    #
+    # The fallback is worth every one of these assertions, because it is what
+    # runs whenever the prediction is unavailable, and getting it wrong makes
+    # the terminal WORSE than one that never tried.
+    echo "$out" | grep -q '^deadline      on'
+    check "deadline rendering is on by default" $?
+
+    out_off=$(caged 30 --stats --no-deadline win -- /bin/sh -c 'echo x; sleep 0.3')
+    echo "$out_off" | grep -q 'deadline      off'
+    check "--no-deadline turns it off, for an A/B against it" $?
+
+    # ⚠ NO CADENCE IS INVENTED. A client that assumes 60 Hz because it was
+    # given nothing is wrong on every 144 Hz and every variable-refresh
+    # monitor, and being wrong here does not degrade gently: it paints after
+    # the deadline and lands a whole frame late, which is the exact problem
+    # deadline rendering exists to fix.
+    echo "$out" | grep -q 'no constant refresh rate'
+    check "with no refresh rate reported it paints immediately and says so" $?
+
+    echo "$out" | grep -qE 'deadline      on, 1[0-9]\.[0-9]+ ms refresh' \
+        && bad "...and never invents 60 Hz to fill the gap" \
+        || ok "...and never invents 60 Hz to fill the gap"
 fi
 
 echo

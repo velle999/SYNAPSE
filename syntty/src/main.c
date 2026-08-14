@@ -48,6 +48,7 @@ static const char *usage_text =
 "  --out=FILE                render: write the painted screen as a PPM\n"
 "  --no-cursor               render: leave the cursor cell unpainted\n"
 "  --probe=COL,ROW           render: print that cell's background colour\n"
+"  --no-deadline             win: paint on the frame callback, not the deadline\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
@@ -61,6 +62,7 @@ typedef struct {
 	const char *out;
 	bool     no_cursor;
 	const char *probe;
+	bool     no_deadline;
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -435,7 +437,8 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 	st_pty_set_nonblocking(&p);
 
 	st_win_stats_t ws = {0};
-	int rc = st_win_run(&g, &vt, &p, f, r, vt.title[0] ? vt.title : "syntty", &ws);
+	int rc = st_win_run(&g, &vt, &p, f, r, vt.title[0] ? vt.title : "syntty",
+	                    !o->no_deadline, &ws);
 
 	if (o->stats) {
 		fprintf(stderr, "first frame   %.2f ms\n", ws.first_frame_ms);
@@ -474,6 +477,24 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 			else
 				fprintf(stderr, "input->photon  nothing was typed\n");
 		}
+
+		/* The deadline line is printed whether the mode is on or off, because
+		 * the two runs of an A/B comparison have to be told apart afterwards
+		 * and a flag that leaves no trace in the output is one somebody will
+		 * forget they passed. */
+		if (!ws.deadline_on) {
+			fprintf(stderr, "deadline      off — painting on the frame "
+			        "callback\n");
+		} else if (ws.refresh_ms > 0) {
+			fprintf(stderr, "deadline      on, %.2f ms refresh, aiming "
+			        "%.2f ms early (%llu on time, %llu already past)\n",
+			        ws.refresh_ms, ws.margin_ms,
+			        (unsigned long long)ws.deadline_used,
+			        (unsigned long long)ws.deadline_late);
+		} else {
+			fprintf(stderr, "deadline      on, but the compositor reported no "
+			        "constant refresh rate — painting immediately\n");
+		}
 	}
 
 	st_render_free(r);
@@ -506,7 +527,7 @@ int main(int argc, char **argv)
 		.cols = 80, .rows = 24, .scrollback = 1000,
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
 		.font = NULL, .font_size = 14.0, .out = NULL, .no_cursor = false,
-		.probe = NULL
+		.probe = NULL, .no_deadline = false
 	};
 	size_t split = 0;
 
@@ -545,6 +566,7 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--out=", 6))         o.out = a + 6;
 		else if (!strcmp(a, "--no-cursor"))        o.no_cursor = true;
 		else if (!strncmp(a, "--probe=", 8))       o.probe = a + 8;
+		else if (!strcmp(a, "--no-deadline"))      o.no_deadline = true;
 		else if (!strcmp(a, "--styled"))           o.styled = true;
 		else if (!strcmp(a, "--scrollback-too"))   o.with_scrollback = true;
 		else if (!strcmp(a, "--stats"))            o.stats = true;
