@@ -840,6 +840,43 @@ int cmd_copy(int argc, char **argv)
 	return g_cancel ? 130 : finish(&t);
 }
 
+/* Open the directory a path lives in. The final component stays with the
+ * caller, via sf_basename().
+ *
+ * WHY THE MOVE LOOP NEEDS THIS
+ *
+ * `lstat(src)` and then `rename(src, …)` resolve the same NAME twice, and the
+ * two resolutions can land on different files. Everything decided from the
+ * first — the size the progress bar counts, and the same-inode guard that stops
+ * a move-into-its-own-folder from deleting the file — is then a statement about
+ * something the rename does not touch. tools/check-toctou.sh fails the build on
+ * exactly this pattern, and it is right to: the window is as long as an
+ * attacker wants to make it.
+ *
+ * rename(2) has no by-descriptor form — POSIX renames names, not inodes — so
+ * the fix is the one the checker names: resolve the DIRECTORY once and do both
+ * the check and the rename through that descriptor, with fstatat() and
+ * renameat(). The directory can then be swapped underneath us without the check
+ * and the action ever disagreeing about which directory they meant. It is the
+ * same thing destfd already does for the other side of the move.
+ */
+static int open_parent_dir(const char *path)
+{
+	char *dir = xstrdup(path);
+	char *slash = strrchr(dir, '/');
+	if (!slash) {
+		free(dir);
+		dir = xstrdup(".");
+	} else if (slash == dir) {
+		dir[1] = '\0';          /* the path is directly under "/" */
+	} else {
+		*slash = '\0';
+	}
+	int fd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	free(dir);
+	return fd;
+}
+
 int cmd_move(int argc, char **argv)
 {
 	args_t a = parse_args(argc, argv, "move");
@@ -892,13 +929,26 @@ int cmd_move(int argc, char **argv)
 
 		char *target = xasprintf("%s/%s", dest, sf_basename(src));
 
+		/* Both sides of the move are descriptors from here down. See
+		 * open_parent_dir() for why the source needs one at all. */
+		const char *sbase = sf_basename(src);
+		int srcfd = open_parent_dir(src);
+		if (srcfd < 0) {
+			report(src, "failed", strerror(errno));
+			t.failed++;
+			free(target);
+			free(src);
+			continue;
+		}
+
 		/* Asked THROUGH the destination descriptor rather than by path: the
 		 * answer and the action that follows it then refer to the same
 		 * directory even if `dest` is replaced underneath us. */
 		struct stat dstat, sstat;
 		/* The source's size, taken BEFORE the rename — afterwards the name
 		 * refers to nothing and the byte total would stop advancing. */
-		bool have_sstat = lstat(src, &sstat) == 0;
+		bool have_sstat = fstatat(srcfd, sbase, &sstat,
+		                          AT_SYMLINK_NOFOLLOW) == 0;
 		long long ssz = have_sstat ? (long long)sstat.st_size : 0;
 		bool exists = fstatat(destfd, sf_basename(src), &dstat,
 		                      AT_SYMLINK_NOFOLLOW) == 0;
@@ -915,6 +965,7 @@ int cmd_move(int argc, char **argv)
 			report(src, "failed", "source and destination are the same");
 			t.failed++;
 			free(target);
+			close(srcfd);
 			free(src);
 			continue;
 		}
@@ -946,13 +997,14 @@ int cmd_move(int argc, char **argv)
 			}
 			if (handled) {
 				free(target);
+				close(srcfd);
 				free(src);
 				continue;
 			}
 		}
 
 		/* The fast path, and the only one that is atomic. */
-		if (rename(src, target) == 0) {
+		if (renameat(srcfd, sbase, destfd, sf_basename(target)) == 0) {
 			/* target -> src is the inverse. Recorded AFTER success, so a
 			 * failed move never leaves an undo entry that would move a file
 			 * that was never moved. */
@@ -973,6 +1025,7 @@ int cmd_move(int argc, char **argv)
 			}
 			t.done++;
 			free(target);
+			close(srcfd);
 			free(src);
 			continue;
 		}
@@ -981,6 +1034,7 @@ int cmd_move(int argc, char **argv)
 			report(src, "failed", strerror(errno));
 			t.failed++;
 			free(target);
+			close(srcfd);
 			free(src);
 			continue;
 		}
@@ -1010,6 +1064,7 @@ int cmd_move(int argc, char **argv)
 		}
 
 		free(target);
+		close(srcfd);
 		free(src);
 	}
 
