@@ -24,6 +24,11 @@
 #include <string.h>
 #include <unistd.h>
 
+/* Only for `syntty key`, which needs to turn a name on the command line into
+ * the keysym a seat would have delivered. Nothing else here touches xkb — the
+ * encoder itself takes a plain number, so that it stays testable. */
+#include <xkbcommon/xkbcommon.h>
+
 #define SYNTTY_VERSION "0.1.0"
 
 static const char *usage_text =
@@ -39,6 +44,7 @@ static const char *usage_text =
 "  syntty [-e CMD...]        the same window — no subcommand means the window,\n"
 "                            and -e is the convention other terminals take\n"
 "  syntty mouse EVENT...     what a pointer event becomes on the child's input\n"
+"  syntty key KEY...         what a keystroke becomes on the child's input\n"
 "  syntty paste TEXT         what pasted text becomes on the way to the child\n"
 "  syntty config             the config file, where it is, and what it says\n"
 "  syntty config --example   a commented config to start from\n"
@@ -1133,6 +1139,125 @@ static int cmd_mouse(int argc, char **argv)
 	return 0;
 }
 
+/* ── what a keystroke becomes, with no keyboard ─────────────────────────────
+ *
+ * The same door `syntty mouse` opens, for the half of the keyboard that could
+ * not be reached from a test at all until key.c existed: a compositor, a
+ * focused surface and a person pressing a key are all required to get one byte
+ * out of win.c, and input is never synthesised on a live session.
+ *
+ *     syntty key shift+tab ctrl+shift+left alt+f f5 backspace
+ *
+ * Each spec prints as the bytes it would put on the child's input, ESCAPED —
+ * printing them raw would have the terminal running the test act on them,
+ * which is how an assertion "passes" while the enclosing terminal quietly
+ * changes mode. A key that sends nothing says so, because "nothing was sent"
+ * and "nothing should have been sent" are the same output and very different
+ * facts — Shift+Tab sending nothing is exactly the bug this subcommand exists
+ * to have caught. */
+static int key_modifier(const char *s, unsigned *mods)
+{
+	if (!strcmp(s, "shift"))      *mods |= ST_KEY_SHIFT;
+	else if (!strcmp(s, "alt") || !strcmp(s, "meta"))
+	                              *mods |= ST_KEY_ALT;
+	else if (!strcmp(s, "ctrl") || !strcmp(s, "control"))
+	                              *mods |= ST_KEY_CTRL;
+	else if (!strcmp(s, "super") || !strcmp(s, "logo"))
+	                              *mods |= ST_KEY_SUPER;
+	else return 0;
+	return 1;
+}
+
+static int cmd_key(int argc, char **argv)
+{
+	unsigned flags   = 0;
+	int      n_specs = 0;
+	bool     press   = true;
+
+	for (int i = 0; i < argc; i++) {
+		const char *a = argv[i];
+
+		if (!strncmp(a, "--flags=", 8)) { flags = (unsigned)strtoul(a + 8, NULL, 0); continue; }
+		if (!strcmp(a, "--kitty"))      { flags = KKP_DISAMBIGUATE; continue; }
+		if (!strcmp(a, "--release"))    { press = false; continue; }
+		if (a[0] == '-')
+			die("key: unknown option '%s'", a);
+
+		/* [mod+]...[mod+]KEY */
+		char spec[64];
+		if (strlen(a) >= sizeof spec)
+			die("key: '%s' is too long to be a key", a);
+		snprintf(spec, sizeof spec, "%s", a);
+
+		unsigned mods = 0;
+		char    *name = spec, *plus;
+		while ((plus = strchr(name, '+')) != NULL) {
+			*plus = '\0';
+			if (!key_modifier(name, &mods))
+				die("key: '%s' is not shift, alt, ctrl or super", name);
+			name = plus + 1;
+		}
+		if (!*name)
+			die("key: '%s' names no key", a);
+
+		xkb_keysym_t sym = xkb_keysym_from_name(name, XKB_KEYSYM_CASE_INSENSITIVE);
+		if (sym == XKB_KEY_NoSymbol)
+			die("key: '%s' is not a keysym name", name);
+
+		/* ⚠ THE ONE PLACE THIS IMITATES XKB, AND IT HAS TO.
+		 *
+		 * Shift+Tab does not arrive as Tab-with-shift. Shift selects level 1
+		 * of the Tab key and every ordinary layout puts ISO_Left_Tab there, so
+		 * what the seat hands over is a DIFFERENT KEYSYM (0xfe20) that
+		 * produces no text at all. Verified against a us keymap rather than
+		 * assumed. Without this line `syntty key shift+tab` would ask the
+		 * encoder a question the keyboard never asks it, and agree with itself
+		 * about an answer no program would ever see.
+		 *
+		 * `shift+ISO_Left_Tab` spells it explicitly and skips this. */
+		if (sym == XKB_KEY_Tab && (mods & ST_KEY_SHIFT))
+			sym = XKB_KEY_ISO_Left_Tab;
+
+		/* The text the key would have produced. xkb resolves this from the
+		 * keymap; from a name alone the keysym's own character is the closest
+		 * true answer, and it is the one that matters — Tab yields \t, an
+		 * arrow yields nothing. */
+		char utf8[16];
+		int  n = xkb_keysym_to_utf8(sym, utf8, sizeof utf8);
+		/* ⚠ It counts the NUL terminator, and st_key_encode takes a length. */
+		n = n > 0 ? n - 1 : 0;
+
+		char   out[64];
+		size_t len = st_key_encode(sym, mods, utf8, n, flags, press,
+		                           out, sizeof out);
+
+		char symname[64];
+		xkb_keysym_get_name(sym, symname, sizeof symname);
+		printf("%-22s %-14s ", a, symname);
+		if (!len) {
+			printf("(nothing)\n");
+		} else {
+			for (size_t k = 0; k < len; k++) {
+				unsigned char c = (unsigned char)out[k];
+				if (c == 0x1b)                  fputs("ESC", stdout);
+				else if (c >= 0x20 && c < 0x7f) fputc(c, stdout);
+				else                            printf("\\x%02x", c);
+			}
+			printf("   (%zu bytes)\n", len);
+		}
+		n_specs++;
+	}
+
+	if (!n_specs) {
+		fprintf(stderr,
+		    "key: give it keys — shift+tab ctrl+shift+left alt+f f5\n"
+		    "     modifiers: shift alt ctrl super; names are xkb keysym names\n"
+		    "     options: --kitty (the protocol encoding) --flags=N --release\n");
+		return 2;
+	}
+	return 0;
+}
+
 /* ── what a paste becomes, with no clipboard ────────────────────────────────
  *
  * The other half that can be tested. Getting text out of another program is
@@ -1315,7 +1440,8 @@ int main(int argc, char **argv)
 		const char *a = argv[i];
 
 		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win")
-		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "paste")
+		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "key")
+		            || !strcmp(cmd, "paste")
 		            || !strcmp(cmd, "config"))) {
 			/* `--` and `-e` both mean "the rest is the child". Accepting
 			 * -e here as well as below is not redundancy: `syntty win -e
@@ -1439,6 +1565,9 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "mouse"))
 		return child_at ? cmd_mouse(argc - child_at, argv + child_at)
 		                : cmd_mouse(0, NULL);
+	if (!strcmp(cmd, "key"))
+		return child_at ? cmd_key(argc - child_at, argv + child_at)
+		                : cmd_key(0, NULL);
 	if (!strcmp(cmd, "paste"))
 		return child_at ? cmd_paste(argc - child_at, argv + child_at)
 		                : cmd_paste(0, NULL);

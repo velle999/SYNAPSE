@@ -45,13 +45,60 @@
 # own working set and 5.4 MB of Python. So the single biggest decision here is
 # that this links no GL at all, and it is why the only library dependency below
 # is libutil, for forkpty.
+#
+# ── 0.1.0-23: the keyboard was missing three things, and one file explains all
+#
+# Reported as "shift+tab does nothing, and I cannot HOLD a key". Two faults,
+# and the second is not a bug so much as a feature that was never written.
+#
+#   1. ⚠ WAYLAND SENDS NO REPEATED KEY EVENTS. A client is told the seat's rate
+#      and delay once, in wl_keyboard.repeat_info, and is then expected to run
+#      the timer itself; the compositor sends exactly one press and one release
+#      however long a key is held. This handled that event and threw both
+#      numbers away, so there was NO key repeat at all — holding backspace
+#      erased one character, holding an arrow moved one cell — and nothing
+#      warned, because nothing had gone wrong. It reads as the keyboard being
+#      ignored rather than as a missing timer, which is how it survived every
+#      stage: every test types one character at a time.
+#
+#   2. ⚠ THE LEGACY ENCODER IGNORED MODIFIERS ENTIRELY, which is three keys:
+#
+#      · Shift+Tab sent NOTHING. xkb resolves the Tab key with Shift held to
+#        ISO_Left_Tab — a different keysym, which produces no text — so it fell
+#        through every branch and wrote zero bytes. Verified against a us
+#        keymap rather than assumed. It is `ESC [ Z`, terminfo's kcbt, and that
+#        fits none of the modifier rules: `CSI 1;2I` is what the pattern would
+#        suggest and nothing reads it.
+#      · Shift+Arrow was BYTE-IDENTICAL to Arrow, because xkb puts the shift in
+#        the modifier state and hands back the same keysym. Nothing extending a
+#        selection could tell; it moved the cursor instead.
+#      · Alt+key sent the bare key. Alt is a PREFIX, not a level shift, so every
+#        meta binding in readline and bash was dead.
+#
+#      F1..F12 were not in the table at all and sent nothing either.
+#
+# The fix that matters most is neither of those: the encoder MOVED, out of
+# win.c's wl_keyboard listener and into src/key.c, behind `syntty key
+# shift+tab`. It needed a compositor, a focused surface and a person pressing a
+# key to reach one byte of it — so no test could run it, and these sat there
+# for as long as the window has existed. mouse.c's header has claimed since it
+# was written that "that split is the same one the keyboard has"; it was not
+# true, and now it is. Every expected sequence in the suite is cross-checked
+# against `infocmp xterm-256color`, not against this implementation.
+#
+# ⚠ The repeat TIMER still cannot be tested — it lives in the poll loop, which
+# needs a seat. What is asserted is that the encoder gives the right bytes when
+# it is called again, which is all a repeat does. Losing focus stopping it is
+# the one to keep an eye on: the release of a key held while the window loses
+# focus is delivered to whoever has focus NOW, so a repeat left running there
+# types forever from a key nobody is touching.
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=22
+pkgrel=23
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

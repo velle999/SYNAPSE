@@ -448,6 +448,22 @@ struct win {
 	bool     deadline;        /* the mode is on (it can be turned off to A/B) */
 	uint64_t late;            /* paints that missed their own deadline */
 	uint64_t on_time;
+
+	/* ── key repeat ─────────────────────────────────────────────────────────
+	 *
+	 * ⚠ THE COMPOSITOR REPEATS NOTHING. It tells us the seat's rate and delay
+	 * once, in `wl_keyboard.repeat_info`, and then sends exactly one press and
+	 * one release however long the key is held. Running the timer is the
+	 * client's job — see repeat_track().
+	 *
+	 * `rep_rate_hz` is 0 until the compositor says otherwise, and 0 is also
+	 * how a seat says repeat is switched off, so both mean "do not repeat" and
+	 * neither needs a separate flag. `rep_key` is the ONE key currently held,
+	 * 0 for none. */
+	int32_t       rep_rate_hz;
+	int32_t       rep_delay_ms;
+	xkb_keycode_t rep_key;
+	uint64_t      rep_next_ns;
 };
 
 /* Copy and paste, defined with the rest of the selection plumbing further
@@ -1513,151 +1529,36 @@ static void kbd_enter(void *d, struct wl_keyboard *k, uint32_t s,
 	selections_flush(w);
 }
 
+static void repeat_stop(win_t *w);
+
+/* ⚠ LOSING FOCUS MUST END A REPEAT, and this is the one place it can.
+ *
+ * The release of a key held as the window loses focus is delivered to whoever
+ * has focus NOW, never to us — so a repeat left running here would run for the
+ * rest of the session, typing into the terminal from a key nobody is touching
+ * any more. Alt+Tab away mid-keypress is all it takes. */
 static void kbd_leave(void *d, struct wl_keyboard *k, uint32_t s,
                       struct wl_surface *surf)
-{ (void)d; (void)k; (void)s; (void)surf; }
-
-/* The bytes a key that produces no text sends instead.
- *
- * These are the sequences every curses program reads. They are NOT the kitty
- * keyboard protocol — that is stage 4, it is table stakes rather than a win,
- * and it is additive to this. Returns NULL for a key that has none, which is
- * the signal to send the key's own text. */
-static const char *key_sequence(xkb_keysym_t sym)
 {
-	switch (sym) {
-	case XKB_KEY_Up:        return "\033[A";
-	case XKB_KEY_Down:      return "\033[B";
-	case XKB_KEY_Right:     return "\033[C";
-	case XKB_KEY_Left:      return "\033[D";
-	case XKB_KEY_Home:      return "\033[H";
-	case XKB_KEY_End:       return "\033[F";
-	case XKB_KEY_Page_Up:   return "\033[5~";
-	case XKB_KEY_Page_Down: return "\033[6~";
-	case XKB_KEY_Insert:    return "\033[2~";
-	case XKB_KEY_Delete:    return "\033[3~";
-	/* DEL and not BS: that is what `stty` reports and what readline expects,
-	 * and getting it the other way round is why backspace sometimes prints
-	 * ^H instead of erasing. */
-	case XKB_KEY_BackSpace: return "\177";
-	case XKB_KEY_Escape:    return "\033";
-	default:                return NULL;
-	}
+	(void)k; (void)s; (void)surf;
+	repeat_stop(d);
 }
 
-/* ── encoding a key the way the program asked for it ────────────────────────
- *
- * Two encodings live here and the program chooses between them by pushing
- * flags (see the kitty keyboard protocol block in syntty.h).
- *
- * LEGACY is what every terminal has sent since the seventies, and it is
- * genuinely ambiguous: Ctrl+I and Tab are both 0x09, Ctrl+M and Enter are both
- * 0x0D, Ctrl+[ and Escape are both 0x1B. Nothing can report a key RELEASE, or
- * Ctrl+Shift+1, or which of two physical keys made a character.
- *
- * THE PROTOCOL encoding says exactly what happened:
- *
- *   CSI unicode-key ; modifiers : event ; text u
- *
- * Trailing empty fields are omitted, because a program reading `CSI 97 u`
- * and one reading `CSI 97 ; 1 : 1 u` must agree, and the short form is what
- * everything in the wild sends. */
-
-/* 1 + a bitmask, which is the protocol's convention: 1 means "no modifiers",
- * so a parameter of 0 or an absent one both mean the same thing. */
-static unsigned kkp_mods(struct xkb_state *st)
+/* The modifier mask st_key_encode takes — the wire value minus one, so that
+ * "nothing held" is 0 here and 1 on the wire. ⚠ EFFECTIVE, not depressed: a
+ * latched or locked modifier is held as far as the person is concerned. */
+static unsigned key_mods(struct xkb_state *st)
 {
 	unsigned m = 0;
 	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_SHIFT,
-	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 1;
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= ST_KEY_SHIFT;
 	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_ALT,
-	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 2;
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= ST_KEY_ALT;
 	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_CTRL,
-	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 4;
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= ST_KEY_CTRL;
 	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_LOGO,
-	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 8;
-	return m + 1;
-}
-
-/* The keys that keep a legacy CSI shape even under the protocol: arrows, the
- * navigation block and the function keys. Returns the numeric parameter and
- * the final byte, or 0 for "not one of these". */
-static uint32_t kkp_functional(xkb_keysym_t sym, char *final)
-{
-	switch (sym) {
-	case XKB_KEY_Up:        *final = 'A'; return 1;
-	case XKB_KEY_Down:      *final = 'B'; return 1;
-	case XKB_KEY_Right:     *final = 'C'; return 1;
-	case XKB_KEY_Left:      *final = 'D'; return 1;
-	case XKB_KEY_Home:      *final = 'H'; return 1;
-	case XKB_KEY_End:       *final = 'F'; return 1;
-	case XKB_KEY_Insert:    *final = '~'; return 2;
-	case XKB_KEY_Delete:    *final = '~'; return 3;
-	case XKB_KEY_Page_Up:   *final = '~'; return 5;
-	case XKB_KEY_Page_Down: *final = '~'; return 6;
-	case XKB_KEY_F1:        *final = 'P'; return 1;
-	case XKB_KEY_F2:        *final = 'Q'; return 1;
-	case XKB_KEY_F3:        *final = 'R'; return 1;
-	case XKB_KEY_F4:        *final = 'S'; return 1;
-	case XKB_KEY_F5:        *final = '~'; return 15;
-	case XKB_KEY_F6:        *final = '~'; return 17;
-	case XKB_KEY_F7:        *final = '~'; return 18;
-	case XKB_KEY_F8:        *final = '~'; return 19;
-	case XKB_KEY_F9:        *final = '~'; return 20;
-	case XKB_KEY_F10:       *final = '~'; return 21;
-	case XKB_KEY_F11:       *final = '~'; return 23;
-	case XKB_KEY_F12:       *final = '~'; return 24;
-	default:                return 0;
-	}
-}
-
-/* The first codepoint of a UTF-8 run.
- *
- * The associated-text field is a CODEPOINT, not a byte — sending the first
- * byte of a multi-byte sequence would report 0xC3 for 'a' with an umlaut, and
- * the program would render whatever that is instead. xkb hands us UTF-8, so it
- * has to be decoded back. */
-static uint32_t decode_utf8_first(const char *s, int n)
-{
-	if (n <= 0)
-		return 0;
-	unsigned char c = (unsigned char)s[0];
-	int need;
-	uint32_t cp;
-	if      (c < 0x80) return c;
-	else if ((c & 0xE0) == 0xC0) { need = 1; cp = c & 0x1F; }
-	else if ((c & 0xF0) == 0xE0) { need = 2; cp = c & 0x0F; }
-	else if ((c & 0xF8) == 0xF0) { need = 3; cp = c & 0x07; }
-	else return 0;
-	if (n < need + 1)
-		return 0;
-	for (int i = 1; i <= need; i++) {
-		unsigned char b = (unsigned char)s[i];
-		if ((b & 0xC0) != 0x80)
-			return 0;
-		cp = cp << 6 | (b & 0x3F);
-	}
-	return cp;
-}
-
-/* The protocol's number for a key that is not one of the above. Escape, Enter,
- * Tab and Backspace have fixed codes; everything else is its own codepoint. */
-static uint32_t kkp_code(xkb_keysym_t sym, const char *utf8, int n)
-{
-	switch (sym) {
-	case XKB_KEY_Escape:    return 27;
-	case XKB_KEY_Return:    return 13;
-	case XKB_KEY_Tab:       return 9;
-	case XKB_KEY_BackSpace: return 127;
-	default: break;
-	}
-	if (sym >= 0x20 && sym < 0x7f)
-		return (uint32_t)sym;
-	/* A key whose keysym is not a character but which produced one — a dead
-	 * key resolving, or a compose sequence finishing. */
-	if (n > 0)
-		return (unsigned char)utf8[0];
-	return 0;
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= ST_KEY_SUPER;
+	return m;
 }
 
 /* ⚠ CTRL+SHIFT+1 IS NOT THE `1` KEYSYM. With shift held, xkb resolves the key
@@ -1678,20 +1579,18 @@ static xkb_keysym_t base_sym(win_t *w, xkb_keycode_t code)
 	return n > 0 ? syms[0] : XKB_KEY_NoSymbol;
 }
 
-static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
-                    uint32_t time, uint32_t key, uint32_t state)
+/* One key event, all the way to the child — the whole of what a press does.
+ *
+ * ⚠ SEPARATE FROM THE LISTENER SO THAT REPEAT CAN RE-RUN IT. A repeat is not a
+ * different kind of event, and a terminal where holding a key takes a shortcut
+ * past the terminal's own bindings is one where holding Shift+PageUp scrolls
+ * once and then types. Everything below therefore happens again, identically,
+ * including reading the modifiers back out of the xkb state — which is what
+ * lets somebody press Shift PART WAY THROUGH a held Left and have the rest of
+ * the repeat extend a selection. */
+static void key_input(win_t *w, xkb_keycode_t code, bool pressed)
 {
-	(void)k; (void)time;
-	win_t *w = data;
-	if (!w->xkb_state)
-		return;
-	w->last_serial = serial;
-	/* A selection the child asked for before there was a serial to claim it
-	 * with. This keystroke is the first legitimate chance. */
-	selections_flush(w);
-
 	unsigned flags = st_vt_kbd_flags(w->vt);
-	bool pressed  = state == WL_KEYBOARD_KEY_STATE_PRESSED;
 
 	/* A RELEASE is only ever reported when the program asked for events. Sent
 	 * unasked, it arrives at a shell as a burst of unrecognised escapes, which
@@ -1699,12 +1598,6 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 	if (!pressed && !(flags & KKP_REPORT_EVENTS))
 		return;
 
-	if (pressed && !w->pending_input_ns)
-		w->pending_input_ns = now_ns();
-
-	/* +8: evdev codes and X11 keycodes differ by exactly that, forever, and
-	 * every Wayland client carries this line. */
-	xkb_keycode_t code = key + 8;
 	char utf8[16];
 	int  n = xkb_state_key_get_utf8(w->xkb_state, code, utf8, sizeof utf8);
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(w->xkb_state, code);
@@ -1812,79 +1705,94 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 			w->dirty = true;
 	}
 
-	char out[64];
-	int  len = 0;
+	/* Everything about WHICH BYTES is in key.c, where a test can reach it. */
+	char   out[64];
+	size_t len = st_key_encode(sym, key_mods(w->xkb_state), utf8, n,
+	                           flags, pressed, out, sizeof out);
+	if (len)
+		(void)!write(w->pty->fd, out, len);
+}
 
-	if (flags) {
-		unsigned mods = kkp_mods(w->xkb_state);
-		unsigned evt  = pressed ? 1 : 3;
+/* ── key repeat ─────────────────────────────────────────────────────────────
+ *
+ * ⚠ WAYLAND SENDS NO REPEATED KEY EVENTS, AND NEVER WILL. A press and a
+ * release are all a client ever receives; `wl_keyboard.repeat_info` hands over
+ * the seat's rate and delay and the CLIENT is required to run the timer
+ * itself. Handling the event and dropping both numbers — which is what this
+ * did — is therefore not a small omission, it is the whole feature: holding
+ * backspace erased exactly one character, holding an arrow moved one cell, and
+ * nothing anywhere reported an error because nothing had gone wrong.
+ *
+ * It reads as the keyboard being ignored rather than as a missing timer, which
+ * is why it survived every stage: every test types one character at a time.
+ *
+ * ⚠ ONLY ONE KEY REPEATS — the last one pressed, which is what every keyboard
+ * has always done. And the KEYMAP decides whether a key is allowed to at all
+ * (`xkb_keymap_key_repeats`), so modifiers and locks are excluded by the
+ * layout rather than by a list here that would need a line per keysym.
+ */
+static void repeat_stop(win_t *w)
+{
+	w->rep_key     = 0;
+	w->rep_next_ns = 0;
+}
 
-		char final = 0;
-		uint32_t num = kkp_functional(sym, &final);
-		if (!num) {
-			num   = kkp_code(sym, utf8, n);
-			final = 'u';
-			if (!num)
-				return;         /* a modifier by itself: nothing to report */
-		}
-
-		/* The short forms matter. `CSI A` is what every program expects for an
-		 * unmodified Up, and one that suddenly reads `CSI 1;1A` will not
-		 * recognise it — so the parameters are only spelled out once there is
-		 * something to say. */
-		if (mods == 1 && evt == 1) {
-			if (final == 'u')
-				len = snprintf(out, sizeof out, "\033[%uu", num);
-			else if (final == '~')
-				len = snprintf(out, sizeof out, "\033[%u~", num);
-			else
-				len = snprintf(out, sizeof out, "\033[%c", final);
-		} else if (evt == 1) {
-			len = snprintf(out, sizeof out, "\033[%u;%u%c",
-			               num, mods, final == '~' ? '~' : final);
-		} else {
-			len = snprintf(out, sizeof out, "\033[%u;%u:%u%c",
-			               num, mods, evt, final == '~' ? '~' : final);
-		}
-
-		/* The text the key produced, when it was asked for and there is any.
-		 * It is a THIRD parameter, so the first two have to be spelled out
-		 * even when they are defaults — `CSI 97;;97u` would be ambiguous
-		 * about which field was omitted, and the protocol counts positions.
-		 *
-		 * Only for the `u` form: a functional key produces no text, and there
-		 * is no position for it in the `~` and letter-terminated shapes. */
-		if ((flags & KKP_ASSOCIATED_TEXT) && pressed && n > 0 && final == 'u') {
-			uint32_t cp = decode_utf8_first(utf8, n);
-			if (cp)
-				len = snprintf(out, sizeof out, "\033[%u;%u:%u;%uu",
-				               num, mods, evt, cp);
-		}
-	} else {
-		/* Legacy. Ctrl+letter is a control code and xkb does not fold it. */
-		bool ctrl = xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_CTRL,
-		                                         XKB_STATE_MODS_EFFECTIVE) > 0;
-		if (ctrl && ((sym >= 'a' && sym <= 'z') || (sym >= 'A' && sym <= 'Z'))) {
-			out[0] = (char)((sym | 0x20) - 'a' + 1);
-			len = 1;
-		} else {
-			/* A named sequence WINS over the key's own text: several of these
-			 * keys do produce text and it is the wrong text — Escape yields
-			 * \033 and Backspace yields \010, which is BS where every line
-			 * editor wants DEL. */
-			const char *seq = key_sequence(sym);
-			if (seq) {
-				len = (int)strlen(seq);
-				memcpy(out, seq, (size_t)len);
-			} else if (n > 0) {
-				len = n;
-				memcpy(out, utf8, (size_t)n);
-			}
-		}
+static void repeat_track(win_t *w, xkb_keycode_t code, bool pressed)
+{
+	if (!pressed) {
+		/* ⚠ ONLY the held key stops it. Letting go of Shift while an arrow is
+		 * still down must not end the repeat — it changes what the repeat
+		 * MEANS, and key_input re-reads the modifiers every time for exactly
+		 * that reason. */
+		if (w->rep_key == code)
+			repeat_stop(w);
+		return;
 	}
+	if (w->rep_rate_hz <= 0)
+		return;                    /* the seat has repeat switched off */
+	if (!w->keymap || !xkb_keymap_key_repeats(w->keymap, code))
+		return;                    /* a modifier: it does not become the held key */
 
-	if (len > 0)
-		(void)!write(w->pty->fd, out, (size_t)len);
+	w->rep_key     = code;
+	w->rep_next_ns = now_ns() + (uint64_t)w->rep_delay_ms * 1000000ull;
+}
+
+/* Called from the poll loop once the deadline has passed. */
+static void repeat_fire(win_t *w)
+{
+	if (!w->rep_key || !w->rep_next_ns || w->rep_rate_hz <= 0)
+		return;
+	if (now_ns() < w->rep_next_ns)
+		return;
+
+	xkb_keycode_t code = w->rep_key;
+	w->rep_next_ns = now_ns() + 1000000000ull / (uint64_t)w->rep_rate_hz;
+	key_input(w, code, true);
+}
+
+static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
+                    uint32_t time, uint32_t key, uint32_t state)
+{
+	(void)k; (void)time;
+	win_t *w = data;
+	if (!w->xkb_state)
+		return;
+	w->last_serial = serial;
+	/* A selection the child asked for before there was a serial to claim it
+	 * with. This keystroke is the first legitimate chance. */
+	selections_flush(w);
+
+	bool pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+
+	if (pressed && !w->pending_input_ns)
+		w->pending_input_ns = now_ns();
+
+	/* +8: evdev codes and X11 keycodes differ by exactly that, forever, and
+	 * every Wayland client carries this line. */
+	xkb_keycode_t code = key + 8;
+
+	repeat_track(w, code, pressed);
+	key_input(w, code, pressed);
 }
 
 static void kbd_modifiers(void *data, struct wl_keyboard *k, uint32_t serial,
@@ -1897,9 +1805,20 @@ static void kbd_modifiers(void *data, struct wl_keyboard *k, uint32_t serial,
 		xkb_state_update_mask(w->xkb_state, dep, lat, lock, 0, 0, group);
 }
 
+/* The seat's repeat settings — the only time we are ever told them, and the
+ * only reason repeat can match the rest of the desktop instead of inventing a
+ * rate of its own. ⚠ A rate of 0 means the person has repeat TURNED OFF; it is
+ * an instruction, not a missing value to substitute a default for. */
 static void kbd_repeat(void *d, struct wl_keyboard *k, int32_t rate,
                        int32_t delay)
-{ (void)d; (void)k; (void)rate; (void)delay; }
+{
+	(void)k;
+	win_t *w = d;
+	w->rep_rate_hz  = rate;
+	w->rep_delay_ms = delay;
+	if (rate <= 0)
+		repeat_stop(w);
+}
 
 static const struct wl_keyboard_listener kbd_listener = {
 	kbd_keymap, kbd_enter, kbd_leave, kbd_key, kbd_modifiers, kbd_repeat
@@ -2952,6 +2871,20 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 				? (int)((w->paint_due_ns - now + 999999) / 1000000) : 0;
 		}
 
+		/* ⚠ A HELD KEY IS A SECOND DEADLINE, and it has to shorten this one.
+		 * Nothing else wakes the loop while a key is down — the compositor has
+		 * already sent the only event it is going to send and the child has
+		 * nothing to say until we type at it — so a repeat left out of the
+		 * timeout is a repeat that fires whenever something else happens to
+		 * wake us, which is never at the rate the seat asked for. */
+		if (w->rep_key && w->rep_next_ns) {
+			uint64_t now = now_ns();
+			int due = w->rep_next_ns > now
+				? (int)((w->rep_next_ns - now + 999999) / 1000000) : 0;
+			if (timeout < 0 || due < timeout)
+				timeout = due;
+		}
+
 		if (poll(fds, (nfds_t)nfds, timeout) < 0) {
 			wl_display_cancel_read(w->dpy);
 			if (errno == EINTR)
@@ -2964,6 +2897,12 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 		else
 			wl_display_cancel_read(w->dpy);
 		wl_display_dispatch_pending(w->dpy);
+
+		/* ⚠ AFTER dispatch, never before. A release that arrived in this same
+		 * wakeup has to be seen first, or the key fires one last time after
+		 * the person let go — the classic extra character at the end of a
+		 * held backspace. */
+		repeat_fire(w);
 
 		if (fds[1].revents & (POLLIN | POLLHUP))
 			paste_pump(w);

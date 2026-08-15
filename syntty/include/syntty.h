@@ -906,6 +906,32 @@ size_t st_mouse_encode(uint16_t mode, bool sgr, int event, int button,
                        unsigned mods, int col, int row,
                        char *out, size_t cap, const char **why);
 
+/* ── key.c: what a keystroke becomes ────────────────────────────────────────
+ *
+ * The modifier mask. ⚠ These are the wire values MINUS ONE: the escape
+ * sequences carry 1 + this, so that "no modifiers" is a 1 and an absent
+ * parameter means the same as a present one. `st_key_encode` adds the 1.
+ *
+ * They are deliberately not the ST_MOUSE_* bits — the two protocols number
+ * their modifiers differently (the mouse packs them into the button byte at
+ * 4/8/16) and sharing one enum would silently encode each with the other's
+ * numbers. */
+enum {
+	ST_KEY_SHIFT = 1, ST_KEY_ALT = 2, ST_KEY_CTRL = 4, ST_KEY_SUPER = 8,
+};
+
+/* Encode one key event, or produce nothing.
+ *
+ * `sym` is the xkb keysym the state resolved to, `utf8`/`n` the text it
+ * produced (which may be none), `flags` the kitty-protocol flags the PROGRAM
+ * pushed — zero means legacy, and legacy is what everything gets until it asks.
+ *
+ * Returns the byte count, and 0 for "this key sends nothing", which is a real
+ * answer: a modifier pressed on its own has no bytes, and a release has none
+ * unless the program asked to hear about releases. */
+size_t st_key_encode(uint32_t sym, unsigned mods, const char *utf8, int n,
+                     unsigned flags, bool pressed, char *out, size_t cap);
+
 /* ── config.c: the file, because flags are not how anybody runs a terminal ──
  *
  * `$XDG_CONFIG_HOME/syntty/syntty.conf`, falling back to

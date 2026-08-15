@@ -463,6 +463,145 @@ e=$(mouse --mode=0 press:left@10,5)
 case "$e" in *'no program asked'*) ok "with no mode set nothing is reported at all" ;;
              *) bad "with no mode set nothing is reported at all ($e)" ;; esac
 
+# ── what a KEYSTROKE becomes on the child's input ───────────────────────────
+#
+# ⚠ THE SAME SPLIT, AND IT ARRIVED THREE YEARS LATE. mouse.c's header has
+# claimed since it was written that "that split is the same one the keyboard
+# has". It was not: the encoder lived inside win.c's wl_keyboard listener,
+# where it needed a compositor, a focused surface and a person pressing a key
+# — so NOTHING below this line could be run at all, and three keys were
+# silently wrong for as long as the window has existed. key.c and `syntty key`
+# are that claim being made true.
+#
+# ⚠ EVERY EXPECTED SEQUENCE HERE IS TERMINFO'S, NOT OURS. Cross-checked against
+# `infocmp xterm-256color` rather than against the implementation, because an
+# encoder tested by its author's idea of the protocol agrees with itself:
+#   kcbt=\E[Z  kLFT=\E[1;2D  kRIT=\E[1;2C  kri=\E[1;2A  kind=\E[1;2B
+#   kHOM=\E[1;2H  kf1=\EOP  kf5=\E[15~  kf17(=Shift+F5)=\E[15;2~  kdch1=\E[3~
+key() { "$ST" key "$@" 2>&1; }
+
+# ⚠ THE ONE THAT WAS DEAD. With Shift held, xkb resolves the Tab key to
+# ISO_Left_Tab — a different keysym, which produces NO TEXT — so the encoder
+# fell through every branch and wrote zero bytes. Not the wrong sequence: no
+# sequence, which is why it looked like the terminal was not reading the key.
+# And CSI Z fits none of the modifier rules; `CSI 1;2I` is what the pattern
+# suggests and nothing on earth reads it.
+e=$(key shift+tab)
+case "$e" in *'ESC[Z'*) ok "shift+tab is CSI Z, which is terminfo's kcbt" ;;
+             *) bad "shift+tab is CSI Z, which is terminfo's kcbt ($e)" ;; esac
+
+case "$e" in *ISO_Left_Tab*) ok "...and it arrives as ISO_Left_Tab, not as Tab" ;;
+             *) bad "...and it arrives as ISO_Left_Tab, not as Tab ($e)" ;; esac
+
+e=$(key tab)
+case "$e" in *'\x09'*) ok "...while plain tab is still one byte" ;;
+             *) bad "...while plain tab is still one byte ($e)" ;; esac
+
+# ⚠ THE OTHER HALF OF THE SAME DEFECT. xkb resolves Shift+Left to the Left
+# keysym — the shift is only in the modifier state — so an encoder that ignores
+# modifiers sends bytes IDENTICAL to a bare arrow, and no program can tell that
+# a selection was meant to be extended. It moved the cursor instead.
+e=$(key shift+left)
+case "$e" in *'ESC[1;2D'*) ok "shift+left carries its modifier (kLFT)" ;;
+             *) bad "shift+left carries its modifier (kLFT) ($e)" ;; esac
+
+e=$(key left)
+case "$e" in *'ESC[D   '*) ok "...and an unmodified arrow keeps the SHORT form" ;;
+             *) bad "...and an unmodified arrow keeps the short form ($e)" ;; esac
+
+# The modifier is a bitmask plus one: shift 1, alt 2, ctrl 4, super 8. Ctrl is
+# 4, so ctrl+shift is 1+1+4 = 6.
+e=$(key ctrl+shift+left)
+case "$e" in *'ESC[1;6D'*) ok "...and modifiers combine as 1 + the bitmask" ;;
+             *) bad "...and modifiers combine as 1 + the bitmask ($e)" ;; esac
+
+e=$(key shift+up)
+case "$e" in *'ESC[1;2A'*) ok "shift+up is kri, not a bare Up" ;;
+             *) bad "shift+up is kri, not a bare Up ($e)" ;; esac
+
+# The tilde block puts the modifier in the SECOND parameter, keeping the key's
+# own number in the first — a different shape from the arrows, same rule.
+e=$(key shift+f5)
+case "$e" in *'ESC[15;2~'*) ok "a modified tilde key keeps its number first" ;;
+             *) bad "a modified tilde key keeps its number first ($e)" ;; esac
+
+# ⚠ F1..F4 ARE SS3, NOT CSI, when they carry no modifier — terminfo's kf1 is
+# \EOP. They are the only entries in the table that are, and they are told apart
+# from the arrows by their final byte, since both report parameter 1. `CSI P` is
+# also DCH, so getting this wrong sends a delete-character to anything reading
+# loosely.
+e=$(key f1)
+case "$e" in *'ESCOP'*) ok "unmodified F1 is SS3 (kf1), not CSI" ;;
+             *) bad "unmodified F1 is SS3 (kf1), not CSI ($e)" ;; esac
+
+# ⚠ ALT IS A PREFIX, NOT A LEVEL. xkb hands back the plain text "f" with a
+# modifier set, so without an escape in front, Alt+f is byte-identical to f and
+# every meta binding in readline, bash and Claude Code is dead.
+e=$(key alt+f)
+case "$e" in *'ESCf'*) ok "alt+key is an ESC prefix, not the bare key" ;;
+             *) bad "alt+key is an ESC prefix, not the bare key ($e)" ;; esac
+
+# DEL, and not BS, is what stty reports and what readline erases with. Ctrl is
+# the exception: 0x08 is what readline and Claude Code read as delete-word.
+e=$(key backspace)
+case "$e" in *'\x7f'*) ok "backspace is DEL" ;;
+             *) bad "backspace is DEL ($e)" ;; esac
+
+e=$(key ctrl+backspace)
+case "$e" in *'\x08'*) ok "...and ctrl+backspace is BS, which deletes a word" ;;
+             *) bad "...and ctrl+backspace is BS, which deletes a word ($e)" ;; esac
+
+e=$(key ctrl+c)
+case "$e" in *'\x03'*) ok "ctrl+letter is still folded to a control code" ;;
+             *) bad "ctrl+letter is still folded to a control code ($e)" ;; esac
+
+# A modifier pressed BY ITSELF has no bytes and never has had. It is a real
+# answer, not a failure, and it is printed as one.
+e=$(key Shift_L)
+case "$e" in *'(nothing)'*) ok "a modifier on its own sends nothing" ;;
+             *) bad "a modifier on its own sends nothing ($e)" ;; esac
+
+# ── the same keys under the kitty protocol ──────────────────────────────────
+#
+# ⚠ Shift+Tab was broken HERE TOO, and differently: kkp_code had no entry for
+# ISO_Left_Tab, so it fell through to "not a character", returned 0, and the
+# encoder reported nothing. The protocol has no separate number for it — it is
+# key 9 with shift held, because that is what it is.
+e=$(key --kitty shift+tab)
+case "$e" in *'ESC[9;2u'*) ok "under the protocol shift+tab is key 9 with shift" ;;
+             *) bad "under the protocol shift+tab is key 9 with shift ($e)" ;; esac
+
+e=$(key --kitty a)
+case "$e" in *'ESC[97u'*) ok "...and an ordinary key is its own codepoint" ;;
+             *) bad "...and an ordinary key is its own codepoint ($e)" ;; esac
+
+e=$(key --kitty left)
+case "$e" in *'ESC[D   '*) ok "...while an unmodified arrow keeps its legacy shape" ;;
+             *) bad "...while an unmodified arrow keeps its legacy shape ($e)" ;; esac
+
+# ⚠ A RELEASE HAS NO LEGACY BYTES. Sent unasked it arrives at a shell as a
+# burst of unrecognised escapes, which is how a terminal "types garbage by
+# itself" — and key repeat, which re-runs the press path, made it newly
+# possible to get this wrong.
+e=$(key --release a)
+case "$e" in *'(nothing)'*) ok "a release sends nothing unless the program asked" ;;
+             *) bad "a release sends nothing unless the program asked ($e)" ;; esac
+
+# ── ⚠ KEY REPEAT IS NOT TESTED HERE, AND CANNOT BE ──────────────────────────
+#
+# Wayland sends no repeated key events: the compositor hands over the seat's
+# rate and delay in wl_keyboard.repeat_info and the CLIENT runs the timer. That
+# timer lives in win.c's poll loop, which needs a seat — a headless cage has no
+# keyboard, and input is never synthesised on a live session.
+#
+# So what is asserted above is only that the ENCODER produces the right bytes
+# when it is called again, which is all a repeat does. That the timer calls it
+# at the seat's rate, that letting go stops it, and that losing focus stops it
+# — that last one being the difference between a feature and a terminal typing
+# forever from a key nobody is holding — are verified by reading win.c and by
+# holding a key down. Said out loud rather than left as a gap somebody has to
+# rediscover.
+
 # ── resizing, which nothing could test until there was a way to ─────────────
 #
 # ⚠ A WINDOW IS RESIZED BY THE COMPOSITOR, so every rule about what happens to

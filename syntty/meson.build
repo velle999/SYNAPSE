@@ -121,6 +121,7 @@ syntty_sources = files(
   'src/font.c',
   'src/graphics.c',
   'src/grid.c',
+  'src/key.c',
   'src/main.c',
   'src/mouse.c',
   'src/paste.c',
