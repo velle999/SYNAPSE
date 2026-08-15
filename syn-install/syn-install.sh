@@ -2907,6 +2907,41 @@ if [ "$WANT_STEAM" = 1 ]; then
         cachy_keyring=$(cachy_pkg_url cachyos-keyring cachyos-keyring-20240331-1-any.pkg.tar.zst)
         cachy_mirrors=$(cachy_pkg_url cachyos-mirrorlist cachyos-mirrorlist-27-1-any.pkg.tar.zst)
 
+        # ── TRUST THE KEY BEFORE FETCHING WHAT IT SIGNS ──────────────────────
+        #
+        # THE BOOTSTRAP IS A CHICKEN AND EGG, AND THIS BLOCK USED TO GET IT
+        # BACKWARDS. cachyos-keyring is itself SIGNED by the CachyOS master key
+        # (the .sig is on the mirror), `pacman -U` on a URL is governed by
+        # RemoteFileSigLevel, and that defaults to Required. So on a target
+        # whose trustdb has never seen this key, the -U below is refused for
+        # unknown trust — every time, on every install. The old order ran the
+        # -U FIRST and only trusted the key afterwards, so it could never have
+        # succeeded on a fresh machine, and CachyOS Proton has never once been
+        # installed by this installer.
+        #
+        # Proven, not deduced: on the 2026-08-14 T14 install the -U logged
+        # `[PACMAN] Running` at 23:43:06 and installed nothing, and the byte-
+        # identical command an hour later — after `synpkg cachyos enable-repo`
+        # had recv+lsigned the key — installed both packages.
+        #
+        # --recv-keys takes the FULL fingerprint, so this is still a pin: gpg
+        # matches the whole thing, and a keyserver that offers a different key
+        # cannot satisfy it. lsign-key then trusts THAT key and nothing else;
+        # --populate below still imports the rest of the keyring, which is why
+        # the check on the delivered file stays.
+        echo "  Trusting the CachyOS master key..."
+        arch-chroot /mnt pacman-key --recv-keys "$CACHY_FPR" \
+            --keyserver keyserver.ubuntu.com >/dev/null 2>&1 || true
+        # Verify rather than believe the exit status: --recv-keys can report
+        # success and leave no key behind (same reason synpkg's helper checks).
+        if arch-chroot /mnt pacman-key --list-keys "$CACHY_FPR" >/dev/null 2>&1; then
+            arch-chroot /mnt pacman-key --lsign-key "$CACHY_FPR" >/dev/null 2>&1 || true
+        else
+            warn "Could not fetch the CachyOS master key from keyserver.ubuntu.com.
+  The signed keyring cannot be installed without it, so CachyOS Proton is
+  skipped. Add it later with:  synpkg cachyos enable-repo"
+        fi
+
         # -U on a URL, because these two packages are the thing that makes the
         # repo usable — they cannot come FROM the repo.
         #
