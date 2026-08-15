@@ -1345,3 +1345,40 @@ the capture taken before the key existed. `bar_backdrop.sh` covers both
 wallpapers that paint no picture — and skips the rain rather than passing it
 where the kanji atlas is not in the build's datadir, because the fallback there
 answers `light` too and a check that passes either way is not a check.
+
+### Super+Return opened two terminals  *(done)*
+
+`spawn("syntty || kitty || foot || alacritty || xterm")`. The chain is there so a
+box whose terminal package failed to install still opens *something* — but `||`
+runs the next command when the previous one **exits non-zero**, and a terminal's
+exit status is the exit status of the shell inside it. So the chain was asking
+"did your shell session succeed?" and answering "no, here is another terminal".
+
+- [x] **Closing the window did it every time.** syntty's teardown closes the pty
+      master, which hangs the shell up, and `st_pty_reap` returns
+      `128 + SIGHUP` = **129**. Measured on a headless rig, not inferred:
+      `syntty -e false` → 1, `syntty -e true` → 0, `syntty -e sh -c 'kill -HUP
+      $$'` → 129.
+- [x] **So did `exit` after any command that failed**, which carries that
+      command's status out of the shell with it.
+- [x] **Why it took three years to show.** The head of the chain used to be
+      kitty, which answers the compositor's close request by quitting cleanly
+      with 0, and the name after it was usually not installed. Putting a terminal
+      that reports the close *honestly* at the head turned a latent bug into one
+      that fires on every close.
+- [x] **`command -v` in a loop, then `exec`** — which is what
+      `config/xdg-terminal-exec` has always done, and what its comment already
+      claimed the keybind did. exec also means nothing can run after the terminal
+      at all. Moved to `synui_terminal_cmd()` in synui.h beside the other policy
+      inlines, so it is testable without linking input.c.
+- [x] **xdg-terminal-exec's own chain was stale the other way** — no syntty in
+      it. Only visible with a synuirc that has no `terminal =` line, where the
+      keybind opened syntty and everything GLib launched opened kitty.
+
+`tests/terminal_chain_test.c` runs the string the keybind spawns against stub
+terminals on PATH that exit 129, and counts how many ran. Verified by restoring
+the old chain: it reports `syntty` then `kitty`, which is the bug as reported.
+It also holds the fallback down — with syntty off PATH the next installed name
+runs, so the fix cannot be satisfied by a chain of one — and pins that an
+explicit `terminal =` arrives unwrapped, since that setting can carry arguments
+and a `command -v` loop would look for a program with a space in its name.

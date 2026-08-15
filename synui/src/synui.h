@@ -3539,6 +3539,60 @@ static inline float theme_bar_alpha(const syn_config_t *cfg)
 }
 
 /*
+ * What the `term` keybind actually runs.
+ *
+ * A box whose terminal package failed to install should still open SOMETHING
+ * rather than have its most-pressed key silently do nothing, so there is a
+ * fallback chain. The chain is used only while the configured terminal is still
+ * a shipped default: an explicit `terminal = <x>` in synuirc is a choice, and
+ * quietly launching a different program when it is missing would hide the
+ * mistake. TWO defaults are recognised — syntty has been the shipped one since
+ * 0.1.0-359, and kitty is what every synuirc written before that still says.
+ * Treating the older one as an explicit choice would strand exactly the machines
+ * that never chose anything. foot stays in every chain: it is what every system
+ * installed before kitty shipped, and at 793 KiB against kitty's 65 MiB it is
+ * also the sensible rescue.
+ *
+ * ⚠ IT ASKS WHICH TERMINAL IS INSTALLED, AND NOT WHETHER ONE SUCCEEDED. This
+ * was `syntty || kitty || foot || alacritty || xterm` for three years, and `||`
+ * runs the next command when the previous one EXITS NON-ZERO — which for a
+ * terminal is the exit status of the shell inside it. So:
+ *
+ *   * closing the window opened another terminal. syntty's teardown closes the
+ *     pty master, the shell is hung up, and 128 + SIGHUP is 129. Measured.
+ *   * so did typing `exit` after any command that failed, since the shell
+ *     carries that status out with it.
+ *
+ * It survived because the terminal at the head of the chain used to be kitty,
+ * which answers the compositor's close request by quitting cleanly with 0, and
+ * because the next name after it was usually not installed. Putting a terminal
+ * that reports the close honestly at the head turned a latent bug into one that
+ * fires every single time.
+ *
+ * `command -v` in a loop and then `exec` is the same shape config/
+ * xdg-terminal-exec has always used — which is what the two are supposed to
+ * agree on — and exec means nothing can run after the terminal at all.
+ *
+ * `names` is never the user's string: only the two shipped defaults reach it,
+ * so there is nothing here for a config file to inject through.
+ */
+static inline void synui_terminal_cmd(const syn_config_t *cfg,
+                                      char *buf, size_t n)
+{
+    const char *names = NULL;
+    if      (strcmp(cfg->terminal, "syntty") == 0) names = "syntty kitty foot alacritty xterm";
+    else if (strcmp(cfg->terminal, "kitty")  == 0) names = "kitty syntty foot alacritty xterm";
+
+    if (!names) {
+        snprintf(buf, n, "%s", cfg->terminal);
+        return;
+    }
+    snprintf(buf, n,
+             "for t in %s; do command -v \"$t\" >/dev/null 2>&1 && exec \"$t\"; done",
+             names);
+}
+
+/*
  * Does this theme's chrome do GLASS — frosted translucent surfaces over a
  * backdrop blur, rather than a tinted slab?
  *

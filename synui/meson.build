@@ -600,6 +600,21 @@ ctlpanel_table_test = executable('ctlpanel_table_test',
   build_by_default : false)
 test('ctlpanel_table', ctlpanel_table_test)
 
+# What Super+Return actually runs. The fallback chain used to be
+# `syntty || kitty || …`, and `||` fires on a NON-ZERO exit — which for a
+# terminal is the exit status of the shell inside it, so closing the window
+# opened another terminal. This links nothing: synui_terminal_cmd() is a policy
+# inline in synui.h, and the test executes the string it returns against stub
+# terminals on PATH, because the bug was in what /bin/sh does with the operators
+# rather than in the words.
+terminal_chain_test = executable('terminal_chain_test',
+  ['tests/terminal_chain_test.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libcurl],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('terminal_chain', terminal_chain_test)
+
 # Per-glyph font fallback. Links text.c alone — it needs cairo and fontconfig
 # and nothing else, which is the point of it being its own file: the fallback
 # is testable without a compositor, an output or a scene graph.

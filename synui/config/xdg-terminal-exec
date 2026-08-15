@@ -51,10 +51,19 @@ fi
 #   2. synuirc        — synui's own `terminal =` setting, so a user who changed
 #                       their terminal in one place does not have to change it
 #                       in two.
-#   3. kitty || foot || alacritty || xterm — the same chain synui's `term`
-#      keybind uses (input.c). foot sits behind kitty because kitty needs
-#      working OpenGL and foot renders on the CPU, which is what makes it the
-#      rescue terminal on llvmpipe.
+#   3. syntty, kitty, foot, alacritty, xterm — the same chain and the same
+#      ORDER synui's `term` keybind uses (synui_terminal_cmd in synui.h). syntty
+#      is the shipped default from 0.1.0-359 and was missing from this list,
+#      which mattered only for a synuirc with no `terminal =` line at all: there
+#      the keybind opened syntty and everything GLib launched opened kitty.
+#      foot sits behind both because kitty needs working OpenGL and foot renders
+#      on the CPU, which is what makes it the rescue terminal on llvmpipe.
+#
+#      ⚠ THE TEST IS `command -v`, NEVER `a || b`. This script has always had it
+#      right; the keybind had not — `||` fires on a non-zero exit, and a
+#      terminal exits with the status of the shell inside it, so closing the
+#      window opened the next terminal in the chain. Fixed in 0.1.0-366, pinned
+#      by tests/terminal_chain_test.c.
 rc="${XDG_CONFIG_HOME:-$HOME/.config}/synui/synuirc"
 configured=""
 if [ -r "$rc" ]; then
@@ -65,7 +74,7 @@ if [ -r "$rc" ]; then
 fi
 
 term=""
-for candidate in "${TERMINAL-}" "$configured" kitty foot alacritty xterm; do
+for candidate in "${TERMINAL-}" "$configured" syntty kitty foot alacritty xterm; do
     [ -n "$candidate" ] || continue
     # $TERMINAL is conventionally a bare command, but tolerate "kitty -e" and
     # friends by testing only the program word.
@@ -85,9 +94,11 @@ fi
 
 # `-e` is accepted by every terminal in the chain -- foot documents it as
 # "ignored (for compatibility with xterm -e)", xterm and alacritty require it,
-# and kitty accepts it even though its --help does not list it (the same
-# reason config.c:673 uses this form for `kitty -e nmtui`). So one shape works
-# across all four, and COMMAND is passed as separate argv words rather than
+# kitty accepts it even though its --help does not list it (the same reason
+# config.c:673 uses this form for `kitty -e nmtui`), and syntty grew it in
+# 0.1.0-359 for exactly this: a terminal without `-e` can be installed but
+# never made the default. So one shape works across all five, and COMMAND is
+# passed as separate argv words rather than
 # through a shell -- these arguments arrive from a URI handler, and re-quoting
 # them into `sh -c` is how a filename with a space becomes a command.
 exec $term -e "$@"
