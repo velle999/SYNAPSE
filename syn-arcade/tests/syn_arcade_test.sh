@@ -116,6 +116,31 @@ check "an unknown command is refused" $?
 [ $? = 2 ]
 check "...with exit status 2" $?
 
+# ── `pads hold` ─────────────────────────────────────────────────────────────
+#
+# The keep-awake verb. Its device path is not exercised here, for the same
+# reason none of the ioctl paths are — but its LIFETIME is, and that is the
+# half that can leak. A `pads hold` that misses its exit condition holds every
+# event node open for the rest of the session, and on a pad that sleeps the
+# symptom of that is the pad staying awake: it looks like the fix working.
+says "$SA" --help | grep -q "pads hold"
+check "pads hold is documented" $?
+
+# ⚠ NOT `pads hold | grep -q ...`. grep holds the read end open waiting for
+# output that never comes, and `pads hold` is by design still running — the
+# assertion hangs until meson's timeout turns it into a build failure. The exit
+# condition has to be the thing that CLOSES the pipe.
+#
+# `| true` closes the read end immediately. 10s is ~100x the observed 69ms and
+# far inside meson's 120s; a timeout here means the guard is gone and the verb
+# would leak a process holding every event node.
+timeout 10 sh -c "'$SA' pads hold 2>'$T/hold.err' | true"
+check "pads hold exits when its stdout reader goes away" $?
+
+grep -q "unknown pads command" "$T/hold.err"
+[ $? != 0 ]
+check "...and is a recognised verb, not one the dispatcher rejected" $?
+
 # ── the overlay ─────────────────────────────────────────────────────────────
 
 echo

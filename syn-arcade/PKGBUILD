@@ -45,6 +45,23 @@
 #      nothing when the result is unchanged — and the session profile runs it
 #      at every login.
 #
+# ⚠ 0.1.0-5 stops the graphical window letting a wireless pad FALL ASLEEP while
+# it is on screen — which looked exactly like this application disconnecting the
+# controller, and was reported as that.
+#
+# xpad submits its USB interrupt URB when the input device is OPENED, and only
+# then. With nothing holding the node open the endpoint is never polled, a
+# 2.4GHz dongle sees no traffic, and the pad's own idle timer switches it off.
+# Steam Input holds every pad open for as long as it runs, so a controller stays
+# alive under Steam and dies under anything that does not — and `pads list`
+# opens each node, reads what it needs, and exits. Measured on an 8BitDo
+# Ultimate: 4-5s with nothing holding it, 43s under Steam, no disconnect at all
+# in five minutes with one blocking read on the node.
+#
+# So the window now also runs `pads hold`, which holds every pad open for as
+# long as it is up and reads nothing into anything. Big screen mode never had
+# the bug: `big nav` already holds the whole set across its rescan loop.
+#
 # ⚠ Its controller navigation SYNTHESISES NOTHING. `syn-arcade big nav` reads
 # the event nodes udev already grants this user and writes WORDS — "up",
 # "accept" — down a pipe that exactly one process is reading. The obvious
@@ -95,7 +112,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -46,9 +46,11 @@
 #include <fcntl.h>
 #include <linux/input.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/prctl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -1094,6 +1096,9 @@ static const char *first_operand(int argc, char **argv)
 	return NULL;
 }
 
+/* Defined at the bottom, with the other evdev polling loop it borrows from. */
+static int pads_hold_stream(void);
+
 int cmd_pads(int argc, char **argv)
 {
 	if (argc < 1)
@@ -1107,6 +1112,7 @@ int cmd_pads(int argc, char **argv)
 	if (strcmp(sub, "list") == 0)
 		return pads_list(opt_flag(rest_c, rest, "--rec"));
 	if (strcmp(sub, "apply") == 0)	return pads_apply();
+	if (strcmp(sub, "hold") == 0)	return pads_hold_stream();
 
 	const char *who = first_operand(rest_c, rest);
 
@@ -1557,6 +1563,135 @@ int pads_nav_stream(void)
 		 */
 		if (feof(stdout) || ferror(stdout))
 			break;
+	}
+
+	nav_close(pads, count);
+	return EX_OK;
+}
+
+/*
+ * `pads hold` — keep every attached controller AWAKE for as long as a UI is up.
+ *
+ * ⚠ This exists because of a fault that looks nothing like its cause, and the
+ * reasoning is worth keeping because the obvious reading blames the wrong
+ * program.
+ *
+ * xpad submits its USB interrupt URB when the input device is OPENED, and only
+ * then. With nothing holding the node open the endpoint is never polled, a
+ * 2.4GHz dongle sees no traffic, and the pad's own idle timer switches it off —
+ * the dongle re-enumerating to its "no pad" product id seconds later. Steam
+ * Input holds every pad open for as long as it runs, which is the entire reason
+ * a controller stays alive under Steam and dies under anything that does not.
+ *
+ * `pads list` opens each node, reads what it needs and exits. So the window
+ * built on it sat and watched the controller it was describing switch itself
+ * off, and looked exactly like the thing that had killed it. Measured on an
+ * 8BitDo Ultimate: 4-5s with nothing holding it, 43s under Steam, and no
+ * disconnect at all in five minutes with a single blocking read on the node.
+ *
+ * It reads and DISCARDS. Holding the descriptor is what keeps the URB
+ * submitted, but a client that never reads has the kernel fill its buffer and
+ * raise SYN_DROPPED, and draining is also what makes POLLHUP arrive so a replug
+ * is noticed. It GRABS nothing — no EVIOCGRAB — so a game, Steam and this can
+ * all hold the same pad at once, which they routinely will.
+ */
+static int pads_hold_stream(void)
+{
+	/*
+	 * ⚠ TWO independent ways to notice the UI has gone, because this
+	 * process prints nothing and so cannot find out the way pads_nav_stream
+	 * does (write a word, then check ferror).
+	 *
+	 *   1. POLLERR on stdout. quickshell hands a Process a pipe; when the
+	 *      window closes and the read end goes, the write end reports
+	 *      POLLERR — without us ever writing to it.
+	 *   2. PR_SET_PDEATHSIG, for when stdout is NOT a pipe — a terminal, or
+	 *      /dev/null — and so never errors at all.
+	 *
+	 * Neither alone covers both, and getting it wrong leaves a stray
+	 * process holding every event node open for the rest of the session.
+	 * On a pad that sleeps, that failure is invisible: it looks like the
+	 * bug being fixed here, fixed.
+	 *
+	 * ⚠ Do NOT add a `getppid() == 1 -> exit` guard for the race where the
+	 * parent dies before the prctl above. It looks like it closes a hole and
+	 * it opens a worse one: under systemd, or from a disowned shell, the
+	 * parent IS init, and the command would exit instantly and hold nothing
+	 * while reporting success — the silent no-op this file keeps warning
+	 * about. The race it guards against is already covered, because in the
+	 * one case that matters the parent is quickshell and stdout is its pipe.
+	 */
+	prctl(PR_SET_PDEATHSIG, SIGTERM);
+
+	navpad_t pads[NAV_MAX];
+	int count = nav_open(pads, NAV_MAX);
+	long long rescan_at = now_ms() + NAV_RESCAN_MS;
+
+	for (;;) {
+		struct pollfd pfd[NAV_MAX + 1];
+		int n = 0;
+
+		for (int i = 0; i < count; i++) {
+			pfd[n].fd = pads[i].fd;
+			pfd[n].events = POLLIN;
+			pfd[n].revents = 0;
+			n++;
+		}
+
+		/* events = 0: the error bits are reported whether asked for or
+		 * not, and POLLIN on stdout would be meaningless. */
+		int out = n;
+		pfd[n].fd = STDOUT_FILENO;
+		pfd[n].events = 0;
+		pfd[n].revents = 0;
+		n++;
+
+		int r = poll(pfd, (nfds_t)n, NAV_RESCAN_MS);
+		if (r < 0 && errno != EINTR)
+			break;
+		if (pfd[out].revents & (POLLERR | POLLHUP | POLLNVAL))
+			break;
+
+		/*
+		 * ⚠ Drain BEFORE rescanning, the same ordering pads_nav_stream
+		 * depends on and for the same reason: a hangup arrives in the
+		 * SAME revents as the last data the device produced. The events
+		 * are thrown away here, but reading them is still what lets the
+		 * POLLHUP in that revents mean "replug" rather than being lost
+		 * with the descriptor that carried it.
+		 */
+		bool relist = false;
+		for (int i = 0; i < count; i++) {
+			if (pfd[i].revents & POLLIN) {
+				struct input_event ev[64];
+				/* Non-blocking (nav_open sets O_NONBLOCK), so
+				 * this ends on EAGAIN. */
+				while (read(pads[i].fd, ev, sizeof(ev)) > 0)
+					;
+			}
+			if (pfd[i].revents & (POLLERR | POLLHUP))
+				relist = true;
+		}
+
+		long long now = now_ms();
+		if (relist || now >= rescan_at) {
+			int found_n = 0;
+			pad_t *found = pads_scan(&found_n);
+			int live = 0;
+			for (int i = 0; i < found_n; i++)
+				if (found[i].is_pad)
+					live++;
+			free(found);
+
+			/* Reopen the whole set rather than diffing — event node
+			 * numbers are recycled across a replug. Same reasoning
+			 * as the nav loop above. */
+			if (relist || live != count) {
+				nav_close(pads, count);
+				count = nav_open(pads, NAV_MAX);
+			}
+			rescan_at = now + NAV_RESCAN_MS;
+		}
 	}
 
 	nav_close(pads, count);

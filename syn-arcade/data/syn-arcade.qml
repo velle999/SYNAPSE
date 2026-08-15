@@ -130,6 +130,23 @@ FloatingWindow {
         }
     }
 
+    // ⚠ Long-lived, prints nothing, and NOT a reader despite living among them.
+    //
+    // A wireless pad falls asleep unless something holds its event node OPEN —
+    // xpad polls the USB endpoint only while the device is open — so a window
+    // whose only contact with a controller is re-running `pads --rec` sits and
+    // watches the pad it is describing switch itself off, and gets the blame
+    // for it. Steam stays out of trouble by holding every pad for as long as it
+    // runs; this does the same for as long as the window is up.
+    //
+    // Killed by quickshell when this shell exits, and `pads hold` also watches
+    // its own stdout for the pipe closing. See pads_hold_stream() in pad.c.
+    Process {
+        id: holdProc
+        command: [root.bin, "pads", "hold"]
+        running: true
+    }
+
     Process {
         id: mapsProc
         stdout: StdioCollector {
