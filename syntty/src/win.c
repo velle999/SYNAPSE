@@ -690,6 +690,16 @@ static const char *tab_name(const tab_t *t)
 	return t->vt.title[0] ? t->vt.title : t->label;
 }
 
+/* The renderer's colours, onto a tab's parser, so OSC 10/11/12 can be answered.
+ * The parser has no renderer and the renderer has no parser; this is the one
+ * place that holds both, and it runs at every point either can change. */
+static void tab_push_colors(win_t *w, tab_t *t)
+{
+	uint32_t fg, bg;
+	st_render_colors_get(w->ren, &fg, &bg);
+	st_vt_set_colors(&t->vt, fg, bg, st_render_cursor_color_get(w->ren));
+}
+
 static tab_t *tab_new(win_t *w)
 {
 	if (w->ntabs >= SYN_MAX_TABS)
@@ -706,15 +716,39 @@ static tab_t *tab_new(win_t *w)
 	tab_t *t = xcalloc(1, sizeof *t);
 	st_grid_init(&t->g, cols, rows, w->spec->scrollback);
 	st_vt_init(&t->vt, &t->g);
+	tab_push_colors(w, t);
 
 	/* ⚠ A SERIAL, NOT A POSITION. `SYNTTY_TAB=2` has to keep meaning the same
 	 * session for as long as it runs; numbering by where a tab sits in the bar
 	 * would renumber every shell behind it the moment somebody closed one. */
-	char serial[24];
-	snprintf(serial, sizeof serial, "%llu",
+	char serial[40];
+	snprintf(serial, sizeof serial, "SYNTTY_TAB=%llu",
 	         (unsigned long long)(w->tabs_opened + 1));
-	if (!st_pty_spawn_env(&t->pty, w->spec->argv, cols, rows,
-	                      "SYNTTY_TAB", serial)) {
+
+	/* ── what the child is told about the colours ───────────────────────────
+	 *
+	 * OSC 11 (vt.c) is the accurate channel and the one a program should use,
+	 * but it costs a round trip and a timeout, so a program that draws its
+	 * first screen immediately has already chosen a palette by the time the
+	 * answer arrives. COLORFGBG is the pre-draw hint, and it is what several
+	 * of them read INSTEAD of asking.
+	 *
+	 * The convention is `<fg>;<bg>` as ANSI indices, and readers take the last
+	 * field: 0 is black, 15 is white, so `0;15` means dark text on a light
+	 * background and `15;0` the other way round. Nothing else about the two
+	 * numbers is used by anyone, which is why they are these two and not the
+	 * nearest palette entries to our actual colours.
+	 *
+	 * ⚠ A CHILD ALREADY RUNNING CANNOT BE TOLD. This is the environment at
+	 * spawn; a theme switch under an open shell reaches the terminal (the
+	 * config watch) and the parser (st_vt_set_colors below), so a program that
+	 * ASKS gets the new answer, and one that read the variable at startup keeps
+	 * the old one until it is restarted. Same shape as the font. */
+	const char *fgbg = st_render_bg_is_light(w->ren) ? "COLORFGBG=0;15"
+	                                                 : "COLORFGBG=15;0";
+	const char *env[] = { serial, fgbg, NULL };
+
+	if (!st_pty_spawn_env(&t->pty, w->spec->argv, cols, rows, env)) {
 		st_vt_free(&t->vt);
 		st_grid_free(&t->g);
 		free(t);
@@ -1242,6 +1276,14 @@ static void config_reload(win_t *w)
 	 * "nothing" correctly means the built-in scheme rather than whatever the
 	 * last theme left behind. */
 	st_config_apply_colors(&nc, w->ren);
+
+	/* ⚠ AND ONTO EVERY PARSER. A program that asks OSC 11 after a theme switch
+	 * must be told what the terminal looks like NOW; a tab still holding the
+	 * colours it was born with would answer for a theme nobody can see, and
+	 * that answer is worse than none — it is confidently wrong, and the program
+	 * would repaint itself for it. */
+	for (int i = 0; i < w->ntabs; i++)
+		tab_push_colors(w, w->tabs[i]);
 
 	if (nc.scroll_lines > 0)
 		w->scroll_lines = nc.scroll_lines;

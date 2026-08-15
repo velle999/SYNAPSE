@@ -104,6 +104,17 @@ enum {
 #define ST_COL_INDEXED   0x01000000u   /* | index  */
 #define ST_COL_RGB       0x02000000u   /* | 0xRRGGBB */
 
+/* The built-in scheme's three colours, in ONE place.
+ *
+ * ⚠ THE PARSER NEEDS THEM TOO, which is why they are here and not in render.c.
+ * A program that asks "what colour is your background?" (OSC 11) is answered by
+ * vt.c, and a second copy of these values there would drift from the renderer's
+ * the first time one of them changed — and the symptom would be a program
+ * picking a theme for a background the terminal does not actually have, which
+ * is the exact bug the query exists to prevent. */
+#define ST_DEF_FG        0x00C8CDD6u
+#define ST_DEF_BG        0x001B1F26u
+
 typedef struct {
 	uint32_t fg;
 	uint32_t bg;
@@ -566,6 +577,16 @@ typedef struct {
 	int      reply_len;
 	uint64_t reply_dropped;
 
+	/* ── what to answer OSC 10/11/12 with ───────────────────────────────────
+	 *
+	 * The colours the RENDERER resolved, pushed in by whoever owns it. The
+	 * parser draws nothing and so has no colours of its own; it holds these
+	 * only so a program that asks can be told the truth. Initialised to the
+	 * built-in scheme, because `dump` and `run` have no renderer at all and an
+	 * answer of zero would be a claim that the background is black. */
+	uint32_t col_fg, col_bg, col_cursor;
+	uint64_t col_queries;     /* how many were asked — `win --stats` prints it */
+
 	char title[512];
 
 	/* ── OSC 52: what the child asked to put on the clipboard ───────────────
@@ -658,6 +679,12 @@ uint64_t st_gfx_refused(const struct st_gfx *g);
  * this, which is correct for `dump`: a file cannot be answered. */
 size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap);
 
+/* Tell the parser what the renderer resolved, so OSC 10/11/12 can be answered
+ * with the colours actually on screen. ⚠ Call it again after a config reload:
+ * a program that asked before a theme switch was told the truth at the time,
+ * and the next one to ask must be told the new truth. */
+void st_vt_set_colors(st_vt_t *vt, uint32_t fg, uint32_t bg, uint32_t cursor);
+
 /* ── font.c ─────────────────────────────────────────────────────────────── */
 
 /* A rasterised glyph: 8-bit COVERAGE, not colour.
@@ -746,6 +773,15 @@ uint32_t st_render_palette_get(const st_render_t *r, int idx);
  * is the default and the only rule that contrasts with whatever a program has
  * painted underneath it. */
 void st_render_cursor_color(st_render_t *r, uint32_t bg, uint32_t fg);
+/* What the cursor would be drawn in. ⚠ When the config named neither, the
+ * cursor INVERTS the cell and there is no such colour — this reports the
+ * default foreground, which is what a program asking OSC 12 can act on. */
+uint32_t st_render_cursor_color_get(const st_render_t *r);
+/* Is the background a light one? The one fact a child needs before it draws
+ * anything — see the COLORFGBG note in win.c. Measured as relative luminance,
+ * not by eye and not by channel average: #0000ff and #ffff00 have the same
+ * average and are not the same kind of background. */
+bool st_render_bg_is_light(const st_render_t *r);
 /* Images to draw over the cells — the graphics protocol's store, which lives on
  * the parser. NULL for none, which is what a session that never shows an image
  * keeps forever. */
@@ -806,11 +842,14 @@ typedef struct {
 /* forkpty, argv exec'd with no shell in the middle. Returns false and leaves
  * errno set on failure. */
 bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows);
-/* The same, with one more variable in the child's environment. Used for
- * SYNTTY_TAB, which tells a shell which tab it is running in — a stable serial
- * that is never reused, not a position that changes whenever a tab closes. */
+/* The same, plus a NULL-terminated list of "NAME=VALUE" for the child.
+ *
+ * Used for SYNTTY_TAB (a stable serial telling a shell which tab it runs in,
+ * never reused and not a position) and for COLORFGBG, which is the one thing a
+ * program can read BEFORE it draws anything to find out whether the background
+ * it is about to draw on is light or dark. */
 bool st_pty_spawn_env(st_pty_t *p, char *const argv[], uint16_t cols,
-                      uint16_t rows, const char *name, const char *value);
+                      uint16_t rows, const char *const env[]);
 /* Read until the child exits and the pty drains, feeding everything through
  * the parser. Returns the child's exit status. */
 int  st_pty_pump(st_pty_t *p, st_vt_t *vt);

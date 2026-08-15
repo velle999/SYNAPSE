@@ -102,10 +102,10 @@ st_render_t *st_render_new(st_font_t *f)
 	st_render_t *r = xcalloc(1, sizeof *r);
 	r->font = f;
 	palette_build(r->palette);
-	r->def_bg      = 0x1B1F26;
-	r->def_fg      = 0xC8CDD6;
-	r->cursor_bg   = 0xC8CDD6;
-	r->cursor_fg   = 0x1B1F26;
+	r->def_bg      = ST_DEF_BG;
+	r->def_fg      = ST_DEF_FG;
+	r->cursor_bg   = ST_DEF_FG;
+	r->cursor_fg   = ST_DEF_BG;
 	r->show_cursor = true;
 	return r;
 }
@@ -133,10 +133,10 @@ void st_render_set_font(st_render_t *r, st_font_t *f)
 void st_render_colors_reset(st_render_t *r)
 {
 	palette_build(r->palette);
-	r->def_bg     = 0x1B1F26;
-	r->def_fg     = 0xC8CDD6;
-	r->cursor_bg  = 0xC8CDD6;
-	r->cursor_fg  = 0x1B1F26;
+	r->def_bg     = ST_DEF_BG;
+	r->def_fg     = ST_DEF_FG;
+	r->cursor_bg  = ST_DEF_FG;
+	r->cursor_fg  = ST_DEF_BG;
 	r->cursor_set = false;
 }
 
@@ -184,6 +184,16 @@ void st_render_cursor_color(st_render_t *r, uint32_t bg, uint32_t fg)
 	r->cursor_set = true;
 	r->cursor_bg = bg == ST_CFG_UNSET ? r->def_fg : bg;
 	r->cursor_fg = fg == ST_CFG_UNSET ? r->def_bg : fg;
+}
+
+/* ⚠ WITH NO CONFIGURED CURSOR THERE IS NO CURSOR COLOUR — the block INVERTS
+ * whatever cell it sits on, which is the default precisely because it contrasts
+ * with anything a program paints. The default foreground is the honest answer
+ * for a program that asks: it is what the cursor comes out as over ordinary
+ * background, and it is a colour, which "an inversion" is not. */
+uint32_t st_render_cursor_color_get(const st_render_t *r)
+{
+	return r->cursor_set ? r->cursor_bg : r->def_fg;
 }
 
 void st_render_set_gfx(st_render_t *r, const struct st_gfx *g) { r->gfx = g; }
@@ -249,6 +259,19 @@ static inline uint32_t luma(uint32_t c)
 	return (2126u * srgb_lin[c >> 16 & 0xFF]
 	      + 7152u * srgb_lin[c >>  8 & 0xFF]
 	      +  722u * srgb_lin[c       & 0xFF]) / 10000u;
+}
+
+/* Light or dark, by the same measure the dim floor uses. The midpoint is the
+ * WCAG one: a background is "light" when black text on it beats white text on
+ * it, which is where its relative luminance passes 0.1791 — 11737 on this
+ * file's 0..65535 scale.
+ *
+ * ⚠ NOT (r+g+b)/3 > 128. That calls #0000ff light and #ffff00 dark, and both
+ * are backwards. The whole point of telling a child which it has is that the
+ * child then picks a palette for it. */
+bool st_render_bg_is_light(const st_render_t *r)
+{
+	return luma(r->def_bg) > 11737u;
 }
 
 /* Does `fg` clear 4.5:1 against `bg`? 3277 is the 0.05 of the WCAG formula in
@@ -458,8 +481,16 @@ static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
 			span = 1;
 
 		/* ⚠ ONLY WHEN LIVE. A cursor painted over scrollback is a cursor in a
-		 * position it cannot be in, and it moves as the history scrolls. */
-		bool cursor = r->show_cursor && g->view == 0
+		 * position it cannot be in, and it moves as the history scrolls.
+		 *
+		 * ⚠ AND ONLY WHEN THE PROGRAM WANTS ONE. `g->cursor_visible` is
+		 * DECTCEM — `ESC[?25l` — and vt.c has recorded it since stage 1 while
+		 * NOTHING read it, so the block was drawn through every full-screen
+		 * program that hides it. cmatrix moves the cursor along the bottom row
+		 * as it writes, so the symptom was a block flickering across the
+		 * bottom of the window in the theme's cursor colour, on top of an
+		 * animation that had asked for no cursor at all. */
+		bool cursor = r->show_cursor && g->cursor_visible && g->view == 0
 		           && row == g->cy && col == g->cx;
 		draw_cell(r, px, stride_px, x0, y0, cw * span, ch,
 		          cell, st_style_get(g, cell->style), cursor,

@@ -24,7 +24,7 @@
 #include <unistd.h>
 
 bool st_pty_spawn_env(st_pty_t *p, char *const argv[], uint16_t cols,
-                      uint16_t rows, const char *name, const char *value)
+                      uint16_t rows, const char *const env[])
 {
 	struct winsize ws = {
 		.ws_row = rows, .ws_col = cols, .ws_xpixel = 0, .ws_ypixel = 0
@@ -40,8 +40,35 @@ bool st_pty_spawn_env(st_pty_t *p, char *const argv[], uint16_t cols,
 		 * job control work in the child; without it every shell started here
 		 * prints "no job control" and Ctrl-C goes to the wrong process. */
 		setenv("TERM", "xterm-256color", 1);
-		if (name && value)
-			setenv(name, value, 1);
+
+		/* ⚠ WITHOUT THIS, A PROGRAM QUANTISES ITS COLOURS. The parser has
+		 * understood `ESC[38;2;r;g;b` since stage 1, but a child has no way to
+		 * find that out: TERM says 256 and the terminfo entry for
+		 * xterm-256color has no truecolor capability, so every library that
+		 * cares (chalk, ansi-styles, rich, tcell) falls back to the 6x6x6 cube
+		 * and picks a NEIGHBOUR of the colour it meant. Measured: Claude Code
+		 * sends `38;5;153` without it and `38;2;177;185;249` with it — the
+		 * second is the colour it actually chose. COLORTERM is the de-facto
+		 * flag every one of those libraries reads. */
+		setenv("COLORTERM", "truecolor", 1);
+
+		/* NAME=VALUE, split here rather than handed to putenv — putenv keeps
+		 * the caller's pointer in the environment, and the callers here build
+		 * these on the stack. The exec is immediate, so it would work; it would
+		 * work by luck. */
+		for (int i = 0; env && env[i]; i++) {
+			const char *eq = strchr(env[i], '=');
+			if (!eq)
+				continue;
+			char nm[64];
+			size_t n = (size_t)(eq - env[i]);
+			if (n == 0 || n >= sizeof nm)
+				continue;
+			memcpy(nm, env[i], n);
+			nm[n] = 0;
+			setenv(nm, eq + 1, 1);
+		}
+
 		unsetenv("COLUMNS");
 		unsetenv("LINES");
 		signal(SIGPIPE, SIG_DFL);
@@ -56,7 +83,7 @@ bool st_pty_spawn_env(st_pty_t *p, char *const argv[], uint16_t cols,
 
 bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
 {
-	return st_pty_spawn_env(p, argv, cols, rows, NULL, NULL);
+	return st_pty_spawn_env(p, argv, cols, rows, NULL);
 }
 
 /* ⚠ Explicit, and NOT the default, because the two readers want opposite

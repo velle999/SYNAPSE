@@ -508,6 +508,15 @@ color1 = #00ff00
 foreground = bright_white
 EOF
 
+# A pale theme, used by everything below that has to tell light from dark —
+# the same three colours synui-apply-theme writes for win95, which is where
+# every legibility bug this terminal has had was found.
+cat > "$T/pale.conf" <<'EOF'
+background = #c0c0c0
+foreground = #000000
+cursor = #000080
+EOF
+
 c=$("$ST" --config="$CONF" config)
 printf '%s' "$c" | grep -q 'errors       none'
 check "a config with only good lines has no errors" $?
@@ -579,6 +588,63 @@ if [ -n "${FC:-}" ] || command -v fc-match >/dev/null 2>&1; then
     [ "$offc" = "1B1F26" ] \
         && ok "--no-config ignores the file entirely" \
         || bad "--no-config ignores the file entirely ($offc)"
+
+    # ── the colour QUERY has to follow the config too ───────────────────────
+    #
+    # ⚠ THIS IS THE ASSERTION THAT MATTERS, and `dump` cannot make it: it has
+    # no renderer, so it can only ever answer with the built-in scheme and
+    # would pass whether or not the config was ever consulted. A terminal that
+    # answers "I am dark" while painting silver has told the program something
+    # worse than nothing — the program repaints itself for a screen nobody has.
+    q=$(printf '\033]11;?\a' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+            --config="$T/pale.conf" render - 2>&1 >/dev/null)
+    echo "$q" | grep -q 'reply *ESC\]11;rgb:c0c0/c0c0/c0c0'
+    check "the background query answers with the CONFIGURED colour" $?
+
+    echo "$q" | grep -q '^bg *C0C0C0, light'
+    check "...and #c0c0c0 is classified as a light background" $?
+
+    d=$(printf '\033]11;?\a' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+            --no-config render - 2>&1 >/dev/null)
+    echo "$d" | grep -q '^bg *1B1F26, dark'
+    check "...and the built-in scheme as a dark one" $?
+
+    # ⚠ NOT BY CHANNEL AVERAGE. #0000ff and #ffff00 have the same mean and are
+    # not the same kind of background; relative luminance is what a program
+    # picking a palette is actually reasoning about.
+    printf 'background = #0000ff\n' > "$T/blue.conf"
+    XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 --config="$T/blue.conf" \
+        render /dev/null 2>&1 >/dev/null | grep -q '^bg *0000FF, dark'
+    check "...measured as luminance, not as a channel average" $?
+
+    # ── ESC[?25l ACTUALLY HIDES IT ──────────────────────────────────────────
+    #
+    # ⚠ vt.c has recorded DECTCEM since stage 1 and NOTHING read it, so the
+    # block was drawn through every full-screen program that asks for no
+    # cursor. cmatrix moves the cursor along the bottom row as it writes: the
+    # symptom was a box in the theme's cursor colour flickering across the
+    # bottom of an animation that had asked for none. `--no-cursor` is a flag
+    # of ours and could not have caught it — this goes through the sequence.
+    cur=$(printf '' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+              --config="$T/pale.conf" render - --probe=0,0 2>/dev/null \
+          | awk '{print $3}')
+    [ "$cur" = "000080" ] \
+        && ok "the cursor is drawn where the program left it" \
+        || bad "the cursor is drawn where the program left it ($cur)"
+
+    hid=$(printf '\033[?25l' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+              --config="$T/pale.conf" render - --probe=0,0 2>/dev/null \
+          | awk '{print $3}')
+    [ "$hid" = "C0C0C0" ] \
+        && ok "...and ESC[?25l hides it" \
+        || bad "...and ESC[?25l hides it ($hid)"
+
+    shn=$(printf '\033[?25l\033[?25h' | XDG_CACHE_HOME="$FCC" "$ST" \
+              --cols=4 --rows=1 --config="$T/pale.conf" render - --probe=0,0 \
+              2>/dev/null | awk '{print $3}')
+    [ "$shn" = "000080" ] \
+        && ok "...and ESC[?25h brings it back" \
+        || bad "...and ESC[?25h brings it back ($shn)"
 else
     echo "  skip  the config reaching the pixels (no fontconfig)"
 fi
@@ -1161,6 +1227,55 @@ kbd "$(printf '\033[>1u%.0s' $(seq 1 40))\033[?u" >/dev/null 2>&1
     && ok "an answer to the program is not drawn on the screen" \
     || bad "an answer to the program is not drawn on the screen"
 
+# ── "what colour are you?" — OSC 10, 11 and 12 ──────────────────────────────
+#
+# ⚠ AN UNANSWERED QUERY IS NOT NEUTRAL, IT MEANS DARK. A program with two
+# palettes asks the terminal which background it has, waits, times out, and
+# assumes the one terminals have always had. syntty answered nothing for five
+# releases, so on the win95 theme Claude Code drew its dark palette on #c0c0c0
+# — its light blue came out LIGHTER than the silver behind it. Silence here is
+# not a missing feature, it is a wrong answer.
+r=$(kbd '\033]11;?\a')
+echo "$r" | grep -q 'reply *ESC\]11;rgb:1b1b/1f1f/2626'
+check "a background query is answered with a colour" $?
+
+r=$(kbd '\033]10;?\a\033]12;?\a')
+echo "$r" | grep -q 'reply *ESC\]10;rgb:c8c8/cdcd/d6d6.*ESC\]12;'
+check "...and so are the foreground and the cursor" $?
+
+# ⚠ ANSWERED WITH THE TERMINATOR IT WAS ASKED WITH. xterm does this, and a
+# reader scanning for BEL sits on an ST-terminated reply until its own timeout
+# — which lands it back on the same wrong default, having been told the truth.
+r=$(kbd '\033]11;?\a')
+echo "$r" | grep -q '2626\\x07$'
+check "a BEL query is answered with BEL" $?
+
+r=$(kbd '\033]11;?\033\\')
+echo "$r" | grep -q '2626ESC\\$'
+check "...and an ST query with ST" $?
+
+# Four hex digits per channel, which is the form every reader expects — 0xC0
+# is c0c0 and not c0. A two-digit answer parses as 0.75/255 rather than 0.75.
+r=$(kbd '\033]11;?\a')
+echo "$r" | grep -q 'rgb:[0-9a-f]\{4\}/[0-9a-f]\{4\}/[0-9a-f]\{4\}'
+check "...in the 16-bit-per-channel form readers expect" $?
+
+# ⚠ A SET IS NOT A QUERY. `ESC]11;#ff0000` asks the terminal to CHANGE its
+# background, which syntty does not do — and answering it as though it were a
+# question would send the program bytes it never asked for, into whatever it
+# was reading at the time.
+r=$(kbd '\033]11;#ff0000\a')
+echo "$r" | grep -q 'reply' && bad "a colour SET is not answered as a query" \
+                            || ok  "a colour SET is not answered as a query"
+
+echo "$(kbd '\033]11;?\a\033]11;?\a')" | grep -q '^colour query  2 answered'
+check "...and the ones that ARE questions are counted, not just answered" $?
+
+# Nothing of any of it reaches the screen.
+[ -z "$(printf '\033]11;?\a' | "$ST" dump - | tr -d ' \n')" ] \
+    && ok "...and no part of the answer is drawn" \
+    || bad "...and no part of the answer is drawn"
+
 # ── the font lookup, and the cache that exists to skip it ───────────────────
 #
 # ⚠ THE ONE PART OF THIS FILE THAT NEEDS SOMETHING INSTALLED. The rule at the
@@ -1532,6 +1647,45 @@ else
     [ "$(sort -u "$T/serials" 2>/dev/null | tr -d '\n')" = "12" ] \
         && ok "each tab's child is told which tab it is (SYNTTY_TAB)" \
         || bad "each tab's child is told which tab it is (got '$(tr -d '\n' < "$T/serials" 2>/dev/null)')"
+
+    # ── what the child is told about the colours ────────────────────────────
+    #
+    # ⚠ COLORTERM IS WHY A PROGRAM'S COLOURS ARRIVE QUANTISED. The parser has
+    # understood 24-bit SGR since stage 1, but TERM says 256 and terminfo has
+    # no truecolor flag, so every library that cares falls back to the 6x6x6
+    # cube and sends a NEIGHBOUR of the colour it meant. Measured: Claude Code
+    # sends 38;5;153 without this variable and 38;2;177;185;249 with it.
+    caged 30 win -- /bin/sh -c "echo \$COLORTERM > $T/colorterm" >/dev/null 2>&1
+    [ "$(cat "$T/colorterm" 2>/dev/null)" = "truecolor" ] \
+        && ok "the child is told the terminal takes 24-bit colour" \
+        || bad "the child is told the terminal takes 24-bit colour"
+
+    # ⚠ AND COLORFGBG IS THE PRE-DRAW HINT. OSC 11 is the accurate channel but
+    # it costs a round trip, so a program that paints its first screen at once
+    # has already chosen a palette by the time an answer could arrive. Readers
+    # take the LAST field as an ANSI index: 15 is white, so `0;15` means dark
+    # text on a light background.
+    caged 30 --config="$T/pale.conf" win -- /bin/sh -c \
+        "echo \$COLORFGBG > $T/fgbg-light" >/dev/null 2>&1
+    [ "$(cat "$T/fgbg-light" 2>/dev/null)" = "0;15" ] \
+        && ok "a light theme tells the child it is light (COLORFGBG=0;15)" \
+        || bad "a light theme tells the child it is light (got '$(cat "$T/fgbg-light" 2>/dev/null)')"
+
+    caged 30 --no-config win -- /bin/sh -c \
+        "echo \$COLORFGBG > $T/fgbg-dark" >/dev/null 2>&1
+    [ "$(cat "$T/fgbg-dark" 2>/dev/null)" = "15;0" ] \
+        && ok "...and the built-in dark scheme tells it it is dark" \
+        || bad "...and the built-in dark scheme tells it it is dark (got '$(cat "$T/fgbg-dark" 2>/dev/null)')"
+
+    # ⚠ THE WHOLE ROUND TRIP, which nothing else in this file covers: the child
+    # writes the query into the pty, the parser queues an answer, and win.c has
+    # to WRITE IT BACK. A reply that is generated and never drained is a
+    # terminal that still says nothing, and every assertion above would pass.
+    caged 30 --config="$T/pale.conf" win -- /bin/sh -c \
+        "stty raw -echo; printf '\033]11;?\a'; dd bs=1 count=24 2>/dev/null > $T/osc11" \
+        >/dev/null 2>&1
+    grep -q 'rgb:c0c0/c0c0/c0c0' "$T/osc11" 2>/dev/null
+    check "a child that asks the background gets the answer back" $?
 
     # ⚠ THE BAR TAKES A ROW, AND THE CHILD HAS TO BE TOLD. Asked of `stty`
     # rather than of our own statistics, because what matters is the size the

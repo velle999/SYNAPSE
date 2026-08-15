@@ -51,6 +51,19 @@ void st_vt_init(st_vt_t *vt, st_grid_t *g)
 	vt->state = VT_GROUND;
 	memset(&vt->style, 0, sizeof vt->style);
 	g->cur_style = st_style_intern(g, &vt->style);
+
+	/* The built-in scheme until somebody says otherwise. A zero here would be
+	 * an answer of "black" to OSC 11 from every path that has no renderer. */
+	vt->col_fg     = ST_DEF_FG;
+	vt->col_bg     = ST_DEF_BG;
+	vt->col_cursor = ST_DEF_FG;
+}
+
+void st_vt_set_colors(st_vt_t *vt, uint32_t fg, uint32_t bg, uint32_t cursor)
+{
+	vt->col_fg     = fg     & 0xFFFFFFu;
+	vt->col_bg     = bg     & 0xFFFFFFu;
+	vt->col_cursor = cursor & 0xFFFFFFu;
 }
 
 /* A parameter that was never written is "absent", and absent is not zero:
@@ -218,7 +231,7 @@ char *st_vt_take_clipboard(st_vt_t *vt, size_t *len, uint8_t *target)
  * their own copy of what to do with the result. That is the shape every drift
  * bug in this codebase has had — a rule that exists in two places is a rule
  * that will shortly exist in one and a half. */
-static void osc_dispatch(st_vt_t *vt)
+static void osc_dispatch(st_vt_t *vt, bool bel)
 {
 	/* ⚠ DROPPED WHOLE, NOT TRUNCATED. This used to dispatch the first
 	 * VT_OSC_MAX bytes of an overlong string as though that were the message.
@@ -244,6 +257,47 @@ static void osc_dispatch(st_vt_t *vt)
 	if (vt->osc_len > 2 && (vt->osc[0] == '0' || vt->osc[0] == '2')
 	    && vt->osc[1] == ';') {
 		snprintf(vt->title, sizeof vt->title, "%s", vt->osc + 2);
+		return;
+	}
+
+	/* ── OSC 10/11/12 QUERY: "what colours are you?" ────────────────────────
+	 *
+	 * `ESC ] 11 ; ? BEL` asks for the background, 10 for the foreground, 12 for
+	 * the cursor. It is how a program with two palettes picks one, and it is
+	 * the ONLY channel it has: nothing else in the protocol tells a child
+	 * whether it is drawing on silver or on near-black.
+	 *
+	 * ⚠ AN UNANSWERED QUERY IS NOT NEUTRAL — IT MEANS "DARK". Every program
+	 * that asks has to time out and assume something, and the something is
+	 * always a dark background, because that is what terminals have had.
+	 * Measured here: Claude Code sends exactly this sequence at startup, got
+	 * nothing back, and drew its dark palette — xterm 153 light blue, 220 gold,
+	 * 246 grey — onto the win95 theme's #c0c0c0. The blue came out LIGHTER than
+	 * the background it was on. So silence is not a missing feature, it is a
+	 * wrong answer that the terminal is the only one able to correct.
+	 *
+	 * ⚠ ANSWERED WITH THE TERMINATOR WE WERE ASKED WITH. xterm does this, and
+	 * a reader that scans for BEL will sit on an ST-terminated reply until its
+	 * own timeout — which lands it back on the same wrong default, having been
+	 * told the right thing.
+	 *
+	 * Only the plain `<n>;?` form is answered. xterm's chained
+	 * `10;?;?;?` — where each further `?` means the next colour up — is left
+	 * alone deliberately: nothing observed sends it, and guessing at it would
+	 * mean answering questions that were not asked. */
+	if (vt->osc_len == 4 && vt->osc[0] == '1' && vt->osc[2] == ';'
+	    && vt->osc[3] == '?'
+	    && vt->osc[1] >= '0' && vt->osc[1] <= '2') {
+		int n = 10 + (vt->osc[1] - '0');
+		uint32_t c = n == 10 ? vt->col_fg
+		           : n == 11 ? vt->col_bg
+		                     : vt->col_cursor;
+		vt->col_queries++;
+		vt_reply(vt, "\033]%d;rgb:%04x/%04x/%04x%s", n,
+		         (c >> 16 & 0xFF) * 0x101u,
+		         (c >>  8 & 0xFF) * 0x101u,
+		         (c       & 0xFF) * 0x101u,
+		         bel ? "\a" : "\033\\");
 		return;
 	}
 
@@ -847,7 +901,7 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 
 		case VT_OSC:
 			if (b == 0x07) {
-				osc_dispatch(vt);
+				osc_dispatch(vt, true);
 				vt->state = VT_GROUND;
 			} else if (b == 0x1B) {
 				vt->state = VT_OSC_ESC;
@@ -863,7 +917,7 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 			break;
 
 		case VT_OSC_ESC:
-			osc_dispatch(vt);
+			osc_dispatch(vt, false);
 			/* ESC \ ends it; ESC anything-else means the string was
 			 * abandoned and that byte starts a new sequence. */
 			vt->state = VT_GROUND;

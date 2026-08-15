@@ -206,6 +206,27 @@ static void apply_pointer(const opts_t *o, st_vt_t *vt, st_grid_t *g)
 	}
 }
 
+/* What the parser owes the child. Printed ESCAPED, because the whole point of a
+ * reply is that it is a control sequence — printing it raw would have the
+ * ENCLOSING terminal act on it rather than show it, which is how a test
+ * asserting on this output would appear to pass while the terminal running the
+ * test quietly changed mode. */
+static void print_reply(const st_vt_t *vt, const char *label)
+{
+	char rep[128];
+	size_t rn = st_vt_take_reply((st_vt_t *)vt, rep, sizeof rep);
+	if (!rn)
+		return;
+	fprintf(stderr, "%s", label);
+	for (size_t i = 0; i < rn; i++) {
+		unsigned char c = (unsigned char)rep[i];
+		if (c == 0x1b)                  fprintf(stderr, "ESC");
+		else if (c >= 0x20 && c < 0x7f) fputc(c, stderr);
+		else                            fprintf(stderr, "\\x%02x", c);
+	}
+	fputc('\n', stderr);
+}
+
 static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 {
 	fprintf(stderr, "cursor        %u,%u\n", g->cx, g->cy);
@@ -278,27 +299,18 @@ static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 		fprintf(stderr, "clipboard     %llu READ request(s) refused — a program "
 		        "cannot be allowed to read what was copied\n",
 		        (unsigned long long)vt->clip_reads_refused);
+	/* ⚠ COUNTED, LIKE EVERY OTHER ANSWER THIS TERMINAL GIVES. "the program
+	 * never asked" and "we never answered" are different bugs and look
+	 * identical from the far side of a pty — which is exactly how OSC 11 went
+	 * unanswered for five releases without anyone being able to see it. */
+	if (vt->col_queries)
+		fprintf(stderr, "colour query  %llu answered\n",
+		        (unsigned long long)vt->col_queries);
 	if (vt->osc_dropped)
 		fprintf(stderr, "osc           %llu dropped for running past %d bytes\n",
 		        (unsigned long long)vt->osc_dropped, VT_OSC_MAX);
 
-	/* What the parser owes the child. Printed ESCAPED, because the whole
-	 * point of a reply is that it is a control sequence — printing it raw
-	 * would have the enclosing terminal act on it rather than show it, which
-	 * is how a test asserting on this output would appear to pass while the
-	 * terminal running the test quietly changed mode. */
-	char rep[128];
-	size_t rn = st_vt_take_reply((st_vt_t *)vt, rep, sizeof rep);
-	if (rn) {
-		fprintf(stderr, "reply         ");
-		for (size_t i = 0; i < rn; i++) {
-			unsigned char c = (unsigned char)rep[i];
-			if (c == 0x1b)                 fprintf(stderr, "ESC");
-			else if (c >= 0x20 && c < 0x7f) fputc(c, stderr);
-			else                            fprintf(stderr, "\\x%02x", c);
-		}
-		fputc('\n', stderr);
-	}
+	print_reply(vt, "reply         ");
 }
 
 static int cmd_dump(const opts_t *o, const char *path)
@@ -556,14 +568,13 @@ static int cmd_render(const opts_t *o, const char *path)
 	st_vt_t vt;
 	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vt, &g);
-	st_vt_feed(&vt, buf, len);
-	free(buf);
-	if (o->view)
-		st_grid_view_scroll(&g, o->view);
-	/* So the highlight can be proved in PIXELS: --click here and --probe on a
-	 * cell inside the selection says what colour it actually came out. */
-	apply_pointer(o, &vt, &g);
 
+	/* ⚠ THE RENDERER IS BUILT BEFORE THE STREAM IS FED, and that ordering is
+	 * the point rather than an accident. A stream that asks `ESC]11;?` has to
+	 * be answered with the colours THIS run resolved from the config — a
+	 * parser fed first would answer from the built-in scheme and the reply
+	 * would be right only when no config was in play, which is the one case
+	 * nobody has. Same rule the window follows in tab_new. */
 	char *err = NULL;
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
 	if (!f)
@@ -572,6 +583,19 @@ static int cmd_render(const opts_t *o, const char *path)
 	st_render_t *r = st_render_new(f);
 	apply_colors(o, r);
 	st_render_cursor(r, !o->no_cursor);
+
+	uint32_t cfg_fg, cfg_bg;
+	st_render_colors_get(r, &cfg_fg, &cfg_bg);
+	st_vt_set_colors(&vt, cfg_fg, cfg_bg, st_render_cursor_color_get(r));
+
+	st_vt_feed(&vt, buf, len);
+	free(buf);
+	if (o->view)
+		st_grid_view_scroll(&g, o->view);
+	/* So the highlight can be proved in PIXELS: --click here and --probe on a
+	 * cell inside the selection says what colour it actually came out. */
+	apply_pointer(o, &vt, &g);
+
 	st_render_set_gfx(r, vt.gfx);
 
 	int w = st_render_width(r, &g), h = st_render_height(r, &g);
@@ -626,6 +650,13 @@ static int cmd_render(const opts_t *o, const char *path)
 	fprintf(stderr, "ink      %.2f%% of pixels differ from the background\n",
 	        100.0 * (double)ink / ((double)w * h));
 	fprintf(stderr, "colours  %d distinct%s\n", nseen, nseen >= 64 ? "+" : "");
+	fprintf(stderr, "bg       %06X, %s\n", cfg_bg,
+	        st_render_bg_is_light(r) ? "light" : "dark");
+
+	/* The colour queries a stream asked, answered from the colours ABOVE. This
+	 * is the only door the suite has onto "the answer follows the config" —
+	 * `dump` has no renderer and can only ever report the built-in scheme. */
+	print_reply(&vt, "reply    ");
 
 	/* The colour of one cell, named by grid coordinate. A test that wants to
 	 * know whether `ESC[7m` really swapped the colours has to look at a
