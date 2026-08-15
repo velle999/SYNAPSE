@@ -1342,6 +1342,25 @@ else
     [ $? -eq 3 ] && ok "the child's exit status is the window's" \
                  || bad "the child's exit status is the window's"
 
+    # ── `-e`, which is what makes this usable as THE terminal ───────────────
+    #
+    # Everything that launches "a terminal running something" emits -e: KDE's
+    # KTerminalLauncherJob, xdg-terminal-exec, a Terminal=true .desktop through
+    # xdg-open, and every script anyone has written. Until this shipped, syntty
+    # answered `-e` with "unknown option" and exited 1 — so the desktop could
+    # name it as the default terminal and every launch through one of those
+    # paths would fail. No subcommand needed: -e implies the window.
+    caged 30 -e /bin/sh -c 'exit 3' >/dev/null 2>&1
+    [ $? -eq 3 ] && ok "-e runs the command in a window, no subcommand needed" \
+                 || bad "-e runs the command in a window, no subcommand needed"
+
+    # And after the subcommand too, because somebody who knows both conventions
+    # writes it that way. Without it the child would be argv "-e /bin/sh …" and
+    # the exec would fail on a program named -e.
+    caged 30 win -e /bin/sh -c 'exit 3' >/dev/null 2>&1
+    [ $? -eq 3 ] && ok "...and 'win -e CMD' means the same thing" \
+                 || bad "...and 'win -e CMD' means the same thing"
+
     # ⚠ THE OUTPUT MUST SURVIVE THE HANGUP. POLLHUP arrives on the same
     # revents that carry the child's last write, so a loop that checks for
     # hangup before draining throws away everything the child printed as it

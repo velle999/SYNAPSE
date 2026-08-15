@@ -20,8 +20,10 @@ StartupWMClass=syntty
 Categories=System;TerminalEmulator;
 Keywords=terminal;shell;prompt;command;console;tty;
 # X-TerminalEmulator is what xdg-open and desktop files with Terminal=true look
-# for when they need "a terminal" by name. Declared, but this does NOT make
-# syntty the default one — that is decided by the terminal= line in synuirc and
-# by /usr/bin/x-terminal-emulator on systems that have one, and nothing here
-# writes either. kitty stays the default until somebody chooses otherwise.
+# for when they need "a terminal" by name. Declaring it here still does NOT
+# make syntty the default one — that is decided by the terminal= line in
+# synuirc (and by kdeglobals for KIO), and nothing in this file writes either.
+# As of synui 0.1.0-359 those DO name syntty, so it is the shipped default on
+# new configurations; an existing synuirc keeps whatever it says, and
+# SYNAPSE Settings ▸ Default Applications ▸ Terminal is what changes it.
 X-TerminalEmulator=true

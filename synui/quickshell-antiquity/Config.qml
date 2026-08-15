@@ -668,7 +668,7 @@ Singleton {
                     property bool enableWeather: false
                 }
                 property JsonObject execCommands: JsonObject {
-                    property string terminal: "kitty"
+                    property string terminal: "syntty"
                     property string files: "nemo"
                 }
                 property JsonObject bar: JsonObject {

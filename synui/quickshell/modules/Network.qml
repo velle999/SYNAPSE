@@ -52,8 +52,8 @@ BarModule {
     onRightClicked: settings.running = true
     onMiddleClicked: radioOn.running = true
 
-    Process { id: pick;     command: ["kitty", "-e", "nmtui-connect"] }
-    Process { id: settings; command: ["kitty", "-e", "nmtui"] }
+    Process { id: pick;     command: ["syntty", "-e", "nmtui-connect"] }
+    Process { id: settings; command: ["syntty", "-e", "nmtui"] }
     // Also clears an rfkill soft block, and needs no root: polkit lets the
     // active local session do network-control.
     Process { id: radioOn;  command: ["nmcli", "radio", "wifi", "on"] }

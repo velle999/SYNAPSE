@@ -1,7 +1,7 @@
 # SynapseOS compositor configuration
 # See synui(1) for all options
 
-terminal = kitty
+terminal = syntty
 
 # Programs to launch on compositor start.
 #

@@ -73,8 +73,9 @@ handler_is_terminal() {
         exec_line=$(sed -n 's/^Exec=//p' "$f" | head -1)
         prog=$(basename "${exec_line%% *}")
         case "$prog" in
-            kitty|foot|foot-client|alacritty|wezterm|konsole|gnome-terminal|kgx| \
-            xterm|urxvt|rxvt|st|terminator|tilix|xfce4-terminal|ghostty|contour)
+            syntty|kitty|foot|foot-client|alacritty|wezterm|konsole| \
+            gnome-terminal|kgx|xterm|urxvt|rxvt|st|terminator|tilix| \
+            xfce4-terminal|ghostty|contour)
                 return 0 ;;
         esac
         return 1

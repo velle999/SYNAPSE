@@ -906,11 +906,16 @@ void syn_config_ensure_dir(void)
  */
 static void config_set_defaults(syn_config_t *cfg)
 {
-    strncpy(cfg->terminal, "kitty", sizeof(cfg->terminal) - 1);
+    /* syntty as of 0.1.0-359: it is ours, it starts in ~3 ms against kitty's
+     * ~230, and it links no GL at all — which is also why it works on a VM
+     * where kitty needs a GPU. kitty stays installed and stays one keystroke
+     * away in SYNAPSE Settings; an existing synuirc is never rewritten, so
+     * only new configurations move. */
+    strncpy(cfg->terminal, "syntty", sizeof(cfg->terminal) - 1);
     cfg->night_light = 0;
     cfg->night_light_temp = 4000;
     cfg->autostart_count = 1;
-    strncpy(cfg->autostart[0], "kitty", sizeof(cfg->autostart[0]) - 1);
+    strncpy(cfg->autostart[0], "syntty", sizeof(cfg->autostart[0]) - 1);
     cfg->border_width = BORDER_WIDTH_DEFAULT;
     cfg->gap = GAP_DEFAULT;
     cfg->float_inset = FLOAT_INSET_DEFAULT;
@@ -1222,17 +1227,18 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->lid_close_ac_action     = SYN_LID_SUSPEND;
     cfg->lid_close_docked_action = SYN_LID_IGNORE;
 
-    /* kitty accepts -e for compatibility with foot/xterm even though its own
-     * help does not list it, so this form stays valid across either terminal. */
+    /* -e is the form every terminal here takes: foot and xterm define it,
+     * kitty accepts it undocumented, and syntty grew it in 0.1.0-19 precisely
+     * so that naming it as the default terminal could not break this line. */
     snprintf(cfg->network_cmd, sizeof(cfg->network_cmd),
-             "kitty -e nmtui");
+             "syntty -e nmtui");
 
     /* About OS. `--infinite` because the default is 2000 frames: an About box
      * that closes itself after a couple of minutes would look like a crash. It
      * exits on any keypress, so it is not a window that has to be hunted for a
      * close button. */
     snprintf(cfg->about_cmd, sizeof(cfg->about_cmd),
-             "kitty -e fetch --infinite");
+             "syntty -e fetch --infinite");
 
     /* News (news.c). No sources here: an empty list means "use the built-in
      * ones" (news.c owns that table), and the first `news_source =` line in
@@ -1281,7 +1287,7 @@ static void config_set_defaults(syn_config_t *cfg)
      * firefox-app-mode apps (tepris, nexus-chat) report their own app_id via
      * MOZ_APP_REMOTINGNAME, so they need naming separately from firefox. */
     static const char *const defaults[] = {
-        "firefox", "chibi", "tepris", "nexus-chat", "kitty", "foot",
+        "firefox", "chibi", "tepris", "nexus-chat", "syntty", "kitty", "foot",
     };
     cfg->game_exclude_count = 0;
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)

@@ -324,6 +324,43 @@ kitty_apply() {   # kitty_apply <family|""> <size>
     return 0
 }
 
+syntty_apply() {   # syntty_apply <family|""> <size>
+    # syntty is the DEFAULT terminal, so the desktop font skipping it would be
+    # the most visible gap this script could have: the one terminal the desktop
+    # opens by itself would be the one that ignored the font picker.
+    #
+    # Its config is flat `key = value` with no sections and no include
+    # mechanism, so the two keys are edited in place the way foot's are. Keys
+    # are `font` and `font_size` (syntty config, and `syntty config` prints
+    # exactly what it read).
+    #
+    # ⚠ IT HAS NO RELOAD SIGNAL — no SIGUSR1 handler, unlike kitty and foot.
+    # New windows pick the font up; a terminal already open keeps the one it
+    # started with. That is a syntty feature to add, not something to fake here
+    # by killing the user's terminals.
+    local dir="$HOME/.config/syntty"
+    local f="$dir/syntty.conf"
+    local tmp
+    command -v syntty >/dev/null 2>&1 || return 0
+
+    # Nothing to set and no file to edit is not a state worth creating.
+    [[ -f $f ]] || { [[ -n ${1:-} ]] || return 0
+                     mkdir -p "$dir" 2>/dev/null || return 0
+                     printf '# Created by synui-apply-font.\n' > "$f"; }
+    tmp=$(mktemp) || return 0
+    # ⚠ `#` OPENS A COMMENT *AND* PREFIXES A COLOUR in this file, so the match
+    # is anchored to the start of a line and to the key name — never a bare
+    # grep for the word, which would also hit `# font …` prose and a colour
+    # line that happens to mention it.
+    awk -v val="${1:-}" -v sz="${2:-}" '
+        /^[[:space:]]*font[[:space:]]*=/      { next }
+        /^[[:space:]]*font_size[[:space:]]*=/ { next }
+        { print }
+        END { if (val != "") { print "font = " val; print "font_size = " sz } }
+    ' "$f" > "$tmp" && mv "$tmp" "$f" || rm -f "$tmp"
+    return 0
+}
+
 foot_apply() {   # foot_apply <family|""> <size>
     local f="$HOME/.config/foot/foot.ini" tmp
     command -v foot >/dev/null 2>&1 || return 0
@@ -380,8 +417,9 @@ apply() {   # apply <family|""> <size>
     # face a Qt app picks when it has asked for monospace, e.g. a code view)
     # rather than a terminal's own font, and pointing that at a proportional
     # family would misreport the font to applications rather than change one.
-    kitty_apply "$fam" "$sz"
-    foot_apply  "$fam" "$sz"
+    syntty_apply "$fam" "$sz"
+    kitty_apply  "$fam" "$sz"
+    foot_apply   "$fam" "$sz"
     gsettings_apply "$fam" "$sz"
 
     # LAST, and the bar's cue: Theme.qml watches font.state, so writing it is

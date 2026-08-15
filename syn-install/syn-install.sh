@@ -3895,7 +3895,7 @@ PROFILEEOF
 # synui config
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
 cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
-terminal = kitty
+terminal = syntty
 # greetd launches synui after login.
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
@@ -4901,7 +4901,7 @@ if [ "$SNAPSHOTS" = "yes" ]; then
         # that opens a terminal would open the rescue one. TERMINAL takes a
         # command with its exec flag, the same shape as its konsole example.
         if ! grep -q '^TERMINAL=' /mnt/etc/limine-snapper-sync.conf 2>/dev/null; then
-            printf '\n# SynapseOS: kitty is the default terminal; upstream probes foot first.\nTERMINAL="kitty -e"\n' \
+            printf '\n# SynapseOS: syntty is the default terminal; upstream probes foot first.\nTERMINAL="syntty -e"\n' \
                 >> /mnt/etc/limine-snapper-sync.conf
         fi
 

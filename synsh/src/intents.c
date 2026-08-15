@@ -66,12 +66,13 @@ static const char *const file_managers[] = {
     "dolphin", "thunar", "nautilus", "pcmanfm", NULL
 };
 /* For the intents that need a tty when we haven't got one — see run_foreground().
- * $TERMINAL wins if it names something real; kitty is what SynapseOS ships by
- * default, with foot right behind it — foot is still installed as the rescue
- * terminal (it renders on the CPU, so it works where kitty's OpenGL does not),
- * and systems installed before the switch have only foot. */
+ * $TERMINAL wins if it names something real; syntty is what SynapseOS ships as
+ * the default, with kitty and then foot behind it — kitty is what installs
+ * between 0.2.5 and 0.2.8 got, and foot is the rescue that renders on the CPU
+ * where kitty's OpenGL does not, so a machine that has only one of the three
+ * still gets a terminal. */
 static const char *const terminals[] = {
-    "kitty", "foot", "alacritty", "konsole", "xterm", NULL
+    "syntty", "kitty", "foot", "alacritty", "konsole", "xterm", NULL
 };
 
 /* Is `prog` on $PATH? execvp-style lookup without spawning anything. */
@@ -274,7 +275,7 @@ static int run_foreground(synsh_state_t *s, const char *cmd, bool keep_open)
     const char *term = find_terminal();
     if (!term) {
         fprintf(stderr, "  synsh: no terminal installed to run: %s\n"
-                        "         sudo pacman -S kitty\n", cmd);
+                        "         sudo pacman -S syntty\n", cmd);
         return 1;
     }
 

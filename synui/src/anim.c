@@ -353,6 +353,15 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
  * A terminal MISSING from this list is a silent fault, not a loud one: it keeps
  * drawing its own alpha and then gets the compositor's fade stacked on top, so
  * the text washes out exactly as if glass were broken. Nothing logs it.
+ *
+ * ⚠ syntty IS THE DEFAULT TERMINAL AND IS DELIBERATELY NOT HERE. The rule is
+ * "does the window draw its own alpha", not "is it the default": syntty's
+ * config has foreground, background and cursor colours and NO opacity key, so
+ * it paints an opaque background and takes the compositor's uniform fade like
+ * every other opaque window. Adding it would pin it fully opaque and it would
+ * be the one window that ignores the transparency slider. Revisit only if
+ * syntty grows a real background-alpha setting — and then teach synui-glass to
+ * write it in the same change, or it will be listed here and driven by nobody.
  */
 static bool view_is_glass_native(syn_view_t *view)
 {

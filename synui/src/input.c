@@ -689,15 +689,27 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * terminal package failed to install still opens SOMETHING rather than
          * a keybind that silently does nothing.
          *
-         * The chain is only used when the configured terminal is still the
+         * The chain is only used when the configured terminal is still a
          * shipped default — an explicit `terminal = <x>` in synuirc is a choice,
          * and quietly launching a different program when it is missing would
-         * hide the mistake. foot stays in the chain behind kitty: it is what
-         * every system installed before this shipped, and it is 793 KiB against
-         * kitty's 65 MiB, so it is also the sensible rescue.
+         * hide the mistake. foot stays in every chain: it is what every system
+         * installed before kitty shipped, and at 793 KiB against kitty's 65 MiB
+         * it is also the sensible rescue.
+         *
+         * TWO defaults are recognised, not one. syntty is the shipped default
+         * from 0.1.0-359; kitty was from 215 and is still what every synuirc
+         * written before this says. Treating the older one as "an explicit
+         * choice" would strand exactly the machines that never chose anything.
          */
-        if (strcmp(s->config.terminal, "kitty") == 0)
-            spawn("kitty || foot || alacritty || xterm");
+        if (strcmp(s->config.terminal, "syntty") == 0)
+            spawn("syntty || kitty || foot || alacritty || xterm");
+        else if (strcmp(s->config.terminal, "kitty") == 0)
+            /* The PREVIOUS shipped default, and every synuirc written before
+             * 0.1.0-359 still says it. Those are not explicit choices in the
+             * sense this comment means — the user never typed them — so they
+             * keep their chain rather than becoming a bind that does nothing
+             * on a machine where kitty was removed. */
+            spawn("kitty || syntty || foot || alacritty || xterm");
         else
             spawn(s->config.terminal);
     } else if (strcmp(action, "cmdbar") == 0) {

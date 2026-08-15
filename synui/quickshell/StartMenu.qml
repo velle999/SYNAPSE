@@ -227,13 +227,19 @@ PanelWindow {
                     { kind: "header", label: "SYSTEM" },
                     { kind: "action", label: "Control Panel", action: "control" },
                     { kind: "action", label: "Task Manager",  action: "taskmgr" },
-                    { kind: "exec",   label: "Terminal",      argv: ["kitty"] }
+                    { kind: "exec",   label: "Terminal",      argv: ["syntty"] }
                 ]
 
                 p["System Tools"] = [
-                    { kind: "exec", label: "AI Shell (synsh)", argv: ["kitty", "synsh"] },
+                    { kind: "exec", label: "AI Shell (synsh)", argv: ["syntty", "-e", "synsh"] },
+                    // ⚠ kitty, NOT syntty, and deliberately: these are the rows
+                    // whose whole value is the output STAYING on screen after
+                    // the command finishes, and `--hold` is a kitty/foot flag
+                    // syntty does not have yet. syntty is the default terminal
+                    // everywhere the window is meant to close with the command;
+                    // when it grows --hold these move too, in one change.
                     { kind: "exec", label: "System Status",    argv: ["kitty", "--hold", "syn", "status"] },
-                    { kind: "exec", label: "Network Setup",    argv: ["kitty", "-e", "nmtui"] },
+                    { kind: "exec", label: "Network Setup",    argv: ["syntty", "-e", "nmtui"] },
                     // synpkg, our own manager. A GUI (Terminal=false in its
                     // .desktop), so it runs bare, no terminal wrapper.
                     //
@@ -263,6 +269,12 @@ PanelWindow {
                     // upgrade, and a bare -Sy leaves a system whose databases
                     // are newer than its packages — every later install then
                     // 404s on a filename the mirror has already rotated away.
+                    // ⚠ kitty, NOT syntty, and deliberately: these are the rows
+                    // whose whole value is the output STAYING on screen after
+                    // the command finishes, and `--hold` is a kitty/foot flag
+                    // syntty does not have yet. syntty is the default terminal
+                    // everywhere the window is meant to close with the command;
+                    // when it grows --hold these move too, in one change.
                     { kind: "exec", label: "Update System",
                       argv: MenuState.synpkgPresent
                           ? ["kitty", "--hold", "synpkg", "upgrade"]

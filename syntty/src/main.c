@@ -36,6 +36,8 @@ static const char *usage_text =
 "  syntty render [FILE]      parse a stream and paint it — see --out\n"
 "  syntty damage-check [F]   prove damage tracking draws the same pixels\n"
 "  syntty win [--] [CMD...]  a WINDOW, running CMD or your shell\n"
+"  syntty [-e CMD...]        the same window — no subcommand means the window,\n"
+"                            and -e is the convention other terminals take\n"
 "  syntty mouse EVENT...     what a pointer event becomes on the child's input\n"
 "  syntty paste TEXT         what pasted text becomes on the way to the child\n"
 "  syntty config             the config file, where it is, and what it says\n"
@@ -1217,7 +1219,30 @@ int main(int argc, char **argv)
 		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win")
 		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "paste")
 		            || !strcmp(cmd, "config"))) {
-			child_at = (!strcmp(a, "--")) ? i + 1 : i;
+			/* `--` and `-e` both mean "the rest is the child". Accepting
+			 * -e here as well as below is not redundancy: `syntty win -e
+			 * htop` is what somebody writes who knows both conventions,
+			 * and without this the child would be argv "-e htop" and the
+			 * exec would fail on a program named -e. */
+			child_at = (!strcmp(a, "--") || !strcmp(a, "-e")) ? i + 1 : i;
+			break;
+		}
+
+		/* ── `-e CMD…`, the convention everything else already speaks ────
+		 *
+		 * xterm, foot, kitty, alacritty, konsole and gnome-terminal all
+		 * take it; KDE's KTerminalLauncherJob, xdg-terminal-exec, `xdg-open`
+		 * on a Terminal=true .desktop, and every script anybody has ever
+		 * written that runs a command in a terminal all emit it. A terminal
+		 * that dies on `-e` with "unknown option" cannot be the system's
+		 * default terminal, whatever the config says — which is what this
+		 * one did until it became the default.
+		 *
+		 * It implies the window, so `syntty -e htop` needs no subcommand,
+		 * and everything after it belongs to the child untouched. */
+		if (!strcmp(a, "-e") || !strcmp(a, "--command")) {
+			if (!cmd) cmd = "win";
+			child_at = i + 1;
 			break;
 		}
 		if (!strcmp(a, "--")) {
@@ -1321,5 +1346,11 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "about"))
 		return cmd_about();
 
-	die("unknown command '%s' (try --help)", cmd);
+	/* Name the -e form in the message. `kitty synsh` and `foot synsh` both run
+	 * the program, so a bare word here is what somebody who knows those types,
+	 * and "unknown command" alone reads as "syntty cannot run it" rather than
+	 * "say -e first". Not accepted silently instead: a bare word that is really
+	 * a mistyped subcommand would then start a shell called `dumpp` and look
+	 * like the terminal ignoring the argument. */
+	die("unknown command '%s' (try --help; to RUN it: syntty -e %s)", cmd, cmd);
 }

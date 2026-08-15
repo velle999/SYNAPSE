@@ -380,7 +380,12 @@ static void synuirc_path(char *out, size_t cap)
  * ones actually on PATH are shown: a chooser offering software that is not
  * installed produces a setting that silently does nothing. */
 static const char *g_terminals[] = {
-	"kitty", "foot", "alacritty", "ghostty", "wezterm", "konsole",
+	/* syntty first because it is the shipped default (synui 0.1.0-359) and
+	 * the order here IS the order the list is offered in. kitty stays second:
+	 * it was the default from 215 to 358, so it is what most existing
+	 * machines have in synuirc, and foot behind it is the CPU-rendered
+	 * rescue that works where an OpenGL terminal does not. */
+	"syntty", "kitty", "foot", "alacritty", "ghostty", "wezterm", "konsole",
 	"gnome-terminal", "xterm", NULL
 };
 
@@ -799,7 +804,7 @@ int do_set_app(int argc, char **argv)
 			fprintf(stderr, " %s", g_roles[i].id);
 		fprintf(stderr, "\n  the application is a .desktop NAME "
 		                "(firefox.desktop), or for `terminal` a "
-		                "command (kitty)\n");
+		                "command (syntty)\n");
 		return 2;
 	}
 

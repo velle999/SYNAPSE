@@ -27,8 +27,8 @@
 # naming a missing icon theme system-wide would fall every Qt app back to
 # hicolor, which is worse than the wrong shade of glyph.
 [General]
-TerminalApplication=kitty
-TerminalService=kitty.desktop
+TerminalApplication=syntty
+TerminalService=syntty.desktop
 ColorScheme=SynapseTheme
 
 # Fusion, not Breeze: it ships with qt6-base so it is always loadable, and it

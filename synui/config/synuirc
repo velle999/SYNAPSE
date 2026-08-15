@@ -3,7 +3,11 @@
 # Read at startup (restart synui to apply changes).
 
 # ── Terminal emulator ──────────────────────────────────────
-terminal = kitty
+#
+# syntty is ours: ~3 ms to first frame, no GL linked at all. kitty and foot are
+# both still installed and either name works here; the Terminal row in
+# SYNAPSE Settings ▸ Default Applications writes this line for you.
+terminal = syntty
 
 # ── Startup applications ───────────────────────────────────
 # Run on first launch. The terminal comes from synui-foot.service
