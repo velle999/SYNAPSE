@@ -1,6 +1,6 @@
 pkgname=syn-update
 pkgver=0.1.0
-pkgrel=33
+pkgrel=34
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

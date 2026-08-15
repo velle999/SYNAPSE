@@ -2107,7 +2107,13 @@ while :; do
     # video. Minimal is "core daemons only" and stays that way — with neither
     # installed the picker honestly shows no Wallpaper Engine rows at all,
     # which is the correct answer there rather than a broken one.
-    SEL_APPS="chibi vibe syn-arsenal linux-wallpaperengine synapse-wallpapers"
+    # syn-arcade is in the Standard set rather than only in Full: it is a
+    # ~140 KB binary whose one real dependency is mangohud (~2 MB from extra),
+    # and this is a distribution that ships CachyOS Proton — a desktop that
+    # cannot tell you whether your controller works, or put an FPS counter on
+    # screen, is missing something Standard should have. Minimal still clears
+    # SEL_APPS entirely.
+    SEL_APPS="chibi vibe syn-arsenal syn-arcade linux-wallpaperengine synapse-wallpapers"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
@@ -2138,7 +2144,7 @@ while :; do
             # package with it — and is only rescued by the one-at-a-time retry
             # in the verify step. `syn printer samsung` installs the driver
             # from Samsung after the install, which is the supported route.
-            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal linux-wallpaperengine synapse-wallpapers"
+            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal syn-arcade linux-wallpaperengine synapse-wallpapers"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1

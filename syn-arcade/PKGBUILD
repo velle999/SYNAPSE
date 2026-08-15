@@ -1,0 +1,120 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-arcade — the SynapseOS game assistant.
+#
+# Three things a desktop owes a person who plays games on it, and that nothing
+# on this system did before:
+#
+#   · the overlay — frame rate, temperatures and load — turned on, moved and
+#     turned off with a key, INSIDE a game that is already running
+#   · game controllers: what is plugged in, whether its sticks are centred,
+#     whether its motors work, and what its buttons are mapped to
+#   · the two compositor shortcuts that drive the first of those
+#
+# ⚠ The overlay keybind works because of a mechanism worth writing down, since
+# the obvious reading of it is wrong. MangoHud is an implicit Vulkan layer
+# living INSIDE the game's process: there is no socket, no signal, and
+# `mangohudctl` does not reach it (it speaks over a SysV message queue that
+# only the separate `mangoapp` process listens on — the shipped libMangoHud.so
+# imports no msgget at all). What libMangoHud DOES do is watch its own config
+# file with inotify and reparse on every change. So rewriting that file is a
+# live control channel into every running game at once, and an ordinary
+# compositor keybind can drive it. /etc/MangoHud.conf's own comment says a
+# toggle "cannot be a compositor keybind"; that was true of a signal or an IPC
+# call, and is not true of the file.
+#
+# ⚠ Two consequences, both load-bearing and both handled by the session profile
+# this package installs:
+#
+#   1. The config file must EXIST BEFORE THE GAME STARTS. inotify_add_watch on
+#      a missing path fails, and that process then watches nothing for the rest
+#      of its life — every overlay keybind silently dead in that game. Hence
+#      `syn-arcade hud ensure` at login.
+#
+#   2. MangoHud reads exactly ONE config file, and /etc/MangoHud.conf (which
+#      synui ships) OUTRANKS ~/.config/MangoHud/MangoHud.conf. There is no
+#      merging. So on a stock install the user's own overlay config was never
+#      read at all, and nothing a user set could win. The profile sets
+#      MANGOHUD_CONFIGFILE, which collapses that list to one writable path;
+#      `syn-arcade hud adopt` moves the settings already in effect across so
+#      nothing anybody tuned is lost in the move.
+#
+# ⚠ Controller writes — rumble and deadzones — need write access to
+# /dev/input/eventN, which is root:input 0660, and the user is NOT in `input`
+# on a stock install. That is fine and needs no root, no polkit action and no
+# setuid helper: udev tags JOYSTICKS (and only joysticks — not keyboards, not
+# mice) for uaccess in 70-uaccess.rules:61, and systemd grants the logged-in
+# seat user an ACL. So "permission denied" here means the device was not
+# recognised as a joystick, or this is not the active seat — never "use sudo",
+# and the binary says so rather than teaching the wrong fix.
+pkgname=syn-arcade
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# Nothing but libc for the tool itself. The three libraries it does NOT link
+# are each a deliberate choice:
+#
+#   libSDL     the natural way to read a gamepad, and it would pull a graphics
+#              stack into a tool that has to work over SSH. The kernel already
+#              describes every attached device in /sys/class/input — which is
+#              also what makes the discovery path testable against a fixture.
+#   libudev    the same list behind a library and a daemon, with nothing here
+#              needing hotplug events.
+#   libevdev   a wrapper over the six ioctls pad.c uses.
+depends=('glibc')
+
+# ⚠ A hard dependency, not an optdepend, and the reasoning is syn-disks'
+# rather than a preference: without MangoHud the overlay tab of this
+# application does nothing at all, and an app whose main feature is inert on a
+# default install is not offering that feature, it is listing it. It is a
+# ~2MB package from `extra` that anything else gaming-related pulls in anyway.
+depends+=('mangohud')
+
+makedepends=('meson' 'ninja' 'gcc')
+
+optdepends=('quickshell: the graphical window (syn-arcade gui)'
+            'synui: the compositor the gaming shortcuts are installed into'
+            'antimicrox: build a controller mapping by pressing every button'
+            'sdl2-compat: SDL2 games that read the controller mappings'
+            'sdl3: SDL3 games that read the controller mappings')
+
+source=("syn-arcade-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syn-arcade-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syn-arcade-0.1.0"
+    # ⚠ The suite is dangerous in a way most are not, because three of the four
+    # things this binary writes are files the LIVE desktop reads — the
+    # compositor's synuirc most of all, since synui reads exactly one of those
+    # and a two-line file written over it replaces the whole desktop
+    # configuration.
+    #
+    # So every invocation runs with XDG_CONFIG_HOME redirected into a mktemp -d
+    # that the EXIT trap removes, and the suite REFUSES TO START if that
+    # redirection is not in place. Controllers are described in a fake
+    # /sys/class/input; the ioctl paths (test, rumble, calibrate) are never
+    # exercised, because a suite that opened a real device node would rumble a
+    # pad and rewrite its deadzones on the machine running the build. The last
+    # two assertions check that the real synuirc and MangoHud.conf were not
+    # touched by the run.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syn-arcade-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

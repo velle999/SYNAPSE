@@ -267,6 +267,19 @@ PACKAGES=(
     # kitty cannot. Builds offline: meson, freetype, fontconfig, wayland and
     # xkbcommon, all already on the build host for synui.
     syntty
+    # syn-arcade — the game assistant. Must be ON the ISO for the same reason
+    # syntty must: syn-install names it in SEL_APPS (Standard and Full), and a
+    # package the installer asks for but the local repo does not carry fails
+    # the install at pacman.
+    #
+    # The live session wants it independently, and for a reason no other app
+    # here has: "does my controller actually work on this machine" is a
+    # question worth answering BEFORE committing to an install, and it is the
+    # one thing on this list that cannot be checked from a spec sheet.
+    #
+    # Builds offline: meson and libc. It depends on mangohud, which is in
+    # `extra` and so comes off the mirror like any other upstream dependency.
+    syn-arcade
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

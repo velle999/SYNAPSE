@@ -33,7 +33,7 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers)
+       synapse-wallpapers syn-arcade)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -401,6 +401,21 @@ build_component syn-edit
 # would kill a passing suite at thirty and report the kill as a build failure,
 # so syntty's meson.build states a timeout of its own.
 build_component syntty
+
+# syn-arcade — the game assistant. meson C plus a quickshell front-end, the same
+# shape as syn-disks and syn-edit, built from a source tarball the generic
+# collector above assembles from src/, include/, meson.build, data/ and tests/.
+#
+# ⚠ Its check() drives the binary against a FIXTURE of /sys/class/input, and
+# every invocation runs with XDG_CONFIG_HOME redirected into a mktemp -d — the
+# suite refuses to start if it is not. That matters more here than in most
+# components, because three of the four files this binary writes are files the
+# LIVE desktop reads, and synuirc is the worst of them: synui reads exactly one
+# synuirc, so a two-line file written over the user's would replace the whole
+# desktop configuration. The ioctl paths (controller test, rumble, calibrate)
+# are never exercised, so a build cannot rumble a pad or rewrite its deadzones
+# on the machine running it.
+build_component syn-arcade
 
 # Vendored, boot-critical where it is installed, and never installed by this
 # script. See build_vendored_pkg.

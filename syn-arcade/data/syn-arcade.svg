@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- syn-arcade — the SynapseOS game assistant.
+
+     A game controller in the dendrite purple the rest of the suite uses, with
+     the overlay's frame-rate bars reading across its face — the two halves of
+     what this app does, in one drawing.
+
+     Deliberately NOT a stock theme name like applications-games or
+     input-gaming: on Breeze those are the faces Steam, Lutris and every
+     emulator in the menu already wear, and synfiles learned the hard way
+     (pkgrel 21) that shipping a stock icon name puts two applications in the
+     dock wearing one face.
+
+     Scalable only. Qt renders this at whatever size the dock asks for.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cd6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- The controller body: one rounded bar with the two grips swept down out
+       of its lower corners, which is the shape a pad reads as at 16px where
+       any moulding detail would disappear anyway. -->
+  <path d="M13 14 h22 a10 10 0 0 1 10 10 v3
+           a7 7 0 0 1 -13 3.6 l-2.2 -3.6 h-9.6 l-2.2 3.6
+           a7 7 0 0 1 -13 -3.6 v-3 a10 10 0 0 1 10 -10 z"
+        fill="url(#body)"/>
+
+  <!-- d-pad -->
+  <path d="M13.4 21.4 h2.6 v-2.6 h2.6 v2.6 h2.6 v2.6 h-2.6 v2.6 h-2.6 v-2.6 h-2.6 z"
+        fill="#1b1030"/>
+
+  <!-- face buttons, in the diamond they sit in on every pad -->
+  <circle cx="33.4" cy="19.2" r="1.9" fill="#1b1030"/>
+  <circle cx="37.2" cy="22.8" r="1.9" fill="#1b1030"/>
+  <circle cx="29.6" cy="22.8" r="1.9" fill="#1b1030"/>
+  <circle cx="33.4" cy="26.4" r="1.9" fill="#1b1030"/>
+
+  <!-- The overlay: a frame-time graph across the middle of the pad, in the
+       same teal syn-disks uses for its activity light. Three rising bars read
+       as "frame rate" at a glance and survive being scaled down. -->
+  <g fill="#4ec9b0">
+    <rect x="22.6" y="24.4" width="1.7" height="3.2" rx="0.6"/>
+    <rect x="25.0" y="22.6" width="1.7" height="5.0" rx="0.6"/>
+    <rect x="20.2" y="21.4" width="1.7" height="6.2" rx="0.6"/>
+  </g>
+</svg>

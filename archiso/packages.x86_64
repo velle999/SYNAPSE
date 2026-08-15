@@ -136,6 +136,13 @@ synfiles
 syn-disks
 syn-edit
 syn-confine
+# The game assistant: the MangoHud overlay driven by a compositor keybind from
+# inside a running game, plus controller detection, rumble, deadzone
+# calibration and SDL mapping overrides. On the live ISO because "does my
+# controller work on this machine" is a question worth answering BEFORE
+# installing, and it is the one thing here that cannot be checked from a
+# spec sheet.
+syn-arcade
 # The settings app: displays, region, date and time, network, Bluetooth, power,
 # kernels, default applications, and where configuration lives. It was in
 # build-all.sh's component list, in syn-update's COMPONENTS and in the start

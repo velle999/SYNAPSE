@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Arcade
+GenericName=Game Assistant
+Comment=Game overlay, controller setup and gaming shortcuts
+Exec=syn-arcade gui
+# Its own icon, not a stock theme name. syn-disks' entry documents why: a
+# generic name makes the app indistinguishable from whatever else in the dock
+# wears the same face.
+Icon=syn-arcade
+Terminal=false
+# The window's app_id, so a taskbar that maps windows to launchers finds THIS
+# entry. syn-arcade sets it on the quickshell process (QS_APP_ID); without both
+# halves the window belongs to "org.quickshell" and wears its icon.
+StartupWMClass=syn-arcade
+Categories=Game;Settings;HardwareSettings;
+Keywords=game;gaming;fps;overlay;mangohud;controller;gamepad;joystick;deadzone;rumble;
