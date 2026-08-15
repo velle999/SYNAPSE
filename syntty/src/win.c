@@ -1708,7 +1708,8 @@ static void key_input(win_t *w, xkb_keycode_t code, bool pressed)
 	/* Everything about WHICH BYTES is in key.c, where a test can reach it. */
 	char   out[64];
 	size_t len = st_key_encode(sym, key_mods(w->xkb_state), utf8, n,
-	                           flags, pressed, out, sizeof out);
+	                           flags, w->g->app_cursor, pressed,
+	                           out, sizeof out);
 	if (len)
 		(void)!write(w->pty->fd, out, len);
 }

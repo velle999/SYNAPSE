@@ -257,6 +257,15 @@ typedef struct {
 	uint16_t mouse_mode;       /* 0 off, or 1000 / 1002 / 1003 */
 	bool     mouse_sgr;        /* ?1006 — extended coordinates */
 
+	/* ⚠ DECCKM (?1) CHANGES WHAT THE ARROW KEYS SEND, and it is the program
+	 * that decides — `smkx` in terminfo, which every full-screen program emits
+	 * on the way in and clears on the way out. On: `ESC O A`. Off: `ESC [ A`.
+	 *
+	 * A terminal that ignores it is not broken in an obvious way; it is broken
+	 * in vim, less, mc and anything else that binds the SS3 forms and is left
+	 * receiving a shape it never asked for. */
+	bool     app_cursor;       /* DECCKM, ?1 */
+
 	/* Recycled full-width row buffers. See row_alloc() in grid.c: the malloc
 	 * triple this removes was 73% of the parse time on ordinary output. */
 	st_cell_t **pool;
@@ -930,7 +939,8 @@ enum {
  * answer: a modifier pressed on its own has no bytes, and a release has none
  * unless the program asked to hear about releases. */
 size_t st_key_encode(uint32_t sym, unsigned mods, const char *utf8, int n,
-                     unsigned flags, bool pressed, char *out, size_t cap);
+                     unsigned flags, bool app_cursor, bool pressed,
+                     char *out, size_t cap);
 
 /* ── config.c: the file, because flags are not how anybody runs a terminal ──
  *

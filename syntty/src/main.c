@@ -288,6 +288,11 @@ static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 	if (g->mouse_mode)
 		fprintf(stderr, "mouse         %u, %s coordinates\n", g->mouse_mode,
 		        g->mouse_sgr ? "SGR" : "1984");
+	/* ⚠ PRINTED AS THE MODE, not as a bare "on". The lesson mouse_mode taught:
+	 * a field that only ever reads back truthy passes every assertion that it
+	 * was understood, while holding the wrong value. */
+	if (g->app_cursor)
+		fprintf(stderr, "cursor keys   application (DECCKM, ?1) — SS3\n");
 
 	/* ── OSC 52, the clipboard the child asked for ──────────────────────────
 	 *
@@ -1173,6 +1178,7 @@ static int cmd_key(int argc, char **argv)
 	unsigned flags   = 0;
 	int      n_specs = 0;
 	bool     press   = true;
+	bool     appcur  = false;
 
 	for (int i = 0; i < argc; i++) {
 		const char *a = argv[i];
@@ -1180,6 +1186,9 @@ static int cmd_key(int argc, char **argv)
 		if (!strncmp(a, "--flags=", 8)) { flags = (unsigned)strtoul(a + 8, NULL, 0); continue; }
 		if (!strcmp(a, "--kitty"))      { flags = KKP_DISAMBIGUATE; continue; }
 		if (!strcmp(a, "--release"))    { press = false; continue; }
+		/* DECCKM, which a program turns on with smkx. It moves the arrows and
+		 * Home/End to SS3, and ONLY when they carry no modifier. */
+		if (!strcmp(a, "--app-cursor")) { appcur = true; continue; }
 		if (a[0] == '-')
 			die("key: unknown option '%s'", a);
 
@@ -1228,7 +1237,7 @@ static int cmd_key(int argc, char **argv)
 		n = n > 0 ? n - 1 : 0;
 
 		char   out[64];
-		size_t len = st_key_encode(sym, mods, utf8, n, flags, press,
+		size_t len = st_key_encode(sym, mods, utf8, n, flags, appcur, press,
 		                           out, sizeof out);
 
 		char symname[64];
@@ -1252,7 +1261,8 @@ static int cmd_key(int argc, char **argv)
 		fprintf(stderr,
 		    "key: give it keys — shift+tab ctrl+shift+left alt+f f5\n"
 		    "     modifiers: shift alt ctrl super; names are xkb keysym names\n"
-		    "     options: --kitty (the protocol encoding) --flags=N --release\n");
+		    "     options: --kitty (the protocol encoding) --flags=N --release\n"
+		    "              --app-cursor (DECCKM: arrows and Home/End as SS3)\n");
 		return 2;
 	}
 	return 0;

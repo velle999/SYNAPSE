@@ -110,12 +110,48 @@ static uint32_t kkp_functional(uint32_t sym, char *final)
 	}
 }
 
-/* F1..F4 are the only entries above that take SS3 rather than CSI when they
- * carry no modifier, and they are told apart from the arrows by their final
+/* F1..F4 take SS3 rather than CSI whenever they carry no modifier, always and
+ * regardless of any mode. They are told apart from the arrows by their final
  * byte — both groups report parameter 1. */
-static bool is_ss3(uint32_t num, char final)
+static bool is_ss3_always(uint32_t num, char final)
 {
 	return num == 1 && final >= 'P' && final <= 'S';
+}
+
+/* The cursor keys, which are the ones DECCKM moves — the arrows plus Home and
+ * End, and NOT the numbered block. `CSI 2~` is Insert in both modes; there is
+ * no SS3 form of a `~` sequence to switch to. */
+static bool is_cursor_key(uint32_t num, char final)
+{
+	if (num != 1)
+		return false;
+	switch (final) {
+	case 'A': case 'B': case 'C': case 'D': case 'H': case 'F': return true;
+	default: return false;
+	}
+}
+
+/* ── DECCKM ─────────────────────────────────────────────────────────────────
+ *
+ * ⚠ THE ALTERNATE FORM IS USED ONLY WHEN NO MODIFIERS ARE PRESENT. That is not
+ * an interpretation — it is what the terminfo entries describe and what kitty's
+ * protocol specification states in as many words ("This form is used only in
+ * cursor key mode and only when no modifiers are present"). Shift+Up stays
+ * `CSI 1;2A` in both modes, because the modified form has nowhere to put the
+ * parameters: SS3 takes none.
+ *
+ * Verified against `infocmp xterm-256color`, which carries both halves —
+ * `smkx=\E[?1h\E=` turns it on, and the key capabilities recorded for that
+ * state are `kcuu1=\EOA`, `kcub1=\EOD`, `khome=\EOH`, `kend=\EOF`.
+ *
+ * This is also why `khome` reads `\EOH` while an unmodified Home sends
+ * `ESC [ H`: terminfo records the APPLICATION-mode value, because ncurses
+ * calls smkx. Both are correct, in their own mode.
+ */
+static bool use_ss3(uint32_t num, char final, bool app_cursor)
+{
+	return is_ss3_always(num, final)
+	       || (app_cursor && is_cursor_key(num, final));
 }
 
 /* The first codepoint of a UTF-8 run.
@@ -179,7 +215,7 @@ static uint32_t kkp_code(uint32_t sym, const char *utf8, int n)
  * pressed on its own has no bytes and never has had.
  */
 static size_t legacy_encode(uint32_t sym, unsigned mods, const char *utf8,
-                            int n, char *out, size_t cap)
+                            int n, bool app_cursor, char *out, size_t cap)
 {
 	/* ⚠ FIRST, because it is the exception to everything below. */
 	if (sym == XKB_KEY_ISO_Left_Tab)
@@ -207,7 +243,7 @@ static size_t legacy_encode(uint32_t sym, unsigned mods, const char *utf8,
 		if (mods == 0) {
 			if (final == '~')
 				return (size_t)snprintf(out, cap, "\033[%u~", num);
-			if (is_ss3(num, final))
+			if (use_ss3(num, final, app_cursor))
 				return (size_t)snprintf(out, cap, "\033O%c", final);
 			return (size_t)snprintf(out, cap, "\033[%c", final);
 		}
@@ -253,7 +289,8 @@ static size_t legacy_encode(uint32_t sym, unsigned mods, const char *utf8,
 }
 
 size_t st_key_encode(uint32_t sym, unsigned mods, const char *utf8, int n,
-                     unsigned flags, bool pressed, char *out, size_t cap)
+                     unsigned flags, bool app_cursor, bool pressed,
+                     char *out, size_t cap)
 {
 	if (cap < 2)
 		return 0;
@@ -264,7 +301,7 @@ size_t st_key_encode(uint32_t sym, unsigned mods, const char *utf8, int n,
 		 * garbage by itself". */
 		if (!pressed)
 			return 0;
-		return legacy_encode(sym, mods, utf8, n, out, cap);
+		return legacy_encode(sym, mods, utf8, n, app_cursor, out, cap);
 	}
 
 	unsigned m   = mods + 1;
@@ -281,8 +318,16 @@ size_t st_key_encode(uint32_t sym, unsigned mods, const char *utf8, int n,
 
 	int len;
 	if (m == 1 && evt == 1) {
+		/* ⚠ DECCKM APPLIES HERE TOO. The protocol deliberately keeps the
+		 * legacy shape for a functional key with no modifiers, and the mode is
+		 * part of that shape — kitty's own specification says the alternate
+		 * form is used "only in cursor key mode and only when no modifiers are
+		 * present", which is exactly the branch this is. A program that pushed
+		 * flags AND set smkx is asking for both. */
 		if (final == 'u')      len = snprintf(out, cap, "\033[%uu", num);
 		else if (final == '~') len = snprintf(out, cap, "\033[%u~", num);
+		else if (use_ss3(num, final, app_cursor))
+		                       len = snprintf(out, cap, "\033O%c", final);
 		else                   len = snprintf(out, cap, "\033[%c", final);
 	} else if (evt == 1) {
 		len = snprintf(out, cap, "\033[%u;%u%c", num, m, final);

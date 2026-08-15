@@ -448,6 +448,13 @@ static void set_mode(st_vt_t *vt, bool on)
 		int p = param_raw(vt, i);
 		if (vt->priv == '?') {
 			switch (p) {
+			/* ⚠ DECCKM, AND IT IS THE ARROW KEYS. `smkx` — what every
+			 * full-screen program sends on the way in — turns this on and
+			 * the cursor keys switch from `ESC [ A` to `ESC O A`. It was
+			 * counted as an unhandled sequence until pkgrel 24, so vim,
+			 * less and mc asked for the shape they bind and were sent the
+			 * other one for the whole life of the window. */
+			case 1:  g->app_cursor = on; break;
 			case 6:  g->origin = on; st_move_to(g, 0, 0); break;
 			case 7:  g->autowrap = on; break;
 			case 25: g->cursor_visible = on; break;
@@ -634,6 +641,16 @@ static void esc_dispatch(st_vt_t *vt, uint8_t b)
 		else if (g->cy > 0)
 			g->cy--;
 		break;
+	/* RIS — reset to the power-on state.
+	 *
+	 * ⚠ THE MODES ARE THE WHOLE POINT OF IT, and they were not being cleared.
+	 * `reset` is what somebody types after a full-screen program has died
+	 * without cleaning up, and what it has to undo is exactly this group: a
+	 * crashed vim leaves mouse reporting on, so every click types `<0;40;12M`
+	 * at the shell, and leaves DECCKM on, so every arrow key arrives in a
+	 * shape the shell's line editor was not expecting. Clearing the screen and
+	 * the attributes — which is all this did — fixes neither, and `reset`
+	 * appearing not to work is how somebody ends up closing the window. */
 	case 'c':
 		st_erase_display(g, 2);
 		st_move_to(g, 0, 0);
@@ -641,6 +658,12 @@ static void esc_dispatch(st_vt_t *vt, uint8_t b)
 		g->cur_style = st_style_intern(g, &vt->style);
 		g->autowrap = true;
 		st_set_region(g, 0, g->rows - 1);
+		g->app_cursor      = false;
+		g->cursor_visible  = true;
+		g->mouse_mode      = 0;
+		g->mouse_sgr       = false;
+		g->bracketed_paste = false;
+		g->origin          = false;
 		break;
 	default:
 		vt->unhandled_esc++;

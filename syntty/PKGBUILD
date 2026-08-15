@@ -92,13 +92,43 @@
 # the one to keep an eye on: the release of a key held while the window loses
 # focus is delivered to whoever has focus NOW, so a repeat left running there
 # types forever from a key nobody is touching.
+#
+# ── 0.1.0-24: DECCKM, the mode that decides what the arrow keys are ─────────
+#
+# `ESC[?1h` was counted as an UNHANDLED sequence. It is DECCKM — terminfo's
+# `smkx`, which every full-screen program emits on the way in — and in that
+# state the cursor keys are SS3: `ESC O A` rather than `ESC [ A`. So vim, less
+# and mc turned it on, bound the shape they had asked for, and were sent the
+# other one for the whole life of the window.
+#
+# ⚠ THE ALTERNATE FORM IS FOR UNMODIFIED KEYS ONLY, and that is not an
+# interpretation: SS3 has nowhere to put a parameter, terminfo records it that
+# way, and kitty's protocol specification says it in as many words — "only in
+# cursor key mode and only when no modifiers are present". Shift+Up stays
+# `CSI 1;2A` in both modes.
+#
+# ⚠ AND IT IS THE CURSOR KEYS, WHICH INCLUDES HOME AND END. The numbered block
+# does not move: there is no SS3 form of a `~` sequence to move it to. Checked
+# against `infocmp xterm-256color`, which carries both halves — `smkx=\E[?1h\E=`
+# and, for that state, kcuu1=\EOA kcud1=\EOB kcuf1=\EOC kcub1=\EOD khome=\EOH
+# kend=\EOF. That is also why khome reads \EOH while an unmodified Home sends
+# CSI H: terminfo records the APPLICATION-mode value, because ncurses calls
+# smkx. Both are right, in their own mode.
+#
+# ⚠ AND RIS NOW CLEARS THE MODES, which it never did. `reset` is what somebody
+# types after a full-screen program has died without cleaning up, and what it
+# has to undo is exactly that group — a crashed vim leaves mouse reporting on,
+# so every click types `<0;40;12M` at the shell, and leaves DECCKM on, so every
+# arrow arrives in a shape the line editor was not expecting. Clearing the
+# screen and the attributes, which was all RIS did, fixes neither, and `reset`
+# appearing not to work is how somebody ends up closing the window.
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=23
+pkgrel=24
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

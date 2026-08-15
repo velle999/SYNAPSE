@@ -561,6 +561,88 @@ e=$(key Shift_L)
 case "$e" in *'(nothing)'*) ok "a modifier on its own sends nothing" ;;
              *) bad "a modifier on its own sends nothing ($e)" ;; esac
 
+# ── DECCKM (?1), which moves the arrows ─────────────────────────────────────
+#
+# `smkx` is what every full-screen program emits on the way in, and in that
+# state the cursor keys are SS3. It was counted as an UNHANDLED sequence until
+# pkgrel 24, so vim, less and mc asked for the shape they bind and were sent
+# the other one for the whole life of the window.
+#
+# ⚠ THE ALTERNATE FORM IS FOR UNMODIFIED KEYS ONLY. Not an interpretation:
+# terminfo records it that way and kitty's protocol specification says it in as
+# many words — "only in cursor key mode and only when no modifiers are
+# present". SS3 has nowhere to put a parameter, so a modified key cannot use it.
+#
+# Cross-checked against `infocmp xterm-256color`, which carries both halves:
+#   smkx=\E[?1h\E=  and, for that state,
+#   kcuu1=\EOA  kcud1=\EOB  kcuf1=\EOC  kcub1=\EOD  khome=\EOH  kend=\EOF
+e=$(key --app-cursor up)
+case "$e" in *'ESCOA'*) ok "in cursor key mode Up is SS3 A (kcuu1)" ;;
+             *) bad "in cursor key mode Up is SS3 A (kcuu1) ($e)" ;; esac
+
+e=$(key --app-cursor left)
+case "$e" in *'ESCOD'*) ok "...and Left is SS3 D (kcub1)" ;;
+             *) bad "...and Left is SS3 D (kcub1) ($e)" ;; esac
+
+# ⚠ HOME AND END MOVE TOO, which is the half that is easy to miss — they are
+# cursor keys, and terminfo's khome/kend are the SS3 forms precisely because
+# ncurses has called smkx by the time it reads them. That is also why khome
+# reads \EOH while an unmodified Home sends CSI H: both are right, per mode.
+e=$(key --app-cursor home)
+case "$e" in *'ESCOH'*) ok "...and Home, which is a cursor key (khome)" ;;
+             *) bad "...and Home, which is a cursor key (khome) ($e)" ;; esac
+
+e=$(key --app-cursor end)
+case "$e" in *'ESCOF'*) ok "...and End (kend)" ;;
+             *) bad "...and End (kend) ($e)" ;; esac
+
+# ⚠ AND THE NUMBERED BLOCK DOES NOT. There is no SS3 form of a `~` sequence to
+# switch to; Insert is CSI 2~ in both modes. Moving these would send a shape
+# nothing reads.
+e=$(key --app-cursor insert)
+case "$e" in *'ESC[2~'*) ok "...while the numbered block is unmoved by the mode" ;;
+             *) bad "...while the numbered block is unmoved by the mode ($e)" ;; esac
+
+e=$(key --app-cursor f5)
+case "$e" in *'ESC[15~'*) ok "...and so is F5" ;;
+             *) bad "...and so is F5 ($e)" ;; esac
+
+# The rule, and the one thing most likely to be got wrong.
+e=$(key --app-cursor shift+up)
+case "$e" in *'ESC[1;2A'*) ok "a MODIFIED cursor key stays CSI in cursor key mode" ;;
+             *) bad "a MODIFIED cursor key stays CSI in cursor key mode ($e)" ;; esac
+
+e=$(key up)
+case "$e" in *'ESC[A'*) ok "...and with the mode off Up is CSI A again" ;;
+             *) bad "...and with the mode off Up is CSI A again ($e)" ;; esac
+
+# The parser half. ⚠ Printed as the MODE, never as a bare "on" — the lesson
+# mouse_mode taught, where a uint8_t held 1000 as 232 and every assertion that
+# the mode was "understood" passed while the value was wrong.
+m=$(printf 'x\033[?1hy' | "$ST" dump - --stats 2>&1 >/dev/null)
+printf '%s' "$m" | grep -q 'cursor keys   application'
+check "?1h is recorded on the grid, where the input layer can read it" $?
+
+printf '%s' "$m" | grep -q 'unhandled     0 CSI'
+check "...and is not counted as an unhandled sequence any more" $?
+
+m=$(printf 'x\033[?1h\033[?1ly' | "$ST" dump - --stats 2>&1 >/dev/null)
+case "$m" in *'cursor keys'*) bad "...and ?1l turns it back off ($m)" ;;
+             *) ok "...and ?1l turns it back off" ;; esac
+
+# ⚠ RIS IS WHAT SOMEBODY TYPES AFTER A FULL-SCREEN PROGRAM DIED. Clearing the
+# screen and the attributes — which was all it did — undoes none of the damage:
+# the modes are what a crashed vim leaves behind, so every click types
+# `<0;40;12M` at the shell and every arrow arrives in a shape the line editor
+# was not expecting. `reset` appearing not to work is how somebody ends up
+# closing the window.
+m=$(printf '\033[?1h\033[?1000h\033cx' | "$ST" dump - --stats 2>&1 >/dev/null)
+case "$m" in *'cursor keys'*) bad "RIS clears cursor key mode ($m)" ;;
+             *) ok "RIS clears cursor key mode" ;; esac
+
+case "$m" in *'mouse  '*) bad "...and mouse reporting with it ($m)" ;;
+             *) ok "...and mouse reporting with it" ;; esac
+
 # ── the same keys under the kitty protocol ──────────────────────────────────
 #
 # ⚠ Shift+Tab was broken HERE TOO, and differently: kkp_code had no entry for
