@@ -98,6 +98,12 @@ float_gap       = 24
 #   nord        arctic frost blue on slate     dark   glassy
 #   dracula     purple + pink on charcoal      dark   glassy
 #   bubblegum   pastel pink, hot-pink titles   light  glassy
+#   macos26     liquid glass, traffic lights   light  glassy  (rounded)
+#   aqua        Mac OS X 10.0 pinstripes       light
+#   platinum    Mac OS 8.1 racing stripes      light
+# The three Macs put their window controls on the LEFT and centre the caption.
+# macos26 also overrides `corner_radius` upward — it never draws a corner under
+# 16px, the way the retro themes never draw one at all.
 # "glassy" is only the translucency level the theme picks IF transparency is on;
 # the master switch stays yours (`transparency` below, or T in the Super+T panel).
 # theme = synapse

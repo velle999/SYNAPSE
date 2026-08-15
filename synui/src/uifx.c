@@ -141,13 +141,19 @@ const char *uifx_row_inert(syn_server_t *s, int row)
     case UIFX_ROW_CORNER:
         /* chrome_corner_radius() forces 0 for the retro styles: a Windows 95
          * window with 12px corners is instantly wrong, so the chrome overrides
-         * the setting rather than overwriting it. */
-        return chrome_corner_radius(cfg) == 0 && cfg->corner_radius > 0
-             ? "retro chrome is square" : NULL;
+         * the setting rather than overwriting it. macOS 26 overrides it the
+         * other way — a floor, not a fix, so a bigger setting still wins. */
+        if (chrome_corner_radius(cfg) == 0 && cfg->corner_radius > 0)
+            return "retro chrome is square";
+        if (cfg->chrome == SYN_CHROME_LIQUID &&
+            cfg->corner_radius < CHROME_LIQUID_RADIUS_MIN)
+            return "macOS chrome rounds at " CHROME_LIQUID_RADIUS_MIN_STR;
+        return NULL;
     case UIFX_ROW_SHADOW:
-        /* 95 sat flat on the desktop; chrome_shadow() drops it. */
-        return cfg->chrome == SYN_CHROME_BEVEL && cfg->shadow
-             ? "95 chrome has no shadow" : NULL;
+        /* 95 sat flat on the desktop, and so did Platinum; chrome_shadow()
+         * drops it for both. */
+        return chrome_shadow(cfg) == 0 && cfg->shadow
+             ? "retro chrome has no shadow" : NULL;
     case UIFX_ROW_SHADOW_SIZE:
     case UIFX_ROW_SHADOW_SPREAD:
     case UIFX_ROW_SHADOW_DROP:
@@ -172,10 +178,13 @@ const char *uifx_note(syn_server_t *s)
     /* Only the whole-page facts belong here — a single off switch is already
      * said by the greyed rows under it. The chrome style is the one that is
      * invisible from this panel, because it is set from Super+T. */
-    if (cfg->chrome == SYN_CHROME_BEVEL)
-        return "95 chrome \xc2\xb7 corners square and shadow off, whatever these say";
-    if (cfg->chrome != SYN_CHROME_FLAT)
+    if (cfg->chrome == SYN_CHROME_BEVEL || cfg->chrome == SYN_CHROME_PLATINUM)
+        return "retro chrome \xc2\xb7 corners square and shadow off, whatever these say";
+    if (chrome_square(cfg))
         return "retro chrome \xc2\xb7 corners are square, whatever this says";
+    if (cfg->chrome == SYN_CHROME_LIQUID)
+        return "macOS chrome \xc2\xb7 corners never go below "
+               CHROME_LIQUID_RADIUS_MIN_STR;
     return NULL;
 }
 

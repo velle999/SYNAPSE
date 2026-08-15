@@ -70,6 +70,16 @@ static const struct {
      * its #3D1A2A ink gives it the least headroom of the three. */
     { "bubblegum",  { 1.000f, 0.914f, 0.949f }, { 0.239f, 0.102f, 0.165f },
                     { 1.000f, 0.518f, 0.741f }, 1 },
+    /* The three Macs, and all three are PALE — which triples the population of
+     * the branch that has actually shipped bugs. macOS 26's #F5F5F7 is the
+     * palest surface any preset ships, so it is also the least forgiving to
+     * every status colour in render.c. */
+    { "macos26",    { 0.961f, 0.961f, 0.969f }, { 0.114f, 0.114f, 0.122f },
+                    { 0.000f, 0.478f, 1.000f }, 1 },
+    { "aqua",       { 0.925f, 0.925f, 0.925f }, { 0.000f, 0.000f, 0.000f },
+                    { 0.208f, 0.424f, 0.737f }, 1 },
+    { "platinum",   { 0.867f, 0.867f, 0.867f }, { 0.000f, 0.000f, 0.000f },
+                    { 0.239f, 0.239f, 0.561f }, 1 },
 };
 
 /* render.c's stat_dark[] — the status colours a panel draws with. */

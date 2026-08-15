@@ -1137,3 +1137,73 @@ advertising the keys on screen the whole time.
       separately against a deliberately-dead `Escape`, because it was the one
       that could pass on a stale log line. It counts occurrences rather than
       grepping for presence for exactly that reason.
+
+### Three Macs — macOS 26, Aqua and Platinum  *(done)*
+
+velle asked for three Mac themes from three screenshots, "one with rounded".
+They are `macos26`, `aqua` and `platinum` in the Super+T picker, and they follow
+the winxp/win95 precedent exactly: **a theme is a STYLE, not a palette**. Colour
+alone could no more make a Mac than it could make a Luna — the give-away is that
+the window controls are on the **left** and the caption is **centred**, and after
+that it is per-era: Tahoe's radius, Aqua's pinstripes and glossy traffic lights,
+Platinum's racing stripes and square close box.
+
+- [x] **Three new `syn_chrome_t` styles** — `LIQUID`, `AQUA`, `PLATINUM` — each
+      a caption painter in `deco.c` on the same cairo titlebar surface the retro
+      ones use. Aqua and Platinum draw their own top corners and stripes;
+      LIQUID draws none, because `chrome_corner_radius()` is non-zero for it and
+      **scenefx already rounds that buffer's top corners** (`corner_radii_top`
+      in anim.c). Rounding it a second time in cairo leaves a dark fringe.
+- [x] **`chrome_square()` is now the single answer** to "does this desktop round
+      its corners". Three things read it — the radius override, `theme.state`'s
+      `square_chrome` export for the bar, and the GTK rule pushed at clients that
+      decorate themselves — and they were three copies of `chrome != FLAT`. That
+      spelling was correct for exactly as long as every non-FLAT style was square,
+      which ended with macOS 26: it is not FLAT and it is the **roundest** thing
+      that ships. One function, three callers, no drift.
+- [x] **The radius is a FLOOR, not a value.** `CHROME_LIQUID_RADIUS_MIN` is 16
+      and a larger `corner_radius` still wins. Tahoe's corner is the theme rather
+      than a taste — 0px reads as a different OS — but the user's setting is only
+      overridden in the direction the theme is arguing for. The uifx panel says
+      so on the row rather than leaving it as a mystery.
+- [x] **Button placement moved into `synui.h`** (`chrome_btn_x`,
+      `chrome_btn_region`, `chrome_btn_at`) because **two** pieces of code have
+      to agree about it: the painter in `deco.c` and the hit test 800 lines
+      below it, which had its own copy of the arithmetic. With every style
+      right-aligned the copies could not disagree; with the Mac styles they can,
+      and the failure is a **click that closes a window somebody aimed to
+      minimize** — silent, and invisible in a screenshot.
+- [x] **`tests/chrome_layout_test.c`** pins that: the three layouts as absolute
+      pixels, and the round trip at *every* x of a 600px bar — no slot may claim
+      a pixel the hit test calls bare, and no named button may be one nothing
+      drew. Plus the two degenerate directions of a too-narrow window (the
+      right-aligned slots overlap and the LAST painted must win; the Mac slots
+      fall off the right and close must survive at x 0).
+- [x] **Platinum's widgets are drawn, not glyphed.** Mac OS 8 identified them by
+      POSITION — an empty close box, a line for collapse, an inner square for
+      zoom — so `draw_glyph` is suppressed and the boxes draw their own marks.
+      Inactive windows keep flat, unbevelled boxes: authentic Platinum dropped
+      them entirely, and an invisible-but-clickable widget is a trap.
+- [x] **Traffic lights grey out when the window is not focused**, which is both
+      the real behaviour and the honest one, and their × − + appear on hover
+      only. `platinum` and `aqua` say the same thing with their stripes: the
+      focused window is the striped one. That is how these desktops signalled
+      focus before anything glowed.
+- [x] **Provenance is in the preset comments.** Platinum's `#9B9CCE` desktop,
+      its `#DEDEDE` face and the white/grey title stripes, and Aqua's `#356CBC`
+      menu highlight and `#345CA5` desktop, were **sampled off velle's
+      screenshots**; macOS 26's are Apple's published system colours. Anything
+      else was tuned by eye and says so — these are not registry values the way
+      Luna's are, and claiming otherwise would be the kind of comment that
+      survives its own truth.
+- [x] **All three are PALE**, which triples the population of the branch that
+      has actually shipped bugs, so all three are in `panel_contrast_test.c`'s
+      table. `macos26`'s `#F5F5F7` is the palest surface any preset ships; every
+      status colour in render.c is corrected against it and clears 4.5:1.
+- [x] **Verified by capture, and by an A/B.** The headless rig from the XP/95
+      work (SYNUI_CONFIG + hermetic HOME, `WLR_BACKENDS=headless`, two foot
+      clients, `synctl dispatch theme`, `grim`) shot all three plus the four
+      themes that already existed — and `synapse`, `dark`, `winxp` and `win95`
+      came back **pixel-identical to the same shot from HEAD's binary**. The
+      button-layout refactor touches every style, so "the new ones look right"
+      was never the whole question.

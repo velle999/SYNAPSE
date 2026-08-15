@@ -5657,6 +5657,9 @@ static const char *thememgr_blurb(syn_theme_t t)
     case SYN_THEME_NORD:       return "Arctic \xc2\xb7 frost blue on slate \xc2\xb7 glassy";
     case SYN_THEME_DRACULA:    return "Purple + pink on charcoal \xc2\xb7 glassy";
     case SYN_THEME_BUBBLEGUM:  return "Pastel pink, hot-pink titles \xc2\xb7 apps light";
+    case SYN_THEME_MACOS26:    return "Liquid glass \xc2\xb7 rounded, translucent \xc2\xb7 apps light";
+    case SYN_THEME_AQUA:       return "Pinstripes + traffic lights \xc2\xb7 apps light grey";
+    case SYN_THEME_PLATINUM:   return "Racing stripes, square boxes \xc2\xb7 apps grey";
     default:                   return "";
     }
 }

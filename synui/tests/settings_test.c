@@ -293,7 +293,10 @@ static void test_defaults(void)
     assert(d->clip_csd_margin == 1);
     assert(d->shadow == 1);
     assert(d->alt_tab_preview == 1);
-    assert(strcmp(d->terminal, "kitty") == 0);
+    /* syntty since a1d0dc6 — this assertion still said kitty and had been
+     * failing the suite ever since, which is exactly the "a default moved
+     * without its comment moving" case the block above exists to catch. */
+    assert(strcmp(d->terminal, "syntty") == 0);
 
     /* Asked twice, the same object: the panel diffs against this on every
      * repaint, so it must not be rebuilt (or worse, half-built) per call. */

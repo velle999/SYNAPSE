@@ -525,6 +525,19 @@ hit_test = executable('hit_test',
   build_by_default : false)
 test('hit', hit_test)
 
+# Which titlebar button sits where, per chrome style — the painter in deco.c and
+# the hit test beside it read one set of functions in synui.h, and this is what
+# says they still agree. The Mac styles moved the buttons to the LEFT, so the
+# failure mode is a click that closes a window somebody meant to minimize:
+# silent, invisible in a screenshot, and not caught by anything else here.
+chrome_layout_test = executable('chrome_layout_test',
+  ['tests/chrome_layout_test.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('chrome_layout', chrome_layout_test)
+
 # The config parser and settings.state. config.c's key chain was lifted whole
 # out of synui_config_load() into config_parse_kv() so the control panel's
 # persistence could read it back through the very same code; this is the guard

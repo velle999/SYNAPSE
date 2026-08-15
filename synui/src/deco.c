@@ -42,7 +42,6 @@
 
 #include "synui.h"
 
-#define BTN_COUNT     3
 #define CORNER_GRAB  24   /* px from a corner that resizes both edges at once */
 
 /* Width of the invisible resize-grab ring outside the window (see the grab_*
@@ -101,13 +100,11 @@ void view_content_box(const syn_view_t *view, struct wlr_box *out)
     if (out->height < 1) out->height = 1;
 }
 
-/* ── Titlebar painting ───────────────────────────────────── */
-/* Buttons are square and titlebar-height, right-aligned in that order:
- * minimize, maximize, close. Returns the x of button `i`'s left edge. */
-static int btn_x(int tb_w, int th, int i)
-{
-    return tb_w - (BTN_COUNT - i) * th;
-}
+/* ── Titlebar painting ─────────────────────────────────────
+ * Where the buttons SIT is chrome_btn_x()/chrome_btn_region()/chrome_btn_at()
+ * in synui.h — shared with the hit test below, which has to agree with what is
+ * painted here or a click lands on a button nobody aimed at. What they look
+ * like is this file's business, and only this file's. */
 
 /* ── Retro chrome helpers ─────────────────────────────────
  * The retro themes are not just a different set of colours: XP's caption is a
@@ -191,6 +188,149 @@ static void bevel(cairo_t *cr, double x, double y, double w, double h, int raise
     }
 }
 
+/* ── Mac chrome helpers ───────────────────────────────────
+ * Three eras, one layout: controls on the left, caption centred. What differs
+ * is the material — Tahoe's flat glass, Aqua's pinstripes, Platinum's racing
+ * stripes — and each is a few lines of cairo on the same titlebar surface.
+ */
+
+/* Horizontal 1px pinstripes: `light` on every other row over whatever has just
+ * been painted. Aqua's are the whole texture of the OS; Platinum's are the
+ * "racing stripes" that flank a title. `step` is 2 for both — a 3px step reads
+ * as corduroy rather than as a pinstripe. */
+static void pinstripe(cairo_t *cr, double x, double y, double w, double h,
+                      const double light[3], double alpha, int step)
+{
+    cairo_save(cr);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_clip(cr);
+    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgba(cr, light[0], light[1], light[2], alpha);
+    for (double ly = y + 0.5; ly < y + h; ly += step) {
+        cairo_move_to(cr, x,     ly);
+        cairo_line_to(cr, x + w, ly);
+    }
+    cairo_stroke(cr);
+    cairo_restore(cr);
+}
+
+/* Tahoe's toolbar: near-white glass, a shallow top-to-bottom ramp, a hairline
+ * of white along the top edge and a hairline separator along the bottom. The
+ * corners are NOT drawn here — chrome_corner_radius() is non-zero for LIQUID,
+ * so scenefx rounds this buffer's top corners for us (anim.c passes
+ * corner_radii_top). Rounding it twice would leave a dark fringe. */
+static void liquid_caption(cairo_t *cr, double w, double h,
+                           const float base[4], const float grad[4])
+{
+    cairo_pattern_t *p = cairo_pattern_create_linear(0, 0, 0, h);
+    cairo_pattern_add_color_stop_rgba(p, 0.0, base[0], base[1], base[2], base[3]);
+    cairo_pattern_add_color_stop_rgba(p, 1.0, grad[0], grad[1], grad[2], base[3]);
+    cairo_set_source(cr, p);
+    cairo_rectangle(cr, 0, 0, w, h);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+
+    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgba(cr, 1, 1, 1, 0.55);      /* the glass's lit top edge */
+    cairo_move_to(cr, 0, 0.5);
+    cairo_line_to(cr, w, 0.5);
+    cairo_stroke(cr);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.10);      /* toolbar → content rule */
+    cairo_move_to(cr, 0, h - 0.5);
+    cairo_line_to(cr, w, h - 0.5);
+    cairo_stroke(cr);
+}
+
+/* Aqua's caption: a light-to-dark grey ramp under 1px white pinstripes, rounded
+ * at the top only (10.0 windows were square at the bottom), with a hairline
+ * under it. An unfocused Aqua window loses the stripes and most of the ramp —
+ * that fade is how the OS said "not this one" long before anything glowed. */
+static void aqua_caption(cairo_t *cr, double w, double h,
+                         const float base[4], const float grad[4], int focused)
+{
+    cairo_pattern_t *p = cairo_pattern_create_linear(0, 0, 0, h);
+    double c[3];
+    mix(grad, base, 0.15, c);
+    cairo_pattern_add_color_stop_rgba(p, 0.00, grad[0], grad[1], grad[2], base[3]);
+    cairo_pattern_add_color_stop_rgba(p, 0.55, c[0], c[1], c[2], base[3]);
+    cairo_pattern_add_color_stop_rgba(p, 1.00, base[0], base[1], base[2], base[3]);
+
+    rounded_top(cr, w, h, 6);
+    cairo_set_source(cr, p);
+    cairo_fill_preserve(cr);
+    cairo_clip(cr);          /* keep the stripes and the rules inside the curve */
+
+    if (focused) {
+        static const double white[3] = { 1.0, 1.0, 1.0 };
+        pinstripe(cr, 0, 2, w, h - 4, white, 0.60, 2);
+    }
+
+    /* The thin dark line that closes the bar off from the window body. */
+    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgba(cr, 0, 0, 0, focused ? 0.30 : 0.18);
+    cairo_move_to(cr, 0, h - 0.5);
+    cairo_line_to(cr, w, h - 0.5);
+    cairo_stroke(cr);
+    cairo_reset_clip(cr);
+    cairo_pattern_destroy(p);
+}
+
+/* Platinum's caption: flat grey with the racing stripes — alternating white and
+ * mid-grey 1px lines — running the full width, and a plaque of plain face grey
+ * cleared behind the title so the text is never drawn over them. Inactive
+ * windows drop the stripes entirely, exactly as Mac OS 8 did. The plaque is
+ * painted by the caller, which is the only one that knows how wide the title is.
+ */
+static void platinum_caption(cairo_t *cr, double w, double h,
+                             const float base[4], int focused)
+{
+    cairo_set_source_rgba(cr, base[0], base[1], base[2], base[3]);
+    cairo_paint(cr);
+
+    if (focused) {
+        static const double white[3] = { 1.0, 1.0, 1.0 };
+        static const double grey[3]  = { 0.60, 0.60, 0.60 };
+        /* Two passes offset by one row: white on the odd rows, #999 on the
+         * even ones. One pass over a flat fill is a hatch, not a stripe. */
+        pinstripe(cr, 0, 3, w, h - 6, white, 0.95, 2);
+        pinstripe(cr, 0, 4, w, h - 6, grey,  0.95, 2);
+    }
+
+    /* The 1px black rule under the bar; the frame's outline continues it. */
+    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgba(cr, 0, 0, 0, focused ? 1.0 : 0.45);
+    cairo_move_to(cr, 0, h - 0.5);
+    cairo_line_to(cr, w, h - 0.5);
+    cairo_stroke(cr);
+}
+
+/* One traffic light. Grey when the window is not focused — that is the real
+ * behaviour and it is also the honest one: an unfocused Mac window's controls
+ * are not armed until you look at it. Aqua's carry a gloss highlight; Tahoe's
+ * are flat. The glyph inside appears on hover only, as it always has. */
+static void traffic_light(cairo_t *cr, double cx, double cy, double r,
+                          const float col[4], int focused, int glossy)
+{
+    static const float grey[4] = { 0.808f, 0.808f, 0.824f, 1.0f };  /* #CECED2 */
+    const float *c = focused ? col : grey;
+
+    cairo_new_path(cr);
+    cairo_arc(cr, cx, cy, r, 0, 2 * M_PI);
+    cairo_set_source_rgba(cr, c[0], c[1], c[2], 1.0);
+    cairo_fill_preserve(cr);
+    /* A rim a shade darker than the fill, so a pale light still has an edge on
+     * a near-white caption — without it Tahoe's yellow bleeds into the glass. */
+    cairo_set_source_rgba(cr, c[0] * 0.72, c[1] * 0.72, c[2] * 0.72, 1.0);
+    cairo_set_line_width(cr, 1);
+    cairo_stroke(cr);
+
+    if (!glossy) return;
+    cairo_new_path(cr);
+    cairo_arc(cr, cx, cy - r * 0.32, r * 0.52, 0, 2 * M_PI);
+    cairo_set_source_rgba(cr, 1, 1, 1, focused ? 0.55 : 0.35);
+    cairo_fill(cr);
+}
+
 static void draw_btn_glyph(cairo_t *cr, syn_deco_region_t which,
                            double cx, double cy, double s, const float col[4])
 {
@@ -272,14 +412,37 @@ static void titlebar_render(syn_view_t *view)
     const float *face = cfg->chrome_face;
 
     /* text_x/text_right bound the caption. Both retro styles inset it: 95 by the
-     * frame bevel, XP by its rounded corner. */
+     * frame bevel, XP by its rounded corner. The Mac styles bound it between
+     * their left-hand controls and the far edge and CENTRE it in there — a
+     * left-aligned caption beside three traffic lights is not a Mac window. */
     double text_x     = 8;
-    int    text_right = btn_x(w, th, 0) - 6;
+    int    text_right = chrome_btn_x(cfg, w, th, 0) - 6;
+    int    centred    = 0;
 
     switch (cfg->chrome) {
     case SYN_CHROME_LUNA:
         luna_caption(cr, w, th, bg, grad);
         text_x = 10;
+        break;
+    case SYN_CHROME_LIQUID:
+        liquid_caption(cr, w, th, bg, grad);
+        text_x     = SYN_TITLEBAR_BTNS * th + 8;
+        text_right = w - 8;
+        centred    = 1;
+        break;
+    case SYN_CHROME_AQUA:
+        aqua_caption(cr, w, th, bg, grad, focused);
+        text_x     = SYN_TITLEBAR_BTNS * th + 8;
+        text_right = w - 8;
+        centred    = 1;
+        break;
+    case SYN_CHROME_PLATINUM:
+        /* The face, not the caption colour: Platinum's bar IS the window face,
+         * with the stripes drawn over it and the title cleared back out. */
+        platinum_caption(cr, w, th, focused ? bg : face, focused);
+        text_x     = th + 6;                       /* past the close box */
+        text_right = w - 2 * th - 6;               /* before collapse + zoom */
+        centred    = 1;
         break;
     case SYN_CHROME_BEVEL:
         /* The raised silver frame, then the flat caption bar inset inside it —
@@ -292,7 +455,7 @@ static void titlebar_render(syn_view_t *view)
         cairo_rectangle(cr, 3, 3, w - 6, th - 6);
         cairo_fill(cr);
         text_x     = 7;
-        text_right = btn_x(w, th, 0) - 4;
+        text_right = chrome_btn_x(cfg, w, th, 0) - 4;
         break;
     case SYN_CHROME_FLAT:
     default:
@@ -314,7 +477,7 @@ static void titlebar_render(syn_view_t *view)
                               ? cfg->border_color_warn
                               : cfg->border_color_norm;
         cairo_set_source_rgba(cr, hl[0], hl[1], hl[2], 1.0);
-        cairo_rectangle(cr, btn_x(w, th, i), 0, th, th);
+        cairo_rectangle(cr, chrome_btn_x(cfg, w, th, i), 0, th, th);
         cairo_fill(cr);
     }
 
@@ -325,13 +488,39 @@ static void titlebar_render(syn_view_t *view)
         cairo_rectangle(cr, text_x, 0, text_right - text_x, th);
         cairo_clip(cr);
 
-        if (cfg->chrome != SYN_CHROME_FLAT)
+        /* Tahoe's caption is not bold — the one Mac style that is a light
+         * modern label rather than a heavy retro one. */
+        if (cfg->chrome != SYN_CHROME_FLAT && cfg->chrome != SYN_CHROME_LIQUID)
             cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
                                    CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, th * 0.46);
         cairo_font_extents_t fe;
         cairo_font_extents(cr, &fe);
         double ty = (th + fe.ascent - fe.descent) / 2.0;
+
+        /* Centring has to measure through syn_text_extents, not cairo's own:
+         * a title with a glyph the UI face lacks is drawn by the fallback, and
+         * measuring the face that will NOT draw it centres the wrong width.
+         * A title too wide for its box falls back to left-aligned, where the
+         * clip above trims the tail — centring an overlong string would cut
+         * BOTH ends and lose the beginning, which is the half that identifies
+         * the window. */
+        if (centred) {
+            cairo_text_extents_t te;
+            syn_text_extents(cr, title, &te);
+            if (te.x_advance < text_right - text_x)
+                text_x += (text_right - text_x - te.x_advance) / 2.0;
+
+            /* Platinum clears a plaque of plain face grey behind the title, so
+             * the racing stripes stop at the text instead of running under it.
+             * Mac OS 8 did exactly this, and without it the caption is unreadable
+             * rather than merely wrong. */
+            if (cfg->chrome == SYN_CHROME_PLATINUM && focused) {
+                cairo_set_source_rgba(cr, face[0], face[1], face[2], face[3]);
+                cairo_rectangle(cr, text_x - 6, 2, te.x_advance + 12, th - 5);
+                cairo_fill(cr);
+            }
+        }
 
         /* XP's caption text carries a soft drop shadow; without it white-on-blue
          * looks pasted on rather than part of the bar. */
@@ -350,16 +539,16 @@ static void titlebar_render(syn_view_t *view)
      * the hover wash above); the retro styles draw a real button under each. */
     double cy = th / 2.0;
     double gs = th * 0.18;
-    static const syn_deco_region_t order[BTN_COUNT] = {
-        DECO_BTN_MIN, DECO_BTN_MAX, DECO_BTN_CLOSE
-    };
     static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     static const float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
-    for (int i = 0; i < BTN_COUNT; i++) {
-        double bx      = btn_x(w, th, i);
-        int    hovered = (view->tb_hover == order[i]);
+    for (int i = 0; i < SYN_TITLEBAR_BTNS; i++) {
+        syn_deco_region_t order_i = chrome_btn_region(cfg, i);
+        double bx      = chrome_btn_x(cfg, w, th, i);
+        int    hovered = (view->tb_hover == order_i);
         const float *gc = fg;
+        double       gsz = gs;    /* per-button: the Mac glyphs are smaller */
+        int          draw_glyph = 1;
 
         if (cfg->chrome == SYN_CHROME_LUNA) {
             /* XP's pills: close is the red one, always visible; the other two are
@@ -371,7 +560,7 @@ static void titlebar_render(syn_view_t *view)
             static const float xp_close[4]  = { 0.906f, 0.220f, 0.153f, 1.0f };
             static const float xp_close_h[4] = { 0.965f, 0.400f, 0.310f, 1.0f };
             double col[3];
-            if (order[i] == DECO_BTN_CLOSE) {
+            if (order_i == DECO_BTN_CLOSE) {
                 const float *c = hovered ? xp_close_h : xp_close;
                 col[0] = c[0]; col[1] = c[1]; col[2] = c[2];
             } else {
@@ -400,11 +589,64 @@ static void titlebar_render(syn_view_t *view)
             cairo_fill(cr);
             bevel(cr, px, by, bs, bs, !hovered);
             gc = black;
-        } else if (order[i] == DECO_BTN_CLOSE && hovered) {
+        } else if (cfg->chrome == SYN_CHROME_LIQUID ||
+                   cfg->chrome == SYN_CHROME_AQUA) {
+            /* The traffic lights. Same three hexes both eras — Apple kept them
+             * across the redesign — with Aqua's carrying a gloss highlight and
+             * Tahoe's flat. The × − + inside appear on HOVER only, which is
+             * what the Mac has always done and is also why they can be drawn
+             * this small without turning into three smudges. */
+            static const float mac_close[4] = { 1.000f, 0.373f, 0.341f, 1.0f }; /* #FF5F57 */
+            static const float mac_min[4]   = { 0.996f, 0.737f, 0.180f, 1.0f }; /* #FEBC2E */
+            static const float mac_max[4]   = { 0.157f, 0.784f, 0.251f, 1.0f }; /* #28C840 */
+            const float *c = order_i == DECO_BTN_CLOSE ? mac_close
+                           : order_i == DECO_BTN_MIN   ? mac_min : mac_max;
+            /* Inset so the three read as a group with air around them: Aqua's
+             * lights are small relative to a tall caption. */
+            traffic_light(cr, bx + th / 2.0, cy, th * 0.20, c, focused,
+                          cfg->chrome == SYN_CHROME_AQUA);
+            /* A dark glyph on a saturated light; near-black rather than black,
+             * to sit on the fill rather than punch through it. */
+            static const float mac_glyph[4] = { 0.15f, 0.09f, 0.02f, 0.85f };
+            gc = mac_glyph;
+            gsz = th * 0.10;
+            draw_glyph = hovered && focused;
+        } else if (cfg->chrome == SYN_CHROME_PLATINUM) {
+            /* Platinum's widgets: small square boxes with a raised bevel, and no
+             * X in the close box — Mac OS 8 identified them by POSITION, not by
+             * symbol. So the glyphs are drawn per-box here and suppressed below:
+             * collapse gets its horizontal line, zoom its little inner square,
+             * close stays empty. A hovered box goes sunken, the way a pressed
+             * one did. Inactive windows keep their boxes flat and unbevelled —
+             * visible, because an invisible-but-clickable widget is a trap. */
+            double bs = th * 0.44, by = (th - bs) / 2.0;
+            double px = bx + (th - bs) / 2.0;
+            cairo_set_source_rgba(cr, face[0], face[1], face[2], face[3]);
+            cairo_rectangle(cr, px, by, bs, bs);
+            cairo_fill(cr);
+            cairo_set_source_rgba(cr, 0, 0, 0, focused ? 1.0 : 0.45);
+            cairo_set_line_width(cr, 1);
+            cairo_rectangle(cr, px + 0.5, by + 0.5, bs - 1, bs - 1);
+            cairo_stroke(cr);
+            if (focused) bevel(cr, px + 1, by + 1, bs - 2, bs - 2, !hovered);
+
+            if (focused && order_i == DECO_BTN_MIN) {      /* collapse */
+                cairo_move_to(cr, px + 3,      by + bs / 2.0 + 0.5);
+                cairo_line_to(cr, px + bs - 3, by + bs / 2.0 + 0.5);
+                cairo_set_source_rgba(cr, 0, 0, 0, 1);
+                cairo_stroke(cr);
+            } else if (focused && order_i == DECO_BTN_MAX) { /* zoom */
+                cairo_rectangle(cr, px + 2.5, by + 2.5, bs * 0.42, bs * 0.42);
+                cairo_set_source_rgba(cr, 0, 0, 0, 1);
+                cairo_stroke(cr);
+            }
+            draw_glyph = 0;
+        } else if (order_i == DECO_BTN_CLOSE && hovered) {
             gc = white;   /* reads on the alarm-red wash */
         }
 
-        draw_btn_glyph(cr, order[i], bx + th / 2.0, cy, gs, gc);
+        if (draw_glyph)
+            draw_btn_glyph(cr, order_i, bx + th / 2.0, cy, gsz, gc);
     }
 
     cairo_destroy(cr);
@@ -997,10 +1239,10 @@ syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
         int w  = v->tb_w;
         if (th <= 0 || w <= 0) return NULL;
 
-        syn_deco_region_t r = DECO_TITLEBAR;
-        if      (nx >= btn_x(w, th, 2)) r = DECO_BTN_CLOSE;
-        else if (nx >= btn_x(w, th, 1)) r = DECO_BTN_MAX;
-        else if (nx >= btn_x(w, th, 0)) r = DECO_BTN_MIN;
+        /* The SAME layout the painter used, asked the other way round. Not a
+         * second copy of the arithmetic: that is how a Mac desktop would end up
+         * closing windows the user meant to minimize. */
+        syn_deco_region_t r = chrome_btn_at(&v->server->config, w, th, nx);
 
         if (region) *region = r;
         return v;

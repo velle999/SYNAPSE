@@ -54,6 +54,9 @@ const char *const syn_theme_names[SYN_THEME_COUNT] = {
     [SYN_THEME_NORD]       = "nord",
     [SYN_THEME_DRACULA]    = "dracula",
     [SYN_THEME_BUBBLEGUM]  = "bubblegum",
+    [SYN_THEME_MACOS26]    = "macos26",
+    [SYN_THEME_AQUA]       = "aqua",
+    [SYN_THEME_PLATINUM]   = "platinum",
 };
 
 /* What the panel shows a human. */
@@ -70,6 +73,9 @@ const char *theme_name(syn_theme_t t)
     case SYN_THEME_NORD:       return "Nord";
     case SYN_THEME_DRACULA:    return "Dracula";
     case SYN_THEME_BUBBLEGUM:  return "Bubblegum";
+    case SYN_THEME_MACOS26:    return "macOS 26 (Tahoe)";
+    case SYN_THEME_AQUA:       return "Mac OS X 10.0 (Aqua)";
+    case SYN_THEME_PLATINUM:   return "Mac OS 8.1 (Platinum)";
     default:                   return "?";
     }
 }
@@ -342,6 +348,113 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .base_r = 255, .base_g = 233, .base_b = 242,        /* #FFE9F2 */
         .text_r = 61, .text_g = 26, .text_b = 42,           /* #3D1A2A */
     },
+    /* ── The Macs ────────────────────────────────────────────
+     * Three eras of one desktop, the same way winxp/win95 are two of another.
+     * What makes each read as a Mac is SHAPE before colour — controls on the
+     * left, a centred caption, and per-era: Tahoe's big radius, Aqua's
+     * pinstripes and traffic lights, Platinum's racing stripes and close box.
+     * See syn_chrome_t and the three caption painters in deco.c.
+     *
+     * Provenance, because these are not registry values the way Luna's are:
+     * the 8.1 and 10.0 numbers were SAMPLED off the screenshots velle supplied
+     * (Platinum's #9B9CCE desktop, its #DEDEDE face and the white/grey title
+     * stripes; Aqua's #356CBC menu highlight, its #345CA5 desktop and the
+     * near-white pinstriped caption). macOS 26's are Apple's published system
+     * colours — systemBlue #007AFF, systemRed #FF3B30, label #1D1D1F,
+     * secondarySystemBackground #F2F2F7 — plus the traffic-light hexes in
+     * deco.c. Anything not on that list was tuned by eye, not measured. */
+    /* macOS 26 "TAHOE" — Liquid Glass: near-white translucent chrome, a hairline
+     * instead of a frame, and a corner radius big enough to be the theme (see
+     * CHROME_LIQUID_RADIUS_MIN). This is the one that leans on the compositor's
+     * own glass: it ships translucent by default, because a flat opaque white
+     * window is Tahoe with the point removed. */
+    [SYN_THEME_MACOS26] = {
+        .border_norm  = { 0.839f, 0.839f, 0.855f, 1.0f },  /* #D6D6DA hairline */
+        .border_focus = { 0.000f, 0.478f, 1.000f, 1.0f },  /* #007AFF systemBlue */
+        .border_ai    = { 0.369f, 0.361f, 0.902f, 1.0f },  /* #5E5CE6 systemIndigo */
+        .border_warn  = { 1.000f, 0.231f, 0.188f, 1.0f },  /* #FF3B30 systemRed */
+        .tb_norm       = { 0.929f, 0.929f, 0.941f, 1.0f },  /* #EDEDF0 */
+        .tb_focus      = { 0.969f, 0.969f, 0.980f, 1.0f },  /* #F7F7FA */
+        /* The bottom end of the toolbar's very shallow ramp. Tahoe's glass is
+         * nearly flat — a strong gradient here reads as Aqua, one era early. */
+        .tb_grad_norm  = { 0.910f, 0.910f, 0.925f, 1.0f },  /* #E8E8EC */
+        .tb_grad_focus = { 0.937f, 0.937f, 0.957f, 1.0f },  /* #EFEFF4 */
+        .face          = { 0.949f, 0.949f, 0.969f, 1.0f },  /* #F2F2F7 */
+        .chrome = SYN_CHROME_LIQUID,
+        .tb_text       = { 0.557f, 0.557f, 0.576f, 1.0f },  /* #8E8E93 secondary */
+        .tb_text_focus = { 0.114f, 0.114f, 0.122f, 1.0f },  /* #1D1D1F label */
+        .active_opacity = 0.94f, .inactive_opacity = 0.88f,
+        .panel_accent  = { 0.000f, 0.478f, 1.000f, 1.0f },  /* systemBlue */
+        .scheme = "light", .accent_r = 0, .accent_g = 122, .accent_b = 255,
+        /* Deeper than the accent: this bar is light, and #007AFF on near-white
+         * is a glyph you have to look for. Same reason bubblegum's glyphs are. */
+        .glyph_r = 0, .glyph_g = 86, .glyph_b = 214,        /* #0056D6 */
+        .base_r = 245, .base_g = 245, .base_b = 247,        /* #F5F5F7 */
+        .text_r = 29, .text_g = 29, .text_b = 31,           /* #1D1D1F */
+    },
+    /* MAC OS X 10.0 "AQUA" — the pinstriped grey caption with the three glossy
+     * traffic lights, black centred title, and the blue focus ring that came
+     * with it. The frame is grey in both states, as it was: what tells a focused
+     * Aqua window from an unfocused one is that the stripes and the lights go
+     * out, which SYN_CHROME_AQUA draws. Opaque, like XP — the transparency Aqua
+     * showed off was in its menus and its shadows, not its window bodies. */
+    [SYN_THEME_AQUA] = {
+        .border_norm  = { 0.725f, 0.725f, 0.725f, 1.0f },  /* #B9B9B9 */
+        .border_focus = { 0.208f, 0.424f, 0.737f, 1.0f },  /* #356CBC sampled */
+        .border_ai    = { 0.204f, 0.361f, 0.647f, 1.0f },  /* #345CA5 desktop blue */
+        .border_warn  = { 0.757f, 0.153f, 0.176f, 1.0f },  /* #C1272D */
+        /* The caption ramp's two ends: tb_* is the DARK end at the bottom of the
+         * bar, tb_grad_* the light end at the top — the same convention Luna
+         * uses, so deco.c mixes both styles with one pair of colours. */
+        .tb_norm       = { 0.902f, 0.902f, 0.902f, 1.0f },  /* #E6E6E6 */
+        .tb_focus      = { 0.812f, 0.812f, 0.812f, 1.0f },  /* #CFCFCF */
+        .tb_grad_norm  = { 0.969f, 0.969f, 0.969f, 1.0f },  /* #F7F7F7 */
+        .tb_grad_focus = { 0.988f, 0.988f, 0.988f, 1.0f },  /* #FCFCFC */
+        .face          = { 0.929f, 0.929f, 0.929f, 1.0f },  /* #EDEDED */
+        .chrome = SYN_CHROME_AQUA,
+        .tb_text       = { 0.478f, 0.478f, 0.478f, 1.0f },  /* #7A7A7A */
+        .tb_text_focus = { 0.102f, 0.102f, 0.102f, 1.0f },  /* #1A1A1A */
+        .active_opacity = 1.0f, .inactive_opacity = 1.0f,
+        .panel_accent  = { 0.208f, 0.424f, 0.737f, 1.0f },  /* the menu blue */
+        .scheme = "light", .accent_r = 53, .accent_g = 108, .accent_b = 188,
+        .glyph_r = 53, .glyph_g = 108, .glyph_b = 188,
+        .base_r = 236, .base_g = 236, .base_b = 236,        /* #ECECEC */
+        .text_r = 0, .text_g = 0, .text_b = 0,
+    },
+    /* MAC OS 8.1 "PLATINUM" — grey on grey with the racing stripes across the
+     * title bar, a square close box on the LEFT and collapse/zoom on the right.
+     * The frame is a hard outline with no shadow (chrome_shadow drops it): a
+     * Platinum window's only depth cue is that outline and the bevels inside it.
+     * The signature colour of the era is the desktop, #9B9CCE, which is a
+     * wallpaper rather than chrome — Super+W's picker owns that, the same
+     * arrangement XP's Bliss has. */
+    [SYN_THEME_PLATINUM] = {
+        /* Real Platinum outlined active and inactive windows identically in
+         * black. The inactive one is #808080 here — a real Platinum system
+         * colour (ButtonShadow's equivalent), borrowed so an unfocused window
+         * is still told apart at a glance on a 3-window desktop. */
+        .border_norm  = { 0.502f, 0.502f, 0.502f, 1.0f },  /* #808080 */
+        .border_focus = { 0.000f, 0.000f, 0.000f, 1.0f },  /* #000000 outline */
+        .border_ai    = { 0.239f, 0.239f, 0.561f, 1.0f },  /* #3D3D8F */
+        .border_warn  = { 0.600f, 0.000f, 0.000f, 1.0f },  /* #990000 */
+        .tb_norm       = { 0.867f, 0.867f, 0.867f, 1.0f },  /* #DDDDDD, no stripes */
+        .tb_focus      = { 0.800f, 0.800f, 0.800f, 1.0f },  /* #CCCCCC under them */
+        .tb_grad_norm  = { 0.867f, 0.867f, 0.867f, 1.0f },  /* Platinum is flat */
+        .tb_grad_focus = { 0.800f, 0.800f, 0.800f, 1.0f },
+        .face          = { 0.867f, 0.867f, 0.867f, 1.0f },  /* #DDDDDD sampled */
+        .chrome = SYN_CHROME_PLATINUM,
+        .tb_text       = { 0.502f, 0.502f, 0.502f, 1.0f },  /* #808080 */
+        .tb_text_focus = { 0.000f, 0.000f, 0.000f, 1.0f },
+        .active_opacity = 1.0f, .inactive_opacity = 1.0f,
+        /* The desktop purple deepened until it is ink: #9B9CCE itself measures
+         * 2.2:1 on this theme's #DDDDDD panels, which is a heading nobody can
+         * read. Same hue, four stops down. */
+        .panel_accent  = { 0.239f, 0.239f, 0.561f, 1.0f },  /* #3D3D8F */
+        .scheme = "light", .accent_r = 61, .accent_g = 61, .accent_b = 143,
+        .glyph_r = 61, .glyph_g = 61, .glyph_b = 143,
+        .base_r = 221, .base_g = 221, .base_b = 221,        /* #DDDDDD */
+        .text_r = 0, .text_g = 0, .text_b = 0,
+    },
 };
 
 /* The theme picker's swatch. It takes TWO colours, because one cannot tell the
@@ -476,7 +589,8 @@ static void theme_state_save(syn_server_t *s)
      * 95 desktop with a 14px-rounded start menu is neither one thing nor the
      * other. The bar cannot work that half out for itself without a copy of the
      * LUNA/BEVEL table in QML, which is a table that would be wrong the first
-     * time a preset here changed.
+     * time a preset here changed — as it would have been the moment macOS 26
+     * arrived, a non-FLAT chrome that is rounder than the default.
      *
      * So the DERIVED fact travels instead of the enum, and the bar's whole share
      * of the rule is one ternary. It lives in theme.state rather than in
@@ -486,7 +600,7 @@ static void theme_state_save(syn_server_t *s)
      * with nothing but colours).
      */
     fprintf(f, "square_chrome=%s\n",
-            s->config.chrome == SYN_CHROME_FLAT ? "off" : "on");
+            chrome_square(&s->config) ? "on" : "off");
     fclose(f);
 }
 
@@ -721,7 +835,7 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
                  p->glyph_r, p->glyph_g, p->glyph_b,
                  p->base_r, p->base_g, p->base_b,
                  p->text_r, p->text_g, p->text_b,
-                 s->config.chrome == SYN_CHROME_FLAT ? "off" : "on");
+                 chrome_square(&s->config) ? "on" : "off");
         synui_spawn(cmd);
 
         /* And the terminal's glass, because the alpha it should run at DEPENDS

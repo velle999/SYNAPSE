@@ -1339,6 +1339,11 @@ typedef enum {
     SYN_THEME_NORD,          /* Nord (frost) */
     SYN_THEME_DRACULA,       /* Dracula (purple/pink) */
     SYN_THEME_BUBBLEGUM,     /* Bubblegum pink (light, pastel) */
+    /* The Macs, newest first — the same idea as the two Windows presets: the
+     * era is in the SHAPE of the chrome as much as in the palette. */
+    SYN_THEME_MACOS26,       /* macOS 26 "Tahoe" — liquid glass, very rounded */
+    SYN_THEME_AQUA,          /* Mac OS X 10.0 — Aqua pinstripes, traffic lights */
+    SYN_THEME_PLATINUM,      /* Mac OS 8.1 — Platinum grey, racing stripes */
     SYN_THEME_COUNT,
 } syn_theme_t;
 
@@ -1353,6 +1358,12 @@ typedef enum {
     SYN_CHROME_FLAT = 0,     /* one solid caption colour — the modern look */
     SYN_CHROME_LUNA,         /* Windows XP: gradient, rounded top, pill buttons */
     SYN_CHROME_BEVEL,        /* Windows 95: 3D bevels, square bevelled buttons */
+    /* The Mac styles. All three put their controls on the LEFT and centre the
+     * caption, which is most of why a Mac window is recognisable across 27
+     * years of them — see btn_slot_x()/btn_slot_region() in deco.c. */
+    SYN_CHROME_LIQUID,       /* macOS 26: flat glass, big radius, traffic lights */
+    SYN_CHROME_AQUA,         /* Mac OS X 10.0: pinstripes, glossy lights */
+    SYN_CHROME_PLATINUM,     /* Mac OS 8.1: racing stripes, close box left */
 } syn_chrome_t;
 
 extern const char *const syn_theme_names[SYN_THEME_COUNT];
@@ -3409,13 +3420,108 @@ typedef struct {
  * no state to remember. XP is square by this rule too: its rounded top corners
  * are drawn by the titlebar itself (deco.c), which can round the TOP only, the
  * way Luna did. 95 also drops the shadow — it sat flat on the desktop. */
+/* macOS 26's corner is not a taste, it is the theme: Tahoe's windows are round
+ * enough that a 0px setting reads as a different operating system. So LIQUID
+ * has a floor rather than a fixed value — a user who likes 24 keeps 24. */
+#define CHROME_LIQUID_RADIUS_MIN 16
+/* …spelt once, for the panel row that has to say the number out loud. */
+#define CHROME_LIQUID_RADIUS_MIN_STR "16"
+
+/* Is this chrome drawn with square corners? The retro styles are; FLAT and
+ * LIQUID are not. Everything that has to answer "does this desktop round its
+ * corners" — the radius override below, the bar's square_chrome export, the
+ * GTK rule pushed at self-decorating clients — asks this one function, so the
+ * three answers cannot drift apart the next time a preset is added. */
+static inline int chrome_square(const syn_config_t *cfg)
+{
+    return cfg->chrome != SYN_CHROME_FLAT && cfg->chrome != SYN_CHROME_LIQUID;
+}
+
+/* Is this one of the Mac styles? They share a layout — window controls on the
+ * LEFT, caption centred between them and the far edge — which is a different
+ * question from what any of them is painted like. deco.c's button placement and
+ * caption bounds ask this; the painters still switch on the style itself. */
+static inline int chrome_is_mac(const syn_config_t *cfg)
+{
+    return cfg->chrome == SYN_CHROME_LIQUID ||
+           cfg->chrome == SYN_CHROME_AQUA   ||
+           cfg->chrome == SYN_CHROME_PLATINUM;
+}
+
+/* ── Where the titlebar buttons are ───────────────────────
+ *
+ * Windows put all three at the right, in the order minimize, maximize, close.
+ * The Mac never did: Aqua's traffic lights and Tahoe's are close/minimize/zoom
+ * at the LEFT, and Platinum split them — close box hard left, collapse and zoom
+ * at the right.
+ *
+ * This lives in the header, and not in deco.c beside the painter, because TWO
+ * pieces of code have to agree about it: the one that draws the buttons and the
+ * one that decides which button a click landed on. A layout that disagrees with
+ * itself is not a cosmetic bug — it is a close button that fires when the user
+ * aimed at minimize. One definition, both callers, and a unit test that does not
+ * need a compositor (tests/chrome_layout_test.c).
+ *
+ * `i` is a SLOT, counted in paint order; every cell is square and titlebar-high.
+ */
+#define SYN_TITLEBAR_BTNS 3
+
+static inline syn_deco_region_t chrome_btn_region(const syn_config_t *cfg, int i)
+{
+    static const syn_deco_region_t win[SYN_TITLEBAR_BTNS] = {
+        DECO_BTN_MIN, DECO_BTN_MAX, DECO_BTN_CLOSE
+    };
+    static const syn_deco_region_t mac[SYN_TITLEBAR_BTNS] = {
+        DECO_BTN_CLOSE, DECO_BTN_MIN, DECO_BTN_MAX
+    };
+    if (i < 0 || i >= SYN_TITLEBAR_BTNS) return DECO_NONE;
+    return chrome_is_mac(cfg) ? mac[i] : win[i];
+}
+
+static inline int chrome_btn_x(const syn_config_t *cfg, int tb_w, int th, int i)
+{
+    switch (cfg->chrome) {
+    case SYN_CHROME_LIQUID:
+    case SYN_CHROME_AQUA:
+        return i * th;                     /* all three together, at the left */
+    case SYN_CHROME_PLATINUM:
+        /* Close alone on the left; collapse and zoom keep the right edge. */
+        return i == 0 ? 0 : tb_w - (SYN_TITLEBAR_BTNS - i) * th;
+    default:
+        return tb_w - (SYN_TITLEBAR_BTNS - i) * th;
+    }
+}
+
+/* The button at titlebar-local x, or DECO_TITLEBAR for the bar itself.
+ *
+ * Walked BACKWARDS, because that is paint order reversed: the slots overlap on
+ * a window narrower than three buttons, and the one on top is the one drawn
+ * last. Answering with anything else hands the click to a button the user
+ * cannot see. */
+static inline syn_deco_region_t chrome_btn_at(const syn_config_t *cfg,
+                                              int tb_w, int th, double nx)
+{
+    for (int i = SYN_TITLEBAR_BTNS - 1; i >= 0; i--) {
+        int bx = chrome_btn_x(cfg, tb_w, th, i);
+        if (nx >= bx && nx < bx + th) return chrome_btn_region(cfg, i);
+    }
+    return DECO_TITLEBAR;
+}
 static inline int chrome_corner_radius(const syn_config_t *cfg)
 {
-    return cfg->chrome == SYN_CHROME_FLAT ? cfg->corner_radius : 0;
+    if (chrome_square(cfg)) return 0;
+    if (cfg->chrome == SYN_CHROME_LIQUID &&
+        cfg->corner_radius < CHROME_LIQUID_RADIUS_MIN)
+        return CHROME_LIQUID_RADIUS_MIN;
+    return cfg->corner_radius;
 }
+/* 95 sat flat on the desktop and so did Platinum — a Mac OS 8 window's whole
+ * depth cue is a 1px black outline. Aqua, by contrast, is the OS that made the
+ * big soft drop shadow famous, so it keeps the user's. */
 static inline int chrome_shadow(const syn_config_t *cfg)
 {
-    return cfg->chrome == SYN_CHROME_BEVEL ? 0 : cfg->shadow;
+    return (cfg->chrome == SYN_CHROME_BEVEL ||
+            cfg->chrome == SYN_CHROME_PLATINUM) ? 0 : cfg->shadow;
 }
 
 /* ── Dock entry (dock.c) ──────────────────────────────────── */
