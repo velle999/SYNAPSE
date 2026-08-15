@@ -79,6 +79,34 @@
 #define BIG_START_CMD  "syn-arcade big start"
 
 /*
+ * The guide-button watcher, which is the other half of the guide button.
+ *
+ * Inside big screen mode, Guide takes you to the desktop. This is what makes
+ * Guide on the DESKTOP bring big screen mode back — and it can only be a
+ * session-long process, because the button is on a USB device rather than on
+ * the compositor: something has to be holding the pads open and reading them
+ * at a moment when none of our windows exist.
+ *
+ * ⚠ An autostart line and not a systemd user unit, for the reason below, and
+ * ⚠ it therefore only starts at the NEXT LOGIN. There is no way for a package,
+ * or for this command, to reach into a session that is already running and add
+ * something to what the compositor spawned at startup.
+ */
+#define BIG_GUARD_CMD  "syn-arcade big guard"
+
+/*
+ * How "I turned that off" is written down.
+ *
+ * The guard is ON by default, so its ABSENCE from a block cannot mean "off" —
+ * that is also what every block written before this feature existed looks
+ * like, and `binds refresh` has to be able to tell those apart. Without a
+ * marker, refresh would helpfully restore the guard at every login for the one
+ * person who deliberately turned it off, which is the most annoying possible
+ * bug: a setting that will not stay set.
+ */
+#define GUARD_OFF_MARK "# syn-arcade: guide button off"
+
+/*
  * Everything this package owns in synuirc, read out of the file as one thing.
  *
  * ⚠ There is exactly ONE managed block and it is rewritten WHOLE. Two commands
@@ -93,6 +121,7 @@ typedef struct {
 	char cycle[128];	/* hud cycle */
 	char big[128];		/* big screen mode toggle */
 	bool autostart_big;	/* start big screen mode at login */
+	bool guard;		/* watch the pad's guide button all session */
 	bool present;		/* was there a block in the file at all */
 
 	/* Which of the three the block ACTUALLY named, as opposed to which have
@@ -102,6 +131,12 @@ typedef struct {
 	 * that difference: a key it is about to ADD is the only one that can
 	 * collide with something else in the file. */
 	bool saw_toggle, saw_cycle, saw_big;
+
+	/* The guard is the same problem in the other direction: it defaults ON,
+	 * so "not in the block" has to be distinguishable from "switched off"
+	 * or refresh would switch it back on at every login. See
+	 * GUARD_OFF_MARK. */
+	bool saw_guard;
 } binds_t;
 
 /* ── which synuirc ───────────────────────────────────────────────────────── */
@@ -242,11 +277,20 @@ BLOCK_BEGIN "  — the gaming shortcuts. Do not edit between the markers;\n"
 "bind = %s spawn syn-arcade hud cycle\n"
 "#\n"
 "# Big screen mode: the ten-foot interface, on the television, driven with a\n"
-"# controller. The key both opens and closes it.\n"
+"# controller. The key opens it, and hides it again while leaving it running.\n"
 "bind = %s spawn " BIG_TOGGLE_CMD "\n"
+"#\n"
+"# The controller's GUIDE button, from the desktop. Big screen mode's own\n"
+"# Guide takes you OUT to the desktop; this watches the pad while big screen\n"
+"# mode is not running and brings it back — the half a console has that a\n"
+"# desktop does not. It also holds every pad open, which is what stops a\n"
+"# wireless one falling asleep.\n"
+"%s"
 "%s"
 BLOCK_END "\n",
 		b->toggle, b->cycle, b->big,
+		b->guard ? "autostart = " BIG_GUARD_CMD "\n"
+			 : GUARD_OFF_MARK "\n",
 		/* ⚠ An autostart line, not a systemd user unit. synui does not
 		 * implement the XDG autostart spec — nothing in a synui session
 		 * reads ~/.config/autostart or /etc/xdg/autostart — and its own
@@ -280,6 +324,7 @@ static bool binds_read(binds_t *b, char *path, size_t pathn)
 	snprintf(b->toggle, sizeof(b->toggle), "%s", DEFAULT_TOGGLE);
 	snprintf(b->cycle, sizeof(b->cycle), "%s", DEFAULT_CYCLE);
 	snprintf(b->big, sizeof(b->big), "%s", DEFAULT_BIG);
+	b->guard = true;		/* on unless the block says otherwise */
 
 	char local[4096];
 	if (!path) { path = local; pathn = sizeof(local); }
@@ -325,14 +370,29 @@ static bool binds_read(binds_t *b, char *path, size_t pathn)
 		 * autostart that does not happen. */
 		char *p = ln;
 		while (*p == ' ' || *p == '\t') p++;
+
+		/* The one comment in the block that MEANS something. See
+		 * GUARD_OFF_MARK: an absent guard line is an old block, a
+		 * present marker is somebody's decision. */
+		if (strncmp(p, GUARD_OFF_MARK, strlen(GUARD_OFF_MARK)) == 0) {
+			b->guard = false;
+			b->saw_guard = true;
+			continue;
+		}
+
 		if (strncmp(p, "autostart", 9) == 0) {
 			p += 9;
 			while (*p == ' ' || *p == '\t') p++;
 			if (*p == '=') {
 				p++;
 				while (*p == ' ' || *p == '\t') p++;
-				if (strcmp(trim(p), BIG_START_CMD) == 0)
+				const char *cmd = trim(p);
+				if (strcmp(cmd, BIG_START_CMD) == 0)
 					b->autostart_big = true;
+				else if (strcmp(cmd, BIG_GUARD_CMD) == 0) {
+					b->guard = true;
+					b->saw_guard = true;
+				}
 			}
 		}
 	}
@@ -361,6 +421,9 @@ static int binds_show(bool rec)
 		rec_row(3, "big screen at login", b.autostart_big ? "on" : "off",
 			b.autostart_big ? "action:autostart-off"
 					: "action:autostart-on");
+		rec_row(3, "guide button", (b.present && b.guard) ? "on" : "off",
+			(b.present && b.guard) ? "action:guide-off"
+					       : "action:guide-on");
 		rec_row(3, "config", path, "detail");
 	} else if (b.present) {
 		printf("installed in %s\n", path);
@@ -369,6 +432,8 @@ static int binds_show(bool rec)
 		printf("  %-14s big screen mode\n", b.big);
 		printf("  %-14s big screen mode at login\n",
 		       b.autostart_big ? "on" : "off");
+		printf("  %-14s the pad's guide button opens big screen mode\n",
+		       b.guard ? "on" : "off");
 	} else {
 		printf("not installed (%s)\n", path);
 		puts("`syn-arcade binds install` adds them.");
@@ -530,6 +595,9 @@ static int binds_install(const char *toggle, const char *cycle, const char *big,
 	printf("  %-14s toggle the overlay\n", toggle);
 	printf("  %-14s move it around the screen\n", cycle);
 	printf("  %-14s big screen mode\n", big);
+	if (b.guard)
+		puts("  the pad's guide button opens big screen mode "
+		     "(from your next login)");
 	if (b.autostart_big)
 		puts("  big screen mode starts at login");
 
@@ -753,6 +821,63 @@ int binds_autostart_set(bool on)
 	return EX_OK;
 }
 
+/* ── the guide button ────────────────────────────────────────────────────── */
+
+bool binds_guard_get(void)
+{
+	binds_t b;
+	if (!binds_read(&b, NULL, 0))
+		return false;
+	/* With no block at all there is no autostart line, whatever the default
+	 * says — the guard is only ever started by one. */
+	return b.present && b.guard;
+}
+
+int binds_guard_set(bool on)
+{
+	binds_t b;
+	if (!binds_read(&b, NULL, 0))
+		return EX_FAIL;
+
+	if (!b.present) {
+		if (!on) {
+			puts("the guide button is off (nothing installed)");
+			return EX_OK;
+		}
+		/* Turning it ON with no block means writing one, which also
+		 * writes three keybinds. Said out loud rather than done
+		 * quietly — see binds_autostart_set for the same rule. */
+		puts("no syn-arcade block in your synui config yet — "
+		     "installing one\n(that is the three gaming keys as well; "
+		     "`syn-arcade binds show` lists them)");
+	} else if (b.guard == on) {
+		printf("the guide button is already %s\n", on ? "on" : "off");
+		return EX_OK;
+	}
+
+	b.guard = on;
+
+	int rc = binds_write(&b, NULL, NULL);
+	if (rc != EX_OK)
+		return rc;
+
+	char user[4096];
+	rc_user_path(user, sizeof(user));
+
+	if (on) {
+		printf("the guide button will open big screen mode (%s)\n", user);
+		puts("\n⚠ It takes effect at your NEXT LOGIN. The watcher is an\n"
+		     "autostart, and synui runs those once when the session\n"
+		     "starts — nothing can add one to a session already running.\n"
+		     "To have it now without logging out:  syn-arcade big guard &");
+	} else {
+		printf("the guide button will no longer open big screen mode "
+		       "(%s)\n", user);
+		puts("\nA watcher already running stays until you log out.");
+	}
+	return EX_OK;
+}
+
 static int binds_remove(bool reload)
 {
 	char user[4096];
@@ -871,6 +996,22 @@ int cmd_binds(int argc, char **argv)
 	if (strcmp(sub, "refresh") == 0)
 		return binds_refresh(opt_has(rest_c, rest, "--quiet"),
 				     opt_has(rest_c, rest, "--reload"));
+
+	/* Also reachable as `big guide`, which is where somebody looking for it
+	 * would look — it is a big screen mode feature that happens to be
+	 * written down in the keybind block. One implementation, two names. */
+	if (strcmp(sub, "guide") == 0) {
+		const char *arg = rest_c > 0 ? rest[0] : NULL;
+		if (!arg || strcmp(arg, "status") == 0) {
+			puts(binds_guard_get() ? "on" : "off");
+			return EX_OK;
+		}
+		if (strcmp(arg, "on") == 0 || strcmp(arg, "off") == 0)
+			return binds_guard_set(strcmp(arg, "on") == 0);
+		fprintf(stderr, "syn-arcade: binds guide takes on, off or "
+				"status (not '%s')\n", arg);
+		return EX_USAGE;
+	}
 
 	fprintf(stderr, "syn-arcade: unknown binds command '%s'\n", sub);
 	return EX_USAGE;

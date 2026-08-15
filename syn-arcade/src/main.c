@@ -61,18 +61,39 @@ static void usage(FILE *f)
 "  big                     whether it is running, and what it can launch\n"
 "  big start               open it (Super+F10 once the shortcuts are in)\n"
 "       --output=NAME      which screen. Default: wherever the pointer is\n"
-"  big stop | toggle       close it, or the key's own behaviour\n"
+"  big stop                close it for good\n"
+"  big show | hide         put it on screen, or get it out of the way while\n"
+"                          leaving it running — this is what Guide does\n"
+"  big toggle              the key's own behaviour: start it, or show/hide it\n"
 "  big autostart on|off    open it at login, instead of the desktop\n"
+"  big guide on|off        the pad's GUIDE button opens big screen mode from\n"
+"                          the desktop (on by default; next login to apply)\n"
 "  big steam               Steam Big Picture\n"
 "       --gamescope[=WxH@R]  through gamescope, for a TV that is not your\n"
 "                            desktop's resolution\n"
 "  big games               every installed Steam game, most recent first\n"
 "       --all              include Proton and the runtimes\n"
 "  big launch <appid>      one of them, the way Steam's own shortcuts do\n"
-"  big apps                the other tiles: launchers, media, power\n"
+"  big apps                the other tiles: launchers, media, browser,\n"
+"                          terminal, power\n"
 "  big run <id>            press one of them\n"
+"       --wait             stay alive until it closes (the shell uses this to\n"
+"                          know when to come back)\n"
+"  big open <url>          a web page, in whichever browser is installed\n"
+"  big news                headlines for the news shelf\n"
+"       --refresh          fetch now rather than reading the cache\n"
+"  big media               Plex and Jellyfin servers on this network\n"
+"       --refresh          ask again rather than reading the cache\n"
 "  big nav                 controller input as words, one per line. The shell\n"
 "                          reads this; nothing is synthesised into the desktop\n"
+"  big guard               watch the pad's guide button all session. Your\n"
+"                          session runs this; it does nothing while big screen\n"
+"                          mode is already up\n"
+"  big mouse               ⚠ the controller AS A MOUSE, for the browser. Real\n"
+"                          pointer motion and clicks, so it runs only while\n"
+"                          the shell is out of the way. See `big keys` too\n"
+"  big keys                type what arrives on stdin (the on-screen keyboard)\n"
+"  big listen              what has been sent to the running shell\n"
 "\n"
 "Shortcuts\n"
 "  binds                   whether the gaming keys are installed, and which\n"
@@ -83,6 +104,7 @@ static void usage(FILE *f)
 "       --reload           ask synui to re-read its config straight away\n"
 "  binds refresh           add keys a newer syn-arcade defines to a block\n"
 "                          that already exists, keeping the ones you chose\n"
+"  binds guide on|off      the same setting as `big guide`\n"
 "  binds remove            take them back out\n"
 "  binds reload            re-read the compositor config now\n"
 "\n"
@@ -158,6 +180,10 @@ static int cmd_about(bool rec)
 {
 	bool mangohud = system("command -v mangohud >/dev/null 2>&1") == 0;
 	bool quickshell = system("command -v quickshell >/dev/null 2>&1") == 0;
+	/* The on-screen keyboard types through wtype. Worth a line here because
+	 * without it that half of big screen mode is silently inert — the
+	 * keyboard draws, the keys highlight, and nothing is typed. */
+	bool wtype = system("command -v wtype >/dev/null 2>&1") == 0;
 
 	char hudpath[4096] = "";
 	hud_effective_config(hudpath, sizeof(hudpath));
@@ -175,6 +201,9 @@ static int cmd_about(bool rec)
 							     : "detail readonly");
 		rec_row(3, "quickshell", quickshell ? "installed" : "NOT INSTALLED",
 			"detail");
+		rec_row(3, "on-screen keyboard", wtype ? "wtype installed"
+						       : "wtype NOT INSTALLED",
+			"detail");
 		rec_row(3, "SDL mappings", (sdl && *sdl) ? sdl : "(not set)",
 			"detail");
 		return EX_OK;
@@ -188,6 +217,9 @@ static int cmd_about(bool rec)
 	       file_writable(hudpath) ? "" : "   (NOT WRITABLE — see `hud path`)");
 	printf("  quickshell      %s\n", quickshell ? "installed"
 	     : "NOT INSTALLED — `syn-arcade gui` needs it");
+	printf("  wtype           %s\n", wtype ? "installed"
+	     : "NOT INSTALLED — big screen mode's on-screen keyboard "
+	       "cannot type without it");
 	printf("  SDL mappings    %s\n", (sdl && *sdl) ? sdl
 	     : "(SDL_GAMECONTROLLERCONFIG_FILE not set — see `map path`)");
 	return EX_OK;

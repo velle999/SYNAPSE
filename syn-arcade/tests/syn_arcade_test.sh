@@ -84,6 +84,33 @@ mkdir -p "$XDG_CONFIG_HOME"
 # The overlay config, pinned away from both /etc and the real user file.
 export MANGOHUD_CONFIGFILE="$T/config/MangoHud/MangoHud.conf"
 
+# Everything DERIVED — the headlines, the media servers found on the network —
+# lands here rather than in the real cache.
+export XDG_CACHE_HOME="$T/cache"
+mkdir -p "$XDG_CACHE_HOME"
+
+# ⚠ XDG_RUNTIME_DIR, and this one is not tidiness — it is the same class of
+# hazard as XDG_CONFIG_HOME above, and worse in one specific way.
+#
+# Big screen mode's lock file and its control FIFO live in $XDG_RUNTIME_DIR. A
+# suite that used the real one would drop a syn-arcade-big.pid beside a running
+# session's, and `big show` would talk to the shell on the developer's own
+# television.
+#
+# The worse thing: libwayland falls back to $XDG_RUNTIME_DIR/wayland-0 when
+# WAYLAND_DISPLAY is unset. Unsetting the variable alone is NOT enough to keep
+# a client off the live compositor — it has bitten this project before — so any
+# test that reaches a Wayland client (wtype, `big mouse`) has to have the
+# runtime directory moved as well. With both, there is no socket to find.
+export XDG_RUNTIME_DIR="$T/run"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+
+# The network is off for the whole run. Two commands here talk to the internet
+# and to the local network; a suite that did either would pass or fail
+# depending on the building's DNS.
+export SYN_ARCADE_NO_NET=1
+
 # ⚠ WAYLAND_DISPLAY unset so that any code path which would reach the live
 # compositor refuses on its own rather than relying on this file never calling
 # one. Belt and braces: `binds reload` checks for it.
@@ -94,6 +121,11 @@ unset WAYLAND_DISPLAY SYNUI_SOCKET SYNUI_CONFIG SDL_GAMECONTROLLERCONFIG_FILE
 case "$XDG_CONFIG_HOME" in
     "$T"/*) ;;
     *) echo "REFUSING: XDG_CONFIG_HOME is not sandboxed" >&2; exit 1 ;;
+esac
+
+case "$XDG_RUNTIME_DIR" in
+    "$T"/*) ;;
+    *) echo "REFUSING: XDG_RUNTIME_DIR is not sandboxed" >&2; exit 1 ;;
 esac
 
 echo "syn-arcade tests — $SA"
@@ -903,6 +935,161 @@ check "status --rec names its columns first" $?
 says "$SA" big | grep -q "not running"
 check "nothing is running to begin with" $?
 
+# ── the shelves, and the two columns that decide what a tile DOES ───────────
+#
+# `shelf` says which row of the television a tile belongs on and `pointer`
+# whether launching it should turn the controller into a mouse. Both are read
+# by name out of the header row, so the assertion is that they are THERE — a
+# missing column arrives in QML as undefined, which reads as false, which is
+# a browser you cannot move a cursor in and nothing anywhere saying why.
+head1=$("$SA" big apps --rec | head -1)
+printf '%s' "$head1" | grep -q "shelf"
+check "apps --rec carries the shelf column" $?
+
+printf '%s' "$head1" | grep -q "pointer"
+check "...and whether a tile wants the controller as a mouse" $?
+
+printf '%s' "$head1" | grep -q "keys"
+check "...and whether it wants the on-screen keyboard" $?
+
+"$SA" big apps --rec | cut -f6 | grep -qx "system"
+check "the power tiles are on the system shelf" $?
+
+# The browser and the terminal are the two tiles the whole pointer/keyboard
+# apparatus exists for. Neither is guaranteed installed on a build machine, so
+# this asserts the RULE rather than the row: anything on the apps shelf that is
+# not an action wants a pointer.
+"$SA" big apps --rec | awk -F'\t' 'NR>1 && $6=="apps" && $7!="1" { bad=1 }
+                                   END { exit bad?1:0 }'
+check "every tile on the apps shelf wants a pointer" $?
+
+# ── URLs, which are the one thing here that comes from OUTSIDE ──────────────
+#
+# A headline's link is written by whoever wrote the feed and a server's address
+# by whatever answered a broadcast. Neither is trusted: `big open` takes http
+# and https and nothing else. The dash cases are the ones that matter — a
+# "URL" starting with a dash is an OPTION to the browser it would be handed.
+says "$SA" big open "--version" | grep -q "not an http"
+check "a URL that is really an option is refused" $?
+
+says "$SA" big open "file:///etc/shadow" | grep -q "not an http"
+check "a file:// URL is refused" $?
+
+says "$SA" big open "javascript:alert(1)" | grep -q "not an http"
+check "a javascript: URL is refused" $?
+
+says "$SA" big open "http://example.com/ -kiosk" | grep -q "not an http"
+check "a URL with a space in it is refused" $?
+
+says "$SA" big open | grep -q "not an http"
+check "no URL at all is refused" $?
+
+# ── news ────────────────────────────────────────────────────────────────────
+#
+# SYN_ARCADE_NO_NET is set for the whole suite, so nothing here fetches. What
+# is tested is the shape and the CACHE RULE, which is the part with a bug in
+# it worth catching: a machine that is offline must show yesterday's headlines
+# rather than an empty shelf.
+says "$SA" big news --rec | head -1 | grep -q "^id.*title.*source.*link"
+check "news --rec names its columns even with no network" $?
+
+"$SA" big news --rec >/dev/null 2>&1
+[ "$?" = 100 ]
+check "...and exits 100, which is 'nothing to list', not failure" $?
+
+mkdir -p "$XDG_CACHE_HOME/syn-arcade"
+printf 'id\ttitle\tsource\tlink\tfeed\nnews-0\tOld%%20News\tSomewhere\thttps://example.com/1\tnews\n' \
+    > "$XDG_CACHE_HOME/syn-arcade/news.tsv"
+
+"$SA" big news --rec | grep -q "Old%20News"
+check "a cached headline is served without touching the network" $?
+
+# The refresh path with no network must NOT flatten the cache. Old news beats
+# no news, and the machine most likely to have no network is a television that
+# has just been switched on.
+"$SA" big news --rec --refresh >/dev/null 2>&1
+grep -q "Old%20News" "$XDG_CACHE_HOME/syn-arcade/news.tsv"
+check "a failed fetch leaves the cached headlines alone" $?
+
+# ── media servers ───────────────────────────────────────────────────────────
+
+says "$SA" big media --rec | head -1 | grep -q "^id.*name.*url.*source"
+check "media --rec names its columns" $?
+
+printf 'id\tname\turl\tsource\tkind\nplex-1\tLiving%%20Room\thttps://example.com:32400/web\tplex\tserver\n' \
+    > "$XDG_CACHE_HOME/syn-arcade/media.tsv"
+
+says "$SA" big run plex-99 | grep -q "no media server called"
+check "a media tile id that is not in the cache is refused" $?
+
+# ⚠ Deliberately NOT `big run plex-1`: that would open a browser on whatever
+# display this build is running next to. The lookup is proven by the refusal
+# above and by the URL check below, both of which stop before spawning.
+# ⚠ Not `says` — it captures the output and always exits 0, so the status
+# being checked here would be its own rather than the binary's.
+"$SA" big run plex-99 >/dev/null 2>&1
+[ "$?" = 2 ]
+check "...with a usage status" $?
+
+# ── stepping aside, and the way back ────────────────────────────────────────
+
+says "$SA" big hide | grep -q "not running"
+check "hiding what is not running is refused" $?
+
+# ⚠ `big show` with nothing running means START it, which needs a compositor.
+# With WAYLAND_DISPLAY unset it must refuse — and that refusal is the proof
+# that this suite cannot open a full-screen window on the developer's desktop.
+says "$SA" big show | grep -q "no Wayland session"
+check "showing what is not running starts it, and needs a session" $?
+
+# The control channel. `big listen` is what the shell runs; `big show` is what
+# the keybind sends. Proven end to end here with the lock HELD by flock, so
+# nothing has to be started: the binary's own big_running() sees a locked pid
+# file exactly as it would with a real shell behind it.
+CTLPID="$XDG_RUNTIME_DIR/syn-arcade-big.pid"
+: > "$CTLPID"
+flock -x "$CTLPID" -c 'sleep 6' &
+FLOCKER=$!
+sleep 0.4
+
+timeout 6 "$SA" big listen > "$T/ctl.out" 2>/dev/null &
+LISTENER=$!
+sleep 0.5
+
+"$SA" big show >/dev/null 2>&1
+"$SA" big toggle >/dev/null 2>&1
+sleep 0.5
+kill "$LISTENER" 2>/dev/null
+wait "$LISTENER" 2>/dev/null
+
+grep -qx "show" "$T/ctl.out"
+check "a word sent to a running shell arrives on its listener" $?
+
+grep -qx "toggle" "$T/ctl.out"
+check "...and the keybind sends toggle rather than killing it" $?
+
+kill "$FLOCKER" 2>/dev/null
+wait "$FLOCKER" 2>/dev/null
+rm -f "$CTLPID"
+
+# ── the controller as a mouse, and the guide watcher ────────────────────────
+#
+# Both need a session and must say so rather than reaching for whatever socket
+# is lying around. ⚠ This is the assertion that keeps `big mouse` off the live
+# seat: it moves a REAL pointer, and a test that accidentally started one would
+# be moving the cursor on the machine running the build.
+says "$SA" big mouse | grep -q "no Wayland session"
+check "big mouse refuses with no session" $?
+
+says "$SA" big guard | grep -q "no Wayland session"
+check "big guard refuses with no session" $?
+
+says "$SA" --help | grep -q "big mouse"
+check "the controller-as-mouse is documented" $?
+
+says "$SA" --help | grep -q "big keys"
+check "...and so is the on-screen keyboard's typist" $?
+
 # ── controller navigation, without a controller ─────────────────────────────
 #
 # `big nav` is the one thing here that turns hardware into behaviour, and the
@@ -1092,6 +1279,62 @@ check "turning it off takes the line back out" $?
 grep -q "spawn syn-arcade big toggle" "$RC"
 check "...and leaves the key that opens it" $?
 
+# ── the guide button ────────────────────────────────────────────────────────
+#
+# The watcher that makes the pad's GUIDE button open big screen mode from the
+# desktop. It is an autostart line in the same managed block, and it is ON by
+# default — which is what makes the "off" case need a marker of its own.
+
+grep -q "^autostart = syn-arcade big guard$" "$RC"
+check "an installed block watches the guide button" $?
+
+says "$SA" big guide | grep -qx "on"
+check "…and says so" $?
+
+"$SA" big guide off >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big guard$" "$RC"
+[ $? != 0 ]
+check "turning the guide button off takes the line out" $?
+
+# ⚠ The whole point of the marker. An absent autostart line is ALSO what every
+# block written before this feature looks like, so without something in the
+# file saying "off out loud", `binds refresh` — which runs at every login —
+# would put the guard back for the one person who deliberately turned it off.
+# A setting that will not stay set is worse than the setting not existing.
+grep -q "syn-arcade: guide button off" "$RC"
+check "...and records the decision, so refresh cannot undo it" $?
+
+"$SA" binds refresh >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big guard$" "$RC"
+[ $? != 0 ]
+check "a login-time refresh leaves it off" $?
+
+says "$SA" big guide status | grep -qx "off"
+check "status reads it back" $?
+
+# The upgrade path, which is the failure this whole marker scheme exists
+# alongside: a block written by an OLDER syn-arcade has no guard line and no
+# marker, and refresh must ADD the line — while keeping the keys the user
+# chose. A default that arrives only for new installs reaches nobody.
+cat > "$RC" <<'OLDBLOCK'
+gaps = 8
+# >>> syn-arcade  — the gaming shortcuts.
+bind = super+F11 spawn syn-arcade hud toggle
+bind = super+F12 spawn syn-arcade hud cycle
+bind = super+F9 spawn syn-arcade big toggle
+# <<< syn-arcade
+OLDBLOCK
+
+"$SA" binds refresh >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big guard$" "$RC"
+check "refreshing a block from an older version adds the guide watcher" $?
+
+grep -q "^bind = super+F9 spawn syn-arcade big toggle$" "$RC"
+check "...without touching the key that person chose" $?
+
+grep -q "^gaps = 8$" "$RC"
+check "...and without touching the rest of their desktop config" $?
+
 "$SA" binds remove >/dev/null 2>&1
 unset SYN_ARCADE_STEAM
 
@@ -1163,6 +1406,74 @@ check "setCol assigns a COPY of cols (a mutated object emits no change)" $?
 
 ! grep -qE '^\s*shell\.cols = c\s*$' "$BIGQML"
 check "...and never reassigns the same object reference" $?
+
+# ── stepping aside rather than quitting ─────────────────────────────────────
+#
+# The behaviour this release exists for. Launching anything used to call
+# Qt.quit(), so opening the controller window or the browser CLOSED the
+# television interface and getting back meant finding a keyboard. Each of the
+# greps below is one half of the replacement.
+
+grep -q "visible: chosen && !shell.away" "$BIGQML"
+check "the main surface is UNMAPPED while away, not just transparent" $?
+
+grep -q '"big", "run", it.id, "--wait"' "$BIGQML"
+check "an app tile is launched with --wait, so its exit is the way back" $?
+
+grep -q 'case "guide":      shell.stepAside()' "$BIGQML"
+check "guide steps aside instead of quitting" $?
+
+grep -q "shell.comeBack()" "$BIGQML"
+check "...and something brings it back" $?
+
+# ⚠ The single-instance trap. Firefox and Steam exit IMMEDIATELY when one is
+# already running — the second process hands its arguments to the first over a
+# socket. Treating that as "they closed it" throws the television back over a
+# browser somebody just opened, on exactly the machines where the browser was
+# already up.
+grep -q "lived < 3000" "$BIGQML"
+check "a launcher that returns at once is a hand-off, not a close" $?
+
+# ── the on-screen keyboard ──────────────────────────────────────────────────
+#
+# ⚠ Keyboard focus NONE, and this is the assertion that matters most in the
+# file. The keyboard's whole job is to type into the window UNDERNEATH it; a
+# surface that took keyboard focus to draw a keyboard would be typing into
+# itself, and every key would go nowhere with nothing saying why.
+grep -q "WlrLayershell.keyboardFocus: WlrKeyboardFocus.None" "$BIGQML"
+check "the on-screen keyboard never takes keyboard focus" $?
+
+grep -q '"big", "keys"' "$BIGQML"
+check "it types through the binary rather than spawning wtype per key" $?
+
+grep -q "stdinEnabled: true" "$BIGQML"
+check "...over a stream, so a fast press cannot be dropped" $?
+
+# ── the controller as a mouse ───────────────────────────────────────────────
+#
+# Bounded in one place: the Process's `running` condition. All three clauses
+# matter — out of the way, something that wants a pointer, and no keyboard up
+# (A cannot be both a click and a keypress).
+grep -q 'running: shell.away && shell.activeApp !== null' "$BIGQML"
+check "the mouse runs only while the interface is out of the way" $?
+
+grep -q 'shell.activeApp.pointer === "1" && !shell.oskOpen' "$BIGQML"
+check "...only for a tile that wants one, and never under the keyboard" $?
+
+# ── the news shelf ──────────────────────────────────────────────────────────
+
+grep -q 'title: "News"' "$BIGQML"
+check "there is a news shelf" $?
+
+grep -q 'title: "System", kind: "action"' "$BIGQML"
+check "...and the machine's own switches are still their own shelf" $?
+
+# The order asked for: news BELOW the system row. Compared by line number,
+# because the shelves are pushed in display order.
+sysline=$(grep -n 'title: "System"' "$BIGQML" | head -1 | cut -d: -f1)
+newsline=$(grep -n 'title: "News"' "$BIGQML" | head -1 | cut -d: -f1)
+[ "$newsline" -gt "$sysline" ]
+check "news comes after the system row" $?
 
 # ── verdict ─────────────────────────────────────────────────────────────────
 

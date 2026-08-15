@@ -114,16 +114,38 @@ void rec_row(int nfields, ...)
 {
 	va_list ap;
 	va_start(ap, nfields);
+	rec_vfrow(stdout, nfields, ap);
+	va_end(ap);
+}
+
+/*
+ * The same row, to any stream.
+ *
+ * Written for the two caches big screen mode keeps — the news headlines and
+ * the media servers it found on the network. Those are stored as the RECORD
+ * TEXT ITSELF rather than in some second format, so the cache is exactly what
+ * `--rec` would have printed and the reader is `cat`. One encoding, one
+ * escaping rule, one thing to get wrong instead of two.
+ */
+void rec_frow(FILE *f, int nfields, ...)
+{
+	va_list ap;
+	va_start(ap, nfields);
+	rec_vfrow(f, nfields, ap);
+	va_end(ap);
+}
+
+void rec_vfrow(FILE *f, int nfields, va_list ap)
+{
 	for (int i = 0; i < nfields; i++) {
 		if (i)
-			fputc('\t', stdout);
+			fputc('\t', f);
 		const char *s = va_arg(ap, const char *);
 		char *enc = pct_encode(s ? s : "");
-		fputs(enc, stdout);
+		fputs(enc, f);
 		free(enc);
 	}
-	va_end(ap);
-	fputc('\n', stdout);
+	fputc('\n', f);
 }
 
 /* ── strings ─────────────────────────────────────────────────────────────── */

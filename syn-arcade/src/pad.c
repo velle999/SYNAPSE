@@ -1697,3 +1697,145 @@ static int pads_hold_stream(void)
 	nav_close(pads, count);
 	return EX_OK;
 }
+
+/* ── the two doors out of this file ──────────────────────────────────────── */
+
+/*
+ * Open every attached controller for reading, and say how many.
+ *
+ * Exported so vptr.c can drive a POINTER from the same devices this file
+ * already knows how to find, without a second copy of "what counts as a
+ * gamepad" — which is the part that is easy to get wrong (see the capability
+ * bitmask comment at the top: sysfs prints those words most-significant first,
+ * and reading them the obvious way finds no gamepads at all).
+ *
+ * Read-only, non-blocking, close-on-exec, and NOT grabbed: a game, Steam, the
+ * navigation stream and the mouse can all hold the same pad at once, and every
+ * one of them routinely does.
+ */
+int pads_open_all(int *fds, int max)
+{
+	int count = 0, n = 0;
+	pad_t *found = pads_scan(&n);
+
+	for (int i = 0; i < n && count < max; i++) {
+		if (!found[i].is_pad)
+			continue;
+		int fd = open(found[i].node, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+		if (fd < 0)
+			continue;	/* quiet: `syn-arcade pads` explains uaccess */
+		fds[count++] = fd;
+	}
+	free(found);
+	return count;
+}
+
+/* How many gamepads are attached right now. The cheap half of the above, for
+ * the hotplug check: a count that changed is the signal to reopen the set. */
+int pads_attached(void)
+{
+	int n = 0, live = 0;
+	pad_t *found = pads_scan(&n);
+	for (int i = 0; i < n; i++)
+		if (found[i].is_pad)
+			live++;
+	free(found);
+	return live;
+}
+
+/*
+ * `syn-arcade big guard` — watch every controller for the GUIDE button and
+ * nothing else.
+ *
+ * This is the other half of the guide button, and it is a separate process
+ * from the navigation stream on purpose. `big nav` only exists while big
+ * screen mode is on screen; the guide button has to work when it is NOT, from
+ * the desktop, with nothing of ours running — which means something has to be
+ * holding the pads open and listening all session. That something is this.
+ *
+ * ⚠ It deliberately does nothing at all while big screen mode is running. Its
+ * own `big nav` is reading the same button from the same device, and both
+ * acting on one press is a race with two wrong outcomes: the shell hides
+ * itself and this immediately puts it back, or two of them start. `running`
+ * is the caller's test (the flock in big.c), asked at the moment of the press
+ * rather than remembered, because big screen mode can come and go a dozen
+ * times while this process lives.
+ *
+ * It also holds every pad OPEN for the whole session, which is `pads hold`'s
+ * job as a side effect — see the comment above pads_hold_stream() for why a
+ * wireless pad falls asleep otherwise. That is not a coincidence worth
+ * removing: a guide button on a controller that has switched itself off is a
+ * guide button that does nothing.
+ */
+int pads_guide_watch(bool (*running)(void), void (*on_guide)(void))
+{
+	/* Same two-way death detection as `pads hold`: a pipe that goes away,
+	 * or a parent that does. Without it this outlives the session that
+	 * started it and holds every event node open. */
+	prctl(PR_SET_PDEATHSIG, SIGTERM);
+
+	navpad_t pads[NAV_MAX];
+	int count = nav_open(pads, NAV_MAX);
+	long long rescan_at = now_ms() + NAV_RESCAN_MS;
+
+	for (;;) {
+		struct pollfd pfd[NAV_MAX + 1];
+		int n = 0;
+
+		for (int i = 0; i < count; i++) {
+			pfd[n].fd = pads[i].fd;
+			pfd[n].events = POLLIN;
+			pfd[n].revents = 0;
+			n++;
+		}
+
+		int out = n;
+		pfd[n].fd = STDOUT_FILENO;
+		pfd[n].events = 0;
+		pfd[n].revents = 0;
+		n++;
+
+		int r = poll(pfd, (nfds_t)n, NAV_RESCAN_MS);
+		if (r < 0 && errno != EINTR)
+			break;
+		if (pfd[out].revents & (POLLERR | POLLHUP | POLLNVAL))
+			break;
+
+		/* ⚠ Read first, rescan after — the hangup is in the same revents
+		 * as the last events the device produced. */
+		bool relist = false;
+		for (int i = 0; i < count; i++) {
+			if (pfd[i].revents & POLLIN) {
+				struct input_event ev[64];
+				ssize_t got;
+				while ((got = read(pads[i].fd, ev, sizeof(ev))) > 0) {
+					int k = (int)(got / (ssize_t)sizeof(ev[0]));
+					for (int j = 0; j < k; j++) {
+						if (ev[j].type != EV_KEY ||
+						    ev[j].code != BTN_MODE ||
+						    ev[j].value != 1)
+							continue;
+						if (running && running())
+							continue;
+						if (on_guide)
+							on_guide();
+					}
+				}
+			}
+			if (pfd[i].revents & (POLLERR | POLLHUP))
+				relist = true;
+		}
+
+		long long now = now_ms();
+		if (relist || now >= rescan_at) {
+			if (relist || pads_attached() != count) {
+				nav_close(pads, count);
+				count = nav_open(pads, NAV_MAX);
+			}
+			rescan_at = now + NAV_RESCAN_MS;
+		}
+	}
+
+	nav_close(pads, count);
+	return EX_OK;
+}

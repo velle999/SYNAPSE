@@ -11,10 +11,10 @@
 //
 // Every fact on screen arrives as a record from `syn-arcade big …`. This file
 // knows how to draw a tile; it knows nothing about Steam's library format,
-// where cover art is cached, or what "Sleep" runs. Pressing a tile calls the
-// binary back — `big launch <appid>`, `big run <id>` — rather than running
-// anything itself, so what a tile does is decided in one place and the same
-// answer is available over SSH.
+// where cover art is cached, which machine on the network is running Jellyfin,
+// or what "Sleep" runs. Pressing a tile calls the binary back — `big launch
+// <appid>`, `big run <id>` — rather than running anything itself, so what a
+// tile does is decided in one place and the same answer is available over SSH.
 //
 // ⚠ That is not tidiness, it is the SIGPIPE bug. A launcher started from here
 // inherits quickshell's pipes, and quickshell closes them the moment its direct
@@ -22,17 +22,39 @@
 // a window, with every visible sign saying it worked. big.c's spawn_detached()
 // is where that is handled, and it can only be handled where the child is made.
 //
-// ── The three ways in, and the one way out ──────────────────────────────────
+// ── STEPPING ASIDE, which is what a console does ────────────────────────────
+//
+// This used to QUIT whenever it launched anything. That is the single thing
+// that made it feel unfinished: opening the controller window, or the browser,
+// closed the television interface, and getting back meant finding a keyboard.
+// A console does not do that — it goes away while you use the thing, and it
+// comes back.
+//
+// So the shell stays alive and hides instead, and there are three ways back:
+//
+//   · the application EXITS. `big run <id> --wait` lives exactly as long as
+//     what it started, so its Process exiting is the news that somebody has
+//     finished with the browser.
+//   · GUIDE, at any time, from the controller. Its stream is still running
+//     while this is hidden, which is the whole reason hiding beats quitting.
+//   · `syn-arcade big show` — which is what Super+F10 now sends.
+//
+// While hidden the window is not merely transparent, it is not MAPPED: a
+// full-screen overlay surface left on top of a game would cost a composite
+// pass per frame and break direct scanout, for a screen nobody is looking at.
+//
+// ── The three ways in ───────────────────────────────────────────────────────
 //
 // Controller, keyboard and mouse all work. The controller is read by
 // `syn-arcade big nav`, which turns evdev events into words on a pipe — NOT
 // into synthetic key presses. There is no uinput device and nothing the
-// compositor can see, so stick drift cannot type into somebody's browser and no
-// other application on the machine is affected by any of this.
+// compositor can see, so stick drift cannot type into somebody's browser.
 //
-// The way out is a TILE, not just a key. A full-screen surface with exclusive
-// keyboard focus that can only be dismissed by a combination somebody has to
-// already know is a trap — and on a gamepad there is no combination at all.
+// The ONE exception is deliberate and bounded: while an application that needs
+// a pointer is up, `big mouse` drives the compositor's cursor from the stick,
+// because a browser takes pointer events and cannot be handed words. It runs
+// only while this is out of the way, it stops the moment the interface comes
+// back, and it moves a cursor rather than pressing keys. See vptr.c.
 //
 // SynapseOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
@@ -57,14 +79,18 @@ ShellRoot {
     // Wayland protocol tells a layer-shell client where the pointer is.
     readonly property string wantOutput: Quickshell.env("SYN_BIG_OUTPUT") || ""
 
-    // ── the data, fetched once at startup ───────────────────────────────────
+    // ── the data ────────────────────────────────────────────────────────────
     //
-    // Not re-polled. A library scan is dozens of stat() calls per game and the
-    // set of installed games does not change while somebody is looking at it;
-    // the one moment it can is when they come back from Steam, and coming back
-    // means this process was restarted anyway.
+    // The library is fetched once: a scan is dozens of stat() calls per game
+    // and the set of installed games does not change while somebody is looking
+    // at it. The headlines and the media servers are different — they go stale
+    // by the clock rather than by anything the user did — so those refresh on
+    // a timer, and both read a cache first so the screen draws immediately
+    // whether or not this machine is online.
     property var games: []
     property var apps: []
+    property var news: []
+    property var media: []
     property bool loaded: false
 
     // decodeURIComponent THROWS on a percent sequence that is not valid UTF-8,
@@ -112,6 +138,50 @@ ShellRoot {
         }
     }
 
+    // Headlines. The first run takes whatever the cache has — which on a cold
+    // machine is nothing, and then this fetches — and the timer refreshes long
+    // after anybody has stopped watching the shelf.
+    Process {
+        id: newsProc
+        command: [shell.bin, "big", "news", "--rec"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: shell.news = shell.parseRecords(this.text)
+        }
+    }
+
+    Timer {
+        interval: 20 * 60 * 1000
+        running: true
+        repeat: true
+        onTriggered: {
+            newsProc.command = [shell.bin, "big", "news", "--rec", "--refresh"]
+            newsProc.running = true
+        }
+    }
+
+    // Plex and Jellyfin, wherever they are. Same shape: cache first, refresh
+    // behind it. A server that has just been switched on appears within ten
+    // minutes without anybody restarting anything.
+    Process {
+        id: mediaProc
+        command: [shell.bin, "big", "media", "--rec"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: shell.media = shell.parseRecords(this.text)
+        }
+    }
+
+    Timer {
+        interval: 10 * 60 * 1000
+        running: true
+        repeat: true
+        onTriggered: {
+            mediaProc.command = [shell.bin, "big", "media", "--rec", "--refresh"]
+            mediaProc.running = true
+        }
+    }
+
     // ── the clock ───────────────────────────────────────────────────────────
     //
     // synui-clock rather than a Date() formatted here, for the same reason the
@@ -139,7 +209,11 @@ ShellRoot {
 
     Timer {
         interval: 1000
-        running: true
+        // Stopped while the interface is hidden. There is no clock on screen
+        // to update, and a process every second for the whole time somebody is
+        // playing a game is a thing that would eventually be noticed in a
+        // profile and not understood.
+        running: !shell.away
         repeat: true
         triggeredOnStart: true
         onTriggered: clockProc.running = true
@@ -149,7 +223,8 @@ ShellRoot {
     //
     // One line per press. See pad.c: this synthesises nothing, and stops the
     // moment this process does, because it is a child holding the other end of
-    // this pipe.
+    // this pipe. ⚠ It keeps running while we are hidden — that is what makes
+    // Guide able to bring the interface back.
     Process {
         id: navProc
         command: [shell.bin, "big", "nav"]
@@ -159,48 +234,269 @@ ShellRoot {
         }
     }
 
-    // ── launching ───────────────────────────────────────────────────────────
+    // ── the keybind, and anything else that wants a word with us ────────────
     //
-    // ⚠ The quit waits for THIS process to exit, and that ordering is
-    // load-bearing. quickshell kills a Process's children when it shuts down,
-    // so calling Qt.quit() straight after setting `running` races the fork that
-    // actually starts the game — sometimes launching nothing at all, on a
-    // machine fast enough. big.c returns as soon as it has forked and detached,
-    // so the wait is milliseconds.
-    property bool quitWhenLaunched: false
+    // `big listen` prints what is written to a FIFO. Super+F10 runs
+    // `big toggle`, which — finding a shell already running — sends "toggle"
+    // here rather than killing it. Without this the key could only stop what
+    // it could not show.
+    Process {
+        id: ctlProc
+        command: [shell.bin, "big", "listen"]
+        running: true
+        stdout: SplitParser {
+            onRead: (line) => {
+                const cmd = line.trim()
+                if (cmd === "show") shell.comeBack()
+                else if (cmd === "hide") shell.stepAside()
+                else if (cmd === "toggle") {
+                    if (shell.away) shell.comeBack(); else shell.stepAside()
+                } else if (cmd === "quit") Qt.quit()
+            }
+        }
+    }
+
+    // ── stepping aside ──────────────────────────────────────────────────────
+
+    // True while the interface is out of the way. The window is unmapped, not
+    // transparent — see the header.
+    property bool away: false
+
+    // What is running, if anything: the record of the tile that started it.
+    // Kept while we are back on screen too, so the banner can say what is
+    // waiting behind this and Guide can go back to it.
+    property var activeApp: null
+
+    // When it was started, in ms. See appProc below for what this is for.
+    property double launchedAt: 0
+
+    // The hint that appears for a few seconds when the interface gets out of
+    // the way, because a screen that simply vanishes gives somebody holding a
+    // controller nothing to go on.
+    property bool hintShown: false
+
+    Timer {
+        id: hintTimer
+        interval: 4500
+        onTriggered: shell.hintShown = false
+    }
+
+    function stepAside() {
+        if (shell.away) return
+        shell.away = true
+        shell.oskOpen = false
+        shell.hintShown = true
+        hintTimer.restart()
+    }
+
+    function comeBack() {
+        shell.away = false
+        shell.oskOpen = false
+        shell.hintShown = false
+        hintTimer.stop()
+    }
+
+    // ── launching ───────────────────────────────────────────────────────────
+
     property string launchingName: ""
 
-    function launch(args, name, thenQuit) {
-        shell.launchingName = name
-        shell.quitWhenLaunched = thenQuit === true
-        launchProc.command = [shell.bin].concat(args)
-        launchProc.running = true
+    Timer {
+        id: launchingTimer
+        interval: 2500
+        onTriggered: shell.launchingName = ""
+    }
+
+    // An application, which this gets out of the way for.
+    //
+    // `cmd` is whatever `big` verb starts it. For the ordinary tiles that is
+    // `run <id> --wait`; for a headline it is `open <url> --wait`. Both end
+    // when the application does, which is the signal to come back.
+    function launchApp(tile, cmd) {
+        shell.activeApp = tile
+        shell.launchingName = tile.name || ""
+        launchingTimer.restart()
+        shell.launchedAt = Date.now()
+        appProc.command = [shell.bin].concat(cmd)
+        appProc.running = true
+        shell.stepAside()
     }
 
     Process {
-        id: launchProc
+        id: appProc
         // No parameters on the handler: quickshell's exited(int, QProcess::
         // ExitStatus) has a second type QML cannot resolve, and a typed handler
         // silently never runs.
         onExited: {
-            if (shell.quitWhenLaunched) Qt.quit()
             shell.launchingName = ""
+
+            // ⚠ A FAST exit is not somebody closing the application.
+            //
+            // Firefox, Steam and half of everything else are single-instance:
+            // start one while it is already running and the second process
+            // hands its arguments to the first over a socket and exits at once.
+            // Treating that as "they have finished reading" would throw the
+            // television back over a browser somebody just opened — reliably,
+            // and only on the machines where the browser was already up, which
+            // is the worst way for a bug to be distributed.
+            //
+            // So a launcher that returns immediately is a hand-off: stay out of
+            // the way, and let Guide be what comes back. Anything that lived
+            // longer than a few seconds really did close.
+            const lived = Date.now() - shell.launchedAt
+            if (lived < 3000) return
+
+            shell.activeApp = null
+            shell.comeBack()
+        }
+    }
+
+    // ── the controller as a mouse ───────────────────────────────────────────
+    //
+    // Running only while all three are true: we are out of the way, what is
+    // running wants a pointer, and the on-screen keyboard is not up (it takes
+    // the same buttons, and A cannot both click and type). Stopping the
+    // process is what removes the virtual pointer — there is no other state to
+    // unwind, and vptr.c releases any held button on the way out.
+    Process {
+        id: mouseProc
+        command: [shell.bin, "big", "mouse"]
+        running: shell.away && shell.activeApp !== null
+                 && shell.activeApp.pointer === "1" && !shell.oskOpen
+    }
+
+    // ── the on-screen keyboard ──────────────────────────────────────────────
+    //
+    // Started as soon as something that might want typing is launched, rather
+    // than when the keyboard opens: `big keys` has to be alive and reading
+    // before the first key is pressed, and starting a process on the press
+    // loses it.
+    Process {
+        id: keysProc
+        command: [shell.bin, "big", "keys"]
+        stdinEnabled: true
+        running: shell.away && shell.activeApp !== null
+                 && shell.activeApp.keys === "1"
+    }
+
+    property bool oskOpen: false
+    property int  oskLayout: 0        // 0 lower, 1 upper, 2 symbols
+    property int  oskRow: 1
+    property int  oskCol: 0
+
+    function type(s)  { if (keysProc.running) keysProc.write("t " + encodeURIComponent(s) + "\n") }
+    function key(n)   { if (keysProc.running) keysProc.write("k " + n + "\n") }
+    function ctrl(n)  { if (keysProc.running) keysProc.write("c " + n + "\n") }
+
+    // The layouts. Four rows of characters and one row of the keys that are
+    // not characters — which is where Address (Ctrl+L) lives, because a
+    // browser you cannot type a URL into is a browser that can only follow
+    // links somebody else opened.
+    readonly property var oskRows: {
+        const chars = shell.oskLayout === 1
+            ? ["!@#$%^&*()", "QWERTYUIOP", "ASDFGHJKL_", "ZXCVBNM:;?"]
+            : shell.oskLayout === 2
+            ? ["~`|\\{}[]<>", "+=-_*/%$#@", "&^()\"':;!?", ",.…€£¥°·§"]
+            : ["1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm.,/"]
+
+        const rows = chars.map(r => r.split("").map(c => ({ t: c, v: c, w: 1 })))
+
+        rows.push([
+            { t: shell.oskLayout === 1 ? "abc" : "ABC", act: "case", w: 1.6 },
+            { t: "#+=",   act: "sym",   w: 1.5 },
+            { t: "space", act: "space", w: 3.4 },
+            { t: "⌫",     act: "back",  w: 1.6 },
+            { t: "⏎",     act: "enter", w: 1.6 },
+            { t: "Tab",   act: "tab",   w: 1.4 },
+            { t: "Esc",   act: "esc",   w: 1.4 },
+            { t: "Address", act: "url", w: 2.0 },
+            { t: "Close", act: "close", w: 1.8 }
+        ])
+        return rows
+    }
+
+    function oskMove(dr, dc) {
+        const rows = shell.oskRows
+        let r = shell.oskRow + dr
+        if (r < 0) r = 0
+        if (r > rows.length - 1) r = rows.length - 1
+
+        let c = shell.oskCol + dc
+        // Moving between rows of different lengths keeps the column where it
+        // was rather than resetting it, and clamps — which is what makes a
+        // thumb able to walk down the keyboard in a straight line.
+        if (r !== shell.oskRow) c = shell.oskCol
+        if (c < 0) c = 0
+        if (c > rows[r].length - 1) c = rows[r].length - 1
+
+        shell.oskRow = r
+        shell.oskCol = c
+    }
+
+    function oskPress() {
+        const row = shell.oskRows[shell.oskRow]
+        const k = row ? row[shell.oskCol] : null
+        if (!k) return
+
+        switch (k.act) {
+        case "case":  shell.oskLayout = shell.oskLayout === 1 ? 0 : 1; return
+        case "sym":   shell.oskLayout = shell.oskLayout === 2 ? 0 : 2; return
+        case "space": shell.type(" ");        return
+        case "back":  shell.key("BackSpace"); return
+        case "enter": shell.key("Return");    return
+        case "tab":   shell.key("Tab");       return
+        case "esc":   shell.key("Escape");    return
+        case "url":   shell.ctrl("l");        return
+        case "close": shell.oskOpen = false;  return
+        default:      shell.type(k.v);        return
+        }
+    }
+
+    function oskToggle() {
+        if (!keysProc.running) return
+        shell.oskOpen = !shell.oskOpen
+        if (shell.oskOpen) {
+            shell.oskRow = 1
+            shell.oskCol = 0
         }
     }
 
     // ── what the tiles are, in the order they are shown ─────────────────────
     //
-    // Three shelves. Play first because it is what somebody who just turned the
-    // television on wants; the library second, because it is the longest and
-    // scrolls; the machine's own switches last, where they cannot be hit by
-    // accident on the way to something else.
+    // The shelf a tile belongs on is a property of the TILE, decided in big.c,
+    // so adding one there puts it in the right place with no change here. The
+    // ORDER of the shelves is this file's business, and it is: what somebody
+    // who just turned the television on wants, then the library, then the
+    // things that are not games, then the machine's own switches — which are
+    // last so they cannot be hit on the way to something else — and then the
+    // news, which is the one shelf nobody is navigating TO.
+    function byShelf(name) {
+        return shell.apps.filter(a => a.shelf === name)
+    }
+
     readonly property var shelves: {
-        const appRows = shell.apps.filter(a => a.kind === "app")
-        const actRows = shell.apps.filter(a => a.kind === "action")
         const out = []
-        if (appRows.length) out.push({ title: "Play", kind: "app", items: appRows })
-        if (shell.games.length) out.push({ title: "Games", kind: "game", items: shell.games })
-        if (actRows.length) out.push({ title: "System", kind: "action", items: actRows })
+
+        const play = shell.byShelf("play")
+        if (play.length) out.push({ title: "Play", kind: "app", items: play })
+
+        if (shell.games.length)
+            out.push({ title: "Games", kind: "game", items: shell.games })
+
+        // Installed media applications first, then whatever answered on the
+        // network — a Plex client on this machine is a better tile than the
+        // same server's web page, and both being here is the point.
+        const media = shell.byShelf("media").concat(shell.media)
+        if (media.length) out.push({ title: "Media", kind: "app", items: media })
+
+        const apps = shell.byShelf("apps")
+        if (apps.length) out.push({ title: "Apps", kind: "app", items: apps })
+
+        const sys = shell.byShelf("system")
+        if (sys.length) out.push({ title: "System", kind: "action", items: sys })
+
+        if (shell.news.length)
+            out.push({ title: "News", kind: "news", items: shell.news })
+
         return out
     }
 
@@ -228,17 +524,7 @@ ShellRoot {
     // That is what made big screen mode look half-built. Everything HORIZONTAL
     // was dead — left, right, the shoulder-button page jumps, Home, and the
     // mouse moving along one shelf — while up and down worked perfectly, because
-    // `row` is an int and an int compares unequal. On a controller it read as
-    // "only the d-pad's vertical half is wired up"; the selection was moving in
-    // `cols` the whole time and no binding was told.
-    //
-    // Worse than dead, it was intermittent-looking: `selected` also reads
-    // `shell.row`, so the moment a row change DID notify, every swallowed column
-    // move appeared at once and the selection jumped several tiles.
-    //
-    // Pinned by the QML assertion in tests/syn_arcade_test.sh. Verified on
-    // Qt 6.11: mutate-and-reassign left a binding reading 0 after a write of 7,
-    // the copy read back 9.
+    // `row` is an int and an int compares unequal.
     function setCol(r, v) {
         shell.cols = Object.assign({}, shell.cols, { [r]: v })
     }
@@ -274,27 +560,52 @@ ShellRoot {
         if (!sh || !it) return
 
         if (sh.kind === "game") {
-            // Quits: this surface is on the overlay layer, above everything,
-            // so a game launched underneath it would render into a screen it
-            // does not own. Super+F10 brings big screen mode back.
-            shell.launch(["big", "launch", it.appid], it.name, true)
+            // Steam is handed a URL and returns at once, so there is nothing
+            // to wait for and nothing that can tell us the game has been
+            // quit. Get out of the way and let Guide be the way back — which
+            // is what a console does anyway.
+            shell.launchApp({ name: it.name, pointer: "0", keys: "0" },
+                            ["big", "launch", it.appid])
             return
         }
 
-        // "Desktop" is the way out and runs nothing — closing this IS going
-        // back to the desktop, which was there underneath all along.
+        if (sh.kind === "news") {
+            if (!it.link) return
+            shell.launchApp({ name: it.title, pointer: "1", keys: "1" },
+                            ["big", "open", it.link, "--wait"])
+            return
+        }
+
+        // "Desktop" is the way out and the only thing here that really quits:
+        // closing this IS going back to the desktop, which was there
+        // underneath all along.
         if (it.id === "desktop") {
             Qt.quit()
             return
         }
 
-        // Sleep, restart and power off deliberately do NOT quit: the machine is
-        // either coming back to this screen or going away entirely, and
-        // dropping to the desktop for the half second in between is a flash of
-        // somebody's email on a television.
-        const stay = sh.kind === "action"
-        shell.launch(["big", "run", it.id], it.name, !stay)
+        // Sleep, restart and power off deliberately do NOT get out of the way:
+        // the machine is either coming back to this screen or going away
+        // entirely, and dropping to the desktop for the half second in between
+        // is a flash of somebody's email on a television.
+        if (it.kind === "action") {
+            actionProc.command = [shell.bin, "big", "run", it.id]
+            actionProc.running = true
+            shell.launchingName = it.name || ""
+            launchingTimer.restart()
+            return
+        }
+
+        // Already running: this is a way BACK to it, not a second copy.
+        if (shell.activeApp && shell.activeApp.id === it.id) {
+            shell.stepAside()
+            return
+        }
+
+        shell.launchApp(it, ["big", "run", it.id, "--wait"])
     }
+
+    Process { id: actionProc }
 
     // ── one place where every input arrives ─────────────────────────────────
     //
@@ -304,6 +615,8 @@ ShellRoot {
     // all (it needs real hardware on the seat), and this makes the keyboard a
     // real proxy for it.
     function nav(cmd) {
+        if (shell.away) { shell.navAway(cmd); return }
+
         switch (cmd) {
         case "up":         shell.moveRow(-1); break
         case "down":       shell.moveRow(1); break
@@ -312,14 +625,50 @@ ShellRoot {
         case "page-left":  shell.moveCol(-6); break
         case "page-right": shell.moveCol(6); break
         case "accept":     shell.activate(); break
-        // Back goes UP a shelf, and from the top one it leaves. A button that
-        // does nothing at the top of the screen is a button somebody presses
-        // three times before reaching for the keyboard they left on the table.
-        case "back":       if (shell.row > 0) shell.moveRow(-1); else Qt.quit(); break
-        case "guide":      Qt.quit(); break
+        // Back goes UP a shelf, and from the top one it steps aside. A button
+        // that does nothing at the top of the screen is a button somebody
+        // presses three times before reaching for the keyboard they left on
+        // the table.
+        case "back":       if (shell.row > 0) shell.moveRow(-1); else shell.stepAside(); break
+        // Guide is the way OUT of the interface and, from the desktop, the way
+        // back in — that half is `big guard`, which is watching the same
+        // button while this is not running.
+        case "guide":      shell.stepAside(); break
         default: break
         }
     }
+
+    // While hidden, almost everything belongs to whatever is on screen. Only
+    // two buttons are ours, and both have to be, because they are the way back
+    // from a full-screen application on a machine with no keyboard in reach.
+    function navAway(cmd) {
+        if (cmd === "guide") { shell.comeBack(); return }
+
+        if (!shell.oskOpen) {
+            // Start opens the keyboard, when there is something to type into.
+            if (cmd === "menu") shell.oskToggle()
+            return
+        }
+
+        switch (cmd) {
+        case "up":         shell.oskMove(-1, 0); break
+        case "down":       shell.oskMove(1, 0); break
+        case "left":       shell.oskMove(0, -1); break
+        case "right":      shell.oskMove(0, 1); break
+        case "accept":     shell.oskPress(); break
+        case "back":       shell.oskOpen = false; break
+        case "menu":       shell.oskToggle(); break
+        case "search":     shell.key("BackSpace"); break   // X
+        case "info":       shell.type(" "); break          // Y
+        case "page-left":  shell.oskLayout = (shell.oskLayout + 2) % 3; break
+        case "page-right": shell.oskLayout = (shell.oskLayout + 1) % 3; break
+        default: break
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // The interface itself
+    // ═══════════════════════════════════════════════════════════════════════
 
     Variants {
         model: Quickshell.screens
@@ -342,7 +691,11 @@ ShellRoot {
                              : win.modelData === Quickshell.screens[0]
             }
 
-            visible: chosen
+            // ⚠ `away` unmaps this. Not opacity, not a colour — the surface
+            // itself goes, because an overlay-layer window the size of the
+            // screen sitting on top of a game is a composite pass per frame
+            // and the end of direct scanout, for something nobody can see.
+            visible: chosen && !shell.away
 
             anchors { top: true; left: true; right: true; bottom: true }
 
@@ -458,6 +811,35 @@ ShellRoot {
                 }
             }
 
+            // ── what is running behind this ─────────────────────────────────
+            //
+            // Only when something is. Coming back to the interface while the
+            // browser is still open and being told nothing about it is how
+            // somebody ends up with four browsers.
+            Rectangle {
+                id: runningStrip
+                anchors { top: header.bottom; left: parent.left; right: parent.right }
+                anchors.leftMargin: win.u * 1.6
+                anchors.rightMargin: win.u * 1.6
+                anchors.topMargin: win.u * 0.4
+                height: visible ? win.u * 1.9 : 0
+                visible: shell.activeApp !== null
+                radius: win.u * 0.4
+                color: "#332a4d"
+                border.width: 1
+                border.color: "#4b3f73"
+
+                Text {
+                    anchors.centerIn: parent
+                    color: win.ink
+                    font.pixelSize: win.u * 0.85
+                    text: shell.activeApp
+                          ? (shell.activeApp.name || "Something")
+                            + " is still open   ·   Guide goes back to it"
+                          : ""
+                }
+            }
+
             // ── the selected thing, named once, large ───────────────────────
             //
             // The title lives HERE and not under every tile. A label under a
@@ -466,10 +848,10 @@ ShellRoot {
             // legible from the sofa and leaves the artwork uncovered.
             Item {
                 id: banner
-                anchors { top: header.bottom; left: parent.left; right: parent.right }
+                anchors { top: runningStrip.bottom; left: parent.left; right: parent.right }
                 anchors.leftMargin: win.u * 1.6
                 anchors.rightMargin: win.u * 1.6
-                height: win.u * 5.6
+                height: win.u * 5.2
 
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
@@ -480,12 +862,17 @@ ShellRoot {
                         width: parent.width
                         text: {
                             const it = shell.current()
-                            return it ? (it.name || "") : ""
+                            if (!it) return ""
+                            // A headline is a title, a game is a name. Both
+                            // end up here, so both are asked for.
+                            return it.name || it.title || ""
                         }
                         color: win.ink
-                        font.pixelSize: win.u * 2.6
+                        font.pixelSize: win.u * 2.4
                         font.bold: true
                         elide: Text.ElideRight
+                        maximumLineCount: 2
+                        wrapMode: Text.WordWrap
                     }
 
                     Text {
@@ -498,13 +885,22 @@ ShellRoot {
                             const it = shell.current()
                             if (!sh || !it) return ""
 
+                            if (sh.kind === "news")
+                                return it.source || "news"
+
                             // Deliberately NOT the exec string for the app and
                             // action shelves. "systemctl suspend" under the
                             // word Sleep is a developer's answer to a question
                             // nobody at four metres asked, and it makes every
                             // tile look like a terminal command that might go
                             // wrong.
-                            if (sh.kind !== "game") return ""
+                            if (sh.kind !== "game") {
+                                if (it.kind === "server")
+                                    return it.source === "plex"
+                                        ? "Plex server on this network"
+                                        : "Jellyfin server on this network"
+                                return ""
+                            }
 
                             const bits = []
                             const sz = parseFloat(it.size)
@@ -621,12 +1017,17 @@ ShellRoot {
                                         && shell.col(shelf.index) === tile.index
                                     readonly property bool portrait:
                                         shelf.modelData.kind === "game"
+                                    readonly property bool headline:
+                                        shelf.modelData.kind === "news"
 
                                     // 2:3, which is the shape of every cover
                                     // Steam caches (600x900). Anything else
                                     // either letterboxes the art or crops
-                                    // somebody's title off it.
-                                    width: portrait ? win.u * 9 : win.u * 11
+                                    // somebody's title off it. A headline is
+                                    // wider than it is tall, because it is
+                                    // words.
+                                    width: portrait ? win.u * 9
+                                                    : headline ? win.u * 14 : win.u * 11
                                     height: portrait ? win.u * 13.5 : win.u * 7
 
                                     scale: selected ? 1.06 : 1.0
@@ -663,18 +1064,39 @@ ShellRoot {
                                         // picture must still say which game it
                                         // is; a blank rectangle in a row of
                                         // covers reads as a broken launcher.
-                                        Text {
+                                        // A headline never has art and is
+                                        // always this.
+                                        Column {
                                             anchors.fill: parent
                                             anchors.margins: win.u * 0.7
+                                            spacing: win.u * 0.3
                                             visible: !tile.modelData.art
-                                            text: tile.modelData.name || ""
-                                            color: win.ink
-                                            font.pixelSize: win.u * 1.1
-                                            font.bold: true
-                                            wrapMode: Text.WordWrap
-                                            elide: Text.ElideRight
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
+
+                                            Text {
+                                                width: parent.width
+                                                text: tile.modelData.name
+                                                      || tile.modelData.title || ""
+                                                color: win.ink
+                                                font.pixelSize: tile.headline
+                                                                ? win.u * 0.9 : win.u * 1.1
+                                                font.bold: true
+                                                wrapMode: Text.WordWrap
+                                                elide: Text.ElideRight
+                                                maximumLineCount: tile.headline ? 4 : 3
+                                                horizontalAlignment: tile.headline
+                                                    ? Text.AlignLeft : Text.AlignHCenter
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                visible: text !== ""
+                                                text: tile.modelData.source || ""
+                                                color: win.dim
+                                                font.pixelSize: win.u * 0.7
+                                                elide: Text.ElideRight
+                                                horizontalAlignment: tile.headline
+                                                    ? Text.AlignLeft : Text.AlignHCenter
+                                            }
                                         }
                                     }
 
@@ -725,7 +1147,7 @@ ShellRoot {
                             { k: "A", v: "Select" },
                             { k: "B", v: "Back" },
                             { k: "LB/RB", v: "Jump" },
-                            { k: "Guide", v: "Desktop" }
+                            { k: "Guide", v: shell.activeApp ? "Resume" : "Desktop" }
                         ]
                         Row {
                             id: hint
@@ -823,10 +1245,188 @@ ShellRoot {
                     case Qt.Key_Enter:
                     case Qt.Key_Space:    shell.nav("accept"); break
                     case Qt.Key_Backspace: shell.nav("back"); break
+                    // Escape QUITS, where Guide steps aside. Somebody at a
+                    // keyboard has a way back that somebody on a sofa does
+                    // not, so the keyboard keeps the stronger verb.
                     case Qt.Key_Escape:   Qt.quit(); break
                     default: return
                     }
                     event.accepted = true
+                }
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // The strip that stays behind: the on-screen keyboard, and the hint
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // A SECOND window, and it has to be, for one reason: this one must never
+    // take keyboard focus. The whole point of the on-screen keyboard is that
+    // the browser underneath keeps focus and receives what wtype types — a
+    // surface that grabbed the keyboard to draw a keyboard would be typing
+    // into itself.
+    //
+    // It is also why the keys are pressed with the CONTROLLER and not by
+    // clicking: while this is up, `big mouse` is stopped, because A cannot be
+    // both a click and a keypress. A real mouse still works — the mask below
+    // is the whole window while the keyboard is open — for the afternoon when
+    // the television is a desktop again.
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: kwin
+
+            required property var modelData
+            screen: modelData
+
+            readonly property bool chosen: {
+                if (!shell.wantOutput) return kwin.modelData === Quickshell.screens[0]
+                const named = Quickshell.screens.find(s => s.name === shell.wantOutput)
+                return named ? kwin.modelData === named
+                             : kwin.modelData === Quickshell.screens[0]
+            }
+
+            visible: chosen && shell.away && (shell.oskOpen || shell.hintShown)
+
+            anchors { left: true; right: true; bottom: true }
+            implicitHeight: shell.oskOpen ? kb.implicitHeight : hintRow.height + u * 1.2
+
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "syn-arcade-big-keys"
+            // ⚠ None, not OnDemand. OnDemand takes focus on a click, and a
+            // click on this keyboard would move focus off the text field the
+            // keys are meant for.
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            exclusionMode: ExclusionMode.Ignore
+
+            // The hint is a label, not a target: with an empty input region it
+            // cannot swallow a click meant for the window underneath it. The
+            // keyboard is the opposite and takes the whole surface.
+            mask: shell.oskOpen ? fullMask : nullMask
+
+            color: "transparent"
+
+            readonly property real u: Math.max(12, (kwin.screen ? kwin.screen.height : 1080) / 54)
+            readonly property color ink:    "#f2f0fa"
+            readonly property color dim:    "#a49cc4"
+            readonly property color accent: "#a78bfa"
+
+            // ⚠ The keyboard's mask names the ITEM rather than being an empty
+            // Region left to mean "everything". An empty region means the
+            // opposite — nothing is clickable — and the two spellings look
+            // identical in a diff. The hint's mask really is nothing: it is a
+            // label, and a label that swallowed a click meant for the window
+            // underneath it would be a small mystery at the bottom of the
+            // screen for four seconds.
+            Region { id: fullMask; item: kb }
+            Region { id: nullMask; width: 0; height: 0 }
+
+            // ── the hint ────────────────────────────────────────────────────
+            Rectangle {
+                id: hintRow
+                visible: !shell.oskOpen
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: kwin.u * 0.6
+                width: hintText.implicitWidth + kwin.u * 2
+                height: kwin.u * 2.2
+                radius: height / 2
+                color: "#e60b0916"
+                border.width: 1
+                border.color: "#453a66"
+
+                Text {
+                    id: hintText
+                    anchors.centerIn: parent
+                    color: kwin.ink
+                    font.pixelSize: kwin.u * 0.85
+                    text: {
+                        const t = "Guide  ▸  big screen"
+                        return keysProc.running ? t + "      Start  ▸  keyboard" : t
+                    }
+                }
+            }
+
+            // ── the keyboard ────────────────────────────────────────────────
+            Rectangle {
+                id: kb
+                visible: shell.oskOpen
+                anchors.fill: parent
+                color: "#f20b0916"
+
+                // Sized from the rows so the window can ask for exactly the
+                // height it needs; anchoring the other way round would make
+                // the strip and its contents disagree during a layout change
+                // and flicker.
+                implicitHeight: keyCol.implicitHeight + kwin.u * 1.6
+
+                Column {
+                    id: keyCol
+                    anchors.centerIn: parent
+                    spacing: kwin.u * 0.35
+
+                    Repeater {
+                        model: shell.oskRows
+
+                        Row {
+                            id: krow
+                            required property var modelData
+                            required property int index
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: kwin.u * 0.35
+
+                            Repeater {
+                                model: krow.modelData
+
+                                Rectangle {
+                                    id: cap
+                                    required property var modelData
+                                    required property int index
+
+                                    readonly property bool here:
+                                        shell.oskRow === krow.index
+                                        && shell.oskCol === cap.index
+
+                                    width: kwin.u * 2.6 * (cap.modelData.w || 1)
+                                    height: kwin.u * 2.4
+                                    radius: kwin.u * 0.35
+                                    color: cap.here ? "#3a2f5c" : "#1d1830"
+                                    border.width: cap.here ? Math.max(2, kwin.u * 0.14) : 1
+                                    border.color: cap.here ? kwin.accent : "#3a3159"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: cap.modelData.t
+                                        color: kwin.ink
+                                        font.pixelSize: cap.modelData.w > 1
+                                                        ? kwin.u * 0.8 : kwin.u * 1.1
+                                        font.bold: true
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: {
+                                            shell.oskRow = krow.index
+                                            shell.oskCol = cap.index
+                                            shell.oskPress()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // The controls, on the screen they apply to, for the same
+                    // reason the main footer exists.
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        color: kwin.dim
+                        font.pixelSize: kwin.u * 0.75
+                        text: "A  type      X  backspace      Y  space      "
+                              + "LB/RB  layout      B  close      Guide  big screen"
+                    }
                 }
             }
         }

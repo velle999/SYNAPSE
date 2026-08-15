@@ -38,6 +38,13 @@ char *pct_decode(const char *s);
  * reaches the GUI with no change to the QML. */
 void rec_row(int nfields, ...);
 
+/* The same row to any stream, and the va_list core both share. big.c writes
+ * its caches with these: a cache holding the record text itself is a cache
+ * that cannot disagree with what --rec prints, because it IS what --rec
+ * prints. */
+void rec_frow(FILE *f, int nfields, ...);
+void rec_vfrow(FILE *f, int nfields, va_list ap);
+
 void strip_trailing_newline(char *s);
 char *trim(char *s);
 
@@ -91,6 +98,31 @@ int cmd_pads(int argc, char **argv);
  * application can see. See the comment above it for why that is not a detail. */
 int pads_nav_stream(void);
 
+/* Open every attached controller for reading (caller closes), and how many
+ * there are. Exported so vptr.c can drive a pointer from the same devices
+ * without a second copy of "what counts as a gamepad". */
+int pads_open_all(int *fds, int max);
+int pads_attached(void);
+
+/* Watch every controller for the GUIDE button, all session, and call
+ * `on_guide` when it is pressed and `running()` says big screen mode is not
+ * already up. This is what makes the guide button work FROM the desktop; the
+ * other direction is big screen mode's own nav stream. Holds every pad open
+ * while it runs, which also keeps a wireless one awake. */
+int pads_guide_watch(bool (*running)(void), void (*on_guide)(void));
+
+/* ── vptr.c ──────────────────────────────────────────────────────────────── */
+
+/* The controller as a MOUSE: stick to pointer motion, buttons to clicks,
+ * through virtual-pointer-v1.
+ *
+ * ⚠ This is the one place in syn-arcade that synthesises input, and it is
+ * bounded on purpose — a separate process, started by the shell only while a
+ * pointer-driven application is on screen and killed when big screen mode
+ * comes back. A browser takes pointer events and cannot be given words on a
+ * pipe; everything else still goes the other way. See the header of vptr.c. */
+int pads_mouse_stream(const char *want_output);
+
 /* ── binds.c ─────────────────────────────────────────────────────────────── */
 
 /* Ask the running synui to re-read its config, so a just-written bind becomes
@@ -109,6 +141,13 @@ int binds_reload(void);
  * places. */
 bool binds_autostart_get(void);
 int  binds_autostart_set(bool on);
+
+/* And whether the guide-button watcher is in that same block. Same reasoning,
+ * same block, one difference: this one defaults ON, so the block has to be
+ * able to say "off" out loud — an absent line is an old block, not a
+ * decision. See GUARD_OFF_MARK in binds.c. */
+bool binds_guard_get(void);
+int  binds_guard_set(bool on);
 
 int cmd_binds(int argc, char **argv);
 

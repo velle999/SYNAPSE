@@ -65,16 +65,22 @@
 #include "arcade.h"
 #include "config.h"
 
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 /*
@@ -671,8 +677,11 @@ static int big_games(bool rec, bool all)
 /* ── launching, and the pipes that must not come with it ─────────────────── */
 
 /* Closing big screen mode is what the "Desktop" tile does, so the tile runner
- * below needs it before it is defined. */
+ * below needs it before it is defined. Likewise a media tile, which is a web
+ * page rather than a program, and the cache that says which page. */
 static int big_stop(void);
+static int big_open(const char *url, bool wait_for_it);
+static bool media_url(const char *id, char *out, size_t n);
 
 static bool have(const char *prog)
 {
@@ -702,7 +711,7 @@ static bool have(const char *prog)
  * would be spawning through the very pipes at issue, and the fix has to live
  * where the child is created.
  */
-static int spawn_detached(char *const argv[])
+static int spawn_detached_pid(char *const argv[], pid_t *out)
 {
 	/*
 	 * With stdio on /dev/null a failed exec — a missing binary, a typo in a
@@ -750,18 +759,190 @@ static int spawn_detached(char *const argv[])
 		close(errfd);
 
 	/*
-	 * Not waited for. The child called setsid, so when this process exits —
-	 * which for a keybind or a tile press is immediately — init adopts and
-	 * reaps it. Waiting would turn "launch a game" into a command that
-	 * blocks for as long as the game runs, which is what an earlier bug in
-	 * this project's file manager did with xdg-open.
+	 * Not waited for HERE. The child called setsid, so when this process
+	 * exits — which for a keybind or a tile press is immediately — init
+	 * adopts and reaps it. Waiting by default would turn "launch a game"
+	 * into a command that blocks for as long as the game runs, which is
+	 * what an earlier bug in this project's file manager did with xdg-open.
+	 *
+	 * The pid comes back for the one caller that DOES want to wait — `big
+	 * run --wait`, which is how big screen mode learns that the browser it
+	 * opened has been closed. That is a caller choosing to block, not this
+	 * function deciding for everybody.
 	 */
+	if (out)
+		*out = pid;
 	return EX_OK;
 }
 
+static int spawn_detached(char *const argv[])
+{
+	return spawn_detached_pid(argv, NULL);
+}
+
+/* ── running something and reading what it said ──────────────────────────── */
+
 /*
- * The other tiles: launchers and media on this machine, then the four things a
- * television needs that are not applications at all.
+ * Run a command and return its stdout. NULL if it could not be run at all;
+ * caller frees.
+ *
+ * ⚠ execvp and NOT popen, and that is not a style preference. The one caller
+ * that matters passes a URL out of a config file the user edits, and popen
+ * hands its argument to /bin/sh — a feed URL containing a backtick or a
+ * semicolon would be a command. There is no shell here, so there is nothing to
+ * quote and nothing to get wrong.
+ *
+ * The timeout is enforced in the CHILD, with alarm(), rather than by the
+ * parent watching a clock. curl already has --max-time and this is the belt to
+ * its braces: a DNS lookup that hangs before curl's own timer starts would
+ * otherwise stall big screen mode's news shelf for as long as the resolver
+ * feels like, and the alarm cannot be talked out of it.
+ */
+static char *run_capture(char *const argv[], int timeout_s)
+{
+	int fds[2];
+	if (pipe(fds) != 0)
+		return NULL;
+
+	pid_t pid = fork();
+	if (pid < 0) {
+		close(fds[0]);
+		close(fds[1]);
+		return NULL;
+	}
+
+	if (pid == 0) {
+		close(fds[0]);
+		dup2(fds[1], STDOUT_FILENO);
+		if (fds[1] > STDERR_FILENO)
+			close(fds[1]);
+
+		int null = open("/dev/null", O_RDWR);
+		if (null >= 0) {
+			dup2(null, STDIN_FILENO);
+			dup2(null, STDERR_FILENO);
+			if (null > STDERR_FILENO)
+				close(null);
+		}
+
+		if (timeout_s > 0)
+			alarm((unsigned)timeout_s);
+		execvp(argv[0], argv);
+		_exit(127);
+	}
+
+	close(fds[1]);
+
+	size_t cap = 65536, len = 0;
+	char *buf = xmalloc(cap);
+	ssize_t got;
+	while ((got = read(fds[0], buf + len, cap - len - 1)) > 0) {
+		len += (size_t)got;
+		if (len + 1 >= cap) {
+			/* A feed is a few tens of KB. The ceiling is not
+			 * politeness, it is what stops a server that streams
+			 * forever from being an out-of-memory kill. */
+			if (cap >= 4u * 1024 * 1024)
+				break;
+			cap *= 2;
+			buf = xrealloc(buf, cap);
+		}
+	}
+	buf[len] = '\0';
+	close(fds[0]);
+
+	int status = 0;
+	waitpid(pid, &status, 0);
+
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+		free(buf);
+		return NULL;
+	}
+	return buf;
+}
+
+/* ── what this machine can do ────────────────────────────────────────────── */
+
+/*
+ * The browser, as an argv.
+ *
+ * ⚠ NOT `--kiosk`, which is what this shipped with and which was wrong the
+ * moment there was an on-screen keyboard. Kiosk mode removes the address bar,
+ * the tabs and every control — on a desktop that is a deliberate lockdown, and
+ * on a television with a gamepad it means the only pages reachable are the ones
+ * something else opened. With a pointer and a keyboard on screen, an ordinary
+ * window is a browser somebody can actually use, and Guide still takes the
+ * whole thing away.
+ */
+static const char *first_installed(const char *const *cands, const char **cache)
+{
+	/* Cached because every one of these is a fork of /bin/sh, and the
+	 * tables below ask twice — once to decide whether the tile exists and
+	 * once for its command. Five extra shells to draw one tile is the kind
+	 * of thing that makes a launcher feel slow for no visible reason. */
+	if (*cache)
+		return **cache ? *cache : NULL;
+	for (int i = 0; cands[i]; i++) {
+		if (have(cands[i])) {
+			*cache = cands[i];
+			return cands[i];
+		}
+	}
+	*cache = "";
+	return NULL;
+}
+
+static const char *browser_prog(void)
+{
+	static const char *const cands[] = {
+		"firefox", "librewolf", "chromium", "brave", "google-chrome-stable",
+		"epiphany", "falkon", NULL
+	};
+	static const char *cache;
+	return first_installed(cands, &cache);
+}
+
+/*
+ * The terminal.
+ *
+ * syntty first because it is this system's own terminal and the default
+ * everywhere else in the desktop; the other two are what a machine that has
+ * replaced it will have. Ordering matters more than usual here: a big screen
+ * tile that opens a different terminal from Super+Return is the sort of small
+ * inconsistency that makes a desktop feel assembled rather than designed.
+ */
+static const char *terminal_prog(void)
+{
+	static const char *const cands[] = {
+		"syntty", "kitty", "foot", "alacritty", "xterm", NULL
+	};
+	static const char *cache;
+	return first_installed(cands, &cache);
+}
+
+/*
+ * A music player, in the order somebody would want one.
+ *
+ * Dedicated music applications first — they have a library, cover art and a
+ * queue, which is what "Music" means on a television — then the general media
+ * players, which will play an album and are better than an empty shelf. mpv is
+ * deliberately absent: with no file to open it is a black window, which is a
+ * tile that looks broken.
+ */
+static const char *music_prog(void)
+{
+	static const char *const cands[] = {
+		"strawberry", "elisa", "amberol", "rhythmbox", "lollypop",
+		"clementine", "audacious", "deadbeef", "quodlibet", "tauon",
+		"plexamp", "spotify", "vlc", NULL
+	};
+	static const char *cache;
+	return first_installed(cands, &cache);
+}
+
+/*
+ * The other tiles: launchers, media, the browser and a terminal, then the four
+ * things a television needs that are not applications at all.
  *
  * DETECTED, never listed unconditionally. A tile for something that is not
  * installed is a tile that does nothing when pressed, and on a gamepad four
@@ -772,60 +953,104 @@ static int spawn_detached(char *const argv[])
  * reimplementing anything, for the same reason the start menu does: there must
  * be one definition of "suspend this machine", or the couch and the desk drift
  * apart.
+ *
+ * ── The four columns that are not the command ───────────────────────────────
+ *
+ *   shelf    which row of the television this belongs on. The shelf is a
+ *            property of the TILE and not of the QML, so adding one here puts
+ *            it in the right place with no change to the shell.
+ *   kind     what pressing it DOES — an app to launch, or an action.
+ *   pointer  whether launching it should turn the controller into a mouse.
+ *            True for anything with a pointer-driven interface and false for
+ *            everything else, because a stick that moves a cursor is exactly
+ *            wrong in a launcher that has its own controller support (Steam
+ *            Big Picture) and exactly right in a web browser.
+ *   keys     whether the on-screen keyboard is worth offering. A terminal and
+ *            a browser need one; RetroArch does not.
  */
-struct row { const char *id, *name, *exec, *icon, *kind; };
+struct row {
+	const char *id, *name, *exec, *icon, *kind, *shelf;
+	bool pointer, keys;
+};
 
 static int apps_table(struct row *rows, int max)
 {
 	int n = 0;
 	(void)max;	/* the table is a literal; the array is sized for it */
 
+	/* ── play: the game launchers ── */
 	if (have("steam"))
 		rows[n++] = (struct row){ "steam-bpm", "Steam Big Picture",
-			"syn-arcade big steam", "steam", "app" };
+			"syn-arcade big steam", "steam", "app", "play",
+			false, false };
 	if (have("retroarch"))
 		rows[n++] = (struct row){ "retroarch", "RetroArch",
-			"retroarch --fullscreen", "retroarch", "app" };
+			"retroarch --fullscreen", "retroarch", "app", "play",
+			false, false };
 	if (have("lutris"))
 		rows[n++] = (struct row){ "lutris", "Lutris", "lutris",
-			"lutris", "app" };
+			"lutris", "app", "play", true, false };
 	if (have("heroic"))
 		rows[n++] = (struct row){ "heroic", "Heroic", "heroic",
-			"heroic", "app" };
-	if (have("kodi"))
-		rows[n++] = (struct row){ "kodi", "Kodi", "kodi", "kodi", "app" };
-	if (have("plex-desktop"))
-		rows[n++] = (struct row){ "plex", "Plex", "plex-desktop",
-			"plex", "app" };
-	else if (have("plexhtpc"))
-		rows[n++] = (struct row){ "plex", "Plex", "plexhtpc",
-			"plex", "app" };
+			"heroic", "app", "play", true, false };
 	if (have("moonlight"))
 		rows[n++] = (struct row){ "moonlight", "Moonlight", "moonlight",
-			"moonlight", "app" };
-	if (have("firefox"))
-		rows[n++] = (struct row){ "web", "Web", "firefox --kiosk",
-			"firefox", "app" };
+			"moonlight", "app", "play", true, false };
+
+	/* ── media ── */
+	{
+		const char *music = music_prog();
+		if (music)
+			rows[n++] = (struct row){ "music", "Music", music,
+				"music", "app", "media", true, false };
+	}
+	if (have("kodi"))
+		rows[n++] = (struct row){ "kodi", "Kodi", "kodi", "kodi", "app",
+			"media", false, false };
+	if (have("plex-desktop"))
+		rows[n++] = (struct row){ "plex", "Plex", "plex-desktop",
+			"plex", "app", "media", true, false };
+	else if (have("plexhtpc"))
+		rows[n++] = (struct row){ "plex", "Plex", "plexhtpc",
+			"plex", "app", "media", true, false };
+	if (have("jellyfinmediaplayer"))
+		rows[n++] = (struct row){ "jellyfin", "Jellyfin",
+			"jellyfinmediaplayer", "jellyfin", "app", "media",
+			true, false };
+	else if (have("jellyfin-media-player"))
+		rows[n++] = (struct row){ "jellyfin", "Jellyfin",
+			"jellyfin-media-player", "jellyfin", "app", "media",
+			true, false };
+
+	/* ── apps: the two that need a pointer and a keyboard ── */
+	if (browser_prog())
+		rows[n++] = (struct row){ "web", "Web", browser_prog(),
+			"firefox", "app", "apps", true, true };
+	if (terminal_prog())
+		rows[n++] = (struct row){ "terminal", "Terminal",
+			terminal_prog(), "terminal", "app", "apps", true, true };
 	if (have("syn-arcade"))
 		rows[n++] = (struct row){ "arcade", "Controllers",
-			"syn-arcade gui", "syn-arcade", "app" };
+			"syn-arcade gui", "syn-arcade", "app", "apps",
+			true, false };
 
 	/* The way OUT is a tile, and it is not optional. A full-screen surface
 	 * with exclusive keyboard focus that can only be dismissed by a key
 	 * combination somebody has to already know is a trap, and on a gamepad
 	 * there is no key combination at all. */
-	rows[n++] = (struct row){ "desktop", "Desktop", "", "desktop", "action" };
+	rows[n++] = (struct row){ "desktop", "Desktop", "", "desktop", "action",
+		"system", false, false };
 	rows[n++] = (struct row){ "sleep", "Sleep", "systemctl suspend",
-		"sleep", "action" };
+		"sleep", "action", "system", false, false };
 	rows[n++] = (struct row){ "restart", "Restart", "systemctl reboot",
-		"restart", "action" };
+		"restart", "action", "system", false, false };
 	rows[n++] = (struct row){ "poweroff", "Power off", "systemctl poweroff",
-		"poweroff", "action" };
+		"poweroff", "action", "system", false, false };
 
 	return n;
 }
 
-#define APPS_MAX 24
+#define APPS_MAX 32
 
 static int big_apps(bool rec)
 {
@@ -833,14 +1058,19 @@ static int big_apps(bool rec)
 	int n = apps_table(rows, APPS_MAX);
 
 	if (rec) {
-		rec_row(5, "id", "name", "exec", "icon", "kind");
+		rec_row(8, "id", "name", "exec", "icon", "kind", "shelf",
+			"pointer", "keys");
 		for (int i = 0; i < n; i++)
-			rec_row(5, rows[i].id, rows[i].name, rows[i].exec,
-				rows[i].icon, rows[i].kind);
+			rec_row(8, rows[i].id, rows[i].name, rows[i].exec,
+				rows[i].icon, rows[i].kind, rows[i].shelf,
+				rows[i].pointer ? "1" : "0",
+				rows[i].keys ? "1" : "0");
 	} else {
 		for (int i = 0; i < n; i++)
-			printf("%-12s %-20s %s\n", rows[i].id, rows[i].name,
-			       rows[i].exec[0] ? rows[i].exec : "(built in)");
+			printf("%-10s %-8s %-20s %s%s\n", rows[i].id,
+			       rows[i].shelf, rows[i].name,
+			       rows[i].exec[0] ? rows[i].exec : "(built in)",
+			       rows[i].pointer ? "   [mouse]" : "");
 	}
 	return EX_OK;
 }
@@ -852,12 +1082,39 @@ static int big_apps(bool rec)
  * what a tile does is decided in one place. A front-end that took the command
  * and ran it itself would be a second launcher — with its own idea of quoting,
  * its own inherited descriptors, and its own answer to what "Desktop" means.
+ *
+ * ── `wait` is what makes big screen mode come BACK ──────────────────────────
+ *
+ * Without it this returns the moment the child is forked, and the shell has no
+ * way to know when somebody has finished with the browser — which is why big
+ * screen mode used to quit on the way out and stay quit. With it, this process
+ * stays alive for exactly as long as the application does, so the shell can
+ * simply watch its own Process exit and put the television back.
+ *
+ * ⚠ Waiting does NOT mean the child keeps our descriptors. It is still forked
+ * with setsid and /dev/null on all three, exactly as spawn_detached does and
+ * for exactly the same reason — a game that inherits quickshell's pipes dies
+ * on its first line of logging. The only difference is that this process hangs
+ * around to reap it. If we are killed first the application is unaffected: it
+ * has its own session and init adopts it.
  */
-static int big_run(const char *id)
+static int big_run(const char *id, bool wait_for_it)
 {
 	if (!id || !*id) {
 		fputs("syn-arcade: big run needs a tile id "
 		      "(`syn-arcade big apps` lists them)\n", stderr);
+		return EX_USAGE;
+	}
+
+	/* A media server found on the network is a tile with no program behind
+	 * it — the answer is a web page. Its URL comes back out of the same
+	 * cache `big media` wrote, so the shell never hands us one. */
+	if (strncmp(id, "plex-", 5) == 0 || strncmp(id, "jellyfin-", 9) == 0) {
+		char url[512];
+		if (media_url(id, url, sizeof(url)))
+			return big_open(url, wait_for_it);
+		fprintf(stderr, "syn-arcade: no media server called '%s' — "
+				"`syn-arcade big media --refresh` looks again\n", id);
 		return EX_USAGE;
 	}
 
@@ -893,7 +1150,23 @@ static int big_run(const char *id)
 
 		if (!argc)
 			return EX_FAIL;
-		return spawn_detached(argv);
+
+		if (!wait_for_it)
+			return spawn_detached(argv);
+
+		pid_t pid = 0;
+		int rc = spawn_detached_pid(argv, &pid);
+		if (rc != EX_OK || pid <= 0)
+			return rc;
+
+		/* ⚠ EINTR is not "it finished". A signal arriving while this
+		 * blocks would otherwise be read as the application closing,
+		 * and big screen mode would come back over the top of a browser
+		 * somebody is still using. */
+		int st = 0;
+		while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
+			;
+		return EX_OK;
 	}
 
 	fprintf(stderr, "syn-arcade: no tile called '%s'\n", id);
@@ -1017,6 +1290,942 @@ static int big_launch(const char *appid)
 
 	char *argv[] = { (char *)"steam", url, NULL };
 	return spawn_detached(argv);
+}
+
+/*
+ * Open a URL in the browser.
+ *
+ * Every URL that reaches this comes from somewhere else: a headline in an RSS
+ * feed, or a media server that answered a broadcast. So it is CHECKED rather
+ * than trusted — http or https, no whitespace, no control characters, nothing
+ * that could be read as an option by the browser it is handed to. A URL
+ * beginning with a dash is the whole attack: `firefox --something` is not a
+ * page, and `--` is not enough on its own because not every browser honours it.
+ */
+static bool url_ok(const char *url)
+{
+	if (!url || !*url)
+		return false;
+	if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0)
+		return false;
+	if (strlen(url) > 2000)
+		return false;
+	for (const char *p = url; *p; p++)
+		if ((unsigned char)*p <= 0x20 || (unsigned char)*p == 0x7f)
+			return false;
+	return true;
+}
+
+static int big_open(const char *url, bool wait_for_it)
+{
+	if (!url_ok(url)) {
+		fprintf(stderr, "syn-arcade: '%s' is not an http(s) URL\n",
+			url ? url : "");
+		return EX_USAGE;
+	}
+
+	const char *browser = browser_prog();
+	if (!browser) {
+		fputs("syn-arcade: no web browser installed\n", stderr);
+		return EX_FAIL;
+	}
+
+	char *argv[] = { (char *)browser, (char *)url, NULL };
+	if (!wait_for_it)
+		return spawn_detached(argv);
+
+	/* --wait, for the same reason `big run --wait` has it: this is how the
+	 * shell finds out that the page it opened has been closed, and puts
+	 * the television back.
+	 *
+	 * ⚠ A browser that is ALREADY running exits immediately — the second
+	 * process hands the URL to the first over its own socket and is done —
+	 * so the shell must not treat this returning as "they finished
+	 * reading". It does not: it stays out of the way until Guide is
+	 * pressed, and only an app that was actually started brings it back. */
+	pid_t pid = 0;
+	int rc = spawn_detached_pid(argv, &pid);
+	if (rc != EX_OK || pid <= 0)
+		return rc;
+	int st = 0;
+	while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
+		;
+	return EX_OK;
+}
+
+/* ── where the caches live ───────────────────────────────────────────────── */
+
+/*
+ * $XDG_CACHE_HOME/syn-arcade/<rel>, or ~/.cache/syn-arcade/<rel>.
+ *
+ * The cache and not the config directory, and the distinction is load-bearing
+ * for the test suite as much as for tidiness: everything under here is
+ * DERIVED — headlines off the internet, servers that answered a broadcast —
+ * and deleting the lot costs a refresh and nothing else.
+ */
+static bool cache_path(char *buf, size_t n, const char *rel)
+{
+	const char *xdg = getenv("XDG_CACHE_HOME");
+	if (xdg && *xdg)
+		return snprintf(buf, n, "%s/syn-arcade/%s", xdg, rel) < (int)n;
+
+	char sub[256];
+	snprintf(sub, sizeof(sub), ".cache/syn-arcade/%s", rel);
+	return home_path(buf, n, sub);
+}
+
+/* How old the file is in seconds, or -1 if it is not there. */
+static long file_age(const char *path)
+{
+	struct stat st;
+	if (stat(path, &st) != 0)
+		return -1;
+	time_t now = time(NULL);
+	if (now < st.st_mtime)
+		return 0;		/* clock stepped backwards */
+	return (long)(now - st.st_mtime);
+}
+
+/*
+ * Print a cache file, and say whether there was one.
+ *
+ * The cache IS the record text, so this is a copy — no parse, no re-encode,
+ * and no chance of the cached form and the printed form disagreeing.
+ */
+static bool cache_print(const char *path)
+{
+	char *text = read_file(path);
+	if (!text)
+		return false;
+	fputs(text, stdout);
+	free(text);
+	return true;
+}
+
+/* Whether anything at all is allowed to touch the network.
+ *
+ * The suite sets this. Two of the commands below talk to the internet and to
+ * the local network, and a test run that did either would be a test whose
+ * result depended on the machine it ran on and on whether the building had
+ * working DNS that morning. */
+static bool net_allowed(void)
+{
+	const char *e = getenv("SYN_ARCADE_NO_NET");
+	return !(e && *e && strcmp(e, "0") != 0);
+}
+
+/* ── media servers on the network ────────────────────────────────────────── */
+
+/*
+ * Plex and Jellyfin both answer a UDP broadcast, and that is the only reliable
+ * way to find them.
+ *
+ * There is no shared standard here and no daemon on this machine that knows —
+ * mDNS would be the tidy answer and neither product uses it for this. So each
+ * is asked in its own dialect, on one socket each, and both are listened to at
+ * once:
+ *
+ *   Plex     GDM. "M-SEARCH * HTTP/1.0" to 239.0.0.250:32414, and the reply is
+ *            an HTTP-shaped block with `Name:` and `Port:` headers. The
+ *            ADDRESS is not in the reply at all — it is where the packet came
+ *            from, which is why recvfrom's source address is what builds the
+ *            URL.
+ *   Jellyfin the literal string "who is JellyfinServer?" to port 7359, and the
+ *            reply is JSON with an "Address" that is already a full URL.
+ *
+ * ⚠ Broadcast, not just multicast, for both. A router or a bridge that does
+ * not forward multicast is common enough on home networks — and on a machine
+ * with several interfaces (a VM bridge, a VPN) the multicast leaves through
+ * whichever one the kernel picked. Sending both costs two datagrams.
+ *
+ * Servers on THIS machine answer neither reliably (a server does not always
+ * broadcast to itself), so localhost is probed directly afterwards.
+ */
+typedef struct {
+	char id[32];
+	char name[128];
+	char url[256];
+	char source[16];	/* "plex" or "jellyfin" */
+} server_t;
+
+static void servers_add(server_t *out, int *n, int max, const char *source,
+			const char *name, const char *url)
+{
+	if (*n >= max || !url || !*url)
+		return;
+	for (int i = 0; i < *n; i++)
+		if (strcmp(out[i].url, url) == 0)
+			return;			/* answered twice */
+
+	server_t *s = &out[(*n)++];
+	memset(s, 0, sizeof(*s));
+	snprintf(s->id, sizeof(s->id), "%s-%d", source, *n);
+	snprintf(s->name, sizeof(s->name), "%s",
+		 (name && *name) ? name : source);
+	snprintf(s->url, sizeof(s->url), "%s", url);
+	snprintf(s->source, sizeof(s->source), "%s", source);
+}
+
+/* One header out of a Plex GDM reply: `Name: Living Room`. */
+static bool gdm_field(const char *text, const char *key, char *out, size_t n)
+{
+	size_t klen = strlen(key);
+	for (const char *p = text; p && *p; ) {
+		if (strncasecmp(p, key, klen) == 0 && p[klen] == ':') {
+			p += klen + 1;
+			while (*p == ' ' || *p == '\t') p++;
+			size_t w = 0;
+			while (*p && *p != '\r' && *p != '\n' && w + 1 < n)
+				out[w++] = *p++;
+			out[w] = '\0';
+			return w > 0;
+		}
+		p = strchr(p, '\n');
+		if (p) p++;
+	}
+	return false;
+}
+
+/* One string out of a flat JSON object: "Address":"http://…". No parser, for
+ * the same reason vdf_pair above is not one — the shape is fixed and known. */
+static bool json_str(const char *text, const char *key, char *out, size_t n)
+{
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char *p = strstr(text, pat);
+	if (!p)
+		return false;
+	p += strlen(pat);
+	while (*p == ' ' || *p == ':') p++;
+	if (*p != '"')
+		return false;
+	p++;
+	size_t w = 0;
+	while (*p && *p != '"' && w + 1 < n) {
+		if (*p == '\\' && p[1])
+			p++;
+		out[w++] = *p++;
+	}
+	out[w] = '\0';
+	return w > 0;
+}
+
+/* Is something listening on this port of this host? A connect() with a short
+ * timeout, which is the only question that matters — a Plex server on this
+ * machine is one that has port 32400 open. */
+static bool port_open(const char *host, int port, int ms)
+{
+	int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return false;
+
+	struct sockaddr_in sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons((uint16_t)port);
+	if (inet_pton(AF_INET, host, &sa.sin_addr) != 1) {
+		close(fd);
+		return false;
+	}
+
+	bool ok = false;
+	if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == 0) {
+		ok = true;
+	} else if (errno == EINPROGRESS) {
+		struct pollfd p = { .fd = fd, .events = POLLOUT };
+		if (poll(&p, 1, ms) > 0) {
+			int err = 0;
+			socklen_t len = sizeof(err);
+			if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) == 0)
+				ok = err == 0;
+		}
+	}
+	close(fd);
+	return ok;
+}
+
+#define DISCOVER_MS 900
+
+static int media_discover(server_t *out, int max)
+{
+	int n = 0;
+
+	if (!net_allowed())
+		return 0;
+
+	int plex = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	int jelly = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+
+	int yes = 1;
+	if (plex >= 0)
+		setsockopt(plex, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
+	if (jelly >= 0)
+		setsockopt(jelly, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
+
+	struct sockaddr_in to;
+	memset(&to, 0, sizeof(to));
+	to.sin_family = AF_INET;
+
+	static const char gdm[] = "M-SEARCH * HTTP/1.0\r\n\r\n";
+	if (plex >= 0) {
+		to.sin_port = htons(32414);
+		inet_pton(AF_INET, "239.0.0.250", &to.sin_addr);
+		sendto(plex, gdm, sizeof(gdm) - 1, 0,
+		       (struct sockaddr *)&to, sizeof(to));
+		inet_pton(AF_INET, "255.255.255.255", &to.sin_addr);
+		sendto(plex, gdm, sizeof(gdm) - 1, 0,
+		       (struct sockaddr *)&to, sizeof(to));
+	}
+
+	static const char jf[] = "who is JellyfinServer?";
+	if (jelly >= 0) {
+		to.sin_port = htons(7359);
+		inet_pton(AF_INET, "255.255.255.255", &to.sin_addr);
+		sendto(jelly, jf, sizeof(jf) - 1, 0,
+		       (struct sockaddr *)&to, sizeof(to));
+		inet_pton(AF_INET, "239.255.255.250", &to.sin_addr);
+		sendto(jelly, jf, sizeof(jf) - 1, 0,
+		       (struct sockaddr *)&to, sizeof(to));
+	}
+
+	/* One window for both, because they are answered in parallel and a
+	 * television is waiting. */
+	struct timespec t0;
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+
+	for (;;) {
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		long elapsed = (long)((now.tv_sec - t0.tv_sec) * 1000 +
+				      (now.tv_nsec - t0.tv_nsec) / 1000000);
+		int left = DISCOVER_MS - (int)elapsed;
+		if (left <= 0)
+			break;
+
+		struct pollfd pfd[2];
+		int np = 0;
+		int pi = -1, ji = -1;
+		if (plex >= 0) { pi = np; pfd[np].fd = plex; pfd[np].events = POLLIN; pfd[np].revents = 0; np++; }
+		if (jelly >= 0) { ji = np; pfd[np].fd = jelly; pfd[np].events = POLLIN; pfd[np].revents = 0; np++; }
+		if (!np)
+			break;
+
+		int r = poll(pfd, (nfds_t)np, left);
+		if (r <= 0)
+			break;
+
+		char buf[2048];
+		struct sockaddr_in from;
+		socklen_t flen;
+
+		if (pi >= 0 && (pfd[pi].revents & POLLIN)) {
+			flen = sizeof(from);
+			ssize_t got = recvfrom(plex, buf, sizeof(buf) - 1, 0,
+					       (struct sockaddr *)&from, &flen);
+			if (got > 0) {
+				buf[got] = '\0';
+				char name[128] = "Plex", port[16] = "32400";
+				gdm_field(buf, "Name", name, sizeof(name));
+				gdm_field(buf, "Port", port, sizeof(port));
+
+				char ip[INET_ADDRSTRLEN] = "";
+				inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
+				if (ip[0]) {
+					char url[256];
+					snprintf(url, sizeof(url), "http://%s:%s/web",
+						 ip, port);
+					servers_add(out, &n, max, "plex", name, url);
+				}
+			}
+		}
+
+		if (ji >= 0 && (pfd[ji].revents & POLLIN)) {
+			flen = sizeof(from);
+			ssize_t got = recvfrom(jelly, buf, sizeof(buf) - 1, 0,
+					       (struct sockaddr *)&from, &flen);
+			if (got > 0) {
+				buf[got] = '\0';
+				char name[128] = "Jellyfin", addr[256] = "";
+				json_str(buf, "Name", name, sizeof(name));
+				if (json_str(buf, "Address", addr, sizeof(addr)) &&
+				    url_ok(addr))
+					servers_add(out, &n, max, "jellyfin",
+						    name, addr);
+			}
+		}
+	}
+
+	if (plex >= 0) close(plex);
+	if (jelly >= 0) close(jelly);
+
+	/* …and this machine, which does not answer its own broadcast. */
+	if (port_open("127.0.0.1", 32400, 200))
+		servers_add(out, &n, max, "plex", "Plex (this machine)",
+			    "http://127.0.0.1:32400/web");
+	if (port_open("127.0.0.1", 8096, 200))
+		servers_add(out, &n, max, "jellyfin", "Jellyfin (this machine)",
+			    "http://127.0.0.1:8096");
+
+	return n;
+}
+
+#define MEDIA_MAX 12
+#define MEDIA_TTL 600		/* ten minutes: a server does not move often */
+
+/*
+ * The media servers, from the cache or from the network.
+ *
+ * Cached because this is on the path of drawing a screen. Nine hundred
+ * milliseconds is nothing when somebody asks for it and everything when it
+ * happens every time the television comes on; the shell asks for the cached
+ * answer immediately and refreshes behind it.
+ */
+static int big_media(bool rec, bool refresh)
+{
+	char path[4096];
+	if (!cache_path(path, sizeof(path), "media.tsv"))
+		return EX_FAIL;
+
+	long age = file_age(path);
+	if (!refresh && age >= 0 && age < MEDIA_TTL) {
+		if (rec) {
+			if (cache_print(path))
+				return EX_OK;
+		} else {
+			char *text = read_file(path);
+			if (text) {
+				/* The cache is records; print them as prose. */
+				char *save = NULL;
+				int row = 0;
+				for (char *ln = strtok_r(text, "\n", &save); ln;
+				     ln = strtok_r(NULL, "\n", &save)) {
+					if (row++ == 0)
+						continue;	/* the header */
+					char *tab = strchr(ln, '\t');
+					if (!tab) continue;
+					*tab = '\0';
+					char *name = pct_decode(tab + 1);
+					char *tab2 = strchr(name, '\t');
+					if (tab2) *tab2 = '\0';
+					printf("%-12s %s\n", ln, name);
+					free(name);
+				}
+				free(text);
+				return EX_OK;
+			}
+		}
+	}
+
+	server_t found[MEDIA_MAX];
+	int n = media_discover(found, MEDIA_MAX);
+
+	/* Built into a string first, so the same text is both printed and
+	 * cached and the two cannot drift. */
+	char *buf = NULL;
+	size_t len = 0;
+	FILE *mem = open_memstream(&buf, &len);
+	if (mem) {
+		rec_frow(mem, 5, "id", "name", "url", "source", "kind");
+		for (int i = 0; i < n; i++)
+			rec_frow(mem, 5, found[i].id, found[i].name,
+				 found[i].url, found[i].source, "server");
+		fclose(mem);
+	}
+
+	if (buf) {
+		/* A failed write is not a failed command: the answer is right
+		 * here, it just will not be remembered. */
+		mkdir_parents(path);
+		write_file_inplace(path, buf);
+	}
+
+	if (rec) {
+		if (buf)
+			fputs(buf, stdout);
+		else
+			rec_row(5, "id", "name", "url", "source", "kind");
+	} else if (n == 0) {
+		puts("no Plex or Jellyfin server answered on this network");
+	} else {
+		for (int i = 0; i < n; i++)
+			printf("%-12s %-28s %s\n", found[i].id, found[i].name,
+			       found[i].url);
+	}
+
+	free(buf);
+	return n ? EX_OK : EX_EMPTY;
+}
+
+/* The URL behind a media tile id, out of the cache. Used by `big run`, so
+ * that pressing a tile goes through the same one place every other tile does
+ * rather than the shell running a URL it was handed. */
+static bool media_url(const char *id, char *out, size_t n)
+{
+	char path[4096];
+	if (!cache_path(path, sizeof(path), "media.tsv"))
+		return false;
+
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool hit = false;
+	char *save = NULL;
+	int row = 0;
+	for (char *ln = strtok_r(text, "\n", &save); ln && !hit;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		if (row++ == 0)
+			continue;
+		char *f1 = strchr(ln, '\t');
+		if (!f1) continue;
+		*f1++ = '\0';
+		if (strcmp(ln, id) != 0)
+			continue;
+		char *f2 = strchr(f1, '\t');
+		if (!f2) continue;
+		f2++;
+		char *f3 = strchr(f2, '\t');
+		if (f3) *f3 = '\0';
+		char *url = pct_decode(f2);
+		if (url_ok(url)) {
+			snprintf(out, n, "%s", url);
+			hit = true;
+		}
+		free(url);
+	}
+
+	free(text);
+	return hit;
+}
+
+/* ── the news shelf ──────────────────────────────────────────────────────── */
+
+/*
+ * Headlines, on the shelf below the machine's own switches.
+ *
+ * ── Why RSS, and why curl ───────────────────────────────────────────────────
+ *
+ * RSS because it is the one thing every news source still emits that is not an
+ * API key, a rate limit and a terms-of-service — and because the same feeds
+ * are already what chibi reads on this system, so a machine's idea of "the
+ * news" is one thing rather than two. curl because this binary does not link
+ * an HTTP client and should not: TLS, redirects, proxies and a CA store are a
+ * library's worth of decisions, all of which curl has already made and every
+ * one of which would have to be maintained here.
+ *
+ * ⚠ Nothing here BLOCKS the television. The shell asks for the cache, which is
+ * a file read, and the fetch happens on a refresh behind it. A launcher that
+ * waits for the internet before it draws is a launcher that does not open when
+ * the internet is down.
+ */
+#define NEWS_TTL   1200		/* twenty minutes */
+#define NEWS_MAX   24
+#define NEWS_PER_FEED 8
+
+static const char *const default_feeds[] = {
+	"https://news.google.com/rss/search?q=video+games&hl=en-US&gl=US&ceid=US:en",
+	"https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
+	NULL
+};
+
+/* One `<tag>…</tag>` out of `item`, with CDATA unwrapped. Returns false if the
+ * tag is absent, which for a feed in the wild is normal rather than an error. */
+static bool xml_tag(const char *item, const char *tag, char *out, size_t n)
+{
+	char open[32], close[32];
+	snprintf(open, sizeof(open), "<%s>", tag);
+	snprintf(close, sizeof(close), "</%s>", tag);
+
+	const char *a = strstr(item, open);
+	if (!a)
+		return false;
+	a += strlen(open);
+	const char *b = strstr(a, close);
+	if (!b)
+		return false;
+
+	/* <![CDATA[ … ]]>, which is how half of these ship a title that has an
+	 * ampersand in it. */
+	if (strncmp(a, "<![CDATA[", 9) == 0) {
+		a += 9;
+		const char *end = strstr(a, "]]>");
+		if (end && end < b)
+			b = end;
+	}
+
+	size_t len = (size_t)(b - a);
+	if (len >= n)
+		len = n - 1;
+	memcpy(out, a, len);
+	out[len] = '\0';
+	return true;
+}
+
+/*
+ * XML entities, in place.
+ *
+ * Only the five that are defined in XML itself plus the numeric forms — a feed
+ * that uses an HTML entity is a feed that is already wrong, and a table of 253
+ * of them would be a table to maintain. `&amp;` is the one that actually
+ * matters: it is in nearly every Google News link.
+ */
+static void xml_unescape(char *s)
+{
+	char *w = s;
+	for (char *r = s; *r; ) {
+		if (*r != '&') { *w++ = *r++; continue; }
+
+		if (strncmp(r, "&amp;", 5) == 0)       { *w++ = '&';  r += 5; continue; }
+		if (strncmp(r, "&lt;", 4) == 0)        { *w++ = '<';  r += 4; continue; }
+		if (strncmp(r, "&gt;", 4) == 0)        { *w++ = '>';  r += 4; continue; }
+		if (strncmp(r, "&quot;", 6) == 0)      { *w++ = '"';  r += 6; continue; }
+		if (strncmp(r, "&apos;", 6) == 0)      { *w++ = '\''; r += 6; continue; }
+
+		if (r[1] == '#') {
+			int base = (r[2] == 'x' || r[2] == 'X') ? 16 : 10;
+			char *end = NULL;
+			long v = strtol(r + (base == 16 ? 3 : 2), &end, base);
+			if (end && *end == ';' && v > 0 && v < 0x110000) {
+				/* UTF-8 out, because everything downstream —
+				 * the record encoding, the QML — is UTF-8. */
+				if (v < 0x80) {
+					*w++ = (char)v;
+				} else if (v < 0x800) {
+					*w++ = (char)(0xC0 | (v >> 6));
+					*w++ = (char)(0x80 | (v & 0x3F));
+				} else if (v < 0x10000) {
+					*w++ = (char)(0xE0 | (v >> 12));
+					*w++ = (char)(0x80 | ((v >> 6) & 0x3F));
+					*w++ = (char)(0x80 | (v & 0x3F));
+				} else {
+					*w++ = (char)(0xF0 | (v >> 18));
+					*w++ = (char)(0x80 | ((v >> 12) & 0x3F));
+					*w++ = (char)(0x80 | ((v >> 6) & 0x3F));
+					*w++ = (char)(0x80 | (v & 0x3F));
+				}
+				r = end + 1;
+				continue;
+			}
+		}
+
+		*w++ = *r++;
+	}
+	*w = '\0';
+}
+
+/* The feeds to read: one URL per line in the config, or the two defaults. */
+static int news_feeds(char feeds[][512], int max)
+{
+	int n = 0;
+	char path[4096];
+
+	if (config_path(path, sizeof(path), "syn-arcade/news.conf")) {
+		char *text = read_file(path);
+		if (text) {
+			char *save = NULL;
+			for (char *ln = strtok_r(text, "\n", &save);
+			     ln && n < max; ln = strtok_r(NULL, "\n", &save)) {
+				char *t = trim(ln);
+				if (!*t || *t == '#')
+					continue;
+				if (!url_ok(t)) {
+					fprintf(stderr, "syn-arcade: %s: "
+						"ignoring '%s' — not an http(s) "
+						"URL\n", path, t);
+					continue;
+				}
+				snprintf(feeds[n++], 512, "%s", t);
+			}
+			free(text);
+			if (n)
+				return n;
+		}
+	}
+
+	for (int i = 0; default_feeds[i] && n < max; i++)
+		snprintf(feeds[n++], 512, "%s", default_feeds[i]);
+	return n;
+}
+
+typedef struct {
+	char title[300];
+	char source[96];
+	char link[1024];
+} news_t;
+
+/*
+ * Google News titles arrive as "Headline - Publisher", which is a fact about
+ * that feed and not about RSS. Splitting it gives a shelf where the publisher
+ * is a small line under a large headline instead of thirty tiles that all end
+ * in a dash and a name.
+ *
+ * Only for that host, because in any other feed a trailing " - something" is
+ * part of the headline and cutting it would be editing somebody's copy.
+ */
+static void news_split_source(const char *feed, news_t *it)
+{
+	if (!strstr(feed, "news.google.com"))
+		return;
+
+	char *dash = NULL;
+	for (char *p = it->title; *p; p++)
+		if (p[0] == ' ' && p[1] == '-' && p[2] == ' ')
+			dash = p;
+	if (!dash)
+		return;
+
+	const char *pub = dash + 3;
+	if (!*pub || strlen(pub) > 48)
+		return;			/* that dash was part of the headline */
+
+	snprintf(it->source, sizeof(it->source), "%s", pub);
+	*dash = '\0';
+}
+
+static int news_fetch(news_t *out, int max)
+{
+	char feeds[8][512];
+	int nf = news_feeds(feeds, 8);
+	int n = 0;
+
+	for (int f = 0; f < nf && n < max; f++) {
+		char *argv[] = {
+			(char *)"curl", (char *)"-fsSL",
+			(char *)"--max-time", (char *)"8",
+			(char *)"-A", (char *)"syn-arcade/1.0",
+			feeds[f], NULL
+		};
+		char *body = run_capture(argv, 12);
+		if (!body)
+			continue;
+
+		const char *p = body;
+		int taken = 0;
+		while (taken < NEWS_PER_FEED && n < max) {
+			const char *a = strstr(p, "<item");
+			if (!a) break;
+			a = strchr(a, '>');
+			if (!a) break;
+			a++;
+			const char *b = strstr(a, "</item>");
+			if (!b) break;
+
+			size_t len = (size_t)(b - a);
+			char *item = xmalloc(len + 1);
+			memcpy(item, a, len);
+			item[len] = '\0';
+
+			news_t it;
+			memset(&it, 0, sizeof(it));
+			if (xml_tag(item, "title", it.title, sizeof(it.title)) &&
+			    xml_tag(item, "link", it.link, sizeof(it.link))) {
+				xml_unescape(it.title);
+				xml_unescape(it.link);
+				news_split_source(feeds[f], &it);
+				if (url_ok(it.link) && it.title[0]) {
+					out[n++] = it;
+					taken++;
+				}
+			}
+
+			free(item);
+			p = b + 7;
+		}
+		free(body);
+	}
+	return n;
+}
+
+static int big_news(bool rec, bool refresh)
+{
+	char path[4096];
+	if (!cache_path(path, sizeof(path), "news.tsv"))
+		return EX_FAIL;
+
+	long age = file_age(path);
+	if (!refresh && age >= 0 && age < NEWS_TTL && rec) {
+		if (cache_print(path))
+			return EX_OK;
+	}
+
+	if (!net_allowed() && !rec) {
+		fputs("syn-arcade: the network is turned off for this run "
+		      "(SYN_ARCADE_NO_NET)\n", stderr);
+		return EX_EMPTY;
+	}
+
+	news_t items[NEWS_MAX];
+	int n = net_allowed() ? news_fetch(items, NEWS_MAX) : 0;
+
+	/*
+	 * ⚠ A fetch that came back with NOTHING must not overwrite the cache.
+	 *
+	 * The common reason for nothing is that the machine is not on the
+	 * internet yet — a television switched on before the Wi-Fi came up —
+	 * and replacing yesterday's headlines with an empty file turns a shelf
+	 * that is merely stale into a shelf that is gone, until the next
+	 * refresh happens to succeed. Old news is better than no news.
+	 */
+	if (n == 0) {
+		if (rec && cache_print(path))
+			return EX_OK;
+		if (rec) {
+			rec_row(5, "id", "title", "source", "link", "feed");
+			return EX_EMPTY;
+		}
+		fputs("syn-arcade: no headlines — is this machine online?\n",
+		      stderr);
+		return EX_EMPTY;
+	}
+
+	char *buf = NULL;
+	size_t len = 0;
+	FILE *mem = open_memstream(&buf, &len);
+	if (mem) {
+		rec_frow(mem, 5, "id", "title", "source", "link", "feed");
+		for (int i = 0; i < n; i++) {
+			char id[32];
+			snprintf(id, sizeof(id), "news-%d", i);
+			rec_frow(mem, 5, id, items[i].title, items[i].source,
+				 items[i].link, "news");
+		}
+		fclose(mem);
+	}
+
+	if (buf) {
+		mkdir_parents(path);
+		write_file_inplace(path, buf);
+	}
+
+	if (rec) {
+		if (buf)
+			fputs(buf, stdout);
+	} else {
+		for (int i = 0; i < n; i++)
+			printf("%-56.56s  %s\n", items[i].title,
+			       items[i].source[0] ? items[i].source : "");
+		printf("\n%d headline%s\n", n, n == 1 ? "" : "s");
+	}
+
+	free(buf);
+	return EX_OK;
+}
+
+/* ── typing, for the on-screen keyboard ──────────────────────────────────── */
+
+/*
+ * `syn-arcade big keys` — read what to type on stdin, one instruction a line,
+ * and type it into whatever is focused.
+ *
+ * ── Why wtype and not another Wayland client ────────────────────────────────
+ *
+ * The pointer half of this feature (vptr.c) had to be written, because nothing
+ * on the system could move a pointer. The keyboard half did not: wtype speaks
+ * virtual-keyboard-v1, ships on every SynapseOS install and on the ISO, and
+ * the desktop's own start menu already drives compositor keybinds through it.
+ * A second implementation of "press a key" would be a second set of keymap
+ * bugs for no gain.
+ *
+ * ── Why it is a stream and not one process per key ──────────────────────────
+ *
+ * The shell would otherwise have to start a process per keystroke from QML,
+ * where the natural spelling — set `command`, set `running` — silently drops a
+ * press that arrives while the last one is still going. Here the shell writes
+ * a line, and this decides what that means. It also puts the argument checking
+ * in C: a keysym name is matched against a strict set before it is passed on,
+ * so nothing typed on a television becomes an option to another program.
+ *
+ * The instructions, one per line:
+ *
+ *   t <percent-encoded text>   type it literally
+ *   k <keysym>                 press one key by XKB name — Return, BackSpace
+ *   c <keysym>                 the same with ctrl held — c l is Ctrl+L
+ */
+static bool keysym_ok(const char *s)
+{
+	if (!s || !*s || strlen(s) > 32)
+		return false;
+	for (const char *p = s; *p; p++)
+		if (!isalnum((unsigned char)*p) && *p != '_')
+			return false;
+	return true;
+}
+
+static int keys_stream(void)
+{
+	if (!have("wtype")) {
+		fputs("syn-arcade: wtype is not installed — the on-screen "
+		      "keyboard needs it to type\n", stderr);
+		return EX_FAIL;
+	}
+
+	char line[4096];
+	while (fgets(line, sizeof(line), stdin)) {
+		strip_trailing_newline(line);
+		if (!line[0])
+			continue;
+
+		char verb = line[0];
+		char *arg = line[1] == ' ' ? line + 2 : NULL;
+		if (!arg || !*arg)
+			continue;
+
+		char *argv[16];
+		int argc = 0;
+		char *text = NULL;
+
+		if (verb == 't') {
+			text = pct_decode(arg);
+			argv[argc++] = (char *)"wtype";
+			/* ⚠ The separator is not optional: somebody typing a
+			 * hyphen into a search box would otherwise be handing
+			 * wtype an option. */
+			argv[argc++] = (char *)"--";
+			argv[argc++] = text;
+		} else if (verb == 'k' || verb == 'c') {
+			if (!keysym_ok(arg))
+				continue;
+			argv[argc++] = (char *)"wtype";
+			if (verb == 'c') {
+				argv[argc++] = (char *)"-M";
+				argv[argc++] = (char *)"ctrl";
+			}
+			argv[argc++] = (char *)"-k";
+			argv[argc++] = arg;
+			if (verb == 'c') {
+				argv[argc++] = (char *)"-m";
+				argv[argc++] = (char *)"ctrl";
+			}
+		} else {
+			continue;
+		}
+		argv[argc] = NULL;
+
+		/*
+		 * Waited for, unlike everything else this file starts. Two
+		 * wtype processes racing would deliver keys out of order — and
+		 * on a keyboard, order is the entire content. It is a
+		 * millisecond either way at the speed a thumb moves.
+		 */
+		pid_t pid = fork();
+		if (pid == 0) {
+			int null = open("/dev/null", O_RDWR);
+			if (null >= 0) {
+				dup2(null, STDIN_FILENO);
+				dup2(null, STDOUT_FILENO);
+				if (null > STDERR_FILENO)
+					close(null);
+			}
+			execvp(argv[0], argv);
+			_exit(127);
+		}
+		if (pid > 0) {
+			int st = 0;
+			waitpid(pid, &st, 0);
+		}
+		free(text);
+	}
+	return EX_OK;
 }
 
 /* ── the shell ───────────────────────────────────────────────────────────── */
@@ -1250,21 +2459,213 @@ static int big_stop(void)
 	return EX_OK;
 }
 
+/* ── talking to a big screen mode that is already running ────────────────── */
+
+/*
+ * A named pipe, and why there is now an IPC channel where there deliberately
+ * was not one.
+ *
+ * The first version of this file argued that `toggle` should be stop-or-start,
+ * because keeping the shell resident to hide it would cost a QML engine and a
+ * library scan for the whole session and needed a channel between the
+ * compositor's keybind and a process that might not exist.
+ *
+ * That argument is now wrong, and it is worth saying why rather than quietly
+ * reversing it. Big screen mode has to STEP ASIDE for the browser, the
+ * terminal and the controller window and then come BACK — that is the whole
+ * point of a console interface, and quitting outright is exactly what made it
+ * feel broken ("I opened the controller mapping and it just closed"). Coming
+ * back means being alive while away, so the process is resident regardless;
+ * once it is, a key that stops it rather than showing it is the wrong key.
+ *
+ * A FIFO rather than a socket because the whole protocol is one word, and
+ * because the failure case has to be silent and immediate: a writer opening
+ * O_WRONLY | O_NONBLOCK with nobody reading gets ENXIO instantly, which is
+ * precisely the question being asked — "is there a shell listening?" — and
+ * needs no timeout and no cleanup. $XDG_RUNTIME_DIR is a tmpfs logind wipes at
+ * logout, so a stale one cannot outlive the session that made it.
+ */
+static bool big_ctl_path(char *buf, size_t n)
+{
+	const char *run = getenv("XDG_RUNTIME_DIR");
+	if (run && *run)
+		return snprintf(buf, n, "%s/syn-arcade-big.ctl", run) < (int)n;
+	return snprintf(buf, n, "/tmp/syn-arcade-big-%u.ctl",
+			(unsigned)getuid()) < (int)n;
+}
+
+/* Send one word to a running shell. False means nobody is listening — which is
+ * not an error, it is how an older shell (or none) is detected. */
+static bool big_ctl_send(const char *word)
+{
+	char path[4096];
+	if (!big_ctl_path(path, sizeof(path)))
+		return false;
+
+	int fd = open(path, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+	if (fd < 0)
+		return false;		/* ENXIO: no reader. ENOENT: no fifo. */
+
+	char line[64];
+	int len = snprintf(line, sizeof(line), "%s\n", word);
+	ssize_t w = write(fd, line, (size_t)len);
+	close(fd);
+	return w == len;
+}
+
+/*
+ * The other end: print what arrives, one word a line, until the shell goes.
+ *
+ * ⚠ Opened O_RDWR, which looks wrong for a reader and is the only thing that
+ * makes this work. A FIFO opened read-only reports end-of-file the moment the
+ * last writer closes — and every writer here is a one-shot `big show` that
+ * closes immediately — so the poll would come back readable forever with
+ * nothing to read, spinning a core for the rest of the session. Holding a
+ * write end ourselves means there is always a writer and EOF never arrives.
+ */
+static int big_listen(void)
+{
+	char path[4096];
+	if (!big_ctl_path(path, sizeof(path)))
+		return EX_FAIL;
+
+	if (mkfifo(path, 0600) != 0 && errno != EEXIST) {
+		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		return EX_FAIL;
+	}
+
+	int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+	if (fd < 0) {
+		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		return EX_FAIL;
+	}
+
+	char buf[256];
+	size_t used = 0;
+
+	for (;;) {
+		struct pollfd pfd[2];
+		pfd[0].fd = fd;
+		pfd[0].events = POLLIN;
+		pfd[0].revents = 0;
+		/* The shell's pipe. When quickshell goes, so does this. */
+		pfd[1].fd = STDOUT_FILENO;
+		pfd[1].events = 0;
+		pfd[1].revents = 0;
+
+		int r = poll(pfd, 2, -1);
+		if (r < 0 && errno != EINTR)
+			break;
+		if (pfd[1].revents & (POLLERR | POLLHUP | POLLNVAL))
+			break;
+		if (!(pfd[0].revents & POLLIN))
+			continue;
+
+		ssize_t got = read(fd, buf + used, sizeof(buf) - used - 1);
+		if (got <= 0)
+			continue;
+		used += (size_t)got;
+		buf[used] = '\0';
+
+		char *start = buf, *nl;
+		while ((nl = strchr(start, '\n'))) {
+			*nl = '\0';
+			if (*start) {
+				puts(start);
+				fflush(stdout);
+			}
+			start = nl + 1;
+		}
+
+		/* Keep any partial line, drop anything absurd. */
+		used = strlen(start);
+		if (used >= sizeof(buf) - 1)
+			used = 0;
+		else
+			memmove(buf, start, used + 1);
+
+		if (ferror(stdout))
+			break;
+	}
+
+	close(fd);
+	return EX_OK;
+}
+
+/*
+ * Show, hide, or the key's own behaviour.
+ *
+ * `toggle` is what Super+F10 runs, and it now has three answers rather than
+ * two:
+ *
+ *   nothing running          start it
+ *   running and listening    tell it to show or hide itself
+ *   running, no listener     stop it — an older shell, or one that has not got
+ *                            as far as opening the channel yet. Falling back
+ *                            to the old behaviour is better than a key that
+ *                            silently does nothing.
+ */
 static int big_toggle(const char *output)
 {
-	/*
-	 * Toggle is stop-or-start, not show-or-hide, and that is a deliberate
-	 * trade. Keeping the shell resident and hiding it would save the ~300ms
-	 * quickshell takes to come up — and would keep a full-screen surface,
-	 * its QML engine and its library scan alive for the entire session for
-	 * the sake of it, on a desktop where the same key has to work when
-	 * nothing has started it yet. Starting it is also the only behaviour
-	 * that needs no IPC channel between the compositor's keybind and a
-	 * process that may not exist.
-	 */
-	if (big_running(NULL))
-		return big_stop();
-	return big_start(output, false);
+	if (!big_running(NULL))
+		return big_start(output, false);
+	if (big_ctl_send("toggle"))
+		return EX_OK;
+	return big_stop();
+}
+
+static int big_show_hide(const char *word, const char *output)
+{
+	if (!big_running(NULL)) {
+		/* "Show it" with nothing running means start it. Anything else
+		 * has nothing to act on. */
+		if (strcmp(word, "show") == 0)
+			return big_start(output, false);
+		fputs("syn-arcade: big screen mode is not running\n", stderr);
+		return EX_FAIL;
+	}
+
+	if (big_ctl_send(word))
+		return EX_OK;
+
+	fputs("syn-arcade: big screen mode is running but is not listening — "
+	      "it predates this command\n", stderr);
+	return EX_FAIL;
+}
+
+/* ── the guide button, from the desktop ──────────────────────────────────── */
+
+/*
+ * The reverse of the Guide tile.
+ *
+ * Guide inside big screen mode takes you to the desktop; this is what makes
+ * Guide on the desktop bring big screen mode back, which is the half a console
+ * has and a desktop does not. It is a session-long process because there is
+ * nothing else to hang it on: the button is on a USB device, not on the
+ * compositor, so somebody has to be holding the pads open and reading them
+ * when none of our windows exist.
+ *
+ * ⚠ It starts big screen mode DETACHED. This process must not become
+ * quickshell — it has to still be here for the next press.
+ */
+static bool guard_running(void)
+{
+	return big_running(NULL);
+}
+
+static void guard_press(void)
+{
+	big_start(NULL, true);
+}
+
+static int big_guard(void)
+{
+	if (!getenv("WAYLAND_DISPLAY")) {
+		fputs("syn-arcade: no Wayland session — `big guard` opens big "
+		      "screen mode and needs one\n", stderr);
+		return EX_FAIL;
+	}
+	return pads_guide_watch(guard_running, guard_press);
 }
 
 static int big_status(bool rec)
@@ -1282,6 +2683,7 @@ static int big_status(bool rec)
 	}
 
 	bool autostart = binds_autostart_get();
+	bool guide = binds_guard_get();
 
 	char pidbuf[32] = "-";
 	if (running && pid > 0)
@@ -1296,6 +2698,8 @@ static int big_status(bool rec)
 		rec_row(3, "pid", pidbuf, "detail");
 		rec_row(3, "at login", autostart ? "on" : "off",
 			autostart ? "action:autostart-off" : "action:autostart-on");
+		rec_row(3, "guide button", guide ? "on" : "off",
+			guide ? "action:guide-off" : "action:guide-on");
 		rec_row(3, "Steam", steam_found ? root : "NOT FOUND", "detail");
 		rec_row(3, "games", gamebuf, "detail");
 		rec_row(3, "gamescope", have("gamescope") ? "installed"
@@ -1310,6 +2714,8 @@ static int big_status(bool rec)
 	       running && pid > 0 ? "  pid " : "",
 	       running && pid > 0 ? pidbuf : "");
 	printf("  at login       %s\n", autostart ? "on" : "off");
+	printf("  guide button   %s\n", guide ? "on — opens this from the desktop"
+	     : "off (`syn-arcade big guide on`)");
 	printf("  Steam          %s\n", steam_found ? root
 	     : "NOT FOUND — the library tiles will be empty");
 	printf("  games          %d\n", games);
@@ -1367,13 +2773,40 @@ int cmd_big(int argc, char **argv)
 		return big_stop();
 	if (!strcmp(sub, "toggle"))
 		return big_toggle(opt_value(rest_c, rest, "--output"));
+	if (!strcmp(sub, "show") || !strcmp(sub, "hide"))
+		return big_show_hide(sub, opt_value(rest_c, rest, "--output"));
+	if (!strcmp(sub, "listen"))
+		return big_listen();
+	if (!strcmp(sub, "guard"))
+		return big_guard();
 
 	if (!strcmp(sub, "games"))
 		return big_games(rec, opt_present(rest_c, rest, "--all"));
 	if (!strcmp(sub, "apps"))
 		return big_apps(rec);
 	if (!strcmp(sub, "run"))
-		return big_run(first_operand(rest_c, rest));
+		return big_run(first_operand(rest_c, rest),
+			       opt_present(rest_c, rest, "--wait"));
+	if (!strcmp(sub, "open"))
+		return big_open(first_operand(rest_c, rest),
+				opt_present(rest_c, rest, "--wait"));
+
+	if (!strcmp(sub, "news"))
+		return big_news(rec, opt_present(rest_c, rest, "--refresh"));
+	if (!strcmp(sub, "media"))
+		return big_media(rec, opt_present(rest_c, rest, "--refresh"));
+
+	/* The on-screen keyboard's typist, and the controller-as-mouse. Both
+	 * are streams the shell owns for as long as it needs them; neither is
+	 * something to run by hand, and both stop when their pipe goes. */
+	if (!strcmp(sub, "keys"))
+		return keys_stream();
+	if (!strcmp(sub, "mouse")) {
+		const char *out = opt_value(rest_c, rest, "--output");
+		if (!out)
+			out = getenv("SYN_BIG_OUTPUT");
+		return pads_mouse_stream(out);
+	}
 
 	if (!strcmp(sub, "steam")) {
 		const char *gs = NULL;
@@ -1391,6 +2824,30 @@ int cmd_big(int argc, char **argv)
 	 * implementation. */
 	if (!strcmp(sub, "nav"))
 		return pads_nav_stream();
+
+	/* `big guide on|off` — the same setting `binds guide` writes, named
+	 * here too because it is a big screen mode feature and this is where
+	 * somebody will look for it. */
+	if (!strcmp(sub, "guide")) {
+		const char *arg = first_operand(rest_c, rest);
+		if (!arg || !strcmp(arg, "status")) {
+			bool on = binds_guard_get();
+			if (rec) {
+				rec_row(3, "field", "value", "action");
+				rec_row(3, "guide button", on ? "on" : "off",
+					on ? "action:guide-off" : "action:guide-on");
+			} else {
+				puts(on ? "on" : "off");
+			}
+			return EX_OK;
+		}
+		if (!strcmp(arg, "on") || !strcmp(arg, "off"))
+			return binds_guard_set(strcmp(arg, "on") == 0);
+
+		fprintf(stderr, "syn-arcade: big guide takes on, off or status "
+				"(not '%s')\n", arg);
+		return EX_USAGE;
+	}
 
 	if (!strcmp(sub, "autostart")) {
 		const char *arg = first_operand(rest_c, rest);

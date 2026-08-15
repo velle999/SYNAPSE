@@ -62,6 +62,70 @@
 # long as it is up and reads nothing into anything. Big screen mode never had
 # the bug: `big nav` already holds the whole set across its rescan loop.
 #
+# ── 0.1.0-6: big screen mode STEPS ASIDE instead of closing ─────────────────
+#
+# The one thing that made it feel unfinished. Every tile called Qt.quit(), so
+# opening the controller window or the browser CLOSED the television interface
+# and getting back to it meant finding a keyboard. A console does not do that:
+# it goes away while you use the thing, and it comes back.
+#
+# So the shell now stays alive and unmaps its surface, and there are three ways
+# back: the application exiting (`big run <id> --wait` lives exactly as long as
+# what it started), the GUIDE button at any time, and `big show`.
+#
+#   ⚠ A launcher that returns IMMEDIATELY is a hand-off, not a close. Firefox
+#     and Steam are single-instance: started while already running, the second
+#     process passes its arguments to the first over a socket and exits. Taking
+#     that as "they finished" would throw the television back over a browser
+#     somebody just opened — reliably, and only on the machines where it was
+#     already running. Under three seconds is treated as a hand-off.
+#
+#   ⚠ UNMAPPED, not transparent. A full-screen overlay-layer surface left on
+#     top of a game is a composite pass per frame and the end of direct
+#     scanout, for a screen nobody can see.
+#
+# And the reverse of the Guide tile: `big guard`, an autostart in the same
+# managed synuirc block, watches the pad while big screen mode is NOT running
+# so the guide button opens it from the desktop. It deliberately does nothing
+# while the shell is up — the shell's own `big nav` is reading the same button,
+# and both acting on one press is a race that either bounces the interface or
+# starts two. It holds every pad open too, which is `pads hold`'s job for free.
+# ⚠ An autostart only starts at the NEXT LOGIN; nothing can add one to a
+# session that is already running.
+#
+# ── …and the four things that needed it ─────────────────────────────────────
+#
+#   · THE CONTROLLER AS A MOUSE, for the browser. `big mouse` is the one place
+#     in this package that synthesises input, and it is bounded: a separate
+#     process, started only while a pointer-driven application is on screen,
+#     killed when the interface comes back, and it moves a POINTER rather than
+#     pressing keys — stick drift moves a visible cursor instead of typing into
+#     every text field on the machine. It goes through virtual-pointer-v1,
+#     which synui had to grow for this (and treats as a privileged global, so
+#     a sandboxed client cannot do it).
+#   · AN ON-SCREEN KEYBOARD, console style, opened with Start and closed with B
+#     or its own Close key. It types through wtype — which already ships here
+#     and already speaks virtual-keyboard-v1 — over one long-lived stream
+#     rather than a process per key. ⚠ Its window takes NO keyboard focus: the
+#     whole job is typing into the window underneath, and a surface that
+#     grabbed the keyboard to draw a keyboard would type into itself.
+#   · A NEWS SHELF below the system row, from RSS via curl, cached for twenty
+#     minutes. ⚠ A fetch that comes back empty does not overwrite the cache:
+#     the usual reason for empty is a television switched on before the Wi-Fi
+#     came up, and old news beats no news.
+#   · MEDIA: a Music tile for whichever player is installed, and Plex and
+#     Jellyfin servers found on the network — Plex by its GDM M-SEARCH to
+#     239.0.0.250:32414 (the address is the SENDER's, not in the reply), and
+#     Jellyfin by the literal string "who is JellyfinServer?" on port 7359.
+#     Both are also asked over broadcast, because plenty of home networks do
+#     not forward multicast, and localhost is probed directly afterwards
+#     because a server does not reliably answer its own broadcast.
+#
+# A Terminal tile too, which is `syntty` first for the same reason everything
+# else here is: a big screen tile that opened a different terminal from
+# Super+Return is the kind of small inconsistency that makes a desktop feel
+# assembled rather than designed.
+#
 # ⚠ Its controller navigation SYNTHESISES NOTHING. `syn-arcade big nav` reads
 # the event nodes udev already grants this user and writes WORDS — "up",
 # "accept" — down a pipe that exactly one process is reading. The obvious
@@ -112,14 +176,14 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
 
-# Nothing but libc for the tool itself. The three libraries it does NOT link
-# are each a deliberate choice:
+# libc, and since 0.1.0-6 libwayland-client. The three libraries it still does
+# NOT link are each a deliberate choice:
 #
 #   libSDL     the natural way to read a gamepad, and it would pull a graphics
 #              stack into a tool that has to work over SSH. The kernel already
@@ -128,7 +192,19 @@ license=('GPL-2.0-or-later')
 #   libudev    the same list behind a library and a daemon, with nothing here
 #              needing hotplug events.
 #   libevdev   a wrapper over the six ioctls pad.c uses.
-depends=('glibc')
+#
+# wayland is here for exactly one command — `big mouse`, the controller as a
+# pointer — because a web browser on a television takes pointer events and
+# there is no way to give it any without being a Wayland client. Everything
+# else in the binary still works with no display at all; `big mouse` says so
+# and exits if there is no session.
+depends=('glibc' 'wayland')
+
+# The news shelf shells out to curl rather than linking an HTTP client: TLS,
+# redirects, proxies and a CA store are a library's worth of decisions, all of
+# which curl has already made. Named here even though pacman itself pulls curl
+# in, because this calls the BINARY by name.
+depends+=('curl')
 
 # ⚠ A hard dependency, not an optdepend, and the reasoning is syn-disks'
 # rather than a preference: without MangoHud the overlay tab of this
@@ -137,13 +213,24 @@ depends=('glibc')
 # ~2MB package from `extra` that anything else gaming-related pulls in anyway.
 depends+=('mangohud')
 
-makedepends=('meson' 'ninja' 'gcc')
+# wayland ships wayland-scanner, which generates the client bindings for the
+# vendored wlr-virtual-pointer protocol in protocols/. ⚠ The XML is vendored
+# rather than taken from the wlr-protocols package, which is NOT installed on a
+# stock SynapseOS box: depending on it would make the tree unbuildable on the
+# machine it ships to for the sake of one 150-line MIT file.
+makedepends=('meson' 'ninja' 'gcc' 'wayland')
 
 optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mode'
-            'synui: the compositor the gaming shortcuts are installed into'
+            'wtype: big screen mode’s on-screen keyboard types through it — without it the keyboard draws and types nothing'
+            'synui: the compositor the gaming shortcuts are installed into. ⚠ `big mouse` needs a synui new enough to offer zwlr_virtual_pointer_manager_v1 (0.1.0-327 or later); it says so if not'
+            'firefox: the Web tile, and where a headline or a media server opens'
             'steam: the game library and Big Picture tiles in big screen mode'
             'gamescope: `big steam --gamescope` — a nested compositor for a TV whose resolution is not the desktop’s'
             'retroarch: appears as a tile in big screen mode'
+            'syntty: the Terminal tile (kitty, foot, alacritty and xterm are used in that order if it is absent)'
+            'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order)'
+            'plex-desktop: the Plex tile — a Plex server on the network is found by broadcast either way'
+            'jellyfin-media-player: the Jellyfin tile, likewise'
             'antimicrox: build a controller mapping by pressing every button'
             'sdl2-compat: SDL2 games that read the controller mappings'
             'sdl3: SDL3 games that read the controller mappings')

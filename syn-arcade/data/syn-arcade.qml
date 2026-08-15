@@ -610,6 +610,14 @@ FloatingWindow {
                         label: "At login"
                         value: root.bindFields["big screen at login"] || "—"
                     }
+                    // The pad's GUIDE button, from the desktop. Big screen
+                    // mode's own Guide takes you out to the desktop; the
+                    // watcher this row controls is what brings it back — so
+                    // the two halves of one button are one row here.
+                    FieldRow {
+                        label: "Guide button"
+                        value: root.bindFields["guide button"] || "—"
+                    }
 
                     RowLayout {
                         Layout.topMargin: 6
@@ -631,6 +639,13 @@ FloatingWindow {
                                   ? "Don't start at login" : "Start at login"
                             onTriggered: root.run(["big", "autostart",
                                 root.bindFields["big screen at login"] === "on"
+                                    ? "off" : "on"])
+                        }
+                        ArcButton {
+                            text: root.bindFields["guide button"] === "on"
+                                  ? "Guide button off" : "Guide button on"
+                            onTriggered: root.run(["big", "guide",
+                                root.bindFields["guide button"] === "on"
                                     ? "off" : "on"])
                         }
                     }

@@ -9,9 +9,18 @@ conf.set_quoted('SYNARCADE_DATADIR',
                 get_option('prefix') / get_option('datadir') / 'syn-arcade')
 configure_file(output: 'config.h', configuration: conf)
 
-# No dependencies but libc, on purpose, and it is worth saying why for each of
-# the three obvious ones this does NOT link:
+# ONE dependency beyond libc — libwayland-client — and it is worth saying why
+# it is here and why the three obvious ones still are not:
 #
+#   wayland-client  big screen mode's `big mouse` drives the compositor's
+#               POINTER from a gamepad stick, because a web browser on a
+#               television takes pointer events and there is no other way to
+#               give it any. That is a Wayland protocol
+#               (zwlr_virtual_pointer_v1) and therefore a Wayland client; no
+#               tool on the system does it, the way wtype does for the
+#               keyboard. Everything else in this binary still works with no
+#               display at all, over SSH — only `big mouse` needs a session,
+#               and it says so and exits if there is not one.
 #   libSDL      would be the natural way to read a gamepad, and would pull a
 #               graphics stack into a tool that has to work over SSH. The
 #               kernel already describes every attached device in
@@ -20,6 +29,26 @@ configure_file(output: 'config.h', configuration: conf)
 #   libudev     the same list, behind a library and a daemon, with nothing
 #               here needing hotplug events.
 #   libevdev    a wrapper over the ioctls in pad.c. Six of them are used.
+wayland_client = dependency('wayland-client')
+wayland_scanner = find_program('wayland-scanner')
+
+# ⚠ VENDORED, not taken from the wlr-protocols package, and deliberately: that
+# package is not installed on a stock SynapseOS box (nothing else needs it),
+# so depending on it would make this tree unbuildable on the machine it ships
+# to for the sake of one 150-line file. It is MIT, its copyright header is
+# intact, and it is never to be relicensed — see the licensing policy.
+virtual_pointer_xml = 'protocols/wlr-virtual-pointer-unstable-v1.xml'
+
+virtual_pointer_header = custom_target('wlr-virtual-pointer-client-header',
+  input: virtual_pointer_xml,
+  output: 'wlr-virtual-pointer-unstable-v1-client-protocol.h',
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+virtual_pointer_code = custom_target('wlr-virtual-pointer-private-code',
+  input: virtual_pointer_xml,
+  output: 'wlr-virtual-pointer-unstable-v1-protocol.c',
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 sources = files(
   'src/main.c',
   'src/util.c',
@@ -28,9 +57,12 @@ sources = files(
   'src/binds.c',
   'src/sdlmap.c',
   'src/big.c',
+  'src/vptr.c',
 )
 
-executable('syn-arcade', sources,
+executable('syn-arcade',
+  sources + [virtual_pointer_header, virtual_pointer_code],
+  dependencies: [wayland_client],
   include_directories: include_directories('include', '.'),
   install: true)
 
