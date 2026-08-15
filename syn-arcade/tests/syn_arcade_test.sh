@@ -47,9 +47,30 @@ check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 # itself rather than grep's verdict. Capture first, match second; `says` always
 # exits 0, so the only status the caller sees is grep's.
 #
-# It also stops `grep -q` closing the pipe early and killing the binary with
+# It also stops `grep -q` closing the pipe early and killing the BINARY with
 # SIGPIPE partway through writing its output.
-says() { local out; out=$("$@" 2>&1); printf '%s\n' "$out"; }
+#
+# ⚠ Taking the binary out of the pipe did not take the WRITER out of it, and
+# that cost a failed `syn-update` on 2026-08-15. `grep -q` exits the instant it
+# matches, which closes this pipe while the printf below may still be in
+# flight; the printf then dies of SIGPIPE, and 141 at the end of a pipeline is
+# exactly what `set -o pipefail` reports. So a PASSING assertion is reported as
+# a failure — a different one each run, roughly half of all runs, and more the
+# busier the machine, which is why it surfaced under makepkg rather than here.
+# `meson test` failing is a BUILD failure, so this was three random red lines
+# in the middle of a package build with nothing wrong with the package.
+#
+# Ignoring PIPE turns that death into a failed write, which is discarded. The
+# status the caller sees is grep's verdict, which is the whole point of says().
+# Diagnosis worth repeating: print the numeric status in `bad()` — "141" says
+# SIGPIPE and ends the guessing immediately, where the assertion names look
+# random and suggest a dozen wrong theories.
+says() {
+    local out; out=$("$@" 2>&1)
+    trap '' PIPE
+    printf '%s\n' "$out" 2>/dev/null || true
+    trap - PIPE
+}
 
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
