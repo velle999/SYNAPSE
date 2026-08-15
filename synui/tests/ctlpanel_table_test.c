@@ -515,6 +515,80 @@ static void test_every_enum_option_round_trips(void)
            options, rows);
 }
 
+/* ── 3c. The rung BELOW the range: "nobody has chosen" ───────
+ *
+ * A `.vauto` row has one position under its minimum meaning synui defers to
+ * something else — for Bar opacity, to whatever the theme asked for. Three
+ * things about it are not reachable from the walk above, which only presses
+ * Right once:
+ *
+ *   * it is where the row STARTS, and it must draw as words. A row that came up
+ *     reading "-1.00" would be a number nobody asked for in a range that does
+ *     not contain it
+ *   * Left off the bottom of the range has to LAND there, and not on the
+ *     minimum. Without that the row is a one-way door: scroll down to 0.00 once
+ *     and the theme's own answer is gone until you know to press Delete
+ *   * and getting back there must clear the key rather than write it, or "no
+ *     opinion" is stored as an opinion and the row is pinned against every
+ *     future change to the default (see ctl_persist)
+ *
+ * Driven through CTL_ROW_BAR_OPACITY, the row that has one. The mechanism is
+ * general and the test is not, deliberately: a table-walking version would have
+ * to ask the table which rows have a rung, and every test in this file is
+ * written to drive the panel and never to read what it says about itself.
+ */
+static void test_auto_rung(void)
+{
+    const int row = CTL_ROW_BAR_OPACITY;
+    assert(select_row(row));
+
+    char v[64];
+    ctlpanel_row_value(&g_s, row, v, sizeof(v));
+    assert(ctlpanel_row_is_default(&g_s, row));
+    /* Words, not a number — and specifically not one below the row's minimum. */
+    assert(strstr(v, "theme") != NULL);
+
+    /* Left at the bottom is a no-op, not a wrap to the maximum. */
+    ctlpanel_key(&g_s, XKB_KEY_Left, 0);
+    assert(ctlpanel_row_is_default(&g_s, row));
+
+    /* In: the first real value, not the second. A rung that stepped to
+     * vmin + vstep would make 0.00 — the clear bar, the whole point of the
+     * row — reachable only by going up and coming back down. */
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    ctlpanel_row_value(&g_s, row, v, sizeof(v));
+    assert(strcmp(v, "0.00") == 0);
+    assert(!ctlpanel_row_is_default(&g_s, row));
+
+    /* Out again, by the arrow rather than by Delete: Delete resets every row and
+     * would prove nothing about this one's bottom end. */
+    ctlpanel_key(&g_s, XKB_KEY_Left, 0);
+    assert(ctlpanel_row_is_default(&g_s, row));
+
+    /* And the file agrees — the key is gone, not written as some spelling of
+     * "auto" that config_parse_kv would have to be trusted to read back. */
+    syn_server_t fresh;
+    memset(&fresh, 0, sizeof(fresh));
+    synui_config_load(&fresh.config);
+    fresh.ctlpanel = g_s.ctlpanel;
+    char reloaded[64];
+    ctlpanel_row_value(&fresh, row, reloaded, sizeof(reloaded));
+    assert(strstr(reloaded, "theme") != NULL);
+
+    /* The other spelling of the same instruction: `auto` written by hand into
+     * synuirc. It has to parse back to the rung, or a config file that says what
+     * the panel writes would move the row off its default. */
+    syn_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    synui_config_load(&cfg);
+    char word[8];
+    snprintf(word, sizeof(word), "auto");
+    config_parse_kv(&cfg, "bar_opacity", word);
+    assert(cfg.bar_opacity < 0.0f);
+
+    printf("  auto rung ................ ok\n");
+}
+
 /* ── 4. Search reaches rows by label and by synuirc key ────── */
 
 static void test_search(void)
@@ -721,6 +795,7 @@ int main(void)
     test_every_category_named();
     test_every_row_round_trips();
     test_every_enum_option_round_trips();
+    test_auto_rung();
     test_search();
     test_apply_hooks();
     test_bind_combo_round_trip();

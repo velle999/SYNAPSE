@@ -1080,6 +1080,17 @@ test('bar_shape', bar_shape,
      depends : [synui_exe],
      timeout : 180)
 
+# `bar_opacity`: the user's alpha for the bar, over the theme's. ctlpanel_table
+# proves the row stores and restores; this proves it ARRIVES — three captures
+# over a magenta desktop, asserting that 0.00 leaves most of the strip showing
+# the wallpaper (no background at all, not a faint one), that 1.00 leaves none
+# of it, and that `auto` comes back pixel-identical to the theme's own bar.
+bar_opacity = find_program('tests/bar_opacity.sh')
+test('bar_opacity', bar_opacity,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # What a bar with NO background is drawn on. macOS 26's menu bar is clear, so its
 # ink comes from the wallpaper rather than the palette, and the compositor writes
 # which ink survives to backdrop.state. bar_ink_test.c pins the arithmetic; this

@@ -1559,6 +1559,7 @@ typedef enum {
     CTL_ROW_NEWS_REFRESH,
     CTL_ROW_ABOUT,         /* System ▸ About OS — fetch, in a terminal */
     CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */
+    CTL_ROW_BAR_OPACITY,   /* how much wallpaper the bar lets through; auto = theme */
     CTL_ROW_BAR_SHAPE,     /* full-width / rounded-ends / floating-pill, when rounded */
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
@@ -3296,6 +3297,30 @@ typedef struct {
      * compositor — see the enum's comment for why it is gated on the radius
      * rather than being a switch of its own. */
     int bar_shape;
+
+    /*
+     * How opaque the bar's own background is, or NEGATIVE for "follow the
+     * theme" — which is the default, and what every desktop that never opens
+     * this row keeps.
+     *
+     * The theme already has an opinion (theme_bar_alpha(): macOS 26 asks for a
+     * clear bar, every other preset leaves synui-apply-theme picking from the
+     * scheme). This is the user's answer ON TOP of it, and the sentinel is what
+     * keeps the two from being the same question: a default of 0.85 here would
+     * be indistinguishable from someone asking for 0.85, and would quietly
+     * override the one theme with a view.
+     *
+     * ZERO IS A REAL VALUE and the interesting one — a bar with no background,
+     * its ink taken off the wallpaper (backdrop.state; see contrast.h). It is
+     * therefore kept out of band from "no opinion", the same way theme.c's "-"
+     * token is.
+     *
+     * Like bar_edge and bar_shape, THE COMPOSITOR NEVER ACTS ON THIS: quickshell
+     * owns the bar, and the key is parsed here so one file spells the setting
+     * and the control panel can persist it through settings.state. Theme.qml
+     * reads it back through BarConfig.qml.
+     */
+    float bar_opacity;          /* -1 = follow the theme; else 0.00..1.00 */
 
     /* Icon theme for the bar, exported to quickshell as QS_ICON_THEME. Empty
      * (the default) means "follow the system theme", which is what a theme

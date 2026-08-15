@@ -89,7 +89,9 @@ QtObject {
     /*
      * macOS 26's menu bar is CLEAR: no strip, no tint, the clock and the menus
      * drawn straight onto the wallpaper. theme.json asks for that with
-     * barAlpha 0 (synui-apply-theme, from theme_bar_alpha()).
+     * barAlpha 0 (synui-apply-theme, from theme_bar_alpha()) — and so does
+     * anyone who drags Control panel ▸ Desktop ▸ Bar opacity down to 0.00, on
+     * any theme. See barAlphaAsked below, which is where the two meet.
      *
      * That request is only half an instruction, because a clear bar cannot tint
      * itself into legibility — its ink is on the wallpaper, and the theme's ink
@@ -148,9 +150,28 @@ QtObject {
     readonly property string barInkUsed: root.barInk !== "" ? root.barInk
                                                             : root.barInkBest
 
-    // The bar is clear only when the theme asks AND an ink survives the
+    /*
+     * How opaque the bar is ASKED to be, before the wallpaper gets a say.
+     *
+     * Two sources and one of them wins outright: the user's row (Control panel ▸
+     * Desktop ▸ Bar opacity, out of settings.state via BarConfig) over the
+     * theme's own barAlpha from theme.json. Negative from BarConfig is not a
+     * number — it is "nobody has chosen", which is its default and leaves the
+     * theme's answer standing exactly as it did before the row existed.
+     *
+     * -1 is the no-answer value on BOTH sides here, which is what lets this be
+     * one property rather than a pair of undefined-checks: theme.json omits
+     * barAlpha on every preset but macOS 26, and a bar reading a theme.json
+     * written by an older synui must land on the same "no answer" as a fresh
+     * install. Falling through to bgAlphaDefault is where that is resolved.
+     */
+    readonly property real barAlphaAsked:
+        BarConfig.barOpacity >= 0 ? BarConfig.barOpacity
+      : (p.barAlpha !== undefined ? p.barAlpha : -1)
+
+    // The bar is clear only when it is ASKED to be AND an ink survives the
     // wallpaper. Either half alone is a bar you cannot read.
-    readonly property bool clearBar: p.barAlpha === 0 && root.barInkUsed !== ""
+    readonly property bool clearBar: root.barAlphaAsked === 0 && root.barInkUsed !== ""
 
     // …and it is clear-WITH-A-SCRIM when the ink it is using is the closest one
     // rather than a safe one. Nothing else changes: same ink, same modules, one
@@ -176,8 +197,8 @@ QtObject {
     readonly property real  bgAlphaDefault: root.isLight ? 0.95 : 0.85
     readonly property real  bgAlpha:    root.barScrim ? root.scrimAlpha
                                       : root.clearBar ? 0.0
-                                      : (p.barAlpha !== undefined && p.barAlpha > 0)
-                                        ? p.barAlpha : root.bgAlphaDefault
+                                      : root.barAlphaAsked > 0
+                                        ? root.barAlphaAsked : root.bgAlphaDefault
     readonly property real  popupAlpha: p.popupAlpha !== undefined ? p.popupAlpha : 0.97
 
     // The scrim is BLACK or WHITE and not the theme's bar colour, which is the

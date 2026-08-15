@@ -204,6 +204,29 @@ struct ctl_item {
     syn_ctl_val_t   vtype;
     float           vmin, vmax, vstep;
     const char     *unit;      /* "px", "ms", "%" — drawn after the number */
+    /*
+     * One rung BELOW vmin meaning "synui has no opinion; something else
+     * decides". NULL on almost every row — a number row's minimum is usually a
+     * real setting (opacity 0.20, a 1px reveal strip) and there is nothing else
+     * to defer to.
+     *
+     * Where it is set, this string is what the row DRAWS there; the file always
+     * gets the word `auto`, so the parser has one spelling to know. Held as the
+     * label rather than a flag because the useful thing to read on the row is
+     * what it defers TO ("Follow the theme"), not that a sentinel exists.
+     *
+     * It is a rung and not a separate row for the same reason CTL_VAL_TRI is
+     * one row: "off" and "nobody has chosen" are answers to the same question,
+     * and splitting them across two controls is how a panel ends up with a
+     * switch whose slider is ignored.
+     *
+     * The rung IS the value CTL_AUTO, and a row that has one must have that as
+     * its compiled default — otherwise "no opinion" would be written into
+     * settings.state as a choice and pin the row against a future default (see
+     * ctl_persist). It also requires vmin >= 0, since "below the minimum" is how
+     * the rung is recognised.
+     */
+    const char     *vauto;
     const char *const *names;  /* CTL_VAL_ENUM options */
     int             nnames;
     syn_ctl_apply_t apply;
@@ -214,6 +237,10 @@ struct ctl_item {
 /* Shorthands. The table is wide enough that spelling every field per row would
  * bury the two things worth reading — the label and the range. */
 #define CFG(field)  offsetof(syn_config_t, field)
+/* The value a `.vauto` row holds while it is deferring. -1 for the same reason
+ * CTL_VAL_TRI's "device default" is -1: it is out of every range this panel
+ * shows, so it can never collide with a value somebody chose. */
+#define CTL_AUTO    (-1.0f)
 /* Both designators at once, so an option list and its length cannot be given
  * separately and disagree. */
 #define NAMES(a)    .names = (a), .nnames = (int)(sizeof(a) / sizeof((a)[0]))
@@ -537,6 +564,26 @@ static const struct ctl_item ctl_items[] = {
       .key = "bar_edge", .off = CFG(bar_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_WALLPAPER,
       .help = "Which edge the bar sits on. The bar picks this up live" },
+    /* The bar's half of Dock opacity, in the same place in the same order — what
+     * kind of surface, then how much of the wallpaper it lets through, then its
+     * shape. Watched live by the bar like Bar edge, hence APPLY_NONE.
+     *
+     * It starts on the auto rung rather than at a number, and that is the whole
+     * design of the row: the theme already has an opinion (macOS 26 asks for a
+     * clear bar; nothing else asks for anything), so a numeric default here
+     * would silently overrule the one preset with a view about it.
+     *
+     * 0.00 is a real position and the reason the row is worth having — a bar
+     * with NO background, its ink taken off the wallpaper. That has a failure
+     * mode the help line has to name: where the wallpaper offers no legible ink
+     * the bar keeps its background, so the row can be set to 0 and the bar can
+     * still, correctly, look solid. */
+    { CTL_ROW_BAR_OPACITY,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Bar opacity", NULL,
+      .key = "bar_opacity", .off = CFG(bar_opacity), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.00f, .vmax = 1.00f, .vstep = 0.05f, .vauto = "Follow the theme",
+      .apply = CTL_APPLY_NONE,
+      .help = "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it "
+              "completely" },
     /* Watched live by the bar like Bar edge above, and like it applied by
      * neither the compositor nor a restart. The help line has to say the row
      * does nothing on its own: it is the bar's share of Window effects ▸ Corner
@@ -840,6 +887,13 @@ static void ctl_format(const struct ctl_item *it, float v, int for_config,
         break;
 
     case CTL_VAL_FLOAT:
+        /* The rung below the minimum, where the row has one: synui defers, and
+         * the row says to what. One word in the file whatever the row calls it
+         * on screen, so config_parse_kv has a single spelling to recognise. */
+        if (it->vauto && v < it->vmin) {
+            snprintf(buf, n, "%s", for_config ? "auto" : it->vauto);
+            break;
+        }
         /* Two decimals is enough for every float here (opacities, blur weights,
          * a shadow sigma) and reads better than the six %g would give. */
         if (!for_config && it->unit) snprintf(buf, n, "%.2f %s", v, it->unit);
@@ -1021,9 +1075,19 @@ static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
     case CTL_VAL_INT:
     case CTL_VAL_FLOAT: {
         float step = it->vstep > 0 ? it->vstep : 1.0f;
-        v += dir * step;
-        if (v < it->vmin) v = it->vmin;
-        if (v > it->vmax) v = it->vmax;
+        /* The auto rung sits one step below the minimum and is entered and left
+         * only from that minimum, so the range keeps its two ends and neither
+         * direction can get stuck. Stepping DOWN off vmin lands on it; stepping
+         * UP from it lands back on vmin rather than on vmin+step, which would
+         * skip the first real value on the way in. */
+        if (it->vauto && v < it->vmin) {
+            if (dir <= 0) return 0;            /* already at the bottom */
+            v = it->vmin;
+        } else {
+            v += dir * step;
+            if (v < it->vmin) v = it->vauto ? CTL_AUTO : it->vmin;
+            if (v > it->vmax) v = it->vmax;
+        }
         break;
     }
 

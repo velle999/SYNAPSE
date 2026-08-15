@@ -162,11 +162,14 @@
  *   widget_glass = auto|off|on  (auto follows the theme, like dock_style)
  *
  * The bar (quickshell) — a SEPARATE PROCESS, so the compositor parses these
- * three and acts on none of them. They live here so each setting has one
+ * four and acts on none of them. They live here so each setting has one
  * spelling and the control panel can persist it through settings.state like
  * every other row:
  *   bar_shell = synapse|antiquity   (which QML tree synui-bar starts; next login)
  *   bar_edge  = top|bottom          (BarConfig.qml watches this — it moves live)
+ *   bar_opacity = auto|0.00-1.00    (auto = the theme decides; 0 = no background
+ *       at all, its ink taken off the wallpaper — which needs a wallpaper that
+ *       HAS a legible ink, or the bar keeps its background. See contrast.h)
  *   bar_shape = full-width|rounded-ends|floating-pill
  *     — what the bar does with `corner_radius`. rounded-ends curves the two
  *       corners facing the desktop; floating-pill also lifts it off the edge and
@@ -1203,6 +1206,9 @@ static void config_set_defaults(syn_config_t *cfg)
     snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "synui-bar");
     cfg->bar_edge          = SYN_BAR_EDGE_TOP;
     cfg->bar_shape         = SYN_BAR_SHAPE_FULL;
+    /* Negative is "the theme decides", not a number the bar could use — see the
+     * field. Every desktop that never opens the row stays here. */
+    cfg->bar_opacity       = -1.0f;
     cfg->bar_icon_theme[0] = '\0';
 
     cfg->power_enabled = 1;
@@ -2155,6 +2161,21 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             }
         if (!found)
             wlr_log(WLR_ERROR, "synui: bar_shape: unknown '%s'", val);
+    }
+    /* …and how much of the wallpaper the bar lets through. `auto` is the word
+     * for "the theme decides", and it is a WORD rather than a number because
+     * 0.00 already means something here — a bar with no background at all,
+     * which is the whole reason this key can say zero. Anything unparseable
+     * lands on atof's 0.0 and would be that, so the number is taken only after
+     * the keyword has had its chance. */
+    else if (strcmp(key, "bar_opacity") == 0) {
+        if (strcmp(val, "auto") == 0) {
+            cfg->bar_opacity = -1.0f;
+        } else {
+            cfg->bar_opacity = (float)atof(val);
+            if (cfg->bar_opacity < 0.0f) cfg->bar_opacity = 0.0f;
+            if (cfg->bar_opacity > 1.0f) cfg->bar_opacity = 1.0f;
+        }
     }
     /* Empty means "follow the system icon theme", which is the default and what
      * a theme switch changes. Not validated against the installed themes: the

@@ -1287,3 +1287,61 @@ and both band cases would answer `light` if the whole wallpaper were being
 measured, which is the obvious implementation.
 
 Verified on the rig with velle's actual wallpaper: `bar_ink=light`.
+
+### …and neither does anyone who asks for one  *(done)*
+
+Two things, and the second is only worth having because of the first.
+
+**`bar_ink=none` was answering for backdrops that were never unmeasurable.**
+`wallpaper.c` measures the cairo surface it paints, so the two picker rows that
+paint no picture — **None** (the solid `bg_rect`) and **Matrix** (its own GPU
+buffer) — both reported -1, and the bar reads that as "no ink is safe here" and
+puts its whole opaque background back. So the glass bar was glass over every
+photograph and a solid strip over those two, flipping as the *wallpaper* changed
+and the theme did not. Measured off the screenshots that reported it:
+`rgb(234,234,237)` opaque under both, and tracking the wallpaper gradient pixel
+for pixel under both image wallpapers.
+
+- [x] **No image to sample is not nothing on screen.** The solid background is a
+      colour synui itself chooses (`syn_bg_color`, shared out of `synui_main.c`),
+      and it measures. What is left in -1 is what was always meant by it: an
+      external client painting over us, which is wallpaper-engine and nothing
+      else.
+- [x] **The rain measures its own frame.** `matrix.c` reads the strip under the
+      bar back off the buffer it just rendered, while the FBO is still bound,
+      throttled to one read every two seconds and never while it is the
+      screensaver. Measured, not declared dark: what the mean comes to depends on
+      how much of the strip the glyphs cover, and a shader is the kind of file
+      somebody tunes. It reads **0.0009** on the rig, an order of magnitude under
+      the solid colour it seeds from.
+- [x] **`glReadPixels`' y is the same GL window coordinate the vertex shader
+      writes to**, so reading from 0 reads the rows a top bar covers whatever the
+      buffer's memory layout turns out to be — and `bar_edge = bottom` reads the
+      far end, exactly as in `wallpaper.c`.
+
+**`bar_opacity = auto | 0.00-1.00`.** Which makes the clear bar something any
+theme can have, instead of a property of one preset.
+
+- [x] **Control panel ▸ Desktop ▸ Bar opacity**, beside Bar edge and Bar shape,
+      in the same order the dock's three rows use: what kind of surface, then how
+      much wallpaper it lets through, then its shape.
+- [x] **It starts on an `auto` rung BELOW the range, not at a number.** The theme
+      already has an opinion (`theme_bar_alpha()`), so a numeric default would
+      silently overrule the one preset that has one. A new `.vauto` field on the
+      row carries the label; the file gets the word `auto`, and the rung is
+      `CTL_AUTO` (-1) for the same reason `CTL_VAL_TRI`'s "device default" is.
+- [x] **0.00 is a real position and the point of the row** — no background at
+      all, ink off the wallpaper. Which is exactly the path the fix above
+      repaired, and is why these ship together: a row that produced an opaque bar
+      on two of the picker's own wallpapers would have been a row that does not
+      work.
+
+`ctlpanel_table_test.c` gained the rung (it draws as words, Left off the bottom
+lands on it rather than the minimum, and getting back there CLEARS the key rather
+than storing "no opinion" as an opinion). `bar_opacity.sh` proves it arrives:
+three captures over a magenta desktop, asserting 0.00 leaves **85%** of the strip
+showing the wallpaper, 1.00 leaves none, and `auto` returns pixel-identical to
+the capture taken before the key existed. `bar_backdrop.sh` covers both
+wallpapers that paint no picture — and skips the rain rather than passing it
+where the kanji atlas is not in the build's datadir, because the fallback there
+answers `light` too and a check that passes either way is not a check.

@@ -130,6 +130,21 @@ QtObject {
     // card fully transparent.
     property real dockOpacity: 0.72
 
+    /* ── How much of the wallpaper the BAR lets through ──────────────────────
+     *
+     * The user's override on the theme's opinion, read the same way as the
+     * three above and resolved in Theme (which is where theme.json's own
+     * barAlpha lives, and this only means anything against that).
+     *
+     * NEGATIVE IS THE DEFAULT and means "the theme decides" — it is not a
+     * number the bar can draw with. It has to be out of band because 0.00 is
+     * itself a real answer here: a bar with no background at all, taking its
+     * ink off the wallpaper. Same sentinel and same reasoning as config.c's
+     * `bar_opacity`, restated because this side must not read an absent key as
+     * a request for a fully transparent bar.
+     */
+    property real barOpacity: -1
+
     // Where a popup hanging off the bar starts, given its height. One place
     // rather than a `Theme.barHeight + 2` at each anchor site: a bottom bar's
     // popups have to go UP, and every one of those sites would otherwise be a
@@ -203,6 +218,20 @@ QtObject {
                   || root.readKey(synuircFile.text(), "dock_opacity")
         const dn = parseFloat(d)
         if (!isNaN(dn)) root.dockOpacity = Math.max(0.20, Math.min(1.0, dn))
+
+        // The bar's own. Same pair, same order. Assigned on every pass rather
+        // than only when it parses, because unlike the four above this one has
+        // to be able to go BACK to "the theme decides" — the control panel drops
+        // the key from settings.state when the row returns to its default, and a
+        // guard that only ever wrote a parsed number would leave the bar on the
+        // last figure the user scrolled past.
+        const b = root.readKey(settingsFile.text(), "bar_opacity")
+                  || root.readKey(synuircFile.text(), "bar_opacity")
+        const bn = parseFloat(b)
+        // `auto` and an absent key are the same instruction; so is a typo, for
+        // the reason cornerRadius clamps rather than trusting the file.
+        root.barOpacity = (b === "auto" || isNaN(bn)) ? -1
+                                                      : Math.max(0, Math.min(1, bn))
     }
 
     property FileView synuircFile: FileView {
