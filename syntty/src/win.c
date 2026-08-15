@@ -49,6 +49,7 @@
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/inotify.h>
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
@@ -253,6 +254,30 @@ struct win {
 	st_pty_t   *pty;
 	st_font_t  *font;
 	st_render_t *ren;
+	/* ⚠ THE CALLER'S HANDLE ON THE FONT. A reload can open a different face and
+	 * close the one that was in use; the caller closes whatever is left at the
+	 * end, so its pointer has to be moved too or it closes freed memory. */
+	st_font_t **fontp;
+
+	/* ── re-reading the config while running ────────────────────────────────
+	 *
+	 * `conf` is what main.c decided (see st_win_conf_t): the file, whether to
+	 * watch it, and the flags that must keep beating it. `cur_font`/`cur_size`
+	 * are what is actually loaded, so a reload can tell whether the font
+	 * changed — reopening the same face on every write to the file would
+	 * rebuild the glyph atlas for nothing.
+	 *
+	 * The watch is on DIRECTORIES, not files, and that is not a shortcut. Both
+	 * writers of these files — the desktop's theme helper and any competent
+	 * editor — write a temp file and rename it over the target, which is the
+	 * right way to avoid a reader seeing half a palette. A watch on the file
+	 * itself follows the INODE, so it stays attached to the old contents and
+	 * never fires again after the first rename. */
+	const st_win_conf_t *conf;
+	char        cur_font[256];
+	double      cur_size;
+	int         inotify_fd;
+	int         nwatch;
 
 	/* What a new tab runs, and how it starts out. */
 	const st_tab_spec_t *spec;
@@ -1189,6 +1214,168 @@ static void fit_grid(win_t *w)
 		st_pty_resize(&w->tabs[i]->pty, (uint16_t)cols, (uint16_t)rows);
 	}
 	w->dirty = true;
+}
+
+/* ── the config, re-read ────────────────────────────────────────────────────
+ *
+ * What a theme switch looks like from in here. See st_win_conf_t for why this
+ * is driven by a file watch rather than by a signal.
+ *
+ * ⚠ NOTHING HERE MAY KILL THE WINDOW. Every failure is survivable and is
+ * survived: an unreadable file leaves the colours alone, a font name that will
+ * not open keeps the face already loaded, a broken line is reported by the
+ * parser and the rest of the file is still applied. The alternative is a
+ * terminal that vanishes because something else wrote a bad config while it
+ * happened to be open, which is the worst possible way to lose a shell. */
+static void config_reload(win_t *w)
+{
+	if (!w->conf || !w->conf->watch)
+		return;
+
+	st_config_t nc;
+	st_config_defaults(&nc);
+	st_config_load(&nc, w->conf->cfg && w->conf->cfg->path[0]
+	                        ? w->conf->cfg->path : NULL);
+
+	/* Colours first, because they cannot fail and cannot change the layout.
+	 * Applied even when the file has gone: the config then names nothing, and
+	 * "nothing" correctly means the built-in scheme rather than whatever the
+	 * last theme left behind. */
+	st_config_apply_colors(&nc, w->ren);
+
+	if (nc.scroll_lines > 0)
+		w->scroll_lines = nc.scroll_lines;
+
+	/* ── the font ───────────────────────────────────────────────────────────
+	 *
+	 * A flag beats the file here exactly as it does at startup, or `syntty
+	 * --font=X` would lose its font the first time the desktop wrote the
+	 * config. */
+	const char *want_font = w->conf->flag_font ? w->conf->flag_font : nc.font;
+	double want_size = w->conf->flag_size > 0 ? w->conf->flag_size
+	                 : nc.font_size    > 0 ? nc.font_size
+	                 : 14.0;
+
+	bool same_family = (!want_font && !w->cur_font[0])
+	                || (want_font && !strcmp(want_font, w->cur_font));
+	if (!same_family || want_size != w->cur_size) {
+		char *err = NULL;
+		st_font_t *nf = st_font_open(want_font, want_size, &err);
+		if (!nf) {
+			/* ⚠ SAID OUT LOUD AND SURVIVED. A font that cannot be opened is a
+			 * typo in a file somebody just edited, and the terminal keeping
+			 * the face it has while saying why is the only outcome that lets
+			 * them fix it — in this window. */
+			fprintf(stderr, "syntty: %s: %s (keeping the current font)\n",
+			        want_font ? want_font : "the default font",
+			        err ? err : "cannot open");
+			free(err);
+		} else {
+			st_font_close(w->font);
+			w->font = nf;
+			*w->fontp = nf;
+			st_render_set_font(w->ren, nf);
+			snprintf(w->cur_font, sizeof w->cur_font, "%s",
+			         want_font ? want_font : "");
+			w->cur_size = want_size;
+
+			/* ⚠ THE CELL SIZE CHANGED, SO EVERYTHING DERIVED FROM IT HAS TO BE
+			 * REDONE — and bar_update alone is not enough: it returns early
+			 * when the bar's height happens to come out the same, which is
+			 * always true with one tab (both are zero). fit_grid is what tells
+			 * every tab AND every child the new size, and without it the
+			 * programs on the other end keep drawing to the old one. */
+			bar_update(w);
+			fit_grid(w);
+		}
+	}
+
+	/* Both buffers hold pixels drawn in the old colours at the old size, and
+	 * no per-row comparison can repair that — a full repaint of both is the
+	 * only correct answer, which is what tabs_invalidate means. */
+	tabs_invalidate(w);
+
+	if (nc.errors)
+		fprintf(stderr, "syntty: %s: %d problem%s, first at %s\n",
+		        nc.path, nc.errors, nc.errors == 1 ? "" : "s", nc.first_error);
+	st_config_free(&nc);
+}
+
+/* Watch the DIRECTORY of every file the config load actually opened — see the
+ * note on win_t.inotify_fd for why the directory and not the file.
+ *
+ * ⚠ THE INCLUDED FILES MATTER MORE THAN THE MAIN ONE. The main file is the
+ * user's and rarely changes; the generated palette an `include` points at is
+ * the one a theme switch rewrites, and watching only syntty.conf would miss
+ * every one of them. Duplicates are skipped rather than deduplicated properly:
+ * they land in the same directory in every arrangement anybody actually has,
+ * and inotify_add_watch returns the SAME descriptor for a directory already
+ * watched, so a duplicate costs nothing anyway. */
+static void watch_config(win_t *w)
+{
+	if (!w->conf || !w->conf->watch)
+		return;
+
+	w->inotify_fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+	if (w->inotify_fd < 0)
+		return;                       /* no live reload; new windows still theme */
+
+	const st_config_t *c = w->conf->cfg;
+	/* The main file's own directory even when there is no file yet: that is
+	 * where one appears the first time the desktop writes a theme, and a
+	 * terminal open across that moment should follow it like any other. */
+	const char *paths[1 + ST_CFG_MAX_FILES];
+	int n = 0;
+	if (c && c->path[0])
+		paths[n++] = c->path;
+	for (int i = 0; c && i < c->nfiles && n < (int)(sizeof paths / sizeof *paths); i++)
+		paths[n++] = c->files[i];
+
+	for (int i = 0; i < n; i++) {
+		char dir[512];
+		snprintf(dir, sizeof dir, "%s", paths[i]);
+		char *slash = strrchr(dir, '/');
+		if (!slash)
+			continue;
+		*slash = '\0';
+		/* CLOSE_WRITE catches an editor writing in place; MOVED_TO catches the
+		 * rename that every careful writer uses instead, including the theme
+		 * helper; CREATE catches the file appearing where there was none. */
+		if (inotify_add_watch(w->inotify_fd, dir,
+		                      IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE) >= 0)
+			w->nwatch++;
+	}
+
+	if (w->nwatch == 0) {
+		close(w->inotify_fd);
+		w->inotify_fd = -1;
+	}
+}
+
+/* Drain the watch. ⚠ EVERY EVENT IS DRAINED BEFORE ANYTHING IS RELOADED: one
+ * rename produces several events across several watches, and reloading per
+ * event would re-read the file and rebuild the glyph atlas four times for one
+ * theme switch. It also does not matter WHICH file changed — the reload reads
+ * the whole config from the top either way — so the events are counted, not
+ * inspected. */
+static void config_pump(win_t *w)
+{
+	if (w->inotify_fd < 0)
+		return;
+
+	/* Sized for a name of any length inotify can produce, so a single read
+	 * never returns EINVAL for a buffer too small to hold one event. */
+	char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+	bool changed = false;
+	for (;;) {
+		ssize_t n = read(w->inotify_fd, buf, sizeof buf);
+		if (n > 0) { changed = true; continue; }
+		if (n < 0 && errno == EINTR)
+			continue;
+		break;
+	}
+	if (changed)
+		config_reload(w);
 }
 
 static void xdg_surface_configure(void *data, struct xdg_surface *s,
@@ -2575,13 +2762,21 @@ static const struct wl_registry_listener registry_listener = {
 
 /* ── the loop ───────────────────────────────────────────────────────────── */
 
-int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
+int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
                const char *title, bool deadline,
-               const st_config_t *cfg, st_win_stats_t *stats)
+               const st_win_conf_t *conf, st_win_stats_t *stats)
 {
+	const st_config_t *cfg = conf ? conf->cfg : NULL;
+
 	win_t W = {0};
 	win_t *w = &W;
-	w->font = font; w->ren = ren; w->spec = spec;
+	w->fontp = font;
+	w->font = *font; w->ren = ren; w->spec = spec;
+	w->conf = conf;
+	w->inotify_fd = -1;
+	snprintf(w->cur_font, sizeof w->cur_font, "%s",
+	         (conf && conf->font) ? conf->font : "");
+	w->cur_size = (conf && conf->size > 0) ? conf->size : 14.0;
 	w->scroll_lines = (cfg && cfg->scroll_lines > 0) ? cfg->scroll_lines : 3;
 	w->pool_fd = -1;
 	w->deadline = deadline;
@@ -2666,6 +2861,11 @@ int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
 
 	int wlfd = wl_display_get_fd(w->dpy);
 
+	/* Set up AFTER the window exists, so a theme written between the config
+	 * being read and the window being mapped is still caught — the first
+	 * event after this fires a reload like any other. */
+	watch_config(w);
+
 	/* 256 KB, which is the read size the design calls for: a flood arrives in
 	 * whatever chunks the kernel has, and a small buffer turns one megabyte
 	 * into hundreds of syscalls. It also guarantees reads land mid-escape
@@ -2687,16 +2887,17 @@ int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
 		 * ⚠ A NEGATIVE FD IS IGNORED BY poll(), which is what keeps the paste
 		 * slot in the set unconditionally instead of shuffling indices around
 		 * depending on whether one is running. */
-		struct pollfd fds[2 + SYN_MAX_TABS] = {
-			{ .fd = wlfd,        .events = POLLIN },
-			{ .fd = w->paste_fd, .events = POLLIN },
+		struct pollfd fds[3 + SYN_MAX_TABS] = {
+			{ .fd = wlfd,          .events = POLLIN },
+			{ .fd = w->paste_fd,   .events = POLLIN },
+			{ .fd = w->inotify_fd, .events = POLLIN },
 		};
 		int ntabs = w->ntabs;
 		for (int i = 0; i < ntabs; i++) {
-			fds[2 + i].fd     = w->tabs[i]->pty.fd;
-			fds[2 + i].events = POLLIN;
+			fds[3 + i].fd     = w->tabs[i]->pty.fd;
+			fds[3 + i].events = POLLIN;
 		}
-		int nfds = 2 + ntabs;
+		int nfds = 3 + ntabs;
 		unsigned gen = w->tab_gen;
 
 		/* Sleep until the deadline, if one is pending — and keep taking input
@@ -2725,6 +2926,13 @@ int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
 		if (fds[1].revents & (POLLIN | POLLHUP))
 			paste_pump(w);
 
+		/* ⚠ BEFORE THE TABS ARE READ, not after. A reload can change the cell
+		 * size, which resizes every grid and tells every child — and doing
+		 * that in the middle of a round of reads would feed bytes sized for
+		 * the old geometry into grids that have just been given a new one. */
+		if (fds[2].revents & POLLIN)
+			config_pump(w);
+
 		/* ── every tab, back to front ───────────────────────────────────────
 		 *
 		 * ⚠ BACKWARDS, because closing a tab shifts everything after it down
@@ -2741,7 +2949,7 @@ int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
 				break;
 			if (i >= w->ntabs)
 				continue;                    /* already gone this iteration */
-			if (!(fds[2 + i].revents & (POLLIN | POLLHUP)))
+			if (!(fds[3 + i].revents & (POLLIN | POLLHUP)))
 				continue;
 
 			tab_t *t = w->tabs[i];
@@ -2897,6 +3105,9 @@ int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
 	 * takes back whatever it was offering — which is why pasting from a
 	 * terminal you have just closed gives nothing, in every Wayland terminal. */
 	if (w->paste_fd >= 0) close(w->paste_fd);
+	/* The watch, and its watches with it: closing the inotify descriptor
+	 * releases every one added to it, so there is no per-watch teardown. */
+	if (w->inotify_fd >= 0) close(w->inotify_fd);
 	free(w->paste_buf);
 	if (w->clip_source) wl_data_source_destroy(w->clip_source);
 	if (w->prim_source) zwp_primary_selection_source_v1_destroy(w->prim_source);

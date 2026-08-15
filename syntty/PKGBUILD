@@ -17,16 +17,16 @@
 # failure this repo keeps re-learning, and it surfaces fifteen minutes into
 # somebody's install as "target not found".
 #
-# ⚠ IT IS NOT THE DEFAULT TERMINAL. kitty still is — synui's `terminal =` names
-# it and nothing here changes that. syntty is the one underneath it: 359 KB
-# against kitty's 65 MiB, and it links no GL at all, so it opens on a machine
-# where the GPU stack does not.
+# ⚠ IT IS THE DEFAULT TERMINAL as of pkgrel 19 — synui's `terminal =` names it
+# and kitty is the fallback, kept for the three `--hold` callers syntty cannot
+# serve yet. It is 359 KB against kitty's 65 MiB, and it links no GL at all, so
+# it opens on a machine where the GPU stack does not.
 #
 # What it has: a pty, a VT parser, a cell grid, a glyph atlas, a wl_shm window,
 # deadline rendering, damage tracking, the kitty keyboard and graphics
 # protocols, OSC 133 marks, the alternate screen, the pointer, the clipboard, a
-# config file and tabs. What it does not have yet: splits, remote control,
-# hyperlinks.
+# config file that follows the desktop theme, and tabs. What it does not have
+# yet: splits, remote control, hyperlinks, `--hold`.
 #
 # The stage ordering was the point. Every claim this program is built on is a
 # number, and a terminal that draws needs a compositor, a seat and a human to
@@ -51,7 +51,7 @@ pkgname=syntty
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=19
+pkgrel=20
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

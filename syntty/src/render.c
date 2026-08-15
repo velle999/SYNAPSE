@@ -112,6 +112,34 @@ st_render_t *st_render_new(st_font_t *f)
 
 void st_render_free(st_render_t *r) { free(r); }
 
+/* Swap the face every glyph comes from. Only the binding — the CELL SIZE goes
+ * with the font, so whoever calls this owns re-fitting the grid to the window
+ * and telling every child about it. The renderer holds no cached metrics of
+ * its own, which is what makes this one assignment rather than an invalidation
+ * pass. */
+void st_render_set_font(st_render_t *r, st_font_t *f)
+{
+	if (f)
+		r->font = f;
+}
+
+/* ⚠ BACK TO THE BUILT-IN SCHEME, and a reload cannot work without it. Applying
+ * a config sets the colours it NAMES; a key the file used to have and no
+ * longer does would otherwise keep the value it had, so deleting a line — or a
+ * theme switching from a palette that set `color4` to one that does not —
+ * would do nothing at all. That is the same silent failure the config chapter
+ * of this program exists to avoid, on the one path where the config is read
+ * twice. */
+void st_render_colors_reset(st_render_t *r)
+{
+	palette_build(r->palette);
+	r->def_bg     = 0x1B1F26;
+	r->def_fg     = 0xC8CDD6;
+	r->cursor_bg  = 0xC8CDD6;
+	r->cursor_fg  = 0x1B1F26;
+	r->cursor_set = false;
+}
+
 /* ⚠ ST_CFG_UNSET LEAVES ONE ALONE. A config that names a background and not a
  * foreground must not silently reset the foreground to whatever the caller
  * happened to have in a variable — and the alternative, a getter for each, is

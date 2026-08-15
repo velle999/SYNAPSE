@@ -113,6 +113,15 @@ typedef struct {
 	const char *config;      /* --config=FILE, or NULL for the usual place */
 	bool        no_config;   /* ignore the file entirely — what tests use */
 	const st_config_t *cfg;  /* what was read, for whatever paints */
+
+	/* ⚠ WHAT THE COMMAND LINE GAVE, KEPT SEPARATELY, because `font` above
+	 * stops being able to answer the question the moment the file is merged
+	 * into it. The window re-reads the config while it runs, and "a flag beats
+	 * the file" has to keep being true on the second read as well as the
+	 * first — otherwise `syntty --font=X` loses its font to the next theme
+	 * switch. NULL and 0 still mean "not given". */
+	const char *flag_font;
+	double      flag_size;
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -522,34 +531,13 @@ static int cmd_font(const opts_t *o)
 	return 0;
 }
 
-/* The colours from the file, onto the renderer.
- *
- * ⚠ THE PALETTE GOES FIRST. `foreground = bright_white` is an INDEX into the
- * sixteen, and the same file may have redefined bright_white two lines earlier
- * — resolving the foreground before the palette is set would use the built-in
- * shade and quietly ignore half of somebody's theme. */
-static uint32_t cfg_color(const st_config_t *c, uint32_t v, const st_render_t *r)
-{
-	(void)c;
-	if (v == ST_CFG_UNSET)
-		return ST_CFG_UNSET;
-	if ((v & 0xFF000000u) == ST_COL_INDEXED)
-		return st_render_palette_get(r, (int)(v & 0xFF));
-	return v & 0xFFFFFFu;
-}
-
+/* The colours from the file, onto the renderer. The rule that makes this
+ * order-sensitive — the palette before anything that can name one of its
+ * entries — lives in config.c now, because the window re-reads the file while
+ * it is running and a second copy of that ordering would drift. */
 static void apply_colors(const opts_t *o, st_render_t *r)
 {
-	const st_config_t *c = o->cfg;
-	if (!c)
-		return;
-	for (int i = 0; i < 16; i++)
-		if (c->palette[i] != ST_CFG_UNSET)
-			st_render_palette(r, i, c->palette[i]);
-
-	st_render_colors(r, cfg_color(c, c->fg, r), cfg_color(c, c->bg, r));
-	st_render_cursor_color(r, cfg_color(c, c->cursor, r),
-	                       cfg_color(c, c->cursor_text, r));
+	st_config_apply_colors(o->cfg, r);
 }
 
 /* Parse a stream and paint it, with no compositor anywhere.
@@ -705,8 +693,22 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 		.tabs       = o->tabs,
 	};
 
+	/* What the window needs to re-read the file while it runs — see
+	 * st_win_conf_t. `--no-config` turns the watch off rather than leaving it
+	 * watching a file it was told to ignore: the test suite passes that flag
+	 * precisely so a developer's own settings cannot reach an assertion, and a
+	 * reload would let them in through the back door. */
+	st_win_conf_t conf = {
+		.cfg       = o->cfg,
+		.watch     = !o->no_config,
+		.flag_font = o->flag_font,
+		.flag_size = o->flag_size,
+		.font      = o->font,
+		.size      = o->font_size,
+	};
+
 	st_win_stats_t ws = {0};
-	int rc = st_win_run(f, r, &spec, "syntty", !o->no_deadline, o->cfg, &ws);
+	int rc = st_win_run(&f, r, &spec, "syntty", !o->no_deadline, &conf, &ws);
 
 	if (o->stats) {
 		fprintf(stderr, "first frame   %.2f ms\n", ws.first_frame_ms);
@@ -1119,6 +1121,16 @@ static int cmd_config(const opts_t *o, int argc, char **argv)
 	printf("path         %s\n", c.path);
 	printf("status       %s\n", c.found ? "read" : "no file (not an error)");
 
+	/* ⚠ EVERY FILE, NOT JUST THE ONE ABOVE. With `include` the answer to "why
+	 * is my background not what I wrote" is usually "something else set it
+	 * afterwards", and that something else is a file the person is not looking
+	 * at — the desktop regenerates one on every theme switch. Naming them here
+	 * is the difference between reading the answer and hunting for it.
+	 * The main file is already printed as `path`, so this starts at the
+	 * second and stays silent for the ordinary single-file config. */
+	for (int i = 1; i < c.nfiles; i++)
+		printf("included     %s\n", c.files[i]);
+
 	printf("font         %s\n", c.font ? c.font : "monospace (default)");
 	if (c.font_size > 0) printf("font_size    %.1f\n", c.font_size);
 	else                 printf("font_size    14.0 (default)\n");
@@ -1297,6 +1309,10 @@ int main(int argc, char **argv)
 	 * ⚠ ERRORS ARE PRINTED AND THE TERMINAL STILL STARTS. See config.c: a
 	 * terminal that refuses to open over a typo cannot be used to fix it. */
 	o.cfg = &cfg;
+	/* Recorded BEFORE the merge below overwrites them — see opts_t. After it,
+	 * `o.font` cannot tell a flag from a config line. */
+	o.flag_font = o.font;
+	o.flag_size = o.font_size;
 	if (!o.no_config && strcmp(cmd, "config") != 0) {
 		st_config_load(&cfg, o.config);
 		if (cfg.errors)

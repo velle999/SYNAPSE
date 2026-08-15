@@ -3,11 +3,46 @@
  * ── Why the format is this small ───────────────────────────────────────────
  *
  * `key = value`, one per line, and a line starting with `#` is a comment. No
- * sections, no includes, no interpolation, no library. Everything a terminal is configured
+ * sections, no interpolation, no library. Everything a terminal is configured
  * with is a scalar: a font name, a size, a colour, a number of lines. Richer
  * formats buy nothing here and cost a dependency, a parser somebody has to
  * trust, and a set of failure modes ("why is my TOML string being parsed as a
  * date") that have nothing to do with terminals.
+ *
+ * ── The one exception: `include` ───────────────────────────────────────────
+ *
+ * This file said "no includes" for four releases and it was right to, until
+ * something else had to write a palette in here. The desktop this ships with
+ * regenerates the terminal's colours on every theme switch, and there are only
+ * two places a generated palette can go:
+ *
+ *   INTO THIS FILE, edited key by key. That is what the font already does
+ *   (synui-apply-font rewrites `font` and `font_size` in place), and one
+ *   writer editing one file is fine. TWO writers editing the same file — one
+ *   owning the font, one owning twenty-one colours, both rewriting it with awk
+ *   — is a collision waiting for the day they run at the same time, and the
+ *   loser's keys vanish with nothing anywhere saying why.
+ *
+ *   INTO ITS OWN FILE, named from here. The generated file can then be
+ *   rewritten wholesale by whoever owns it, this file stays the user's, and
+ *   the two never touch the same bytes. It is also what every other consumer
+ *   of that theme already does — kitty gets an `include`, rofi an `@import`.
+ *
+ * So: `include = <path>`, relative to the directory of the file it appears in,
+ * and that is the whole feature. No globs, no conditionals, no variables.
+ *
+ * ⚠ IT IS `include = path`, WITH THE EQUALS. kitty writes `include path` and
+ * copying that shape here would have made the one rule this format has — every
+ * line is `key = value` — grow its first exception, for one key. The bare form
+ * gets an error that names the difference rather than "no '='", because
+ * somebody arriving from a kitty config will write it that way once.
+ *
+ * ⚠ AN INCLUDE IS READ WHERE IT APPEARS, so the LAST assignment wins exactly
+ * as it does for two plain lines. An include at the bottom therefore beats
+ * what the user wrote above it, which is deliberate and is what makes a theme
+ * switch actually change the colours: a theme that silently loses to a line
+ * somebody forgot they wrote is a theme switch that appears to do nothing.
+ * Someone who wants the opposite puts the include at the top.
  *
  * ── The three rules that matter more than the format ───────────────────────
  *
@@ -133,19 +168,45 @@ static bool parse_long(const char *v, long *out)
 	return true;
 }
 
-static void oops(st_config_t *c, int line, const char *what, const char *detail)
+/* Where a line came from. One file is the common case and the only one this
+ * had for four releases; `include` made "line 12" ambiguous, and an error
+ * pointing at the wrong file is worse than one pointing at nothing. */
+typedef struct {
+	st_config_t *c;
+	int          file;    /* index into c->files */
+	int          depth;   /* how many includes deep, for the cap */
+} load_t;
+
+static bool load_file(const load_t *from, const char *path);
+
+/* The name to put in front of a line number. Empty for the main file, so every
+ * message a single-file config can produce reads exactly as it did before. */
+static const char *where(const load_t *L)
 {
+	if (L->file <= 0)
+		return "";
+	const char *p = L->c->files[L->file];
+	const char *slash = strrchr(p, '/');
+	return slash ? slash + 1 : p;
+}
+
+static void oops(const load_t *L, int line, const char *what, const char *detail)
+{
+	st_config_t *c = L->c;
 	c->errors++;
 	if (c->first_error[0])
 		return;
-	snprintf(c->first_error, sizeof c->first_error, "line %d: %s%s%s",
-	         line, what, detail ? ": " : "", detail ? detail : "");
+	const char *w = where(L);
+	snprintf(c->first_error, sizeof c->first_error, "%s%sline %d: %s%s%s",
+	         w, *w ? " " : "", line, what,
+	         detail ? ": " : "", detail ? detail : "");
 }
 
 /* ── one line ───────────────────────────────────────────────────────────── */
 
-static void set_key(st_config_t *c, char *key, char *val, int line)
+static void set_key(const load_t *L, char *key, char *val, int line)
 {
+	st_config_t *c = L->c;
 	long n = 0;
 	uint32_t col = 0;
 	int b = 0;
@@ -159,42 +220,42 @@ static void set_key(st_config_t *c, char *key, char *val, int line)
 		char *end = NULL;
 		double d = strtod(val, &end);
 		if (end == val || (end && *end) || d <= 0)
-			oops(c, line, "font_size wants a positive number", val);
+			oops(L, line, "font_size wants a positive number", val);
 		else
 			c->font_size = d;
 		return;
 	}
 	if (!strcmp(key, "columns") || !strcmp(key, "cols")) {
 		if (!parse_long(val, &n) || n < 1 || n > 4096)
-			oops(c, line, "columns wants 1..4096", val);
+			oops(L, line, "columns wants 1..4096", val);
 		else
 			c->cols = (int)n;
 		return;
 	}
 	if (!strcmp(key, "rows")) {
 		if (!parse_long(val, &n) || n < 1 || n > 4096)
-			oops(c, line, "rows wants 1..4096", val);
+			oops(L, line, "rows wants 1..4096", val);
 		else
 			c->rows = (int)n;
 		return;
 	}
 	if (!strcmp(key, "scrollback")) {
 		if (!parse_long(val, &n) || n < 0 || n > 10000000)
-			oops(c, line, "scrollback wants 0..10000000 lines", val);
+			oops(L, line, "scrollback wants 0..10000000 lines", val);
 		else
 			c->scrollback = n;
 		return;
 	}
 	if (!strcmp(key, "scroll_lines")) {
 		if (!parse_long(val, &n) || n < 1 || n > 100)
-			oops(c, line, "scroll_lines wants 1..100", val);
+			oops(L, line, "scroll_lines wants 1..100", val);
 		else
 			c->scroll_lines = (int)n;
 		return;
 	}
 	if (!strcmp(key, "deadline")) {
 		if (!parse_bool(val, &b))
-			oops(c, line, "deadline wants true or false", val);
+			oops(L, line, "deadline wants true or false", val);
 		else
 			c->deadline = b;
 		return;
@@ -203,7 +264,7 @@ static void set_key(st_config_t *c, char *key, char *val, int line)
 	if (!strcmp(key, "foreground") || !strcmp(key, "background")
 	    || !strcmp(key, "cursor") || !strcmp(key, "cursor_text")) {
 		if (!parse_color(val, &col)) {
-			oops(c, line, "not a colour (#rrggbb, or a palette name)", val);
+			oops(L, line, "not a colour (#rrggbb, or a palette name)", val);
 			return;
 		}
 		if      (!strcmp(key, "foreground"))  c->fg = col;
@@ -220,38 +281,91 @@ static void set_key(st_config_t *c, char *key, char *val, int line)
 		long idx = strtol(key + 5, &end, 10);
 		if (end && !*end && idx >= 0 && idx < 16) {
 			if (!parse_color(val, &col))
-				oops(c, line, "not a colour (#rrggbb, or a palette name)", val);
+				oops(L, line, "not a colour (#rrggbb, or a palette name)", val);
 			else if (col & 0xFF000000u)
-				oops(c, line, "a palette entry cannot name another one", val);
+				oops(L, line, "a palette entry cannot name another one", val);
 			else
 				c->palette[idx] = col;
 			return;
 		}
 	}
 
+	/* Another file, read right here. See the header for why this is the one
+	 * thing the format grew.
+	 *
+	 * ⚠ A MISSING INCLUDE IS AN ERROR AND SAYS SO. Every other "file is not
+	 * there" in this program is silence, because not writing a config is the
+	 * normal case — but naming a file that does not exist is a typo, and the
+	 * whole point of an include is that the settings live somewhere the person
+	 * is not looking. Silence here is an hour spent wondering why a palette
+	 * never arrived. */
+	if (!strcmp(key, "include")) {
+		if (!load_file(L, val))
+			oops(L, line, "cannot read the included file", val);
+		return;
+	}
+
 	/* ⚠ NOT SILENTLY IGNORED. See the header — a misspelled key that does
 	 * nothing and says nothing is the worst outcome available here. */
-	oops(c, line, "unknown setting", key);
+	oops(L, line, "unknown setting", key);
 }
 
-bool st_config_load(st_config_t *c, const char *path)
+/* Resolve an include's path: absolute as written, `~/` against HOME, and
+ * anything else against the DIRECTORY OF THE FILE IT APPEARS IN — not the
+ * working directory, which for a terminal is wherever the person happened to
+ * launch it from and would make the same config behave differently depending
+ * on where it was started. */
+static void resolve(const load_t *from, const char *path, char *out, size_t cap)
 {
-	char buf[512];
-	if (path)
-		snprintf(c->path, sizeof c->path, "%s", path);
-	else
-		st_config_path(c->path, sizeof c->path);
-	(void)buf;
-
-	FILE *f = fopen(c->path, "r");
-	if (!f) {
-		/* ⚠ NOT AN ERROR. Most people never write one, and a terminal that
-		 * complained about a missing config on every start would be noise on
-		 * every start. */
-		c->found = false;
-		return false;
+	if (path[0] == '/') {
+		snprintf(out, cap, "%s", path);
+		return;
 	}
-	c->found = true;
+	if (path[0] == '~' && path[1] == '/') {
+		const char *home = getenv("HOME");
+		snprintf(out, cap, "%s/%s", home && *home ? home : ".", path + 2);
+		return;
+	}
+
+	const char *base = from->c->files[from->file];
+	const char *slash = strrchr(base, '/');
+	if (!slash) {
+		snprintf(out, cap, "%s", path);
+		return;
+	}
+	snprintf(out, cap, "%.*s/%s", (int)(slash - base), base, path);
+}
+
+/* Read one file into the config. `from` is the file that named this one, or
+ * NULL for the main one. */
+static bool load_file(const load_t *from, const char *path)
+{
+	st_config_t *c = from->c;
+
+	char full[512];
+	if (from->depth == 0 && from->file < 0)
+		snprintf(full, sizeof full, "%s", path);   /* the main file, as given */
+	else
+		resolve(from, path, full, sizeof full);
+
+	/* ⚠ THREE CAPS, AND THEY ARE WHAT MAKES A CYCLE HARMLESS rather than a
+	 * stack overflow. A file already read is not read again (which catches
+	 * a → b → a); the depth cap catches a long chain; and the file cap bounds
+	 * the whole load however the first two are dodged. Any one of them alone
+	 * would do it, and all three are two lines each. */
+	for (int i = 0; i < c->nfiles; i++)
+		if (!strcmp(c->files[i], full))
+			return true;              /* already read — not an error, a no-op */
+	if (from->depth >= 4 || c->nfiles >= ST_CFG_MAX_FILES)
+		return false;
+
+	FILE *f = fopen(full, "r");
+	if (!f)
+		return false;
+
+	load_t L = { .c = c, .file = c->nfiles, .depth = from->depth + 1 };
+	snprintf(c->files[c->nfiles], sizeof c->files[0], "%s", full);
+	c->nfiles++;
 
 	char line[1024];
 	int lineno = 0;
@@ -277,24 +391,86 @@ bool st_config_load(st_config_t *c, const char *path)
 
 		char *eq = strchr(s, '=');
 		if (!eq) {
-			oops(c, lineno, "no '=' — settings are `key = value`", s);
+			/* kitty spells it `include foo.conf`, so this is the one wrong
+			 * line somebody is actually likely to write, and "no '='" would
+			 * leave them looking for a missing equals in the wrong place. */
+			if (!strncmp(s, "include ", 8))
+				oops(&L, lineno, "include takes an '=' here", s);
+			else
+				oops(&L, lineno, "no '=' — settings are `key = value`", s);
 			continue;
 		}
 		*eq = '\0';
 		char *key = trim(s);
 		char *val = trim(eq + 1);
 		if (!*key) {
-			oops(c, lineno, "a setting with no name", NULL);
+			oops(&L, lineno, "a setting with no name", NULL);
 			continue;
 		}
 		if (!*val) {
-			oops(c, lineno, "no value", key);
+			oops(&L, lineno, "no value", key);
 			continue;
 		}
-		set_key(c, key, val, lineno);
+		set_key(&L, key, val, lineno);
 	}
 	fclose(f);
 	return true;
+}
+
+bool st_config_load(st_config_t *c, const char *path)
+{
+	if (path)
+		snprintf(c->path, sizeof c->path, "%s", path);
+	else
+		st_config_path(c->path, sizeof c->path);
+
+	/* file = -1 marks "there is no including file", which is what tells
+	 * load_file to take the path exactly as given rather than resolving it
+	 * against a directory that does not exist yet. */
+	const load_t root = { .c = c, .file = -1, .depth = 0 };
+
+	/* ⚠ NOT AN ERROR WHEN THERE IS NO FILE. Most people never write one, and a
+	 * terminal that complained about a missing config on every start would be
+	 * noise on every start. An include that is missing IS an error — see
+	 * set_key — because that one was asked for by name. */
+	c->found = load_file(&root, c->path);
+	return c->found;
+}
+
+/* ── the colours, onto a renderer ───────────────────────────────────────────
+ *
+ * See the header for why the palette has to be pushed before anything that
+ * could name one of its entries. This lived in main.c until the window learned
+ * to re-read the file while it was running; two callers of a rule with an
+ * ordering constraint is exactly when it stops being a call site and becomes a
+ * function. */
+static uint32_t resolved(uint32_t v, const st_render_t *r)
+{
+	if (v == ST_CFG_UNSET)
+		return ST_CFG_UNSET;
+	if ((v & 0xFF000000u) == ST_COL_INDEXED)
+		return st_render_palette_get(r, (int)(v & 0xFF));
+	return v & 0xFFFFFFu;
+}
+
+void st_config_apply_colors(const st_config_t *c, st_render_t *r)
+{
+	if (!c || !r)
+		return;
+
+	/* ⚠ EVERY TIME, not only the first. On a reload this is what puts back the
+	 * default for a key the file has stopped naming — see
+	 * st_render_colors_reset. On the first call the renderer is already at its
+	 * defaults, so it costs one memcpy of the sixteen. */
+	st_render_colors_reset(r);
+
+	for (int i = 0; i < 16; i++)
+		if (c->palette[i] != ST_CFG_UNSET)
+			st_render_palette(r, i, c->palette[i]);
+
+	st_render_colors(r, resolved(c->fg, r), resolved(c->bg, r));
+	st_render_cursor_color(r, resolved(c->cursor, r),
+	                       resolved(c->cursor_text, r));
 }
 
 /* ⚠ THIS IS HOW ANYBODY FINDS OUT THE FILE EXISTS. The compositor this ships

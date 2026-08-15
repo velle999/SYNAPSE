@@ -591,6 +591,72 @@ rows_used=$(printf 'a\nb\nc\nd\ne\nf\ng\nh\ni\n' \
     && ok "a flag beats the file (--rows=7 over rows = 30)" \
     || bad "a flag beats the file (--rows=7 over rows = 30; $rows_used scrolled)"
 
+# ── include ─────────────────────────────────────────────────────────────────
+#
+# The one thing the format grew, and it grew for a reason: the desktop
+# regenerates the terminal's palette on every theme switch, and a generated
+# file and a hand-written one must not be the same file. See config.c.
+INC="$T/inc"
+mkdir -p "$INC"
+printf 'background = #111111\nfont = Original\ninclude = palette.conf\n' > "$INC/main.conf"
+printf 'background = #c0c0c0\nforeground = #000000\n' > "$INC/palette.conf"
+
+c=$("$ST" --config="$INC/main.conf" config)
+printf '%s\n' "$c" | grep -q 'errors       none'
+check "an include is read" $?
+
+# ⚠ LAST WINS, exactly as it does for two plain lines. This is what makes a
+# theme switch change anything at all: an include at the bottom beats the line
+# the user forgot they wrote at the top.
+printf '%s\n' "$c" | grep -q 'background   #C0C0C0'
+check "...and an include at the bottom beats the line above it" $?
+
+# It is not an all-or-nothing takeover: a key the included file says nothing
+# about keeps what the including file set.
+printf '%s\n' "$c" | grep -q 'font         Original'
+check "...while a key it does not mention is left alone" $?
+
+# ⚠ NAMED IN THE OUTPUT. "why is my background not what I wrote" is answerable
+# only if the file that overrode it can be found, and it is not a file the
+# person went looking for.
+printf '%s\n' "$c" | grep -q "included     $INC/palette.conf"
+check "...and 'syntty config' names every file it read" $?
+
+# Resolved against the DIRECTORY OF THE FILE IT APPEARS IN, not the working
+# directory — a terminal is launched from wherever somebody happened to be, and
+# the same config must not mean different things depending on that.
+( cd / && "$ST" --config="$INC/main.conf" config | grep -q 'background   #C0C0C0' )
+check "...resolved beside its parent, not against the working directory" $?
+
+# ⚠ A MISSING INCLUDE IS AN ERROR. Every other absent file here is silence,
+# because not writing a config is normal — but naming one that is not there is
+# a typo, and the settings live somewhere the person is not looking.
+#
+# ⚠ CAPTURED BEFORE MATCHING, not piped. `syntty config` EXITS 1 when it has
+# something to report, and under `pipefail` that makes the pipeline fail for a
+# test whose grep matched — the same trap this file hits with `grep -q` on a
+# producer, one release earlier, and it fails in the direction that looks like
+# a broken feature rather than a broken test.
+printf 'include = nowhere.conf\n' > "$INC/missing.conf"
+c=$("$ST" --config="$INC/missing.conf" config || true)
+printf '%s\n' "$c" | grep -q 'cannot read the included file: nowhere.conf'
+check "a missing include is an error that says which file" $?
+
+# kitty spells it without the equals, so this is the one wrong line somebody is
+# actually going to write.
+printf 'include palette.conf\n' > "$INC/bare.conf"
+c=$("$ST" --config="$INC/bare.conf" config || true)
+printf '%s\n' "$c" | grep -q "include takes an '=' here"
+check "...and the kitty spelling is named rather than reported as a syntax error" $?
+
+# ⚠ A CYCLE TERMINATES. Three separate caps make it harmless (already-read,
+# depth, total files) — this asserts the program comes back at all, which is
+# the property that matters and the one a recursive reader loses.
+printf 'include = b.conf\n' > "$INC/a.conf"
+printf 'include = a.conf\nbackground = #abcdef\n' > "$INC/b.conf"
+timeout 5 "$ST" --config="$INC/a.conf" config | grep -q 'background   #ABCDEF'
+check "an include cycle terminates instead of recursing" $?
+
 # ── what a paste becomes on the way to the child ────────────────────────────
 #
 # ⚠ A PASTE IS NOT TYPING, and a terminal that treats it as typing has turned
@@ -923,10 +989,44 @@ fi
 # Then it compares the two buffers BYTE FOR BYTE. Any mutation site in grid.c
 # that forgets to mark its row fails here and names the cell.
 #
-# ⚠ SMALL CHUNKS ARE HARSHER. A missed mark that happens to be covered because
-# a later chunk redrew the same row passes at 64 KB and fails at 3 bytes.
+# ⚠ SMALL CHUNKS ARE HARSHER FOR A MISSED MARK. One that happens to be covered
+# because a later chunk redrew the same row passes at 64 KB and fails at 3 bytes.
+#
+# ⚠⚠ AND THEY ARE THE WRONG TOOL FOR A MISSED **ROW**, which is the other half
+# of this and the half that was missing for three releases. The cursor forces a
+# repaint of the row it left and the row it arrived at; feed a stream three
+# bytes at a time and the cursor visits nearly every row between paints, doing
+# the marking the grid failed to do. A whole-stream feed hands it only the first
+# row and the last — which is what a pty delivers, because a read is 256 KB.
+#
+# So every case below is run at BOTH ends: chopped fine, and whole.
 dmg() { local out; out=$(printf "$1" | "$ST" --cols="${2:-40}" --rows="${3:-12}" \
             damage-check - --split="${4:-3}" 2>&1); printf '%s\n' "$out"; }
+
+# ── the whole-stream feed, which is the one a real terminal gets ────────────
+#
+# ⚠ THIS IS THE TEST THAT WAS MISSING, and its absence cost three releases of a
+# terminal that dropped plain text on the floor. `put_run` — the printable
+# ASCII fast path, i.e. what all ordinary output goes through — wrote cells and
+# never set the row's dirty flag. Nothing caught it because every damage case
+# here fed 3 bytes at a time, and at 3 bytes the cursor marks the rows for it.
+#
+# Under a compositor it looked like this: `syntty about` prints nineteen lines,
+# the cursor touches the first and the last, and the seventeen in between were
+# written and never drawn. They appeared the moment anything else dirtied them
+# — a keystroke, a scroll, a drag-select — so the text seemed to be hiding
+# rather than missing, and it read as a colour bug rather than a paint bug.
+#
+# Plain text, no escapes at all: the one thing a terminal must not lose.
+dmg 'first line\r\nsecond line\r\nthird line\r\nfourth line\r\nfifth line\r\n' \
+    40 12 4096 | grep -q '^identical'
+check "a block of plain text fed WHOLE paints every row it wrote" $?
+
+# The same, without carriage returns — a bare LF leaves the column alone, so
+# each line starts further right and no two rows share a column. A row that is
+# never painted cannot be excused by the one above it having covered it.
+dmg 'aaa\nbbb\nccc\nddd\n' 40 12 4096 | grep -q '^identical'
+check "...and so does a staircase, where no row covers for another" $?
 
 scrollout=$(echo "$(seq 1 200)" | "$ST" --cols=80 --rows=24 damage-check - --split=7 2>&1)
 printf '%s' "$scrollout" | grep -q '^identical'
@@ -1532,6 +1632,87 @@ else
     echo "$out" | grep -qE 'deadline      on, 1[0-9]\.[0-9]+ ms refresh' \
         && bad "...and never invents 60 Hz to fill the gap" \
         || ok "...and never invents 60 Hz to fill the gap"
+
+    # ── the desktop switches theme while a terminal is open ─────────────────
+    #
+    # The whole point of the config watch, and the only place it can be proved:
+    # it is a claim about PIXELS ON A SCREEN changing without a restart, so
+    # nothing headless can answer it. `grim` works inside a headless cage
+    # because cage implements screencopy, which is what makes this testable at
+    # all rather than a thing verified once by eye and hoped for afterwards.
+    #
+    # ⚠ THE PALETTE IS RENAMED OVER, NOT WRITTEN IN PLACE, because that is what
+    # the desktop helper does and it is the case a naive watch gets wrong: a
+    # watch on the FILE follows the inode and stays attached to the old
+    # contents, so it fires once and never again. Writing in place here would
+    # pass with that bug present.
+    if ! command -v grim >/dev/null 2>&1; then
+        echo "  skip  the live recolour (grim is not installed)"
+    else
+        RC="$T/reload"
+        mkdir -p "$RC/syntty"
+        printf 'include = palette.conf\n' > "$RC/syntty/syntty.conf"
+        printf 'background = #1b1f26\n' > "$RC/syntty/palette.conf"
+
+        # The socket cage creates is the NEXT free one; the live desktop, if
+        # there is one, already owns wayland-0. Taken from cage's own
+        # environment rather than guessed — see
+        # reference_wayland_connect_falls_back_to_live_socket for what guessing
+        # costs: a client with no display connects to the REAL session.
+        rm -f "$RC/sock"
+        WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+        XDG_CONFIG_HOME="$RC" XDG_CACHE_HOME="$FC" \
+        timeout 40 cage -- /bin/sh -c \
+            "printf '%s' \"\$WAYLAND_DISPLAY\" > $RC/sock; \
+             exec $ST --cols=40 --rows=6 win -- /bin/sh -c 'sleep 20'" \
+            >/dev/null 2>&1 &
+        cagepid=$!
+
+        # Wait for the window rather than sleeping a guessed amount: a fixed
+        # sleep is a test that passes on this machine and flakes on a slower one.
+        shot=""
+        for _ in $(seq 1 40); do
+            [ -s "$RC/sock" ] && shot=$(cat "$RC/sock") && break
+            sleep 0.25
+        done
+
+        first=""
+        if [ -n "$shot" ]; then
+            for _ in $(seq 1 40); do
+                WAYLAND_DISPLAY="$shot" grim -t ppm "$RC/a.ppm" 2>/dev/null \
+                    && first=1 && break
+                sleep 0.25
+            done
+        fi
+
+        if [ -z "$first" ]; then
+            echo "  skip  the live recolour (no window came up under cage)"
+        else
+            # The theme switch, exactly as synui-apply-theme performs it.
+            printf 'background = #c0c0c0\n' > "$RC/syntty/palette.tmp"
+            mv -f "$RC/syntty/palette.tmp" "$RC/syntty/palette.conf"
+
+            got=""
+            for _ in $(seq 1 40); do
+                WAYLAND_DISPLAY="$shot" grim -t ppm "$RC/b.ppm" 2>/dev/null || break
+                # The new background as three raw bytes, anywhere in the image.
+                if printf '\300\300\300' | grep -qaF -f - "$RC/b.ppm"; then
+                    got=1; break
+                fi
+                sleep 0.25
+            done
+            [ -n "$got" ]
+            check "a theme written under a RUNNING window recolours it in place" $?
+
+            # ...and it really was a change, not a window that was silver all
+            # along: the old background has to be gone.
+            printf '\033\037\046' | grep -qaF -f - "$RC/b.ppm" \
+                && bad "...and the old background is gone, not merely covered" \
+                || ok "...and the old background is gone, not merely covered"
+        fi
+        kill "$cagepid" 2>/dev/null || true
+        wait "$cagepid" 2>/dev/null || true
+    fi
 fi
 
 echo

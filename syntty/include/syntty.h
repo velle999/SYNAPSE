@@ -721,6 +721,15 @@ typedef struct st_render st_render_t;
 st_render_t *st_render_new(st_font_t *f);
 void         st_render_free(st_render_t *r);
 
+/* Swap the face. The CELL SIZE comes with it, so the caller owns re-fitting
+ * the grid to the window afterwards — this only rebinds. */
+void st_render_set_font(st_render_t *r, st_font_t *f);
+
+/* Back to the built-in scheme. ⚠ What a RELOAD needs before re-applying a
+ * config: a key the file no longer has must go back to its default, or
+ * deleting a line does nothing. */
+void st_render_colors_reset(st_render_t *r);
+
 /* Default foreground and background, as 0xRRGGBB. Cells that name a colour
  * still win; these are what ST_COL_DEFAULT resolves to. */
 void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg);
@@ -882,6 +891,10 @@ size_t st_mouse_encode(uint16_t mode, bool sgr, int event, int button,
  * what the assertions see. */
 #define ST_CFG_UNSET 0xFFFFFFFFu
 
+/* How many files one load may read: the main one plus what it includes. Small
+ * on purpose — this is a terminal's settings, not a build system. */
+#define ST_CFG_MAX_FILES 8
+
 typedef struct {
 	char    *font;             /* NULL: whatever fontconfig calls monospace */
 	double   font_size;        /* 0: the default */
@@ -901,6 +914,21 @@ typedef struct {
 	bool     found;
 	int      errors;
 	char     first_error[256];
+
+	/* Every file this load actually opened, main one first, then whatever it
+	 * included. Two jobs, and neither is decoration:
+	 *
+	 *   - `syntty config` names them, so "my colours are not being applied"
+	 *     can be answered by looking at the output instead of guessing which
+	 *     of two files won.
+	 *   - the window WATCHES their directories, which is how a theme switch
+	 *     recolours a terminal that is already open. Watching only the main
+	 *     file would miss the generated palette, which is the one that
+	 *     actually changes.
+	 *
+	 * Also the cycle guard: a file already in here is not read again. */
+	char     files[ST_CFG_MAX_FILES][512];
+	int      nfiles;
 } st_config_t;
 
 void st_config_defaults(st_config_t *c);
@@ -910,6 +938,17 @@ void st_config_free(st_config_t *c);
 bool st_config_load(st_config_t *c, const char *path);
 /* Where it would look, for `syntty config` and for the help text. */
 const char *st_config_path(char *buf, size_t cap);
+/* The colours from a config onto a renderer, defaults included for everything
+ * the file does not name.
+ *
+ * ⚠ THE PALETTE GOES FIRST, and that ordering is the whole reason this is one
+ * function rather than four calls at the call site: `foreground = bright_white`
+ * is an INDEX into the sixteen, and the same file may have redefined
+ * bright_white two lines earlier. Resolving the foreground before the palette
+ * is set uses the built-in shade and quietly ignores half of somebody's theme.
+ * There are two callers now — startup and reload — and a rule kept in one
+ * place cannot be got right in one of them and wrong in the other. */
+void st_config_apply_colors(const st_config_t *c, st_render_t *r);
 /* A commented example, on stdout. ⚠ Because a config nobody can find is a
  * config nobody uses — see reference_synui_config_synuirc_ships_nowhere, where
  * exactly that happened to the compositor this ships beside. */
@@ -1019,15 +1058,49 @@ typedef struct {
 	int          tabs;      /* how many to open at startup; 0 and 1 mean one */
 } st_tab_spec_t;
 
+/* ── the configuration, and how the window re-reads it ──────────────────────
+ *
+ * A terminal that only reads its config at startup is a terminal whose colours
+ * change when you open a new one, which is not what "the desktop switched
+ * theme" should look like — every other window on the screen recolours in
+ * place. So the window WATCHES the files it read and re-reads them when they
+ * change.
+ *
+ * ⚠ A WATCH, NOT A SIGNAL, and the reason is upgrades. SIGUSR1 is the
+ * convention (kitty and foot both use it) but its default disposition is
+ * TERMINATE, so the first theme switch after an update would kill every syntty
+ * that was already open — they are running the old binary, which has no
+ * handler. A file watch cannot do that: a build that does not know about it
+ * simply does not react. It is also strictly more useful, because it follows a
+ * hand edit of the file in an editor as well as a write from the desktop.
+ *
+ * ⚠ FLAGS STILL BEAT THE FILE, AFTERWARDS AS WELL AS AT STARTUP. `syntty
+ * --font=X` must not have its font taken away by a later write to the config,
+ * so what the command line gave is passed in here and re-applied over every
+ * reload. That policy lives in main.c and always has; this carries it. */
+typedef struct {
+	const st_config_t *cfg;    /* what was read at startup */
+	bool        watch;         /* false for --no-config: nothing to re-read */
+	const char *flag_font;     /* --font=, or NULL — the file cannot take it */
+	double      flag_size;     /* --font-size=, or 0 */
+	const char *font;          /* the family in use (NULL: the default) */
+	double      size;          /* and its size, resolved */
+} st_win_conf_t;
+
 /* Open a window and run until the last tab's child exits or it is closed.
  *
  * ⚠ THE WINDOW OWNS THE SESSIONS NOW, which it did not before tabs. A grid, a
  * parser and a pty per tab, created and destroyed here — the caller builds only
  * the font and the renderer, which are the things tabs share. Everything under
  * this is still driven headlessly by the subcommands in main.c, which is what
- * keeps the untestable part small. */
-int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
-               const char *title, bool deadline, const st_config_t *cfg,
+ * keeps the untestable part small.
+ *
+ * ⚠ `font` IS THE OWNER'S HANDLE, not a font. A reload may open a different
+ * face and close the old one, so the caller's pointer has to move with it —
+ * passing the font by value would leave the caller holding freed memory to
+ * close at the end. */
+int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
+               const char *title, bool deadline, const st_win_conf_t *conf,
                st_win_stats_t *stats);
 
 #endif /* SYNTTY_H */

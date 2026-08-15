@@ -625,10 +625,34 @@ static size_t ascii_run(const uint8_t *p, size_t n)
 
 /* Write a clipped run straight into the current row: no wrap test, no width
  * lookup, no function call per character. The caller has already guaranteed
- * the run fits. */
+ * the run fits.
+ *
+ * ⚠ IT STILL HAS TO MARK THE ROW DIRTY. This is the path essentially all
+ * ordinary output takes, and for three releases it was the one path that wrote
+ * cells without saying so — st_grid_putc marks, every erase marks, every
+ * scroll marks a whole range, and the fast path silently did not. Rows written
+ * by it were therefore never repainted, and the only reason a terminal was
+ * usable at all is that something ELSE happened to dirty most of them: the
+ * cursor forces the row it left and the row it arrived at, and the cursor
+ * lands on almost every row when output arrives a few bytes at a time.
+ *
+ * It arrives a few bytes at a time in the TESTS. A pty read is 256 KB, so a
+ * command that prints a block of text lands whole, the cursor touches only the
+ * first row and the last, and every row between them is written and never
+ * drawn — until a keystroke, a scroll or a drag-select dirties it and the text
+ * appears all at once, as if it had been hiding. That is what `syntty about`
+ * under a real compositor looked like: three visible lines out of nineteen.
+ *
+ * ⚠ AND IT IS WHY `damage-check --split=3` PASSED. Small chunks are harsher
+ * for a missed MARK — a later chunk covering the same row hides one — but they
+ * are the wrong tool for a missed row entirely, because they hand the cursor
+ * to every row in turn and it does the marking the grid failed to do. The
+ * suite now checks a single whole-stream feed as well, which is what a pty
+ * actually delivers. */
 static void put_run(st_grid_t *g, const uint8_t *p, size_t n)
 {
 	st_row_t *row = &g->screen[g->cy];
+	row->dirty = true;
 	if (g->cx + n > row->hi)
 		row->hi = (uint16_t)(g->cx + n);
 	st_cell_t *cells = row->cells + g->cx;
