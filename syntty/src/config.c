@@ -498,7 +498,7 @@ void st_config_example(FILE *out)
 "# The font. Any fontconfig family name; the file it resolves to is cached,\n"
 "# so this costs 0.03 ms at startup rather than 7.4 ms.\n"
 "# font = monospace\n"
-"# font_size = 14\n"
+"# font_size = 10.5\n"
 "\n"
 "# The size a window asks for when the compositor lets it choose. A tiling\n"
 "# compositor will not, and the grid follows the window rather than fighting\n"

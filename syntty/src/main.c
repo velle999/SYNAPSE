@@ -503,7 +503,7 @@ static int cmd_font(const opts_t *o)
 
 	printf("family       %s\n", o->font ? o->font : "monospace");
 	printf("file         %s\n", s->path);
-	printf("size         %.1f px\n", o->font_size);
+	printf("size         %.1f pt\n", o->font_size);
 	printf("cell         %dx%d px, baseline %d\n",
 	       st_font_cell_w(f), st_font_cell_h(f), st_font_baseline(f));
 	printf("atlas        %u ASCII glyphs, %zu bytes\n",
@@ -839,7 +839,10 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 
 	uint32_t *full = xcalloc(npx, sizeof *full);
 	uint32_t *incr = xcalloc(npx, sizeof *incr);
+	/* Ground truth for the per-frame check below — see the comment there. */
+	uint32_t *ref  = xcalloc(npx, sizeof *ref);
 	uint8_t  *rows = xcalloc(o->rows, 1);
+	size_t    bad_frame = 0, bad_px = 0;
 
 	/* INCREMENTAL. The first paint is a full one, exactly as the window does
 	 * on its first configure — there is nothing on screen to preserve. */
@@ -880,6 +883,35 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 		st_render_rows(r, &gi, rows, incr, w, w, h);
 		incr_ns += now_ns() - t0;
 		st_grid_clear_dirty(&gi);
+
+		/* ⚠ COMPARED AFTER EVERY CHUNK, NOT ONLY AT THE END — and the end-only
+		 * version of this check is why an animation could look broken while
+		 * this tool said `identical`.
+		 *
+		 * A program that repaints the same cells over and over converges: rows
+		 * a frame failed to paint get written again a moment later, so the
+		 * FINAL buffer comes out right no matter how many intermediate frames
+		 * were wrong. cmatrix is exactly that shape, and it is also exactly the
+		 * shape whose brokenness a person sees — the whole content is the
+		 * intermediate frames.
+		 *
+		 * So the ground truth is a full paint of the SAME grid, taken every
+		 * frame. Same grid rather than a second one fed in parallel, because
+		 * then any difference is the damage decision and nothing else.
+		 *
+		 * Only the FIRST divergence is worth reporting: once `incr` is wrong it
+		 * stays wrong, and every later frame would report the same corruption
+		 * again. The loop keeps running so the timings still cover the whole
+		 * stream. */
+		if (bad_frame == 0) {
+			st_render_grid(r, &gi, ref, w, w, h);
+			for (size_t k = 0; k < npx; k++)
+				if (ref[k] != incr[k]) {
+					bad_frame = chunks;
+					bad_px    = k;
+					break;
+				}
+		}
 	}
 
 	/* FULL, from a clean grid fed in one go. */
@@ -918,20 +950,43 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 	         ((double)full_ns * (double)chunks) / (double)incr_ns : 0.0);
 
 	int rc = 0;
+	/* ⚠ THE PER-FRAME RESULT IS REPORTED FIRST AND FAILS ON ITS OWN, because it
+	 * is the stricter of the two and the one that matches what a person sees.
+	 * A stream can pass the final comparison below and still have been visibly
+	 * broken the whole way through — see the note at the check itself. */
+	if (bad_frame) {
+		size_t bx = bad_px % (size_t)w, by = bad_px / (size_t)w;
+		printf("MISMATCH   frame %zu of %zu: pixel %zu,%zu = cell %zu,%zu "
+		       "(correct %06X, incremental %06X)\n",
+		       bad_frame, chunks, bx, by, bx / (size_t)cw, by / (size_t)ch,
+		       ref[bad_px] & 0xFFFFFF, incr[bad_px] & 0xFFFFFF);
+		printf("           that frame was drawn wrong — a row changed and was "
+		       "not marked dirty.\n"
+		       "           Later frames may repair it, which is why this is "
+		       "checked EVERY frame\n"
+		       "           and not only at the end: an animation is its "
+		       "intermediate frames.\n");
+		rc = 1;
+	}
+
 	if (bad_y >= 0) {
 		printf("MISMATCH   pixel %d,%d = cell %d,%d "
 		       "(full %06X, incremental %06X)\n",
 		       bad_x, bad_y, bad_x / cw, bad_y / ch,
 		       full[(size_t)bad_y * w + bad_x] & 0xFFFFFF,
 		       incr[(size_t)bad_y * w + bad_x] & 0xFFFFFF);
-		printf("           a row changed and was not marked dirty — "
-		       "see the damage note in include/syntty.h\n");
+		printf("           the FINAL screen is wrong too — a row changed and "
+		       "was not marked dirty.\n");
 		rc = 1;
+	} else if (!bad_frame) {
+		printf("identical  damage tracking drew the same %d x %d buffer, "
+		       "every frame\n", w, h);
 	} else {
-		printf("identical  damage tracking drew the same %d x %d buffer\n", w, h);
+		printf("converged  the final screen matches; only the frames on the "
+		       "way there were wrong\n");
 	}
 
-	free(rows); free(full); free(incr); free(buf); free(err);
+	free(rows); free(full); free(incr); free(ref); free(buf); free(err);
 	st_vt_free(&vti); st_vt_free(&vtf);
 	st_grid_free(&gi); st_grid_free(&gf);
 	st_render_free(r); st_font_close(f);
@@ -1133,7 +1188,7 @@ static int cmd_config(const opts_t *o, int argc, char **argv)
 
 	printf("font         %s\n", c.font ? c.font : "monospace (default)");
 	if (c.font_size > 0) printf("font_size    %.1f\n", c.font_size);
-	else                 printf("font_size    14.0 (default)\n");
+	else                 printf("font_size    10.5 (default)\n");
 	if (c.cols > 0)      printf("columns      %d\n", c.cols);
 	else                 printf("columns      80 (default)\n");
 	if (c.rows > 0)      printf("rows         %d\n", c.rows);
@@ -1332,7 +1387,7 @@ int main(int argc, char **argv)
 	if (o.cols < 1)         o.cols = 80;
 	if (o.rows < 1)         o.rows = 24;
 	if (o.scrollback < 0)   o.scrollback = 1000;
-	if (o.font_size <= 0)   o.font_size = 14.0;
+	if (o.font_size <= 0)   o.font_size = 10.5;
 
 	if (!strcmp(cmd, "dump"))
 		return split ? cmd_dump_split(&o, file, split) : cmd_dump(&o, file);

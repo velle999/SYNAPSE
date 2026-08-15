@@ -207,14 +207,101 @@ static inline uint32_t resolve(const st_render_t *r, uint32_t c, uint32_t dflt)
 	}
 }
 
-/* Halfway between two colours, per channel. Used for ST_DIM, which is a real
- * attribute programs use for de-emphasis — rendering it as plain fg makes
- * `ls` output and diff headers indistinguishable from ordinary text. */
-static inline uint32_t mix_half(uint32_t a, uint32_t b)
+/* `t` sixteenths of the way from `a` to `b`, per channel. t=8 is the halfway
+ * mix ST_DIM used to be, and is byte-identical to it. */
+static inline uint32_t mix_16th(uint32_t a, uint32_t b, unsigned t)
 {
-	return (((a >> 16 & 0xFF) + (b >> 16 & 0xFF)) / 2) << 16
-	     | (((a >>  8 & 0xFF) + (b >>  8 & 0xFF)) / 2) <<  8
-	     | (((a       & 0xFF) + (b       & 0xFF)) / 2);
+	unsigned s = 16 - t;
+	return ((((a >> 16 & 0xFF) * s + (b >> 16 & 0xFF) * t) / 16) << 16)
+	     | ((((a >>  8 & 0xFF) * s + (b >>  8 & 0xFF) * t) / 16) <<  8)
+	     |  (((a       & 0xFF) * s + (b       & 0xFF) * t) / 16);
+}
+
+/* sRGB → linear, 0..65535, so relative luminance is integer arithmetic and
+ * this file keeps needing no libm. Generated, not hand-written. */
+static const uint16_t srgb_lin[256] = {
+	    0,    20,    40,    60,    80,    99,   119,   139,   159,   179,   199,   219,
+	  241,   264,   288,   313,   340,   367,   396,   427,   458,   491,   526,   562,
+	  599,   637,   677,   718,   761,   805,   851,   898,   947,   997,  1048,  1101,
+	 1156,  1212,  1270,  1330,  1391,  1453,  1517,  1583,  1651,  1720,  1790,  1863,
+	 1937,  2013,  2090,  2170,  2250,  2333,  2418,  2504,  2592,  2681,  2773,  2866,
+	 2961,  3058,  3157,  3258,  3360,  3464,  3570,  3678,  3788,  3900,  4014,  4129,
+	 4247,  4366,  4488,  4611,  4736,  4864,  4993,  5124,  5257,  5392,  5530,  5669,
+	 5810,  5953,  6099,  6246,  6395,  6547,  6700,  6856,  7014,  7174,  7335,  7500,
+	 7666,  7834,  8004,  8177,  8352,  8528,  8708,  8889,  9072,  9258,  9445,  9635,
+	 9828, 10022, 10219, 10417, 10619, 10822, 11028, 11235, 11446, 11658, 11873, 12090,
+	12309, 12530, 12754, 12980, 13209, 13440, 13673, 13909, 14146, 14387, 14629, 14874,
+	15122, 15371, 15623, 15878, 16135, 16394, 16656, 16920, 17187, 17456, 17727, 18001,
+	18277, 18556, 18837, 19121, 19407, 19696, 19987, 20281, 20577, 20876, 21177, 21481,
+	21787, 22096, 22407, 22721, 23038, 23357, 23678, 24002, 24329, 24658, 24990, 25325,
+	25662, 26001, 26344, 26688, 27036, 27386, 27739, 28094, 28452, 28813, 29176, 29542,
+	29911, 30282, 30656, 31033, 31412, 31794, 32179, 32567, 32957, 33350, 33745, 34143,
+	34544, 34948, 35355, 35764, 36176, 36591, 37008, 37429, 37852, 38278, 38706, 39138,
+	39572, 40009, 40449, 40891, 41337, 41785, 42236, 42690, 43147, 43606, 44069, 44534,
+	45002, 45473, 45947, 46423, 46903, 47385, 47871, 48359, 48850, 49344, 49841, 50341,
+	50844, 51349, 51858, 52369, 52884, 53401, 53921, 54445, 54971, 55500, 56032, 56567,
+	57105, 57646, 58190, 58737, 59287, 59840, 60396, 60955, 61517, 62082, 62650, 63221,
+	63795, 64372, 64952, 65535,
+};
+
+static inline uint32_t luma(uint32_t c)
+{
+	return (2126u * srgb_lin[c >> 16 & 0xFF]
+	      + 7152u * srgb_lin[c >>  8 & 0xFF]
+	      +  722u * srgb_lin[c       & 0xFF]) / 10000u;
+}
+
+/* Does `fg` clear 4.5:1 against `bg`? 3277 is the 0.05 of the WCAG formula in
+ * the same 0..65535 scale, and the ratio is cross-multiplied so there is no
+ * division and no float. */
+static inline bool clears_4_5(uint32_t fg, uint32_t bg)
+{
+	uint32_t a = luma(fg) + 3277, b = luma(bg) + 3277;
+	uint32_t hi = a > b ? a : b, lo = a > b ? b : a;
+	return (uint64_t)hi * 10u >= (uint64_t)lo * 45u;
+}
+
+/* ST_DIM, which is a real attribute programs use for de-emphasis — rendering it
+ * as plain fg makes `ls` output and diff headers indistinguishable from
+ * ordinary text.
+ *
+ * ⚠ DIMMING IS A BLEND TOWARD THE BACKGROUND, AND THAT IS ONLY LEGIBLE ON A
+ * DARK ONE. The old code always took the halfway mix, which darkens toward
+ * black on a dark theme (fine) and LIGHTENS toward silver on a pale one, where
+ * it lands on grey-on-grey: measured on the win95 theme's #c0c0c0, dimmed
+ * default text was 3.46:1 and dimmed blue and grey were both 2.10:1. Claude
+ * Code, `ls`, git and diff all mark their secondary lines DIM, so on a light
+ * theme most of the screen was the unreadable half.
+ *
+ * So the blend is the LARGEST one that still clears 4.5:1 rather than a fixed
+ * half.
+ *
+ * ⚠ THIS DOES MOVE THE DARK THEMES A LITTLE, and that is deliberate — the
+ * opposite of the invariant contrast.c holds for the panels. Measured on
+ * gruvbox, the halfway mix is #89816d on #282828 = 3.81:1, already under the
+ * floor, so t comes back 7 rather than 8. The panel invariant exists because an
+ * accent is the THEME AUTHOR'S colour and correcting it overrides a deliberate
+ * choice; a dimmed foreground is a colour SYNTTY DERIVES from two of theirs, so
+ * there is no authored value here to preserve. A dark theme shifts by one
+ * sixteenth at most, which is why the floor is allowed to be unconditional.
+ *
+ * The cost, stated because it is real: where the undimmed colour is itself near
+ * the floor there is no blend left to make, and DIM becomes a no-op. The light
+ * palette's blue is 4.59:1 on silver, so dim blue renders as plain blue. Losing
+ * the de-emphasis is the better half of that trade — the alternative measured
+ * 2.10:1.
+ *
+ * A fg that ALREADY fails against its own bg is left exactly where it is. It is
+ * the program's colour, not ours to correct, and dimming it further is the only
+ * outcome that is certainly wrong. */
+static inline uint32_t dim_fg(uint32_t fg, uint32_t bg)
+{
+	for (unsigned t = 8; t > 0; t--) {
+		uint32_t d = mix_16th(fg, bg, t);
+		if (clears_4_5(d, bg))
+			return d;
+	}
+	return fg;
 }
 
 /* Composite one coverage value. `cov` is 0..255 from the glyph atlas.
@@ -273,7 +360,7 @@ static void draw_cell(const st_render_t *r, uint32_t *px, int stride,
 		else               { uint32_t t = fg; fg = bg; bg = t; }
 	}
 
-	if (at & ST_DIM)     fg = mix_half(fg, bg);
+	if (at & ST_DIM)     fg = dim_fg(fg, bg);
 	if (at & ST_HIDDEN)  fg = bg;
 
 	fill_rect(px, stride, x0, y0, cw, ch, bg);

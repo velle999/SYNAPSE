@@ -499,7 +499,20 @@ static st_glyph_t *tab_insert(face_t *fa, uint32_t cp)
 
 /* ── public ─────────────────────────────────────────────────────────────── */
 
-st_font_t *st_font_open(const char *family, double size_px, char **err)
+/* ⚠ THE SIZE COMING IN IS A POINT SIZE, AND FREETYPE WANTS PIXELS. `font_size`
+ * is written by synui-apply-font, which hands the SAME NUMBER to GTK, Qt, kitty
+ * and rofi, and every one of those reads it as points. Taking it as pixels drew
+ * this terminal at 10px where kitty beside it drew 13 — about a quarter smaller
+ * than the entire rest of the desktop, from the same setting.
+ *
+ * 96 dpi is the conversion because that is the density every one of those
+ * toolkits assumes when nothing says otherwise, and nothing here says
+ * otherwise: syntty binds no output scale, so there is no second factor to
+ * fold in. When it learns about scale, this is where that belongs. */
+#define ST_DPI 96.0
+#define ST_PT_TO_PX(pt) ((pt) * ST_DPI / 72.0)
+
+st_font_t *st_font_open(const char *family, double size_pt, char **err)
 {
 	if (!family || !*family)
 		family = "monospace";
@@ -507,7 +520,7 @@ st_font_t *st_font_open(const char *family, double size_px, char **err)
 	uint64_t t_open = now_ns();
 
 	st_font_t *f = xcalloc(1, sizeof *f);
-	f->size_px = size_px > 0 ? size_px : 14.0;
+	f->size_px = ST_PT_TO_PX(size_pt > 0 ? size_pt : 10.5);
 	f->family  = xstrdup(family);
 
 	if (FT_Init_FreeType(&f->ft) != 0) {

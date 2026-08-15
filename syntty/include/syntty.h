@@ -680,7 +680,7 @@ typedef struct st_font st_font_t;
 
 /* Open a font by fontconfig family name ("monospace", "JetBrains Mono", …).
  * Returns NULL and sets *err to a malloc'd sentence on failure. */
-st_font_t *st_font_open(const char *family, double size_px, char **err);
+st_font_t *st_font_open(const char *family, double size_pt, char **err);
 void       st_font_close(st_font_t *f);
 
 /* The cell box every row and column is laid out on. Taken from the regular

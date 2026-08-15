@@ -1254,7 +1254,7 @@ static void config_reload(win_t *w)
 	const char *want_font = w->conf->flag_font ? w->conf->flag_font : nc.font;
 	double want_size = w->conf->flag_size > 0 ? w->conf->flag_size
 	                 : nc.font_size    > 0 ? nc.font_size
-	                 : 14.0;
+	                 : 10.5;   /* points; 14px as it was */
 
 	bool same_family = (!want_font && !w->cur_font[0])
 	                || (want_font && !strcmp(want_font, w->cur_font));
@@ -2776,7 +2776,7 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 	w->inotify_fd = -1;
 	snprintf(w->cur_font, sizeof w->cur_font, "%s",
 	         (conf && conf->font) ? conf->font : "");
-	w->cur_size = (conf && conf->size > 0) ? conf->size : 14.0;
+	w->cur_size = (conf && conf->size > 0) ? conf->size : 10.5;
 	w->scroll_lines = (cfg && cfg->scroll_lines > 0) ? cfg->scroll_lines : 3;
 	w->pool_fd = -1;
 	w->deadline = deadline;
