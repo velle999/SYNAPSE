@@ -164,6 +164,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
 | **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
+| **`syn-arcade`** | The game assistant. Three things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); and **SDL mapping overrides** for a pad whose buttons come out in the wrong places. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 
 ### Apps
 
@@ -655,11 +656,81 @@ synui-game-run -- %command%
 ```
 
 Every wrapper is optional and a missing tool is dropped rather than fatal.
-`gamescope` and `wine` ship on the ISO; `mangohud` and `gamemode` are optdepends.
-The overlay is loaded but hidden — **`Shift_R`+`F12`** toggles it.
+`gamescope` and `wine` ship on the ISO; `gamemode` is an optdepend, and
+`mangohud` arrives with `syn-arcade`. The overlay is loaded but hidden.
 
 > `MANGOHUD=1` only hooks Vulkan. An OpenGL game needs the wrapper, which is the
 > usual reason the overlay "doesn't work".
+
+**`syn-arcade`** is the overlay's controls, and they work *inside a game that is
+already running*:
+
+```bash
+syn-arcade hud toggle        # show it or hide it
+syn-arcade hud cycle         # move it to the next corner
+syn-arcade hud set font_size 24
+syn-arcade binds install     # bind the first two to Super+F11 / Super+F12
+```
+
+`binds install` writes two ordinary `bind =` lines into your `synuirc`, so the
+`Super`+`/` shortcuts palette can rebind them like any other key. It is not done
+for you — nothing here edits your compositor config until you ask it to.
+
+<details>
+<summary>Why a keybind can change the overlay mid-game</summary>
+
+MangoHud is an implicit Vulkan layer living **inside the game's own process**.
+There is no socket and no signal, and `mangohudctl` does not reach it — that
+talks to the separate `mangoapp` process used by gamescope/SteamOS. What
+`libMangoHud` *does* do is watch its own config file with inotify and reparse on
+every change, so **rewriting that file is a live control channel into every
+running game at once**.
+
+Two consequences, both of which `syn-arcade` handles for you:
+
+- The config must **exist before the game starts**. MangoHud adds its watch once,
+  at layer init; if the file is missing at that moment the watch fails and that
+  process never sees a config change again. Your session runs `syn-arcade hud
+  ensure` at login for this reason.
+- MangoHud reads **exactly one** config file, and `/etc/MangoHud.conf` outranks
+  `~/.config/MangoHud/MangoHud.conf` — there is no merging. So by default nothing
+  you set as a user was ever read. SynapseOS pins `MANGOHUD_CONFIGFILE` to your
+  own file to collapse that list; `syn-arcade hud path` says which file is
+  winning, and `hud adopt` takes ownership without losing what was in effect.
+
+`Shift_R`+`F12` still works as MangoHud's own built-in toggle, handled inside the
+game process. It is deliberately a different key from the two above — two things
+toggling one setting on one keypress would cancel out.
+</details>
+
+**Controllers.** Steam handles its own input; this is for everything outside it.
+
+```bash
+syn-arcade pads                        # what is plugged in
+syn-arcade pads test <pad>             # watch buttons and sticks live
+syn-arcade pads rumble <pad>           # check the motors
+syn-arcade pads calibrate <pad>        # measure stick drift, set deadzones
+```
+
+A pad is named by its event id (`event20`), its number in the list (`2`), or any
+unique part of its name (`dualsense`). Calibration measures how far a stick
+wanders while nobody is touching it and sets the kernel's per-axis deadzone to
+cover it — which SDL and evdev games read, so it fixes drift **everywhere at
+once** rather than per game. Let go of both sticks first: a reading taken with
+one held is refused rather than believed. Deadzones live in the kernel's copy of
+the device and are lost when it is unplugged, so `pads save` remembers them and
+your session re-applies them at login.
+
+None of this needs root. `udev` tags **joysticks** — and only joysticks, not
+keyboards or mice — for `uaccess`, so whoever is logged in at the machine gets
+write access to the device. If it says permission denied, the device was not
+recognised as a joystick or this is not the active seat; `sudo` is not the fix.
+
+If a pad's buttons come out in the wrong places, `syn-arcade map add` takes an
+SDL mapping string (from `antimicrox` or the SDL gamepad tool) and every SDL2 and
+SDL3 game reads it. A mapping that says `platform:Windows` loads and is then
+silently never applied — the most common reason a pasted mapping does nothing —
+so that one is refused with the reason.
 
 **CachyOS Proton** comes with the installer's Steam option — `proton-cachyos-slr`,
 Valve's experimental branch plus the CachyOS patch set, built against the same
@@ -715,6 +786,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
+| `syn-arcade` | The game assistant — `hud toggle/cycle/set/path/adopt` drives the MangoHud overlay inside a running game, `pads list/info/test/rumble/calibrate` covers controllers outside Steam, `map add/remove` overrides SDL button mappings, and `binds install` puts the overlay on `Super`+`F11` / `Super`+`F12`. `syn-arcade gui` opens the window. See [Gaming](#gaming) |
 | `syn-arsenal` | Browse and install BlackArch security tooling by category — a window by default, `--tui` in the terminal, `--enable-repo` to add the repository |
 | `syn-confine` | Run a command inside a kernel-enforced allowlist — `syn-confine --ro /usr --rw ~/project -- ./build.sh`. `--print` shows the resolved policy without running anything |
 | `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
