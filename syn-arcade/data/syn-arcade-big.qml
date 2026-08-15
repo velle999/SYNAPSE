@@ -768,10 +768,24 @@ ShellRoot {
             readonly property color dim:    "#a49cc4"
             readonly property color accent: "#a78bfa"
 
-            // Everything scales off the screen height, so the same file is
-            // right on a 1080p television and a 4K one. A fixed pixel size is
-            // what makes a desktop UI unreadable on a TV in the first place.
-            readonly property real u: Math.max(12, win.height / 54)
+            // Everything scales off the screen, so the same file is right on a
+            // 1080p television and a 4K one. A fixed pixel size is what makes
+            // a desktop UI unreadable on a TV in the first place.
+            //
+            // ⚠ HEIGHT ALONE WAS NOT ENOUGH, and the failure is invisible on
+            // the shape this was written on. Height gives the same answer for
+            // every 16:9 panel — 1080p, 1440p and 4K all land on the identical
+            // layout, which is the part that already worked — but it says
+            // nothing about how much room there is ACROSS. A 1080x1920 portrait
+            // panel got u=35.6 and fitted less than three tiles on a screen
+            // wide enough for six.
+            //
+            // ⚠ 96 IS NOT A SECOND TASTE DECISION: 54 × 16/9 = 96 exactly, so
+            // on any 16:9 screen the two terms are equal and this is a NO-OP.
+            // It can only ever make the unit smaller, and only on a screen
+            // proportionally narrower than the one the design assumes.
+            readonly property real u: Math.max(12, Math.min(win.height / 54,
+                                                            win.width / 96))
 
             onVisibleChanged: if (visible) keys.forceActiveFocus()
             Component.onCompleted: if (visible) keys.forceActiveFocus()
@@ -1030,10 +1044,64 @@ ShellRoot {
                                 // shelves fit a 720p panel without scrolling —
                                 // above that there is slack, and below it the
                                 // rows scroll, which is the right way round.
-                                height: shelf.modelData.kind === "game"
-                                        ? win.u * 14.6 : win.u * 7.8
+                                height: strip.slotH + (strip.portrait ? win.u * 1.1
+                                                                      : win.u * 0.8)
                                 orientation: ListView.Horizontal
                                 spacing: win.u * 0.8
+
+                                // ── fitting a whole number of tiles ─────────
+                                //
+                                // ⚠ THE TILE WAS A FIXED MULTIPLE OF u, so what
+                                // landed at the right-hand edge was whatever was
+                                // left over — and that leftover is decided by the
+                                // screen's ASPECT RATIO, which nothing here was
+                                // looking at. Measured across the shapes people
+                                // actually own, the last tile came out anywhere
+                                // from 10% visible (4:3, a sliver that reads as a
+                                // rendering fault) to 92% (21:9, a tile that looks
+                                // whole until you notice it is clipped). Only 16:9
+                                // looked deliberate, because 16:9 is what it was
+                                // drawn on.
+                                //
+                                // So the leftover stops being an accident: the
+                                // shelf picks the number of whole tiles that best
+                                // matches the intended size, then stretches the
+                                // pitch slightly so that number PLUS a constant
+                                // half-tile peek fills the row exactly. The peek
+                                // is kept on purpose — a row cut clean at the edge
+                                // gives no sign there is more along it, which is
+                                // the one thing a ten-foot list has to say.
+                                readonly property bool portrait:
+                                    shelf.modelData.kind === "game"
+                                readonly property real idealW:
+                                    portrait ? win.u * 9
+                                             : shelf.modelData.kind === "news" ? win.u * 14
+                                                                               : win.u * 11
+                                readonly property real peek: 0.5
+                                readonly property real content:
+                                    width - leftMargin - rightMargin
+
+                                readonly property int slots: Math.max(1,
+                                    Math.round((content + spacing) / (idealW + spacing)
+                                               - peek))
+
+                                // ⚠ CLAMPED, because rounding to ONE tile on a
+                                // narrow screen would otherwise stretch that tile
+                                // to the full width. Past the clamp the peek is
+                                // wrong by a few percent, which is invisible; an
+                                // eighty-percent-wide cover is not.
+                                readonly property real slotW: {
+                                    const fit = (content + spacing) / (slots + peek)
+                                                - spacing
+                                    return Math.max(idealW * 0.85,
+                                                    Math.min(idealW * 1.15, fit))
+                                }
+                                // ⚠ 2:3 IS THE ART, NOT A STYLE CHOICE — every
+                                // cover Steam caches is 600x900, so the height has
+                                // to follow the snapped width or the snapping
+                                // starts letterboxing 53 pictures.
+                                readonly property real slotH:
+                                    portrait ? slotW * 1.5 : win.u * 7
                                 // The pointer does not drive this; a stray
                                 // flick from a touchpad would fight the
                                 // selection for control of the same list.
@@ -1071,9 +1139,16 @@ ShellRoot {
                                     // somebody's title off it. A headline is
                                     // wider than it is tall, because it is
                                     // words.
-                                    width: portrait ? win.u * 9
-                                                    : headline ? win.u * 14 : win.u * 11
-                                    height: portrait ? win.u * 13.5 : win.u * 7
+                                    //
+                                    // ⚠ TAKEN FROM THE STRIP, not worked out
+                                    // again from u: the strip has already
+                                    // nudged this to whatever makes a whole
+                                    // number of tiles fit the screen, and a
+                                    // delegate that recomputed the ideal would
+                                    // quietly undo that and put the ragged
+                                    // edge back.
+                                    width: strip.slotW
+                                    height: strip.slotH
 
                                     scale: selected ? 1.06 : 1.0
                                     Behavior on scale {
@@ -1365,7 +1440,14 @@ ShellRoot {
 
             color: "transparent"
 
-            readonly property real u: Math.max(12, (kwin.screen ? kwin.screen.height : 1080) / 54)
+            // ⚠ THE SAME UNIT AS THE SHELF ABOVE, and it has to stay that way:
+            // this is a SECOND window, so it cannot read win.u, and the two
+            // drifting apart puts a keyboard on screen at a different scale
+            // from the interface it is typing into. Both clamp the same way —
+            // see the note at win.u for why 96 makes 16:9 a no-op.
+            readonly property real u: Math.max(12, Math.min(
+                (kwin.screen ? kwin.screen.height : 1080) / 54,
+                (kwin.screen ? kwin.screen.width  : 1920) / 96))
             readonly property color ink:    "#f2f0fa"
             readonly property color dim:    "#a49cc4"
             readonly property color accent: "#a78bfa"

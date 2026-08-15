@@ -11,6 +11,8 @@
 #   tests/bigscreen_rig.sh build/syn-arcade ../synui/_build/synui \
 #                          data/syn-arcade-big.qml
 #
+#   SIZE=1024x768 tests/bigscreen_rig.sh ...   # any screen shape, not just 16:9
+#
 # It found real things on its first run: the away hint pill was reported
 # missing when it was merely BEHIND synui's own welcome panel (which is why the
 # rig now turns that off), and the launch path was proven by what landed in
@@ -100,7 +102,16 @@ cat > "$TMP/steam/steamapps/libraryfolders.vdf" <<'VDF'
 "libraryfolders" { "0" { "path" "PLACEHOLDER" } }
 VDF
 sed -i "s|PLACEHOLDER|$TMP/steam|" "$TMP/steam/steamapps/libraryfolders.vdf"
-for id in 400 620; do
+# ⚠ ENOUGH TO OVERFLOW A SHELF. Two games cannot show how a row FILLS — the
+# tiles just sit at the left and every screen looks alike — so the one thing
+# the horizontal layout has to get right was invisible here until this fixture
+# was long enough to run off the edge of the screen.
+# ⚠ SIXTEEN, and the number is chosen against the WIDEST screen this rig can be
+# asked for, not the default one. Ten overflows 16:9 but not 21:9, where the row
+# simply ran out of games and looked like a layout that stops halfway — the
+# fixture has to be longer than the widest shelf, or a wide screen silently
+# tests nothing.
+for id in 400 620 630 730 8930 4000 220 240 280 300 320 340 360 380 420 440; do
 cat > "$TMP/steam/steamapps/appmanifest_$id.acf" <<ACF
 "AppState"
 {
@@ -134,6 +145,31 @@ suspend_timeout = 86400
 idle_timeout = 86400
 RC
 export SYNUI_CONFIG="$TMP/synuirc"
+
+# ── the shape of the screen ─────────────────────────────────────────────────
+#
+# ⚠ THE RIG ONLY EVER ASKED ONE QUESTION ABOUT SIZE, and that is why an
+# aspect-ratio bug lived in the layout: wlroots' headless backend gives 1280x720
+# and nothing here ever changed it, so every screenshot this rig has ever taken
+# was 16:9 — the one shape the interface was drawn on and the one shape whose
+# leftover at the right-hand edge looked deliberate.
+#
+# There is no env var for a headless mode, but synui restores a saved mode per
+# connector on new_output, so seeding its outputs.conf is how the rig asks for
+# a different screen. HEADLESS-1 is what wlroots names the first one.
+if [ -n "${SIZE:-}" ]; then
+    case $SIZE in
+        *x*) : ;;
+        *) echo "SIZE must look like WIDTHxHEIGHT (got '$SIZE')" >&2; exit 2 ;;
+    esac
+    mkdir -p "$TMP/synui"
+    # refresh=0 leaves the rate to the backend: a custom mode that also
+    # insisted on a rate is a mode the headless backend can reject outright,
+    # and a rejected mode falls back to 1280x720 SILENTLY — which would look
+    # like the layout ignoring the screen rather than the rig failing to set it.
+    printf 'output HEADLESS-1 enabled=1 width=%s height=%s refresh=0 scale=1\n' \
+        "${SIZE%x*}" "${SIZE#*x}" > "$TMP/synui/outputs.conf"
+fi
 
 if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
     echo "SKIP: no DRM render node — synui renders through fx_renderer (GLES2)"

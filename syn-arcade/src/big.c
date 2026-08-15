@@ -2383,6 +2383,31 @@ static int big_start(const char *output, bool detach)
 	if (flags >= 0)
 		fcntl(fd, F_SETFD, flags & ~FD_CLOEXEC);
 
+	/*
+	 * ⚠⚠ AND NOW EVERY GRANDCHILD INHERITS THE LOCK TOO — which is the same
+	 * accident as the QS_APP_ID one below, one layer down. Clearing CLOEXEC
+	 * hands the descriptor to quickshell, as intended; what was not intended
+	 * is that quickshell hands it on to everything IT spawns — `big nav`,
+	 * `big keys`, `big mouse`, `pads hold` — because an inherited fd is
+	 * inherited all the way down unless somebody stops it.
+	 *
+	 * The lock is then held by the LONGEST-LIVED of that family, not by the
+	 * shell. Observed on a live box: the shell was gone, an orphaned
+	 * `big nav` still held fd 5 on this file 51 minutes later, and every
+	 * `big start` answered "big screen mode is already running" while there
+	 * was visibly no big screen anywhere. `big stop` could not help either —
+	 * it kills the pid in the file, and that pid had already exited.
+	 *
+	 * ⚠ IT SURVIVES A LOGOUT, so this is not self-clearing: logind ships
+	 * `KillUserProcesses=no`, so the orphan is still there at the next
+	 * login and the feature is dead until somebody finds the process by
+	 * hand. The name is exported rather than a fixed number because the fd
+	 * is whatever open() returned, and the reader must never guess.
+	 */
+	char fdbuf[16];
+	snprintf(fdbuf, sizeof(fdbuf), "%d", fd);
+	setenv("SYN_BIG_LOCK_FD", fdbuf, 1);
+
 	if (ftruncate(fd, 0) == 0) {
 		char buf[32];
 		int len = snprintf(buf, sizeof(buf), "%d\n", (int)getpid());

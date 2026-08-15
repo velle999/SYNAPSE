@@ -232,6 +232,32 @@ int main(int argc, char **argv)
 		return EX_OK;
 	}
 
+	/*
+	 * ⚠ DROP AN INHERITED BIG-SCREEN LOCK BEFORE DOING ANYTHING ELSE.
+	 *
+	 * `big start` deliberately leaves its flock descriptor open across the
+	 * exec into quickshell, so the kernel holds "big screen mode is running"
+	 * for exactly as long as the shell lives. But quickshell passes the
+	 * descriptor on to every helper it spawns, and any one of those
+	 * outliving the shell keeps the lock — so the mode reports itself
+	 * running with nothing on screen, permanently. See the note at the
+	 * setenv in big.c for what that looked like in the wild.
+	 *
+	 * ⚠ THE VARIABLE IS UNSET AS WELL AS THE FD CLOSED, and that is not
+	 * tidiness: this process may reuse the freed number for something of its
+	 * own — pad.c opens event nodes seconds later — and a child of ours
+	 * reading a stale SYN_BIG_LOCK_FD would then close a descriptor that
+	 * means something entirely different.
+	 */
+	const char *lockfd = getenv("SYN_BIG_LOCK_FD");
+	if (lockfd && *lockfd) {
+		char *end = NULL;
+		long n = strtol(lockfd, &end, 10);
+		if (end && !*end && n > STDERR_FILENO && n < 1024)
+			close((int)n);
+		unsetenv("SYN_BIG_LOCK_FD");
+	}
+
 	const char *cmd = argv[1];
 	int rest_c = argc - 2;
 	char **rest = argv + 2;

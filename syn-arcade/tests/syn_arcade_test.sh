@@ -1509,6 +1509,95 @@ newsline=$(grep -n 'title: "News"' "$BIGQML" | head -1 | cut -d: -f1)
 [ "$newsline" -gt "$sysline" ]
 check "news comes after the system row" $?
 
+# ── the layout answers to the screen's SHAPE, not only its height ───────────
+#
+# ⚠ WHAT MADE THIS BUG INVISIBLE: scaling off height alone gives the identical
+# layout for 1080p, 1440p and 4K, so "it works at every resolution" was true
+# and hid that it was wrong at every ASPECT RATIO. The leftover tile at the
+# right-hand edge ran from 10% visible on 4:3 to 92% on 21:9; only 16:9, the
+# shape it was drawn on, looked deliberate.
+#
+# Rendered proof is bigscreen_rig.sh, which can now be given a SIZE. These
+# guard the two things a later edit could quietly undo.
+grep -q 'win.width / 96' "$BIGQML"
+check "the unit is clamped by WIDTH as well as height" $?
+
+# 54 x 16/9 = 96 exactly, so the clamp is a no-op on 16:9 and can only ever
+# shrink the unit on a proportionally narrower screen. If someone "tidies" that
+# constant the televisions this is for change size, which is the one thing it
+# must never do.
+grep -q 'win.height / 54' "$BIGQML"
+check "...and 16:9 still lands on exactly the height-derived unit" $?
+
+# The tile takes the SNAPPED width from the strip. A delegate that went back to
+# a fixed multiple of u would put the ragged edge straight back, and nothing
+# would warn.
+grep -q 'width: strip.slotW' "$BIGQML"
+check "a tile takes the width the shelf snapped for it" $?
+
+grep -q 'height: strip.slotH' "$BIGQML"
+check "...and the height that keeps Steam's 2:3 art square" $?
+
+# The keyboard is a second window and cannot read win.u, so it carries its own
+# copy of the clamp — the two drifting apart is a keyboard at a different scale
+# from the interface it types into.
+[ "$(grep -c '/ 96' "$BIGQML")" -ge 2 ]
+check "the on-screen keyboard clamps the same way" $?
+
+# ── the lock belongs to the shell, and to nothing the shell spawned ─────────
+#
+# ⚠ THE BUG THIS PINS LEFT BIG SCREEN MODE PERMANENTLY UNUSABLE. `big start`
+# clears FD_CLOEXEC on the flock descriptor on purpose, so the lock survives
+# the exec into quickshell and is held for exactly as long as the shell lives.
+# What it also did was hand that descriptor to every helper quickshell spawns —
+# `big nav`, `big keys`, `big mouse`, `pads hold` — because an inherited fd
+# keeps being inherited until something stops it.
+#
+# So the lock came to be held by the longest-lived of that family. Found in the
+# wild with the shell long gone and an orphaned `big nav` still holding the
+# file 51 minutes later: every `big start` answered "already running" with no
+# big screen anywhere on any output, and `big stop` could not clear it either,
+# because it kills the pid in the file and that process had already exited.
+#
+# ⚠ AND IT OUTLIVED A LOGOUT — logind ships KillUserProcesses=no — so it was
+# still there at the next login. Nothing about it was self-clearing.
+#
+# The shell is stood in for by a plain `flock`, which is all it is to the
+# kernel; `pads hold` stands in for the helper because it is the one that
+# genuinely runs for hours.
+if ! command -v flock >/dev/null 2>&1; then
+    echo "  skip  the inherited lock (flock is not installed)"
+else
+    LOCKF="$XDG_RUNTIME_DIR/syn-arcade-big.pid"
+    rm -f "$LOCKF"
+    # 9<> so the descriptor is a NUMBER we know and can announce, exactly as
+    # big.c announces whatever open() gave it.
+    printf '99999\n' > "$LOCKF"
+    (
+        exec 9<>"$LOCKF"
+        flock -x 9
+        SYN_BIG_LOCK_FD=9 "$SA" pads hold >/dev/null 2>&1 &
+        helper=$!
+        sleep 1
+        exec 9<&-              # the shell dies; the helper lives on
+        echo "$helper" > "$T/helper.pid"
+        sleep 4
+        kill "$helper" 2>/dev/null
+    ) &
+    outer=$!
+    sleep 2
+
+    # With the shell's own descriptor closed, nothing should be holding this.
+    out=$("$SA" big status 2>&1 | head -1)
+    case "$out" in
+        *"not running"*) ok "a helper outliving the shell does not hold the lock" ;;
+        *) bad "a helper outliving the shell does not hold the lock ($out)" ;;
+    esac
+
+    wait "$outer" 2>/dev/null
+    rm -f "$LOCKF"
+fi
+
 # ── verdict ─────────────────────────────────────────────────────────────────
 
 echo
