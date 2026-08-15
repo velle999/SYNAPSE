@@ -32,7 +32,8 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
-       syn-confine syn-edit limine-mkinitcpio-hook fetch synapse-wallpapers)
+       syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
+       synapse-wallpapers)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -388,6 +389,18 @@ build_component syn-disks
 # keys to a file and prints the result instead of saving it, inside a
 # mktemp -d. Nothing in it edits anything outside that directory.
 build_component syn-edit
+
+# syntty — the terminal. meson C again, and the generic tarball collector above
+# takes src/, include/, meson.build, data/ and tests/, which is all of it.
+#
+# ⚠ ITS check() NEEDS A COMPOSITOR AND HAS NONE. The suite covers the parser,
+# the grid, the renderer and the mouse and paste encoders with no seat and no
+# display; the window tests start their own headless cage and SKIP where cage
+# is not installed, which is what makes this buildable on a machine that is not
+# somebody's desktop. Budget about forty seconds for it — meson's own default
+# would kill a passing suite at thirty and report the kill as a build failure,
+# so syntty's meson.build states a timeout of its own.
+build_component syntty
 
 # Vendored, boot-critical where it is installed, and never installed by this
 # script. See build_vendored_pkg.

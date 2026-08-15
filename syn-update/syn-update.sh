@@ -67,8 +67,8 @@ SRC_GIT=""
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
             nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles
-            syn-settings syn-disks syn-edit syn-confine limine-mkinitcpio-hook
-            fetch synapse-wallpapers)
+            syn-settings syn-disks syn-edit syntty syn-confine
+            limine-mkinitcpio-hook fetch synapse-wallpapers)
 
 # On the ISO but NOT updatable this way, with the reason. Reported rather than
 # skipped in silence: a component quietly frozen forever is exactly the bug

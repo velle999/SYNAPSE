@@ -8,17 +8,27 @@
 # name — and it keeps the word clear of Synty Studios, which the single-t
 # spelling would have walked straight into.
 #
-# ⚠ ALL FIVE STAGES ARE BUILT, AND IT IS STILL REGISTERED NOWHERE. Nothing in
-# the ISO, the installer, build-all.sh or syn-update points at it and it does
-# not claim the terminal handle; registering takes five registrations in one
-# commit and belongs with a decision to ship it, not with the code landing.
+# ⚠ IT SHIPS NOW, AND THAT TOOK SIX REGISTRATIONS IN ONE COMMIT: build-all.sh's
+# KNOWN= *and* a build rule beneath it, syn-update's COMPONENTS,
+# archiso/build.sh's PACKAGES (what is BUILT into the ISO's local repo),
+# archiso/packages.x86_64 (what the live image INSTALLS), syn-install's
+# SEL_CORE (what the TARGET gets), and the line that came out of preflight's
+# UNREGISTERED table. A name on one of those lists and not the others is the
+# failure this repo keeps re-learning, and it surfaces fifteen minutes into
+# somebody's install as "target not found".
+#
+# ⚠ IT IS NOT THE DEFAULT TERMINAL. kitty still is — synui's `terminal =` names
+# it and nothing here changes that. syntty is the one underneath it: 359 KB
+# against kitty's 65 MiB, and it links no GL at all, so it opens on a machine
+# where the GPU stack does not.
+#
 # What it has: a pty, a VT parser, a cell grid, a glyph atlas, a wl_shm window,
 # deadline rendering, damage tracking, the kitty keyboard and graphics
-# protocols, OSC 133 marks, the alternate screen, the pointer and the
-# clipboard, a config file and tabs. What it does not have yet: splits, remote
-# control, hyperlinks.
+# protocols, OSC 133 marks, the alternate screen, the pointer, the clipboard, a
+# config file and tabs. What it does not have yet: splits, remote control,
+# hyperlinks.
 #
-# That ordering is the point. Every claim this program is being built on is a
+# The stage ordering was the point. Every claim this program is built on is a
 # number, and a terminal that draws needs a compositor, a seat and a human to
 # produce one; a terminal that only parses can be measured in CI. The baseline
 # it exists to beat was taken before a line of it was written, with hyperfine
@@ -41,7 +51,7 @@ pkgname=syntty
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=17
+pkgrel=18
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

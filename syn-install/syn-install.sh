@@ -2083,7 +2083,13 @@ while :; do
     # There is no second file manager to choose any more: Dolphin was the
     # optional extra here (WANT_FILEMGR) and nothing opened it by default.
     # `synpkg install dolphin` after the fact.
-    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-edit syn-confine fetch"
+    # syntty is CORE for the same reason synfiles is: a desktop where nothing
+    # opens a prompt is not a smaller system but a broken one. It is 359 KB, it
+    # depends on freetype/fontconfig/wayland/xkbcommon and nothing else, and it
+    # links no GL — so it is also the terminal that still opens on a machine
+    # where the GPU stack does not. kitty remains the default; this is the one
+    # underneath it.
+    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-edit syntty syn-confine fetch"
     # linux-wallpaperengine and synapse-wallpapers travel TOGETHER and are never
     # split. The renderer without our wallpapers is a player with nothing to
     # play on a box that has no Steam; our wallpapers without the renderer is
@@ -2213,10 +2219,10 @@ while :; do
                 ask_opt core_guard   1 "synguard + kernel module — security monitor"
                 ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
 
-                # synpkg and synfiles are unconditional here too — Custom lets
-                # the user drop synapd or synui, but not the package manager
-                # and not the file manager.
-                SEL_CORE="syn syn-model syn-firstboot synpkg synfiles syn-settings syn-disks syn-edit"
+                # synpkg, synfiles and syntty are unconditional here too —
+                # Custom lets the user drop synapd or synui, but not the package
+                # manager, not the file manager and not the terminal.
+                SEL_CORE="syn syn-model syn-firstboot synpkg synfiles syn-settings syn-disks syn-edit syntty"
                 [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
                 [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
                 [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"

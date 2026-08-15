@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- syntty — a terminal window with a prompt and a block cursor.
+
+     The prompt chevron and the block cursor are the whole drawing: they are
+     what a terminal looks like from across a room, and together they read as
+     "a place you type" rather than as another dark rectangle. In the dendrite
+     purple the rest of the suite uses (#a78bfa), so syntty, syn-edit, synfiles
+     and syn-disks sit in the dock as one family.
+
+     The title bar is thinner than a real one on purpose: at 22 px in a menu
+     the window frame has to survive, and a two-pixel bar disappears. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- the window -->
+  <rect x="5" y="8" width="38" height="32" rx="3"
+        fill="#2a2438" stroke="#a78bfa" stroke-width="2"/>
+  <!-- the title bar, closed off by a line rather than a second rectangle so
+       the corner radius above is not drawn twice -->
+  <line x1="6" y1="16" x2="42" y2="16" stroke="#a78bfa" stroke-width="2"/>
+  <!-- the prompt: a chevron, at the size a person would type at -->
+  <path d="M12 24l5 4-5 4" fill="none" stroke="#a78bfa" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- the block cursor, one cell to the right of the chevron -->
+  <rect x="21" y="24" width="7" height="8" rx="1" fill="#a78bfa"/>
+  <!-- a line of output underneath, shorter than the prompt line -->
+  <line x1="12" y1="36" x2="26" y2="36"
+        stroke="#6b6480" stroke-width="2" stroke-linecap="round"/>
+</svg>

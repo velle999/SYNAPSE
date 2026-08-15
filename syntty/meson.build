@@ -142,6 +142,18 @@ syntty = executable('syntty',
                   wayland_client_dep, xkbcommon_dep],
   install : true)
 
+# The desktop entry and its icon. A terminal that installs and appears in no
+# menu is half-shipped — and ⚠ the .desktop BASENAME must equal the window's
+# app_id ("syntty", set in win.c), because that is what the dock keys a pinned
+# launcher off. See reference_dock_pin_desktop_basename_must_equal_app_id.
+install_data('data/syntty.desktop',
+             install_dir: get_option('datadir') / 'applications')
+
+# Scalable only: whatever draws it asks for the size it wants, and a set of
+# PNGs would be five more files to keep in step with one drawing.
+install_data('data/syntty.svg',
+             install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps')
+
 # ⚠ The suite runs a pty and a benchmark, so it is slower than a pure unit
 # test — but meson kills a test at 30 seconds by DEFAULT and reports the kill
 # as a BUILD failure, which looks like a broken program rather than a slow one.

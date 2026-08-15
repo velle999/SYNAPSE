@@ -255,6 +255,18 @@ PACKAGES=(
     # one list and not the other fails pacstrap ~15 minutes in with "target not
     # found". Builds offline: meson and libc.
     syn-settings
+    # syntty — the terminal. Must be ON the ISO for the same reason syn-settings
+    # must: syn-install names it in SEL_CORE, and a package the installer asks
+    # for but the local repo does not carry fails the install at pacman.
+    #
+    # The live session wants it for a reason of its own. kitty needs a GL
+    # context, which is the one thing a live image cannot count on — an
+    # unfamiliar GPU, a driver that did not load, a VM without acceleration —
+    # and a live session with no way to open a prompt is a rescue disk that
+    # cannot rescue anything. syntty links no GL at all, so it opens where
+    # kitty cannot. Builds offline: meson, freetype, fontconfig, wayland and
+    # xkbcommon, all already on the build host for synui.
+    syntty
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

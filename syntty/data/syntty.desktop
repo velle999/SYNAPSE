@@ -1,0 +1,27 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+GenericName=Terminal
+Comment=The SynapseOS terminal — a Wayland terminal that links no GL
+Exec=syntty
+# Its own icon rather than the theme's generic utilities-terminal, which on
+# Breeze is the face Konsole already wears. syn-edit and synfiles both learned
+# this: a stock icon in the dock is indistinguishable from the KDE app it was
+# borrowed from.
+Icon=syntty
+Terminal=false
+# ⚠ THE BASENAME OF THIS FILE MUST EQUAL THE WINDOW'S app_id, which win.c sets
+# to "syntty" — that is what the dock keys a pinned launcher off, and
+# StartupWMClass is IGNORED by it. See
+# reference_dock_pin_desktop_basename_must_equal_app_id: pin an app whose
+# .desktop basename and app_id disagree and the pin opens a second copy while
+# the running window stays unclaimed.
+StartupWMClass=syntty
+Categories=System;TerminalEmulator;
+Keywords=terminal;shell;prompt;command;console;tty;
+# X-TerminalEmulator is what xdg-open and desktop files with Terminal=true look
+# for when they need "a terminal" by name. Declared, but this does NOT make
+# syntty the default one — that is decided by the terminal= line in synuirc and
+# by /usr/bin/x-terminal-emulator on systems that have one, and nothing here
+# writes either. kitty stays the default until somebody chooses otherwise.
+X-TerminalEmulator=true

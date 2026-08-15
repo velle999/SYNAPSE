@@ -97,6 +97,17 @@ synpkg
 fetch
 foot
 kitty
+# syntty — our own terminal, alongside them rather than instead of them.
+#
+# It is 359 KB and links no GL at all: no EGL, no libLLVM, no gallium, which is
+# 188 MB of what a fresh kitty maps and most of the 230 ms it spends before it
+# can run `true`. syntty's first frame is under 6 ms on the machine this is
+# built on.
+#
+# kitty stays the default terminal — synui's `terminal =` still names it, and
+# nothing here changes that. Two terminals on the image is a few hundred KB and
+# means the one that needs a GPU is not the only way to get a prompt.
+syntty
 # Application launcher on Super+Space. rofi 2.0.0 merged lbonn's Wayland port
 # into mainline, so this is the plain `rofi` package (it Provides/Replaces
 # rofi-wayland) talking layer-shell to synui — no XWayland, no AUR, no fork.
