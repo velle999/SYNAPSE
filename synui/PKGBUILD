@@ -1,6 +1,16 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=366
+# 367: virtual-pointer-v1. synui advertised zwp_virtual_keyboard_manager_v1 —
+#   which is how wtype and the bar's start menu work — and no pointer
+#   equivalent, so nothing on the system could move the cursor. syn-arcade's
+#   big screen mode needs to: a web browser on a television takes pointer
+#   events from a gamepad stick, and no amount of message passing is one.
+#   wlr_virtual_pointer_v1 wraps a real struct wlr_pointer, so it goes to
+#   wlr_cursor and behaves exactly like a mouse — same focus rules, same cursor
+#   on screen. ⚠ Added to privileged_globals[] in the same commit: motion plus
+#   a button drives every window on the seat, so a sandboxed client does not
+#   get it. See src/input.c server_new_virtual_pointer().
+pkgrel=367
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

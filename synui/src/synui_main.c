@@ -97,8 +97,11 @@ static const char *const privileged_globals[] = {
     /* Clipboard snooping: these watch every copy, not just paste-on-demand. */
     "zwlr_data_control_manager_v1",
     "ext_data_control_manager_v1",
-    /* Input injection and input interception. */
+    /* Input injection and input interception. A virtual POINTER is as
+     * privileged as a virtual keyboard: motion plus a button is enough to
+     * drive every window on the seat. */
     "zwp_virtual_keyboard_manager_v1",
+    "zwlr_virtual_pointer_manager_v1",
     "zwp_input_method_manager_v2",
     /* Other windows: enumerate, focus, close. */
     "zwlr_foreign_toplevel_manager_v1",

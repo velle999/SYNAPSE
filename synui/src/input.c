@@ -65,6 +65,7 @@
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_switch.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
 
 #include "synui.h"
 #include "effects.h"
@@ -1942,6 +1943,10 @@ static void server_vkb_mgr_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&s->vkb_mgr_destroy.link);
 }
 
+/* The virtual POINTER handler is the mirror of this one, and lives further
+ * down beside server_new_input — it needs input_dev_track(), which is defined
+ * there. */
+
 /* ── Interactive move / resize (Super + mouse drag) ──────── */
 /*
  * Begin an interactive grab of `view`. Tiled windows are auto-floated so the
@@ -3409,6 +3414,55 @@ static void server_new_switch(syn_server_t *s, struct wlr_input_device *dev)
             is_lid ? " (lid)" : "");
 }
 
+/*
+ * A virtual POINTER (virtual-pointer-v1) — the mirror of
+ * server_new_virtual_keyboard(), and it takes the same shortcut:
+ * wlr_virtual_pointer_v1 wraps a real struct wlr_pointer, so handing it to
+ * wlr_cursor makes it a mouse in every way that matters. Motion goes through
+ * the same cursor, lands on the surface the same focus rules pick, and draws
+ * the same cursor image on screen.
+ *
+ * ⚠ Deliberately NOT reached through server_new_input() below. That is the
+ * BACKEND's signal and a virtual device never passes through it — the identical
+ * arrangement virtual keyboards have here, and the reason both of these exist
+ * rather than one switch statement.
+ *
+ * Added for syn-arcade's big screen mode, where a gamepad stick has to move a
+ * pointer through somebody's web browser: a browser takes pointer events, and
+ * no amount of words on a pipe is one. The client may suggest an output and
+ * that is honoured, because big screen mode is on the television and a cursor
+ * that came up on the desk monitor is a cursor nobody can see moving.
+ */
+static void server_new_virtual_pointer(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, new_virtual_pointer);
+    struct wlr_virtual_pointer_v1_new_pointer_event *ev = data;
+    struct wlr_input_device *dev = &ev->new_pointer->pointer.base;
+
+    /* Tracked like any other pointer, so a config reload revisits it and the
+     * device's own destroy tears the bookkeeping down. Applying the libinput
+     * config is a no-op for a device libinput never made — it checks — and is
+     * called anyway so this path cannot drift from the real one. */
+    input_apply_libinput_config(s, dev);
+    input_dev_track(s, dev);
+    wlr_cursor_attach_input_device(s->cursor, dev);
+
+    if (ev->suggested_output)
+        wlr_cursor_map_input_to_output(s->cursor, dev, ev->suggested_output);
+
+    seat_update_capabilities(s);
+    wlr_log(WLR_INFO, "synui: input: virtual pointer attached");
+}
+
+/* Same shutdown rule as the keyboard manager: wlroots asserts nobody is still
+ * subscribed when the display tears the manager down. */
+static void server_vptr_mgr_destroy(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, vptr_mgr_destroy);
+    wl_list_remove(&s->new_virtual_pointer.link);
+    wl_list_remove(&s->vptr_mgr_destroy.link);
+}
+
 static void server_new_input(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, new_input);
@@ -3618,4 +3672,15 @@ void input_setup(syn_server_t *s)
     s->vkb_mgr_destroy.notify = server_vkb_mgr_destroy;
     wl_signal_add(&s->virtual_keyboard_mgr->events.destroy,
                  &s->vkb_mgr_destroy);
+
+    /* virtual-pointer-v1 (syn-arcade's controller-as-mouse — see
+     * server_new_virtual_pointer). Privileged: it is in privileged_globals[]
+     * so a sandboxed client cannot bind it. */
+    s->virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(s->display);
+    s->new_virtual_pointer.notify = server_new_virtual_pointer;
+    wl_signal_add(&s->virtual_pointer_mgr->events.new_virtual_pointer,
+                 &s->new_virtual_pointer);
+    s->vptr_mgr_destroy.notify = server_vptr_mgr_destroy;
+    wl_signal_add(&s->virtual_pointer_mgr->events.destroy,
+                 &s->vptr_mgr_destroy);
 }

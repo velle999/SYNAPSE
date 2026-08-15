@@ -63,6 +63,7 @@ static const char *const privileged[] = {
     "zwlr_data_control_manager_v1",
     "ext_data_control_manager_v1",
     "zwp_virtual_keyboard_manager_v1",
+    "zwlr_virtual_pointer_manager_v1",
     "zwp_input_method_manager_v2",
     "zwlr_foreign_toplevel_manager_v1",
     "ext_foreign_toplevel_list_v1",

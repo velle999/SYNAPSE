@@ -4355,6 +4355,20 @@ struct syn_server {
     struct wl_listener new_virtual_keyboard;
     struct wl_listener vkb_mgr_destroy;
 
+    /* virtual-pointer-v1: the same idea for the POINTER. A client creates a
+     * pointer device and wlr_cursor drives it exactly like a physical mouse —
+     * same motion path, same focus rules, same cursor on screen. Added for
+     * syn-arcade's big screen mode, where a gamepad stick has to move a real
+     * pointer through somebody's web browser and nothing else can do that:
+     * a browser takes pointer events, not words on a pipe.
+     *
+     * ⚠ Privileged, and listed in privileged_globals[] in synui_main.c — a
+     * client that can move the pointer and click can drive every window on the
+     * seat. Sandboxed clients therefore do not get it. */
+    struct wlr_virtual_pointer_manager_v1   *virtual_pointer_mgr;
+    struct wl_listener new_virtual_pointer;
+    struct wl_listener vptr_mgr_destroy;
+
     /* dock.c: shared entry model (pinned + running apps), rendered into
      * every output's own syn_output::dock tree. */
     syn_dock_entry_t dock_entries[DOCK_MAX_ENTRIES];
