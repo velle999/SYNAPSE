@@ -18,9 +18,9 @@ BarModule {
 
     moduleVisible: on              // invisible when off, like waybar's empty text
     icon: Icons.game
-    iconColor: Theme.yellow
+    iconColor: Theme.barClock
     text: "GAME"
-    textColor: Theme.yellow
+    textColor: Theme.barClock
     active: on
     tooltipText: tip
 

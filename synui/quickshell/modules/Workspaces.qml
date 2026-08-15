@@ -52,10 +52,10 @@ Item {
 
                 // Three states worth telling apart at a glance: the one you are
                 // on, ones holding windows you can go back to, and empty ones.
-                color: pill.active ? Theme.activeBg
-                                   : (mouse.containsMouse ? Theme.hoverBg : "transparent")
+                color: pill.active ? Theme.barActiveBg
+                                   : (mouse.containsMouse ? Theme.barHoverBg : "transparent")
                 border.width: pill.active ? 1 : 0
-                border.color: Theme.magenta
+                border.color: Theme.barAccent
                 Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
                 Text {
@@ -63,8 +63,8 @@ Item {
                     text: pill.modelData.id
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
-                    color: pill.active ? Theme.fg
-                                       : (pill.occupied ? Theme.cyan : Theme.fgDim)
+                    color: pill.active ? Theme.barFg
+                                       : (pill.occupied ? Theme.barGlyph : Theme.barDim)
                     Behavior on color { ColorAnimation { duration: Theme.animFast } }
                 }
 

@@ -268,13 +268,20 @@ PanelWindow {
                 // child of a rounded parent with no clip, so the margins are the
                 // version of "let the curve eat its ends" that costs nothing.
                 // barRadius is 0 at full width, where this is the old rule.
+                //
+                // Gone entirely on a clear bar. The rule is what gives a strip
+                // its edge, and a strip with no background has no edge to give:
+                // a 2px line across the screen with nothing above it is not a
+                // bar, it is a line. (A single boolean binding, deliberately —
+                // never a second ternary on this item, see the anchors above.)
                 Rectangle {
+                    visible: !Theme.clearBar
                     anchors { left: parent.left; right: parent.right
                               leftMargin: Theme.barRadius
                               rightMargin: Theme.barRadius }
                     y: BarConfig.atBottom ? 0 : parent.height - height
                     height: Theme.accentHeight
-                    color: Theme.magenta
+                    color: Theme.barAccent
                 }
 
                 // ── Left: start button, then virtual desktops ────

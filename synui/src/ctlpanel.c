@@ -493,9 +493,15 @@ static const struct ctl_item ctl_items[] = {
      * settings.state itself, so it moves while you are looking at it. Two
      * options rather than the dock's four — the bar is a horizontal row and has
      * no vertical form (see syn_bar_edge_t). */
+    /* …with one thing on THIS side to do, which is why it is not APPLY_NONE like
+     * its neighbours: a bar with no background of its own takes its ink from the
+     * wallpaper strip it covers (backdrop.state), and moving the bar moves which
+     * strip that is. Without this the ink stays picked from the top of the
+     * screen while the bar sits at the bottom — a wrong answer that only shows
+     * up on the one theme that draws a clear bar, and only on some wallpapers. */
     { CTL_ROW_BAR_EDGE,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar edge",         NULL,
       .key = "bar_edge", .off = CFG(bar_edge), .vtype = CTL_VAL_ENUM,
-      NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_NONE,
+      NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_WALLPAPER,
       .help = "Which edge the bar sits on. The bar picks this up live" },
     /* Watched live by the bar like Bar edge above, and like it applied by
      * neither the compositor nor a restart. The help line has to say the row
@@ -876,6 +882,11 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
 
     case CTL_APPLY_DESKICONS:
         deskicons_reload(s);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_WALLPAPER:
+        wallpaper_relayout(s);
         ctlpanel_repaint(s);
         break;
 

@@ -700,6 +700,18 @@ panel_contrast_test = executable('panel_contrast_test',
   build_by_default : false)
 test('panel_contrast', panel_contrast_test)
 
+# The other half of contrast.c, and the one with a failure mode a screenshot
+# cannot show: a bar with NO background of its own (macOS 26) is drawn on the
+# wallpaper, so its ink is chosen from the wallpaper — and there is a band of
+# mid-tone backdrops where neither black nor white clears AA and the honest
+# answer is to keep the background. Same arithmetic-only link as above.
+bar_ink_test = executable('bar_ink_test',
+  ['tests/bar_ink_test.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('bar_ink', bar_ink_test)
+
 # The panel pointer contract, on a real panel. There is no way to synthesise a
 # click into a headless synui — no virtual-pointer protocol, no input devices on
 # the headless backend, and uinput would be picked up by the LIVE session — so
@@ -1022,6 +1034,16 @@ test('apply_theme_color_scheme', apply_theme_scheme,
      args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
      timeout : 60)
 
+# And its THIRD: the bar alpha a theme brings with it, which reaches theme.json
+# and deliberately not the waybar CSS — only the quickshell bar can pick an ink
+# that survives having no background (backdrop.state). Also pins that a
+# malformed value is refused rather than pasted into JSON, where it would take
+# the bar's whole palette down rather than one colour.
+apply_theme_alpha = find_program('tests/apply_theme_bar_alpha.sh')
+test('apply_theme_bar_alpha', apply_theme_alpha,
+     args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
+     timeout : 60)
+
 # The two ways round src/contrast.c, which panel_contrast_test.c already covers.
 # The calendar's day numbers were a hardcoded near-white — 1.31:1 on 95's silver,
 # and a literal is not a rung, so the corrector never saw them. kitty's light
@@ -1041,6 +1063,18 @@ test('theme_contrast', theme_contrast,
 bar_shape = find_program('tests/bar_shape.sh')
 test('bar_shape', bar_shape,
      args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
+# What a bar with NO background is drawn on. macOS 26's menu bar is clear, so its
+# ink comes from the wallpaper rather than the palette, and the compositor writes
+# which ink survives to backdrop.state. bar_ink_test.c pins the arithmetic; this
+# pins that the number fed to it is the strip the BAR covers — measured off the
+# painted buffer, at the edge the bar is on — and not the picture as a whole.
+# No bar needed: the state file is the interface.
+bar_backdrop = find_program('tests/bar_backdrop.sh')
+test('bar_backdrop', bar_backdrop,
+     args    : [synui_exe.full_path()],
      depends : [synui_exe],
      timeout : 180)
 

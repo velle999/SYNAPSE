@@ -22,7 +22,7 @@ import ".."
  * is pure subtraction — Workspaces no longer has to mirror launcher.c's width
  * formula to avoid being drawn under an invisible-but-clickable region.
  *
- * The colour is now Theme.cyan rather than a hardcoded #05d9e8. Those are the
+ * The colour is now Theme.barGlyph rather than a hardcoded #05d9e8. Those are the
  * same value on the default palette, so nothing changes until a theme is
  * applied — at which point the button follows it, which the compositor-drawn one
  * never could ("kept in step by eye" was the old comment's admission).
@@ -43,7 +43,7 @@ Rectangle {
     implicitWidth:  content.implicitWidth + 24
     implicitHeight: Theme.barHeight
 
-    color: mouse.containsMouse || MenuState.open ? Theme.hoverBg : "transparent"
+    color: mouse.containsMouse || MenuState.open ? Theme.barHoverBg : "transparent"
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
     Row {
@@ -54,7 +54,7 @@ Rectangle {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: "◢"
-            color: Theme.cyan
+            color: Theme.barGlyph
             // NOT the picked font, for the same reason Theme.iconFamily isn't:
             // U+25E2 is a geometric symbol, and a picked face that lacks it
             // hands the caret to whatever Qt substitutes — a different weight
@@ -86,7 +86,7 @@ Rectangle {
             visible: !root.logo
             anchors.verticalCenter: parent.verticalCenter
             text: "SYNAPSE"
-            color: Theme.cyan
+            color: Theme.barGlyph
             // Follows the font picker, like every other string on the bar. It
             // was hardcoded to "monospace" back when the compositor drew this
             // button in cairo and the bar could not have known what the picker

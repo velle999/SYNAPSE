@@ -151,6 +151,7 @@ void deco_refresh_all(syn_server_t *s)        { (void)s; }
 void nightlight_apply(syn_server_t *s)        { (void)s; }
 void cursor_reload(syn_server_t *s)           { (void)s; }
 void deskicons_reload(syn_server_t *s)        { (void)s; }
+void wallpaper_relayout(syn_server_t *s)     { (void)s; }
 void layout_apply(syn_server_t *s, syn_workspace_t *ws) { (void)s; (void)ws; }
 
 void settings_state_set(const char *k, const char *v) { (void)k; (void)v; }

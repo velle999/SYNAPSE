@@ -20,7 +20,7 @@ BarModule {
     property real totalGiB: 0
 
     icon: Icons.memory
-    iconColor: percent >= 90 ? Theme.red : (percent >= 75 ? Theme.yellow : Theme.cyan)
+    iconColor: percent >= 90 ? Theme.barRed : (percent >= 75 ? Theme.barClock : Theme.barGlyph)
     text: percent + "%"
     tooltipText: "Memory " + usedGiB.toFixed(1) + " / " + totalGiB.toFixed(1) + " GiB"
                  + "\nClick for the task manager"

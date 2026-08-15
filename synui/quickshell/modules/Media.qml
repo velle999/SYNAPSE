@@ -32,7 +32,7 @@ BarModule {
     moduleVisible: player !== null
 
     icon: playing ? Icons.mediaPlay : Icons.mediaPause
-    iconColor: playing ? Theme.cyan : Theme.fgDim
+    iconColor: playing ? Theme.barGlyph : Theme.barDim
 
     // A 25-char cap rather than an elide: this sits in a row of fixed-width
     // readouts, and a title that grows the bar shifts every module beside it

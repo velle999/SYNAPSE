@@ -37,8 +37,8 @@ Rectangle {
 
     property string text: ""
     property string icon: ""                 // optional leading glyph
-    property color  iconColor: Theme.cyan
-    property color  textColor: Theme.fg
+    property color  iconColor: Theme.barGlyph
+    property color  textColor: Theme.barFg
     property string tooltipText: ""
     property bool   active: false            // draws the magenta wash
 
@@ -63,8 +63,8 @@ Rectangle {
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
     radius: Theme.pillRadius
 
-    color: root.active ? Theme.activeBg
-                       : (mouse.containsMouse ? Theme.hoverBg : "transparent")
+    color: root.active ? Theme.barActiveBg
+                       : (mouse.containsMouse ? Theme.barHoverBg : "transparent")
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
     // A press that only changes colour is easy to miss on a 20px target; the
@@ -75,7 +75,7 @@ Rectangle {
     // Active modules get a hairline in the accent so "on" survives a theme
     // whose activeBg wash is subtle against its own bar colour.
     border.width: root.active ? 1 : 0
-    border.color: Theme.magenta
+    border.color: Theme.barAccent
 
     Row {
         id: row
@@ -148,6 +148,11 @@ Rectangle {
             rect.y: BarConfig.popupY(tip.implicitHeight) + 2
         }
 
+        /* Theme.magenta and Theme.fg here, not the bar* pair the pill above
+         * uses: this is drawn on popupBg, which is a surface the palette owns
+         * and is solid whatever the strip is doing. On a clear bar those two
+         * sets differ — see Theme.qml — and taking the strip's white ink into
+         * a pale popup is how a tooltip becomes white on white. */
         Rectangle {
             anchors.fill: parent
             color: Theme.popupBg

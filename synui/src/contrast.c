@@ -78,6 +78,47 @@ void syn_contrast_fix(const float in[3], float out[3], double surface_lum)
     out[2] = (float)(in[2] * (1.0 - hi));
 }
 
+/* Both arguments are already luminances, which syn_contrast's are not: the ink
+ * here is one of two fixed colours and the backdrop is a MEAN over thousands of
+ * wallpaper pixels, so neither side ever exists as an r,g,b triple. */
+static double contrast_lum(double a, double b)
+{
+    double hi = a > b ? a : b;
+    double lo = a > b ? b : a;
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+syn_ink_t syn_ink_for_backdrop(double lum, double target)
+{
+    if (lum < 0.0) return SYN_INK_NONE;   /* not measured */
+
+    double c_dark  = contrast_lum(SYN_INK_DARK_LUM,  lum);
+    double c_light = contrast_lum(SYN_INK_LIGHT_LUM, lum);
+
+    /* At AA there is a band — roughly 0.18 to 0.23 — where a backdrop is too
+     * pale for white and too dark for black. Real wallpapers land in it (an
+     * evenly-lit photograph does), and that is the case a clear bar must refuse
+     * rather than round off: both answers are unreadable, so neither is one. */
+    if (c_dark < target && c_light < target) return SYN_INK_NONE;
+
+    return c_dark >= c_light ? SYN_INK_DARK : SYN_INK_LIGHT;
+}
+
+syn_ink_t syn_ink_combine(syn_ink_t a, syn_ink_t b)
+{
+    if (a == SYN_INK_NONE || b == SYN_INK_NONE) return SYN_INK_NONE;
+    return a == b ? a : SYN_INK_NONE;
+}
+
+const char *syn_ink_name(syn_ink_t ink)
+{
+    switch (ink) {
+    case SYN_INK_DARK:  return "dark";
+    case SYN_INK_LIGHT: return "light";
+    default:            return "none";
+    }
+}
+
 /* Windows 95 is the theme with the least room to work in: black on its #C0C0C0
  * silver tops out at 11.54:1 where SYNAPSE's near-white on near-black reaches
  * 17.07:1, and the ladder's sRGB-linear mapping spends that smaller budget

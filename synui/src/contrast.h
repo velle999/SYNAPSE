@@ -37,4 +37,45 @@ void syn_contrast_fix(const float in[3], float out[3], double surface_lum);
  * which makes the clamp a no-op and leaves every dark theme untouched. */
 double syn_ink_floor(const float bg[3], const float ink[3], double target);
 
+/* ── A bar with no background of its own ─────────────────── */
+/*
+ * macOS 26's menu bar draws NOTHING behind itself: its ink sits straight on the
+ * wallpaper. That makes the wallpaper the surface, and the surface is no longer
+ * something a theme can know — #1D1D1F is 12.6:1 on Tahoe's own pale desktop and
+ * 1.2:1 on the near-black one this box actually runs. So the ink is CHOSEN from
+ * the backdrop rather than shipped with the palette, which is what macOS does.
+ *
+ * Two colours only, because that is the honest range: a clear bar cannot tint
+ * itself out of trouble, so the ink is either black or white and the answer is
+ * which one clears CONTRAST_TARGET. NONE is a real answer and the important one
+ * — a mid-tone backdrop where NEITHER passes, and the caller must not go clear.
+ */
+typedef enum {
+    SYN_INK_NONE = 0,   /* no legible ink — do not draw a clear bar here */
+    SYN_INK_DARK,       /* dark ink; the backdrop is pale */
+    SYN_INK_LIGHT,      /* light ink; the backdrop is dark */
+} syn_ink_t;
+
+/* The two ink colours the enum names, 0..1 sRGB. Not the theme's — see above. */
+#define SYN_INK_DARK_LUM  0.0122771  /* #1D1D1F, Apple's `label` */
+#define SYN_INK_LIGHT_LUM 1.0        /* #FFFFFF */
+
+/* Which of the two clears `target` over a backdrop of relative luminance `lum`.
+ * When both do (a mid-grey never happens, but a backdrop can be pale enough for
+ * dark ink and still let white pass at a lower target) the HIGHER contrast wins,
+ * so the answer does not flip on a rounding error near the boundary. */
+syn_ink_t syn_ink_for_backdrop(double lum, double target);
+
+/* Fold two monitors' answers into one. The bar's ink is a singleton in QML — one
+ * value for every screen — so two screens that disagree have no shared answer,
+ * and the honest result is NONE rather than picking a side and leaving the other
+ * monitor's clock invisible. NONE absorbs, which also makes a monitor whose
+ * backdrop could not be measured (a video wallpaper, the matrix backend) veto
+ * the clear bar instead of being silently skipped. */
+syn_ink_t syn_ink_combine(syn_ink_t a, syn_ink_t b);
+
+/* The token written to backdrop.state and read by the bar: "dark", "light", or
+ * "none". Never NULL. */
+const char *syn_ink_name(syn_ink_t ink);
+
 #endif /* SYNUI_CONTRAST_H */

@@ -63,11 +63,11 @@ BarModule {
     // iconColor — the timer only has to flip the target and the 120ms
     // ColorAnimation carries it. A hand-rolled per-frame pulse would fight it.
     iconColor: (root.blinking && !root.blinkOn)
-               ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.3)
-               : Theme.red
+               ? Qt.rgba(Theme.barRed.r, Theme.barRed.g, Theme.barRed.b, 0.3)
+               : Theme.barRed
 
     text: root.stopping ? "SAVING" : root.clock
-    textColor: Theme.red
+    textColor: Theme.barRed
 
     // The magenta wash and hairline BarModule draws for "on". A recording IS
     // the on state, so it is on for the pill's whole life.

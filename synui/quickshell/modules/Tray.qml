@@ -34,7 +34,7 @@ Row {
             width: Theme.iconSize + 12
             height: Theme.barHeight
             radius: Theme.radius
-            color: mouse.containsMouse ? Theme.hoverBg : "transparent"
+            color: mouse.containsMouse ? Theme.barHoverBg : "transparent"
             Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
             IconImage {

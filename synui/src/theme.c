@@ -829,13 +829,21 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
          * what corner_radius said. The helper turns this into a GTK rule; the
          * same derived fact theme.state carries for the bar (square_chrome),
          * spelt the same way, so the two cannot disagree about what "retro" is. */
+        /* The bar's alpha rides along for the same reason: it is the theme's,
+         * not the scheme's, and the helper is the one thing that writes
+         * theme.json. "-" is the no-opinion token, kept out of band from a real
+         * 0.00 because a clear bar is a value this now has to be able to say. */
+        char alpha[8] = "-";
+        float ba = theme_bar_alpha(&s->config);
+        if (ba >= 0.0f) snprintf(alpha, sizeof(alpha), "%.2f", ba);
+
         snprintf(cmd, sizeof(cmd),
-                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d %s",
+                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d %s %s",
                  p->scheme, p->accent_r, p->accent_g, p->accent_b,
                  p->glyph_r, p->glyph_g, p->glyph_b,
                  p->base_r, p->base_g, p->base_b,
                  p->text_r, p->text_g, p->text_b,
-                 chrome_square(&s->config) ? "on" : "off");
+                 chrome_square(&s->config) ? "on" : "off", alpha);
         synui_spawn(cmd);
 
         /* And the terminal's glass, because the alpha it should run at DEPENDS

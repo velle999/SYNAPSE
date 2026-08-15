@@ -17,7 +17,13 @@
 # Usage: synui-apply-theme <dark|light> <accent_r> <accent_g> <accent_b>
 #                          [glyph_r] [glyph_g] [glyph_b]
 #                          [base_r] [base_g] [base_b] [text_r] [text_g] [text_b]
-#                          [square_chrome]
+#                          [square_chrome] [bar_alpha]
+#
+# `bar_alpha` is 0.00..1.00, or "-"/omitted for "this theme has no opinion" —
+# which is every theme but macOS 26, whose menu bar has no background at all.
+# The out-of-band token matters: 0.00 is now a value a theme can mean, so
+# "unset" cannot be spelled as a number. Unset keeps the per-scheme default
+# below, which is what every caller before this argument existed got.
 #
 # `square_chrome` is on|off and is the retro chromes' rule reaching the toolkits
 # — see the GTK CSS section below for why a Win95 desktop still had rounded
@@ -44,6 +50,7 @@ gr=${5:-$ar} gg=${6:-$ag} gb=${7:-$ab}
 br=${8:-} bg_=${9:-} bb=${10:-}
 tr=${11:-} tg=${12:-} tb=${13:-}
 square=${14:-}
+bar_alpha_arg=${15:--}
 
 case "$scheme" in
     dark|light) ;;
@@ -555,6 +562,23 @@ else
     # yellow *text* modules for a dark gold that still reads as "amber".
     clock_fg="#8a6d00"
 fi
+# A theme with its own answer overrides the scheme's — for the QUICKSHELL bar
+# only, which is the deliberate half of this. Both bars read a palette from
+# here, but only one of them can survive a clear background: Theme.qml flips its
+# ink from backdrop.state to whatever the wallpaper needs, and waybar has no such
+# machinery, so the same 0.00 would leave the Antiquity bar's near-black text on
+# whatever the desktop happens to show. It keeps the scheme's default.
+#
+# Validated rather than interpolated blind: this string is pasted into JSON, and
+# a malformed one takes the bar's WHOLE palette down (Theme.qml falls back
+# wholesale on a parse error, by design) rather than just this value.
+qs_bar_alpha=$bar_alpha
+case "$bar_alpha_arg" in
+    -|'') ;;
+    [01].[0-9][0-9]|[01]) qs_bar_alpha=$bar_alpha_arg ;;
+    *) echo "synui-apply-theme: ignoring bar_alpha '$bar_alpha_arg'" >&2 ;;
+esac
+
 bar_bg="rgba($bar_base,$bar_alpha)"
 menu_bg="rgba($menu_base,$menu_alpha)"
 cat > "$gen" <<CSS
@@ -596,7 +620,7 @@ cat > "$qs.tmp" <<JSON
   "accent":     [$ar, $ag, $ab],
   "glyph":      [$gr, $gg, $gb],
   "bar":        [$bar_base],
-  "barAlpha":   $bar_alpha,
+  "barAlpha":   $qs_bar_alpha,
   "popup":      [$menu_base],
   "popupAlpha": $menu_alpha,
   "fg":         "$fg",

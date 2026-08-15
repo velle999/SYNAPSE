@@ -1207,3 +1207,83 @@ Platinum's racing stripes and square close box.
       came back **pixel-identical to the same shot from HEAD's binary**. The
       button-layout refactor touches every style, so "the new ones look right"
       was never the whole question.
+
+### The macOS 26 bar has no background  *(done)*
+
+Reported against the three Mac themes: the macOS 26 bar is not transparent, and
+Tahoe's is. Correct, and it was not close — the bar's alpha had never been the
+theme's to decide. `synui-apply-theme` picked it from the SCHEME
+(0.85 dark, 0.95 light) and macOS 26 is a light scheme, so Tahoe shipped with
+window chrome from 2025 and a bar at **0.95, near-solid**.
+
+The fix is one number. Everything below is the consequence of that number, and
+the consequence is the whole change: **a clear bar is drawn on the wallpaper, and
+the wallpaper is not something a theme can know.** Measured on velle's own
+desktop before writing any of it — the top strip of the wallpaper in use reads
+0.001 relative luminance, where the theme's `#1D1D1F` ink is **1.2:1** and its
+`#0056D6` glyphs are **3.2:1**. Shipping the alpha alone would have deleted the
+clock and called it Tahoe.
+
+- [x] **`theme_bar_alpha()`** beside `chrome_square()` — negative for "no
+      opinion", which is twelve of the thirteen presets. Not a field in the
+      preset table: a zero-initialised float cannot tell "unset" from "clear",
+      and clear is now a value a theme can mean. It rides to the helper as a
+      15th positional argument with `-` for unset, the same out-of-band spelling
+      `square_chrome`'s omission already uses.
+- [x] **It reaches theme.json and deliberately NOT the waybar CSS.** Both bars
+      read a palette from that helper; only the quickshell one can pick an ink
+      that survives having no background. Handing waybar 0.00 would leave the
+      Antiquity bar's near-black text on whatever the desktop happens to show.
+- [x] **`backdrop.state`, written by wallpaper.c** — which ink survives the
+      strip the bar covers, as `dark`, `light` or `none`. Measured off the
+      **painted buffer**, not the source image: `fill` crops, `fit` letterboxes,
+      `center` on a small image is mostly not the image, and `tile` repeats it.
+      Sampling the buffer means the scaling question is answered by the code that
+      answers it for the screen, and it runs exactly where a repaint does.
+- [x] **Its own file, not theme.state.** That file holds facts that change
+      exactly when the theme does; this one changes when the WALLPAPER does.
+      Filing it under the theme means either rewriting theme.state from the
+      picker or leaving the bar on a stale answer — and the second looks like it
+      works.
+- [x] **`none` is a real answer and the important one.** Between roughly 0.183
+      and 0.230 relative luminance neither black nor white clears AA, and an
+      evenly-lit photograph lands there. A clear bar cannot tint its way out — it
+      has no background to tint — so the bar KEEPS its background. Two monitors
+      that need different answers fold to `none` for the same reason: the bar's
+      palette is a QML singleton, so picking a side means the other screen's
+      clock is the one that vanishes.
+- [x] **The strip's ink is now a SEPARATE set of names from the palette's.**
+      `Theme.barFg`/`barGlyph`/`barAccent`/`barClock` and the washes, used by
+      `modules/*` and `BarModule`'s pill. Not the existing names redirected: the
+      right-click menu, the start menu, the mixer and the widgets all draw on
+      `popupBg`, which is solid and pale on a light theme, and flipping their ink
+      to white to suit the wallpaper behind the strip would black-on-black every
+      surface this change never touches. When the strip is not clear each bar\*
+      colour **is** its counterpart, which is what makes this inert for the
+      twelve themes that do not ask.
+- [x] **Monochrome, like Tahoe's.** Over an unknown backdrop the palette's blues
+      and yellows are a contrast nothing can vouch for. The status colours keep
+      their meaning (a red battery warning turned white is a warning nobody
+      reads) and only swap which half of their pair suits the backdrop.
+- [x] **The accent rule is gone on a clear bar.** A 2px line across the screen
+      with nothing above it is not a bar, it is a line. One boolean binding —
+      never a second ternary on that item, see pkgrel 295.
+- [x] **`bar_edge` stopped being `CTL_APPLY_NONE`.** The bar still moves itself;
+      what the compositor has to do now is repaint, because moving the bar moves
+      which strip it is drawn on. Reading the top while sitting at the bottom is
+      a wrong answer visible on one theme and in no screenshot.
+
+Three tests, and the split between them is the point. `bar_ink_test.c` links
+`contrast.c` alone and sweeps 1001 luminances asserting the property rather than
+the boundary numbers: an ink is returned only where it clears target, `none`
+only where neither does, and the band is **not empty** (47 of 1001) — if that
+ever reads zero the "keep your background" path has become dead code while the
+bar still has it. `apply_theme_bar_alpha.sh` pins the file contract including
+that a malformed value is refused rather than pasted into JSON, where it takes
+the bar's *whole* palette down rather than one colour. `bar_backdrop.sh` runs a
+real headless synui and asserts the number handed to the arithmetic is the right
+one — a pale band across one eighth of the wallpaper averages dark as a picture,
+and both band cases would answer `light` if the whole wallpaper were being
+measured, which is the obvious implementation.
+
+Verified on the rig with velle's actual wallpaper: `bar_ink=light`.

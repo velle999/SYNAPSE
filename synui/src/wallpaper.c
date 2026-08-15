@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <cairo.h>
 #include <jpeglib.h>
@@ -33,6 +34,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "contrast.h"
 #include "synui.h"
 
 /* ── Path resolution ─────────────────────────────────────── */
@@ -305,12 +307,159 @@ static void wallpaper_cache_drop(syn_server_t *s)
     s->wallpaper.per_n = 0;
 }
 
+/* ── What the bar is drawn on ────────────────────────────── */
+/*
+ * A bar with no background of its own (macOS 26 — see theme_bar_alpha()) draws
+ * its clock and its menus straight onto the wallpaper, so the wallpaper decides
+ * whether they can be read. Nothing else in synui has ever had to ask what the
+ * wallpaper LOOKS like; it paints it and forgets it.
+ *
+ * The measurement is taken from the PAINTED BUFFER rather than the source image,
+ * because the two are not the same picture: `fill` crops, `fit` letterboxes into
+ * bg_color, `center` on a small image is mostly not the image at all, and `tile`
+ * repeats it. Sampling the buffer means the scaling question is already answered
+ * by the code that answers it for the screen, and a mode change is picked up for
+ * free. It also means this runs exactly where a repaint does — on a wallpaper
+ * change, a mode change, a rotate — and nowhere else.
+ */
+
+/* Theme.qml's barHeight (28) plus the floating pill's gap (6), in LOGICAL px.
+ * Over-sampling is safe here and under-sampling is not: this is a mean, so a few
+ * extra rows of wallpaper move it slightly, while missing rows the ink is
+ * actually drawn over would measure a strip nothing is written on. */
+#define WP_BAR_STRIP_LOGICAL 34
+
+/* sRGB → linear, per 8-bit channel value. A pow() per channel per pixel over a
+ * 3840-wide strip is ~400k calls on every relayout; the table makes it a load. */
+static double srgb_lut(int v)
+{
+    static double lut[256];
+    static bool   built = false;
+    if (!built) {
+        for (int i = 0; i < 256; i++) {
+            double c = i / 255.0;
+            lut[i] = c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+        }
+        built = true;
+    }
+    return lut[v];
+}
+
+/* Mean relative luminance of the strip the bar covers, or -1 when there is
+ * nothing to measure. `edge` picks which end of the buffer — a bar moved to the
+ * bottom is drawn on the bottom of the wallpaper, and measuring the top there
+ * would answer a question nobody asked. */
+static double strip_luminance(cairo_surface_t *dst, int rows, syn_bar_edge_t edge)
+{
+    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return -1.0;
+    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return -1.0;
+
+    cairo_surface_flush(dst);
+    const unsigned char *data = cairo_image_surface_get_data(dst);
+    if (!data) return -1.0;
+
+    int w      = cairo_image_surface_get_width(dst);
+    int h      = cairo_image_surface_get_height(dst);
+    int stride = cairo_image_surface_get_stride(dst);
+    if (w <= 0 || h <= 0 || rows <= 0) return -1.0;
+    if (rows > h) rows = h;
+
+    int y0 = edge == SYN_BAR_EDGE_BOTTOM ? h - rows : 0;
+
+    double sum = 0.0;
+    for (int y = y0; y < y0 + rows; y++) {
+        const unsigned char *row = data + (size_t)y * stride;
+        for (int x = 0; x < w; x++) {
+            /* ARGB32 is premultiplied, but this buffer is a wallpaper painted
+             * edge to edge over an opaque surface, so alpha is 255 throughout
+             * and premultiplied equals straight. Byte order is native-endian
+             * within the 32-bit word: B, G, R, A on little-endian. */
+            const unsigned char *px = row + (size_t)x * 4;
+            sum += 0.2126 * srgb_lut(px[2]) +
+                   0.7152 * srgb_lut(px[1]) +
+                   0.0722 * srgb_lut(px[0]);
+        }
+    }
+    return sum / ((double)w * rows);
+}
+
+/* Fold every output's answer into one and publish it. ONE value, because the
+ * bar's palette is a QML singleton shared by every screen — see the comment on
+ * syn_ink_combine(), which is where two monitors that disagree become "none".
+ *
+ * Its own file, not theme.state: that file holds facts that change exactly when
+ * the theme does, and this one changes when the WALLPAPER does. Filing a
+ * wallpaper fact under the theme would mean either rewriting theme.state from
+ * the picker or leaving the bar reading a stale answer, and the second is the
+ * kind that looks like it works. */
+static void backdrop_export(syn_server_t *s)
+{
+    /* No synui_owns_seat() guard, deliberately, and it is worth saying why: this
+     * is state under XDG_CONFIG_HOME, exactly like the wallpaper.state written a
+     * few functions down and the theme.state beside it. A rig keeps out of the
+     * live desktop's way by pointing HOME somewhere else — which is what makes
+     * this measurable at all, since a headless synui has no session and would
+     * fail that check on every run. The guard belongs on the pushes that reach
+     * ANOTHER program's config (glass_push, the font picker), and this reaches
+     * only the bar reading this HOME. */
+    syn_ink_t ink  = SYN_INK_NONE;
+    bool      seen = false;
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        syn_ink_t this_one = syn_ink_for_backdrop(o->wp_top_lum, CONTRAST_TARGET);
+        ink  = seen ? syn_ink_combine(ink, this_one) : this_one;
+        seen = true;
+    }
+    if (!seen) ink = SYN_INK_NONE;
+
+    /* Written only on a CHANGE. Every relayout repaints, and the bar watches
+     * this path — rewriting an identical file would have it reload and repaint
+     * itself for each of them. */
+    static syn_ink_t last = -1;
+    if (ink == last) return;
+
+    char path[256];
+    if (!syn_config_path(path, sizeof(path), "backdrop.state")) return;
+    syn_config_ensure_dir();
+
+    char tmp[288];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: wallpaper: cannot write '%s': %s",
+                tmp, strerror(errno));
+        return;
+    }
+    fprintf(f, "# Generated by synui — which ink a bar with no background of its\n"
+               "# own must use to be legible on the wallpaper behind it.\n");
+    fprintf(f, "bar_ink=%s\n", syn_ink_name(ink));
+    fclose(f);
+
+    /* Renamed rather than written in place, for the same reason theme.json is:
+     * the bar watches this and must never read a half-written file. */
+    if (rename(tmp, path) != 0) {
+        wlr_log(WLR_ERROR, "synui: wallpaper: cannot rename '%s': %s",
+                tmp, strerror(errno));
+        unlink(tmp);
+        return;
+    }
+    last = ink;
+    wlr_log(WLR_INFO, "synui: wallpaper: bar ink is %s", syn_ink_name(ink));
+}
+
 /* Paint (or clear) a single output's wallpaper buffer from the server's
  * currently-decoded source image. Used both when an output first appears
  * and when the layout is reflowed (resize/rotate/move). */
 static void paint_output(syn_output_t *o)
 {
     syn_server_t *s = o->server;
+
+    /* Cleared up front so every early return below leaves "not measured"
+     * rather than the previous wallpaper's answer — and so the calloc'd zero a
+     * new output starts life with, which reads as a legitimately black
+     * backdrop, is never what backdrop_export() sees. */
+    o->wp_top_lum = -1.0;
 
     syn_wallpaper_src_t src;
     const char *path;
@@ -355,6 +504,16 @@ static void paint_output(syn_output_t *o)
 
     cairo_begin(cr);
     wallpaper_paint_box(cr, img, pw, ph, mode);
+
+    /* Measured here, off the finished buffer and before the cairo context that
+     * owns it goes away. `rows` is the logical strip converted to this output's
+     * physical pixels — the buffer is painted at the physical size (above), so
+     * on a 2x monitor the bar's 34 logical rows are 68 of these. */
+    int rows = (int)lround(WP_BAR_STRIP_LOGICAL * (double)ph / box.height);
+    if (rows < 1) rows = 1;
+    o->wp_top_lum = strip_luminance(cairo_get_target(cr), rows,
+                                    s->config.bar_edge);
+
     cairo_destroy(cr);
 
     set_scene_buffer(&o->wallpaper_buf, s->wallpaper_tree, buf);
@@ -378,6 +537,10 @@ void wallpaper_init(syn_server_t *s)
 void wallpaper_output_created(syn_output_t *o)
 {
     paint_output(o);
+    /* A monitor arriving is a monitor the bar has to be legible on too, and it
+     * can carry a wallpaper of its own. wallpaper_relayout() covers the reverse
+     * (one leaving) — the layout change that follows a disconnect repaints. */
+    backdrop_export(o->server);
 }
 
 void wallpaper_output_destroy(syn_output_t *o)
@@ -393,6 +556,10 @@ void wallpaper_relayout(syn_server_t *s)
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link)
         paint_output(o);
+    /* After the loop, not inside it: the published answer is a fold over every
+     * monitor, so one written per output would flap through intermediate values
+     * on a two-monitor desktop — and the bar watches this file. */
+    backdrop_export(s);
 }
 
 void wallpaper_reload(syn_server_t *s)

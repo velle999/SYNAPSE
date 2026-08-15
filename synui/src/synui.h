@@ -1609,6 +1609,7 @@ typedef enum {
     CTL_APPLY_NIGHTLIGHT,/* re-commit the gamma ramps                    */
     CTL_APPLY_CURSOR,    /* reload the cursor theme at the new size       */
     CTL_APPLY_DESKICONS, /* redraw the desktop icon grid                  */
+    CTL_APPLY_WALLPAPER, /* repaint every output's wallpaper              */
 } syn_ctl_apply_t;
 
 /* What activating a row does. The distinction is not cosmetic: only CTL_KIND_PANEL
@@ -3448,6 +3449,25 @@ static inline int chrome_is_mac(const syn_config_t *cfg)
            cfg->chrome == SYN_CHROME_PLATINUM;
 }
 
+/* How opaque this desktop's BAR should be, or negative for "this theme has no
+ * opinion" — which is every theme but one, and leaves synui-apply-theme picking
+ * from the scheme as it always has (0.85 dark, 0.95 light).
+ *
+ * macOS 26's menu bar has no background at all: it is the wallpaper, with the
+ * clock and the menus drawn straight onto it. That is not a colour and so could
+ * not live in the preset table with the rest of the palette — it is a fact about
+ * the STYLE, like square_chrome, and it travels the same way (a positional
+ * argument to synui-apply-theme, which writes theme.json's barAlpha).
+ *
+ * A ZERO here is only half an instruction. The other half is backdrop.state,
+ * written by wallpaper.c: ink drawn on the wallpaper has to be picked from the
+ * wallpaper, and where no legible ink exists the bar keeps its background. See
+ * syn_ink_for_backdrop() in contrast.h. */
+static inline float theme_bar_alpha(const syn_config_t *cfg)
+{
+    return cfg->theme == SYN_THEME_MACOS26 ? 0.0f : -1.0f;
+}
+
 /* ── Where the titlebar buttons are ───────────────────────
  *
  * Windows put all three at the right, in the order minimize, maximize, close.
@@ -3940,6 +3960,14 @@ struct syn_output {
     /* wallpaper.c: this output's painted background, parented under
      * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
     struct wlr_scene_buffer *wallpaper_buf;
+
+    /* wallpaper.c: mean relative luminance of the strip the BAR covers on this
+     * output, or -1 for "not measured" — no image, or a backend that paints its
+     * own background (matrix, wallpaperengine). It is what a bar with no
+     * background of its own is drawn on, and the only thing that decides
+     * whether its ink can be read; see backdrop_export(). Measured on every
+     * repaint, which is also every time it can change. */
+    double                   wp_top_lum;
 
     /* matrix.c: the animated wallpaper's per-frame GPU buffer + swapchain,
      * a sibling of wallpaper_buf under wallpaper_tree. Only one of the two

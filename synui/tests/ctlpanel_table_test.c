@@ -48,6 +48,7 @@
  */
 static int applied_uifx, applied_input, applied_layout, applied_deco;
 static int applied_dock, applied_nightlight, applied_cursor, applied_deskicons;
+static int applied_wallpaper;
 
 void uifx_apply(syn_server_t *s)              { (void)s; applied_uifx++; }
 void input_reload_config(syn_server_t *s)     { (void)s; applied_input++; }
@@ -57,6 +58,7 @@ void dock_relayout(syn_server_t *s)           { (void)s; }
 void nightlight_apply(syn_server_t *s)        { (void)s; applied_nightlight++; }
 void cursor_reload(syn_server_t *s)           { (void)s; applied_cursor++; }
 void deskicons_reload(syn_server_t *s)        { (void)s; applied_deskicons++; }
+void wallpaper_relayout(syn_server_t *s)      { (void)s; applied_wallpaper++; }
 void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 { (void)s; (void)ws; applied_layout++; }
 
@@ -582,6 +584,13 @@ static void test_apply_hooks(void)
         { CTL_ROW_DOCK_HEIGHT,   &applied_dock,       "dock"       },
         { CTL_ROW_NIGHTLIGHT_TEMP, &applied_nightlight, "nightlight" },
         { CTL_ROW_DESKTOP_ICONS, &applied_deskicons,  "deskicons"  },
+        /* Bar edge was APPLY_NONE — the bar watches settings.state and moves
+         * itself. It still does; what the compositor has to do now is repaint
+         * the wallpaper, because a clear bar takes its ink from the strip it
+         * covers and moving the bar moves which strip that is. Pinned here
+         * because the failure is silent: the bar moves either way, and only the
+         * one theme that draws a clear bar shows the stale answer. */
+        { CTL_ROW_BAR_EDGE,      &applied_wallpaper,  "wallpaper"  },
     };
 
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {

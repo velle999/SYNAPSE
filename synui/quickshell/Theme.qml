@@ -85,8 +85,53 @@ QtObject {
     }
     function pick(dark, light) { return root.isLight ? light : dark }
 
+    // ── A bar with no background of its own ──────────────
+    /*
+     * macOS 26's menu bar is CLEAR: no strip, no tint, the clock and the menus
+     * drawn straight onto the wallpaper. theme.json asks for that with
+     * barAlpha 0 (synui-apply-theme, from theme_bar_alpha()).
+     *
+     * That request is only half an instruction, because a clear bar cannot tint
+     * itself into legibility — its ink is on the wallpaper, and the theme's ink
+     * is #1D1D1F, which is 12.6:1 on Tahoe's own pale desktop and 1.2:1 on the
+     * near-black one this box actually runs. So the compositor measures the
+     * strip the bar covers and writes which ink survives it; "none" is a real
+     * answer (a mid-tone wallpaper where neither black nor white clears AA, or
+     * two monitors that need different answers) and the bar KEEPS ITS
+     * BACKGROUND rather than going clear and unreadable.
+     */
+    property string barInk: ""      // "dark" | "light" | "" (no safe answer)
+
+    property FileView backdropFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/backdrop.state"
+        watchChanges: true
+        printErrors: false          // absent until a wallpaper has been painted
+        onFileChanged: reload()
+        onLoaded: {
+            const m = this.text().match(/^\s*bar_ink\s*=\s*(\S+)\s*$/m)
+            const v = m ? m[1] : "none"
+            root.barInk = (v === "dark" || v === "light") ? v : ""
+        }
+        onLoadFailed: root.barInk = ""
+    }
+
+    // The bar is clear only when the theme asks AND an ink survives the
+    // wallpaper. Either half alone is a bar you cannot read.
+    readonly property bool clearBar: p.barAlpha === 0 && root.barInk !== ""
+
+    // Which way the ink runs. On a clear bar that is the backdrop's answer, not
+    // the scheme's — a light theme over a dark wallpaper wants WHITE text, which
+    // is the whole point.
+    readonly property bool inkOnDark: root.clearBar ? (root.barInk === "light")
+                                                    : !root.isLight
+
     // ── Surfaces ─────────────────────────────────────────
-    readonly property real  bgAlpha:    p.barAlpha   !== undefined ? p.barAlpha   : 0.85
+    // The scheme's default, and also the floor a clear bar falls back to when
+    // the wallpaper offers no legible ink. Spelt once so the two cannot drift.
+    readonly property real  bgAlphaDefault: root.isLight ? 0.95 : 0.85
+    readonly property real  bgAlpha:    root.clearBar ? 0.0
+                                      : (p.barAlpha !== undefined && p.barAlpha > 0)
+                                        ? p.barAlpha : root.bgAlphaDefault
     readonly property real  popupAlpha: p.popupAlpha !== undefined ? p.popupAlpha : 0.97
 
     readonly property color bg:      themed("bar",   11, 11, 20, bgAlpha)
@@ -113,6 +158,56 @@ QtObject {
     readonly property color green:  pick("#a6e3a1", "#166534")
     readonly property color red:    pick("#f38ba8", "#b91c1c")
     readonly property color orange: pick("#f9e2af", "#8a6d00")
+
+    // ── …and the STRIP's, which is a different surface ───
+    /*
+     * Everything above is drawn on a surface this palette owns: the strip when
+     * it has a background, and every popup, menu and widget that opens off it.
+     * A CLEAR strip is the one thing that is not — it is drawn on the wallpaper,
+     * and the wallpaper is not something the theme knows.
+     *
+     * So the strip gets its own set of names, and `modules/*` and BarModule use
+     * THOSE. Not the pair above renamed: the bar's right-click menu, the start
+     * menu, the mixer and the widgets keep drawing on popupBg, which is solid
+     * and pale on a light theme, and flipping their ink to white to suit the
+     * wallpaper behind the strip would black-on-black exactly the surfaces this
+     * change never touches.
+     *
+     * When the strip is not clear every one of these IS its counterpart above,
+     * which is what makes this inert for the twelve themes that do not ask.
+     */
+    function barPick(dark, light) { return root.inkOnDark ? dark : light }
+
+    // The one colour a clear strip is allowed. Tahoe's menu bar is monochrome
+    // for exactly this reason: over an unknown backdrop the palette's blues and
+    // yellows are a contrast nothing can vouch for — this theme's #0056D6 glyph
+    // measures 3.2:1 on a near-black wallpaper. Black and white are the two that
+    // can be, which is what syn_ink_for_backdrop() chooses between.
+    readonly property color barInkColor: root.inkOnDark ? "#ffffff" : "#1d1d1f"
+
+    readonly property color barFg:     root.clearBar ? root.barInkColor : root.fg
+    readonly property color barGlyph:  root.clearBar ? root.barInkColor : root.cyan
+    readonly property color barAccent: root.clearBar ? root.barInkColor : root.magenta
+    readonly property color barClock:  root.clearBar ? root.barInkColor : root.yellow
+
+    // A 15% accent wash over a photograph is not a hover state, it is nothing.
+    // On a clear strip the wash is the ink, at the strength it takes to read as
+    // a button against whatever is behind it.
+    readonly property color barHoverBg:  root.clearBar
+        ? Qt.rgba(root.barInkColor.r, root.barInkColor.g, root.barInkColor.b, 0.18)
+        : root.hoverBg
+    readonly property color barActiveBg: root.clearBar
+        ? Qt.rgba(root.barInkColor.r, root.barInkColor.g, root.barInkColor.b, 0.28)
+        : root.activeBg
+
+    // The status colours keep their MEANING on a clear strip — a red battery
+    // warning turned white is a warning nobody reads — and only swap which half
+    // of each pair suits the backdrop.
+    readonly property color barDim:    barPick("#3a4a52", "#6b7280")
+    readonly property color barBlue:   barPick("#4dabff", "#1d4ed8")
+    readonly property color barGreen:  barPick("#a6e3a1", "#166534")
+    readonly property color barRed:    barPick("#f38ba8", "#b91c1c")
+    readonly property color barOrange: barPick("#f9e2af", "#8a6d00")
 
     // ── Metrics ──────────────────────────────────────────
     // 28px matches the waybar height the compositor already lays out around:

@@ -20,7 +20,7 @@ BarModule {
     property real prevIdle: 0
 
     icon: Icons.cpu
-    iconColor: usage >= 90 ? Theme.red : (usage >= 60 ? Theme.yellow : Theme.cyan)
+    iconColor: usage >= 90 ? Theme.barRed : (usage >= 60 ? Theme.barClock : Theme.barGlyph)
     text: usage + "%"
     tooltipText: "CPU " + usage + "%\nClick for the task manager"
 

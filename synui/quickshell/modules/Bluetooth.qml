@@ -27,7 +27,7 @@ BarModule {
     readonly property bool anyConnected: connectedDevices.length > 0
 
     icon: !on ? Icons.btOff : (anyConnected ? Icons.btConnected : Icons.btOn)
-    iconColor: !on ? Theme.fgDim : (anyConnected ? Theme.blue : Theme.cyan)
+    iconColor: !on ? Theme.barDim : (anyConnected ? Theme.barBlue : Theme.barGlyph)
     active: anyConnected
 
     tooltipText: {
