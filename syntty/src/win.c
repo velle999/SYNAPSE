@@ -2840,9 +2840,17 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 		 * commit — is still in the client's buffer until this runs, and a
 		 * loop that polls before flushing can wait for a reply to a message
 		 * it has not sent. */
-		while (wl_display_prepare_read(w->dpy) != 0)
-			wl_display_dispatch_pending(w->dpy);
-		wl_display_flush(w->dpy);
+		while (wl_display_prepare_read(w->dpy) != 0) {
+			if (wl_display_dispatch_pending(w->dpy) < 0)
+				goto display_lost;
+		}
+		/* ⚠ EAGAIN is not a failure — it means the compositor is not reading
+		 * fast enough and the rest goes out next time round. Anything else is
+		 * the connection, and POLLOUT is not worth a branch for a terminal. */
+		if (wl_display_flush(w->dpy) < 0 && errno != EAGAIN) {
+			wl_display_cancel_read(w->dpy);
+			goto display_lost;
+		}
 
 		/* The compositor, the paste in flight, and every tab's child.
 		 *
@@ -2893,11 +2901,47 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 			break;
 		}
 
-		if (fds[0].revents & POLLIN)
-			wl_display_read_events(w->dpy);
-		else
+		/* ⚠⚠ THE COMPOSITOR GOING AWAY IS THE ONE EVENT THAT NEVER STOPS.
+		 *
+		 * Every other descriptor here settles: a pty reports EOF once and is
+		 * closed, a paste ends, inotify is drained. A dead Wayland connection
+		 * does the opposite — the socket stays readable-at-EOF forever, so
+		 * poll() returns INSTANTLY on every single iteration, and with the
+		 * return values below thrown away the loop spun at 100% of a core
+		 * until something killed it. Two thirds of that was system time: it
+		 * was poll() and a failing read(), several hundred thousand times a
+		 * second, for as long as the process lived.
+		 *
+		 * ⚠ And it lived a LONG time, because logind ships
+		 * `KillUserProcesses=no`: a terminal open across a logout is not
+		 * reaped, it is orphaned onto init with its compositor gone. So the
+		 * cost of missing this is not one spinning window — it is one per
+		 * terminal that was open at every logout since boot, accumulating.
+		 *
+		 * The window is gone and cannot come back (a Wayland client cannot
+		 * reconnect — every object it holds belonged to that connection), so
+		 * the honest response is to leave the loop. The teardown below reaps
+		 * the children and closing the pty master hangs them up, which is
+		 * what every other Wayland terminal does. */
+		if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
 			wl_display_cancel_read(w->dpy);
-		wl_display_dispatch_pending(w->dpy);
+			goto display_lost;
+		}
+		if (fds[0].revents & POLLIN) {
+			if (wl_display_read_events(w->dpy) < 0)
+				goto display_lost;
+		} else {
+			wl_display_cancel_read(w->dpy);
+		}
+		if (wl_display_dispatch_pending(w->dpy) < 0)
+			goto display_lost;
+		/* ⚠ The belt to the braces above: libwayland latches a protocol error
+		 * (a bad object, a version mismatch) into the display and from then on
+		 * every call is a no-op returning -1. Checking only the syscalls would
+		 * catch the socket dying and miss the protocol dying, and both end in
+		 * the same unbreakable spin. */
+		if (wl_display_get_error(w->dpy) != 0)
+			goto display_lost;
 
 		/* ⚠ AFTER dispatch, never before. A release that arrived in this same
 		 * wakeup has to be seen first, or the key fires one last time after
@@ -3010,6 +3054,10 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 		if (w->dirty && !w->needs_frame && !w->paint_due_ns)
 			schedule_paint(w);
 	}
+	/* Closed normally, or the connection went — the same teardown either way.
+	 * There is nothing extra to unwind for a dead display: the objects below
+	 * are freed client-side and the socket is closed by the disconnect. */
+display_lost:
 
 	if (stats) {
 		stats->frames       = w->frames;

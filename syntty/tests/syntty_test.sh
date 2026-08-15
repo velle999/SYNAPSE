@@ -2119,6 +2119,92 @@ else
         kill "$cagepid" 2>/dev/null || true
         wait "$cagepid" 2>/dev/null || true
     fi
+
+    # ── the compositor goes away while the terminal is open ─────────────────
+    #
+    # ⚠ THE ONE FAILURE THAT NEVER SETTLES. Every other descriptor in the poll
+    # loop reports its end once: a pty gives EOF and is closed, a paste
+    # finishes, inotify is drained. A dead Wayland socket stays readable at EOF
+    # FOREVER, so poll() returns instantly on every iteration — and with the
+    # libwayland return values thrown away the loop span at 100% of a core, in
+    # silence, until something killed it.
+    #
+    # ⚠ IT IS NOT A SHORT SPIN, because logind ships `KillUserProcesses=no`:
+    # a terminal open across a logout is orphaned onto init rather than
+    # reaped, keeping a core busy for as long as the machine stays up, and one
+    # more joins it at every logout. Found on a live box at eleven of them,
+    # each burning 50-80% of a core, oldest first.
+    #
+    # ⚠ THE COMPOSITOR MUST BE A SEPARATE PROCESS, which is why this cannot
+    # use `caged`: that runs `cage -- syntty`, so killing the compositor takes
+    # the terminal with it and the test could never fail. The socket is read
+    # out of cage's OWN environment for the reason the recolour test gives.
+    LOST="$T/lost"
+    mkdir -p "$LOST"
+    rm -f "$LOST/sock"
+    WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+    XDG_CACHE_HOME="$FC" timeout 60 cage -- /bin/sh -c \
+        "printf '%s' \"\$WAYLAND_DISPLAY\" > $LOST/sock; sleep 50" \
+        >/dev/null 2>&1 &
+    cagepid=$!
+
+    disp=""
+    for _ in $(seq 1 60); do
+        [ -s "$LOST/sock" ] && disp=$(cat "$LOST/sock") && break
+        sleep 0.25
+    done
+
+    if [ -z "$disp" ]; then
+        echo "  skip  the compositor going away (cage did not come up)"
+    else
+        WAYLAND_DISPLAY="$disp" XDG_CACHE_HOME="$FC" \
+            "$ST" --cols=40 --rows=6 win -- /bin/sh -c 'sleep 40' \
+            >/dev/null 2>&1 &
+        stpid=$!
+        sleep 3
+
+        if ! kill -0 "$stpid" 2>/dev/null; then
+            echo "  skip  the compositor going away (the window did not start)"
+        else
+            # utime+stime the window has spent just being open, so what the
+            # spin costs is measured against ITS OWN startup rather than
+            # against zero.
+            ticks() { awk '{print $14 + $15}' "/proc/$1/stat" 2>/dev/null; }
+            before=$(ticks "$stpid"); : "${before:=0}"
+
+            kill "$cagepid" 2>/dev/null || true
+
+            # It has to LEAVE, and leave promptly — and the CPU it burns on
+            # the way out is sampled here, because once it exits /proc is gone
+            # and the number can no longer be asked for.
+            gone=1 spun=0
+            for _ in $(seq 1 40); do
+                now=$(ticks "$stpid")
+                [ -n "$now" ] && spun=$((now - before))
+                kill -0 "$stpid" 2>/dev/null || { gone=0; break; }
+                sleep 0.25
+            done
+            check "the terminal exits when the compositor goes away" $gone
+
+            # ⚠ AND THE REAL CLAIM IS THE CPU, not the lifetime. A build that
+            # exited for some unrelated reason would pass the check above; only
+            # this says the loop was not spinning while it did. The bug burns a
+            # FULL CORE — a 10-second window costs ~1000 ticks against a budget
+            # of 60, so there are two orders of magnitude of headroom and a
+            # slow machine cannot fail it by being slow.
+            if [ "$gone" != 0 ]; then
+                kill -9 "$stpid" 2>/dev/null || true
+                bad "...without spinning on the dead connection (never exited)"
+            elif [ "$spun" -gt 60 ]; then
+                bad "...without spinning on the dead connection ($spun ticks)"
+            else
+                ok "...without spinning on the dead connection ($spun ticks)"
+            fi
+        fi
+        wait "$stpid" 2>/dev/null || true
+    fi
+    kill "$cagepid" 2>/dev/null || true
+    wait "$cagepid" 2>/dev/null || true
 fi
 
 # ── the suite checks ITSELF for the bug that kept coming back ───────────────
