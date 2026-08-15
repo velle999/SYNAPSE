@@ -529,6 +529,51 @@ ShellRoot {
         shell.cols = Object.assign({}, shell.cols, { [r]: v })
     }
 
+    // ── the pointer has to have actually MOVED ──────────────────────────────
+    //
+    // ⚠ A hover event is not evidence that anybody touched the mouse.
+    //
+    // Qt re-delivers hover at the LAST KNOWN cursor position on every frame in
+    // which the scene graph is dirty (QQuickDeliveryAgentPrivate::
+    // flushFrameSynchronousEvents), and it is right to: an item that slides out
+    // from under a stationary pointer has genuinely stopped being hovered. But
+    // every selection move here animates — the shelf column slides in y for
+    // 200ms, the strip slides in x for 200ms under ApplyRange, the tile scales
+    // for 140ms — so one press of the d-pad is a dozen frames of tiles being
+    // dragged past a cursor that is sitting perfectly still.
+    //
+    // Each of those frames used to re-enter a tile and write row and col from
+    // whatever had drifted under the pointer, which is a FEEDBACK LOOP: hover
+    // sets the selection, the selection scrolls the strip, the scroll moves
+    // another tile under the pointer, and that sets the selection again.
+    //
+    // It is worth spelling out the three faces this wore, because none of them
+    // looks like a mouse problem and all three are the same bug:
+    //
+    //   · up and down "not taking" — the row moved and the cursor put it back
+    //   · the selection "jumping" — it landed on whatever the animation happened
+    //     to drag past, which is any shelf, not the next one
+    //   · launching "one behind" — the strip scrolls by exactly one tile, so the
+    //     tile now under the cursor is one off from the highlight that was drawn
+    //     when the move started, and A activates the state, not the picture
+    //
+    // And it only bites once the surface has EVER seen the pointer, which is why
+    // it arrived with the controller-as-mouse: coming back from an app leaves
+    // the cursor wherever the stick left it, which is over the tiles.
+    //
+    // So hover is gated on the cursor's SCENE position changing. Sitting still
+    // while the world moves underneath is not input.
+    property real ptrX: -1
+    property real ptrY: -1
+
+    function pointerMoved(g) {
+        if (Math.abs(g.x - shell.ptrX) < 1 && Math.abs(g.y - shell.ptrY) < 1)
+            return false
+        shell.ptrX = g.x
+        shell.ptrY = g.y
+        return true
+    }
+
     function moveRow(d) {
         const n = shell.shelves.length
         if (!n) return
@@ -1109,7 +1154,19 @@ ShellRoot {
                                     MouseArea {
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        onEntered: {
+                                        // ⚠ NOT onEntered. A tile sliding under
+                                        // a parked cursor enters it just as
+                                        // truly as a cursor moving onto the
+                                        // tile, and only one of those is a
+                                        // person choosing something — see
+                                        // shell.pointerMoved. onPositionChanged
+                                        // carries the coordinates that tell
+                                        // them apart; entered() does not carry
+                                        // any.
+                                        onPositionChanged: (mouse) => {
+                                            if (!shell.pointerMoved(
+                                                    tile.mapToItem(null, mouse.x, mouse.y)))
+                                                return
                                             shell.row = shelf.index
                                             shell.setCol(shelf.index, tile.index)
                                         }

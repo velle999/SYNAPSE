@@ -1407,6 +1407,40 @@ check "setCol assigns a COPY of cols (a mutated object emits no change)" $?
 ! grep -qE '^\s*shell\.cols = c\s*$' "$BIGQML"
 check "...and never reassigns the same object reference" $?
 
+# ── hover must not be able to move the selection on its own ─────────────────
+#
+# The second bug of this family, and it read as three unrelated faults from the
+# sofa: up and down "not taking", the selection "jumping" several shelves, and
+# launching "one app behind" what was highlighted.
+#
+# Qt re-delivers a hover event at the LAST KNOWN cursor position on every frame
+# where the scene graph is dirty (QQuickDeliveryAgentPrivate::
+# flushFrameSynchronousEvents). Every selection move here animates — the shelf
+# column for 200ms, the strip under ApplyRange for 200ms, the tile scale for
+# 140ms — so ONE d-pad press is a dozen frames of tiles being dragged past a
+# cursor nobody is touching. `onEntered` fired on each tile that arrived under
+# it and wrote row and col, which scrolled the strip, which dragged another tile
+# under the cursor: a feedback loop with the pad on one side and the animation
+# on the other. Launching landed exactly one behind because ApplyRange scrolls
+# by exactly one tile width, so A activated the state while the screen still
+# showed the picture from before the move.
+#
+# ⚠ The headless rig CANNOT catch this and neither can any screenshot it takes:
+# the fault needs the surface to have seen a pointer at least once, and nothing
+# in the rig ever moves one. On a television it needs nothing at all — coming
+# back from an app leaves the cursor wherever the stick left it, over the tiles.
+#
+# So the fix is a gate on the cursor's SCENE position actually changing, and
+# entered() cannot be part of it because entered() carries no coordinates.
+grep -q "function pointerMoved(g)" "$BIGQML"
+check "hover is gated on the pointer's scene position changing" $?
+
+! grep -qE '^\s*onEntered:' "$BIGQML"
+check "...and no onEntered handler moves the selection" $?
+
+grep -q "shell.pointerMoved(" "$BIGQML"
+check "...with the tile's hover routed through that gate" $?
+
 # ── stepping aside rather than quitting ─────────────────────────────────────
 #
 # The behaviour this release exists for. Launching anything used to call

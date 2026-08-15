@@ -126,6 +126,42 @@
 # Super+Return is the kind of small inconsistency that makes a desktop feel
 # assembled rather than designed.
 #
+# ── 0.1.0-7: a stationary mouse was steering the television ─────────────────
+#
+# Reported from the sofa as three separate faults, and they are one bug:
+#
+#   · up and down would not take consistently
+#   · the selection jumped, several shelves at a time
+#   · pressing A launched ONE APP BEHIND the tile that was highlighted
+#
+# None of them is a controller fault, and the pad was innocent again. Qt
+# re-delivers a hover event at the LAST KNOWN cursor position on every frame in
+# which the scene graph is dirty, which is correct — a tile sliding out from
+# under a stationary pointer really has stopped being hovered. But every
+# selection move in this interface animates: the shelf column slides for 200ms,
+# the strip slides for 200ms under ApplyRange, the tile scales for 140ms. So one
+# press of the d-pad is a dozen frames of tiles being dragged past a cursor
+# nobody is touching, and the tile MouseArea's `onEntered` wrote row and column
+# on every one of them.
+#
+# That is a feedback loop with the controller on one side and the animation on
+# the other: hover sets the selection, the selection scrolls the strip, the
+# scroll drags another tile under the cursor, and that sets the selection again.
+# It launched exactly one behind because ApplyRange scrolls by exactly one tile
+# width, so A activated the state while the screen still showed the picture from
+# before the move.
+#
+# Hover is now gated on the cursor's SCENE position actually changing — sitting
+# still while the world moves underneath is not input. It cannot be spelled with
+# `onEntered`, which carries no coordinates; onPositionChanged does.
+#
+#   ⚠ It only bites once the surface has EVER seen a pointer, which is why it
+#     arrived with the controller-as-mouse in 0.1.0-6 and why NO rig here could
+#     have caught it: coming back from an app leaves the cursor wherever the
+#     stick left it, which is over the tiles, and nothing in the headless rig
+#     moves a pointer at all. Every screenshot it takes is of a seat that has
+#     never had one.
+#
 # ⚠ Its controller navigation SYNTHESISES NOTHING. `syn-arcade big nav` reads
 # the event nodes udev already grants this user and writes WORDS — "up",
 # "accept" — down a pipe that exactly one process is reading. The obvious
@@ -176,7 +212,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
