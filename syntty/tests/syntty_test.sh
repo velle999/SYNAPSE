@@ -25,6 +25,37 @@ ok()    { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad()   { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }
 check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 
+# ⚠ NEVER `producer | grep -q`, HOWEVER THE PRODUCER CAPTURES ITS OUTPUT.
+#
+# This is the second time this bug has been fixed and the first fix was aimed
+# one process too far to the left.
+#
+# `grep -q` exits the instant it matches. Whatever is still writing into the
+# pipe is then killed by SIGPIPE, and `set -o pipefail` (line 17) turns that
+# into a pipeline status of 141 — for an assertion that MATCHED. The earlier
+# round made the helpers capture into a variable first so that the syntty
+# BINARY could not be the thing that died; but the helper still ends with
+# `printf "%s\n" "$out"` into that same pipe, and the shell writing that is
+# just as killable. Measured on the real suite: about 1.2% of these pipelines,
+# scattered at random across the font, graphics, damage and keyboard blocks —
+# roughly one failing run in five, always naming an assertion that was true.
+#
+# `seen` reads its input to EOF with `cat` before matching anything, so nothing
+# upstream is ever signalled, and it greps a FILE so grep has no pipe to close
+# either. That is safe by construction rather than by grep's good manners:
+# `grep PATTERN >/dev/null` also happens to work today (GNU grep 3.12 reads to
+# EOF unless -q), but it depends on an optimisation grep is free to add.
+#
+# ⚠ It is NOT used where stdin carries the PATTERNS (`grep -f -`) — there the
+# file argument is the haystack and grep must read all of stdin anyway.
+# ⚠ `cat > file`, NOT `in=$(cat)`. An unbounded shell capture is its own
+# recorded trap — one of them OOM-killed the user session on this machine — and
+# there is no reason to hold the haystack in memory to grep it.
+seen() {  # seen [grep-flags] PATTERN   — reads the haystack on stdin
+    cat > "$T/.seen"
+    grep "$@" "$T/.seen" >/dev/null
+}
+
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 
@@ -298,7 +329,7 @@ expect "the child sees the grid's size" "9 77" "$size"
 
 seq 1 20000 > "$T/bench.txt"
 benchout=$("$ST" bench "$T/bench.txt" --runs=2 2>&1)
-if printf '%s' "$benchout" | grep -q 'MB/s'; then
+if printf '%s' "$benchout" | seen 'MB/s'; then
     ok "bench reports a throughput number"
 else
     bad "bench reports a throughput number"
@@ -327,11 +358,11 @@ sys.stdout.write('after\r\n')
 if [ -z "$alt" ]; then
     echo "  skip  the alternate screen (no python3)"
 else
-    printf '%s' "$alt" | grep -q 'EDITOR JUNK' \
+    printf '%s' "$alt" | seen 'EDITOR JUNK' \
         && bad "a full-screen program's redraws never reach the scrollback" \
         || ok "a full-screen program's redraws never reach the scrollback"
 
-    printf '%s' "$alt" | grep -q 'command 1' \
+    printf '%s' "$alt" | seen 'command 1' \
         && ok "...and the real history is still there afterwards" \
         || bad "...and the real history is still there afterwards"
 
@@ -367,7 +398,7 @@ fi
 # ── modes a program turns on that the input layer must obey ─────────────────
 modes=$(printf '\033[?1000h\033[?1006h\033[?2004h\033[?25l' \
         | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
-printf '%s' "$modes" | grep -q 'unhandled     0 CSI'
+printf '%s' "$modes" | seen 'unhandled     0 CSI'
 check "mouse, paste and cursor modes are understood, not counted as unknown" $?
 
 # ⚠ AND THE MODE IS THE NUMBER IT SAYS IT IS. The check above passed for a
@@ -376,11 +407,11 @@ check "mouse, paste and cursor modes are understood, not counted as unknown" $?
 # wrong. Nothing compared the value against 1000 until there was an input layer
 # to send events, which is precisely when it would have started sending the
 # wrong ones. A test that only asks "was it understood?" cannot see this.
-printf '%s' "$modes" | grep -q 'mouse         1000, SGR coordinates'
+printf '%s' "$modes" | seen 'mouse         1000, SGR coordinates'
 check "...and ?1000 is recorded as 1000, not as a truncated byte" $?
 
 m3=$(printf '\033[?1003h' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
-printf '%s' "$m3" | grep -q 'mouse         1003, 1984 coordinates'
+printf '%s' "$m3" | seen 'mouse         1003, 1984 coordinates'
 check "...and ?1003 as 1003, with the old coordinates until ?1006 asks" $?
 
 # ── what a pointer event becomes on the child's input ───────────────────────
@@ -620,10 +651,10 @@ case "$e" in *'ESC[A'*) ok "...and with the mode off Up is CSI A again" ;;
 # mouse_mode taught, where a uint8_t held 1000 as 232 and every assertion that
 # the mode was "understood" passed while the value was wrong.
 m=$(printf 'x\033[?1hy' | "$ST" dump - --stats 2>&1 >/dev/null)
-printf '%s' "$m" | grep -q 'cursor keys   application'
+printf '%s' "$m" | seen 'cursor keys   application'
 check "?1h is recorded on the grid, where the input layer can read it" $?
 
-printf '%s' "$m" | grep -q 'unhandled     0 CSI'
+printf '%s' "$m" | seen 'unhandled     0 CSI'
 check "...and is not counted as an unhandled sequence any more" $?
 
 m=$(printf 'x\033[?1h\033[?1ly' | "$ST" dump - --stats 2>&1 >/dev/null)
@@ -702,7 +733,7 @@ grew=$(printf 'one\r\ntwo\r\nthree' | "$ST" --cols=10 --rows=3 dump - --resize=1
 # that is EVERY window: the shell's output sat at the bottom of the screen with
 # the cursor blinking at the top, and the next command overwrote the top while
 # its output appeared at the bottom.
-printf '%s' "$grew" | grep -q '^cursor        5,2'
+printf '%s' "$grew" | seen '^cursor        5,2'
 check "...and the cursor stays on the line it was on" $?
 
 shrunk_screen=$(printf 'a\r\nb\r\nc\r\nd\r\ne\r\nf' | "$ST" --cols=10 --rows=6 dump - --resize=10x3 2>/dev/null)
@@ -711,7 +742,7 @@ shrunk=$(printf 'a\r\nb\r\nc\r\nd\r\ne\r\nf' | "$ST" --cols=10 --rows=6 dump - -
     && ok "shrinking keeps the BOTTOM — where a shell's prompt is" \
     || bad "shrinking keeps the BOTTOM — where a shell's prompt is"
 
-printf '%s' "$shrunk" | grep -q '^cursor        1,2'
+printf '%s' "$shrunk" | seen '^cursor        1,2'
 check "...and the cursor follows the text up" $?
 
 # ── the config file ─────────────────────────────────────────────────────────
@@ -739,10 +770,10 @@ cursor = #000080
 EOF
 
 c=$("$ST" --config="$CONF" config)
-printf '%s' "$c" | grep -q 'errors       none'
+printf '%s' "$c" | seen 'errors       none'
 check "a config with only good lines has no errors" $?
 
-printf '%s' "$c" | grep -q '^rows         30'
+printf '%s' "$c" | seen '^rows         30'
 check "...and the values it sets are the ones it says" $?
 
 # ⚠ THE COMMENT CHARACTER AND THE COLOUR PREFIX ARE THE SAME CHARACTER. This
@@ -751,7 +782,7 @@ check "...and the values it sets are the ones it says" $?
 # silently dropping every colour in the file. A comment is a WHOLE LINE here,
 # and there are no trailing comments, because that rule has no exception to
 # forget.
-printf '%s' "$c" | grep -q '^background   #123456'
+printf '%s' "$c" | seen '^background   #123456'
 check "a colour survives the comment stripping (# is both)" $?
 
 # ⚠ A BROKEN LINE MUST NOT STOP THE TERMINAL. A terminal that refuses to open
@@ -762,21 +793,21 @@ fnt = DejaVu
 font_size = huge
 EOF
 c=$("$ST" --config="$T/bad.conf" config)
-printf '%s' "$c" | grep -q '^rows         30'
+printf '%s' "$c" | seen '^rows         30'
 check "a broken line does not stop the good lines around it" $?
 
 # ⚠ AN UNKNOWN KEY IS REPORTED. Silently ignoring `fnt` is how a misspelling
 # becomes half an hour of wondering why the font never changed.
-printf '%s' "$c" | grep -q 'errors       2, first at line 2: unknown setting: fnt'
+printf '%s' "$c" | seen 'errors       2, first at line 2: unknown setting: fnt'
 check "...and an unknown key is named, with its line number" $?
 
 # A missing file is the normal case, not an error.
 c=$("$ST" --config="$T/does-not-exist.conf" config)
-printf '%s' "$c" | grep -q 'no file (not an error)'
+printf '%s' "$c" | seen 'no file (not an error)'
 check "no config file at all is not an error" $?
 
 "$ST" config --example > "$T/example.conf"
-[ -s "$T/example.conf" ] && "$ST" --config="$T/example.conf" config | grep -q 'errors       none'
+[ -s "$T/example.conf" ] && "$ST" --config="$T/example.conf" config | seen 'errors       none'
 check "the example it prints is a config it accepts" $?
 
 # ── and the settings reach the pixels ───────────────────────────────────────
@@ -819,15 +850,15 @@ if [ -n "${FC:-}" ] || command -v fc-match >/dev/null 2>&1; then
     # worse than nothing — the program repaints itself for a screen nobody has.
     q=$(printf '\033]11;?\a' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
             --config="$T/pale.conf" render - 2>&1 >/dev/null)
-    echo "$q" | grep -q 'reply *ESC\]11;rgb:c0c0/c0c0/c0c0'
+    echo "$q" | seen 'reply *ESC\]11;rgb:c0c0/c0c0/c0c0'
     check "the background query answers with the CONFIGURED colour" $?
 
-    echo "$q" | grep -q '^bg *C0C0C0, light'
+    echo "$q" | seen '^bg *C0C0C0, light'
     check "...and #c0c0c0 is classified as a light background" $?
 
     d=$(printf '\033]11;?\a' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
             --no-config render - 2>&1 >/dev/null)
-    echo "$d" | grep -q '^bg *1B1F26, dark'
+    echo "$d" | seen '^bg *1B1F26, dark'
     check "...and the built-in scheme as a dark one" $?
 
     # ⚠ NOT BY CHANNEL AVERAGE. #0000ff and #ffff00 have the same mean and are
@@ -835,7 +866,7 @@ if [ -n "${FC:-}" ] || command -v fc-match >/dev/null 2>&1; then
     # picking a palette is actually reasoning about.
     printf 'background = #0000ff\n' > "$T/blue.conf"
     XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 --config="$T/blue.conf" \
-        render /dev/null 2>&1 >/dev/null | grep -q '^bg *0000FF, dark'
+        render /dev/null 2>&1 >/dev/null | seen '^bg *0000FF, dark'
     check "...measured as luminance, not as a channel average" $?
 
     # ── ESC[?25l ACTUALLY HIDES IT ──────────────────────────────────────────
@@ -889,30 +920,30 @@ printf 'background = #111111\nfont = Original\ninclude = palette.conf\n' > "$INC
 printf 'background = #c0c0c0\nforeground = #000000\n' > "$INC/palette.conf"
 
 c=$("$ST" --config="$INC/main.conf" config)
-printf '%s\n' "$c" | grep -q 'errors       none'
+printf '%s\n' "$c" | seen 'errors       none'
 check "an include is read" $?
 
 # ⚠ LAST WINS, exactly as it does for two plain lines. This is what makes a
 # theme switch change anything at all: an include at the bottom beats the line
 # the user forgot they wrote at the top.
-printf '%s\n' "$c" | grep -q 'background   #C0C0C0'
+printf '%s\n' "$c" | seen 'background   #C0C0C0'
 check "...and an include at the bottom beats the line above it" $?
 
 # It is not an all-or-nothing takeover: a key the included file says nothing
 # about keeps what the including file set.
-printf '%s\n' "$c" | grep -q 'font         Original'
+printf '%s\n' "$c" | seen 'font         Original'
 check "...while a key it does not mention is left alone" $?
 
 # ⚠ NAMED IN THE OUTPUT. "why is my background not what I wrote" is answerable
 # only if the file that overrode it can be found, and it is not a file the
 # person went looking for.
-printf '%s\n' "$c" | grep -q "included     $INC/palette.conf"
+printf '%s\n' "$c" | seen "included     $INC/palette.conf"
 check "...and 'syntty config' names every file it read" $?
 
 # Resolved against the DIRECTORY OF THE FILE IT APPEARS IN, not the working
 # directory — a terminal is launched from wherever somebody happened to be, and
 # the same config must not mean different things depending on that.
-( cd / && "$ST" --config="$INC/main.conf" config | grep -q 'background   #C0C0C0' )
+( cd / && "$ST" --config="$INC/main.conf" config | seen 'background   #C0C0C0' )
 check "...resolved beside its parent, not against the working directory" $?
 
 # ⚠ A MISSING INCLUDE IS AN ERROR. Every other absent file here is silence,
@@ -926,14 +957,14 @@ check "...resolved beside its parent, not against the working directory" $?
 # a broken feature rather than a broken test.
 printf 'include = nowhere.conf\n' > "$INC/missing.conf"
 c=$("$ST" --config="$INC/missing.conf" config || true)
-printf '%s\n' "$c" | grep -q 'cannot read the included file: nowhere.conf'
+printf '%s\n' "$c" | seen 'cannot read the included file: nowhere.conf'
 check "a missing include is an error that says which file" $?
 
 # kitty spells it without the equals, so this is the one wrong line somebody is
 # actually going to write.
 printf 'include palette.conf\n' > "$INC/bare.conf"
 c=$("$ST" --config="$INC/bare.conf" config || true)
-printf '%s\n' "$c" | grep -q "include takes an '=' here"
+printf '%s\n' "$c" | seen "include takes an '=' here"
 check "...and the kitty spelling is named rather than reported as a syntax error" $?
 
 # ⚠ A CYCLE TERMINATES. Three separate caps make it harmless (already-read,
@@ -941,7 +972,7 @@ check "...and the kitty spelling is named rather than reported as a syntax error
 # the property that matters and the one a recursive reader loses.
 printf 'include = b.conf\n' > "$INC/a.conf"
 printf 'include = a.conf\nbackground = #abcdef\n' > "$INC/b.conf"
-timeout 5 "$ST" --config="$INC/a.conf" config | grep -q 'background   #ABCDEF'
+timeout 5 "$ST" --config="$INC/a.conf" config | seen 'background   #ABCDEF'
 check "an include cycle terminates instead of recursing" $?
 
 # ── what a paste becomes on the way to the child ────────────────────────────
@@ -988,11 +1019,11 @@ p=$("$ST" paste "$(printf 'a\tb\001c')")
 # How vim, tmux and anything over ssh copy to the clipboard of the machine the
 # person is sitting at. There is no other channel from the far end of a pty.
 c=$(printf '\033]52;c;aGVsbG8gY2xpcA==\007' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
-printf '%s' "$c" | grep -q 'clipboard     1 set, 10 bytes waiting for the clipboard'
+printf '%s' "$c" | seen 'clipboard     1 set, 10 bytes waiting for the clipboard'
 check "a child can put text on the clipboard (OSC 52)" $?
 
 c=$(printf '\033]52;p;aGk=\007' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
-printf '%s' "$c" | grep -q 'waiting for the primary'
+printf '%s' "$c" | seen 'waiting for the primary'
 check "...and can name the primary selection instead" $?
 
 # ⚠ THE READ FORM IS REFUSED, AND THAT IS THE POINT. `52;c;?` asks the terminal
@@ -1001,9 +1032,9 @@ check "...and can name the primary selection instead" $?
 # terminal cannot tell who is asking, so nobody gets an answer, and the refusal
 # is counted so it is visible that something asked.
 c=$(printf '\033]52;c;?\007' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
-printf '%s' "$c" | grep -q 'READ request(s) refused'
+printf '%s' "$c" | seen 'READ request(s) refused'
 check "a child asking to READ the clipboard is refused, out loud" $?
-printf '%s' "$c" | grep -q 'reply  '
+printf '%s' "$c" | seen 'reply  '
 if [ $? = 0 ]; then bad "...and is sent nothing back at all"
 else ok "...and is sent nothing back at all"; fi
 
@@ -1016,9 +1047,9 @@ if [ -z "$big" ]; then
     echo "  skip  an overlong OSC is dropped whole (no python3)"
 else
     c=$(printf '\033]52;c;%s\007' "$big" | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
-    printf '%s' "$c" | grep -q 'dropped for running past'
+    printf '%s' "$c" | seen 'dropped for running past'
     check "an OSC longer than the buffer is dropped whole, not truncated" $?
-    printf '%s' "$c" | grep -q 'clipboard     1 set'
+    printf '%s' "$c" | seen 'clipboard     1 set'
     if [ $? = 0 ]; then bad "...and sets no clipboard from the part that fitted"
     else ok "...and sets no clipboard from the part that fitted"; fi
 fi
@@ -1115,20 +1146,20 @@ if [ -z "$(sess)" ]; then
 else
     r=$(sess | "$ST" --cols=20 --rows=6 dump - --stats 2>&1)
 
-    echo "$r" | grep -q 'commands      12 recorded'
+    echo "$r" | seen 'commands      12 recorded'
     check "every command the shell announced is recorded" $?
 
     # ⚠ THE STATUS IS THE POINT. A terminal that records the timing but loses
     # whether it worked cannot colour a failed command, which is the single
     # most useful thing these marks buy.
-    echo "$r" | grep -q 'status 1'
+    echo "$r" | seen 'status 1'
     check "...with the exit status the shell reported" $?
 
     # ⚠ AND UNKNOWN IS NOT ZERO. A bare `D` says "finished" and nothing else;
     # reporting that as 0 is how a failing command comes back looking green.
     u=$(printf '\033]133;A\007$ \033]133;B\007x\r\n\033]133;C\007\033]133;D\007' \
         | "$ST" --cols=20 --rows=4 dump - --stats 2>&1)
-    printf '%s' "$u" | grep -q 'status unknown'
+    printf '%s' "$u" | seen 'status unknown'
     check "a command that finished without saying how reports unknown, not 0" $?
 
     # ── the scrollback viewport ─────────────────────────────────────────────
@@ -1169,7 +1200,7 @@ else
     live=$(printf 'abc' | "$ST" --cols=8 --rows=2 render - --probe=3,0 2>/dev/null | awk '{print $3}')
     for i in $(seq 1 30); do printf 'x\r\n'; done \
         | "$ST" --cols=8 --rows=2 --view=10 render - --probe=0,0 2>/dev/null \
-        | awk '{print $3}' | grep -qv "$live"
+        | awk '{print $3}' | seen -v "$live"
     check "the cursor is not painted over scrollback" $?
 fi
 
@@ -1193,17 +1224,17 @@ else
     # to send images at all, so answering it is most of what "supports the
     # protocol" means in practice.
     r=$(gfx '\033_Gi=31,s=1,v=1,a=q;AAAA\033\\\\')
-    echo "$r" | grep -q 'ESC_Gi=31;OKESC'
+    echo "$r" | seen 'ESC_Gi=31;OKESC'
     check "a graphics query is answered OK" $?
 
     # ⚠ AND WHAT IS NOT IMPLEMENTED IS REFUSED OUT LOUD. A program told "OK"
     # for a format we ignore draws nothing and has no way to find out why —
     # the failure moves from the negotiation, where it is legible, into the
     # program's own rendering, where it is not.
-    echo "$(gfx '\033_Gi=7,f=100,a=T,s=2,v=2;iVBOR\033\\\\')" | grep -q 'ENOTSUPP'
+    echo "$(gfx '\033_Gi=7,f=100,a=T,s=2,v=2;iVBOR\033\\\\')" | seen 'ENOTSUPP'
     check "...and an unimplemented format is refused, not silently dropped" $?
 
-    echo "$(gfx '\033_Gi=8,f=32,t=f,a=T,s=2,v=2;L3RtcC94\033\\\\')" | grep -q 'ENOTSUPP'
+    echo "$(gfx '\033_Gi=8,f=32,t=f,a=T,s=2,v=2;L3RtcC94\033\\\\')" | seen 'ENOTSUPP'
     check "...as is a transmission medium we do not implement" $?
 
     # The whole path: transmit, display, and check the PIXELS. Four probes,
@@ -1234,12 +1265,12 @@ else
     # ⚠ THE CHILD IS NOT TRUSTED. `s=65535,v=65535,f=32` is a 17 GB allocation
     # request in eleven bytes. A refused image is a visible missing picture; an
     # unbounded one is a machine that stops.
-    echo "$(gfx '\033_Ga=T,f=32,s=65535,v=65535,i=11;AAAA\033\\\\')" | grep -q 'EINVAL'
+    echo "$(gfx '\033_Ga=T,f=32,s=65535,v=65535,i=11;AAAA\033\\\\')" | seen 'EINVAL'
     check "an implausibly large image is refused rather than allocated" $?
 
     # A payload shorter than the geometry claims must not be believed, or the
     # blit reads whatever follows it in memory.
-    echo "$(gfx '\033_Ga=T,f=24,s=64,v=64,i=12;AAAA\033\\\\')" | grep -q 'EINVAL'
+    echo "$(gfx '\033_Ga=T,f=24,s=64,v=64,i=12;AAAA\033\\\\')" | seen 'EINVAL'
     check "a payload shorter than its declared size is refused" $?
 
     # Deleting removes the placement — the image stops being drawn.
@@ -1251,7 +1282,7 @@ else
 
     # An APC that is not ours is left alone, not guessed at.
     other=$(printf '\033_Xsomething else\033\\\\hello' | "$ST" --cols=20 --rows=2 dump -)
-    printf '%s' "$other" | head -1 | grep -q 'hello'
+    printf '%s' "$other" | head -1 | seen 'hello'
     check "an APC belonging to something else is ignored, not eaten" $?
 
     # ⚠ AN UNTERMINATED SEQUENCE MUST NOT GROW A BUFFER FOREVER. This is the
@@ -1259,7 +1290,7 @@ else
     # with no terminator in sight.
     apcout=$(python3 -c "import sys; sys.stdout.write('\033_G' + 'A'*40000 + '\033\\\\' + 'survived')" \
         | "$ST" --cols=20 --rows=2 dump -)
-    printf '%s' "$apcout" | head -1 | grep -q 'survived'
+    printf '%s' "$apcout" | head -1 | seen 'survived'
     check "an over-long APC is dropped and the stream stays in step" $?
 fi
 
@@ -1306,37 +1337,37 @@ dmg() { local out; out=$(printf "$1" | "$ST" --cols="${2:-40}" --rows="${3:-12}"
 #
 # Plain text, no escapes at all: the one thing a terminal must not lose.
 dmg 'first line\r\nsecond line\r\nthird line\r\nfourth line\r\nfifth line\r\n' \
-    40 12 4096 | grep -q '^identical'
+    40 12 4096 | seen '^identical'
 check "a block of plain text fed WHOLE paints every row it wrote" $?
 
 # The same, without carriage returns — a bare LF leaves the column alone, so
 # each line starts further right and no two rows share a column. A row that is
 # never painted cannot be excused by the one above it having covered it.
-dmg 'aaa\nbbb\nccc\nddd\n' 40 12 4096 | grep -q '^identical'
+dmg 'aaa\nbbb\nccc\nddd\n' 40 12 4096 | seen '^identical'
 check "...and so does a staircase, where no row covers for another" $?
 
 scrollout=$(echo "$(seq 1 200)" | "$ST" --cols=80 --rows=24 damage-check - --split=7 2>&1)
-printf '%s' "$scrollout" | grep -q '^identical'
+printf '%s' "$scrollout" | seen '^identical'
 check "scrolling output paints the same pixels either way" $?
 
 # Every kind of mutation, at three bytes a feed. Each of these is a different
 # family of grid operation, and each is a different place to forget the mark.
-dmg 'plain\r\n\033[31mred\033[0m\r\n\033[2;5H\033[42mjump\033[0m\r\n' | grep -q '^identical'
+dmg 'plain\r\n\033[31mred\033[0m\r\n\033[2;5H\033[42mjump\033[0m\r\n' | seen '^identical'
 check "...and so do cursor jumps and colour changes" $?
 
-dmg '\033[3;10r\033[5;1Hin a scroll region\r\nsecond\r\nthird\r\n' | grep -q '^identical'
+dmg '\033[3;10r\033[5;1Hin a scroll region\r\nsecond\r\nthird\r\n' | seen '^identical'
 check "...and a scroll region, which moves rows without changing them" $?
 
-dmg 'aaaa\r\n\033[2J\033[1;1Hafter a clear\r\n\033[K\033[1Kboth erases\r\n' | grep -q '^identical'
+dmg 'aaaa\r\n\033[2J\033[1;1Hafter a clear\r\n\033[K\033[1Kboth erases\r\n' | seen '^identical'
 check "...and erase-display and erase-line" $?
 
-dmg '\033[3;1Hxxx\033[4L\033[2Minsert and delete lines\r\n' | grep -q '^identical'
+dmg '\033[3;1Hxxx\033[4L\033[2Minsert and delete lines\r\n' | seen '^identical'
 check "...and inserting and deleting whole lines" $?
 
-dmg 'abcdefgh\033[3D\033[4@\033[2Pinsert and delete chars\r\n' | grep -q '^identical'
+dmg 'abcdefgh\033[3D\033[4@\033[2Pinsert and delete chars\r\n' | seen '^identical'
 check "...and inserting and deleting characters" $?
 
-dmg '\xe6\x97\xa5\xe6\x9c\xac wide\r\n\033[2;3H\xe8\xaa\x9e over it\r\n' | grep -q '^identical'
+dmg '\xe6\x97\xa5\xe6\x9c\xac wide\r\n\033[2;3H\xe8\xaa\x9e over it\r\n' | seen '^identical'
 check "...and wide glyphs, whose tail column belongs to the head" $?
 
 # ⚠ THE CURSOR IS DAMAGE THE GRID CANNOT REPORT. Moving it changes no cell, so
@@ -1344,7 +1375,7 @@ check "...and wide glyphs, whose tail column belongs to the head" $?
 # it left and the one it arrived at. Left out, the cursor smears a trail of
 # itself down the window, which is the most visible form of this bug.
 printf '\033[1;1Ha\033[5;1H\033[9;1H\033[3;1H' \
-    | "$ST" --cols=20 --rows=12 damage-check - --split=1 2>&1 | grep -q '^identical'
+    | "$ST" --cols=20 --rows=12 damage-check - --split=1 2>&1 | seen '^identical'
 check "a cursor that only MOVES still repaints the rows it touched" $?
 
 # And it must actually be SAVING something, or it is complexity for nothing.
@@ -1389,7 +1420,7 @@ kbd() { local out; out=$(printf "$1" | "$ST" dump - --stats 2>&1); printf '%s\n'
     || bad "the base state is the legacy encoding"
 
 r=$(kbd '\033[?u')
-echo "$r" | grep -q 'reply *ESC\[?0u'
+echo "$r" | seen 'reply *ESC\[?0u'
 check "...and a query is answered, not ignored" $?
 
 [ "$(kbd '\033[>15u\033[?u' | awk '/^kbd flags/{print $3}')" = 15 ] \
@@ -1457,28 +1488,28 @@ kbd "$(printf '\033[>1u%.0s' $(seq 1 40))\033[?u" >/dev/null 2>&1
 # — its light blue came out LIGHTER than the silver behind it. Silence here is
 # not a missing feature, it is a wrong answer.
 r=$(kbd '\033]11;?\a')
-echo "$r" | grep -q 'reply *ESC\]11;rgb:1b1b/1f1f/2626'
+echo "$r" | seen 'reply *ESC\]11;rgb:1b1b/1f1f/2626'
 check "a background query is answered with a colour" $?
 
 r=$(kbd '\033]10;?\a\033]12;?\a')
-echo "$r" | grep -q 'reply *ESC\]10;rgb:c8c8/cdcd/d6d6.*ESC\]12;'
+echo "$r" | seen 'reply *ESC\]10;rgb:c8c8/cdcd/d6d6.*ESC\]12;'
 check "...and so are the foreground and the cursor" $?
 
 # ⚠ ANSWERED WITH THE TERMINATOR IT WAS ASKED WITH. xterm does this, and a
 # reader scanning for BEL sits on an ST-terminated reply until its own timeout
 # — which lands it back on the same wrong default, having been told the truth.
 r=$(kbd '\033]11;?\a')
-echo "$r" | grep -q '2626\\x07$'
+echo "$r" | seen '2626\\x07$'
 check "a BEL query is answered with BEL" $?
 
 r=$(kbd '\033]11;?\033\\')
-echo "$r" | grep -q '2626ESC\\$'
+echo "$r" | seen '2626ESC\\$'
 check "...and an ST query with ST" $?
 
 # Four hex digits per channel, which is the form every reader expects — 0xC0
 # is c0c0 and not c0. A two-digit answer parses as 0.75/255 rather than 0.75.
 r=$(kbd '\033]11;?\a')
-echo "$r" | grep -q 'rgb:[0-9a-f]\{4\}/[0-9a-f]\{4\}/[0-9a-f]\{4\}'
+echo "$r" | seen 'rgb:[0-9a-f]\{4\}/[0-9a-f]\{4\}/[0-9a-f]\{4\}'
 check "...in the 16-bit-per-channel form readers expect" $?
 
 # ⚠ A SET IS NOT A QUERY. `ESC]11;#ff0000` asks the terminal to CHANGE its
@@ -1486,10 +1517,10 @@ check "...in the 16-bit-per-channel form readers expect" $?
 # question would send the program bytes it never asked for, into whatever it
 # was reading at the time.
 r=$(kbd '\033]11;#ff0000\a')
-echo "$r" | grep -q 'reply' && bad "a colour SET is not answered as a query" \
+echo "$r" | seen 'reply' && bad "a colour SET is not answered as a query" \
                             || ok  "a colour SET is not answered as a query"
 
-echo "$(kbd '\033]11;?\a\033]11;?\a')" | grep -q '^colour query  2 answered'
+echo "$(kbd '\033]11;?\a\033]11;?\a')" | seen '^colour query  2 answered'
 check "...and the ones that ARE questions are counted, not just answered" $?
 
 # Nothing of any of it reaches the screen.
@@ -1513,7 +1544,7 @@ check "...and the ones that ARE questions are counted, not just answered" $?
 FC="$T/cache"
 mkdir -p "$FC"
 # ⚠ CAPTURES, for the reason at the top of this file: a direct
-# `producer | grep -q` dies of SIGPIPE when grep matches and exits early, and
+# `producer | seen` dies of SIGPIPE when grep matches and exits early, and
 # under `pipefail` that is 141 for a test that PASSED. ASan is slow enough to
 # lose that race every time.
 fontrun() { local out; out=$(XDG_CACHE_HOME="$FC" "$ST" font "$@" 2>&1); printf '%s\n' "$out"; }
@@ -1528,10 +1559,10 @@ else
     # decoration. Asserted on which SOURCE answered, not on a duration —
     # a timing threshold here would be flaky on a loaded machine.
     rm -rf "$FC"; mkdir -p "$FC"
-    fontrun | grep -q 'via fontconfig'
+    fontrun | seen 'via fontconfig'
     check "the first start asks fontconfig" $?
 
-    fontrun | grep -q 'via cache'
+    fontrun | seen 'via cache'
     check "...and the second start does not" $?
 
     # The glyphs must be the SAME ones. A cache that answers instantly with a
@@ -1551,26 +1582,26 @@ else
     real=$(fontrun | awk '/^file/{print $2}')
 
     printf 'syntty-fonts-1\nmonospace\t0\t596428\t1785569937\t%s/gone.ttf\n' "$T" > "$CACHEFILE"
-    fontrun | grep -q 'via fontconfig'
+    fontrun | seen 'via fontconfig'
     check "a cache naming a font that is gone is not believed" $?
 
     printf 'syntty-fonts-1\nmonospace\t0\t999999\t1785569937\t%s\n' "$real" > "$CACHEFILE"
-    fontrun | grep -q 'via fontconfig'
+    fontrun | seen 'via fontconfig'
     check "a cache whose font changed size is not believed" $?
 
     echo "not a cache at all" > "$CACHEFILE"
-    fontrun | grep -q 'via fontconfig'
+    fontrun | seen 'via fontconfig'
     check "a cache with the wrong header is not believed" $?
 
     # ...and having disbelieved it, it must REWRITE it. A cache that is
     # correctly rejected every time is a cache that never works again.
-    fontrun | grep -q 'via cache'
+    fontrun | seen 'via cache'
     check "...and every rejection repairs the cache" $?
 
     # A face that loads and rasterises nothing looks identical, from the
     # outside, to one that works. `font` fails rather than reporting success
     # with an all-zero atlas — see cmd_font.
-    fontrun | grep -qE '^ink +[1-9]'
+    fontrun | seen -E '^ink +[1-9]'
     check "the rasteriser produced actual ink, not an empty atlas" $?
 
     # The cell box is what the whole grid is laid out on. Zero or negative
@@ -1581,7 +1612,7 @@ else
     # A font nobody has must not silently become a font somebody has WITHOUT
     # saying so — fontconfig always matches something, so this asserts the
     # request reached it rather than that it failed.
-    fontrun --font=NoSuchFontExistsAnywhere1234 | grep -q '^file'
+    fontrun --font=NoSuchFontExistsAnywhere1234 | seen '^file'
     check "an unknown family still resolves (fontconfig always substitutes)" $?
 
     # ── the renderer ────────────────────────────────────────────────────────
@@ -1700,7 +1731,7 @@ else
 
     # A PPM a person can open, and that `cmp` can compare.
     XDG_CACHE_HOME="$FC" "$ST" --cols=8 --rows=2 render /dev/null --out="$T/r.ppm" >/dev/null 2>&1
-    head -c 2 "$T/r.ppm" | grep -q 'P6'
+    head -c 2 "$T/r.ppm" | seen 'P6'
     check "--out writes a PPM" $?
 
     sz=$(stat -c %s "$T/r.ppm" 2>/dev/null)
@@ -1760,10 +1791,10 @@ else
     # earlier assertion in this file is about a terminal that cannot be seen;
     # this is the first one that says the whole thing runs.
     out=$(caged 30 --stats win -- /bin/sh -c 'exit 0')
-    echo "$out" | grep -qE '^first frame +[0-9]'
+    echo "$out" | seen -E '^first frame +[0-9]'
     check "the window opens and paints a first frame" $?
 
-    echo "$out" | grep -qE '^frames +[1-9]'
+    echo "$out" | seen -E '^frames +[1-9]'
     check "...and commits at least one buffer" $?
 
     # THE STARTUP CLAIM. Not a threshold — a machine slower than this one must
@@ -1802,7 +1833,7 @@ else
     # hangup before draining throws away everything the child printed as it
     # exited — which is most of what a short command ever prints.
     out=$(caged 30 --stats win -- /bin/sh -c 'printf "the-last-line-before-exit"')
-    echo "$out" | grep -qE '^frames +[1-9]'
+    echo "$out" | seen -E '^frames +[1-9]'
     check "output written just before the child exits is not lost" $?
 
     # No display at all is a sentence, not a crash. This is what running it
@@ -1821,7 +1852,7 @@ else
           XDG_RUNTIME_DIR="$EMPTY" XDG_CACHE_HOME="$FC" \
           timeout 20 "$ST" win -- /bin/true 2>&1)
     rc=$?
-    [ $rc -ne 0 ] && echo "$out" | grep -qi 'wayland' \
+    [ $rc -ne 0 ] && echo "$out" | seen -i 'wayland' \
         && ok "with no compositor it says so and exits non-zero" \
         || bad "with no compositor it says so and exits non-zero"
 
@@ -1838,7 +1869,7 @@ else
     # with it, that the status is still the first tab's, and that the bar takes
     # a row from the grid the CHILD is told about.
     out=$(caged 30 --stats --tabs=3 win -- /bin/sh -c 'exit 0')
-    echo "$out" | grep -q '^tabs          3 opened'
+    echo "$out" | seen '^tabs          3 opened'
     check "--tabs=3 opens three sessions in one window" $?
 
     # ⚠ A TAB EXITING IS NOT THE WINDOW EXITING. Before tabs, any child hanging
@@ -1947,10 +1978,10 @@ else
     # latency nobody measured is reported as unmeasured instead of as zero.
     out=$(caged 30 --stats win -- /bin/sh -c 'echo x; sleep 0.4')
 
-    echo "$out" | grep -qE 'commit->photon|discarded'
+    echo "$out" | seen -E 'commit->photon|discarded'
     check "wp_presentation is bound and its clock matched ours" $?
 
-    echo "$out" | grep -q 'latency       not measured'
+    echo "$out" | seen 'latency       not measured'
     if [ $? -eq 0 ]; then
         bad "wp_presentation is bound and its clock matched ours"
     fi
@@ -1960,10 +1991,10 @@ else
     # is the single most damaging thing this program could print — it would be
     # quoted, and it would be a lie. "0.00 ms" must be impossible to reach by
     # accident.
-    echo "$out" | grep -q 'input->photon  nothing was typed'
+    echo "$out" | seen 'input->photon  nothing was typed'
     check "an input latency nobody measured is reported as unmeasured" $?
 
-    echo "$out" | grep -qE 'input->photon +[0-9]' \
+    echo "$out" | seen -E 'input->photon +[0-9]' \
         && bad "...and never as a number" \
         || ok "...and never as a number"
 
@@ -1989,11 +2020,11 @@ else
     # The fallback is worth every one of these assertions, because it is what
     # runs whenever the prediction is unavailable, and getting it wrong makes
     # the terminal WORSE than one that never tried.
-    echo "$out" | grep -q '^deadline      on'
+    echo "$out" | seen '^deadline      on'
     check "deadline rendering is on by default" $?
 
     out_off=$(caged 30 --stats --no-deadline win -- /bin/sh -c 'echo x; sleep 0.3')
-    echo "$out_off" | grep -q 'deadline      off'
+    echo "$out_off" | seen 'deadline      off'
     check "--no-deadline turns it off, for an A/B against it" $?
 
     # ⚠ NO CADENCE IS INVENTED. A client that assumes 60 Hz because it was
@@ -2001,10 +2032,10 @@ else
     # monitor, and being wrong here does not degrade gently: it paints after
     # the deadline and lands a whole frame late, which is the exact problem
     # deadline rendering exists to fix.
-    echo "$out" | grep -q 'no constant refresh rate'
+    echo "$out" | seen 'no constant refresh rate'
     check "with no refresh rate reported it paints immediately and says so" $?
 
-    echo "$out" | grep -qE 'deadline      on, 1[0-9]\.[0-9]+ ms refresh' \
+    echo "$out" | seen -E 'deadline      on, 1[0-9]\.[0-9]+ ms refresh' \
         && bad "...and never invents 60 Hz to fill the gap" \
         || ok "...and never invents 60 Hz to fill the gap"
 
@@ -2088,6 +2119,33 @@ else
         kill "$cagepid" 2>/dev/null || true
         wait "$cagepid" 2>/dev/null || true
     fi
+fi
+
+# ── the suite checks ITSELF for the bug that kept coming back ───────────────
+#
+# ⚠ THIS ONE HAS BEEN FIXED TWICE AND CAME BACK, so it is guarded rather than
+# just corrected. `producer | grep -q` under `set -o pipefail` reports 141 for
+# an assertion that MATCHED, at about 1.2% per pipeline — which is a failing
+# run in five, naming a different true assertion each time. It is the single
+# most expensive kind of bug this file can have: it teaches people that a red
+# suite means nothing, and it fails the PACKAGE BUILD at random, since the
+# PKGBUILD's check() runs it.
+#
+# Nothing warns about it, it passes review, and the fix is invisible in a diff
+# — so the rule lives here as an assertion. See `seen` at the top for the why.
+#
+# The `-f -` form is exempt: there stdin carries the PATTERNS and the haystack
+# is a file argument, so grep has to read all of stdin before it can match.
+# Comment lines are excluded by shape, not by line number — the note at the top
+# spells the bad pattern out on purpose, and a hardcoded number would go stale
+# the first time a line is added above it.
+selfgrep=$(grep -nE '\| *grep -q' "$0" | grep -vE '^[0-9]+:[[:space:]]*#' \
+           | grep -v -- '-f -' || true)
+if [ -n "$selfgrep" ]; then
+    bad "this suite pipes into 'grep -q' — use 'seen', see the note at the top"
+    printf '%s\n' "$selfgrep" | sed 's/^/        /' >&2
+else
+    ok "no assertion in this file pipes into 'grep -q' (it reports 141 on a MATCH)"
 fi
 
 echo

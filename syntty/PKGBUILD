@@ -122,13 +122,44 @@
 # arrow arrives in a shape the line editor was not expecting. Clearing the
 # screen and the attributes, which was all RIS did, fixes neither, and `reset`
 # appearing not to work is how somebody ends up closing the window.
+#
+# ── 0.1.0-25: the suite failed at random, and it was the suite ──────────────
+#
+# Roughly one run in five went red, naming a DIFFERENT true assertion each
+# time — the font cache, the graphics payload guard, the cell box. Every one of
+# them was correct; the pipeline reporting them was not.
+#
+# ⚠ `producer | grep -q` UNDER `set -o pipefail` REPORTS 141 FOR A MATCH.
+# grep -q exits the instant it matches, whatever is still writing into the pipe
+# takes SIGPIPE, and pipefail promotes that to the pipeline's status. Measured
+# at about 1.2% per pipeline against the real binary, over 88 call sites.
+#
+# ⚠ AND THIS WAS FIXED ONCE ALREADY, one process too far to the left. That
+# round made the helpers capture into a variable so the syntty BINARY could not
+# be what died — but the helper still ends by writing that variable into the
+# same pipe, and the shell doing it is just as killable. Assertions now match
+# through `seen`, which reads to EOF before grepping and greps a FILE, so it is
+# safe by construction rather than by grep's good manners. The suite also
+# GREPS ITSELF for the bad shape now, because twice is a pattern.
+#
+# Nothing about this was a syntty defect — but a suite that goes red at random
+# teaches people to ignore it, and check() below runs it, so it failed package
+# builds at random too. That is the part that made it urgent.
+#
+# ⚠ And one real leak, found while hunting it: main() never released the config
+# it loaded. `cfg.font` is heap, and the merge hands the POINTER to the options
+# rather than copying, so it can only be freed after the subcommand returns —
+# which a `return` in the middle of the dispatch chain skipped. Harmless-looking
+# and not harmless: LeakSanitizer reports it and MAKES THE PROCESS EXIT 1, so a
+# sanitiser build returned failure from every successful run on any machine
+# that has a config file, and success on any machine that does not.
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=24
+pkgrel=25
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

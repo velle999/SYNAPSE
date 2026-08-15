@@ -1556,36 +1556,60 @@ int main(int argc, char **argv)
 	if (o.scrollback < 0)   o.scrollback = 1000;
 	if (o.font_size <= 0)   o.font_size = 10.5;
 
+	/* ⚠ THE CONFIG IS RELEASED AFTER THE SUBCOMMAND, NOT BEFORE — AND IT WAS
+	 * NOT RELEASED AT ALL.
+	 *
+	 * `cfg.font` is a heap string, and the merge above hands the POINTER to
+	 * `o.font` rather than copying it, so the subcommand is still reading it
+	 * while it runs. That is why every branch below records its status instead
+	 * of returning it: the free has to happen after the call and before main
+	 * ends, and a `return` in the middle of the chain skips it.
+	 *
+	 * Leaving it leaked looked harmless — the process was about to exit — and
+	 * it is not, for the reason recorded in reference_deliberate_leak_fails_
+	 * leaksanitizer: LeakSanitizer reports it and MAKES THE PROCESS EXIT 1. So
+	 * a sanitiser build of syntty returned failure from every successful run on
+	 * any machine that has a config file, and returned success on any machine
+	 * that does not — which is a difference between developers, not between
+	 * builds. The same shape broke the child's exit status twice before. */
+	int rc;
 	if (!strcmp(cmd, "dump"))
-		return split ? cmd_dump_split(&o, file, split) : cmd_dump(&o, file);
-	if (!strcmp(cmd, "bench"))
-		return cmd_bench(&o, file);
-	if (!strcmp(cmd, "run"))
-		return child_at ? cmd_run(&o, argc - child_at, argv + child_at)
-		                : (die("run: need a command"), 1);
-	if (!strcmp(cmd, "font"))
-		return cmd_font(&o);
-	if (!strcmp(cmd, "render"))
-		return cmd_render(&o, file);
-	if (!strcmp(cmd, "damage-check"))
-		return cmd_damage_check(&o, file, split);
-	if (!strcmp(cmd, "win"))
-		return child_at ? cmd_win(&o, argc - child_at, argv + child_at)
-		                : cmd_win(&o, 0, NULL);
-	if (!strcmp(cmd, "mouse"))
-		return child_at ? cmd_mouse(argc - child_at, argv + child_at)
-		                : cmd_mouse(0, NULL);
-	if (!strcmp(cmd, "key"))
-		return child_at ? cmd_key(argc - child_at, argv + child_at)
-		                : cmd_key(0, NULL);
-	if (!strcmp(cmd, "paste"))
-		return child_at ? cmd_paste(argc - child_at, argv + child_at)
-		                : cmd_paste(0, NULL);
-	if (!strcmp(cmd, "config"))
-		return child_at ? cmd_config(&o, argc - child_at, argv + child_at)
-		                : cmd_config(&o, 0, NULL);
-	if (!strcmp(cmd, "about"))
-		return cmd_about();
+		rc = split ? cmd_dump_split(&o, file, split) : cmd_dump(&o, file);
+	else if (!strcmp(cmd, "bench"))
+		rc = cmd_bench(&o, file);
+	else if (!strcmp(cmd, "run"))
+		rc = child_at ? cmd_run(&o, argc - child_at, argv + child_at)
+		              : (die("run: need a command"), 1);
+	else if (!strcmp(cmd, "font"))
+		rc = cmd_font(&o);
+	else if (!strcmp(cmd, "render"))
+		rc = cmd_render(&o, file);
+	else if (!strcmp(cmd, "damage-check"))
+		rc = cmd_damage_check(&o, file, split);
+	else if (!strcmp(cmd, "win"))
+		rc = child_at ? cmd_win(&o, argc - child_at, argv + child_at)
+		              : cmd_win(&o, 0, NULL);
+	else if (!strcmp(cmd, "mouse"))
+		rc = child_at ? cmd_mouse(argc - child_at, argv + child_at)
+		              : cmd_mouse(0, NULL);
+	else if (!strcmp(cmd, "key"))
+		rc = child_at ? cmd_key(argc - child_at, argv + child_at)
+		              : cmd_key(0, NULL);
+	else if (!strcmp(cmd, "paste"))
+		rc = child_at ? cmd_paste(argc - child_at, argv + child_at)
+		              : cmd_paste(0, NULL);
+	else if (!strcmp(cmd, "config"))
+		rc = child_at ? cmd_config(&o, argc - child_at, argv + child_at)
+		              : cmd_config(&o, 0, NULL);
+	else if (!strcmp(cmd, "about"))
+		rc = cmd_about();
+	else
+		rc = -1;
+
+	if (rc >= 0) {
+		st_config_free(&cfg);
+		return rc;
+	}
 
 	/* Name the -e form in the message. `kitty synsh` and `foot synsh` both run
 	 * the program, so a bare word here is what somebody who knows those types,
