@@ -38,6 +38,10 @@ show_commits() { :; }; checkout_remote() { :; }; report() { :; }; scan() { :; }
 refresh_local_repo() { echo "REFRESH built=[${BUILT[*]}]"; }
 git() { echo shortrev; }
 cd() { :; }
+# ⚠ NOT optional. cmd_apply refreshes pacman's databases before it builds, and
+# an unstubbed run of that would `sudo pacman -Syy` on whatever machine is
+# running the suite.
+sync_pacman_dbs() { echo "SYNC"; }
 # Stands in for build-all.sh: records the filter it was handed.
 build_all_recorder() { echo "BUILD [$*]"; }
 STUB
@@ -161,6 +165,48 @@ case "$out" in
     *"BUILD ["*) bad "a current component still ran a build: $out" ;;
     *)           ok "a current component runs no build" ;;
 esac
+
+echo ""
+echo "=== the database refresh runs before the build, and only when needed ==="
+#
+# `pacman -Syy` re-downloads every database (~12 MB here). Doing it on an apply
+# with nothing to build would ask for a password for no reason, and doing it on
+# the syn-update apply that `synpkg upgrade` runs a second after refreshing as
+# root would pay for the same download twice.
+out=$(run_apply '"synui 1 2"' '""')
+case "$out" in
+    *SYNC*BUILD*) ok "the refresh happens BEFORE the build" ;;
+    *BUILD*SYNC*) bad "the refresh ran after the build: $out" ;;
+    *)            bad "no refresh in an apply that builds: $out" ;;
+esac
+# Genuinely empty arrays — NOT the '""' the tests above pass, which is one
+# empty-string element and does not reach the "nothing to build" return.
+out=$(run_apply '' '')
+case "$out" in
+    *SYNC*) bad "an apply with nothing to build still asked for a password: $out" ;;
+    *)      ok "an apply with nothing to build does not refresh" ;;
+esac
+
+# pacman_dbs_stale against fixtures, which is the only way to reach the two
+# conditions without waiting a day or corrupting a real mirror copy.
+stale_says() {   # stale_says <dir>
+    { harness; echo "SYNC_DIR=$1"; echo 'DB_FRESH_SECS=600'
+      sed -n '/^pacman_dbs_stale() {/,/^}/p' "$script"
+      echo 'if pacman_dbs_stale; then echo STALE; else echo FRESH; fi'
+    } > "$tmp/stale.sh"
+    bash "$tmp/stale.sh"
+}
+mkdir -p "$tmp/fresh" "$tmp/old" "$tmp/badsig" "$tmp/empty"
+: > "$tmp/fresh/core.db"; : > "$tmp/fresh/core.db.sig"
+: > "$tmp/old/core.db";   touch -d '2 hours ago' "$tmp/old/core.db"
+# The signature written BEFORE the database it signs — a good signature over
+# different content, which pacman calls a corrupted database.
+: > "$tmp/badsig/core.db"; : > "$tmp/badsig/core.db.sig"
+touch -d '2 days ago' "$tmp/badsig/core.db.sig"
+check "a database synced a minute ago is fresh"       FRESH "$(stale_says "$tmp/fresh")"
+check "a database two hours old is stale"             STALE "$(stale_says "$tmp/old")"
+check "a signature older than its database is stale"  STALE "$(stale_says "$tmp/badsig")"
+check "no databases at all counts as stale"           STALE "$(stale_says "$tmp/empty")"
 
 echo ""
 echo "=== names are validated before anything is fetched ==="

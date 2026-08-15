@@ -752,8 +752,30 @@ int cmd_upgrade(int argc, char **argv)
 
 	/* A sysupgrade without -Sy compares against databases that may be weeks
 	 * old; that is a partial upgrade waiting to happen, so refresh is the
-	 * default and turning it off is explicit. */
-	if (refresh && do_refresh(h, false) != 0)
+	 * default and turning it off is explicit.
+	 *
+	 * FORCED — the -Syy half, not -Sy. pacman fetches a database and its
+	 * signature as two separate files, so a mirror that updates between them
+	 * (or serves a cached .sig) leaves a good signature over different content,
+	 * and pacman then refuses to load ANY repository:
+	 *
+	 *   error: database 'blackarch' is not valid (invalid or corrupted
+	 *          database (PGP signature))
+	 *
+	 * A plain -Sy cannot fix that — it sees a database it already has and keeps
+	 * the stale signature beside it. Seen three times on this desktop
+	 * (blackarch 2026-08-11, blackarch and cachyos together 2026-08-14), each
+	 * time diagnosed as a keyring problem it never was.
+	 *
+	 * It costs a full database download (~12 MB here) per upgrade, and buys
+	 * that failure never happening mid-transaction. It is also the one place
+	 * where the download is free of an extra PROMPT: this is the escalated
+	 * pass, so the refresh runs under the pkexec the upgrade already asked
+	 * for. Doing it separately (`synpkg refresh --force`) is a second
+	 * authentication for the same operation, which is how people stop doing it.
+	 *
+	 * `--no-refresh` still skips the whole thing. */
+	if (refresh && do_refresh(h, true) != 0)
 		goto out;
 
 	if (alpm_trans_init(h, 0) != 0) {

@@ -124,6 +124,126 @@ ok()   { printf '%s  ok%s  %s\n' "$C_OK" "$C_R" "$*"; }
 warn() { printf '%swarn%s  %s\n' "$C_WARN" "$C_R" "$*" >&2; }
 die()  { printf '%sfail%s  %s\n' "$C_ERR" "$C_R" "$*" >&2; exit 1; }
 
+# ── the failure that looks like a broken keyring and is not ──────────────────
+#
+# A build dies at its first `makepkg -s`, because resolving dependencies means
+# pacman reads the sync databases, and pacman refuses to load ANY of them if one
+# fails its signature check:
+#
+#   error: blackarch: signature from "Levon 'noptrix' Kayan ..." is invalid
+#   error: database 'blackarch' is not valid (invalid or corrupted database
+#          (PGP signature))
+#   error: failed to prepare transaction (invalid or corrupted database)
+#
+# ⚠ NOTHING IS WRONG WITH THE KEYS, AND `pacman-key` IS THE WRONG TOOL. Seen
+# three times now (blackarch 2026-08-11, blackarch and cachyos together
+# 2026-08-14): both keys held [full] trust and had not expired, and the .db
+# matched the mirror's byte for byte. What was stale was the SIGNATURE beside
+# it — a `.db.sig` written two days before the `.db` it signs, which is a
+# perfectly good signature over different content, and gpg calls that BADSIG.
+# It happens because pacman fetches the two files separately and the mirror can
+# update between them, or keep serving a cached sig.
+#
+# So this checks the one thing that is actually true of that state — a
+# signature file OLDER than the database it signs — rather than matching
+# pacman's wording, which changes between versions. It costs two stats per repo
+# and needs no privileges.
+#
+# The directory is a variable purely so the tests can point it at a fixture —
+# these two functions are otherwise unreachable without a real machine to break.
+SYNC_DIR="${SYN_UPDATE_SYNC_DIR:-/var/lib/pacman/sync}"
+
+stale_db_sig_hint() {
+    local db sig repos=()
+    for db in "$SYNC_DIR"/*.db; do
+        [ -f "$db" ] || continue
+        sig="$db.sig"
+        [ -f "$sig" ] || continue
+        [ "$sig" -ot "$db" ] && repos+=("$(basename "${db%.db}")")
+    done
+    [ ${#repos[@]} -gt 0 ] || return 0
+
+    say ""
+    warn "the signature is OLDER than the database it signs: ${repos[*]}"
+    say "  That is a good signature over different content, which pacman reports"
+    say "  as \"invalid or corrupted database (PGP signature)\". The keys are"
+    say "  fine and pacman-key is the wrong tool. Force a fresh download of both"
+    say "  halves:"
+    say ""
+    say "      ${C_OK}sudo pacman -Syy${C_R}"
+    say ""
+    say "  Two y's: plain -Sy can keep the cached signature, which is the stale"
+    say "  half. Then run this again."
+}
+
+# ── refresh the databases BEFORE the build, not after it fails ───────────────
+#
+# The hint above is a post-mortem, and a post-mortem arrives after a build that
+# ran for minutes. Both database failures it covers are preventable by doing
+# what the hint asks for FIRST:
+#
+#   * the stale .db.sig — the mirror updated the database between the two
+#     fetches, and pacman then refuses to load ANY repository; and
+#   * a 404 on a dependency, because a database older than the mirrors asks for
+#     a version that has already been rotated out (see the pacman notes: the
+#     error names the dependency, so it reads as a broken package).
+#
+# `makepkg -s` resolves each component's makedepends through pacman, so both
+# land on the FIRST component build-all.sh touches.
+#
+# TWO y's. Plain -Sy is happy to keep a cached .db.sig, and that cached
+# signature is exactly the stale half in the first case.
+#
+# ── AND IT COSTS NO EXTRA PASSWORD ──────────────────────────────────────────
+#
+# This runs where sudo is needed anyway: build-all.sh installs every component
+# it produces with `sudo pacman -U`, so an apply always authenticates. Asking
+# here just moves that prompt to the front, where somebody is still watching,
+# instead of stopping for a password fifteen minutes into an unattended build.
+DB_FRESH_SECS="${SYN_UPDATE_DB_FRESH_SECS:-600}"
+
+# Whether a refresh is worth a download. `synpkg upgrade` refreshes as root and
+# THEN calls `syn-update apply`, and two applies in a row are normal; re-pulling
+# every database each time is ~12 MB of nothing. Freshness is the two facts that
+# actually matter — how old the database is, and whether its signature predates
+# it — not a flag the caller has to pass (an older syn-update dies on an
+# argument it does not know, so a flag from synpkg would break on version skew).
+pacman_dbs_stale() {
+    local db sig now mtime found=0
+    now=$(date +%s)
+    for db in "$SYNC_DIR"/*.db; do
+        [ -f "$db" ] || continue
+        found=1
+        sig="$db.sig"
+        [ -f "$sig" ] && [ "$sig" -ot "$db" ] && return 0
+        mtime=$(stat -c %Y "$db" 2>/dev/null) || return 0
+        [ $((now - mtime)) -gt "$DB_FRESH_SECS" ] && return 0
+    done
+    # No databases at all is not "fresh" — it is a system that has never synced.
+    [ "$found" = 1 ] || return 0
+    return 1
+}
+
+sync_pacman_dbs() {
+    if ! pacman_dbs_stale; then
+        ok "pacman's databases are current (synced within ${DB_FRESH_SECS}s)"
+        return 0
+    fi
+
+    # Same guard as setup_src: the GUI has no terminal to prompt on. Name the
+    # command instead of failing at an invisible prompt — the build below may
+    # still succeed against what is on disk, and refusing to try would be worse.
+    if ! can_sudo; then
+        warn "cannot refresh pacman's databases from here (no cached credential, no terminal).
+    Run:  sudo pacman -Syy"
+        return 0
+    fi
+
+    info "refreshing pacman's databases (pacman -Syy)"
+    sudo pacman -Syy ||
+        warn "database refresh failed — building against the databases already on disk"
+}
+
 # ── preconditions ────────────────────────────────────────────
 
 need_not_root() {
@@ -603,12 +723,21 @@ cmd_apply() {
     say "${C_DIM}  (build-all.sh orders these itself; arguments are a filter, not a sequence)${C_R}"
     say ""
 
+    # Databases first, while somebody is still watching — see sync_pacman_dbs().
+    # It is deliberately AFTER the "nothing to build" return above: an apply with
+    # no work must not ask for a password.
+    sync_pacman_dbs
+    say ""
+
     # ONE invocation, all components: build-all.sh walks its own fixed order and
     # skips what was not asked for, so dependencies come out right even though
     # the arguments are unordered. Calling it once per package would build them
     # in the order given, which is exactly the wrong thing.
     BUILT=("${names[@]}")
-    ( cd "$SRC" && ./build-all.sh "${names[@]}" ) || die "build failed — the tree is at $(git -C "$SRC" rev-parse --short HEAD), nothing was rolled back"
+    if ! ( cd "$SRC" && ./build-all.sh "${names[@]}" ); then
+        stale_db_sig_hint
+        die "build failed — the tree is at $(git -C "$SRC" rev-parse --short HEAD), nothing was rolled back"
+    fi
 
     refresh_local_repo
     say ""
@@ -773,8 +902,9 @@ syn-update $VERSION — update an installed SynapseOS from git
 
 Usage:
   syn-update check          Fetch and show what would change (default, read-only)
-  syn-update apply          Fetch, rebuild the changed components, install them,
-                            and install any component the tree has gained since
+  syn-update apply          Fetch, refresh pacman's databases (-Syy), rebuild
+                            the changed components, install them, and install
+                            any component the tree has gained since
   syn-update apply <name>…  Only the components named. build-all.sh still walks
                             its own order, so the names are a filter and not a
                             sequence. Warns when a named component depends on
@@ -790,6 +920,8 @@ Environment:
   SYN_UPDATE_REPO           Source repository (default: the SynapseOS GitHub)
   SYN_UPDATE_REF            Branch to track (default: main)
   SYN_UPDATE_SRC            Where the source tree lives (default: /var/lib/synapse-src)
+  SYN_UPDATE_DB_FRESH_SECS  How recently pacman's databases must have been synced
+                            for apply to skip its own -Syy (default: 600)
 
 Components are rebuilt from source with makepkg, so this needs base-devel and
 each component's makedepends. Components with a large prebuilt payload
