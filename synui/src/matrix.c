@@ -53,6 +53,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "contrast.h"
 #include "synui.h"
 
 struct syn_matrix {
@@ -73,6 +74,13 @@ struct syn_matrix {
      * machine. Not cleared on its own; nothing that failed here recovers
      * without a restart. */
     int        gl_failed;
+
+    /* Scratch for the strip readback below, grown to the widest output and
+     * kept: the alternative is a malloc of a few hundred KB inside a frame
+     * callback. Shared across outputs because they are measured one at a
+     * time, in this thread, and the bytes are consumed before the next. */
+    unsigned char *lum_buf;
+    size_t         lum_buf_n;
 };
 
 static double now_secs(void)
@@ -353,6 +361,107 @@ static bool matrix_gl_setup(struct syn_matrix *m)
     return true;
 }
 
+/* ── What the bar is drawn on ────────────────────────────── */
+/*
+ * A bar with no background of its own takes its ink from the wallpaper, which
+ * means something has to MEASURE the wallpaper — and wallpaper.c can only
+ * measure the cairo surface it paints. The rain is not one of those: it is a
+ * GPU buffer this file renders and hands straight to the scene, so that painter
+ * had nothing to sample and published "unmeasured".
+ *
+ * The bar reads "unmeasured" as "no ink is safe here" and puts its whole opaque
+ * background back — correctly, for the case that answer was written for (a
+ * wallpaper-engine client painting over us, which really is unknowable). It is
+ * the wrong answer here, and it is the visible bug: picking the matrix
+ * wallpaper turned the glass bar off, and picking a photograph turned it back
+ * on, with the theme never changing.
+ *
+ * MEASURED, not declared dark, even though the shader's base is #080510 and
+ * every term is added on top of it. What the mean over the strip actually comes
+ * to depends on how much of it the glyphs cover, and a shader is the kind of
+ * file somebody tunes. A number read off the frame survives that; a constant is
+ * right until the commit that moves it, and wrong silently after.
+ */
+
+/* How often the strip is re-read. The value moves by a hair as glyphs pass
+ * through it and the decision it feeds — black ink or white — sits two orders
+ * of magnitude from either end of that range, so this is about tracking a
+ * resize or a shader edit, not the animation. Once a frame would be a ~350 KB
+ * readback at the refresh rate to re-answer a question that has not moved. */
+#define MX_LUM_PERIOD 2.0
+
+static void mx_measure_strip(syn_output_t *o, int pw, int ph)
+{
+    syn_server_t *s = o->server;
+    struct syn_matrix *m = s->matrix;
+
+    double now = now_secs();
+    if (now - o->matrix_lum_at < MX_LUM_PERIOD) return;
+    bool first = o->matrix_lum_at == 0.0;
+    o->matrix_lum_at = now;
+
+    struct wlr_box box;
+    wlr_output_layout_get_box(s->output_layout, o->wlr_output, &box);
+    if (box.height <= 0) return;
+
+    /* The logical strip in this output's physical rows — the buffer is rendered
+     * at the physical size, so on a 2x monitor the bar's 34 logical rows are
+     * 68 of these. Same conversion the cairo painter does, off the same shared
+     * constant, because the two are measuring the same bar. */
+    int rows = (int)lround(SYN_BAR_STRIP_LOGICAL * (double)ph / box.height);
+    if (rows < 1)  rows = 1;
+    if (rows > ph) rows = ph;
+
+    size_t need = (size_t)pw * (size_t)rows * 4;
+    if (need > m->lum_buf_n) {
+        unsigned char *nb = realloc(m->lum_buf, need);
+        if (!nb) return;   /* keep the last answer rather than publishing junk */
+        m->lum_buf   = nb;
+        m->lum_buf_n = need;
+    }
+
+    /* WHICH END. glReadPixels' y is in the same GL window coordinates the
+     * vertex shader writes to: y = 0 is where gl_Position.y = -1 lands, which
+     * is v_uv.y = 0, which the shader and wlr_scene both treat as the top of
+     * the output (see the vertex shader's comment). So reading from 0 reads the
+     * rows a top bar covers whatever the buffer's memory layout turns out to
+     * be, and a bar moved to the bottom reads from the far end — exactly as it
+     * does in wallpaper.c, and for the same reason: measuring the end the bar
+     * is NOT on is a failure that shows up on one theme and in no screenshot. */
+    int y0 = s->config.bar_edge == SYN_BAR_EDGE_BOTTOM ? ph - rows : 0;
+
+    /* No glPixelStorei: GL_PACK_ALIGNMENT defaults to 4 and every row here is
+     * pw whole RGBA pixels, so the row length in bytes is a multiple of 4 and
+     * no padding is ever inserted. Worth saying because the obvious defensive
+     * `glPixelStorei(GL_PACK_ALIGNMENT, 1)` would be a write to state we do not
+     * own — this runs on the fx_renderer's own EGL context, captured from it,
+     * and nothing here restores it afterwards.
+     *
+     * RGBA/UNSIGNED_BYTE is the one format/type pair GLES2 guarantees on every
+     * implementation. */
+    glReadPixels(0, y0, pw, rows, GL_RGBA, GL_UNSIGNED_BYTE, m->lum_buf);
+
+    double sum = 0.0;
+    for (size_t i = 0; i + 3 < need; i += 4)
+        sum += 0.2126 * syn_srgb_lut(m->lum_buf[i]) +
+               0.7152 * syn_srgb_lut(m->lum_buf[i + 1]) +
+               0.0722 * syn_srgb_lut(m->lum_buf[i + 2]);
+    double lum = sum / ((double)pw * rows);
+
+    /* Once per run of the rain on this output, and not every two seconds: the
+     * value is published on CHANGE and the ink it resolves to never moves, so
+     * without this the only evidence the readback happened at all would be an
+     * ink that the seed in wallpaper.c already produces. That is also what the
+     * test hangs off — an assertion that cannot fail is not one, and this line
+     * is the difference between "the rain measured 0.002" and "nobody measured
+     * anything and the seed happened to agree". Reset in
+     * matrix_output_destroy, so switching back to the rain says so again. */
+    if (first) wlr_log(WLR_INFO, "matrix: backdrop under the bar is %.4f on %s",
+                       lum, o->wlr_output->name);
+
+    wallpaper_backdrop_measured(o, lum);
+}
+
 void matrix_init(syn_server_t *s)
 {
     s->matrix = NULL;
@@ -374,6 +483,7 @@ void matrix_finish(syn_server_t *s)
 {
     if (!s->matrix) return;
     /* GL objects are owned by the renderer's context and released with it. */
+    free(s->matrix->lum_buf);
     free(s->matrix);
     s->matrix = NULL;
 }
@@ -427,6 +537,12 @@ void matrix_output_destroy(syn_output_t *o)
         wlr_swapchain_destroy(o->matrix_swapchain);
         o->matrix_swapchain = NULL;
     }
+    /* The rain is no longer this output's background, so the next frame that
+     * draws it is a fresh run — and its first measurement is worth a line
+     * again. Also the throttle: a wallpaper switched away and back must
+     * re-measure at once rather than serve up to two seconds of the picture it
+     * had before. */
+    o->matrix_lum_at = 0.0;
 }
 
 bool matrix_output_frame(syn_output_t *o)
@@ -445,6 +561,11 @@ bool matrix_output_frame(syn_output_t *o)
 
     /* Already known to be impossible — do not retry the compile once a frame. */
     if (m->gl_failed) return false;
+
+    /* Which of the rain's two jobs this frame is. Answered up here because the
+     * strip measurement below the render needs it too, and asking twice would
+     * be two chances for the two to disagree within one frame. */
+    bool as_saver = saver_wants_matrix(s);
 
     /* Rotated outputs need no special handling: we render offscreen into a
      * scene buffer sized to the *transformed* resolution (so a portrait
@@ -541,6 +662,14 @@ bool matrix_output_frame(syn_output_t *o)
     glDisableVertexAttribArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glUseProgram(0);
+
+    /* Still bound and still current, which is the only place the strip can be
+     * read back from. Not while the rain is the SCREENSAVER: it covers the bar
+     * then, so what it measures is not what the bar is drawn on — and with
+     * as_saver false the only way this output got here is its own wallpaper
+     * being the rain (see matrix_output_active). */
+    if (!as_saver) mx_measure_strip(o, pw, ph);
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     /* Same GL context as the renderer, but force completion before the scene
      * textures this buffer during commit. */
@@ -559,7 +688,6 @@ bool matrix_output_frame(syn_output_t *o)
      * saver coming up must not cost a swapchain teardown, and a node left under
      * wallpaper_tree would draw the rain underneath the windows the saver is
      * supposed to be covering. */
-    bool as_saver = saver_wants_matrix(s);
     struct wlr_scene_tree *parent = as_saver ? s->saver.tree : s->wallpaper_tree;
 
     /* The node takes its own lock, so release our acquire lock — the swapchain

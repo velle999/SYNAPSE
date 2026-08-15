@@ -19,12 +19,29 @@
  */
 
 #include <math.h>
+#include <stdbool.h>
 
 #include "contrast.h"
 
 static double srgb_to_linear(double c)
 {
     return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+}
+
+/* The same curve over the 256 values an 8-bit channel can hold, which is what
+ * every caller measuring PIXELS has. Here rather than beside either of them
+ * because both wallpaper.c (a cairo surface) and matrix.c (a GL readback)
+ * measure the same strip for the same decision, and a second table would be a
+ * second place for the transfer function to be wrong. */
+double syn_srgb_lut(int v)
+{
+    static double lut[256];
+    static bool   built = false;
+    if (!built) {
+        for (int i = 0; i < 256; i++) lut[i] = srgb_to_linear(i / 255.0);
+        built = true;
+    }
+    return lut[v < 0 ? 0 : v > 255 ? 255 : v];
 }
 
 double syn_rel_luminance(double r, double g, double b)

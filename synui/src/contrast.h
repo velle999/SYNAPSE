@@ -21,6 +21,12 @@
 
 /* Channels are 0..1 sRGB. */
 double syn_rel_luminance(double r, double g, double b);
+
+/* One 8-bit sRGB channel value → linear, table-backed. Callers measuring whole
+ * strips of pixels go through this rather than syn_rel_luminance's doubles: a
+ * pow() per channel per pixel over a 3840-wide strip is ~400k calls on every
+ * repaint, and the table makes each one a load. Clamps out of range. */
+double syn_srgb_lut(int v);
 double syn_contrast(double r, double g, double b, double surface_lum);
 
 /* Darken `in` into `out` until it clears CONTRAST_TARGET against a surface of
@@ -92,8 +98,14 @@ syn_ink_t syn_ink_best(double lum);
  * value for every screen — so two screens that disagree have no shared answer,
  * and the honest result is NONE rather than picking a side and leaving the other
  * monitor's clock invisible. NONE absorbs, which also makes a monitor whose
- * backdrop could not be measured (a video wallpaper, the matrix backend) veto
- * the clear bar instead of being silently skipped. */
+ * backdrop could not be measured veto the clear bar instead of being silently
+ * skipped.
+ *
+ * That last set is smaller than it looks, and assuming otherwise was a bug: an
+ * external client painting the background (wallpaper-engine) is unknowable, but
+ * synui's own solid colour and its own matrix rain are not — see wp_top_lum in
+ * synui.h. Both used to answer NONE here, which turned the clear bar opaque on
+ * exactly those two wallpaper choices. */
 syn_ink_t syn_ink_combine(syn_ink_t a, syn_ink_t b);
 
 /* The token written to backdrop.state and read by the bar: "dark", "light", or

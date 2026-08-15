@@ -323,26 +323,24 @@ static void wallpaper_cache_drop(syn_server_t *s)
  * change, a mode change, a rotate — and nowhere else.
  */
 
-/* Theme.qml's barHeight (28) plus the floating pill's gap (6), in LOGICAL px.
- * Over-sampling is safe here and under-sampling is not: this is a mean, so a few
- * extra rows of wallpaper move it slightly, while missing rows the ink is
- * actually drawn over would measure a strip nothing is written on. */
-#define WP_BAR_STRIP_LOGICAL 34
+/* Painted by synui_main.c into s->bg_rect; declared in synui.h. */
+const float syn_bg_color[4] = { 0.07f, 0.07f, 0.12f, 1.0f };
 
-/* sRGB → linear, per 8-bit channel value. A pow() per channel per pixel over a
- * 3840-wide strip is ~400k calls on every relayout; the table makes it a load. */
-static double srgb_lut(int v)
+/*
+ * …and what it MEASURES, which is the only reason it is not still a literal at
+ * the rect's creation.
+ *
+ * "No picture behind the bar" and "no way to know what is behind the bar" read
+ * the same in the code (both leave the painter with nothing to sample) and are
+ * not the same fact. The solid background is a colour synui itself chooses and
+ * draws; it is more knowable than any wallpaper, not less. Answering it with
+ * "unmeasured" is what made a clear bar put its whole opaque background back on
+ * the two wallpaper choices that paint no image — `none`, and the matrix rain
+ * before its first frame — while every photograph left it clear.
+ */
+static double solid_backdrop_lum(void)
 {
-    static double lut[256];
-    static bool   built = false;
-    if (!built) {
-        for (int i = 0; i < 256; i++) {
-            double c = i / 255.0;
-            lut[i] = c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
-        }
-        built = true;
-    }
-    return lut[v];
+    return syn_rel_luminance(syn_bg_color[0], syn_bg_color[1], syn_bg_color[2]);
 }
 
 /* Mean relative luminance of the strip the bar covers, or -1 when there is
@@ -375,9 +373,9 @@ static double strip_luminance(cairo_surface_t *dst, int rows, syn_bar_edge_t edg
              * and premultiplied equals straight. Byte order is native-endian
              * within the 32-bit word: B, G, R, A on little-endian. */
             const unsigned char *px = row + (size_t)x * 4;
-            sum += 0.2126 * srgb_lut(px[2]) +
-                   0.7152 * srgb_lut(px[1]) +
-                   0.0722 * srgb_lut(px[0]);
+            sum += 0.2126 * syn_srgb_lut(px[2]) +
+                   0.7152 * syn_srgb_lut(px[1]) +
+                   0.0722 * syn_srgb_lut(px[0]);
         }
     }
     return sum / ((double)w * rows);
@@ -477,7 +475,12 @@ static void paint_output(syn_output_t *o)
     /* Cleared up front so every early return below leaves "not measured"
      * rather than the previous wallpaper's answer — and so the calloc'd zero a
      * new output starts life with, which reads as a legitimately black
-     * backdrop, is never what backdrop_export() sees. */
+     * backdrop, is never what backdrop_export() sees.
+     *
+     * The two branches that go on to SET it rather than fall out of here (no
+     * image, and the rain) say why where they do it. Everything else that
+     * returns early is a failure — no resolution yet, no buffer — and has
+     * genuinely measured nothing. */
     o->wp_top_lum = -1.0;
 
     syn_wallpaper_src_t src;
@@ -493,6 +496,15 @@ static void paint_output(syn_output_t *o)
             wlr_scene_node_destroy(&o->wallpaper_buf->node);
             o->wallpaper_buf = NULL;
         }
+        /* The rain measures its own strip off the GPU buffer it renders into,
+         * once there is one (matrix.c). Seeded here with the solid colour
+         * because that is what is actually on screen until then — and, if the
+         * shader never builds, for good: matrix.c's fallback for every GL
+         * failure is to leave the background to bg_rect. Seeding rather than
+         * clearing to -1 also keeps a live switch to the rain from publishing
+         * one frame of "unmeasured" on its way to the same answer, which the
+         * bar would wear as a flash of its opaque background. */
+        o->wp_top_lum = solid_backdrop_lum();
         return;
     }
 
@@ -502,6 +514,13 @@ static void paint_output(syn_output_t *o)
             wlr_scene_node_destroy(&o->wallpaper_buf->node);
             o->wallpaper_buf = NULL;
         }
+        /* Nothing painted, so bg_rect is the backdrop — the `none` wallpaper
+         * choice, and equally a path that would not decode. NOT under
+         * wallpaper-engine, which is an external client painting its own
+         * surface over the top of all this: there the compositor genuinely
+         * cannot see what the bar is drawn on, and -1 is the honest answer. */
+        if (src != SYN_WP_SRC_WPENGINE)
+            o->wp_top_lum = solid_backdrop_lum();
         return;
     }
 
@@ -528,7 +547,7 @@ static void paint_output(syn_output_t *o)
      * owns it goes away. `rows` is the logical strip converted to this output's
      * physical pixels — the buffer is painted at the physical size (above), so
      * on a 2x monitor the bar's 34 logical rows are 68 of these. */
-    int rows = (int)lround(WP_BAR_STRIP_LOGICAL * (double)ph / box.height);
+    int rows = (int)lround(SYN_BAR_STRIP_LOGICAL * (double)ph / box.height);
     if (rows < 1) rows = 1;
     o->wp_top_lum = strip_luminance(cairo_get_target(cr), rows,
                                     s->config.bar_edge);
@@ -579,6 +598,16 @@ void wallpaper_relayout(syn_server_t *s)
      * monitor, so one written per output would flap through intermediate values
      * on a two-monitor desktop — and the bar watches this file. */
     backdrop_export(s);
+}
+
+void wallpaper_backdrop_measured(syn_output_t *o, double lum)
+{
+    o->wp_top_lum = lum;
+    /* Straight to the fold, not through paint_output: the caller is a backend
+     * that painted the background itself, and repainting the static wallpaper
+     * here would tear down the buffer it just drew. backdrop_export writes only
+     * on a CHANGE, so a backend that reports every frame costs a compare. */
+    backdrop_export(o->server);
 }
 
 void wallpaper_reload(syn_server_t *s)

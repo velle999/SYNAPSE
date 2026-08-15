@@ -4036,11 +4036,19 @@ struct syn_output {
     struct wlr_scene_buffer *wallpaper_buf;
 
     /* wallpaper.c: mean relative luminance of the strip the BAR covers on this
-     * output, or -1 for "not measured" — no image, or a backend that paints its
-     * own background (matrix, wallpaperengine). It is what a bar with no
-     * background of its own is drawn on, and the only thing that decides
-     * whether its ink can be read; see backdrop_export(). Measured on every
-     * repaint, which is also every time it can change. */
+     * output, or -1 for "not measured". It is what a bar with no background of
+     * its own is drawn on, and the only thing that decides whether its ink can
+     * be read; see backdrop_export(). Measured on every repaint, which is also
+     * every time it can change.
+     *
+     * -1 IS NARROWER THAN "NO IMAGE", and that distinction is the whole value
+     * of this field. A wallpaper choice that paints no picture still puts
+     * something on screen: `none` leaves the solid bg_rect (syn_bg_color, a
+     * colour synui picked), and the matrix rain draws a background of its own
+     * and reports it through wallpaper_backdrop_measured(). Both are known, and
+     * both used to answer -1 — which is why a clear bar went opaque on exactly
+     * those two choices and nowhere else. What is left is genuinely unknowable:
+     * wallpaper-engine, an external client painting over the top of us. */
     double                   wp_top_lum;
 
     /* matrix.c: the animated wallpaper's per-frame GPU buffer + swapchain,
@@ -4049,6 +4057,11 @@ struct syn_output {
      * matrix wallpaper isn't active on this output. */
     struct wlr_scene_buffer *matrix_buf;
     struct wlr_swapchain    *matrix_swapchain;
+    /* CLOCK_MONOTONIC secs the rain last measured the strip under the bar on
+     * this output and reported it (matrix.c). Zero is "never", and reads that
+     * way for free: the clock is seconds since boot, so the first frame is
+     * always past the interval. */
+    double                   matrix_lum_at;
 
     /* dock.c: this output's own mirror of the auto-hide dock. A top-level
      * scene tree (sibling of the welcome/overlay/dispcfg UI trees, not
@@ -5715,10 +5728,30 @@ const char *syn_text_ui_font(void);
 void syn_text_shutdown(void);
 
 /* ── wallpaper.c ─────────────────────────────────────────── */
+/* How deep the strip the bar covers is: Theme.qml's barHeight (28) plus the
+ * floating pill's gap (6), in LOGICAL px. Over-sampling is safe and
+ * under-sampling is not — this is a mean, so a few extra rows move it slightly,
+ * while missing rows the ink is actually drawn over would measure a strip
+ * nothing is written on. Shared because every backend that paints a background
+ * has to measure the SAME strip, or two of them disagree about the same bar. */
+#define SYN_BAR_STRIP_LOGICAL 34
+
+/* The colour of s->bg_rect — what is on screen wherever no wallpaper is
+ * painted. Shared rather than a literal at the rect's creation because it is
+ * also an ANSWER: a bar with no background of its own that finds no picture
+ * behind it is not sitting on something unknowable, it is sitting on this, and
+ * wallpaper.c measures it instead of giving up. Defined in wallpaper.c. */
+extern const float syn_bg_color[4];
+
 void wallpaper_init(syn_server_t *s);             /* create wallpaper_tree, decode initial config */
 void wallpaper_output_created(syn_output_t *o);   /* paint this output (server_new_output) */
 void wallpaper_output_destroy(syn_output_t *o);   /* destroy this output's buffer (output_destroy) */
 void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output_layout_changed) */
+/* Report the backdrop under the bar on one output from a backend that paints
+ * that background ITSELF, and republish the bar's ink. For matrix.c, which
+ * renders to a GPU buffer the painter above never sees and so is the only thing
+ * that can measure it. */
+void wallpaper_backdrop_measured(syn_output_t *o, double lum);
 void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from current config */
 
 /* ── imgdec.c ────────────────────────────────────────────── */

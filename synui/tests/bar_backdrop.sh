@@ -27,6 +27,11 @@
 #   * and it is the BAR's strip, not the screen's top edge: moving the bar to the
 #     bottom moves which end is read. That failure shows up on exactly one theme
 #     and in no screenshot
+#   * a wallpaper that paints no PICTURE still has an answer. `none` leaves the
+#     solid bg_rect and the rain paints its own GPU buffer; both were reported as
+#     "unmeasured", which is what a clear bar answers by putting its whole
+#     background back. So the bar was glass on every photograph and a solid strip
+#     on those two, with the theme never changing
 #
 # No bar and no pixels are needed: backdrop.state is the interface between the
 # compositor and the bar, so the file is what is asserted.
@@ -178,6 +183,17 @@ await() {  # await <expected> <description>
 
 set_wp() { synctl dispatch wallpaper "$1" >/dev/null 2>&1; }
 
+# The two picker rows that are not a path. `dispatch wallpaper` above takes a
+# path and NOTHING else — deliberately, so the tokens live in one parser rather
+# than two (see the action in input.c) — so these go the way the picker itself
+# persists them: the token in wallpaper.state, which the config load applies
+# OVER synuirc, then a reload. Same file, same token, same code path Super+W
+# leaves behind, which is how the desktop that reported this bug got there.
+set_src() {  # set_src <matrix|none>
+    printf '%s\n' "$1" > "$CFG/wallpaper.state"
+    synctl dispatch wallpaper_reload >/dev/null 2>&1
+}
+
 await light "a near-black wallpaper takes light ink"
 
 # Where an ink IS safe, the closest one is that same ink. The scrim must never
@@ -237,6 +253,58 @@ await light "…and a pale band at the other end is not"
 wp_config "$TMP/botband.png" 'bar_edge = bottom'
 synctl dispatch wallpaper_reload >/dev/null 2>&1
 await dark  "…until the bar moves to that end"
+
+# ── the wallpapers that paint no PICTURE ─────────────────────
+# Both of these reported `none` until 2026-08-15, and `none` is what a clear bar
+# answers by putting its whole opaque background back. So the bar was glass on
+# every photograph and a solid strip on these two, with the theme never changing
+# and nothing in the log saying why. That is the bug these two checks are here
+# for, and the four screenshots that reported it were all of this.
+#
+# Neither backdrop is unmeasurable — "no image to sample" is not "nothing on
+# screen". Left until LAST because both change what the wallpaper IS, and every
+# check above is about a picture.
+set_src none
+await light "the solid background is a colour we CHOSE, so it measures"
+
+# The rain paints its own GPU buffer, which the cairo painter never sees — so
+# matrix.c reads its strip back off the frame it renders and reports that.
+#
+# The INK is not the assertion here, and this is the trap this check was written
+# around twice. wallpaper.c seeds the matrix branch with the solid background
+# (what is on screen until the first frame lands, and for good if the shader
+# never builds), and that seed is `light` — the same answer the readback
+# produces. So `await light` would pass with the readback deleted. What only the
+# readback can produce is the number, which it logs once per run of the rain.
+set_src matrix
+i=0
+while [ $i -lt 60 ]; do
+    grep -q 'matrix: backdrop under the bar' "$LOG" && break
+    grep -q 'animated wallpaper off' "$LOG" && break
+    sleep 0.1; i=$((i + 1))
+done
+if grep -q 'animated wallpaper off' "$LOG" 2>/dev/null; then
+    # SKIP and not FAIL: with no shader there IS no rain, and what the bar sits
+    # on is the solid colour the check above already covers.
+    #
+    # The ordinary reason, and the one to expect from `meson test`: the kanji
+    # atlas is loaded from the build's SYNUI_DATADIR, which is
+    # <prefix>/share/synui and empty until `ninja install`. So this check runs
+    # against a build configured at an installed prefix and skips elsewhere,
+    # which is the whole of it — it is named here because "shader did not
+    # build" reads like a GPU problem and sends you looking at the driver.
+    why='shader did not build'
+    grep -q 'atlas decode failed' "$LOG" 2>/dev/null &&
+        why="no kanji atlas in this build's datadir — configure at an installed prefix"
+    printf '  skip  the rain measures its own frame (%s)\n' "$why"
+elif grep -q 'matrix: backdrop under the bar' "$LOG"; then
+    printf '  ok    the rain measures the frame it renders — %s\n' \
+        "$(sed -n 's/.*matrix: backdrop under the bar is \([0-9.]*\).*/\1/p' "$LOG" | head -1)"
+    await light "…and that is what the bar is told"
+else
+    printf '  FAIL  the rain never measured its own frame\n'
+    fails=$((fails + 1))
+fi
 
 if [ "$fails" -eq 0 ]; then
     printf 'bar_backdrop: all checks passed\n'
