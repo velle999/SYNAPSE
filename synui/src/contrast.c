@@ -104,6 +104,17 @@ syn_ink_t syn_ink_for_backdrop(double lum, double target)
     return c_dark >= c_light ? SYN_INK_DARK : SYN_INK_LIGHT;
 }
 
+/* Same comparison with the target dropped: the answer is always one of the two,
+ * because "closer" is always defined even when neither is close enough. Ties go
+ * to dark for the same reason the tie above does — a stable side, so the value
+ * does not flicker between two frames of a video wallpaper. */
+syn_ink_t syn_ink_best(double lum)
+{
+    if (lum < 0.0) return SYN_INK_NONE;   /* not measured */
+    return contrast_lum(SYN_INK_DARK_LUM, lum) >= contrast_lum(SYN_INK_LIGHT_LUM, lum)
+               ? SYN_INK_DARK : SYN_INK_LIGHT;
+}
+
 syn_ink_t syn_ink_combine(syn_ink_t a, syn_ink_t b)
 {
     if (a == SYN_INK_NONE || b == SYN_INK_NONE) return SYN_INK_NONE;

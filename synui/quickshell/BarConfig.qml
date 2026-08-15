@@ -110,6 +110,26 @@ QtObject {
      */
     property string barShape: "full-width"
 
+    /* ── The dock's glass, borrowed by the desktop widgets ───────────────────
+     *
+     * Read exactly like bar_shape: settings.state over synuirc, because the
+     * control panel row is the writer and settings.state is what it writes.
+     * Neither of these is a bar setting at all — they belong to the widgets
+     * (WidgetFrame.qml), which have no config singleton of their own and read
+     * everything through Theme, which reads it through here.
+     *
+     * Raw strings and raw reals, resolved in Theme: `widget_glass` is a
+     * three-position auto/off/on whose "auto" needs theme.state to answer, and
+     * that file is Theme's to watch.
+     */
+    property string widgetGlass: "auto"
+
+    // config.c's default and its clamp, restated for the same reason
+    // cornerRadius restates its own: a typo'd synuirc line must not hand the
+    // compositor its default and the widgets a NaN, which would paint every
+    // card fully transparent.
+    property real dockOpacity: 0.72
+
     // Where a popup hanging off the bar starts, given its height. One place
     // rather than a `Theme.barHeight + 2` at each anchor site: a bottom bar's
     // popups have to go UP, and every one of those sites would otherwise be a
@@ -173,6 +193,16 @@ QtObject {
         const s = root.readKey(settingsFile.text(), "bar_shape")
                   || root.readKey(synuircFile.text(), "bar_shape")
         root.barShape = s || "full-width"
+
+        // The widgets' two, same pair of files and same order.
+        const w = root.readKey(settingsFile.text(), "widget_glass")
+                  || root.readKey(synuircFile.text(), "widget_glass")
+        root.widgetGlass = (w === "on" || w === "off") ? w : "auto"
+
+        const d = root.readKey(settingsFile.text(), "dock_opacity")
+                  || root.readKey(synuircFile.text(), "dock_opacity")
+        const dn = parseFloat(d)
+        if (!isNaN(dn)) root.dockOpacity = Math.max(0.20, Math.min(1.0, dn))
     }
 
     property FileView synuircFile: FileView {

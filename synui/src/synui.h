@@ -1425,6 +1425,10 @@ typedef enum {
     CTL_ROW_LAYOUT,        /* tiling / floating / monocle / AI / niri — of the ACTIVE desktop */
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
+    CTL_ROW_DOCK_STYLE,    /* solid slab or frosted glass — auto follows the theme */
+    CTL_ROW_DOCK_OPACITY,  /* how much of the wallpaper shows through the bar */
+    CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
+    CTL_ROW_WIDGET_GLASS,  /* desktop widgets take the dock's glass, or keep the HUD */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_BAR_SHELL,     /* which QML tree synui-bar starts: SYNAPSE or Antiquity */
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza */
@@ -2587,6 +2591,36 @@ typedef enum {
     SYN_DOCK_EDGE_RIGHT,
 } syn_dock_edge_t;
 
+/*
+ * How the dock's BAR is painted (dock.c), which is a different question from
+ * what colour it is: SOLID is the tinted slab synui has always drawn, GLASS is
+ * the macOS 26 treatment — the same tint at a lower alpha over a real backdrop
+ * blur, with a specular hairline along the lit edge instead of the accent
+ * stroke.
+ *
+ * AUTO is the default and resolves per THEME (see dock_style_is_glass), for the
+ * same reason square_chrome exists: "does this desktop's chrome do glass" is a
+ * fact about the preset, and a fixed default would mean either a Win95 desktop
+ * with a frosted dock or a Tahoe one with an opaque slab. Picking a value here
+ * pins it against the theme, which is what a user who wants glass on Gruvbox is
+ * asking for.
+ */
+typedef enum {
+    SYN_DOCK_STYLE_AUTO = 0,   /* glass on a glass theme, solid otherwise */
+    SYN_DOCK_STYLE_SOLID,
+    SYN_DOCK_STYLE_GLASS,
+} syn_dock_style_t;
+
+/* Same three positions for the desktop widgets, which are quickshell's and read
+ * the resolved answer out of theme.state + settings.state (see Theme.qml). The
+ * compositor parses it purely so the key has ONE spelling and one clamp — like
+ * bar_shape, nothing on this side acts on it. */
+typedef enum {
+    SYN_WIDGET_GLASS_AUTO = 0,
+    SYN_WIDGET_GLASS_OFF,
+    SYN_WIDGET_GLASS_ON,
+} syn_widget_glass_t;
+
 /* The start-menu launcher (launcher.c) synui draws in the top-left of every
  * output — the "◢ SYNAPSE" button that used to be a waybar module. Text is the
  * old look; logo swaps it for the dendrite emblem (SYNUI_DATADIR/logo.svg). */
@@ -3179,6 +3213,17 @@ typedef struct {
     int   dock_height;          /* px thickness, default 64 */
     int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
+    /* How the bar is painted, and how transparent and how round it is. The
+     * alpha used to be a literal 0.80 in dock_render_output() and the radius a
+     * literal 16 — see the comments there for why neither could simply borrow
+     * panel_bg[3] or corner_radius. Both are the dock's own, because the dock is
+     * the one piece of chrome that floats over the wallpaper. */
+    syn_dock_style_t dock_style;   /* default AUTO */
+    float dock_opacity;            /* body alpha, 0.20..1.00, default 0.72 */
+    int   dock_radius;             /* px corner radius, default 26 */
+    /* Read by quickshell, not by the compositor. Parsed here so `widget_glass`
+     * has one spelling and one clamp — see syn_widget_glass_t. */
+    syn_widget_glass_t widget_glass;   /* default AUTO */
     /* launcher.c: the synui-drawn start-menu button. Default TEXT. */
     syn_launcher_style_t launcher_style;
 
@@ -3466,6 +3511,35 @@ static inline int chrome_is_mac(const syn_config_t *cfg)
 static inline float theme_bar_alpha(const syn_config_t *cfg)
 {
     return cfg->theme == SYN_THEME_MACOS26 ? 0.0f : -1.0f;
+}
+
+/*
+ * Does this theme's chrome do GLASS — frosted translucent surfaces over a
+ * backdrop blur, rather than a tinted slab?
+ *
+ * One theme, for now, and that is the point of asking it as a question rather
+ * than testing the enum at each site: macOS 26 is the preset built on the
+ * compositor's own glass (see its entry in theme.c, and CHROME_LIQUID), and the
+ * next one that is will be added here and nowhere else. It is the same shape as
+ * square_chrome — a derived fact about the PRESET, spelt once — and it travels
+ * to the bar and the widgets the same way, as a line in theme.state.
+ *
+ * Deliberately NOT "is the scheme light": XP and Win95 are light and neither has
+ * ever been glass, and Tahoe would still be glass in a dark variant.
+ */
+static inline bool theme_is_glass(const syn_config_t *cfg)
+{
+    return cfg->theme == SYN_THEME_MACOS26;
+}
+
+/* Whether the dock paints itself as glass, with AUTO resolved. */
+static inline bool dock_style_is_glass(const syn_config_t *cfg)
+{
+    switch (cfg->dock_style) {
+    case SYN_DOCK_STYLE_GLASS: return true;
+    case SYN_DOCK_STYLE_SOLID: return false;
+    default:                   return theme_is_glass(cfg);
+    }
 }
 
 /* ── Where the titlebar buttons are ───────────────────────
@@ -4223,6 +4297,34 @@ struct syn_server {
         syn_output_t *output;   /* output the drag started on */
         double        start_x, start_y;   /* press point (layout coords) */
         double        float_x, float_y;   /* current bar top-left while floating */
+        /*
+         * ONE press, two gestures, told apart by where it landed. On the bar's
+         * background this is a reposition and everything above applies. On an
+         * ICON it is a rearrange: `icon` is that entry's index in dock_entries
+         * at press time, `slot` is the position it would drop into, and the bar
+         * stays where it is — floating it under the cursor would take the
+         * icons' own row with it and there would be nothing to drag along.
+         *
+         * -1 in `icon` is what says "this is a bar drag", which is why the two
+         * can share the struct: only one press is ever down.
+         *
+         * A press on an icon that never travels is a CLICK, and the click is
+         * what launches or raises the app — so unlike the bar drag, this one
+         * owes an action on release even when nothing moved. See
+         * dock_icon_drag_end().
+         */
+        int           icon;     /* dragged entry index, or -1 for a bar drag */
+        /* …and which app that index MEANT at press time. dock_rebuild() memcpy's
+         * a whole fresh entry array over s->dock_entries whenever anything maps
+         * or unmaps, so an index taken at press can be pointing at a different
+         * app by release — an app finishing its launch mid-gesture is enough.
+         * Committing then would silently rearrange something the user never
+         * touched, so the release re-checks this and abandons the reorder if it
+         * no longer matches. */
+        char          icon_app[128];
+        int           slot;     /* live drop position among the icons */
+        double        icon_x, icon_y;   /* dragged icon's top-left, canvas-local */
+        double        grab_dx, grab_dy; /* cursor offset within that icon */
     } dock_drag;
 
     /* dock.c / render.c: right-click context menu for a dock icon. */
@@ -7017,6 +7119,29 @@ void anim_workspace_hide(syn_view_t *view, int dir);
 void anim_workspace_show(syn_view_t *view, int dir);
 void anim_reset(syn_view_t *view);
 void anim_apply_alpha(syn_view_t *view);
+
+/*
+ * Backdrop blur behind a scene buffer synui drew ITSELF, rather than behind a
+ * client's window.
+ *
+ * scenefx 0.5 makes blur a node of its own that has to be created, sized,
+ * positioned and z-ordered next to the thing it blurs (see blur_set in anim.c).
+ * All of that already exists for windows and none of it was reachable from a
+ * compositor-drawn panel, so the dock's glass would otherwise have meant a
+ * second copy of the companion-node bookkeeping in dock.c — including the
+ * addon-destroy ordering trap, which is exactly the kind of thing that is only
+ * got right once.
+ *
+ * Idempotent and cheap to call every render: the setters underneath early-return
+ * when nothing moved, and `want = false` on a buffer that has no companion does
+ * nothing. `radius` is the buffer's own corner radius, so the blur stops where
+ * the rounded corner does instead of squaring it off.
+ *
+ * The caller still owns the POLICY — the master blur switch, whether this
+ * desktop wants glass at all — because this is the mechanism and nothing else.
+ */
+void syn_buffer_backdrop_blur(struct wlr_scene_buffer *buffer, bool want,
+                              int radius);
 /* Re-assert the glass halo's place under the frame's chrome. Called by the
  * decoration pass, which lowers the border and shadow on its own schedule; a
  * no-op unless glass_halo is set. See anim.c. */
@@ -7133,6 +7258,15 @@ void dock_drag_end(syn_server_t *s, double lx, double ly);
 /* True if (lx,ly) is over a shown dock bar's background (not an icon); sets
  * *out to that output. Used to distinguish an icon click from a bar drag. */
 bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out);
+
+/* Drag-to-rearrange, the icon half of the gesture above. A left press on an
+ * icon arms this INSTEAD of launching the app: dock_icon_drag_end() runs the
+ * click when the press never travelled, and commits the new order when it did.
+ * Motion and release are the same dock_drag_motion/dock_drag_end entry points —
+ * input.c has one press-drag-release path for the dock and this picks which
+ * gesture it is. */
+void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
+                          double lx, double ly);
 
 /* Right-click context menu (mouse-driven; rendered by synui_render_dockmenu).
  * open() builds the item list for an entry and shows the menu at (lx,ly);

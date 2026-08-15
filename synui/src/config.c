@@ -151,6 +151,15 @@
  *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
  *   dock_edge = bottom|top|left|right   (left/right draw a vertical column)
+ *   dock_style = auto|solid|glass  (auto = glass on a glass theme; see
+ *                                   dock_style_is_glass)
+ *   dock_opacity = 0.72         (0.20-1.00; how much wallpaper shows through)
+ *   dock_radius = 26            (px; clamped to half the bar's thickness)
+ *
+ * …and one the compositor parses but does not act on, because its reader is
+ * quickshell (WidgetFrame.qml). Here so the key has one spelling and one clamp,
+ * exactly like bar_shell/bar_edge below:
+ *   widget_glass = auto|off|on  (auto follows the theme, like dock_style)
  *
  * The bar (quickshell) — a SEPARATE PROCESS, so the compositor parses these
  * three and acts on none of them. They live here so each setting has one
@@ -1141,6 +1150,21 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
+    /* AUTO, so the theme decides: glass on macOS 26, the tinted slab on the
+     * other twelve. See dock_style_is_glass(). */
+    cfg->dock_style        = SYN_DOCK_STYLE_AUTO;
+    /* 0.72, not the 0.80 this was a literal at for its whole life. The dock is
+     * the one panel that floats over the wallpaper and it should read as
+     * floating; 0.80 is a slab with a hint of the desktop behind it. Still well
+     * clear of the point where a dark icon on a dark wallpaper stops reading —
+     * the row goes down to 0.20 for anyone who wants that. */
+    cfg->dock_opacity      = 0.72f;
+    /* 26 against the old literal 16, and clamped to half the bar's thickness at
+     * draw time so it can never round past a capsule. At the default 64px
+     * thickness that is 26 of a possible 32 — noticeably round, the shape the
+     * Mac dock has, without becoming a lozenge on a 200px dock. */
+    cfg->dock_radius       = 26;
+    cfg->widget_glass      = SYN_WIDGET_GLASS_AUTO;
     cfg->dock_pin_count    = 0;
     cfg->launcher_style    = SYN_LAUNCHER_TEXT;
     /* A tapped Super opens the start menu, the way it does everywhere else —
@@ -2159,6 +2183,30 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_hover_margin = atoi(val);
         if (cfg->dock_hover_margin < 1)  cfg->dock_hover_margin = 1;
         if (cfg->dock_hover_margin > 32) cfg->dock_hover_margin = 32;
+    }
+    else if (strcmp(key, "dock_style") == 0) {
+        if      (strcmp(val, "auto")  == 0) cfg->dock_style = SYN_DOCK_STYLE_AUTO;
+        else if (strcmp(val, "solid") == 0) cfg->dock_style = SYN_DOCK_STYLE_SOLID;
+        else if (strcmp(val, "glass") == 0) cfg->dock_style = SYN_DOCK_STYLE_GLASS;
+        else wlr_log(WLR_ERROR, "synui: dock_style: unknown '%s'", val);
+    }
+    else if (strcmp(key, "dock_opacity") == 0) {
+        cfg->dock_opacity = (float)atof(val);
+        /* Floored well above zero: an invisible dock is indistinguishable from
+         * a broken one, and `dock_enabled = off` is how you ask for no dock. */
+        if (cfg->dock_opacity < 0.20f) cfg->dock_opacity = 0.20f;
+        if (cfg->dock_opacity > 1.00f) cfg->dock_opacity = 1.00f;
+    }
+    else if (strcmp(key, "dock_radius") == 0) {
+        cfg->dock_radius = atoi(val);
+        if (cfg->dock_radius < 0)  cfg->dock_radius = 0;
+        if (cfg->dock_radius > 64) cfg->dock_radius = 64;
+    }
+    else if (strcmp(key, "widget_glass") == 0) {
+        if      (strcmp(val, "auto") == 0) cfg->widget_glass = SYN_WIDGET_GLASS_AUTO;
+        else if (strcmp(val, "off")  == 0) cfg->widget_glass = SYN_WIDGET_GLASS_OFF;
+        else if (strcmp(val, "on")   == 0) cfg->widget_glass = SYN_WIDGET_GLASS_ON;
+        else wlr_log(WLR_ERROR, "synui: widget_glass: unknown '%s'", val);
     }
     else if (strcmp(key, "dock_pin") == 0) {
         /* space-separated app_ids/.desktop basenames */

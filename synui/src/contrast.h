@@ -66,6 +66,28 @@ typedef enum {
  * so the answer does not flip on a rounding error near the boundary. */
 syn_ink_t syn_ink_for_backdrop(double lum, double target);
 
+/*
+ * The better of the two, WHETHER OR NOT it clears the target. NONE only when the
+ * backdrop was not measured.
+ *
+ * This exists because "neither ink is legible on this wallpaper" was being
+ * answered by putting the bar's background back, and a near-opaque strip is a
+ * loud fix for a problem the user experiences as "my bar stops being see-through
+ * on some wallpapers, and comes back if I change it". The band that triggers it
+ * is narrow — roughly 0.184 to 0.238 relative luminance — so an evenly-lit
+ * photograph falls in and out of it for no reason the user can see.
+ *
+ * A SCRIM is the better answer: a thin wash in the opposite direction to the ink
+ * pushes the backdrop out of the band and buys ~8:1 at a third of the coverage
+ * an opaque strip needs, so the bar still reads as glass. But a scrim can only
+ * be laid in ONE direction, and picking it needs the losing question answered:
+ * not "which ink passes" (neither) but "which ink is closer". Hence a second
+ * value alongside the first rather than folding the two — the bar has to be able
+ * to tell "clear is safe" from "clear is safe once I dim it", because those are
+ * different pixels.
+ */
+syn_ink_t syn_ink_best(double lum);
+
 /* Fold two monitors' answers into one. The bar's ink is a singleton in QML — one
  * value for every screen — so two screens that disagree have no shared answer,
  * and the honest result is NONE rather than picking a side and leaving the other

@@ -137,6 +137,76 @@ int main(void)
     check(strcmp(syn_ink_name(SYN_INK_LIGHT), "light") == 0, "token: light");
     check(strcmp(syn_ink_name(SYN_INK_NONE),  "none")  == 0, "token: none");
 
+    /* ── 5. The band, and the scrim that gets out of it ───────────────── */
+    /*
+     * Claim 2 above says the band is real and that the bar must not go clear in
+     * it. What the bar USED to do there was put its whole background back, and
+     * from the outside that is "my transparent bar stops being transparent on
+     * some wallpapers and starts again if I change it" — because the band is
+     * narrow enough that one photograph is inside it and the next is not.
+     *
+     * So the bar dims the backdrop instead: a wash the opposite way from the
+     * ink, at SCRIM_ALPHA, and then draws the ink it was going to draw. This
+     * section is what says that actually works — that in the WHOLE band, the
+     * scrimmed backdrop clears the target. Without it, "0.34" is a number
+     * somebody liked the look of.
+     */
+    syn_ink_t best_dark  = syn_ink_best(0.85);
+    syn_ink_t best_light = syn_ink_best(0.001);
+    check(best_dark  == SYN_INK_DARK,  "a pale wallpaper's closest ink is dark");
+    check(best_light == SYN_INK_LIGHT, "a dark wallpaper's closest ink is light");
+    check(syn_ink_best(-1.0) == SYN_INK_NONE,
+          "an unmeasured backdrop still has no ink, closest or otherwise");
+
+    /* Wherever an ink is SAFE, the closest one is that same ink. The scrim must
+     * never flip the ink over — it is there to help the answer the bar already
+     * had, and a bar that swapped black for white as a wallpaper drifted across
+     * the band would flicker in exactly the case this is fixing. */
+    for (int i = 0; i <= 1000; i++) {
+        double lum = i / 1000.0;
+        syn_ink_t safe = syn_ink_for_backdrop(lum, CONTRAST_TARGET);
+        if (safe != SYN_INK_NONE)
+            check(syn_ink_best(lum) == safe,
+                  "the closest ink agrees with the safe one wherever there is one");
+    }
+
+    /*
+     * Theme.qml's `scrimAlpha`. Spelt here because a C test cannot read a QML
+     * property — so if that number is changed, this is the file that says
+     * whether the new one still clears, and it has to be changed with it.
+     */
+    const double SCRIM_ALPHA = 0.34;
+
+    int scrimmed = 0;
+    for (int i = 0; i <= 1000; i++) {
+        double lum = i / 1000.0;
+        if (syn_ink_for_backdrop(lum, CONTRAST_TARGET) != SYN_INK_NONE) continue;
+
+        syn_ink_t ink = syn_ink_best(lum);
+        check(ink != SYN_INK_NONE, "the band always has a closest ink");
+
+        /* Compositing happens in sRGB, luminance is linear, so the backdrop has
+         * to be taken back to sRGB, washed, and re-measured. An APPROXIMATION —
+         * `lum` is the mean luminance of thousands of pixels and the mean of a
+         * non-linear function is not that function of the mean — but a wash is
+         * monotonic in every pixel, so a strip whose mean clears it is not
+         * hiding a region that does not. */
+        double v = lum <= 0.0031308 ? 12.92 * lum
+                                    : 1.055 * pow(lum, 1.0 / 2.4) - 0.055;
+        /* Light ink darkens the backdrop; dark ink lightens it. */
+        double wash = (ink == SYN_INK_LIGHT) ? 0.0 : 1.0;
+        double out  = v * (1.0 - SCRIM_ALPHA) + wash * SCRIM_ALPHA;
+        double lin  = out <= 0.04045 ? out / 12.92
+                                     : pow((out + 0.055) / 1.055, 2.4);
+
+        double ink_lum = (ink == SYN_INK_LIGHT) ? SYN_INK_LIGHT_LUM
+                                                : SYN_INK_DARK_LUM;
+        check(ratio(ink_lum, lin) >= CONTRAST_TARGET,
+              "the scrim clears the target everywhere in the band");
+        scrimmed++;
+    }
+    check(scrimmed == band_seen, "every unreadable backdrop gets a scrim");
+
     if (failures) {
         printf("bar_ink_test: %d failure(s)\n", failures);
         return 1;

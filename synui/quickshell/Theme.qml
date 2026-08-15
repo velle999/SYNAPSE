@@ -102,39 +102,94 @@ QtObject {
      */
     property string barInk: ""      // "dark" | "light" | "" (no safe answer)
 
+    /*
+     * …and the ink that is merely CLOSEST, for the band where neither is safe.
+     *
+     * "The bar stops being transparent on some wallpapers, and goes transparent
+     * again if I switch" was this, and it was the design working as written: a
+     * backdrop between roughly 0.184 and 0.238 relative luminance clears neither
+     * ink, so the bar put its whole background back. An evenly-lit photograph
+     * lands in that band, the one beside it does not, and from the outside the
+     * bar looks like it randomly stops being glass.
+     *
+     * Falling back to opaque was too big a step. A SCRIM — a thin wash the
+     * opposite way from the ink — moves the backdrop clean out of the band and
+     * measures around 8:1, at a third of the coverage, so the wallpaper is still
+     * plainly visible through the strip. What it needs is a direction, and that
+     * is what this value is: see syn_ink_best() in contrast.h.
+     */
+    property string barInkBest: ""
+
     property FileView backdropFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/backdrop.state"
         watchChanges: true
         printErrors: false          // absent until a wallpaper has been painted
         onFileChanged: reload()
         onLoaded: {
-            const m = this.text().match(/^\s*bar_ink\s*=\s*(\S+)\s*$/m)
+            const t = this.text()
+            const m = t.match(/^\s*bar_ink\s*=\s*(\S+)\s*$/m)
             const v = m ? m[1] : "none"
             root.barInk = (v === "dark" || v === "light") ? v : ""
+            // Absent from a backdrop.state written by an older synui, which
+            // leaves barInkUsed equal to barInk and every behaviour below
+            // exactly what it was before the scrim existed.
+            const b = t.match(/^\s*bar_ink_best\s*=\s*(\S+)\s*$/m)
+            const bv = b ? b[1] : "none"
+            root.barInkBest = (bv === "dark" || bv === "light") ? bv : ""
         }
-        onLoadFailed: root.barInk = ""
+        onLoadFailed: { root.barInk = ""; root.barInkBest = "" }
     }
+
+    // The ink actually drawn: the safe one where there is one, the closest one
+    // otherwise. Empty only when the backdrop could not be measured at all — a
+    // video wallpaper, or two monitors that want opposite answers — and THAT is
+    // still a bar that keeps its background, because there is no one answer to
+    // draw for both screens.
+    readonly property string barInkUsed: root.barInk !== "" ? root.barInk
+                                                            : root.barInkBest
 
     // The bar is clear only when the theme asks AND an ink survives the
     // wallpaper. Either half alone is a bar you cannot read.
-    readonly property bool clearBar: p.barAlpha === 0 && root.barInk !== ""
+    readonly property bool clearBar: p.barAlpha === 0 && root.barInkUsed !== ""
+
+    // …and it is clear-WITH-A-SCRIM when the ink it is using is the closest one
+    // rather than a safe one. Nothing else changes: same ink, same modules, one
+    // wash behind them.
+    readonly property bool barScrim: root.clearBar && root.barInk === ""
+
+    // How strong that wash is. 0.34 is what it takes to move the worst case in
+    // the band (backdrop ≈ 0.20) to roughly 8:1 — comfortably past AA, with the
+    // wallpaper still reading through it. Below about 0.25 the worst case does
+    // not clear; much above 0.4 and it stops looking like glass and starts
+    // looking like the opaque strip this replaced.
+    readonly property real scrimAlpha: 0.34
 
     // Which way the ink runs. On a clear bar that is the backdrop's answer, not
     // the scheme's — a light theme over a dark wallpaper wants WHITE text, which
     // is the whole point.
-    readonly property bool inkOnDark: root.clearBar ? (root.barInk === "light")
+    readonly property bool inkOnDark: root.clearBar ? (root.barInkUsed === "light")
                                                     : !root.isLight
 
     // ── Surfaces ─────────────────────────────────────────
     // The scheme's default, and also the floor a clear bar falls back to when
     // the wallpaper offers no legible ink. Spelt once so the two cannot drift.
     readonly property real  bgAlphaDefault: root.isLight ? 0.95 : 0.85
-    readonly property real  bgAlpha:    root.clearBar ? 0.0
+    readonly property real  bgAlpha:    root.barScrim ? root.scrimAlpha
+                                      : root.clearBar ? 0.0
                                       : (p.barAlpha !== undefined && p.barAlpha > 0)
                                         ? p.barAlpha : root.bgAlphaDefault
     readonly property real  popupAlpha: p.popupAlpha !== undefined ? p.popupAlpha : 0.97
 
-    readonly property color bg:      themed("bar",   11, 11, 20, bgAlpha)
+    // The scrim is BLACK or WHITE and not the theme's bar colour, which is the
+    // one place this diverges from `bg` meaning "the theme's surface at some
+    // alpha". Its whole job is to move the backdrop away from the ink, and the
+    // theme's bar colour is chosen to sit UNDER that ink — Tahoe's is near-white
+    // and so is the wash it would lay under white text. So it follows the ink,
+    // not the palette: light ink darkens the backdrop, dark ink lightens it.
+    readonly property color bg: root.barScrim
+        ? (root.inkOnDark ? Qt.rgba(0, 0, 0, root.scrimAlpha)
+                          : Qt.rgba(1, 1, 1, root.scrimAlpha))
+        : themed("bar", 11, 11, 20, bgAlpha)
     readonly property color bgSolid: themed("bar",   11, 11, 20, 1.0)
     readonly property color popupBg: themed("popup", 11, 11, 20, popupAlpha)
 
@@ -308,6 +363,43 @@ QtObject {
     // presets are, and it degrades to exactly the behaviour above.
     property bool squareChrome: false
 
+    /* ── Glass ───────────────────────────────────────────────
+     *
+     * The other half of the same file, and the same kind of fact: does this
+     * desktop's chrome do FROSTED GLASS — translucent surfaces over a blurred
+     * backdrop — rather than a tinted slab? theme.c exports it because nothing
+     * over here can work it out: theme.json carries a palette and a scheme, and
+     * "light" is XP and Win95 as much as it is Tahoe.
+     *
+     * `widgetGlass` is the user's override on top, out of settings.state, in
+     * synui's own precedence (settings.state, then synuirc). "auto" is the
+     * default and means the theme decides — the same three positions the dock's
+     * own `dock_style` row has, and deliberately spelt the same way.
+     */
+    property bool squareChromeGlass: false
+
+    // What the desktop widgets actually do. The one property WidgetFrame reads.
+    readonly property bool widgetsGlass:
+        BarConfig.widgetGlass === "on"  ? true :
+        BarConfig.widgetGlass === "off" ? false : root.squareChromeGlass
+
+    /*
+     * …and how transparent they are when they do. The ASK was that the widgets
+     * match the dock, so this is the dock's own opacity rather than a second
+     * number that starts equal to it and drifts the first time either is
+     * touched. config.c's default is 0.72 and it clamps to 0.20-1.00; BarConfig
+     * re-does that clamp for the same reason it re-does corner_radius's.
+     *
+     * Not applied verbatim, though, and the difference is the point: the dock
+     * is a bar of icons with a real blur behind it, and a widget is a card of
+     * SMALL TEXT on whatever the wallpaper happens to be. Quickshell's layer
+     * surfaces get no backdrop blur here — that is a compositor node the dock
+     * has and these do not — so the same alpha over an unblurred photograph is a
+     * sysmon readout nobody can read. The lift is what buys the text a surface
+     * while still tracking the slider.
+     */
+    readonly property real widgetAlpha: Math.min(1.0, BarConfig.dockOpacity + 0.16)
+
     property FileView chromeFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/theme.state"
         watchChanges: true
@@ -320,10 +412,19 @@ QtObject {
         printErrors: false      // absent until a theme is picked
         onFileChanged: reload()
         onLoaded: {
-            const m = this.text().match(/^\s*square_chrome\s*=\s*(\S+)\s*$/m)
+            const t = this.text()
+            const m = t.match(/^\s*square_chrome\s*=\s*(\S+)\s*$/m)
             root.squareChrome = !!m && m[1] === "on"
+            // Absent means a synui too old to export it, which is a desktop
+            // whose widgets have always been the HUD panel. Off is the honest
+            // answer for both that and a theme that really is not glass.
+            const g = t.match(/^\s*glass_chrome\s*=\s*(\S+)\s*$/m)
+            root.squareChromeGlass = !!g && g[1] === "on"
         }
-        onLoadFailed: root.squareChrome = false
+        onLoadFailed: {
+            root.squareChrome = false
+            root.squareChromeGlass = false
+        }
     }
 
     // Module pills are inset from the bar's height so the hover wash reads as a

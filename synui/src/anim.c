@@ -271,6 +271,15 @@ static void blur_set(struct wlr_scene_buffer *buffer, bool want,
     blur_sync(bb, buffer, corners);
 }
 
+/* The same machinery, for a buffer synui painted itself — the dock's glass bar.
+ * See the header for why this is exported rather than reimplemented there. */
+void syn_buffer_backdrop_blur(struct wlr_scene_buffer *buffer, bool want,
+                              int radius)
+{
+    if (!buffer) return;
+    blur_set(buffer, want, corner_radii_all(radius > 0 ? radius : 0));
+}
+
 /* ── Applying alpha + scenefx glass to a whole window ─────── */
 struct view_effect_params {
     float alpha;

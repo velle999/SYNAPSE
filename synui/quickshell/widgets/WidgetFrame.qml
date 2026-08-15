@@ -113,6 +113,47 @@ PanelWindow {
     property bool dragX:     true
     property bool dragY:     true
 
+    /* ── Glass ───────────────────────────────────────────────────────────────
+     *
+     * The other card these can be drawn as: a rounded translucent pane that
+     * matches the dock, for a desktop whose chrome is glass (macOS 26) or whose
+     * owner has asked for it. Theme.widgetsGlass is the whole decision — see
+     * there and BarConfig for where the three positions come from.
+     *
+     * A MODE and not a replacement, deliberately. The chamfered HUD panel with
+     * its scanlines and corner ticks is what SYNAPSE looks like, and a Gruvbox
+     * or Win95 desktop wearing frosted Mac cards would be no better matched than
+     * a Tahoe one wearing the HUD. So both exist and the theme picks.
+     *
+     * `chrome` still gates it: the visualiser has no card, so it has no card to
+     * make glass either.
+     *
+     * WHY THIS IS NOT A REAL BLUR
+     *
+     * The dock's glass is a scenefx blur node the compositor creates behind its
+     * own buffer. Nothing here can ask for one — these are ordinary layer
+     * surfaces and the compositor blurs windows, not arbitrary clients — so what
+     * is drawn is the rest of the recipe: the falloff, the specular hairline,
+     * the rim, at an alpha that tracks the dock's. Theme.widgetAlpha lifts it
+     * enough that small text still reads without the blur underneath it; see the
+     * note there.
+     */
+    readonly property bool glass: win.chrome && Theme.widgetsGlass
+
+    // Follows the desktop's radius where there is one, with a floor: at 4px a
+    // "rounded" glass card just looks like a rectangle that failed.
+    readonly property int glassRadius: Theme.panelRadius > 0
+                                       ? Math.max(12, Theme.panelRadius) : 14
+
+    // base lifted `t` of the way to white, at alpha `a`. The gradient, the
+    // specular and the rim are all this function with different numbers, so
+    // there is one place the surface's colour is decided.
+    function lift(base, t, a) {
+        return Qt.rgba(base.r + (1 - base.r) * t,
+                       base.g + (1 - base.g) * t,
+                       base.b + (1 - base.b) * t, a)
+    }
+
     // Whether the body takes pointer input. False is the default because a
     // widget that takes clicks is a widget the desktop menu cannot be opened
     // through.
@@ -203,11 +244,99 @@ PanelWindow {
             width:  win.fillWidth ? win.width - win.pad * 2 : win.cardWidth
             height: win.cardHeight
 
+            /* ── Frame: glass ────────────────────────────
+             *
+             * Declared before the HUD frame so that when both are somehow
+             * visible the HUD wins, which is the safer way round: the HUD is
+             * opaque and legible on anything.
+             */
+            Item {
+                id: glassFrame
+                anchors.fill: parent
+                visible: win.glass
+
+                // Shadow, spread OUTSIDE the card rather than under it — a
+                // translucent pane with a shadow inside its own edge looks
+                // dirty rather than lifted. Negative margins grow each ring
+                // past the card; the radius grows with them so the corners stay
+                // concentric instead of tightening as the rings widen.
+                Item {
+                    id: glassShadow
+                    anchors.fill: parent
+
+                    // The drop, as a plain property with the Behavior on IT
+                    // rather than on each ring's anchors.topMargin: a Behavior
+                    // on a member of a grouped property is not something to
+                    // rely on, and one animated number driving three bindings
+                    // is what keeps the rings moving together anyway.
+                    property real drop: win.dragging ? 7 : 3
+                    Behavior on drop { NumberAnimation { duration: Theme.animNormal } }
+
+                    Repeater {
+                        model: [ { m: 9, a: 0.045 }, { m: 5, a: 0.065 }, { m: 2, a: 0.09 } ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            anchors.fill: parent
+                            anchors.margins: -modelData.m
+                            anchors.topMargin: -modelData.m + glassShadow.drop
+                            radius: win.glassRadius + modelData.m
+                            color: Qt.rgba(0, 0, 0,
+                                           modelData.a * (win.dragging ? 1.6 : 1))
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: pane
+                    anchors.fill: parent
+                    radius: win.glassRadius
+
+                    // Thinnest at the top, where the light is: the falloff is
+                    // what stops a flat alpha reading as a sheet of plastic.
+                    // Same rule the dock's body follows (dock_paint_body).
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: win.lift(Theme.popupBg, Theme.isLight ? 0.35 : 0.13,
+                                            Theme.widgetAlpha * 0.88)
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: win.lift(Theme.popupBg, 0.0, Theme.widgetAlpha)
+                        }
+                    }
+
+                    // The rim takes whichever of black/white shows on this
+                    // scheme's surface — a white hairline is invisible on
+                    // Tahoe's near-white pane and a black one on SYNAPSE's
+                    // navy. It goes yellow while dragging, which is the same
+                    // signal the HUD outline gives.
+                    border.width: 1
+                    border.color: win.dragging ? Theme.yellow
+                                : Theme.isLight ? Qt.rgba(0, 0, 0, 0.14)
+                                                : Qt.rgba(1, 1, 1, 0.20)
+                    Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+                }
+
+                // The specular. Inset past the corner arcs for the reason the
+                // dock's is: carried into them it would just be a second rim,
+                // and a highlight is where the light hits and nowhere else.
+                Rectangle {
+                    anchors {
+                        left: parent.left; right: parent.right; top: parent.top
+                        leftMargin: win.glassRadius; rightMargin: win.glassRadius
+                        topMargin: 1
+                    }
+                    height: 1
+                    color: Qt.rgba(1, 1, 1, Theme.isLight ? 0.80 : 0.28)
+                }
+            }
+
             // ── Frame ────────────────────────────────────
             Item {
                 id: frame
                 anchors.fill: parent
-                visible: win.chrome
+                visible: win.chrome && !win.glass
 
                 LinearGradient {
                     id: panelFill

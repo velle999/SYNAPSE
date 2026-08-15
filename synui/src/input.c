@@ -2917,7 +2917,12 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
             syn_dock_entry_t *dock_hit =
                 dock_entry_at(s, s->cursor->x, s->cursor->y);
             if (dock_hit) {
-                dock_entry_click(s, dock_hit);
+                /* NOT dock_entry_click() any more. A press on an icon arms the
+                 * drag-to-rearrange; the release runs the click if the pointer
+                 * never travelled far enough to be a drag. Launching on press
+                 * and reordering on release would mean every rearrange also
+                 * raised or launched the app it moved. */
+                dock_icon_drag_begin(s, dock_hit, s->cursor->x, s->cursor->y);
                 return;
             }
             /* Press on the bar background (not an icon) begins a drag that,

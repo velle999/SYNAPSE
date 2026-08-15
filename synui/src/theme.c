@@ -601,6 +601,35 @@ static void theme_state_save(syn_server_t *s)
      */
     fprintf(f, "square_chrome=%s\n",
             chrome_square(&s->config) ? "on" : "off");
+    /*
+     * The same kind of export, for the same kind of reader, one question over:
+     * does this desktop's chrome do GLASS — frosted translucent surfaces over a
+     * blur — rather than a tinted slab?
+     *
+     * The dock resolves `dock_style = auto` against theme_is_glass() in-process.
+     * The desktop widgets are quickshell's and have no way to ask: theme.json
+     * carries a palette and a scheme, and neither says "macOS 26" — a light
+     * scheme is XP and Win95 as well, and both are emphatically not glass. So
+     * the derived fact travels here beside square_chrome, and WidgetFrame.qml's
+     * whole share of the rule is reading one line.
+     *
+     * It inherits square_chrome's upgrade path, which is the reason it sits in
+     * this function rather than anywhere else: a desktop that picked its theme
+     * under an older synui has a theme.state with no such key, and the startup
+     * re-save at the bottom of theme_state_load() writes it on the first login
+     * instead of leaving the widgets wrong until somebody next visits the theme
+     * manager.
+     *
+     * It inherits the GAP too, and that is worth saying out loud: that re-save
+     * refuses to CREATE the file (see its comment — creating it would hand
+     * theme.state precedence over settings.state's opacity keys on a desktop
+     * that never asked for it). So a box that has never picked a theme and names
+     * a glass one in synuirc gets a glass dock, which the compositor resolves
+     * in-process, and HUD widgets, which cannot ask. `widget_glass = on` says it
+     * explicitly and is the answer for that case.
+     */
+    fprintf(f, "glass_chrome=%s\n",
+            theme_is_glass(&s->config) ? "on" : "off");
     fclose(f);
 }
 

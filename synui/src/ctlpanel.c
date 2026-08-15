@@ -94,6 +94,12 @@ static double ctl_now_secs(void)
  * ("bottom"). ctl_enum_write() lowercases on the way out, which is what keeps
  * the two in step without needing two tables that can drift. */
 static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Right" };
+/* Order matches syn_dock_style_t / syn_widget_glass_t, and folded to lower case
+ * these ARE the synuirc spellings config.c parses back — same contract as the
+ * edge names above. "Auto" is first because it is the default and because it is
+ * the only one of the three that is not an override. */
+static const char *const ctl_names_dock_style[]   = { "Auto", "Solid", "Glass" };
+static const char *const ctl_names_widget_glass[] = { "Auto", "Off", "On" };
 static const char *const ctl_names_arrange[]   = { "Name", "Type", "Size", "Date" };
 static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blue" };
 /* Order matches syn_focus_mode_t, and these ARE the synuirc spellings — the
@@ -461,6 +467,34 @@ static const struct ctl_item ctl_items[] = {
       .key = "dock_hover_margin", .off = CFG(dock_hover_margin), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DOCK,
       .help = "How close to the edge the pointer must get to bring it back" },
+    /* The look of the bar itself, in the order you would reach for them: what
+     * kind of surface it is, then how much of the wallpaper it lets through,
+     * then its shape. */
+    { CTL_ROW_DOCK_STYLE,    CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock style", NULL,
+      .key = "dock_style", .off = CFG(dock_style), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_dock_style), .apply = CTL_APPLY_DOCK,
+      .help = "Glass frosts the wallpaper behind the bar. Auto follows the theme" },
+    { CTL_ROW_DOCK_OPACITY,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock opacity", NULL,
+      .key = "dock_opacity", .off = CFG(dock_opacity), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.20f, .vmax = 1.00f, .vstep = 0.05f, .apply = CTL_APPLY_DOCK,
+      .help = "1.00 hides the wallpaper behind the bar completely" },
+    { CTL_ROW_DOCK_RADIUS,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock corners", NULL,
+      .key = "dock_radius", .off = CFG(dock_radius), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 64, .vstep = 2, .unit = "px", .apply = CTL_APPLY_DOCK,
+      /* The clamp is worth saying out loud: past half the dock's thickness the
+       * number stops doing anything, and a slider that visibly moves while the
+       * screen does not reads as broken. */
+      .help = "Its own, not the window radius. Caps at half the dock's size" },
+    /* The widgets are quickshell's and read this out of settings.state
+     * themselves (WidgetFrame.qml), so the compositor has nothing to apply —
+     * like Bar edge above, it moves while you are looking at it. It sits in the
+     * Dock section on purpose: the row exists to make the widgets MATCH the
+     * dock, and putting it beside Desktop widgets would separate a setting from
+     * the thing it copies. */
+    { CTL_ROW_WIDGET_GLASS,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Widget glass", NULL,
+      .key = "widget_glass", .off = CFG(widget_glass), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_widget_glass), .apply = CTL_APPLY_NONE,
+      .help = "Desktop widgets take the dock's glass instead of the HUD panel" },
 
     { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL,
       .section = "Shell" },

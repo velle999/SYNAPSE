@@ -497,6 +497,20 @@ deskicon_drag_test = executable('deskicon_drag_test',
   build_by_default : false)
 test('deskicon_drag', deskicon_drag_test)
 
+# Dragging a dock icon to a new place in the row: which gesture a release turns
+# out to have been, and the rule that decides where a drop lands in the PIN
+# LIST. Same shape as the test above and for the same reason — the headless
+# backend has no pointer, so dock.c is linked against stubs and driven through
+# the entry points input.c uses. syn_config_path() is stubbed to REFUSE, so
+# dock_state_save() can be counted without any path to a real dock.state.
+dock_reorder_test = executable('dock_reorder_test',
+  ['tests/dock_reorder_test.c', 'src/dock.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('dock_reorder', dock_reorder_test)
+
 # The text/uri-list a drag-and-drop hands the desktop. INCLUDES deskdrop.c
 # rather than linking it: the percent-decoding, the list walk and the
 # collision-renaming are all static, and there is no way to drive the wire side

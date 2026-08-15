@@ -86,9 +86,18 @@ from PIL import Image
 d = sys.argv[1]
 Image.new('RGB', (64, 64), (2, 2, 3)).save(d + '/black.png')
 Image.new('RGB', (64, 64), (245, 245, 247)).save(d + '/white.png')
-# ~0.216 relative luminance: above white ink's ceiling and below black ink's
+# 0.2159 relative luminance: above white ink's ceiling and below black ink's
 # floor, which is the band where a clear bar has no legible answer at all.
-Image.new('RGB', (64, 64), (128, 128, 128)).save(d + '/grey.png')
+#
+# FULL SIZE, unlike the two above, and that is not tidiness. Stretched from
+# 64x64 the top rows of the strip fade toward the transparent edge of the
+# source, and the strip's MEAN comes out around 0.19 — still inside the band,
+# so `none` passed by luck, but 0.006 from falling out of it, and on the far
+# side of the crossover between the two inks. Measured: the same grey at 64x64
+# reports its closest ink as `light` and at full size as `dark`. Anything
+# asserting WHICH ink is closer has to be measuring the colour rather than the
+# scaler. 1920x1080 is at or above any headless output, so it downscales.
+Image.new('RGB', (1920, 1080), (128, 128, 128)).save(d + '/grey.png')
 
 # Pale across one eighth, near-black for the rest, and the mirror of it. As
 # pictures both average ~0.11, which is dark; where they differ is which END.
@@ -112,6 +121,18 @@ wp_config() {  # wp_config <path> [extra synuirc lines...]
     path=$1; shift
     printf 'wallpaper = %s\nwallpaper_mode = stretch\nautostart =\n' "$path" \
         > "$CFG/synuirc"
+    # ⚠ SUSPEND IS NOT PER-COMPOSITOR. A hermetic HOME means no user timeouts,
+    # so synui's DEFAULTS apply — and the idle chain ends at power.c handing
+    # suspend to logind, which is system-wide. A headless rig that outlives the
+    # default timeout puts the whole machine into S3; it has happened, on a box
+    # somebody was using at the time. This test's six awaits can add up to ~36s
+    # of waiting on a failing run, which is well inside the window.
+    #
+    # power_enabled = 0 alone is NOT enough — the blank stage still fires. Every
+    # stage has to be pushed past any plausible run.
+    printf 'power_enabled = 0\npower_dim_timeout = 86400\n' >> "$CFG/synuirc"
+    printf 'power_blank_timeout = 86400\npower_lock_timeout = 86400\n' >> "$CFG/synuirc"
+    printf 'power_suspend_timeout = 86400\n' >> "$CFG/synuirc"
     [ $# -gt 0 ] && printf '%s\n' "$@" >> "$CFG/synuirc"
     return 0
 }
@@ -133,6 +154,11 @@ export WAYLAND_DISPLAY="$SOCK"
 echo "compositor: WAYLAND_DISPLAY=$SOCK"
 
 ink() { sed -n 's/^bar_ink=\(.*\)$/\1/p' "$STATE" 2>/dev/null; }
+# The second half of the contract: the CLOSEST ink, published even where neither
+# is safe, so a clear bar can lay a scrim the right way instead of putting its
+# whole background back. `^bar_ink=` above does not match this line — the key is
+# `bar_ink_best` — which is the only reason the two can share a prefix.
+best() { sed -n 's/^bar_ink_best=\(.*\)$/\1/p' "$STATE" 2>/dev/null; }
 
 # The file is written from the painter, which runs on its own schedule; wait for
 # the VALUE rather than sleeping a guessed number of seconds.
@@ -154,6 +180,18 @@ set_wp() { synctl dispatch wallpaper "$1" >/dev/null 2>&1; }
 
 await light "a near-black wallpaper takes light ink"
 
+# Where an ink IS safe, the closest one is that same ink. The scrim must never
+# flip the ink over — it exists to help the answer the bar already had.
+best_matches_ink() {  # best_matches_ink <description>
+    if [ "$(best)" = "$(ink)" ]; then
+        printf '  ok    %s\n' "$1"
+    else
+        printf '  FAIL  %s — ink "%s" but closest "%s"\n' "$1" "$(ink)" "$(best)"
+        fails=$((fails + 1))
+    fi
+}
+best_matches_ink "…and the closest ink agrees with it"
+
 # ── it follows a live change ─────────────────────────────────
 set_wp "$TMP/white.png"
 await dark  "…and a near-white one takes dark ink, live"
@@ -161,6 +199,26 @@ await dark  "…and a near-white one takes dark ink, live"
 # ── the band with no answer ──────────────────────────────────
 set_wp "$TMP/grey.png"
 await none  "a mid-grey has no legible ink at all"
+
+# …and that is exactly where the second value earns its keep. `none` used to be
+# the end of it, and the bar's only move was to put its whole background back —
+# which is what "my transparent bar stops being transparent on some wallpapers"
+# was. There is still a closer ink, and knowing which one is what lets the bar
+# dim the backdrop that way and stay glass.
+#
+# `dark` and not merely "something": this grey measures 4.27:1 against black and
+# 3.95:1 against white, so the closer answer is not a coin toss, and a change
+# that made it one would be a bar whose scrim flips direction on a wallpaper the
+# user has not touched.
+check_best() {  # check_best <expected> <description>
+    if [ "$(best)" = "$1" ]; then
+        printf '  ok    %s\n' "$2"
+    else
+        printf '  FAIL  %s — expected %s, got "%s"\n' "$2" "$1" "$(best)"
+        fails=$((fails + 1))
+    fi
+}
+check_best dark "…but it still has a CLOSER one, for the scrim to work against"
 
 # ── and back, so `none` is not a one-way trap ────────────────
 set_wp "$TMP/black.png"

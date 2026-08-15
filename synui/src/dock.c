@@ -36,6 +36,7 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/util/log.h>
 
+#include "contrast.h"
 #include "synui.h"
 
 #define DOCK_ICON_SIZE 48
@@ -187,7 +188,10 @@ static const char *dock_tray_restore_exec(const char *app_id)
 #define DOCK_HIDE_DELAY 0.45
 #define DOCK_REVEAL_DELAY 0.18
 
-/* Pointer travel (px) before a press on the bar becomes a real drag. */
+/* Pointer travel (px) before a press on the bar becomes a real drag. Shared by
+ * both gestures: repositioning the bar, and rearranging the icons. It is what
+ * keeps a click from being a one-pixel drag, so a rearrange press that never
+ * crosses it still launches the app (dock_icon_drag_end). */
 #define DOCK_DRAG_THRESHOLD 6.0
 
 /* Click feedback: a clicked icon dips in then springs back over this window so
@@ -334,6 +338,97 @@ static bool dock_geometry(syn_output_t *o, int *bx, int *by,
     return true;
 }
 
+/*
+ * The bar's corner radius, clamped so it can never round past a capsule. Half
+ * the SHORT side, so a horizontal bar is limited by its thickness and a vertical
+ * column by its width.
+ *
+ * The row goes to 64 because a 200px dock can genuinely take it, and at the
+ * default 64px thickness the same number has to mean 32.
+ *
+ * cairo_rounded_rect() applies the identical clamp for its own path (a bigger
+ * radius turns the arcs inside out and draws a bow-tie), so this is NOT here for
+ * the fill. It is here because two other things take the same number and neither
+ * clamps: the specular hairline insets by it to stay out of the corner arcs, and
+ * the blur node's fx_corner_radii is set from it — an unclamped radius there
+ * leaves the frosted patch a different shape from the pane on top of it, which
+ * shows as a bright rim in each corner.
+ */
+static double dock_bar_radius(syn_server_t *s, int bar_w, int bar_h)
+{
+    double r = s->config.dock_radius;
+    if (r < 0.0) r = 0.0;
+    double cap = (bar_w < bar_h ? bar_w : bar_h) / 2.0;
+    return r > cap ? cap : r;
+}
+
+/* Top-left of the icon in display position `i`, dock-canvas-local. The layout
+ * is a single run of equal cells, so this is the whole of it — and having it in
+ * one place is what lets the drag ask "which cell is the pointer over" with the
+ * same arithmetic the renderer places cells with. */
+static void dock_slot_pos(syn_server_t *s, int i, int bar_w, int bar_h,
+                          int *ix, int *iy)
+{
+    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
+    if (edge_is_vertical(s->config.dock_edge)) {
+        *iy = pad + i * (icon + pad);
+        *ix = (bar_w - icon) / 2;
+    } else {
+        *ix = pad + i * (icon + pad);
+        *iy = (bar_h - icon) / 2 - 4;   /* room for the dot below */
+    }
+}
+
+/* Which cell a point on the run axis falls in, clamped to the icons that exist.
+ * `run` is canvas-local along the bar's long axis. */
+static int dock_slot_at(int run, int count)
+{
+    if (count <= 0) return 0;
+    int cell = DOCK_ICON_SIZE + DOCK_ICON_PAD;
+    int i = (run - DOCK_ICON_PAD) / cell;
+    if (run < DOCK_ICON_PAD) i = 0;      /* integer division truncates toward 0 */
+    if (i < 0) i = 0;
+    if (i >= count) i = count - 1;
+    return i;
+}
+
+/*
+ * The order the icons are DRAWN in this frame.
+ *
+ * Identity, except while an icon is being dragged: then the dragged entry is
+ * lifted out of the run and re-inserted at the slot it currently hovers, so the
+ * others shuffle to open a gap under it. That shuffle is the whole feedback of
+ * the gesture — without it a dragged icon is a picture sliding over a bar that
+ * has not agreed to anything, and you find out where it landed on release.
+ *
+ * Fills `order` with entry indices and returns the count. The dragged entry is
+ * still IN the order (at its target slot); the renderer skips its cell and
+ * paints it under the cursor instead, so the gap is exactly icon-sized.
+ */
+static int dock_display_order(syn_server_t *s, int *order, int max)
+{
+    int n = s->dock_entry_count;
+    if (n > max) n = max;
+    for (int i = 0; i < n; i++) order[i] = i;
+
+    int from = s->dock_drag.icon;
+    if (!s->dock_drag.active || !s->dock_drag.moved || from < 0 || from >= n)
+        return n;
+
+    int to = s->dock_drag.slot;
+    if (to < 0) to = 0;
+    if (to >= n) to = n - 1;
+    if (to == from) return n;
+
+    /* Shift the run between the two positions by one and drop it in. */
+    if (to < from)
+        for (int i = from; i > to; i--) order[i] = order[i - 1];
+    else
+        for (int i = from; i < to; i++) order[i] = order[i + 1];
+    order[to] = from;
+    return n;
+}
+
 /* True while this output shows a mapped, non-minimized fullscreen window on the
  * active workspace. Mirrors layer_update_occlusion's rule (layer.c) — the dock
  * must yield to a fullscreen game/video the same way the top-layer bar does. */
@@ -387,10 +482,16 @@ static void dock_apply_position(syn_output_t *o)
     syn_server_t *s = o->server;
     if (!o->dock.tree) return;
 
-    /* Dragging: float freely under the cursor, always visible. Deliberately
-     * uncropped — a drag is how the dock is moved between edges and outputs,
-     * so it has to be able to cross them. */
-    if (s->dock_drag.active && s->dock_drag.moved && s->dock_drag.output == o) {
+    /* Dragging THE BAR: float freely under the cursor, always visible.
+     * Deliberately uncropped — a drag is how the dock is moved between edges and
+     * outputs, so it has to be able to cross them.
+     *
+     * An ICON drag (icon >= 0) is not this. The bar stays exactly where it is:
+     * floating it would carry the row of icons the gesture is rearranging along
+     * with the cursor, and there would be nothing for the dragged icon to move
+     * relative to. */
+    if (s->dock_drag.active && s->dock_drag.moved && s->dock_drag.icon < 0 &&
+        s->dock_drag.output == o) {
         int dw, dh, dbx, dby;
         if (dock_geometry(o, &dbx, &dby, &dw, &dh))
             dock_set_crop(o, 0, 0, dw, dh, dw, dh);
@@ -429,7 +530,18 @@ static void dock_apply_position(syn_output_t *o)
     int cw = cx1 - cx0, ch = cy1 - cy0;
 
     bool visible = p > 0.001 && cw > 0 && ch > 0;
-    if (visible) dock_set_crop(o, cx0 - x, cy0 - y, cw, ch, bw, bh);
+    if (visible) {
+        dock_set_crop(o, cx0 - x, cy0 - y, cw, ch, bw, bh);
+        /* The crop just changed the buffer's painted size and offset, and the
+         * blur companion is sized and placed FROM those — so it has to be
+         * re-synced here and not only after a render, or the frosted patch keeps
+         * the pose it had before the slide and hangs off the edge for the whole
+         * animation. Same class of staleness as the window blur that kept its
+         * old size across a resize; see blur_sync_geometry() in anim.c. */
+        syn_buffer_backdrop_blur(o->dock.icons_buf,
+                                 dock_style_is_glass(&s->config) && s->config.blur,
+                                 (int)lround(dock_bar_radius(s, bw, bh)));
+    }
     wlr_scene_node_set_position(&o->dock.tree->node, x, y);
     wlr_scene_node_set_enabled(&o->dock.tree->node, visible);
     if (visible) {
@@ -448,6 +560,173 @@ static void dock_apply_position(syn_output_t *o)
 
 /* ── Rendering ───────────────────────────────────────────── */
 
+/*
+ * The bar's body.
+ *
+ * SOLID is what the dock has always drawn: one flat fill of the theme's panel
+ * surface with the theme's accent stroked round it.
+ *
+ * GLASS is the macOS 26 treatment, and it is three things rather than "the same
+ * thing at a lower alpha" — that was the first attempt and it reads as a faded
+ * dock, not a frosted one:
+ *
+ *   1. A real BACKDROP BLUR behind the buffer (wired up by the caller). This is
+ *      the one that does the work. Frosted glass is defined by what it does to
+ *      what is behind it, and no amount of alpha is a substitute.
+ *   2. A gradient that is MORE transparent at the lit edge than the far one, so
+ *      the surface has a direction. A flat alpha over a blur looks like a sheet
+ *      of plastic; the falloff is what makes it read as a thick pane.
+ *   3. A specular hairline just inside the lit edge, and a rim instead of the
+ *      accent stroke. The accent is right for a panel that is part of the shell
+ *      furniture and wrong for one that is pretending to be a piece of glass
+ *      lying on the wallpaper — it outlines the shape and kills the illusion.
+ *
+ * Which way is "lit" is the edge the dock lives on: light comes from away from
+ * that edge, so a bottom dock is lit along its top and a left column along its
+ * right. Getting this wrong is not subtle — a bottom dock lit from underneath
+ * looks like it is glowing.
+ *
+ * The pale/dark split is the same one contrast.c draws everywhere else. A white
+ * rim is invisible on Tahoe's near-white surface and a black one is invisible on
+ * SYNAPSE's navy, so each takes the one that shows.
+ */
+static void dock_paint_body(syn_server_t *s, cairo_t *cr,
+                            int bar_w, int bar_h, double radius, bool glass)
+{
+    const float *pb = s->config.panel_bg;
+    double a = s->config.dock_opacity;
+    if (a < 0.05) a = 0.05;
+    if (a > 1.0)  a = 1.0;
+
+    cairo_rounded_rect(cr, 0, 0, bar_w, bar_h, radius);
+
+    if (!glass) {
+        /* Body: the theme's panel surface, the same one render.c fills every
+         * other compositor-drawn panel with. This was a literal 0.06/0.06/0.12 —
+         * frozen here back when only the ACCENT was theme data, so the dock kept
+         * SYNAPSE's near-black navy under a Gruvbox or XP desktop exactly as the
+         * panels did before panel_bg existed. Stock is unaffected: SYNAPSE's
+         * panel_bg IS 0.06/0.06/0.12 (theme.c), which is why the literal went
+         * unnoticed.
+         *
+         * The alpha does NOT come from panel_bg[3] — the dock floats over the
+         * wallpaper and wants to be translucent, while the panels it borrows the
+         * colour from are opaque surfaces. It was a literal 0.80 for the same
+         * reason the radius was a literal 16, and it is `dock_opacity` now. */
+        cairo_set_source_rgba(cr, pb[0], pb[1], pb[2], a);
+        cairo_fill_preserve(cr);
+        /* Themed outline. This used to be a literal 0.00/0.85/0.75 — which is
+         * the DEFAULT panel accent, frozen here before the accent became theme
+         * data. So the dock kept SYNAPSE's house cyan on a Gruvbox or win95
+         * desktop and was the one piece of chrome that never joined in.
+         * panel_accent is the single colour every other panel already uses for
+         * its rules and headers.
+         *
+         * Slightly heavier than the old 1px at 0.35 alpha: an outline that is
+         * meant to tie the dock to the rest of the desktop has to actually be
+         * visible against a wallpaper. */
+        cairo_set_source_rgba(cr, s->config.panel_accent[0],
+                              s->config.panel_accent[1],
+                              s->config.panel_accent[2], 0.55);
+        cairo_set_line_width(cr, 1.5);
+        cairo_stroke(cr);
+        return;
+    }
+
+    bool pale = syn_rel_luminance(pb[0], pb[1], pb[2]) > SURFACE_PALE;
+    syn_dock_edge_t edge = s->config.dock_edge;
+
+    /* From the lit edge to the far one, in canvas coordinates. */
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    switch (edge) {
+    case SYN_DOCK_EDGE_TOP:    y0 = bar_h; y1 = 0;     break;  /* lit from below */
+    case SYN_DOCK_EDGE_LEFT:   x0 = bar_w; x1 = 0;     break;
+    case SYN_DOCK_EDGE_RIGHT:  x0 = 0;     x1 = bar_w; break;
+    case SYN_DOCK_EDGE_BOTTOM:
+    default:                   y0 = 0;     y1 = bar_h; break;
+    }
+
+    cairo_pattern_t *pat = cairo_pattern_create_linear(x0, y0, x1, y1);
+    /* Thinnest at the lit edge, where the blur shows through most. */
+    cairo_pattern_add_color_stop_rgba(pat, 0.0, pb[0], pb[1], pb[2], a * 0.82);
+    cairo_pattern_add_color_stop_rgba(pat, 0.5, pb[0], pb[1], pb[2], a);
+    cairo_pattern_add_color_stop_rgba(pat, 1.0, pb[0], pb[1], pb[2], a * 1.06 > 1.0
+                                                                     ? 1.0 : a * 1.06);
+    cairo_set_source(cr, pat);
+    cairo_fill_preserve(cr);
+    cairo_pattern_destroy(pat);
+
+    /* The rim. Whichever of black/white shows on this theme's surface, kept
+     * faint: it is there to give the pane an edge, not to outline the dock. */
+    if (pale) cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.13);
+    else      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.22);
+    cairo_set_line_width(cr, 1.0);
+    cairo_stroke(cr);
+
+    /* The specular. One hairline just inside the lit edge, along the run axis
+     * and stopping short of the corners — carried into the arcs it would just be
+     * a second rim, and the point of a highlight is that it is where the light
+     * hits and nowhere else. Always white: a specular is the light source, not
+     * the surface, so it does not follow the pale/dark split above. */
+    double inset = 1.5, r = radius;
+    cairo_set_line_width(cr, 1.0);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, pale ? 0.75 : 0.38);
+    switch (edge) {
+    case SYN_DOCK_EDGE_TOP:
+        cairo_move_to(cr, r, bar_h - inset);
+        cairo_line_to(cr, bar_w - r, bar_h - inset);
+        break;
+    case SYN_DOCK_EDGE_LEFT:
+        cairo_move_to(cr, bar_w - inset, r);
+        cairo_line_to(cr, bar_w - inset, bar_h - r);
+        break;
+    case SYN_DOCK_EDGE_RIGHT:
+        cairo_move_to(cr, inset, r);
+        cairo_line_to(cr, inset, bar_h - r);
+        break;
+    case SYN_DOCK_EDGE_BOTTOM:
+    default:
+        cairo_move_to(cr, r, inset);
+        cairo_line_to(cr, bar_w - r, inset);
+        break;
+    }
+    cairo_stroke(cr);
+}
+
+/* One icon, at (ix,iy) in the dock canvas, scaled about its own centre. Pulled
+ * out of the render loop because the dragged icon is drawn by the same code at a
+ * different place and a different scale — two copies would be two chances for a
+ * lifted icon to stop looking like the one it was lifted from. */
+static void dock_draw_icon(cairo_t *cr, const char *app_id,
+                           double ix, double iy, int icon, double scale)
+{
+    cairo_save(cr);
+    if (scale != 1.0) {
+        double cx = ix + icon / 2.0, cy = iy + icon / 2.0;
+        cairo_translate(cr, cx, cy);
+        cairo_scale(cr, scale, scale);
+        cairo_translate(cr, -cx, -cy);
+    }
+
+    const syn_icon_entry_t *ic = icon_lookup(app_id);
+    if (ic->icon_surface) {
+        double sw = cairo_image_surface_get_width(ic->icon_surface);
+        double sh = cairo_image_surface_get_height(ic->icon_surface);
+        if (sw > 0 && sh > 0) {
+            cairo_save(cr);
+            cairo_translate(cr, ix, iy);
+            cairo_scale(cr, icon / sw, icon / sh);
+            cairo_set_source_surface(cr, ic->icon_surface, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+            cairo_paint(cr);
+            cairo_restore(cr);
+        }
+    } else {
+        icon_draw_monogram(cr, app_id, ix, iy, icon);
+    }
+    cairo_restore(cr);
+}
+
 static void dock_render_output(syn_output_t *o)
 {
     syn_server_t *s = o->server;
@@ -461,84 +740,46 @@ static void dock_render_output(syn_output_t *o)
     int bx, by, bar_w, bar_h;
     if (!dock_geometry(o, &bx, &by, &bar_w, &bar_h)) return;
     int n = s->dock_entry_count;
-    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
+    int icon = DOCK_ICON_SIZE;
     bool vertical = edge_is_vertical(s->config.dock_edge);
+
+    bool glass  = dock_style_is_glass(&s->config);
+    double radius = dock_bar_radius(s, bar_w, bar_h);
 
     cairo_t *cr;
     struct wlr_buffer *buf = create_cairo_buf(bar_w, bar_h, &cr);
     if (!buf) return;
     cairo_begin(cr);
 
-    cairo_rounded_rect(cr, 0, 0, bar_w, bar_h, 16);
-    /* Body: the theme's panel surface, the same one render.c fills every other
-     * compositor-drawn panel with. This was a literal 0.06/0.06/0.12 — frozen
-     * here back when only the ACCENT was theme data, so the dock kept SYNAPSE's
-     * near-black navy under a Gruvbox or XP desktop exactly as the panels did
-     * before panel_bg existed. Stock is unaffected: SYNAPSE's panel_bg IS
-     * 0.06/0.06/0.12 (theme.c), which is why the literal went unnoticed.
-     *
-     * The 0.80 alpha stays a literal and does NOT come from panel_bg[3] — the
-     * dock floats over the wallpaper and wants to be translucent, while the
-     * panels it borrows the colour from are opaque surfaces. */
-    cairo_set_source_rgba(cr, s->config.panel_bg[0],
-                          s->config.panel_bg[1],
-                          s->config.panel_bg[2], 0.80);
-    cairo_fill_preserve(cr);
-    /* Themed outline. This used to be a literal 0.00/0.85/0.75 — which is the
-     * DEFAULT panel accent, frozen here before the accent became theme data. So
-     * the dock kept SYNAPSE's house cyan on a Gruvbox or win95 desktop and was
-     * the one piece of chrome that never joined in. panel_accent is the single
-     * colour every other panel already uses for its rules and headers.
-     *
-     * Slightly heavier than the old 1px at 0.35 alpha: an outline that is meant
-     * to tie the dock to the rest of the desktop has to actually be visible
-     * against a wallpaper. */
-    cairo_set_source_rgba(cr, s->config.panel_accent[0],
-                          s->config.panel_accent[1],
-                          s->config.panel_accent[2], 0.55);
-    cairo_set_line_width(cr, 1.5);
-    cairo_stroke(cr);
+    dock_paint_body(s, cr, bar_w, bar_h, radius, glass);
+
+    /* Is an icon on THIS server being dragged, and to where. The dragged entry
+     * is drawn last and elsewhere, so the loop below skips its cell. */
+    bool dragging_icon = s->dock_drag.active && s->dock_drag.moved &&
+                         s->dock_drag.icon >= 0 && s->dock_drag.icon < n;
+
+    int order[DOCK_MAX_ENTRIES];
+    int ndisp = dock_display_order(s, order, DOCK_MAX_ENTRIES);
 
     double now = dock_now();
-    for (int i = 0; i < n; i++) {
+    for (int slot = 0; slot < ndisp; slot++) {
+        int i = order[slot];
         syn_dock_entry_t *e = &s->dock_entries[i];
         int ix, iy;
-        if (vertical) {
-            iy = pad + i * (icon + pad);
-            ix = (bar_w - icon) / 2;
-        } else {
-            ix = pad + i * (icon + pad);
-            iy = (bar_h - icon) / 2 - 4;   /* room for the dot below */
-        }
+        dock_slot_pos(s, slot, bar_w, bar_h, &ix, &iy);
+
+        /* The hit-box goes on the CELL, not on where the icon is painted: the
+         * dragged icon is painted under the cursor, and a hit-box that followed
+         * it would leave the gap it came out of clickable and the icon itself
+         * hit-testable in mid-air. Nothing hit-tests during a drag anyway, and
+         * on release the box is right for wherever the icon settled. */
+        e->x = ix; e->y = iy; e->w = icon; e->h = icon;
+
+        if (dragging_icon && i == s->dock_drag.icon) continue;   /* drawn below */
 
         /* Press-pop: scale the icon about its centre. Only the icon glyph is
          * transformed — the hit-box and running-dot stay put. */
-        double pop = dock_click_scale(e, now);
-        cairo_save(cr);
-        if (pop != 1.0) {
-            double cx = ix + icon / 2.0, cy = iy + icon / 2.0;
-            cairo_translate(cr, cx, cy);
-            cairo_scale(cr, pop, pop);
-            cairo_translate(cr, -cx, -cy);
-        }
-
-        const syn_icon_entry_t *ic = icon_lookup(e->app_id);
-        if (ic->icon_surface) {
-            double sw = cairo_image_surface_get_width(ic->icon_surface);
-            double sh = cairo_image_surface_get_height(ic->icon_surface);
-            if (sw > 0 && sh > 0) {
-                cairo_save(cr);
-                cairo_translate(cr, ix, iy);
-                cairo_scale(cr, icon / sw, icon / sh);
-                cairo_set_source_surface(cr, ic->icon_surface, 0, 0);
-                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
-                cairo_paint(cr);
-                cairo_restore(cr);
-            }
-        } else {
-            icon_draw_monogram(cr, e->app_id, ix, iy, icon);
-        }
-        cairo_restore(cr);
+        dock_draw_icon(cr, e->app_id, ix, iy, icon, dock_click_scale(e, now));
 
         if (e->running) {
             double dx, dy;
@@ -563,14 +804,33 @@ static void dock_render_output(syn_output_t *o)
             cairo_arc(cr, dx, dy, 2.5, 0, 2 * M_PI);
             cairo_fill(cr);
         }
+    }
 
-        /* Dock-canvas-local hit-box — identical across every output's
-         * mirror since icon size/layout doesn't depend on output width. */
-        e->x = ix; e->y = iy; e->w = icon; e->h = icon;
+    /* The lifted icon, last so it is over everything, and slightly larger with a
+     * shadow under it. Both say "this one is off the surface" — without them a
+     * dragged icon and a settled one are the same picture in different places,
+     * and which one the pointer is carrying stops being obvious the moment it
+     * lines up with a gap. */
+    if (dragging_icon) {
+        syn_dock_entry_t *e = &s->dock_entries[s->dock_drag.icon];
+        double ix = s->dock_drag.icon_x, iy = s->dock_drag.icon_y;
+        cairo_save(cr);
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.30);
+        cairo_arc(cr, ix + icon / 2.0, iy + icon * 0.86, icon * 0.40, 0, 2 * M_PI);
+        cairo_fill(cr);
+        cairo_restore(cr);
+        dock_draw_icon(cr, e->app_id, ix, iy, icon, 1.12);
     }
 
     cairo_destroy(cr);
     set_scene_buffer(&o->dock.icons_buf, o->dock.tree, buf);
+
+    /* Frosted glass is what the blur does behind the buffer, not what the fill
+     * does on it — see dock_paint_body(). Gated on the user's master blur switch
+     * as well as the style: somebody who turned blur off for their windows did
+     * not mean "except the dock". */
+    syn_buffer_backdrop_blur(o->dock.icons_buf, glass && s->config.blur,
+                             (int)lround(radius));
 
     /* Position/visibility follow the current slide state, not a forced
      * "shown" — the auto-hide tick owns whether the bar is on-screen. */
@@ -599,6 +859,10 @@ void dock_wake(syn_server_t *s)
 void dock_init(syn_server_t *s)
 {
     s->dock_entry_count = 0;
+    /* -1 is "no icon", and the server struct is zeroed — which would read as
+     * "entry 0". Nothing looks at it while the drag is inactive, but a field
+     * whose resting value is a valid index is one refactor from being read. */
+    s->dock_drag.icon = -1;
     dock_rebuild(s);   /* seeds pinned-only entries; nothing mapped yet */
 }
 
@@ -620,6 +884,7 @@ void dock_output_destroy(syn_output_t *o)
     if (o->server->dock_drag.output == o) {
         o->server->dock_drag.active = 0;
         o->server->dock_drag.moved = 0;
+        o->server->dock_drag.icon = -1;
         o->server->dock_drag.output = NULL;
     }
     if (o->dock.tree) {
@@ -1013,9 +1278,93 @@ void dock_drag_begin(syn_server_t *s, double lx, double ly)
 
     s->dock_drag.active  = 1;
     s->dock_drag.moved   = 0;
+    s->dock_drag.icon    = -1;        /* the bar, not an icon */
     s->dock_drag.output  = o;
     s->dock_drag.start_x = lx;
     s->dock_drag.start_y = ly;
+}
+
+/* A left press on an icon. Arms the rearrange; whether it turns out to be one is
+ * settled on release, because until the pointer moves this is a click. */
+void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
+                          double lx, double ly)
+{
+    if (!e) return;
+
+    /* Index rather than the pointer: dock_rebuild() memcpy's a whole fresh array
+     * over s->dock_entries on any map/unmap, so a stashed syn_dock_entry_t* is
+     * live but the entry it points at can become a different app mid-gesture.
+     * The index has the same problem in principle and is at least bounds-
+     * checkable; dock_icon_drag_end() re-reads the app_id through it. */
+    int idx = (int)(e - s->dock_entries);
+    if (idx < 0 || idx >= s->dock_entry_count) return;
+
+    syn_output_t *o = NULL;
+    if (!dock_bar_at(s, lx, ly, &o) || !o) return;
+
+    s->dock_drag.active  = 1;
+    s->dock_drag.moved   = 0;
+    s->dock_drag.icon    = idx;
+    snprintf(s->dock_drag.icon_app, sizeof(s->dock_drag.icon_app),
+             "%s", e->app_id);
+    s->dock_drag.slot    = idx;
+    s->dock_drag.output  = o;
+    s->dock_drag.start_x = lx;
+    s->dock_drag.start_y = ly;
+    /* Where in the icon the press landed, so the lifted icon stays under the
+     * same point of itself instead of jumping its centre to the cursor. */
+    s->dock_drag.grab_dx = lx - o->dock.tree->node.x - e->x;
+    s->dock_drag.grab_dy = ly - o->dock.tree->node.y - e->y;
+    s->dock_drag.icon_x  = e->x;
+    s->dock_drag.icon_y  = e->y;
+}
+
+/* The lifted icon follows the cursor, and the run-axis position of its centre
+ * says which cell it wants. Clamped to the bar: this gesture rearranges, it does
+ * not remove — dragging an icon off the dock would need somewhere for it to go
+ * and a way to say so, and the right-click menu already unpins. */
+static void dock_icon_drag_motion(syn_server_t *s, syn_output_t *o,
+                                  double lx, double ly)
+{
+    int bx, by, bw, bh;
+    if (!dock_geometry(o, &bx, &by, &bw, &bh)) return;
+
+    double ix = lx - o->dock.tree->node.x - s->dock_drag.grab_dx;
+    double iy = ly - o->dock.tree->node.y - s->dock_drag.grab_dy;
+
+    double max_x = bw - DOCK_ICON_PAD - DOCK_ICON_SIZE;
+    double max_y = bh - DOCK_ICON_PAD - DOCK_ICON_SIZE;
+    if (ix < DOCK_ICON_PAD) ix = DOCK_ICON_PAD;
+    if (iy < DOCK_ICON_PAD) iy = DOCK_ICON_PAD;
+    if (ix > max_x) ix = max_x > DOCK_ICON_PAD ? max_x : DOCK_ICON_PAD;
+    if (iy > max_y) iy = max_y > DOCK_ICON_PAD ? max_y : DOCK_ICON_PAD;
+
+    /* A high-polling-rate mouse sends motion far faster than a pixel of travel,
+     * so most events land on the position the icon already has. Repainting the
+     * dock canvas for each of those is the cost of this gesture and none of its
+     * value — the same guard deskicon_drag_motion() keeps for the same reason. */
+    if ((int)lround(ix) == (int)lround(s->dock_drag.icon_x) &&
+        (int)lround(iy) == (int)lround(s->dock_drag.icon_y))
+        return;
+
+    s->dock_drag.icon_x = ix;
+    s->dock_drag.icon_y = iy;
+
+    /* The cell the icon's CENTRE is over, so a swap happens when the two icons
+     * are half past each other rather than a full cell apart. Measured on the
+     * icon, not on the cursor: the cursor is wherever in the icon it was pressed
+     * and would put the swap point somewhere different for every grab. */
+    bool vertical = edge_is_vertical(s->config.dock_edge);
+    double centre = (vertical ? iy : ix) + DOCK_ICON_SIZE / 2.0;
+    s->dock_drag.slot = dock_slot_at((int)lround(centre), s->dock_entry_count);
+
+    /* Every mirror, not just this output's: the entry model is server-global, so
+     * the shuffle has to show on all of them or two monitors disagree about what
+     * order the dock is in for the length of the gesture. */
+    dock_relayout(s);
+    syn_output_t *out;
+    wl_list_for_each(out, &s->outputs, link)
+        if (out->wlr_output) wlr_output_schedule_frame(out->wlr_output);
 }
 
 void dock_drag_motion(syn_server_t *s, double lx, double ly)
@@ -1032,6 +1381,8 @@ void dock_drag_motion(syn_server_t *s, double lx, double ly)
         o->dock.shown = 1;
         o->dock.slide_progress = 1.0;
     }
+
+    if (s->dock_drag.icon >= 0) { dock_icon_drag_motion(s, o, lx, ly); return; }
 
     int bx, by, bw, bh;
     if (!dock_geometry(o, &bx, &by, &bw, &bh)) return;
@@ -1056,15 +1407,123 @@ static syn_dock_edge_t nearest_edge(struct wlr_box *ob, double lx, double ly)
     return edge;
 }
 
+/*
+ * Commit a rearrange: put `app_id` at display position `slot` in the PIN LIST,
+ * which is the only order that survives a logout.
+ *
+ * dock_rebuild() lays the pinned entries out first, in config order, and appends
+ * the running-only ones after them — so a display position under pin_count is a
+ * pin position and one at or past it is not a position at all, just wherever the
+ * app happened to map. That asymmetry is the whole of the rule:
+ *
+ *   - A pinned icon moved anywhere lands in the pin list, clamped to it. Drag it
+ *     into the running run and it goes to the end of the pins, which is the
+ *     nearest place it can actually be.
+ *   - An UNPINNED icon dropped among the pins gets pinned there. That is the
+ *     macOS gesture — drag a running app into the dock to keep it — and it is
+ *     the one that makes dragging a running icon do something rather than
+ *     silently snap back. Dropped among the other running apps it stays
+ *     unpinned: there is no order there to write down.
+ *
+ * Returns true if anything changed.
+ */
+static bool dock_commit_reorder(syn_server_t *s, const char *app_id, int slot)
+{
+    syn_config_t *c = &s->config;
+
+    int from = -1;
+    for (int i = 0; i < c->dock_pin_count; i++)
+        if (strcmp(c->dock_pin[i], app_id) == 0) { from = i; break; }
+
+    if (from < 0) {
+        /* Not pinned. Only a drop INSIDE the pinned run means anything. */
+        if (slot >= c->dock_pin_count) return false;
+        if (c->dock_pin_count >= DOCK_PIN_MAX) {
+            wlr_log(WLR_ERROR, "synui: dock: pin list full (max %d)", DOCK_PIN_MAX);
+            return false;
+        }
+        if (slot < 0) slot = 0;
+        for (int i = c->dock_pin_count; i > slot; i--)
+            memcpy(c->dock_pin[i], c->dock_pin[i - 1], 128);
+        snprintf(c->dock_pin[slot], 128, "%s", app_id);
+        c->dock_pin_count++;
+        return true;
+    }
+
+    int to = slot;
+    if (to < 0) to = 0;
+    if (to >= c->dock_pin_count) to = c->dock_pin_count - 1;
+    if (to == from) return false;
+
+    char moving[128];
+    snprintf(moving, sizeof(moving), "%s", c->dock_pin[from]);
+    if (to < from)
+        for (int i = from; i > to; i--) memcpy(c->dock_pin[i], c->dock_pin[i - 1], 128);
+    else
+        for (int i = from; i < to; i++) memcpy(c->dock_pin[i], c->dock_pin[i + 1], 128);
+    snprintf(c->dock_pin[to], 128, "%s", moving);
+    return true;
+}
+
+/* The icon half of the release. A press that never travelled is the click it
+ * always was — that is why the press no longer launches anything directly. */
+static void dock_icon_drag_end(syn_server_t *s, int idx, int slot,
+                               const char *pressed_app, bool moved)
+{
+    /*
+     * Is the entry we armed on still the entry at that index? dock_rebuild()
+     * replaces the whole array on any map or unmap, so an app finishing its
+     * launch during the gesture can shift everything after it along. Acting on
+     * the index anyway would launch — or worse, rearrange — an app the user
+     * never pressed. There is no good recovery, so the gesture is simply
+     * abandoned: nothing is a much better answer than something wrong.
+     */
+    if (idx < 0 || idx >= s->dock_entry_count ||
+        strcmp(s->dock_entries[idx].app_id, pressed_app) != 0) {
+        dock_relayout(s);
+        return;
+    }
+
+    if (!moved) {
+        dock_entry_click(s, &s->dock_entries[idx]);
+        return;
+    }
+
+    /* Snapshot before the commit rebuilds the array under us. */
+    char app_id[128];
+    snprintf(app_id, sizeof(app_id), "%s", pressed_app);
+
+    if (dock_commit_reorder(s, app_id, slot)) {
+        dock_state_save(s);
+        dock_rebuild(s);   /* re-derives the entry order from the new pin list */
+    } else {
+        dock_relayout(s);  /* nothing changed — just drop the lifted icon back */
+    }
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
+}
+
 void dock_drag_end(syn_server_t *s, double lx, double ly)
 {
     if (!s->dock_drag.active) return;
 
     bool moved = s->dock_drag.moved;
     syn_output_t *drag_o = s->dock_drag.output;
+    int icon = s->dock_drag.icon, slot = s->dock_drag.slot;
+    char pressed[128];
+    snprintf(pressed, sizeof(pressed), "%s", s->dock_drag.icon_app);
     s->dock_drag.active = 0;
     s->dock_drag.moved  = 0;
+    s->dock_drag.icon   = -1;
     s->dock_drag.output = NULL;
+
+    /* Cleared BEFORE the commit, not after: dock_display_order() and
+     * dock_apply_position() both read this state, and dock_rebuild() renders
+     * every output on its way through. Committing first would repaint the whole
+     * dock still holding a drag that has ended. */
+    if (icon >= 0) { dock_icon_drag_end(s, icon, slot, pressed, moved); return; }
 
     if (!moved || !drag_o) {
         /* A press with no travel: not a reposition — just settle back. */
