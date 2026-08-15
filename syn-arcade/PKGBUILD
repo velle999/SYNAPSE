@@ -19,6 +19,32 @@
 # launchers and media players are on the machine, and the machine's own
 # switches. `big autostart on` opens it at login instead of the desktop.
 #
+# ⚠ 0.1.0-3 fixes the two things that made big screen mode look half-finished,
+# and both are worth knowing about because neither produced a single warning.
+#
+#   1. Nothing HORIZONTAL worked — left, right, the shoulder-button page jumps,
+#      Home, and the mouse moving along one shelf — while up and down were
+#      perfect. The selection keeps one column index per shelf in a QML `var`
+#      property, and the obvious way to update it (take the object, set a key,
+#      assign it back) does not notify: Qt compares the incoming QVariant with
+#      the stored one, finds the identical JS object, and drops the write. No
+#      binding that reads it is ever re-evaluated. Up and down survived only
+#      because the row is an int. It read as a controller that was half wired
+#      up, and it read as INTERMITTENT too, because the next row change
+#      published every swallowed column move at once.
+#
+#   2. super+F10 was in nobody's config. Installing a package writes nothing
+#      into a user's home: the keybind block lives in ~/.config/synui/synuirc
+#      and is only ever written by `binds install`. So 0.1.0-2 added the key to
+#      the defaults and to blocks installed from then on, and every machine
+#      that had already installed one kept the two overlay keys it was born
+#      with. The feature shipped, the docs named the key, `binds show` printed
+#      the key, and pressing it did nothing. `binds refresh` re-renders an
+#      existing block — keeping every combo the user chose, refusing rather
+#      than duplicating a key that is already bound elsewhere, and writing
+#      nothing when the result is unchanged — and the session profile runs it
+#      at every login.
+#
 # ⚠ Its controller navigation SYNTHESISES NOTHING. `syn-arcade big nav` reads
 # the event nodes udev already grants this user and writes WORDS — "up",
 # "accept" — down a pipe that exactly one process is reading. The obvious
@@ -69,7 +95,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

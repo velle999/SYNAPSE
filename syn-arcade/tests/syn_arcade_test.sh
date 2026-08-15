@@ -593,6 +593,107 @@ check "an unterminated block is still removed" $?
 grep -q "^terminal = syntty$" "$RC"
 check "...without eating the rest of the file" $?
 
+# ── refresh: the only path an upgrade has into a user's config ──────────────
+#
+# The bug these pin, found 2026-08-15. 0.1.0-2 added super+F10 for big screen
+# mode. Installing the package writes nothing into anybody's home, so every
+# machine that had already run `binds install` under 0.1.0-1 kept the two-key
+# block it was born with: the feature shipped, the docs named the key,
+# `binds show` PRINTED the key — and the key was in no synuirc anywhere. There
+# is no way to notice that from inside the package; only a command that
+# re-renders an existing block can close it.
+
+rm -rf "$XDG_CONFIG_HOME/synui"
+
+says "$SA" binds refresh | grep -q "nothing to refresh"
+check "refresh with no block installed does nothing" $?
+
+[ ! -f "$RC" ]
+check "...and does not create a config file (refresh is not install)" $?
+
+mkdir -p "$XDG_CONFIG_HOME/synui"
+cat > "$RC" <<'EOF'
+terminal = syntty
+
+# >>> syn-arcade  — the gaming shortcuts.
+bind = super+shift+H spawn syn-arcade hud toggle
+bind = super+F12 spawn syn-arcade hud cycle
+# <<< syn-arcade
+EOF
+
+"$SA" binds refresh >/dev/null 2>&1
+grep -q "^bind = super+F10 spawn syn-arcade big toggle$" "$RC"
+check "refresh adds a key the older version never wrote" $?
+
+grep -q "^bind = super+shift+H spawn syn-arcade hud toggle$" "$RC"
+check "...keeping the combo the user chose" $?
+
+grep -q "^terminal = syntty$" "$RC"
+check "...and everything outside the block" $?
+
+[ "$(grep -c 'syn-arcade hud toggle' "$RC")" = 1 ]
+check "...in exactly ONE block" $?
+
+says "$SA" binds refresh | grep -q "already up to date"
+check "refreshing an up-to-date block says so" $?
+
+# ⚠ Byte-identical, not just "says nothing". This runs from /etc/profile.d at
+# every login, and a writer that rewrites the same content each time churns the
+# mtime of the user's compositor config for nothing.
+cp "$RC" "$T/rc-before"
+"$SA" binds refresh --quiet >/dev/null 2>&1
+cmp -s "$T/rc-before" "$RC"
+check "...and does not touch the file" $?
+
+# An autostart is in the same block and is re-rendered with it.
+cat > "$RC" <<'EOF'
+# >>> syn-arcade
+bind = super+F11 spawn syn-arcade hud toggle
+autostart = syn-arcade big start
+# <<< syn-arcade
+EOF
+"$SA" binds refresh >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big start$" "$RC"
+check "refresh keeps big screen mode at login turned on" $?
+
+# ⚠ A key refresh would ADD must never land on top of one the user already
+# bound: synui applies whichever `bind =` line it read LAST and logs nothing, so
+# a duplicate is one of the two shortcuts silently not existing.
+cat > "$RC" <<'EOF'
+bind = super+F10 spawn firefox
+
+# >>> syn-arcade
+bind = super+F11 spawn syn-arcade hud toggle
+bind = super+F12 spawn syn-arcade hud cycle
+# <<< syn-arcade
+EOF
+says "$SA" binds refresh | grep -q "already bound"
+check "refresh refuses a key that clashes with one the user set" $?
+
+[ "$(grep -c 'super+F10' "$RC")" = 1 ]
+check "...and leaves the file alone" $?
+
+grep -q "^bind = super+F10 spawn firefox$" "$RC"
+check "...with the user's own bind intact" $?
+
+# A combo already IN the block is not a clash with itself.
+cat > "$RC" <<'EOF'
+# >>> syn-arcade
+bind = super+F11 spawn syn-arcade hud toggle
+bind = super+F12 spawn syn-arcade hud cycle
+bind = super+F10 spawn syn-arcade big toggle
+# <<< syn-arcade
+EOF
+# ⚠ Not "already up to date": a hand-written block is missing the comments
+# make_block() renders, so refresh rightly rewrites it. What is being pinned is
+# that it does not see OUR OWN key as somebody else's and refuse.
+says "$SA" binds refresh | grep -q "already bound"
+[ $? != 0 ]
+check "a key already in the block is not read as a clash" $?
+
+[ "$(grep -c '^bind = super+F10 spawn syn-arcade big toggle$' "$RC")" = 1 ]
+check "...and is still bound exactly once afterwards" $?
+
 # ── big screen mode ─────────────────────────────────────────────────────────
 #
 # ⚠ NOTHING here launches anything. `big steam`, `big run steam-bpm` and
@@ -988,6 +1089,34 @@ if [ -f "$HOME/.config/MangoHud/MangoHud.conf" ]; then
 else
     ok "the real MangoHud config was not created"
 fi
+
+# ── the selection model in the QML ──────────────────────────────────────────
+#
+# A grep, because there is no QML engine in this suite and pulling one in would
+# make the build depend on qt6-declarative for a five-line check. It is worth
+# having anyway: this exact line cost big screen mode every horizontal movement
+# it had, in the shipped 0.1.0-2.
+#
+# `cols` is a `var` property holding one column index per shelf. The obvious
+# spelling — take the object, set a key, assign it back — does NOT notify:
+# Qt compares the incoming QVariant against the stored one, finds the identical
+# JS object and drops the write, so no binding reading `cols` is re-evaluated.
+# Nothing warns. The result was that left, right, the shoulder-button page
+# jumps, Home, and the mouse moving along one shelf were all dead, while up and
+# down worked perfectly because `row` is an int — which read from the sofa as
+# "the controller is half wired up" rather than as a QML bug.
+#
+# It even looked intermittent: `selected` also reads `row`, so the next up or
+# down press published every swallowed column move at once and the selection
+# jumped several tiles. Verified both ways on Qt 6.11 by driving the real file
+# under quickshell — mutate-and-reassign read back 0 after a write of 7.
+BIGQML=data/syn-arcade-big.qml
+
+grep -q "Object.assign({}, shell.cols" "$BIGQML"
+check "setCol assigns a COPY of cols (a mutated object emits no change)" $?
+
+! grep -qE '^\s*shell\.cols = c\s*$' "$BIGQML"
+check "...and never reassigns the same object reference" $?
 
 # ── verdict ─────────────────────────────────────────────────────────────────
 

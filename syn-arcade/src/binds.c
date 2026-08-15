@@ -94,6 +94,14 @@ typedef struct {
 	char big[128];		/* big screen mode toggle */
 	bool autostart_big;	/* start big screen mode at login */
 	bool present;		/* was there a block in the file at all */
+
+	/* Which of the three the block ACTUALLY named, as opposed to which have
+	 * a value in here — every field above is pre-filled with its default, so
+	 * "b.big is super+F10" does not distinguish a user who chose it from a
+	 * block written before big screen mode existed. `binds refresh` needs
+	 * that difference: a key it is about to ADD is the only one that can
+	 * collide with something else in the file. */
+	bool saw_toggle, saw_cycle, saw_big;
 } binds_t;
 
 /* ── which synuirc ───────────────────────────────────────────────────────── */
@@ -295,15 +303,19 @@ static bool binds_read(binds_t *b, char *path, size_t pathn)
 
 		if (sscanf(ln, "bind = %127s spawn syn-arcade hud %63s",
 			   combo, verb) == 2) {
-			if (strcmp(verb, "toggle") == 0)
+			if (strcmp(verb, "toggle") == 0) {
 				snprintf(b->toggle, sizeof(b->toggle), "%s", combo);
-			else if (strcmp(verb, "cycle") == 0)
+				b->saw_toggle = true;
+			} else if (strcmp(verb, "cycle") == 0) {
 				snprintf(b->cycle, sizeof(b->cycle), "%s", combo);
+				b->saw_cycle = true;
+			}
 			continue;
 		}
 		if (sscanf(ln, "bind = %127s spawn syn-arcade big %63s",
 			   combo, verb) == 2 && strcmp(verb, "toggle") == 0) {
 			snprintf(b->big, sizeof(b->big), "%s", combo);
+			b->saw_big = true;
 			continue;
 		}
 
@@ -374,8 +386,14 @@ static int binds_show(bool rec)
  * `seeded_out` reports whether the whole system config had to be copied, so the
  * caller can say so — that is a big enough thing to happen to somebody's
  * desktop that it should never be silent.
+ *
+ * `changed_out` reports whether the file on disk actually differs from what we
+ * were about to write. `binds refresh` runs unattended at every login, and a
+ * writer that rewrites an identical file each time churns the mtime of the
+ * user's compositor config for nothing — which is exactly the sort of thing
+ * that later gets blamed for a config reload nobody asked for.
  */
-static int binds_write(const binds_t *b, bool *seeded_out)
+static int binds_write(const binds_t *b, bool *seeded_out, bool *changed_out)
 {
 	char eff[4096], user[4096];
 	if (!rc_effective_path(eff, sizeof(eff)) ||
@@ -427,6 +445,19 @@ static int binds_write(const binds_t *b, bool *seeded_out)
 
 	free(base);
 	free(block);
+
+	/* Identical to what is already there: say so and touch nothing. */
+	char *current = read_file(user);
+	bool same = current && strcmp(current, out) == 0;
+	free(current);
+	if (changed_out)
+		*changed_out = !same;
+	if (same) {
+		free(out);
+		if (seeded_out)
+			*seeded_out = false;
+		return EX_OK;
+	}
 
 	int rc = write_file_inplace(user, out);
 	free(out);
@@ -491,7 +522,7 @@ static int binds_install(const char *toggle, const char *cycle, const char *big,
 	char user[4096];
 	rc_user_path(user, sizeof(user));
 
-	int rc = binds_write(&b, NULL);
+	int rc = binds_write(&b, NULL, NULL);
 	if (rc != EX_OK)
 		return rc;
 
@@ -511,6 +542,146 @@ static int binds_install(const char *toggle, const char *cycle, const char *big,
 		     "file to exist before a game starts, or it never watches it.");
 
 	return binds_activate(reload);
+}
+
+/* ── refresh: the upgrade path for the block ─────────────────────────────── */
+
+/*
+ * Is `combo` already bound somewhere in `text`?
+ *
+ * `text` is the config with OUR block already stripped out, so a match is a
+ * genuine clash with something the user (or another package) put there.
+ *
+ * Only `binds refresh` asks. It runs unattended and adds keys nobody typed, and
+ * synui applies whichever `bind =` line it read LAST while logging nothing — so
+ * an unchecked collision is one of the two shortcuts silently not existing, with
+ * which one losing decided by line order.
+ */
+static bool combo_bound_in(const char *text, const char *combo)
+{
+	char *copy = xstrdup(text);
+	bool hit = false;
+	char *save = NULL;
+
+	for (char *ln = strtok_r(copy, "\n", &save); ln && !hit;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *p = ln;
+		while (*p == ' ' || *p == '\t') p++;
+		if (strncmp(p, "bind", 4) != 0)
+			continue;
+		p += 4;
+		while (*p == ' ' || *p == '\t') p++;
+		if (*p != '=')
+			continue;
+		p++;
+		while (*p == ' ' || *p == '\t') p++;
+
+		char found[128];
+		if (sscanf(p, "%127s", found) == 1 &&
+		    strcasecmp(found, combo) == 0)
+			hit = true;
+	}
+
+	free(copy);
+	return hit;
+}
+
+/*
+ * Re-render an EXISTING block so it gains whatever this version of syn-arcade
+ * defines, keeping every combo the user chose.
+ *
+ * ⚠ This is the gap that shipped big screen mode with no way to open it.
+ * Installing the package writes nothing into anybody's home: the block lives in
+ * ~/.config/synui/synuirc and is only ever written by `binds install`. So
+ * 0.1.0-2 added super+F10 to the DEFAULTS and to a freshly installed block, and
+ * on every machine that had already run `binds install` under 0.1.0-1 the block
+ * kept the two overlay keys it was born with. The feature shipped, the docs
+ * described the key, `binds show` printed the key — and the key was not in the
+ * file, because nothing in a package upgrade can reach a user's config.
+ *
+ * Hence a command that is safe to run at every login, from the session profile:
+ *
+ *   · does NOTHING if there is no block. Refresh is not install; somebody who
+ *     never ran `binds install`, or who ran `binds remove`, has said what they
+ *     want and a login script must not overrule it.
+ *   · keeps every combo the block already names, and only fills in the ones it
+ *     does not.
+ *   · REFUSES if a key it would add is already bound elsewhere in the file,
+ *     rather than writing a duplicate synui resolves by line order.
+ *   · writes nothing when the rendered block is byte-identical, so the common
+ *     case does not touch the file at all.
+ */
+static int binds_refresh(bool quiet, bool reload)
+{
+	char path[4096];
+	binds_t b;
+	if (!binds_read(&b, path, sizeof(path)))
+		return EX_FAIL;
+
+	if (!b.present) {
+		if (!quiet)
+			printf("nothing to refresh — no syn-arcade block in %s\n"
+			       "`syn-arcade binds install` adds one.\n", path);
+		return EX_OK;
+	}
+
+	/* Only a key being ADDED can collide. One already in the block is either
+	 * ours from last time or the user's own choice, and in both cases it is
+	 * already in the file exactly once. */
+	char *text = read_file(path);
+	if (text) {
+		char *outside = strip_block(text);
+		free(text);
+
+		const struct { const char *combo; bool saw; const char *what; }
+		check[3] = {
+			{ b.toggle, b.saw_toggle, "the overlay toggle" },
+			{ b.cycle,  b.saw_cycle,  "moving the overlay" },
+			{ b.big,    b.saw_big,    "big screen mode" },
+		};
+
+		for (int i = 0; i < 3; i++) {
+			if (check[i].saw || !combo_bound_in(outside, check[i].combo))
+				continue;
+			free(outside);
+			fprintf(stderr,
+				"syn-arcade: not refreshing — %s is already bound "
+				"in %s\nto something else, and synui would apply "
+				"whichever line it read last.\n"
+				"Pick another key: syn-arcade binds install "
+				"--big=super+F9\n",
+				check[i].combo, path);
+			return EX_FAIL;
+		}
+		free(outside);
+	}
+
+	bool changed = false;
+	int rc = binds_write(&b, NULL, &changed);
+	if (rc != EX_OK)
+		return rc;
+
+	if (!changed) {
+		if (!quiet)
+			printf("already up to date (%s)\n", path);
+		return EX_OK;
+	}
+
+	if (!quiet) {
+		printf("refreshed the syn-arcade block in %s\n", path);
+		printf("  %-14s toggle the overlay\n", b.toggle);
+		printf("  %-14s move it around the screen\n", b.cycle);
+		printf("  %-14s big screen mode\n", b.big);
+	}
+
+	/* At login (--quiet) there is nothing to reload: synui has not read its
+	 * config yet, or is about to. Reloading is for somebody running this by
+	 * hand on a desktop that is already up. */
+	if (reload)
+		return binds_reload();
+	if (!quiet)
+		puts("\nNot active until synui reloads: syn-arcade binds reload");
+	return EX_OK;
 }
 
 /* ── big screen mode at login ────────────────────────────────────────────── */
@@ -547,7 +718,7 @@ int binds_autostart_set(bool on)
 	b.autostart_big = on;
 
 	bool seeded = false;
-	int rc = binds_write(&b, &seeded);
+	int rc = binds_write(&b, &seeded, NULL);
 	if (rc != EX_OK)
 		return rc;
 
@@ -693,6 +864,13 @@ int cmd_binds(int argc, char **argv)
 
 	if (strcmp(sub, "remove") == 0)
 		return binds_remove(opt_has(rest_c, rest, "--reload"));
+
+	/* --quiet is what /etc/profile.d passes: at login there is nobody to read
+	 * "already up to date" and stdout is /dev/null anyway, but a refusal on
+	 * stderr still needs to be able to reach a journal. */
+	if (strcmp(sub, "refresh") == 0)
+		return binds_refresh(opt_has(rest_c, rest, "--quiet"),
+				     opt_has(rest_c, rest, "--reload"));
 
 	fprintf(stderr, "syn-arcade: unknown binds command '%s'\n", sub);
 	return EX_USAGE;

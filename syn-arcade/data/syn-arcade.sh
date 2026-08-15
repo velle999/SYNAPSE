@@ -39,7 +39,7 @@ if [ -z "${SDL_GAMECONTROLLERCONFIG_FILE:-}" ]; then
     unset _syn_arcade_db
 fi
 
-# ── The two things that must happen before a game starts ────────────────────
+# ── The three things that must happen before the session is usable ──────────
 #
 # 1. The overlay config file must EXIST. MangoHud adds its inotify watch once,
 #    at layer init; if the path is missing at that moment the watch fails and
@@ -50,12 +50,27 @@ fi
 #    copy of the device and are destroyed when it is unplugged, so a login is
 #    exactly when they need putting back.
 #
+# 3. The keybind block in the user's synuirc must gain any key a NEWER
+#    syn-arcade defines. Nothing in a package upgrade can reach a user's home,
+#    so a version that adds a shortcut adds it to the defaults and to blocks
+#    installed from then on, and every machine that ran `binds install` under
+#    the older version keeps the keys it was born with — the feature ships, the
+#    docs name the key, `binds show` prints the key, and the key is not in the
+#    file. That is exactly how big screen mode shipped in 0.1.0-2 with no
+#    super+F10 on any machine that already had the block.
+#
+#    `binds refresh` does nothing at all if there is no block (refresh is not
+#    install), keeps every combo the user chose, refuses rather than writing a
+#    key that clashes with one already in the file, and writes nothing when the
+#    result is byte-identical — which is the case at almost every login.
+#
 # ⚠ Backgrounded, redirected, and failure-tolerant. This is /etc/profile.d: it
 # runs for every login shell including non-interactive ones, and anything that
 # blocks, prints, or returns non-zero here breaks logins for everybody. `pads
 # apply` in particular opens device nodes, which can stall on a wedged USB
 # device.
 if command -v syn-arcade >/dev/null 2>&1; then
-    ( syn-arcade hud ensure >/dev/null 2>&1
-      syn-arcade pads apply  >/dev/null 2>&1 ) &
+    ( syn-arcade hud ensure          >/dev/null 2>&1
+      syn-arcade pads apply          >/dev/null 2>&1
+      syn-arcade binds refresh --quiet >/dev/null 2>&1 ) &
 fi

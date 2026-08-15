@@ -219,10 +219,28 @@ ShellRoot {
         return v === undefined ? 0 : v
     }
 
+    // ⚠ A COPY. Mutating the object and assigning the SAME REFERENCE back is
+    // the obvious spelling and it does not work: Qt compares the incoming
+    // QVariant against the stored one, finds the identical JS object, and drops
+    // the write — so nothing that reads `cols` is ever re-evaluated. Reassigning
+    // "to emit a change" emits nothing.
+    //
+    // That is what made big screen mode look half-built. Everything HORIZONTAL
+    // was dead — left, right, the shoulder-button page jumps, Home, and the
+    // mouse moving along one shelf — while up and down worked perfectly, because
+    // `row` is an int and an int compares unequal. On a controller it read as
+    // "only the d-pad's vertical half is wired up"; the selection was moving in
+    // `cols` the whole time and no binding was told.
+    //
+    // Worse than dead, it was intermittent-looking: `selected` also reads
+    // `shell.row`, so the moment a row change DID notify, every swallowed column
+    // move appeared at once and the selection jumped several tiles.
+    //
+    // Pinned by the QML assertion in tests/syn_arcade_test.sh. Verified on
+    // Qt 6.11: mutate-and-reassign left a binding reading 0 after a write of 7,
+    // the copy read back 9.
     function setCol(r, v) {
-        const c = shell.cols
-        c[r] = v
-        shell.cols = c          // reassign: a mutated object emits no change
+        shell.cols = Object.assign({}, shell.cols, { [r]: v })
     }
 
     function moveRow(d) {

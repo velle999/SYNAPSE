@@ -78,6 +78,8 @@ static void usage(FILE *f)
 "       --cycle=COMBO      default super+F12\n"
 "       --big=COMBO        default super+F10\n"
 "       --reload           ask synui to re-read its config straight away\n"
+"  binds refresh           add keys a newer syn-arcade defines to a block\n"
+"                          that already exists, keeping the ones you chose\n"
 "  binds remove            take them back out\n"
 "  binds reload            re-read the compositor config now\n"
 "\n"
