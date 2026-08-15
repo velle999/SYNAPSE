@@ -2871,11 +2871,24 @@ if [ "$WANT_STEAM" = 1 ]; then
     # pinned URL is a 404 waiting for the next keyring bump. Ask the repo's own
     # database for the current name instead; the pinned pair upstream's script
     # uses is the fallback for when the database itself cannot be read.
+    #
+    # ⚠ bsdtar, NOT `tar -tzf`. `cachyos.db` is ZSTANDARD-compressed, and GNU
+    # tar refuses it from a pipe ("Archive is compressed. Use --zstd option"),
+    # so the lookup failed every single time and this function ALWAYS returned
+    # the pinned fallback — silently, because a failed lookup is indistinguish-
+    # able from a lookup that agrees with the pin. It only looked like it worked
+    # because upstream has not rolled either package since March 2024. Measured
+    # on a real install 2026-08-14, which came out with exactly
+    # cachyos-keyring-20240331-1 and cachyos-mirrorlist-27-1.
+    #
+    # `--zstd` would work today and break the day upstream switches back;
+    # bsdtar detects the compression itself and is already here (libarchive is
+    # a pacman dependency, so it is on every ISO and every target).
     cachy_pkg_url() {
         local name=$1 fallback=$2 dir
         dir=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 60 \
                   "$CACHY_MIRROR/cachyos.db" 2>/dev/null \
-              | tar -tzf - 2>/dev/null | grep -m1 "^${name}-[0-9]") || true
+              | bsdtar -tf - 2>/dev/null | grep -m1 "^${name}-[0-9]") || true
         # The listing carries both "<pkg>-<ver>/" and "<pkg>-<ver>/desc"; take
         # the directory component either way rather than trusting which came
         # first out of the tar.
@@ -2896,8 +2909,15 @@ if [ "$WANT_STEAM" = 1 ]; then
 
         # -U on a URL, because these two packages are the thing that makes the
         # repo usable — they cannot come FROM the repo.
+        #
+        # Its output is KEPT, not sent to /dev/null. This is the step most
+        # likely to fail (two URLs, one network) and the warning at the bottom
+        # of this block can only say "the repository could not be enabled" —
+        # which names no cause at all, on the one machine where the cause was
+        # visible for a moment.
+        cachy_log=$(mktemp)
         if arch-chroot /mnt pacman -U --noconfirm --needed \
-                "$cachy_keyring" "$cachy_mirrors" >/dev/null 2>&1; then
+                "$cachy_keyring" "$cachy_mirrors" >"$cachy_log" 2>&1; then
             # Read the fingerprints out of the keyring without importing them.
             # --show-keys parses the file and touches no keyring of ours, so a
             # keyring signed by somebody else never reaches pacman's trustdb.
@@ -2909,6 +2929,9 @@ if [ "$WANT_STEAM" = 1 ]; then
 
                 # Appended, so it lands after [core], [extra], [multilib] and
                 # [synapseos]. See rule 1 above — the ORDER is the safety.
+                # Saved first so the block below can take it back out if the
+                # repo turns out not to sync.
+                cp -a /mnt/etc/pacman.conf /mnt/etc/pacman.conf.precachy
                 cat >> /mnt/etc/pacman.conf << 'CACHYEOF'
 
 # CachyOS — deliberately LAST, so it can only supply packages no other
@@ -2924,6 +2947,17 @@ CACHYEOF
                 if [ "${cachy_count:-0}" -gt 0 ]; then
                     cachy_ok=1
                     echo "  [cachyos] enabled ($cachy_count packages available)"
+                else
+                    # TAKE THE SECTION BACK OUT. A repo pacman cannot sync is
+                    # not a dormant extra — pacman aborts the WHOLE -Syu when
+                    # any one database fails, so leaving this behind converts a
+                    # skipped Proton into a machine that can take no upgrades at
+                    # all (the failure BlackArch has caused here twice). Restore
+                    # the file we saved before appending; synpkg's own
+                    # enable-repo helper rolls back the same way.
+                    warn "[cachyos] was added but lists no packages — removing it
+  again so it cannot block a later upgrade."
+                    mv -f /mnt/etc/pacman.conf.precachy /mnt/etc/pacman.conf
                 fi
             else
                 warn "The CachyOS keyring does not carry the expected master key.
@@ -2931,24 +2965,37 @@ CACHYEOF
                 arch-chroot /mnt pacman -Rdd --noconfirm \
                     cachyos-keyring cachyos-mirrorlist >/dev/null 2>&1 || true
             fi
+        else
+            warn "Could not install the CachyOS keyring and mirrorlist:
+$(sed 's/^/    /' "$cachy_log" | tail -5)"
         fi
+        rm -f "$cachy_log" /mnt/etc/pacman.conf.precachy
     fi
 
     if [ "$cachy_ok" = 1 ]; then
         echo "  Installing proton-cachyos-slr (~340 MB download)..."
         if arch-chroot /mnt pacman -S --noconfirm --needed proton-cachyos-slr 2>&1; then
+            # The name in the dropdown is the vdf's display_name, which is
+            # "proton-cachyos-<ver> (steam linux runtime)" — NOT "Proton-CachyOS",
+            # which this used to say and which matches nothing on screen.
             success "CachyOS Proton installed — pick it per game in Steam under
-  Properties → Compatibility ('Proton-CachyOS')"
+  Properties → Compatibility, listed as 'proton-cachyos-… (steam linux runtime)'.
+  Steam only scans for it at startup, so restart Steam if it is already running."
         else
             warn "proton-cachyos-slr failed to install. Steam and Valve's own
   Proton are unaffected. Install later with:
   sudo pacman -S proton-cachyos-slr"
         fi
     else
+        # ⛔ NOT a pointer at wiki.cachyos.org, which this used to say: that page
+        # tells you to run cachyos-repo.sh, and that script inserts the v3/v4
+        # repositories ABOVE [core] and installs CachyOS's build of pacman —
+        # re-sourcing an Arch system. synpkg's helper does the same job the way
+        # this installer does it: generic [cachyos], appended last, key pinned.
         warn "The [cachyos] repository could not be enabled, so CachyOS Proton
-  was skipped. Steam still works with Valve's Proton. To add it later,
-  see https://wiki.cachyos.org/features/optimized_repos/ and then:
-  sudo pacman -S proton-cachyos-slr"
+  was skipped. Steam still works with Valve's Proton. To add it later:
+      synpkg cachyos enable-repo
+      synpkg install proton-cachyos-slr"
     fi
 fi
 
