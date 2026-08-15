@@ -66,6 +66,35 @@
 
 #define DEFAULT_TOGGLE "super+F11"
 #define DEFAULT_CYCLE  "super+F12"
+/* super+F10 for big screen mode, next to the other two so the gaming keys are
+ * three adjacent function keys rather than three unrelated letters. Checked
+ * against synui's defaults in config.c before it was chosen: nothing there
+ * binds any F-key at all, so this collides with nothing on a stock desktop. */
+#define DEFAULT_BIG    "super+F10"
+
+/* What big screen mode is started by, at login and from the keybind. Written
+ * into synuirc in two forms — a `bind =` and an `autostart =` — so it is one
+ * constant rather than a string to keep in step in two places. */
+#define BIG_TOGGLE_CMD "syn-arcade big toggle"
+#define BIG_START_CMD  "syn-arcade big start"
+
+/*
+ * Everything this package owns in synuirc, read out of the file as one thing.
+ *
+ * ⚠ There is exactly ONE managed block and it is rewritten WHOLE. Two commands
+ * that each appended their own would produce two blocks with the same markers:
+ * synui would apply whichever it read last, `binds remove` would delete one and
+ * leave the other, and the leftover would be a shortcut with no command able to
+ * remove it. So every writer reads the current settings first, changes the one
+ * it cares about, and writes the lot back.
+ */
+typedef struct {
+	char toggle[128];	/* hud toggle */
+	char cycle[128];	/* hud cycle */
+	char big[128];		/* big screen mode toggle */
+	bool autostart_big;	/* start big screen mode at login */
+	bool present;		/* was there a block in the file at all */
+} binds_t;
 
 /* ── which synuirc ───────────────────────────────────────────────────────── */
 
@@ -190,7 +219,7 @@ static bool combo_ok(const char *combo)
 	return true;
 }
 
-static char *make_block(const char *toggle, const char *cycle)
+static char *make_block(const binds_t *b)
 {
 	size_t cap = 2048;
 	char *out = xmalloc(cap);
@@ -199,80 +228,155 @@ BLOCK_BEGIN "  — the gaming shortcuts. Do not edit between the markers;\n"
 "#   `syn-arcade binds install` rewrites this block, and\n"
 "#   `syn-arcade binds remove` deletes it. Everything outside it is yours.\n"
 "#\n"
-"# These rewrite MangoHud's config file, which MangoHud watches with inotify —\n"
-"# so they change the overlay inside a game that is already running.\n"
+"# The overlay keys rewrite MangoHud's config file, which MangoHud watches with\n"
+"# inotify — so they change the overlay inside a game that is already running.\n"
 "bind = %s spawn syn-arcade hud toggle\n"
 "bind = %s spawn syn-arcade hud cycle\n"
-BLOCK_END "\n", toggle, cycle);
+"#\n"
+"# Big screen mode: the ten-foot interface, on the television, driven with a\n"
+"# controller. The key both opens and closes it.\n"
+"bind = %s spawn " BIG_TOGGLE_CMD "\n"
+"%s"
+BLOCK_END "\n",
+		b->toggle, b->cycle, b->big,
+		/* ⚠ An autostart line, not a systemd user unit. synui does not
+		 * implement the XDG autostart spec — nothing in a synui session
+		 * reads ~/.config/autostart or /etc/xdg/autostart — and its own
+		 * `autostart =` lines are the only thing it does run. A .desktop
+		 * dropped in the usual place would be silently ignored, which is
+		 * a bug people have hit here before with OpenRGB and KDE
+		 * Connect. */
+		b->autostart_big
+		  ? "#\n"
+		    "# Straight to the couch at login. Commented out or absent means the\n"
+		    "# desktop starts as usual and the key above opens big screen mode.\n"
+		    "autostart = " BIG_START_CMD "\n"
+		  : "");
 	return out;
 }
 
 /* ── commands ────────────────────────────────────────────────────────────── */
 
-static int binds_show(bool rec)
+/*
+ * What is in the file right now, with the defaults filled in for anything that
+ * is not.
+ *
+ * Read back out of synuirc rather than assumed, because the whole point of
+ * --toggle is that the keys may not be the defaults — and a status line that
+ * reprints what the defaults WOULD have been, on a machine where somebody chose
+ * something else, is worse than printing nothing.
+ */
+static bool binds_read(binds_t *b, char *path, size_t pathn)
 {
-	char path[4096];
-	if (!rc_effective_path(path, sizeof(path)))
-		return EX_FAIL;
+	memset(b, 0, sizeof(*b));
+	snprintf(b->toggle, sizeof(b->toggle), "%s", DEFAULT_TOGGLE);
+	snprintf(b->cycle, sizeof(b->cycle), "%s", DEFAULT_CYCLE);
+	snprintf(b->big, sizeof(b->big), "%s", DEFAULT_BIG);
+
+	char local[4096];
+	if (!path) { path = local; pathn = sizeof(local); }
+	if (!rc_effective_path(path, pathn))
+		return false;
 
 	char *text = read_file(path);
-	bool installed = text && has_block(text);
+	if (!text)
+		return true;			/* no file yet: all defaults */
 
-	/* Read the combos back out of the file rather than reprinting the
-	 * defaults — the whole point of --toggle is that they may not match,
-	 * and a status line that lies about which key is bound is worse than
-	 * none. */
-	char toggle[128] = "", cycle[128] = "";
-	if (installed) {
-		char *save = NULL;
-		for (char *ln = strtok_r(text, "\n", &save); ln;
-		     ln = strtok_r(NULL, "\n", &save)) {
-			char combo[128], verb[64];
-			if (sscanf(ln, "bind = %127s spawn syn-arcade hud %63s",
-				   combo, verb) != 2)
-				continue;
+	b->present = has_block(text);
+	if (!b->present) {
+		free(text);
+		return true;
+	}
+
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char combo[128], verb[64];
+
+		if (sscanf(ln, "bind = %127s spawn syn-arcade hud %63s",
+			   combo, verb) == 2) {
 			if (strcmp(verb, "toggle") == 0)
-				snprintf(toggle, sizeof(toggle), "%s", combo);
+				snprintf(b->toggle, sizeof(b->toggle), "%s", combo);
 			else if (strcmp(verb, "cycle") == 0)
-				snprintf(cycle, sizeof(cycle), "%s", combo);
+				snprintf(b->cycle, sizeof(b->cycle), "%s", combo);
+			continue;
+		}
+		if (sscanf(ln, "bind = %127s spawn syn-arcade big %63s",
+			   combo, verb) == 2 && strcmp(verb, "toggle") == 0) {
+			snprintf(b->big, sizeof(b->big), "%s", combo);
+			continue;
+		}
+
+		/* ⚠ Matched with the leading whitespace skipped and the exact
+		 * command required. A line the user commented out is a line
+		 * synui does not run, and reading it as "on" would report an
+		 * autostart that does not happen. */
+		char *p = ln;
+		while (*p == ' ' || *p == '\t') p++;
+		if (strncmp(p, "autostart", 9) == 0) {
+			p += 9;
+			while (*p == ' ' || *p == '\t') p++;
+			if (*p == '=') {
+				p++;
+				while (*p == ' ' || *p == '\t') p++;
+				if (strcmp(trim(p), BIG_START_CMD) == 0)
+					b->autostart_big = true;
+			}
 		}
 	}
 
+	free(text);
+	return true;
+}
+
+static int binds_show(bool rec)
+{
+	char path[4096];
+	binds_t b;
+	if (!binds_read(&b, path, sizeof(path)))
+		return EX_FAIL;
+
 	if (rec) {
 		rec_row(3, "field", "value", "action");
-		rec_row(3, "installed", installed ? "yes" : "no",
-			installed ? "action:remove" : "action:install");
-		rec_row(3, "toggle overlay", toggle[0] ? toggle : "(not bound)",
+		rec_row(3, "installed", b.present ? "yes" : "no",
+			b.present ? "action:remove" : "action:install");
+		rec_row(3, "toggle overlay", b.present ? b.toggle : "(not bound)",
 			"set:toggle");
-		rec_row(3, "move overlay", cycle[0] ? cycle : "(not bound)",
+		rec_row(3, "move overlay", b.present ? b.cycle : "(not bound)",
 			"set:cycle");
+		rec_row(3, "big screen mode", b.present ? b.big : "(not bound)",
+			"set:big");
+		rec_row(3, "big screen at login", b.autostart_big ? "on" : "off",
+			b.autostart_big ? "action:autostart-off"
+					: "action:autostart-on");
 		rec_row(3, "config", path, "detail");
-	} else if (installed) {
+	} else if (b.present) {
 		printf("installed in %s\n", path);
-		printf("  %-14s toggle the overlay\n",
-		       toggle[0] ? toggle : "(unbound)");
-		printf("  %-14s move it around the screen\n",
-		       cycle[0] ? cycle : "(unbound)");
+		printf("  %-14s toggle the overlay\n", b.toggle);
+		printf("  %-14s move it around the screen\n", b.cycle);
+		printf("  %-14s big screen mode\n", b.big);
+		printf("  %-14s big screen mode at login\n",
+		       b.autostart_big ? "on" : "off");
 	} else {
 		printf("not installed (%s)\n", path);
 		puts("`syn-arcade binds install` adds them.");
 	}
-
-	free(text);
 	return EX_OK;
 }
 
-static int binds_install(const char *toggle, const char *cycle, bool reload)
+/*
+ * Write the block, seeding the user's synuirc from the effective one first if
+ * this machine's config still lives in /etc.
+ *
+ * Everything that can refuse does so before anything is written: a half-written
+ * config file is a desktop that comes back wrong at the next login.
+ *
+ * `seeded_out` reports whether the whole system config had to be copied, so the
+ * caller can say so — that is a big enough thing to happen to somebody's
+ * desktop that it should never be silent.
+ */
+static int binds_write(const binds_t *b, bool *seeded_out)
 {
-	if (!combo_ok(toggle) || !combo_ok(cycle))
-		return EX_USAGE;
-
-	if (strcasecmp(toggle, cycle) == 0) {
-		fprintf(stderr, "syn-arcade: both shortcuts are '%s' — synui "
-				"would apply whichever it read last\n", toggle);
-		return EX_USAGE;
-	}
-
 	char eff[4096], user[4096];
 	if (!rc_effective_path(eff, sizeof(eff)) ||
 	    !rc_user_path(user, sizeof(user))) {
@@ -306,7 +410,7 @@ static int binds_install(const char *toggle, const char *cycle, bool reload)
 	char *base = strip_block(text);
 	free(text);
 
-	char *block = make_block(toggle, cycle);
+	char *block = make_block(b);
 
 	size_t n = strlen(base);
 	/* Exactly one blank line between whatever was there and the block. */
@@ -336,9 +440,67 @@ static int binds_install(const char *toggle, const char *cycle, bool reload)
 	if (seeded)
 		printf("copied %s → %s (synui reads only one, so the whole file "
 		       "had to move)\n", eff, user);
+	if (seeded_out)
+		*seeded_out = seeded;
+	return EX_OK;
+}
+
+/* What synui has to do before any of this is live, said once. */
+static int binds_activate(bool reload)
+{
+	if (reload)
+		return binds_reload();
+
+	puts("\nNot active yet. synui re-reads its config on Super+Shift+W,\n"
+	     "on Ctrl+Shift+R in the Super+/ palette, or on:");
+	puts("    syn-arcade binds reload");
+	return EX_OK;
+}
+
+static int binds_install(const char *toggle, const char *cycle, const char *big,
+			 bool reload)
+{
+	if (!combo_ok(toggle) || !combo_ok(cycle) || !combo_ok(big))
+		return EX_USAGE;
+
+	/* Three keys now, so the clash check is pairwise. synui applies
+	 * whichever line it read last and says nothing, so two shortcuts on one
+	 * key is a feature that silently is not there. */
+	const char *combos[3] = { toggle, cycle, big };
+	static const char *const what[3] = { "--toggle", "--cycle", "--big" };
+	for (int i = 0; i < 3; i++)
+		for (int j = i + 1; j < 3; j++)
+			if (strcasecmp(combos[i], combos[j]) == 0) {
+				fprintf(stderr, "syn-arcade: %s and %s are both "
+					"'%s' — synui would apply whichever it "
+					"read last\n", what[i], what[j],
+					combos[i]);
+				return EX_USAGE;
+			}
+
+	/* Read first, so installing keybinds does not silently turn off a big
+	 * screen autostart somebody has already set. */
+	binds_t b;
+	if (!binds_read(&b, NULL, 0))
+		return EX_FAIL;
+
+	snprintf(b.toggle, sizeof(b.toggle), "%s", toggle);
+	snprintf(b.cycle, sizeof(b.cycle), "%s", cycle);
+	snprintf(b.big, sizeof(b.big), "%s", big);
+
+	char user[4096];
+	rc_user_path(user, sizeof(user));
+
+	int rc = binds_write(&b, NULL);
+	if (rc != EX_OK)
+		return rc;
+
 	printf("installed in %s\n", user);
 	printf("  %-14s toggle the overlay\n", toggle);
 	printf("  %-14s move it around the screen\n", cycle);
+	printf("  %-14s big screen mode\n", big);
+	if (b.autostart_big)
+		puts("  big screen mode starts at login");
 
 	/* The overlay config has to EXIST before a game starts or MangoHud's
 	 * inotify watch never attaches — a keybind installed without it would
@@ -348,12 +510,75 @@ static int binds_install(const char *toggle, const char *cycle, bool reload)
 		puts("\nRun `syn-arcade hud ensure` too — MangoHud needs the config\n"
 		     "file to exist before a game starts, or it never watches it.");
 
-	if (reload)
-		return binds_reload();
+	return binds_activate(reload);
+}
 
-	puts("\nNot active yet. synui re-reads its config on Super+Shift+W,\n"
-	     "on Ctrl+Shift+R in the Super+/ palette, or on:");
-	puts("    syn-arcade binds reload");
+/* ── big screen mode at login ────────────────────────────────────────────── */
+
+bool binds_autostart_get(void)
+{
+	binds_t b;
+	if (!binds_read(&b, NULL, 0))
+		return false;
+	return b.autostart_big;
+}
+
+int binds_autostart_set(bool on)
+{
+	binds_t b;
+	if (!binds_read(&b, NULL, 0))
+		return EX_FAIL;
+
+	if (b.autostart_big == on && (b.present || !on)) {
+		printf("big screen mode at login is already %s\n",
+		       on ? "on" : "off");
+		return EX_OK;
+	}
+
+	/* Turning it OFF with no block in the file is not an error and must not
+	 * write one: "make sure this is not happening" is satisfied by a file
+	 * that never mentioned it, and creating a block to say so would install
+	 * three keybinds nobody asked for. */
+	if (!on && !b.present) {
+		puts("big screen mode at login is off (nothing installed)");
+		return EX_OK;
+	}
+
+	b.autostart_big = on;
+
+	bool seeded = false;
+	int rc = binds_write(&b, &seeded);
+	if (rc != EX_OK)
+		return rc;
+
+	char user[4096];
+	rc_user_path(user, sizeof(user));
+
+	if (on) {
+		printf("big screen mode will start at login (%s)\n", user);
+		/* Said out loud because turning ON an autostart also writes the
+		 * gaming keybinds — they are one block, and the way BACK out of
+		 * a full-screen ten-foot interface is one of them. */
+		printf("  %-14s opens and closes it\n", b.big);
+	} else {
+		printf("big screen mode will no longer start at login (%s)\n",
+		       user);
+		printf("  %-14s still opens it\n", b.big);
+	}
+
+	/*
+	 * Deliberately NOT offering `binds reload` here, and not calling it.
+	 *
+	 * An autostart line is read when the session STARTS. Reloading the
+	 * config re-reads the list but does not run it — synui spawns those
+	 * entries once, at startup — so a reload would neither start big screen
+	 * mode now nor be needed for this to take effect at the next login.
+	 * Printing the usual "not active yet, reload to apply" would be a
+	 * sentence that is wrong in both directions.
+	 */
+	puts(on ? "\nIt takes effect at your next login. To see it now: "
+		  "syn-arcade big start"
+		: "\nIt takes effect at your next login.");
 	return EX_OK;
 }
 
@@ -463,6 +688,7 @@ int cmd_binds(int argc, char **argv)
 	if (strcmp(sub, "install") == 0)
 		return binds_install(opt_str(rest_c, rest, "--toggle", DEFAULT_TOGGLE),
 				     opt_str(rest_c, rest, "--cycle", DEFAULT_CYCLE),
+				     opt_str(rest_c, rest, "--big", DEFAULT_BIG),
 				     opt_has(rest_c, rest, "--reload"));
 
 	if (strcmp(sub, "remove") == 0)

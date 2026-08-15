@@ -549,6 +549,75 @@ FloatingWindow {
                         }
                     }
 
+                    // ── big screen mode ──────────────────────────────────────
+                    //
+                    // Here rather than in a tab of its own: everything this
+                    // window can usefully say about big screen mode is which
+                    // key opens it and whether it opens at login, and both are
+                    // lines in the same managed block as the shortcuts above.
+                    // The mode itself has its own full-screen interface, which
+                    // is not something to preview in a 820px window.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 14
+                        // Layout.preferredHeight, not height: inside a layout,
+                        // `height` is assigned by the layout itself and setting
+                        // it is undefined behaviour that happens to work until
+                        // something else in the column changes size.
+                        Layout.preferredHeight: 1
+                        color: root.panelHi
+                    }
+
+                    Text {
+                        Layout.topMargin: 8
+                        text: "Big screen mode"
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "The ten-foot interface: your Steam library, Big Picture "
+                            + "and the machine's own switches as tiles, drivable from a "
+                            + "game controller."
+                        color: root.dim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    FieldRow {
+                        label: "Opens with"
+                        value: root.bindFields["big screen mode"] || "—"
+                    }
+                    FieldRow {
+                        label: "At login"
+                        value: root.bindFields["big screen at login"] || "—"
+                    }
+
+                    RowLayout {
+                        Layout.topMargin: 6
+                        spacing: 8
+                        ArcButton {
+                            text: "Open big screen"
+                            // ⚠ --detach. This window IS quickshell, and
+                            // `run` starts a child Process: without the fork
+                            // the big screen shell would be that child, so the
+                            // window would sit waiting for it and closing the
+                            // window would close its pipes.
+                            onTriggered: root.run(["big", "start", "--detach"])
+                        }
+                        // One button whose label is the verb, not a checkbox:
+                        // the C side refuses a no-op either way, so the label
+                        // is the only thing that has to be right.
+                        ArcButton {
+                            text: root.bindFields["big screen at login"] === "on"
+                                  ? "Don't start at login" : "Start at login"
+                            onTriggered: root.run(["big", "autostart",
+                                root.bindFields["big screen at login"] === "on"
+                                    ? "off" : "on"])
+                        }
+                    }
+
                     Item { Layout.fillHeight: true }
                 }
             }

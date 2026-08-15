@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Name=Big Screen
+GenericName=Ten-Foot Interface
+Comment=Your Steam library, Big Picture and the machine's own switches as tiles, on a television, driven with a game controller
+# ⚠ --detach, and it is not optional here. Everything that launches a .desktop
+# on this desktop is quickshell — the start menu, the dock, the widget launcher
+# — and a child started from one inherits pipes quickshell closes as soon as its
+# direct child exits. Without the fork this entry starts a full-screen shell
+# that dies the moment the menu that launched it finishes.
+#
+# The synuirc `autostart =` line that `syn-arcade big autostart on` writes does
+# NOT use this file and does NOT pass --detach: synui spawns it to be exactly
+# that process, and exec-in-place is one process instead of two.
+Exec=syn-arcade big start --detach
+# Its own icon, not a stock theme name: a generic one makes the entry
+# indistinguishable from whatever else in the menu wears the same face.
+Icon=syn-arcade
+Terminal=false
+# Deliberately NO StartupWMClass. Big screen mode is a layer-shell surface, not
+# a toplevel window — there is no window for a taskbar to match against, which
+# is also why it never appears in the window list or the alt-tab ring.
+Categories=Game;
+Keywords=big;screen;picture;tv;television;couch;controller;gamepad;steam;bigpicture;launcher;arcade;

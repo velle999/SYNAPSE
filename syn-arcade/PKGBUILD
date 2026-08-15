@@ -11,6 +11,22 @@
 #     whether its motors work, and what its buttons are mapped to
 #   · the two compositor shortcuts that drive the first of those
 #
+# And, since 0.1.0-2, a fourth: BIG SCREEN MODE — the ten-foot interface. A
+# television is not a monitor with a bigger number; it is four metres away and
+# driven with a controller, and every desktop convention fails at that distance.
+# `syn-arcade big start` puts up one full-screen layer-shell surface of tiles:
+# the installed Steam library with its cover art, Steam Big Picture, whatever
+# launchers and media players are on the machine, and the machine's own
+# switches. `big autostart on` opens it at login instead of the desktop.
+#
+# ⚠ Its controller navigation SYNTHESISES NOTHING. `syn-arcade big nav` reads
+# the event nodes udev already grants this user and writes WORDS — "up",
+# "accept" — down a pipe that exactly one process is reading. The obvious
+# alternative, a uinput device turning stick movement into arrow keys, is a
+# system-wide input device: stick drift would type into whatever is focused,
+# which on this machine has meant typing into the user's browser. Nothing here
+# is visible to the compositor or to any other application.
+#
 # ⚠ The overlay keybind works because of a mechanism worth writing down, since
 # the obvious reading of it is wrong. MangoHud is an implicit Vulkan layer
 # living INSIDE the game's process: there is no socket, no signal, and
@@ -53,7 +69,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -80,8 +96,11 @@ depends+=('mangohud')
 
 makedepends=('meson' 'ninja' 'gcc')
 
-optdepends=('quickshell: the graphical window (syn-arcade gui)'
+optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mode'
             'synui: the compositor the gaming shortcuts are installed into'
+            'steam: the game library and Big Picture tiles in big screen mode'
+            'gamescope: `big steam --gamescope` — a nested compositor for a TV whose resolution is not the desktop’s'
+            'retroarch: appears as a tile in big screen mode'
             'antimicrox: build a controller mapping by pressing every button'
             'sdl2-compat: SDL2 games that read the controller mappings'
             'sdl3: SDL3 games that read the controller mappings')

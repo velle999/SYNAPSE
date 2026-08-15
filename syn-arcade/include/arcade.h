@@ -82,6 +82,15 @@ int cmd_hud(int argc, char **argv);
 
 int cmd_pads(int argc, char **argv);
 
+/* Every controller on the machine reduced to the words a menu needs — "up",
+ * "accept", "back" — one per line on stdout, until the reader goes away.
+ *
+ * Lives in pad.c because that is where the evdev code is, and is exposed here
+ * because big screen mode is what reads it. ⚠ It synthesises NOTHING: no
+ * uinput device, no virtual keyboard, nothing the compositor or any other
+ * application can see. See the comment above it for why that is not a detail. */
+int pads_nav_stream(void);
+
 /* ── binds.c ─────────────────────────────────────────────────────────────── */
 
 /* Ask the running synui to re-read its config, so a just-written bind becomes
@@ -89,11 +98,27 @@ int cmd_pads(int argc, char **argv);
  * installer both reach for it. */
 int binds_reload(void);
 
+/* Whether the managed block in synuirc starts big screen mode at login, and
+ * setting it either way.
+ *
+ * ⚠ These live in binds.c and not in big.c because there is exactly ONE
+ * managed block in that file, delimited by one pair of markers. Two writers
+ * appending their own block would leave synui applying whichever it read last,
+ * and neither command able to remove the other's — which is why the block is
+ * read, changed and rewritten whole here rather than appended to from two
+ * places. */
+bool binds_autostart_get(void);
+int  binds_autostart_set(bool on);
+
 int cmd_binds(int argc, char **argv);
 
 /* ── sdlmap.c ────────────────────────────────────────────────────────────── */
 
 int cmd_map(int argc, char **argv);
+
+/* ── big.c ───────────────────────────────────────────────────────────────── */
+
+int cmd_big(int argc, char **argv);
 
 /* Exit codes shared across the commands.
  *

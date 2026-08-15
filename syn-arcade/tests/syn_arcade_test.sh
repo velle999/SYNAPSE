@@ -593,6 +593,361 @@ check "an unterminated block is still removed" $?
 grep -q "^terminal = syntty$" "$RC"
 check "...without eating the rest of the file" $?
 
+# ── big screen mode ─────────────────────────────────────────────────────────
+#
+# ⚠ NOTHING here launches anything. `big steam`, `big run steam-bpm` and
+# `big launch <appid>` all start real programs — on a build machine that would
+# open Steam, and on this developer's machine it would open Steam over whatever
+# they were doing. Only the REFUSALS are exercised, plus the library scanner,
+# which is pure reading and is the part with something to get wrong.
+#
+# `big start` is likewise never called: it takes a lock and execs quickshell.
+# The suite runs with WAYLAND_DISPLAY unset, so it refuses on its own — which
+# is itself worth an assertion.
+
+echo
+echo "big screen mode"
+
+# ── a described Steam installation ──────────────────────────────────────────
+#
+# Two libraries, because one is the bug: a machine with games on a second drive
+# keeps nothing for them in the home directory, and a scanner that reads only
+# the Steam root finds the runtimes and none of the games.
+STEAM="$T/steam"
+LIB2="$T/fastdisk/SteamLibrary"
+mkdir -p "$STEAM/steamapps" "$LIB2/steamapps" "$STEAM/appcache/librarycache"
+
+cat > "$STEAM/steamapps/libraryfolders.vdf" <<EOF
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"$STEAM"
+		"label"		""
+	}
+	"1"
+	{
+		"path"		"$LIB2"
+		"label"		""
+	}
+	"2"
+	{
+		"path"		"$T/unplugged-drive/SteamLibrary"
+	}
+}
+EOF
+
+manifest() {  # dir appid name stateflags lastplayed
+    cat > "$1/steamapps/appmanifest_$2.acf" <<EOF
+"AppState"
+{
+	"appid"		"$2"
+	"name"		"$3"
+	"StateFlags"		"$4"
+	"LastPlayed"		"$5"
+	"SizeOnDisk"		"1073741824"
+}
+EOF
+}
+
+manifest "$STEAM" 10 "Fixture Adventure"     4    100
+manifest "$STEAM" 20 "Proton Experimental"   4    900
+manifest "$STEAM" 30 "Still Downloading"     1026 800
+manifest "$LIB2"  40 "Second Disk Game"      4    200
+manifest "$LIB2"  50 "Hashed Art Game"       4    50
+
+# The three cover-art layouts Steam has used, all of which are still on disk on
+# a machine that has had it installed for a few years.
+mkdir -p "$STEAM/appcache/librarycache/10"
+: > "$STEAM/appcache/librarycache/10/library_600x900.jpg"          # current
+: > "$STEAM/appcache/librarycache/40_library_600x900.jpg"          # legacy flat
+mkdir -p "$STEAM/appcache/librarycache/50/deadbeefdeadbeef"
+: > "$STEAM/appcache/librarycache/50/deadbeefdeadbeef/library_capsule.jpg"
+
+export SYN_ARCADE_STEAM="$STEAM"
+
+says "$SA" big games --rec | head -1 | grep -q "^appid.*name.*art"
+check "games --rec names its columns first" $?
+
+[ "$("$SA" big games --rec | tail -n +2 | wc -l)" = 3 ]
+check "three installed games — not the tool, not the half-downloaded one" $?
+
+# A space is NOT percent-encoded — the record separator is a tab, and
+# encoding spaces would make every name in the suite unreadable.
+"$SA" big games --rec | cut -f2 | grep -qx "Second Disk Game"
+check "a game on the SECOND library is found (libraryfolders.vdf is read)" $?
+
+"$SA" big games --rec | cut -f2 | grep -q "Proton"
+[ $? != 0 ]
+check "Proton is not a game" $?
+
+"$SA" big games --rec | cut -f2 | grep -q "Still Downloading"
+[ $? != 0 ]
+check "a manifest without StateFlags 4 is not installed" $?
+
+"$SA" big games --all --rec | cut -f2 | grep -q "Proton"
+check "--all puts the tools back" $?
+
+# Most recently played first. On a gamepad every row down the list is a
+# physical press, so alphabetical order costs eleven of them to reach the game
+# somebody was playing yesterday.
+[ "$("$SA" big games --rec | sed -n 2p | cut -f2)" = "Second Disk Game" ]
+check "the most recently played game is first" $?
+
+[ "$("$SA" big games --rec | sed -n 4p | cut -f2)" = "Hashed Art Game" ]
+check "...and the least recent is last" $?
+
+"$SA" big games --rec | grep -q "10/library_600x900.jpg"
+check "cover art: the current per-appid layout" $?
+
+"$SA" big games --rec | grep -q "40_library_600x900.jpg"
+check "cover art: the legacy flat layout" $?
+
+"$SA" big games --rec | grep -q "deadbeefdeadbeef/library_capsule.jpg"
+check "cover art: the content-hash layout Steam uses now" $?
+
+# A library on a drive that is not plugged in is listed in the vdf and has no
+# steamapps directory. Skipping it must not be an error.
+says "$SA" big games | grep -q "Fixture Adventure"
+check "a library on an absent drive is skipped, not fatal" $?
+
+SYN_ARCADE_STEAM="$T/no-steam-here" says "$SA" big games --rec | head -1 |
+    grep -q "^appid"
+check "with no Steam at all the columns are still named" $?
+
+SYN_ARCADE_STEAM="$T/no-steam-here" "$SA" big games --rec >/dev/null 2>&1
+[ "$?" = 100 ]
+check "...and it exits 100, which is 'nothing to list', not failure" $?
+
+# ── the other tiles ─────────────────────────────────────────────────────────
+
+says "$SA" big apps --rec | head -1 | grep -q "^id.*name.*exec"
+check "apps --rec names its columns first" $?
+
+"$SA" big apps --rec | cut -f1 | grep -q "^desktop$"
+check "there is always a way out of a full-screen surface" $?
+
+"$SA" big apps --rec | cut -f1 | grep -q "^poweroff$"
+check "...and the machine's own switches are there" $?
+
+says "$SA" big run nosuchtile | grep -q "no tile called"
+check "an unknown tile id is refused" $?
+
+"$SA" big run nosuchtile >/dev/null 2>&1
+[ "$?" = 2 ]
+check "...with a usage status" $?
+
+says "$SA" big launch "'; rm -rf /" | grep -q "not an appid"
+check "an appid that is not a number is refused" $?
+
+says "$SA" big launch | grep -q "needs an appid"
+check "launch with no appid is refused" $?
+
+# ⚠ A layer-shell surface needs a compositor. WAYLAND_DISPLAY is unset for this
+# whole suite, so this must refuse rather than reach for whatever socket
+# happens to be in XDG_RUNTIME_DIR — which on a developer's machine is their
+# live desktop, and the failure mode is a full-screen window over their work.
+says "$SA" big start | grep -q "no Wayland session"
+check "big start refuses with no session" $?
+
+says "$SA" big status --rec | head -1 | grep -q "^field"
+check "status --rec names its columns first" $?
+
+says "$SA" big | grep -q "not running"
+check "nothing is running to begin with" $?
+
+# ── controller navigation, without a controller ─────────────────────────────
+#
+# `big nav` is the one thing here that turns hardware into behaviour, and the
+# hardware is exactly what a build machine does not have. It is testable anyway,
+# because the code opens the event node by path and reads input_event structs
+# out of it — so a FIFO in a fake /dev/input is a controller as far as this is
+# concerned, and the whole translation runs for real: which button is which
+# word, how a d-pad hat becomes a direction, that a release emits nothing, and
+# that a held direction repeats.
+#
+# ⚠ TWO things this deliberately does not claim to cover.
+#
+#   The analogue sticks. Their thresholds come from EVIOCGABS, an ioctl a FIFO
+#   cannot answer, so stick navigation needs a real pad on a real seat.
+#
+#   The writing end is held OPEN for the whole run, with `exec`, and that is
+#   not a detail. Close a FIFO and the reader gets POLLHUP — which this code
+#   correctly treats as "the controller was unplugged" and responds to by
+#   reopening every device from scratch, forgetting which direction was held.
+#   A test that wrote with a fresh `>` per batch would be testing a pad being
+#   yanked out between every button press.
+
+echo
+echo "controller navigation"
+
+NAVSYS="$T/navsys"
+NAVDEV="$T/navdev"
+mkdir -p "$NAVSYS" "$NAVDEV"
+
+navdir="$NAVSYS/event9/device"
+mkdir -p "$navdir/id" "$navdir/capabilities"
+printf 'Fixture Pad\n'   > "$navdir/name"
+printf '045e\n'          > "$navdir/id/vendor"
+printf '028e\n'          > "$navdir/id/product"
+printf '0001\n'          > "$navdir/id/version"
+printf '0003\n'          > "$navdir/id/bustype"
+printf '%s\n' "$PAD_KEY" > "$navdir/capabilities/key"
+printf '3\n'             > "$navdir/capabilities/abs"
+printf '0\n'             > "$navdir/capabilities/ff"
+
+mkfifo "$NAVDEV/event9"
+
+# One input_event per triple: 16 bytes of timeval (which nothing here reads),
+# then u16 type, u16 code, s32 value. Written by python because a struct with
+# NUL bytes in it is not something printf can be trusted to emit.
+#
+# EV_SYN=0/SYN_REPORT=0 ends a frame, and every batch below sends one — that is
+# what the kernel does, and it is what tells the reader "this is one complete
+# state now" rather than leaving a press and its release to cancel out.
+ev() {  # type code value [type code value ...] — appended to the open fd 9
+    python3 -c '
+import struct, sys
+out = sys.stdout.buffer
+a = sys.argv[1:]
+for i in range(0, len(a), 3):
+    out.write(struct.pack("qqHHi", 0, 0, int(a[i]), int(a[i+1]), int(a[i+2])))
+out.write(struct.pack("qqHHi", 0, 0, 0, 0, 0))     # SYN_REPORT
+out.flush()
+' "$@" >&9
+}
+
+NAVOUT="$T/nav.out"
+
+# The reader first: opening a FIFO for writing BLOCKS until there is one.
+SYN_ARCADE_SYSFS="$NAVSYS" SYN_ARCADE_DEV="$NAVDEV" timeout 6 "$SA" big nav \
+    > "$NAVOUT" 2>/dev/null &
+NAVPID=$!
+sleep 0.5
+
+exec 9> "$NAVDEV/event9"
+
+# EV_KEY=1, EV_ABS=3. BTN_SOUTH=304, BTN_EAST=305, BTN_TR=311, BTN_START=315,
+# BTN_MODE=316. ABS_HAT0X=16, ABS_HAT0Y=17.
+ev 1 304 1;  ev 1 304 0            # press and release the bottom face button
+ev 1 305 1;  ev 1 305 0
+ev 1 316 1;  ev 1 316 0
+ev 1 311 1;  ev 1 311 0
+ev 1 315 1;  ev 1 315 0
+
+# ⚠ Press and release in ONE write, in two frames. This is the case that used
+# to emit nothing at all: the direction was decided once per read(), so a tap
+# fast enough to land in a single batch cancelled itself out.
+ev 3 17 -1  0 0 0  3 17 0
+ev 3 16 1   0 0 0  3 16 0
+sleep 0.4
+
+# Held: one press, then nothing. What arrives after it is the repeat.
+ev 3 17 1
+sleep 1.2
+ev 3 17 0
+
+exec 9>&-
+wait "$NAVPID" 2>/dev/null
+
+navout=$(cat "$NAVOUT")
+
+printf '%s\n' "$navout" | grep -qx "accept"
+check "the bottom face button is 'accept'" $?
+
+printf '%s\n' "$navout" | grep -qx "back"
+check "the right face button is 'back'" $?
+
+# A press and its release are one word, not two. A stream reporting both halves
+# would move the selection twice per press.
+[ "$(printf '%s\n' "$navout" | grep -c '^accept$')" = 1 ]
+check "a button RELEASE emits nothing" $?
+
+printf '%s\n' "$navout" | grep -qx "guide"
+check "the guide button is its own word" $?
+
+printf '%s\n' "$navout" | grep -qx "page-right"
+check "a shoulder button pages" $?
+
+printf '%s\n' "$navout" | grep -qx "menu"
+check "start is 'menu'" $?
+
+printf '%s\n' "$navout" | grep -qx "up"
+check "a d-pad tap arriving in ONE read still becomes a direction" $?
+
+printf '%s\n' "$navout" | grep -qx "right"
+check "...on both axes" $?
+
+# Two taps, so exactly two directions before the held one. Returning to centre
+# must emit nothing, or letting go of the d-pad would move one square more
+# every time.
+[ "$(printf '%s\n' "$navout" | grep -cE '^(up|left|right)$')" = 2 ]
+check "returning to centre emits nothing" $?
+
+# The held press plus its repeats. Asserted as a range, not a count: an exact
+# number would make this a test of the build machine's scheduler.
+held=$(printf '%s\n' "$navout" | grep -c '^down$')
+[ "$held" -gt 1 ]
+check "a HELD direction repeats" $?
+
+[ "$held" -lt 30 ]
+check "...at a walking pace, not as fast as the loop spins" $?
+
+# ── at login ────────────────────────────────────────────────────────────────
+
+rm -rf "$XDG_CONFIG_HOME/synui"
+
+says "$SA" big autostart status | grep -qx "off"
+check "big screen at login starts off" $?
+
+# Turning it OFF when nothing is installed must not WRITE anything. "Make sure
+# this is not happening" is satisfied by a file that never mentioned it, and
+# creating a block to say so would install three keybinds nobody asked for.
+"$SA" big autostart off >/dev/null 2>&1
+[ ! -f "$RC" ]
+check "turning it off when it was never on writes no config" $?
+
+"$SA" big autostart on >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big start$" "$RC"
+check "turning it on writes the autostart line" $?
+
+# ⚠ synui does NOT implement the XDG autostart spec — nothing in a synui
+# session reads ~/.config/autostart — so a .desktop there would be silently
+# ignored. The synuirc line is the only thing that runs.
+grep -q "^bind = super+F10 spawn syn-arcade big toggle$" "$RC"
+check "...and the key that opens and closes it" $?
+
+says "$SA" big autostart status | grep -qx "on"
+check "status reads it back" $?
+
+says "$SA" binds show | grep -q "big screen mode at login"
+check "the shortcuts listing reports it too" $?
+
+# One managed block, read-modify-written. Two writers each appending their own
+# would leave synui applying whichever it read last, with neither command able
+# to remove the other's.
+[ "$(grep -c '>>> syn-arcade' "$RC")" = 1 ]
+check "there is exactly ONE managed block" $?
+
+"$SA" binds install --toggle=super+shift+H >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big start$" "$RC"
+check "installing keybinds does not silently turn the autostart off" $?
+
+says "$SA" binds install --big=super+F11 |
+    grep -q "whichever it read last"
+check "binding big screen to the overlay's key is refused" $?
+
+"$SA" big autostart off >/dev/null 2>&1
+grep -q "^autostart = syn-arcade big start$" "$RC"
+[ $? != 0 ]
+check "turning it off takes the line back out" $?
+
+grep -q "spawn syn-arcade big toggle" "$RC"
+check "...and leaves the key that opens it" $?
+
+"$SA" binds remove >/dev/null 2>&1
+unset SYN_ARCADE_STEAM
+
 # ── about ───────────────────────────────────────────────────────────────────
 
 echo

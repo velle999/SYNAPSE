@@ -54,11 +54,29 @@ static void usage(FILE *f)
 "  map remove <guid|name>  take one back out\n"
 "  map path                where the database is, and whether SDL reads it\n"
 "\n"
+"Big screen mode — the ten-foot interface, for a television and a controller\n"
+"  big                     whether it is running, and what it can launch\n"
+"  big start               open it (Super+F10 once the shortcuts are in)\n"
+"       --output=NAME      which screen. Default: wherever the pointer is\n"
+"  big stop | toggle       close it, or the key's own behaviour\n"
+"  big autostart on|off    open it at login, instead of the desktop\n"
+"  big steam               Steam Big Picture\n"
+"       --gamescope[=WxH@R]  through gamescope, for a TV that is not your\n"
+"                            desktop's resolution\n"
+"  big games               every installed Steam game, most recent first\n"
+"       --all              include Proton and the runtimes\n"
+"  big launch <appid>      one of them, the way Steam's own shortcuts do\n"
+"  big apps                the other tiles: launchers, media, power\n"
+"  big run <id>            press one of them\n"
+"  big nav                 controller input as words, one per line. The shell\n"
+"                          reads this; nothing is synthesised into the desktop\n"
+"\n"
 "Shortcuts\n"
 "  binds                   whether the gaming keys are installed, and which\n"
 "  binds install           add them to synuirc\n"
 "       --toggle=COMBO     default super+F11\n"
 "       --cycle=COMBO      default super+F12\n"
+"       --big=COMBO        default super+F10\n"
 "       --reload           ask synui to re-read its config straight away\n"
 "  binds remove            take them back out\n"
 "  binds reload            re-read the compositor config now\n"
@@ -196,6 +214,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "map"))	return cmd_map(rest_c, rest);
 	if (!strcmp(cmd, "binds") || !strcmp(cmd, "bind"))
 					return cmd_binds(rest_c, rest);
+	if (!strcmp(cmd, "big"))	return cmd_big(rest_c, rest);
 	if (!strcmp(cmd, "gui"))	return cmd_gui();
 	if (!strcmp(cmd, "about"))
 		return cmd_about(rest_c > 0 && !strcmp(rest[0], "--rec"));

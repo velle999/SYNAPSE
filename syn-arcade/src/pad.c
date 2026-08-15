@@ -1153,3 +1153,412 @@ int cmd_pads(int argc, char **argv)
 	fprintf(stderr, "syn-arcade: unknown pads command '%s'\n", sub);
 	return EX_USAGE;
 }
+
+/* ── the navigation stream ───────────────────────────────────────────────── */
+
+/*
+ * `syn-arcade big nav` — every controller on the machine, reduced to the eight
+ * words a menu needs, one per line on stdout.
+ *
+ * ── Why this exists at all, and why it is NOT synthetic input ───────────────
+ *
+ * A ten-foot interface has to be drivable from a gamepad, and Qt does not read
+ * one: QtGamepad was removed in Qt 6, and quickshell has no evdev binding. The
+ * obvious fix — a daemon that turns stick movement into arrow KEY events
+ * through uinput — is the one thing this project will not do. Synthetic input
+ * goes to the compositor, which delivers it to whatever is focused, so a stray
+ * event lands in somebody's browser rather than in this menu; that has happened
+ * here before and it is not recoverable. It is also wrong even when it works:
+ * a virtual keyboard is a system-wide device, so every game, terminal and text
+ * field on the machine sees stick drift as held arrow keys.
+ *
+ * So nothing is synthesised. This process reads the event nodes it is already
+ * allowed to read and writes WORDS to a pipe, and exactly one program is
+ * listening at the other end. Nothing outside the shell can see a keystroke,
+ * because there is no keystroke.
+ *
+ * ── Repeat is implemented here, not in the shell ────────────────────────────
+ *
+ * A direction that is HELD has to repeat, or crossing a library of sixty games
+ * means sixty separate pushes of the stick. Doing that in QML would need the
+ * shell to track which direction is down, which is the same state machine one
+ * layer further from the device — and it cannot see the difference between
+ * "held" and "the pad stopped reporting", which is what an unplugged
+ * controller looks like. Here, a POLLHUP ends the hold; there, it would repeat
+ * forever.
+ *
+ * ── The three sources of a direction, all merged ────────────────────────────
+ *
+ * A d-pad arrives as a hat (ABS_HAT0X/Y) on most pads and as four BUTTONS
+ * (BTN_DPAD_*) on some — the Switch Pro controller and several 8BitDo modes —
+ * and the left stick is a third. All three are folded into one direction per
+ * pad, so a person can use whichever their thumb is on, and no pad reports a
+ * direction twice.
+ */
+
+#define NAV_MAX 16
+#define NAV_DELAY_MS  380	/* held this long before it starts repeating */
+#define NAV_REPEAT_MS 110	/* then one step this often */
+#define NAV_RESCAN_MS 2000	/* how often a hotplugged pad is noticed */
+
+typedef struct {
+	int  fd;
+	char id[32];
+	int  cx, cy;		/* stick centre and the distance that counts */
+	int  span_x, span_y;
+	int  stick_x, stick_y;	/* the three sources, each -1/0/1 */
+	int  hat_x, hat_y;
+	int  btn_x, btn_y;
+	int  dir_x, dir_y;	/* what they merge to, and what was last sent */
+	long long repeat_at;
+} navpad_t;
+
+/*
+ * Where "pushed" starts, per axis, per device.
+ *
+ * NOT a fixed number: axis ranges are whatever the device reports — 0..255 on
+ * an old USB pad, -32768..32767 on a DualSense, 0..65535 on some wheels — so a
+ * hardcoded threshold is either unreachable on one and permanently tripped on
+ * another. EVIOCGABS gives the real range, and half of it from centre is far
+ * enough that resting-hand jitter never trips and a deliberate push always
+ * does.
+ *
+ * ⚠ Deliberately NOT the device's `flat` (the deadzone `pads calibrate` sets).
+ * That is tuned for a game — small, so aiming stays precise — and a menu
+ * threshold that small turns a thumb resting on the stick into a list
+ * scrolling on its own.
+ */
+static void nav_axis_range(int fd, int code, int *centre, int *span)
+{
+	struct input_absinfo ai;
+	*centre = 0;
+	*span = 1;
+	if (ioctl(fd, EVIOCGABS(code), &ai) != 0)
+		return;
+	*centre = (ai.maximum + ai.minimum) / 2;
+	*span = (ai.maximum - ai.minimum) / 4;	/* half of half-range */
+	if (*span < 1)
+		*span = 1;
+}
+
+static int nav_axis_dir(int value, int centre, int span)
+{
+	if (value > centre + span) return 1;
+	if (value < centre - span) return -1;
+	return 0;
+}
+
+/* Open every attached pad. Returns how many are open. */
+static int nav_open(navpad_t *pads, int max)
+{
+	int count = 0;
+	int n = 0;
+	pad_t *found = pads_scan(&n);
+
+	for (int i = 0; i < n && count < max; i++) {
+		if (!found[i].is_pad)
+			continue;
+		/* Quiet on failure, unlike every other command here: a pad that
+		 * cannot be opened is one this stream ignores, and a menu is
+		 * not the place to explain uaccess. `syn-arcade pads` is. */
+		int fd = open(found[i].node, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+		if (fd < 0)
+			continue;
+
+		navpad_t *p = &pads[count++];
+		memset(p, 0, sizeof(*p));
+		p->fd = fd;
+		snprintf(p->id, sizeof(p->id), "%s", found[i].id);
+		nav_axis_range(fd, ABS_X, &p->cx, &p->span_x);
+		nav_axis_range(fd, ABS_Y, &p->cy, &p->span_y);
+	}
+	free(found);
+	return count;
+}
+
+static void nav_close(navpad_t *pads, int count)
+{
+	for (int i = 0; i < count; i++)
+		if (pads[i].fd >= 0)
+			close(pads[i].fd);
+}
+
+/* ⚠ FLUSHED on every line. stdout is a pipe here — the shell is the only
+ * consumer — and a pipe is block buffered, so without this a press does
+ * nothing until 4KB of them have piled up. That is not a slow menu, it is a
+ * dead one. */
+static void nav_say(const char *word)
+{
+	puts(word);
+	fflush(stdout);
+}
+
+static void nav_say_dir(int dx, int dy)
+{
+	if (dy < 0) nav_say("up");
+	else if (dy > 0) nav_say("down");
+	else if (dx < 0) nav_say("left");
+	else if (dx > 0) nav_say("right");
+}
+
+/*
+ * The button map.
+ *
+ * Only the buttons a menu has a meaning for. Everything else — triggers, stick
+ * clicks, the four paddles on the back of a pad that claims to have them — is
+ * dropped here rather than passed on as a number, because a stream carrying
+ * events the reader has no use for is one where a new button silently becomes a
+ * navigation command.
+ *
+ * ⚠ A is BTN_SOUTH and B is BTN_EAST *by position*, not by the letter printed
+ * on the pad. Nintendo-layout controllers have those letters the other way
+ * round and the kernel still reports the bottom button as BTN_SOUTH, which is
+ * the one under the thumb — matching the physical position is what makes the
+ * same tile confirm on every controller.
+ */
+static const char *nav_button(int code)
+{
+	switch (code) {
+	case BTN_SOUTH:		return "accept";
+	case BTN_EAST:		return "back";
+	case BTN_NORTH:		return "info";
+	case BTN_WEST:		return "search";
+	case BTN_START:		return "menu";
+	case BTN_SELECT:	return "select";
+	case BTN_MODE:		return "guide";
+	case BTN_TL:		return "page-left";
+	case BTN_TR:		return "page-right";
+	default:		return NULL;
+	}
+}
+
+/*
+ * Fold this pad's three direction sources into one and say so if it changed.
+ *
+ * The stick is consulted LAST so that a d-pad press wins while both are held —
+ * the d-pad is the deliberate one, and a thumb resting on a stick should not
+ * override it.
+ */
+static void nav_settle(navpad_t *p, long long now)
+{
+	int dx = p->hat_x ? p->hat_x : p->btn_x ? p->btn_x : p->stick_x;
+	int dy = p->hat_y ? p->hat_y : p->btn_y ? p->btn_y : p->stick_y;
+
+	/* One axis at a time: a stick pushed diagonally would otherwise emit
+	 * two moves per step and the selection would jump a row AND a column.
+	 * Vertical wins, because a shelf-and-rows layout is browsed down more
+	 * than it is browsed across. */
+	if (dy) dx = 0;
+
+	if (dx == p->dir_x && dy == p->dir_y)
+		return;
+
+	p->dir_x = dx;
+	p->dir_y = dy;
+
+	if (dx || dy) {
+		nav_say_dir(dx, dy);
+		p->repeat_at = now + NAV_DELAY_MS;
+	} else {
+		p->repeat_at = 0;	/* let go: stop repeating */
+	}
+}
+
+int pads_nav_stream(void)
+{
+	navpad_t pads[NAV_MAX];
+	int count = nav_open(pads, NAV_MAX);
+
+	/*
+	 * Not an error, and nothing is printed about it. A television session
+	 * starts before anybody picks up a controller, and this stream is the
+	 * shell's only chance to hear the one plugged in a minute later — so it
+	 * waits, rescanning, rather than exiting to report an empty machine.
+	 * The shell says "no controller" on its own if it wants to; that is a
+	 * question `syn-arcade pads` already answers.
+	 */
+	long long rescan_at = now_ms() + NAV_RESCAN_MS;
+
+	for (;;) {
+		struct pollfd pfd[NAV_MAX];
+		for (int i = 0; i < count; i++) {
+			pfd[i].fd = pads[i].fd;
+			pfd[i].events = POLLIN;
+			pfd[i].revents = 0;
+		}
+
+		/* The timeout is whichever comes first: the next repeat step or
+		 * the next hotplug scan. Polling on a fixed tick instead would
+		 * either make repeat lumpy or spin the CPU when nothing is
+		 * held. */
+		long long now = now_ms();
+		long long wake = rescan_at;
+		for (int i = 0; i < count; i++)
+			if (pads[i].repeat_at && pads[i].repeat_at < wake)
+				wake = pads[i].repeat_at;
+		int timeout = (int)(wake - now);
+		if (timeout < 0) timeout = 0;
+		if (timeout > NAV_RESCAN_MS) timeout = NAV_RESCAN_MS;
+
+		int r = poll(pfd, (nfds_t)count, timeout);
+		if (r < 0 && errno != EINTR)
+			break;
+
+		now = now_ms();
+
+		/* ── events ── */
+		for (int i = 0; i < count && r > 0; i++) {
+			if (!(pfd[i].revents & POLLIN))
+				continue;
+
+			struct input_event ev[64];
+			ssize_t got = read(pads[i].fd, ev, sizeof(ev));
+			if (got < (ssize_t)sizeof(ev[0]))
+				continue;
+
+			navpad_t *p = &pads[i];
+			int n = (int)(got / (ssize_t)sizeof(ev[0]));
+
+			for (int k = 0; k < n; k++) {
+				int code = ev[k].code, val = ev[k].value;
+
+				if (ev[k].type == EV_ABS) {
+					switch (code) {
+					case ABS_X:
+						p->stick_x = nav_axis_dir(val, p->cx, p->span_x);
+						break;
+					case ABS_Y:
+						p->stick_y = nav_axis_dir(val, p->cy, p->span_y);
+						break;
+					case ABS_HAT0X:
+						p->hat_x = val > 0 ? 1 : val < 0 ? -1 : 0;
+						break;
+					case ABS_HAT0Y:
+						p->hat_y = val > 0 ? 1 : val < 0 ? -1 : 0;
+						break;
+					default:
+						break;
+					}
+				} else if (ev[k].type == EV_SYN &&
+					   code == SYN_REPORT) {
+					/* END OF FRAME — and the reason this
+					 * is handled rather than skipped as
+					 * "framing, not input".
+					 *
+					 * One read() can return several
+					 * frames. Deciding the direction once
+					 * per READ means a press and its
+					 * release, both landing in the same
+					 * batch, cancel each other out and
+					 * emit NOTHING — a d-pad tap quick
+					 * enough to arrive in one go simply
+					 * does not move the selection, and it
+					 * happens more the busier the machine
+					 * is, which is the worst possible
+					 * shape for a bug. SYN_REPORT is
+					 * exactly the kernel saying "that is
+					 * one complete state now", so it is
+					 * where the state is read. */
+					nav_settle(p, now);
+				} else if (ev[k].type == EV_KEY) {
+					/* value 2 is the kernel's own key
+					 * autorepeat, which pads do not send
+					 * and which would double every press
+					 * from anything that did. */
+					int down = val == 1;
+					switch (code) {
+					case BTN_DPAD_UP:    p->btn_y = down ? -1 : 0; break;
+					case BTN_DPAD_DOWN:  p->btn_y = down ?  1 : 0; break;
+					case BTN_DPAD_LEFT:  p->btn_x = down ? -1 : 0; break;
+					case BTN_DPAD_RIGHT: p->btn_x = down ?  1 : 0; break;
+					default: {
+						const char *w = nav_button(code);
+						if (w && val == 1)
+							nav_say(w);
+						break;
+					}
+					}
+				}
+			}
+
+			/* One last settle for a device that sent no SYN in
+			 * this batch. Cheap, and idempotent — nothing is
+			 * emitted unless the direction actually changed. */
+			nav_settle(p, now);
+		}
+
+		/*
+		 * ── hotplug, in both directions ──
+		 *
+		 * ⚠ AFTER the events above, never before, and this is the one
+		 * ordering in this function that is not arbitrary. A hangup
+		 * does NOT arrive on its own: the kernel sets POLLHUP in the
+		 * SAME revents as the POLLIN carrying the last events the
+		 * device produced. Rescanning first would close and reopen
+		 * every descriptor with those events still unread, so the last
+		 * thing somebody did before a pad dropped out would be thrown
+		 * away — and on a device that produces a hangup per batch, it
+		 * would be every event, forever, with the stream looking
+		 * perfectly healthy.
+		 */
+		bool relist = false;
+		for (int i = 0; i < count; i++)
+			if (pfd[i].revents & (POLLERR | POLLHUP))
+				relist = true;	/* unplugged mid-session */
+
+		if (relist || now >= rescan_at) {
+			int n = 0;
+			pad_t *found = pads_scan(&n);
+			int live = 0;
+			for (int i = 0; i < n; i++)
+				if (found[i].is_pad)
+					live++;
+			free(found);
+
+			if (relist || live != count) {
+				/* ⚠ Reopen the WHOLE set rather than diffing.
+				 * Event node numbers are recycled: a pad
+				 * unplugged and plugged back in is usually a
+				 * different eventN, and sometimes the same one
+				 * pointing at different hardware. Matching by
+				 * id across a replug is how a stream ends up
+				 * reading a keyboard. */
+				nav_close(pads, count);
+				count = nav_open(pads, NAV_MAX);
+			}
+			rescan_at = now + NAV_RESCAN_MS;
+		}
+
+		/* ── repeat ── */
+		for (int i = 0; i < count; i++) {
+			navpad_t *p = &pads[i];
+			if (!p->repeat_at || now < p->repeat_at)
+				continue;
+			if (!p->dir_x && !p->dir_y) {
+				p->repeat_at = 0;
+				continue;
+			}
+			nav_say_dir(p->dir_x, p->dir_y);
+			p->repeat_at = now + NAV_REPEAT_MS;
+		}
+
+		/*
+		 * The shell exiting closes the pipe, and this is what makes
+		 * that the end of this process too — one leaked stream per big
+		 * screen session, each holding every event node open, is the
+		 * alternative.
+		 *
+		 * ⚠ Not redundant with SIGPIPE. The default disposition would
+		 * kill us on the first write to a closed pipe, but a signal
+		 * disposition is INHERITED: start big screen mode from a shell
+		 * or a service that ignores SIGPIPE and every descendant does
+		 * too, and then the write simply fails with EPIPE and sets the
+		 * error flag instead. Checking it covers both worlds.
+		 */
+		if (feof(stdout) || ferror(stdout))
+			break;
+	}
+
+	nav_close(pads, count);
+	return EX_OK;
+}

@@ -27,6 +27,7 @@ sources = files(
   'src/pad.c',
   'src/binds.c',
   'src/sdlmap.c',
+  'src/big.c',
 )
 
 executable('syn-arcade', sources,
@@ -35,6 +36,13 @@ executable('syn-arcade', sources,
 
 install_data('data/syn-arcade.qml', install_dir: get_option('datadir') / 'syn-arcade')
 
+# Big screen mode's shell — a separate QML file, not a tab of the one above,
+# because it is a different SURFACE: a full-screen layer-shell window with
+# exclusive keyboard focus, where the other is an ordinary desktop window. They
+# share the record format and nothing else.
+install_data('data/syn-arcade-big.qml',
+             install_dir: get_option('datadir') / 'syn-arcade')
+
 # Scalable only: Qt renders the SVG at whatever size the dock or the menu asks
 # for, and a set of PNGs would be five more files to keep in step with one
 # drawing.
@@ -42,6 +50,9 @@ install_data('data/syn-arcade.svg',
              install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps')
 
 install_data('data/syn-arcade.desktop',
+             install_dir: get_option('datadir') / 'applications')
+
+install_data('data/syn-arcade-big.desktop',
              install_dir: get_option('datadir') / 'applications')
 
 # ⚠ The session profile is not optional garnish — it is half the mechanism.

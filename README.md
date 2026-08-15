@@ -164,7 +164,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
 | **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
-| **`syn-arcade`** | The game assistant. Three things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); and **SDL mapping overrides** for a pad whose buttons come out in the wrong places. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
+| **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, and the machine's own switches as tiles, drivable from a controller and openable at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 
 ### Apps
 
@@ -732,6 +732,54 @@ SDL3 game reads it. A mapping that says `platform:Windows` loads and is then
 silently never applied — the most common reason a pasted mapping does nothing —
 so that one is refused with the reason.
 
+**Big screen mode** is the couch face of the machine — a full-screen, ten-foot
+interface you drive with a controller, with the keyboard left on the table.
+
+```bash
+syn-arcade big start                   # open it (Super+F10 once the keys are in)
+syn-arcade big autostart on            # …and open it at login instead of the desktop
+syn-arcade big games                   # what it will show, in a terminal
+syn-arcade big steam --gamescope=3840x2160@60
+```
+
+It shows your **installed Steam library with its cover art**, sorted by what you
+played most recently; **Steam Big Picture**; whatever launchers and media players
+are actually on the machine; and the machine's own switches — desktop, sleep,
+restart, power off. Every tile there is one that works: nothing is listed that is
+not installed.
+
+The library is read the way Steam stores it, which is three questions and not
+one — `libraryfolders.vdf` for **every drive** Steam has been pointed at (a
+scanner that reads only your home directory finds the runtimes and none of the
+games), a manifest per installed app, and a cover-art cache that has had three
+different on-disk layouts and still has all three on any machine that has run
+Steam for a few years. Proton and the Steam Linux Runtimes are dropped, because
+the first screen of a ten-foot launcher is the whole interface; `--all` puts them
+back.
+
+<details>
+<summary>Why the controller navigation is not a virtual keyboard</summary>
+
+Qt does not read a gamepad — QtGamepad was removed in Qt 6 — so the obvious way
+to make a QML interface controller-drivable is a daemon that turns stick
+movement into arrow **key** events through `uinput`. SynapseOS will not do that,
+for a reason learned here the hard way: synthetic input goes to the compositor,
+which delivers it to whatever is focused. A stray event lands in the browser you
+left open, not in the menu. It is also wrong even when it works — a virtual
+keyboard is a system-wide device, so every game, terminal and text field on the
+machine sees stick drift as held arrow keys.
+
+`syn-arcade big nav` reads the event nodes `udev` already grants you and writes
+**words** — `up`, `accept`, `page-right` — one per line down a pipe, and exactly
+one process is listening. Nothing outside big screen mode can see a keystroke,
+because there is no keystroke. Auto-repeat for a held direction is done there
+too, where a disconnected pad ends the hold; a shell doing it a layer further up
+cannot tell "held" from "the pad stopped reporting" and would repeat forever.
+
+A keyboard and a mouse work as well, mapped onto those same words — the machine
+that is a television in the evening is a desktop in the afternoon.
+</details>
+
 **CachyOS Proton** comes with the installer's Steam option — `proton-cachyos-slr`,
 Valve's experimental branch plus the CachyOS patch set, built against the same
 Steam Linux Runtime as Valve's own Proton. It installs into
@@ -786,7 +834,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
-| `syn-arcade` | The game assistant — `hud toggle/cycle/set/path/adopt` drives the MangoHud overlay inside a running game, `pads list/info/test/rumble/calibrate` covers controllers outside Steam, `map add/remove` overrides SDL button mappings, and `binds install` puts the overlay on `Super`+`F11` / `Super`+`F12`. `syn-arcade gui` opens the window. See [Gaming](#gaming) |
+| `syn-arcade` | The game assistant — `hud toggle/cycle/set/path/adopt` drives the MangoHud overlay inside a running game, `pads list/info/test/rumble/calibrate` covers controllers outside Steam, `map add/remove` overrides SDL button mappings, `binds install` puts the overlay on `Super`+`F11` / `Super`+`F12`, and `big start`/`big autostart on` opens the ten-foot big screen interface on `Super`+`F10` or at login. `syn-arcade gui` opens the window. See [Gaming](#gaming) |
 | `syn-arsenal` | Browse and install BlackArch security tooling by category — a window by default, `--tui` in the terminal, `--enable-repo` to add the repository |
 | `syn-confine` | Run a command inside a kernel-enforced allowlist — `syn-confine --ro /usr --rw ~/project -- ./build.sh`. `--print` shows the resolved policy without running anything |
 | `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
