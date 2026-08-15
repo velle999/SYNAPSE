@@ -58,6 +58,16 @@ static const setting_t settings[] = {
 	 * manager is until you ask for two. The divider's position is NOT
 	 * remembered: that is a gesture about what is on screen right now. */
 	{ "split",     T_BOOL, "0",     0, 1,   NULL },
+	/* The left panel — Recent, Trash, Places, and the folder tree when it is
+	 * on. ON by default, because that is the window everybody already has;
+	 * remembered because hiding it is a decision about the shape of the
+	 * window, exactly like `split`, and a panel that comes back on every
+	 * launch is a panel that was never really hidden.
+	 *
+	 * It hides the WHOLE strip. The tree is a section inside it, so `tree`
+	 * stays a separate setting: turning the panel off and on again must not
+	 * silently lose which sections were open in it. */
+	{ "sidebar",   T_BOOL, "1",     0, 1,   NULL },
 };
 
 static const setting_t *find_setting(const char *key)

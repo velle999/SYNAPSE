@@ -699,6 +699,31 @@ v=$(SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config get view)
 SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config set view sideways >/dev/null 2>&1
 [ $? -ne 0 ] && ok "an invented view mode is refused" || bad "view accepted 'sideways'"
 
+# The left panel. ON by default and it has to stay that way: the default IS the
+# window everybody already has, and a "1" that ever became "0" would hide the
+# places list on every existing install at once, with nothing said.
+v=$(SYNFILES_CONFIG="$T/sidecfg" "$SYNFILES" config get sidebar)
+[ "$v" = 1 ] && ok "the sidebar is on by default" || bad "sidebar defaulted to '$v'"
+
+SYNFILES_CONFIG="$T/sidecfg" "$SYNFILES" config set sidebar 0 >/dev/null
+v=$(SYNFILES_CONFIG="$T/sidecfg" "$SYNFILES" config get sidebar)
+[ "$v" = 0 ] && ok "hiding the sidebar is remembered" || bad "sidebar came back '$v'"
+
+# Boolean, not free text — the QML reads it as `=== "1"`, so anything that is
+# neither 0 nor 1 would silently mean "hidden".
+SYNFILES_CONFIG="$T/sidecfg" "$SYNFILES" config set sidebar maybe >/dev/null 2>&1
+[ $? -ne 0 ] && ok "a non-boolean sidebar value is refused" || bad "sidebar accepted 'maybe'"
+
+# The QML half of it: a setting the binary remembers and the window never reads
+# is the shape of bug this pairing exists to prevent. Its own path, because
+# $QML is not defined until the QML section far below.
+_qml="$(dirname "$0")/../data/synfiles.qml"
+grep -q 'case "sidebar":' "$_qml" \
+    && ok "the window reads the sidebar setting back" \
+    || bad "nothing in the QML reads the sidebar setting"
+grep -q 'Qt.Key_F9' "$_qml" \
+    && ok "F9 toggles the sidebar" || bad "F9 is not bound"
+
 # The text slider is a percentage with a floor and a ceiling, like icon_size:
 # a settings file that accepts 0 or 5000 is a window that opens unreadable.
 SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config set text_scale 5000 >/dev/null

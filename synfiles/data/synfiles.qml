@@ -1420,6 +1420,10 @@ FloatingWindow {
     property bool   defaultReverse: false
     property bool   defaultHidden: false
 
+    // The left panel. Not per-tab and not per-pane: it is the shape of the
+    // WINDOW, like the split, so both panes and every tab see the same one.
+    property bool   showSidebar: true
+
     Process {
         id: cfgReadProc
         command: [root.bin, "--rec", "config", "list"]
@@ -1446,6 +1450,7 @@ FloatingWindow {
                     // the other and focuses the new pane, neither of which is
                     // what restoring a remembered layout means.
                     case "split":     root.split = r.value === "1"; break
+                    case "sidebar":   root.showSidebar = r.value === "1"; break
                     }
                 }
                 // Only after applying, or the act of applying would write every
@@ -1538,6 +1543,7 @@ FloatingWindow {
         root.refreshPeekAll()
     }
     onShowTreeChanged: root.saveSetting("tree", root.showTree ? 1 : 0)
+    onShowSidebarChanged: root.saveSetting("sidebar", root.showSidebar ? 1 : 0)
     onViewModeChanged: root.saveSetting("view", root.viewMode)
 
     // ── Address bar ─────────────────────────────────────────────────────────
@@ -1610,6 +1616,7 @@ FloatingWindow {
         }
         case "thumbs": root.thumbs = !root.thumbs; break   // onThumbsChanged saves
         case "split": root.toggleSplit(); break            // onSplitChanged saves
+        case "sidebar": root.showSidebar = !root.showSidebar; break  // onShowSidebarChanged saves
         case "tree":
             root.showTree = !root.showTree
             if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
@@ -1688,7 +1695,7 @@ FloatingWindow {
                     ? root.disp(root.tab.path) : root.homeDir
         Quickshell.execDetached(["sh", "-c",
             'cd "$1" || exit 1; ' +
-            'for t in kitty foot alacritty konsole xterm; do ' +
+            'for t in syntty kitty foot alacritty konsole xterm; do ' +
             '  command -v "$t" >/dev/null 2>&1 && exec "$t"; done; ' +
             'echo "no terminal emulator found" >&2; exit 127',
             "sh", dir])
@@ -2197,7 +2204,13 @@ FloatingWindow {
         Rectangle {
             id: sidebar
             anchors { top: toolBar.bottom; left: parent.left; bottom: parent.bottom }
-            width: 220
+            // Width AND visible, because the pane beside it anchors to
+            // `sidebar.right`: hiding it without collapsing the width would
+            // leave a 220px hole where the panel used to be, and collapsing the
+            // width without hiding it would draw the panel's own background
+            // colour as a hairline down the left edge.
+            width: root.showSidebar ? 220 : 0
+            visible: root.showSidebar
             color: root.cPanel
 
             Flickable {
@@ -2210,7 +2223,10 @@ FloatingWindow {
                 // The gutter the scrollbar lives in. Reserved always, or the
                 // eject glyph ends up underneath the handle exactly when a
                 // long sidebar makes both appear.
-                anchors.rightMargin: 12
+                // Zero when the panel is collapsed: a 12px gutter inside a
+                // 0px panel is a Flickable with width -12, which QML reports as
+                // a binding warning on every toggle.
+                anchors.rightMargin: root.showSidebar ? 12 : 0
                 contentHeight: sideCol.implicitHeight
                 clip: true
 
@@ -2564,6 +2580,8 @@ FloatingWindow {
                                   act: "thumbs",  on: true },
                                 { label: root.split ? "Close Split View" : "Split View",
                                   act: "split",   on: true },
+                                { label: root.showSidebar ? "Hide Sidebar" : "Show Sidebar",
+                                  act: "sidebar", on: true },
                                 { label: "-",                    act: "",         on: true },
                                 { label: "Show Hidden Files",    act: "hidden",   on: true },
                                 { label: "Select All",           act: "selectall",on: true },
@@ -2612,6 +2630,7 @@ FloatingWindow {
                                             if (a === "hidden") return root.tab && root.tab.showHidden ? "✓" : ""
                                             if (a === "tree")   return root.showTree ? "✓" : ""
                                             if (a === "thumbs") return root.thumbs ? "✓" : ""
+                                            if (a === "sidebar") return root.showSidebar ? "✓" : ""
                                             return ""
                                         }
                                         color: root.cAccent
@@ -2636,6 +2655,7 @@ FloatingWindow {
                                                 break
                                             case "thumbs":  root.thumbs = !root.thumbs; break   // onThumbsChanged saves
                                             case "split":   root.toggleSplit(); break
+                                            case "sidebar": root.showSidebar = !root.showSidebar; break
                                             case "hidden": {
                                                 const v = !root.tab.showHidden
                                                 root.setTab({ showHidden: v })
@@ -3439,6 +3459,7 @@ FloatingWindow {
                         { label: "Previews",         act: "thumbs",     tick: root.thumbs },
                         { label: "Folder Tree",      act: "tree",       tick: root.showTree },
                         { label: "Split View",       act: "split",      tick: root.split },
+                        { label: "Sidebar",          act: "sidebar",    tick: root.showSidebar },
                         { label: "-",                act: "",           tick: false }
                     ]
                     delegate: Item {
@@ -4220,6 +4241,11 @@ FloatingWindow {
             } else if (event.key === Qt.Key_F3) {
                 // Dolphin's key for it, which is the one a hand already knows.
                 root.toggleSplit()
+                event.accepted = true
+            } else if (event.key === Qt.Key_F9) {
+                // Dolphin and Nautilus both hide the places panel on F9, so it
+                // is the key a hand already knows here too.
+                root.showSidebar = !root.showSidebar
                 event.accepted = true
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                 if (event.modifiers & Qt.AltModifier) root.openProperties()
