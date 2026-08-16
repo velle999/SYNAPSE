@@ -261,7 +261,18 @@ sed -i "s|PLACEHOLDER|$TMP/steam|" "$TMP/steam/steamapps/libraryfolders.vdf"
 # simply ran out of games and looked like a layout that stops halfway — the
 # fixture has to be longer than the widest shelf, or a wide screen silently
 # tests nothing.
-for id in 400 620 630 730 8930 4000 220 240 280 300 320 340 360 380 420 440; do
+#
+# ⚠ AND A SHORT LIBRARY IS A DIFFERENT LAYOUT, not merely a shorter one — which
+# is why `GAMES=n` exists. A shelf that FITS is packed into a band with
+# whatever comes next, so a laptop with three games draws Games, Play, Media
+# and Apps on ONE row where a machine with fifty draws Games on its own. Every
+# screenshot this rig ever took was of the crowded case.
+ALLIDS="400 620 630 730 8930 4000 220 240 280 300 320 340 360 380 420 440"
+IDS=$ALLIDS
+if [ -n "${GAMES:-}" ]; then
+    IDS=$(printf '%s\n' $ALLIDS | head -n "$GAMES" | tr '\n' ' ')
+fi
+for id in $IDS; do
 cat > "$TMP/steam/steamapps/appmanifest_$id.acf" <<ACF
 "AppState"
 {

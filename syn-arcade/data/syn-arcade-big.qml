@@ -1057,6 +1057,17 @@ ShellRoot {
         return kind === "game" ? 9 : kind === "news" ? 14 : 11
     }
 
+    // ── the SHAPE of a tile, which is a second fact about a shelf ────────────
+    //
+    // A cover is 2:3 and everything else is a flat card. In units that is a
+    // strip roughly FOURTEEN high against one that is EIGHT, and the packer has
+    // to know it — see the band rule below.
+    //
+    // ⚠ ONE PLACE, for exactly the reason idealUnits gives above: the strip
+    // reads this too. Two copies is a packer reserving a row of one height for
+    // a strip that draws itself at another.
+    function isPortrait(sh) { return sh.kind === "game" }
+
     // How much a selected tile grows. ⚠ ONE HOME, for the same reason
     // idealUnits is: the delegate scales by it and the strip has to RESERVE
     // room for it on every side. Two copies is a highlight drawn outside the
@@ -1163,6 +1174,33 @@ ShellRoot {
         for (let i = 0; i < shell.shelves.length; i++) {
             const sh = shell.shelves[i]
             const bar = shell.isBar(sh)
+
+            // ⚠ A BAND IS ONE SHAPE OF TILE, AND THIS RULE OUTRANKS THE BAR
+            // RULE BELOW.
+            //
+            // Reported from a 1080p laptop with three games installed, where
+            // the whole interface arrived in the top half of the screen with a
+            // hole in the middle of it. Nothing was wrong with the packer's
+            // arithmetic: three covers FIT, so Games was packed into a band
+            // with Play, Media and Apps exactly as the rule says — and a Row
+            // takes the height of its tallest child and aligns them all at the
+            // top. A cover strip is about fourteen units high and a bar is
+            // about eight, so half of that row was empty by construction, and
+            // the rows that should have filled the screen below it were one
+            // fewer than they should have been.
+            //
+            // ⚠ INVISIBLE ON A REAL LIBRARY, which is why it shipped: fifty
+            // games overflow, an overflowing shelf keeps its own row, and the
+            // machine it was written on has fifty-three. It takes a SMALL
+            // library to reach this at all — a laptop, or a fresh install.
+            //
+            // The band mechanism was always about sharing a row between
+            // shelves that are the same kind of thing (Media and Apps, three
+            // tiles each, two thirds of both wasted). Two shelves whose tiles
+            // are different heights are not that, however well they fit.
+            if (cur.length &&
+                shell.isPortrait(sh) !== shell.isPortrait(shell.shelves[cur[0]]))
+                close()
 
             // ⚠ A BAR JOINS THE BAR BAND UNCONDITIONALLY — no trial, no
             // squeeze test. This is the one place the "a shelf that scrolls
@@ -2508,8 +2546,12 @@ ShellRoot {
                                         // one row of app tiles two different sizes, half
                                         // a screen apart, which reads as a rendering
                                         // fault rather than a layout.
+                                        // ⚠ THE PACKER'S ANSWER, not a second
+                                        // copy of the question: it reserves a
+                                        // band's height from this and refuses
+                                        // to mix the two shapes in one row.
                                         readonly property bool portrait:
-                                            shelf.sh.kind === "game"
+                                            shell.isPortrait(shelf.sh)
                                         // ⚠ THE BAND'S SCALE, not a fresh multiple of u.
                                         // The packer reserved this shelf's width from
                                         // the same number; a strip that worked out its
@@ -2575,7 +2617,7 @@ ShellRoot {
                                                 shell.row === shelf.shelfRow
                                                 && shell.col(shelf.shelfRow) === tile.index
                                             readonly property bool portrait:
-                                                shelf.sh.kind === "game"
+                                                shell.isPortrait(shelf.sh)
                                             readonly property bool headline:
                                                 shelf.sh.kind === "news"
 

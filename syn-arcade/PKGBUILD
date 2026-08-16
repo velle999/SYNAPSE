@@ -212,6 +212,28 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-27: a band is ONE SHAPE of tile ───────────────────────────────────
+#
+# On a 1080p laptop with three games installed, the whole interface arrived in
+# the top half of the screen with a hole in the middle of it. The packer was
+# right by its own rules: three covers FIT, and a shelf that fits is packed
+# into a band with whatever comes next — so Games shared a row with Play, Media
+# and Apps. But a Row takes the height of its tallest child and aligns them all
+# at the top, and a cover strip is about fourteen units tall against a bar's
+# eight. Half that row was empty by construction, and the screen was a row
+# short below it.
+#
+# ⚠ INVISIBLE ON A REAL LIBRARY, which is why it shipped: fifty games overflow,
+# an overflowing shelf keeps its own row, and the machine this was written on
+# has fifty-three. It takes a SMALL library to reach at all — a laptop, or a
+# fresh install. `GAMES=3 SIZE=1920x1080 tests/bigscreen_rig.sh …` draws it.
+#
+# The band mechanism was always about sharing a row between shelves that are
+# the same kind of thing — Media and Apps, three tiles each, two thirds of both
+# wasted. Two shelves whose tiles are different heights are not that, however
+# well they fit, so a shape change now ends the band. `isPortrait()` is the one
+# home for that fact and both drawing paths read it.
+
 # ── 0.1.0-26: media buttons on the television, and a visualizer that is ─────
 # ── ENDED rather than hidden ────────────────────────────────────────────────
 #
@@ -353,7 +375,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=26
+pkgrel=27
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

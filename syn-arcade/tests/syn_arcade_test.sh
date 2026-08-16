@@ -3390,6 +3390,33 @@ check "the ideal tile width has exactly one home" $?
 grep -q 'win.u \* shell.idealUnits' "$BIGQML"
 check "...and the strip reads it from there rather than repeating it" $?
 
+# ── a band is ONE SHAPE of tile ─────────────────────────────────────────────
+#
+# ⚠ REPORTED FROM A 1080p LAPTOP WITH THREE GAMES: the whole interface arrived
+# in the top half of the screen with a hole in the middle of it. The packer was
+# right by its own rules — three covers FIT, so Games was packed into a band
+# with Play, Media and Apps — but a cover strip is about fourteen units tall
+# and a bar is about eight, and a Row aligns its children at the TOP. Half that
+# row was empty by construction, and the screen was a row short below it.
+#
+# ⚠ INVISIBLE ON A REAL LIBRARY, which is why it shipped and why this suite is
+# the wrong place to catch it on its own: fifty games overflow, an overflowing
+# shelf keeps its own row, and the machine it was written on has fifty-three.
+# `GAMES=3 SIZE=1920x1080 tests/bigscreen_rig.sh …` is the picture of it.
+grep -q 'function isPortrait' "$BIGQML"
+check "the shape of a tile has exactly one home too" $?
+
+# ⚠ ONE definition, and every consumer must READ it rather than ask the kind
+# again. There are two `portrait` properties — the strip's, which decides how
+# tall a row is, and the tile's, which decides the shape of the art — and the
+# packer now decides which shelves may share a row from the same answer. Any of
+# the three drifting is a row reserved at one height and drawn at another.
+[ "$(grep -A1 'property bool portrait:' "$BIGQML" | grep -c 'shell.isPortrait')" = 2 ]
+check "...and both drawing paths take that answer rather than asking again" $?
+
+grep -q 'shell.isPortrait(sh) !== shell.isPortrait(shell.shelves\[cur\[0\]\])' "$BIGQML"
+check "a shelf of covers never shares a row with a shelf of app tiles" $?
+
 # The screen decides the packing, not a count of tiles — the same six shelves
 # land differently on 4:3, 16:9 and 21:9. Assuming a shape here is the bug
 # 0.1.0-8 was, one layer up.
