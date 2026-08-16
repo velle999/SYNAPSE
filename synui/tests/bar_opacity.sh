@@ -204,9 +204,28 @@ def wallpaper_fraction(img):
     d = np.abs(strip - WP).sum(axis=2)
     return float((d <= 6).sum()) / strip[:, :, 0].size
 
-def differs(p, q):
-    d = np.abs(p[Y0:Y1, X0:W] - q[Y0:Y1, X0:W]).sum(axis=2)
-    return int((d > 12).sum())
+def background(img):
+    """The bar's background colour, and how much of the strip it covers.
+
+    ⚠ THE MOST COMMON COLOUR, not a pixel-for-pixel comparison of the strip,
+    and the difference is the whole reason this test used to fail on a busy
+    machine. The strip carries LIVE widgets — a CPU meter, a memory meter, a
+    clock, a scrolling headline — and the four captures below are taken eight
+    seconds apart. Two of them are `auto` and must be equal, but between them
+    the CPU reading went 8% to 10%: 2478 pixels of text, and a comparison that
+    counted differing pixels called that a bar which had failed to come back.
+
+    It was never right, only lucky. On a quiet machine the meters read the same
+    twice and the test passed; the machine that had just compiled synui to run
+    it is exactly the machine where they do not.
+
+    The background is what bar_opacity actually changes, and it is ~83% of the
+    strip against a few hundred pixels of moving text — so it is both the thing
+    being asserted and the stable thing to measure."""
+    strip = img[Y0:Y1, X0:W].reshape(-1, 3)
+    colours, counts = np.unique(strip, axis=0, return_counts=True)
+    i = counts.argmax()
+    return tuple(int(v) for v in colours[i]), float(counts[i]) / len(strip)
 
 fa, fb, fc = wallpaper_fraction(A), wallpaper_fraction(B), wallpaper_fraction(C)
 print(f"  strip that is wallpaper   auto {fa:.0%}   1.00 {fb:.0%}   0.00 {fc:.0%}")
@@ -226,20 +245,34 @@ if fb > 0.02:
     fails.append(f"bar_opacity = 1.00 still showed the wallpaper through "
                  f"{fb:.0%} of the strip")
 
+ba, ca = background(A)
+bb, cb = background(B)
+bd, cd = background(D)
+print(f"  bar background            auto {ba} {ca:.0%}   "
+      f"1.00 {bb} {cb:.0%}   auto-again {bd} {cd:.0%}")
+
 # ── 3. the row carries a NUMBER, not a switch ────────────────
-d_ab = differs(A, B)
-print(f"  auto vs 1.00   {d_ab}px differ")
-if d_ab == 0:
-    fails.append("bar_opacity = 1.00 was pixel-identical to the theme's own "
-                 "default — the row is being read as clear-or-not rather than "
-                 "as the alpha it is")
+#
+# ⚠ ASKED OF THE BACKGROUND, and asking it of the whole strip was a false pass
+# waiting to happen: "some pixels differ" is satisfied by the CPU meter ticking
+# over, so this would have gone green for a bar_opacity that did nothing at all.
+if ba == bb:
+    fails.append(f"bar_opacity = 1.00 produced the same background {bb} as the "
+                 f"theme's own default — the row is being read as clear-or-not "
+                 f"rather than as the alpha it is")
 
 # ── 4. and it goes back ──────────────────────────────────────
-d_ad = differs(A, D)
-print(f"  auto vs auto-again   {d_ad}px differ")
-if d_ad != 0:
-    fails.append(f"`auto` did not restore the theme's bar ({d_ad}px differ from "
-                 f"the capture taken before the key existed)")
+if ba != bd:
+    fails.append(f"`auto` did not restore the theme's bar: {bd} now, {ba} before "
+                 f"the key existed")
+
+# The background has to STAY the background. A capture where it covers a
+# fraction of the strip is one where something else took the bar over, and the
+# colour above would be measuring that instead.
+for name, cov in (("auto", ca), ("1.00", cb), ("auto-again", cd)):
+    if cov < 0.5:
+        fails.append(f"the bar's background covers only {cov:.0%} of the strip "
+                     f"at {name} — the colour compared above is not the bar")
 
 if fails:
     for f in fails:
