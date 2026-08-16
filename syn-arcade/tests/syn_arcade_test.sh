@@ -1894,16 +1894,47 @@ check "...and the bars go rather than freezing on the last frame" $?
 # without a `toggle` is a television that says it is playing and is silent.
 MSTUB="$T/music-bin"
 mkdir -p "$MSTUB"
+#
+# ⚠ CLIAMP_STATE is what lets "there is no player" be tested at all. The stub
+# used to answer `{"ok":true,"state":"playing"}` unconditionally, so every
+# assertion here ran against a machine where music was already playing — which
+# is the one case where starting the player looks harmless, and is why a source
+# picker that STARTED the music passed this suite. "off" answers the way cliamp
+# answers when nothing is bound to the socket.
+#
+# ⚠ IT HAS TO BE ABLE TO COME UP, or the assertions below prove nothing. A stub
+# that answers "not running" for ever makes music_ensure_running() give up and
+# return false, so the caller bails out BEFORE the transport verb — and a
+# picker that starts the music then passes a test written to catch it. Measured:
+# with a stub that could not start, three of the four assertions below passed
+# against the very code they were written against. So `--provider` marks the
+# player as up, exactly as starting cliamp really does.
+#
+# ⚠ And it comes up STOPPED, which is the whole reason `toggle` starts music.
+# See the note on `play` being RESUME in big.c.
 cat > "$MSTUB/cliamp" <<'EOF'
 #!/bin/sh
 echo "cliamp $*" >> "$CLIAMP_LOG"
-[ "$1" = status ] && printf '{"ok":true,"state":"playing","track":{"title":"%s","path":"%s"}}' \
-    "$CLIAMP_TRACK" "$CLIAMP_TRACK"
+if [ "$1" = status ]; then
+    st="${CLIAMP_STATE:-playing}"
+    [ "$st" = off ] && [ -f "$CLIAMP_UP" ] && st=stopped
+    if [ "$st" = off ]; then
+        printf '{"ok":false,"error":"not running"}'
+    else
+        printf '{"ok":true,"state":"%s","track":{"title":"%s","path":"%s"}}' \
+            "$st" "$CLIAMP_TRACK" "$CLIAMP_TRACK"
+    fi
+    exit 0
+fi
+# Anything carrying --provider IS a start: that is the only way the flag is
+# ever passed, and music_ensure_running() is the only thing that passes it.
+[ "$1" = "--provider" ] && : > "$CLIAMP_UP"
 exit 0
 EOF
 chmod +x "$MSTUB/cliamp"
-export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK=""
-: > "$CLIAMP_LOG"
+export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK="" CLIAMP_STATE="playing"
+export CLIAMP_UP="$T/cliamp.up"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP"
 
 # ⚠ In a SUBSHELL for the same reason the synctl stub note above gives: an
 # assignment in front of a shell FUNCTION persists after the call in bash.
@@ -1952,6 +1983,57 @@ check "...with every other key and comment kept" $?
 printf 'music_source = wobble\n' > "$BIGCONF"
 music source 2>&1 | grep -q "big.conf says music_source = wobble"
 check "a source nobody implements says so and falls back" $?
+
+# ── choosing a source must not START the music ──────────────────────────────
+#
+# ⚠ THE REGRESSION THIS SECTION EXISTS FOR. Changing Plex → Radio on a silent
+# machine started playing: the picker restarted the player unconditionally,
+# which STARTS one that was not running, and then sent `toggle` for radio —
+# which from `stopped` is not a toggle, it is `play`. Reported from the sofa,
+# and reproduced here: `script -qfc cliamp --provider radio` was left running
+# and audible after a press that only asked for a preference.
+#
+# Asserted on the LOG rather than on exit status, because the picker "worked"
+# throughout — the setting was always written correctly. It is what it did
+# BESIDES writing it that was the bug.
+rm -f "$BIGCONF"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP"
+( PATH="$MSTUB:$PATH"; export PATH; CLIAMP_STATE=off; export CLIAMP_STATE
+  says "$SA" big music source radio ) >/dev/null
+
+grep -q '^music_source = radio$' "$BIGCONF"
+check "choosing a source with no player running still records it" $?
+
+# ⚠ Both halves, and they fail separately. `toggle` is what actually made
+# sound; the start is what created a player to make it with. Checking only the
+# verb would miss a version that leaves cliamp running and silent, which is
+# still a program somebody did not ask to start.
+[ ! -f "$CLIAMP_UP" ]
+check "...and does not START a player that was not running" $?
+
+grep -q 'cliamp toggle' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "...nor plays anything" $?
+
+# The other side of it: a player that WAS playing keeps playing, on the new
+# source. Changing source is not a stop button any more than it is a play one.
+: > "$CLIAMP_LOG"
+( PATH="$MSTUB:$PATH"; export PATH; CLIAMP_STATE=playing; export CLIAMP_STATE
+  says "$SA" big music source radio ) >/dev/null
+grep -q 'cliamp toggle' "$CLIAMP_LOG"
+check "music that was playing carries on after a source change" $?
+
+# ⚠ And `paused` is neither. Resuming here would start music somebody had
+# deliberately stopped — the same complaint, one state along.
+: > "$CLIAMP_LOG"
+( PATH="$MSTUB:$PATH"; export PATH; CLIAMP_STATE=paused; export CLIAMP_STATE
+  says "$SA" big music source radio ) >/dev/null
+grep -q 'cliamp toggle' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "...but a PAUSED player is not resumed by changing source" $?
+
+rm -f "$BIGCONF"
+: > "$CLIAMP_LOG"
 
 rm -f "$BIGCONF"
 

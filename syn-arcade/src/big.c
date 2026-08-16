@@ -3632,6 +3632,31 @@ static int big_music_sources(bool rec)
  * Written down FIRST and started SECOND: if the player refuses to come up, the
  * setting is still what somebody asked for, and the next press of the Music
  * tile uses it. The reverse order would lose the choice to a transient.
+ *
+ * ⚠ CHOOSING A SOURCE IS A SETTING, NOT A TRANSPORT COMMAND, and this used to
+ * treat it as both. It restarted the player unconditionally — which STARTS one
+ * that was not running, because music_restart() ends in music_ensure_running()
+ * — and then sent `toggle` for radio, which from `stopped` does not toggle
+ * anything, it begins playing. So picking a source from a settings list on a
+ * silent machine started the music: measured, changing Plex → Radio left
+ * `script -qfc cliamp --provider radio` running and audible, having asked for
+ * nothing but a preference.
+ *
+ * So the player's state is read BEFORE the setting is written, and it is the
+ * thing that decides what happens next:
+ *
+ *   · not running → write it down and stop. `--provider` is read at start-up
+ *                   and music_ensure_running() reads music_source(), so the
+ *                   next press of the Music tile comes up on this source by
+ *                   itself. Nothing needs to start now for that to be true.
+ *   · running     → the change has to REACH it, and a start-up flag can only
+ *                   be changed by starting again. Restart.
+ *   · playing     → and only then does anything play, because the music was
+ *                   already playing and stopping it is not what "change
+ *                   source" means either.
+ *
+ * ⚠ `toggle` and not `play`: after a restart the state is `stopped`, and
+ * `play` is RESUME, which does nothing from there.
  */
 static int big_music_source_set(const char *id)
 {
@@ -3642,24 +3667,44 @@ static int big_music_source_set(const char *id)
 		return EX_USAGE;
 	}
 
+	/* ⚠ ASKED FIRST. Everything below changes it, so there is exactly one
+	 * moment when the answer is still about what the player was doing when
+	 * somebody opened the list. An empty state is "there is nothing to
+	 * control" — see music_read(). */
+	char was[32];
+	music_read(was, sizeof(was), NULL, 0, NULL, 0);
+	const bool was_running = was[0] != '\0';
+	const bool was_playing = strcmp(was, "playing") == 0;
+
 	if (big_conf_set("music_source", s->id) != EX_OK) {
 		fputs("syn-arcade: could not write "
 		      "~/.config/syn-arcade/big.conf\n", stderr);
 		return EX_FAIL;
 	}
 
-	if (!music_restart()) {
+	if (!was_running) {
+		printf("music source: %s\n", s->name);
+		return EX_OK;
+	}
+
+	/* local_queue() restarts on its own way through, so it must not be
+	 * given a second one — and it is the only source whose queue this
+	 * program fills. Plex needs an album picked and the two services need
+	 * cliamp's own interface; both are the caller's next move. */
+	if (strcmp(s->id, "local") == 0) {
+		int rc = local_queue();
+		if (rc != EX_OK)
+			return rc;
+	} else if (!music_restart()) {
 		fputs("syn-arcade: cliamp did not come up\n", stderr);
 		return EX_FAIL;
 	}
 
-	/* Only the sources that arrive with something in the queue are played.
-	 * Plex needs an album picked and the two services need cliamp's own
-	 * interface; both are the caller's next move, and `action` above is
-	 * what tells it which. */
-	if (strcmp(s->id, "local") == 0)
-		return local_queue();
-	if (strcmp(s->id, "radio") == 0)
+	/* Only where the new source arrives with something in it. Plex and the
+	 * two services come up empty by design, and `toggle` on an empty queue
+	 * is a button that appears to do nothing. */
+	if (was_playing && (strcmp(s->id, "radio") == 0 ||
+			    strcmp(s->id, "local") == 0))
 		music_cmd("toggle");
 
 	printf("music source: %s\n", s->name);
