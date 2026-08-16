@@ -365,11 +365,25 @@ shot 01c-game-no-logo    # 280: hero but NO logo — the text title over art
 say right 0.6
 shot 01d-game-no-hero    # 300: cover only — banner over an empty band
 
-# Shelves, top to bottom: Play, Games, Media, Apps, System, News.
-say down; say down; say down; say down; say down 0.6
-shot 02-news
+# ── BANDS: shelves that fit are drawn side by side ─────────────────────────
+#
+# ⚠ DOWN IS NO LONGER ONE SHELF. Six shelves pack into four rows on a 16:9
+# screen — Play, Games, then Media+Apps across one row and System+News across
+# the next — so a walk written as "five downs to reach the news" now stops two
+# rows short and screenshots something else entirely while still looking like
+# it worked. The number of presses between two shelves is a fact about the
+# SCREEN now, which is why these steps say where they expect to land.
+say down; say down 0.6
+shot 02-system-news          # the last band: two shelves, one row
+
+# Right runs ALONG a band and crosses into the shelf drawn beside it — the
+# thing a suite of greps cannot show. Four presses from Desktop is one past the
+# end of System, which lands on the first headline.
+say right; say right; say right; say right 0.6
+shot 02b-crossed-into-news
+
 say up 0.5
-shot 03-system
+shot 03-media-apps
 
 # Guide steps aside: the main surface must go, and the hint must appear.
 say guide 0.9
@@ -383,7 +397,8 @@ shot 05-back
 # turns `big run` into a sleep, so "an application is running" is true with no
 # application involved.
 say up; say up; say up; say up; say up 0.4    # to the top, wherever we were
-say down; say down; say down 0.6              # Play → Games → Media → Apps
+say down; say down 0.6                        # Play → Games → the Media/Apps band
+say right; say right; say right 0.5           # along Media, then across into Apps
 shot 06-apps-shelf
 say accept 1.4
 shot 07-launched

@@ -660,6 +660,120 @@ ShellRoot {
         return out
     }
 
+    // ── shelves that share a row: BANDS ─────────────────────────────────────
+    //
+    // ⚠ A SHELF USED TO OWN A WHOLE ROW OF THE TELEVISION WHETHER IT NEEDED ONE
+    // OR NOT. Media has three tiles and Apps has three, so on any screen wider
+    // than it is tall each of them spent two thirds of a row on nothing — while
+    // System and the headlines sat off the bottom edge, reachable only by
+    // scrolling. The empty right-hand half of one row and the missing row below
+    // it were the SAME SPACE, and the interface was leaving it and then asking
+    // for it back.
+    //
+    // So consecutive shelves that fit ACROSS are packed into a band and drawn
+    // side by side, labels and all.
+    //
+    // ⚠ A SHELF THAT HAS TO SCROLL KEEPS ITS OWN ROW, and that is a rule about
+    // travel rather than about tidiness: half a row is half the tiles per
+    // press, so narrowing a fifty-game library doubles how far somebody pushes
+    // a stick to cross it. A shelf that already fits, by contrast, gains
+    // nothing at all from the extra width — which is exactly the space this
+    // hands to the shelf below.
+    //
+    // ⚠ IT ANSWERS TO THE SCREEN, not to a count of tiles: the same six shelves
+    // pack differently on 4:3, 16:9 and 21:9, for the same reason `u` is
+    // clamped by width — see the comment on it. `rowUnits` is what the window
+    // that is actually on screen reports, so this is measured, never assumed.
+    property real rowUnits: 96          // 16:9, until the chosen window says
+
+    // The strip's own margins, both ends, in units. Part of a SHELF's width
+    // rather than the stage's — which is what lets two of them sit side by side
+    // and still hold their tiles clear of each other and of the screen edge.
+    readonly property real shelfMargins: 3.2
+    readonly property real tileGap: 0.8
+
+    // ⚠ ONE PLACE. The strip reads this too, so the width the packer reserves
+    // and the width the tiles are drawn at cannot drift apart — and a band
+    // whose arithmetic disagreed with its contents would clip the last tile of
+    // a shelf that was promised to fit whole.
+    function idealUnits(kind) {
+        return kind === "game" ? 9 : kind === "news" ? 14 : 11
+    }
+
+    // What a shelf wants, split into the part that can be squeezed and the part
+    // that cannot: tiles scale, gaps and margins do not.
+    function shelfTiles(sh) { return sh.items.length * shell.idealUnits(sh.kind) }
+    function shelfFixed(sh) {
+        return Math.max(0, sh.items.length - 1) * shell.tileGap + shell.shelfMargins
+    }
+
+    // How much every tile in a band has to shrink for the whole band to fit.
+    // 1 when it fits as drawn, and never below 0.85 — the SAME 15% the strip
+    // already allows itself when it snaps a row to whole tiles, because a tile
+    // that is a sixth off its size stops reading as the same kind of thing as
+    // its neighbours.
+    readonly property real bandSqueeze: 0.85
+
+    function bandScale(band) {
+        let tiles = 0, fixed = 0
+        for (let i = 0; i < band.length; i++) {
+            tiles += shell.shelfTiles(band[i])
+            fixed += shell.shelfFixed(band[i])
+        }
+        if (tiles <= 0) return 1
+        return Math.min(1, (shell.rowUnits - fixed) / tiles)
+    }
+
+    // Each entry is one row of the screen: [{ row, units, scale }, …], `row`
+    // being the index into `shelves` so nothing downstream has to care that a
+    // shelf is no longer the same thing as a row.
+    readonly property var bands: {
+        const out = []
+        let cur = []
+
+        function close() {
+            if (!cur.length) return
+            const shs = cur.map(r => shell.shelves[r])
+            // A lone shelf that does not fit is the library or the headlines:
+            // it keeps its tiles at full size and the strip's own snapping
+            // deals with what runs off the edge.
+            const s = cur.length === 1 ? 1 : shell.bandScale(shs)
+            let used = 0
+            const w = shs.map(sh => shell.shelfTiles(sh) * s + shell.shelfFixed(sh))
+            for (let i = 0; i < w.length; i++) used += w[i]
+            const spare = Math.max(0, shell.rowUnits - used) / w.length
+            out.push(cur.map((r, i) => ({
+                row: r,
+                units: cur.length === 1 ? shell.rowUnits : w[i] + spare,
+                scale: s
+            })))
+            cur = []
+        }
+
+        for (let i = 0; i < shell.shelves.length; i++) {
+            const sh = shell.shelves[i]
+            // Does it still work with this one added? If not, the band ends
+            // here and this shelf starts the next one — which may itself be a
+            // shelf that fits nowhere, and then it is a row of its own.
+            const trial = cur.map(r => shell.shelves[r]).concat([sh])
+            if (cur.length && shell.bandScale(trial) < shell.bandSqueeze) close()
+            cur.push(i)
+            if (shell.bandScale([sh]) < shell.bandSqueeze) close()
+        }
+        close()
+        return out
+    }
+
+    // Where a shelf sits: [band, position along it]. Used by everything that
+    // moves — up and down step between BANDS now, left and right run along one.
+    function place(r) {
+        const bs = shell.bands
+        for (let i = 0; i < bs.length; i++)
+            for (let j = 0; j < bs[i].length; j++)
+                if (bs[i][j].row === r) return [i, j]
+        return [0, 0]
+    }
+
     // ── where the selection is ──────────────────────────────────────────────
     //
     // One row index and one column index PER ROW, kept when the row changes.
@@ -807,25 +921,52 @@ ShellRoot {
         shell.rowChosen = true
     }
 
+    // ⚠ UP AND DOWN MOVE A BAND, not a shelf. Two shelves packed onto one row
+    // are one row to the person holding the controller, and a d-pad that needed
+    // two presses to leave a row it had visibly already left is the same fault
+    // as a scrollbar that moves the wrong list.
+    //
+    // The place ALONG the band is kept: leaving Apps, which is the second shelf
+    // of its row, lands on the second shelf of the next one where there is one.
+    // Dropping to the first every time drags the selection back across the
+    // screen for a press that was purely vertical.
     function moveRow(d) {
-        const n = shell.shelves.length
-        if (!n) return
-        const next = shell.row + d
-        if (next < 0 || next >= n) return   // no wrap: the ends are a landmark
-        shell.row = next
-        shell.rowTitle = shell.shelves[next].title
+        const bs = shell.bands
+        if (!bs.length) return
+        const at = shell.place(shell.row)
+        const nb = at[0] + d
+        if (nb < 0 || nb >= bs.length) return   // no wrap: the ends are a landmark
+        const band = bs[nb]
+        const tgt = band[Math.min(at[1], band.length - 1)]
+        shell.row = tgt.row
+        shell.rowTitle = shell.shelves[tgt.row].title
         shell.rowChosen = true
     }
 
+    // ⚠ AND LEFT AND RIGHT RUN ALONG THE WHOLE BAND. Running off the end of a
+    // shelf that has another one drawn beside it steps into that one, at the
+    // edge you arrived from — otherwise the last tile of Media is a wall with
+    // three tiles of Apps visible on the other side of it.
     function moveCol(d) {
         const sh = shell.shelves[shell.row]
         if (!sh) return
         const n = sh.items.length
         if (!n) return
-        let next = shell.col(shell.row) + d
-        if (next < 0) next = 0
-        if (next > n - 1) next = n - 1
-        shell.setCol(shell.row, next)
+
+        const next = shell.col(shell.row) + d
+        if (next >= 0 && next <= n - 1) { shell.setCol(shell.row, next); return }
+
+        const at = shell.place(shell.row)
+        const band = shell.bands[at[0]] || []
+        const step = next < 0 ? -1 : 1
+        const over = band[at[1] + step]
+        if (!over) { shell.setCol(shell.row, step < 0 ? 0 : n - 1); return }
+
+        shell.row = over.row
+        shell.rowTitle = shell.shelves[over.row].title
+        shell.rowChosen = true
+        const m = shell.shelves[over.row].items.length
+        shell.setCol(over.row, step > 0 ? 0 : Math.max(0, m - 1))
     }
 
     function current() {
@@ -970,7 +1111,14 @@ ShellRoot {
         // that does nothing at the top of the screen is a button somebody
         // presses three times before reaching for the keyboard they left on
         // the table.
-        case "back":       if (shell.row > 0) shell.moveRow(-1); else shell.stepAside(); break
+        // ⚠ THE TOP BAND, not the top shelf. On a row where two shelves are
+        // packed side by side, `row > 0` is true while the selection is still
+        // on the very first row of the screen — and B would then move sideways
+        // instead of stepping aside, which is the one thing it must do when
+        // there is nowhere left above.
+        case "back":       if (shell.place(shell.row)[0] > 0) shell.moveRow(-1)
+                           else shell.stepAside()
+                           break
         // X closes what the selection is on, and only on the Running shelf —
         // it is the one place where the thing under the cursor is a window
         // rather than a way to open one. Everywhere else it does nothing,
@@ -1088,6 +1236,22 @@ ShellRoot {
             // proportionally narrower than the one the design assumes.
             readonly property real u: Math.max(12, Math.min(win.height / 54,
                                                             win.width / 96))
+
+            // How wide a row is, in units, for the packer that decides which
+            // shelves can share one.
+            //
+            // ⚠ FROM THE CHOSEN WINDOW ONLY. There is one of these per screen
+            // and only ever one on show, so without the guard the desk
+            // monitor's width would decide how the television packs its
+            // shelves — and which screen won would come down to the order
+            // Quickshell happened to build them in, which is the sort of bug
+            // that is right on the machine it was written on.
+            Binding {
+                target: shell
+                property: "rowUnits"
+                value: win.width / win.u
+                when: win.chosen
+            }
 
             onVisibleChanged: if (visible) keys.forceActiveFocus()
             Component.onCompleted: if (visible) keys.forceActiveFocus()
@@ -1429,10 +1593,18 @@ ShellRoot {
                     // when every shelf fits on screen already, as it does on a
                     // machine with one or two of them, it would scroll for no
                     // reason at all.
+                    //
+                    // ⚠ BY BAND, and it has to be: two shelves drawn side by
+                    // side are ONE row of this Column, so counting shelves here
+                    // would scroll a row too far for every band that holds more
+                    // than one of them — and the amount of the error would
+                    // depend on the screen's width, which is the shape of bug
+                    // this file has already been bitten by once.
                     y: {
                         const items = rows.visibleChildren
+                        const band = shell.place(shell.row)[0]
                         let off = 0
-                        for (let i = 0; i < shell.row && i < items.length; i++)
+                        for (let i = 0; i < band && i < items.length; i++)
                             off += items[i].height + rows.spacing
                         const most = Math.max(0, rows.height - stage.height)
                         return -Math.min(off, most)
@@ -1440,301 +1612,348 @@ ShellRoot {
                     Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
                     Repeater {
-                        model: shell.shelves
+                        model: shell.bands
 
-                        Item {
-                            id: shelf
+                        // One row of the television: the shelves that fit
+                        // across it. A Row takes the height of its tallest
+                        // child and lines them all up at the TOP, which is
+                        // where the labels are — so a band mixing a shelf of
+                        // covers with a shelf of app tiles still reads as one
+                        // row rather than two things floating.
+                        Row {
+                            id: band
                             required property var modelData
-                            required property int index
 
                             width: rows.width
-                            height: label.height + win.u * 0.6 + strip.height
-                            opacity: shell.row === shelf.index ? 1.0 : 0.45
-                            Behavior on opacity { NumberAnimation { duration: 160 } }
 
-                            Text {
-                                id: label
-                                x: win.u * 1.6
-                                text: shelf.modelData.title
-                                color: win.dim
-                                font.pixelSize: win.u * 0.9
-                                font.letterSpacing: win.u * 0.12
-                                font.bold: true
-                            }
+                            Repeater {
+                                model: band.modelData
 
-                            ListView {
-                                id: strip
-                                anchors.top: label.bottom
-                                anchors.topMargin: win.u * 0.6
-                                width: parent.width
-                                // Tall enough for the tile plus the room a
-                                // selected one grows into. Sized so three
-                                // shelves fit a 720p panel without scrolling —
-                                // above that there is slack, and below it the
-                                // rows scroll, which is the right way round.
-                                height: strip.slotH + (strip.portrait ? win.u * 1.1
-                                                                      : win.u * 0.8)
-                                orientation: ListView.Horizontal
-                                spacing: win.u * 0.8
+                                Item {
+                                    id: shelf
 
-                                // ── fitting a whole number of tiles ─────────
-                                //
-                                // ⚠ THE TILE WAS A FIXED MULTIPLE OF u, so what
-                                // landed at the right-hand edge was whatever was
-                                // left over — and that leftover is decided by the
-                                // screen's ASPECT RATIO, which nothing here was
-                                // looking at. Measured across the shapes people
-                                // actually own, the last tile came out anywhere
-                                // from 10% visible (4:3, a sliver that reads as a
-                                // rendering fault) to 92% (21:9, a tile that looks
-                                // whole until you notice it is clipped). Only 16:9
-                                // looked deliberate, because 16:9 is what it was
-                                // drawn on.
-                                //
-                                // So the leftover stops being an accident: the
-                                // shelf picks the number of whole tiles that best
-                                // matches the intended size, then stretches the
-                                // pitch slightly so that number PLUS a constant
-                                // half-tile peek fills the row exactly. The peek
-                                // is kept on purpose — a row cut clean at the edge
-                                // gives no sign there is more along it, which is
-                                // the one thing a ten-foot list has to say.
-                                readonly property bool portrait:
-                                    shelf.modelData.kind === "game"
-                                readonly property real idealW:
-                                    portrait ? win.u * 9
-                                             : shelf.modelData.kind === "news" ? win.u * 14
-                                                                               : win.u * 11
-                                readonly property real peek: 0.5
-                                readonly property real content:
-                                    width - leftMargin - rightMargin
-
-                                readonly property int slots: Math.max(1,
-                                    Math.round((content + spacing) / (idealW + spacing)
-                                               - peek))
-
-                                // ⚠ CLAMPED, because rounding to ONE tile on a
-                                // narrow screen would otherwise stretch that tile
-                                // to the full width. Past the clamp the peek is
-                                // wrong by a few percent, which is invisible; an
-                                // eighty-percent-wide cover is not.
-                                readonly property real slotW: {
-                                    const fit = (content + spacing) / (slots + peek)
-                                                - spacing
-                                    return Math.max(idealW * 0.85,
-                                                    Math.min(idealW * 1.15, fit))
-                                }
-                                // ⚠ 2:3 IS THE ART, NOT A STYLE CHOICE — every
-                                // cover Steam caches is 600x900, so the height has
-                                // to follow the snapped width or the snapping
-                                // starts letterboxing 53 pictures.
-                                readonly property real slotH:
-                                    portrait ? slotW * 1.5 : win.u * 7
-                                // The pointer does not drive this; a stray
-                                // flick from a touchpad would fight the
-                                // selection for control of the same list.
-                                interactive: false
-                                // Room for a selected tile to grow into at
-                                // either end, and for the first tile to sit
-                                // clear of the screen edge.
-                                leftMargin: win.u * 1.6
-                                rightMargin: win.u * 1.6
-
-                                currentIndex: shell.col(shelf.index)
-                                highlightRangeMode: ListView.ApplyRange
-                                preferredHighlightBegin: win.u * 1.6
-                                preferredHighlightEnd: width - win.u * 1.6
-                                highlightMoveDuration: 200
-
-                                model: shelf.modelData.items
-
-                                delegate: Item {
-                                    id: tile
+                                    // { row, units, scale } — `row` indexes
+                                    // shell.shelves, because a shelf is no
+                                    // longer the same thing as a row and
+                                    // everything downstream still needs to
+                                    // name one.
                                     required property var modelData
-                                    required property int index
 
-                                    readonly property bool selected:
-                                        shell.row === shelf.index
-                                        && shell.col(shelf.index) === tile.index
-                                    readonly property bool portrait:
-                                        shelf.modelData.kind === "game"
-                                    readonly property bool headline:
-                                        shelf.modelData.kind === "news"
+                                    readonly property int shelfRow: shelf.modelData.row
+                                    readonly property var sh:
+                                        shell.shelves[shelf.shelfRow]
+                                        || ({ title: "", kind: "app", items: [] })
 
-                                    // 2:3, which is the shape of every cover
-                                    // Steam caches (600x900). Anything else
-                                    // either letterboxes the art or crops
-                                    // somebody's title off it. A headline is
-                                    // wider than it is tall, because it is
-                                    // words.
-                                    //
-                                    // ⚠ TAKEN FROM THE STRIP, not worked out
-                                    // again from u: the strip has already
-                                    // nudged this to whatever makes a whole
-                                    // number of tiles fit the screen, and a
-                                    // delegate that recomputed the ideal would
-                                    // quietly undo that and put the ragged
-                                    // edge back.
-                                    width: strip.slotW
-                                    height: strip.slotH
+                                    width: shelf.modelData.units * win.u
+                                    height: label.height + win.u * 0.6 + strip.height
+                                    opacity: shell.row === shelf.shelfRow ? 1.0 : 0.45
+                                    Behavior on opacity { NumberAnimation { duration: 160 } }
 
-                                    scale: selected ? 1.06 : 1.0
-                                    Behavior on scale {
-                                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                                    Text {
+                                        id: label
+                                        x: win.u * 1.6
+                                        text: shelf.sh.title
+                                        color: win.dim
+                                        font.pixelSize: win.u * 0.9
+                                        font.letterSpacing: win.u * 0.12
+                                        font.bold: true
                                     }
 
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: win.u * 0.5
-                                        color: tile.selected ? "#242038" : "#191527"
-                                        border.width: tile.selected ? Math.max(2, win.u * 0.16) : 1
-                                        border.color: tile.selected ? win.accent : "#332c4d"
-                                        clip: true
+                                    ListView {
+                                        id: strip
+                                        anchors.top: label.bottom
+                                        anchors.topMargin: win.u * 0.6
+                                        width: parent.width
+                                        // Tall enough for the tile plus the room a
+                                        // selected one grows into. Sized so three
+                                        // shelves fit a 720p panel without scrolling —
+                                        // above that there is slack, and below it the
+                                        // rows scroll, which is the right way round.
+                                        height: strip.slotH + (strip.portrait ? win.u * 1.1
+                                                                              : win.u * 0.8)
+                                        orientation: ListView.Horizontal
+                                        spacing: win.u * 0.8
 
-                                        // The cover, when Steam has cached one.
-                                        Image {
-                                            anchors.fill: parent
-                                            anchors.margins: parent.border.width
-                                            source: tile.modelData.art
-                                                    ? "file://" + tile.modelData.art : ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
-                                            visible: status === Image.Ready
-                                            // Decoded at the size drawn, not at
-                                            // 600x900 each: sixty covers at full
-                                            // resolution is most of a gigabyte of
-                                            // texture on a screen showing eight.
-                                            sourceSize.width: Math.round(tile.width * 1.2)
-                                            sourceSize.height: Math.round(tile.height * 1.2)
+                                        // ── fitting a whole number of tiles ─────────
+                                        //
+                                        // ⚠ THE TILE WAS A FIXED MULTIPLE OF u, so what
+                                        // landed at the right-hand edge was whatever was
+                                        // left over — and that leftover is decided by the
+                                        // screen's ASPECT RATIO, which nothing here was
+                                        // looking at. Measured across the shapes people
+                                        // actually own, the last tile came out anywhere
+                                        // from 10% visible (4:3, a sliver that reads as a
+                                        // rendering fault) to 92% (21:9, a tile that looks
+                                        // whole until you notice it is clipped). Only 16:9
+                                        // looked deliberate, because 16:9 is what it was
+                                        // drawn on.
+                                        //
+                                        // So the leftover stops being an accident: the
+                                        // shelf picks the number of whole tiles that best
+                                        // matches the intended size, then stretches the
+                                        // pitch slightly so that number PLUS a constant
+                                        // half-tile peek fills the row exactly. The peek
+                                        // is kept on purpose — a row cut clean at the edge
+                                        // gives no sign there is more along it, which is
+                                        // the one thing a ten-foot list has to say.
+                                        //
+                                        // ⚠ AND IT IS ONLY WORTH SAYING WHEN IT IS TRUE.
+                                        // A shelf whose tiles all fit has nothing past
+                                        // the edge to promise, so the peek — and the
+                                        // stretch that pays for it — is skipped there.
+                                        // That is what lets Media and Apps sit side by
+                                        // side with tiles of the SAME SIZE: each of them
+                                        // stretching its own leftover would have made
+                                        // one row of app tiles two different sizes, half
+                                        // a screen apart, which reads as a rendering
+                                        // fault rather than a layout.
+                                        readonly property bool portrait:
+                                            shelf.sh.kind === "game"
+                                        // ⚠ THE BAND'S SCALE, not a fresh multiple of u.
+                                        // The packer reserved this shelf's width from
+                                        // the same number; a strip that worked out its
+                                        // own would silently disagree with the row it
+                                        // was given and clip its last tile.
+                                        readonly property real idealW:
+                                            win.u * shell.idealUnits(shelf.sh.kind)
+                                                  * shelf.modelData.scale
+                                        readonly property real peek: 0.5
+                                        readonly property real content:
+                                            width - leftMargin - rightMargin
+
+                                        readonly property bool overflows:
+                                            shelf.sh.items.length * (idealW + spacing)
+                                                - spacing > content + 0.5
+
+                                        readonly property int slots: Math.max(1,
+                                            Math.round((content + spacing) / (idealW + spacing)
+                                                       - peek))
+
+                                        // ⚠ CLAMPED, because rounding to ONE tile on a
+                                        // narrow screen would otherwise stretch that tile
+                                        // to the full width. Past the clamp the peek is
+                                        // wrong by a few percent, which is invisible; an
+                                        // eighty-percent-wide cover is not.
+                                        readonly property real slotW: {
+                                            if (!strip.overflows) return idealW
+                                            const fit = (content + spacing) / (slots + peek)
+                                                        - spacing
+                                            return Math.max(idealW * 0.85,
+                                                            Math.min(idealW * 1.15, fit))
                                         }
+                                        // ⚠ 2:3 IS THE ART, NOT A STYLE CHOICE — every
+                                        // cover Steam caches is 600x900, so the height has
+                                        // to follow the snapped width or the snapping
+                                        // starts letterboxing 53 pictures.
+                                        readonly property real slotH:
+                                            portrait ? slotW * 1.5 : win.u * 7
+                                        // The pointer does not drive this; a stray
+                                        // flick from a touchpad would fight the
+                                        // selection for control of the same list.
+                                        interactive: false
+                                        // Room for a selected tile to grow into at
+                                        // either end, and for the first tile to sit
+                                        // clear of the screen edge.
+                                        leftMargin: win.u * 1.6
+                                        rightMargin: win.u * 1.6
 
-                                        // …and when it has not. A tile with no
-                                        // picture must still say which game it
-                                        // is; a blank rectangle in a row of
-                                        // covers reads as a broken launcher.
-                                        // A headline never has art and is
-                                        // always this.
-                                        Column {
-                                            id: face
+                                        currentIndex: shell.col(shelf.shelfRow)
+                                        highlightRangeMode: ListView.ApplyRange
+                                        preferredHighlightBegin: win.u * 1.6
+                                        preferredHighlightEnd: width - win.u * 1.6
+                                        highlightMoveDuration: 200
 
-                                            // ⚠ CENTRED, and it used to be
-                                            // anchored to fill. A label pinned
-                                            // to the top of a tile with a
-                                            // glyph under it leaves the whole
-                                            // bottom third empty and the two
-                                            // pieces drift apart as the tile
-                                            // grows; a headline is different,
-                                            // because a headline is a
-                                            // paragraph and reads from its
-                                            // first line down.
-                                            x: win.u * 0.7
-                                            width: parent.width - win.u * 1.4
-                                            y: tile.headline
-                                               ? win.u * 0.7
-                                               : Math.max(win.u * 0.7,
-                                                          (parent.height - height) / 2)
-                                            spacing: win.u * 0.3
-                                            visible: !tile.modelData.art
+                                        model: shelf.sh.items
 
-                                            // ── the drawn glyph ─────────────
+                                        delegate: Item {
+                                            id: tile
+                                            required property var modelData
+                                            required property int index
+
+                                            readonly property bool selected:
+                                                shell.row === shelf.shelfRow
+                                                && shell.col(shelf.shelfRow) === tile.index
+                                            readonly property bool portrait:
+                                                shelf.sh.kind === "game"
+                                            readonly property bool headline:
+                                                shelf.sh.kind === "news"
+
+                                            // 2:3, which is the shape of every cover
+                                            // Steam caches (600x900). Anything else
+                                            // either letterboxes the art or crops
+                                            // somebody's title off it. A headline is
+                                            // wider than it is tall, because it is
+                                            // words.
                                             //
-                                            // ⚠ big.c has been emitting the
-                                            // `icon` column since the day this
-                                            // table existed and this file has
-                                            // never read it — the same gap the
-                                            // logo was in. `iconfile` is that
-                                            // name resolved to a drawing that
-                                            // exists; empty means there is no
-                                            // glyph for it, and a tile without
-                                            // one is the tile as it was.
-                                            //
-                                            // A game has cover art and a
-                                            // headline is words, so this is
-                                            // only ever an app or an action —
-                                            // which is exactly the set that had
-                                            // nothing to look at.
-                                            Image {
-                                                id: tileGlyph
-                                                anchors.horizontalCenter: parent.horizontalCenter
-                                                width: win.u * 3.2
-                                                height: win.u * 3.2
-                                                visible: String(source) !== ""
-                                                         && status !== Image.Error
-                                                source: tile.modelData.iconfile
-                                                        ? "file://" + tile.modelData.iconfile : ""
-                                                fillMode: Image.PreserveAspectFit
-                                                asynchronous: true
-                                                // Rasterised at the size drawn.
-                                                // These are vectors, so asking
-                                                // for the wrong one is a blurry
-                                                // glyph rather than a missing
-                                                // one — which is worse, because
-                                                // it looks like a decision.
-                                                sourceSize.width: Math.round(win.u * 4.4)
-                                                sourceSize.height: Math.round(win.u * 4.4)
-                                                opacity: tile.selected ? 1.0 : 0.75
-                                                Behavior on opacity {
-                                                    NumberAnimation { duration: 140 }
+                                            // ⚠ TAKEN FROM THE STRIP, not worked out
+                                            // again from u: the strip has already
+                                            // nudged this to whatever makes a whole
+                                            // number of tiles fit the screen, and a
+                                            // delegate that recomputed the ideal would
+                                            // quietly undo that and put the ragged
+                                            // edge back.
+                                            width: strip.slotW
+                                            height: strip.slotH
+
+                                            scale: selected ? 1.06 : 1.0
+                                            Behavior on scale {
+                                                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: win.u * 0.5
+                                                color: tile.selected ? "#242038" : "#191527"
+                                                border.width: tile.selected ? Math.max(2, win.u * 0.16) : 1
+                                                border.color: tile.selected ? win.accent : "#332c4d"
+                                                clip: true
+
+                                                // The cover, when Steam has cached one.
+                                                Image {
+                                                    anchors.fill: parent
+                                                    anchors.margins: parent.border.width
+                                                    source: tile.modelData.art
+                                                            ? "file://" + tile.modelData.art : ""
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    asynchronous: true
+                                                    visible: status === Image.Ready
+                                                    // Decoded at the size drawn, not at
+                                                    // 600x900 each: sixty covers at full
+                                                    // resolution is most of a gigabyte of
+                                                    // texture on a screen showing eight.
+                                                    sourceSize.width: Math.round(tile.width * 1.2)
+                                                    sourceSize.height: Math.round(tile.height * 1.2)
+                                                }
+
+                                                // …and when it has not. A tile with no
+                                                // picture must still say which game it
+                                                // is; a blank rectangle in a row of
+                                                // covers reads as a broken launcher.
+                                                // A headline never has art and is
+                                                // always this.
+                                                Column {
+                                                    id: face
+
+                                                    // ⚠ CENTRED, and it used to be
+                                                    // anchored to fill. A label pinned
+                                                    // to the top of a tile with a
+                                                    // glyph under it leaves the whole
+                                                    // bottom third empty and the two
+                                                    // pieces drift apart as the tile
+                                                    // grows; a headline is different,
+                                                    // because a headline is a
+                                                    // paragraph and reads from its
+                                                    // first line down.
+                                                    x: win.u * 0.7
+                                                    width: parent.width - win.u * 1.4
+                                                    y: tile.headline
+                                                       ? win.u * 0.7
+                                                       : Math.max(win.u * 0.7,
+                                                                  (parent.height - height) / 2)
+                                                    spacing: win.u * 0.3
+                                                    visible: !tile.modelData.art
+
+                                                    // ── the drawn glyph ─────────────
+                                                    //
+                                                    // ⚠ big.c has been emitting the
+                                                    // `icon` column since the day this
+                                                    // table existed and this file has
+                                                    // never read it — the same gap the
+                                                    // logo was in. `iconfile` is that
+                                                    // name resolved to a drawing that
+                                                    // exists; empty means there is no
+                                                    // glyph for it, and a tile without
+                                                    // one is the tile as it was.
+                                                    //
+                                                    // A game has cover art and a
+                                                    // headline is words, so this is
+                                                    // only ever an app or an action —
+                                                    // which is exactly the set that had
+                                                    // nothing to look at.
+                                                    Image {
+                                                        id: tileGlyph
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        width: win.u * 3.2
+                                                        height: win.u * 3.2
+                                                        visible: String(source) !== ""
+                                                                 && status !== Image.Error
+                                                        source: tile.modelData.iconfile
+                                                                ? "file://" + tile.modelData.iconfile : ""
+                                                        fillMode: Image.PreserveAspectFit
+                                                        asynchronous: true
+                                                        // Rasterised at the size drawn.
+                                                        // These are vectors, so asking
+                                                        // for the wrong one is a blurry
+                                                        // glyph rather than a missing
+                                                        // one — which is worse, because
+                                                        // it looks like a decision.
+                                                        sourceSize.width: Math.round(win.u * 4.4)
+                                                        sourceSize.height: Math.round(win.u * 4.4)
+                                                        opacity: tile.selected ? 1.0 : 0.75
+                                                        Behavior on opacity {
+                                                            NumberAnimation { duration: 140 }
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        width: parent.width
+                                                        text: tile.modelData.name
+                                                              || tile.modelData.title || ""
+                                                        color: win.ink
+                                                        font.pixelSize: tile.headline
+                                                                        ? win.u * 0.9 : win.u * 1.1
+                                                        font.bold: true
+                                                        wrapMode: Text.WordWrap
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: tile.headline ? 4 : 3
+                                                        horizontalAlignment: tile.headline
+                                                            ? Text.AlignLeft : Text.AlignHCenter
+                                                    }
+
+                                                    Text {
+                                                        width: parent.width
+                                                        visible: text !== ""
+                                                        text: tile.modelData.source || ""
+                                                        color: win.dim
+                                                        font.pixelSize: win.u * 0.7
+                                                        elide: Text.ElideRight
+                                                        horizontalAlignment: tile.headline
+                                                            ? Text.AlignLeft : Text.AlignHCenter
+                                                    }
                                                 }
                                             }
 
-                                            Text {
-                                                width: parent.width
-                                                text: tile.modelData.name
-                                                      || tile.modelData.title || ""
-                                                color: win.ink
-                                                font.pixelSize: tile.headline
-                                                                ? win.u * 0.9 : win.u * 1.1
-                                                font.bold: true
-                                                wrapMode: Text.WordWrap
-                                                elide: Text.ElideRight
-                                                maximumLineCount: tile.headline ? 4 : 3
-                                                horizontalAlignment: tile.headline
-                                                    ? Text.AlignLeft : Text.AlignHCenter
+                                            // A mouse still works, because a machine
+                                            // that is a television in the evening is a
+                                            // desktop in the afternoon. Hover moves the
+                                            // selection so the pointer and the
+                                            // controller are never fighting over two
+                                            // different ideas of what is selected.
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                // ⚠ NOT onEntered. A tile sliding under
+                                                // a parked cursor enters it just as
+                                                // truly as a cursor moving onto the
+                                                // tile, and only one of those is a
+                                                // person choosing something — see
+                                                // shell.pointerMoved. onPositionChanged
+                                                // carries the coordinates that tell
+                                                // them apart; entered() does not carry
+                                                // any.
+                                                onPositionChanged: (mouse) => {
+                                                    if (!shell.pointerMoved(
+                                                            tile.mapToItem(null, mouse.x, mouse.y)))
+                                                        return
+                                                    shell.setRow(shelf.shelfRow)
+                                                    shell.setCol(shelf.shelfRow, tile.index)
+                                                }
+                                                onClicked: {
+                                                    shell.setRow(shelf.shelfRow)
+                                                    shell.setCol(shelf.shelfRow, tile.index)
+                                                    shell.activate()
+                                                }
                                             }
-
-                                            Text {
-                                                width: parent.width
-                                                visible: text !== ""
-                                                text: tile.modelData.source || ""
-                                                color: win.dim
-                                                font.pixelSize: win.u * 0.7
-                                                elide: Text.ElideRight
-                                                horizontalAlignment: tile.headline
-                                                    ? Text.AlignLeft : Text.AlignHCenter
-                                            }
-                                        }
-                                    }
-
-                                    // A mouse still works, because a machine
-                                    // that is a television in the evening is a
-                                    // desktop in the afternoon. Hover moves the
-                                    // selection so the pointer and the
-                                    // controller are never fighting over two
-                                    // different ideas of what is selected.
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        // ⚠ NOT onEntered. A tile sliding under
-                                        // a parked cursor enters it just as
-                                        // truly as a cursor moving onto the
-                                        // tile, and only one of those is a
-                                        // person choosing something — see
-                                        // shell.pointerMoved. onPositionChanged
-                                        // carries the coordinates that tell
-                                        // them apart; entered() does not carry
-                                        // any.
-                                        onPositionChanged: (mouse) => {
-                                            if (!shell.pointerMoved(
-                                                    tile.mapToItem(null, mouse.x, mouse.y)))
-                                                return
-                                            shell.setRow(shelf.index)
-                                            shell.setCol(shelf.index, tile.index)
-                                        }
-                                        onClicked: {
-                                            shell.setRow(shelf.index)
-                                            shell.setCol(shelf.index, tile.index)
-                                            shell.activate()
                                         }
                                     }
                                 }

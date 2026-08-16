@@ -1861,6 +1861,77 @@ check "...and the height that keeps Steam's 2:3 art square" $?
 [ "$(grep -c '/ 96' "$BIGQML")" -ge 2 ]
 check "the on-screen keyboard clamps the same way" $?
 
+# ── shelves that share a row ────────────────────────────────────────────────
+#
+# ⚠ THE EMPTY HALF OF ONE ROW AND THE MISSING ROW BELOW IT WERE THE SAME SPACE.
+# Media has three tiles and Apps has three, and each of them used to own a full
+# row of the television — so two thirds of both rows was nothing, while System
+# and the headlines sat off the bottom edge where only a scroll could reach
+# them. Consecutive shelves that fit across are packed into a BAND now.
+#
+# Rendered proof is bigscreen_rig.sh at three aspect ratios; these guard the
+# parts an edit could undo without anything warning.
+grep -q 'readonly property var bands' "$BIGQML"
+check "shelves are packed into bands" $?
+
+grep -q 'model: shell.bands' "$BIGQML"
+check "...and a band, not a shelf, is one row of the Column" $?
+
+# ⚠ ONE PLACE FOR THE TILE WIDTH. The packer reserves a shelf's width from this
+# and the strip draws its tiles from it; two copies of the number is a band
+# whose arithmetic disagrees with its own contents, which clips the last tile
+# of a shelf that was promised to fit whole. Nothing about that warns.
+grep -q 'function idealUnits' "$BIGQML"
+check "the ideal tile width has exactly one home" $?
+
+grep -q 'win.u \* shell.idealUnits' "$BIGQML"
+check "...and the strip reads it from there rather than repeating it" $?
+
+# The screen decides the packing, not a count of tiles — the same six shelves
+# land differently on 4:3, 16:9 and 21:9. Assuming a shape here is the bug
+# 0.1.0-8 was, one layer up.
+grep -q 'property: "rowUnits"' "$BIGQML"
+check "the packer is told how wide the row really is" $?
+
+grep -q 'when: win.chosen' "$BIGQML"
+check "...by the screen that is actually showing it, and no other" $?
+
+# A shelf that has to scroll keeps its own row: half a row is half the tiles
+# per press, so narrowing a fifty-game library doubles how far somebody pushes
+# a stick to cross it. The squeeze is the same 15% the strip already allows
+# itself when it snaps a row to whole tiles.
+grep -q 'readonly property real bandSqueeze: 0.85' "$BIGQML"
+check "a band may squeeze its tiles, but only as far as the strip already does" $?
+
+# The peek is a promise that the row runs on past the edge. On a shelf whose
+# tiles all fit it is a promise of nothing — and the stretch that pays for it
+# would make Media's tiles a different size from Apps's on the same row.
+grep -q 'if (!strip.overflows) return idealW' "$BIGQML"
+check "a shelf that fits keeps its tiles at size, with no peek to promise" $?
+
+# ⚠ UP AND DOWN MOVE A BAND. Two shelves on one row are ONE row to somebody
+# holding a controller, and a d-pad that needed two presses to leave a row it
+# had visibly already left is a broken d-pad.
+grep -q 'const at = shell.place(shell.row)' "$BIGQML"
+check "up and down step between bands, not between shelves" $?
+
+# …and left and right run along the whole band, crossing into the shelf drawn
+# beside it rather than stopping at a wall with three tiles visible past it.
+grep -q 'shell.setCol(over.row' "$BIGQML"
+check "...and running off a shelf steps into the one beside it" $?
+
+# The rows scroll by BAND too. Counting shelves would scroll a row too far for
+# every band holding more than one — by an amount that depends on the screen's
+# width, which is exactly the shape of bug this file has been bitten by.
+grep -q 'const band = shell.place(shell.row)\[0\]' "$BIGQML"
+check "the stage scrolls by band as well" $?
+
+# B steps aside from the TOP BAND. `row > 0` is still true on a first row that
+# holds two shelves, and B would move sideways instead of getting out of the
+# way — from the one place it has nowhere else to go.
+grep -q 'if (shell.place(shell.row)\[0\] > 0) shell.moveRow(-1)' "$BIGQML"
+check "B steps aside from the top band, not merely from the top shelf" $?
+
 # ── the lock belongs to the shell, and to nothing the shell spawned ─────────
 #
 # ⚠ THE BUG THIS PINS LEFT BIG SCREEN MODE PERMANENTLY UNUSABLE. `big start`
