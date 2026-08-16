@@ -1713,6 +1713,64 @@ check "with no compositor to ask it falls back rather than failing" $?
 # already looks like to this binary. Anything added below that needs the real
 # one is a test that would be reaching the live desktop.
 
+# ── which music player ──────────────────────────────────────────────────────
+#
+# ⚠ THE SAME READER AS `output` ABOVE, which is the point of testing it here:
+# one key was hard-coded until this, and generalising the parser is exactly the
+# kind of change that keeps working for the key it was written for and silently
+# stops working for the other one.
+#
+# Named against `sh`, because the assertion has to hold on any machine — the
+# suite runs on CI, on a fresh install, and on a desktop with a dozen players
+# installed, and "whichever of these twelve is present" is not something a test
+# can know. sh is not a music player; it is a program that certainly exists.
+printf 'music = sh\n' > "$BIGCONF"
+says "$SA" big apps | grep -qE '^music +media +Music +sh( |$)'
+check "music = <program> in big.conf picks the Music tile's player" $?
+
+# ⚠ SAID OUT LOUD, and it still falls back. A tile that quietly opens a
+# different program from the one named in the config file is the failure nobody
+# thinks to check for: they read the config, see the right name, and go looking
+# somewhere else entirely.
+printf 'music = not-a-real-player-xyz\n' > "$BIGCONF"
+says "$SA" big apps 2>&1 | grep -q "big.conf says music = not-a-real-player-xyz"
+check "...and a named player that is not installed says so" $?
+
+# Both keys in one file, because that is what a config file looks like after
+# somebody has set two things — and a parser that takes the last assignment can
+# take the last assignment of the WRONG key if it is careless.
+printf 'output = DP-2\nmusic = sh\n' > "$BIGCONF"
+says "$SA" big | grep -q "screen         DP-2"
+check "two keys in one file do not read each other" $?
+
+says "$SA" big apps | grep -qE '^music +media +Music +sh( |$)'
+check "...both ways round" $?
+
+rm -f "$BIGCONF"
+
+# ── music as something DRIVEN rather than launched ──────────────────────────
+#
+# ⚠ Only cliamp can be driven, so the useful assertion on an arbitrary machine
+# is the REFUSAL: `big music` must say what to do rather than fail silently or,
+# worse, try to drive a player that has no socket. Whether cliamp is installed
+# on the machine running this suite is not something the suite gets to decide,
+# so the `music = sh` above is what makes the answer deterministic.
+printf 'music = sh\n' > "$BIGCONF"
+says "$SA" big music status | grep -q "cannot drive"
+check "a player that cannot be driven is refused, by name" $?
+
+says "$SA" big music status | grep -q "music = cliamp"
+check "...and the refusal says what to put in the config" $?
+
+"$SA" big music status >/dev/null 2>&1
+[ "$?" = 1 ]
+check "...with a failing status, not a silent zero" $?
+
+says "$SA" big music wobble | grep -q "takes status, play, pause"
+check "an unknown transport verb lists the real ones" $?
+
+rm -f "$BIGCONF"
+
 # ── the guide button ────────────────────────────────────────────────────────
 #
 # The watcher that makes the pad's GUIDE button open big screen mode from the
@@ -2014,7 +2072,7 @@ check "...and the headlines are last" $?
 ! grep -q 'title: "System"' "$BIGQML"
 check "the system switches are no longer a row of the screen" $?
 
-grep -q 'readonly property var menuItems: shell.byShelf("system")' "$BIGQML"
+grep -q 'out.concat(shell.byShelf("system"))' "$BIGQML"
 check "...they are what is behind Start" $?
 
 # One implementation of what Sleep does. Reachable from the menu now and from a

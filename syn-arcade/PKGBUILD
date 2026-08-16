@@ -212,7 +212,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=17
+pkgrel=18
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -269,7 +269,7 @@ optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mo
             'gamescope: `big steam --gamescope` — a nested compositor for a TV whose resolution is not the desktop’s'
             'retroarch: appears as a tile in big screen mode'
             'syntty: the Terminal tile (kitty, foot, alacritty and xterm are used in that order if it is absent)'
-            'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order)'
+            'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order). ⚠ cliamp is preferred over all of them when present and is not packaged here — it is the only player big screen mode can DRIVE rather than launch, so with it the Music tile opens no window and the Start menu gets a Now Playing row. Pick any of them explicitly with `music = <program>` in ~/.config/syn-arcade/big.conf'
             'plex-desktop: the Plex tile — a Plex server on the network is found by broadcast either way'
             'jellyfin-media-player: the Jellyfin tile, likewise'
             'sdl2-compat: SDL2 games that read the controller mappings'

@@ -71,6 +71,19 @@ fi
 if [ "\${1:-}" = big ] && [ "\${2:-}" = mouse ]; then
     printf 'mouse\n' >> "$TMP/launch.log"; exec sleep 300
 fi
+# Music is DRIVEN rather than launched, so the stub answers as a running
+# player instead of standing in for one. Without this the rig's HOME has no
+# cliamp socket, the menu correctly shows no music row, and the row could be
+# broken in any way at all with every screenshot still looking right.
+if [ "\${1:-}" = big ] && [ "\${2:-}" = music ]; then
+    case " \$* " in
+        *" status "*)
+            printf 'state\ttitle\tpath\n'
+            printf 'playing\tFixture%%20Track\thttp://example.invalid/stream\n' ;;
+        *)  printf '%s\n' "\$*" >> "$TMP/music.log" ;;
+    esac
+    exit 0
+fi
 exec "$REAL" "\$@"
 STUB
 chmod +x "$TMP/bin/syn-arcade"
@@ -424,11 +437,17 @@ shot 03b-back-on-the-bar
 # everything after it silently missing, and a rig that stops early looks a lot
 # like a rig that finished.
 say menu 0.8
-shot 03c-start-menu
+shot 03c-start-menu           # Now Playing on top, then the four switches
+# Right is next-track, and it does nothing on any row but the music one — so
+# this is safe to press before knowing where the selection is, which `accept`
+# is NOT (see below). It lands in music.log either way, which is how a row that
+# drew but was not wired is told from one that works.
+say right 0.5
+shot 03d-start-menu-next
 say down 0.4
-shot 03d-start-menu-moved
+shot 03e-start-menu-moved
 say back 0.6
-shot 03e-start-menu-closed
+shot 03f-start-menu-closed
 
 # Guide steps aside: the main surface must go, and the hint must appear.
 say guide 0.9
@@ -469,6 +488,8 @@ echo "── what the keyboard typed ──"
 cat "$TMP/typed.log" 2>/dev/null || echo "(nothing)"
 echo "── what was launched ──"
 cat "$TMP/launch.log" 2>/dev/null || echo "(nothing)"
+echo "── music transport ──"
+cat "$TMP/music.log" 2>/dev/null || echo "(nothing)"
 echo "── shell errors ──"
 grep -aE "ERROR|WARN|qs:" "$TMP/qs.log" | grep -viE "IPC server|Saving logs" | head -25
 echo "── screenshots ──"

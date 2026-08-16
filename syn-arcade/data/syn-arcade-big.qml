@@ -681,10 +681,68 @@ ShellRoot {
         return out
     }
 
-    // What is behind the Start button: the machine's own switches, in the
-    // order big.c lists them — the way out first, because it is the one
-    // somebody reaches for without having decided anything.
-    readonly property var menuItems: shell.byShelf("system")
+    // ── what is playing ─────────────────────────────────────────────────────
+    //
+    // Only cliamp can answer this, because it is the only player big screen
+    // mode can drive rather than launch — see music_headless() in big.c. An
+    // empty `state` means there is nothing to control, and the menu then has no
+    // music row at all rather than a row whose buttons do nothing.
+    //
+    // ⚠ ASKED ONLY WHILE THE MENU IS OPEN. This is a subprocess per poll, and
+    // the mistake to avoid is the one the Running shelf's comment names: a
+    // timer that keeps asking forever behind a full-screen game.
+    property var music: ({})
+
+    Process {
+        id: musicProc
+        command: [shell.bin, "big", "music", "status", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = shell.parseRecords(this.text)
+                shell.music = rows.length ? rows[0] : ({})
+            }
+        }
+    }
+
+    function refreshMusic() {
+        if (!musicProc.running) musicProc.running = true
+    }
+
+    Timer {
+        id: musicTimer
+        interval: 2000
+        repeat: true
+        // The menu is the only thing that reads it, so it is the only thing
+        // that makes it worth asking.
+        running: shell.menuOpen
+        onTriggered: shell.refreshMusic()
+    }
+
+    readonly property bool musicLive:
+        shell.music && String(shell.music.state || "") !== ""
+
+    // The Music tile's own glyph, reused for the menu row. Taken from the tile
+    // rather than resolved again, so there is still exactly one place that
+    // knows where this package put its drawings — big.c's icon_file().
+    readonly property string musicIcon: {
+        const t = shell.apps.filter(a => a.id === "music")
+        return t.length ? (t[0].iconfile || "") : ""
+    }
+
+    // What is behind the Start button: what is playing, then the machine's own
+    // switches in the order big.c lists them — the way out first, because it is
+    // the one somebody reaches for without having decided anything.
+    //
+    // ⚠ ONE LIST, and the music row is an entry in it rather than a special
+    // case above it. Up and down have to walk the whole menu; a row drawn
+    // outside the model is a row the d-pad goes straight past.
+    readonly property var menuItems: {
+        const out = []
+        if (shell.musicLive)
+            out.push({ id: "now-playing", kind: "music",
+                       name: shell.music.title || "Music" })
+        return out.concat(shell.byShelf("system"))
+    }
 
     // ── shelves that share a row: BANDS ─────────────────────────────────────
     //
@@ -1206,6 +1264,27 @@ ShellRoot {
         if (!shell.menuItems.length) return
         shell.menuIndex = 0
         shell.menuOpen = true
+        // Asked as it opens, not when it was last drawn: the track may have
+        // changed since, and a menu that says the wrong song is worse than one
+        // that takes a moment to say the right one.
+        shell.refreshMusic()
+    }
+
+    // Transport, which is the one thing in this menu that does NOT close it —
+    // pausing a track and being thrown back to the tiles means opening the menu
+    // again for every press, and skipping three tracks is three presses.
+    function musicCmd(verb) {
+        musicCmdProc.command = [shell.bin, "big", "music", verb]
+        musicCmdProc.running = true
+    }
+
+    Process {
+        id: musicCmdProc
+        // ⚠ The state after a transport command is what the row must show, and
+        // it is only true once the command has finished. Asking before that
+        // draws the state from before the press — a pause that still says
+        // playing, which reads as a button that did not work.
+        onExited: shell.refreshMusic()
     }
 
     function menuMove(d) {
@@ -1216,6 +1295,10 @@ ShellRoot {
 
     function menuActivate() {
         const it = shell.menuItems[shell.menuIndex]
+        if (it && it.kind === "music") {
+            shell.musicCmd("toggle")
+            return				// stays open, deliberately
+        }
         // Closed FIRST. Sleep comes back to this screen, and coming back to a
         // menu somebody left open half an hour ago is the interface having
         // remembered the wrong thing.
@@ -1253,9 +1336,17 @@ ShellRoot {
         // and drawn UNDER the close question, which is the order these two are
         // guarded in here.
         if (shell.menuOpen) {
+            const on = shell.menuItems[shell.menuIndex]
+            const onMusic = on && on.kind === "music"
             switch (cmd) {
             case "up":     shell.menuMove(-1); break
             case "down":   shell.menuMove(1); break
+            // ⚠ Left and right belong to the music row and to nothing else.
+            // A switch that reads "Power off" does not have a sideways, and a
+            // d-pad that appears to do something on it is a d-pad somebody
+            // will press again to find out what.
+            case "left":   if (onMusic) shell.musicCmd("prev"); break
+            case "right":  if (onMusic) shell.musicCmd("next"); break
             case "accept": shell.menuActivate(); break
             case "back":
             case "menu":
@@ -2387,7 +2478,7 @@ ShellRoot {
                         spacing: win.u * 0.3
 
                         Text {
-                            text: "SYSTEM"
+                            text: shell.musicLive ? "NOW PLAYING" : "SYSTEM"
                             color: win.dim
                             font.pixelSize: win.u * 0.8
                             font.letterSpacing: win.u * 0.12
@@ -2407,8 +2498,15 @@ ShellRoot {
                                 readonly property bool chosen:
                                     shell.menuIndex === entry.index
 
+                                readonly property bool isMusic:
+                                    entry.modelData.kind === "music"
+
                                 width: menuCol.width
-                                height: win.u * 2.6
+                                // The music row is taller because it carries two
+                                // lines: what is playing, and what the d-pad does
+                                // to it. Nothing else in this menu needs saying
+                                // twice.
+                                height: entry.isMusic ? win.u * 3.6 : win.u * 2.6
                                 radius: win.u * 0.4
                                 color: entry.chosen ? "#2b2450" : "transparent"
                                 border.width: entry.chosen
@@ -2437,9 +2535,14 @@ ShellRoot {
                                     anchors.verticalCenter: parent.verticalCenter
                                     height: win.u * 1.4
                                     width: height
-                                    source: entry.modelData.iconfile
-                                            ? "file://" + entry.modelData.iconfile
-                                            : ""
+                                    source: {
+                                        if (entry.isMusic)
+                                            return shell.musicIcon
+                                                   ? "file://" + shell.musicIcon : ""
+                                        return entry.modelData.iconfile
+                                               ? "file://" + entry.modelData.iconfile
+                                               : ""
+                                    }
                                     visible: status === Image.Ready
                                     fillMode: Image.PreserveAspectFit
                                     sourceSize.width: Math.round(height * 2)
@@ -2452,13 +2555,41 @@ ShellRoot {
                                 // width, so a machine missing one glyph keeps
                                 // its menu in a column instead of shuffling
                                 // one row left.
-                                Text {
+                                Column {
                                     anchors.left: entryIcon.right
                                     anchors.leftMargin: win.u * 0.7
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: win.u * 0.7
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: entry.modelData.name || ""
-                                    color: entry.chosen ? win.ink : win.dim
-                                    font.pixelSize: win.u * 1.0
+                                    spacing: win.u * 0.15
+
+                                    Text {
+                                        width: parent.width
+                                        text: entry.modelData.name || ""
+                                        color: entry.chosen ? win.ink : win.dim
+                                        font.pixelSize: win.u * 1.0
+                                        // A track title is somebody else's
+                                        // text and can be any length; a switch
+                                        // is one word.
+                                        elide: Text.ElideRight
+                                    }
+
+                                    // What the d-pad does here, said on the row
+                                    // it applies to. The transport is the only
+                                    // place in this interface where left and
+                                    // right mean something other than moving
+                                    // the selection, and a legend at the bottom
+                                    // of the screen cannot say "except here".
+                                    Text {
+                                        visible: entry.isMusic
+                                        width: parent.width
+                                        text: (String(shell.music.state) === "playing"
+                                               ? "Playing" : "Paused")
+                                              + "   ·   A pause   ·   ‹ › track"
+                                        color: win.dim
+                                        font.pixelSize: win.u * 0.75
+                                        elide: Text.ElideRight
+                                    }
                                 }
                             }
                         }

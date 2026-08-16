@@ -949,6 +949,48 @@ static const char *first_installed(const char *const *cands, const char **cache)
 	return NULL;
 }
 
+/*
+ * One key out of ~/.config/syn-arcade/big.conf. `key = value`, `#` comments.
+ *
+ * Deliberately not a library: the file has a handful of keys, all of them
+ * "which one of these do you want", and the whole reason it exists is the case
+ * a command-line flag cannot reach — `big autostart` takes no arguments, so a
+ * preference that can only be spelled as a flag is no preference at all.
+ *
+ * ⚠ THE LAST ASSIGNMENT WINS, which matches synui's own config and is what
+ * somebody who edited a line twice rather than deleting the first one expects.
+ */
+static bool big_conf_get(const char *key, char *buf, size_t n)
+{
+	buf[0] = '\0';
+
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "syn-arcade/big.conf"))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (!*t || *t == '#')
+			continue;
+		char *eq = strchr(t, '=');
+		if (!eq)
+			continue;
+		*eq = '\0';
+		char *k = trim(t);
+		char *v = trim(eq + 1);
+		if (strcmp(k, key) == 0 && *v)
+			snprintf(buf, n, "%s", v);
+	}
+
+	free(text);
+	return buf[0] != '\0';
+}
+
 static const char *browser_prog(void)
 {
 	static const char *const cands[] = {
@@ -978,9 +1020,19 @@ static const char *terminal_prog(void)
 }
 
 /*
- * A music player, in the order somebody would want one.
+ * A music player: `music = <program>` in big.conf, or the first one installed.
  *
- * Dedicated music applications first — they have a library, cover art and a
+ * ⚠ THE CONFIG KEY EXISTS BECAUSE THE LIST CANNOT BE RIGHT FOR EVERYBODY.
+ * Ordering a dozen players by what most people would want is a guess, and it
+ * silently overrules somebody who installed two. Naming one ends the argument.
+ *
+ * cliamp is first among the detected ones, and it is not favouritism: it is the
+ * only player here that big screen mode can DRIVE — it runs headless and takes
+ * transport commands over a socket, so Music on a television becomes a tile
+ * that starts the music and a row in the menu that controls it, rather than a
+ * window somebody then has to get out of with a gamepad. See music_headless().
+ *
+ * Dedicated music applications next — they have a library, cover art and a
  * queue, which is what "Music" means on a television — then the general media
  * players, which will play an album and are better than an empty shelf. mpv is
  * deliberately absent: with no file to open it is a black window, which is a
@@ -988,13 +1040,62 @@ static const char *terminal_prog(void)
  */
 static const char *music_prog(void)
 {
+	static char chosen[128];
+	static bool decided;
+
+	if (decided)
+		return chosen[0] ? chosen : NULL;
+	decided = true;
+
+	char want[128];
+	if (big_conf_get("music", want, sizeof(want))) {
+		if (have(want)) {
+			snprintf(chosen, sizeof(chosen), "%s", want);
+			return chosen;
+		}
+		/* ⚠ SAID OUT LOUD, and it falls back anyway. A named player
+		 * that is not installed is a typo or an uninstall, and a tile
+		 * that quietly opens a DIFFERENT program from the one in the
+		 * config file is the kind of thing nobody thinks to check —
+		 * they check the config, see the right name, and look
+		 * elsewhere. stderr, so `--rec` output is untouched. */
+		fprintf(stderr, "syn-arcade: big.conf says music = %s, which is "
+				"not installed — using what is\n", want);
+	}
+
 	static const char *const cands[] = {
+		"cliamp",
 		"strawberry", "elisa", "amberol", "rhythmbox", "lollypop",
 		"clementine", "audacious", "deadbeef", "quodlibet", "tauon",
 		"plexamp", "spotify", "vlc", NULL
 	};
 	static const char *cache;
-	return first_installed(cands, &cache);
+	const char *found = first_installed(cands, &cache);
+	if (found)
+		snprintf(chosen, sizeof(chosen), "%s", found);
+	return chosen[0] ? chosen : NULL;
+}
+
+/*
+ * Can the chosen player be driven WITHOUT a window?
+ *
+ * Exactly one can, so this is a name check and says so rather than pretending
+ * to be a capability test. The property being asked about is real, though, and
+ * it is what makes the Music tile a different KIND of thing: cliamp runs
+ * headless (`--daemon`, its own word for it) and takes play/pause/next over a
+ * unix socket, so nothing has to be mapped, focused, or escaped from.
+ *
+ * ⚠ Compared on the BASENAME. `music = /home/velle/.local/bin/cliamp` is a
+ * perfectly reasonable thing to write in a config file, and it is the same
+ * program.
+ */
+static bool music_headless(void)
+{
+	const char *m = music_prog();
+	if (!m)
+		return false;
+	const char *base = strrchr(m, '/');
+	return strcmp(base ? base + 1 : m, "cliamp") == 0;
 }
 
 /*
@@ -1123,7 +1224,18 @@ static int apps_table(struct row *rows, int max)
 	/* ── media ── */
 	{
 		const char *music = music_prog();
-		if (music)
+		/* ⚠ AN ACTION, NOT AN APP, when the player is headless — and
+		 * that is the whole difference in how it behaves. An app tile
+		 * launches something, steps the television aside, and waits for
+		 * it to exit. cliamp opens no window, so stepping aside would
+		 * reveal the desktop and waiting would wait for ever. As an
+		 * action it starts the music and the interface stays where it
+		 * is, which is what a music button on a television should do. */
+		if (music && music_headless())
+			rows[n++] = (struct row){ "music", "Music",
+				"syn-arcade big music play", "music", "action",
+				"media", false, false, false };
+		else if (music)
 			rows[n++] = (struct row){ "music", "Music", music,
 				"music", "app", "media", true, false, true };
 	}
@@ -2461,6 +2573,178 @@ static bool media_url(const char *id, char *out, size_t n)
 	return hit;
 }
 
+/* ── music, driven rather than launched ──────────────────────────────────── */
+
+/*
+ * Transport for a headless player, which on this system means cliamp.
+ *
+ * ⚠ THIS IS NOT A SECOND MUSIC PLAYER. Every verb here is one cliamp
+ * subcommand, run and waited for. The point is that the television never has to
+ * show a terminal: cliamp is a TUI, and a TUI four metres away with a gamepad in
+ * somebody's hands is a window they cannot read and cannot leave. Its own
+ * `--daemon` flag exists for exactly this ("serving IPC for scripts/Waybar"),
+ * so big screen mode becomes its face.
+ *
+ * The socket is the whole state model. `~/.config/cliamp/cliamp.sock` present
+ * and answering means there is something to control; absent means there is not,
+ * and the menu simply has no music row rather than a row whose buttons do
+ * nothing.
+ */
+static bool music_socket_live(void)
+{
+	/* ⚠ ASKED, not stat()ed. A socket FILE outlives the process that bound
+	 * it — there is a stale one on this machine from a cliamp that exited
+	 * in August — so its presence proves nothing. `status` answers "not
+	 * running" for a stale socket, which is the question actually being
+	 * asked. */
+	char *out = run_capture((char *const[]){ "cliamp", "status", "--json",
+						 NULL }, 2);
+	if (!out)
+		return false;
+	bool live = strstr(out, "\"ok\":true") || strstr(out, "\"ok\": true");
+	free(out);
+	return live;
+}
+
+/*
+ * Start the daemon and wait for it to answer.
+ *
+ * ⚠ WAITED FOR, and the wait is the reason this is not two lines. `cliamp
+ * --daemon` returns before its socket is bound, so a `play` sent straight
+ * afterwards lands on nothing and the tile press is silently lost — the one
+ * failure this whole design is meant to avoid, and the one that would look
+ * exactly like a broken tile.
+ */
+static bool music_ensure_running(void)
+{
+	if (music_socket_live())
+		return true;
+
+	char *const argv[] = { "cliamp", "--daemon", NULL };
+	if (spawn_detached(argv) != EX_OK)
+		return false;
+
+	for (int i = 0; i < 30; i++) {		/* up to ~3s */
+		struct timespec ts = { 0, 100 * 1000 * 1000 };
+		nanosleep(&ts, NULL);
+		if (music_socket_live())
+			return true;
+	}
+	return false;
+}
+
+/* One transport word, straight through. */
+static int music_cmd(const char *verb)
+{
+	char *const argv[] = { "cliamp", (char *)verb, NULL };
+	char *out = run_capture(argv, 3);
+	free(out);
+	return EX_OK;
+}
+
+/*
+ * What is playing, as records the shell reads like every other shelf.
+ *
+ * `state` is empty when there is nothing to control, and that is the signal the
+ * menu keys off — an absent row rather than a dead one.
+ */
+static int big_music_status(bool rec)
+{
+	char state[32] = "", title[256] = "", path[512] = "";
+
+	char *json = run_capture((char *const[]){ "cliamp", "status", "--json",
+						  NULL }, 2);
+	if (json && (strstr(json, "\"ok\":true") || strstr(json, "\"ok\": true"))) {
+		json_str(json, NULL, "state", state, sizeof(state));
+		/* ⚠ Scoped to the track object. `title` is a common enough key
+		 * that searching the whole document would one day find
+		 * somebody else's. */
+		const char *tr = strstr(json, "\"track\"");
+		json_str(tr ? tr : json, NULL, "title", title, sizeof(title));
+		json_str(tr ? tr : json, NULL, "path", path, sizeof(path));
+	}
+	free(json);
+
+	if (rec) {
+		rec_row(3, "state", "title", "path");
+		rec_row(3, state, title, path);
+		return EX_OK;
+	}
+
+	if (!state[0]) {
+		puts("no music player is running");
+		return EX_EMPTY;
+	}
+	printf("%-8s %s\n", state, title[0] ? title : "(nothing)");
+	return EX_OK;
+}
+
+/* Declared rather than moved: it belongs with the dispatch below, which is the
+ * only other thing that parses an argument list. */
+static const char *first_operand(int argc, char **argv);
+
+/* ⚠ The verb is the first OPERAND, not argv[0], and `rec` is the caller's.
+ * `--rec` is a global flag everywhere else in this command — `big music --rec
+ * status` has to mean what `big music status --rec` means, or the shell's
+ * habit of putting it first quietly turns a status query into a usage error. */
+static int big_music(int argc, char **argv, bool rec)
+{
+	const char *verb = first_operand(argc, argv);
+	if (!verb)
+		verb = "status";
+
+	/* ⚠ THE VERB IS CHECKED BEFORE THE PLAYER IS. A typo is a typo on every
+	 * machine, and answering it with "your music player cannot be driven"
+	 * sends somebody to edit a config file over a missing letter. */
+	static const char *const verbs[] = { "status", "play", "pause",
+					     "toggle", "next", "prev", "stop",
+					     NULL };
+	bool known = false;
+	for (int i = 0; verbs[i] && !known; i++)
+		known = strcmp(verb, verbs[i]) == 0;
+	if (!known) {
+		fprintf(stderr, "syn-arcade: big music takes status, play, "
+				"pause, toggle, next, prev or stop "
+				"(got '%s')\n", verb);
+		return EX_USAGE;
+	}
+
+	if (!music_headless()) {
+		fprintf(stderr, "syn-arcade: the music player is %s, which big "
+				"screen mode cannot drive — set `music = cliamp` "
+				"in ~/.config/syn-arcade/big.conf\n",
+			music_prog() ? music_prog() : "not installed");
+		return EX_FAIL;
+	}
+
+	if (!strcmp(verb, "status"))
+		return big_music_status(rec);
+
+	/* ⚠ Only `play` starts anything. toggle/next/prev on a player that is
+	 * not running would otherwise START one and then skip a track in it,
+	 * which is a surprising amount to happen because somebody pressed
+	 * pause. */
+	if (!strcmp(verb, "play")) {
+		if (!music_ensure_running()) {
+			fputs("syn-arcade: cliamp did not come up\n", stderr);
+			return EX_FAIL;
+		}
+		return music_cmd("play");
+	}
+
+	if (!strcmp(verb, "toggle") || !strcmp(verb, "pause") ||
+	    !strcmp(verb, "next") || !strcmp(verb, "prev") ||
+	    !strcmp(verb, "stop")) {
+		if (!music_socket_live()) {
+			fputs("syn-arcade: no music player is running\n", stderr);
+			return EX_FAIL;
+		}
+		return music_cmd(verb);
+	}
+
+	return EX_OK;		/* unreachable: the verb list above is closed */
+}
+
 /* ── the news shelf ──────────────────────────────────────────────────────── */
 
 /*
@@ -3630,6 +3914,11 @@ int cmd_big(int argc, char **argv)
 		return big_news(rec, opt_present(rest_c, rest, "--refresh"));
 	if (!strcmp(sub, "media"))
 		return big_media(rec, opt_present(rest_c, rest, "--refresh"));
+
+	/* Transport for a headless player. Unlike every other tile, Music is
+	 * something the television DRIVES rather than opens — see big_music. */
+	if (!strcmp(sub, "music"))
+		return big_music(rest_c, rest, rec);
 
 	/* The on-screen keyboard's typist, and the controller-as-mouse. Both
 	 * are streams the shell owns for as long as it needs them; neither is
