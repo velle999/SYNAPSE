@@ -953,11 +953,21 @@ static bool cmdbar_is_launch(const char *line)
  * what a shell would make of them, without this code re-quoting the user's own
  * words. Returns false only if the process could not be started at all.
  *
- * kitty first, then foot: execlp() only RETURNS when the exec fails, so chaining
- * them is the whole fallback — no need to probe for the binary first, and no
- * window where a check passes and the exec then fails anyway. Both spell the
- * flag `--hold` and both take the command as trailing arguments, so one form
- * covers them. */
+ * syntty first, then kitty, then foot: execlp() only RETURNS when the exec
+ * fails, so chaining them is the whole fallback — no need to probe for the
+ * binary first, and no window where a check passes and the exec then fails
+ * anyway.
+ *
+ * ⚠ TWO FORMS, and they cannot be collapsed. All three spell the flag --hold,
+ * but syntty takes the command after `-e` while kitty and foot take it as
+ * trailing arguments. Handed the trailing form, syntty reads `sh` as a
+ * subcommand and dies on `-c` with "unknown option" — and because that is a
+ * failed START rather than a failed exec, execlp does not return and the
+ * fallback never runs: the command bar would simply produce no window.
+ *
+ * ⚠ A syntty older than 0.1.0-27 has no --hold and fails the same way. That is
+ * a downgrade-only case on a system where synui and syntty ship together, and
+ * the honest cost of it is one command bar launch that opens nothing. */
 static bool cmdbar_launch_term(const char *line)
 {
     pid_t pid = fork();
@@ -965,8 +975,9 @@ static bool cmdbar_launch_term(const char *line)
     if (pid == 0) {
         setsid();                                 /* outlive the compositor */
         synui_child_reset_signals();
-        execlp("kitty", "kitty", "--hold", "sh", "-c", line, (char *)NULL);
-        execlp("foot",  "foot",  "--hold", "sh", "-c", line, (char *)NULL);
+        execlp("syntty", "syntty", "--hold", "-e", "sh", "-c", line, (char *)NULL);
+        execlp("kitty",  "kitty",  "--hold", "sh", "-c", line, (char *)NULL);
+        execlp("foot",   "foot",   "--hold", "sh", "-c", line, (char *)NULL);
         _exit(127);
     }
     return true;

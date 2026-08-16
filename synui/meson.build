@@ -957,6 +957,17 @@ test('menu_cats', menu_cats,
                 meson.current_source_dir() / 'quickshell/StartMenu.qml'],
      timeout : 30)
 
+# The windows synui opens to run ONE command, and the flag that keeps them
+# open. Three terminals spell --hold and two of them take the command
+# differently; syntty handed the trailing form dies at argument parsing, which
+# is a row that was clicked and a window that never opened, with nothing on
+# screen or in the journal. Source-only, same as above.
+term_hold = find_program('tests/term_hold.sh')
+test('term_hold', term_hold,
+     args    : [meson.current_source_dir() / 'quickshell/StartMenu.qml',
+                meson.current_source_dir() / 'src/ai_interface.c'],
+     timeout : 30)
+
 # What synui-record hands wf-recorder. Source-only: recording needs a seat and
 # an output, so this asserts the command line rather than the capture. The
 # constant-rate flag in particular has no visible symptom when it goes missing

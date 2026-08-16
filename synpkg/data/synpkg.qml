@@ -555,10 +555,17 @@ FloatingWindow {
         onExited: root.reload()
     }
 
-    // Hand a command to a terminal. kitty first: it is SynapseOS's default and
-    // what syn-install writes into limine-snapper-sync.conf. Both kitty and
-    // foot take the command positionally and both have --hold; the others need
-    // -e and a pause of their own.
+    // Hand a command to a terminal. syntty first: it is SynapseOS's default,
+    // it is the one terminal every install profile has, and as of 0.1.0-27 it
+    // has --hold — which is the only reason this chain used to start at kitty.
+    //
+    // ⚠ THREE FORMS, not one, and they are not interchangeable. syntty takes
+    // the command after `-e`; kitty and foot take it positionally after
+    // --hold; alacritty, konsole and xterm have no --hold at all and need a
+    // pause written into the command itself. Handing syntty the positional
+    // form makes it read `sh` as a subcommand and then die on `-c` with
+    // "unknown option" — a window that never opens, from a button that gave
+    // no sign of having done anything.
     //
     // The command is passed as sh's $1 rather than pasted into the script, so
     // nothing here has to be quoted. Joining argv on spaces is safe for what
@@ -567,6 +574,7 @@ FloatingWindow {
     function inTerminal(argv, note) {
         root.statusLine = note || "opened a terminal"
         termProc.command = ["sh", "-c",
+            'command -v syntty >/dev/null 2>&1 && exec syntty --hold -e sh -c "$1"; ' +
             'for t in kitty foot; do command -v "$t" >/dev/null 2>&1 && exec "$t" --hold sh -c "$1"; done; ' +
             'for t in alacritty konsole xterm; do command -v "$t" >/dev/null 2>&1 && exec "$t" -e sh -c "$1; printf \'\\n[press enter] \'; read _"; done; ' +
             'echo "no terminal emulator found" >&2; exit 127',

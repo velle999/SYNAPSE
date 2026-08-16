@@ -12,7 +12,7 @@ pkgname=synpkg
 # pkgver without changing that leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=29
+pkgrel=30
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -35,7 +35,13 @@ optdepends=('quickshell: the graphical browser (synpkg gui)'
             'syn-update: update SynapseOS components through synpkg system'
             'git: build packages from the AUR'
             'base-devel: makepkg, for AUR builds'
-            'foot: terminal the GUI opens for a full system upgrade')
+            # ⚠ VERSIONED, because the flag is the whole reason this one is
+            # named: --hold landed in syntty 0.1.0-27. An older syntty is
+            # still FOUND by the chain's `command -v` and then dies at parse,
+            # so the window never opens — which looks exactly like the button
+            # doing nothing. foot stays listed for a box that has neither.
+            'syntty>=0.1.0-27: terminal the GUI opens for a full system upgrade'
+            'foot: the same, on an install that predates syntty')
 
 source=("synpkg-0.1.0.tar.gz")
 sha256sums=('SKIP')

@@ -21,11 +21,33 @@ die() {
         printf '%s\n' "$msg" >&2
     else
         # Launched from a .desktop with no tty, so the error has nowhere to go
-        # but a terminal window. kitty is the default; fall back to foot, which
-        # is what pre-kitty installs have and what still works without OpenGL.
-        MSG="$msg" kitty --hold -e sh -c 'printf "%s\n" "$MSG"' >/dev/null 2>&1 \
-            || MSG="$msg" foot --hold -e sh -c 'printf "%s\n" "$MSG"' >/dev/null 2>&1 \
-            || true
+        # but a terminal window. syntty is the default and the one terminal
+        # every install profile has; kitty and foot are what older installs
+        # have, and foot still works without OpenGL.
+        #
+        # ⚠ `command -v`, NOT `a || b`. The old chain asked the wrong question:
+        # a non-zero exit from the first terminal means the COMMAND failed, not
+        # that the terminal is missing — so a kitty that opened and printed the
+        # error and was then closed with a non-zero status opened a second
+        # window in foot saying the same thing. Asking whether the binary
+        # exists is the question that was meant.
+        #
+        # ⚠ syntty needs --hold before -e; kitty and foot accept it either way.
+        # A syntty older than 0.1.0-27 has no --hold at all and would die at
+        # parse, so the message would be lost — which is why the error is still
+        # written to stderr above it, where a journal can catch it.
+        printf '%s\n' "$msg" >&2
+        for t in syntty kitty foot; do
+            command -v "$t" >/dev/null 2>&1 || continue
+            # ⚠ FOREGROUND, as it always was. Backgrounding it and exiting
+            # orphans the window onto init with this script's inherited
+            # descriptors still open — and when the launcher was started by
+            # quickshell those are pipes quickshell closes the moment its
+            # direct child exits, which is the SIGPIPE that kills detached
+            # children all over this system.
+            MSG="$msg" "$t" --hold -e sh -c 'printf "%s\n" "$MSG"' >/dev/null 2>&1
+            break
+        done
     fi
     exit 1
 }

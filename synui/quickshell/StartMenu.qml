@@ -232,13 +232,18 @@ PanelWindow {
 
                 p["System Tools"] = [
                     { kind: "exec", label: "AI Shell (synsh)", argv: ["syntty", "-e", "synsh"] },
-                    // ⚠ kitty, NOT syntty, and deliberately: these are the rows
-                    // whose whole value is the output STAYING on screen after
-                    // the command finishes, and `--hold` is a kitty/foot flag
-                    // syntty does not have yet. syntty is the default terminal
-                    // everywhere the window is meant to close with the command;
-                    // when it grows --hold these move too, in one change.
-                    { kind: "exec", label: "System Status",    argv: ["kitty", "--hold", "syn", "status"] },
+                    // ⚠ --hold, because the whole value of this row is the
+                    // output STAYING on screen after the command finishes. It
+                    // was pinned to kitty for exactly that flag while syntty
+                    // was the default terminal everywhere else; syntty grew it
+                    // in 0.1.0-27 and these move with it.
+                    //
+                    // ⚠ AND `-e`, which kitty did not need. syntty takes the
+                    // command after -e; handed it positionally it reads `syn`
+                    // as a subcommand and dies on the next argument, so the
+                    // window never opens and the row silently does nothing.
+                    { kind: "exec", label: "System Status",
+                      argv: ["syntty", "--hold", "-e", "syn", "status"] },
                     { kind: "exec", label: "Network Setup",    argv: ["syntty", "-e", "nmtui"] },
                     // synpkg, our own manager. A GUI (Terminal=false in its
                     // .desktop), so it runs bare, no terminal wrapper.
@@ -269,16 +274,11 @@ PanelWindow {
                     // upgrade, and a bare -Sy leaves a system whose databases
                     // are newer than its packages — every later install then
                     // 404s on a filename the mirror has already rotated away.
-                    // ⚠ kitty, NOT syntty, and deliberately: these are the rows
-                    // whose whole value is the output STAYING on screen after
-                    // the command finishes, and `--hold` is a kitty/foot flag
-                    // syntty does not have yet. syntty is the default terminal
-                    // everywhere the window is meant to close with the command;
-                    // when it grows --hold these move too, in one change.
+                    // ⚠ --hold and -e, for the reasons on System Status above.
                     { kind: "exec", label: "Update System",
                       argv: MenuState.synpkgPresent
-                          ? ["kitty", "--hold", "synpkg", "upgrade"]
-                          : ["kitty", "--hold", "sudo", "pacman", "-Syu"] },
+                          ? ["syntty", "--hold", "-e", "synpkg", "upgrade"]
+                          : ["syntty", "--hold", "-e", "sudo", "pacman", "-Syu"] },
                     // SynapseOS's OWN components. They come from the
                     // [synapseos] repo, which is a frozen copy of the
                     // installing ISO that nothing ever writes to, so no ALPM
@@ -416,7 +416,7 @@ PanelWindow {
         // still running does not start a second child; it QUEUES, and the queued
         // command runs the moment the first child exits. Every row here launches
         // something that lives as long as its window does — `synpkg gui` and
-        // `syn-update-gui` both exec quickshell in the FOREGROUND, `kitty` stays
+        // `syn-update-gui` both exec quickshell in the FOREGROUND, a terminal stays
         // up — so one shared Process meant the start menu could only ever have
         // one launched application alive at a time.
         //

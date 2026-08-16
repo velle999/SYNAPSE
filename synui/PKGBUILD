@@ -19,7 +19,7 @@ pkgver=0.1.0
 #   only stops it being load-bearing. ⚠ syntty had to move BEFORE synui in
 #   build-all.sh and archiso/build.sh — both are ordered, and makepkg -s
 #   resolves depends out of the local repo as it goes.
-pkgrel=369
+pkgrel=370
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
