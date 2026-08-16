@@ -726,6 +726,13 @@ ShellRoot {
         return kind === "game" ? 9 : kind === "news" ? 14 : 11
     }
 
+    // How much a selected tile grows. ⚠ ONE HOME, for the same reason
+    // idealUnits is: the delegate scales by it and the strip has to RESERVE
+    // room for it on every side. Two copies is a highlight drawn outside the
+    // space set aside for it, which — now that the strips clip — is a
+    // highlight with an edge missing.
+    readonly property real tileSelectedScale: 1.06
+
     // What a shelf wants, split into the part that can be squeezed and the part
     // that cannot: tiles scale, gaps and margins do not.
     function shelfTiles(sh) { return sh.items.length * shell.idealUnits(sh.kind) }
@@ -1872,6 +1879,34 @@ ShellRoot {
 
                                     width: shelf.modelData.units * win.u
                                     height: label.height + win.u * 0.6 + strip.height
+
+                                    // ⚠ CLIPPED AT THE SHELF, and until bars shared a
+                                    // row nothing here needed to clip at all. A shelf
+                                    // that overflowed always had the whole row, so what
+                                    // ran past its right edge ran to the edge of the
+                                    // SCREEN and the stage's own clip caught it. Three
+                                    // bars on one row means the thing to the right of a
+                                    // shelf is another shelf: Play's half-tile peek drew
+                                    // ON TOP of Media's first tile. It did not read as a
+                                    // clipping bug — it read as two tiles at slightly
+                                    // wrong positions.
+                                    //
+                                    // ⚠ AND NOT ON THE STRIP, which is where it went
+                                    // first and is one level too deep. A selected tile
+                                    // scales from its CENTRE, and a delegate sits at y=0
+                                    // in a horizontal ListView — the view owns the
+                                    // cross-axis position, so a `y` on the delegate is
+                                    // simply ignored and every bit of the strip's slack
+                                    // is BELOW the tile. Clipping there sheared the
+                                    // highlight's top border off flush, leaving the two
+                                    // side borders standing with nothing joining them.
+                                    //
+                                    // This boundary is the same one horizontally — the
+                                    // strip fills the shelf's width — and vertically it
+                                    // has the label's 0.6u gap above the strip to grow
+                                    // into, which is more than the 3% a tile takes.
+                                    clip: true
+
                                     opacity: shell.row === shelf.shelfRow ? 1.0 : 0.45
                                     Behavior on opacity { NumberAnimation { duration: 160 } }
 
@@ -1977,25 +2012,6 @@ ShellRoot {
                                         // flick from a touchpad would fight the
                                         // selection for control of the same list.
                                         interactive: false
-
-                                        // ⚠ CLIPPED AT THE SHELF, and until bars
-                                        // shared a row it did not need to be. A
-                                        // shelf that overflowed always had the whole
-                                        // row to itself, so what ran past its right
-                                        // edge ran to the edge of the SCREEN and the
-                                        // stage's own clip caught it. Three bars on
-                                        // one row means the thing to the right of a
-                                        // shelf is another shelf: Play's half-tile
-                                        // peek was drawn ON TOP of Media's first
-                                        // tile, and Media's on top of Apps's. It did
-                                        // not read as a clipping bug either — it read
-                                        // as two tiles at slightly wrong positions.
-                                        //
-                                        // The margins below are what make this safe:
-                                        // a selected tile grows by 3% of its width at
-                                        // each side, into 1.6u of room that is inside
-                                        // these bounds rather than past them.
-                                        clip: true
                                         // Room for a selected tile to grow into at
                                         // either end, and for the first tile to sit
                                         // clear of the screen edge.
@@ -2039,8 +2055,7 @@ ShellRoot {
                                             // edge back.
                                             width: strip.slotW
                                             height: strip.slotH
-
-                                            scale: selected ? 1.06 : 1.0
+                                            scale: selected ? shell.tileSelectedScale : 1.0
                                             Behavior on scale {
                                                 NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
                                             }
