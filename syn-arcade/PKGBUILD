@@ -212,6 +212,60 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-28: asking the visualizer to stop is not the same as it ───────────
+# ── stopping, and YouTube Music never had credentials to browse with ────────
+#
+# Two reports from the sofa, and the first is 0.1.0-26's fix arriving at the
+# same symptom it was written for: press Guide to come back from the
+# visualizer, and the frozen visualizer is still there.
+#
+# The signal chain was right and it was not enough. SIGTERM's default action
+# ends a process; a program that CATCHES it does not have to, and a program
+# that catches it and answers from an event loop cannot if that loop is the
+# thing that is stuck. projectM-pulseaudio is exactly that — `nm -D` shows it
+# imports both `signal` and `pa_signal_new` — and covered by the interface it
+# is occlusion-culled, gets no frame callbacks, and has no loop turning to
+# deliver the quit TO. The journal has the whole shape of it: Guide at
+# 16:08:16, and projectM printing TERMINATED at 16:08:24, eight seconds later
+# and only once the television had stepped aside and handed it frames again.
+#
+# So the polite signal is asked FIRST and enforced SECOND: `alarm()` is armed
+# as the TERM goes out, and SIGALRM sends the process group a SIGKILL, which no
+# program catches and no stuck loop can sit on. Two seconds of grace, and ONLY
+# for the tiles that asked for it — `insist` comes off the same `transient`
+# column that decides what is signalled at all, so Ctrl+C on `big run
+# steam-bpm --wait` still means "stop waiting" rather than "SIGKILL Steam".
+#
+# ⚠ AND THE RIG IS WHY IT SHIPPED. bigscreen_rig.sh stubs `big run` with
+# `exec sleep 300`, and sleep dies of SIGTERM the way the manual says — so the
+# rig agreed the fix worked against the one property projectM does not have.
+# The suite now stands in for it with a process that CATCHES the signal and
+# carries on, and asserts on the process being GONE rather than on the signal
+# having been sent. Against polite-signal-only code that assertion fails.
+#
+# ── and the second: YouTube Music was a row that could not work ─────────────
+#
+# "The cliamp menu to install YouTube Music worked but now it just says open
+# with cliamp, but cliamp never got setup and I don't see how."
+#
+# Both halves true. yt-dlp is what PLAYS a YouTube URL; a Google OAuth desktop
+# client is what BROWSES for one, and `browse` is the second of those. cliamp
+# v1.63.2 ships an EMPTY fallback credential pool — external/ytmusic/fallback.go
+# declares `var fallbackCredentials []oauthCreds` with no entries — so with no
+# client_id/client_secret in config.toml it prints "YouTube: no credentials
+# available" to a stderr nobody on a sofa is reading and registers no YouTube
+# provider at all. Measured against the installed binary.
+#
+# ⚠ INCLUDING AFTER ITS OWN WIZARD SAYS YES. `cliamp setup` calls its first
+# YouTube Music mode "Use built-in credentials (recommended)" and writes
+# `[ytmusic]\nenabled = true` against that empty pool. So the row now gates on
+# the CREDENTIALS rather than on the section, and says which mode to pick.
+#
+# Also in this release:
+#   · the note on a `setup` row is per SOURCE rather than per action. Both
+#     services answer `setup` and they are not the same errand — setting up
+#     YouTube Music was being told it needed Spotify Premium.
+
 # ── 0.1.0-27: a band is ONE SHAPE of tile ───────────────────────────────────
 #
 # On a 1080p laptop with three games installed, the whole interface arrived in
@@ -375,7 +429,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=27
+pkgrel=28
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

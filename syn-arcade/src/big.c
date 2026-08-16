@@ -1621,17 +1621,60 @@ static void fullscreen_after_launch(const struct focus *before)
  * otherwise be left behind — which is the same "it is still running" this is
  * here to fix, one level down.
  *
- * ⚠ Async-signal-safe, and only just: kill() and a sig_atomic_t assignment are
- * on the list, and nothing else happens in the handler. The reap continues
- * afterwards through the EINTR loop below, so this still returns when the
- * application really has gone rather than the moment it was asked to.
+ * ⚠ Async-signal-safe, and only just: kill(), alarm() and a sig_atomic_t
+ * assignment are on the list, and nothing else happens in the handler. The reap
+ * continues afterwards through the EINTR loop below, so this still returns when
+ * the application really has gone rather than the moment it was asked to.
+ *
+ * ── ⚠ AND ASKING IS NOT ENOUGH, WHICH IS WHY THERE IS A SECOND HALF ─────────
+ *
+ * SIGTERM's default action ends a process. A program that CATCHES it does not
+ * have to, and a program that catches it and then waits for its event loop
+ * cannot, if that loop is the thing that is stuck.
+ *
+ * That is exactly the visualizer. projectM-pulseaudio imports `signal` and
+ * pa_signal_new, so SIGTERM is delivered into pulse's mainloop rather than to
+ * the kernel's default action — measured on this machine:
+ * `SigCgt` has bit 15 set, and a SIGTERM to a HEALTHY offscreen projectM left
+ * it still running five seconds later. Covered by the interface it gets no
+ * frame callbacks, so its loop is not turning at all and there is nothing to
+ * deliver the quit TO. The journal caught the whole shape of it: Guide at
+ * 16:08:16, the interface back, and projectM only printing TERMINATED at
+ * 16:08:24 — eight seconds later, and only after the television stepped aside
+ * again and handed it frames back. From the sofa that is the bug 0.1.0-26 was
+ * supposed to have fixed: come back, and the frozen visualizer is still there.
+ *
+ * So the polite signal is asked FIRST and enforced SECOND. `alarm()` is armed
+ * as the TERM goes out, and SIGALRM sends the group a SIGKILL, which no
+ * program catches and no stuck event loop can sit on.
+ *
+ * ⚠ ONLY FOR THE TILES THAT ASKED FOR IT. `insist` comes from the SAME
+ * `transient` column that decides what gets signalled at all — it is not a new
+ * list, and it is not everything. Somebody pressing Ctrl+C at a prompt on
+ * `big run steam-bpm --wait` means "stop waiting", and answering that by
+ * SIGKILLing Steam two seconds later would lose whatever it had not written
+ * yet. A transient tile has nothing to lose by construction: it is ended and
+ * launched afresh every time.
  */
+#define INSIST_AFTER 2		/* seconds of grace before the SIGKILL */
+
 static volatile sig_atomic_t waited_pid;
+static volatile sig_atomic_t insist_on_it;
 
 static void pass_on_the_signal(int sig)
 {
+	if (waited_pid <= 0)
+		return;
+	kill(-(pid_t)waited_pid, sig);
+	if (insist_on_it)
+		alarm(INSIST_AFTER);
+}
+
+static void insist(int sig)
+{
+	(void)sig;
 	if (waited_pid > 0)
-		kill(-(pid_t)waited_pid, sig);
+		kill(-(pid_t)waited_pid, SIGKILL);
 }
 
 /*
@@ -1643,7 +1686,7 @@ static void pass_on_the_signal(int sig)
  * earlier and there is no window to fullscreen, any later and the application
  * has already been closed.
  */
-static int spawn_wait(char *const argv[], bool fill)
+static int spawn_wait(char *const argv[], bool fill, bool hard)
 {
 	/*
 	 * Asked BEFORE the spawn, and its failure is the answer to whether the
@@ -1671,11 +1714,22 @@ static int spawn_wait(char *const argv[], bool fill)
 	 * to be interrupted for the handler to run at all, and the EINTR loop
 	 * is already written for it. */
 	waited_pid = pid;
+	insist_on_it = hard;
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = pass_on_the_signal;
 	sigaction(SIGTERM, &sa, NULL);
 	sigaction(SIGINT, &sa, NULL);
+
+	/* ⚠ AND SIGALRM HAS TO BE HANDLED, not merely armed. Its default action
+	 * ends the process — so without this the enforcement would kill the
+	 * WAITER two seconds after the polite signal and leave the application
+	 * it was supposed to be enforcing against running, which is the bug
+	 * with an extra step. Installed unconditionally: it costs nothing when
+	 * nothing arms the alarm, and it means the arming half in the handler
+	 * above never has to ask whether it is safe to arm. */
+	sa.sa_handler = insist;
+	sigaction(SIGALRM, &sa, NULL);
 
 	if (fill)
 		fullscreen_after_launch(&before);
@@ -1686,6 +1740,12 @@ static int spawn_wait(char *const argv[], bool fill)
 	int st = 0;
 	while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
 		;
+
+	/* Disarmed in the order that cannot misfire: the alarm first, so a
+	 * pending one cannot land on a pid this no longer owns, and only then
+	 * the pid it would have used. */
+	alarm(0);
+	insist_on_it = 0;
 	waited_pid = 0;
 	return EX_OK;
 }
@@ -2006,7 +2066,10 @@ static int big_run(const char *id, bool wait_for_it)
 		if (!wait_for_it)
 			return spawn_detached(argv);
 
-		return spawn_wait(argv, rows[i].full);
+		/* The `transient` column answers BOTH halves: what gets
+		 * signalled on the way back, and what may be insisted upon if
+		 * asking is ignored. There is no second list. */
+		return spawn_wait(argv, rows[i].full, rows[i].transient);
 	}
 
 	fprintf(stderr, "syn-arcade: no tile called '%s'\n", id);
@@ -2187,7 +2250,7 @@ static int big_open(const char *url, bool wait_for_it)
 	 * A headline is a browser window, and a browser window is the case the
 	 * `full` column exists for — nothing about a web page fills a
 	 * television by itself. So this one is always true. */
-	return spawn_wait(argv, true);
+	return spawn_wait(argv, true, false);
 }
 
 /* ── where the caches live ───────────────────────────────────────────────── */
@@ -3692,6 +3755,100 @@ static bool cliamp_conf_section(const char *section)
 }
 
 /*
+ * Whether YouTube Music can actually BROWSE anything on this machine.
+ *
+ * ── ⚠ AND `enabled = true` IS NOT THE ANSWER, WHICH IS THE WHOLE POINT ──────
+ *
+ * cliamp's own setup wizard offers three modes for YouTube Music and calls the
+ * first one "Use built-in credentials (recommended)". It writes
+ * `[ytmusic]\nenabled = true` and nothing else, on the documented promise that
+ * the player carries a pool of shared Google OAuth desktop credentials to fall
+ * back on.
+ *
+ * ⚠ THAT POOL IS EMPTY. In v1.63.2 — the pinned version this OS ships —
+ * external/ytmusic/fallback.go declares `var fallbackCredentials []oauthCreds`
+ * with no entries, so FallbackCredentials() returns two empty strings and
+ * ResolveCredentials() has nothing to resolve to. Measured against the
+ * installed binary, with a config directory of its own so nothing live was
+ * touched:
+ *
+ *     cliamp --provider ytmusic
+ *     → YouTube: no credentials available (configure client_id/client_secret
+ *       in config.toml)
+ *
+ * and the three YouTube entries are never added to the provider list at all.
+ * So the television sent somebody to cliamp, cliamp opened with no YouTube
+ * Music in it, and the one line explaining why went to a stderr nobody on a
+ * sofa is reading. Reported exactly that way: "cliamp never got setup and I
+ * don't see how".
+ *
+ * ⚠ THE OAUTH CLIENT IS FOR BROWSING, NOT FOR PLAYING. Worth stating because
+ * it is the difference between "needs an account" and "needs a Google Cloud
+ * project": resolve.go sends every YouTube URL through yt-dlp and the native
+ * client, neither of which sees these credentials. A URL plays with yt-dlp
+ * alone. It is SEARCH and BROWSE that go through the Data API, which is what
+ * `browse` on this row means and why this check gates that row and no other.
+ *
+ * ⚠ So this asks for the two keys rather than for the section. A section with
+ * `enabled = true` and nothing else is a machine that has been through the
+ * wizard and still cannot play anything, which is the state this exists to
+ * stop calling ready. If upstream ever fills that pool, THIS is the check to
+ * revisit — the section alone would then be enough.
+ *
+ * `[yt]`, `[youtube]` and `[ytmusic]` are one section to cliamp's parser
+ * (config.go normalises all three), so they are one section here.
+ */
+static bool ytmusic_credentialed(void)
+{
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "cliamp/config.toml"))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool inside = false, id = false, secret = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (*t == '[') {
+			inside = strcmp(t, "[ytmusic]") == 0 ||
+				 strcmp(t, "[youtube]") == 0 ||
+				 strcmp(t, "[yt]") == 0;
+			continue;
+		}
+		if (!inside)
+			continue;
+
+		char *eq = strchr(t, '=');
+		if (!eq)
+			continue;
+		*eq = '\0';
+		char *key = trim(t);
+		char *val = trim(eq + 1);
+
+		/* Quoted in everything the wizard writes, and the quotes are
+		 * what "empty" has to be measured inside: `client_id = ""` is
+		 * a key that is present and useless. */
+		size_t n = strlen(val);
+		if (n >= 2 && val[0] == '"' && val[n - 1] == '"') {
+			val[n - 1] = '\0';
+			val++;
+		}
+		if (!*val)
+			continue;
+
+		if (strcmp(key, "client_id") == 0)
+			id = true;
+		else if (strcmp(key, "client_secret") == 0)
+			secret = true;
+	}
+	free(text);
+	return id && secret;
+}
+
+/*
  * What a source DOES when it is chosen, which is the column the television
  * acts on:
  *
@@ -3711,8 +3868,19 @@ static bool cliamp_conf_section(const char *section)
 static const char *source_action(const struct source *s)
 {
 	if (!s->queueable) {
-		if (strcmp(s->id, "ytmusic") == 0 && !have("yt-dlp"))
-			return "install";
+		/* ⚠ TWO GATES ON THIS ONE ROW, IN ORDER, AND THE SECOND WAS
+		 * MISSING. yt-dlp is what PLAYS a YouTube URL and the OAuth
+		 * client is what BROWSES for one; having the first has never
+		 * implied the second. Without this the row went straight from
+		 * "press to install yt-dlp" to "opens cliamp" — and opening
+		 * cliamp showed no YouTube Music at all. See
+		 * ytmusic_credentialed() for the measurement. */
+		if (strcmp(s->id, "ytmusic") == 0) {
+			if (!have("yt-dlp"))
+				return "install";
+			if (!ytmusic_credentialed())
+				return "setup";
+		}
 		if (strcmp(s->id, "spotify") == 0 &&
 		    !cliamp_conf_section("[spotify]"))
 			return "setup";
@@ -3762,8 +3930,24 @@ static int big_music_sources(bool rec)
 			note = "no music folder on this machine";
 		else if (strcmp(act, "install") == 0)
 			note = "needs yt-dlp — press to install it";
+
+		/* ⚠ THE NOTE IS PER SOURCE, NOT PER ACTION. Both of these are
+		 * `setup` and they are not the same errand: one is a password
+		 * on a subscription, the other is a pair of keys out of a
+		 * Google Cloud project. A note keyed on the action alone told
+		 * somebody setting up YouTube Music that they needed Spotify
+		 * Premium.
+		 *
+		 * ⚠ AND IT NAMES THE MODE, because the wizard's own default is
+		 * the one that does not work here: "Use built-in credentials
+		 * (recommended)" writes `enabled = true` against an empty
+		 * credential pool, and the row would come straight back to
+		 * this note having looked like it succeeded. */
 		else if (strcmp(act, "setup") == 0)
-			note = "press to sign in — needs Spotify Premium";
+			note = strcmp(s->id, "ytmusic") == 0
+				? "press to sign in — pick \"my own OAuth "
+				  "credentials\", not the built-in ones"
+				: "press to sign in — needs Spotify Premium";
 		else if (!s->queueable)
 			note = "opens cliamp";
 
@@ -3912,7 +4096,7 @@ static int big_music_browse(void)
 	}
 	argv[argc] = NULL;
 
-	return spawn_wait(argv, true);
+	return spawn_wait(argv, true, false);
 }
 
 /*
@@ -3959,7 +4143,7 @@ static int term_run_and_hold(const char *command)
 	argv[argc++] = script;
 	argv[argc] = NULL;
 
-	return spawn_wait(argv, true);
+	return spawn_wait(argv, true, false);
 }
 
 /*

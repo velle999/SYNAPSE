@@ -1915,6 +1915,138 @@ check "...and never against a player that is not cliamp" $?
 grep -q 'onExited: shell.musicBands = \[\]' "$BIGQML"
 check "...and the bars go rather than freezing on the last frame" $?
 
+# ── and ASKING it to end is not the same as it ENDING ───────────────────────
+#
+# ⚠ THE ASSERTION THE LAST RELEASE WAS MISSING, AND THE REASON IT SHIPPED A
+# FIX THAT DID NOT FIX ANYTHING.
+#
+# 0.1.0-26 added the signal chain — the shell signals `big run --wait`, which
+# passes it on to the process group — and the big screen rig agreed it worked.
+# It agreed because the rig STUBS `big run` with `exec sleep 300`, and sleep
+# dies of SIGTERM the way the manual says. The real tile does not: projectM
+# imports `signal` and `pa_signal_new` (`nm -D` on projectM-pulseaudio shows
+# both), so SIGTERM lands in a handler and is answered by an event loop — and
+# while the interface is over the top of it, occlusion-culled and getting no
+# frame callbacks, that loop is not turning. Reported from the sofa exactly as
+# before: Guide, and the frozen visualizer is still there.
+#
+# So this stands in for projectM with the property that MATTERS — it catches
+# the signal and carries on — and asserts on the process being GONE, not on
+# the signal having been sent. Against the polite-signal-only code the
+# stand-in outlives the waiter and this fails, which is what the rig could
+# not do.
+# ⚠ THE STUBS ARE BUILT HERE AND ONLY THE LAUNCH IS A SUBSHELL. A `check`
+# inside a subshell increments a copy of the counters and the parent's totals
+# never see it — a failing assertion would print FAIL and the suite would still
+# exit 0. Everything counted below runs in this shell.
+VT="$T/insist"
+mkdir -p "$VT/bin"
+
+# A monitor to listen to, so big_visualizer gets past its refusal. Stubbed
+# rather than real: the suite must not ask the running machine what its audio
+# devices are, and `pactl list sources short` is tab-separated.
+cat > "$VT/bin/pactl" <<'STUB'
+#!/bin/sh
+case " $* " in
+    *" sources "*) printf '0\tfixture.monitor\tPipeWire\ts16le 2ch 48000Hz\tIDLE\n' ;;
+    *" get-default-sink "*) printf 'fixture\n' ;;
+esac
+exit 0
+STUB
+
+# ⚠ The stand-in, and the trap IS the fixture. Without it this is the rig's
+# `sleep` again and passes against code that fixes nothing.
+cat > "$VT/bin/projectM-pulseaudio" <<STUB
+#!/bin/bash
+trap 'echo caught >> "$VT/caught.log"' TERM INT
+printf '%s\n' "\$\$" > "$VT/vis.pid"
+while :; do sleep 0.2; done
+STUB
+
+# Nothing may reach a compositor. The suite already unsets SYNUI_SOCKET and
+# moves XDG_RUNTIME_DIR, so there is no live socket to find; this is the third
+# layer, and it also records any attempt.
+cat > "$VT/bin/synctl" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$VT/synctl.log"
+exit 1
+STUB
+
+chmod +x "$VT/bin/pactl" "$VT/bin/projectM-pulseaudio" "$VT/bin/synctl"
+
+# The tile's exec is `syn-arcade big visualizer` — a word off a table, resolved
+# through PATH. It has to find the binary under test.
+ln -sf "$SA" "$VT/bin/syn-arcade"
+
+# ⚠ `exec`, so $! names the WAITER and not a shell that happens to be its
+# parent. The signal below has to land on the process holding waited_pid.
+( export PATH="$VT/bin:$PATH"; exec "$SA" big run visualizer --wait ) \
+    >/dev/null 2>&1 &
+WAITER=$!
+
+VIS=""
+for _ in $(seq 60); do
+    [ -s "$VT/vis.pid" ] && { VIS=$(cat "$VT/vis.pid"); break; }
+    sleep 0.1
+done
+
+if [ -z "$VIS" ]; then
+    bad "the stand-in visualizer never started"
+else
+    ok "the visualizer tile starts through the waiter"
+
+    # What coming back does: one SIGTERM, to the waiter.
+    kill -TERM "$WAITER" 2>/dev/null
+
+    # ⚠ Longer than INSIST_AFTER and not much longer. The grace is two seconds;
+    # five is room for a loaded build machine and still short enough that a
+    # regression is a failure rather than a slow suite.
+    gone=1
+    for _ in $(seq 50); do
+        kill -0 "$VIS" 2>/dev/null || { gone=0; break; }
+        sleep 0.1
+    done
+    check "a visualizer that IGNORES the polite signal is ended anyway" $gone
+
+    # And the waiter itself, because a waiter still running is big screen mode
+    # still believing the tile is open.
+    wgone=1
+    for _ in $(seq 30); do
+        kill -0 "$WAITER" 2>/dev/null || { wgone=0; break; }
+        sleep 0.1
+    done
+    check "...and the waiter goes with it" $wgone
+
+    # The polite signal is still asked FIRST. Enforcement that skipped straight
+    # to SIGKILL would take a save file with it on any tile that ever grew one.
+    [ -s "$VT/caught.log" ]
+    check "...having been ASKED first, not merely killed" $?
+fi
+
+kill -KILL "$WAITER" ${VIS:-} 2>/dev/null
+wait "$WAITER" 2>/dev/null
+
+# The seatbelt, asserted rather than assumed — and it is `dispatch` that is
+# forbidden, not synctl. Asking `activewindow` is the FIRST thing spawn_wait
+# does and its failure is the answer that turns the fullscreen step off; a
+# dispatch getting through would be this suite toggling fullscreen on whatever
+# the developer was looking at.
+! grep -q dispatch "$VT/synctl.log" 2>/dev/null
+check "...and nothing in that path dispatched to a compositor" $?
+
+grep -q activewindow "$VT/synctl.log" 2>/dev/null
+check "...the fullscreen step having been skipped by ASKING, not by luck" $?
+
+# ⚠ AND ONLY FOR THE TILES THAT ASKED FOR IT. `hard` comes off the same
+# `transient` column as the signalling itself, so there is no second list to
+# fall out of step — and Ctrl+C at a prompt on `big run steam-bpm --wait` still
+# means "stop waiting" rather than "SIGKILL Steam in two seconds".
+grep -q 'spawn_wait(argv, rows\[i\].full, rows\[i\].transient)' src/big.c
+check "insisting is the transient column's decision, not a new list" $?
+
+grep -q 'sigaction(SIGALRM, &sa, NULL)' src/big.c
+check "...and SIGALRM is HANDLED, so enforcement cannot kill the waiter" $?
+
 # ── where the music comes from ──────────────────────────────────────────────
 #
 # The source picker. cliamp is STUBBED and lives in a directory of its own,
@@ -2136,10 +2268,88 @@ check "Spotify offers to sign in when cliamp has no [spotify] section" $?
 # television that offers to install yt-dlp every time somebody who already has
 # it presses the row.
 printf '#!/bin/sh\nexit 0\n' > "$NOYT/yt-dlp"; chmod +x "$NOYT/yt-dlp"
-( PATH="$MSTUB:$STUB:$NOYT"; export PATH
-  says "$SA" big music source --rec ) |
+yt() { ( PATH="$MSTUB:$STUB:$NOYT"; export PATH; says "$SA" big music "$@" ); }
+
+# ── ⚠ AND yt-dlp WAS NEVER THE WHOLE STORY, WHICH IS THE SECOND DEAD END ─────
+#
+# Reported from the sofa after the install row worked: "it just says open with
+# cliamp but cliamp never got setup and I don't see how". Both halves true
+# again, and this time the row was the one lying.
+#
+# yt-dlp is what PLAYS a YouTube URL; a Google OAuth desktop client is what
+# BROWSES for one, and the row's `browse` action is the second of those. cliamp
+# v1.63.2 ships an EMPTY fallback credential pool
+# (external/ytmusic/fallback.go: `var fallbackCredentials []oauthCreds`), so
+# with no client_id/client_secret in config.toml it prints
+#
+#     YouTube: no credentials available (configure client_id/client_secret …)
+#
+# to a stderr nobody on a sofa reads, and registers no YouTube provider at all.
+# Measured against the installed binary in a config directory of its own.
+#
+# So the gate is the CREDENTIALS, not the section — and these four assertions
+# are the four states a machine can be in.
+rm -f "$CLIAMPCONF"
+yt source --rec |
+    awk -F'\t' '$1 == "ytmusic" && $4 == "setup" { f = 1 } END { exit !f }'
+check "yt-dlp installed but no OAuth client is SETUP, not browse" $?
+
+# ⚠ THE WIZARD'S OWN DEFAULT, and it is the state that used to look ready.
+# "Use built-in credentials (recommended)" writes exactly this and nothing
+# else, against a pool with nothing in it.
+printf '[ytmusic]\nenabled = true\n' > "$CLIAMPCONF"
+yt source --rec |
+    awk -F'\t' '$1 == "ytmusic" && $4 == "setup" { f = 1 } END { exit !f }'
+# ⚠ NO BACKTICKS IN A CHECK LABEL. They are a command substitution inside the
+# double quotes, and the arguments to `check` expand LEFT TO RIGHT — so the
+# substitution runs and replaces $? before the second argument is expanded.
+# Written as "`enabled = true` alone", this assertion reported the exit status
+# of "enabled: command not found" (127) and failed against passing code.
+check "...and enabled = true alone is not set up, whatever the wizard says" $?
+
+yt source | grep -q 'my own OAuth credentials'
+check "...so the row names the mode that works, not just 'sign in'" $?
+
+# ⚠ A KEY THAT IS PRESENT AND EMPTY IS NOT A CREDENTIAL. Cheap to get wrong —
+# a check for the key rather than for its value passes on this file.
+printf '[ytmusic]\nclient_id     = ""\nclient_secret = ""\n' > "$CLIAMPCONF"
+yt source --rec |
+    awk -F'\t' '$1 == "ytmusic" && $4 == "setup" { f = 1 } END { exit !f }'
+check "...and empty keys are not credentials either" $?
+
+# The other side, so none of the above passes against a row that says `setup`
+# unconditionally.
+printf '[ytmusic]\nenabled = true\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
+    > "$CLIAMPCONF"
+yt source --rec |
     awk -F'\t' '$1 == "ytmusic" && $4 == "browse" { f = 1 } END { exit !f }'
-check "...and with yt-dlp installed the row opens cliamp as before" $?
+check "...and a real OAuth client is what finally opens cliamp" $?
+
+# ⚠ `[yt]` and `[youtube]` are the SAME SECTION to cliamp (config.go normalises
+# all three), so a machine set up under either name must not be sent back to
+# the wizard by us.
+printf '[youtube]\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
+    > "$CLIAMPCONF"
+yt source --rec |
+    awk -F'\t' '$1 == "ytmusic" && $4 == "browse" { f = 1 } END { exit !f }'
+check "...under [ytmusic], [youtube] or [yt], as cliamp reads them" $?
+
+# ⚠ AND THE NOTE IS PER SOURCE, NOT PER ACTION. Both services answer `setup`
+# and they are not the same errand; the note used to be keyed on the action, so
+# setting up YouTube Music said "needs Spotify Premium".
+#
+# ⚠ Captured rather than piped into `grep -q`. This is the negative half, and
+# `grep -q` exits the instant it matches — which closes the pipe under the
+# writer and reports SIGPIPE (141) through `set -o pipefail`. The file header
+# has the long version; a NEGATIVE assertion is where it bites hardest,
+# because 141 is not 0 and the row would read as correct.
+rm -f "$CLIAMPCONF"
+ytrow=$(yt source | grep '^ytmusic')
+case "$ytrow" in
+    *"Spotify Premium"*) false ;;
+    *) true ;;
+esac
+check "...and no row tells YouTube Music it needs Spotify Premium" $?
 
 printf '[spotify]\nbitrate = 320\n' > "$CLIAMPCONF"
 srcpath source --rec |
