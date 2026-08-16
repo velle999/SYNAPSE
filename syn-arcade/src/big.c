@@ -1324,8 +1324,23 @@ static int apps_table(struct row *rows, int max)
 	/* The way OUT is a tile, and it is not optional. A full-screen surface
 	 * with exclusive keyboard focus that can only be dismissed by a key
 	 * combination somebody has to already know is a trap, and on a gamepad
-	 * there is no key combination at all. */
+	 * there is no key combination at all.
+	 *
+	 * ⚠ TWO WAYS OUT, AND THEY DIFFER IN WHAT IS LEFT BEHIND. Both reveal
+	 * the desktop and from four metres they look identical, so the split is
+	 * worth stating: Desktop gets out of the way and STAYS LOADED, which is
+	 * what makes Guide come straight back; Quit ends the process.
+	 *
+	 * Desktop used to be the one that quit, which left no way to leave big
+	 * screen mode running-but-away on purpose and no way to close it on
+	 * purpose either — Super+F10 only ever hides it, so the usual way out
+	 * left it resident for the rest of the session with nothing in the dock
+	 * to close (a layer-shell surface is not a window and never appears in
+	 * one). Reported from the sofa as "it runs in the background but is not
+	 * a program I can close". */
 	rows[n++] = (struct row){ "desktop", "Desktop", "", "desktop", "action",
+		"system", false, false, false };
+	rows[n++] = (struct row){ "quit", "Quit", "", "quit", "action",
 		"system", false, false, false };
 	rows[n++] = (struct row){ "sleep", "Sleep", "systemctl suspend",
 		"sleep", "action", "system", false, false, false };

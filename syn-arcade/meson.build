@@ -119,6 +119,7 @@ install_data(
   'data/icons/syn-arcade.svg',
   'data/icons/visualizer.svg',
   'data/icons/desktop.svg',
+  'data/icons/quit.svg',
   'data/icons/sleep.svg',
   'data/icons/restart.svg',
   'data/icons/poweroff.svg',

@@ -1099,6 +1099,25 @@ check "apps --rec names its columns first" $?
 "$SA" big apps --rec | cut -f1 | grep -q "^desktop$"
 check "there is always a way out of a full-screen surface" $?
 
+# ⚠ AND A WAY TO CLOSE IT, WHICH IS NOT THE SAME THING. Stepping aside leaves
+# the shell loaded — that is what makes Guide instant — so on its own it left
+# big screen mode resident for the rest of the session. Super+F10 only ever
+# hides it, and a layer-shell surface is not a window, so nothing in the dock
+# or the switcher could close it either. Reported as "it runs in the background
+# but is not a program I can close".
+"$SA" big apps --rec | cut -f1 | grep -q "^quit$"
+check "...and a way to CLOSE it, not merely leave it" $?
+
+"$SA" big apps --rec | awk -F'\t' '$1 == "quit" && $6 == "system" { f = 1 } END { exit !f }'
+check "...on the system shelf, beside the machine's own switches" $?
+
+# ⚠ The glyph is listed in meson.build by NAME — data/icons is not a glob — so
+# a drawing added to the tree and not to the build ships nothing and the tile
+# comes up blank on the television. Silent both ways: the build succeeds and
+# the shell draws an empty box.
+grep -q "data/icons/quit.svg" meson.build
+check "...and its glyph is actually installed" $?
+
 "$SA" big apps --rec | cut -f1 | grep -q "^poweroff$"
 check "...and the machine's own switches are there" $?
 
@@ -2747,6 +2766,22 @@ check "guide steps aside instead of quitting" $?
 
 grep -q "shell.comeBack()" "$BIGQML"
 check "...and something brings it back" $?
+
+# ⚠ AND THE TWO TILES ARE NOT THE SAME TILE. Desktop used to be the one that
+# quit, which left the interface with a way to END it and no way to leave it
+# loaded on purpose — and, because Super+F10 only hides, the ordinary way out
+# left it resident with nothing in the dock to close. Asserted as a PAIR: two
+# tiles that both quit is the state this replaced, and it looks correct from
+# every angle except the one that matters.
+grep -A2 'if (it.id === "desktop")' "$BIGQML" | grep -q "shell.stepAside()"
+check "the Desktop tile steps aside and stays loaded" $?
+
+grep -A2 'if (it.id === "quit")' "$BIGQML" | grep -q "Qt.quit()"
+check "...and the Quit tile is the one that ends the process" $?
+
+grep -A2 'if (it.id === "desktop")' "$BIGQML" | grep -q "Qt.quit()"
+[ $? != 0 ]
+check "...so Desktop is not a second Quit" $?
 
 # ⚠ The single-instance trap. Firefox and Steam exit IMMEDIATELY when one is
 # already running — the second process hands its arguments to the first over a

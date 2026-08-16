@@ -177,8 +177,9 @@ done
 # only when the player is one big screen mode can DRIVE, which big.c decides by
 # asking whether cliamp is installed. Without this stub the row is there on the
 # developer's machine and absent on CI — and the walk below counts rows. One
-# `down` would land on Desktop instead, whose job is Qt.quit(), and the run
-# would end four screenshots in while looking like it had finished.
+# `down` would land on Desktop instead, which steps the interface aside (and
+# one row further is Quit, which ends it outright), and the run would finish
+# four screenshots in while looking like it had finished properly.
 #
 # Nothing ever runs it: every cliamp call goes through `big music`, which the
 # syn-arcade stub above answers itself.
@@ -509,12 +510,13 @@ shot 03b-back-on-the-bar
 #
 # Where the system switches went. Opened, moved down one, and closed with B.
 #
-# ⚠ NO `accept` ANYWHERE NEAR THIS. The first entry is Desktop, whose whole job
-# is Qt.quit() — an accept here would end the run at screenshot four with
-# everything after it silently missing, and a rig that stops early looks a lot
-# like a rig that finished.
+# ⚠ NO `accept` ANYWHERE NEAR THIS. The first entry is Desktop, which steps the
+# interface aside, and the one below it is Quit, which ends the process — an
+# accept on either would finish the run at screenshot four with everything
+# after it silently missing, and a rig that stops early looks a lot like a rig
+# that finished.
 say menu 0.8
-shot 03c-start-menu           # Now Playing on top, then the four switches
+shot 03c-start-menu           # Now Playing on top, then the five switches
 # Right is next-track, and it does nothing on any row but the music one — so
 # this is safe to press before knowing where the selection is, which `accept`
 # is NOT (see below). It lands in music.log either way, which is how a row that

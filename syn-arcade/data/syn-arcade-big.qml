@@ -1347,10 +1347,24 @@ ShellRoot {
     function runAction(it) {
         if (!it) return false
 
-        // "Desktop" is the way out and the only thing here that really quits:
-        // closing this IS going back to the desktop, which was there
-        // underneath all along.
+        // ⚠ TWO WAYS OUT, AND ONLY ONE OF THEM ENDS THE PROCESS. Both reveal
+        // the desktop that was underneath all along, and from a sofa they look
+        // the same — the difference is what is left running.
+        //
+        // Desktop steps aside: the surface is unmapped and the shell stays
+        // loaded, so Guide comes straight back to the same screen with the
+        // same selection. That is the common case and it is why this is not
+        // simply a second Quit.
         if (it.id === "desktop") {
+            shell.stepAside()
+            return true
+        }
+
+        // Quit really does end it. Super+F10 only ever hides this, so without
+        // a tile the ordinary way out left big screen mode resident for the
+        // rest of the session — and a layer-shell surface is not a window, so
+        // nothing in the dock or the switcher could close it either.
+        if (it.id === "quit") {
             Qt.quit()
             return true
         }
