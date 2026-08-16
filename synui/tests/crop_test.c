@@ -27,7 +27,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <utime.h>
+#include <time.h>		/* futimens, struct timespec */
 
 #include <cairo/cairo.h>
 
@@ -474,10 +474,20 @@ static void touch_image(const char *dir, const char *name, time_t when)
     FILE *f = fopen(path, "w");
     if (!f) { CHECK(0, "could not create %s", path); return; }
     fputc('x', f);
-    fclose(f);
 
-    struct utimbuf ut = { .actime = when, .modtime = when };
-    if (utime(path, &ut) != 0) CHECK(0, "could not set mtime on %s", path);
+    /* ⚠ ON THE DESCRIPTOR, and flushed first. utime(path) after fclose()
+     * resolves the name a second time — between the two it can mean a
+     * different file, and this writes under /tmp where somebody else can
+     * arrange that. futimens() cannot be pointed anywhere but at the file that
+     * was opened. Same finding as terminal_chain_test.c (CodeQL #14).
+     *
+     * fflush BEFORE it: closing the stream writes the byte, and a write after
+     * the timestamp is set would put the mtime back to now — which is the one
+     * thing this helper exists to control. */
+    struct timespec ts[2] = { { when, 0 }, { when, 0 } };
+    fflush(f);
+    if (futimens(fileno(f), ts) != 0) CHECK(0, "could not set mtime on %s", path);
+    fclose(f);
 }
 
 static void test_recent_list(void)

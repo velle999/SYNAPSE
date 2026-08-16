@@ -50,8 +50,17 @@ static void stub(const char *name, int code)
     FILE *f = fopen(path, "w");
     assert(f);
     fprintf(f, "#!/bin/sh\necho %s >> \"%s\"\nexit %d\n", name, g_log, code);
+
+    /* ⚠ fchmod ON THE OPEN FILE, not chmod(path) after closing it. The name is
+     * resolved once and everything else talks to the descriptor; between an
+     * fclose() and a chmod() the name can come to mean a different file, and
+     * the mode lands on that one instead. It is a test rig writing into a
+     * directory under /tmp — which is precisely where somebody else can create
+     * the name first. CodeQL cpp/toctou-race-condition #14; the same shape as
+     * the one tools/check-toctou.sh was written for, in the direction it did
+     * not look. */
+    assert(fchmod(fileno(f), 0755) == 0);
     fclose(f);
-    assert(chmod(path, 0755) == 0);
 }
 
 static void rig_init(void)

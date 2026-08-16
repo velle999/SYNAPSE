@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 #
 # pre-commit — run tools/preflight.sh over what this commit would actually
-# contain, and refuse the commit if it cannot ship.
+# contain, and refuse the commit if it cannot ship. Since alert #14, it also
+# runs tools/check-toctou.sh over the C files being committed: CodeQL reports
+# only after a push, so this is the last point where a check-then-use costs a
+# minute instead of a release.
 #
 # Install:
 #     ln -sf ../../tools/pre-commit .git/hooks/pre-commit
@@ -50,3 +53,27 @@ fi
     echo "Fix the findings, or run 'git commit --no-verify' if you have a reason." >&2
     exit 1
 }
+
+# ── check-then-use on a path name, on the C being committed ─────────────────
+#
+# ⚠ CODE SCANNING ONLY SPEAKS AFTER A PUSH, on code that has already shipped —
+# both CodeQL TOCTOU alerts on this repo arrived that way. The sanity job runs
+# the same scanner, and that too is after the push. This is the one place the
+# question gets asked while the answer is still cheap.
+#
+# ⚠ Only the STAGED C files. Scanning the whole tree here would gate somebody's
+# commit on a finding in a file they did not touch — which is how a hook earns
+# itself a permanent --no-verify — and the tree is covered by CI anyway. The
+# `git commit -- <path>` case above exits before this for the same reason: it
+# stages nothing, so there is nothing this can honestly call the commit's own.
+mapfile -t toctou_files < <(git diff --cached --name-only --diff-filter=ACM \
+                            -- '*.c' '*.h' | grep -Ev '/src/[A-Za-z0-9_-]+-[0-9]+\.[0-9]+\.[0-9]+/' || true)
+if [ "${#toctou_files[@]}" -gt 0 ]; then
+    "$root/tools/check-toctou.sh" "${toctou_files[@]}" || {
+        echo
+        echo "pre-commit: refusing the commit above." >&2
+        echo "Resolve the name once and use the descriptor, or mark it:" >&2
+        echo "  toctou-ok: <why nothing re-resolves this name>" >&2
+        exit 1
+    }
+fi

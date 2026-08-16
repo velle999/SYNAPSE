@@ -84,6 +84,36 @@ AWK='
 function is_check(fn) {
 	return fn ~ /^(stat|lstat|statx|access|euidaccess|eaccess|faccess)$/
 }
+# ── the other direction: a name that was OPENED, then operated on BY NAME
+#
+# ⚠ THE HALF THIS SCRIPT DID NOT LOOK AT, and CodeQL cpp/toctou-race-condition
+# #14 landed on it — synui/tests/terminal_chain_test.c wrote a stub with
+# fopen(), closed it, and then chmod(path, 0755). The open is a resolution of
+# the name just as much as a stat() is; between the fclose() and the chmod()
+# the name can come to mean a different file, and the mode lands on that one.
+# In a test rig writing under /tmp, arranging that is not exotic.
+#
+# ⚠ THE LIST IS ONLY THE CALLS THAT HAVE AN fd TWIN, and that restriction is
+# the whole difference between a rule worth having and noise. chmod -> fchmod,
+# chown -> fchown, utime/utimes -> futimens, truncate -> ftruncate: every
+# finding has a one-line mechanical fix.
+#
+# unlink/remove/rmdir are deliberately NOT here. They take a name by
+# definition — there is no descriptor form to move to — so a finding on one is
+# unactionable, and the tree is full of the shape:
+#
+#     f = fopen(tmp, "w"); ...; if (failed) unlink(tmp);   /* write-then-rename */
+#
+# Measured before this was wired in: including them reported 24 further
+# findings across the repo, every one of them that cleanup path and not one of
+# them fixable. A matcher that cries wolf is as broken as one that matches
+# nothing — this file has already shipped both failures once each.
+function is_open(fn) {
+	return fn ~ /^(open|open64|creat|fopen|fopen64|freopen|opendir)$/
+}
+function is_metaname(fn) {
+	return fn ~ /^(chmod|chown|lchown|utime|utimes|truncate|truncate64)$/
+}
 # ── what counts as a USE: resolves a NAME again and acts on the result
 function is_use(fn) {
 	return fn ~ /^(open|open64|fopen|fopen64|freopen|creat|opendir|scandir|truncate|truncate64|unlink|rmdir|remove|rename|link|symlink|chmod|chown|lchown|utimes|utime|mkfifo|mknod|mkdir|execl|execle|execlp|execv|execve|execvp|chdir|chroot|mount|umount)$/
@@ -159,11 +189,15 @@ function decomment(s,   out, i, j) {
 	return out
 }
 
-FNR == 1 { delete checked; delete checkline; delete checkfn; delete checkdepth; depth = 0; incomment = 0 }
+FNR == 1 { delete checked; delete checkline; delete checkfn; delete checkdepth;
+           delete opened; delete openline; delete openfn; delete opendepth;
+           depth = 0; incomment = 0 }
 
 # A closing brace in column 0 ends a function. Checks do not survive it: two
 # functions touching the same-named variable are not the same window.
-/^}/ { delete checked; delete checkline; delete checkfn; delete checkdepth; depth = 0; next }
+/^}/ { delete checked; delete checkline; delete checkfn; delete checkdepth;
+       delete opened; delete openline; delete openfn; delete opendepth;
+       depth = 0; next }
 
 {
 	# The marker is read from the raw line, because it lives in a comment.
@@ -189,6 +223,24 @@ FNR == 1 { delete checked; delete checkline; delete checkfn; delete checkdepth; 
 		arg = first_arg(rest)
 		if (arg == "")
 			continue
+
+		# An open is BOTH: it resolves the name — so a chmod on that
+		# same name below it is a second resolution — and it is itself
+		# the use a stat() above it was checking for.
+		if (is_open(fn) && !ok && !(arg in opened)) {
+			opened[arg]    = 1
+			openline[arg]  = FNR
+			openfn[arg]    = fn
+			opendepth[arg] = depth
+		}
+
+		if (is_metaname(fn) && (arg in opened)) {
+			emit(FILENAME, FNR, \
+			     fn "(" arg ") re-resolves a name already opened by " \
+			     openfn[arg] "() at line " openline[arg] \
+			     " — use the f-form on the descriptor (fchmod, fchown, futimens, ftruncate)")
+			delete opened[arg]    # one finding per pair
+		}
 
 		if (is_check(fn)) {
 			if (!ok && !(arg in checked)) {
@@ -230,6 +282,9 @@ FNR == 1 { delete checked; delete checkline; delete checkfn; delete checkdepth; 
 		for (a in checked)
 			if (checkdepth[a] > limit)
 				delete checked[a]
+		for (a in opened)
+			if (opendepth[a] > limit)
+				delete opened[a]
 	}
 	depth += net
 	if (depth < 0) depth = 0
@@ -249,6 +304,8 @@ END {
 		print  "  fd = open(p, O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);"
 		print  "  fstat(fd, &st);            /* not stat(p, &st) */"
 		print  "  ...at()/openat() below it, relative to fd."
+		print  "An opened name, then chmod/chown/utime on the NAME:"
+		print  "  fchmod(fileno(f), 0755);   /* not chmod(path, 0755) */"
 		print  "If the check really is printed and then dropped, say so:"
 		print  "  toctou-ok: <why nothing opens this name afterwards>"
 		exit 1
@@ -319,6 +376,24 @@ if [ "$selftest" -eq 1 ]; then
 	    if (access("/etc/one", R_OK) != 0) return;
 	    int fd = open("/etc/one", O_RDONLY);        /* 45: FINDING */
 	}
+	void opened_then_chmod(const char *p) {
+	    FILE *f = fopen(p, "w");
+	    fputs("x", f);
+	    fclose(f);
+	    chmod(p, 0755);                             /* 51: FINDING */
+	}
+	void opened_then_fchmod(const char *p) {
+	    FILE *f = fopen(p, "w");
+	    fputs("x", f);
+	    fchmod(fileno(f), 0755);
+	    fclose(f);
+	}
+	void temp_then_unlink(const char *tmp) {
+	    FILE *f = fopen(tmp, "w");
+	    if (!f) return;
+	    fclose(f);
+	    unlink(tmp);
+	}
 	EOF
 
 	# The output goes to a FILE and the assertions grep the file. Not style:
@@ -332,11 +407,12 @@ if [ "$selftest" -eq 1 ]; then
 
 	fails=0
 	got=$(grep -c ':[0-9]*: ' "$out" || true)
-	[ "$got" -eq 3 ] || { echo "SELF-TEST: expected 3 findings, got $got"; cat "$out"; fails=1; }
+	[ "$got" -eq 4 ] || { echo "SELF-TEST: expected 4 findings, got $got"; cat "$out"; fails=1; }
 
-	# Two planted bugs on a VARIABLE, and one on a literal path checked and
-	# then opened by the same name.
-	for want in '4:open(p)' '10:open(p)' '45:open("STR__etc_one")'; do
+	# Two planted bugs on a VARIABLE, one on a literal path checked and then
+	# opened by the same name, and one on a name OPENED and then chmod'd —
+	# the direction this script did not look in until CodeQL #14.
+	for want in '4:open(p)' '10:open(p)' '45:open("STR__etc_one")' '51:chmod(p)'; do
 		grep -q ":${want%%:*}: ${want#*:}" "$out" \
 			|| { echo "SELF-TEST: the planted bug on line ${want%%:*} was not found"; fails=1; }
 	done
@@ -350,8 +426,28 @@ if [ "$selftest" -eq 1 ]; then
 		fails=1
 	fi
 
+	# The FIXED form of the new rule must be silent, or the rule reports the
+	# thing it is asking for.
+	# ⚠ Matched as a FINDING LINE (`file:line: fchmod(...)`), not anywhere in
+	# the output — the advice printed at the end names fchmod and fchown, so
+	# a bare grep for the word passes on a clean run and fails on a clean run
+	# too. It cost one iteration here.
+	if grep -qE ':[0-9]+: fchmod' "$out"; then
+		echo "SELF-TEST: fchmod on the descriptor was reported as a finding"
+		fails=1
+	fi
+
+	# And the shape deliberately left out: unlink takes a name by definition,
+	# there is no descriptor form to move to, and the tree has two dozen of
+	# them on the write-to-temp-then-rename path. Reporting those is the
+	# cry-wolf failure this file has already shipped once.
+	if grep -qE ':[0-9]+: unlink' "$out"; then
+		echo "SELF-TEST: unlink after fopen was reported — it has no fd form"
+		fails=1
+	fi
+
 	[ "$fails" -eq 0 ] || exit 1
-	echo "ok: self-test — finds all three planted bugs, and nothing else"
+	echo "ok: self-test — finds all four planted bugs, and nothing else"
 	exit 0
 fi
 

@@ -83,12 +83,19 @@ jobs:
       # it can still be answered in a branch. The scanner is pure awk: no
       # toolchain, which is why it belongs in this job.
       #
+      # It asks the question in BOTH directions since alert #14: a name checked
+      # and then opened, and a name OPENED and then chmod/chown/utime'd by name.
+      # The second is what #14 was, in a test rig, and the scanner walked past
+      # it while reporting the file clean.
+      #
       # --self-test first, and it is not ceremony. A pattern-matcher that has
       # stopped matching passes every file and prints "ok", so the run that
       # proves nothing looks exactly like the run that proves everything. The
-      # self-test plants two known bugs — including the initializer-brace shape
+      # self-test plants four known bugs — including the initializer-brace shape
       # that the first version of this script scanned straight past — and fails
-      # if either goes unreported.
+      # if any goes unreported. It also asserts that the two shapes this
+      # scanner must NOT report stay unreported: two different string literals,
+      # and an unlink() that has no descriptor form to move to.
       - name: No check-then-use on a path name (TOCTOU)
         run: |
           ./tools/check-toctou.sh --self-test
