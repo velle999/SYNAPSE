@@ -120,6 +120,11 @@ typedef struct {
 	bool      first;         /* the one named on the command line */
 	char      label[64];     /* the fallback name — the command */
 	char      shown[128];    /* the title last given to the compositor */
+
+	/* --hold, and the child has exited. The grid stays exactly as the command
+	 * left it, the pty is reaped and its descriptor is -1 — which poll()
+	 * ignores, so a held tab costs nothing and cannot spin the loop. */
+	bool      held;
 } tab_t;
 
 /* One of these per committed frame, handed to the feedback object and freed by
@@ -882,6 +887,66 @@ static void tab_close(win_t *w, int i)
 	title_update(w);
 }
 
+/*
+ * --hold: keep the tab on screen after its child has gone.
+ *
+ * ⚠ REAPED HERE ALL THE SAME. Holding is about the WINDOW, not the process —
+ * a child that is left unwaited is a zombie for as long as the person reads
+ * the output, and on a machine where the updater is held open overnight that
+ * is a zombie all night. st_pty_reap() closes the descriptor and sets it to
+ * -1, which the poll set already ignores, so a held tab is genuinely idle
+ * rather than a tab whose fd reports EOF forever. That distinction is the
+ * whole difference between this and a loop at 100% of a core.
+ *
+ * ⚠ The status is recorded exactly as tab_close() records it, because the
+ * window still has to EXIT with it. A held window that returned 0 for a build
+ * that failed would be worse than no hold at all: the output says one thing
+ * and `$?` says another.
+ *
+ * The message goes through the parser rather than being drawn, so it lands in
+ * the grid as text: it scrolls, it is selectable, it copies, and it is in the
+ * scrollback like everything else the session produced.
+ */
+static void tab_hold(win_t *w, int i)
+{
+	tab_t *t = w->tabs[i];
+
+	int status = st_pty_reap(&t->pty);
+	if (t->first && !w->first_done) {
+		w->first_status = status;
+		w->first_done = true;
+	}
+	t->held = true;
+
+	char msg[192];
+	int n = status == 0
+		? snprintf(msg, sizeof msg,
+			   "\r\n\x1b[2m[syntty] the command finished. "
+			   "Press any key to close this tab.\x1b[0m\r\n")
+		: snprintf(msg, sizeof msg,
+			   "\r\n\x1b[1;31m[syntty] the command exited %d.\x1b[0m"
+			   "\x1b[2m Press any key to close this tab.\x1b[0m\r\n",
+			   status);
+	if (n > 0)
+		st_vt_feed(&t->vt, (const uint8_t *)msg, (size_t)n);
+
+	if (i == w->active) {
+		w->dirty = true;
+		title_update(w);
+	}
+	bar_update(w);
+}
+
+/* Any key closes a held tab, and that is the whole binding: somebody reading
+ * the end of a build reaches for the keyboard, not for a shortcut they have to
+ * have been told. Ctrl+Shift+W still works, because it goes through the same
+ * tab_close() — this only makes every other key do it too. */
+static void tab_release(win_t *w, int i)
+{
+	if (i >= 0 && i < w->ntabs && w->tabs[i]->held)
+		tab_close(w, i);
+}
+
 static void tab_open(win_t *w)
 {
 	if (!tab_new(w))
@@ -1588,8 +1653,46 @@ static xkb_keysym_t base_sym(win_t *w, xkb_keycode_t code)
  * including reading the modifiers back out of the xkb state — which is what
  * lets somebody press Shift PART WAY THROUGH a held Left and have the rest of
  * the repeat extend a selection. */
+/* A keysym that is only ever pressed IN COMBINATION — shift, control, alt, the
+ * lock keys and the level shifts. Everything else, printable or not, counts as
+ * somebody pressing a key. The ranges are xkbcommon's own: 0xffe1..0xffee is
+ * the modifier block, and the three below it are the locks and ISO levels that
+ * sit outside it. */
+static bool is_modifier_sym(xkb_keysym_t k)
+{
+	if (k >= XKB_KEY_Shift_L && k <= XKB_KEY_Hyper_R)
+		return true;
+	return k == XKB_KEY_Caps_Lock || k == XKB_KEY_Num_Lock
+	    || k == XKB_KEY_Scroll_Lock
+	    || k == XKB_KEY_ISO_Level3_Shift || k == XKB_KEY_ISO_Level5_Shift;
+}
+
 static void key_input(win_t *w, xkb_keycode_t code, bool pressed)
 {
+	/* ── a HELD tab, whose child is gone ────────────────────────────────────
+	 *
+	 * There is nothing to type at: the pty is closed and the pid reaped, so
+	 * every path below this would be writing into a descriptor of -1. Any key
+	 * closes it instead.
+	 *
+	 * ⚠ ON THE PRESS, and only on the press. Taking the release as well means
+	 * the keystroke that ENDED the command — the Enter of whatever was typed
+	 * before it, or a key still down as the child exits — closes the window
+	 * with its own release before anybody has read a line of it. The whole
+	 * point of --hold is that the output survives being produced.
+	 *
+	 * ⚠ MODIFIERS ARE NOT A KEY. Shift alone comes through here as a press,
+	 * and reaching for Ctrl+Shift+C to copy the failure out of a held window
+	 * must not be what closes it. */
+	if (w->ntabs > 0 && w->tabs[w->active]->held) {
+		if (!pressed)
+			return;
+		if (is_modifier_sym(xkb_state_key_get_one_sym(w->xkb_state, code)))
+			return;
+		tab_release(w, w->active);
+		return;
+	}
+
 	unsigned flags = st_vt_kbd_flags(w->vt);
 
 	/* A RELEASE is only ever reported when the program asked for events. Sent
@@ -3032,8 +3135,18 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 			 * one. A child exiting used to end the whole loop, which is
 			 * exactly right with one tab and would have thrown away three
 			 * other sessions with it. */
-			if (eof)
-				tab_close(w, i);
+			/* ⚠ …unless the window was asked to HOLD, in which case
+			 * the tab stays and the output with it. Guarded on
+			 * `held` as well as on the flag: a held tab's fd is -1
+			 * and poll() ignores it, but a second hangup arriving
+			 * in the same iteration must not print the message
+			 * twice or reap a pid that is already reaped. */
+			if (eof) {
+				if (w->spec->hold && !t->held)
+					tab_hold(w, i);
+				else if (!t->held)
+					tab_close(w, i);
+			}
 		}
 		if (w->closed)
 			break;

@@ -229,5 +229,32 @@ case "$out" in
 esac
 
 echo ""
+echo "=== the terminal the GUI hands the privileged build off to ==="
+#
+# ⚠ THE FLAG IS THE WHOLE POINT, and the terminal is chosen for it. `apply`
+# drives build-all.sh, which runs `sudo pacman -U` mid-build — sudo with no
+# controlling terminal cannot prompt, so this half has to leave the window and
+# go somewhere a password can be typed. And it has to STAY there afterwards: a
+# window that closes when the build ends takes the build log with it, which is
+# the one thing anybody needs when an update fails.
+#
+# Asserted as a PAIR, because either half alone is a broken button. syntty
+# without --hold is a window that vanishes at the moment it becomes useful;
+# --hold on a terminal that has not got it is a launch that dies at parse, and
+# a failed exec here is silent — the button simply does nothing.
+qml="$here/../shell.qml"
+if grep -q '"syntty", "--hold"' "$qml"; then
+    ok "the GUI hands apply to syntty, held open"
+else
+    bad "the GUI does not launch syntty --hold: $(grep -n applyProc -A3 "$qml" | tr '\n' ' ')"
+fi
+
+if grep -q '"kitty"' "$qml"; then
+    bad "something in the GUI is still pinned to kitty"
+else
+    ok "...and nothing is still pinned to kitty for that flag"
+fi
+
+echo ""
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

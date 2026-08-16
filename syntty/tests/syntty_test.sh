@@ -1828,6 +1828,40 @@ else
     [ $? -eq 3 ] && ok "...and 'win -e CMD' means the same thing" \
                  || bad "...and 'win -e CMD' means the same thing"
 
+    # ── --hold, which is what a window opened BY something else needs ───────
+    #
+    # A terminal somebody is sitting at should close when the command ends. A
+    # terminal opened to run ONE thing — an updater handing off a privileged
+    # build, a menu row running `syn status` — must not, because the output is
+    # the entire reason it was opened and it goes with the window.
+    #
+    # Three call sites in SynapseOS were pinned to kitty for this one flag,
+    # while syntty was the default terminal everywhere else.
+    #
+    # ⚠ ASSERTED AS A TIMEOUT, and the negative control above is what makes
+    # that mean anything: the same command WITHOUT --hold returns its status
+    # promptly a few lines up, so 124 here is the window outliving its child
+    # rather than the window failing to start. A test that only checked the
+    # held case would pass just as happily if --hold made syntty hang before
+    # it ever drew.
+    caged 6 --hold -e /bin/sh -c 'exit 0' >/dev/null 2>&1
+    [ $? -eq 124 ] && ok "--hold keeps the window after the command exits" \
+                   || bad "--hold keeps the window after the command exits"
+
+    # ⚠ And it must not SPIN. A tab whose child is gone has a closed pty, and
+    # a descriptor at EOF left in the poll set returns instantly forever — the
+    # exact failure that had one syntty per logout burning a core (see the
+    # dead-display note in win.c). st_pty_reap() sets the fd to -1 and poll()
+    # ignores it; this is the assertion that keeps it that way.
+    #
+    # Measured as CPU TIME, not as a rate: a held window that idles correctly
+    # uses a few milliseconds over five seconds, and a spinning one uses five
+    # seconds. The threshold is a factor of ten off either.
+    held_cpu=$( { time -p caged 5 --hold -e /bin/sh -c 'exit 0' >/dev/null 2>&1; } 2>&1 |
+                awk '/^user/{u=$2} /^sys/{s=$2} END{printf "%d", (u+s)*100}' )
+    [ "${held_cpu:-999}" -lt 100 ]
+    check "...and a held window idles rather than spinning (${held_cpu}0 ms cpu)" $?
+
     # ⚠ THE OUTPUT MUST SURVIVE THE HANGUP. POLLHUP arrives on the same
     # revents that carry the child's last write, so a loop that checks for
     # hangup before draining throws away everything the child printed as it

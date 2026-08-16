@@ -268,11 +268,22 @@ ShellRoot {
         onExited: root.busy = false
     }
 
-    // --hold so the window survives the run and the build output stays readable,
-    // matching how the start menu already launches `synpkg upgrade`.
+    // --hold so the window survives the run and the build output stays readable.
+    //
+    // ⚠ syntty, and it could not be until syntty grew --hold. syntty has been
+    // the default terminal on this system since synui 0.1.0-359, but three call
+    // sites stayed pinned to kitty for exactly one flag — this being one of
+    // them — because a window that closes the instant the build ends takes the
+    // build log with it, and the log is why the window was opened. An updater
+    // that fails and then vanishes is an updater nobody can report a bug
+    // against.
+    //
+    // kitty is not a dependency of this package and never was; it is an
+    // optdepend that a Minimal install does not have. Pointing at the terminal
+    // that ships in every profile is also what makes the button work there.
     Process {
         id: applyProc
-        command: ["kitty", "--hold", "syn-update", "apply"]
+        command: ["syntty", "--hold", "-e", "syn-update", "apply"]
         running: false
     }
 

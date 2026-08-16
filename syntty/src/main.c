@@ -71,6 +71,9 @@ static const char *usage_text =
 "  --config=FILE             read that instead of the usual place\n"
 "  --no-config               ignore the config file entirely\n"
 "  --tabs=N                  win: open N tabs at startup, all running CMD\n"
+"  --hold                    win: keep a tab open after its command exits,\n"
+"                            with its status — for a window opened to run one\n"
+"                            thing, where the output is the point\n"
 "  --resize=COLSxROWS        resize the grid after the stream, before dumping\n"
 "\n"
 "mouse: EVENT is press:BUTTON@COL,ROW, release:..., move[:BUTTON]@COL,ROW or\n"
@@ -115,6 +118,7 @@ typedef struct {
 	int         scroll_after;
 
 	int      tabs;           /* --tabs=N: open N at startup */
+	bool     hold;           /* --hold: keep the window after the command */
 	const char *resize;      /* --resize=COLSxROWS, applied after the stream */
 	const char *config;      /* --config=FILE, or NULL for the usual place */
 	bool        no_config;   /* ignore the file entirely — what tests use */
@@ -733,6 +737,7 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 		.rows       = o->rows,
 		.scrollback = (uint32_t)o->scrollback,
 		.tabs       = o->tabs,
+		.hold       = o->hold,
 	};
 
 	/* What the window needs to re-read the file while it runs — see
@@ -1498,6 +1503,7 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--jump=", 7))        o.jump = atoi(a + 7);
 		else if (!strncmp(a, "--select=", 9))      o.select = a + 9;
 		else if (!strncmp(a, "--tabs=", 7))        o.tabs = atoi(a + 7);
+		else if (!strcmp(a, "--hold"))             o.hold = true;
 		else if (!strncmp(a, "--resize=", 9))      o.resize = a + 9;
 		else if (!strncmp(a, "--config=", 9))      o.config = a + 9;
 		else if (!strcmp(a, "--no-config"))        o.no_config = true;

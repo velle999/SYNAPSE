@@ -1131,6 +1131,24 @@ typedef struct {
 	uint16_t     cols, rows;
 	uint32_t     scrollback;
 	int          tabs;      /* how many to open at startup; 0 and 1 mean one */
+
+	/* ── --hold: the window OUTLIVES the command ────────────────────────────
+	 *
+	 * Normally a tab closes when its child exits and the window goes with the
+	 * last one, which is right for a terminal somebody is sitting at. It is
+	 * wrong for every window that was opened BY something else to run one
+	 * command — an updater handing off a privileged build, a menu row running
+	 * `syn status` — because there the output IS the point and the window
+	 * vanishing at the end takes the answer with it, along with whatever the
+	 * failure was.
+	 *
+	 * kitty and foot both spell this --hold, and SynapseOS had three call
+	 * sites pinned to kitty for that one flag while syntty was the default
+	 * terminal everywhere else. This is the flag those were waiting for.
+	 *
+	 * The tab stays on screen with its status printed under the output, and
+	 * any key closes it. */
+	bool         hold;
 } st_tab_spec_t;
 
 /* ── the configuration, and how the window re-reads it ──────────────────────

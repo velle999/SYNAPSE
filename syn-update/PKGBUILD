@@ -1,6 +1,6 @@
 pkgname=syn-update
 pkgver=0.1.0
-pkgrel=34
+pkgrel=35
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -22,7 +22,14 @@ depends=('bash' 'git' 'base-devel' 'pacman' 'sudo')
 # than failing silently when quickshell is absent.
 optdepends=('quickshell: graphical updater (syn-update-gui, "SynapseOS Updates" in the menu)'
             'qt6-declarative: QtQuick runtime for the graphical updater'
-            'kitty: terminal the GUI hands the privileged build off to'
+            # ⚠ syntty, and it needs 0.1.0-27 or newer — that is the release
+            # where --hold landed. An older syntty dies at parse with "unknown
+            # option '--hold'", so the Install button would open a window that
+            # closes immediately and never runs the build. An optdepend cannot
+            # express a version, which is why it is written here: the depends
+            # line stays as it is because a headless install must still get a
+            # command-line updater without pulling a terminal in.
+            'syntty>=0.1.0-27: terminal the GUI hands the privileged build off to'
             'zenity: dialog used to report a missing quickshell')
 source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update.desktop"
         "syn-update.svg")
