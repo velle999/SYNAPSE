@@ -36,7 +36,7 @@ pkgname=syn-edit
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="SynapseOS text editor: modal editing, syntax highlighting, in a terminal or a window"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

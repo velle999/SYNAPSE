@@ -378,6 +378,64 @@ FloatingWindow {
     readonly property bool inserting: root.st.mode === "INSERT" || root.st.mode === "REPLACE"
     readonly property bool inCmd: (root.st.cmdline || "") !== ""
 
+    // ── Saving something that has never had a name ──────────────────────────
+    //
+    // A buffer with no path cannot be written, and the engine says so — "no
+    // file name" — which is a correct answer and a dead end in a window. The
+    // Save button reported the refusal and offered nothing that could clear
+    // it: New → type → Save was unsaveable through the GUI, and the only way
+    // out was knowing to type `:w name` at a command line the toolbar exists
+    // to avoid.
+    //
+    // `named` comes from the engine rather than being read off the file label,
+    // because the label says "[No Name]" and matching that string is matching a
+    // message. See the s_row in serve.c.
+    readonly property bool named: (root.st.named || "0") === "1"
+
+    // Save, and ask for a name first if there is not one yet.
+    //
+    // ⚠ The ENGINE owns the typing, exactly as it does for Find (`/`) and
+    // Replace (`:%s/`): those buttons open the engine's command line prefilled
+    // and let it collect the text. This does the same with `:w <dir>/`, so the
+    // name is edited by the editor — one undo stack, one set of keys, and no
+    // text-editing item in a window whose whole architecture is that it owns
+    // no text.
+    function saveNow() {
+        if (root.named) root.send("save")
+        else            root.saveAs()
+    }
+
+    // Pick the FOLDER with the pointer, type only the basename. The browser is
+    // already a directory chooser; naming a file is the one part of the job it
+    // cannot do, so it hands that part to the command line.
+    function saveAs() {
+        if (root.haveFiles) browser.showSave()
+        else                root.promptWrite(root.saveDir() + "/")
+    }
+
+    // Open the engine's command line on `:w <prefix>`.
+    //
+    // ⚠ <Esc> FIRST, and it is not defensive tidiness. A toolbar button can be
+    // clicked in INSERT mode, where `:` is not a command — it is a colon. The
+    // Save button would then type ":w /home/velle/" INTO the document it was
+    // asked to save, which is the one failure worse than not saving. <Esc> in
+    // normal mode is harmless, so it is sent unconditionally rather than
+    // guarded on a mode that could be stale by the time this runs.
+    function promptWrite(prefix) {
+        root.sendKeys("<Esc>")
+        root.sendKeys(":w " + prefix)
+    }
+
+    // Where a Save As should start: beside the file being edited, or home for
+    // a buffer that has never been anywhere.
+    function saveDir() {
+        const f = root.named ? (root.st.file || "") : ""
+        const slash = f.lastIndexOf("/")
+        if (slash > 0)  return f.substring(0, slash)
+        if (slash === 0) return ""      // a file at the root: ":w /name"
+        return Quickshell.env("HOME") || ""
+    }
+
     Rectangle {
         id: shell
         anchors.fill: parent
@@ -440,7 +498,11 @@ FloatingWindow {
                                                                    : "type a path (:e)"
                                  onTriggered: root.haveFiles ? browser.show()
                                                              : root.sendKeys(":e ") }
-                    ToolButton { label: "Save"; tip: "write this buffer";   onTriggered: root.send("save") }
+                    ToolButton { label: "Save"; tip: root.named ? "write this buffer"
+                                                               : "name it, then write it"
+                                 onTriggered: root.saveNow() }
+                    ToolButton { label: "Save As"; tip: "write it somewhere else"
+                                 onTriggered: root.saveAs() }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
                     ToolButton { label: "Undo"; tip: "u";                   onTriggered: root.sendKeys("u") }
@@ -598,7 +660,7 @@ FloatingWindow {
                 // not implement one.
                 if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S
                     && !root.inCmd) {
-                    root.send("save")
+                    root.saveNow()
                     event.accepted = true
                     return
                 }
@@ -1046,7 +1108,8 @@ FloatingWindow {
                             { label: "Replace…", keys: ":%s/", hint: "" },
                             { label: "-", keys: "", hint: "" },
                             { label: "Open…", keys: "", act: "open", hint: "" },
-                            { label: "Save", keys: "", act: "save", hint: "Ctrl+S" }
+                            { label: "Save", keys: "", act: "save", hint: "Ctrl+S" },
+                            { label: "Save As…", keys: "", act: "saveas", hint: "" }
                         ]
                     }
                     delegate: Item {
@@ -1098,9 +1161,10 @@ FloatingWindow {
                                     ctxMenu.open = false
                                     editor.forceActiveFocus()
                                     const m = ctxItem.modelData
-                                    if (m.act === "open")      browser.show()
-                                    else if (m.act === "save") root.send("save")
-                                    else if (m.keys !== "")    root.sendKeys(m.keys)
+                                    if (m.act === "open")        browser.show()
+                                    else if (m.act === "save")   root.saveNow()
+                                    else if (m.act === "saveas") root.saveAs()
+                                    else if (m.keys !== "")      root.sendKeys(m.keys)
                                 }
                             }
                         }
@@ -1140,18 +1204,41 @@ FloatingWindow {
             property string dir: ""
             property var rows: []
             property int sel: 0
+            // "open" or "save". The listing is identical either way — what
+            // changes is what happens to the thing you pick.
+            property string mode: "open"
 
             function show() {
                 // Beside the file being edited, which is where the next one
                 // usually is. A [No Name] buffer has no directory, so home.
                 const f = root.st.file || ""
                 const slash = f.lastIndexOf("/")
+                browser.mode = "open"
                 browser.dir = slash > 0 ? f.substring(0, slash)
                             : (f !== "" && slash === 0) ? "/"
                             : (Quickshell.env("HOME") || "/")
                 browser.visible = true
                 browser.load()
                 browser.forceActiveFocus()
+            }
+
+            function showSave() {
+                browser.mode = "save"
+                browser.dir = root.saveDir() || "/"
+                browser.visible = true
+                browser.load()
+                browser.forceActiveFocus()
+            }
+
+            // Leave the browser and hand the rest to the engine's command
+            // line, prefilled. `partial` is a directory to type a name into;
+            // a whole path is an existing file being written over — and
+            // seeding the full `:w /path/to/it` is what makes that an ANSWER
+            // rather than a click: it is on screen, and it takes Return.
+            function seedWrite(partial) {
+                browser.visible = false
+                editor.forceActiveFocus()
+                root.promptWrite(partial)
             }
 
             function load() {
@@ -1169,6 +1256,17 @@ FloatingWindow {
                 if (row.type === "dir") {
                     browser.dir = path
                     browser.load()
+                    return
+                }
+                if (browser.mode === "save") {
+                    // Writing OVER something. Not done on the click: the path
+                    // goes to the command line where it can be read and has to
+                    // be confirmed with Return. `:w` overwrites without asking
+                    // — vim's E13 is not implemented here — so the confirmation
+                    // has to come from somewhere, and a dialogue this window
+                    // does not otherwise have is a worse answer than the
+                    // command line it already draws.
+                    browser.seedWrite(path)
                     return
                 }
                 // The engine opens it — the same `open` a command line would
@@ -1233,7 +1331,7 @@ FloatingWindow {
 
                 Text {
                     width: parent.width
-                    text: browser.dir
+                    text: (browser.mode === "save" ? "Save in:  " : "") + browser.dir
                     elide: Text.ElideLeft
                     font.family: root.monoFont
                     font.pixelSize: root.ui(12)
@@ -1312,7 +1410,20 @@ FloatingWindow {
 
                 Row {
                     spacing: 8
-                    ToolButton { label: "Open"; tip: "open the highlighted file"
+                    ToolButton { label: browser.mode === "save" ? "Save here" : "Open"
+                                 tip: browser.mode === "save"
+                                      ? "write into this folder — then type a name"
+                                      : "open the highlighted file"
+                                 onTriggered: browser.mode === "save"
+                                              ? browser.seedWrite(
+                                                    (browser.dir === "/" ? "" : browser.dir) + "/")
+                                              : browser.enter(browser.rows[browser.sel]) }
+                    // Only in save mode, and only with a FILE highlighted —
+                    // there is nothing to write over otherwise.
+                    ToolButton { label: "Overwrite"
+                                 visible: browser.mode === "save"
+                                          && (browser.rows[browser.sel] || {}).type === "file"
+                                 tip: "write over the highlighted file"
                                  onTriggered: browser.enter(browser.rows[browser.sel]) }
                     ToolButton { label: "Cancel"; tip: "Esc"
                                  onTriggered: { browser.visible = false; editor.forceActiveFocus() } }

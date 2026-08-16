@@ -173,6 +173,13 @@ static void emit_frame(ed_t *e, unsigned long serial)
 	s_num("lines", b->n);
 	s_num("top", top);
 	s_row("file", buf_name(b));
+	/* Whether that name is a PATH or the placeholder. buf_name() answers
+	 * "[No Name]" for a buffer that has never been written, and a window
+	 * that string-matched for it would be a window that breaks the day the
+	 * placeholder is reworded — or worse, one that treats a real file
+	 * called "[No Name]" as unnamed. The window needs this to know that
+	 * Save has to ask for a name first. */
+	s_row("named", (b->path && *b->path) ? "1" : "0");
 	s_row("lang", syn_lang_name(b->lang));
 	s_row("modified", b->modified ? "1" : "0");
 	s_row("readonly", b->readonly ? "1" : "0");

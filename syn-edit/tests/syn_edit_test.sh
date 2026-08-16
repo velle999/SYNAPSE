@@ -594,6 +594,49 @@ check "serve names an unknown request instead of dying" $?
 printf 'keys l\nquit\n' | "$E" serve "$T/tab.txt" | gq '^S	dcol	'
 check "serve reports the display column" $?
 
+# ── naming a buffer that has never had a name ───────────────────────────────
+#
+# `named` exists so the window can tell "this has a path" from "this is called
+# [No Name]" WITHOUT matching that string. Matching it would break the day the
+# placeholder is reworded, and would call a real file named "[No Name]"
+# unnamed. The window needs the answer to know that Save must ask first.
+printf 'quit\n' | "$E" serve "$T/tab.txt" | gq '^S	named	1$'
+check "serve reports a buffer that has a path as named" $?
+
+printf 'quit\n' | "$E" serve | gq '^S	named	0$'
+check "...and a fresh buffer as unnamed" $?
+
+printf 'keys ihi\nsave\nquit\n' | "$E" serve | gq '^S	msg	no%20file%20name$'
+check "saving an unnamed buffer is still refused by the engine" $?
+
+# `save <path>` is a real Save As: it writes AND adopts the name, so the next
+# plain Save goes to the same place rather than refusing again.
+rm -f "$T/named-as.txt"
+printf 'keys ihello\nsave %s\nquit\n' "$T/named-as.txt" | "$E" serve >/dev/null 2>&1
+[ "$(cat "$T/named-as.txt" 2>/dev/null)" = "hello" ]
+check "save <path> writes the buffer" $?
+
+printf 'keys ihello\nsave %s\nquit\n' "$T/named-as.txt" | "$E" serve | gq '^S	named	1$'
+check "...and the buffer adopts the name it was given" $?
+
+# The route the WINDOW actually drives: it does not send `save <path>` for a
+# new name — it opens the engine's command line on `:w <dir>/` and lets the
+# editor collect the rest. Pinned here because it is the whole fix.
+rm -f "$T/typed-in.txt"
+printf 'keys ityped\nkeys %%1B\nkeys :w %s\nkeys <CR>\nquit\n' "$T/typed-in.txt" |
+    "$E" serve >/dev/null 2>&1
+[ "$(cat "$T/typed-in.txt" 2>/dev/null)" = "typed" ]
+check ":w <name> from the command line names and writes it" $?
+
+# ⚠ The <Esc> in front is load-bearing, and this is the assertion that proves
+# it: WITHOUT leaving insert mode, ":w …" is text. If promptWrite ever stops
+# escaping, the Save button types its own command into the document.
+rm -f "$T/no-esc.txt"
+printf 'keys ityped\nkeys :w %s\nkeys <CR>\nquit\n' "$T/no-esc.txt" |
+    "$E" serve >/dev/null 2>&1
+[ ! -f "$T/no-esc.txt" ]
+check "...and without the Esc it is typed into the buffer instead" $?
+
 # ── what the WINDOW sends ───────────────────────────────────────────────────
 #
 # The graphical window has no selection, no scroll position and no idea what a
@@ -744,6 +787,42 @@ if [ -f "$QML" ]; then
     grep -q '"synfiles", "--rec", "list"' "$QML" && grep -q 'haveFiles' "$QML" \
         && ok "Open browses through synfiles, and is probed for" \
         || bad "the Open dialogue no longer uses synfiles --rec list"
+
+    # ── Save must be able to ask for a name ─────────────────────────────────
+    #
+    # The regression: a [No Name] buffer cannot be written, the engine says
+    # "no file name", and the window had nothing that could clear it. New →
+    # type → Save was unsaveable through the GUI, and the only way out was
+    # knowing to type `:w name` at the command line the toolbar exists to
+    # avoid. Every one of these is a SILENT loss if it comes back — a Save
+    # button that reports a refusal and offers nothing.
+    grep -q 'function saveNow' "$QML" && grep -q 'function saveAs' "$QML" \
+        && ok "Save knows the difference between writing and naming" \
+        || bad "syn-edit.qml lost saveNow/saveAs — Save cannot name a file"
+
+    # Nothing may send a bare `save` any more: on an unnamed buffer that is
+    # the dead end. Every route goes through saveNow(), which asks first.
+    n=$(grep -cE 'send\("save"\)' "$QML" || true)
+    [ "$n" = 1 ] && ok "only saveNow() sends a bare save" \
+                 || bad "$n direct send(\"save\") call(s) — one of them cannot name a file"
+
+    # The name is typed into the ENGINE's command line, like Find and Replace.
+    # A TextInput here would be the second editor the whole architecture exists
+    # to avoid — and the check above for that is still in force.
+    grep -q 'function promptWrite' "$QML" && grep -q '":w "' "$QML" \
+        && ok "naming goes through the engine's :w command line" \
+        || bad "syn-edit.qml no longer opens :w to name a file"
+
+    # ⚠ <Esc> before the colon. A toolbar button can be clicked in INSERT
+    # mode, where `:` is a character — without this, Save types ":w /home/…"
+    # INTO the document it was asked to save.
+    grep -A3 'function promptWrite' "$QML" | grep -q 'sendKeys("<Esc>")' \
+        && ok "naming leaves INSERT mode before typing the colon" \
+        || bad "promptWrite no longer escapes insert mode — Save would type into the buffer"
+
+    grep -q 'function showSave' "$QML" \
+        && ok "the browser doubles as the Save As folder chooser" \
+        || bad "syn-edit.qml lost the Save As browser mode"
 
     # See the note in synfiles' suite: this qmllint reports a parse failure
     # through its EXIT STATUS and prints nothing at all, so the status is the
