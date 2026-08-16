@@ -963,6 +963,88 @@ check "the power tiles are on the system shelf" $?
                                    END { exit bad?1:0 }'
 check "every tile on the apps shelf wants a pointer" $?
 
+# ── the drawn tile glyphs ───────────────────────────────────────────────────
+#
+# An app tile is a word on a rounded rectangle, so a shelf of them is a list of
+# names with nothing to aim at from four metres away. The `icon` column has
+# always said which drawing a tile wants; `iconfile` is that name resolved
+# against this installation, and the shell draws whatever comes back.
+#
+# ⚠ THREE LISTS THAT HAVE TO AGREE, and not one of them fails loudly on its
+# own: the names in apps_table(), the files in data/icons, and the install
+# list in meson.build. Add a tile and forget the drawing — a blank tile, which
+# looks like a rendering fault. Draw one and forget meson — it works in the
+# source tree, where every developer runs the rig, and ships an empty tile to
+# the television. Both are silent, and both are one grep to catch.
+
+apps=$("$SA" big apps --rec)
+
+printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($NF == "iconfile") ? 0 : 1 }'
+check "apps --rec ends with the resolved glyph path" $?
+
+# ⚠ The PATH, checked for existence, not merely for being non-empty. An
+# unreadable path is what a wrong prefix produces, and it arrives in the shell
+# as an Image that quietly fails to load — indistinguishable on screen from a
+# tile that was never given a glyph at all.
+missing=
+while IFS= read -r f; do
+    [ -n "$f" ] && [ -f "$f" ] || missing="$missing [$f]"
+done < <(printf '%s\n' "$apps" | awk -F'\t' 'NR>1 { print $10 }')
+[ -z "$missing" ]
+check "every tile's glyph resolves to a file that exists$missing" $?
+
+# The names in the C table, whether or not that application happens to be
+# installed on the machine running this suite — which is the whole point, since
+# a build host has none of them and would otherwise assert nothing.
+#
+# ⚠ Read out of the STRUCT INITIALISERS, not by grepping for a name next to
+# "app". The looser pattern also matched `rec_row(3, "field", "value",
+# "action")` — a column header three thousand lines away — and reported that
+# the drawing for a tile called "value" was missing. A pattern that can match
+# something which is not a tile will eventually match something which is not a
+# tile.
+#
+# ⚠ …and matched by PATTERN inside those initialisers, not by counting quoted
+# strings. Three rows take their exec from a helper — music_prog(),
+# browser_prog(), terminal_prog() — so the icon is the third quoted string in
+# those and the fourth everywhere else. Counting reported "app" as an icon name
+# and never looked at music, firefox or terminal at all: an assertion that
+# passes because it is testing nothing.
+undrawn=
+while IFS= read -r name; do
+    [ -f "data/icons/$name.svg" ] || undrawn="$undrawn $name"
+done < <(awk '/\(struct row\)\{/ { buf = ""; inrow = 1 }
+              inrow          { buf = buf $0 }
+              inrow && /\};/ { print buf; inrow = 0 }' \
+              "$(dirname "$0")/../src/big.c" |
+         grep -oE '"[a-z0-9-]+",[[:space:]]*"(app|action)"' |
+         sed -E 's/^"([^"]+)".*/\1/' | sort -u)
+[ -z "$undrawn" ]
+check "every icon name in apps_table has a drawing:$undrawn" $?
+
+unshipped=
+for f in data/icons/*.svg; do
+    grep -q "'$f'" meson.build || unshipped="$unshipped $f"
+done
+[ -z "$unshipped" ]
+check "every drawing is in meson's install list:$unshipped" $?
+
+# ⚠ SVG TINY, because that is what QtSvg renders. A gradient, a filter or a
+# <style> block is not an error — it simply does not draw, so the glyph looks
+# perfect in a browser and the television shows a blank tile. Checked here
+# rather than trusted to review: this is exactly the kind of thing a later
+# edit adds without knowing.
+rich=$(grep -lE '<style|filter=|Gradient|<use' data/icons/*.svg 2>/dev/null | tr '\n' ' ')
+[ -z "$rich" ]
+check "the glyphs stay inside SVG Tiny: $rich" $?
+
+# A Plex server found on the network and Plex installed on this machine are the
+# same thing on the shelf, so they get the same drawing — which means the media
+# records carry a glyph too.
+printf '%s\n' "$(says "$SA" big media --rec)" |
+    awk -F'\t' 'NR==1 { exit ($NF == "iconfile") ? 0 : 1 }'
+check "media --rec carries a glyph for what it found" $?
+
 # ── filling the screen, and the toggle that can undo it ─────────────────────
 #
 # A tile press asks synui to fullscreen what it opened: from a sofa, a titlebar
@@ -1604,6 +1686,43 @@ check "setCol assigns a COPY of cols (a mutated object emits no change)" $?
 
 ! grep -qE '^\s*shell\.cols = c\s*$' "$BIGQML"
 check "...and never reassigns the same object reference" $?
+
+# ── which shelf it OPENS on ────────────────────────────────────────────────
+#
+# The shelves arrive as separate queries and land in whatever order they
+# finish: the cached ones (media, news) in a millisecond, the Steam library
+# last, because it reads every manifest on disk. Whichever answered first was
+# shelves[0] for an instant, `rowTitle` adopted it as though somebody had
+# chosen it, and when Games was inserted ABOVE it the name-matching faithfully
+# moved the selection down to keep it there. The rows scroll to keep the
+# selection in view — so big screen mode opened with the library off the top of
+# the screen and Media selected, on a machine with a large library every time.
+#
+# ⚠ An adoption is not a choice, and `rowChosen` is the whole of the fix: until
+# a button is actually pressed there is no selection to preserve, so the top
+# shelf is re-taken every time another one lands. Both movers have to set it,
+# or the first press is forgotten and the next arriving shelf overrides it.
+grep -q "property bool rowChosen" "$BIGQML"
+check "the selection knows whether anybody has chosen it" $?
+
+grep -q "if (!shell.rowChosen)" "$BIGQML"
+check "...and an unchosen selection follows the top shelf" $?
+
+[ "$(grep -c 'shell.rowChosen = true' "$BIGQML")" -ge 3 ]
+check "...and every deliberate move claims it" $?
+
+# ── the two things big.c ships that the shell used to drop ──────────────────
+#
+# Both were being computed, percent-encoded and written into every record while
+# this file read neither: `logo` is the game's own title art, and `iconfile`
+# the drawn glyph for an app or an action. A column nothing reads is invisible
+# — no warning, no error, and the interface merely looks plainer than the data
+# it was handed.
+grep -q "it.logo" "$BIGQML"
+check "the banner draws the game's own title art" $?
+
+grep -q "tile.modelData.iconfile" "$BIGQML"
+check "a tile with no cover draws its glyph" $?
 
 # ── hover must not be able to move the selection on its own ─────────────────
 #

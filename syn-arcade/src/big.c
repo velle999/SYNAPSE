@@ -1045,6 +1045,54 @@ struct row {
 	bool pointer, keys, full;
 };
 
+/*
+ * The drawn glyph for an icon name, as a path the shell can open.
+ *
+ * ⚠ RESOLVED HERE, not in the QML, for the same reason cover art is: the shell
+ * is a renderer. It is handed a path that exists or an empty string, and it
+ * never has to know where this package installed itself, that there is a
+ * source tree, or that the drawings are SVG at all. Adding a tile in
+ * apps_table() and dropping <icon>.svg into data/icons is then the whole
+ * change — there is no second list anywhere to fall out of step with this one.
+ *
+ * ⚠ ABSOLUTE, and the relative form is not good enough. The shell turns this
+ * into a file:// URL, and quickshell's working directory is wherever the
+ * person who started it happened to be — which for the desktop launcher is
+ * `/`. A path that resolves perfectly from the source tree in a terminal
+ * silently draws nothing on a television.
+ *
+ * ⚠ ONE STATIC BUFFER, so exactly one of these may be live at a time. That is
+ * true of every caller below — one per record row — and it is why this returns
+ * a const char * rather than filling something the caller owns.
+ */
+static const char *icon_file(const char *name)
+{
+	static char path[SYN_PATH];
+
+	if (!name || !name[0])
+		return "";
+
+	snprintf(path, sizeof(path), "%s/icons/%s.svg", SYNARCADE_DATADIR, name);
+	if (access(path, R_OK) == 0)
+		return path;
+
+	/* the source tree, made absolute against the working directory rather
+	 * than through realpath(): realpath wants a PATH_MAX buffer and this
+	 * one is a quarter of that. */
+	char rel[SYN_PATH], cwd[SYN_PATH];
+	snprintf(rel, sizeof(rel), "data/icons/%s.svg", name);
+	if (access(rel, R_OK) == 0 && getcwd(cwd, sizeof(cwd))) {
+		/* ⚠ The RETURN VALUE, checked. Two buffers this size cannot
+		 * both fit in one of them, and a silent truncation here is a
+		 * path that names some other file — so a joined path that did
+		 * not fit is no path at all. */
+		int len = snprintf(path, sizeof(path), "%s/%s", cwd, rel);
+		if (len > 0 && (size_t)len < sizeof(path))
+			return path;
+	}
+	return "";
+}
+
 static int apps_table(struct row *rows, int max)
 {
 	int n = 0;
@@ -1136,15 +1184,26 @@ static int big_apps(bool rec)
 		/* `full` is APPENDED and not slotted in among the others: the
 		 * shell reads columns by name, but the test suite reads a few
 		 * of them by number, and so does anybody at a prompt with a
-		 * `cut -f`. A new column belongs on the end. */
-		rec_row(9, "id", "name", "exec", "icon", "kind", "shelf",
-			"pointer", "keys", "full");
+		 * `cut -f`. A new column belongs on the end. `iconfile` came
+		 * later and went on the end after it, for the same reason.
+		 *
+		 * ⚠ `icon` STAYS, and iconfile is a second column rather than
+		 * a replacement. The name is the identity — it is what the
+		 * plain-text output prints, what a drawing is filed under, and
+		 * what anything else reading this table would match on. The
+		 * path is a fact about this installation that is empty on a
+		 * machine where the drawing is missing; overwriting the name
+		 * with it would lose the identity in exactly the case where
+		 * somebody needs to know which glyph failed to ship. */
+		rec_row(10, "id", "name", "exec", "icon", "kind", "shelf",
+			"pointer", "keys", "full", "iconfile");
 		for (int i = 0; i < n; i++)
-			rec_row(9, rows[i].id, rows[i].name, rows[i].exec,
+			rec_row(10, rows[i].id, rows[i].name, rows[i].exec,
 				rows[i].icon, rows[i].kind, rows[i].shelf,
 				rows[i].pointer ? "1" : "0",
 				rows[i].keys ? "1" : "0",
-				rows[i].full ? "1" : "0");
+				rows[i].full ? "1" : "0",
+				icon_file(rows[i].icon));
 	} else {
 		for (int i = 0; i < n; i++)
 			printf("%-10s %-8s %-20s %s%s%s\n", rows[i].id,
@@ -2227,10 +2286,22 @@ static int big_media(bool rec, bool refresh)
 	size_t len = 0;
 	FILE *mem = open_memstream(&buf, &len);
 	if (mem) {
-		rec_frow(mem, 5, "id", "name", "url", "source", "kind");
+		/* ⚠ `iconfile` on the END, which is also what keeps a cache
+		 * written by an older build readable: the shell reads columns
+		 * by NAME, so a five-column media.tsv from yesterday simply
+		 * has no glyph until the next refresh rewrites it, rather than
+		 * shifting every field one to the left.
+		 *
+		 * The glyph comes off `source` — plex, jellyfin — which is the
+		 * same name the installed application's tile files its drawing
+		 * under, so a Plex server on the network and Plex on this
+		 * machine look like the same thing on the shelf. They are. */
+		rec_frow(mem, 6, "id", "name", "url", "source", "kind",
+			 "iconfile");
 		for (int i = 0; i < n; i++)
-			rec_frow(mem, 5, found[i].id, found[i].name,
-				 found[i].url, found[i].source, "server");
+			rec_frow(mem, 6, found[i].id, found[i].name,
+				 found[i].url, found[i].source, "server",
+				 icon_file(found[i].source));
 		fclose(mem);
 	}
 
@@ -2245,7 +2316,8 @@ static int big_media(bool rec, bool refresh)
 		if (buf)
 			fputs(buf, stdout);
 		else
-			rec_row(5, "id", "name", "url", "source", "kind");
+			rec_row(6, "id", "name", "url", "source", "kind",
+				"iconfile");
 	} else if (n == 0) {
 		puts("no Plex or Jellyfin server answered on this network");
 	} else {

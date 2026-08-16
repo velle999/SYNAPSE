@@ -75,6 +75,33 @@ install_data('data/syn-arcade.qml', install_dir: get_option('datadir') / 'syn-ar
 install_data('data/syn-arcade-big.qml',
              install_dir: get_option('datadir') / 'syn-arcade')
 
+# Big screen mode's tile glyphs, one per value of the `icon` column. big.c
+# resolves <icon>.svg against this directory and ships the path as `iconfile`,
+# so this list and apps_table() are the only two places a new tile touches.
+#
+# ⚠ NAMED ONE BY ONE rather than install_subdir(), which would also ship the
+# README that explains how to draw them — and, worse, would keep silently
+# shipping whatever else ended up in that directory. A file list that has to be
+# edited is a file list somebody looks at.
+install_data(
+  'data/icons/steam.svg',
+  'data/icons/retroarch.svg',
+  'data/icons/lutris.svg',
+  'data/icons/heroic.svg',
+  'data/icons/moonlight.svg',
+  'data/icons/music.svg',
+  'data/icons/kodi.svg',
+  'data/icons/plex.svg',
+  'data/icons/jellyfin.svg',
+  'data/icons/firefox.svg',
+  'data/icons/terminal.svg',
+  'data/icons/syn-arcade.svg',
+  'data/icons/desktop.svg',
+  'data/icons/sleep.svg',
+  'data/icons/restart.svg',
+  'data/icons/poweroff.svg',
+  install_dir: get_option('datadir') / 'syn-arcade' / 'icons')
+
 # Scalable only: Qt renders the SVG at whatever size the dock or the menu asks
 # for, and a set of PNGs would be five more files to keep in step with one
 # drawing.

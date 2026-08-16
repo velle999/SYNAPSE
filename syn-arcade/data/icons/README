@@ -1,0 +1,39 @@
+syn-arcade big screen mode — tile glyphs
+========================================
+
+One SVG per value of the `icon` column that `syn-arcade big apps --rec` emits.
+The file name IS the column value: big.c resolves <icon>.svg against this
+directory and ships the resulting path as the `iconfile` column, so adding a
+tile in apps_table() and dropping a drawing in here is the whole change — no
+mapping table in the shell, and nothing to keep in step.
+
+⚠ DRAWN, NOT BRANDED, and that is a deliberate decision rather than an artistic
+one. The obvious set is each application's own logo — Steam's valve, Plex's
+chevron, the Firefox fox. Those are trademarks: redrawing them puts a mark
+somebody else owns into a GPL package, in a launcher that decides which of them
+you see. Worse, they do not form a SET. Sixteen logos drawn by sixteen
+different studios at sixteen different weights sit on one screen looking like a
+list of other people's software, which is exactly what a console interface is
+not. A glyph says what the tile DOES — a pad, a cartridge, a screen, a power
+symbol — in one hand, and it is ours to change.
+
+House rules, so a later addition matches:
+
+  48x48 viewBox, no width/height attributes  scaled by the shell to whatever
+                                             the tile is, which on a 4K
+                                             television is not 48.
+  stroke #cfc6ee, width 3, round cap+join    the ink, one step down from the
+                                             label so the glyph reads UNDER
+                                             the name rather than beside it.
+  one accent detail in #a78bfa               the dendrite violet, and never
+                                             more than one per drawing: the
+                                             point of it is where the eye
+                                             lands, and two of them is none.
+  fill="none" on the outlines                a filled glyph goes black on a
+                                             selected tile, which is lighter
+                                             than an unselected one.
+
+⚠ SVG TINY ONLY — no filters, no CSS, no <style>, no gradients. Qt renders
+these through QtSvg, which is a Tiny 1.2 renderer: anything richer is not an
+error, it simply does not draw, and the tile comes up blank on the television
+while looking perfect in a browser.

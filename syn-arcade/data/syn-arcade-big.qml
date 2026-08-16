@@ -354,6 +354,7 @@ ShellRoot {
         // "deal with the thing I was just in", so that is what is selected.
         if (shell.windows.length || shell.anyRunning()) {
             shell.rowTitle = "Running"
+            shell.rowChosen = true
             for (let i = 0; i < shell.shelves.length; i++)
                 if (shell.shelves[i].title === "Running") { shell.row = i; break }
         }
@@ -691,9 +692,37 @@ ShellRoot {
     // was when the list of shelves changes underneath it.
     property string rowTitle: ""
 
+    // ⚠ FALSE until somebody has actually MOVED, and without it the interface
+    // opened on the wrong shelf every single time.
+    //
+    // The shelves do not arrive together. Each one is a separate `syn-arcade
+    // big …` and they land in whatever order they finish — the cached ones
+    // (media, news) in a millisecond, the library only after Steam's manifests
+    // have been read, which on a real library is the slowest of them. The
+    // first answer therefore becomes shelves[0] for an instant, `rowTitle`
+    // adopts it as though it were a choice, and when Games finally arrives and
+    // is inserted ABOVE, the name-matching below faithfully moves the selection
+    // DOWN to keep it on that shelf. The rows scroll to keep the selection in
+    // view, so the library — the thing somebody turned the television on for —
+    // ends up off the top of the screen with Media selected.
+    //
+    // It is invisible in a spot check, because it depends on which query wins a
+    // race. The rig showed it only once the library fixture had ARTWORK in it
+    // and the missing hero band was suddenly obvious.
+    //
+    // An adoption is not a choice. Until a button is pressed the selection sits
+    // on the top shelf and is re-decided every time another one lands.
+    property bool rowChosen: false
+
     onShelvesChanged: {
         const n = shell.shelves.length
         if (!n) return
+
+        if (!shell.rowChosen) {
+            if (shell.row !== 0) shell.row = 0
+            shell.rowTitle = shell.shelves[0].title
+            return
+        }
 
         if (shell.rowTitle) {
             for (let i = 0; i < n; i++) {
@@ -775,6 +804,7 @@ ShellRoot {
         if (i < 0 || i >= shell.shelves.length) return
         shell.row = i
         shell.rowTitle = shell.shelves[i].title
+        shell.rowChosen = true
     }
 
     function moveRow(d) {
@@ -784,6 +814,7 @@ ShellRoot {
         if (next < 0 || next >= n) return   // no wrap: the ends are a landmark
         shell.row = next
         shell.rowTitle = shell.shelves[next].title
+        shell.rowChosen = true
     }
 
     function moveCol(d) {
@@ -1061,36 +1092,108 @@ ShellRoot {
             onVisibleChanged: if (visible) keys.forceActiveFocus()
             Component.onCompleted: if (visible) keys.forceActiveFocus()
 
-            // ── background: the selected game's own artwork ─────────────────
+            // ── the artwork band: the top of the screen IS the picture ──────
             //
-            // Steam ships a pre-blurred hero for most titles and big.c prefers
-            // it, so this is a plain Image rather than a blur pass — a
-            // full-screen gaussian on a 4K panel for a picture Valve already
-            // blurred would be an odd thing to spend a frame on.
-            Image {
-                id: hero
-                anchors.fill: parent
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: false
-                source: {
-                    const it = shell.current()
-                    return (it && it.hero) ? "file://" + it.hero : ""
-                }
-                opacity: status === Image.Ready ? 0.5 : 0
-                Behavior on opacity { NumberAnimation { duration: 220 } }
-            }
+            // ⚠ THIS WAS A FULL-SCREEN WASH AND IT WAS VERY NEARLY INVISIBLE.
+            // The hero was drawn over the whole window at opacity 0.5 and a
+            // scrim then went over it at alpha 0.80 rising to 0.97, so what
+            // reached the panel was about a TENTH of the picture at the top of
+            // the screen and under two percent at the bottom. Valve ships a
+            // 1920x620 hero per title and this was spending a full-screen
+            // texture on a rumour of one.
+            //
+            // The art gets a BAND of its own instead, edge to edge across the
+            // screen and near-opaque inside it, and the scrim stops being one
+            // flat wash over everything. Two directional ones over the band
+            // alone do the same job better:
+            //
+            //   across — solid where the title sits, clear at the right-hand
+            //            edge. The words get ground under them without the
+            //            picture being hidden everywhere to provide it.
+            //   down   — into the page, so the band has no edge. A picture
+            //            that stops on a line reads as a header; one that
+            //            dissolves reads as the screen it is on.
+            //
+            // Below the band there is nothing left to scrim, which is why the
+            // old full-screen gradient could go rather than be kept and
+            // weakened: `win.color` is already this exact colour, so the old
+            // bottom stop (#f705060a over #05060a) was painting the background
+            // onto the background.
+            Item {
+                id: artBand
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                clip: true
 
-            // The scrim. Without it a label sits on whatever colour that
-            // screenshot happens to be, which is the failure mode of every
-            // artwork-backed launcher: legible on nine games and unreadable on
-            // the tenth. Darkest at the bottom, where the shelves are.
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#cc05060a" }
-                    GradientStop { position: 0.45; color: "#e605060a" }
-                    GradientStop { position: 1.0; color: "#f705060a" }
+                // ⚠ It BLEEDS PAST the banner rather than making the banner
+                // taller. Every unit this takes as LAYOUT comes off the stage
+                // and pushes the third shelf off a 720p panel; taken as
+                // BACKGROUND it costs nothing at all, because the shelves are
+                // declared after it and draw straight over the tail of it.
+                //
+                // ⚠ NINE units of tail, and it was five. The band has to end
+                // by DISSOLVING, and a fade needs room: at five the picture
+                // was still at a third of its brightness when the clip took
+                // it, which draws a horizontal line straight across the
+                // television at the top of the first shelf. The rig showed it
+                // as a hard edge under the hero's glow. The tail is free —
+                // it is background, and the shelves draw over it — so the
+                // only thing spending it buys is the absence of that line.
+                height: banner.y + banner.height + win.u * 9
+
+                // ⚠ SIZED, not anchored to fill, and PreserveAspectCrop is a
+                // fallback here rather than the mechanism. A crop fits the box
+                // and then centres what is left over, and this box is far
+                // wider than 3:1 — so on a hero it would keep a horizontal
+                // slice out of the MIDDLE of the picture, which is where the
+                // subject's waist is. Giving the image the band's width and
+                // its own aspect-correct height instead puts the crop at the
+                // BOTTOM, where a hero has its ground and its gradient, and
+                // `clip` on the band takes it.
+                Image {
+                    id: hero
+                    width: artBand.width
+                    height: Math.max(artBand.height,
+                                     implicitWidth > 0
+                                     ? artBand.width * implicitHeight / implicitWidth
+                                     : artBand.height)
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: false
+                    source: {
+                        const it = shell.current()
+                        return (it && it.hero) ? "file://" + it.hero : ""
+                    }
+                    opacity: status === Image.Ready ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 220 } }
+                }
+
+                // Across. The title, the subtitle and the logo all live in the
+                // left half, and this is the ground they stand on — which is
+                // the whole reason the picture can be left alone on the right.
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.00; color: "#fa05060a" }
+                        GradientStop { position: 0.38; color: "#f005060a" }
+                        GradientStop { position: 0.62; color: "#a805060a" }
+                        GradientStop { position: 1.00; color: "#2605060a" }
+                    }
+                }
+
+                // Down. Dark again at the very top so the clock has ground
+                // too, open through the middle, and closed at the bottom
+                // because that edge has to not exist.
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        GradientStop { position: 0.00; color: "#8c05060a" }
+                        GradientStop { position: 0.26; color: "#4505060a" }
+                        GradientStop { position: 0.48; color: "#4505060a" }
+                        GradientStop { position: 0.70; color: "#9905060a" }
+                        GradientStop { position: 0.88; color: "#ee05060a" }
+                        GradientStop { position: 1.00; color: "#ff05060a" }
+                    }
                 }
             }
 
@@ -1185,11 +1288,65 @@ ShellRoot {
 
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width * 0.7
+                    // ⚠ Narrower than it was (0.7), and that is not a
+                    // reduction. The right-hand side of this band is where the
+                    // artwork now reads, and a title column running 70% of the
+                    // way across puts two lines of text over the brightest
+                    // part of it. What fills the screen across here is the
+                    // PICTURE; the words only have to be legible.
+                    width: parent.width * 0.58
                     spacing: win.u * 0.3
+
+                    // ── the game's own title art, when Steam has it ─────────
+                    //
+                    // ⚠ big.c has ALWAYS found this — art_find() checks the
+                    // user's grid override and all three cache layouts for
+                    // logo.png, and big_games emits it as a column — and this
+                    // file has never once read it. It is the single asset that
+                    // makes a library look like the game's own front door
+                    // rather than a list of names, and it was arriving on
+                    // every record and being dropped on the floor.
+                    //
+                    // ⚠ BOUNDED BOTH WAYS, because a logo has no reliable
+                    // shape. They run from nearly square to 8:1 ribbons, and
+                    // one given only a height will happily draw itself off the
+                    // side of the screen and over its own artwork.
+                    Image {
+                        id: titleLogo
+                        width: parent.width
+                        height: win.u * 3.8
+                        fillMode: Image.PreserveAspectFit
+                        horizontalAlignment: Image.AlignLeft
+                        asynchronous: true
+                        cache: false
+                        // Decoded to the height it is drawn at. Valve's logos
+                        // are up to 1280 wide and the selection changes on
+                        // every press of the stick.
+                        sourceSize.height: Math.round(win.u * 5)
+                        source: {
+                            const it = shell.current()
+                            return (it && it.logo) ? "file://" + it.logo : ""
+                        }
+                        // ⚠ Visible as soon as there IS one, not once it has
+                        // LOADED, and the two are a frame or more apart on a
+                        // 1280-wide PNG. Gating the space on `Ready` shows the
+                        // text title in the gap and then swaps it for the logo
+                        // — a flash of the wrong thing on every press of the
+                        // stick. The slot is held from the moment the record
+                        // says there is art; only the ink fades in.
+                        visible: String(source) !== "" && status !== Image.Error
+                        opacity: status === Image.Ready ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
+                    }
 
                     Text {
                         width: parent.width
+                        // The name in words, whenever there is no logo — which
+                        // is most of the shelves (an app, an action and a
+                        // headline have no artwork at all) and plenty of games.
+                        // This is the unchanged original, kept as the fallback
+                        // rather than replaced.
+                        visible: !titleLogo.visible
                         text: {
                             const it = shell.current()
                             if (!it) return ""
@@ -1458,10 +1615,68 @@ ShellRoot {
                                         // A headline never has art and is
                                         // always this.
                                         Column {
-                                            anchors.fill: parent
-                                            anchors.margins: win.u * 0.7
+                                            id: face
+
+                                            // ⚠ CENTRED, and it used to be
+                                            // anchored to fill. A label pinned
+                                            // to the top of a tile with a
+                                            // glyph under it leaves the whole
+                                            // bottom third empty and the two
+                                            // pieces drift apart as the tile
+                                            // grows; a headline is different,
+                                            // because a headline is a
+                                            // paragraph and reads from its
+                                            // first line down.
+                                            x: win.u * 0.7
+                                            width: parent.width - win.u * 1.4
+                                            y: tile.headline
+                                               ? win.u * 0.7
+                                               : Math.max(win.u * 0.7,
+                                                          (parent.height - height) / 2)
                                             spacing: win.u * 0.3
                                             visible: !tile.modelData.art
+
+                                            // ── the drawn glyph ─────────────
+                                            //
+                                            // ⚠ big.c has been emitting the
+                                            // `icon` column since the day this
+                                            // table existed and this file has
+                                            // never read it — the same gap the
+                                            // logo was in. `iconfile` is that
+                                            // name resolved to a drawing that
+                                            // exists; empty means there is no
+                                            // glyph for it, and a tile without
+                                            // one is the tile as it was.
+                                            //
+                                            // A game has cover art and a
+                                            // headline is words, so this is
+                                            // only ever an app or an action —
+                                            // which is exactly the set that had
+                                            // nothing to look at.
+                                            Image {
+                                                id: tileGlyph
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                width: win.u * 3.2
+                                                height: win.u * 3.2
+                                                visible: String(source) !== ""
+                                                         && status !== Image.Error
+                                                source: tile.modelData.iconfile
+                                                        ? "file://" + tile.modelData.iconfile : ""
+                                                fillMode: Image.PreserveAspectFit
+                                                asynchronous: true
+                                                // Rasterised at the size drawn.
+                                                // These are vectors, so asking
+                                                // for the wrong one is a blurry
+                                                // glyph rather than a missing
+                                                // one — which is worse, because
+                                                // it looks like a decision.
+                                                sourceSize.width: Math.round(win.u * 4.4)
+                                                sourceSize.height: Math.round(win.u * 4.4)
+                                                opacity: tile.selected ? 1.0 : 0.75
+                                                Behavior on opacity {
+                                                    NumberAnimation { duration: 140 }
+                                                }
+                                            }
 
                                             Text {
                                                 width: parent.width

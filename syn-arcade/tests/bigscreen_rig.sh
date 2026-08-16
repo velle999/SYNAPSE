@@ -56,6 +56,10 @@ trap cleanup EXIT INT TERM
 # ── the stub ────────────────────────────────────────────────────────────────
 cat > "$TMP/bin/syn-arcade" <<STUB
 #!/bin/bash
+# ⚠ Every call logged, and it is the only way to tell "the shell never asked"
+# apart from "the shell asked and the answer was empty" — two failures that
+# look identical on screen, as an EMPTY SHELF.
+printf '%s\n' "\$*" >> "$TMP/calls.log"
 if [ "\${1:-}" = big ] && [ "\${2:-}" = nav ]; then exec cat "$TMP/nav.fifo"; fi
 if [ "\${1:-}" = big ] && [ "\${2:-}" = keys ]; then
     while IFS= read -r line; do printf '%s\n' "\$line" >> "$TMP/typed.log"; done
@@ -90,10 +94,15 @@ news-0	Half-Life 3 confirmed, again	Game Informer	https://example.com/1	news
 news-1	The 12 best games of 2002	kotaku.com	https://example.com/2	news
 news-2	A very long headline about a game nobody asked to be remade	Eurogamer	https://example.com/3	news
 NEWS
-cat > "$TMP/cache/syn-arcade/media.tsv" <<'MEDIA'
-id	name	url	source	kind
-plex-1	Living Room	https://192.168.1.20:32400/web	plex	server
-jellyfin-2	Loft Jellyfin	https://192.168.1.31:8096	jellyfin	server
+# ⚠ SIX columns, and the sixth is a path into THIS tree. A cache is what the
+# binary last wrote, so a fixture with yesterday's column count is testing a
+# build nobody is running. The iconfile column is absolute because that is what
+# big.c writes into it — the shell opens it as a file:// URL and has no working
+# directory worth relying on.
+cat > "$TMP/cache/syn-arcade/media.tsv" <<MEDIA
+id	name	url	source	kind	iconfile
+plex-1	Living Room	https://192.168.1.20:32400/web	plex	server	$PWD/data/icons/plex.svg
+jellyfin-2	Loft Jellyfin	https://192.168.1.31:8096	jellyfin	server	$PWD/data/icons/jellyfin.svg
 MEDIA
 
 # A Steam library fixture, so the Games shelf is populated.
@@ -123,6 +132,120 @@ cat > "$TMP/steam/steamapps/appmanifest_$id.acf" <<ACF
 }
 ACF
 done
+
+# ── Artwork, because a library with no pictures in it proves nothing ──
+#
+# ⚠ The fixture above seeded SIXTEEN games and NOT ONE PICTURE, and that gap
+# went unnoticed for as long as the interface drew its title as TEXT. The
+# moment the top of the screen became a hero band and a logo, every screenshot
+# this rig produced showed the empty-art path and nothing else — a render that
+# looks fine, is fine, and says nothing whatsoever about the thing being
+# changed. Art that is absent is not a neutral fixture; it silently tests the
+# fallback and calls it the layout.
+#
+# ⚠ Written into userdata/<id>/config/grid, NOT appcache/librarycache, and the
+# reason is the file format. The user-grid path is the one Steam keeps as PNG;
+# the download cache is JPEG, and this machine has no JPEG encoder that ships
+# by default (no `magick`, no `convert`). rsvg-convert writes PNG and is
+# already here for the icon theme. art_find() checks the user grid FIRST, so
+# this is also the path a real override would take — the rig exercises the
+# branch a person with SteamGridDB installed is actually on.
+#
+# The spread is deliberate and each row of it is a different code path:
+#   220, 240   cover + hero + logo   — the full dressed banner
+#   280        cover + hero, NO logo — the TEXT TITLE over art, the fallback
+#                                      that is invisible if every game has a
+#                                      logo, and which has to stay legible
+#                                      against the brightest part of the band
+#   300…440    cover only            — a shelf tile with no hero behind it
+#   620…8930   nothing at all        — the no-art tile, still the common case
+#                                      on a fresh install
+GRID="$TMP/steam/userdata/1000/config/grid"
+mkdir -p "$GRID"
+
+# ⚠ A SKIP, not a failure. rsvg-convert is not a dependency of syn-arcade and
+# must not become one of its rig: a machine without it should still be able to
+# drive the interface and screenshot the layout, and be TOLD what it is not
+# seeing rather than left to wonder why the band is empty.
+if ! command -v rsvg-convert >/dev/null 2>&1; then
+	echo "rig: rsvg-convert missing — NO artwork fixtures; hero/logo will render EMPTY" >&2
+else
+	# hue per appid, so the shelf is legible as a row of distinct games
+	# rather than a row of the same picture sixteen times.
+	art_hue() { echo $(( ( ${1} * 47 ) % 360 )); }
+
+	svg2png() {  # svg2png <out.png> <w> <h> <svg-on-stdin>
+		rsvg-convert -w "$2" -h "$3" -o "$1" - 2>/dev/null \
+			|| echo "rig: rsvg-convert failed for $1" >&2
+	}
+
+	for id in 220 240 280 300 320 340 360 380 400 4000 420 440; do
+		h=$(art_hue "$id")
+
+		# The cover. 600×900 is the shape the shelf is built around,
+		# so the fixture is that exact size — a differently-shaped
+		# placeholder would letterbox and hide slot-snapping bugs.
+		svg2png "$GRID/${id}p.png" 600 900 <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="hsl($h,58%,42%)"/>
+    <stop offset="1" stop-color="hsl($(( (h + 40) % 360 )),64%,16%)"/>
+  </linearGradient></defs>
+  <rect width="600" height="900" fill="url(#g)"/>
+  <circle cx="300" cy="330" r="150" fill="hsl($h,70%,72%)" opacity="0.85"/>
+  <rect x="0" y="700" width="600" height="200" fill="#000" opacity="0.45"/>
+  <text x="300" y="800" font-family="sans-serif" font-size="86"
+        font-weight="bold" fill="#ffffff" text-anchor="middle">$id</text>
+</svg>
+SVG
+	done
+
+	for id in 220 240 280; do
+		h=$(art_hue "$id")
+
+		# The hero. Wide and tall enough that the band crops it rather
+		# than upscaling it — a hero smaller than the screen would test
+		# the layout against a blurry stretch and prove the crop math
+		# on the wrong pixels.
+		svg2png "$GRID/${id}_hero.png" 1920 620 <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="620">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="hsl($h,55%,30%)"/>
+    <stop offset="0.55" stop-color="hsl($(( (h + 25) % 360 )),70%,48%)"/>
+    <stop offset="1" stop-color="hsl($(( (h + 60) % 360 )),60%,22%)"/>
+  </linearGradient></defs>
+  <rect width="1920" height="620" fill="url(#g)"/>
+  <circle cx="1450" cy="200" r="260" fill="hsl($h,85%,78%)" opacity="0.5"/>
+  <circle cx="1120" cy="470" r="170" fill="hsl($(( (h + 90) % 360 )),85%,70%)" opacity="0.35"/>
+  <path d="M0 620 L520 180 L980 620 Z" fill="#000" opacity="0.3"/>
+</svg>
+SVG
+	done
+
+	# ⚠ 280 gets NO logo on purpose. See the spread above.
+	for id in 220 240; do
+		h=$(art_hue "$id")
+
+		# Transparent, as Steam's logos are — an opaque logo would sit
+		# on the band as a visible rectangle and the rig would never
+		# show that the compositing is right.
+		# ⚠ The ink FILLS the canvas, and a fixture that did not was
+		# misleading in a way that nearly changed the design. Drawn on a
+		# 640×320 sheet with the words in the middle of it, the logo is
+		# scaled to fit a box whose height is mostly whitespace — so it
+		# renders half the size a real one would and the banner looks
+		# under-weighted. Valve's logos are trimmed to their ink. This
+		# one has to be too, or it is testing the wrong picture.
+		svg2png "$GRID/${id}_logo.png" 640 208 <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="208">
+  <text x="0" y="86" font-family="sans-serif" font-size="96"
+        font-weight="bold" fill="hsl($h,90%,80%)">FIXTURE</text>
+  <text x="0" y="196" font-family="sans-serif" font-size="96"
+        font-weight="bold" fill="#ffffff">$id</text>
+</svg>
+SVG
+	done
+fi
 
 export HOME="$TMP" XDG_CONFIG_HOME="$TMP" XDG_CACHE_HOME="$TMP/cache"
 export XDG_RUNTIME_DIR="$TMP" XDG_STATE_HOME="$TMP/state"
@@ -228,6 +351,20 @@ shot() { grim -o HEADLESS-1 "$OUT/$1.png" 2>/dev/null || grim "$OUT/$1.png"; }
 
 shot 01-main
 
+# ── the library, which is what the top of the screen DRESSES ────────────────
+#
+# ⚠ 01-main sits on the Play shelf, where the selected tile is an APPLICATION:
+# no hero, no logo, and a banner that is text on black. Every screenshot this
+# rig produced was of that state, so the art band could have been drawing
+# nothing at all and nothing here would have said so. The band only exists
+# with a GAME selected, and it has three states which are three code paths:
+say down 0.6
+shot 01b-game-art        # 220: hero + logo — the dressed banner
+say right; say right 0.6
+shot 01c-game-no-logo    # 280: hero but NO logo — the text title over art
+say right 0.6
+shot 01d-game-no-hero    # 300: cover only — banner over an empty band
+
 # Shelves, top to bottom: Play, Games, Media, Apps, System, News.
 say down; say down; say down; say down; say down 0.6
 shot 02-news
@@ -277,5 +414,13 @@ grep -aE "ERROR|WARN|qs:" "$TMP/qs.log" | grep -viE "IPC server|Saving logs" | h
 echo "── screenshots ──"
 ls -la "$OUT"
 
-cp -r "$OUT" "${BIGRIG_OUT:-/tmp/bigrig-out}" 2>/dev/null
-echo "copied to ${BIGRIG_OUT:-/tmp/bigrig-out}"
+# ⚠ The FILES, into the directory — not `cp -r "$OUT" "$DEST"`, which is a
+# different operation depending on whether the destination already exists.
+# First run: the shots land in $DEST. Every run after: cp puts them in
+# $DEST/out/ instead, and $DEST still holds the pictures from the FIRST run.
+# Nothing fails, nothing is said, and the reviewer is looking at yesterday's
+# render while reasoning about today's change — which cost an hour here,
+# diagnosing an intermittency that was a stale screenshot every time.
+DEST=${BIGRIG_OUT:-/tmp/bigrig-out}
+mkdir -p "$DEST" && rm -f "$DEST"/*.png && cp "$OUT"/*.png "$DEST"/
+echo "copied to $DEST"
