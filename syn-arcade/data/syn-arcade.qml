@@ -265,10 +265,24 @@ FloatingWindow {
                         font.pixelSize: 16
                         font.bold: true
                     }
+                    // ⚠ "SHOW OVERLAY" WAS A PROMISE THIS WINDOW CANNOT KEEP,
+                    // and it was reported as a dead button. MangoHud is a
+                    // Vulkan and OpenGL layer living inside the game's own
+                    // process: it draws over a game and it CANNOT draw on the
+                    // desktop. So the switch worked perfectly, wrote the
+                    // setting, relabelled itself — and put nothing on screen,
+                    // because there was nothing for it to draw on.
+                    //
+                    // Nothing here is a new mechanism. The words are the fix:
+                    // a button that says where it takes effect cannot be
+                    // pressed in the expectation of something else.
                     Text {
                         Layout.fillWidth: true
-                        text: "Frame rate, temperatures and load, drawn over any game. "
-                            + "These take effect inside a game that is already running."
+                        text: "Frame rate, temperatures and load, drawn over a game. "
+                            + "MangoHud draws INSIDE a game and cannot draw on the "
+                            + "desktop, so switching it on here puts nothing on screen "
+                            + "until you start one. A game that is already running picks "
+                            + "the change up straight away."
                         color: root.dim
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -278,8 +292,8 @@ FloatingWindow {
                         Layout.topMargin: 6
                         spacing: 8
                         ArcButton {
-                            text: (root.hudFields.state === "hidden") ? "Show overlay"
-                                                                     : "Hide overlay"
+                            text: (root.hudFields.state === "hidden") ? "Show in games"
+                                                                     : "Hide in games"
                             primary: true
                             onTriggered: root.run(["hud", "toggle"])
                         }
@@ -289,7 +303,18 @@ FloatingWindow {
                         }
                     }
 
-                    FieldRow { label: "State";      value: root.hudFields.state || "—" }
+                    FieldRow {
+                        label: "State"
+                        // ⚠ The bare word is what the record carries and it is
+                        // right — `visible` is a fact about the config, and
+                        // every other consumer of these records wants it that
+                        // way. It is only READING IT BACK as though it meant
+                        // "on screen now" that misleads, and only here, where
+                        // somebody is looking at a desktop with no game on it.
+                        value: root.hudFields.state === "visible" ? "on — shows in games"
+                             : root.hudFields.state === "hidden"  ? "off"
+                             : (root.hudFields.state || "—")
+                    }
                     FieldRow { label: "Position";   value: root.hudFields.position || "—" }
                     FieldRow { label: "Font size";  value: root.hudFields.font_size || "—" }
                     FieldRow { label: "Background"; value: root.hudFields.background_alpha || "—" }

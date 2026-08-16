@@ -201,6 +201,52 @@ check "...by setting no_display=0, not by deleting the line" $?
 says "$SA" hud state | grep -q "^state     hidden"
 check "toggle flips it back" $?
 
+# ── "visible" has never meant "on screen now" ───────────────────────────────
+#
+# ⚠ REPORTED AS A DEAD BUTTON, and the switch was working the whole time.
+# MangoHud is a Vulkan and OpenGL layer inside the game's own process: it draws
+# over a game and CANNOT draw on the desktop. So `hud show` on a machine with
+# no game running writes the setting, reports success, and puts nothing
+# anywhere — which from the outside is indistinguishable from a command that
+# did nothing at all.
+#
+# The fix is words, and words are exactly what a later edit tidies away. Every
+# change says where it takes effect, position included: "Move it" with nothing
+# running moves nothing visible for the same reason, and a message that
+# explained the silence only half the time would teach people to stop reading
+# it.
+says "$SA" hud toggle | grep -q "inside a game"
+check "a toggle says where the overlay will actually be seen" $?
+
+says "$SA" hud show | grep -q "inside a game"
+check "...and so does turning it on" $?
+
+says "$SA" hud position top-left | grep -q "inside a game"
+check "...and moving it, which is silent for exactly the same reason" $?
+
+says "$SA" hud cycle | grep -q "inside a game"
+check "...and cycling it" $?
+
+"$SA" hud hide >/dev/null 2>&1
+
+# The record keeps the bare word. `visible` is a fact about the config and
+# every other consumer of these records wants it that way — it is only reading
+# it back to somebody looking at a desktop with no game on it that misleads,
+# and that belongs in the window, not in the data.
+says "$SA" hud --rec | grep -q "^state	hidden	toggle:hud$"
+check "the record still carries the plain state, not the explanation" $?
+
+# The window said "Show overlay", which is a promise it cannot keep on a
+# desktop. The button now says where it takes effect, so it cannot be pressed
+# in the expectation of something else.
+GUIQML=data/syn-arcade.qml
+
+grep -q '"Show in games"' "$GUIQML"
+check "the window's button says where the overlay will appear" $?
+
+grep -q 'cannot draw on the' "$GUIQML"
+check "...and the panel says why the desktop stays empty" $?
+
 # ⚠ `no_display` is strtol()-parsed by MangoHud, and a BARE `no_display` line
 # carries the value 1. A reader that treated "the key is present" as "hidden"
 # would report a visible overlay as hidden forever.

@@ -430,6 +430,33 @@ static int hud_show_state(bool rec)
 	return EX_OK;
 }
 
+/*
+ * What changed, said where somebody will actually see it.
+ *
+ * ⚠ "VISIBLE" HAS NEVER MEANT "ON SCREEN NOW", and reporting it as though it
+ * did is what made a working switch look broken. MangoHud is a Vulkan and
+ * OpenGL layer: it draws inside a program it has been injected into and it
+ * cannot draw on the desktop at all. So `hud show` on a machine with no game
+ * running correctly writes the setting, correctly reports success, and
+ * correctly puts nothing anywhere — which is indistinguishable, from the
+ * outside, from a command that did nothing.
+ *
+ * The state is real, and it is the state the NEXT game starts in. A game
+ * already running picks it up through MangoHud's inotify watch on this file,
+ * which is why the toggle is worth having at all rather than being a thing you
+ * set before launching.
+ *
+ * ⚠ SAID ON EVERY CHANGE, position included. "Move it" with nothing running
+ * moves nothing visible for exactly the same reason, and a message that
+ * explained the silence only half the time would teach people to stop reading
+ * it.
+ */
+static void hud_said(const char *what)
+{
+	printf("hud %s — MangoHud draws inside a game, not on the desktop\n",
+	       what);
+}
+
 static int hud_set_hidden(bool hide)
 {
 	lines_t L = {0};
@@ -438,7 +465,7 @@ static int hud_set_hidden(bool hide)
 	cfg_set(&L, "no_display", hide ? "1" : "0");
 	int rc = hud_store(&L, path);
 	if (rc == EX_OK)
-		printf("hud %s\n", hide ? "hidden" : "visible");
+		hud_said(hide ? "hidden" : "visible");
 	lines_free(&L);
 	return rc;
 }
@@ -452,7 +479,7 @@ static int hud_toggle(void)
 	cfg_set(&L, "no_display", hide ? "1" : "0");
 	int rc = hud_store(&L, path);
 	if (rc == EX_OK)
-		printf("hud %s\n", hide ? "hidden" : "visible");
+		hud_said(hide ? "hidden" : "visible");
 	lines_free(&L);
 	return rc;
 }
@@ -485,7 +512,7 @@ static int hud_cycle(int step)
 
 	int rc = hud_store(&L, path);
 	if (rc == EX_OK)
-		printf("hud %s\n", hud_positions[next]);
+		hud_said(hud_positions[next]);
 	lines_free(&L);
 	return rc;
 }
@@ -506,7 +533,7 @@ static int hud_set_position(const char *pos)
 	cfg_set(&L, "position", pos);
 	int rc = hud_store(&L, path);
 	if (rc == EX_OK)
-		printf("hud %s\n", pos);
+		hud_said(pos);
 	lines_free(&L);
 	return rc;
 }
