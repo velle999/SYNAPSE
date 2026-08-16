@@ -212,7 +212,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=19
+pkgrel=20
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -269,7 +269,8 @@ optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mo
             'gamescope: `big steam --gamescope` — a nested compositor for a TV whose resolution is not the desktop’s'
             'retroarch: appears as a tile in big screen mode'
             'syntty: the Terminal tile (kitty, foot, alacritty and xterm are used in that order if it is absent)'
-            'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order). ⚠ cliamp is preferred over all of them when present and is not packaged here — it is the only player big screen mode can DRIVE rather than launch, so with it the Music tile opens no window and the Start menu gets a Now Playing row. Pick any of them explicitly with `music = <program>` in ~/.config/syn-arcade/big.conf'
+            'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order). ⚠ cliamp is preferred over all of them when present and is not packaged here — it is the only player big screen mode can DRIVE rather than launch, so with it the Music tile opens no window and the Start menu gets a Now Playing row. Pick any of them explicitly with `music = <program>` in ~/.config/syn-arcade/big.conf. With cliamp the Start menu also gets a Music Source picker — Plex, YouTube Music, Spotify, local files or radio — and the Plex library is browsable from the sofa, using the server and token `cliamp setup` already wrote'
+            'projectm-pulseaudio: the Visualizer row in big screen mode’s Start menu — projectM, the Milkdrop engine, with four thousand presets. ⚠ The PULSEAUDIO build and not projectm-sdl: it captures through libpulse, which honours PULSE_SOURCE, so `big visualizer` can point it at the monitor of whatever is playing. The SDL build opens a capture device by name from its own list, and the first one on that list is usually a microphone — a visualizer that dances to the room'
             'plex-desktop: the Plex tile — a Plex server on the network is found by broadcast either way'
             'jellyfin-media-player: the Jellyfin tile, likewise'
             'sdl2-compat: SDL2 games that read the controller mappings'

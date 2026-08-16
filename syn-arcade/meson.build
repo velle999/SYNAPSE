@@ -116,6 +116,7 @@ install_data(
   'data/icons/firefox.svg',
   'data/icons/terminal.svg',
   'data/icons/syn-arcade.svg',
+  'data/icons/visualizer.svg',
   'data/icons/desktop.svg',
   'data/icons/sleep.svg',
   'data/icons/restart.svg',

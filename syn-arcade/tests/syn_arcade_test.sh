@@ -1786,8 +1786,14 @@ rm -f "$BIGCONF"
 ! grep -q '"--daemon"' src/big.c
 check "the player is never started headless — the visualizer needs its TUI" $?
 
-grep -q '"script", "-qfc", "cliamp", "/dev/null"' src/big.c
+# ⚠ The command is BUILT now (the source picker appends --provider), so the
+# assertion is on the shape rather than on the literal: script, -qfc, a command,
+# and /dev/null for the typescript.
+grep -q '"script", "-qfc", cmd, "/dev/null"' src/big.c
 check "...it gets a pty and no window instead" $?
+
+grep -q 'snprintf(cmd, sizeof(cmd), "cliamp%s%s"' src/big.c
+check "...and the source is a --provider flag on that command" $?
 
 grep -q 'execlp("cliamp", "cliamp", "visstream"' src/big.c
 check "big music vis streams cliamp's own bands" $?
@@ -1811,6 +1817,215 @@ check "...and a bad frame cannot take the menu down with it" $?
 
 grep -q 'onExited: shell.musicBands = \[\]' "$BIGQML"
 check "...and the bars go rather than freezing on the last frame" $?
+
+# ── where the music comes from ──────────────────────────────────────────────
+#
+# The source picker. cliamp is STUBBED and lives in a directory of its own,
+# entered only inside subshells: a cliamp on the suite's main PATH would change
+# which player music_prog() picks for every assertion after this point, and
+# `big apps` is checked in half a dozen places above.
+#
+# ⚠ The stub answers `status` and LOGS everything, because most of what matters
+# here is which cliamp commands were run and in what order — a queue that ends
+# without a `toggle` is a television that says it is playing and is silent.
+MSTUB="$T/music-bin"
+mkdir -p "$MSTUB"
+cat > "$MSTUB/cliamp" <<'EOF'
+#!/bin/sh
+echo "cliamp $*" >> "$CLIAMP_LOG"
+[ "$1" = status ] && printf '{"ok":true,"state":"playing","track":{"title":"%s","path":"%s"}}' \
+    "$CLIAMP_TRACK" "$CLIAMP_TRACK"
+exit 0
+EOF
+chmod +x "$MSTUB/cliamp"
+export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK=""
+: > "$CLIAMP_LOG"
+
+# ⚠ In a SUBSHELL for the same reason the synctl stub note above gives: an
+# assignment in front of a shell FUNCTION persists after the call in bash.
+music() { ( PATH="$MSTUB:$PATH"; export PATH; says "$SA" big music "$@" ); }
+
+rm -f "$BIGCONF"
+music source | grep -qE '^plex +Plex'
+check "the source picker lists Plex first" $?
+
+music source | grep -qE '^radio +Radio +· current'
+check "...and an unset config reads as radio, which is what cliamp does" $?
+
+music source --rec |
+    awk -F'\t' '$1 == "plex" && $4 == "albums" { f = 1 } END { exit !f }'
+check "...with an action column saying Plex has a library to pick from" $?
+
+music source --rec |
+    awk -F'\t' '$1 == "spotify" && $4 == "browse" { f = 1 } END { exit !f }'
+check "...and that the two streaming services open cliamp instead" $?
+
+# ⚠ NOT through says(), which always exits 0. An exit STATUS has to come from
+# the binary itself, and every refusal in this file that checks one runs it
+# directly for exactly that reason.
+( PATH="$MSTUB:$PATH"; export PATH
+  "$SA" big music source wobble >/dev/null 2>&1 )
+[ "$?" = 2 ]
+check "an unknown source is a usage error, not a silent no-op" $?
+
+# ⚠ THE KEY IS WRITTEN ONCE, and every earlier copy of it goes. big_conf_get
+# takes the LAST assignment in the file, so a writer that replaced the first
+# one would leave a config that looks changed and reads unchanged — the
+# setting would appear not to take, on exactly the machines where somebody had
+# already edited the file by hand.
+printf 'output = DP-2\nmusic_source = radio\n# a comment\nmusic_source = local\n' \
+    > "$BIGCONF"
+music source plex >/dev/null 2>&1
+[ "$(grep -c '^music_source' "$BIGCONF")" = 1 ]
+check "choosing a source leaves exactly one line for it" $?
+
+grep -q '^music_source = plex$' "$BIGCONF"
+check "...and it is the one that was chosen" $?
+
+grep -q '^output = DP-2$' "$BIGCONF" && grep -q '^# a comment$' "$BIGCONF"
+check "...with every other key and comment kept" $?
+
+printf 'music_source = wobble\n' > "$BIGCONF"
+music source 2>&1 | grep -q "big.conf says music_source = wobble"
+check "a source nobody implements says so and falls back" $?
+
+rm -f "$BIGCONF"
+
+# ⚠ A SOURCE THAT WOULD PLAY NOTHING HAS TO SAY SO ON ITS ROW. Choosing Local
+# files on a machine with no music directory stops whatever is playing and
+# queues nothing — silence, from a menu that looked fine. This machine is one
+# of them: everything is on the Plex server and there is no ~/Music.
+#
+# ⚠ HOME is redirected for these two and nowhere else in this suite: whether
+# the developer has a Music folder is not something an assertion may depend on.
+mkdir -p "$T/nohome" "$T/withmusic/Music"
+( HOME="$T/nohome"; export HOME; PATH="$MSTUB:$PATH"; export PATH
+  says "$SA" big music source ) | grep -q "no music folder"
+check "a machine with no music folder says so on the Local row" $?
+
+( HOME="$T/withmusic"; export HOME; PATH="$MSTUB:$PATH"; export PATH
+  says "$SA" big music source ) | grep -q "no music folder"
+[ $? != 0 ]
+check "...and a machine with one does not" $?
+
+rm -f "$BIGCONF"
+
+# ── a Plex token is not something to draw on a television ───────────────────
+#
+# ⚠ THE MOST IMPORTANT ASSERTION IN THIS SECTION. cliamp reports a queued
+# track's PATH as its title — it reads no tags — so a track streamed from Plex
+# comes back as a URL with `?X-Plex-Token=…` on the end. Left alone, that is
+# somebody's credential drawn four metres wide in the Start menu, in every
+# screenshot of it, and in the records this command prints.
+CLIAMP_TRACK='http://192.168.40.153:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
+music status --rec | grep -q SECRETVALUE
+[ $? != 0 ]
+check "a Plex token never reaches the records the shell reads" $?
+
+music status | grep -q SECRETVALUE
+[ $? != 0 ]
+check "...nor the line a person sees" $?
+
+music status | grep -q 'file.flac'
+check "...and what is left still names the track" $?
+
+# The map that gives it a real name. Written by whatever queued the track,
+# keyed on the path WITHOUT its query — which is the same string both sides
+# have to agree on, and the reason the token is not in the cache either.
+mkdir -p "$XDG_CACHE_HOME/syn-arcade"
+printf '%s\t%s\n' \
+    'http://192.168.40.153:32400/library/parts/1/2/file.flac' \
+    'Linkin%20Park%20%E2%80%94%20With%20You' \
+    > "$XDG_CACHE_HOME/syn-arcade/music-titles.rec"
+music status | grep -q 'Linkin Park — With You'
+check "a queued track is drawn with the name it was queued under" $?
+
+rm -f "$XDG_CACHE_HOME/syn-arcade/music-titles.rec"
+CLIAMP_TRACK=''
+
+# The suite runs with SYN_ARCADE_NO_NET=1, so this is the refusal rather than a
+# library: what matters is that it FAILS rather than hanging or pretending.
+( PATH="$MSTUB:$PATH"; export PATH; "$SA" big music plex >/dev/null 2>&1 )
+[ "$?" != 0 ]
+check "with no network the Plex library says so instead of drawing nothing" $?
+
+music plex 2>&1 | grep -q "cliamp setup"
+check "...and names the command that would give it a server" $?
+
+# ── projectM, and the microphone it must not listen to ──────────────────────
+#
+# ⚠ THE DEFAULT CAPTURE DEVICE IS A MICROPHONE. A visualizer that opens it
+# reacts to the room and sits still through the music, which reads as a broken
+# visualizer rather than as the wrong device. What is wanted is the MONITOR of
+# whatever sink the music is going to, and it is asked for at launch because
+# this machine's default output changes with a Bluetooth headset.
+VSTUB="$T/vis-bin"
+mkdir -p "$VSTUB"
+cat > "$VSTUB/pactl" <<'EOF'
+#!/bin/sh
+[ "$1" = get-default-sink ] || exit 1
+echo bluez_output.F4_B6_2D_DA_0E_BD.1
+EOF
+cat > "$VSTUB/projectM-pulseaudio" <<'EOF'
+#!/bin/sh
+echo "PULSE_SOURCE=$PULSE_SOURCE"
+echo "SDL_AUDIO_INCLUDE_MONITORS=$SDL_AUDIO_INCLUDE_MONITORS"
+EOF
+chmod +x "$VSTUB/pactl" "$VSTUB/projectM-pulseaudio"
+
+( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big visualizer ) |
+    grep -q '^PULSE_SOURCE=bluez_output.F4_B6_2D_DA_0E_BD.1.monitor$'
+check "the visualizer listens to the monitor of the sink in use" $?
+
+( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big visualizer ) |
+    grep -q '^SDL_AUDIO_INCLUDE_MONITORS=1$'
+check "...and the SDL build is told monitors exist at all" $?
+
+( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big apps ) |
+    grep -qE '^visualizer +system +Visualizer +syn-arcade big visualizer'
+check "an installed projectM is a row behind Start, not a shelf tile" $?
+
+( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big apps ) |
+    grep -qE '^visualizer .*\[fullscreen\]'
+check "...and it is asked to fill the screen, being a 512x512 window" $?
+
+# ⚠ ON AN EMPTY PATH, not on this machine's. Whether projectM is installed
+# where the suite runs is not something the suite gets to decide, and an
+# assertion about its ABSENCE that reads the developer's own PATH is one that
+# passes today and fails on the machine that installs it.
+mkdir -p "$T/empty"
+( PATH="$T/empty"; export PATH; says "$SA" big apps ) | grep -q '^visualizer'
+[ $? != 0 ]
+check "...and there is no such row on a machine without it" $?
+
+( PATH="$T/empty"; export PATH; says "$SA" big visualizer ) |
+    grep -q "projectM is not installed"
+check "...where the command says what to install" $?
+
+# ── the menu has pages now ──────────────────────────────────────────────────
+grep -q 'property string menuPage: "main"' "$BIGQML"
+check "the Start menu draws a page rather than a second panel" $?
+
+grep -q 'if (shell.menuPage !== "main")' "$BIGQML"
+check "...and B goes UP a page before it closes anything" $?
+
+# ⚠ 130 albums in a Column is a panel taller than the television with its first
+# row off the top of the screen.
+grep -q 'ListView {' "$BIGQML" && grep -q 'positionViewAtIndex' "$BIGQML"
+check "...the rows scroll and keep the selection on screen" $?
+
+# The gap that arrived with the visualizer: menuActivate() handled the switches
+# and the way out, and every `kind: "app"` row reaching it did nothing at all.
+grep -q 'shell.launchApp(it, \["big", "run", it.id, "--wait"\])' "$BIGQML"
+check "an application row in the Start menu actually launches" $?
+
+# Setting `running = true` on a quickshell Process that is already running is a
+# silent no-op, and these are the two rows somebody can press A on twice.
+grep -q 'if (sourceSetProc.running) return' "$BIGQML"
+check "a second press while a source is being switched is refused, not lost" $?
+
+grep -q 'if (albumPlayProc.running) return' "$BIGQML"
+check "...and the same on an album" $?
 
 # ── the guide button ────────────────────────────────────────────────────────
 #

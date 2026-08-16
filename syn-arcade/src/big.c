@@ -76,6 +76,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>		/* strcasecmp, for the audio extensions */
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -1077,6 +1078,34 @@ static const char *music_prog(void)
 }
 
 /*
+ * projectM: the visualizer, as a program rather than as ten rectangles.
+ *
+ * The Start menu already draws cliamp's own bands behind the Now Playing row,
+ * and that is a meter — it says the music is playing. This is the other thing
+ * a visualizer is for: a television with nothing to show while an album plays.
+ * projectM is the Milkdrop engine on Linux and ships four thousand presets, so
+ * "Visualizer" is a tile that fills the screen and needs no configuring.
+ *
+ * ⚠ THE PULSEAUDIO BUILD FIRST, and not as a matter of taste. It captures
+ * through libpulse, which honours PULSE_SOURCE — so big_visualizer() below can
+ * point it at the monitor of whatever is playing. projectMSDL opens an SDL
+ * capture device BY NAME from its own enumeration, and the first one on that
+ * list is usually a microphone: a visualizer that dances to the room.
+ *
+ * ⚠ NOT a dependency of this package. It is a 30MB Qt5 program with a preset
+ * library behind it, and a machine with no interest in it should not carry
+ * one; the tile appears when it is installed, like every other tile here.
+ */
+static const char *visualizer_prog(void)
+{
+	static const char *const cands[] = {
+		"projectM-pulseaudio", "projectMSDL", NULL
+	};
+	static const char *cache;
+	return first_installed(cands, &cache);
+}
+
+/*
  * Can the chosen player be driven WITHOUT a window?
  *
  * Exactly one can, so this is a name check and says so rather than pretending
@@ -1269,6 +1298,19 @@ static int apps_table(struct row *rows, int max)
 		rows[n++] = (struct row){ "arcade", "Controllers",
 			"syn-arcade gui", "syn-arcade", "app", "apps",
 			true, false, true };
+
+	/* ── the Start menu's own row ── */
+	/* ⚠ `shelf = system` means BEHIND START, not on a shelf: since
+	 * 0.1.0-16 the QML draws the system rows in the Start menu and nowhere
+	 * else. The visualizer belongs there rather than among the media tiles
+	 * because it is not something to browse to — it is what you turn on
+	 * while something else is already playing. It needs help filling the
+	 * screen: projectM opens a 512x512 window by default, which on a
+	 * television is a stamp in the middle of a wall. */
+	if (visualizer_prog())
+		rows[n++] = (struct row){ "visualizer", "Visualizer",
+			"syn-arcade big visualizer", "visualizer", "app",
+			"system", false, false, true };
 
 	/* The way OUT is a tile, and it is not optional. A full-screen surface
 	 * with exclusive keyboard focus that can only be dismissed by a key
@@ -2575,6 +2617,154 @@ static bool media_url(const char *id, char *out, size_t n)
 
 /* ── music, driven rather than launched ──────────────────────────────────── */
 
+/* Declared rather than moved: the XML scanners belong with the news reader
+ * below, which is what they were written for. Plex answers XML too, and one
+ * scanner read by two callers is better than the same loop written twice. */
+static bool xml_attr(const char *tag, const char *name, char *out, size_t n);
+static void xml_unescape(char *s);
+
+/*
+ * WHERE the music comes from, which is a different question from WHICH PLAYER
+ * plays it.
+ *
+ * `music = <program>` (above) picks the program. This picks what that program
+ * is pointed AT, and until now nothing did: cliamp starts on its `radio`
+ * provider with three internet stations preloaded, so the Music tile on a
+ * television full of somebody's own albums played lo-fi radio and there was no
+ * way from the sofa to say otherwise.
+ *
+ * ⚠ THE SOURCE IS A START-UP FLAG, NOT A TRANSPORT VERB. cliamp takes
+ * `--provider` when it starts and has no IPC verb to change it afterwards, so
+ * switching source means stopping the player and starting it again. That is
+ * why source_apply() below is allowed to do something as rude as killing the
+ * music: there is no gentler mechanism, and a picker that silently did nothing
+ * until the next reboot would be worse.
+ *
+ * ── queueable, and why three of the five are not the same kind of thing ────
+ *
+ * `queueable` is the honest half of this table. cliamp's own interface can
+ * browse all of these; big screen mode can only FILL A QUEUE for the ones
+ * whose contents are reachable from outside that interface:
+ *
+ *   radio    cliamp preloads its stations itself — nothing to do
+ *   plex     an HTTP API this file can read (see big_music_plex)
+ *   local    files on a disk
+ *
+ * YouTube Music and Spotify are searched and browsed inside the TUI and
+ * nowhere else, so choosing one of them cannot end in music the way the other
+ * three do. Rather than pretend, they open cliamp itself on the television —
+ * see big_music_browse(). A tile that sets a setting and plays nothing is the
+ * exact failure this file keeps warning about.
+ */
+struct source {
+	const char *id;		/* what goes in big.conf                     */
+	const char *name;	/* what the television says                  */
+	const char *provider;	/* cliamp's --provider, NULL for none        */
+	bool queueable;		/* can big screen mode fill a queue for it?  */
+};
+
+/* Ordered for somebody on a sofa: their own library first, then the services
+ * they might subscribe to, then the two that always work. */
+static const struct source SOURCES[] = {
+	{ "plex",    "Plex",          "plex",    true  },
+	{ "ytmusic", "YouTube Music", "ytmusic", false },
+	{ "spotify", "Spotify",       "spotify", false },
+	{ "local",   "Local files",   NULL,      true  },
+	{ "radio",   "Radio",         "radio",   true  },
+};
+#define SOURCES_N ((int)(sizeof(SOURCES) / sizeof(SOURCES[0])))
+
+static const struct source *source_by_id(const char *id)
+{
+	if (!id || !*id)
+		return NULL;
+	for (int i = 0; i < SOURCES_N; i++)
+		if (strcmp(SOURCES[i].id, id) == 0)
+			return &SOURCES[i];
+	return NULL;
+}
+
+/*
+ * The chosen source: `music_source = <id>` in big.conf, or radio.
+ *
+ * ⚠ RADIO IS THE DEFAULT BECAUSE IT IS WHAT ALREADY HAPPENS. cliamp with no
+ * --provider starts on radio with a queue in it, so an unset key has to mean
+ * radio or the first release of this picker would silently change what the
+ * Music tile does on every machine that never opened it.
+ */
+static const struct source *music_source(void)
+{
+	char want[64];
+	if (big_conf_get("music_source", want, sizeof(want))) {
+		const struct source *s = source_by_id(want);
+		if (s)
+			return s;
+		/* Said out loud and falls back, for the same reason `music =`
+		 * does: a config file that names a source nobody implements is
+		 * a typo, and silence sends somebody to look at the player. */
+		fprintf(stderr, "syn-arcade: big.conf says music_source = %s, "
+				"which is not one of plex, ytmusic, spotify, "
+				"local or radio — using radio\n", want);
+	}
+	return source_by_id("radio");
+}
+
+/*
+ * Write one key back into big.conf.
+ *
+ * ⚠ EVERY EXISTING LINE FOR THE KEY GOES, and the new one is appended. Not
+ * "replace the first": big_conf_get takes the LAST assignment it sees, so a
+ * file that already says the key twice — which is what a hand-edited config
+ * looks like after somebody changed their mind — would be rewritten at the top
+ * and still read from the bottom. The setting would appear not to take, and
+ * the file would look right.
+ *
+ * Comments and every other key are preserved, because this file is a person's
+ * config and not this program's storage.
+ */
+static int big_conf_set(const char *key, const char *val)
+{
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "syn-arcade/big.conf"))
+		return EX_FAIL;
+
+	char *text = read_file(path);		/* may not exist yet */
+	size_t cap = (text ? strlen(text) : 0) + strlen(key) + strlen(val) + 16;
+	char *out = xmalloc(cap);
+	size_t w = 0;
+	out[0] = '\0';
+
+	if (text) {
+		char *save = NULL;
+		for (char *ln = strtok_r(text, "\n", &save); ln;
+		     ln = strtok_r(NULL, "\n", &save)) {
+			/* ⚠ The line is matched on a COPY. trim() and the split
+			 * on '=' both write into what they are given, and the
+			 * line that survives has to reach the new file exactly
+			 * as the person wrote it — spacing, comment and all. */
+			char probe[1024];
+			snprintf(probe, sizeof(probe), "%s", ln);
+			char *t = trim(probe);
+			char *eq = strchr(t, '=');
+			if (*t && *t != '#' && eq) {
+				*eq = '\0';
+				if (strcmp(trim(t), key) == 0)
+					continue;	/* dropped */
+			}
+			w += (size_t)snprintf(out + w, cap - w, "%s\n", ln);
+		}
+		free(text);
+	}
+
+	snprintf(out + w, cap - w, "%s = %s\n", key, val);
+
+	int rc = mkdir_parents(path);
+	if (rc == 0)
+		rc = write_file_inplace(path, out);
+	free(out);
+	return rc == 0 ? EX_OK : EX_FAIL;
+}
+
 /*
  * Transport for a headless player, which on this system means cliamp.
  *
@@ -2627,16 +2817,32 @@ static bool music_socket_live(void)
  * lands on nothing and the tile press is silently lost — the one failure this
  * whole design is meant to avoid, and the one that would look exactly like a
  * broken tile.
+ *
+ * ⚠ AND ON THE CHOSEN SOURCE, which only has an effect HERE. `--provider` is a
+ * start-up flag; a player already running keeps whatever it was started with,
+ * which is why this returns early and why changing source has to go through
+ * music_restart() rather than through here.
  */
 static bool music_ensure_running(void)
 {
 	if (music_socket_live())
 		return true;
 
+	/* ⚠ ONE STRING, and `script -c` hands it to /bin/sh. Nothing
+	 * user-supplied may ever reach it: the provider comes from SOURCES[]
+	 * above, which is a table of literals in this file, and music_source()
+	 * refuses anything that is not in it. A config file that could put
+	 * arbitrary text here would be a config file that runs commands. */
+	const struct source *src = music_source();
+	char cmd[128];
+	snprintf(cmd, sizeof(cmd), "cliamp%s%s",
+		 src && src->provider ? " --provider " : "",
+		 src && src->provider ? src->provider : "");
+
 	/* ⚠ -f, so the pty is flushed rather than buffered: `script` without it
 	 * can hold a TUI's output long enough that the program blocks on a
 	 * write nobody is draining. */
-	char *const argv[] = { "script", "-qfc", "cliamp", "/dev/null", NULL };
+	char *const argv[] = { "script", "-qfc", cmd, "/dev/null", NULL };
 	if (spawn_detached(argv) != EX_OK)
 		return false;
 
@@ -2649,6 +2855,73 @@ static bool music_ensure_running(void)
 	return false;
 }
 
+/*
+ * Stop the player, and be sure it is the player being stopped.
+ *
+ * cliamp writes its pid beside its socket, which is the only handle there is:
+ * it has transport verbs but no "quit", and the source cannot be changed
+ * without a restart.
+ *
+ * ⚠ THE PID FILE IS NOT PROOF. It outlives the process that wrote it — this
+ * machine had a stale socket from a cliamp that exited weeks earlier — and a
+ * pid on a busy machine is reused. Sending SIGTERM to a number out of a stale
+ * file is how a music picker kills somebody's compile. So the socket must be
+ * answering first (something IS bound to it), and /proc/<pid>/comm must say
+ * cliamp before anything is signalled.
+ */
+static bool music_stop_player(void)
+{
+	if (!music_socket_live())
+		return true;			/* nothing to stop */
+
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "cliamp/cliamp.sock.pid"))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+	long pid = strtol(trim(text), NULL, 10);
+	free(text);
+	if (pid <= 1)
+		return false;
+
+	char comm[64];
+	snprintf(comm, sizeof(comm), "/proc/%ld/comm", pid);
+	char *who = read_file(comm);
+	if (!who)
+		return false;
+	bool is_cliamp = strcmp(trim(who), "cliamp") == 0;
+	free(who);
+	if (!is_cliamp)
+		return false;
+
+	if (kill((pid_t)pid, SIGTERM) != 0)
+		return false;
+
+	for (int i = 0; i < 30; i++) {		/* up to ~3s */
+		struct timespec ts = { 0, 100 * 1000 * 1000 };
+		nanosleep(&ts, NULL);
+		if (!music_socket_live())
+			return true;
+	}
+	return false;
+}
+
+/*
+ * Start again on the source that is configured now.
+ *
+ * ⚠ IT REALLY DOES STOP THE MUSIC, and that is the point rather than a side
+ * effect. Two things need it: changing source (a start-up flag), and playing a
+ * Plex album — cliamp's `queue` APPENDS, so without a restart the second album
+ * somebody picks plays after the first one finishes, which from a sofa is a
+ * button that did nothing.
+ */
+static bool music_restart(void)
+{
+	music_stop_player();
+	return music_ensure_running();
+}
+
 /* One transport word, straight through. */
 static int music_cmd(const char *verb)
 {
@@ -2659,8 +2932,90 @@ static int music_cmd(const char *verb)
 }
 
 /*
- * What is playing, as records the shell reads like every other shelf.
+ * What is playing, and what it is CALLED.
  *
+ * ⚠ CLIAMP DOES NOT NAME A QUEUED TRACK. `cliamp queue <thing>` takes a path
+ * and reports that path back as the title — no tags are read — so everything
+ * this file queues would arrive on the television as
+ *
+ *   /mnt/drive8tb/music/2Pac - Discography [FLAC…]/…/02. Trapped.flac
+ *
+ * or, for a track streamed from a Plex server that is not this machine, as an
+ * HTTP URL WITH THE PLEX TOKEN IN IT — somebody's credential, four metres
+ * wide, in every screenshot of the Start menu. Measured, not assumed: that is
+ * what `status --json` answers after a queue.
+ *
+ * So whatever queues also writes down what it queued, in the same record
+ * encoding as every other cache here, and this reads it back. The map is keyed
+ * on the path cliamp reports.
+ */
+static bool music_titles_path(char *buf, size_t n)
+{
+	return cache_path(buf, n, "music-titles.rec");
+}
+
+/* Remember `path` is called `title`, appended to whatever is already known.
+ * Called once per track by the queueing paths below. */
+static void music_title_remember(FILE *f, const char *path, const char *title)
+{
+	if (f && path && *path && title && *title)
+		rec_frow(f, 2, path, title);
+}
+
+static bool music_title_lookup(const char *path, char *out, size_t n)
+{
+	if (!path || !*path)
+		return false;
+
+	char cache[SYN_PATH];
+	if (!music_titles_path(cache, sizeof(cache)))
+		return false;
+	char *text = read_file(cache);
+	if (!text)
+		return false;
+
+	bool found = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln && !found;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *tab = strchr(ln, '\t');
+		if (!tab)
+			continue;
+		*tab = '\0';
+		char *k = pct_decode(ln);
+		char *v = pct_decode(tab + 1);
+		if (k && v && strcmp(k, path) == 0) {
+			snprintf(out, n, "%s", v);
+			found = true;
+		}
+		free(k);
+		free(v);
+	}
+	free(text);
+	return found;
+}
+
+/*
+ * The fallback, for a track nothing here queued.
+ *
+ * ⚠ THE QUERY GOES, ALWAYS. It is where a Plex token lives, and this string is
+ * printed, recorded and drawn. Cutting at '?' is not tidying.
+ */
+static void music_title_fallback(const char *path, char *out, size_t n)
+{
+	char work[512];
+	snprintf(work, sizeof(work), "%s", path);
+
+	char *q = strchr(work, '?');
+	if (q)
+		*q = '\0';
+
+	const char *base = strrchr(work, '/');
+	base = base ? base + 1 : work;
+	snprintf(out, n, "%s", *base ? base : work);
+}
+
+/*
  * `state` is empty when there is nothing to control, and that is the signal the
  * menu keys off — an absent row rather than a dead one.
  */
@@ -2680,8 +3035,35 @@ static void music_read(char *state, size_t sn, char *title, size_t tn,
 		 * that searching the whole document would one day find
 		 * somebody else's. */
 		const char *tr = strstr(json, "\"track\"");
-		if (title) json_str(tr ? tr : json, NULL, "title", title, tn);
-		if (path)  json_str(tr ? tr : json, NULL, "path", path, pn);
+
+		char raw[512] = "";
+		json_str(tr ? tr : json, NULL, "path", raw, sizeof(raw));
+
+		/* ⚠ THE KEY IS THE PATH WITHOUT ITS QUERY, and both sides of
+		 * the lookup have to agree on that. The query is where a Plex
+		 * token lives, so nothing here writes one into a cache file —
+		 * which means nothing here may look one up with it either. */
+		char keyed[512];
+		snprintf(keyed, sizeof(keyed), "%s", raw);
+		char *q = strchr(keyed, '?');
+		if (q)
+			*q = '\0';
+
+		if (title) {
+			json_str(tr ? tr : json, NULL, "title", title, tn);
+			/* A title that IS the path is cliamp saying it has no
+			 * name for this track — the queued case. Anything else
+			 * (a radio station, a local file it knows) is its own
+			 * answer and is left alone. */
+			if (raw[0] && strcmp(title, raw) == 0 &&
+			    !music_title_lookup(keyed, title, tn))
+				music_title_fallback(keyed, title, tn);
+		}
+		/* ⚠ The path is recorded too, and it is the one field that can
+		 * carry a token. Stripped here rather than at each reader:
+		 * this function is the only door it comes through. */
+		if (path)
+			snprintf(path, pn, "%s", keyed);
 	}
 	free(json);
 }
@@ -2706,9 +3088,631 @@ static int big_music_status(bool rec)
 	return EX_OK;
 }
 
-/* Declared rather than moved: it belongs with the dispatch below, which is the
- * only other thing that parses an argument list. */
+/* ── the Plex library, reached without a Plex client ─────────────────────── */
+
+/*
+ * Plex is where this machine's music actually is, and until now big screen
+ * mode could only offer the SERVER — a tile that opens Plex's web interface in
+ * a browser, which on a television is a pointer, a login and somebody else's
+ * idea of a remote control.
+ *
+ * The library itself is an ordinary HTTP API, and cliamp is already configured
+ * for it: `cliamp setup` writes the server and a token into
+ * ~/.config/cliamp/config.toml, which is the one place either program has to
+ * look. Nothing here asks for a password, stores one, or has a second idea of
+ * where the server is.
+ *
+ * ⚠ THE TOKEN GOES IN A HEADER, not in the URL. Plex accepts either, and both
+ * are equally visible in `ps` — but a URL is logged by the server, kept in its
+ * own diagnostics, and would end up in this file's caches. A header is not.
+ * The one place a token has to be in a URL is a stream handed to cliamp, which
+ * has no way to send a header, and that is exactly the case avoided below when
+ * the file is readable directly.
+ */
+static bool plex_conf(char *url, size_t un, char *token, size_t tn)
+{
+	url[0] = '\0';
+	token[0] = '\0';
+
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "cliamp/config.toml"))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool in_plex = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (*t == '[') {
+			in_plex = strncmp(t, "[plex]", 6) == 0;
+			continue;
+		}
+		if (!in_plex || !*t || *t == '#')
+			continue;
+
+		char *eq = strchr(t, '=');
+		if (!eq)
+			continue;
+		*eq = '\0';
+		char *k = trim(t);
+		char *v = trim(eq + 1);
+
+		/* TOML quotes; nothing here needs escape handling, because a
+		 * URL and a token contain neither quotes nor backslashes. */
+		size_t vl = strlen(v);
+		if (vl >= 2 && v[0] == '"' && v[vl - 1] == '"') {
+			v[vl - 1] = '\0';
+			v++;
+		}
+
+		if (strcmp(k, "url") == 0)
+			snprintf(url, un, "%s", v);
+		else if (strcmp(k, "token") == 0)
+			snprintf(token, tn, "%s", v);
+	}
+	free(text);
+
+	/* A trailing slash on the configured URL would make every path below
+	 * double-slashed. Plex tolerates it; nothing else has to. */
+	size_t ul = strlen(url);
+	while (ul && url[ul - 1] == '/')
+		url[--ul] = '\0';
+
+	return url[0] && token[0];
+}
+
+/* One GET against the configured server. NULL for every kind of "no". */
+static char *plex_get(const char *path)
+{
+	if (!net_allowed())
+		return NULL;
+
+	char base[256], token[192];
+	if (!plex_conf(base, sizeof(base), token, sizeof(token)))
+		return NULL;
+
+	char url[SYN_PATH], hdr[256];
+	snprintf(url, sizeof(url), "%s%s", base, path);
+	snprintf(hdr, sizeof(hdr), "X-Plex-Token: %s", token);
+
+	/* Accept the default XML rather than asking for JSON: this file
+	 * already has an XML scanner for the news reader, and Plex's XML puts
+	 * everything on attributes of one element per row. */
+	char *const argv[] = { "curl", "-sS", "--max-time", "8",
+			       "-H", hdr, url, NULL };
+	return run_capture(argv, 12);
+}
+
+/*
+ * Which library section holds the music.
+ *
+ * ⚠ ASKED, never assumed to be section 3 (which it is on this machine). A
+ * hard-coded section number is a launcher that shows somebody's films as
+ * albums on the one server whose sections were made in a different order.
+ */
+static bool plex_music_section(char *out, size_t n)
+{
+	char *xml = plex_get("/library/sections");
+	if (!xml)
+		return false;
+
+	bool found = false;
+	for (const char *p = strstr(xml, "<Directory ");
+	     p && !found; p = strstr(p + 1, "<Directory ")) {
+		char type[32];
+		if (xml_attr(p, "type", type, sizeof(type)) &&
+		    strcmp(type, "artist") == 0)
+			found = xml_attr(p, "key", out, n);
+	}
+	free(xml);
+	return found;
+}
+
+/*
+ * Whether the server's own file paths mean anything on THIS machine.
+ *
+ * A Part carries `file=` — where the track sits on the server's disk — and on
+ * this system that is a directory the user can read, because the server IS
+ * this machine. Handing cliamp the file rather than an HTTP stream is worth a
+ * check: it plays without the round trip, and no URL means no token anywhere.
+ *
+ * ⚠ The check is on the SERVER, not on the file. A remote Plex whose library
+ * lives at /mnt/music would otherwise have its paths tested against this
+ * machine's /mnt/music — a different disk with the same name, which is the one
+ * way this could quietly play the wrong music.
+ */
+static bool plex_is_local(void)
+{
+	char base[256], token[192], host[128];
+	if (!plex_conf(base, sizeof(base), token, sizeof(token)))
+		return false;
+	if (!url_host(base, host, sizeof(host)))
+		return false;
+	return strcmp(host, "localhost") == 0 || addr_is_local(host);
+}
+
+/* The albums, one record per row, for the picker to draw. */
+static int plex_albums(bool rec)
+{
+	char sect[32];
+	if (!plex_music_section(sect, sizeof(sect))) {
+		fputs("syn-arcade: no Plex music library — check the [plex] "
+		      "section of ~/.config/cliamp/config.toml, or run "
+		      "`cliamp setup`\n", stderr);
+		return EX_FAIL;
+	}
+
+	char path[128];
+	snprintf(path, sizeof(path), "/library/sections/%s/all?type=9", sect);
+	char *xml = plex_get(path);
+	if (!xml) {
+		fputs("syn-arcade: the Plex server did not answer\n", stderr);
+		return EX_FAIL;
+	}
+
+	if (rec)
+		rec_row(4, "id", "name", "artist", "year");
+
+	int n = 0;
+	for (const char *p = strstr(xml, "<Directory ");
+	     p; p = strstr(p + 1, "<Directory ")) {
+		char key[32], title[256], artist[256], year[16];
+		if (!xml_attr(p, "ratingKey", key, sizeof(key)) ||
+		    !xml_attr(p, "title", title, sizeof(title)))
+			continue;
+		if (!xml_attr(p, "parentTitle", artist, sizeof(artist)))
+			artist[0] = '\0';
+		if (!xml_attr(p, "year", year, sizeof(year)))
+			year[0] = '\0';
+
+		if (rec)
+			rec_row(4, key, title, artist, year);
+		else
+			printf("%-8s %-30s %s%s%s\n", key, artist, title,
+			       year[0] ? "  " : "", year);
+		n++;
+	}
+	free(xml);
+
+	if (!n && !rec)
+		puts("no albums in the Plex music library");
+	return n ? EX_OK : EX_EMPTY;
+}
+
+/*
+ * Play one album.
+ *
+ * ⚠ THE PLAYER IS RESTARTED FIRST, and that is not heavy-handedness. cliamp's
+ * `queue` APPENDS — there is no verb that clears a queue — so picking a second
+ * album without a restart puts it behind the first one and the television goes
+ * on playing what it was already playing. From four metres that is a button
+ * that did nothing. A restart makes the queue exactly the album that was
+ * chosen, every time.
+ */
+static int plex_play_album(const char *key)
+{
+	char path[128];
+	snprintf(path, sizeof(path), "/library/metadata/%s/children", key);
+	char *xml = plex_get(path);
+	if (!xml) {
+		fputs("syn-arcade: the Plex server did not answer\n", stderr);
+		return EX_FAIL;
+	}
+
+	char base[256], token[192];
+	plex_conf(base, sizeof(base), token, sizeof(token));
+	bool local = plex_is_local();
+
+	if (!music_restart()) {
+		free(xml);
+		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* Truncated, not appended: this map describes the queue, and the queue
+	 * was just replaced. */
+	char cache[SYN_PATH];
+	FILE *titles = NULL;
+	if (music_titles_path(cache, sizeof(cache)) && mkdir_parents(cache) == 0)
+		titles = fopen(cache, "w");
+
+	int queued = 0;
+	for (const char *p = strstr(xml, "<Track ");
+	     p; p = strstr(p + 1, "<Track ")) {
+		char title[256], artist[256];
+		if (!xml_attr(p, "title", title, sizeof(title)))
+			continue;
+		if (!xml_attr(p, "grandparentTitle", artist, sizeof(artist)))
+			artist[0] = '\0';
+
+		/* ⚠ BOUNDED BY THE NEXT TRACK. A Part is nested inside the
+		 * Track it belongs to, and an unbounded search would give
+		 * every track after the last one with no media the file of a
+		 * track further down — thirteen rows pointing at eleven
+		 * songs, in the right order, with two wrong. */
+		const char *next = strstr(p + 1, "<Track ");
+		const char *part = strstr(p, "<Part ");
+		if (!part || (next && part > next))
+			continue;
+
+		char file[SYN_PATH], pkey[256];
+		bool have_file = xml_attr(part, "file", file, sizeof(file));
+		bool have_key = xml_attr(part, "key", pkey, sizeof(pkey));
+
+		char what[SYN_PATH];
+		if (local && have_file && access(file, R_OK) == 0) {
+			snprintf(what, sizeof(what), "%s", file);
+		} else if (have_key) {
+			snprintf(what, sizeof(what), "%s%s?X-Plex-Token=%s",
+				 base, pkey, token);
+		} else {
+			continue;
+		}
+
+		char *out = run_capture((char *const[]){ "cliamp", "queue",
+							 what, NULL }, 5);
+		free(out);
+
+		/* What the television will call it. cliamp reports a queued
+		 * track's path as its title; this is the only place that knows
+		 * the real one. ⚠ Keyed WITHOUT the query, which is where the
+		 * token is — see music_read(). */
+		char keyed[SYN_PATH];
+		snprintf(keyed, sizeof(keyed), "%s", what);
+		char *q = strchr(keyed, '?');
+		if (q)
+			*q = '\0';
+
+		char shown[SYN_PATH];
+		if (artist[0])
+			snprintf(shown, sizeof(shown), "%s — %s", artist, title);
+		else
+			snprintf(shown, sizeof(shown), "%s", title);
+		music_title_remember(titles, keyed, shown);
+		queued++;
+	}
+	free(xml);
+	if (titles)
+		fclose(titles);
+
+	if (!queued) {
+		fputs("syn-arcade: that album has no playable tracks\n", stderr);
+		return EX_EMPTY;
+	}
+
+	/* `toggle`, not `play` — see big_music: a player that has just started
+	 * is `stopped`, and resume does nothing from there. */
+	music_cmd("toggle");
+	printf("queued %d track%s\n", queued, queued == 1 ? "" : "s");
+	return EX_OK;
+}
+
+/* ── local files ─────────────────────────────────────────────────────────── */
+
+/*
+ * The music directory, which on a lot of machines is not there at all.
+ *
+ * XDG_MUSIC_DIR out of user-dirs.dirs first, because that is where a desktop
+ * records the answer, and ~/Music after it. ⚠ user-dirs.dirs writes the value
+ * as `XDG_MUSIC_DIR="$HOME/Music"` — a shell expression, and the $HOME in it
+ * is literal text in that file.
+ */
+static bool music_dir(char *out, size_t n)
+{
+	out[0] = '\0';
+
+	char conf[SYN_PATH];
+	if (config_path(conf, sizeof(conf), "user-dirs.dirs")) {
+		char *text = read_file(conf);
+		if (text) {
+			const char *p = strstr(text, "XDG_MUSIC_DIR=");
+			if (p) {
+				p += strlen("XDG_MUSIC_DIR=");
+				if (*p == '"')
+					p++;
+				char val[SYN_PATH];
+				size_t w = 0;
+				while (*p && *p != '"' && *p != '\n' &&
+				       w + 1 < sizeof(val))
+					val[w++] = *p++;
+				val[w] = '\0';
+
+				if (strncmp(val, "$HOME/", 6) == 0)
+					home_path(out, n, val + 6);
+				else if (val[0] == '/')
+					snprintf(out, n, "%s", val);
+			}
+			free(text);
+		}
+	}
+
+	if (!out[0])
+		home_path(out, n, "Music");
+
+	struct stat st;
+	return out[0] && stat(out, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static bool is_audio(const char *name)
+{
+	static const char *const ext[] = { ".flac", ".mp3", ".ogg", ".opus",
+					   ".m4a", ".wav", ".aac", ".wma",
+					   NULL };
+	const char *dot = strrchr(name, '.');
+	if (!dot)
+		return false;
+	for (int i = 0; ext[i]; i++)
+		if (strcasecmp(dot, ext[i]) == 0)
+			return true;
+	return false;
+}
+
+#define LOCAL_MAX 300
+
+/* Every audio file under `dir`, depth first, capped. */
+static void local_scan(const char *dir, char (*out)[SYN_PATH], int *n,
+		       int depth)
+{
+	if (*n >= LOCAL_MAX || depth > 6)
+		return;
+
+	DIR *d = opendir(dir);
+	if (!d)
+		return;
+
+	struct dirent *e;
+	while ((e = readdir(d)) && *n < LOCAL_MAX) {
+		if (e->d_name[0] == '.')
+			continue;
+
+		char path[SYN_PATH];
+		if (snprintf(path, sizeof(path), "%s/%s", dir, e->d_name) >=
+		    (int)sizeof(path))
+			continue;
+
+		struct stat st;
+		if (stat(path, &st) != 0)
+			continue;
+		if (S_ISDIR(st.st_mode))
+			local_scan(path, out, n, depth + 1);
+		else if (S_ISREG(st.st_mode) && is_audio(e->d_name))
+			snprintf(out[(*n)++], SYN_PATH, "%s", path);
+	}
+	closedir(d);
+}
+
+static int path_cmp(const void *a, const void *b)
+{
+	return strcmp((const char *)a, (const char *)b);
+}
+
+/*
+ * Fill the queue from the music directory.
+ *
+ * ⚠ SORTED. readdir answers in whatever order the filesystem feels like, and
+ * an album queued in hash order is an album nobody recognises. Sorting by path
+ * puts a disc in track order, because that is what the numbers in the file
+ * names are for.
+ */
+static int local_queue(void)
+{
+	char dir[SYN_PATH];
+	if (!music_dir(dir, sizeof(dir))) {
+		fprintf(stderr, "syn-arcade: no music directory — there is "
+				"nothing at %s\n", dir);
+		return EX_EMPTY;
+	}
+
+	static char found[LOCAL_MAX][SYN_PATH];
+	int n = 0;
+	local_scan(dir, found, &n, 0);
+	if (!n) {
+		fprintf(stderr, "syn-arcade: no music files under %s\n", dir);
+		return EX_EMPTY;
+	}
+	qsort(found, (size_t)n, SYN_PATH, path_cmp);
+
+	if (!music_restart()) {
+		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		return EX_FAIL;
+	}
+
+	char cache[SYN_PATH];
+	FILE *titles = NULL;
+	if (music_titles_path(cache, sizeof(cache)) && mkdir_parents(cache) == 0)
+		titles = fopen(cache, "w");
+
+	for (int i = 0; i < n; i++) {
+		char *out = run_capture((char *const[]){ "cliamp", "queue",
+							 found[i], NULL }, 5);
+		free(out);
+
+		/* The file name without its extension is a better title than
+		 * the path, and it is all there is: nothing here reads tags,
+		 * and neither does cliamp's queue. */
+		const char *base = strrchr(found[i], '/');
+		char shown[SYN_PATH];
+		snprintf(shown, sizeof(shown), "%s", base ? base + 1 : found[i]);
+		char *dot = strrchr(shown, '.');
+		if (dot)
+			*dot = '\0';
+		music_title_remember(titles, found[i], shown);
+	}
+	if (titles)
+		fclose(titles);
+
+	music_cmd("toggle");
+	printf("queued %d track%s from %s\n", n, n == 1 ? "" : "s", dir);
+	return EX_OK;
+}
+
+/* ── the source picker ───────────────────────────────────────────────────── */
+
+/*
+ * What a source DOES when it is chosen, which is the column the television
+ * acts on:
+ *
+ *   play     it is playing now — nothing else to do
+ *   albums   pick something from the library first (Plex)
+ *   browse   only cliamp's own interface can reach this one
+ *
+ * ⚠ THE COLUMN EXISTS SO THE SHELL DOES NOT HAVE TO KNOW THE LIST. Which
+ * sources can be queued from outside cliamp is a fact about cliamp, and a copy
+ * of it in QML is a copy that stops being true.
+ */
+static const char *source_action(const struct source *s)
+{
+	if (!s->queueable)
+		return "browse";
+	if (strcmp(s->id, "plex") == 0)
+		return "albums";
+	return "play";
+}
+
+static int big_music_sources(bool rec)
+{
+	const struct source *cur = music_source();
+	char dir[SYN_PATH];
+	bool plex_ready = false;
+	{
+		char u[256], t[192];
+		plex_ready = plex_conf(u, sizeof(u), t, sizeof(t));
+	}
+
+	if (rec)
+		rec_row(5, "id", "name", "current", "action", "note");
+
+	for (int i = 0; i < SOURCES_N; i++) {
+		const struct source *s = &SOURCES[i];
+		const char *note = "";
+
+		/* The notes are facts about THIS machine rather than about the
+		 * source, and they are here for one reason: a row that answers
+		 * a button press with an error is a row nobody can debug from
+		 * a sofa. Both of these are silent failures otherwise — the
+		 * music stops, nothing starts, and the menu looks fine.
+		 *
+		 * ⚠ `local` needs one as much as Plex does. Plenty of machines
+		 * have no music directory at all (this one does not: everything
+		 * is on the Plex server), and choosing it there would stop
+		 * whatever was playing to queue nothing. */
+		if (strcmp(s->id, "plex") == 0 && !plex_ready)
+			note = "not set up — run `cliamp setup`";
+		else if (strcmp(s->id, "local") == 0 && !music_dir(dir, sizeof(dir)))
+			note = "no music folder on this machine";
+		else if (!s->queueable)
+			note = "opens cliamp";
+
+		if (rec)
+			rec_row(5, s->id, s->name,
+				s == cur ? "1" : "0", source_action(s), note);
+		else
+			printf("%-8s %-14s %s%s%s\n", s->id, s->name,
+			       s == cur ? "· current" : "",
+			       note[0] ? "   " : "", note);
+	}
+	return EX_OK;
+}
+
+/*
+ * Choose a source.
+ *
+ * Written down FIRST and started SECOND: if the player refuses to come up, the
+ * setting is still what somebody asked for, and the next press of the Music
+ * tile uses it. The reverse order would lose the choice to a transient.
+ */
+static int big_music_source_set(const char *id)
+{
+	const struct source *s = source_by_id(id);
+	if (!s) {
+		fprintf(stderr, "syn-arcade: no music source called '%s' — "
+				"`syn-arcade big music source` lists them\n", id);
+		return EX_USAGE;
+	}
+
+	if (big_conf_set("music_source", s->id) != EX_OK) {
+		fputs("syn-arcade: could not write "
+		      "~/.config/syn-arcade/big.conf\n", stderr);
+		return EX_FAIL;
+	}
+
+	if (!music_restart()) {
+		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* Only the sources that arrive with something in the queue are played.
+	 * Plex needs an album picked and the two services need cliamp's own
+	 * interface; both are the caller's next move, and `action` above is
+	 * what tells it which. */
+	if (strcmp(s->id, "local") == 0)
+		return local_queue();
+	if (strcmp(s->id, "radio") == 0)
+		music_cmd("toggle");
+
+	printf("music source: %s\n", s->name);
+	return EX_OK;
+}
+
+/*
+ * Open cliamp itself, on the television.
+ *
+ * ⚠ THE HONEST ANSWER FOR TWO OF THE FIVE SOURCES. YouTube Music and Spotify
+ * are searched inside cliamp's own interface and are reachable no other way —
+ * there is no CLI verb that lists them and nothing to queue from outside. The
+ * alternative was a menu entry that sets a provider and then plays silence,
+ * which is the failure this whole file is written against.
+ *
+ * ⚠ THE HEADLESS PLAYER IS STOPPED FIRST. There can be exactly one cliamp on
+ * the socket; a second one started in a terminal while the pty instance is up
+ * finds the socket taken, and what appears on the television is a music player
+ * that will not accept a keypress.
+ *
+ * It is an ordinary application launch after that: the interface steps aside,
+ * the on-screen keyboard is available, and Guide comes back — with the music
+ * still playing, because the terminal instance IS the player now.
+ */
+static int big_music_browse(void)
+{
+	const char *term = terminal_prog();
+	if (!term) {
+		fputs("syn-arcade: no terminal is installed to open cliamp "
+		      "in\n", stderr);
+		return EX_FAIL;
+	}
+
+	music_stop_player();
+
+	const struct source *src = music_source();
+	char *argv[8];
+	int argc = 0;
+	argv[argc++] = (char *)term;
+
+	/* ⚠ `-e` for some and not for others, and it is not a preference:
+	 * syntty, alacritty and xterm take the command after -e; kitty and
+	 * foot take it as their own trailing arguments and treat -e as an
+	 * error or a legacy alias. Getting this wrong opens an empty terminal
+	 * on the television. */
+	if (strcmp(term, "kitty") != 0 && strcmp(term, "foot") != 0)
+		argv[argc++] = (char *)"-e";
+
+	argv[argc++] = (char *)"cliamp";
+	if (src && src->provider) {
+		argv[argc++] = (char *)"--provider";
+		argv[argc++] = (char *)src->provider;
+	}
+	argv[argc] = NULL;
+
+	return spawn_wait(argv, true);
+}
+
+/* Declared rather than moved: they belong with the dispatch below, which is
+ * the only other thing that parses an argument list. */
 static const char *first_operand(int argc, char **argv);
+static const char *second_operand(int argc, char **argv);
 
 /* ⚠ The verb is the first OPERAND, not argv[0], and `rec` is the caller's.
  * `--rec` is a global flag everywhere else in this command — `big music --rec
@@ -2725,14 +3729,15 @@ static int big_music(int argc, char **argv, bool rec)
 	 * sends somebody to edit a config file over a missing letter. */
 	static const char *const verbs[] = { "status", "play", "pause",
 					     "toggle", "next", "prev", "stop",
-					     "vis", NULL };
+					     "vis", "source", "plex", "browse",
+					     NULL };
 	bool known = false;
 	for (int i = 0; verbs[i] && !known; i++)
 		known = strcmp(verb, verbs[i]) == 0;
 	if (!known) {
 		fprintf(stderr, "syn-arcade: big music takes status, play, "
-				"pause, toggle, next, prev or stop "
-				"(got '%s')\n", verb);
+				"pause, toggle, next, prev, stop, source, plex "
+				"or browse (got '%s')\n", verb);
 		return EX_USAGE;
 	}
 
@@ -2746,6 +3751,28 @@ static int big_music(int argc, char **argv, bool rec)
 
 	if (!strcmp(verb, "status"))
 		return big_music_status(rec);
+
+	/*
+	 * Where the music comes from.
+	 *
+	 * ⚠ THE LIST IS A READ AND THE SET IS A RESTART, and both are this one
+	 * verb because they are one thing from the sofa: the picker asks what
+	 * the sources are, draws them, and hands back the one that was chosen.
+	 */
+	if (!strcmp(verb, "source")) {
+		const char *id = second_operand(argc, argv);
+		return id ? big_music_source_set(id) : big_music_sources(rec);
+	}
+
+	/* The Plex library: the albums, and playing one. */
+	if (!strcmp(verb, "plex")) {
+		const char *key = second_operand(argc, argv);
+		return key ? plex_play_album(key) : plex_albums(rec);
+	}
+
+	/* cliamp's own interface, for the sources nothing else can reach. */
+	if (!strcmp(verb, "browse"))
+		return big_music_browse();
 
 	/* ⚠ Only `play` starts anything. toggle/next/prev on a player that is
 	 * not running would otherwise START one and then skip a track in it,
@@ -2813,6 +3840,66 @@ static int big_music(int argc, char **argv, bool rec)
 	return EX_OK;		/* unreachable: the verb list above is closed */
 }
 
+/* ── the visualizer, as a program ────────────────────────────────────────── */
+
+/*
+ * projectM, pointed at whatever this machine is playing.
+ *
+ * ⚠ THE DEFAULT CAPTURE DEVICE IS A MICROPHONE, and that is the whole reason
+ * this is a command rather than the program's name in the table. A visualizer
+ * that opens the default source dances to the room: it reacts to somebody
+ * talking and sits still through the music. What is wanted is the MONITOR of
+ * the sink the music is going to — a recording of the output — and PulseAudio
+ * (PipeWire's server here) spells that `<sink>.monitor`.
+ *
+ * PULSE_SOURCE is how a client is told which one to open without changing
+ * anything system-wide. ⚠ Not the default SOURCE, which is a machine-wide
+ * setting: pointing that at a monitor would send the output of the speakers to
+ * every program that opens a microphone.
+ *
+ * ⚠ The sink is asked for at LAUNCH, not written into a config. This machine's
+ * default output is a Bluetooth headset one hour and an HDMI television the
+ * next, and a visualizer wired to the wrong one is silent with no explanation.
+ *
+ * SDL_AUDIO_INCLUDE_MONITORS is the same instruction for the SDL build, which
+ * hides monitor devices from its enumeration by default. It is set for both:
+ * an environment variable meant for a program that is not running costs
+ * nothing and saves a second code path.
+ */
+static int big_visualizer(void)
+{
+	const char *prog = visualizer_prog();
+	if (!prog) {
+		fputs("syn-arcade: projectM is not installed — "
+		      "synpkg install projectm-pulseaudio\n", stderr);
+		return EX_FAIL;
+	}
+
+	char *sink = run_capture((char *const[]){ "pactl", "get-default-sink",
+						  NULL }, 3);
+	if (sink) {
+		strip_trailing_newline(sink);
+		if (*sink) {
+			char src[320];
+			snprintf(src, sizeof(src), "%s.monitor", trim(sink));
+			setenv("PULSE_SOURCE", src, 1);
+		}
+		free(sink);
+	} else {
+		/* Not fatal: it will open whatever the server calls default,
+		 * and projectM has a device chooser of its own. Said out loud,
+		 * because "the visualizer is not moving" has no other clue. */
+		fputs("syn-arcade: could not ask which audio output is in use "
+		      "— the visualizer may be listening to a microphone\n",
+		      stderr);
+	}
+	setenv("SDL_AUDIO_INCLUDE_MONITORS", "1", 1);
+
+	execlp(prog, prog, (char *)NULL);
+	fprintf(stderr, "syn-arcade: could not start %s\n", prog);
+	return EX_FAIL;
+}
+
 /* ── the news shelf ──────────────────────────────────────────────────────── */
 
 /*
@@ -2873,6 +3960,49 @@ static bool xml_tag(const char *item, const char *tag, char *out, size_t n)
 		len = n - 1;
 	memcpy(out, a, len);
 	out[len] = '\0';
+	return true;
+}
+
+/*
+ * One ATTRIBUTE of one element: `<Track title="…" …>`.
+ *
+ * The news reader wants the text between two tags; Plex puts everything on
+ * attributes and one element per row, so it wants this instead. Same file,
+ * same reasoning: every shape read here is fixed and known, and an XML library
+ * would be a dependency for two loops.
+ *
+ * ⚠ THE LEADING SPACE IN THE PATTERN IS LOAD-BEARING. Plex's album rows carry
+ * both `title=` and `parentTitle=`, and a search for `title="` finds the
+ * artist's name on every row — an album list where every album is called after
+ * the band. A value cannot contain a raw quote (Plex escapes it as &#34;), so
+ * ` name="` cannot appear inside another attribute's text.
+ *
+ * ⚠ BOUNDED BY THE ELEMENT'S OWN '>'. Without it, an element that happens not
+ * to carry the attribute silently borrows the next element's — which is the
+ * same failure json_str's `end` argument exists to stop.
+ */
+static bool xml_attr(const char *tag, const char *name, char *out, size_t n)
+{
+	const char *end = strchr(tag, '>');
+
+	char pat[64];
+	snprintf(pat, sizeof(pat), " %s=\"", name);
+
+	const char *p = strstr(tag, pat);
+	if (!p || (end && p > end))
+		return false;
+	p += strlen(pat);
+
+	const char *q = strchr(p, '"');
+	if (!q)
+		return false;
+
+	size_t len = (size_t)(q - p);
+	if (len >= n)
+		len = n - 1;
+	memcpy(out, p, len);
+	out[len] = '\0';
+	xml_unescape(out);
 	return true;
 }
 
@@ -3933,6 +5063,21 @@ static const char *first_operand(int argc, char **argv)
 	return NULL;
 }
 
+/* The one after it — `big music source plex`, `big music plex 15305`. Skips
+ * flags for the same reason first_operand does: `--rec` may be anywhere. */
+static const char *second_operand(int argc, char **argv)
+{
+	bool seen = false;
+	for (int i = 0; i < argc; i++) {
+		if (argv[i][0] == '-')
+			continue;
+		if (seen)
+			return argv[i];
+		seen = true;
+	}
+	return NULL;
+}
+
 int cmd_big(int argc, char **argv)
 {
 	bool rec = opt_present(argc, argv, "--rec");
@@ -3987,6 +5132,12 @@ int cmd_big(int argc, char **argv)
 	 * something the television DRIVES rather than opens — see big_music. */
 	if (!strcmp(sub, "music"))
 		return big_music(rest_c, rest, rec);
+
+	/* projectM, told which audio to listen to. A tile in the Start menu
+	 * runs this through `big run visualizer --wait`, which is what fills
+	 * the screen and what brings the television back when it closes. */
+	if (!strcmp(sub, "visualizer"))
+		return big_visualizer();
 
 	/* The on-screen keyboard's typist, and the controller-as-mouse. Both
 	 * are streams the shell owns for as long as it needs them; neither is

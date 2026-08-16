@@ -94,6 +94,50 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = music ]; then
                 printf '%s\n' '{"ok":true,"visualizer":"Bars","bands":[0.78,0.55,0.91,0.36,0.52,0.18,0.31,0.09,0.11,0.04]}'
                 sleep 0.08
             done ;;
+        *" source "*)
+            # ⚠ THE LIST AND THE CHOICE ARE THE SAME VERB, told apart by
+            # whether there is an id after it. A stub that answered the list to
+            # both would make "the source was chosen" unobservable: the picker
+            # would redraw and nothing would prove a command had run.
+            if [ -n "\${4:-}" ] && [ "\${4}" != --rec ]; then
+                printf 'source %s\n' "\${4}" >> "$TMP/music.log"
+                exit 0
+            fi
+            printf 'id\tname\tcurrent\taction\tnote\n'
+            printf 'plex\tPlex\t0\talbums\t\n'
+            printf 'ytmusic\tYouTube%%20Music\t0\tbrowse\topens%%20cliamp\n'
+            printf 'spotify\tSpotify\t0\tbrowse\topens%%20cliamp\n'
+            printf 'local\tLocal%%20files\t0\tplay\t\n'
+            printf 'radio\tRadio\t1\tplay\t\n' ;;
+        *" plex "*)
+            if [ -n "\${4:-}" ] && [ "\${4}" != --rec ]; then
+                printf 'plex %s\n' "\${4}" >> "$TMP/music.log"
+                exit 0
+            fi
+            # ⚠ MORE ALBUMS THAN THE PANEL CAN SHOW. A dozen rows is what
+            # makes the list SCROLL, and a fixture of four would screenshot
+            # perfectly while the selection walked off the bottom edge on a
+            # real library of a hundred and thirty.
+            printf 'id\tname\tartist\tyear\n'
+            i=1
+            for a in "2Pacalypse%20Now|2Pac|1991" \
+                     "All%20Eyez%20on%20Me|2Pac|1996" \
+                     "Hybrid%20Theory|Linkin%20Park|2000" \
+                     "Meteora|Linkin%20Park|2003" \
+                     "The%20Dark%20Side%20of%20the%20Moon|Pink%20Floyd|1973" \
+                     "Wish%20You%20Were%20Here|Pink%20Floyd|1975" \
+                     "Kind%20of%20Blue|Miles%20Davis|1959" \
+                     "A%20Love%20Supreme|John%20Coltrane|1965" \
+                     "Rumours|Fleetwood%20Mac|1977" \
+                     "Nevermind|Nirvana|1991" \
+                     "OK%20Computer|Radiohead|1997" \
+                     "Discovery|Daft%20Punk|2001"; do
+                printf '%s\t%s\t%s\t%s\n' "\$i" \
+                    "\$(printf '%s' "\$a" | cut -d'|' -f1)" \
+                    "\$(printf '%s' "\$a" | cut -d'|' -f2)" \
+                    "\$(printf '%s' "\$a" | cut -d'|' -f3)"
+                i=\$((i + 1))
+            done ;;
         *)  printf '%s\n' "\$*" >> "$TMP/music.log" ;;
     esac
     exit 0
@@ -128,6 +172,25 @@ for launcher in lutris heroic; do
     printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/$launcher"
     chmod +x "$TMP/bin/$launcher"
 done
+
+# ⚠ AND CLIAMP, for a reason worth spelling out: the Music Source row exists
+# only when the player is one big screen mode can DRIVE, which big.c decides by
+# asking whether cliamp is installed. Without this stub the row is there on the
+# developer's machine and absent on CI — and the walk below counts rows. One
+# `down` would land on Desktop instead, whose job is Qt.quit(), and the run
+# would end four screenshots in while looking like it had finished.
+#
+# Nothing ever runs it: every cliamp call goes through `big music`, which the
+# syn-arcade stub above answers itself.
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/cliamp"
+chmod +x "$TMP/bin/cliamp"
+
+# projectM, for the same kind of reason: the Visualizer row is only there when
+# it is installed, and a menu screenshot that does not contain it proves
+# nothing about how it looks. It is never launched here — the walk below stays
+# off that row, and `big run` is a sleep anyway.
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/projectM-pulseaudio"
+chmod +x "$TMP/bin/projectM-pulseaudio"
 
 mkfifo "$TMP/nav.fifo"
 
@@ -459,7 +522,36 @@ shot 03c-start-menu           # Now Playing on top, then the four switches
 say right 0.5
 shot 03d-start-menu-next
 say down 0.4
-shot 03e-start-menu-moved
+shot 03e-start-menu-moved     # …and down one is Music Source
+
+# ── the source picker and the library behind it ─────────────────────────────
+#
+# ⚠ ACCEPT IS SAFE HERE AND NOWHERE ELSE IN THIS MENU, and the reason is the
+# same one the warning above gives: the selection is on Music Source, which is
+# a PAGE. One row up is Now Playing and two rows down is Desktop, and an accept
+# on the latter ends the run looking like a success.
+say accept 1.0
+shot 03g-source-picker        # five sources; Radio marked as the current one
+
+# Plex is the first row, so this needs no movement — which is what makes it
+# safe. Choosing it runs `big music source plex` (it lands in music.log) and
+# the page that follows is the library, because that is what the `action`
+# column said to do next.
+say accept 1.6
+shot 03h-plex-albums          # the album list, scrolling, artist and year
+
+# ⚠ PAST THE BOTTOM OF THE PANEL, which is the whole assertion. Six rows fit
+# and the fixture has twelve, so a selection still visible at row seven is a
+# list that scrolled to keep it — and one that is NOT visible is a menu that
+# has stopped responding as far as anybody watching can tell.
+for _ in 1 2 3 4 5 6; do say down 0.25; done
+shot 03i-plex-albums-scrolled
+
+# Playing one. `big music plex <id>` in music.log is the proof that the row
+# was wired to something; the menu goes back to its first page afterwards.
+say accept 1.2
+shot 03j-album-chosen
+
 say back 0.6
 shot 03f-start-menu-closed
 

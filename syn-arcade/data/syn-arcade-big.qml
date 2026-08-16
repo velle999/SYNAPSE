@@ -762,19 +762,115 @@ ShellRoot {
         return t.length ? (t[0].iconfile || "") : ""
     }
 
-    // What is behind the Start button: what is playing, then the machine's own
-    // switches in the order big.c lists them — the way out first, because it is
-    // the one somebody reaches for without having decided anything.
+    // ── where the music comes from ──────────────────────────────────────────
     //
-    // ⚠ ONE LIST, and the music row is an entry in it rather than a special
-    // case above it. Up and down have to walk the whole menu; a row drawn
+    // The picker, and the Plex library behind it. Both are records from big.c,
+    // for the same reason every other list here is: which sources exist, which
+    // one is chosen and what choosing it DOES are facts about cliamp, and a
+    // copy of them in QML is a copy that stops being true.
+    //
+    // ⚠ ASKED WHEN THE MENU OPENS, never on a timer. The albums are a hundred
+    // and thirty rows off a server; the sources are two file reads. Neither is
+    // worth a subprocess behind a full-screen game.
+    property var sourceItems: []
+    property var albumItems: []
+    property string menuBusy: ""
+
+    Process {
+        id: sourcesProc
+        command: [shell.bin, "big", "music", "source", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.sourceItems = shell.parseRecords(this.text).map(r => ({
+                    id: r.id, name: r.name, kind: "source",
+                    action: r.action, current: r.current === "1",
+                    // The row's second line: what this one is, said on the row
+                    // it applies to. "· playing now" is the only state a
+                    // picker has to show, and the note from C is the only
+                    // thing that knows a source is not set up.
+                    note: r.note && r.note.length ? r.note
+                          : (r.current === "1" ? "· playing from this now" : "")
+                }))
+            }
+        }
+    }
+
+    Process {
+        id: albumsProc
+        command: [shell.bin, "big", "music", "plex", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.albumItems = shell.parseRecords(this.text).map(r => ({
+                    id: r.id, name: r.name, kind: "album",
+                    note: r.artist + (r.year && r.year.length
+                                      ? "   ·   " + r.year : "")
+                }))
+                shell.menuBusy = ""
+            }
+        }
+    }
+
+    function refreshSources() {
+        if (!sourcesProc.running) sourcesProc.running = true
+    }
+
+    // Which source is playing, for the row that opens the picker. Empty until
+    // the first read comes back, and the row says nothing rather than guessing.
+    readonly property string musicSourceName: {
+        const cur = shell.sourceItems.filter(s => s.current)
+        return cur.length ? cur[0].name : ""
+    }
+
+    // Whether there is a player here that can be DRIVEN — which is what makes
+    // a source picker mean anything. big.c already decides this: the Music tile
+    // is an `action` when the player is cliamp and an `app` when it is anything
+    // else (see music_headless), so this reads the answer instead of keeping a
+    // second one.
+    readonly property bool musicDrivable: {
+        const t = shell.apps.filter(a => a.id === "music")
+        return t.length > 0 && t[0].kind === "action"
+    }
+
+    // What is behind the Start button: what is playing, where it comes from,
+    // then the machine's own switches in the order big.c lists them — the way
+    // out first, because it is the one somebody reaches for without having
+    // decided anything.
+    //
+    // ⚠ ONE LIST, and the music rows are entries in it rather than special
+    // cases above it. Up and down have to walk the whole menu; a row drawn
     // outside the model is a row the d-pad goes straight past.
+    //
+    // ⚠ AND THE MENU HAS PAGES NOW. The picker and the album list are the same
+    // list on a different page rather than a second panel: one delegate, one
+    // set of keys, and a d-pad that cannot end up driving the thing underneath.
+    property string menuPage: "main"		// main | source | albums
+
     readonly property var menuItems: {
+        if (shell.menuPage === "source") return shell.sourceItems
+        if (shell.menuPage === "albums") return shell.albumItems
+
         const out = []
         if (shell.musicLive)
             out.push({ id: "now-playing", kind: "music",
                        name: shell.music.title || "Music" })
+        if (shell.musicDrivable)
+            out.push({ id: "music-source", kind: "page", page: "source",
+                       name: "Music Source",
+                       note: shell.musicSourceName
+                             ? "· " + shell.musicSourceName : "" })
         return out.concat(shell.byShelf("system"))
+    }
+
+    function openMenuPage(page) {
+        shell.menuPage = page
+        shell.menuIndex = 0
+        if (page === "albums") {
+            // Said out loud, because a server on the other end of a network
+            // can take a moment and an empty panel reads as a broken button.
+            shell.menuBusy = "Reading the library…"
+            shell.albumItems = []
+            if (!albumsProc.running) albumsProc.running = true
+        }
     }
 
     // ── shelves that share a row: BANDS ─────────────────────────────────────
@@ -1296,11 +1392,14 @@ ShellRoot {
         // first frames before `big apps` has answered.
         if (!shell.menuItems.length) return
         shell.menuIndex = 0
+        shell.menuPage = "main"
+        shell.menuBusy = ""
         shell.menuOpen = true
         // Asked as it opens, not when it was last drawn: the track may have
         // changed since, and a menu that says the wrong song is worse than one
         // that takes a moment to say the right one.
         shell.refreshMusic()
+        shell.refreshSources()
     }
 
     // Transport, which is the one thing in this menu that does NOT close it —
@@ -1326,17 +1425,104 @@ ShellRoot {
         shell.menuIndex = Math.max(0, Math.min(n - 1, shell.menuIndex + d))
     }
 
+    // ── choosing a source, and picking an album ─────────────────────────────
+    //
+    // Both are one command that takes a couple of seconds — the player is
+    // stopped and started again, and an album is queued a track at a time — so
+    // both say so on the panel while they run. ⚠ The Starting… overlay cannot
+    // do that job here: it is drawn UNDER the menu, which is the right order
+    // for a tile launch and the wrong one for something happening inside the
+    // menu itself.
+    //
+    // ⚠ GUARDED ON `running`. Setting `running = true` on a quickshell Process
+    // that is already running is a SILENT no-op, and these are the two places
+    // in this file where somebody can press A twice in a second.
+    function chooseSource(it) {
+        if (sourceSetProc.running) return
+        shell.menuBusy = "Switching to " + it.name + "…"
+        sourceSetProc.next = it.action || "play"
+        sourceSetProc.command = [shell.bin, "big", "music", "source", it.id]
+        sourceSetProc.running = true
+    }
+
+    Process {
+        id: sourceSetProc
+        property string next: "play"
+        onExited: {
+            shell.menuBusy = ""
+            shell.refreshSources()
+            shell.refreshMusic()
+
+            // What happens NEXT is the source's own answer, not this file's:
+            // Plex has a library to pick from, YouTube Music and Spotify are
+            // reachable only inside cliamp, and the other two are already
+            // playing. See source_action() in big.c.
+            if (sourceSetProc.next === "albums") {
+                shell.openMenuPage("albums")
+            } else if (sourceSetProc.next === "browse") {
+                shell.menuOpen = false
+                shell.menuPage = "main"
+                shell.launchApp({ id: "music-browse", name: "cliamp",
+                                  pointer: "0", keys: "1" },
+                                ["big", "music", "browse"])
+            } else {
+                shell.menuPage = "main"
+                shell.menuIndex = 0
+            }
+        }
+    }
+
+    function playAlbum(it) {
+        if (albumPlayProc.running) return
+        shell.menuBusy = "Loading " + it.name + "…"
+        albumPlayProc.command = [shell.bin, "big", "music", "plex", it.id]
+        albumPlayProc.running = true
+    }
+
+    Process {
+        id: albumPlayProc
+        onExited: {
+            shell.menuBusy = ""
+            shell.menuPage = "main"
+            shell.menuIndex = 0
+            shell.refreshMusic()
+        }
+    }
+
     function menuActivate() {
         const it = shell.menuItems[shell.menuIndex]
-        if (it && it.kind === "music") {
+        if (!it) return
+
+        if (it.kind === "music") {
             shell.musicCmd("toggle")
             return				// stays open, deliberately
         }
+        // The pages stay open too — they ARE the menu, one level down.
+        if (it.kind === "page") {
+            shell.openMenuPage(it.page)
+            return
+        }
+        if (it.kind === "source") {
+            shell.chooseSource(it)
+            return
+        }
+        if (it.kind === "album") {
+            shell.playAlbum(it)
+            return
+        }
+
         // Closed FIRST. Sleep comes back to this screen, and coming back to a
         // menu somebody left open half an hour ago is the interface having
         // remembered the wrong thing.
         shell.menuOpen = false
-        shell.runAction(it)
+        shell.menuPage = "main"
+        if (shell.runAction(it)) return
+
+        // ⚠ AND AN APPLICATION IF IT IS ONE. runAction takes the switches and
+        // the way out; everything else on this menu is a tile like any other,
+        // and before the visualizer arrived there was nothing here that was —
+        // so a `kind: "app"` row reached this point and QUIETLY DID NOTHING.
+        shell.launchApp(it, ["big", "run", it.id, "--wait"])
     }
 
     // ── one place where every input arrives ─────────────────────────────────
@@ -1381,9 +1567,25 @@ ShellRoot {
             case "left":   if (onMusic) shell.musicCmd("prev"); break
             case "right":  if (onMusic) shell.musicCmd("next"); break
             case "accept": shell.menuActivate(); break
+            // ⚠ BACK GOES UP A PAGE, and only closes from the top one — the
+            // same rule B follows on the shelves. A hundred and thirty albums
+            // that shut the whole menu on one wrong press is a list nobody
+            // browses twice.
             case "back":
+                if (shell.menuPage !== "main") {
+                    shell.menuPage = "main"
+                    shell.menuIndex = 0
+                } else {
+                    shell.menuOpen = false
+                }
+                break
+            // Start and Guide close it outright from wherever it is: they are
+            // the way OUT of the menu, not a step in it.
             case "menu":
-            case "guide":  shell.menuOpen = false; break
+            case "guide":
+                shell.menuOpen = false
+                shell.menuPage = "main"
+                break
             default: break
             }
             return
@@ -2497,7 +2699,14 @@ ShellRoot {
                     // it against the row it is supposed to sit above.
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: footer.height + win.u * 1.2
-                    width: Math.min(parent.width * 0.42, win.u * 24)
+                    // Wider on the album page: a menu of one-word switches and
+                    // a menu of "Grandmaster Flash and the Furious Five" are
+                    // not the same panel, and elide is not an answer when
+                    // every row ends in the same three dots.
+                    width: Math.min(parent.width * (shell.menuPage === "albums"
+                                                    ? 0.60 : 0.42),
+                                    win.u * (shell.menuPage === "albums"
+                                             ? 34 : 24))
                     height: menuCol.implicitHeight + win.u * 2.4
                     radius: win.u * 0.8
                     color: "#1a1430"
@@ -2511,7 +2720,12 @@ ShellRoot {
                         spacing: win.u * 0.3
 
                         Text {
-                            text: shell.musicLive ? "NOW PLAYING" : "SYSTEM"
+                            text: {
+                                if (shell.menuBusy) return shell.menuBusy.toUpperCase()
+                                if (shell.menuPage === "source") return "MUSIC SOURCE"
+                                if (shell.menuPage === "albums") return "PLEX ALBUMS"
+                                return shell.musicLive ? "NOW PLAYING" : "SYSTEM"
+                            }
                             color: win.dim
                             font.pixelSize: win.u * 0.8
                             font.letterSpacing: win.u * 0.12
@@ -2520,10 +2734,37 @@ ShellRoot {
                             bottomPadding: win.u * 0.3
                         }
 
-                        Repeater {
+                        // ── the rows ────────────────────────────────────
+                        //
+                        // ⚠ A LIST, NOT A REPEATER, and that arrived with the
+                        // album page. A Repeater builds every row and the
+                        // Column grows to hold them: fine for six switches,
+                        // and a hundred and thirty albums is a panel taller
+                        // than the television with its first row off the top
+                        // of the screen. The list is capped at ten rows and
+                        // scrolls; the panel is still only as tall as what it
+                        // has to draw.
+                        ListView {
+                            id: menuList
+                            width: menuCol.width
+                            height: Math.min(contentHeight,
+                                             win.u * (shell.menuPage === "main"
+                                                      ? 26 : 22))
+                            spacing: win.u * 0.3
+                            clip: true
+                            interactive: false
                             model: shell.menuItems
+                            currentIndex: shell.menuIndex
+                            // ⚠ Keeping the SELECTION on screen is the whole
+                            // reason this scrolls: the d-pad moves an index,
+                            // and an index that has walked off the bottom is a
+                            // menu that has stopped responding as far as
+                            // anybody watching can tell.
+                            onCurrentIndexChanged:
+                                menuList.positionViewAtIndex(menuList.currentIndex,
+                                                             ListView.Contain)
 
-                            Rectangle {
+                            delegate: Rectangle {
                                 id: entry
                                 required property var modelData
                                 required property int index
@@ -2534,7 +2775,14 @@ ShellRoot {
                                 readonly property bool isMusic:
                                     entry.modelData.kind === "music"
 
-                                width: menuCol.width
+                                // A row carries a second line when it has
+                                // something to say about itself: an album's
+                                // artist, a source that is not set up, the
+                                // transport legend on the music row.
+                                readonly property bool hasNote:
+                                    String(entry.modelData.note || "") !== ""
+
+                                width: menuList.width
                                 // The music row is taller because it carries two
                                 // lines: what is playing, and what the d-pad does
                                 // to it. Nothing else in this menu needs saying
@@ -2545,7 +2793,9 @@ ShellRoot {
                                 // solid bars — legible up close, and exactly
                                 // the sort of thing that stops being legible at
                                 // four metres.
-                                height: entry.isMusic ? win.u * 4.0 : win.u * 2.6
+                                height: entry.isMusic ? win.u * 4.0
+                                        : (entry.hasNote ? win.u * 3.4
+                                                         : win.u * 2.6)
                                 radius: win.u * 0.4
                                 color: entry.chosen ? "#2b2450" : "transparent"
                                 border.width: entry.chosen
@@ -2565,15 +2815,26 @@ ShellRoot {
                                 // this is read from four metres away.
                                 clip: true
 
+                                // ⚠ EVERY ANCHOR AND SIZE IN THIS DELEGATE
+                                // NAMES `entry`, NEVER `parent`. A ListView
+                                // reparents a delegate to null on its way out,
+                                // and a binding that reads `parent.width` at
+                                // that moment throws "cannot read property of
+                                // null" — a stream of TypeErrors in the log
+                                // and nothing wrong on screen, which is a
+                                // fault that gets ignored until it is hiding a
+                                // real one. It arrived the moment these rows
+                                // stopped being a Repeater in a Column.
                                 Row {
+                                    id: meter
                                     visible: entry.isMusic
                                              && shell.musicBands.length > 0
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.bottom: parent.bottom
-                                    anchors.margins: parent.border.width
+                                    anchors.left: entry.left
+                                    anchors.right: entry.right
+                                    anchors.bottom: entry.bottom
+                                    anchors.margins: entry.border.width
                                     // The bottom band only. See the row height.
-                                    height: parent.height * 0.30
+                                    height: entry.height * 0.30
                                     spacing: win.u * 0.12
 
                                     Repeater {
@@ -2589,13 +2850,13 @@ ShellRoot {
                                             // assuming the ten cliamp sends
                                             // today.
                                             width: Math.max(1,
-                                                (parent.width
+                                                (meter.width
                                                  - (shell.musicBands.length - 1)
-                                                   * parent.spacing)
+                                                   * meter.spacing)
                                                 / shell.musicBands.length)
-                                            anchors.bottom: parent.bottom
+                                            anchors.bottom: meter.bottom
                                             height: Math.max(1,
-                                                parent.height
+                                                meter.height
                                                 * Math.min(1, Math.max(0,
                                                     Number(bar.modelData) || 0)))
                                             radius: win.u * 0.08
@@ -2634,7 +2895,7 @@ ShellRoot {
                                 // opening under a stationary pointer would
                                 // choose whatever it opened under.
                                 MouseArea {
-                                    anchors.fill: parent
+                                    anchors.fill: entry
                                     onClicked: {
                                         shell.menuIndex = entry.index
                                         shell.menuActivate()
@@ -2643,7 +2904,7 @@ ShellRoot {
 
                                 Image {
                                     id: entryIcon
-                                    anchors.left: parent.left
+                                    anchors.left: entry.left
                                     anchors.leftMargin: win.u * 0.7
                                     // ⚠ To the TEXT, not to the row. On the
                                     // music row the row's middle is where the
@@ -2652,7 +2913,15 @@ ShellRoot {
                                     height: win.u * 1.4
                                     width: height
                                     source: {
-                                        if (entry.isMusic)
+                                        // Every music row borrows the Music
+                                        // tile's glyph — what is playing, where
+                                        // it comes from, and an album on the
+                                        // server are all the same subject, and
+                                        // three near-identical drawings would
+                                        // be three things to keep in step.
+                                        const k = entry.modelData.kind
+                                        if (k === "music" || k === "page"
+                                            || k === "source" || k === "album")
                                             return shell.musicIcon
                                                    ? "file://" + shell.musicIcon : ""
                                         return entry.modelData.iconfile
@@ -2675,20 +2944,20 @@ ShellRoot {
                                     id: entryText
                                     anchors.left: entryIcon.right
                                     anchors.leftMargin: win.u * 0.7
-                                    anchors.right: parent.right
+                                    anchors.right: entry.right
                                     anchors.rightMargin: win.u * 0.7
                                     // One anchor with a computed margin rather
                                     // than two conditional ones: an ordinary
                                     // row centres, and the music row sits up
                                     // to leave the meter its band.
-                                    anchors.top: parent.top
+                                    anchors.top: entry.top
                                     anchors.topMargin: entry.isMusic
                                         ? win.u * 0.5
-                                        : (parent.height - entryText.height) / 2
+                                        : (entry.height - entryText.height) / 2
                                     spacing: win.u * 0.15
 
                                     Text {
-                                        width: parent.width
+                                        width: entryText.width
                                         text: entry.modelData.name || ""
                                         color: entry.chosen ? win.ink : win.dim
                                         font.pixelSize: win.u * 1.0
@@ -2705,17 +2974,41 @@ ShellRoot {
                                     // the selection, and a legend at the bottom
                                     // of the screen cannot say "except here".
                                     Text {
-                                        visible: entry.isMusic
-                                        width: parent.width
-                                        text: (String(shell.music.state) === "playing"
+                                        visible: entry.isMusic || entry.hasNote
+                                        width: entryText.width
+                                        text: entry.isMusic
+                                            ? (String(shell.music.state) === "playing"
                                                ? "Playing" : "Paused")
                                               + "   ·   A pause   ·   ‹ › track"
+                                            : String(entry.modelData.note || "")
                                         color: win.dim
                                         font.pixelSize: win.u * 0.75
                                         elide: Text.ElideRight
                                     }
                                 }
                             }
+                        }
+
+                        // ⚠ AN EMPTY PAGE HAS TO SAY WHY. A panel with a
+                        // heading and nothing under it is what a server that
+                        // did not answer looks like, and from a sofa it is
+                        // indistinguishable from a button that half worked.
+                        Text {
+                            visible: shell.menuPage !== "main"
+                                     && shell.menuItems.length === 0
+                                     && shell.menuBusy === ""
+                            width: menuCol.width
+                            wrapMode: Text.WordWrap
+                            leftPadding: win.u * 0.7
+                            topPadding: win.u * 0.4
+                            bottomPadding: win.u * 0.4
+                            color: win.dim
+                            font.pixelSize: win.u * 0.9
+                            text: shell.menuPage === "albums"
+                                ? "Nothing came back from Plex. Check the "
+                                  + "server, or run `cliamp setup` to give it "
+                                  + "an address and a token."
+                                : "Nothing to choose from."
                         }
                     }
                 }
