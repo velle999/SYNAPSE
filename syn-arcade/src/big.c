@@ -954,7 +954,7 @@ static const char *music_prog(void)
  * be one definition of "suspend this machine", or the couch and the desk drift
  * apart.
  *
- * ── The four columns that are not the command ───────────────────────────────
+ * ── The five columns that are not the command ───────────────────────────────
  *
  *   shelf    which row of the television this belongs on. The shelf is a
  *            property of the TILE and not of the QML, so adding one here puts
@@ -967,10 +967,26 @@ static const char *music_prog(void)
  *            Big Picture) and exactly right in a web browser.
  *   keys     whether the on-screen keyboard is worth offering. A terminal and
  *            a browser need one; RetroArch does not.
+ *   full     whether this tile needs HELP filling the screen.
+ *
+ *            A window is what a desktop wants and a television does not: from
+ *            the sofa, a titlebar and a strip of wallpaper around the edge are
+ *            the whole difference between an appliance and somebody's computer
+ *            left switched on. So a tile press asks the compositor to
+ *            fullscreen what it opened — see fullscreen_when_ready below.
+ *
+ *            ⚠ FALSE is the interesting value, and it does not mean "leave it
+ *            in a window". Steam Big Picture, RetroArch and Kodi already open
+ *            full-screen, and plexhtpc is the HTPC build of Plex for exactly
+ *            this reason. Asking on their behalf buys nothing and costs
+ *            something: Steam maps a small startup splash BEFORE Big Picture
+ *            itself, and helping would blow that splash up to fill a wall for
+ *            a second on the way in. The rule is "does this need help", not
+ *            "should this be full-screen".
  */
 struct row {
 	const char *id, *name, *exec, *icon, *kind, *shelf;
-	bool pointer, keys;
+	bool pointer, keys, full;
 };
 
 static int apps_table(struct row *rows, int max)
@@ -979,73 +995,76 @@ static int apps_table(struct row *rows, int max)
 	(void)max;	/* the table is a literal; the array is sized for it */
 
 	/* ── play: the game launchers ── */
+	/* Big Picture is full-screen the moment it finishes starting, and gets
+	 * there through a splash window that must not be helped. */
 	if (have("steam"))
 		rows[n++] = (struct row){ "steam-bpm", "Steam Big Picture",
 			"syn-arcade big steam", "steam", "app", "play",
-			false, false };
-	if (have("retroarch"))
+			false, false, false };
+	if (have("retroarch"))		/* --fullscreen, up in the exec */
 		rows[n++] = (struct row){ "retroarch", "RetroArch",
 			"retroarch --fullscreen", "retroarch", "app", "play",
-			false, false };
+			false, false, false };
 	if (have("lutris"))
 		rows[n++] = (struct row){ "lutris", "Lutris", "lutris",
-			"lutris", "app", "play", true, false };
+			"lutris", "app", "play", true, false, true };
 	if (have("heroic"))
 		rows[n++] = (struct row){ "heroic", "Heroic", "heroic",
-			"heroic", "app", "play", true, false };
+			"heroic", "app", "play", true, false, true };
 	if (have("moonlight"))
 		rows[n++] = (struct row){ "moonlight", "Moonlight", "moonlight",
-			"moonlight", "app", "play", true, false };
+			"moonlight", "app", "play", true, false, true };
 
 	/* ── media ── */
 	{
 		const char *music = music_prog();
 		if (music)
 			rows[n++] = (struct row){ "music", "Music", music,
-				"music", "app", "media", true, false };
+				"music", "app", "media", true, false, true };
 	}
-	if (have("kodi"))
+	if (have("kodi"))		/* opens full-screen by itself */
 		rows[n++] = (struct row){ "kodi", "Kodi", "kodi", "kodi", "app",
-			"media", false, false };
+			"media", false, false, false };
 	if (have("plex-desktop"))
 		rows[n++] = (struct row){ "plex", "Plex", "plex-desktop",
-			"plex", "app", "media", true, false };
-	else if (have("plexhtpc"))
+			"plex", "app", "media", true, false, true };
+	else if (have("plexhtpc"))	/* the HTPC build: already full-screen */
 		rows[n++] = (struct row){ "plex", "Plex", "plexhtpc",
-			"plex", "app", "media", true, false };
+			"plex", "app", "media", true, false, false };
 	if (have("jellyfinmediaplayer"))
 		rows[n++] = (struct row){ "jellyfin", "Jellyfin",
 			"jellyfinmediaplayer", "jellyfin", "app", "media",
-			true, false };
+			true, false, true };
 	else if (have("jellyfin-media-player"))
 		rows[n++] = (struct row){ "jellyfin", "Jellyfin",
 			"jellyfin-media-player", "jellyfin", "app", "media",
-			true, false };
+			true, false, true };
 
 	/* ── apps: the two that need a pointer and a keyboard ── */
 	if (browser_prog())
 		rows[n++] = (struct row){ "web", "Web", browser_prog(),
-			"firefox", "app", "apps", true, true };
+			"firefox", "app", "apps", true, true, true };
 	if (terminal_prog())
 		rows[n++] = (struct row){ "terminal", "Terminal",
-			terminal_prog(), "terminal", "app", "apps", true, true };
+			terminal_prog(), "terminal", "app", "apps",
+			true, true, true };
 	if (have("syn-arcade"))
 		rows[n++] = (struct row){ "arcade", "Controllers",
 			"syn-arcade gui", "syn-arcade", "app", "apps",
-			true, false };
+			true, false, true };
 
 	/* The way OUT is a tile, and it is not optional. A full-screen surface
 	 * with exclusive keyboard focus that can only be dismissed by a key
 	 * combination somebody has to already know is a trap, and on a gamepad
 	 * there is no key combination at all. */
 	rows[n++] = (struct row){ "desktop", "Desktop", "", "desktop", "action",
-		"system", false, false };
+		"system", false, false, false };
 	rows[n++] = (struct row){ "sleep", "Sleep", "systemctl suspend",
-		"sleep", "action", "system", false, false };
+		"sleep", "action", "system", false, false, false };
 	rows[n++] = (struct row){ "restart", "Restart", "systemctl reboot",
-		"restart", "action", "system", false, false };
+		"restart", "action", "system", false, false, false };
 	rows[n++] = (struct row){ "poweroff", "Power off", "systemctl poweroff",
-		"poweroff", "action", "system", false, false };
+		"poweroff", "action", "system", false, false, false };
 
 	return n;
 }
@@ -1058,20 +1077,249 @@ static int big_apps(bool rec)
 	int n = apps_table(rows, APPS_MAX);
 
 	if (rec) {
-		rec_row(8, "id", "name", "exec", "icon", "kind", "shelf",
-			"pointer", "keys");
+		/* `full` is APPENDED and not slotted in among the others: the
+		 * shell reads columns by name, but the test suite reads a few
+		 * of them by number, and so does anybody at a prompt with a
+		 * `cut -f`. A new column belongs on the end. */
+		rec_row(9, "id", "name", "exec", "icon", "kind", "shelf",
+			"pointer", "keys", "full");
 		for (int i = 0; i < n; i++)
-			rec_row(8, rows[i].id, rows[i].name, rows[i].exec,
+			rec_row(9, rows[i].id, rows[i].name, rows[i].exec,
 				rows[i].icon, rows[i].kind, rows[i].shelf,
 				rows[i].pointer ? "1" : "0",
-				rows[i].keys ? "1" : "0");
+				rows[i].keys ? "1" : "0",
+				rows[i].full ? "1" : "0");
 	} else {
 		for (int i = 0; i < n; i++)
-			printf("%-10s %-8s %-20s %s%s\n", rows[i].id,
+			printf("%-10s %-8s %-20s %s%s%s\n", rows[i].id,
 			       rows[i].shelf, rows[i].name,
 			       rows[i].exec[0] ? rows[i].exec : "(built in)",
-			       rows[i].pointer ? "   [mouse]" : "");
+			       rows[i].pointer ? "   [mouse]" : "",
+			       rows[i].full ? "   [fullscreen]" : "");
 	}
+	return EX_OK;
+}
+
+/* ── filling the screen ──────────────────────────────────────────────────── */
+
+/*
+ * The compositor is the only thing that can make a launch fill a television,
+ * and it offers exactly one verb for it: `synctl dispatch fullscreen_toggle`.
+ *
+ * ⚠ THAT VERB IS A TOGGLE, AND IT ACTS ON WHATEVER HAS THE FOCUS WHEN IT
+ * ARRIVES. There is no "set fullscreen" to reach for — input.c has the one
+ * action and it flips `!focused_view->fullscreen`. Fired blindly after a
+ * launch it is wrong in both directions: too early and it fullscreens the
+ * window the tile was covering, and on anything that got there by itself it
+ * lands on a window that is ALREADY full and puts it back in a box. That
+ * second case is not hypothetical — it is half the play shelf.
+ *
+ * So this looks before it leaps:
+ *
+ *   1. remember what had the focus BEFORE the launch, so a new window can be
+ *      told from the old one. `synctl activewindow` prints {} when nothing is
+ *      focused, which on a television is the ordinary case.
+ *   2. poll until a DIFFERENT window has the focus. Something that never
+ *      shows one — a single-instance app that handed its argument to the copy
+ *      already running — times out, and nothing is toggled.
+ *   3. let it SETTLE and read the state AGAIN, because an app that
+ *      fullscreens itself does so a moment after mapping and the gap between
+ *      is long enough to sample. Without this the toggle races the app, and
+ *      when it wins the viewer loses.
+ *   4. toggle only if it is still not fullscreen.
+ *
+ * Step 3 is what makes step 4 safe, and the `full` column is what keeps this
+ * away from the tiles where even a correct answer is not worth the wait.
+ */
+struct focus {
+	char app_id[128];
+	long pid;
+	bool fullscreen;
+	bool any;		/* false when nothing at all is focused */
+};
+
+/*
+ * What synui says has the focus. False means the question could not be ASKED
+ * — no synctl on PATH, no compositor listening — which is different from `{}`,
+ * "nothing is focused", and the difference decides whether to bother waiting.
+ */
+static bool focused_window(struct focus *f)
+{
+	char *argv[] = { (char *)"synctl", (char *)"activewindow", NULL };
+	char *json = run_capture(argv, 2);
+	if (!json)
+		return false;
+
+	memset(f, 0, sizeof(*f));
+	f->pid = -1;
+
+	/*
+	 * Looked up by name with no JSON parser, the same way focused_output
+	 * reads `synctl outputs`, and for the same reason: this file and ipc.c
+	 * both know the shape.
+	 *
+	 * Safe against a hostile window TITLE, which is the one field here a
+	 * stranger controls. ipc.c escapes the quotes inside a string, so a
+	 * page that titles itself `","fullscreen":true` arrives as
+	 * \",\"fullscreen\":true — and `"fullscreen":` cannot match across the
+	 * backslash. The spellings searched for below exist nowhere but as
+	 * real keys.
+	 */
+	const char *p = strstr(json, "\"app_id\":\"");
+	if (p) {
+		p += 10;
+		const char *e = strchr(p, '"');
+		if (e) {
+			int len = (int)(e - p);
+			if (len > (int)sizeof(f->app_id) - 1)
+				len = (int)sizeof(f->app_id) - 1;
+			snprintf(f->app_id, sizeof(f->app_id), "%.*s", len, p);
+			f->any = true;
+		}
+	}
+	if ((p = strstr(json, "\"pid\":")))
+		f->pid = strtol(p + 6, NULL, 10);
+	f->fullscreen = strstr(json, "\"fullscreen\":true") != NULL;
+
+	free(json);
+	return true;
+}
+
+/* pid AND app_id, because either alone is a false match waiting to happen: pids
+ * are reused, and two windows of one application share an app_id. */
+static bool same_window(const struct focus *a, const struct focus *b)
+{
+	return a->any && b->any && a->pid == b->pid &&
+	       strcmp(a->app_id, b->app_id) == 0;
+}
+
+#define FULL_STEP_MS      250	/* between looks */
+#define FULL_WAIT_MS    15000	/* before giving up on a window appearing */
+#define FULL_SETTLE_MS    800	/* for an app to fullscreen itself first */
+
+static void sleep_ms(int ms)
+{
+	struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
+	while (nanosleep(&ts, &ts) < 0 && errno == EINTR)
+		;
+}
+
+static void fullscreen_when_ready(const struct focus *before)
+{
+	struct focus now;
+
+	for (int waited = 0; waited < FULL_WAIT_MS; waited += FULL_STEP_MS) {
+		sleep_ms(FULL_STEP_MS);
+
+		if (!focused_window(&now) || !now.any)
+			continue;		/* nothing focused yet */
+		if (same_window(&now, before))
+			continue;		/* still the old window */
+
+		sleep_ms(FULL_SETTLE_MS);
+
+		if (!focused_window(&now) || !now.any)
+			return;			/* it went away again */
+		/* Or it went away and handed the focus BACK. Toggling now
+		 * would fullscreen a window nobody asked about. */
+		if (same_window(&now, before))
+			return;
+		if (now.fullscreen)
+			return;			/* it got there on its own */
+
+		char *argv[] = { (char *)"synctl", (char *)"dispatch",
+				 (char *)"fullscreen_toggle", NULL };
+		free(run_capture(argv, 2));
+		return;
+	}
+}
+
+/*
+ * ⚠ THE WAITING ABOVE HAPPENS IN A CHILD, and that is not tidiness.
+ *
+ * The waitpid in spawn_wait is how big screen mode learns the application has
+ * been closed — and the shell tells a real close from a single-instance
+ * hand-off BY HOW LONG IT TOOK: under three seconds is a hand-off, see the
+ * `lived < 3000` comment in syn-arcade-big.qml. Polling for a window on the
+ * way to that wait would add up to fifteen seconds to every launch, turning
+ * every hand-off into a "close" and throwing the television back over the
+ * browser somebody just opened. That is precisely the bug the QML comment
+ * exists to prevent, so this has to run BESIDE the wait and not before it.
+ *
+ * Double-forked so that nothing has to reap it: spawn_wait's own waitpid names
+ * a single pid and may block for hours, which would leave a plain child a
+ * zombie for all of them. The middle process exits at once and init adopts the
+ * one doing the work.
+ *
+ * Its stdio goes to /dev/null for the reason spawn_detached documents at
+ * length — this outlives its starter, and a launcher hands no descendant
+ * anything the caller owns.
+ */
+static void fullscreen_after_launch(const struct focus *before)
+{
+	pid_t mid = fork();
+	if (mid < 0)
+		return;
+
+	if (mid == 0) {
+		if (fork() == 0) {
+			setsid();
+			int null = open("/dev/null", O_RDWR);
+			if (null >= 0) {
+				dup2(null, STDIN_FILENO);
+				dup2(null, STDOUT_FILENO);
+				dup2(null, STDERR_FILENO);
+				if (null > STDERR_FILENO)
+					close(null);
+			}
+			fullscreen_when_ready(before);
+			_exit(0);
+		}
+		_exit(0);
+	}
+
+	int st = 0;
+	while (waitpid(mid, &st, 0) < 0 && errno == EINTR)
+		;
+}
+
+/*
+ * Start something, fill the screen with it, and stay alive exactly as long as
+ * it does.
+ *
+ * The two blocking callers — a tile press and a headline — did the spawn and
+ * the wait identically, and the fullscreen step has to sit between them: any
+ * earlier and there is no window to fullscreen, any later and the application
+ * has already been closed.
+ */
+static int spawn_wait(char *const argv[], bool fill)
+{
+	/*
+	 * Asked BEFORE the spawn, and its failure is the answer to whether the
+	 * waiter is worth starting at all: `false` here means no synctl and no
+	 * compositor to ask, so there would be fifteen seconds of forking to
+	 * reach a question nobody can answer. `{}` — nothing focused — comes
+	 * back TRUE and is a perfectly good starting point.
+	 */
+	struct focus before;
+	memset(&before, 0, sizeof(before));
+	if (fill && !focused_window(&before))
+		fill = false;
+
+	pid_t pid = 0;
+	int rc = spawn_detached_pid(argv, &pid);
+	if (rc != EX_OK || pid <= 0)
+		return rc;
+
+	if (fill)
+		fullscreen_after_launch(&before);
+
+	/* ⚠ EINTR is not "it finished". A signal arriving while this blocks
+	 * would otherwise be read as the application closing, and big screen
+	 * mode would come back over the top of something still in use. */
+	int st = 0;
+	while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
+		;
 	return EX_OK;
 }
 
@@ -1151,22 +1399,14 @@ static int big_run(const char *id, bool wait_for_it)
 		if (!argc)
 			return EX_FAIL;
 
+		/* Without --wait this is not a tile press from the television:
+		 * it is somebody at a prompt, or one of the system actions,
+		 * which open no window to fill. Filling the screen belongs to
+		 * the shell's launch path and not to the verb. */
 		if (!wait_for_it)
 			return spawn_detached(argv);
 
-		pid_t pid = 0;
-		int rc = spawn_detached_pid(argv, &pid);
-		if (rc != EX_OK || pid <= 0)
-			return rc;
-
-		/* ⚠ EINTR is not "it finished". A signal arriving while this
-		 * blocks would otherwise be read as the application closing,
-		 * and big screen mode would come back over the top of a browser
-		 * somebody is still using. */
-		int st = 0;
-		while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
-			;
-		return EX_OK;
+		return spawn_wait(argv, rows[i].full);
 	}
 
 	fprintf(stderr, "syn-arcade: no tile called '%s'\n", id);
@@ -1342,15 +1582,12 @@ static int big_open(const char *url, bool wait_for_it)
 	 * process hands the URL to the first over its own socket and is done —
 	 * so the shell must not treat this returning as "they finished
 	 * reading". It does not: it stays out of the way until Guide is
-	 * pressed, and only an app that was actually started brings it back. */
-	pid_t pid = 0;
-	int rc = spawn_detached_pid(argv, &pid);
-	if (rc != EX_OK || pid <= 0)
-		return rc;
-	int st = 0;
-	while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
-		;
-	return EX_OK;
+	 * pressed, and only an app that was actually started brings it back.
+	 *
+	 * A headline is a browser window, and a browser window is the case the
+	 * `full` column exists for — nothing about a web page fills a
+	 * television by itself. So this one is always true. */
+	return spawn_wait(argv, true);
 }
 
 /* ── where the caches live ───────────────────────────────────────────────── */

@@ -963,6 +963,58 @@ check "the power tiles are on the system shelf" $?
                                    END { exit bad?1:0 }'
 check "every tile on the apps shelf wants a pointer" $?
 
+# ── filling the screen, and the toggle that can undo it ─────────────────────
+#
+# A tile press asks synui to fullscreen what it opened: from a sofa, a titlebar
+# and a strip of wallpaper around the edge are the whole difference between an
+# appliance and somebody's computer left switched on.
+#
+# ⚠ The compositor offers a TOGGLE and nothing else — there is no "set
+# fullscreen" verb. So every assertion here is about one of the two ways a
+# toggle goes wrong: sent to a window that is already full it puts it back in
+# a box, and sent at the wrong moment it fullscreens whatever the tile was
+# covering. `full` is the column that keeps it away from the first case.
+
+printf '%s' "$head1" | grep -q "full"
+check "...and whether it needs help filling the screen" $?
+
+# An action opens no window, so a toggle sent on its behalf can only land on
+# something else.
+"$SA" big apps --rec | awk -F'\t' 'NR>1 && $5=="action" && $9=="1" { bad=1 }
+                                   END { exit bad?1:0 }'
+check "no action tile asks for a fullscreen it has no window for" $?
+
+# The launchers that arrive full-screen by themselves must NOT be helped —
+# helping them is what undoes it. Steam is the worst of them: it maps a startup
+# splash before Big Picture, and a helped splash fills a wall on the way in.
+# Neither is guaranteed installed here, so this asserts the rule, not the row.
+"$SA" big apps --rec | awk -F'\t' '
+    NR>1 && ($1=="steam-bpm" || $1=="retroarch" || $1=="kodi") && $9=="1" { bad=1 }
+    END { exit bad?1:0 }'
+check "nothing that opens full-screen by itself is helped into it" $?
+
+BIGC=src/big.c
+
+# Sampling the state once is not enough: an app that fullscreens itself does it
+# a moment AFTER mapping, and a toggle that wins that race turns fullscreen off.
+grep -q "FULL_SETTLE_MS" "$BIGC"
+check "the window's state is re-read after a settle, not sampled once" $?
+
+grep -q "if (now.fullscreen)" "$BIGC"
+check "...and a window that got there on its own is left alone" $?
+
+# ⚠ Waiting for a window must not delay waiting for the APPLICATION. The shell
+# reads an exit under three seconds as a single-instance hand-off (a browser
+# already running takes the URL and quits); fifteen seconds of polling in front
+# of the waitpid would turn every hand-off into a "close" and throw the
+# television back over the browser somebody just opened. These two are one
+# contract, written in two languages.
+awk '/^static void fullscreen_after_launch/,/^}/' "$BIGC" | grep -q "fork()"
+check "the window wait is forked, so it cannot delay the app's exit" $?
+
+grep -q "lived < 3000" data/syn-arcade-big.qml
+check "...which is the hand-off rule that delay would have broken" $?
+
 # ── URLs, which are the one thing here that comes from OUTSIDE ──────────────
 #
 # A headline's link is written by whoever wrote the feed and a server's address
