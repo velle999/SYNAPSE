@@ -186,6 +186,21 @@ pkgfield() {
     printf '%s' "$v"
 }
 
+# depends= as separate names, one per line.
+#
+# NOT pkgfield: `${!name}` on an array yields its FIRST element only, so
+# depends would read as 'wlroots0.20' and every check over it would pass
+# vacuously. Sourcing also handles what the arrays here actually look like —
+# several lines long with `#` comments between the entries.
+#
+# Version constraints are trimmed: a depend may be written 'foo>=1.2', and the
+# name is the only part that names a sibling.
+pkgdeps() {
+    ( set +e +u; cd "$1" 2>/dev/null && . ./PKGBUILD >/dev/null 2>&1 &&
+      printf '%s\n' "${depends[@]}" ) 2>/dev/null |
+    sed -e 's/[<>=].*$//' -e '/^$/d'
+}
+
 # What a sed-scraper would have read out of the same line. Not used to decide
 # anything — used to say "a scraper would misread this", which is the shape of
 # bug 2 and the reason limine-mkinitcpio-hook bricked the updater for a day.
@@ -302,6 +317,10 @@ mapfile -t UNSUP      < <(read_keys  syn-update/syn-update.sh UNSUPPORTED)
 mapfile -t NEVER_ADD  < <(read_keys  syn-update/syn-update.sh NEVER_ADD)
 mapfile -t RULES      < <(grep -oE '^build_(component|script_pkg|vendored_pkg) [A-Za-z0-9_.+-]+' \
                           build-all.sh | awk '{print $2}' | sort -u)
+# The same rules in the order they RUN. RULES above is sorted and de-duplicated,
+# which is what the set comparisons want and is exactly wrong for check_order.
+mapfile -t RULES_ORDERED < <(grep -oE '^build_(component|script_pkg|vendored_pkg) [A-Za-z0-9_.+-]+' \
+                          build-all.sh | awk '{print $2}')
 
 # An empty list here would make every comparison below trivially pass. Refuse
 # to run rather than print a screenful of ok.
@@ -638,6 +657,72 @@ check_pkgrel() {
     return 0
 }
 
+# ── Check 7: a component is built before whatever depends on it ──
+#
+# Both collectors are ORDERED lists, and both install as they go: build-all.sh
+# runs `pacman -U` on each package, and the ISO's makepkg -s resolves a
+# component's depends out of the local repo it is filling. So a component that
+# depends on a SIBLING built later fails — on build-all.sh with "could not
+# satisfy dependencies", on the ISO at that package's makepkg.
+#
+# It fails only on a machine that has not got the sibling installed ALREADY,
+# which is never the developer's box and always a fresh build host or the ISO
+# runner. That is the whole reason for checking it here: locally it passes.
+#
+# Found when synui's `kitty` dependency became `syntty` — syntty was built near
+# the end, next to syn-arcade, which had been correct for as long as nothing
+# required it.
+check_order() {
+    local bad=$FINDINGS c dep pos_c pos_d
+
+    # Position of a name in an ordered list; empty if absent.
+    pos_in() {  # pos_in <needle> <haystack...>
+        local n=$1 i=0; shift
+        local h
+        for h in "$@"; do
+            [ "$h" = "$n" ] && { printf '%s' "$i"; return 0; }
+            i=$((i + 1))
+        done
+        return 1
+    }
+
+    for c in "${KNOWN[@]}"; do
+        [ -f "$c/PKGBUILD" ] || continue
+        # Only SynapseOS siblings matter: anything else comes off a mirror and
+        # is resolved by pacman long before either list is walked.
+        while read -r dep; do
+            [ -n "$dep" ] || continue
+            has "$dep" "${KNOWN[@]}" || continue
+
+            if pos_c=$(pos_in "$c" "${RULES_ORDERED[@]}") &&
+               pos_d=$(pos_in "$dep" "${RULES_ORDERED[@]}") &&
+               [ "$pos_d" -gt "$pos_c" ]; then
+                fail order \
+                    "build-all.sh builds '$c' before '$dep', which it depends on" \
+                    "build-all.sh installs each package as it builds it, so this fails" \
+                    "with 'could not satisfy dependencies' on any machine that has not" \
+                    "got $dep already — a fresh build host, never yours. Move the" \
+                    "build_component line for '$dep' above '$c'."
+            fi
+
+            if pos_c=$(pos_in "$c" "${ISO_PKGS[@]}") &&
+               pos_d=$(pos_in "$dep" "${ISO_PKGS[@]}") &&
+               [ "$pos_d" -gt "$pos_c" ]; then
+                fail order \
+                    "archiso PACKAGES builds '$c' before '$dep', which it depends on" \
+                    "The ISO's makepkg -s resolves depends out of the local repo it is" \
+                    "still filling, so '$c' fails at its own build. archiso/build.sh is a" \
+                    "second, independent collector — fixing build-all.sh alone is half" \
+                    "the fix. Move '$dep' above '$c' in PACKAGES."
+            fi
+        done < <(pkgdeps "$c")
+    done
+
+    [ "$FINDINGS" -eq "$bad" ] && ok order \
+        "build order respects every inter-component dependency"
+    return 0
+}
+
 # ── Run ──────────────────────────────────────────────────────
 
 case "$MODE" in
@@ -651,6 +736,7 @@ check_registration
 check_iso
 check_installer
 check_pkgver
+check_order
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \

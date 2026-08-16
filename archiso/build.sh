@@ -185,11 +185,28 @@ PACKAGES=(
     # scenefx0.5, not scenefx: the two are separate packages tracking wlroots
     # (0.4.x = 0.19, 0.5.x = 0.20), and synui moved to the 0.20 pair.
     scenefx0.5
+    # Must precede synui too, and for the SAME reason scenefx does: synui
+    # depends on syntty (it is the default terminal and the one every fresh
+    # synuirc names), and makepkg -s resolves a component's depends out of the
+    # local repo as it builds. syntty used to sit far below, next to
+    # syn-arcade, which was correct while nothing required it.
+    #
+    # The live session wants it for a reason of its own. kitty needs a GL
+    # context, which is the one thing a live image cannot count on — an
+    # unfamiliar GPU, a driver that did not load, a VM without acceleration —
+    # and a live session with no way to open a prompt is a rescue disk that
+    # cannot rescue anything. syntty links no GL at all, so it opens where
+    # kitty cannot. Builds offline: meson, freetype, fontconfig, wayland and
+    # xkbcommon, all already on the build host for synui.
+    syntty
     synui
     synapse_kmod
     syn
-    syn-firstboot
+    # Must precede syn-firstboot — syn-firstboot depends on it. These two were
+    # the other way round here while build-all.sh had them right, which is the
+    # drift this list keeps producing: it is a second, independent collector.
     syn-model
+    syn-firstboot
     syn-install
     # Updates an installed system from git by driving build-all.sh. Pulls
     # base-devel + git (17 packages, ~118 MiB) onto the ISO as dependencies —
@@ -255,18 +272,6 @@ PACKAGES=(
     # one list and not the other fails pacstrap ~15 minutes in with "target not
     # found". Builds offline: meson and libc.
     syn-settings
-    # syntty — the terminal. Must be ON the ISO for the same reason syn-settings
-    # must: syn-install names it in SEL_CORE, and a package the installer asks
-    # for but the local repo does not carry fails the install at pacman.
-    #
-    # The live session wants it for a reason of its own. kitty needs a GL
-    # context, which is the one thing a live image cannot count on — an
-    # unfamiliar GPU, a driver that did not load, a VM without acceleration —
-    # and a live session with no way to open a prompt is a rescue disk that
-    # cannot rescue anything. syntty links no GL at all, so it opens where
-    # kitty cannot. Builds offline: meson, freetype, fontconfig, wayland and
-    # xkbcommon, all already on the build host for synui.
-    syntty
     # syn-arcade — the game assistant. Must be ON the ISO for the same reason
     # syntty must: syn-install names it in SEL_APPS (Standard and Full), and a
     # package the installer asks for but the local repo does not carry fails

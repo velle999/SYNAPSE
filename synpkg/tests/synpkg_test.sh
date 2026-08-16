@@ -810,6 +810,35 @@ if [ -f "$QML" ]; then
     grep -qE '^[[:space:]]*visible:.*extra !== "component"' "$QML" \
         && bad "the action button is still hidden for SynapseOS components" \
         || ok "SynapseOS components get an action button"
+
+    # ── a refused transaction has to SAY SO ─────────────────────────────────
+    #
+    # `remove kitty` authenticated through polkit, was refused by libalpm
+    # ("synui: requires kitty"), and the window cleared the status line,
+    # re-read the list and showed kitty still installed with nothing saying
+    # why. actProc read neither the exit code nor stderr, and every other
+    # failed transaction was equally silent.
+    #
+    # Three separate things have to hold, and any one of them alone is still a
+    # silent failure — the same shape as the syn-settings bug this repeats.
+    grep -q 'property string outcome' "$QML" \
+        && ok "a failed transaction leaves an outcome behind" \
+        || bad "synpkg.qml has no outcome — reload() erases every failure message"
+
+    awk '/id: actProc/,/^    }/' "$QML" | grep -q 'onExited: (code) =>' \
+        && ok "actProc reads the exit code" \
+        || bad "actProc ignores the exit code — a refusal is indistinguishable from a success"
+
+    awk '/id: actProc/,/^    }/' "$QML" | grep -q 'stderr: StdioCollector' \
+        && ok "...and the reason, off stderr" \
+        || bad "actProc discards stderr — the outcome cannot say WHY"
+
+    # ⚠ reload() must NOT clear it. That is the whole defect: every finished
+    # action reloads, so anything reload() touches has the lifetime of the
+    # thing that failed.
+    awk '/function reload\(\)/,/^    }/' "$QML" | grep -q 'outcome' \
+        && bad "reload() clears the outcome — the message dies with the action" \
+        || ok "reload() leaves the outcome alone"
 else
     bad "synpkg.qml not found beside the tests: $QML"
 fi

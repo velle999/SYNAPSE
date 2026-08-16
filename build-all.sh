@@ -277,6 +277,24 @@ build_script_pkg synapse-llama
 # but frozen forever" is the bug that tool exists to prevent.
 build_script_pkg scenefx0.5
 
+# syntty — the terminal. meson C again, and the generic tarball collector above
+# takes src/, include/, meson.build, data/ and tests/, which is all of it.
+#
+# ⚠ BEFORE synui, which DEPENDS ON IT since syntty replaced kitty in synui's
+# depends. It used to be built near the end, next to syn-arcade, which was
+# correct for as long as nothing required it — `pacman -U` on synui would now
+# refuse on a machine that has not got syntty yet, and a fresh build host is
+# exactly that machine. tools/preflight.sh checks this ordering now.
+#
+# ⚠ ITS check() NEEDS A COMPOSITOR AND HAS NONE. The suite covers the parser,
+# the grid, the renderer and the mouse and paste encoders with no seat and no
+# display; the window tests start their own headless cage and SKIP where cage
+# is not installed, which is what makes this buildable on a machine that is not
+# somebody's desktop. Budget about forty seconds for it — meson's own default
+# would kill a passing suite at thirty and report the kill as a build failure,
+# so syntty's meson.build states a timeout of its own.
+build_component syntty
+
 # Build C components
 build_component synapd
 build_component synsh
@@ -389,18 +407,6 @@ build_component syn-disks
 # keys to a file and prints the result instead of saving it, inside a
 # mktemp -d. Nothing in it edits anything outside that directory.
 build_component syn-edit
-
-# syntty — the terminal. meson C again, and the generic tarball collector above
-# takes src/, include/, meson.build, data/ and tests/, which is all of it.
-#
-# ⚠ ITS check() NEEDS A COMPOSITOR AND HAS NONE. The suite covers the parser,
-# the grid, the renderer and the mouse and paste encoders with no seat and no
-# display; the window tests start their own headless cage and SKIP where cage
-# is not installed, which is what makes this buildable on a machine that is not
-# somebody's desktop. Budget about forty seconds for it — meson's own default
-# would kill a passing suite at thirty and report the kill as a build failure,
-# so syntty's meson.build states a timeout of its own.
-build_component syntty
 
 # syn-arcade — the game assistant. meson C plus a quickshell front-end, the same
 # shape as syn-disks and syn-edit, built from a source tarball the generic

@@ -281,6 +281,25 @@ FloatingWindow {
     property string statusLine: ""
     property bool   loading: false
 
+    // ── What a FAILED transaction leaves on screen ──────────────────────────
+    //
+    // `statusLine` cannot carry a failure, and that is not a style choice: every
+    // finished action calls reload(), and reload() clears it. Anything written
+    // there at exit lives for milliseconds.
+    //
+    // So `remove kitty` authenticated through polkit, was refused by libalpm —
+    // synui depended on kitty, so the prepare failed with "synui: requires
+    // kitty" — and the window cleared the status line, re-read the list, and
+    // showed kitty still installed with nothing anywhere saying why. Every
+    // other failed transaction was equally silent: actProc read neither the
+    // exit code nor stderr.
+    //
+    // `outcome` survives the reload, is ranked above the item count in the
+    // header, and is cleared when the next action starts. Same fix, same
+    // reasoning and same name as syn-settings' — a message with the lifetime
+    // of the thing that failed is a message nobody can read.
+    property string outcome: ""
+
     // Assumed true until `flatpak remotes` says otherwise. The banner this
     // gates is an instruction to go and fix something, and showing it for the
     // half-second before the probe answers would put a "your Flathub is
@@ -487,9 +506,40 @@ FloatingWindow {
     // the linter flags it, and the handler would simply never run.
     Process {
         id: actProc
-        onExited: {
+        property string errLine: ""
+
+        // StdioCollector, not SplitParser: this text is only wanted once the
+        // transaction is over, and what is wanted is the FIRST warning. alpm
+        // reports the specific reason first ("synui: requires kitty") and the
+        // generic one last ("transaction failed: could not satisfy
+        // dependencies"), so the last line is the one that says least.
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (!this.text) return
+                const first = this.text.split("\n").find(l => l.trim() !== "") || ""
+                // synpkg prefixes every warning; the window has its own way of
+                // showing that something went wrong and does not need the word.
+                actProc.errLine = first.replace(/^warning:\s*/, "")
+                // Whether this arrives before or after onExited is not ours to
+                // decide, so handle both: if the exit already settled for a
+                // weaker message, replace it with the real one.
+                if (root.busy === "" && root.outcome !== "")
+                    root.outcome = actProc.errLine
+            }
+        }
+
+        // One parameter, not none. The signal is exited(int, QProcess::
+        // ExitStatus) and qmllint warns that the second type is unresolvable —
+        // but declaring FEWER parameters than a signal has is legal QML, and
+        // the same spelling is what carries syn-settings' outcome. Reading no
+        // parameters at all is what made this window unable to tell a refusal
+        // from a success in the first place.
+        onExited: (code) => {
             root.busy = ""
             root.statusLine = ""
+            if (code !== 0)
+                root.outcome = actProc.errLine !== "" ? actProc.errLine
+                    : "refused (exit " + code + ") — polkit may have declined"
             root.reload()
         }
     }
@@ -565,6 +615,8 @@ FloatingWindow {
         }
 
         root.busy = row.name
+        root.outcome = ""
+        actProc.errLine = ""
         root.statusLine = (verb === "remove" ? "removing " : "installing ") + row.name + "…"
 
         if (row.source === "flathub") {
@@ -716,6 +768,10 @@ FloatingWindow {
 
     function showSection(id) {
         root.section = id
+        // A refusal belongs to the pane it happened on. Carrying "synui:
+        // requires kitty" across to Flathub would be a message about a package
+        // that is not on screen any more.
+        root.outcome = ""
         // Tabs that can be browsed open on their category pane; the AUR has no
         // categories and so has nothing to show until you type.
         root.mode = root.hasCategories(id) ? "browse" : "search"
@@ -790,13 +846,20 @@ FloatingWindow {
                 // now that the title's width is derived from this one.
                 width: Math.min(implicitWidth, header.width * 0.45)
                 elide: Text.ElideRight
-                color: root.busy !== "" || root.loading ? root.cAccent : root.cDim
+                color: root.outcome !== "" ? root.cWarn
+                     : root.busy !== "" || root.loading ? root.cAccent : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(12) }
                 horizontalAlignment: Text.AlignRight
+                // `outcome` outranks the item count and survives the reload
+                // that follows a failed action — it is the only thing here
+                // that outlives the action it describes. It still yields to a
+                // live status line, because a NEW action in flight is more
+                // current news than the last one's refusal.
                 text: root.loading ? (root.statusLine !== "" ? root.statusLine : "loading…")
-                                   : (root.statusLine !== "" ? root.statusLine
-                                      : (root.section === "about" ? ""
-                                         : root.shownRows.length + " items"))
+                                   : root.statusLine !== "" ? root.statusLine
+                                   : root.outcome !== "" ? root.outcome
+                                   : (root.section === "about" ? ""
+                                      : root.shownRows.length + " items")
             }
 
             // Along the bottom edge of the header, so it reads as the whole

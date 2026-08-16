@@ -10,7 +10,16 @@ pkgver=0.1.0
 #   on screen. ⚠ Added to privileged_globals[] in the same commit: motion plus
 #   a button drives every window on the seat, so a sandboxed client does not
 #   get it. See src/input.c server_new_virtual_pointer().
-pkgrel=368
+# 369: the terminal dependency caught up with the default. syntty has been the
+#   default terminal since 359 and is what every fresh synuirc names, but this
+#   still hard-depended on kitty — so 65 MiB of terminal nothing opens by
+#   default could not be uninstalled, and `synpkg remove kitty` was refused with
+#   "synui: requires kitty". depends: kitty → syntty, kitty to optdepends. It is
+#   still installed by the ISO and the installer, which name it directly; this
+#   only stops it being load-bearing. ⚠ syntty had to move BEFORE synui in
+#   build-all.sh and archiso/build.sh — both are ordered, and makepkg -s
+#   resolves depends out of the local repo as it goes.
+pkgrel=369
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -78,11 +87,17 @@ license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
 # rofi: the Super+Space application launcher. A hard depend for the same reason
-#   kitty is one — it backs a DEFAULT bind, so without it the most-pressed key on
+#   syntty is one — it backs a DEFAULT bind, so without it the most-pressed key on
 #   the desktop silently does nothing. rofi 2.0.0 merged lbonn's Wayland port
 #   into mainline (it Provides/Replaces rofi-wayland), so this is layer-shell,
 #   not XWayland. The AI command bar it displaced moved to Super+=.
-depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'kitty' 'rofi' 'cairo'
+         # syntty is the default terminal (0.1.0-359) and the one every fresh
+         # synuirc names, so it is the terminal this depends on. kitty was the
+         # default between 215 and 358 and is an optdepend now: it stayed a
+         # hard dependency for four months after it stopped being the default,
+         # which made 65 MiB un-removable — `synpkg remove kitty` was refused
+         # with "synui: requires kitty" for a terminal nothing opens by default.
+depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'syntty' 'rofi' 'cairo'
          # dbus: synui_run() execs dbus-update-activation-environment before the
          # autostarts, without which D-Bus-activated GUI services get no display.
          # Always present transitively, named here because we exec its binary.
@@ -93,7 +108,8 @@ depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'k
          # every variant; the menu offers rar, so a fallback is not enough.
          '7zip' 'unrar')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info')
-optdepends=('foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
+optdepends=('kitty: the terminal SynapseOS defaulted to before syntty — every synuirc written between synui 215 and 358 still names it, and anim.c draws it on glass'
+            'foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
             'imagemagick: same — most cursor makefiles render their PNGs with it'
             'cava: audio visualiser widget (synui-widgets visualizer on)'

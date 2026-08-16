@@ -2087,8 +2087,10 @@ while :; do
     # opens a prompt is not a smaller system but a broken one. It is 359 KB, it
     # depends on freetype/fontconfig/wayland/xkbcommon and nothing else, and it
     # links no GL — so it is also the terminal that still opens on a machine
-    # where the GPU stack does not. kitty remains the default; this is the one
-    # underneath it.
+    # where the GPU stack does not. It is the DEFAULT since synui 0.1.0-359 and
+    # synui depends on it; kitty is still installed by the pacstrap above and is
+    # still what a synuirc written before 359 names, but it is an optdepend now
+    # and can be removed.
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-edit syntty syn-confine fetch"
     # linux-wallpaperengine and synapse-wallpapers travel TOGETHER and are never
     # split. The renderer without our wallpapers is a player with nothing to
