@@ -2316,33 +2316,18 @@ yt source --rec |
 # of "enabled: command not found" (127) and failed against passing code.
 check "...whatever enabled = true does or does not mean to cliamp" $?
 
-# The note is the one place the credentials still matter, and it is a note
-# rather than a gate: somebody who wants cliamp's own search is told where to
-# go, and somebody who does not is not sent to a wizard for a row that works.
-rm -f "$CLIAMPCONF"
-yt source | grep -q "cliamp's own search"
-check "...and the row says what an OAuth client would still buy" $?
+# ⚠ THE NOTE ANSWERS "CAN I GET AT MY OWN MUSIC", which is the question
+# somebody actually has. Signed out it says what signing in would buy; signed
+# in it says what the row now holds. The OAuth client is a narrower thing and
+# has its own row on the page rather than a warning on this one.
+rm -f "$CLIAMPCONF" "$BIGCONF"
+yt source | grep -q "sign in for your own playlists"
+check "...and a signed-out row says what signing in would buy" $?
 
-# ⚠ A KEY THAT IS PRESENT AND EMPTY IS NOT A CREDENTIAL. Cheap to get wrong —
-# a check for the key rather than for its value passes on this file.
-printf '[ytmusic]\nclient_id     = ""\nclient_secret = ""\n' > "$CLIAMPCONF"
-yt source | grep -q "cliamp's own search"
-check "...and empty keys are not credentials either" $?
-
-# The other side, so the note is not simply always printed.
-printf '[ytmusic]\nenabled = true\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
-    > "$CLIAMPCONF"
-ytnote=$(yt source | grep '^ytmusic')
-case "$ytnote" in *"cliamp's own search"*) false ;; *) true ;; esac
-check "...and a machine with an OAuth client is not told to get one" $?
-
-# ⚠ `[yt]` and `[youtube]` are the SAME SECTION to cliamp (config.go normalises
-# all three), so a machine set up under either name must be read as set up.
-printf '[youtube]\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
-    > "$CLIAMPCONF"
-ytnote=$(yt source | grep '^ytmusic')
-case "$ytnote" in *"cliamp's own search"*) false ;; *) true ;; esac
-check "...under [ytmusic], [youtube] or [yt], as cliamp reads them" $?
+printf 'yt_cookies = vivaldi\n' > "$BIGCONF"
+yt source | grep -q "your playlists and your stations"
+check "...and a signed-in one says what it now holds" $?
+rm -f "$BIGCONF"
 
 # ⚠ AND THE NOTE IS PER SOURCE, NOT PER ACTION. It was keyed on the action, and
 # `setup` was briefly both services — so setting up YouTube Music said "needs
@@ -2479,6 +2464,183 @@ check "...and finds things with it off, keyed by URL so playing one is one path"
 ytrun yt search 2>&1 | grep -q "takes something to search for"
 check "...and a search with nothing to search for says so" $?
 
+# ── signing in, which is a BROWSER and not a Google Cloud project ───────────
+#
+# ⚠ "Log in to use my own playlists" has two possible answers and they are not
+# the same amount of work. An OAuth client unlocks SEARCH INSIDE CLIAMP'S TUI
+# and takes a Google Cloud project; browser cookies unlock somebody's own
+# PRIVATE playlists and Liked Music, which is what puts their music on the
+# television with a d-pad. Both are offered; this is the one the row leads with.
+#
+# ⚠ THE STUB ANSWERS 401 WITHOUT COOKIES, exactly as YouTube does — measured
+# here against the real thing, Vivaldi with no session gave 7 cookies, all
+# decrypted, and a 401. A stub that answered the same either way could not tell
+# a working sign-in from a broken one.
+# ⚠ THE BROWSER NAME IS WHAT DECIDES, not merely whether the flag was passed.
+# `yt login` WRITES the setting before it checks it — so the check does carry
+# `--cookies-from-browser <that browser>`, and a stub keyed on the flag alone
+# answers "signed in" for every browser on earth. It did, and both refusal
+# assertions passed against a sign-in that could never fail.
+# Here only `vivaldi` has a session, which is the shape of a real machine.
+cat > "$YTB/yt-dlp" <<'STUB'
+#!/bin/sh
+browser=""
+prev=""
+for a in "$@"; do
+    [ "$prev" = "--cookies-from-browser" ] && browser="$a"
+    prev="$a"
+done
+for last in "$@"; do :; done
+case "$last" in
+    */feed/playlists)
+        [ "$browser" = vivaldi ] || exit 1
+        printf 'Late Night Drive\nhttps://www.youtube.com/playlist?list=PLaaa\n'
+        printf 'Liked Music\nhttps://www.youtube.com/playlist?list=LM\n' ;;
+    ytsearch*)
+        printf 'Found One\nhttps://www.youtube.com/watch?v=aaaaaaaaaaa\n'
+        printf 'Found Two\nhttps://www.youtube.com/watch?v=bbbbbbbbbbb\n' ;;
+    *list=RD*)
+        printf 'Seed Track\nhttps://www.youtube.com/watch?v=ccccccccccc\n' ;;
+    *)  printf 'One Single Track\nhttps://www.youtube.com/watch?v=eeeeeeeeeee\n' ;;
+esac
+exit 0
+STUB
+chmod +x "$YTB/yt-dlp"
+rm -f "$BIGCONF"
+
+# ⚠ A SIGNED-OUT MACHINE GETS A SENTENCE, NOT AN EMPTY LIST. "You have no
+# playlists" is a lie somebody would reasonably act on by making some.
+ytrun yt mine 2>&1 | grep -q "not signed in"
+check "reading playlists while signed out says so, rather than showing none" $?
+
+# ⚠ VERIFIED, NOT MERELY WRITTEN DOWN — every failure here is silent by nature,
+# and yt-dlp says so on a stderr a television never shows.
+ytrun yt login vivaldi | grep -q "Late Night Drive"
+check "signing in reports what the session can actually see" $?
+
+grep -q '^yt_cookies = vivaldi$' "$BIGCONF"
+check "...and remembers the browser" $?
+
+ytrun yt mine --rec |
+    awk -F'\t' '$2 == "Liked Music" { f = 1 } END { exit !f }'
+check "...so a signed-in machine can list its own playlists" $?
+
+# ⚠ THE ID IS THE PLAYLIST URL, so playing one is the same command as playing a
+# station — there is no second play path to keep in step.
+ytrun yt mine --rec | grep -q 'playlist%3Flist%3DLM'
+check "...keyed by URL, so playing one is the station path" $?
+
+# ⚠ THE COOKIES GO ON EVERY ENUMERATION, not only the library one: a private
+# playlist is private at PLAY time too, and without them a station that lists
+# perfectly resolves to nothing when it is pressed.
+grep -q '"--cookies-from-browser", browser' src/big.c
+check "...and every enumeration carries the session, not just that one" $?
+
+# The refusal, and ⚠ THE SETTING IS TAKEN BACK OUT. Leaving it would put
+# --cookies-from-browser on every enumeration from then on and keep answering
+# "no playlists" as though the account were empty.
+( PATH="$YTB:$MSTUB:$STUB"; export PATH
+  SYN_ARCADE_NO_NET=0; export SYN_ARCADE_NO_NET
+  "$SA" big music yt login chromium >/dev/null 2>&1 )
+[ "$?" != 0 ]
+check "a browser with no YouTube session is refused" $?
+
+ytnow=$(cat "$BIGCONF" 2>/dev/null)
+case "$ytnow" in *"yt_cookies = chromium"*) false ;; *) true ;; esac
+check "...and the machine is not left claiming to be signed in" $?
+
+# A browser yt-dlp cannot read is a usage error before anything is written.
+( PATH="$YTB:$MSTUB:$STUB"; export PATH
+  "$SA" big music yt login netscape >/dev/null 2>&1 )
+[ "$?" = 2 ]
+check "...and a browser yt-dlp cannot read is refused outright" $?
+
+# ── the page is not all stations ────────────────────────────────────────────
+#
+# ⚠ WHICH ERRANDS EXIST IS big.c's ANSWER. Whether this machine has a YouTube
+# session, and whether cliamp has an OAuth client, are facts about the machine —
+# and a copy of that reasoning in QML is how the sign-in route vanished from the
+# television in 0.1.0-29: the C answer changed and nothing in the shell noticed.
+rm -f "$BIGCONF" "$CLIAMPCONF"
+ytrun yt --rec |
+    awk -F'\t' '$1 == "find" && $4 == "action" { f = 1 } END { exit !f }'
+check "the stations page offers Search" $?
+
+ytrun yt --rec |
+    awk -F'\t' '$1 == "login" && $4 == "action" { f = 1 } END { exit !f }'
+check "...Sign in, while there is no session" $?
+
+# ⚠ THE OAUTH ROUTE, RESTORED. It was the row's action in 0.1.0-28 and 0.1.0-29
+# replaced that action with this page, leaving `cliamp setup` reachable from
+# nowhere on the television. It is a row on the page now.
+ytrun yt --rec |
+    awk -F'\t' '$1 == "setup" && $4 == "action" { f = 1 } END { exit !f }'
+check "...and cliamp's own search, which is the OAuth route" $?
+
+printf '[ytmusic]\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
+    > "$CLIAMPCONF"
+ytsetup=$(ytrun yt --rec | awk -F'\t' '$1 == "setup"')
+[ -z "$ytsetup" ]
+check "...offered only while it is missing" $?
+
+# ⚠ A KEY THAT IS PRESENT AND EMPTY IS NOT A CREDENTIAL. Cheap to get wrong —
+# a check for the key rather than for its value passes on this file.
+printf '[ytmusic]\nclient_id     = ""\nclient_secret = ""\n' > "$CLIAMPCONF"
+ytrun yt --rec |
+    awk -F'\t' '$1 == "setup" { f = 1 } END { exit !f }'
+check "...and empty keys are not credentials either" $?
+
+# ⚠ `[yt]` and `[youtube]` are the SAME SECTION to cliamp (config.go normalises
+# all three), so a machine set up under either name must be read as set up.
+printf '[youtube]\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
+    > "$CLIAMPCONF"
+ytsetup=$(ytrun yt --rec | awk -F'\t' '$1 == "setup"')
+[ -z "$ytsetup" ]
+check "...under [ytmusic], [youtube] or [yt], as cliamp reads them" $?
+rm -f "$CLIAMPCONF"
+
+# Signed in, the Sign in row becomes the playlists row.
+printf 'yt_cookies = vivaldi\n' > "$BIGCONF"
+ytrun yt --rec |
+    awk -F'\t' '$1 == "mine" && $4 == "action" { f = 1 } END { exit !f }'
+check "signed in, the page offers Your playlists instead" $?
+
+ytlogin=$(ytrun yt --rec | awk -F'\t' '$1 == "login"')
+[ -z "$ytlogin" ]
+check "...and stops asking for a sign-in it already has" $?
+rm -f "$BIGCONF"
+
+# ⚠ THE STATIONS ARE STILL DISTINGUISHABLE FROM THE ERRANDS, or the shell would
+# try to play "Search…" as a URL.
+printf 'https://www.youtube.com/watch?v=fffffffffff\tKept\n' > "$YTLIST"
+ytrun yt --rec |
+    awk -F'\t' '$2 == "Kept" && $4 == "station" { f = 1 } END { exit !f }'
+check "...and a station still says it is one" $?
+
+# ── typing, which is a TERMINAL and not a text field ────────────────────────
+#
+# ⚠ THE ON-SCREEN KEYBOARD CANNOT TYPE INTO THE SHELL. It types through wtype
+# into whatever holds keyboard focus, and the shell's surface deliberately holds
+# none — a menu that grabbed the keyboard to draw a keyboard would type into
+# itself. So the two verbs that read stdin get a TERMINAL when there is no tty,
+# which is the same mechanism the install and sign-in rows already use.
+#
+# ⚠ Without this they are launched by the television as a plain process with no
+# tty at all: fgets returns on EOF immediately and the command flashes and exits
+# having done nothing, which is exactly the shape of a dead button.
+grep -q 'static bool can_be_asked' src/big.c
+check "a verb that reads stdin asks whether there is anybody to ask" $?
+
+grep -q 'term_run_and_hold("syn-arcade big music yt find")' src/big.c
+check "...and gets a terminal on the television when there is not" $?
+
+grep -q 'term_run_and_hold("syn-arcade big music yt login")' src/big.c
+check "...for signing in as well as for searching" $?
+
+# ⚠ It cannot loop: the command inside the terminal HAS a tty.
+grep -q 'isatty(STDIN_FILENO) && isatty(STDOUT_FILENO)' src/big.c
+check "...and the terminal it opens takes the interactive branch" $?
+
 # ── the key a queued track is remembered under ──────────────────────────────
 #
 # ⚠ `?v=` IS THE IDENTITY ON YOUTUBE, and the rule used to be "strip everything
@@ -2548,9 +2710,31 @@ check "...through the same verb the id came from" $?
 grep -q 'if (ytPlayProc.running) return' "$BIGQML"
 check "...once, however many times A is pressed" $?
 
-# The empty state is the first thing most people will see on that page.
-grep -q 'No stations yet' "$BIGQML"
-check "an empty stations page says how to add one" $?
+# ⚠ THE ERRAND ROWS ARE DISPATCHED BY KIND, not by a list of ids here — so a
+# row added in big.c needs no change in this file unless it needs a NEW kind of
+# handling. The one id this file does know about is `mine`, because that one is
+# another PAGE rather than something launched.
+grep -q 'it.kind === "ytaction"' "$BIGQML"
+check "the shell dispatches the errand rows by kind" $?
+
+grep -q '"big", "music", "yt", "mine", "--rec"' "$BIGQML"
+check "...and Your playlists is a page of the same menu" $?
+
+# ⚠ `setup` IS CLIAMP'S WIZARD, not one of ours — the OAuth route, restored to
+# the television after 0.1.0-29 left it reachable from nowhere.
+grep -q '"big", "music", "setup"' "$BIGQML"
+check "...and the OAuth row runs cliamp's own wizard" $?
+
+# ⚠ `keys: "1"` — both of the errands that end in typing need the on-screen
+# keyboard pointed at the terminal they open.
+grep -q 'id: "music-yt-" + it.id' "$BIGQML"
+check "...and the two that type open with the keyboard enabled" $?
+
+# The empty state is the first thing most people will see on that page — and
+# ⚠ IT IS ITS OWN TEXT, because the page is never EMPTY: Search and Sign in are
+# always on it, so the shared "nothing here" line can never fire.
+grep -q 'No saved stations yet' "$BIGQML"
+check "a page with no stations still says stations are a thing" $?
 
 # ── the media buttons: whatever is playing, not just cliamp ─────────────────
 #

@@ -212,6 +212,80 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-30: your OWN playlists, and a search you can type from the sofa ───
+#
+# 0.1.0-29 put YouTube Music stations on the television. Two things were still
+# missing, and one of them was a regression this release owns up to.
+#
+# ── signing in, and why it is a BROWSER rather than a Google Cloud project ──
+#
+# "Log in so I can use my own playlists" has two possible answers here and they
+# are wildly different amounts of work:
+#
+#   OAuth client     what cliamp's own wizard asks for. Unlocks search and
+#                    browse INSIDE CLIAMP'S TUI, and takes a Google Cloud
+#                    project, an enabled API and a client id and secret copied
+#                    out of a web console — after which somebody is driving a
+#                    terminal interface from four metres away.
+#   browser cookies  what yt-dlp takes. Unlocks somebody's own PRIVATE
+#                    playlists and Liked Music, listed as rows on the
+#                    television and played with a d-pad.
+#
+# Both are offered. The second is what the row leads with, because it is the
+# one that answers the question that was asked. `big music yt login` writes the
+# browser name to big.conf and hands it to yt-dlp; nothing here reads, logs or
+# caches a cookie — yt-dlp opens the store itself, in its own process, for the
+# length of one command.
+#
+# ⚠ AND IT VERIFIES RATHER THAN WRITING THE SETTING DOWN, because every failure
+# in this area is silent. A browser that was never signed in decrypts its
+# cookies perfectly and answers 401, on a stderr a television never shows —
+# measured here, Vivaldi with no YouTube session gave SEVEN cookies, `v10`
+# every one, and nothing at all. So the setting is written, the account is
+# asked what it has, and what comes back is printed by name. A failure takes
+# the setting BACK OUT: leaving it would put --cookies-from-browser on every
+# enumeration from then on and keep answering "no playlists" as though the
+# account were empty.
+#
+# ⚠ The cookies go on EVERY enumeration, not only the one that lists a library.
+# A private playlist is private at PLAY time too, and without them a station
+# that lists perfectly resolves to nothing when it is pressed.
+#
+# ── typing, which is a TERMINAL and not a text field ────────────────────────
+#
+# The on-screen keyboard types through wtype into whatever holds keyboard
+# focus, and the shell's own surface deliberately holds none — a menu that
+# grabbed the keyboard to draw a keyboard would type into itself. So there is
+# no text field to put on that page. `Search…` opens a TERMINAL on the
+# television with `keys: "1"`, which is the same mechanism the install and
+# sign-in rows have always used, and types into that.
+#
+# `big music yt find` asks for a query, lists what came back, and plays the
+# number chosen — or keeps it as a station first with `s<number>`, which is
+# what finally makes stations addable without a keyboard.
+#
+# ⚠ The two verbs that read stdin ask whether there IS anybody to ask
+# (`isatty`) and open that terminal themselves when there is not. Launched by
+# the television as a plain process they have no tty at all: fgets returns on
+# EOF immediately and the command flashes and exits having done nothing, which
+# is exactly the shape of a dead button. It cannot loop — the command inside
+# the terminal has a tty, so it takes the interactive branch.
+#
+# ── and the regression, which is the interesting half ───────────────────────
+#
+# ⚠ 0.1.0-29 LEFT `cliamp setup` REACHABLE FROM NOWHERE. In -28 the YouTube
+# Music row's action WAS `setup`, so the OAuth route was one press away; -29
+# replaced that action with the stations page and never put the route back.
+# The C answer changed and nothing in the shell noticed — which is the same
+# second-roster failure this file keeps warning about, committed by the
+# release that added an assertion against it.
+#
+# So which errands exist is big.c's answer now, in the same list as the
+# stations and marked with a `kind` column: Search, then Your playlists or Sign
+# in depending on whether there is a session, then cliamp's own search while it
+# still has no client. The shell dispatches on the kind and knows none of the
+# reasoning.
+
 # ── 0.1.0-29: YouTube Music PLAYS on the television now, and needs no ───────
 # ── account to do it ────────────────────────────────────────────────────────
 #
@@ -494,7 +568,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=29
+pkgrel=30
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

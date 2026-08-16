@@ -963,12 +963,40 @@ ShellRoot {
     // in particular. See yt_stations() in big.c.
     property var ytItems: []
 
+    // ⚠ THE PAGE IS NOT ALL STATIONS. big.c puts the errands at the top of the
+    // same list — Search, Your playlists or Sign in, and cliamp's own search
+    // when it is still missing an OAuth client — and says which is which in a
+    // `kind` column. WHICH of them exist is a fact about this machine (is
+    // there a YouTube session? has cliamp a client?) and deciding it here
+    // would be a second copy of that reasoning. It is exactly how the sign-in
+    // route vanished from the television in 0.1.0-29: the C answer changed and
+    // nothing in this file noticed.
     Process {
         id: ytProc
         command: [shell.bin, "big", "music", "yt", "--rec"]
         stdout: StdioCollector {
             onStreamFinished: {
                 shell.ytItems = shell.parseRecords(this.text).map(r => ({
+                    id: r.id, name: r.name, note: r.note || "",
+                    kind: r.kind === "action" ? "ytaction" : "yt"
+                }))
+                shell.menuBusy = ""
+            }
+        }
+    }
+
+    // Somebody's own playlists, once there is a session to read them with.
+    property var ytMineItems: []
+
+    Process {
+        id: ytMineProc
+        command: [shell.bin, "big", "music", "yt", "mine", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.ytMineItems = shell.parseRecords(this.text).map(r => ({
+                    // ⚠ The id IS the playlist URL, which is why playing one
+                    // is the same command as playing a station. There is no
+                    // second play path to keep in step.
                     id: r.id, name: r.name, kind: "yt", note: ""
                 }))
                 shell.menuBusy = ""
@@ -1009,12 +1037,13 @@ ShellRoot {
     // ⚠ AND THE MENU HAS PAGES NOW. The picker and the album list are the same
     // list on a different page rather than a second panel: one delegate, one
     // set of keys, and a d-pad that cannot end up driving the thing underneath.
-    property string menuPage: "main"		// main | source | albums | yt
+    property string menuPage: "main"	// main | source | albums | yt | ytmine
 
     readonly property var menuItems: {
         if (shell.menuPage === "source") return shell.sourceItems
         if (shell.menuPage === "albums") return shell.albumItems
         if (shell.menuPage === "yt") return shell.ytItems
+        if (shell.menuPage === "ytmine") return shell.ytMineItems
 
         const out = []
         if (shell.musicLive)
@@ -1045,6 +1074,14 @@ ShellRoot {
             shell.menuBusy = "Reading your stations…"
             shell.ytItems = []
             if (!ytProc.running) ytProc.running = true
+        }
+        if (page === "ytmine") {
+            // ⚠ THIS ONE REALLY DOES CROSS THE INTERNET — yt-dlp asking
+            // YouTube what the account has — so it is said out loud for the
+            // same reason the Plex library is.
+            shell.menuBusy = "Reading your playlists…"
+            shell.ytMineItems = []
+            if (!ytMineProc.running) ytMineProc.running = true
         }
     }
 
@@ -1773,6 +1810,44 @@ ShellRoot {
         }
     }
 
+    // ── the rows on that page that are ERRANDS ──────────────────────────────
+    //
+    // `mine` is another page of this menu. The other two END IN TYPING, and
+    // that is why they open a terminal instead:
+    //
+    // ⚠ THE ON-SCREEN KEYBOARD CANNOT TYPE INTO THIS SHELL. It types through
+    // wtype, into whatever holds keyboard focus — and this surface
+    // deliberately holds none while it is away, because a menu that grabbed
+    // the keyboard to draw a keyboard would type into itself. So there is no
+    // text field to put on the television; there is a terminal, with
+    // `keys: "1"` so the keyboard is pointed at it. It is the same mechanism
+    // the install and sign-in rows have always used, and the reason the search
+    // row is shaped this way rather than as a box on this page.
+    function ytAction(it) {
+        if (it.id === "mine") {
+            shell.openMenuPage("ytmine")
+            return
+        }
+
+        shell.menuOpen = false
+        shell.menuPage = "main"
+        shell.menuIndex = 0
+
+        // ⚠ `setup` IS CLIAMP'S, NOT OURS. It is the OAuth route — a Google
+        // client for cliamp's own search — and `big music setup` is the verb
+        // that already runs its wizard. Restored to the television here: it
+        // was reachable in 0.1.0-28 as the row's action, and 0.1.0-29 replaced
+        // that action with this page and left it reachable from nowhere.
+        const cmd = it.id === "setup" ? ["big", "music", "setup"]
+                                      : ["big", "music", "yt", it.id]
+        const name = it.id === "setup" ? "cliamp setup"
+                   : it.id === "login" ? "Signing in"
+                                       : "Search"
+
+        shell.launchApp({ id: "music-yt-" + it.id, name: name,
+                          pointer: "0", keys: "1" }, cmd)
+    }
+
     function menuActivate() {
         const it = shell.menuItems[shell.menuIndex]
         if (!it) return
@@ -1796,6 +1871,10 @@ ShellRoot {
         }
         if (it.kind === "yt") {
             shell.playYt(it)
+            return
+        }
+        if (it.kind === "ytaction") {
+            shell.ytAction(it)
             return
         }
 
@@ -3182,6 +3261,7 @@ ShellRoot {
                     // which is routinely a sentence.
                     readonly property bool wideMenu: shell.menuPage === "albums"
                                                      || shell.menuPage === "yt"
+                                                     || shell.menuPage === "ytmine"
                     width: Math.min(parent.width * (wideMenu ? 0.60 : 0.42),
                                     win.u * (wideMenu ? 34 : 24))
                     height: menuCol.implicitHeight + win.u * 2.4
@@ -3202,6 +3282,7 @@ ShellRoot {
                                 if (shell.menuPage === "source") return "MUSIC SOURCE"
                                 if (shell.menuPage === "albums") return "PLEX ALBUMS"
                                 if (shell.menuPage === "yt") return "YOUTUBE MUSIC"
+                                if (shell.menuPage === "ytmine") return "YOUR PLAYLISTS"
                                 return shell.musicLive ? "NOW PLAYING" : "SYSTEM"
                             }
                             color: win.dim
@@ -3491,13 +3572,34 @@ ShellRoot {
                                 ? "Nothing came back from Plex. Check the "
                                   + "server, or run `cliamp setup` to give it "
                                   + "an address and a token."
-                                : shell.menuPage === "yt"
-                                ? "No stations yet. Add one from a terminal "
-                                  + "with\n\n    syn-arcade big music yt add "
-                                  + "<url>\n\nwhere <url> is a YouTube Music "
-                                  + "playlist, album, mix or track. A mix "
-                                  + "(list=RD…) plays on like a radio station."
+                                : shell.menuPage === "ytmine"
+                                ? "Nothing came back from that account. If "
+                                  + "you have just signed in to the browser, "
+                                  + "try Sign in again — it checks the "
+                                  + "session and says what it can see."
                                 : "Nothing to choose from."
+                        }
+
+                        // ⚠ A SEPARATE HINT, because the stations page is
+                        // never EMPTY — Search and Sign in are always on it,
+                        // so the "nothing here" text above can never fire and
+                        // a machine with no saved stations would show three
+                        // errands and no hint that stations are a thing.
+                        Text {
+                            visible: shell.menuPage === "yt"
+                                     && shell.menuBusy === ""
+                                     && shell.ytItems.length > 0
+                                     && !shell.ytItems.some(i => i.kind === "yt")
+                            width: menuCol.width
+                            wrapMode: Text.WordWrap
+                            leftPadding: win.u * 0.7
+                            topPadding: win.u * 0.6
+                            bottomPadding: win.u * 0.4
+                            color: win.dim
+                            font.pixelSize: win.u * 0.9
+                            text: "No saved stations yet. Search finds one and "
+                                  + "can keep it; a mix (list=RD…) plays on "
+                                  + "like a radio station."
                         }
                     }
                 }

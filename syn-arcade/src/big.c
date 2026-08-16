@@ -3830,9 +3830,90 @@ static int local_queue(void)
 #define YT_FIND	   12		/* results a search comes back with         */
 #define YT_TIMEOUT 25		/* seconds — a search crosses the internet  */
 
+/* Declared rather than moved: it belongs beside the source picker below, with
+ * the rest of what reads cliamp's own config — but the stations list has to
+ * ask it whether the OAuth row is still worth offering. */
+static bool ytmusic_credentialed(void);
+static int term_run_and_hold(const char *command);
+
+/*
+ * Is there anybody to ask?
+ *
+ * ⚠ THE TWO VERBS BELOW READ FROM STDIN, AND THE SHELL HAS NONE TO GIVE. A
+ * tile is launched as a plain process by the television — no terminal, no tty
+ * — so `fgets` there returns immediately on EOF and an interactive prompt
+ * becomes a command that flashes and exits having done nothing. That is the
+ * exact shape of a dead button.
+ *
+ * So the rule is the honest one: if there is no terminal to be read from, GET
+ * one, and run the same command inside it. `keys: "1"` on the shell's side
+ * points the on-screen keyboard at that terminal, which is how everything on
+ * this system that needs typing from a sofa already works.
+ *
+ * ⚠ It cannot loop: the command inside the terminal HAS a tty, so it takes the
+ * interactive branch.
+ */
+static bool can_be_asked(void)
+{
+	return isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+}
+
 static bool yt_stations_path(char *buf, size_t n)
 {
 	return config_path(buf, n, "syn-arcade/ytmusic.list");
+}
+
+/*
+ * ── signing in, and why it is a BROWSER rather than a Google Cloud project ──
+ *
+ * "Log in so I can use my own playlists" has two possible answers on this
+ * system and they are wildly different amounts of work:
+ *
+ *   OAuth client   what cliamp's own wizard asks for. Unlocks SEARCH AND
+ *                  BROWSE inside cliamp's TUI. Requires somebody to create a
+ *                  Google Cloud project, enable the YouTube Data API and copy
+ *                  a client id and secret out of a web console — and then
+ *                  leaves them driving a terminal interface from a sofa.
+ *   browser cookies  what yt-dlp takes. Requires being signed in to YouTube in
+ *                  a browser, which most people already are. With them yt-dlp
+ *                  enumerates PRIVATE playlists and Liked Music, which means
+ *                  this package can list somebody's own playlists as stations
+ *                  and play them with a d-pad.
+ *
+ * Both are offered — the OAuth route is still one row away, and `cliamp setup`
+ * is still the thing that does it — but THIS is the one that puts a person's
+ * playlists on their television, so it is the one the row leads with.
+ *
+ * ⚠ NOTHING IS COPIED OUT OF THE BROWSER BY THIS PACKAGE. The name of a
+ * browser is written to big.conf and handed to yt-dlp, which reads the cookie
+ * store itself, in its own process, for the length of one command. No cookie,
+ * token or password is read, logged or cached here — the titles cache is the
+ * only thing this writes, and it holds names and URLs.
+ *
+ * ⚠ AND THE STORE IS LOCKED WHILE THE BROWSER RUNS on the Chromium family.
+ * yt-dlp copies it rather than failing, but a browser that has never been
+ * signed in is a silent nothing: measured here, Vivaldi with no YouTube
+ * session yielded SEVEN cookies, decrypted perfectly, and a 401. Which is why
+ * `yt login` VERIFIES rather than just writing the setting down.
+ */
+static bool yt_cookie_browser(char *buf, size_t n)
+{
+	return big_conf_get("yt_cookies", buf, n) && buf[0];
+}
+
+/* The browsers yt-dlp can read, in the order this machine is likely to have
+ * meant. ⚠ Not a guess at what is installed — `yt login` checks that. */
+static const char *const YT_BROWSERS[] = {
+	"firefox", "vivaldi", "chromium", "chrome", "brave", "edge", "opera",
+	"safari", "whale", NULL
+};
+
+static bool yt_browser_known(const char *name)
+{
+	for (int i = 0; YT_BROWSERS[i]; i++)
+		if (strcmp(YT_BROWSERS[i], name) == 0)
+			return true;
+	return false;
 }
 
 /*
@@ -3875,13 +3956,29 @@ static int yt_enumerate(const char *spec, char titles[][256],
 	char end[16];
 	snprintf(end, sizeof(end), "%d", max);
 
-	char *out = run_capture((char *const[]){
-		(char *)"yt-dlp", (char *)"--flat-playlist",
-		(char *)"--no-warnings", (char *)"--ignore-errors",
-		(char *)"--playlist-end", end,
-		(char *)"--print", (char *)"%(title)s",
-		(char *)"--print", (char *)"%(webpage_url)s",
-		(char *)spec, NULL }, YT_TIMEOUT);
+	/* ⚠ THE COOKIES GO ON EVERY ENUMERATION, not only on the one that
+	 * lists somebody's library. A private playlist is private at PLAY time
+	 * too: without them a station that lists perfectly resolves to nothing
+	 * when it is pressed, which is the worst shape this bug could take. */
+	char browser[64];
+	bool signed_in = yt_cookie_browser(browser, sizeof(browser));
+
+	char *out = signed_in
+		? run_capture((char *const[]){
+			(char *)"yt-dlp", (char *)"--flat-playlist",
+			(char *)"--no-warnings", (char *)"--ignore-errors",
+			(char *)"--cookies-from-browser", browser,
+			(char *)"--playlist-end", end,
+			(char *)"--print", (char *)"%(title)s",
+			(char *)"--print", (char *)"%(webpage_url)s",
+			(char *)spec, NULL }, YT_TIMEOUT)
+		: run_capture((char *const[]){
+			(char *)"yt-dlp", (char *)"--flat-playlist",
+			(char *)"--no-warnings", (char *)"--ignore-errors",
+			(char *)"--playlist-end", end,
+			(char *)"--print", (char *)"%(title)s",
+			(char *)"--print", (char *)"%(webpage_url)s",
+			(char *)spec, NULL }, YT_TIMEOUT);
 	if (!out)
 		return 0;
 
@@ -3932,7 +4029,46 @@ static int yt_stations(bool rec)
 		text = read_file(path);
 
 	if (rec)
-		rec_row(3, "id", "name", "note");
+		rec_row(4, "id", "name", "note", "kind");
+
+	/*
+	 * ── the rows that are ERRANDS rather than stations ─────────────────
+	 *
+	 * ⚠ THE SHELL DOES NOT DECIDE WHICH OF THESE EXIST, for the same
+	 * reason it does not decide what a source's action is: whether this
+	 * machine has a YouTube session, and whether cliamp has an OAuth
+	 * client, are facts about the machine. A copy of that reasoning in QML
+	 * is a copy that stops being true — and it is how the sign-in route
+	 * disappeared from the television in 0.1.0-29, when the C answer
+	 * changed and nothing in the shell noticed.
+	 *
+	 * `kind` is what the shell dispatches on, so a row added here needs no
+	 * change there unless it needs a NEW kind of handling.
+	 */
+	char browser[64];
+	bool signed_in = yt_cookie_browser(browser, sizeof(browser));
+
+	if (rec) {
+		rec_row(4, "find", "Search…",
+			"type a search on the television", "action");
+
+		if (signed_in)
+			rec_row(4, "mine", "Your playlists", browser, "action");
+		else
+			rec_row(4, "login", "Sign in…",
+				"use your own playlists and Liked Music",
+				"action");
+
+		/* ⚠ THE OAUTH ROUTE, WHICH IS A DIFFERENT THING AND STILL
+		 * REAL. Signing in above is browser cookies and gets somebody
+		 * their playlists HERE; this is cliamp's own search inside its
+		 * own interface, and it needs a Google Cloud client. Offered
+		 * last and only when it is missing, because it is the long way
+		 * round and most people will never want it. */
+		if (!ytmusic_credentialed())
+			rec_row(4, "setup", "Search inside cliamp…",
+				"needs a Google OAuth client", "action");
+	}
 
 	int n = 0;
 	if (text) {
@@ -3956,7 +4092,8 @@ static int yt_stations(bool rec)
 			char id[16];
 			snprintf(id, sizeof(id), "%d", n + 1);
 			if (rec)
-				rec_row(3, id, name && *name ? name : t, t);
+				rec_row(4, id, name && *name ? name : t, t,
+					"station");
 			else
 				printf("%-4s %-40s %s\n", id,
 				       name && *name ? name : t, t);
@@ -4201,6 +4338,246 @@ static int yt_search(const char *query, bool rec)
 	if (!n && !rec)
 		puts("nothing came back for that");
 	return n ? EX_OK : EX_EMPTY;
+}
+
+/*
+ * Somebody's own playlists, which is the whole point of signing in.
+ *
+ * ⚠ ONE URL, AND IT IS THE ACCOUNT'S FEED RATHER THAN A LIBRARY PAGE.
+ * music.youtube.com's library is rendered for a browser; `/feed/playlists` is
+ * what yt-dlp's youtube:tab extractor is built for and is the same list.
+ *
+ * ⚠ AND A SIGNED-OUT MACHINE GETS A SENTENCE, NOT AN EMPTY LIST. Without
+ * cookies this URL answers 401 and yt_enumerate returns nothing, which drawn
+ * on a television is "you have no playlists" — a lie, and one somebody would
+ * reasonably act on by making some.
+ */
+static int yt_mine(bool rec)
+{
+	char browser[64];
+	if (!yt_cookie_browser(browser, sizeof(browser))) {
+		if (!rec)
+			fputs("syn-arcade: not signed in, so there are no "
+			      "playlists to read — `big music yt login`\n",
+			      stderr);
+		return EX_FAIL;
+	}
+	if (!have("yt-dlp")) {
+		fputs("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n", stderr);
+		return EX_FAIL;
+	}
+
+	static char titles[YT_FIND][256];
+	static char urls[YT_FIND][SYN_PATH];
+	int n = yt_enumerate("https://www.youtube.com/feed/playlists",
+			     titles, urls, YT_FIND);
+
+	if (rec)
+		rec_row(3, "id", "name", "note");
+	for (int i = 0; i < n; i++) {
+		if (rec)
+			rec_row(3, urls[i], titles[i], "");
+		else
+			printf("%-50s %s\n", titles[i], urls[i]);
+	}
+
+	if (!n && !rec)
+		printf("nothing came back from %s's YouTube session.\n"
+		       "Sign in to YouTube in that browser and try again — "
+		       "`big music yt login` checks it.\n", browser);
+	return n ? EX_OK : EX_EMPTY;
+}
+
+/*
+ * Sign in: remember which browser to take a YouTube session from.
+ *
+ * ⚠ VERIFIED, NOT MERELY WRITTEN DOWN, and that is the whole value of this
+ * verb. Every failure here is silent by nature — a browser that was never
+ * signed in decrypts its cookies perfectly and answers 401, and yt-dlp says so
+ * on a stderr that a television never shows. Measured on this machine: Vivaldi
+ * with no YouTube session gave seven cookies, `v10` every one of them, and
+ * nothing at all from the playlists feed.
+ *
+ * So the setting is written, the account is asked what it has, and what comes
+ * back is REPORTED. A person who is told "signed in — 14 playlists" knows it
+ * worked; a person who is told "that browser has no YouTube session" knows
+ * exactly what to go and do.
+ */
+static int yt_login(const char *browser)
+{
+	if (!browser || !*browser) {
+		if (!can_be_asked())
+			return term_run_and_hold("syn-arcade big music yt login");
+
+		puts("Which browser are you signed in to YouTube with?");
+		puts("");
+		for (int i = 0; YT_BROWSERS[i]; i++)
+			printf("    %s%s\n", YT_BROWSERS[i],
+			       have(YT_BROWSERS[i]) ? "   · installed here" : "");
+		puts("");
+		fputs("Browser (or Enter to cancel): ", stdout);
+		fflush(stdout);
+
+		char line[64];
+		if (!fgets(line, sizeof(line), stdin))
+			return EX_FAIL;
+		char *t = trim(line);
+		if (!*t) {
+			puts("nothing changed.");
+			return EX_OK;
+		}
+		return yt_login(t);
+	}
+
+	if (!yt_browser_known(browser)) {
+		fprintf(stderr, "syn-arcade: yt-dlp cannot read cookies from "
+				"'%s'\n", browser);
+		return EX_USAGE;
+	}
+	if (!have("yt-dlp")) {
+		fputs("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* ⚠ WRITTEN BEFORE THE CHECK, because the check reads it: yt_enumerate
+	 * takes the browser from big.conf rather than from an argument, so
+	 * that there is one answer to "which session is this package using"
+	 * and every path gets the same one. */
+	if (big_conf_set("yt_cookies", browser) != EX_OK) {
+		fputs("syn-arcade: could not write big.conf\n", stderr);
+		return EX_FAIL;
+	}
+
+	printf("checking what %s's YouTube session can see…\n", browser);
+	fflush(stdout);
+
+	static char titles[YT_FIND][256];
+	static char urls[YT_FIND][SYN_PATH];
+	int n = yt_enumerate("https://www.youtube.com/feed/playlists",
+			     titles, urls, YT_FIND);
+	if (!n) {
+		/* ⚠ THE SETTING IS TAKEN BACK OUT. Leaving it would put
+		 * `--cookies-from-browser` on every enumeration from now on —
+		 * slower, and it would keep answering "no playlists" as though
+		 * the account were empty. */
+		big_conf_set("yt_cookies", "");
+		fprintf(stderr,
+			"\nsyn-arcade: %s has no YouTube session — nothing came "
+			"back.\n"
+			"\n"
+			"Open %s, sign in at music.youtube.com, and run this "
+			"again.\n"
+			"You are still signed out, and the stations you "
+			"already have still play.\n", browser, browser);
+		return EX_FAIL;
+	}
+
+	printf("\nsigned in with %s — %d playlist%s:\n\n",
+	       browser, n, n == 1 ? "" : "s");
+	for (int i = 0; i < n; i++)
+		printf("    %s\n", titles[i]);
+	printf("\nThey are on the television under Music Source ▸ YouTube "
+	       "Music ▸ Your playlists.\n");
+	return EX_OK;
+}
+
+/*
+ * Search and play, from a terminal ON the television.
+ *
+ * ⚠ THIS IS HOW TYPING HAPPENS HERE, and it is not a workaround — it is the
+ * same mechanism the install and sign-in rows already use. The on-screen
+ * keyboard types through wtype into whatever holds keyboard focus, and the
+ * shell's own surface deliberately does not: a menu that grabbed the keyboard
+ * to draw a keyboard would type into itself. So the shell steps aside, a
+ * terminal comes up with `keys: "1"`, and the keyboard types into THAT.
+ *
+ * ⚠ AND IT PLAYS THE CHOICE ITSELF rather than handing an id back. The shell
+ * is already out of the way by the time somebody has typed a query; coming
+ * back to a menu to press A again would be two interfaces for one errand.
+ */
+static int yt_find(void)
+{
+	if (!can_be_asked())
+		return term_run_and_hold("syn-arcade big music yt find");
+
+	if (!have("yt-dlp")) {
+		fputs("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n", stderr);
+		return EX_FAIL;
+	}
+
+	fputs("Search YouTube Music: ", stdout);
+	fflush(stdout);
+
+	char query[256];
+	if (!fgets(query, sizeof(query), stdin))
+		return EX_FAIL;
+	char *q = trim(query);
+	if (!*q) {
+		puts("nothing to search for.");
+		return EX_OK;
+	}
+
+	char spec[512];
+	snprintf(spec, sizeof(spec), "ytsearch%d:%s", YT_FIND, q);
+
+	static char titles[YT_FIND][256];
+	static char urls[YT_FIND][SYN_PATH];
+	printf("\nsearching…\n\n");
+	fflush(stdout);
+	int n = yt_enumerate(spec, titles, urls, YT_FIND);
+	if (!n) {
+		puts("nothing came back for that.");
+		return EX_EMPTY;
+	}
+
+	for (int i = 0; i < n; i++)
+		printf("  %2d  %s\n", i + 1, titles[i]);
+
+	fputs("\nPlay which? (number, `s<number>` to save it as a station, "
+	      "Enter to cancel): ", stdout);
+	fflush(stdout);
+
+	char line[32];
+	if (!fgets(line, sizeof(line), stdin))
+		return EX_OK;
+	char *t = trim(line);
+	if (!*t)
+		return EX_OK;
+
+	bool save = (*t == 's' || *t == 'S');
+	if (save)
+		t++;
+
+	int pick = atoi(t);
+	if (pick < 1 || pick > n) {
+		fprintf(stderr, "syn-arcade: there is no %d on that list\n",
+			pick);
+		return EX_USAGE;
+	}
+
+	if (save) {
+		/* ⚠ SAVED AND THEN PLAYED, in that order: a station somebody
+		 * asked to keep is kept even if the playing half then fails
+		 * for a reason that has nothing to do with the list. */
+		char path[SYN_PATH];
+		if (yt_stations_path(path, sizeof(path)) &&
+		    mkdir_parents(path) == 0) {
+			FILE *f = fopen(path, "a");
+			if (f) {
+				fprintf(f, "%s\t%s\n", urls[pick - 1],
+					titles[pick - 1]);
+				fclose(f);
+				printf("kept as a station: %s\n",
+				       titles[pick - 1]);
+			}
+		}
+	}
+
+	printf("\nplaying %s…\n", titles[pick - 1]);
+	return yt_play(urls[pick - 1]);
 }
 
 /*
@@ -4490,9 +4867,19 @@ static int big_music_sources(bool rec)
 		 * it with. Somebody who wants that has somewhere to go, and
 		 * somebody who does not is not being sent to a wizard for a
 		 * row that already works. */
-		else if (strcmp(act, "yt") == 0 && !ytmusic_credentialed())
-			note = "stations play here — cliamp's own search "
-			       "needs an OAuth client";
+		/* ⚠ THE NOTE ANSWERS "CAN I GET AT MY OWN MUSIC", which is the
+		 * question somebody actually has, and signing in is what
+		 * changes the answer. The OAuth client is a second, narrower
+		 * thing — cliamp's own search — and saying so on a row that
+		 * already works only reads as another thing gone wrong. */
+		else if (strcmp(act, "yt") == 0) {
+			char br[64];
+			if (yt_cookie_browser(br, sizeof(br)))
+				note = "your playlists and your stations";
+			else
+				note = "stations play here — sign in for your "
+				       "own playlists";
+		}
 		else if (!s->queueable)
 			note = "opens cliamp";
 
@@ -4821,6 +5208,19 @@ static int big_music(int argc, char **argv, bool rec)
 			return yt_search(third_operand(argc, argv), rec);
 		if (!strcmp(a, "add"))
 			return yt_add(third_operand(argc, argv));
+
+		/* Somebody's own library, and the two that TYPE. `login` and
+		 * `find` read from stdin, which on the television means a
+		 * terminal with the on-screen keyboard pointed at it — see
+		 * yt_find() for why that is the mechanism rather than a text
+		 * field in the shell. */
+		if (!strcmp(a, "mine"))
+			return yt_mine(rec);
+		if (!strcmp(a, "login"))
+			return yt_login(third_operand(argc, argv));
+		if (!strcmp(a, "find"))
+			return yt_find();
+
 		return yt_play(a);
 	}
 
