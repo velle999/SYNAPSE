@@ -29,7 +29,13 @@ pkgver=0.1.0
 #   screen until the next login. A bind action rather than a new IPC verb,
 #   because every bindable action is already scriptable through
 #   `synctl dispatch` and a second registry is a second thing to keep in step.
-pkgrel=374
+# 375: a Refresh row on the desktop's own right-click menu, using that same
+#   action. The action alone was reachable only by another program; a person who
+#   drops a file into ~/Desktop from a terminal had no way to ask for the
+#   rescan at all. It is a plain deskicons_reload and deliberately NOT
+#   deskicons_arrange — arranging clears every cell an icon has been dragged
+#   into, and a "refresh" that rearranges the desktop is not a refresh.
+pkgrel=375
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

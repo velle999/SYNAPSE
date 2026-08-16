@@ -1,6 +1,10 @@
 pkgname=syn-install
 pkgver=0.1.0
-pkgrel=77
+# 78: cliamp in SEL_APPS, beside syn-arcade. Big screen mode's Music tile plays
+#   without a window ONLY with that player — every other one opens a window
+#   somebody then has to get out of with a gamepad — so a fresh install without
+#   it had half of big screen mode described and absent.
+pkgrel=78
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

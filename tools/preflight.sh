@@ -107,13 +107,28 @@ declare -A UNREGISTERED=(
 # Paths inside a component that do not reach the package, so editing them
 # cannot require a pkgrel bump.
 #
-#   src/, pkg/  makepkg's extraction and staging dirs — not tracked source at
-#               all. `git show HEAD:synui/src/...` fails; the tracked file is
-#               synui/<path>.
+#   pkg/        makepkg's staging dir — not tracked source at all.
 #   tests/      no PKGBUILD installs a tests/ tree. synpkg RUNS its tests in
 #               check(), so an edit there can fail a build, but it still ships
 #               nothing.
-NON_SHIPPING='(^|/)(src|pkg|tests)/'
+#
+# ⚠ src/ IS NOT IN THIS LIST, AND USED TO BE — which quietly exempted the
+# largest component in the repo from the one gate that exists to stop an edit
+# that cannot ship.
+#
+# `src/` means two different things here. For a SCRIPT component it is
+# makepkg's extraction dir (`git show HEAD:syn-update/src/syn-update.sh` fails;
+# the tracked file is syn-update/syn-update.sh) — and those are all in
+# .gitignore, so they never reach this check anyway. For a C component it is
+# the SOURCE: synui/src has 93 tracked files, syn-arcade/src has 10. Excluding
+# the pattern therefore excused every compositor change ever made, and the only
+# reason it was ever caught was that most of them also touch a .qml or a
+# header outside src/.
+#
+# So the split is made on what git says, one file at a time, in check_pkgrel:
+# tracked means source, untracked means staging. No per-component list to keep
+# in step.
+NON_SHIPPING='(^|/)(pkg|tests)/'
 
 # ── Output ───────────────────────────────────────────────────
 
@@ -611,6 +626,11 @@ check_pkgrel() {
         [ "$c" = "$f" ] && continue          # repo root: build-all.sh, README
         [ -f "$c/PKGBUILD" ] || continue     # archiso/, docs/, tools/
         printf '%s' "${f#*/}" | grep -qE "$NON_SHIPPING" && continue
+        # src/ is source when git tracks it and makepkg's extraction dir when
+        # it does not. See the note on NON_SHIPPING.
+        case "${f#*/}" in
+            src/*) git ls-files --error-unmatch "$f" >/dev/null 2>&1 || continue ;;
+        esac
         touched[$c]=1
         [ -n "${witness[$c]:-}" ] || witness[$c]=$f
     done < <(changed_files)

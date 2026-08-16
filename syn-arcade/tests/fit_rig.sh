@@ -159,6 +159,7 @@ shot_state 02-editor 's/property int tab: 0/property int tab: 3/;
                       s/property bool   fitEditing: false/property bool   fitEditing: true/'
 shot_state 03-picker 's/property int tab: 0/property int tab: 3/;
                       s/property bool   fitPicking: false/property bool   fitPicking: true/'
+shot_state 04-big    's/property int tab: 0/property int tab: 4/'
 
 echo
 echo "screenshots in $OUT"

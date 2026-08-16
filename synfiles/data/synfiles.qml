@@ -5734,6 +5734,16 @@ FloatingWindow {
                         items.push({ label: "Properties…", act: "props", on: n > 0,
                                      hint: "Alt+Enter" })
                         items.push({ label: "Copy Path", act: "copypath", on: one })
+                        // ⚠ Refresh is HERE as well as in the empty-space menu,
+                        // and it is not a duplicate worth removing: a pane that
+                        // is full of files has no empty space to right-click,
+                        // so the only menu reachable was the one without it —
+                        // and F5 is no answer to somebody whose hand is on the
+                        // mouse. It is about the pane rather than the row,
+                        // which is why it sits in this trailing group with
+                        // Open Terminal Here rather than up among Copy and Cut.
+                        items.push({ label: "Refresh", act: "refresh", on: true,
+                                     hint: "F5" })
                         items.push({ label: "Open Terminal Here", act: "term",
                                      on: t.view === "dir" })
                         items.push({ label: root.isPinned(r.full) ? "Remove from Places"
@@ -5833,10 +5843,12 @@ FloatingWindow {
                                         pane.selection = inv
                                         break
                                     }
-                                    // ── Empty-space entries ──────────────
+                                    // ── Entries that do not need a row ───
                                     // Everything above needs `r`; these are
                                     // reached with it null, which is what a
-                                    // background click means.
+                                    // background click means. ⚠ Refresh is
+                                    // also offered from the ROW menu, because
+                                    // a full pane has no background to click.
                                     case "refresh":     pane.reload(); break
                                     case "folderprops": root.openFolderProperties(); break
                                     case "sort:name":

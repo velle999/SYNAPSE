@@ -300,6 +300,49 @@ FloatingWindow {
     property bool   fitMenu: true
     property bool   fitDesktop: false
 
+    // ── big screen mode ─────────────────────────────────────────────────────
+    //
+    // Its own tab since 0.1.0-23. It used to be three rows at the bottom of
+    // Shortcuts, which was right while the only things worth saying about it
+    // were which key opens it and whether it opens at login — and stopped being
+    // right the moment it had a screen to choose and a music player to name.
+    //
+    // ⚠ Those rows are GONE from Shortcuts rather than repeated here. Two
+    // panels writing one setting is the shape of every "I turned it off and it
+    // came back" report in this project.
+    property var bigFields: ({})
+    property var bigScreens: []
+    property var bigPlayers: []
+    property var bigSources: []
+
+    Process {
+        id: bigProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigFields = root.parseFields(this.text)
+        }
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.status = root.oneLine(this.text)
+        }
+    }
+    Process {
+        id: bigOutProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigScreens = root.parseRecords(this.text)
+        }
+    }
+    Process {
+        id: bigPlayerProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigPlayers = root.parseRecords(this.text)
+        }
+    }
+    Process {
+        id: bigSourceProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigSources = root.parseRecords(this.text)
+        }
+    }
+
     Process {
         id: fitsProc
         stdout: StdioCollector {
@@ -524,6 +567,13 @@ FloatingWindow {
         fitFiltersProc.running = true
         fitAppsProc.command = [root.bin, "fit", "apps", "--rec"]
         fitAppsProc.running = true
+        bigProc.command   = [root.bin, "big", "status", "--rec"]; bigProc.running = true
+        bigOutProc.command = [root.bin, "big", "output", "--rec"]
+        bigOutProc.running = true
+        bigPlayerProc.command = [root.bin, "big", "player", "--rec"]
+        bigPlayerProc.running = true
+        bigSourceProc.command = [root.bin, "big", "music", "source", "--rec"]
+        bigSourceProc.running = true
     }
 
     Component.onCompleted: root.reload()
@@ -546,7 +596,7 @@ FloatingWindow {
 
                 Repeater {
                     model: ["Overlay", "Controllers", "Mappings", "Fit to screen",
-                            "Shortcuts"]
+                            "Big screen", "Shortcuts"]
                     Rectangle {
                         id: tabChip
                         required property int index
@@ -1044,7 +1094,7 @@ FloatingWindow {
                     anchors.fill: parent
                     anchors.margins: 16
                     spacing: 10
-                    visible: root.tab === 4
+                    visible: root.tab === 5
 
                     Text {
                         text: "Gaming shortcuts"
@@ -1092,90 +1142,6 @@ FloatingWindow {
                             text: "Remove"
                             visible: root.bindFields.installed === "yes"
                             onTriggered: root.run(["binds", "remove", "--reload"])
-                        }
-                    }
-
-                    // ── big screen mode ──────────────────────────────────────
-                    //
-                    // Here rather than in a tab of its own: everything this
-                    // window can usefully say about big screen mode is which
-                    // key opens it and whether it opens at login, and both are
-                    // lines in the same managed block as the shortcuts above.
-                    // The mode itself has its own full-screen interface, which
-                    // is not something to preview in a 820px window.
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 14
-                        // Layout.preferredHeight, not height: inside a layout,
-                        // `height` is assigned by the layout itself and setting
-                        // it is undefined behaviour that happens to work until
-                        // something else in the column changes size.
-                        Layout.preferredHeight: 1
-                        color: root.panelHi
-                    }
-
-                    Text {
-                        Layout.topMargin: 8
-                        text: "Big screen mode"
-                        color: root.ink
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: "The ten-foot interface: your Steam library, Big Picture "
-                            + "and the machine's own switches as tiles, drivable from a "
-                            + "game controller."
-                        color: root.dim
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
-                    }
-
-                    FieldRow {
-                        label: "Opens with"
-                        value: root.bindFields["big screen mode"] || "—"
-                    }
-                    FieldRow {
-                        label: "At login"
-                        value: root.bindFields["big screen at login"] || "—"
-                    }
-                    // The pad's GUIDE button, from the desktop. Big screen
-                    // mode's own Guide takes you out to the desktop; the
-                    // watcher this row controls is what brings it back — so
-                    // the two halves of one button are one row here.
-                    FieldRow {
-                        label: "Guide button"
-                        value: root.bindFields["guide button"] || "—"
-                    }
-
-                    RowLayout {
-                        Layout.topMargin: 6
-                        spacing: 8
-                        ArcButton {
-                            text: "Open big screen"
-                            // ⚠ --detach. This window IS quickshell, and
-                            // `run` starts a child Process: without the fork
-                            // the big screen shell would be that child, so the
-                            // window would sit waiting for it and closing the
-                            // window would close its pipes.
-                            onTriggered: root.run(["big", "start", "--detach"])
-                        }
-                        // One button whose label is the verb, not a checkbox:
-                        // the C side refuses a no-op either way, so the label
-                        // is the only thing that has to be right.
-                        ArcButton {
-                            text: root.bindFields["big screen at login"] === "on"
-                                  ? "Don't start at login" : "Start at login"
-                            onTriggered: root.run(["big", "autostart",
-                                root.bindFields["big screen at login"] === "on"
-                                    ? "off" : "on"])
-                        }
-                        ArcButton {
-                            text: root.bindFields["guide button"] === "on"
-                                  ? "Guide button off" : "Guide button on"
-                            onTriggered: root.run(["big", "guide",
-                                root.bindFields["guide button"] === "on"
-                                    ? "off" : "on"])
                         }
                     }
 
@@ -1652,6 +1618,212 @@ FloatingWindow {
                         }
                         Item { Layout.fillWidth: true }
                     }
+                }
+
+                // ── Big screen ────────────────────────────────────────────
+                //
+                // Everything about the ten-foot interface that is easier to
+                // set with a keyboard in front of you than with a pad from
+                // four metres away. The interface itself keeps the things that
+                // only make sense there — what is playing, what to launch —
+                // and this keeps the ones you set once.
+                //
+                // ⚠ These rows used to be the bottom of the Shortcuts tab and
+                // are GONE from there rather than repeated here. Two panels
+                // writing one setting is the shape of every "I turned it off
+                // and it came back" report in this project.
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 10
+                    visible: root.tab === 4
+
+                    Text {
+                        text: "Big screen mode"
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "The ten-foot interface: your Steam library, Big Picture "
+                            + "and the machine's own switches as tiles, drivable from a "
+                            + "game controller."
+                        color: root.dim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        Layout.topMargin: 4
+                        spacing: 8
+                        ArcButton {
+                            text: root.bigFields.running === "yes" ? "Show it"
+                                                                   : "Open big screen"
+                            primary: true
+                            // ⚠ --detach. This window IS quickshell, and `run`
+                            // starts a child Process: without the fork the big
+                            // screen shell would be that child, so closing this
+                            // window would close its pipes.
+                            onTriggered: root.run(root.bigFields.running === "yes"
+                                ? ["big", "show"] : ["big", "start", "--detach"])
+                        }
+                        ArcButton {
+                            text: "Close it"
+                            visible: root.bigFields.running === "yes"
+                            onTriggered: root.run(["big", "stop"])
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: root.bigFields.running === "yes" ? "running"
+                                                                   : "not running"
+                            color: root.bigFields.running === "yes" ? root.good : root.dim
+                            font.pixelSize: 12
+                        }
+                    }
+
+                    FieldRow {
+                        label: "Opens with"
+                        value: root.bindFields["big screen mode"] || "—"
+                    }
+
+                    // ⚠ The screen it opens on, first because it is the
+                    // setting that fails invisibly: at login nobody has
+                    // pointed at anything, so "wherever the pointer is" opens
+                    // the television interface on whichever monitor the cursor
+                    // was parked on — and nothing on that screen can explain
+                    // why it is there.
+                    Text {
+                        Layout.topMargin: 6
+                        text: "Which screen"
+                        color: root.ink
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: root.bigScreens
+                            ArcChip {
+                                required property var modelData
+                                label: modelData.label
+                                on: modelData.current === "current"
+                                onPicked: root.run(["big", "output", modelData.id])
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Opens on " + (root.bigFields.screen || "—")
+                        color: root.dim
+                        font.pixelSize: 11
+                    }
+
+                    // ⚠ The music player, and the note under the chips is the
+                    // point of the row: cliamp is the only one big screen mode
+                    // can DRIVE. With it, Music plays without a window and the
+                    // Start menu grows transport and a Now Playing meter; with
+                    // anything else the tile opens a window somebody then has
+                    // to get out of with a gamepad.
+                    Text {
+                        Layout.topMargin: 8
+                        text: "Music player"
+                        color: root.ink
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: root.bigPlayers
+                            ArcChip {
+                                required property var modelData
+                                label: modelData.label
+                                on: modelData.current === "current"
+                                onPicked: root.run(["big", "player", modelData.id])
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: {
+                            for (const p of root.bigPlayers)
+                                if (p.current === "current") return p.note
+                            return root.bigPlayers.length === 0
+                                ? "No music player installed — synpkg install cliamp"
+                                : ""
+                        }
+                        color: root.dim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // Only worth showing for a player that HAS sources, which
+                    // is the driven one: everything else browses its own
+                    // library in its own window.
+                    Text {
+                        Layout.topMargin: 8
+                        visible: root.bigSources.length > 0
+                        text: "Where the music comes from"
+                        color: root.ink
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.bigSources.length > 0
+                        spacing: 6
+                        Repeater {
+                            model: root.bigSources
+                            ArcChip {
+                                required property var modelData
+                                label: modelData.name
+                                on: modelData.current === "1"
+                                onPicked: root.run(["big", "music", "source",
+                                                    modelData.id])
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 8
+                        ArcButton {
+                            text: root.bigFields["at login"] === "on"
+                                  ? "Don't start at login" : "Start at login"
+                            onTriggered: root.run(["big", "autostart",
+                                root.bigFields["at login"] === "on" ? "off" : "on"])
+                        }
+                        // The pad's GUIDE button, from the desktop. Big screen
+                        // mode's own Guide takes you out to the desktop; this
+                        // watcher is what brings it back, so the two halves of
+                        // one button are one setting.
+                        ArcButton {
+                            text: root.bigFields["guide button"] === "on"
+                                  ? "Guide button off" : "Guide button on"
+                            onTriggered: root.run(["big", "guide",
+                                root.bigFields["guide button"] === "on" ? "off" : "on"])
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    FieldRow {
+                        Layout.topMargin: 6
+                        label: "Steam library"
+                        value: (root.bigFields.games || "0") + " games"
+                    }
+                    FieldRow {
+                        label: "quickshell"
+                        value: root.bigFields.quickshell || "—"
+                        warn: (root.bigFields.quickshell || "") !== "installed"
+                    }
+
+                    Item { Layout.fillHeight: true }
                 }
             }
 

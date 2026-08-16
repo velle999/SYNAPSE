@@ -81,6 +81,7 @@ const char *deskact_label(syn_deskact_t a)
     case SYN_DESKACT_THEME:     return "Appearance…";
     case SYN_DESKACT_DISPLAY:   return "Display Settings…";
     case SYN_DESKACT_ICONS:     return "Show Desktop Icons";
+    case SYN_DESKACT_REFRESH:   return "Refresh";
     case SYN_DESKACT_ARRANGE_NAME: return "Arrange by Name";
     case SYN_DESKACT_ARRANGE_TYPE: return "Arrange by Type";
     case SYN_DESKACT_ARRANGE_SIZE: return "Arrange by Size";
@@ -138,6 +139,8 @@ void deskmenu_open(syn_server_t *s, double lx, double ly)
      * otherwise they are four rows that visibly do nothing. */
     if (s->config.desktop_icons) {
         s->deskmenu.actions[n++] = SYN_DESKACT_SEP;
+        /* First of the icon rows, where every other desktop puts it. */
+        s->deskmenu.actions[n++] = SYN_DESKACT_REFRESH;
         s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_NAME;
         s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_TYPE;
         s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_SIZE;
@@ -277,6 +280,12 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
             deskicons_state_save(s);
             deskicons_reload(s);
         }
+        break;
+    case SYN_DESKACT_REFRESH:
+        /* Plain reload, NOT deskicons_arrange: arranging clears every cell a
+         * user has dragged an icon into, and "refresh" that rearranges the
+         * desktop is not a refresh. */
+        deskicons_reload(s);
         break;
     case SYN_DESKACT_ARRANGE_NAME:
         deskicons_arrange(s, SYN_ARRANGE_NAME);

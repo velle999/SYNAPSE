@@ -2115,7 +2115,11 @@ while :; do
     # cannot tell you whether your controller works, or put an FPS counter on
     # screen, is missing something Standard should have. Minimal still clears
     # SEL_APPS entirely.
-    SEL_APPS="chibi vibe syn-arsenal syn-arcade linux-wallpaperengine synapse-wallpapers"
+    # cliamp travels with syn-arcade for the same reason it is on the ISO: big
+    # screen mode's Music tile plays without a window ONLY with this player, and
+    # a feature that is described in the package and absent from every fresh
+    # install is not being offered. ~30 MB.
+    SEL_APPS="chibi vibe syn-arsenal syn-arcade cliamp linux-wallpaperengine synapse-wallpapers"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
@@ -2146,7 +2150,7 @@ while :; do
             # package with it — and is only rescued by the one-at-a-time retry
             # in the verify step. `syn printer samsung` installs the driver
             # from Samsung after the install, which is the supported route.
-            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal syn-arcade linux-wallpaperengine synapse-wallpapers"
+            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal syn-arcade cliamp linux-wallpaperengine synapse-wallpapers"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1

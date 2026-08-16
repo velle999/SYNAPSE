@@ -143,6 +143,13 @@ syn-confine
 # installing, and it is the one thing here that cannot be checked from a
 # spec sheet.
 syn-arcade
+# The terminal music player big screen mode DRIVES. Every other player on its
+# list is a tile that opens a window somebody then has to get out of with a
+# gamepad; this one runs headless and takes transport over a socket, which is
+# what makes Music on a television a tile that plays and a Start-menu row that
+# controls it. Without it installed, that whole half of big screen mode is
+# listed and absent — which is how it shipped, working on one machine.
+cliamp
 # The settings app: displays, region, date and time, network, Bluetooth, power,
 # kernels, default applications, and where configuration lives. It was in
 # build-all.sh's component list, in syn-update's COMPONENTS and in the start

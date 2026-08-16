@@ -2725,6 +2725,12 @@ typedef enum {
     SYN_DESKACT_THEME,
     SYN_DESKACT_DISPLAY,
     SYN_DESKACT_ICONS,       /* toggle desktop icons at runtime */
+    /* Rescan ~/Desktop. ⚠ Not a nicety: there is NO inotify watch on that
+     * directory (see deskicons_reload in deskmenu.c), so a file put there by
+     * anything other than a drag-and-drop is invisible until something asks
+     * for a rescan — and until this row existed, the only ways to ask were
+     * turning the icons off and on again or arranging them. */
+    SYN_DESKACT_REFRESH,
     /* Icon sort order. Only offered while the icons are on, since choosing one
      * with nothing drawn would be a setting with no visible effect. */
     SYN_DESKACT_ARRANGE_NAME,

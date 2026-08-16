@@ -1,0 +1,141 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# bjarneo/cliamp — a terminal music player in the shape of Winamp, and on
+# SynapseOS the one big screen mode can DRIVE.
+#
+# ── Why this is packaged rather than left as a downloaded binary ─────────────
+#
+# It was a 33MB unowned ELF in ~/.local/bin, installed by upstream's install.sh
+# in July. That is the shape of every problem this repo packages away: an
+# unowned binary cannot reach the ISO, never upgrades, is invisible to
+# `pacman -Qo`, and belongs to exactly one user on one machine.
+#
+# It matters more than most, because syn-arcade's big screen mode is BUILT ON
+# IT. Every other music player on that list is a tile that opens a window
+# somebody then has to get out of with a gamepad; cliamp runs headless and takes
+# transport commands over a socket, so Music on a television becomes a tile that
+# starts the music and a row in the Start menu that controls it — with a Now
+# Playing meter, a source picker (Plex, YouTube Music, Spotify, local files,
+# radio) and a browsable Plex library. All of that was listed in syn-arcade's
+# package description and present on exactly one machine in the world.
+#
+# ── What it is NOT ──────────────────────────────────────────────────────────
+#
+# ⚠ NOT a dependency of syn-arcade, and deliberately. Big screen mode works
+# without it — the Music tile falls back to whichever player is installed, says
+# so, and `syn-arcade big player` picks between them. Making a music player a
+# hard dependency of the game assistant would put 30MB of Go on machines that
+# want the overlay and nothing else. It is an optdepend there, a component here,
+# and syn-install offers it with the rest of the applications.
+#
+# ⚠ cava is NOT a dependency, which is easy to get wrong: there is a `cava`
+# process on this developer's machine capturing the same audio, and it belongs
+# to SYNUI's desktop visualizer widget. cliamp computes its own bands inside its
+# TUI draw loop — which is also why `syn-arcade big music vis` runs it on a pty
+# rather than with `--daemon`, where the bands are never computed at all.
+#
+# ── Rolling it forward ──────────────────────────────────────────────────────
+#
+# Built from a PINNED TAG, not from main: a music player that changes under an
+# interface driving it over a socket is how "the tile stopped working" happens
+# with nothing in this repo having changed. Bump `pkgver` and `_commit`
+# together — the commit is what is actually fetched, and the tag name alone
+# would let upstream move it.
+pkgname=cliamp
+pkgver=1.63.2
+pkgrel=1
+pkgdesc="Terminal music player in the shape of Winamp — and the one big screen mode can drive"
+arch=('x86_64')
+url="https://github.com/bjarneo/cliamp"
+# Upstream's own licence. ⚠ Never relicensed: this is third-party source, like
+# nexus-chat and tepris. See the licensing policy — only files carrying the
+# `SynapseOS Project` header are ours to touch.
+license=('MIT')
+
+# The audio backend is ALSA (through PipeWire's alsa-lib bridge on this system),
+# which is also why alsa-lib is a makedepend: the Go build is cgo against its
+# headers.
+depends=('glibc' 'alsa-lib')
+makedepends=('go' 'git' 'alsa-lib')
+
+# ⚠ Both OPTIONAL and both worth naming, because their absence is silent: a
+# format simply refuses to play, and a provider simply returns nothing. Neither
+# prints anything a person would connect to a missing program.
+optdepends=('yt-dlp: YouTube, YouTube Music, SoundCloud, Bandcamp and Bilibili — without it those sources return nothing'
+            'ffmpeg: AAC, ALAC, Opus and WMA playback'
+            'syn-arcade: big screen mode drives this one over its socket — Music with no window, and transport in the Start menu')
+
+# v1.63.2, the tag itself rather than what the tag points at today.
+_commit=7c7788a3c9a107508bdbfea29ca11d67ffea947d
+
+source=("git+$url.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+prepare() {
+    cd "$pkgname"
+    # ⚠ VERIFIED, not trusted. A git tag is a movable label: fetching by tag
+    # gets whatever it names at build time, which for a pinned build is exactly
+    # the thing being pinned against. This is the check that makes _commit mean
+    # something — it fails the build rather than shipping a different player.
+    local got
+    got=$(git rev-parse "v$pkgver^{}" 2>/dev/null || git rev-parse HEAD)
+    if [ "$(git rev-parse v$pkgver)" != "$_commit" ] && [ "$got" != "$_commit" ]; then
+        echo "cliamp: tag v$pkgver is $got, expected $_commit" >&2
+        echo "cliamp: upstream moved the tag — check the diff, then bump _commit" >&2
+        return 1
+    fi
+
+    # The module cache is populated here so build() is the build and nothing
+    # else, which is what makes a failure legible: "could not download" and
+    # "does not compile" are different problems.
+    export GOPATH="$srcdir/gopath"
+    go mod download
+}
+
+build() {
+    cd "$pkgname"
+
+    # Arch's Go packaging flags. -buildmode=pie and the external linker are what
+    # let the distro's hardening flags reach a Go binary at all; -trimpath keeps
+    # $srcdir out of the shipped paths, and -modcacherw leaves the module cache
+    # deletable by makepkg afterwards (without it, cleaning up needs root).
+    export GOPATH="$srcdir/gopath"
+    export CGO_CPPFLAGS="${CPPFLAGS}"
+    export CGO_CFLAGS="${CFLAGS}"
+    export CGO_CXXFLAGS="${CXXFLAGS}"
+    export CGO_LDFLAGS="${LDFLAGS}"
+    export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+
+    # `main.version` is what `cliamp --version` prints and what its log line
+    # carries. Upstream's Makefile fills it from `git describe`; left unset the
+    # binary reports "dev", and a player that cannot say which version it is
+    # makes every "does your cliamp do X" question unanswerable.
+    go build -ldflags "-linkmode=external -X main.version=v$pkgver" \
+        -o build/cliamp .
+}
+
+check() {
+    cd "$pkgname"
+    export GOPATH="$srcdir/gopath"
+    # ⚠ The audio and IPC suites are the point of running this at all: the
+    # socket protocol is what big screen mode talks to, so a change upstream
+    # makes to it should fail HERE rather than as a Music tile that stops
+    # responding on a television.
+    go test ./... 2>&1 | tail -40
+}
+
+package() {
+    cd "$pkgname"
+    install -Dm755 build/cliamp "$pkgdir/usr/bin/cliamp"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+
+    # Upstream ships a .desktop. ⚠ It is a TERMINAL application, so the entry
+    # carries Terminal=true — which on this desktop needs an xdg-terminal-exec
+    # to be launchable at all. Shipped as upstream wrote it; syn-arcade never
+    # goes through it (it runs the binary, on a pty when it needs the bands).
+    if [ -f cliamp.desktop ]; then
+        install -Dm644 cliamp.desktop \
+            "$pkgdir/usr/share/applications/cliamp.desktop"
+    fi
+}

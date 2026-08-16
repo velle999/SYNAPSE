@@ -33,7 +33,7 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers syn-arcade)
+       synapse-wallpapers syn-arcade cliamp)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -327,6 +327,13 @@ build_script_pkg tepris
 # packages.x86_64, so every installed system HAS it; before this rule it was on
 # every machine and updatable on none.
 build_script_pkg fetch
+
+# cliamp — bjarneo/cliamp, the terminal music player big screen mode DRIVES.
+# Same shape as the three above: a pinned upstream tag fetched at build time, so
+# it needs network. Third-party and MIT; it is packaged because syn-arcade's
+# whole Music path is built on it and it was an unowned binary in ~/.local/bin
+# on exactly one machine.
+build_script_pkg cliamp
 
 # synapse-wallpapers — our own Wallpaper Engine wallpapers (dendrite + Tux).
 # source=() and the renders are derived from the checkout at build time, so

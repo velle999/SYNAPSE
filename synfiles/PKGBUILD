@@ -22,7 +22,10 @@ pkgname=synfiles
 # component (build-all.sh:123), so bumping pkgver leaves makepkg looking for a
 # tarball nothing creates.
 pkgver=0.1.0
-pkgrel=49
+# 50: Refresh on the FILE menu as well as the empty-space one. A pane full of
+#   files has no empty space to right-click, so the only menu reachable was the
+#   one without it — and F5 is no answer to somebody whose hand is on the mouse.
+pkgrel=50
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

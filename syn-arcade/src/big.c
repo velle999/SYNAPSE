@@ -1087,11 +1087,19 @@ static const char *music_prog(void)
  * projectM is the Milkdrop engine on Linux and ships four thousand presets, so
  * "Visualizer" is a tile that fills the screen and needs no configuring.
  *
- * ⚠ THE PULSEAUDIO BUILD FIRST, and not as a matter of taste. It captures
- * through libpulse, which honours PULSE_SOURCE — so big_visualizer() below can
- * point it at the monitor of whatever is playing. projectMSDL opens an SDL
- * capture device BY NAME from its own enumeration, and the first one on that
- * list is usually a microphone: a visualizer that dances to the room.
+ * ⚠ THE PULSEAUDIO BUILD FIRST, and not as a matter of taste. projectMSDL
+ * opens an SDL capture device by name from its own enumeration, and the first
+ * one on that list is usually a microphone: a visualizer that dances to the
+ * room and sits still through the music.
+ *
+ * ⚠ AND IT DOES NOT READ PULSE_SOURCE — a claim that used to be in this
+ * comment, and it was wrong, and being wrong cost a working desktop's audio.
+ * projectM-pulseaudio calls pa_context_get_source_info_list(), picks a device
+ * itself, remembers the choice in ~/.config/projectM/qprojectM-pulseaudio.conf
+ * as `pulseAudioDeviceName=`, and connects to THAT by name. libpulse only
+ * substitutes PULSE_SOURCE for a stream that connects with a NULL device, so
+ * the variable was set on every launch and read by nothing. See
+ * big_visualizer() for what it did.
  *
  * ⚠ NOT a dependency of this package. It is a 30MB Qt5 program with a preset
  * library behind it, and a machine with no interest in it should not carry
@@ -3844,28 +3852,211 @@ static int big_music(int argc, char **argv, bool rec)
 /* ── the visualizer, as a program ────────────────────────────────────────── */
 
 /*
+ * Every capture source on the machine, as `pactl list sources short` prints
+ * them: one per line, tab separated, the NAME in field two.
+ *
+ * Asked rather than composed, because the whole failure below was a device name
+ * that was assembled by hand and did not exist.
+ */
+static bool source_exists(const char *want)
+{
+	char *out = run_capture((char *const[]){ "pactl", "list", "sources",
+						 "short", NULL }, 3);
+	if (!out)
+		return false;
+
+	bool found = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(out, "\n", &save); ln && !found;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *tab = strchr(ln, '\t');
+		if (!tab)
+			continue;
+		char *name = tab + 1;
+		char *end = strchr(name, '\t');
+		if (end)
+			*end = '\0';
+		found = strcmp(name, want) == 0;
+	}
+	free(out);
+	return found;
+}
+
+/* The first monitor source there is, for when the default sink's own monitor
+ * cannot be found. A monitor — any monitor — is the right KIND of device; a
+ * microphone never is. */
+static bool first_monitor(char *buf, size_t n)
+{
+	char *out = run_capture((char *const[]){ "pactl", "list", "sources",
+						 "short", NULL }, 3);
+	if (!out)
+		return false;
+
+	bool found = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(out, "\n", &save); ln && !found;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *tab = strchr(ln, '\t');
+		if (!tab)
+			continue;
+		char *name = tab + 1;
+		char *end = strchr(name, '\t');
+		if (end)
+			*end = '\0';
+
+		size_t len = strlen(name);
+		if (len > 8 && strcmp(name + len - 8, ".monitor") == 0) {
+			snprintf(buf, n, "%s", name);
+			found = true;
+		}
+	}
+	free(out);
+	return found;
+}
+
+/*
+ * Which source the visualizer should listen to: the MONITOR of the sink the
+ * music is going to — a recording of the output.
+ *
+ * ⚠ The name is VERIFIED against the source list rather than composed and
+ * hoped for. `<default-sink>.monitor` is the right shape and is not always a
+ * real device: with synui's equaliser in the chain the default sink is a
+ * virtual node (`effect_input.synui_eq`), whose monitor is not named that way
+ * at all. A name that does not resolve is worse than no name — see below for
+ * what a program does when the device it was told about is not there.
+ */
+static bool monitor_source(char *buf, size_t n)
+{
+	char *sink = run_capture((char *const[]){ "pactl", "get-default-sink",
+						  NULL }, 3);
+	if (sink) {
+		strip_trailing_newline(sink);
+		char want[320];
+		snprintf(want, sizeof(want), "%s.monitor", trim(sink));
+		free(sink);
+		if (*want && source_exists(want)) {
+			snprintf(buf, n, "%s", want);
+			return true;
+		}
+	}
+	return first_monitor(buf, n);
+}
+
+/*
+ * Tell projectM which device to open, in the file projectM actually reads.
+ *
+ * ⚠ THIS IS THE FIX FOR THE BUG THAT KILLED A DESKTOP'S AUDIO, and it is worth
+ * the whole comment because every part of it looked right.
+ *
+ * projectM-pulseaudio does NOT honour PULSE_SOURCE. It enumerates sources with
+ * pa_context_get_source_info_list(), connects to one BY NAME, and remembers the
+ * choice in ~/.config/projectM/qprojectM-pulseaudio.conf. The saved value on
+ * this developer's machine was:
+ *
+ *     pulseAudioDeviceName=bluez_input.F4:B6:2D:DA:0E:BD
+ *
+ * — the MICROPHONE of a Bluetooth headset. And a Bluetooth device cannot do
+ * high-fidelity playback and microphone input at the same time: opening that
+ * mic makes WirePlumber switch the card from A2DP to the HSP/HFP headset
+ * profile, which
+ *
+ *   · drops the OUTPUT to 16kHz mono — everything suddenly quiet and muffled,
+ *     with the volume control making no difference, because the level was
+ *     never the problem;
+ *   · destroys and rebuilds the sink, which breaks every stream playing
+ *     through it — so the music stopped and the player froze.
+ *
+ * Pressing Visualizer therefore killed the music it was meant to draw, and
+ * left the whole desktop's audio broken until somebody knew to run
+ * `pactl set-card-profile <card> a2dp-sink`. Nothing in it looked like the
+ * visualizer's fault.
+ *
+ * So the device is WRITTEN, not suggested — and it is written only when it is
+ * a monitor.
+ *
+ * ⚠ AND `tryFirstAvailablePlaybackMonitor` IS SET TO FALSE, WHICH IS THE
+ * OPPOSITE OF WHAT IT SOUNDS LIKE. It reads as the safety net — "if all else
+ * fails, find a playback monitor" — and it is not: while it is true projectM
+ * runs its own scan INSTEAD of opening the device named above, and that scan
+ * is what picks a microphone. Measured, both ways round, on this machine:
+ *
+ *     pulseAudioDeviceName=<the monitor>  tryFirst=false  → the monitor  ✓
+ *     pulseAudioDeviceName=<the monitor>  tryFirst=true   → the analog MIC
+ *
+ * The name is re-resolved on every launch anyway, so nothing is lost by
+ * turning the scan off: a monitor that has gone away since last time is
+ * replaced before projectM ever sees the file.
+ *
+ * Every other key in the file is preserved: it is projectM's own config, not
+ * ours, and it holds a window position and a preset playlist.
+ */
+static int visualizer_pin_device(const char *monitor)
+{
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "projectM/qprojectM-pulseaudio.conf"))
+		return EX_FAIL;
+
+	char *old = read_file(path);
+
+	char *out = NULL;
+	size_t len = 0;
+	FILE *m = open_memstream(&out, &len);
+	if (!m) {
+		free(old);
+		return EX_FAIL;
+	}
+
+	fputs("[General]\n", m);
+	fprintf(m, "pulseAudioDeviceName=%s\n", monitor);
+	fputs("tryFirstAvailablePlaybackMonitor=false\n", m);
+
+	/* Anything else that was in there, minus the two keys just written and
+	 * the group header they live under. */
+	if (old) {
+		char *save = NULL;
+		for (char *ln = strtok_r(old, "\n", &save); ln;
+		     ln = strtok_r(NULL, "\n", &save)) {
+			char *t = trim(ln);
+			if (!*t)
+				continue;
+			if (strcmp(t, "[General]") == 0)
+				continue;
+			if (strncmp(t, "pulseAudioDeviceName=", 21) == 0)
+				continue;
+			if (strncmp(t, "tryFirstAvailablePlaybackMonitor=", 33) == 0)
+				continue;
+			fprintf(m, "%s\n", t);
+		}
+		free(old);
+	}
+	fclose(m);
+
+	int rc = write_file_inplace(path, out);
+	free(out);
+	return rc < 0 ? EX_FAIL : EX_OK;
+}
+
+/*
  * projectM, pointed at whatever this machine is playing.
  *
- * ⚠ THE DEFAULT CAPTURE DEVICE IS A MICROPHONE, and that is the whole reason
- * this is a command rather than the program's name in the table. A visualizer
- * that opens the default source dances to the room: it reacts to somebody
- * talking and sits still through the music. What is wanted is the MONITOR of
- * the sink the music is going to — a recording of the output — and PulseAudio
- * (PipeWire's server here) spells that `<sink>.monitor`.
+ * ⚠ THE DEFAULT CAPTURE DEVICE IS A MICROPHONE, which is the whole reason this
+ * is a command rather than the program's name in the tile table. What is wanted
+ * is the MONITOR of the sink the music is going to.
  *
- * PULSE_SOURCE is how a client is told which one to open without changing
- * anything system-wide. ⚠ Not the default SOURCE, which is a machine-wide
- * setting: pointing that at a monitor would send the output of the speakers to
- * every program that opens a microphone.
+ * ⚠ And it must be a monitor or NOTHING. Refusing to start is the right answer
+ * to "no monitor could be found": the alternative is a program that opens a
+ * microphone, and on a Bluetooth headset that does not merely listen to the
+ * wrong thing — it forces the card into headset mode and takes the machine's
+ * audio down with it. See visualizer_pin_device().
  *
- * ⚠ The sink is asked for at LAUNCH, not written into a config. This machine's
- * default output is a Bluetooth headset one hour and an HDMI television the
- * next, and a visualizer wired to the wrong one is silent with no explanation.
+ * ⚠ The device is resolved at LAUNCH, not written once at install: this
+ * machine's default output is a Bluetooth headset one hour and an HDMI
+ * television the next, and a visualizer wired to the wrong one is silent with
+ * no explanation.
  *
- * SDL_AUDIO_INCLUDE_MONITORS is the same instruction for the SDL build, which
- * hides monitor devices from its enumeration by default. It is set for both:
- * an environment variable meant for a program that is not running costs
- * nothing and saves a second code path.
+ * PULSE_SOURCE and SDL_AUDIO_INCLUDE_MONITORS are still set — they cost
+ * nothing, and they are what the SDL build and any other future one read.
+ * They are no longer relied upon.
  */
 static int big_visualizer(void)
 {
@@ -3876,24 +4067,26 @@ static int big_visualizer(void)
 		return EX_FAIL;
 	}
 
-	char *sink = run_capture((char *const[]){ "pactl", "get-default-sink",
-						  NULL }, 3);
-	if (sink) {
-		strip_trailing_newline(sink);
-		if (*sink) {
-			char src[320];
-			snprintf(src, sizeof(src), "%s.monitor", trim(sink));
-			setenv("PULSE_SOURCE", src, 1);
-		}
-		free(sink);
-	} else {
-		/* Not fatal: it will open whatever the server calls default,
-		 * and projectM has a device chooser of its own. Said out loud,
-		 * because "the visualizer is not moving" has no other clue. */
-		fputs("syn-arcade: could not ask which audio output is in use "
-		      "— the visualizer may be listening to a microphone\n",
-		      stderr);
+	char monitor[320] = "";
+	if (!monitor_source(monitor, sizeof(monitor))) {
+		fputs("syn-arcade: no audio monitor to listen to, so the "
+		      "visualizer is not being started.\n"
+		      "\n"
+		      "It would open a microphone instead — which on a "
+		      "Bluetooth headset switches the\n"
+		      "card into headset mode and takes the machine's audio "
+		      "down with it. Check that\n"
+		      "something is playing and that `pactl list sources "
+		      "short` shows a .monitor.\n", stderr);
+		return EX_FAIL;
 	}
+
+	if (visualizer_pin_device(monitor) != EX_OK)
+		fprintf(stderr, "syn-arcade: could not write projectM's own "
+			"config — it may open a microphone instead of %s\n",
+			monitor);
+
+	setenv("PULSE_SOURCE", monitor, 1);
 	setenv("SDL_AUDIO_INCLUDE_MONITORS", "1", 1);
 
 	execlp(prog, prog, (char *)NULL);
@@ -4964,6 +5157,148 @@ static int big_guard(void)
 	return pads_guide_watch(guard_running, guard_press);
 }
 
+/*
+ * Which screen big screen mode opens on: read, or set.
+ *
+ * The setting has existed since 0.1.0-11 and could only be spelled by editing
+ * ~/.config/syn-arcade/big.conf by hand — which is no use at all to the case it
+ * exists for, somebody sitting in front of a television that the interface just
+ * opened on the wrong monitor. A verb makes it reachable from the window.
+ *
+ * ⚠ The connector is CHECKED against what is plugged in. A name that matches no
+ * screen is not an error the compositor will report — the shell simply falls
+ * back to its first screen, which is indistinguishable from the setting being
+ * ignored.
+ */
+static int big_output(const char *want, bool rec)
+{
+	if (!want) {
+		char pref[128], screen[128] = "";
+		big_output_pref(pref, sizeof(pref));
+		resolve_output(NULL, screen, sizeof(screen));
+
+		if (rec) {
+			rec_row(3, "id", "label", "current");
+			rec_row(3, "primary", "Main screen",
+				strcmp(pref, "primary") == 0 ? "current" : "-");
+			rec_row(3, "focused", "Wherever the pointer is",
+				strcmp(pref, "focused") == 0 ? "current" : "-");
+
+			/* Every connector by name, so the window can offer a
+			 * specific monitor without knowing what one is called. */
+			char *out = run_capture((char *const[]){ "synctl",
+					"outputs", NULL }, 2);
+			if (out) {
+				for (char *obj = strtok(out, "{"); obj;
+				     obj = strtok(NULL, "{")) {
+					char *nm = strstr(obj, "\"name\":\"");
+					if (!nm)
+						continue;
+					nm += 8;
+					char *end = strchr(nm, '"');
+					if (!end)
+						continue;
+					*end = '\0';
+					rec_row(3, nm, nm,
+						strcmp(pref, nm) == 0 ? "current" : "-");
+				}
+				free(out);
+			}
+			return EX_OK;
+		}
+
+		printf("%s  (%s)\n", screen[0] ? screen : "first screen", pref);
+		return EX_OK;
+	}
+
+	if (strcmp(want, "primary") != 0 && strcmp(want, "focused") != 0 &&
+	    !output_exists(want)) {
+		fprintf(stderr, "syn-arcade: no screen called '%s'. Use "
+			"`primary`, `focused`, or a connector name from "
+			"`synctl outputs`\n", want);
+		return EX_USAGE;
+	}
+
+	if (big_conf_set("output", want) != EX_OK) {
+		fputs("syn-arcade: could not write big.conf\n", stderr);
+		return EX_FAIL;
+	}
+	printf("big screen mode opens on %s\n", want);
+	return EX_OK;
+}
+
+/*
+ * Which music player: read, set, or list the ones installed.
+ *
+ * ⚠ cliamp is not merely first in the list, and the window has to be able to
+ * say so: it is the only player big screen mode can DRIVE rather than launch.
+ * With it, Music is a tile that starts the music and a row in the menu that
+ * controls it; with anything else it is a tile that opens a window somebody
+ * then has to get out of with a gamepad. A picker that presented fourteen
+ * equal choices would be hiding the one fact that matters.
+ */
+static int big_player(const char *want, bool rec)
+{
+	static const char *const cands[] = {
+		"cliamp",
+		"strawberry", "elisa", "amberol", "rhythmbox", "lollypop",
+		"clementine", "audacious", "deadbeef", "quodlibet", "tauon",
+		"plexamp", "spotify", "vlc", NULL
+	};
+
+	if (!want) {
+		const char *now = music_prog();
+		char named[128] = "";
+		bool pinned = big_conf_get("music", named, sizeof(named));
+
+		if (rec) {
+			rec_row(4, "id", "label", "current", "note");
+			for (int i = 0; cands[i]; i++) {
+				if (!have(cands[i]))
+					continue;
+				rec_row(4, cands[i], cands[i],
+					now && strcmp(now, cands[i]) == 0
+						? "current" : "-",
+					strcmp(cands[i], "cliamp") == 0
+						? "played without a window"
+						: "opens its own window");
+			}
+			/* A player named in the config that is not installed is
+			 * a row too — otherwise the window shows the fallback
+			 * as though it were the choice, and the config file
+			 * says something nobody can see. */
+			if (pinned && *named && !have(named))
+				rec_row(4, named, named, "-", "NOT INSTALLED");
+			return EX_OK;
+		}
+
+		printf("%s%s\n", now ? now : "(none installed)",
+		       pinned ? "   (named in big.conf)" : "   (first installed)");
+		return EX_OK;
+	}
+
+	if (!have(want)) {
+		fprintf(stderr, "syn-arcade: %s is not installed\n", want);
+		return EX_FAIL;
+	}
+
+	if (big_conf_set("music", want) != EX_OK) {
+		fputs("syn-arcade: could not write big.conf\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* ⚠ Said on every change, because the difference is the whole reason
+	 * somebody would come here and it is invisible until they are back on
+	 * the sofa with a pad in their hand. */
+	if (strcmp(want, "cliamp") == 0)
+		printf("music player: cliamp — played without a window, with "
+		       "transport in the Start menu\n");
+	else
+		printf("music player: %s — the Music tile opens its window; "
+		       "only cliamp can be driven from the sofa\n", want);
+	return EX_OK;
+}
+
 static int big_status(bool rec)
 {
 	pid_t pid = 0;
@@ -5006,8 +5341,16 @@ static int big_status(bool rec)
 		rec_row(3, "at login", autostart ? "on" : "off",
 			autostart ? "action:autostart-off" : "action:autostart-on");
 		rec_row(3, "screen", screenbuf, "detail");
+		/* The PREFERENCE as written, beside the screen it resolved to.
+		 * The window needs the rule to show which chip is chosen; the
+		 * resolved name is what a person reads. */
+		rec_row(3, "screen rule", pref, "choice:big-output");
 		rec_row(3, "guide button", guide ? "on" : "off",
 			guide ? "action:guide-off" : "action:guide-on");
+		rec_row(3, "music player", music_prog() ? music_prog()
+			: "NONE INSTALLED", "choice:big-player");
+		rec_row(3, "cliamp", have("cliamp") ? "installed"
+			: "NOT INSTALLED", "detail");
 		rec_row(3, "Steam", steam_found ? root : "NOT FOUND", "detail");
 		rec_row(3, "games", gamebuf, "detail");
 		rec_row(3, "gamescope", have("gamescope") ? "installed"
@@ -5025,6 +5368,9 @@ static int big_status(bool rec)
 	printf("  screen         %s\n", screenbuf);
 	printf("  guide button   %s\n", guide ? "on — opens this from the desktop"
 	     : "off (`syn-arcade big guide on`)");
+	printf("  music player   %s%s\n", music_prog() ? music_prog() : "none installed",
+	       have("cliamp") ? "" : "   (cliamp not installed — the Music tile "
+				     "opens a window instead of playing)");
 	printf("  Steam          %s\n", steam_found ? root
 	     : "NOT FOUND — the library tiles will be empty");
 	printf("  games          %d\n", games);
@@ -5137,6 +5483,10 @@ int cmd_big(int argc, char **argv)
 	/* projectM, told which audio to listen to. A tile in the Start menu
 	 * runs this through `big run visualizer --wait`, which is what fills
 	 * the screen and what brings the television back when it closes. */
+	if (!strcmp(sub, "output"))
+		return big_output(first_operand(rest_c, rest), rec);
+	if (!strcmp(sub, "player"))
+		return big_player(first_operand(rest_c, rest), rec);
 	if (!strcmp(sub, "visualizer"))
 		return big_visualizer();
 

@@ -1378,10 +1378,10 @@ ShellRoot {
     // because "how do I turn this off" has to have an answer that is one
     // button from anywhere.
     //
-    // Start is that button, and the keyboard's spelling of it is P. Escape
-    // still quits and Backspace is still Back; P is free, and unlike a
-    // modifier chord it is one key somebody can find while holding a pad in
-    // the other hand.
+    // Start is that button, and the keyboard's spelling of it is S. Escape
+    // still quits and Backspace is still Back; S is free, it stands for the
+    // button's own name, and unlike a modifier chord it is one key somebody
+    // can find while holding a pad in the other hand.
     property bool menuOpen: false
     property int menuIndex: 0
 
@@ -3165,11 +3165,13 @@ ShellRoot {
                     // to on a build machine.
                     case Qt.Key_X:
                     case Qt.Key_Delete:   shell.nav("search"); break
-                    // The keyboard's spelling of Start. Escape quits and
-                    // Backspace is Back, so neither of the obvious keys was
-                    // free — and a modifier chord is the wrong shape for a
-                    // screen somebody is looking at from a sofa.
-                    case Qt.Key_P:        shell.nav("menu"); break
+                    // The keyboard's spelling of Start — S, for Start. Escape
+                    // quits and Backspace is Back, so neither of the obvious
+                    // keys was free, and a modifier chord is the wrong shape
+                    // for a screen somebody is looking at from a sofa. It was
+                    // P until 0.1.0-23, which stood for nothing and was
+                    // remembered by nobody.
+                    case Qt.Key_S:        shell.nav("menu"); break
                     // Escape QUITS, where Guide steps aside. Somebody at a
                     // keyboard has a way back that somebody on a sofa does
                     // not, so the keyboard keeps the stronger verb.

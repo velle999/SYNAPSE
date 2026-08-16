@@ -2025,10 +2025,23 @@ check "...and names the command that would give it a server" $?
 # this machine's default output changes with a Bluetooth headset.
 VSTUB="$T/vis-bin"
 mkdir -p "$VSTUB"
+
+# A machine with a Bluetooth headset connected: its output, its MONITOR, and —
+# the one that matters — its microphone, which is what the shipped code used to
+# open. The analog card is here too, so "the first monitor" is a real choice
+# rather than the only row.
 cat > "$VSTUB/pactl" <<'EOF'
 #!/bin/sh
-[ "$1" = get-default-sink ] || exit 1
-echo bluez_output.F4_B6_2D_DA_0E_BD.1
+case "$1 $2 $3" in
+    "get-default-sink  ")
+        echo bluez_output.F4_B6_2D_DA_0E_BD.1 ;;
+    "list sources short")
+        printf '60\talsa_output.pci-0000_0a_00.4.analog-stereo.monitor\tPipeWire\ts32le 2ch 48000Hz\tSUSPENDED\n'
+        printf '61\talsa_input.pci-0000_0a_00.4.analog-stereo\tPipeWire\ts32le 2ch 48000Hz\tSUSPENDED\n'
+        printf '63930\tbluez_input.F4:B6:2D:DA:0E:BD\tPipeWire\tfloat32le 1ch 48000Hz\tRUNNING\n'
+        printf '65138\tbluez_output.F4_B6_2D_DA_0E_BD.1.monitor\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n' ;;
+    *) exit 1 ;;
+esac
 EOF
 cat > "$VSTUB/projectM-pulseaudio" <<'EOF'
 #!/bin/sh
@@ -2037,6 +2050,9 @@ echo "SDL_AUDIO_INCLUDE_MONITORS=$SDL_AUDIO_INCLUDE_MONITORS"
 EOF
 chmod +x "$VSTUB/pactl" "$VSTUB/projectM-pulseaudio"
 
+PMCONF="$XDG_CONFIG_HOME/projectM/qprojectM-pulseaudio.conf"
+rm -f "$PMCONF"
+
 ( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big visualizer ) |
     grep -q '^PULSE_SOURCE=bluez_output.F4_B6_2D_DA_0E_BD.1.monitor$'
 check "the visualizer listens to the monitor of the sink in use" $?
@@ -2044,6 +2060,67 @@ check "the visualizer listens to the monitor of the sink in use" $?
 ( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big visualizer ) |
     grep -q '^SDL_AUDIO_INCLUDE_MONITORS=1$'
 check "...and the SDL build is told monitors exist at all" $?
+
+# ── the bug that took a desktop's audio down with it ────────────────────────
+#
+# ⚠ projectM does NOT read PULSE_SOURCE. It enumerates sources itself, connects
+# BY NAME, and remembers the choice in its own Qt config — where the saved value
+# was `bluez_input.…`, the MICROPHONE of a Bluetooth headset. A Bluetooth device
+# cannot do high-fidelity playback and microphone input at once, so opening it
+# switched the card to the HSP/HFP profile: the output dropped to 16kHz mono
+# (quiet and muffled, with the volume control making no difference) and the sink
+# was destroyed and rebuilt, killing the music the visualizer was drawing.
+grep -q '^pulseAudioDeviceName=bluez_output.F4_B6_2D_DA_0E_BD.1.monitor$' "$PMCONF"
+check "the device is written into the config projectM actually reads" $?
+
+# ⚠ FALSE, which is the opposite of what the name suggests: while it is true,
+# projectM runs its own scan INSTEAD of opening the device named beside it, and
+# that scan is what picks a microphone. Measured both ways round.
+grep -q '^tryFirstAvailablePlaybackMonitor=false$' "$PMCONF"
+check "...with projectM's own device scan turned OFF, or the name is ignored" $?
+
+grep -qv 'bluez_input' "$PMCONF" && ! grep -q 'bluez_input' "$PMCONF"
+check "...and a microphone is never written into it" $?
+
+# Keys that are projectM's own — a window position, a preset playlist — survive.
+printf '[General]\npulseAudioDeviceName=wrong\nplaylistPath=/home/somebody\n' > "$PMCONF"
+( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big visualizer ) >/dev/null
+grep -q '^playlistPath=/home/somebody$' "$PMCONF"
+check "...while everything else in projectM's config is preserved" $?
+
+# ⚠ REFUSES rather than falling back. With no monitor to be found the only
+# device left is a microphone, and opening one is what broke the machine — so
+# "no monitor" has to mean "do not start", not "start on whatever is there".
+cat > "$VSTUB/pactl" <<'EOF'
+#!/bin/sh
+case "$1 $2 $3" in
+    "get-default-sink  ") echo some_sink ;;
+    "list sources short")
+        printf '61\talsa_input.pci-0000_0a_00.4.analog-stereo\tPipeWire\ts32le 2ch 48000Hz\tSUSPENDED\n' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$VSTUB/pactl"
+
+( PATH="$VSTUB:$PATH"; export PATH; "$SA" big visualizer >/dev/null 2>&1 )
+[ "$?" != 0 ]
+check "with no monitor to listen to, the visualizer refuses to start" $?
+
+( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big visualizer ) |
+    grep -qi "microphone"
+check "...and says why, in terms of what it would have opened" $?
+
+# Put the working stub back for the assertions below, which only care that
+# projectM is on PATH.
+cat > "$VSTUB/pactl" <<'EOF'
+#!/bin/sh
+case "$1 $2 $3" in
+    "get-default-sink  ") echo sink ;;
+    "list sources short") printf '1\tsink.monitor\tPipeWire\ts16le\tRUNNING\n' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$VSTUB/pactl"
 
 ( PATH="$VSTUB:$PATH"; export PATH; says "$SA" big apps ) |
     grep -qE '^visualizer +system +Visualizer +syn-arcade big visualizer'
@@ -2160,6 +2237,83 @@ check "about names the licence" $?
 
 says "$SA" about --rec | head -1 | grep -q "^field	value	action$"
 check "about --rec names its columns" $?
+
+# ── big screen: the two settings that could only be spelled by hand ─────────
+#
+# The screen it opens on and the music player were `output =` and `music =` in
+# big.conf and nothing else — no verb, no window — which is no use at all to the
+# case they exist for: somebody sitting in front of a television that the
+# interface just opened on the wrong monitor.
+#
+# ⚠ synctl is STUBBED. `big output` asks the compositor which screens are
+# attached, and the one in this session is the LIVE one.
+
+echo
+echo "big screen settings"
+
+OSTUB="$T/out-bin"
+mkdir -p "$OSTUB"
+cat > "$OSTUB/synctl" <<'EOF'
+#!/bin/sh
+[ "$1" = outputs ] || exit 1
+printf '[{"name":"DP-3","at":[0,0],"size":[2560,1440],"scale":1.00,"primary":true,"focused":true},'
+printf '{"name":"HDMI-A-1","at":[2560,0],"size":[1920,1080],"scale":1.00,"primary":false,"focused":false}]\n'
+EOF
+chmod +x "$OSTUB/synctl"
+
+BIGCONF2="$XDG_CONFIG_HOME/syn-arcade/big.conf"
+rm -f "$BIGCONF2"
+
+( PATH="$OSTUB:$PATH"; export PATH; says "$SA" big output --rec ) |
+    grep -q '^primary	Main screen	current$'
+check "the screen defaults to primary, and says so" $?
+
+( PATH="$OSTUB:$PATH"; export PATH; says "$SA" big output --rec ) |
+    grep -q '^HDMI-A-1	HDMI-A-1	-$'
+check "...and every attached connector is offered by name" $?
+
+( PATH="$OSTUB:$PATH"; export PATH; "$SA" big output HDMI-A-1 >/dev/null 2>&1 )
+grep -q '^output = HDMI-A-1$' "$BIGCONF2"
+check "choosing one writes it to big.conf" $?
+
+# ⚠ A connector that is not plugged in is REFUSED. The shell falls back to its
+# first screen for a name that matches nothing, which is indistinguishable from
+# the setting being ignored.
+( PATH="$OSTUB:$PATH"; export PATH; says "$SA" big output DP-9 ) |
+    grep -q "no screen called"
+check "a screen that is not attached is refused" $?
+
+grep -q '^output = HDMI-A-1$' "$BIGCONF2"
+check "...and the refusal leaves the old choice alone" $?
+
+# The player. cliamp is the only one that can be DRIVEN, and the picker has to
+# say so — fourteen equal-looking chips would hide the one fact that matters.
+PSTUB="$T/player-bin"
+mkdir -p "$PSTUB"
+printf '#!/bin/sh\nexit 0\n' > "$PSTUB/cliamp"
+printf '#!/bin/sh\nexit 0\n' > "$PSTUB/vlc"
+chmod +x "$PSTUB/cliamp" "$PSTUB/vlc"
+
+( PATH="$PSTUB:$PATH"; export PATH; says "$SA" big player --rec ) |
+    grep -q '^cliamp	cliamp	current	played without a window$'
+check "cliamp is the player, and the row says it needs no window" $?
+
+( PATH="$PSTUB:$PATH"; export PATH; says "$SA" big player --rec ) |
+    grep -q '^vlc	vlc	-	opens its own window$'
+check "...and the others say they open one" $?
+
+( PATH="$PSTUB:$PATH"; export PATH; "$SA" big player vlc >/dev/null 2>&1 )
+grep -q '^music = vlc$' "$BIGCONF2"
+check "choosing a player writes it to big.conf" $?
+
+says "$SA" big player nosuchplayer | grep -q "not installed"
+check "a player that is not installed is refused" $?
+
+( PATH="$PSTUB:$PATH"; export PATH; says "$SA" big player cliamp ) |
+    grep -q "without a window"
+check "...and switching back to cliamp says what changes" $?
+
+rm -f "$BIGCONF2"
 
 # ── fit: the gamescope wrappers ─────────────────────────────────────────────
 #
@@ -2616,8 +2770,8 @@ check "the Start menu is modal to the controller" $?
 grep -q 'case "menu":       shell.menuToggle(); break' "$BIGQML"
 check "Start opens it" $?
 
-grep -q 'case Qt.Key_P:        shell.nav("menu"); break' "$BIGQML"
-check "...and P is the keyboard's spelling of Start" $?
+grep -q 'case Qt.Key_S:        shell.nav("menu"); break' "$BIGQML"
+check "...and S is the keyboard's spelling of Start" $?
 
 # A switch nobody can find is a switch that is not there, and on a television
 # the legend is the only place it can be advertised.

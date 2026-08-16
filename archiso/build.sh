@@ -285,6 +285,13 @@ PACKAGES=(
     # Builds offline: meson and libc. It depends on mangohud, which is in
     # `extra` and so comes off the mirror like any other upstream dependency.
     syn-arcade
+    # cliamp — the terminal music player big screen mode DRIVES, and the one
+    # component of that feature that is not ours. It is built here rather than
+    # pulled from a repo because it is not in one: it was a 33MB unowned binary
+    # in ~/.local/bin until this release. ⚠ Needs network at build time (a
+    # pinned upstream tag and the Go module cache), exactly like nexus-chat,
+    # tepris and fetch above.
+    cliamp
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

@@ -1,6 +1,9 @@
 pkgname=syn-update
 pkgver=0.1.0
-pkgrel=35
+# 36: cliamp joins COMPONENTS. ⚠ Adopting a COMPONENTS change takes TWO
+#   applies — the running process keeps the list it started with — so the first
+#   `syn-update apply` updates this script and the second one sees cliamp.
+pkgrel=36
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
