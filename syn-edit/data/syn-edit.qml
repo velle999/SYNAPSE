@@ -413,14 +413,34 @@ FloatingWindow {
         else                root.promptWrite(root.saveDir() + "/")
     }
 
+    // ── A button is not a keystroke ─────────────────────────────────────────
+    //
+    // Every key a BUTTON or a MENU sends goes through here rather than through
+    // sendKeys directly, because a button can be pressed in a mode where its
+    // keys are not commands at all. In INSERT mode `/` is a slash, `:` is a
+    // colon and `u` is a letter: clicking Find typed "/" into the document,
+    // and Replace typed ":%s/". Proven against the engine — `keys ihello`
+    // then `keys /` leaves the line reading "hello/" and the mode still
+    // INSERT.
+    //
+    // ⚠ INSERT AND REPLACE ONLY. Escaping unconditionally looks tidier and is
+    // wrong: the context menu's Copy and Cut are `"+y` and `"+d`, which need
+    // the VISUAL selection they act on. <Esc> drops it, and the yank then
+    // waits for a motion and takes the wrong text — `vll "ay` yanks "abc",
+    // while `vll <Esc> "ay` does not. Both are pinned in the suite.
+    function actKeys(k) {
+        if (root.inserting) root.sendKeys("<Esc>")
+        root.sendKeys(k)
+    }
+
     // Open the engine's command line on `:w <prefix>`.
     //
-    // ⚠ <Esc> FIRST, and it is not defensive tidiness. A toolbar button can be
-    // clicked in INSERT mode, where `:` is not a command — it is a colon. The
-    // Save button would then type ":w /home/velle/" INTO the document it was
-    // asked to save, which is the one failure worse than not saving. <Esc> in
-    // normal mode is harmless, so it is sent unconditionally rather than
-    // guarded on a mode that could be stale by the time this runs.
+    // The <Esc> here IS unconditional, unlike actKeys above, and for a second
+    // reason on top of the insert-mode one: `:` pressed in visual mode prefills
+    // the range `:'<,'>`, so the command line would read `:'<,'>w /path/` — a
+    // whole-file write wearing a selection's range. This engine's `:w` happens
+    // to ignore the range, which makes it a display problem today and a data
+    // one the moment `:w` learns to honour it.
     function promptWrite(prefix) {
         root.sendKeys("<Esc>")
         root.sendKeys(":w " + prefix)
@@ -497,7 +517,7 @@ FloatingWindow {
                     ToolButton { label: "Open"; tip: root.haveFiles ? "browse for a file"
                                                                    : "type a path (:e)"
                                  onTriggered: root.haveFiles ? browser.show()
-                                                             : root.sendKeys(":e ") }
+                                                             : root.actKeys(":e ") }
                     ToolButton { label: "Save"; tip: root.named ? "write this buffer"
                                                                : "name it, then write it"
                                  onTriggered: root.saveNow() }
@@ -505,12 +525,12 @@ FloatingWindow {
                                  onTriggered: root.saveAs() }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
-                    ToolButton { label: "Undo"; tip: "u";                   onTriggered: root.sendKeys("u") }
-                    ToolButton { label: "Redo"; tip: "Ctrl-R";              onTriggered: root.sendKeys("<C-r>") }
+                    ToolButton { label: "Undo"; tip: "u";                   onTriggered: root.actKeys("u") }
+                    ToolButton { label: "Redo"; tip: "Ctrl-R";              onTriggered: root.actKeys("<C-r>") }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
-                    ToolButton { label: "Find"; tip: "/";                   onTriggered: root.sendKeys("/") }
-                    ToolButton { label: "Replace"; tip: ":%s/…/…/g";        onTriggered: root.sendKeys(":%s/") }
+                    ToolButton { label: "Find"; tip: "/";                   onTriggered: root.actKeys("/") }
+                    ToolButton { label: "Replace"; tip: ":%s/…/…/g";        onTriggered: root.actKeys(":%s/") }
                 }
             }
 
@@ -1164,7 +1184,7 @@ FloatingWindow {
                                     if (m.act === "open")        browser.show()
                                     else if (m.act === "save")   root.saveNow()
                                     else if (m.act === "saveas") root.saveAs()
-                                    else if (m.keys !== "")      root.sendKeys(m.keys)
+                                    else if (m.keys !== "")      root.actKeys(m.keys)
                                 }
                             }
                         }

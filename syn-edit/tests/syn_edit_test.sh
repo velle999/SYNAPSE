@@ -637,6 +637,39 @@ printf 'keys ityped\nkeys :w %s\nkeys <CR>\nquit\n' "$T/no-esc.txt" |
 [ ! -f "$T/no-esc.txt" ]
 check "...and without the Esc it is typed into the buffer instead" $?
 
+# ── a button is not a keystroke ─────────────────────────────────────────────
+#
+# The same defect as the Save one above, in every other button: in INSERT mode
+# the keys a toolbar sends are not commands. Find typed "/" into the document
+# and Replace typed ":%s/", which is data loss dressed as a no-op — the caret
+# does not move, so it reads as a button that did nothing.
+printf 'a\n' > "$T/act.txt"
+printf 'keys ihello\nkeys /\nquit\n' | "$E" serve "$T/act.txt" | gq '^L	1	hello/'
+check "Find's key IS typed into the buffer when insert mode is not left" $?
+
+printf 'keys ihello\nkeys <Esc>\nkeys /\nquit\n' | "$E" serve "$T/act.txt" |
+    gq '^S	cmdline	/$'
+check "...and opens the search prompt once it is" $?
+
+printf 'keys ihello\nkeys <Esc>\nkeys :%%25s/\nquit\n' | "$E" serve "$T/act.txt" |
+    gq '^S	cmdline	%3A%25s/$'
+check "Replace opens the substitute prompt after an Esc" $?
+
+# ⚠ AND NOT UNCONDITIONALLY. Copy and Cut are `"+y` / `"+d`, which act on the
+# VISUAL selection — <Esc> drops it and the yank then waits for a motion and
+# takes different text. This pair is the whole reason actKeys() is guarded on
+# insert mode rather than always escaping, and it is the assertion that fails
+# if somebody ever "tidies" that guard away.
+printf 'abc def\n' > "$T/vis.txt"
+printf 'keys vll\nkeys "ay\nkeys $\nkeys "ap\nquit\n' | "$E" serve "$T/vis.txt" |
+    gq '^L	1	abc%20defabc$'
+check "a visual yank takes the selection" $?
+
+printf 'keys vll\nkeys <Esc>\nkeys "ay\nkeys $\nkeys "ap\nquit\n' |
+    "$E" serve "$T/vis.txt" | gq '^L	1	abc%20defabc$'
+[ $? != 0 ]
+check "...and an Esc in front of it would take something else" $?
+
 # ── what the WINDOW sends ───────────────────────────────────────────────────
 #
 # The graphical window has no selection, no scroll position and no idea what a
@@ -823,6 +856,39 @@ if [ -f "$QML" ]; then
     grep -q 'function showSave' "$QML" \
         && ok "the browser doubles as the Save As folder chooser" \
         || bad "syn-edit.qml lost the Save As browser mode"
+
+    # Every button and menu entry routes its keys through actKeys, which leaves
+    # INSERT mode first. A raw sendKeys on a button is the bug coming back.
+    grep -q 'function actKeys' "$QML" \
+        && ok "buttons send their keys through actKeys" \
+        || bad "syn-edit.qml lost actKeys — a button in insert mode types into the file"
+
+    grep -A2 'function actKeys' "$QML" | grep -q 'if (root.inserting)' \
+        && ok "...which escapes INSERT mode and only insert mode" \
+        || bad "actKeys no longer guards on insert mode — a blanket Esc breaks visual Copy"
+
+    grep -q 'actKeys("/")' "$QML" && grep -q 'actKeys(":%s/")' "$QML" \
+        && ok "Find and Replace go through it" \
+        || bad "Find/Replace send raw keys again — they type into the buffer in insert mode"
+
+    grep -q 'actKeys(m.keys)' "$QML" \
+        && ok "...and so does every context-menu entry" \
+        || bad "the context menu sends raw keys again"
+
+    # The POINTER paths are deliberately NOT converted: a click, a drag, the
+    # wheel and the scrollbar send motions, and making those leave insert mode
+    # is a change to what the editor DOES rather than a bug fix. They send raw
+    # keys still — and they DO type into the buffer in insert mode, which is
+    # recorded here as a known gap rather than pinned as correct.
+    #
+    # So the assertion is exact: the one remaining raw-key trigger is the
+    # edge-scroll timer. Any OTHER one is a button that lost its guard.
+    n=$(grep -cE 'onTriggered: root\.sendKeys\(' "$QML" || true)
+    if [ "$n" = 1 ] && grep -qE 'onTriggered: root\.sendKeys\(edgeScroll' "$QML"; then
+        ok "the only raw-key trigger left is the edge-scroll timer"
+    else
+        bad "$n raw-key trigger(s) — a button has lost its insert-mode guard"
+    fi
 
     # See the note in synfiles' suite: this qmllint reports a parse failure
     # through its EXIT STATUS and prints nothing at all, so the status is the
