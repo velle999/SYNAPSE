@@ -2607,20 +2607,36 @@ static bool music_socket_live(void)
 }
 
 /*
- * Start the daemon and wait for it to answer.
+ * Start the player and wait for it to answer.
  *
- * ⚠ WAITED FOR, and the wait is the reason this is not two lines. `cliamp
- * --daemon` returns before its socket is bound, so a `play` sent straight
- * afterwards lands on nothing and the tile press is silently lost — the one
- * failure this whole design is meant to avoid, and the one that would look
- * exactly like a broken tile.
+ * ⚠ ON A PTY, AND NOT WITH `--daemon`, WHICH IS THE OBVIOUS THING AND IS WRONG.
+ * cliamp has a headless mode and it does exactly what it says — but its
+ * visualizer is part of the TUI's own draw loop, so in `--daemon` the bands
+ * never get computed: `cliamp vis` answers "visualizer not available in
+ * headless mode" and `visstream` yields nothing but `{"ok":false,"error":"bands
+ * timeout"}` for ever. A visualizer that is silently always flat is worse than
+ * no visualizer, because it looks like a rendering bug in this code.
+ *
+ * So the TUI is run with a terminal and no WINDOW: `script` hands it a pty,
+ * cliamp draws into it, and the drawing goes to /dev/null. Everything else is
+ * identical — the same socket, the same transport verbs — and the bands are
+ * real. `script` is util-linux, which is on every Arch system by construction.
+ *
+ * ⚠ WAITED FOR, and the wait is the reason this is not two lines. cliamp
+ * returns before its socket is bound, so a `play` sent straight afterwards
+ * lands on nothing and the tile press is silently lost — the one failure this
+ * whole design is meant to avoid, and the one that would look exactly like a
+ * broken tile.
  */
 static bool music_ensure_running(void)
 {
 	if (music_socket_live())
 		return true;
 
-	char *const argv[] = { "cliamp", "--daemon", NULL };
+	/* ⚠ -f, so the pty is flushed rather than buffered: `script` without it
+	 * can hold a TUI's output long enough that the program blocks on a
+	 * write nobody is draining. */
+	char *const argv[] = { "script", "-qfc", "cliamp", "/dev/null", NULL };
 	if (spawn_detached(argv) != EX_OK)
 		return false;
 
@@ -2648,22 +2664,33 @@ static int music_cmd(const char *verb)
  * `state` is empty when there is nothing to control, and that is the signal the
  * menu keys off — an absent row rather than a dead one.
  */
-static int big_music_status(bool rec)
+/* One read of the player's state, for everything that needs one. */
+static void music_read(char *state, size_t sn, char *title, size_t tn,
+		       char *path, size_t pn)
 {
-	char state[32] = "", title[256] = "", path[512] = "";
+	if (state && sn) state[0] = '\0';
+	if (title && tn) title[0] = '\0';
+	if (path && pn) path[0] = '\0';
 
 	char *json = run_capture((char *const[]){ "cliamp", "status", "--json",
 						  NULL }, 2);
 	if (json && (strstr(json, "\"ok\":true") || strstr(json, "\"ok\": true"))) {
-		json_str(json, NULL, "state", state, sizeof(state));
+		if (state) json_str(json, NULL, "state", state, sn);
 		/* ⚠ Scoped to the track object. `title` is a common enough key
 		 * that searching the whole document would one day find
 		 * somebody else's. */
 		const char *tr = strstr(json, "\"track\"");
-		json_str(tr ? tr : json, NULL, "title", title, sizeof(title));
-		json_str(tr ? tr : json, NULL, "path", path, sizeof(path));
+		if (title) json_str(tr ? tr : json, NULL, "title", title, tn);
+		if (path)  json_str(tr ? tr : json, NULL, "path", path, pn);
 	}
 	free(json);
+}
+
+static int big_music_status(bool rec)
+{
+	char state[32], title[256], path[512];
+	music_read(state, sizeof(state), title, sizeof(title),
+		   path, sizeof(path));
 
 	if (rec) {
 		rec_row(3, "state", "title", "path");
@@ -2698,7 +2725,7 @@ static int big_music(int argc, char **argv, bool rec)
 	 * sends somebody to edit a config file over a missing letter. */
 	static const char *const verbs[] = { "status", "play", "pause",
 					     "toggle", "next", "prev", "stop",
-					     NULL };
+					     "vis", NULL };
 	bool known = false;
 	for (int i = 0; verbs[i] && !known; i++)
 		known = strcmp(verb, verbs[i]) == 0;
@@ -2729,7 +2756,48 @@ static int big_music(int argc, char **argv, bool rec)
 			fputs("syn-arcade: cliamp did not come up\n", stderr);
 			return EX_FAIL;
 		}
-		return music_cmd("play");
+
+		/* ⚠ `play` IS RESUME, AND RESUME DOES NOTHING FROM `stopped` —
+		 * which is exactly the state a player that has just started is
+		 * in. Sending it there starts the music player and plays
+		 * nothing, which is the worst kind of working: the tile
+		 * responds, the daemon is up, the menu grows a Now Playing row,
+		 * and there is silence. `toggle` is what begins playback from a
+		 * standing start, and it is also the right verb from `paused`. */
+		char state[32];
+		music_read(state, sizeof(state), NULL, 0, NULL, 0);
+		return music_cmd(strcmp(state, "playing") == 0 ? "play"
+							       : "toggle");
+	}
+
+	/*
+	 * The visualizer's bands, one NDJSON frame per line, straight from
+	 * cliamp to whoever is reading this.
+	 *
+	 * ⚠ EXEC, not a copy loop, and that is the whole implementation. This
+	 * process has nothing left to do but move lines, and the reader one
+	 * layer up has to see cliamp's OWN end-of-stream when the player goes —
+	 * a relay in the middle turns "the music stopped" into "the relay is
+	 * still here with nothing to say", which draws a visualizer frozen on
+	 * its last frame rather than one that goes away.
+	 *
+	 * ⚠ It answers `{"ok":false,"error":"bands timeout"}` for ever if the
+	 * player was started headless. See music_ensure_running for why it is
+	 * not, and never make that `--daemon` again.
+	 */
+	if (!strcmp(verb, "vis")) {
+		if (!music_socket_live()) {
+			fputs("syn-arcade: no music player is running\n", stderr);
+			return EX_FAIL;
+		}
+		/* 20 rather than cliamp's default 30: this drives ten
+		 * rectangles on a television, and the frames a launcher cannot
+		 * draw are frames it pays a subprocess to hand it anyway. */
+		execlp("cliamp", "cliamp", "visstream", "--fps", "20",
+		       (char *)NULL);
+		fputs("syn-arcade: could not start the visualizer stream\n",
+		      stderr);
+		return EX_FAIL;
 	}
 
 	if (!strcmp(verb, "toggle") || !strcmp(verb, "pause") ||

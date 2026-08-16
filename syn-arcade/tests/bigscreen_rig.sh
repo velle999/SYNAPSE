@@ -80,6 +80,20 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = music ]; then
         *" status "*)
             printf 'state\ttitle\tpath\n'
             printf 'playing\tFixture%%20Track\thttp://example.invalid/stream\n' ;;
+        *" vis "*)
+            # ⚠ FRAMES THAT DIFFER. A stub emitting one repeated frame draws a
+            # shape that never moves, which is indistinguishable on a
+            # screenshot from a visualizer bound to the wrong field and stuck
+            # on its first value. These three rotate, so the bars are visibly
+            # unequal and the animation has somewhere to go.
+            while :; do
+                printf '%s\n' '{"ok":true,"visualizer":"Bars","bands":[0.95,0.72,0.58,0.41,0.33,0.26,0.19,0.12,0.07,0.03]}'
+                sleep 0.08
+                printf '%s\n' '{"ok":true,"visualizer":"Bars","bands":[0.61,0.88,0.44,0.67,0.29,0.38,0.14,0.21,0.05,0.02]}'
+                sleep 0.08
+                printf '%s\n' '{"ok":true,"visualizer":"Bars","bands":[0.78,0.55,0.91,0.36,0.52,0.18,0.31,0.09,0.11,0.04]}'
+                sleep 0.08
+            done ;;
         *)  printf '%s\n' "\$*" >> "$TMP/music.log" ;;
     esac
     exit 0

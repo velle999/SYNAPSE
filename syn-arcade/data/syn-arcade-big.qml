@@ -708,6 +708,39 @@ ShellRoot {
         if (!musicProc.running) musicProc.running = true
     }
 
+    // ── the visualizer ──────────────────────────────────────────────────────
+    //
+    // cliamp's own bands, one NDJSON frame per line, drawn behind the Now
+    // Playing row. Ten floats in 0..1.
+    //
+    // ⚠ IT RUNS ONLY WHILE THE MENU IS OPEN. Twenty frames a second is twenty
+    // scene-graph updates a second, and a launcher that keeps that up behind a
+    // full-screen game is exactly the sort of thing the header of this file
+    // warns about. The Process's `running` condition is the whole bound.
+    property var musicBands: []
+
+    Process {
+        id: visProc
+        command: [shell.bin, "big", "music", "vis"]
+        running: shell.menuOpen && shell.musicLive
+        stdout: SplitParser {
+            onRead: (line) => {
+                // ⚠ GUARDED, because this is a parser pointed at another
+                // program's output. cliamp answers `{"ok":false,...}` when it
+                // has no bands to give, a half-written line is possible on any
+                // stream, and one throw here would take the whole menu down.
+                try {
+                    const f = JSON.parse(line)
+                    if (f && f.ok && Array.isArray(f.bands))
+                        shell.musicBands = f.bands
+                } catch (e) { /* not a frame; the next one will be */ }
+            }
+        }
+        // Nothing to draw once the stream ends, and a visualizer frozen on its
+        // last frame reads as the interface having hung.
+        onExited: shell.musicBands = []
+    }
+
     Timer {
         id: musicTimer
         interval: 2000
@@ -2506,12 +2539,92 @@ ShellRoot {
                                 // lines: what is playing, and what the d-pad does
                                 // to it. Nothing else in this menu needs saying
                                 // twice.
-                                height: entry.isMusic ? win.u * 3.6 : win.u * 2.6
+                                // ⚠ Tall enough for the text AND the meter to
+                                // have their own band. They shared the row at
+                                // 3.6 and the legend was read across the top of
+                                // solid bars — legible up close, and exactly
+                                // the sort of thing that stops being legible at
+                                // four metres.
+                                height: entry.isMusic ? win.u * 4.0 : win.u * 2.6
                                 radius: win.u * 0.4
                                 color: entry.chosen ? "#2b2450" : "transparent"
                                 border.width: entry.chosen
                                               ? Math.max(1, win.u * 0.08) : 0
                                 border.color: win.accent
+
+                                // ── the visualizer ──────────────────────
+                                //
+                                // Drawn FIRST, so it is behind the title and
+                                // the legend rather than over them, and
+                                // clipped to the row's rounded corners.
+                                //
+                                // ⚠ It has to stay a BACKGROUND. The row's job
+                                // is to say what is playing; bars bright enough
+                                // to compete with the text would make a
+                                // legibility problem out of a decoration, and
+                                // this is read from four metres away.
+                                clip: true
+
+                                Row {
+                                    visible: entry.isMusic
+                                             && shell.musicBands.length > 0
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: parent.border.width
+                                    // The bottom band only. See the row height.
+                                    height: parent.height * 0.30
+                                    spacing: win.u * 0.12
+
+                                    Repeater {
+                                        model: shell.musicBands
+
+                                        Rectangle {
+                                            id: bar
+                                            required property var modelData
+                                            required property int index
+
+                                            // Share the row between however
+                                            // many bands arrived, rather than
+                                            // assuming the ten cliamp sends
+                                            // today.
+                                            width: Math.max(1,
+                                                (parent.width
+                                                 - (shell.musicBands.length - 1)
+                                                   * parent.spacing)
+                                                / shell.musicBands.length)
+                                            anchors.bottom: parent.bottom
+                                            height: Math.max(1,
+                                                parent.height
+                                                * Math.min(1, Math.max(0,
+                                                    Number(bar.modelData) || 0)))
+                                            radius: win.u * 0.08
+                                            color: win.accent
+                                            // Low, and low on purpose — see
+                                            // above. The selected row's own
+                                            // fill is already lighter, so the
+                                            // bars sit a little further back
+                                            // there to keep the contrast the
+                                            // text needs.
+                                            // Brighter than a watermark, now
+                                            // that it has the row to itself —
+                                            // a visualizer nobody can see is a
+                                            // subprocess running for nothing.
+                                            opacity: entry.chosen ? 0.55 : 0.40
+
+                                            // 20 frames a second is visibly
+                                            // steppy on a bar meter; this
+                                            // carries each one to the next
+                                            // rather than snapping.
+                                            Behavior on height {
+                                                NumberAnimation {
+                                                    duration: 70
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // ⚠ CLICK ONLY, never hover. A hovered entry
                                 // that moved the selection would be the tile
@@ -2532,7 +2645,10 @@ ShellRoot {
                                     id: entryIcon
                                     anchors.left: parent.left
                                     anchors.leftMargin: win.u * 0.7
-                                    anchors.verticalCenter: parent.verticalCenter
+                                    // ⚠ To the TEXT, not to the row. On the
+                                    // music row the row's middle is where the
+                                    // meter starts.
+                                    anchors.verticalCenter: entryText.verticalCenter
                                     height: win.u * 1.4
                                     width: height
                                     source: {
@@ -2556,11 +2672,19 @@ ShellRoot {
                                 // its menu in a column instead of shuffling
                                 // one row left.
                                 Column {
+                                    id: entryText
                                     anchors.left: entryIcon.right
                                     anchors.leftMargin: win.u * 0.7
                                     anchors.right: parent.right
                                     anchors.rightMargin: win.u * 0.7
-                                    anchors.verticalCenter: parent.verticalCenter
+                                    // One anchor with a computed margin rather
+                                    // than two conditional ones: an ordinary
+                                    // row centres, and the music row sits up
+                                    // to leave the meter its band.
+                                    anchors.top: parent.top
+                                    anchors.topMargin: entry.isMusic
+                                        ? win.u * 0.5
+                                        : (parent.height - entryText.height) / 2
                                     spacing: win.u * 0.15
 
                                     Text {

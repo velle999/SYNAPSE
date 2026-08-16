@@ -1771,6 +1771,47 @@ check "an unknown transport verb lists the real ones" $?
 
 rm -f "$BIGCONF"
 
+# ── the visualizer, and the flag that must never come back ──────────────────
+#
+# ⚠ `--daemon` IS THE OBVIOUS WAY TO START A HEADLESS PLAYER AND IT IS WRONG
+# HERE. cliamp computes its visualizer bands inside the TUI's own draw loop, so
+# in headless mode `vis` answers "visualizer not available in headless mode" and
+# `visstream` yields nothing but {"ok":false,"error":"bands timeout"} for ever.
+#
+# The failure is the dangerous kind: the music plays, the menu grows a Now
+# Playing row, every transport button works, and the meter is silently flat —
+# which reads as a bug in the drawing code, not in how the player was started.
+# So the player is run on a pty with no window (`script`), and this is the
+# assertion standing between that and somebody tidying it back.
+! grep -q '"--daemon"' src/big.c
+check "the player is never started headless — the visualizer needs its TUI" $?
+
+grep -q '"script", "-qfc", "cliamp", "/dev/null"' src/big.c
+check "...it gets a pty and no window instead" $?
+
+grep -q 'execlp("cliamp", "cliamp", "visstream"' src/big.c
+check "big music vis streams cliamp's own bands" $?
+
+# ⚠ `play` is RESUME, and resume does nothing from `stopped` — which is the
+# state a player that has just started is in. Sending it there starts the
+# player and plays nothing: the tile responds, the row appears, and there is
+# silence.
+grep -q 'music_cmd(strcmp(state, "playing") == 0 ? "play"' src/big.c
+check "a cold start is toggled into playing, not merely resumed" $?
+
+# The stream is bounded by the menu being open. Twenty frames a second behind a
+# full-screen game is the thing this file's header warns about.
+grep -q 'running: shell.menuOpen && shell.musicLive' "$BIGQML"
+check "the visualizer runs only while the menu is open" $?
+
+# A parser pointed at another program's output, inside a try. cliamp answers
+# {"ok":false} when it has no bands, and one throw here takes the menu down.
+grep -q 'try {' "$BIGQML"
+check "...and a bad frame cannot take the menu down with it" $?
+
+grep -q 'onExited: shell.musicBands = \[\]' "$BIGQML"
+check "...and the bars go rather than freezing on the last frame" $?
+
 # ── the guide button ────────────────────────────────────────────────────────
 #
 # The watcher that makes the pad's GUIDE button open big screen mode from the

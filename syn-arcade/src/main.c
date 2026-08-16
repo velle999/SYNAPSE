@@ -93,6 +93,8 @@ static void usage(FILE *f)
 "  big music [status]      what is playing, for the Start menu's Now Playing\n"
 "  big music play          start the player if it is not up, then play\n"
 "  big music pause | toggle | next | prev | stop\n"
+"  big music vis           the visualizer's bands, one NDJSON frame per line\n"
+"                          (the Start menu's meter reads this)\n"
 "                          ⚠ needs a player big screen mode can DRIVE rather\n"
 "                          than launch — cliamp, which runs headless. Choose\n"
 "                          it with `music = cliamp` in big.conf; any other\n"
