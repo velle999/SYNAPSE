@@ -1191,8 +1191,16 @@ check "every tile on the apps shelf wants a pointer" $?
 
 apps=$("$SA" big apps --rec)
 
-printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($NF == "iconfile") ? 0 : 1 }'
-check "apps --rec ends with the resolved glyph path" $?
+# ⚠ THE GLYPH PATH IS COLUMN TEN AND NO LONGER THE LAST ONE. A new column goes
+# on the END — that is the rule this record has followed since `full`, and it
+# is what keeps `cut -f10` working for anybody who wrote one — so `transient`
+# went after `iconfile` and the shape has to be pinned by POSITION now rather
+# than by "the last field is the icon".
+printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($10 == "iconfile") ? 0 : 1 }'
+check "apps --rec has the resolved glyph path in column ten" $?
+
+printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($NF == "transient") ? 0 : 1 }'
+check "...and the newest column on the end, where new columns go" $?
 
 # ⚠ The PATH, checked for existence, not merely for being non-empty. An
 # unreadable path is what a wrong prefix produces, and it arrives in the shell
@@ -1898,6 +1906,12 @@ check "the visualizer runs only while the menu is open" $?
 grep -q 'try {' "$BIGQML"
 check "...and a bad frame cannot take the menu down with it" $?
 
+# ⚠ …AND ONLY WHEN CLIAMP IS THE PLAYER. The bands come out of cliamp's own
+# stream, so with Spotify playing the meter is a subprocess answering
+# {"ok":false} twenty times a second for as long as the menu is open.
+grep -q 'shell.musicLive && shell.musicIsPlayer' "$BIGQML"
+check "...and never against a player that is not cliamp" $?
+
 grep -q 'onExited: shell.musicBands = \[\]' "$BIGQML"
 check "...and the bars go rather than freezing on the last frame" $?
 
@@ -1970,9 +1984,15 @@ music source --rec |
     awk -F'\t' '$1 == "plex" && $4 == "albums" { f = 1 } END { exit !f }'
 check "...with an action column saying Plex has a library to pick from" $?
 
+# ⚠ THE TWO STREAMING SERVICES NO LONGER SAY `browse` UNCONDITIONALLY, and
+# that is the change rather than a broken assertion: on a machine with no
+# yt-dlp and no Spotify account, "opens cliamp" was true and the outcome was an
+# empty library. Which action each one gets, and both sides of it, are asserted
+# in the streaming section further down; this only pins that the column is
+# still answered for them.
 music source --rec |
-    awk -F'\t' '$1 == "spotify" && $4 == "browse" { f = 1 } END { exit !f }'
-check "...and that the two streaming services open cliamp instead" $?
+    awk -F'\t' '$1 == "spotify" && $4 != "" { f = 1 } END { exit !f }'
+check "...and that the streaming services answer the column too" $?
 
 # ⚠ NOT through says(), which always exits 0. An exit STATUS has to come from
 # the binary itself, and every refusal in this file that checks one runs it
@@ -2074,6 +2094,347 @@ check "a machine with no music folder says so on the Local row" $?
 check "...and a machine with one does not" $?
 
 rm -f "$BIGCONF"
+
+# ── the two rows that used to dead-end ──────────────────────────────────────
+#
+# ⚠ REPORTED FROM THE SOFA: both rows opened cliamp, and cliamp appeared to
+# support neither service. Both halves were true, for reasons that have nothing
+# to do with each other:
+#
+#   YouTube Music  needs yt-dlp, which is an OPTDEPEND of the cliamp package.
+#                  Without it the provider is there, is selectable, and
+#                  returns nothing — cliamp's own package says so.
+#   Spotify        needs a [spotify] section in cliamp's config and an account
+#                  signed in. With no section there is nothing to open.
+#
+# So the `action` column answers "install" and "setup" rather than "browse",
+# and the row says which. Both are facts about THIS machine, which is why the
+# PATH below is cut down to the stubs: whether the developer happens to have
+# yt-dlp installed is not something an assertion may depend on. It is the same
+# rule the "no music folder" pair above redirects HOME for.
+NOYT="$T/no-yt"
+mkdir -p "$NOYT"
+srcpath() { ( PATH="$MSTUB:$STUB"; export PATH; says "$SA" big music "$@" ); }
+
+CLIAMPCONF="$XDG_CONFIG_HOME/cliamp/config.toml"
+mkdir -p "$(dirname "$CLIAMPCONF")"
+rm -f "$CLIAMPCONF"
+
+srcpath source --rec |
+    awk -F'\t' '$1 == "ytmusic" && $4 == "install" { f = 1 } END { exit !f }'
+check "YouTube Music offers to install yt-dlp on a machine without it" $?
+
+srcpath source | grep -q "needs yt-dlp"
+check "...and the row says so rather than describing the button" $?
+
+srcpath source --rec |
+    awk -F'\t' '$1 == "spotify" && $4 == "setup" { f = 1 } END { exit !f }'
+check "Spotify offers to sign in when cliamp has no [spotify] section" $?
+
+# ⚠ THE OTHER SIDE OF BOTH, and without it these assertions would pass against
+# a version that answered "install" and "setup" unconditionally — which is a
+# television that offers to install yt-dlp every time somebody who already has
+# it presses the row.
+printf '#!/bin/sh\nexit 0\n' > "$NOYT/yt-dlp"; chmod +x "$NOYT/yt-dlp"
+( PATH="$MSTUB:$STUB:$NOYT"; export PATH
+  says "$SA" big music source --rec ) |
+    awk -F'\t' '$1 == "ytmusic" && $4 == "browse" { f = 1 } END { exit !f }'
+check "...and with yt-dlp installed the row opens cliamp as before" $?
+
+printf '[spotify]\nbitrate = 320\n' > "$CLIAMPCONF"
+srcpath source --rec |
+    awk -F'\t' '$1 == "spotify" && $4 == "browse" { f = 1 } END { exit !f }'
+check "...and a configured Spotify opens cliamp rather than the wizard" $?
+rm -f "$CLIAMPCONF"
+
+# ⚠ `--noconfirm` BEFORE THE VERB. synpkg stops parsing global options at the
+# first non-option argument, so `install --noconfirm` is a flag it never sees —
+# and a front-end that cannot answer a prompt then authenticates through
+# polkit, declines itself, and installs nothing while reporting success. It has
+# bitten this project twice. The permissive shape `synpkg( --[a-z]+)* install`
+# is what let it through last time, so this pins the literal.
+grep -q '"synpkg --noconfirm install yt-dlp"' src/big.c
+check "the installer passes --noconfirm BEFORE the verb" $?
+
+# Nothing is installed twice, and nothing opens a terminal to say so.
+( PATH="$MSTUB:$STUB:$NOYT"; export PATH
+  says "$SA" big music install ytmusic ) | grep -q "already installed"
+check "installing what is already there is a sentence, not a terminal" $?
+
+# ── the media buttons: whatever is playing, not just cliamp ─────────────────
+#
+# ⚠ `big transport` IS NOT `big music`, and the difference is whose music it
+# is. `big music` drives cliamp over its socket; this speaks MPRIS, which is
+# what makes a play/pause button on a television work on Spotify, a film, or a
+# video in a browser tab. busctl is STUBBED here — the real one would find the
+# session bus of the desktop running this suite and pause somebody's album.
+BSTUB="$T/bus-bin"
+mkdir -p "$BSTUB"
+cat > "$BSTUB/busctl" <<'EOF'
+#!/bin/sh
+printf 'busctl %s\n' "$*" >> "$BUSCTL_LOG"
+
+# Which player this call is about: the argument that looks like a bus name.
+#
+# ⚠ THE INTERFACE NAME LOOKS EXACTLY LIKE ONE. `org.mpris.MediaPlayer2.Player`
+# is the last argument of every GetAll, so a loop that keeps the LAST match
+# answers for a player called "Player" — which is to say it answers with the
+# fallback for every call, and the fixture then has one player in it however
+# many the list printed. It cost twenty minutes here.
+bus=
+for a in "$@"; do
+    case $a in
+        org.mpris.MediaPlayer2.Player) ;;
+        org.mpris.MediaPlayer2.*) [ -z "$bus" ] && bus=$a ;;
+    esac
+done
+
+case " $* " in
+    *" list "*)
+        # ⚠ WITH SOMETHING ELSE ON THE BUS. A list of nothing but media
+        # players cannot show that the prefix is what filters them.
+        printf 'org.freedesktop.systemd1 1 systemd velle :1.1 - - -\n'
+        [ -n "${BUS_FIREFOX:-}" ] &&
+            printf 'org.mpris.MediaPlayer2.firefox 222 firefox velle :1.5 - - -\n'
+        [ -n "${BUS_CLIAMP:-}" ] &&
+            printf 'org.mpris.MediaPlayer2.cliamp 333 cliamp velle :1.6 - - -\n'
+        exit 0 ;;
+    *GetAll*)
+        case $bus in
+            *firefox) st=$BUS_FIREFOX; title=$BUS_FTITLE; artist="Someone" ;;
+            *)        st=$BUS_CLIAMP;  title="Cliamp Track"; artist="" ;;
+        esac
+        printf '{"type":"a{sv}","data":[{"CanPause":{"type":"b","data":true},'
+        printf '"Metadata":{"type":"a{sv}","data":{"xesam:title":{"type":"s","data":"%s"},' "$title"
+        printf '"xesam:artist":{"type":"as","data":["%s"]}}},' "$artist"
+        printf '"CanPlay":{"type":"b","data":true},'
+        printf '"CanGoNext":{"type":"b","data":true},'
+        printf '"PlaybackStatus":{"type":"s","data":"%s"},' "$st"
+        printf '"CanGoPrevious":{"type":"b","data":false}}]}\n'
+        exit 0 ;;
+    *Identity*)
+        case $bus in
+            *firefox) printf 's "Firefox"\n' ;;
+            *)        printf 's "Cliamp"\n' ;;
+        esac
+        exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x "$BSTUB/busctl"
+export BUSCTL_LOG="$T/busctl.log" BUS_FIREFOX="" BUS_CLIAMP="" BUS_FTITLE="A Video"
+: > "$BUSCTL_LOG"
+
+# ⚠ The MUSIC stub is on this path too: when the chosen player is cliamp the
+# transport goes over its socket rather than over D-Bus, and without cliamp
+# here that branch would be tested against a player that is not installed.
+tport() { ( PATH="$BSTUB:$MSTUB:$STUB"; export PATH; says "$SA" big transport "$@" ); }
+
+( PATH="$BSTUB:$MSTUB:$STUB"; export PATH
+  "$SA" big transport status >/dev/null 2>&1 )
+[ "$?" != 0 ]
+check "with nothing on the bus, transport status is not a success" $?
+
+BUS_FIREFOX=Playing BUS_CLIAMP=Paused
+export BUS_FIREFOX BUS_CLIAMP
+tport status --rec | awk -F'\t' 'NR == 2 && $1 == "firefox" { f = 1 } END { exit !f }'
+check "whatever is PLAYING wins, over a paused player big screen owns" $?
+
+tport status --rec | awk -F'\t' 'NR == 2 && $2 == "Firefox" { f = 1 } END { exit !f }'
+check "...and the player is named the way it names itself" $?
+
+# ⚠ `as`, A LIST WITH ONE ENTRY — which is how every MPRIS player publishes an
+# artist, and which the JSON reader had to learn to step over. Without it the
+# artist is silently always empty.
+tport status --rec | grep -q "Someone"
+check "the artist is read out of a one-element D-Bus array" $?
+
+# ⚠ THE TIE-BREAK, and it is what decides whose buttons these are on a machine
+# with a browser tab paused in another workspace.
+BUS_FIREFOX=Paused; export BUS_FIREFOX
+tport status --rec | awk -F'\t' 'NR == 2 && $1 == "cliamp" { f = 1 } END { exit !f }'
+check "with both paused, the player big screen mode drives wins" $?
+
+# ⚠ AND CLIAMP IS DRIVEN OVER ITS OWN SOCKET, not over D-Bus. Its MPRIS title
+# is the file path and `play` from `stopped` does nothing there — both already
+# solved in the music path, and rediscovering them through a second interface
+# is how a television ends up with two answers about one player.
+: > "$CLIAMP_LOG"; : > "$BUSCTL_LOG"
+( PATH="$BSTUB:$MSTUB:$STUB"; export PATH; says "$SA" big transport next ) >/dev/null
+grep -q 'cliamp next' "$CLIAMP_LOG"
+check "a transport command for cliamp goes over its socket" $?
+
+grep -q 'busctl.*Next' "$BUSCTL_LOG"
+[ $? != 0 ]
+check "...and not over D-Bus as well" $?
+
+# The other way round: a player that is not cliamp gets the D-Bus method.
+: > "$CLIAMP_LOG"; : > "$BUSCTL_LOG"
+BUS_FIREFOX=Playing; export BUS_FIREFOX
+( PATH="$BSTUB:$MSTUB:$STUB"; export PATH; says "$SA" big transport toggle ) >/dev/null
+grep -q 'org.mpris.MediaPlayer2.firefox' "$BUSCTL_LOG" &&
+    grep -q 'PlayPause' "$BUSCTL_LOG"
+check "a transport command for anything else is an MPRIS method call" $?
+
+# ⚠ SAID, NOT SENT. The stub answers CanGoPrevious false, which is what a radio
+# stream looks like. A button that reports success and does nothing is how
+# somebody learns the interface is broken.
+( PATH="$BSTUB:$MSTUB:$STUB"; export PATH
+  "$SA" big transport prev >/dev/null 2>&1 )
+[ "$?" != 0 ]
+check "a skip the player says it cannot do is refused, not faked" $?
+
+# ⚠ THE MOST IMPORTANT ASSERTION IN THIS SECTION, and it is the same one the
+# Plex section below makes about `big music`: MPRIS is a SECOND DOOR onto the
+# same fact, and cliamp publishes the file path as the track title. For a Plex
+# stream that path carries the account token in its query — four metres wide on
+# a television, in the footer, on every screen.
+BUS_FTITLE='http://192.168.40.153:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
+export BUS_FTITLE
+tport status --rec | grep -q "SECRETVALUE"
+[ $? != 0 ]
+check "a token in a track title never reaches the media buttons" $?
+
+tport status --rec | grep -q "file.flac"
+check "...and what is left is the name of the track" $?
+
+BUS_FTITLE="A Video"; export BUS_FTITLE
+BUS_FIREFOX=""; BUS_CLIAMP=""; export BUS_FIREFOX BUS_CLIAMP
+
+( PATH="$BSTUB:$MSTUB:$STUB"; export PATH
+  "$SA" big transport wobble >/dev/null 2>&1 )
+[ "$?" = 2 ]
+check "an unknown transport verb is a usage error" $?
+
+# ── the visualizer is ENDED on the way back, not left running ───────────────
+#
+# ⚠ THE BUG: open the visualizer, press Guide, go back to it — and it is
+# frozen until the window is resized twice with a mouse. A surface fully
+# covered by an opaque one is occlusion-culled and gets no frame callbacks, and
+# projectM does not idle without them (measured: 100% of a core while covered).
+#
+# ⚠ AND KILLING THE SHELL'S PROCESS IS NOT ENOUGH, which is the whole reason
+# this is a behavioural test and not a grep. `big run --wait` gives the
+# application its own SESSION, so a SIGTERM to the waiter leaves the program
+# it started drawing away behind the television. The waiter has to pass the
+# signal on to the whole process group.
+grep -qE 'rows\[n\+\+\] = \(struct row\)\{ "visualizer".*|^\t\t\t"system", false, false, true, true \};' src/big.c
+check "the visualizer is marked as ending on return" $?
+
+says "$SA" big apps | grep -q "ends on return"
+check "...and says so in plain text as well" $?
+
+says "$SA" big apps --rec | awk -F'\t' '
+    NR == 1 { for (i = 1; i <= NF; i++) if ($i == "transient") c = i; next }
+    $1 == "web" && $c == "1" { bad = 1 }
+    END { exit !!bad }'
+check "...and the browser is NOT — Guide is meant to come back to it" $?
+
+KILLBIN="$T/kill-bin"
+mkdir -p "$KILLBIN" "$T/killhome"
+ln -sf "$SA" "$KILLBIN/syn-arcade"
+printf '#!/bin/sh\nexec sleep 941\n' > "$KILLBIN/projectM-pulseaudio"
+chmod +x "$KILLBIN/projectM-pulseaudio"
+# The visualizer refuses to start without a monitor source to listen to — it
+# would open a MICROPHONE otherwise, which on a Bluetooth headset takes the
+# machine's audio down. Two answers is the whole fixture.
+cat > "$KILLBIN/pactl" <<'EOF'
+#!/bin/sh
+case "$1" in
+    get-default-sink) echo fixture_sink ;;
+    list) printf '0\tfixture_sink.monitor\tmodule-null-sink.c\ts16le\tSUSPENDED\n' ;;
+esac
+exit 0
+EOF
+chmod +x "$KILLBIN/pactl"
+
+(
+    # ⚠ HOME redirected as well: the visualizer writes projectM's own config
+    # before starting it, and that file belongs to the person running this.
+    HOME="$T/killhome"; export HOME
+    PATH="$KILLBIN:$STUB:$PATH"; export PATH
+    syn-arcade big run visualizer --wait &
+    waiter=$!
+    sleep 1
+    app=$(pgrep -P "$waiter" | head -1)
+    printf '%s\n' "${app:-none}" > "$T/vis.pid"
+    kill -TERM "$waiter" 2>/dev/null
+    sleep 1
+    if [ -n "$app" ] && kill -0 "$app" 2>/dev/null; then
+        kill -9 "$app" 2>/dev/null
+        echo still > "$T/vis.alive"
+    fi
+    wait "$waiter" 2>/dev/null
+)
+app=$(cat "$T/vis.pid" 2>/dev/null)
+[ -n "$app" ] && [ "$app" != none ]
+check "a tile launch really does start something" $?
+
+[ ! -f "$T/vis.alive" ]
+check "…and a SIGTERM to the waiter ends the program it started" $?
+
+# ⚠ THE GROUP, not the pid. The application was given its own session by
+# spawn_detached_pid, so anything IT started in turn is in that group too — and
+# killing one pid leaves a wrapper's real program running with nothing left
+# holding a handle on it.
+grep -q 'kill(-(pid_t)waited_pid, sig)' src/big.c
+check "...and the signal goes to the whole process group" $?
+
+# The shell's half: coming back is what ends them, and it signals the WAITER
+# (there is no other pid it has) rather than trying to find the application.
+grep -q 'shell.endTransients()' "$BIGQML"
+check "coming back ends the applications marked as transient" $?
+
+grep -q 'shell.procs\[i\].signal(15)' "$BIGQML"
+check "...by signalling the process it started, which passes it on" $?
+
+grep -q 'rec.tile.transient' "$BIGQML"
+check "...and WHICH ones is big.c's column, not a list in the QML" $?
+
+# ⚠ Coming back a second time would move the selection to the Running shelf —
+# from a press of Guide meant to leave it where it was.
+grep -q 'if (rec.ended)' "$BIGQML"
+check "...and the exit that follows does not bounce the selection" $?
+
+# ── the media buttons, on screen ────────────────────────────────────────────
+
+grep -q 'big", "transport", "status", "--rec"' "$BIGQML"
+check "the footer asks what is playing rather than assuming cliamp" $?
+
+# ⚠ `transport`, NOT `media`: `media` is already the Plex and Jellyfin servers
+# found on the network, and a duplicated property in QML is a warning nobody
+# reads and a Media shelf that empties itself one day.
+grep -q 'property var transport: ({})' "$BIGQML"
+check "...into a property that does not collide with the media SERVERS" $?
+
+grep -q 'shell.mediaState === "playing" || shell.mediaState === "paused"' "$BIGQML"
+check "the buttons are drawn only while something is playing or paused" $?
+
+grep -q 'if (!shell.mediaLive) shell.mediaFocus = false' "$BIGQML"
+check "...and the selection cannot be left on them when they go" $?
+
+grep -q 'shell.mediaFocus = true' "$BIGQML"
+check "down from the last shelf lands on the media buttons" $?
+
+# Every input path, because a button reachable only one way is a button half
+# the room cannot press.
+grep -q 'Qt.Key_MediaTogglePlayPause' "$BIGQML" &&
+    grep -q 'Qt.Key_MediaNext' "$BIGQML" &&
+    grep -q 'Qt.Key_MediaPrevious' "$BIGQML"
+check "the media keys on a keyboard or a remote work too" $?
+
+grep -q 'shell.mediaPress()' "$BIGQML"
+check "...and so do A on the pad and a mouse click" $?
+
+# ⚠ ⏮ ⏯ ⏭ ARE NOT IN EVERY FONT. On this machine they resolve through Noto
+# Sans Symbols 2 and Noto Color Emoji; a fresh install is promised neither, and
+# a missing glyph is an empty box four metres wide with nothing said anywhere.
+grep -q 'ctx.fillRect' "$BIGQML"
+check "the glyphs are drawn rather than typed, so no font can lose them" $?
+
+# The rig has to be able to see all of this without reaching the real bus.
+grep -q '^unset DBUS_SESSION_BUS_ADDRESS' tests/bigscreen_rig.sh
+check "the rig cannot reach the live desktop's music player over D-Bus" $?
 
 # ── a Plex token is not something to draw on a television ───────────────────
 #

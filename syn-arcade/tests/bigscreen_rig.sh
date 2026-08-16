@@ -103,10 +103,16 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = music ]; then
                 printf 'source %s\n' "\${4}" >> "$TMP/music.log"
                 exit 0
             fi
+            # ⚠ ytmusic and spotify carry the two actions that are not
+            # "open cliamp", because on most machines that is what big.c
+            # answers: YouTube Music plays through yt-dlp, which nobody has
+            # by default, and Spotify needs an account. A fixture that said
+            # `browse` for both would screenshot the row this change exists
+            # to replace.
             printf 'id\tname\tcurrent\taction\tnote\n'
             printf 'plex\tPlex\t0\talbums\t\n'
-            printf 'ytmusic\tYouTube%%20Music\t0\tbrowse\topens%%20cliamp\n'
-            printf 'spotify\tSpotify\t0\tbrowse\topens%%20cliamp\n'
+            printf 'ytmusic\tYouTube%%20Music\t0\tinstall\tneeds%%20yt-dlp%%20—%%20press%%20to%%20install%%20it\n'
+            printf 'spotify\tSpotify\t0\tsetup\tpress%%20to%%20sign%%20in%%20—%%20needs%%20Spotify%%20Premium\n'
             printf 'local\tLocal%%20files\t0\tplay\t\n'
             printf 'radio\tRadio\t1\tplay\t\n' ;;
         *" plex "*)
@@ -139,6 +145,26 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = music ]; then
                 i=\$((i + 1))
             done ;;
         *)  printf '%s\n' "\$*" >> "$TMP/music.log" ;;
+    esac
+    exit 0
+fi
+# ⚠ THE MEDIA BUTTONS ARE STUBBED, AND THIS ONE IS A SEATBELT AS MUCH AS A
+# FIXTURE. \`big transport\` asks the SESSION BUS what is playing and then sends
+# it Play/Pause — and D-Bus is not reached through XDG_RUNTIME_DIR alone:
+# DBUS_SESSION_BUS_ADDRESS is inherited from the shell that ran this rig, so
+# the real binary here would find the LIVE desktop's music player and pause
+# somebody's album from inside a test. Same family as the SYNUI_SOCKET note
+# below. (The variable is unset as well; this is the brace to that belt.)
+#
+# ⚠ AND IT ANSWERS AS SOMETHING PLAYING, because the buttons are drawn only
+# while something is — a stub that said "nothing" would screenshot a footer
+# with no media row in it and prove nothing about either.
+if [ "\${1:-}" = big ] && [ "\${2:-}" = transport ]; then
+    case " \$* " in
+        *" status "*)
+            printf 'player\tapp\tstate\ttitle\tartist\tcannext\tcanprev\tcanplay\tcanpause\n'
+            printf 'cliamp\tCliamp\tplaying\tFixture%%20Track\tThe%%20Fixtures\t1\t1\t1\t1\n' ;;
+        *)  printf 'transport %s\n' "\${3:-}" >> "$TMP/transport.log" ;;
     esac
     exit 0
 fi
@@ -378,6 +404,14 @@ unset DISPLAY WAYLAND_DISPLAY
 # both of which point at the nested compositor by the time anything runs.
 unset SYNUI_SOCKET
 
+# ⚠ AND THE SESSION BUS, for exactly the same reason one step along. The media
+# buttons ask MPRIS what is playing and send it transport commands, and D-Bus
+# is found through DBUS_SESSION_BUS_ADDRESS FIRST — which this script inherits
+# from the live desktop that started it. Redirecting XDG_RUNTIME_DIR is not
+# enough on its own. With it unset there is no bus to find, and the stub above
+# answers instead of anything reaching the real one.
+unset DBUS_SESSION_BUS_ADDRESS
+
 # ⚠ Every power timeout pushed out. A rig that blanks or suspends halfway
 # through is a rig that screenshots a black screen and looks like a bug.
 cat > "$TMP/synuirc" <<'RC'
@@ -503,6 +537,21 @@ shot 02b-crossed-along-the-bar
 say down 0.6
 shot 03-news                 # the third row, on its own
 
+# ── the media buttons, which are BELOW the last shelf ───────────────────────
+#
+# ⚠ DOWN FROM THE BOTTOM BAND USED TO DO NOTHING, and that is the whole way in
+# — no new button and nothing to learn. So this step is also the assertion that
+# the interface has not simply stopped at the last row: what proves it is the
+# highlight moving into the footer, and `transport next` landing in the log.
+say down 0.6
+shot 03k-media-buttons       # the footer row, play/pause chosen
+
+say right 0.4                # onto skip-forward
+say accept 0.7
+shot 03l-media-pressed       # …and `transport next` in transport.log
+
+say back 0.5                 # B leaves the buttons for the tiles again
+
 say up 0.5
 shot 03b-back-on-the-bar
 
@@ -598,6 +647,8 @@ echo "── what was launched ──"
 cat "$TMP/launch.log" 2>/dev/null || echo "(nothing)"
 echo "── music transport ──"
 cat "$TMP/music.log" 2>/dev/null || echo "(nothing)"
+echo "── the media buttons ──"
+cat "$TMP/transport.log" 2>/dev/null || echo "(nothing)"
 echo "── shell errors ──"
 grep -aE "ERROR|WARN|qs:" "$TMP/qs.log" | grep -viE "IPC server|Saving logs" | head -25
 echo "── screenshots ──"

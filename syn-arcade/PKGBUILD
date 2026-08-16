@@ -212,6 +212,61 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-26: media buttons on the television, and a visualizer that is ─────
+# ── ENDED rather than hidden ────────────────────────────────────────────────
+#
+# Three things from the sofa, and the first of them is the interesting one.
+#
+# ⚠ THE VISUALIZER CAME BACK FROZEN, and the way out was to resize its window
+# twice with a mouse. Open it, press Guide to go back to the interface, press
+# Guide again — a still picture. It is not a drawing bug and it is not synui's
+# fault: a surface fully covered by an OPAQUE one is occlusion-culled by the
+# compositor and gets no frame callbacks, and projectM does not idle without
+# them. Measured on a headless rig: 62 frames a second uncovered, ZERO covered,
+# and 100% of a core burnt drawing frames nobody will ever see.
+#
+# So the visualizer is now ENDED when the interface comes back. It has nothing
+# to be away from — it draws the music that is playing anyway — and a fresh one
+# is what the tile starts next time, full-screen, with nothing to restore.
+#
+# ⚠ AND KILLING THE SHELL'S PROCESS WAS NOT ENOUGH. `big run <id> --wait` gives
+# the application its own SESSION, so a signal to the waiter left projectM
+# drawing away behind the television with nothing holding a handle on it. The
+# waiter forwards the signal to the whole process group now — which is the only
+# way the shell can end anything at all, since a layer-shell surface cannot
+# close a window and there is no pid anywhere in QML.
+#
+# ── MEDIA BUTTONS, in the middle of the legend along the bottom ─────────────
+#
+# ⚠ THEY DRIVE WHATEVER IS PLAYING, NOT CLIAMP. `big music` is one player over
+# one socket, which is right for the Music tile and worth nothing the moment
+# somebody is listening to Spotify or watching a film. `big transport` speaks
+# MPRIS2 — the interface every media player on Linux implements — through
+# busctl, which is on every machine because systemd is. It still drives cliamp
+# over its own socket when cliamp is what is playing: cliamp's MPRIS reports
+# the FILE PATH as the track title, and for a Plex stream that path carries the
+# account token in its query.
+#
+# Reachable four ways, because a button reachable one way is a button half the
+# room cannot press: DOWN from the last shelf (the one direction that used to
+# do nothing), a mouse, and the media keys on a keyboard or a remote. They are
+# drawn only while something is playing.
+#
+# ── YouTube Music and Spotify no longer dead-end ────────────────────────────
+#
+# Reported from the sofa: both rows opened cliamp, and cliamp appeared to
+# support neither service. Both were true, for unrelated reasons: YouTube
+# Music plays through yt-dlp, which is an OPTDEPEND of cliamp and is not on a
+# stock install — without it the provider is there, is selectable, and returns
+# nothing — and Spotify needs a [spotify] section and an account. So the rows
+# say which, and pressing one installs the package or opens cliamp's own
+# sign-in wizard on the television rather than opening an empty library.
+#
+# ⚠ The installer passes `--noconfirm` BEFORE the verb. synpkg stops parsing
+# global options at the first non-option argument, and a front-end that cannot
+# answer a prompt otherwise authenticates through polkit, declines itself, and
+# installs nothing while reporting success. Twice now.
+
 # ── 0.1.0-22: FIT TO SCREEN — the gamescope wrapper, made once and kept ─────
 #
 # An old game renders at 640x480 or 1024x768 and has no idea what a 2560x1440
@@ -298,7 +353,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=25
+pkgrel=26
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

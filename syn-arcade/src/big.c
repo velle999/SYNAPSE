@@ -886,7 +886,13 @@ static bool json_str(const char *text, const char *end, const char *key,
 	if (!p || (end && p >= end))
 		return false;
 	p += strlen(pat);
-	while (*p == ' ' || *p == ':') p++;
+	/* ⚠ `[` IS SKIPPED, and it is for MPRIS. Half of what a media player
+	 * publishes about a track is typed `as` — `xesam:artist` is "a list
+	 * with one entry" in the specification, and every player really does
+	 * send a one-element array. Skipping the bracket reads the first
+	 * string of a list with the same call that reads a plain one; nothing
+	 * else here passes a key whose value is an array. */
+	while (*p == ' ' || *p == ':' || *p == '[') p++;
 	if (*p != '"')
 		return false;
 	p++;
@@ -1179,10 +1185,27 @@ static bool music_headless(void)
  *            itself, and helping would blow that splash up to fill a wall for
  *            a second on the way in. The rule is "does this need help", not
  *            "should this be full-screen".
+ *   transient  whether this tile's application should be ENDED when big screen
+ *            mode comes back, rather than left running behind it.
+ *
+ *            ⚠ FALSE FOR ALMOST EVERYTHING, and that is the point: a game, a
+ *            browser or a film is exactly what Guide is meant to step away
+ *            from and come back to. This is for the one kind of tile that has
+ *            nothing to be away from — the visualizer draws the music that is
+ *            playing anyway, so hidden behind the interface it is a window
+ *            with no viewer.
+ *
+ *            It is not merely wasteful. A surface fully covered by an opaque
+ *            one is occlusion-culled by the compositor and gets NO FRAME
+ *            CALLBACKS, and projectM does not idle without them: measured on a
+ *            headless synui, it free-runs at 100% of a core while covered, and
+ *            comes back frozen often enough that the way out was to resize the
+ *            window twice with a mouse. Reported from the sofa as "open the
+ *            visualizer, hit Guide, go back and it is frozen".
  */
 struct row {
 	const char *id, *name, *exec, *icon, *kind, *shelf;
-	bool pointer, keys, full;
+	bool pointer, keys, full, transient;
 };
 
 /*
@@ -1244,20 +1267,20 @@ static int apps_table(struct row *rows, int max)
 	if (have("steam"))
 		rows[n++] = (struct row){ "steam-bpm", "Steam Big Picture",
 			"syn-arcade big steam", "steam", "app", "play",
-			false, false, false };
+			false, false, false, false };
 	if (have("retroarch"))		/* --fullscreen, up in the exec */
 		rows[n++] = (struct row){ "retroarch", "RetroArch",
 			"retroarch --fullscreen", "retroarch", "app", "play",
-			false, false, false };
+			false, false, false, false };
 	if (have("lutris"))
 		rows[n++] = (struct row){ "lutris", "Lutris", "lutris",
-			"lutris", "app", "play", true, false, true };
+			"lutris", "app", "play", true, false, true, false };
 	if (have("heroic"))
 		rows[n++] = (struct row){ "heroic", "Heroic", "heroic",
-			"heroic", "app", "play", true, false, true };
+			"heroic", "app", "play", true, false, true, false };
 	if (have("moonlight"))
 		rows[n++] = (struct row){ "moonlight", "Moonlight", "moonlight",
-			"moonlight", "app", "play", true, false, true };
+			"moonlight", "app", "play", true, false, true, false };
 
 	/* ── media ── */
 	{
@@ -1272,41 +1295,41 @@ static int apps_table(struct row *rows, int max)
 		if (music && music_headless())
 			rows[n++] = (struct row){ "music", "Music",
 				"syn-arcade big music play", "music", "action",
-				"media", false, false, false };
+				"media", false, false, false, false };
 		else if (music)
 			rows[n++] = (struct row){ "music", "Music", music,
-				"music", "app", "media", true, false, true };
+				"music", "app", "media", true, false, true, false };
 	}
 	if (have("kodi"))		/* opens full-screen by itself */
 		rows[n++] = (struct row){ "kodi", "Kodi", "kodi", "kodi", "app",
-			"media", false, false, false };
+			"media", false, false, false, false };
 	if (have("plex-desktop"))
 		rows[n++] = (struct row){ "plex", "Plex", "plex-desktop",
-			"plex", "app", "media", true, false, true };
+			"plex", "app", "media", true, false, true, false };
 	else if (have("plexhtpc"))	/* the HTPC build: already full-screen */
 		rows[n++] = (struct row){ "plex", "Plex", "plexhtpc",
-			"plex", "app", "media", true, false, false };
+			"plex", "app", "media", true, false, false, false };
 	if (have("jellyfinmediaplayer"))
 		rows[n++] = (struct row){ "jellyfin", "Jellyfin",
 			"jellyfinmediaplayer", "jellyfin", "app", "media",
-			true, false, true };
+			true, false, true, false };
 	else if (have("jellyfin-media-player"))
 		rows[n++] = (struct row){ "jellyfin", "Jellyfin",
 			"jellyfin-media-player", "jellyfin", "app", "media",
-			true, false, true };
+			true, false, true, false };
 
 	/* ── apps: the two that need a pointer and a keyboard ── */
 	if (browser_prog())
 		rows[n++] = (struct row){ "web", "Web", browser_prog(),
-			"firefox", "app", "apps", true, true, true };
+			"firefox", "app", "apps", true, true, true, false };
 	if (terminal_prog())
 		rows[n++] = (struct row){ "terminal", "Terminal",
 			terminal_prog(), "terminal", "app", "apps",
-			true, true, true };
+			true, true, true, false };
 	if (have("syn-arcade"))
 		rows[n++] = (struct row){ "arcade", "Controllers",
 			"syn-arcade gui", "syn-arcade", "app", "apps",
-			true, false, true };
+			true, false, true, false };
 
 	/* ── the Start menu's own row ── */
 	/* ⚠ `shelf = system` means BEHIND START, not on a shelf: since
@@ -1319,7 +1342,7 @@ static int apps_table(struct row *rows, int max)
 	if (visualizer_prog())
 		rows[n++] = (struct row){ "visualizer", "Visualizer",
 			"syn-arcade big visualizer", "visualizer", "app",
-			"system", false, false, true };
+			"system", false, false, true, true };
 
 	/* The way OUT is a tile, and it is not optional. A full-screen surface
 	 * with exclusive keyboard focus that can only be dismissed by a key
@@ -1339,15 +1362,15 @@ static int apps_table(struct row *rows, int max)
 	 * one). Reported from the sofa as "it runs in the background but is not
 	 * a program I can close". */
 	rows[n++] = (struct row){ "desktop", "Desktop", "", "desktop", "action",
-		"system", false, false, false };
+		"system", false, false, false, false };
 	rows[n++] = (struct row){ "quit", "Quit", "", "quit", "action",
-		"system", false, false, false };
+		"system", false, false, false, false };
 	rows[n++] = (struct row){ "sleep", "Sleep", "systemctl suspend",
-		"sleep", "action", "system", false, false, false };
+		"sleep", "action", "system", false, false, false, false };
 	rows[n++] = (struct row){ "restart", "Restart", "systemctl reboot",
-		"restart", "action", "system", false, false, false };
+		"restart", "action", "system", false, false, false, false };
 	rows[n++] = (struct row){ "poweroff", "Power off", "systemctl poweroff",
-		"poweroff", "action", "system", false, false, false };
+		"poweroff", "action", "system", false, false, false, false };
 
 	return n;
 }
@@ -1374,22 +1397,24 @@ static int big_apps(bool rec)
 		 * machine where the drawing is missing; overwriting the name
 		 * with it would lose the identity in exactly the case where
 		 * somebody needs to know which glyph failed to ship. */
-		rec_row(10, "id", "name", "exec", "icon", "kind", "shelf",
-			"pointer", "keys", "full", "iconfile");
+		rec_row(11, "id", "name", "exec", "icon", "kind", "shelf",
+			"pointer", "keys", "full", "iconfile", "transient");
 		for (int i = 0; i < n; i++)
-			rec_row(10, rows[i].id, rows[i].name, rows[i].exec,
+			rec_row(11, rows[i].id, rows[i].name, rows[i].exec,
 				rows[i].icon, rows[i].kind, rows[i].shelf,
 				rows[i].pointer ? "1" : "0",
 				rows[i].keys ? "1" : "0",
 				rows[i].full ? "1" : "0",
-				icon_file(rows[i].icon));
+				icon_file(rows[i].icon),
+				rows[i].transient ? "1" : "0");
 	} else {
 		for (int i = 0; i < n; i++)
-			printf("%-10s %-8s %-20s %s%s%s\n", rows[i].id,
+			printf("%-10s %-8s %-20s %s%s%s%s\n", rows[i].id,
 			       rows[i].shelf, rows[i].name,
 			       rows[i].exec[0] ? rows[i].exec : "(built in)",
 			       rows[i].pointer ? "   [mouse]" : "",
-			       rows[i].full ? "   [fullscreen]" : "");
+			       rows[i].full ? "   [fullscreen]" : "",
+			       rows[i].transient ? "   [ends on return]" : "");
 	}
 	return EX_OK;
 }
@@ -1578,6 +1603,38 @@ static void fullscreen_after_launch(const struct focus *before)
 }
 
 /*
+ * ── ending what this started, from the outside ──────────────────────────────
+ *
+ * The pid of the application this process is waiting on, so that a signal
+ * arriving HERE can be passed on to IT.
+ *
+ * ⚠ KILLING THIS PROCESS DOES NOT KILL THE APPLICATION, and that is the whole
+ * reason this exists. spawn_detached_pid gives the child its own session, so
+ * `syn-arcade big run <id> --wait` is the only thing a SIGTERM from the shell
+ * reaches; the program it started is orphaned and carries on drawing behind
+ * the television. The shell has no other handle on it — a layer-shell surface
+ * cannot close a window, and there is no pid anywhere in QML.
+ *
+ * So the waiter forwards. The kill is to `-pid`, the whole process GROUP,
+ * because setsid() made the child a group leader and anything it started in
+ * turn (a wrapper script's real program) belongs to that group and would
+ * otherwise be left behind — which is the same "it is still running" this is
+ * here to fix, one level down.
+ *
+ * ⚠ Async-signal-safe, and only just: kill() and a sig_atomic_t assignment are
+ * on the list, and nothing else happens in the handler. The reap continues
+ * afterwards through the EINTR loop below, so this still returns when the
+ * application really has gone rather than the moment it was asked to.
+ */
+static volatile sig_atomic_t waited_pid;
+
+static void pass_on_the_signal(int sig)
+{
+	if (waited_pid > 0)
+		kill(-(pid_t)waited_pid, sig);
+}
+
+/*
  * Start something, fill the screen with it, and stay alive exactly as long as
  * it does.
  *
@@ -1605,6 +1662,21 @@ static int spawn_wait(char *const argv[], bool fill)
 	if (rc != EX_OK || pid <= 0)
 		return rc;
 
+	/* Armed only once there is something to pass a signal on TO. Both
+	 * signals, because a terminal sends INT and the shell sends TERM, and
+	 * an interface that can only end what it started from one of them is
+	 * an interface that cannot end it from the sofa.
+	 *
+	 * ⚠ sigaction with no SA_RESTART, deliberately: the waitpid below has
+	 * to be interrupted for the handler to run at all, and the EINTR loop
+	 * is already written for it. */
+	waited_pid = pid;
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = pass_on_the_signal;
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+
 	if (fill)
 		fullscreen_after_launch(&before);
 
@@ -1614,6 +1686,7 @@ static int spawn_wait(char *const argv[], bool fill)
 	int st = 0;
 	while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
 		;
+	waited_pid = 0;
 	return EX_OK;
 }
 
@@ -3576,21 +3649,75 @@ static int local_queue(void)
 /* ── the source picker ───────────────────────────────────────────────────── */
 
 /*
+ * ── the two streaming services, and why their rows used to dead-end ─────────
+ *
+ * Reported from the sofa: choosing YouTube Music or Spotify opened cliamp, and
+ * cliamp appeared not to support either of them. Both halves were true, and
+ * neither was cliamp's fault:
+ *
+ *   YouTube Music  works with no account at all — cliamp ships fallback
+ *                  credentials — but every track is fetched with **yt-dlp**,
+ *                  which is an OPTDEPEND of the cliamp package and is not
+ *                  installed here. cliamp's own package says what happens
+ *                  without it: "those sources return nothing". So the row
+ *                  opened a music player onto an empty library.
+ *   Spotify        needs a `[spotify]` section in cliamp's config.toml and a
+ *                  sign-in through a browser, and a Premium account to play
+ *                  anything at all. With no section there is nothing to open.
+ *
+ * ⚠ NEITHER IS SOMETHING A TILE CAN FIX BY TRYING HARDER, and that is why they
+ * get their own actions rather than a better error message. What is missing is
+ * a package on one and an account on the other; the row's job is to say which
+ * and to start the thing that fixes it.
+ *
+ * Checked rather than assumed on both counts: `yt-dlp` on PATH, and the
+ * section `cliamp setup` writes when somebody finishes signing in.
+ */
+static bool cliamp_conf_section(const char *section)
+{
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "cliamp/config.toml"))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool found = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln && !found;
+	     ln = strtok_r(NULL, "\n", &save))
+		found = strcmp(trim(ln), section) == 0;
+	free(text);
+	return found;
+}
+
+/*
  * What a source DOES when it is chosen, which is the column the television
  * acts on:
  *
  *   play     it is playing now — nothing else to do
  *   albums   pick something from the library first (Plex)
  *   browse   only cliamp's own interface can reach this one
+ *   install  something has to be installed before it can play anything
+ *   setup    somebody has to sign in before it can play anything
  *
  * ⚠ THE COLUMN EXISTS SO THE SHELL DOES NOT HAVE TO KNOW THE LIST. Which
  * sources can be queued from outside cliamp is a fact about cliamp, and a copy
- * of it in QML is a copy that stops being true.
+ * of it in QML is a copy that stops being true. The two new actions are the
+ * same rule one step further on: whether YouTube Music needs a package is a
+ * fact about this machine, and the shell only has to know how to launch what
+ * the column names.
  */
 static const char *source_action(const struct source *s)
 {
-	if (!s->queueable)
+	if (!s->queueable) {
+		if (strcmp(s->id, "ytmusic") == 0 && !have("yt-dlp"))
+			return "install";
+		if (strcmp(s->id, "spotify") == 0 &&
+		    !cliamp_conf_section("[spotify]"))
+			return "setup";
 		return "browse";
+	}
 	if (strcmp(s->id, "plex") == 0)
 		return "albums";
 	return "play";
@@ -3612,6 +3739,7 @@ static int big_music_sources(bool rec)
 	for (int i = 0; i < SOURCES_N; i++) {
 		const struct source *s = &SOURCES[i];
 		const char *note = "";
+		const char *act = source_action(s);
 
 		/* The notes are facts about THIS machine rather than about the
 		 * source, and they are here for one reason: a row that answers
@@ -3622,17 +3750,26 @@ static int big_music_sources(bool rec)
 		 * ⚠ `local` needs one as much as Plex does. Plenty of machines
 		 * have no music directory at all (this one does not: everything
 		 * is on the Plex server), and choosing it there would stop
-		 * whatever was playing to queue nothing. */
+		 * whatever was playing to queue nothing.
+		 *
+		 * ⚠ AND A NOTE THAT NAMES WHAT IS MISSING IS THE WHOLE POINT of
+		 * the two new actions. "opens cliamp" was true and useless on a
+		 * machine with no yt-dlp: it described the button rather than
+		 * the outcome, which was an empty library. */
 		if (strcmp(s->id, "plex") == 0 && !plex_ready)
 			note = "not set up — run `cliamp setup`";
 		else if (strcmp(s->id, "local") == 0 && !music_dir(dir, sizeof(dir)))
 			note = "no music folder on this machine";
+		else if (strcmp(act, "install") == 0)
+			note = "needs yt-dlp — press to install it";
+		else if (strcmp(act, "setup") == 0)
+			note = "press to sign in — needs Spotify Premium";
 		else if (!s->queueable)
 			note = "opens cliamp";
 
 		if (rec)
 			rec_row(5, s->id, s->name,
-				s == cur ? "1" : "0", source_action(s), note);
+				s == cur ? "1" : "0", act, note);
 		else
 			printf("%-8s %-14s %s%s%s\n", s->id, s->name,
 			       s == cur ? "· current" : "",
@@ -3778,6 +3915,101 @@ static int big_music_browse(void)
 	return spawn_wait(argv, true);
 }
 
+/*
+ * ── the two rows that have something to fix first ───────────────────────────
+ *
+ * A terminal on the television running one command, and then WAITING with what
+ * it said still on the screen.
+ *
+ * ⚠ THE PAUSE AT THE END IS THE FEATURE. Both of these end in something worth
+ * reading — a package manager's summary, or a wizard saying which account it
+ * just signed in as — and a terminal that closes the instant the command
+ * returns takes the answer with it. Worse than useless from four metres: the
+ * screen flashes, the interface comes back, and there is no way to tell
+ * success from "yt-dlp: not found".
+ *
+ * ⚠ A SHELL, AND EVERY WORD OF IT IS A LITERAL IN THIS FILE. Nothing here is
+ * built from a config file, a package name typed by anybody, or a source id —
+ * the two commands are chosen from a fixed list below and the shell only ever
+ * sees text that is in this source. That is the whole reason run_capture
+ * refuses /bin/sh (see its header); the rule is "no user input reaches a
+ * shell", not "no shell".
+ */
+static int term_run_and_hold(const char *command)
+{
+	const char *term = terminal_prog();
+	if (!term) {
+		fputs("syn-arcade: no terminal is installed to run this in\n",
+		      stderr);
+		return EX_FAIL;
+	}
+
+	char script[512];
+	snprintf(script, sizeof(script),
+		 "%s; printf '\\n── press Enter to close ──'; read _",
+		 command);
+
+	char *argv[8];
+	int argc = 0;
+	argv[argc++] = (char *)term;
+	if (strcmp(term, "kitty") != 0 && strcmp(term, "foot") != 0)
+		argv[argc++] = (char *)"-e";
+	argv[argc++] = (char *)"sh";
+	argv[argc++] = (char *)"-c";
+	argv[argc++] = script;
+	argv[argc] = NULL;
+
+	return spawn_wait(argv, true);
+}
+
+/*
+ * Install what a source needs before it can play anything.
+ *
+ * ⚠ `--noconfirm` BEFORE THE VERB, and both halves matter. synpkg stops
+ * parsing global options at the first non-option argument, so
+ * `install --noconfirm` is a flag it never sees — and without it a front-end
+ * that cannot answer a prompt authenticates through polkit and then declines
+ * itself, installing nothing and reporting success. That has bitten this
+ * project twice already; see the note in synpkg's own trans.c.
+ *
+ * A television with a gamepad is the front-end that cannot answer, even with
+ * the on-screen keyboard up. The password prompt is unavoidable — installing a
+ * package is root's business — but a y/n question that somebody has to spell
+ * out with a d-pad is not.
+ */
+static int big_music_install(const struct source *s)
+{
+	if (!s || strcmp(s->id, "ytmusic") != 0) {
+		fputs("syn-arcade: nothing to install for that source\n",
+		      stderr);
+		return EX_USAGE;
+	}
+	if (have("yt-dlp")) {
+		puts("yt-dlp is already installed");
+		return EX_OK;
+	}
+	return term_run_and_hold("synpkg --noconfirm install yt-dlp");
+}
+
+/*
+ * Sign in to a source, through cliamp's own wizard.
+ *
+ * ⚠ NOT A WIZARD OF OUR OWN, and that is deliberate. What Spotify needs is an
+ * OAuth round trip through a browser and a credential cache in cliamp's config
+ * directory; a second implementation of that here would be a second thing to
+ * keep in step with a player that changes its providers between releases. The
+ * wizard already exists, it validates the connection before it writes, and it
+ * is one command.
+ *
+ * ⚠ THE HEADLESS PLAYER IS STOPPED FIRST, for the reason big_music_browse
+ * gives: one socket, one cliamp.
+ */
+static int big_music_setup(void)
+{
+	music_stop_player();
+	return term_run_and_hold("cliamp setup");
+}
+
 /* Declared rather than moved: they belong with the dispatch below, which is
  * the only other thing that parses an argument list. */
 static const char *first_operand(int argc, char **argv);
@@ -3799,14 +4031,15 @@ static int big_music(int argc, char **argv, bool rec)
 	static const char *const verbs[] = { "status", "play", "pause",
 					     "toggle", "next", "prev", "stop",
 					     "vis", "source", "plex", "browse",
+					     "install", "setup",
 					     NULL };
 	bool known = false;
 	for (int i = 0; verbs[i] && !known; i++)
 		known = strcmp(verb, verbs[i]) == 0;
 	if (!known) {
 		fprintf(stderr, "syn-arcade: big music takes status, play, "
-				"pause, toggle, next, prev, stop, source, plex "
-				"or browse (got '%s')\n", verb);
+				"pause, toggle, next, prev, stop, source, plex, "
+				"browse, install or setup (got '%s')\n", verb);
 		return EX_USAGE;
 	}
 
@@ -3842,6 +4075,16 @@ static int big_music(int argc, char **argv, bool rec)
 	/* cliamp's own interface, for the sources nothing else can reach. */
 	if (!strcmp(verb, "browse"))
 		return big_music_browse();
+
+	/* The two rows that have something to fix before they can play: a
+	 * package on one, an account on the other. Both open a terminal on the
+	 * television and both are named by the `action` column of the source
+	 * picker, so the shell launches what the row said and nothing here is
+	 * a second copy of which source needs what. */
+	if (!strcmp(verb, "install"))
+		return big_music_install(source_by_id(second_operand(argc, argv)));
+	if (!strcmp(verb, "setup"))
+		return big_music_setup();
 
 	/* ⚠ Only `play` starts anything. toggle/next/prev on a player that is
 	 * not running would otherwise START one and then skip a track in it,
@@ -3907,6 +4150,371 @@ static int big_music(int argc, char **argv, bool rec)
 	}
 
 	return EX_OK;		/* unreachable: the verb list above is closed */
+}
+
+/* ── transport, for whatever is playing ──────────────────────────────────── */
+
+/*
+ * The media buttons along the bottom of the television, and the keys on a
+ * keyboard or a remote that mean the same thing.
+ *
+ * ⚠ THIS IS NOT `big music`, AND THE DIFFERENCE IS WHOSE MUSIC IT IS.
+ * `big music` drives cliamp — one player, over its own socket, with a source
+ * picker and a queue this program fills. That is a good deal of machinery for
+ * one program, and it is worth nothing the moment somebody is listening to
+ * Spotify, watching a film in mpv, or playing a video in a browser tab. A
+ * play/pause button on a television has to work on whatever is making the
+ * noise, or it is a button that works on Tuesdays.
+ *
+ * So this speaks MPRIS2 — the freedesktop interface every media player on
+ * Linux implements, cliamp included (`org.mpris.MediaPlayer2.cliamp`, and its
+ * own documentation is where that was checked rather than guessed).
+ *
+ * ⚠ THROUGH `busctl` RATHER THAN A D-BUS LIBRARY, and that is the same
+ * decision the news shelf made with curl. libsystemd would be a link-time
+ * dependency on every machine, for six method calls that a program shipped
+ * with systemd already makes — and this binary's one hard dependency beyond
+ * libc is a Wayland protocol nothing else implements. busctl is on every
+ * SynapseOS machine because systemd is; nothing here needs a connection held
+ * open, and a failed call is simply "nothing is playing".
+ *
+ * ⚠ AND CLIAMP IS STILL DRIVEN OVER ITS SOCKET when cliamp is what is
+ * playing. Not for want of MPRIS: cliamp's MPRIS reports the FILE PATH as the
+ * track title (measured — `xesam:title` came back as
+ * /mnt/.../04. In a Lonely Place (Tricky Mix).mp3), and for a Plex stream that
+ * path is a URL with the server token in it. music_read() already knows how to
+ * turn that back into a name, and `play` from `stopped` is already known to be
+ * the wrong verb there. Rediscovering both through a second interface is how a
+ * television ends up with two answers about the same player.
+ */
+
+#define MPRIS_PREFIX	"org.mpris.MediaPlayer2."
+#define PLAYERS_MAX	16
+
+struct playing {
+	char bus[128];		/* the whole D-Bus name                      */
+	char who[64];		/* the part after the prefix: cliamp, spotify */
+	char app[64];		/* Identity — what the player calls itself   */
+	char state[32];		/* playing | paused | stopped                */
+	char title[256];
+	char artist[192];
+	bool can_next, can_prev, can_play, can_pause;
+};
+
+/*
+ * One value out of a D-Bus variant, as `busctl --json=short` prints it:
+ *
+ *     "PlaybackStatus":{"type":"s","data":"Paused"}
+ *
+ * The key names the variant and the value is one level in, which is the only
+ * difference from reading an ordinary JSON object — hence json_str at the
+ * position of the key rather than at the top of the document.
+ */
+static bool var_str(const char *json, const char *key, char *out, size_t n)
+{
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char *p = json ? strstr(json, pat) : NULL;
+	return p && json_str(p, NULL, "data", out, n);
+}
+
+static bool var_true(const char *json, const char *key)
+{
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char *p = json ? strstr(json, pat) : NULL;
+	if (!p)
+		return false;
+	const char *d = strstr(p, "\"data\":");
+	return d && strncmp(d + 7, "true", 4) == 0;
+}
+
+/*
+ * Every media player with a name on the session bus.
+ *
+ * ⚠ THE NAME IS THE FIRST FIELD OF `busctl list`, and the list holds unique
+ * names (`:1.67`) and every other service on the bus besides. Matching the
+ * prefix is the whole filter, and it is what the specification says to do.
+ */
+static int mpris_players(char names[][128], int max)
+{
+	char *out = run_capture((char *const[]){ "busctl", "--user", "list",
+						 "--no-pager", NULL }, 3);
+	if (!out)
+		return 0;
+
+	int n = 0;
+	char *save = NULL;
+	for (char *ln = strtok_r(out, "\n", &save); ln && n < max;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		if (strncmp(ln, MPRIS_PREFIX, strlen(MPRIS_PREFIX)) != 0)
+			continue;
+		size_t k = strcspn(ln, " \t");
+		if (k >= sizeof(names[0]))
+			continue;
+		memcpy(names[n], ln, k);
+		names[n][k] = '\0';
+		n++;
+	}
+	free(out);
+	return n;
+}
+
+/* Everything the Player interface knows, in one call. Caller frees. */
+static char *mpris_props(const char *bus)
+{
+	return run_capture((char *const[]){
+		"busctl", "--user", "--json=short", "call", (char *)bus,
+		"/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties",
+		"GetAll", "s", "org.mpris.MediaPlayer2.Player", NULL }, 3);
+}
+
+/* playing → 2, paused → 1, anything else → 0. What the pick below sorts on. */
+static int state_rank(const char *state)
+{
+	if (!strcmp(state, "playing"))
+		return 2;
+	if (!strcmp(state, "paused"))
+		return 1;
+	return 0;
+}
+
+/*
+ * A title that is really a path, made into something to draw on a television.
+ *
+ * ⚠ THE SAME RULE AS music_read, FOR THE SAME REASON, and it has to be applied
+ * here too because MPRIS is a second door onto the same fact. cliamp publishes
+ * the path as the title, and for a Plex stream that path carries the account
+ * token in its query. Nothing that leaves this function has a query on it.
+ */
+static void title_from_path(char *title, size_t n)
+{
+	if (!strchr(title, '/'))
+		return;			/* a real title; leave it alone */
+
+	char keyed[512];
+	snprintf(keyed, sizeof(keyed), "%s", title);
+	char *q = strchr(keyed, '?');
+	if (q)
+		*q = '\0';
+
+	if (!music_title_lookup(keyed, title, n))
+		music_title_fallback(keyed, title, n);
+}
+
+/*
+ * WHICH player the buttons act on, when there is more than one.
+ *
+ * Whatever is playing wins; failing that, whatever is paused, which is the
+ * player somebody most likely wants to start again. cliamp breaks a tie
+ * because it is the one this interface starts itself — with the Music tile
+ * paused and a browser tab paused as well, the button belongs to the music.
+ *
+ * ⚠ A player that is STOPPED is still a player, and it is returned. The shell
+ * decides what to draw; a status command that answered "nothing" for a player
+ * sitting at the start of a track would be lying about the machine.
+ */
+static bool transport_pick(struct playing *p)
+{
+	char names[PLAYERS_MAX][128];
+	int n = mpris_players(names, PLAYERS_MAX);
+	if (n <= 0)
+		return false;
+
+	memset(p, 0, sizeof(*p));
+	int best = -1;
+
+	for (int i = 0; i < n; i++) {
+		char *props = mpris_props(names[i]);
+		if (!props)
+			continue;	/* it went away between the two calls */
+
+		struct playing c;
+		memset(&c, 0, sizeof(c));
+		snprintf(c.bus, sizeof(c.bus), "%s", names[i]);
+		snprintf(c.who, sizeof(c.who), "%s",
+			 names[i] + strlen(MPRIS_PREFIX));
+
+		char raw[32] = "";
+		var_str(props, "PlaybackStatus", raw, sizeof(raw));
+		snprintf(c.state, sizeof(c.state), "%s",
+			 !strcmp(raw, "Playing") ? "playing" :
+			 !strcmp(raw, "Paused")  ? "paused"  : "stopped");
+
+		c.can_next  = var_true(props, "CanGoNext");
+		c.can_prev  = var_true(props, "CanGoPrevious");
+		c.can_play  = var_true(props, "CanPlay");
+		c.can_pause = var_true(props, "CanPause");
+
+		/* ⚠ SCOPED TO THE METADATA. `xesam:title` is unambiguous, but
+		 * the rest of the reply is another program's and the whole
+		 * point of a bound is not having to be sure. */
+		const char *meta = strstr(props, "\"Metadata\"");
+		if (meta) {
+			var_str(meta, "xesam:title", c.title, sizeof(c.title));
+			var_str(meta, "xesam:artist", c.artist,
+				sizeof(c.artist));
+			if (!c.title[0])
+				var_str(meta, "xesam:url", c.title,
+					sizeof(c.title));
+			title_from_path(c.title, sizeof(c.title));
+		}
+		free(props);
+
+		int rank = state_rank(c.state) * 2 +
+			   (strcmp(c.who, "cliamp") == 0 ? 1 : 0);
+		if (rank > best) {
+			best = rank;
+			*p = c;
+		}
+	}
+
+	if (!p->bus[0])
+		return false;
+
+	/* What the player calls itself, for the one place a television has to
+	 * name it. Its own interface, not the Player one, so it is a second
+	 * call — and a cheap one, made once for the chosen player rather than
+	 * for every name on the bus. */
+	char *id = run_capture((char *const[]){
+		"busctl", "--user", "get-property", p->bus,
+		"/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2",
+		"Identity", NULL }, 3);
+	if (id) {
+		/* `s "Cliamp"` — the type, then the string. */
+		const char *q = strchr(id, '"');
+		if (q) {
+			snprintf(p->app, sizeof(p->app), "%s", q + 1);
+			char *close = strrchr(p->app, '"');
+			if (close)
+				*close = '\0';
+		}
+		free(id);
+	}
+	if (!p->app[0])
+		snprintf(p->app, sizeof(p->app), "%s", p->who);
+
+	/* ⚠ CLIAMP ANSWERS FOR ITSELF. See the header of this section: its
+	 * MPRIS title is the file path, and music_read knows the name. */
+	if (!strcmp(p->who, "cliamp")) {
+		char state[32], title[256];
+		music_read(state, sizeof(state), title, sizeof(title), NULL, 0);
+		if (state[0])
+			snprintf(p->state, sizeof(p->state), "%s", state);
+		if (title[0])
+			snprintf(p->title, sizeof(p->title), "%s", title);
+	}
+	return true;
+}
+
+static int big_transport_status(bool rec)
+{
+	struct playing p;
+	bool any = transport_pick(&p);
+
+	if (rec) {
+		rec_row(9, "player", "app", "state", "title", "artist",
+			"cannext", "canprev", "canplay", "canpause");
+		if (any)
+			rec_row(9, p.who, p.app, p.state, p.title, p.artist,
+				p.can_next  ? "1" : "0",
+				p.can_prev  ? "1" : "0",
+				p.can_play  ? "1" : "0",
+				p.can_pause ? "1" : "0");
+		return any ? EX_OK : EX_EMPTY;
+	}
+
+	if (!any) {
+		puts("nothing is playing");
+		return EX_EMPTY;
+	}
+	printf("%-10s %s\n", "player", p.app);
+	printf("%-10s %s\n", "state", p.state);
+	if (p.title[0])
+		printf("%-10s %s\n", "title", p.title);
+	if (p.artist[0])
+		printf("%-10s %s\n", "artist", p.artist);
+	return EX_OK;
+}
+
+/*
+ * One button press, on whichever player answered.
+ *
+ * ⚠ `prev` IS NOT ALWAYS THE PREVIOUS TRACK, and that is the player's rule
+ * rather than this one's: MPRIS says a player more than a few seconds into a
+ * track may restart it instead, and cliamp documents exactly that at three
+ * seconds. It is what every physical skip-back button on earth does, so it is
+ * left alone — but it is the reason a second press is sometimes needed, and
+ * that is worth knowing before somebody reports it as a bug.
+ */
+static int big_transport_cmd(const char *verb)
+{
+	static const struct { const char *verb, *method; } MAP[] = {
+		{ "play",   "Play"      },
+		{ "pause",  "Pause"     },
+		{ "toggle", "PlayPause" },
+		{ "next",   "Next"      },
+		{ "prev",   "Previous"  },
+		{ "stop",   "Stop"      },
+	};
+	const char *method = NULL;
+	for (size_t i = 0; i < sizeof(MAP) / sizeof(MAP[0]); i++)
+		if (!strcmp(verb, MAP[i].verb))
+			method = MAP[i].method;
+
+	/* ⚠ THE VERB BEFORE THE PLAYER, the rule big_music already follows: a
+	 * typo is a typo on every machine, and answering it with "nothing is
+	 * playing" sends somebody to look at their music player. */
+	if (!method) {
+		fprintf(stderr, "syn-arcade: big transport takes status, play, "
+				"pause, toggle, next, prev or stop (got "
+				"'%s')\n", verb);
+		return EX_USAGE;
+	}
+
+	struct playing p;
+	if (!transport_pick(&p)) {
+		fputs("syn-arcade: nothing is playing\n", stderr);
+		return EX_EMPTY;
+	}
+
+	/* cliamp over its own socket — including the rule that `play` from
+	 * `stopped` does nothing at all, which is why the tile sends `toggle`
+	 * there. See big_music. */
+	if (!strcmp(p.who, "cliamp")) {
+		if (!strcmp(verb, "play") && strcmp(p.state, "playing") != 0)
+			return music_cmd("toggle");
+		return music_cmd(verb);
+	}
+
+	/* Said rather than sent, for the two buttons a player can refuse. A
+	 * radio stream has no previous track; pretending the press worked is
+	 * how a button teaches somebody it is broken. */
+	if ((!strcmp(verb, "next") && !p.can_next) ||
+	    (!strcmp(verb, "prev") && !p.can_prev)) {
+		fprintf(stderr, "syn-arcade: %s cannot skip %s\n", p.app,
+			!strcmp(verb, "next") ? "forward" : "back");
+		return EX_FAIL;
+	}
+
+	char *out = run_capture((char *const[]){
+		"busctl", "--user", "call", p.bus, "/org/mpris/MediaPlayer2",
+		"org.mpris.MediaPlayer2.Player", (char *)method, NULL }, 3);
+	if (!out) {
+		fprintf(stderr, "syn-arcade: %s did not answer %s\n", p.app,
+			method);
+		return EX_FAIL;
+	}
+	free(out);
+	return EX_OK;
+}
+
+static int big_transport(int argc, char **argv, bool rec)
+{
+	const char *verb = first_operand(argc, argv);
+	if (!verb || !strcmp(verb, "status"))
+		return big_transport_status(rec);
+	return big_transport_cmd(verb);
 }
 
 /* ── the visualizer, as a program ────────────────────────────────────────── */
@@ -5539,6 +6147,12 @@ int cmd_big(int argc, char **argv)
 	 * something the television DRIVES rather than opens — see big_music. */
 	if (!strcmp(sub, "music"))
 		return big_music(rest_c, rest, rec);
+
+	/* The media buttons, which act on whatever is playing rather than on
+	 * cliamp alone — see the header of that section for why the two are
+	 * different commands and not one. */
+	if (!strcmp(sub, "transport"))
+		return big_transport(rest_c, rest, rec);
 
 	/* projectM, told which audio to listen to. A tile in the Start menu
 	 * runs this through `big run visualizer --wait`, which is what fills

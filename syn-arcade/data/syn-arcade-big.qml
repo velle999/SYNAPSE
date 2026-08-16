@@ -340,11 +340,45 @@ ShellRoot {
         hintTimer.restart()
     }
 
+    // ── the applications that are only worth running while they are VISIBLE ──
+    //
+    // ⚠ COMING BACK ENDS THE VISUALIZER, and it is not tidiness — it is the
+    // only way it survives being covered. A surface fully hidden behind an
+    // opaque one is occlusion-culled by the compositor and gets no frame
+    // callbacks; projectM does not idle without them, it free-runs at 100% of
+    // a core, and it comes back frozen. Reported from the sofa: open the
+    // visualizer, press Guide, go back to it — a still picture, until the
+    // window was resized twice with a mouse.
+    //
+    // Killing it is also what makes the way back RIGHT: a fresh projectM is
+    // launched through the same tile as before, which fullscreens it. There is
+    // nothing to restore and nothing to resize.
+    //
+    // ⚠ WHICH tiles these are is big.c's answer (the `transient` column), not
+    // a list here. A game or a browser is exactly what Guide is meant to leave
+    // running.
+    //
+    // ⚠ AND THE SIGNAL GOES TO `big run --wait`, NOT to the application: the
+    // application was given its own session, so it is the waiter that has to
+    // pass the signal on. It does — see pass_on_the_signal in big.c. Without
+    // that half this kills the messenger and leaves projectM drawing.
+    function endTransients() {
+        for (let i = 0; i < shell.procs.length; i++) {
+            const rec = shell.slotApp[i]
+            if (!shell.procs[i].running || !rec) continue
+            if (String(rec.tile.transient || "0") !== "1") continue
+            shell.setSlot(i, { tile: rec.tile, at: rec.at, ended: true })
+            shell.procs[i].signal(15)		// SIGTERM
+            if (shell.activeApp === rec.tile) shell.activeApp = null
+        }
+    }
+
     function comeBack() {
         shell.away = false
         shell.oskOpen = false
         shell.hintShown = false
         hintTimer.stop()
+        shell.endTransients()
         // The Running shelf has to be true at the moment it is looked at, and
         // this is that moment. Anything could have opened or closed while the
         // television was out of the way.
@@ -484,6 +518,14 @@ ShellRoot {
         // the launch path.
         const lived = Date.now() - rec.at
         if (lived < 3000) return
+
+        // ⚠ We are the ones who ended it, and we are already back. Coming back
+        // again would move the selection to the Running shelf — from a press
+        // of Guide that was meant to leave the selection where it was.
+        if (rec.ended) {
+            shell.refreshWindows()
+            return
+        }
 
         shell.refreshWindows()
 
@@ -722,7 +764,7 @@ ShellRoot {
     Process {
         id: visProc
         command: [shell.bin, "big", "music", "vis"]
-        running: shell.menuOpen && shell.musicLive
+        running: shell.menuOpen && shell.musicLive && shell.musicIsPlayer
         stdout: SplitParser {
             onRead: (line) => {
                 // ⚠ GUARDED, because this is a parser pointed at another
@@ -753,6 +795,108 @@ ShellRoot {
 
     readonly property bool musicLive:
         shell.music && String(shell.music.state || "") !== ""
+
+    // ── the media buttons, for whatever is playing ──────────────────────────
+    //
+    // ⚠ A DIFFERENT QUESTION FROM `music` ABOVE, and the difference is whose
+    // music it is. Everything above this drives cliamp: its socket, its source
+    // picker, its queue. That is the right machinery for the Music tile and
+    // worth nothing the moment somebody is listening to Spotify, watching a
+    // film, or playing a video in a browser tab — and a play/pause button on a
+    // television has to work on whatever is making the noise.
+    //
+    // `big transport` answers over MPRIS, which every media player on Linux
+    // implements, and it still drives cliamp over its own socket when cliamp
+    // is what is playing. See that section in big.c.
+    //
+    // ⚠ ASKED ONLY WHILE THE INTERFACE IS ON SCREEN, the same bound as the
+    // clock and for the same reason: nothing here is drawn behind a
+    // full-screen game, and a subprocess every two seconds for the length of
+    // somebody's evening is a thing that turns up in a profile and is not
+    // understood.
+    //
+    // ⚠ `transport`, NOT `media` — `media` is the Plex and Jellyfin SERVERS on
+    // the network, and `mediaProc` is what asks for them. qmllint caught the
+    // collision; a duplicated property in QML is not an error, and the Media
+    // shelf would simply have emptied itself one day with nothing said. Same
+    // family as the `bands` shadow the visualizer nearly shipped with.
+    property var transport: ({})
+
+    Process {
+        id: transportProc
+        command: [shell.bin, "big", "transport", "status", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = shell.parseRecords(this.text)
+                shell.transport = rows.length ? rows[0] : ({})
+            }
+        }
+    }
+
+    function refreshTransport() {
+        if (!transportProc.running) transportProc.running = true
+    }
+
+    Timer {
+        interval: 2000
+        running: !shell.away
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: shell.refreshTransport()
+    }
+
+    readonly property string mediaState: String(shell.transport.state || "")
+    readonly property string mediaTitle: String(shell.transport.title || "")
+    readonly property string mediaArtist: String(shell.transport.artist || "")
+
+    // ⚠ STOPPED IS NOT LIVE. A player sitting at the start of a track with
+    // nothing playing is a row of buttons for a thing nobody started, and the
+    // ask was explicit: if nothing is playing they can disappear.
+    readonly property bool mediaLive:
+        shell.mediaState === "playing" || shell.mediaState === "paused"
+
+    // The bars in the Start menu come out of cliamp's own visualizer stream, so
+    // they mean nothing while something else is playing. Without this the
+    // stream runs against a player that is not there and answers
+    // {"ok":false} twenty times a second for as long as the menu is open.
+    readonly property bool musicIsPlayer:
+        String(shell.transport.player || "") === "cliamp"
+
+    // ── the selection, when it is on the buttons rather than on the tiles ────
+    //
+    // ⚠ REACHED BY PRESSING DOWN PAST THE LAST SHELF, which is the one
+    // direction that did nothing before: the bottom band was the end of the
+    // interface. It costs no new button and no new key to learn, and B or Up
+    // comes back to the tiles the way B always goes back.
+    //
+    // The middle button is the one it lands on. Somebody who has pressed Down
+    // to reach a row of media buttons came to pause something.
+    property bool mediaFocus: false
+    property int mediaIndex: 1
+
+    // ⚠ THE MUSIC CAN STOP WHILE THE SELECTION IS DOWN HERE — the track ends,
+    // or somebody closes the player from another room. The buttons go with it,
+    // and a selection left pointing at a row that is no longer drawn is a
+    // television where the d-pad does nothing at all.
+    onMediaLiveChanged: if (!shell.mediaLive) shell.mediaFocus = false
+
+    function mediaPress() {
+        const acts = ["prev", "toggle", "next"]
+        shell.mediaCmd(acts[Math.max(0, Math.min(2, shell.mediaIndex))])
+    }
+
+    function mediaCmd(verb) {
+        mediaCmdProc.command = [shell.bin, "big", "transport", verb]
+        mediaCmdProc.running = true
+    }
+
+    Process {
+        id: mediaCmdProc
+        // The state AFTER the press is what the buttons must show, and it is
+        // only true once the command has finished — the same rule the Now
+        // Playing row learned the hard way.
+        onExited: { shell.refreshTransport(); shell.refreshMusic() }
+    }
 
     // The Music tile's own glyph, reused for the menu row. Taken from the tile
     // rather than resolved again, so there is still exactly one place that
@@ -1213,6 +1357,13 @@ ShellRoot {
         if (!bs.length) return
         const at = shell.place(shell.row)
         const nb = at[0] + d
+        // Down from the last band lands on the media buttons, when there are
+        // any — see mediaFocus. Everything else about the ends is unchanged.
+        if (nb >= bs.length && d > 0 && shell.mediaLive) {
+            shell.mediaFocus = true
+            shell.mediaIndex = 1
+            return
+        }
         if (nb < 0 || nb >= bs.length) return   // no wrap: the ends are a landmark
         const band = bs[nb]
         const tgt = band[Math.min(at[1], band.length - 1)]
@@ -1455,6 +1606,7 @@ ShellRoot {
         if (sourceSetProc.running) return
         shell.menuBusy = "Switching to " + it.name + "…"
         sourceSetProc.next = it.action || "play"
+        sourceSetProc.src = it.id
         sourceSetProc.command = [shell.bin, "big", "music", "source", it.id]
         sourceSetProc.running = true
     }
@@ -1462,6 +1614,7 @@ ShellRoot {
     Process {
         id: sourceSetProc
         property string next: "play"
+        property string src: ""
         onExited: {
             shell.menuBusy = ""
             shell.refreshSources()
@@ -1471,6 +1624,14 @@ ShellRoot {
             // Plex has a library to pick from, YouTube Music and Spotify are
             // reachable only inside cliamp, and the other two are already
             // playing. See source_action() in big.c.
+            //
+            // ⚠ AND TWO OF THEM HAVE SOMETHING TO FIX FIRST. YouTube Music
+            // plays through yt-dlp, which is an optional dependency nobody has
+            // by default, and Spotify needs an account signed in. Both were
+            // `browse` until now — which opened a music player onto an empty
+            // library and looked, from the sofa, like the source was simply
+            // not supported. Which of them needs what is decided in big.c;
+            // this only has to launch what the row said.
             if (sourceSetProc.next === "albums") {
                 shell.openMenuPage("albums")
             } else if (sourceSetProc.next === "browse") {
@@ -1479,6 +1640,19 @@ ShellRoot {
                 shell.launchApp({ id: "music-browse", name: "cliamp",
                                   pointer: "0", keys: "1" },
                                 ["big", "music", "browse"])
+            } else if (sourceSetProc.next === "install"
+                       || sourceSetProc.next === "setup") {
+                shell.menuOpen = false
+                shell.menuPage = "main"
+                // ⚠ `keys: "1"` — both of these end in typing. One wants a
+                // password for the package manager and the other a sign-in,
+                // and there is no keyboard within reach of a sofa.
+                shell.launchApp({ id: "music-" + sourceSetProc.next,
+                                  name: sourceSetProc.next === "install"
+                                        ? "Installing yt-dlp" : "Signing in",
+                                  pointer: "0", keys: "1" },
+                                ["big", "music", sourceSetProc.next,
+                                 sourceSetProc.src])
             } else {
                 shell.menuPage = "main"
                 shell.menuIndex = 0
@@ -1562,6 +1736,32 @@ ShellRoot {
         if (shell.closing) {
             if (cmd === "accept")                      shell.confirmClose()
             else if (cmd === "back" || cmd === "guide") shell.closing = null
+            return
+        }
+
+        // The media buttons own left, right and A while the selection is on
+        // them — and nothing else, because Start, Guide and the way back have
+        // the same job everywhere. Guarded here rather than in the switch
+        // below so that there is one place that says what happens when the
+        // selection is not on a tile.
+        //
+        // ⚠ ABOVE the Start menu's guard would be wrong: the menu is drawn
+        // over everything, and a d-pad that moved a footer button while a menu
+        // was up would be driving the thing underneath.
+        if (shell.menuOpen === false && shell.mediaFocus) {
+            switch (cmd) {
+            case "left":   shell.mediaIndex = Math.max(0, shell.mediaIndex - 1); break
+            case "right":  shell.mediaIndex = Math.min(2, shell.mediaIndex + 1); break
+            case "accept": shell.mediaPress(); break
+            // Up and B both go back to the tiles, because both of them mean
+            // that everywhere else on this screen.
+            case "up":
+            case "back":   shell.mediaFocus = false; break
+            case "down":   break		// the bottom of the screen
+            case "menu":   shell.mediaFocus = false; shell.menuToggle(); break
+            case "guide":  shell.mediaFocus = false; shell.stepAside(); break
+            default: break
+            }
             return
         }
 
@@ -2587,6 +2787,13 @@ ShellRoot {
                         model: {
                             const sh = shell.shelves[shell.row]
                             const running = sh && sh.kind === "running"
+                            // On the media buttons the legend says what THEY
+                            // do, because that is where the selection is and
+                            // "Select" would be describing a tile nobody is
+                            // pointing at.
+                            if (shell.mediaFocus)
+                                return [ { k: "A", v: "Press" },
+                                         { k: "B", v: "Back to the tiles" } ]
                             const out = [
                                 { k: "A", v: running ? "Switch to" : "Select" },
                                 { k: "B", v: "Back" }
@@ -2634,6 +2841,154 @@ ShellRoot {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
+                    }
+
+                    // ── the media buttons ───────────────────────────────────
+                    //
+                    // In the legend row rather than anywhere else on the
+                    // screen, because that is where a television already
+                    // teaches people to look for what the buttons do — and
+                    // asked for exactly that way: in the middle along the
+                    // bottom, with the other button indicators.
+                    //
+                    // ⚠ THEY GO AWAY WITH THE MUSIC. Three dead buttons on
+                    // every screen of a launcher are three buttons somebody
+                    // presses once and learns to ignore.
+                    //
+                    // ⚠ DRAWN, not typed. ⏮ ⏯ ⏭ exist in Unicode and not in
+                    // every font: on this machine they resolve through Noto
+                    // Sans Symbols 2 and Noto Color Emoji, neither of which a
+                    // fresh install is promised. A missing glyph is an empty
+                    // box four metres wide, and the build says nothing — the
+                    // same silence as an icon left out of meson.build. Two
+                    // rectangles and a triangle have no such problem.
+                    Rectangle {
+                        visible: shell.mediaLive
+                        width: 1
+                        height: win.u * 1.4
+                        color: "#453a66"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Row {
+                        id: mediaBar
+                        visible: shell.mediaLive
+                        spacing: win.u * 0.5
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Repeater {
+                            model: [
+                                { act: "prev",   can: String(shell.transport.canprev || "1") === "1" },
+                                { act: "toggle", can: true },
+                                { act: "next",   can: String(shell.transport.cannext || "1") === "1" }
+                            ]
+
+                            Rectangle {
+                                id: mbtn
+                                required property var modelData
+                                required property int index
+
+                                readonly property bool chosen:
+                                    shell.mediaFocus && shell.mediaIndex === mbtn.index
+
+                                width: win.u * 2.2
+                                height: win.u * 1.8
+                                radius: win.u * 0.4
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: mbtn.chosen ? "#3a2f5e" : "#2a2340"
+                                border.width: mbtn.chosen ? 2 : 1
+                                border.color: mbtn.chosen ? win.accent : "#453a66"
+                                opacity: mbtn.modelData.can ? 1.0 : 0.35
+
+                                // ⚠ A repaint on every change that matters, and
+                                // Canvas does NOT repaint by itself: the play
+                                // glyph becomes a pause glyph on a property
+                                // change, and without this the button shows
+                                // the state before the press for ever.
+                                Canvas {
+                                    id: glyphCanvas
+                                    anchors.centerIn: parent
+                                    width: win.u * 0.9
+                                    height: win.u * 0.9
+
+                                    readonly property color tint:
+                                        mbtn.chosen ? win.accent : win.ink
+                                    readonly property bool showPause:
+                                        mbtn.modelData.act === "toggle"
+                                        && shell.mediaState === "playing"
+
+                                    onTintChanged: requestPaint()
+                                    onShowPauseChanged: requestPaint()
+
+                                    onPaint: {
+                                        const ctx = getContext("2d")
+                                        const w = width, h = height
+                                        ctx.reset()
+                                        ctx.fillStyle = tint
+
+                                        // A triangle pointing whichever way the
+                                        // button means, and a bar for the edge
+                                        // a skip button stops at.
+                                        function tri(x0, x1) {
+                                            ctx.beginPath()
+                                            ctx.moveTo(x0, 0)
+                                            ctx.lineTo(x0, h)
+                                            ctx.lineTo(x1, h / 2)
+                                            ctx.closePath()
+                                            ctx.fill()
+                                        }
+
+                                        if (glyphCanvas.showPause) {
+                                            ctx.fillRect(w * 0.16, 0, w * 0.22, h)
+                                            ctx.fillRect(w * 0.62, 0, w * 0.22, h)
+                                        } else if (mbtn.modelData.act === "toggle") {
+                                            tri(w * 0.2, w * 0.88)
+                                        } else if (mbtn.modelData.act === "next") {
+                                            tri(w * 0.06, w * 0.68)
+                                            ctx.fillRect(w * 0.74, 0, w * 0.18, h)
+                                        } else {
+                                            tri(w * 0.94, w * 0.32)
+                                            ctx.fillRect(w * 0.08, 0, w * 0.18, h)
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    // Hover moves the selection the same way it
+                                    // does on a tile, and through the same
+                                    // guard: Qt re-delivers hover at the last
+                                    // cursor position on every dirty frame, so
+                                    // a STATIONARY mouse would otherwise steer
+                                    // this. See shell.pointerMoved.
+                                    hoverEnabled: true
+                                    onPositionChanged: (mouse) => {
+                                        if (!shell.pointerMoved(
+                                                mbtn.mapToItem(null, mouse.x, mouse.y)))
+                                            return
+                                        shell.mediaFocus = true
+                                        shell.mediaIndex = mbtn.index
+                                    }
+                                    onClicked: {
+                                        shell.mediaFocus = true
+                                        shell.mediaIndex = mbtn.index
+                                        shell.mediaPress()
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: shell.mediaLive && text !== ""
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, win.u * 16)
+                        elide: Text.ElideRight
+                        color: shell.mediaFocus ? win.ink : win.dim
+                        font.pixelSize: win.u * 0.85
+                        text: shell.mediaArtist
+                              ? shell.mediaTitle + "   ·   " + shell.mediaArtist
+                              : shell.mediaTitle
                     }
                 }
             }
@@ -3162,6 +3517,36 @@ ShellRoot {
 
                 Keys.onPressed: (event) => {
                     switch (event.key) {
+                    // ── the keys on a keyboard, a remote and half the
+                    // headphones in the house ──────────────────────────────
+                    //
+                    // FIRST, and outside everything else: these mean the same
+                    // thing wherever the selection happens to be, including
+                    // with the Start menu open. That is what a media key IS —
+                    // it does not address a screen, it addresses whatever is
+                    // playing.
+                    //
+                    // ⚠ MORE THAN ONE KEY PER BUTTON, and not for tidiness.
+                    // What arrives depends on the device: a keyboard's play
+                    // key sends XF86AudioPlay, which Qt has spelled both
+                    // Key_MediaPlay and Key_MediaTogglePlayPause across
+                    // versions, and an infrared remote through a receiver
+                    // sends the separate play and pause keysyms. Handling one
+                    // of them is a button that works on one person's hardware.
+                    //
+                    // ⚠ NOTHING IN synui BINDS THESE. Its default binds cover
+                    // the volume keys (a knob was the reason) and no others,
+                    // so a play key reaches whatever has keyboard focus, which
+                    // while this is on screen is this. It is deliberately NOT
+                    // handled while stepped aside: the application in front is
+                    // then the thing playing, and taking its media keys away
+                    // would be this launcher reaching over somebody's film.
+                    case Qt.Key_MediaTogglePlayPause:
+                    case Qt.Key_MediaPlay:
+                    case Qt.Key_MediaPause:  shell.mediaCmd("toggle"); break
+                    case Qt.Key_MediaNext:   shell.mediaCmd("next"); break
+                    case Qt.Key_MediaPrevious: shell.mediaCmd("prev"); break
+                    case Qt.Key_MediaStop:   shell.mediaCmd("stop"); break
                     case Qt.Key_Up:       shell.nav("up"); break
                     case Qt.Key_Down:     shell.nav("down"); break
                     case Qt.Key_Left:     shell.nav("left"); break
