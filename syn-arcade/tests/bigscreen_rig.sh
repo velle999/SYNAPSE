@@ -66,7 +66,13 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = keys ]; then
     exit 0
 fi
 if [ "\${1:-}" = big ] && [ "\${2:-}" = run ]; then
-    printf 'run %s\n' "\$*" >> "$TMP/launch.log"; exec sleep 300
+    printf 'run %s\n' "\$*" >> "$TMP/launch.log"
+    # ⚠ ITS OWN PID, for the one tile that is supposed to be ENDED when the
+    # interface comes back. \`exec\` keeps this pid, so the file names the
+    # process the shell has to kill — and "did Guide end the visualizer" stops
+    # being a thing that can only be read in the QML.
+    [ "\${3:-}" = visualizer ] && printf '%s\n' "\$\$" > "$TMP/visualizer.pid"
+    exec sleep 300
 fi
 if [ "\${1:-}" = big ] && [ "\${2:-}" = mouse ]; then
     printf 'mouse\n' >> "$TMP/launch.log"; exec sleep 300
@@ -605,6 +611,32 @@ shot 03j-album-chosen
 
 say back 0.6
 shot 03f-start-menu-closed
+
+# ── the visualizer, which must NOT survive coming back ──────────────────────
+#
+# ⚠ THE BUG THIS RELEASE EXISTS FOR: covered by the interface, projectM gets no
+# frame callbacks, free-runs, and comes back frozen. So it is killed on the way
+# back — and the QML half of that (signal the waiter, which passes it on) can
+# only be proven by a process that really goes away.
+#
+# ⚠ THE COUNT, again: the menu is Now Playing, Music Source, Visualizer. One
+# `down` too many is Desktop, which steps aside; two is Quit, which ends the
+# run looking like it finished.
+say menu 0.8
+say down; say down 0.5
+shot 03o-visualizer-row
+say accept 1.6                # launches it; the interface steps aside
+shot 03p-visualizer-away
+VISPID=$(cat "$TMP/visualizer.pid" 2>/dev/null)
+say guide 1.2                 # …and coming back must END it
+shot 03q-back-from-visualizer
+if [ -z "$VISPID" ]; then
+    echo "VISUALIZER: never launched — the menu walk landed somewhere else"
+elif kill -0 "$VISPID" 2>/dev/null; then
+    echo "VISUALIZER: pid $VISPID STILL RUNNING after Guide — NOT ended"
+else
+    echo "VISUALIZER: ended by coming back (pid $VISPID is gone)"
+fi
 
 # Guide steps aside: the main surface must go, and the hint must appear.
 say guide 0.9

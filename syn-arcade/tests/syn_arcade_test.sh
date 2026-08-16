@@ -2436,6 +2436,13 @@ check "the glyphs are drawn rather than typed, so no font can lose them" $?
 grep -q '^unset DBUS_SESSION_BUS_ADDRESS' tests/bigscreen_rig.sh
 check "the rig cannot reach the live desktop's music player over D-Bus" $?
 
+# ⚠ AND THE QML HALF IS PROVEN BY A PROCESS THAT REALLY GOES AWAY. A grep can
+# show that comeBack() calls endTransients(); only the rig can show that the
+# thing the tile started is gone afterwards. Confirmed discriminating: with the
+# call removed the rig reports the pid still running.
+grep -q 'STILL RUNNING after Guide' tests/bigscreen_rig.sh
+check "...and it says whether Guide really ended the visualizer" $?
+
 # ── a Plex token is not something to draw on a television ───────────────────
 #
 # ⚠ THE MOST IMPORTANT ASSERTION IN THIS SECTION. cliamp reports a queued
