@@ -138,6 +138,44 @@ ShellRoot {
         }
     }
 
+    // ── what is open ────────────────────────────────────────────────────────
+    //
+    // ⚠ ASKED, never remembered. This is `synctl clients` by way of
+    // `big windows` — what synui actually has mapped — and not a tally kept
+    // here of what this file launched. The two disagree within a minute of
+    // anybody touching a keyboard: an application opens a second window, or
+    // exits by itself, or is closed from the desktop, or was never started
+    // from here at all. A Running shelf built from a private list would offer
+    // to switch to windows that are gone and miss the ones that are there,
+    // and every close aimed at a stale row would land on nothing — or on
+    // something else.
+    //
+    // Refreshed on the way back rather than on a timer: this list only has to
+    // be true when it is about to be LOOKED at, and polling a subprocess
+    // forever behind a full-screen game is exactly the sort of thing the
+    // header warns about.
+    property var windows: []
+
+    Process {
+        id: winProc
+        command: [shell.bin, "big", "windows", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: shell.windows = shell.parseRecords(this.text)
+        }
+    }
+
+    function refreshWindows() {
+        if (!winProc.running) winProc.running = true
+    }
+
+    // After a launch, because the window does not exist the moment the
+    // launcher returns — the same reason big.c's fullscreen waiter has to wait.
+    Timer {
+        id: windowsTimer
+        interval: 1600
+        onTriggered: shell.refreshWindows()
+    }
+
     // Headlines. The first run takes whatever the cache has — which on a cold
     // machine is nothing, and then this fetches — and the timer refreshes long
     // after anybody has stopped watching the shelf.
@@ -267,8 +305,15 @@ ShellRoot {
     // waiting behind this and Guide can go back to it.
     property var activeApp: null
 
-    // When it was started, in ms. See appProc below for what this is for.
-    property double launchedAt: 0
+    // A line of text that appears for a few seconds and goes away — for the
+    // things that used to happen silently. See launchApp.
+    property string notice: ""
+
+    Timer {
+        id: noticeTimer
+        interval: 4000
+        onTriggered: shell.notice = ""
+    }
 
     // The hint that appears for a few seconds when the interface gets out of
     // the way, because a screen that simply vanishes gives somebody holding a
@@ -294,6 +339,24 @@ ShellRoot {
         shell.oskOpen = false
         shell.hintShown = false
         hintTimer.stop()
+        // The Running shelf has to be true at the moment it is looked at, and
+        // this is that moment. Anything could have opened or closed while the
+        // television was out of the way.
+        shell.refreshWindows()
+
+        // ⚠ AND THE SELECTION GOES THERE. Without this the shelf is correct
+        // and useless: coming back leaves the selection wherever it was, the
+        // shelves scroll to keep it in view, and Running — being at the top —
+        // is off the screen. The rig showed exactly that, and X did nothing
+        // because the selected shelf was still Apps.
+        //
+        // Pressing Guide while something is open is not browsing. It is
+        // "deal with the thing I was just in", so that is what is selected.
+        if (shell.windows.length || shell.anyRunning()) {
+            shell.rowTitle = "Running"
+            for (let i = 0; i < shell.shelves.length; i++)
+                if (shell.shelves[i].title === "Running") { shell.row = i; break }
+        }
     }
 
     // ── launching ───────────────────────────────────────────────────────────
@@ -306,49 +369,137 @@ ShellRoot {
         onTriggered: shell.launchingName = ""
     }
 
+    // ── one process per application, and why it is a POOL ───────────────────
+    //
+    // ⚠ THIS WAS ONE `Process`, AND THAT IS WHY ONLY ONE APPLICATION COULD EVER
+    // BE OPENED.
+    //
+    // `big run <id> --wait` lives for as long as the application does, so the
+    // single process was still running when the next tile was pressed — and
+    // `running = true` on a process that is already running is a NO-OP in
+    // quickshell. Silently: no error, nothing in the log. Everything else in
+    // this function still happened, so the television recorded the new tile as
+    // active, re-pointed the controller-as-mouse and the on-screen keyboard at
+    // it, and got out of the way — revealing the application that was already
+    // there. From the sofa that reads as "it will not open anything else", and
+    // with no way to close from a gamepad the only way out was a keyboard.
+    //
+    // A FIXED POOL rather than dynamically created objects. Six is more than
+    // anybody opens on a television, a slot is free exactly when its process is
+    // not running, and there is no model-reconciliation behaviour to be wrong
+    // about — a Variants/Instantiator delegate that got re-created on a model
+    // reassign would restart every running application at once, and that is a
+    // failure this file has no way to notice.
+    readonly property var procs: [proc0, proc1, proc2, proc3, proc4, proc5]
+
+    // slot index → { tile, at }. `at` is per slot because the hand-off rule
+    // below is per launch: two applications started a second apart must not
+    // share one clock.
+    //
+    // ⚠ Assigned as a COPY for the reason setCol documents at length — mutating
+    // this object and assigning the same reference back emits nothing.
+    property var slotApp: ({})
+    function setSlot(i, v) {
+        shell.slotApp = Object.assign({}, shell.slotApp, { [i]: v })
+    }
+
+    function anyRunning() {
+        for (let i = 0; i < shell.procs.length; i++)
+            if (shell.procs[i].running) return true
+        return false
+    }
+
+    // The tile of some other still-running slot, for when the one in front
+    // exits and something else is still open.
+    function otherApp(notTile) {
+        for (let i = 0; i < shell.procs.length; i++) {
+            const rec = shell.slotApp[i]
+            if (shell.procs[i].running && rec && rec.tile !== notTile)
+                return rec.tile
+        }
+        return null
+    }
+
     // An application, which this gets out of the way for.
     //
     // `cmd` is whatever `big` verb starts it. For the ordinary tiles that is
     // `run <id> --wait`; for a headline it is `open <url> --wait`. Both end
     // when the application does, which is the signal to come back.
     function launchApp(tile, cmd) {
+        let i = -1
+        for (let k = 0; k < shell.procs.length; k++)
+            if (!shell.procs[k].running) { i = k; break }
+
+        // Saying so rather than doing nothing, which is the whole lesson of
+        // the bug above.
+        if (i < 0) {
+            shell.launchingName = ""
+            shell.notice = "Six applications are already open — close one first"
+            noticeTimer.restart()
+            return
+        }
+
+        shell.setSlot(i, { tile: tile, at: Date.now() })
         shell.activeApp = tile
         shell.launchingName = tile.name || ""
         launchingTimer.restart()
-        shell.launchedAt = Date.now()
-        appProc.command = [shell.bin].concat(cmd)
-        appProc.running = true
+        shell.procs[i].command = [shell.bin].concat(cmd)
+        shell.procs[i].running = true
         shell.stepAside()
+
+        // The window does not exist yet; `big windows` is asked again once it
+        // has had time to map, so the Running shelf has it on the way back.
+        windowsTimer.restart()
     }
 
-    Process {
-        id: appProc
-        // No parameters on the handler: quickshell's exited(int, QProcess::
-        // ExitStatus) has a second type QML cannot resolve, and a typed handler
-        // silently never runs.
-        onExited: {
-            shell.launchingName = ""
+    function launchEnded(i) {
+        const rec = shell.slotApp[i]
+        shell.setSlot(i, null)
+        shell.launchingName = ""
+        if (!rec) return
 
-            // ⚠ A FAST exit is not somebody closing the application.
-            //
-            // Firefox, Steam and half of everything else are single-instance:
-            // start one while it is already running and the second process
-            // hands its arguments to the first over a socket and exits at once.
-            // Treating that as "they have finished reading" would throw the
-            // television back over a browser somebody just opened — reliably,
-            // and only on the machines where the browser was already up, which
-            // is the worst way for a bug to be distributed.
-            //
-            // So a launcher that returns immediately is a hand-off: stay out of
-            // the way, and let Guide be what comes back. Anything that lived
-            // longer than a few seconds really did close.
-            const lived = Date.now() - shell.launchedAt
-            if (lived < 3000) return
+        // ⚠ A FAST exit is not somebody closing the application.
+        //
+        // Firefox, Steam and half of everything else are single-instance:
+        // start one while it is already running and the second process hands
+        // its arguments to the first over a socket and exits at once. Treating
+        // that as "they have finished reading" would throw the television back
+        // over a browser somebody just opened — reliably, and only on the
+        // machines where the browser was already up, which is the worst way for
+        // a bug to be distributed.
+        //
+        // So a launcher that returns immediately is a hand-off: stay out of the
+        // way, and let Guide be what comes back. Anything that lived longer
+        // than a few seconds really did close.
+        //
+        // ⚠ This clock is why the fullscreen wait in big.c is forked. See the
+        // comment on fullscreen_after_launch there before adding anything to
+        // the launch path.
+        const lived = Date.now() - rec.at
+        if (lived < 3000) return
 
-            shell.activeApp = null
-            shell.comeBack()
+        shell.refreshWindows()
+
+        // Something else is still open: stay out of the way and hand the front
+        // to it, rather than throwing the television over the top of it.
+        if (shell.anyRunning()) {
+            shell.activeApp = shell.otherApp(rec.tile) || shell.activeApp
+            return
         }
+
+        shell.activeApp = null
+        shell.comeBack()
     }
+
+    // No parameters on these handlers: quickshell's exited(int, QProcess::
+    // ExitStatus) has a second type QML cannot resolve, and a typed handler
+    // silently never runs.
+    Process { id: proc0; onExited: shell.launchEnded(0) }
+    Process { id: proc1; onExited: shell.launchEnded(1) }
+    Process { id: proc2; onExited: shell.launchEnded(2) }
+    Process { id: proc3; onExited: shell.launchEnded(3) }
+    Process { id: proc4; onExited: shell.launchEnded(4) }
+    Process { id: proc5; onExited: shell.launchEnded(5) }
 
     // ── the controller as a mouse ───────────────────────────────────────────
     //
@@ -476,6 +627,14 @@ ShellRoot {
     readonly property var shelves: {
         const out = []
 
+        // What is already open goes FIRST, because it is the shelf somebody
+        // pressing Guide came here for: they are not browsing, they are going
+        // back to something. It is also the only shelf that can be empty and
+        // simply not appear, which is why the selection is remembered by NAME
+        // below rather than by row number.
+        if (shell.windows.length)
+            out.push({ title: "Running", kind: "running", items: shell.windows })
+
         const play = shell.byShelf("play")
         if (play.length) out.push({ title: "Play", kind: "app", items: play })
 
@@ -510,9 +669,44 @@ ShellRoot {
     property int row: 0
     property var cols: ({})
 
+    // ⚠ KEYED BY SHELF NAME, not by row number, and the Running shelf is what
+    // forced it — but it was always wrong. Shelves appear and disappear while
+    // somebody is looking at them: the media servers arrive from a broadcast,
+    // the headlines from the network, and Running comes and goes with every
+    // launch. A column remembered against row 2 belongs to whatever shelf is
+    // second AT THE TIME, so a shelf arriving above it silently hands its
+    // scroll position to a different row.
+    function colKey(r) {
+        const sh = shell.shelves[r]
+        return sh ? sh.title : String(r)
+    }
+
     function col(r) {
-        const v = shell.cols[r]
+        const v = shell.cols[shell.colKey(r)]
         return v === undefined ? 0 : v
+    }
+
+    // Which shelf the selection is ON, by name, for the same reason. Kept up
+    // to date by every deliberate move, and used to put `row` back where it
+    // was when the list of shelves changes underneath it.
+    property string rowTitle: ""
+
+    onShelvesChanged: {
+        const n = shell.shelves.length
+        if (!n) return
+
+        if (shell.rowTitle) {
+            for (let i = 0; i < n; i++) {
+                if (shell.shelves[i].title === shell.rowTitle) {
+                    if (shell.row !== i) shell.row = i
+                    return
+                }
+            }
+        }
+        // The shelf we were on is gone (the last window closed, say). Stay in
+        // range and adopt whatever is there now.
+        if (shell.row >= n) shell.row = n - 1
+        shell.rowTitle = shell.shelves[shell.row].title
     }
 
     // ⚠ A COPY. Mutating the object and assigning the SAME REFERENCE back is
@@ -526,7 +720,7 @@ ShellRoot {
     // mouse moving along one shelf — while up and down worked perfectly, because
     // `row` is an int and an int compares unequal.
     function setCol(r, v) {
-        shell.cols = Object.assign({}, shell.cols, { [r]: v })
+        shell.cols = Object.assign({}, shell.cols, { [shell.colKey(r)]: v })
     }
 
     // ── the pointer has to have actually MOVED ──────────────────────────────
@@ -574,12 +768,22 @@ ShellRoot {
         return true
     }
 
+    // Every deliberate move goes through here, so `rowTitle` cannot fall out
+    // of step with `row` — the mouse path included, which is why this exists
+    // rather than two assignments in the delegate.
+    function setRow(i) {
+        if (i < 0 || i >= shell.shelves.length) return
+        shell.row = i
+        shell.rowTitle = shell.shelves[i].title
+    }
+
     function moveRow(d) {
         const n = shell.shelves.length
         if (!n) return
         const next = shell.row + d
         if (next < 0 || next >= n) return   // no wrap: the ends are a landmark
         shell.row = next
+        shell.rowTitle = shell.shelves[next].title
     }
 
     function moveCol(d) {
@@ -599,10 +803,55 @@ ShellRoot {
         return sh.items[shell.col(shell.row)] || null
     }
 
+    // ── switching to, and closing, something already open ───────────────────
+
+    // Which window a close is waiting on confirmation for; null when nothing
+    // is being asked. The confirm is not optional and not a setting: this is a
+    // gamepad on a sofa, a button is easy to catch with a sleeve, and the
+    // thing on the other side of it may be a half-written message.
+    property var closing: null
+
+    function switchTo(win) {
+        if (!win || !win.app_id) return
+        focusProc.command = [shell.bin, "big", "focus", win.app_id]
+        focusProc.running = true
+        // The tile record carries the pointer/keys columns for whatever the
+        // shelf knew about it; a window nothing matched gets a pointer, which
+        // is the safe default for something we cannot describe.
+        shell.activeApp = { id: win.app_id, name: win.name,
+                            pointer: "1", keys: "1" }
+        shell.stepAside()
+    }
+
+    function askClose(win) {
+        if (win && win.app_id) shell.closing = win
+    }
+
+    function confirmClose() {
+        const win = shell.closing
+        shell.closing = null
+        if (!win || !win.app_id) return
+        closeProc.command = [shell.bin, "big", "close", win.app_id]
+        closeProc.running = true
+        // Not instant: the application is being ASKED to close, and a well
+        // behaved one may put up its own "save first?" before it goes.
+        windowsTimer.restart()
+    }
+
+    Process { id: focusProc }
+    Process { id: closeProc; onExited: shell.refreshWindows() }
+
     function activate() {
         const sh = shell.shelves[shell.row]
         const it = shell.current()
         if (!sh || !it) return
+
+        // Something already open: go to it. Nothing is launched, because it is
+        // already running — this is the way BACK.
+        if (sh.kind === "running") {
+            shell.switchTo(it)
+            return
+        }
 
         if (sh.kind === "game") {
             // Steam is handed a URL and returns at once, so there is nothing
@@ -659,8 +908,24 @@ ShellRoot {
     // here more than usual: the controller path cannot be driven by a test at
     // all (it needs real hardware on the seat), and this makes the keyboard a
     // real proxy for it.
+    function closeCurrent() {
+        const sh = shell.shelves[shell.row]
+        if (!sh || sh.kind !== "running") return
+        shell.askClose(shell.current())
+    }
+
     function nav(cmd) {
         if (shell.away) { shell.navAway(cmd); return }
+
+        // A question on screen owns every button until it is answered. Without
+        // this, the d-pad would still be moving the selection behind a dialog
+        // asking about a window that is no longer the selected one — and A
+        // would then close whatever the selection had wandered onto.
+        if (shell.closing) {
+            if (cmd === "accept")                      shell.confirmClose()
+            else if (cmd === "back" || cmd === "guide") shell.closing = null
+            return
+        }
 
         switch (cmd) {
         case "up":         shell.moveRow(-1); break
@@ -675,6 +940,12 @@ ShellRoot {
         // presses three times before reaching for the keyboard they left on
         // the table.
         case "back":       if (shell.row > 0) shell.moveRow(-1); else shell.stepAside(); break
+        // X closes what the selection is on, and only on the Running shelf —
+        // it is the one place where the thing under the cursor is a window
+        // rather than a way to open one. Everywhere else it does nothing,
+        // deliberately: a close button that works on a tile would be a close
+        // button that closes something you did not mean.
+        case "search":     shell.closeCurrent(); break
         // Guide is the way OUT of the interface and, from the desktop, the way
         // back in — that half is `big guard`, which is watching the same
         // button while this is not running.
@@ -1242,11 +1513,11 @@ ShellRoot {
                                             if (!shell.pointerMoved(
                                                     tile.mapToItem(null, mouse.x, mouse.y)))
                                                 return
-                                            shell.row = shelf.index
+                                            shell.setRow(shelf.index)
                                             shell.setCol(shelf.index, tile.index)
                                         }
                                         onClicked: {
-                                            shell.row = shelf.index
+                                            shell.setRow(shelf.index)
                                             shell.setCol(shelf.index, tile.index)
                                             shell.activate()
                                         }
@@ -1275,12 +1546,23 @@ ShellRoot {
                     spacing: win.u * 2
 
                     Repeater {
-                        model: [
-                            { k: "A", v: "Select" },
-                            { k: "B", v: "Back" },
-                            { k: "LB/RB", v: "Jump" },
-                            { k: "Guide", v: shell.activeApp ? "Resume" : "Desktop" }
-                        ]
+                        // ⚠ X appears only on the Running shelf, because that
+                        // is the only shelf it does anything on. A legend that
+                        // advertises a button everywhere and means it in one
+                        // place teaches people it is broken.
+                        model: {
+                            const sh = shell.shelves[shell.row]
+                            const running = sh && sh.kind === "running"
+                            const out = [
+                                { k: "A", v: running ? "Switch to" : "Select" },
+                                { k: "B", v: "Back" }
+                            ]
+                            if (running) out.push({ k: "X", v: "Close" })
+                            out.push({ k: "LB/RB", v: "Jump" })
+                            out.push({ k: "Guide",
+                                       v: shell.activeApp ? "Resume" : "Desktop" })
+                            return out
+                        }
                         Row {
                             id: hint
                             required property var modelData
@@ -1354,6 +1636,128 @@ ShellRoot {
                 }
             }
 
+            // ── "close this?" ───────────────────────────────────────────────
+            //
+            // Drawn LAST of the visible things, so it is over the shelves, and
+            // paired with the guard at the top of nav() that stops every other
+            // button while it is up. A dialog that only LOOKS modal is worse
+            // than none: the selection would still be moving behind it.
+            //
+            // The confirm is not a setting. This is a gamepad on a sofa, X is
+            // easy to catch with a sleeve, and on the other side of it may be
+            // a half-written message or an unsaved file. One button press is a
+            // cheap price for that never happening by accident.
+            Rectangle {
+                anchors.fill: parent
+                visible: shell.closing !== null
+                color: "#d905060a"
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: shell.closing = null
+                    // A real mouse is still a thing on this machine; clicking
+                    // the dimmed area is the same "no" that B is.
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width * 0.7, win.u * 34)
+                    height: body.implicitHeight + win.u * 5
+                    radius: win.u * 0.8
+                    color: "#1a1430"
+                    border.width: Math.max(1, win.u * 0.08)
+                    border.color: win.accent
+
+                    Column {
+                        id: body
+                        anchors.centerIn: parent
+                        width: parent.width - win.u * 4
+                        spacing: win.u * 1.6
+
+                        Text {
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            color: win.ink
+                            font.pixelSize: win.u * 1.7
+                            font.bold: true
+                            text: "Close " + (shell.closing ? shell.closing.name
+                                                            : "") + "?"
+                        }
+
+                        Text {
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            color: win.dim
+                            font.pixelSize: win.u * 1.0
+                            text: "Anything unsaved in it will be lost."
+                        }
+
+                        Row {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: win.u * 2
+
+                            Repeater {
+                                model: [ { k: "A", v: "Close it" },
+                                         { k: "B", v: "Keep it open" } ]
+                                Row {
+                                    id: choice
+                                    required property var modelData
+                                    spacing: win.u * 0.4
+
+                                    Rectangle {
+                                        width: win.u * 1.6
+                                        height: win.u * 1.6
+                                        radius: height / 2
+                                        color: "#2a2340"
+                                        border.width: 1
+                                        border.color: "#453a66"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: choice.modelData.k
+                                            color: win.ink
+                                            font.pixelSize: win.u * 0.85
+                                            font.bold: true
+                                        }
+                                    }
+                                    Text {
+                                        text: choice.modelData.v
+                                        color: win.dim
+                                        font.pixelSize: win.u * 1.0
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Something that used to happen silently, said out loud. Bottom of
+            // the screen so it never covers what it is about.
+            Rectangle {
+                visible: shell.notice !== ""
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: win.u * 4.5
+                width: msg.implicitWidth + win.u * 3
+                height: win.u * 2.8
+                radius: height / 2
+                color: "#e61a1430"
+                border.width: 1
+                border.color: win.accent
+
+                Text {
+                    id: msg
+                    anchors.centerIn: parent
+                    text: shell.notice
+                    color: win.ink
+                    font.pixelSize: win.u * 1.1
+                }
+            }
+
             // ── the keyboard ────────────────────────────────────────────────
             //
             // Mapped onto the same words the controller sends, so there is one
@@ -1377,6 +1781,12 @@ ShellRoot {
                     case Qt.Key_Enter:
                     case Qt.Key_Space:    shell.nav("accept"); break
                     case Qt.Key_Backspace: shell.nav("back"); break
+                    // The keyboard's spelling of the X button, so the two
+                    // input paths stay one implementation — and so a test can
+                    // reach a close, which a controller path cannot be driven
+                    // to on a build machine.
+                    case Qt.Key_X:
+                    case Qt.Key_Delete:   shell.nav("search"); break
                     // Escape QUITS, where Guide steps aside. Somebody at a
                     // keyboard has a way back that somebody on a sofa does
                     // not, so the keyboard keeps the stronger verb.

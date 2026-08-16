@@ -132,6 +132,20 @@ export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
 export SYNUI_RUNNING=1
 unset DISPLAY WAYLAND_DISPLAY
 
+# ⚠ SYNUI_SOCKET, and it is the seatbelt this rig was MISSING.
+#
+# The live desktop exports it into every process it starts, including the shell
+# this script was run from — and synctl prefers it over XDG_RUNTIME_DIR. So
+# anything under this rig that shells out to synctl was talking to the REAL
+# compositor, no matter how carefully HOME and XDG_RUNTIME_DIR were redirected.
+# It went unnoticed while that was only `synctl outputs`, a read. It stopped
+# being harmless the moment big screen mode grew `big close`, which would have
+# closed a window on the live seat from inside a test.
+#
+# Unset, synctl falls back to $XDG_RUNTIME_DIR/synui-$WAYLAND_DISPLAY.sock —
+# both of which point at the nested compositor by the time anything runs.
+unset SYNUI_SOCKET
+
 # ⚠ Every power timeout pushed out. A rig that blanks or suspends halfway
 # through is a rig that screenshots a black screen and looks like a bug.
 cat > "$TMP/synuirc" <<'RC'

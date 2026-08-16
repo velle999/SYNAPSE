@@ -40,6 +40,7 @@
  * every sense the user cares about, so it goes back with the rest of them on
  * Ctrl+Shift+R rather than being the one that has to be undone by hand.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
+ * focus_app <app-id>, close_app <app-id>,
  * layout_cycle, retile, cascade, overview, about, focus_next/prev, alt_tab,
  * alt_tab_prev,
  * stack_next/prev, master_shrink/grow,

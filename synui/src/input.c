@@ -721,6 +721,67 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         wl_display_terminate(s->display);
     } else if (strcmp(action, "close") == 0) {
         if (s->focused_view) view_close(s->focused_view);
+    } else if (strcmp(action, "focus_app") == 0 ||
+               strcmp(action, "close_app") == 0) {
+        /*
+         * Focus or close a window BY APP-ID, rather than whichever one happens
+         * to be focused.
+         *
+         * Every other window action here aims at `focused_view`, which is
+         * right for a keybind and useless to a launcher. Big screen mode has
+         * to switch to the browser it started three tiles ago, and on a
+         * television there is no click to focus it with first — the pointer
+         * is a stick, and pointing it at a window you cannot see is not a
+         * gesture anybody can make.
+         *
+         * wlr-foreign-toplevel-management is the protocol for this and
+         * foreign_toplevel.c already serves it — but reaching it needs a
+         * Wayland client and the wlr XML is not on a stock SynapseOS box
+         * (nothing installs wlr-protocols), so the launcher would have to
+         * vendor a protocol to ask a question `synctl dispatch` can carry in
+         * one line. These two are that line.
+         *
+         * ⚠ The FIRST mapped view with that app-id wins, in workspace order.
+         * Two windows of one application are deliberately not told apart:
+         * from four metres "switch to the browser" is the whole of the
+         * intent, and anything finer would need a window id that a launcher
+         * would have had to be holding since before the window existed.
+         */
+        if (arg && *arg) {
+            bool closing = strcmp(action, "close_app") == 0;
+            syn_view_t *v, *hit = NULL;
+
+            for (int w = 0; w < WORKSPACE_MAX && !hit; w++) {
+                wl_list_for_each(v, &s->workspaces[w].windows, link) {
+                    const char *id = view_app_id(v);
+                    if (v->mapped && id && strcmp(id, arg) == 0) {
+                        hit = v;
+                        break;
+                    }
+                }
+            }
+
+            if (!hit) {
+                /* Not an error: the window may have closed between whoever
+                 * listed it and this arriving. Saying so is what stops a
+                 * launcher reporting a silent success it did not have. */
+                wlr_log(WLR_INFO, "synui: %s — no window with app-id '%s'",
+                        action, arg);
+            } else if (closing) {
+                view_close(hit);
+            } else if (!s->locked) {
+                /* The same three steps ft_handle_activate takes, and for the
+                 * same reason: a window that is minimized, or on a workspace
+                 * that is not showing, is still the window somebody asked
+                 * for. Focusing it without these two lines "works" and leaves
+                 * the screen exactly as it was. */
+                if (hit->minimized)
+                    view_apply_minimized(s, hit, 0);
+                if (hit->workspace && !workspace_visible(hit->workspace))
+                    workspace_switch(s, hit->workspace->index);
+                focus_view(s, hit, view_surface(hit));
+            }
+        }
     } else if (strcmp(action, "layout_cycle") == 0) {
         ws->layout = (ws->layout + 1) % SYN_LAYOUT_COUNT;
         wlr_log(WLR_INFO, "synui: layout → %s", layout_label(ws->layout));

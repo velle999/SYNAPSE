@@ -10,7 +10,7 @@ pkgver=0.1.0
 #   on screen. ⚠ Added to privileged_globals[] in the same commit: motion plus
 #   a button drives every window on the seat, so a sandboxed client does not
 #   get it. See src/input.c server_new_virtual_pointer().
-pkgrel=367
+pkgrel=368
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

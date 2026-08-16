@@ -1015,6 +1015,74 @@ check "the window wait is forked, so it cannot delay the app's exit" $?
 grep -q "lived < 3000" data/syn-arcade-big.qml
 check "...which is the hand-off rule that delay would have broken" $?
 
+# ── more than one application, and a way to close one ──────────────────────
+#
+# ⚠ Big screen mode could open exactly ONE application and did not say so. The
+# shell had a single `Process`; `big run --wait` lives as long as the
+# application, so the second tile press set `running = true` on a process that
+# was already running — a SILENT no-op in quickshell. Everything else still
+# happened, so the television stepped aside to reveal the application already
+# on screen, and with no close on the controller the only way out was a
+# keyboard.
+BIGQML=data/syn-arcade-big.qml
+
+! grep -q "id: appProc" "$BIGQML"
+check "the one shared launch process is gone" $?
+
+grep -q "readonly property var procs: \[proc0" "$BIGQML"
+check "...replaced by a pool, so a second launch has somewhere to go" $?
+
+# The pool is only a fix if a full pool SAYS so rather than dropping the press.
+grep -q "already open — close one first" "$BIGQML"
+check "...and a full pool says so instead of doing nothing" $?
+
+# The register is the compositor's, not a tally kept in the shell — a private
+# list drifts from the screen the moment anything is opened or closed
+# elsewhere, and every close aimed at a stale row lands on nothing.
+grep -q '"big", "windows", "--rec"' "$BIGQML"
+check "what is open is ASKED of synui, never remembered" $?
+
+says "$SA" big focus | grep -q "needs an app-id"
+check "big focus refuses without an app-id" $?
+
+says "$SA" big close | grep -q "needs an app-id"
+check "big close refuses without an app-id" $?
+
+# Closing is confirmed, always. This is a gamepad on a sofa and X is easy to
+# catch with a sleeve.
+grep -q "property var closing: null" "$BIGQML"
+check "a close is a question before it is an action" $?
+
+# ⚠ A dialog that only LOOKS modal is worse than none: the selection would go
+# on moving behind it, and A would then close whatever it had wandered onto.
+grep -q "if (shell.closing) {" "$BIGQML"
+check "...and it owns every button until it is answered" $?
+
+# X is meaningful on exactly one shelf; a close that worked on a tile would be
+# a close that closes something nobody chose.
+grep -q 'sh.kind !== "running"' "$BIGQML"
+check "X closes only on the Running shelf" $?
+
+# ⚠ The shelf was correct and USELESS until this: coming back left the
+# selection where it was, the rows scroll to keep it in view, and Running —
+# being at the top — sat off the screen. The rig caught it.
+grep -q 'shell.rowTitle = "Running"' "$BIGQML"
+check "coming back from an app selects the Running shelf" $?
+
+# ⚠ Shelves appear and disappear underneath the selection — media from a
+# broadcast, news from the network, and now Running on every launch. A column
+# remembered against a row NUMBER belongs to whatever shelf is at that number
+# at the time.
+grep -q "function colKey" "$BIGQML"
+check "the scroll position of a shelf is remembered by NAME, not row" $?
+
+# ⚠ A seatbelt, and it was missing. synui exports SYNUI_SOCKET into every
+# process it starts, and synctl PREFERS it over XDG_RUNTIME_DIR — so the rig
+# was talking to the live compositor no matter what else it redirected. It was
+# harmless while that was one read. `big close` made it not harmless.
+grep -q "^unset SYNUI_SOCKET" tests/bigscreen_rig.sh
+check "the rig cannot reach the live compositor through SYNUI_SOCKET" $?
+
 # ── URLs, which are the one thing here that comes from OUTSIDE ──────────────
 #
 # A headline's link is written by whoever wrote the feed and a server's address

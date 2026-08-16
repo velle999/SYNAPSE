@@ -861,6 +861,62 @@ static char *run_capture(char *const argv[], int timeout_s)
 	return buf;
 }
 
+/* ── reading a JSON reply without a parser ───────────────────────────────── */
+
+/*
+ * One string out of a JSON object: "Address":"http://…". No parser, for the
+ * same reason vdf_pair is not one — every shape read here is fixed and known,
+ * and two of them are printed by synui's own ipc.c.
+ *
+ * ⚠ `end` BOUNDS THE OBJECT, and NULL means "the rest of the text". It exists
+ * because `synctl clients` is an ARRAY: without a bound, a window with no
+ * title silently borrows the next window's, and the Running shelf shows the
+ * same name twice with no hint that anything went wrong. The single-object
+ * callers (a Plex GDM reply, a Jellyfin broadcast) pass NULL and are unchanged.
+ */
+static bool json_str(const char *text, const char *end, const char *key,
+		     char *out, size_t n)
+{
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char *p = strstr(text, pat);
+	if (!p || (end && p >= end))
+		return false;
+	p += strlen(pat);
+	while (*p == ' ' || *p == ':') p++;
+	if (*p != '"')
+		return false;
+	p++;
+
+	size_t w = 0;
+	while (*p && *p != '"' && w + 1 < n) {
+		if (*p == '\\' && p[1]) {
+			p++;
+			/* \uXXXX is a control character synui escaped on the
+			 * way out — skip the whole escape rather than copying
+			 * `u0007` into a window title as five literal
+			 * characters. */
+			if (*p == 'u' && strlen(p) >= 5) {
+				p += 5;
+				continue;
+			}
+		}
+		out[w++] = *p++;
+	}
+	out[w] = '\0';
+	return w > 0;
+}
+
+/* Whether a JSON boolean in this object is true. Bounded like json_str, and
+ * for the same reason. */
+static bool json_true(const char *text, const char *end, const char *key)
+{
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\":true", key);
+	const char *p = strstr(text, pat);
+	return p && (!end || p < end);
+}
+
 /* ── what this machine can do ────────────────────────────────────────────── */
 
 /*
@@ -1323,6 +1379,239 @@ static int spawn_wait(char *const argv[], bool fill)
 	return EX_OK;
 }
 
+/* ── what is open ────────────────────────────────────────────────────────── */
+
+/*
+ * Big screen mode used to be able to run exactly ONE application, and it did
+ * not say so.
+ *
+ * The shell had a single `Process`, and starting a second application while
+ * the first was still running set `running = true` on a process that was
+ * already running — which quickshell treats as a no-op, silently. Everything
+ * else still happened: the interface recorded the new tile as the active one,
+ * re-pointed the controller-as-mouse and the on-screen keyboard at it, and got
+ * out of the way. So the television stepped aside to reveal the application
+ * you were already looking at, and the only way out was a keyboard.
+ *
+ * Fixing the launch is half of it. The other half is that a machine which can
+ * have three things open needs to be able to SAY which three, and to switch
+ * and close them — from a gamepad, with no keyboard in reach.
+ *
+ * ── The compositor is the register, and nothing here is ────────────────────
+ *
+ * These verbs deliberately keep NO list of their own. `synctl clients` is what
+ * synui has mapped, which is the only answer that stays true when an
+ * application opens a second window, exits on its own, is closed from the
+ * desktop, or was never started from here at all. A launcher that kept its own
+ * tally would drift from the screen within a minute of anybody touching a
+ * keyboard, and every "close" aimed at a stale row would land on nothing or,
+ * worse, on something else.
+ */
+struct win {
+	char app_id[128];
+	char title[256];
+	char name[128];		/* the tile's name, when one matches */
+	char icon[64];
+	bool focused, minimized;
+};
+
+/*
+ * Which tile, if any, opened a window with this app-id — so the Running shelf
+ * can say "Web" and show the browser's tile art rather than "org.mozilla.
+ * firefox" in the same grey as everything else.
+ *
+ * ⚠ A HEURISTIC, and it has to be. Nothing anywhere promises that the program
+ * a tile runs and the app-id its window reports are related: `plexhtpc` maps
+ * `plexhtpc`, but Firefox has been `firefox`, `Navigator` and
+ * `org.mozilla.firefox` depending on the build and the backend. So this tries
+ * the spellings that are actually observed, in order, and falls back to the
+ * window's own title — which is never wrong, only less pretty.
+ */
+static const struct row *tile_for(const struct row *rows, int n,
+				  const char *app_id)
+{
+	if (!app_id || !*app_id)
+		return NULL;
+
+	/* org.mozilla.firefox → firefox. The last dot-component of a
+	 * reverse-DNS app-id is the program often enough to be worth trying,
+	 * and an app-id with no dots is its own last component. */
+	const char *tail = strrchr(app_id, '.');
+	tail = tail ? tail + 1 : app_id;
+
+	/*
+	 * ⚠ TWO PASSES, and the order is the whole correctness of this.
+	 *
+	 * What a tile CALLS ITSELF is checked before what it RUNS, because two
+	 * tiles here run the same program: "Steam Big Picture" is
+	 * `syn-arcade big steam` and "Controllers" is `syn-arcade gui`. With
+	 * one pass in table order, every window this binary opens was labelled
+	 * Steam Big Picture — the arcade GUI included, which is how this was
+	 * caught the first time `big windows` was run against a real session.
+	 */
+	for (int i = 0; i < n; i++) {
+		if (strcmp(rows[i].kind, "app") != 0)
+			continue;
+		if (strcasecmp(app_id, rows[i].id) == 0 ||
+		    strcasecmp(tail, rows[i].id) == 0 ||
+		    strcasecmp(app_id, rows[i].icon) == 0 ||
+		    strcasecmp(tail, rows[i].icon) == 0)
+			return &rows[i];
+	}
+
+	for (int i = 0; i < n; i++) {
+		if (strcmp(rows[i].kind, "app") != 0)
+			continue;
+
+		/* The program, which is the first word of the exec and may be
+		 * a path. */
+		char prog[128];
+		snprintf(prog, sizeof(prog), "%s", rows[i].exec);
+		char *sp = strchr(prog, ' ');
+		if (sp) *sp = '\0';
+		const char *base = strrchr(prog, '/');
+		base = base ? base + 1 : prog;
+
+		/* Our own name is never evidence. A tile that runs
+		 * `syn-arcade …` is a tile that launches something ELSE, and
+		 * the window that appears belongs to whatever that was. */
+		if (strcmp(base, "syn-arcade") == 0)
+			continue;
+
+		if (strcasecmp(app_id, base) == 0 ||
+		    strcasecmp(tail, base) == 0)
+			return &rows[i];
+	}
+	return NULL;
+}
+
+/*
+ * Every mapped window synui has, newest workspace order first.
+ *
+ * Returns -1 when the question could not be ASKED — no synctl, no compositor —
+ * which is different from "nothing is open", and the callers say so
+ * differently.
+ */
+static int windows_collect(struct win *out, int max)
+{
+	char *argv[] = { (char *)"synctl", (char *)"clients", NULL };
+	char *json = run_capture(argv, 3);
+	if (!json)
+		return -1;
+
+	struct row rows[APPS_MAX];
+	int nrows = apps_table(rows, APPS_MAX);
+
+	/*
+	 * ⚠ Objects are found by their FIRST KEY, `{"app_id":"`, and not by
+	 * splitting on braces. A window title is the one string here written by
+	 * a stranger — a web page picks it — and a title containing `},{` would
+	 * cut a brace-split parser in half. It cannot forge this: synui escapes
+	 * every quote inside a string, so the real quotes in `{"app_id":"`
+	 * appear nowhere but at the start of a real object.
+	 */
+	static const char *const head = "{\"app_id\":\"";
+	int n = 0;
+
+	for (const char *p = strstr(json, head); p && n < max; ) {
+		const char *end = strstr(p + strlen(head), head);
+
+		struct win *w = &out[n];
+		memset(w, 0, sizeof(*w));
+		json_str(p, end, "app_id", w->app_id, sizeof(w->app_id));
+		json_str(p, end, "title", w->title, sizeof(w->title));
+		w->focused   = json_true(p, end, "focused");
+		w->minimized = json_true(p, end, "minimized");
+
+		const struct row *t = tile_for(rows, nrows, w->app_id);
+		if (t) {
+			snprintf(w->name, sizeof(w->name), "%s", t->name);
+			snprintf(w->icon, sizeof(w->icon), "%s", t->icon);
+		} else {
+			/* Clipped ON PURPOSE, and said so with a precision so
+			 * that gcc knows it too: a window title is as long as
+			 * a web page felt like making it, and what this feeds
+			 * is one tile on a shelf. */
+			snprintf(w->name, sizeof(w->name), "%.*s",
+				 (int)sizeof(w->name) - 1,
+				 w->title[0] ? w->title : w->app_id);
+			snprintf(w->icon, sizeof(w->icon), "%.*s",
+				 (int)sizeof(w->icon) - 1, w->app_id);
+		}
+
+		if (w->name[0] || w->app_id[0])
+			n++;
+		p = end;
+	}
+
+	free(json);
+	return n;
+}
+
+#define WINS_MAX 32
+
+static int big_windows(bool rec)
+{
+	struct win wins[WINS_MAX];
+	int n = windows_collect(wins, WINS_MAX);
+
+	if (n < 0) {
+		fputs("syn-arcade: no synui to ask — `big windows` needs a "
+		      "running compositor and synctl on PATH\n", stderr);
+		return EX_FAIL;
+	}
+
+	if (rec) {
+		rec_row(5, "app_id", "name", "icon", "title", "focused");
+		for (int i = 0; i < n; i++)
+			rec_row(5, wins[i].app_id, wins[i].name, wins[i].icon,
+				wins[i].title, wins[i].focused ? "1" : "0");
+		return EX_OK;
+	}
+
+	if (!n) {
+		puts("nothing is open");
+		return EX_OK;
+	}
+	for (int i = 0; i < n; i++)
+		printf("%-24s %-20s %s%s\n", wins[i].app_id, wins[i].name,
+		       wins[i].title,
+		       wins[i].focused ? "   [focused]" : "");
+	return EX_OK;
+}
+
+/*
+ * Switch to a window, or close one, by app-id.
+ *
+ * Both are one `synctl dispatch` — see the comment on focus_app in synui's
+ * input.c for why the compositor grew a by-app-id verb rather than this
+ * vendoring a protocol to ask the same question.
+ *
+ * ⚠ NOT a shell. The app-id is a string a window chose for itself, and
+ * `system()` would hand a semicolon in one to /bin/sh.
+ */
+static int big_window_act(const char *app_id, bool close_it)
+{
+	if (!app_id || !*app_id) {
+		fprintf(stderr, "syn-arcade: big %s needs an app-id "
+				"(`syn-arcade big windows` lists them)\n",
+			close_it ? "close" : "focus");
+		return EX_USAGE;
+	}
+
+	char *argv[] = { (char *)"synctl", (char *)"dispatch",
+			 (char *)(close_it ? "close_app" : "focus_app"),
+			 (char *)app_id, NULL };
+	char *reply = run_capture(argv, 3);
+	if (!reply) {
+		fputs("syn-arcade: synui did not answer — is it running?\n",
+		      stderr);
+		return EX_FAIL;
+	}
+	free(reply);
+	return EX_OK;
+}
+
 /*
  * Run one of those tiles, by id.
  *
@@ -1723,30 +2012,6 @@ static bool gdm_field(const char *text, const char *key, char *out, size_t n)
 	return false;
 }
 
-/* One string out of a flat JSON object: "Address":"http://…". No parser, for
- * the same reason vdf_pair above is not one — the shape is fixed and known. */
-static bool json_str(const char *text, const char *key, char *out, size_t n)
-{
-	char pat[64];
-	snprintf(pat, sizeof(pat), "\"%s\"", key);
-	const char *p = strstr(text, pat);
-	if (!p)
-		return false;
-	p += strlen(pat);
-	while (*p == ' ' || *p == ':') p++;
-	if (*p != '"')
-		return false;
-	p++;
-	size_t w = 0;
-	while (*p && *p != '"' && w + 1 < n) {
-		if (*p == '\\' && p[1])
-			p++;
-		out[w++] = *p++;
-	}
-	out[w] = '\0';
-	return w > 0;
-}
-
 /* Is something listening on this port of this host? A connect() with a short
  * timeout, which is the only question that matters — a Plex server on this
  * machine is one that has port 32400 open. */
@@ -1883,8 +2148,8 @@ static int media_discover(server_t *out, int max)
 			if (got > 0) {
 				buf[got] = '\0';
 				char name[128] = "Jellyfin", addr[256] = "";
-				json_str(buf, "Name", name, sizeof(name));
-				if (json_str(buf, "Address", addr, sizeof(addr)) &&
+				json_str(buf, NULL, "Name", name, sizeof(name));
+				if (json_str(buf, NULL, "Address", addr, sizeof(addr)) &&
 				    url_ok(addr))
 					servers_add(out, &n, max, "jellyfin",
 						    name, addr);
@@ -3052,6 +3317,15 @@ int cmd_big(int argc, char **argv)
 	if (!strcmp(sub, "open"))
 		return big_open(first_operand(rest_c, rest),
 				opt_present(rest_c, rest, "--wait"));
+
+	/* What is open, and the two things worth doing to one of them. The
+	 * shell's Running shelf is these three verbs and nothing else. */
+	if (!strcmp(sub, "windows"))
+		return big_windows(rec);
+	if (!strcmp(sub, "focus"))
+		return big_window_act(first_operand(rest_c, rest), false);
+	if (!strcmp(sub, "close"))
+		return big_window_act(first_operand(rest_c, rest), true);
 
 	if (!strcmp(sub, "news"))
 		return big_news(rec, opt_present(rest_c, rest, "--refresh"));
