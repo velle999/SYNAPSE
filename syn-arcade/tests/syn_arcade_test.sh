@@ -1915,6 +1915,90 @@ check "...and never against a player that is not cliamp" $?
 grep -q 'onExited: shell.musicBands = \[\]' "$BIGQML"
 check "...and the bars go rather than freezing on the last frame" $?
 
+# ── the shortcut: both stick clicks, or V ───────────────────────────────────
+#
+# The visualizer is the one tile somebody turns on WHILE something else is
+# already playing, so three rows into the Start menu is the wrong distance for
+# it. L3+R3 on the pad, V on a keyboard.
+#
+# ⚠ A CHORD, AND SINGLY THEY STILL SAY NOTHING. The nav stream deliberately
+# drops every button a menu has no meaning for — the header on nav_button()
+# explains why a stream carrying spare events is one where a new button
+# silently becomes a navigation command — so L3 and R3 must not appear in that
+# map. Only the pair speaks.
+#
+# ⚠ SCOPED TO nav_button(), not to the file. pad.c also has
+# pad_button_name(), which is the HUMAN-READABLE list `pads` and the mapping
+# wizard print — "left stick click" belongs there and always has. A file-wide
+# grep matched it and failed against correct code.
+navmap=$(awk '/^static const char \*nav_button/,/^}/' src/pad.c)
+case "$navmap" in
+    *BTN_THUMB*) false ;;
+    *) true ;;
+esac
+check "a single stick click is still not a navigation word" $?
+
+grep -q 'nav_say("visualizer")' src/pad.c
+check "...and both together say one word" $?
+
+# ⚠ LATCHED, or a hold that wobbles toggles twice. Both sticks going down is
+# two events and whichever lands second completes the chord; re-pressing one
+# thumb while the other stayed down would fire again and read as the press
+# having been ignored.
+grep -q 'if (p->chorded)' src/pad.c
+check "...once per hold, however the thumbs wobble" $?
+
+# ⚠ PER PAD. Two controllers on a sofa are two people, and a chord is one pair
+# of thumbs — a global latch would let one pad's L3 arm another's R3.
+grep -q 'bool l3, r3;' src/pad.c
+check "...and per controller, not per machine" $?
+
+# ⚠ THE CHORD SEES BOTH EDGES. Everything else in that switch acts on the
+# press; this one has to see the RELEASE to clear its latch, which is why it is
+# offered the code before nav_button() and is handed `down` rather than a
+# press-only filter.
+grep -q 'if (nav_chord(p, code, down))' src/pad.c
+check "...and it is the one thing there that watches releases too" $?
+
+# The shell half. ⚠ BEFORE EVERY GUARD in nav(), because this addresses the
+# machine rather than the screen: it means the same thing with the Start menu
+# open, with a close dialog up, and with the selection parked on a media
+# button.
+grep -q 'if (cmd === "visualizer") { shell.toggleVisualizer(); return }' "$BIGQML"
+check "the shell acts on it wherever the selection happens to be" $?
+
+# ⚠ AND ABOVE THE KEYBOARD BRANCH when stepped aside, or it would be swallowed
+# as a letter whenever the on-screen keyboard was open — which is the half that
+# matters most, since the visualizer is turned off from in front of it.
+awk '/function navAway/,/^    }/' "$BIGQML" | grep -q 'cmd === "visualizer"'
+check "...including while it is the thing on screen" $?
+
+# ⚠ COMING BACK IS HOW IT STOPS, which is not a second mechanism: the tile is
+# `transient`, so endTransients() ends it exactly as Guide would — and that is
+# the path 0.1.0-28 made actually let go of projectM.
+grep -q 'if (shell.visualizerRunning()) { shell.comeBack(); return }' "$BIGQML"
+check "...and stopping it is the same path Guide already uses" $?
+
+# ⚠ ASKED OF THE SLOTS rather than a flag of its own. A second answer would be
+# a second thing to keep in step, and would be wrong the first time somebody
+# closed the visualizer from the Running shelf.
+grep -q "rec.tile.id === \"visualizer\"" "$BIGQML"
+check "...deciding it is running from what is running" $?
+
+# ⚠ projectM IS OPTIONAL, so on a machine without it there is no tile at all —
+# and a shortcut answering a press with nothing is the dead button this file
+# keeps warning about.
+grep -q 'The visualizer needs projectM' "$BIGQML"
+check "...and a machine without projectM is told so, not ignored" $?
+
+grep -q 'case Qt.Key_V:' "$BIGQML"
+check "V is the keyboard's spelling of the chord" $?
+
+# ⚠ ADVERTISED, but only where it does something — the same rule the X button
+# in that legend already follows.
+grep -q '{ k: "L3+R3", v: "Visualizer" }' "$BIGQML"
+check "...and the legend names it when there is one to toggle" $?
+
 # ── and ASKING it to end is not the same as it ENDING ───────────────────────
 #
 # ⚠ THE ASSERTION THE LAST RELEASE WAS MISSING, AND THE REASON IT SHIPPED A

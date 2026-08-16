@@ -1217,6 +1217,8 @@ typedef struct {
 	int  btn_x, btn_y;
 	int  dir_x, dir_y;	/* what they merge to, and what was last sent */
 	long long repeat_at;
+	bool l3, r3;		/* the stick clicks, held state */
+	bool chorded;		/* …and whether this hold already spoke */
 } navpad_t;
 
 /*
@@ -1308,13 +1310,51 @@ static void nav_say_dir(int dx, int dy)
 }
 
 /*
+ * The stick clicks, which mean nothing apart and one thing TOGETHER.
+ *
+ * ⚠ L3 AND R3 ARE STILL DROPPED SINGLY, and that is the rule the map below
+ * describes rather than an exception to it: one stick click carries no
+ * navigation meaning and never reaches the shell. Only the CHORD does, and it
+ * says one word — the visualizer, on and off, from wherever somebody is.
+ *
+ * ⚠ SAID ONCE PER HOLD. Both sticks going down is two events, and whichever
+ * lands second completes the chord; without `chorded` a hold that wobbled —
+ * releasing and re-pressing one thumb while the other stayed down — would
+ * toggle the visualizer twice and look like it had ignored the press. The
+ * latch clears when either click is released, so the next deliberate chord
+ * speaks again.
+ *
+ * ⚠ PER PAD, not global. Two controllers on a sofa are two people, and a chord
+ * is one pair of thumbs.
+ */
+static bool nav_chord(navpad_t *p, int code, int down)
+{
+	if (code == BTN_THUMBL)
+		p->l3 = down;
+	else if (code == BTN_THUMBR)
+		p->r3 = down;
+	else
+		return false;
+
+	if (p->l3 && p->r3) {
+		if (p->chorded)
+			return true;
+		p->chorded = true;
+		nav_say("visualizer");
+	} else {
+		p->chorded = false;
+	}
+	return true;
+}
+
+/*
  * The button map.
  *
- * Only the buttons a menu has a meaning for. Everything else — triggers, stick
- * clicks, the four paddles on the back of a pad that claims to have them — is
- * dropped here rather than passed on as a number, because a stream carrying
- * events the reader has no use for is one where a new button silently becomes a
- * navigation command.
+ * Only the buttons a menu has a meaning for. Everything else — triggers, the
+ * four paddles on the back of a pad that claims to have them, and a stick
+ * click ON ITS OWN — is dropped here rather than passed on as a number,
+ * because a stream carrying events the reader has no use for is one where a
+ * new button silently becomes a navigation command.
  *
  * ⚠ A is BTN_SOUTH and B is BTN_EAST *by position*, not by the letter printed
  * on the pad. Nintendo-layout controllers have those letters the other way
@@ -1478,6 +1518,14 @@ int pads_nav_stream(void)
 					case BTN_DPAD_LEFT:  p->btn_x = down ? -1 : 0; break;
 					case BTN_DPAD_RIGHT: p->btn_x = down ?  1 : 0; break;
 					default: {
+						/* ⚠ The chord is offered the
+						 * code FIRST and both edges of
+						 * it — it is the one thing here
+						 * that has to see a RELEASE, to
+						 * clear its latch. Everything
+						 * below acts on the press. */
+						if (nav_chord(p, code, down))
+							break;
 						const char *w = nav_button(code);
 						if (w && val == 1)
 							nav_say(w);

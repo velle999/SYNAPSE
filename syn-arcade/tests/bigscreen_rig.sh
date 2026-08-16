@@ -649,6 +649,36 @@ else
     echo "VISUALIZER: ended by coming back (pid $VISPID is gone)"
 fi
 
+# ── …and the SHORTCUT, which is the same thing without the menu walk ────────
+#
+# `visualizer` is the word the nav stream says when both stick clicks are held
+# together (see nav_chord in pad.c). The chord itself cannot be driven here —
+# that needs a real pad, or a uinput device on the seat running this — but the
+# word it produces is exactly what this rig already speaks, so everything the
+# SHELL does with it is testable: it must launch from anywhere, and it must
+# stop from in front of the visualizer without going through Guide.
+#
+# ⚠ FROM THE MAIN SCREEN, with no menu open, which is the case a shortcut
+# exists for. The Start menu walk above proves the tile; this proves the
+# shortcut is wired to the same tile and not to a second launch path.
+rm -f "$TMP/visualizer.pid"
+say visualizer 1.6
+shot 03r-visualizer-by-chord
+VISPID2=$(cat "$TMP/visualizer.pid" 2>/dev/null)
+
+# ⚠ AND THE SECOND PRESS IS SENT WHILE STEPPED ASIDE. That is the half that
+# would break silently: navAway() handles the on-screen keyboard, and a word
+# that fell through to it would be typed as a letter instead of acted on.
+say visualizer 1.4
+shot 03s-visualizer-off-by-chord
+if [ -z "$VISPID2" ]; then
+    echo "CHORD: the shortcut launched nothing"
+elif kill -0 "$VISPID2" 2>/dev/null; then
+    echo "CHORD: pid $VISPID2 STILL RUNNING after the second press — not a toggle"
+else
+    echo "CHORD: launched and stopped by the shortcut alone (pid $VISPID2 is gone)"
+fi
+
 # Guide steps aside: the main surface must go, and the hint must appear.
 say guide 0.9
 shot 04-away

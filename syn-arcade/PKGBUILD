@@ -212,6 +212,55 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-32: the visualizer on a shortcut — both stick clicks, or V ────────
+#
+# Asked for, and it is the right tile to give one to: the visualizer is the one
+# thing somebody turns on WHILE something else is already playing, and three
+# rows into the Start menu is the wrong distance for that.
+#
+# ⚠ A CHORD, AND THE STICK CLICKS STILL MEAN NOTHING APART. The nav stream
+# deliberately drops every button a menu has no meaning for — a stream carrying
+# spare events is one where a new button silently becomes a navigation command
+# — so L3 and R3 are still absent from that map. Only the PAIR says a word, and
+# the word is "visualizer".
+#
+# ⚠ LATCHED, ONCE PER HOLD. Both sticks going down is two events and whichever
+# lands second completes the chord; without the latch a hold that wobbled —
+# one thumb lifting and returning while the other stayed down — would toggle
+# twice and read as the press having been ignored. Latched PER PAD, because two
+# controllers on a sofa are two people and a chord is one pair of thumbs.
+#
+# ⚠ AND IT IS THE ONE THING IN THAT SWITCH THAT WATCHES RELEASES. Everything
+# else there acts on the press; this has to see the release to clear its latch,
+# which is why it is offered the code before the button map and handed the edge
+# rather than a press-only filter.
+#
+# On the shell side it is handled BEFORE every guard in nav(), because it
+# addresses the machine rather than the screen: it means the same thing with
+# the Start menu open, with a close dialog up, and with the selection parked on
+# a media button. And above the keyboard branch in navAway(), which is the half
+# that would have broken silently — the visualizer is turned OFF from in front
+# of it, and a word falling through to the on-screen keyboard would have been
+# typed as a letter.
+#
+# Stopping it is `comeBack()` and not a second mechanism: the tile is
+# `transient`, so it ends exactly as pressing Guide would — the path 0.1.0-28
+# made actually let go of projectM.
+#
+# V on a keyboard is the same call, so the two input paths stay one
+# implementation. ⚠ It only reaches the shell while the interface is ON SCREEN:
+# stepped aside, keyboard focus belongs to the application in front, which is
+# why the pad chord is the one that can turn it back off.
+#
+# The legend names it, and only where projectM is installed — the same rule the
+# X button already follows, one button further along.
+#
+# ⚠ Proven in the rig rather than asserted at: the chord itself needs a real
+# pad, but the WORD it produces is what the rig already speaks, so everything
+# the shell does with it is driven — launched from the main screen with no menu
+# open, and stopped by a second press sent while stepped aside. Removing the
+# navAway half leaves it "STILL RUNNING after the second press".
+
 # ── 0.1.0-31: the browser prompt takes a NUMBER ─────────────────────────────
 #
 # Reported the first time the sign-in was used, and it is entirely fair:
@@ -608,7 +657,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=31
+pkgrel=32
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

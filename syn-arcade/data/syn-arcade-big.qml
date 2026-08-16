@@ -373,6 +373,49 @@ ShellRoot {
         }
     }
 
+    // ── the visualizer, from anywhere: both stick clicks, or V ──────────────
+    //
+    // A shortcut rather than a walk to the Start menu, because the visualizer
+    // is the one tile somebody turns on WHILE something else is already
+    // playing — three rows into a menu is the wrong distance for that.
+    //
+    // ⚠ COMING BACK IS HOW IT IS TURNED OFF, and that is not a shortcut of its
+    // own: the tile is `transient`, so endTransients() ends it exactly as
+    // pressing Guide would. One mechanism, and the one that is already proven
+    // to make projectM let go (see 0.1.0-28 — it catches SIGTERM, so the
+    // waiter escalates to SIGKILL).
+    //
+    // ⚠ ASKED OF THE SLOTS, not of a flag of its own. Whether the visualizer
+    // is up is already recorded — a second answer here would be a second thing
+    // to keep in step, and it would be wrong the first time somebody closed it
+    // from the Running shelf.
+    function visualizerRunning() {
+        for (let i = 0; i < shell.procs.length; i++) {
+            const rec = shell.slotApp[i]
+            if (shell.procs[i].running && rec && rec.tile
+                && rec.tile.id === "visualizer")
+                return true
+        }
+        return false
+    }
+
+    function toggleVisualizer() {
+        if (shell.visualizerRunning()) { shell.comeBack(); return }
+
+        // ⚠ THE TILE HAS TO EXIST. projectM is an optional dependency, so on a
+        // machine without it there is no visualizer tile at all — and a
+        // shortcut that answered a press with nothing would be exactly the
+        // dead button this file keeps warning about. It says so instead.
+        const t = shell.apps.filter(a => a.id === "visualizer")
+        if (!t.length) {
+            shell.notice = "The visualizer needs projectM — "
+                         + "synpkg install projectm-pulseaudio"
+            noticeTimer.restart()
+            return
+        }
+        shell.launchApp(t[0], ["big", "run", "visualizer", "--wait"])
+    }
+
     function comeBack() {
         shell.away = false
         shell.oskOpen = false
@@ -1908,6 +1951,14 @@ ShellRoot {
     function nav(cmd) {
         if (shell.away) { shell.navAway(cmd); return }
 
+        // ⚠ BEFORE EVERY GUARD BELOW, and for the same reason Guide is handled
+        // first when stepped aside: this addresses the MACHINE rather than the
+        // screen. It means the same thing with the Start menu open, with a
+        // close dialog up and with the selection parked on a media button —
+        // which is the whole point of a shortcut somebody presses without
+        // looking at what the selection is doing.
+        if (cmd === "visualizer") { shell.toggleVisualizer(); return }
+
         // A question on screen owns every button until it is answered. Without
         // this, the d-pad would still be moving the selection behind a dialog
         // asking about a window that is no longer the selected one — and A
@@ -2029,6 +2080,12 @@ ShellRoot {
     // from a full-screen application on a machine with no keyboard in reach.
     function navAway(cmd) {
         if (cmd === "guide") { shell.comeBack(); return }
+
+        // ⚠ ABOVE THE KEYBOARD BRANCH, or it would be swallowed as a letter
+        // whenever the on-screen keyboard happened to be open — and this is
+        // the half that matters most: the visualizer is a thing somebody turns
+        // OFF from in front of it, with the interface already stepped aside.
+        if (cmd === "visualizer") { shell.toggleVisualizer(); return }
 
         if (!shell.oskOpen) {
             // Start opens the keyboard, when there is something to type into.
@@ -2990,6 +3047,13 @@ ShellRoot {
                             // be advertised.
                             if (shell.menuItems.length)
                                 out.push({ k: "Start", v: "System" })
+                            // ⚠ ONLY WHEN THERE IS ONE TO TOGGLE. projectM is
+                            // an optional dependency, so on a machine without
+                            // it there is no visualizer tile — and advertising
+                            // a chord that does nothing is the lesson at the
+                            // top of this model, one button further along.
+                            if (shell.apps.some(a => a.id === "visualizer"))
+                                out.push({ k: "L3+R3", v: "Visualizer" })
                             out.push({ k: "Guide",
                                        v: shell.activeApp ? "Resume" : "Desktop" })
                             return out
@@ -3793,6 +3857,13 @@ ShellRoot {
                     // P until 0.1.0-23, which stood for nothing and was
                     // remembered by nobody.
                     case Qt.Key_S:        shell.nav("menu"); break
+                    // V for the visualizer — the keyboard's spelling of both
+                    // stick clicks, so the two input paths stay one
+                    // implementation. ⚠ It reaches this only while the
+                    // interface is ON SCREEN: stepped aside, keyboard focus
+                    // belongs to the application in front, which is why the
+                    // pad chord is the one that turns it back OFF.
+                    case Qt.Key_V:        shell.nav("visualizer"); break
                     // Escape QUITS, where Guide steps aside. Somebody at a
                     // keyboard has a way back that somebody on a sofa does
                     // not, so the keyboard keeps the stronger verb.

@@ -95,6 +95,10 @@ int cmd_pads(int argc, char **argv);
 /* Every controller on the machine reduced to the words a menu needs — "up",
  * "accept", "back" — one per line on stdout, until the reader goes away.
  *
+ * ⚠ One of them is a CHORD rather than a button: both stick clicks together
+ * say "visualizer". Singly they still say nothing, which is why the word is
+ * here and L3 and R3 are not.
+ *
  * Lives in pad.c because that is where the evdev code is, and is exposed here
  * because big screen mode is what reads it. ⚠ It synthesises NOTHING: no
  * uinput device, no virtual keyboard, nothing the compositor or any other
