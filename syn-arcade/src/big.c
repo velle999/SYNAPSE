@@ -777,7 +777,8 @@ static int spawn_detached_pid(char *const argv[], pid_t *out)
 	return EX_OK;
 }
 
-static int spawn_detached(char *const argv[])
+/* Declared in arcade.h: fit.c launches games through this too. */
+int spawn_detached(char *const argv[])
 {
 	return spawn_detached_pid(argv, NULL);
 }

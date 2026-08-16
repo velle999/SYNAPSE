@@ -78,6 +78,7 @@ sources = files(
   'src/sdlwiz.c',
   'src/big.c',
   'src/vptr.c',
+  'src/fit.c',
 )
 
 executable('syn-arcade',

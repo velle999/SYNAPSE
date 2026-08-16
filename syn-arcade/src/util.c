@@ -328,3 +328,22 @@ bool config_path(char *buf, size_t n, const char *rel)
 	if (!home || !*home) return false;
 	return snprintf(buf, n, "%s/.config/%s", home, rel) < (int)n;
 }
+
+/*
+ * The user half of XDG_DATA_DIRS — where `fit` writes the menu entry it makes.
+ *
+ * XDG_DATA_HOME is honoured for the same reason config_path honours
+ * XDG_CONFIG_HOME: it is what lets the test suite redirect every file this
+ * binary writes into a temporary directory, and applications/ is a directory
+ * whose contents appear in the live desktop's menu the moment they are written.
+ */
+bool data_path(char *buf, size_t n, const char *rel)
+{
+	const char *xdg = getenv("XDG_DATA_HOME");
+	if (xdg && *xdg)
+		return snprintf(buf, n, "%s/%s", xdg, rel) < (int)n;
+
+	const char *home = getenv("HOME");
+	if (!home || !*home) return false;
+	return snprintf(buf, n, "%s/.local/share/%s", home, rel) < (int)n;
+}

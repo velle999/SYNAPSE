@@ -62,6 +62,9 @@ int write_file_inplace(const char *path, const char *text);
 bool home_path(char *buf, size_t n, const char *rel);
 /* $XDG_CONFIG_HOME (or $HOME/.config)/<rel>. */
 bool config_path(char *buf, size_t n, const char *rel);
+/* $XDG_DATA_HOME (or $HOME/.local/share)/<rel> — where fit.c writes the
+ * applications/ entry that puts a wrapper in the menu. */
+bool data_path(char *buf, size_t n, const char *rel);
 
 bool file_exists(const char *path);
 bool file_writable(const char *path);
@@ -168,6 +171,24 @@ int map_learn(int argc, char **argv);
 /* ── big.c ───────────────────────────────────────────────────────────────── */
 
 int cmd_big(int argc, char **argv);
+
+/* Start something and hand it NOTHING this process owns: a new session, and
+ * /dev/null on all three descriptors.
+ *
+ * ⚠ Exported rather than kept private to big.c because fit.c launches games
+ * too, and the rule it implements is the one that took a day to find in
+ * synfiles: a launcher started by quickshell whose child inherits quickshell's
+ * pipes has that child killed by SIGPIPE the moment the launcher exits — a
+ * game that dies before it maps a window, with every visible sign saying it
+ * worked. See the comment above spawn_detached_pid() in big.c. */
+int spawn_detached(char *const argv[]);
+
+/* ── fit.c ───────────────────────────────────────────────────────────────── */
+
+/* gamescope wrappers: a low-resolution game given a display of the size it
+ * expects, upscaled to the size of the screen, with the menu entry and the
+ * desktop icon that launch it. */
+int cmd_fit(int argc, char **argv);
 
 /* Exit codes shared across the commands.
  *

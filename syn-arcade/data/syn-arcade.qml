@@ -269,6 +269,224 @@ FloatingWindow {
         }
     }
 
+    // ── fit: the gamescope wrappers ─────────────────────────────────────────
+
+    property var fits: []
+    property var fitApps: []
+    property var fitScreens: []
+    property var fitFilters: []
+
+    // ⚠ THE TEXT BOXES ARE THE MODEL, and are written to by name — fitBlank()
+    // and fitFillForm() below assign fitNameField.text and the rest directly.
+    //
+    // The obvious arrangement is the opposite: a root property per field, with
+    // `text: root.fitName` in the box. It does not survive contact with typing.
+    // A TextInput edited by hand has its `text` written imperatively by the
+    // input method, which DESTROYS the binding that was feeding it — so the
+    // next `fitBlank()` sets the property, nothing is listening any more, and
+    // the box still shows the previous game's command. Silently, and only after
+    // somebody has typed in it, which is why it survives every quick test.
+    //
+    // Only the fields with no box of their own stay as properties.
+    property bool   fitEditing: false
+    property bool   fitPicking: false
+    property string fitId: ""            // empty while creating
+    property string fitIcon: ""
+    property string fitCategories: ""
+    property string fitFilter: "fsr"
+    property bool   fitForceWin: false
+    property bool   fitOverlay: false
+    property bool   fitGamemode: false
+    property bool   fitMenu: true
+    property bool   fitDesktop: false
+
+    Process {
+        id: fitsProc
+        stdout: StdioCollector {
+            onStreamFinished: root.fits = root.parseRecords(this.text)
+        }
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.status = root.oneLine(this.text)
+        }
+    }
+
+    Process {
+        id: fitScreensProc
+        stdout: StdioCollector {
+            onStreamFinished: root.fitScreens = root.parseRecords(this.text)
+        }
+    }
+
+    Process {
+        id: fitFiltersProc
+        stdout: StdioCollector {
+            onStreamFinished: root.fitFilters = root.parseRecords(this.text)
+        }
+    }
+
+    // ⚠ Read with everything else rather than when the picker opens, and that
+    // is not an optimisation — a list fetched on open is EMPTY for as long as
+    // the walk takes, and an empty picker is indistinguishable from a picker
+    // that found nothing. It is a walk of three directory trees and costs
+    // milliseconds. `fitOpenPicker` asks again anyway, so a game installed
+    // while this window is up still turns up.
+    Process {
+        id: fitAppsProc
+        stdout: StdioCollector {
+            onStreamFinished: root.fitApps = root.parseRecords(this.text)
+        }
+    }
+
+    // `fit inspect <desktop>` and `fit show <id>` answer in the SAME record
+    // shape, which is why one reader fills the form for both "make one from
+    // this game" and "change this wrapper".
+    Process {
+        id: fitFormProc
+        stdout: StdioCollector {
+            onStreamFinished: root.fitFillForm(this.text)
+        }
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.status = root.oneLine(this.text)
+        }
+    }
+
+    function fitBlank() {
+        root.fitId = ""
+        fitNameField.text = ""
+        fitExecField.text = ""
+        fitDirField.text = ""
+        fitEnvArea.text = ""
+        fitGameField.text = ""
+        fitSharpField.text = ""
+        root.fitIcon = ""
+        root.fitCategories = "Game;"
+        // The screen is a fact about the monitor, so it is filled in rather
+        // than asked for. The primary one, which is also the screen synui puts
+        // game windows on.
+        fitScreenField.text = ""
+        for (const s of root.fitScreens)
+            if (s.primary === "yes") fitScreenField.text = s.size
+        root.fitFilter = "fsr"
+        root.fitForceWin = false
+        root.fitOverlay = false
+        root.fitGamemode = false
+        root.fitMenu = true
+        root.fitDesktop = false
+    }
+
+    function fitOpenNew() {
+        root.status = ""
+        root.fitBlank()
+        root.fitPicking = false
+        root.fitEditing = true
+    }
+
+    function fitOpenPicker() {
+        root.status = ""
+        fitAppsProc.command = [root.bin, "fit", "apps", "--rec"]
+        fitAppsProc.running = true
+        root.fitEditing = false
+        root.fitPicking = true
+    }
+
+    function fitFromApp(path) {
+        root.status = ""
+        root.fitBlank()
+        fitFormProc.command = [root.bin, "fit", "inspect", path, "--rec"]
+        fitFormProc.running = true
+    }
+
+    function fitOpenEdit(id) {
+        root.status = ""
+        root.fitBlank()
+        root.fitId = id
+        fitFormProc.command = [root.bin, "fit", "show", id, "--rec"]
+        fitFormProc.running = true
+    }
+
+    // ⚠ Every field arrives as its CONFIG KEY, so this is a rename table of
+    // one column and not a second description of what a wrapper is. A key this
+    // window does not draw is ignored rather than dropped from the wrapper:
+    // the save path sends back only what it was given, and `fit edit` leaves
+    // everything it is not told about alone.
+    function fitFillForm(text) {
+        const rows = root.parseRecords(text)
+        const env = []
+        for (const r of rows) {
+            switch (r.field) {
+            case "id":           root.fitId = r.value; break
+            case "name":         fitNameField.text = r.value; break
+            case "exec":         fitExecField.text = r.value; break
+            case "workdir":      fitDirField.text = r.value; break
+            case "icon":         root.fitIcon = r.value; break
+            case "categories":   root.fitCategories = r.value; break
+            case "game":         fitGameField.text = r.value; break
+            case "screen":       fitScreenField.text = r.value; break
+            case "filter":       root.fitFilter = r.value; break
+            case "sharpness":    fitSharpField.text = r.value; break
+            case "force_window": root.fitForceWin = r.value === "yes"; break
+            case "overlay":      root.fitOverlay = r.value === "yes"; break
+            case "gamemode":     root.fitGamemode = r.value === "yes"; break
+            case "menu":         root.fitMenu = r.value === "yes"; break
+            case "desktop":      root.fitDesktop = r.value === "yes"; break
+            case "env":          env.push(r.value); break
+            default: break
+            }
+        }
+        fitEnvArea.text = env.join("\n")
+        root.fitPicking = false
+        root.fitEditing = true
+    }
+
+    function fitArgs() {
+        const a = ["--name=" + fitNameField.text.trim(),
+                   "--exec=" + fitExecField.text.trim(),
+                   "--workdir=" + fitDirField.text.trim(),
+                   "--icon=" + root.fitIcon.trim(),
+                   "--game=" + fitGameField.text.trim(),
+                   "--screen=" + fitScreenField.text.trim(),
+                   "--filter=" + root.fitFilter.trim(),
+                   "--sharpness=" + fitSharpField.text.trim(),
+                   "--force-window=" + (root.fitForceWin ? "yes" : "no"),
+                   "--overlay=" + (root.fitOverlay ? "yes" : "no"),
+                   "--gamemode=" + (root.fitGamemode ? "yes" : "no"),
+                   "--menu=" + (root.fitMenu ? "yes" : "no"),
+                   "--desktop=" + (root.fitDesktop ? "yes" : "no")]
+        if (root.fitCategories.trim() !== "")
+            a.push("--categories=" + root.fitCategories.trim())
+
+        // ⚠ An empty --env has to be SENT, not omitted. The first --env of a
+        // run replaces the set, so leaving it out on an edit would make the
+        // variables the one thing this form could add and never take away.
+        const lines = fitEnvArea.text.split("\n")
+                          .map(s => s.trim()).filter(s => s !== "")
+        if (lines.length === 0) a.push("--env=")
+        else for (const l of lines) a.push("--env=" + l)
+        return a
+    }
+
+    function fitSave() {
+        const args = root.fitId ? ["fit", "edit", root.fitId] : ["fit", "new"]
+        root.fitEditing = false
+        root.run(args.concat(root.fitArgs()))
+    }
+
+    // The line the wrapper will run, drawn as it is being built. Assembled here
+    // rather than asked of the binary because it changes on every keystroke and
+    // a process per keystroke is not a preview — it is a fan. The binary
+    // assembles the real one; this one is a reading aid and says nothing the
+    // form does not already show.
+    function fitPreview() {
+        let s = ""
+        if (fitDirField.text.trim() !== "") s += "cd <folder> && "
+        s += "gamescope"
+        if (fitGameField.text.trim() !== "") s += " -w/-h " + fitGameField.text.trim()
+        if (fitScreenField.text.trim() !== "") s += " -W/-H " + fitScreenField.text.trim()
+        if (root.fitFilter.trim() !== "") s += " -F " + root.fitFilter.trim()
+        s += " -- " + fitExecField.text.trim()
+        return s
+    }
+
     // Every mutation goes through here, and every one of them re-reads
     // afterwards rather than assuming it worked. The binary is the source of
     // truth for what the state now IS — a GUI that updates its own model on a
@@ -299,6 +517,13 @@ FloatingWindow {
         padsProc.command  = [root.bin, "pads", "--rec"];   padsProc.running = true
         mapsProc.command  = [root.bin, "map", "--rec"];    mapsProc.running = true
         bindsProc.command = [root.bin, "binds", "--rec"];  bindsProc.running = true
+        fitsProc.command  = [root.bin, "fit", "--rec"];    fitsProc.running = true
+        fitScreensProc.command = [root.bin, "fit", "screens", "--rec"]
+        fitScreensProc.running = true
+        fitFiltersProc.command = [root.bin, "fit", "choices", "filter"]
+        fitFiltersProc.running = true
+        fitAppsProc.command = [root.bin, "fit", "apps", "--rec"]
+        fitAppsProc.running = true
     }
 
     Component.onCompleted: root.reload()
@@ -320,7 +545,8 @@ FloatingWindow {
                 spacing: 6
 
                 Repeater {
-                    model: ["Overlay", "Controllers", "Mappings", "Shortcuts"]
+                    model: ["Overlay", "Controllers", "Mappings", "Fit to screen",
+                            "Shortcuts"]
                     Rectangle {
                         id: tabChip
                         required property int index
@@ -818,7 +1044,7 @@ FloatingWindow {
                     anchors.fill: parent
                     anchors.margins: 16
                     spacing: 10
-                    visible: root.tab === 3
+                    visible: root.tab === 4
 
                     Text {
                         text: "Gaming shortcuts"
@@ -955,6 +1181,478 @@ FloatingWindow {
 
                     Item { Layout.fillHeight: true }
                 }
+
+                // ── Fit to screen ─────────────────────────────────────────
+                //
+                // Three states in one panel, never two at once: the wrappers
+                // that exist, the picker for choosing an installed game, and
+                // the editor. They are separate `visible` blocks rather than
+                // separate windows because the whole point of this tab is that
+                // making one of these is a single sitting — a dialog on top of
+                // a dialog is how the hand-written version already felt.
+                //
+                // ⚠ NOTHING HERE PARSES A .desktop FILE OR A GAMESCOPE LINE.
+                // `fit inspect` does both and answers in records, so the form
+                // is filled with exactly what the binary would have produced.
+                // A window that read the entry itself would be a second
+                // implementation of the same two parsers, and the way that
+                // fails is a form pre-filled with something `fit new` would
+                // never write.
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 10
+                    visible: root.tab === 3
+
+                    Text {
+                        text: root.fitEditing ? (root.fitId ? "Edit a wrapper"
+                                                            : "New wrapper")
+                            : root.fitPicking ? "Which game?"
+                            : "Fit a game to the screen"
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+
+                    // ── the wrappers that exist ───────────────────────────
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !root.fitEditing && !root.fitPicking
+                        text: "An old game renders at 640×480 or 1024×768 and has no idea "
+                            + "what this monitor is, so it sits in the middle of a black "
+                            + "screen. gamescope gives it a display of exactly the size it "
+                            + "wants and stretches the result to fill yours. What you make "
+                            + "here goes in the applications menu — and on the desktop if "
+                            + "you ask — so it is a shortcut you click, not a line you have "
+                            + "to remember."
+                        color: root.dim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !root.fitEditing && !root.fitPicking
+                        spacing: 8
+                        ArcButton {
+                            text: "From an installed game"
+                            primary: true
+                            onTriggered: root.fitOpenPicker()
+                        }
+                        ArcButton {
+                            text: "From a command"
+                            onTriggered: root.fitOpenNew()
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    ListView {
+                        visible: !root.fitEditing && !root.fitPicking
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 6
+                        model: root.fits
+
+                        delegate: Rectangle {
+                            id: fitRow
+                            required property var modelData
+                            width: ListView.view.width
+                            height: 62
+                            radius: 6
+                            color: root.panelHi
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 10
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: fitRow.modelData.name
+                                        color: root.ink
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        // The two resolutions are the whole
+                                        // reason the wrapper exists, so they
+                                        // are what the row says.
+                                        text: fitRow.modelData.game + " → "
+                                            + fitRow.modelData.screen
+                                            + " · " + fitRow.modelData.filter
+                                            + (fitRow.modelData.desktop === "yes"
+                                               ? " · on the desktop" : "")
+                                        color: root.dim
+                                        font.pixelSize: 11
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                ArcButton {
+                                    text: "Play"
+                                    // ⚠ --detach. This window IS quickshell,
+                                    // and a game started as its child inherits
+                                    // quickshell's pipes: closing the window
+                                    // would close them under a running game.
+                                    onTriggered: root.run(["fit", "run",
+                                        fitRow.modelData.id, "--detach"])
+                                }
+                                ArcButton {
+                                    text: "Edit"
+                                    onTriggered: root.fitOpenEdit(fitRow.modelData.id)
+                                }
+                                ArcButton {
+                                    text: "Remove"
+                                    onTriggered: root.run(["fit", "remove",
+                                        fitRow.modelData.id])
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !root.fitEditing && !root.fitPicking
+                                 && root.fits.length === 0
+                        text: "Nothing wrapped yet."
+                        color: root.dim
+                        font.pixelSize: 12
+                    }
+
+                    // ── the picker ────────────────────────────────────────
+                    Text {
+                        Layout.fillWidth: true
+                        visible: root.fitPicking
+                        text: "Everything installed, games first. Its command, folder and "
+                            + "icon come across with it — and if it already runs gamescope, "
+                            + "that line is taken apart rather than wrapped again."
+                        color: root.dim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.fitPicking
+                        spacing: 8
+                        ArcInput {
+                            id: appSearch
+                            Layout.fillWidth: true
+                            placeholder: "Search…"
+                        }
+                        ArcButton {
+                            text: "Cancel"
+                            onTriggered: root.fitPicking = false
+                        }
+                    }
+
+                    ListView {
+                        visible: root.fitPicking
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 4
+                        model: root.fitApps.filter(a =>
+                            appSearch.text === ""
+                            || a.name.toLowerCase().indexOf(
+                                   appSearch.text.toLowerCase()) >= 0)
+
+                        delegate: Rectangle {
+                            id: appRow
+                            required property var modelData
+                            width: ListView.view.width
+                            height: 46
+                            radius: 6
+                            color: appMa.containsMouse ? root.panel : root.panelHi
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 1
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: appRow.modelData.name
+                                        + (appRow.modelData.kind === "game" ? "" : "")
+                                    color: root.ink
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: appRow.modelData.exec
+                                    color: root.dim
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            MouseArea {
+                                id: appMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.fitFromApp(appRow.modelData.id)
+                            }
+                        }
+                    }
+
+                    // ── the editor ────────────────────────────────────────
+                    Flickable {
+                        id: fitFlick
+                        visible: root.fitEditing
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        contentWidth: width
+                        contentHeight: fitForm.implicitHeight
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        ColumnLayout {
+                            id: fitForm
+                            width: fitFlick.width
+                            spacing: 8
+
+                            Text {
+                                text: "Name in the menu"
+                                color: root.dim
+                                font.pixelSize: 11
+                            }
+                            ArcInput {
+                                id: fitNameField
+                                Layout.fillWidth: true
+                                placeholder: "The Sims (Fullscreen)"
+                            }
+
+                            Text {
+                                Layout.topMargin: 4
+                                text: "Command"
+                                color: root.dim
+                                font.pixelSize: 11
+                            }
+                            ArcInput {
+                                id: fitExecField
+                                Layout.fillWidth: true
+                                placeholder: "wine Sims.exe"
+                            }
+
+                            Text {
+                                Layout.topMargin: 4
+                                text: "Folder to run it in"
+                                color: root.dim
+                                font.pixelSize: 11
+                            }
+                            ArcInput {
+                                id: fitDirField
+                                Layout.fillWidth: true
+                                placeholder: "(the game's own directory)"
+                            }
+
+                            // ⚠ THE ONE THING THIS TAB EXISTS TO GET RIGHT.
+                            // gamescope's -w and -W are different flags, and
+                            // swapping them renders the game at the monitor's
+                            // resolution — which is the thing being avoided,
+                            // and which most of these games cannot do at all.
+                            // So they are never two boxes side by side: they
+                            // are two labelled rows, in the order the sentence
+                            // reads.
+                            Text {
+                                Layout.topMargin: 8
+                                text: "What the game renders at"
+                                color: root.ink
+                                font.pixelSize: 12
+                                font.bold: true
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Repeater {
+                                    model: ["320x200", "640x480", "800x600",
+                                            "1024x768", "1280x720"]
+                                    ArcChip {
+                                        required property string modelData
+                                        label: modelData.replace("x", "×")
+                                        on: fitGameField.text === modelData
+                                        onPicked: fitGameField.text = modelData
+                                    }
+                                }
+                                ArcInput {
+                                    id: fitGameField
+                                    Layout.preferredWidth: 110
+                                    placeholder: "1024x768"
+                                }
+                            }
+
+                            Text {
+                                Layout.topMargin: 8
+                                text: "The screen it fills"
+                                color: root.ink
+                                font.pixelSize: 12
+                                font.bold: true
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Repeater {
+                                    model: root.fitScreens
+                                    ArcChip {
+                                        required property var modelData
+                                        label: modelData.label
+                                        on: fitScreenField.text === modelData.size
+                                        onPicked: fitScreenField.text = modelData.size
+                                    }
+                                }
+                                ArcInput {
+                                    id: fitScreenField
+                                    Layout.preferredWidth: 110
+                                    placeholder: "2560x1440"
+                                }
+                            }
+
+                            Text {
+                                Layout.topMargin: 8
+                                text: "Upscaler"
+                                color: root.ink
+                                font.pixelSize: 12
+                                font.bold: true
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Repeater {
+                                    // From `fit choices filter`, so this and
+                                    // what gamescope accepts cannot drift.
+                                    model: root.fitFilters
+                                    ArcChip {
+                                        required property var modelData
+                                        label: modelData.label
+                                        on: root.fitFilter === modelData.id
+                                        onPicked: root.fitFilter = modelData.id
+                                    }
+                                }
+                                Text {
+                                    text: "sharpness"
+                                    color: root.dim
+                                    font.pixelSize: 11
+                                }
+                                ArcInput {
+                                    id: fitSharpField
+                                    Layout.preferredWidth: 60
+                                    placeholder: "0–20"
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            Text {
+                                Layout.topMargin: 8
+                                text: "Variables — one NAME=VALUE per line"
+                                color: root.dim
+                                font.pixelSize: 11
+                            }
+                            ArcArea {
+                                id: fitEnvArea
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 54
+                                placeholder: "WINEPREFIX=/home/you/Games/thegame"
+                            }
+
+                            ColumnLayout {
+                                Layout.topMargin: 8
+                                spacing: 6
+                                ArcCheck {
+                                    label: "Put it in the applications menu"
+                                    checked: root.fitMenu
+                                    onToggled: root.fitMenu = !root.fitMenu
+                                }
+                                ArcCheck {
+                                    label: "Put an icon on the desktop"
+                                    checked: root.fitDesktop
+                                    onToggled: root.fitDesktop = !root.fitDesktop
+                                }
+                                ArcCheck {
+                                    label: "Force the game's own window to fill the display"
+                                    checked: root.fitForceWin
+                                    onToggled: root.fitForceWin = !root.fitForceWin
+                                }
+                                ArcCheck {
+                                    label: "Performance overlay over the game"
+                                    checked: root.fitOverlay
+                                    onToggled: root.fitOverlay = !root.fitOverlay
+                                }
+                                ArcCheck {
+                                    label: "Run it under gamemode"
+                                    checked: root.fitGamemode
+                                    onToggled: root.fitGamemode = !root.fitGamemode
+                                }
+                            }
+
+                            // What will actually run, before it is saved.
+                            // Nothing else on this form says whether -w and -H
+                            // landed where they were meant to, and this is one
+                            // line somebody can read.
+                            Text {
+                                Layout.topMargin: 10
+                                Layout.fillWidth: true
+                                text: root.fitPreview()
+                                color: root.dim
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                wrapMode: Text.Wrap
+                            }
+
+                            // Leaves room under the last row for the pinned
+                            // buttons below, which are not part of this
+                            // scrolling column.
+                            Item { Layout.preferredHeight: 8 }
+                        }
+
+                        // ⚠ A scroll bar, because THE FORM IS TALLER THAN THE
+                        // WINDOW. Without one there is no sign that anything
+                        // is below the fold — a Flickable simply stops, and a
+                        // field somebody cannot see is a field they will swear
+                        // is missing.
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 2
+                            width: 4
+                            radius: 2
+                            color: root.panelHi
+                            visible: fitFlick.contentHeight > fitFlick.height
+                            y: fitFlick.contentY
+                               + (fitFlick.contentY / fitFlick.contentHeight)
+                                 * fitFlick.height
+                            height: Math.max(24, fitFlick.height
+                                    * fitFlick.height / fitFlick.contentHeight)
+                        }
+                    }
+
+                    // ⚠ OUTSIDE the Flickable. Inside it, Create sat below the
+                    // fold of an 820x600 window — the one button the whole tab
+                    // exists to reach, invisible until somebody thought to
+                    // scroll a form that gives no sign of scrolling.
+                    RowLayout {
+                        visible: root.fitEditing
+                        Layout.fillWidth: true
+                        spacing: 8
+                        ArcButton {
+                            text: root.fitId ? "Save" : "Create"
+                            primary: true
+                            enabled: fitExecField.text.trim() !== ""
+                            onTriggered: root.fitSave()
+                        }
+                        ArcButton {
+                            text: "Cancel"
+                            onTriggered: root.fitEditing = false
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                }
             }
 
             // status line
@@ -1010,6 +1708,148 @@ FloatingWindow {
             hoverEnabled: true
             cursorShape: btn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: if (btn.enabled) btn.triggered()
+        }
+    }
+
+    // A one-line text box with a placeholder.
+    //
+    // ⚠ `onTextEdited`, never `onTextChanged`, wherever one of these is bound
+    // to a root property: onTextChanged also fires when the BINDING writes the
+    // box — filling the form from `fit inspect` would write the property, which
+    // writes the box, which writes the property. onTextEdited is typing only.
+    component ArcInput: Rectangle {
+        id: fieldBox
+        property alias text: inp.text
+        property string placeholder: ""
+
+        implicitHeight: 28
+        implicitWidth: 160
+        radius: 6
+        color: root.panelHi
+
+        TextInput {
+            id: inp
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            verticalAlignment: TextInput.AlignVCenter
+            color: root.ink
+            font.pixelSize: 12
+            clip: true
+            selectByMouse: true
+        }
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            visible: inp.text === ""
+            text: fieldBox.placeholder
+            color: root.dim
+            font.pixelSize: 12
+            elide: Text.ElideRight
+        }
+    }
+
+    // The same, several lines tall. One box per environment variable would be a
+    // list widget with an add button and a remove button; lines in a box is the
+    // same information and no chrome, and a value with a space in it survives
+    // it (which is why they are not space-separated in one field).
+    component ArcArea: Rectangle {
+        id: areaBox
+        property alias text: area.text
+        property string placeholder: ""
+
+        implicitHeight: 54
+        radius: 6
+        color: root.panelHi
+
+        TextEdit {
+            id: area
+            anchors.fill: parent
+            anchors.margins: 8
+            color: root.ink
+            font.pixelSize: 12
+            wrapMode: TextEdit.NoWrap
+            clip: true
+            selectByMouse: true
+        }
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.top: parent.top
+            anchors.topMargin: 8
+            visible: area.text === ""
+            text: areaBox.placeholder
+            color: root.dim
+            font.pixelSize: 12
+        }
+    }
+
+    component ArcCheck: Item {
+        id: chk
+        property string label: ""
+        property bool checked: false
+        signal toggled()
+
+        implicitHeight: 20
+        implicitWidth: 16 + 8 + chkLabel.implicitWidth
+
+        Rectangle {
+            id: chkBox
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 16
+            height: 16
+            radius: 4
+            color: chk.checked ? root.accent : root.panelHi
+            Text {
+                anchors.centerIn: parent
+                text: chk.checked ? "✓" : ""
+                color: "#1b1030"
+                font.pixelSize: 11
+                font.bold: true
+            }
+        }
+        Text {
+            id: chkLabel
+            anchors.left: chkBox.right
+            anchors.leftMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: chk.label
+            color: root.ink
+            font.pixelSize: 12
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: chk.toggled()
+        }
+    }
+
+    component ArcChip: Rectangle {
+        id: chip
+        property string label: ""
+        property bool on: false
+        signal picked()
+
+        implicitHeight: 24
+        implicitWidth: chipText.implicitWidth + 18
+        radius: 12
+        color: chip.on ? root.accent : root.panelHi
+
+        Text {
+            id: chipText
+            anchors.centerIn: parent
+            text: chip.label
+            color: chip.on ? "#1b1030" : root.ink
+            font.pixelSize: 11
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: chip.picked()
         }
     }
 

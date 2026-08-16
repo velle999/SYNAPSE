@@ -212,7 +212,55 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=21
+# ── 0.1.0-22: FIT TO SCREEN — the gamescope wrapper, made once and kept ─────
+#
+# An old game renders at 640x480 or 1024x768 and has no idea what a 2560x1440
+# monitor is, so it sits as a postage stamp in the middle of a black screen.
+# gamescope fixes it, and the line that does is genuinely hard to remember:
+#
+#     gamescope -w 1024 -h 768 -W 2560 -H 1440 -f -F fsr -- wine Sims.exe
+#
+# ⚠ THE WHOLE TRAP IS THAT -w AND -W ARE DIFFERENT FLAGS. Lower case is the size
+# the GAME renders at; upper case is the size of the SCREEN it is stretched
+# onto. Swap them and the game is asked to render at the monitor's resolution —
+# which is the thing being avoided, and which most of these games cannot do at
+# all. Nothing warns; it looks like a bug in the game.
+#
+# And then the line has to be kept somewhere, which by hand means writing a
+# .desktop file with Exec, Path, Icon and StartupWMClass right and remembering
+# where it went the next time the resolution needs changing.
+#
+# `syn-arcade fit` keeps one small config file per wrapper, generates the
+# command from it, and writes the menu entry — and, if asked, the desktop icon —
+# that runs it. In the window it is a tab: pick a game from what is installed,
+# press two resolutions, press Create.
+#
+# ⚠ The .desktop's Exec is `syn-arcade fit run <id>`, NOT the assembled
+# gamescope line, so editing a wrapper changes what the menu entry does with no
+# file in ~/.local/share/applications being rewritten and no menu cache to
+# invalidate. The assembled command is written into that file as a comment, and
+# `fit command <id>` prints it, so nothing about it is hidden.
+#
+# ⚠ `--from` on an entry that ALREADY carries a hand-written gamescope line
+# takes it apart rather than wrapping it. Without that, the entries most worth
+# wrapping — the ones somebody already fought with once — produced a wrapper
+# around a wrapper: two nested micro-compositors, an extra composite of every
+# frame. The sizes, the filter and the environment come out into fields that can
+# be edited, and everything after `--` becomes the game's own command.
+#
+# ⚠ It warns about Lutris and Proton, because gamescope around Proton ABORTS
+# INSTANTLY — SIGABRT, status 134, no window and nothing in any log, which sends
+# people looking at the game rather than at the wrapper. Plain wine under
+# gamescope is the combination that works.
+#
+# ⚠ The desktop icon needed a change in the COMPOSITOR to be visible at all:
+# synui has no inotify watch on ~/Desktop, so a file written there did not
+# appear until icons were toggled off and on. synui 0.1.0-374 adds
+# `dispatch deskicons_refresh`, which `fit` calls after writing or removing one.
+# Without it the checkbox would have been the exact shape of dead button this
+# project keeps writing memos about: everything done correctly, nothing on
+# screen.
+pkgrel=22
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -280,7 +328,7 @@ optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mo
             'synui: the compositor the gaming shortcuts are installed into. ⚠ `big mouse` needs a synui new enough to offer zwlr_virtual_pointer_manager_v1 (0.1.0-327 or later); it says so if not'
             'firefox: the Web tile, and where a headline or a media server opens'
             'steam: the game library and Big Picture tiles in big screen mode'
-            'gamescope: `big steam --gamescope` — a nested compositor for a TV whose resolution is not the desktop’s'
+            'gamescope: `syn-arcade fit` — the nested compositor that makes a low-resolution game fill the screen, and `big steam --gamescope` for a TV whose resolution is not the desktop’s'
             'retroarch: appears as a tile in big screen mode'
             'syntty: the Terminal tile (kitty, foot, alacritty and xterm are used in that order if it is absent)'
             'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order). ⚠ cliamp is preferred over all of them when present and is not packaged here — it is the only player big screen mode can DRIVE rather than launch, so with it the Music tile opens no window and the Start menu gets a Now Playing row. Pick any of them explicitly with `music = <program>` in ~/.config/syn-arcade/big.conf. With cliamp the Start menu also gets a Music Source picker — Plex, YouTube Music, Spotify, local files or radio — and the Plex library is browsable from the sofa, using the server and token `cliamp setup` already wrote'

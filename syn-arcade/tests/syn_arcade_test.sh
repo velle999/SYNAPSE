@@ -75,6 +75,10 @@ says() {
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 
+# The real one, kept so the assertions at the end can prove nothing reached it —
+# the `fit` section redirects HOME, and $HOME by then is a temporary directory.
+REAL_HOME=$HOME
+
 # ── the sandbox ─────────────────────────────────────────────────────────────
 #
 # Everything the binary resolves through config_path() lands under here.
@@ -2156,6 +2160,209 @@ check "about names the licence" $?
 
 says "$SA" about --rec | head -1 | grep -q "^field	value	action$"
 check "about --rec names its columns" $?
+
+# ── fit: the gamescope wrappers ─────────────────────────────────────────────
+#
+# ⚠ HOME AND XDG_DATA_HOME ARE REDIRECTED FOR THIS WHOLE SECTION, and unlike
+# everything above that is not belt and braces — it is the only thing standing
+# between this suite and the live desktop's own menu. `fit` writes
+# ~/.local/share/applications/syn-fit-*.desktop and ~/Desktop/syn-fit-*.desktop,
+# both of which appear in the running session the moment they exist. A run
+# without this leaves fixture games in velle's start menu.
+#
+# XDG_CONFIG_HOME is redirected for the whole file already; it is set again here
+# so the three stay together and a future edit cannot separate them.
+
+echo
+echo "fit"
+
+FITHOME="$T/fithome"
+mkdir -p "$FITHOME/Desktop"
+export HOME="$FITHOME" XDG_DATA_HOME="$FITHOME/.local/share"
+export XDG_CONFIG_HOME="$T/config"
+
+case "$HOME" in
+    "$T"/*) : ;;
+    *) echo "REFUSING: fit's HOME is not sandboxed" >&2; exit 1 ;;
+esac
+
+says "$SA" fit | grep -q "No gamescope wrappers"
+check "there are no wrappers to start with" $?
+
+"$SA" fit >/dev/null 2>&1
+[ "$?" = 100 ]
+check "an empty list exits 100 rather than failing" $?
+
+says "$SA" fit new --exec="wine Sims.exe" --name="The Sims (Fullscreen)" \
+    --game=1024x768 --screen=2560x1440 --sharpness=2 |
+    grep -q "gamescope -w 1024 -h 768 -W 2560 -H 1440"
+check "the game size is -w/-h and the screen size is -W/-H" $?
+
+# ⚠ THE assertion of this whole feature. Lower case is the size the GAME
+# renders at and upper case the size of the SCREEN; swapped, the game renders at
+# the monitor's resolution — which is the thing being avoided, and which most of
+# these games cannot do at all. Nothing warns, and it looks like a game bug.
+says "$SA" fit command the-sims-fullscreen |
+    grep -q -- "-w 1024 -h 768 -W 2560 -H 1440"
+check "...and the same way round when the command is read back" $?
+
+[ -f "$XDG_DATA_HOME/applications/syn-fit-the-sims-fullscreen.desktop" ]
+check "a menu entry is written" $?
+
+grep -q "^Exec=syn-arcade fit run the-sims-fullscreen$" \
+    "$XDG_DATA_HOME/applications/syn-fit-the-sims-fullscreen.desktop"
+check "the entry runs \`fit run\`, so editing it needs no menu rewrite" $?
+
+grep -q "gamescope -w 1024 -h 768" \
+    "$XDG_DATA_HOME/applications/syn-fit-the-sims-fullscreen.desktop"
+check "...with the assembled command written in it as a comment" $?
+
+[ ! -e "$FITHOME/Desktop/syn-fit-the-sims-fullscreen.desktop" ]
+check "no desktop icon unless one was asked for" $?
+
+"$SA" fit edit the-sims-fullscreen --desktop=yes >/dev/null 2>&1
+[ -x "$FITHOME/Desktop/syn-fit-the-sims-fullscreen.desktop" ]
+check "the desktop icon appears, and is executable" $?
+
+"$SA" fit edit the-sims-fullscreen --desktop=no >/dev/null 2>&1
+[ ! -e "$FITHOME/Desktop/syn-fit-the-sims-fullscreen.desktop" ]
+check "...and goes away again" $?
+
+# Editing changes the command without touching the entry that runs it.
+"$SA" fit edit the-sims-fullscreen --game=640x480 >/dev/null 2>&1
+says "$SA" fit command the-sims-fullscreen | grep -q -- "-w 640 -h 480"
+check "an edit changes the command" $?
+
+grep -q "^Exec=syn-arcade fit run the-sims-fullscreen$" \
+    "$XDG_DATA_HOME/applications/syn-fit-the-sims-fullscreen.desktop"
+check "...and the menu entry's Exec is unchanged by it" $?
+
+# Refusals. Each of these is a value that would otherwise reach gamescope or
+# the shell, and be wrong somewhere nobody is watching.
+says "$SA" fit edit the-sims-fullscreen --game=1024 | grep -q "WxH"
+check "a size that is not WxH is refused" $?
+
+says "$SA" fit edit the-sims-fullscreen --filter=bilinear | grep -q "unknown filter"
+check "a filter gamescope does not have is refused" $?
+
+says "$SA" fit edit the-sims-fullscreen --sharpness=40 | grep -q "0"
+check "a sharpness outside 0-20 is refused" $?
+
+says "$SA" fit edit the-sims-fullscreen --env=WINEPREFIX | grep -q "NAME=VALUE"
+check "an env setting with no = is refused" $?
+
+# ⚠ A newline would forge a second setting in the config file, a second key in
+# the .desktop, and a second command in the shell line.
+says "$SA" fit edit the-sims-fullscreen --name="$(printf 'a\nExec=rm -rf x')" |
+    grep -q "newline"
+check "a newline in a value is refused" $?
+
+# Quoting. A path with a space in it is the normal case for wine games, and an
+# unquoted `cd` would run the game in the wrong directory or not at all.
+"$SA" fit new --id=spaced --name="Spaced" --exec="wine Game.exe" \
+    --workdir="/home/you/Program Files/A Game" >/dev/null 2>&1
+says "$SA" fit command spaced | grep -q "cd '/home/you/Program Files/A Game' &&"
+check "a working directory with spaces is quoted" $?
+
+# ── adopting a gamescope line that is already there ─────────────────────────
+#
+# ⚠ Without this, `--from` on a shortcut somebody had already made by hand
+# produced a wrapper AROUND a wrapper — two nested micro-compositors — and the
+# entries most worth wrapping are exactly the ones that already carry a
+# hand-written gamescope line.
+
+cat > "$T/adopt.desktop" <<'ADOPT'
+[Desktop Entry]
+Type=Application
+Name=Gangsters (Fullscreen)
+Exec=env WINEPREFIX=/home/you/Games/gangsters gamescope -w 800 -h 600 -W 2560 -H 1440 -f -F fsr --fsr-sharpness 2 -- wine gangsters.exe
+Path=/home/you/Games/gangsters
+Categories=Game;
+ADOPT
+
+out=$("$SA" fit inspect "$T/adopt.desktop" 2>&1)
+printf '%s\n' "$out" | grep -q "^game      800x600$"
+check "an existing gamescope line gives up its game size" $?
+
+printf '%s\n' "$out" | grep -q "^screen    2560x1440$"
+check "...and its screen size" $?
+
+printf '%s\n' "$out" | grep -q "^env       WINEPREFIX=/home/you/Games/gangsters$"
+check "...and its environment" $?
+
+printf '%s\n' "$out" | grep -q -- "-- wine gangsters.exe$"
+check "...and the game's own command, from after the --" $?
+
+[ "$(printf '%s\n' "$out" | grep -c gamescope)" = 1 ]
+check "...exactly ONE gamescope in the result, not two" $?
+
+printf '%s\n' "$out" | grep -q "^name      Gangsters (Fullscreen)$"
+check "a name that already says Fullscreen is not given a second one" $?
+
+# --fsr-sharpness is gamescope's own alias for --sharpness; a line using it
+# would otherwise lose the setting silently.
+printf '%s\n' "$out" | grep -q -- "--sharpness 2"
+check "--fsr-sharpness is read as sharpness" $?
+
+# inspect must not CREATE anything: the window calls it to fill a form, and a
+# picker that made a wrapper out of every entry looked at would be a menu full
+# of them.
+[ ! -e "$XDG_CONFIG_HOME/syn-arcade/fit/gangsters-fullscreen.conf" ]
+check "inspect creates nothing" $?
+
+# A plain entry, with the field codes the launcher is supposed to substitute.
+cat > "$T/plain.desktop" <<'PLAIN'
+[Desktop Entry]
+Type=Application
+Name=Quake
+Exec=wine Quake.exe %U
+Categories=Game;
+PLAIN
+says "$SA" fit inspect "$T/plain.desktop" | grep -q "wine Quake.exe$"
+check "a .desktop field code is stripped from the command" $?
+
+says "$SA" fit inspect "$T/plain.desktop" | grep -q "^name      Quake (Fullscreen)$"
+check "...and a plain name gains the suffix" $?
+
+# The applications list, which is what the picker draws. The fixture goes into
+# the sandbox's own applications directory — the one the picker searches first —
+# rather than being read from where it was written above.
+mkdir -p "$XDG_DATA_HOME/applications"
+cp "$T/plain.desktop" "$XDG_DATA_HOME/applications/quake.desktop"
+says "$SA" fit apps --rec | grep -q "Quake"
+check "fit apps finds an entry in XDG_DATA_HOME" $?
+
+# ⚠ Not `grep -qv`, which succeeds the moment ANY line fails to match and is
+# therefore true of every list. The question is whether the wrapper made above
+# is in there at all.
+says "$SA" fit apps --rec | grep -q "The%20Sims"
+[ "$?" != 0 ]
+check "...and leaves this tool's own wrappers out of it" $?
+
+# ── removal takes all three files ───────────────────────────────────────────
+"$SA" fit edit the-sims-fullscreen --desktop=yes >/dev/null 2>&1
+"$SA" fit remove the-sims-fullscreen >/dev/null 2>&1
+[ ! -e "$XDG_CONFIG_HOME/syn-arcade/fit/the-sims-fullscreen.conf" ] &&
+    [ ! -e "$XDG_DATA_HOME/applications/syn-fit-the-sims-fullscreen.desktop" ] &&
+    [ ! -e "$FITHOME/Desktop/syn-fit-the-sims-fullscreen.desktop" ]
+check "remove takes the config, the menu entry and the desktop icon" $?
+
+says "$SA" fit remove nosuchwrapper | grep -q "no wrapper called"
+check "removing something absent is refused" $?
+
+says "$SA" fit show nosuchwrapper | grep -q "no wrapper called"
+check "showing something absent is refused" $?
+
+# ⚠ The live desktop's own menu, which this section is redirected away from.
+[ -z "$(find "$REAL_HOME/.local/share/applications" -name 'syn-fit-*' \
+        2>/dev/null)" ]
+check "no wrapper reached the real applications menu" $?
+
+[ -z "$(find "$REAL_HOME/Desktop" -name 'syn-fit-*' 2>/dev/null)" ]
+check "no wrapper reached the real desktop" $?
+
+unset XDG_DATA_HOME
+export HOME="$REAL_HOME"
 
 # ── the sandbox held ────────────────────────────────────────────────────────
 #

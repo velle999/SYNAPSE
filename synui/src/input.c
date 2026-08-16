@@ -1114,6 +1114,22 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         spawn(s->config.network_cmd);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
+    } else if (strcmp(action, "deskicons_refresh") == 0) {
+        /* Rescan ~/Desktop.
+         *
+         * ⚠ There is NO inotify watch on that directory (see the comment above
+         * deskicons_reload in deskmenu.c), so a .desktop file written into it
+         * by anything else does not appear until something makes the compositor
+         * look again — and until this existed the only things that did were
+         * toggling desktop icons off and on, arranging them, and a drag-and-
+         * drop. So every tool on this system that offers to "put an icon on the
+         * desktop" wrote the file correctly and put nothing on screen.
+         *
+         * A bind action rather than a new IPC verb because every bindable
+         * action is already scriptable through `synctl dispatch` — which is how
+         * syn-arcade's `fit` calls it — and a second registry is a second thing
+         * to keep in step. Cheap, and a no-op while desktop icons are off. */
+        deskicons_reload(s);
     } else if (strcmp(action, "widgets") == 0) {
         /* Super+Shift+A: the widget manager, one row per widget. It replaced a
          * blind group toggle, exactly as the filter panel replaced one — and,
