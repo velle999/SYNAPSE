@@ -3813,6 +3813,18 @@ export XCURSOR_SIZE=24
 # live in-game, the only place it can work: an overlay cannot be injected into a
 # process already up. Vulkan only; OpenGL needs synui-game-run's preload.
 export MANGOHUD=1
+# The three gaming shortcuts — super+F10 (big screen mode), F11 and F12 (the
+# overlay) — live in ~/.config/synui/synuirc, and a package cannot write into a
+# user's home. Nothing ever did: `binds refresh` deliberately does nothing when
+# there is no block, so on a fresh install those keys existed in the defaults,
+# in `binds show` and in the documentation, and did nothing when pressed.
+#
+# ⚠ HERE, synchronously, and not only in /etc/profile.d/syn-arcade.sh — that
+# one backgrounds its work and would race synui reading its config, which on a
+# first login means the keys are written but not live until the NEXT one.
+# `ensure` writes nothing when the block is already right, and leaves a block
+# somebody deliberately removed alone.
+command -v syn-arcade >/dev/null 2>&1 && syn-arcade binds ensure --quiet >/dev/null 2>&1
 exec synui
 SESSION_EOF
         chmod 755 /mnt/usr/local/bin/synui-session
@@ -3895,6 +3907,9 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         [ -r "$HOME/.config/synui/cursor.env" ] && . "$HOME/.config/synui/cursor.env"
         # Vulkan overlay layer; see the synui-session heredoc above.
         export MANGOHUD=1
+        # The gaming shortcuts; see the synui-session heredoc above.
+        command -v syn-arcade >/dev/null 2>&1 && \
+            syn-arcade binds ensure --quiet >/dev/null 2>&1
         exec synui
     fi
 fi

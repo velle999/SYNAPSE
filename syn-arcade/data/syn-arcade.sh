@@ -50,19 +50,26 @@ fi
 #    copy of the device and are destroyed when it is unplugged, so a login is
 #    exactly when they need putting back.
 #
-# 3. The keybind block in the user's synuirc must gain any key a NEWER
-#    syn-arcade defines. Nothing in a package upgrade can reach a user's home,
-#    so a version that adds a shortcut adds it to the defaults and to blocks
-#    installed from then on, and every machine that ran `binds install` under
-#    the older version keeps the keys it was born with — the feature ships, the
-#    docs name the key, `binds show` prints the key, and the key is not in the
-#    file. That is exactly how big screen mode shipped in 0.1.0-2 with no
-#    super+F10 on any machine that already had the block.
+# 3. The keybind block in the user's synuirc must EXIST, and must gain any key
+#    a NEWER syn-arcade defines. Nothing in a package upgrade can reach a
+#    user's home, so a version that adds a shortcut adds it to the defaults and
+#    to blocks installed from then on, and every machine that ran `binds
+#    install` under the older version keeps the keys it was born with — the
+#    feature ships, the docs name the key, `binds show` prints the key, and the
+#    key is not in the file. That is exactly how big screen mode shipped in
+#    0.1.0-2 with no super+F10 on any machine that already had the block.
 #
-#    `binds refresh` does nothing at all if there is no block (refresh is not
-#    install), keeps every combo the user chose, refuses rather than writing a
-#    key that clashes with one already in the file, and writes nothing when the
-#    result is byte-identical — which is the case at almost every login.
+#    ⚠ And on a machine where nobody ever ran `binds install`, there was no
+#    block to refresh and none of the three keys existed AT ALL — super+F10
+#    included, which is the only key that opens big screen mode. The package
+#    shipped a feature reachable only by somebody who had read the README.
+#
+#    `binds ensure` refreshes a block that exists and writes one where there is
+#    none. It keeps every combo the user chose, refuses rather than writing a
+#    key that clashes with one already in the file, writes nothing when the
+#    result is byte-identical — the case at almost every login — and leaves a
+#    deliberate `binds remove` alone, which it can tell apart because remove
+#    leaves a marker line behind.
 #
 # ⚠ Backgrounded, redirected, and failure-tolerant. This is /etc/profile.d: it
 # runs for every login shell including non-interactive ones, and anything that
@@ -72,5 +79,5 @@ fi
 if command -v syn-arcade >/dev/null 2>&1; then
     ( syn-arcade hud ensure          >/dev/null 2>&1
       syn-arcade pads apply          >/dev/null 2>&1
-      syn-arcade binds refresh --quiet >/dev/null 2>&1 ) &
+      syn-arcade binds ensure --quiet  >/dev/null 2>&1 ) &
 fi

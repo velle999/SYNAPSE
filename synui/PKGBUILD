@@ -19,7 +19,7 @@ pkgver=0.1.0
 #   only stops it being load-bearing. ⚠ syntty had to move BEFORE synui in
 #   build-all.sh and archiso/build.sh — both are ordered, and makepkg -s
 #   resolves depends out of the local repo as it goes.
-pkgrel=371
+pkgrel=372
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -106,13 +106,21 @@ depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 's
          # Archive extraction for the Dolphin service menu. 7zip reads zip and 7z
          # (and rar), unrar is kept because 7-Zip's rar support does not cover
          # every variant; the menu offers rar, so a fallback is not enough.
-         '7zip' 'unrar')
+         '7zip' 'unrar'
+         # ⚠ cava was an optdepend and the desktop's audio visualiser widget is
+         # DARK without it — widgets.c says "cava is not installed, so it will
+         # stay dark" and render.c draws "needs cava" where the bars belong. A
+         # widget that answers its own switch with an apology on a stock
+         # install is not a feature being offered, it is one being listed.
+         # There is no alternative to depend on instead: an FFT in QML over raw
+         # audio is not something this compositor should grow, which is why the
+         # widget shells out in the first place. 200 KiB.
+         'cava')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info')
 optdepends=('kitty: the terminal SynapseOS defaulted to before syntty — every synuirc written between synui 215 and 358 still names it, and anim.c draws it on glass'
             'foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
             'imagemagick: same — most cursor makefiles render their PNGs with it'
-            'cava: audio visualiser widget (synui-widgets visualizer on)'
             # Event sounds (Super+S) ship OFF, so neither of these is needed for
             # a working desktop — but with sounds turned on and no theme
             # installed, every event resolves to a sample that is not there and

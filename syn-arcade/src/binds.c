@@ -107,6 +107,26 @@
 #define GUARD_OFF_MARK "# syn-arcade: guide button off"
 
 /*
+ * And how "I removed those shortcuts on purpose" is written down.
+ *
+ * ⚠ THE SAME PROBLEM ONE LEVEL UP, and it arrives with `binds ensure`. Until
+ * now no block meant "nobody ever ran `binds install`", and refresh could
+ * safely do nothing. ensure INSTALLS in that case — which is the whole point,
+ * because otherwise super+F10/F11/F12 do not exist on a machine nobody has
+ * configured by hand — so the absence of a block is no longer unambiguous:
+ * it is either a fresh install or somebody who ran `binds remove`.
+ *
+ * Without this marker the second of those is the worst kind of bug, the one
+ * the guard marker above already exists to prevent: a setting that will not
+ * stay set. The keys would come back at every login, for ever.
+ *
+ * It is a comment line left OUTSIDE the block (there is no block to hold it),
+ * in the file somebody would look in — and deleting the line is exactly the
+ * right way to ask for the shortcuts back.
+ */
+#define REMOVED_MARK "# syn-arcade: shortcuts removed — `syn-arcade binds install` puts them back"
+
+/*
  * Everything this package owns in synuirc, read out of the file as one thing.
  *
  * ⚠ There is exactly ONE managed block and it is rewritten WHOLE. Two commands
@@ -218,6 +238,50 @@ static bool has_block(const char *text)
 		if (p) p++;
 	}
 	return false;
+}
+
+/* Was the block taken out on purpose? See REMOVED_MARK. */
+static bool removal_marked(const char *path)
+{
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool marked = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln && !marked;
+	     ln = strtok_r(NULL, "\n", &save))
+		marked = strncmp(ln, REMOVED_MARK, strlen(REMOVED_MARK)) == 0;
+
+	free(text);
+	return marked;
+}
+
+/*
+ * And take it out again, in place.
+ *
+ * ⚠ EVERY WRITE OF THE BLOCK CLEARS IT, which is why this is called from
+ * binds_write rather than from `install`. A file that says "the shortcuts were
+ * removed on purpose" directly above the shortcuts is a contradiction, and the
+ * half of it that would still be believed is the comment: remove the block by
+ * hand later and the stale marker would stop `ensure` ever putting it back.
+ */
+static void strip_removal_mark(char *text)
+{
+	size_t n = strlen(REMOVED_MARK);
+	char *w = text;
+
+	for (char *p = text; *p; ) {
+		char *nl = strchr(p, '\n');
+		size_t len = nl ? (size_t)(nl - p + 1) : strlen(p);
+
+		if (strncmp(p, REMOVED_MARK, n) != 0) {
+			memmove(w, p, len);
+			w += len;
+		}
+		p += len;
+	}
+	*w = '\0';
 }
 
 /*
@@ -492,6 +556,7 @@ static int binds_write(const binds_t *b, bool *seeded_out, bool *changed_out)
 
 	char *base = strip_block(text);
 	free(text);
+	strip_removal_mark(base);
 
 	char *block = make_block(b);
 
@@ -752,6 +817,48 @@ static int binds_refresh(bool quiet, bool reload)
 	return EX_OK;
 }
 
+/*
+ * ensure — what a session runs, and the answer to "the keys should just work
+ * on a fresh install".
+ *
+ * ⚠ THEY DID NOT. Installing this package writes nothing into anybody's home,
+ * `binds refresh` deliberately does nothing when there is no block, and the
+ * only thing that ever wrote one was somebody typing `binds install` after
+ * reading the README. So on a stock SynapseOS the three gaming shortcuts —
+ * including super+F10, the ONLY key that opens big screen mode — existed in
+ * the defaults, in `binds show`, and in the documentation, and did nothing at
+ * all when pressed. The package shipped a feature nobody could reach.
+ *
+ * So: a block gets refreshed (the upgrade path), no block gets one, and a
+ * block somebody deliberately REMOVED stays removed.
+ *
+ * ⚠ Not a change to `refresh`. Refresh is run by hand as well, and "add the
+ * keys a newer version defines" and "put keys in a file that has none" are
+ * different promises — quietly widening the first into the second is how a
+ * command that a person trusts to be conservative stops being.
+ */
+static int binds_ensure(bool quiet, bool reload)
+{
+	char path[4096];
+	binds_t b;
+	if (!binds_read(&b, path, sizeof(path)))
+		return EX_FAIL;
+
+	if (b.present)
+		return binds_refresh(quiet, reload);
+
+	if (removal_marked(path)) {
+		if (!quiet)
+			printf("the syn-arcade shortcuts were removed on "
+			       "purpose (%s)\n"
+			       "`syn-arcade binds install` puts them back.\n",
+			       path);
+		return EX_OK;
+	}
+
+	return binds_install(DEFAULT_TOGGLE, DEFAULT_CYCLE, DEFAULT_BIG, reload);
+}
+
 /* ── big screen mode at login ────────────────────────────────────────────── */
 
 bool binds_autostart_get(void)
@@ -898,8 +1005,26 @@ static int binds_remove(bool reload)
 	char *base = strip_block(text);
 	free(text);
 
-	int rc = write_file_inplace(user, base);
+	/* ⚠ AND A LINE SAYING SO. Since `binds ensure` runs at every login and
+	 * installs a block when there is none, an unmarked removal would be
+	 * undone by the next login — for ever. See REMOVED_MARK. */
+	strip_removal_mark(base);
+	size_t n = strlen(base);
+	while (n > 0 && (base[n - 1] == '\n' || base[n - 1] == ' ' ||
+			 base[n - 1] == '\t'))
+		n--;
+
+	size_t total = n + strlen(REMOVED_MARK) + 8;
+	char *out = xmalloc(total);
+	memcpy(out, base, n);
+	out[n] = '\0';
+	if (n)
+		strcat(out, "\n\n");
+	strcat(out, REMOVED_MARK "\n");
 	free(base);
+
+	int rc = write_file_inplace(user, out);
+	free(out);
 
 	if (rc < 0) {
 		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
@@ -996,6 +1121,13 @@ int cmd_binds(int argc, char **argv)
 	if (strcmp(sub, "refresh") == 0)
 		return binds_refresh(opt_has(rest_c, rest, "--quiet"),
 				     opt_has(rest_c, rest, "--reload"));
+
+	/* What the session runs. Refresh where there is a block, INSTALL where
+	 * there is none — the difference between shortcuts that work on a fresh
+	 * install and shortcuts that wait for somebody to read the README. */
+	if (strcmp(sub, "ensure") == 0)
+		return binds_ensure(opt_has(rest_c, rest, "--quiet"),
+				    opt_has(rest_c, rest, "--reload"));
 
 	/* Also reachable as `big guide`, which is where somebody looking for it
 	 * would look — it is a big screen mode feature that happens to be

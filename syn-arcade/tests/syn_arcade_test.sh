@@ -739,10 +739,18 @@ says "$SA" binds install --toggle=super+F11 --cycle=super+F11 |
     grep -q "whichever it read last"
 check "binding both shortcuts to one combo is refused" $?
 
+# ⚠ THE MARKERS, not the string "syn-arcade" — which is what this asserted
+# until `binds ensure` arrived. Remove now leaves one comment line behind
+# saying the removal was deliberate, and that line names the command that puts
+# the shortcuts back, so it contains the word.
 "$SA" binds remove >/dev/null 2>&1
-grep -q "syn-arcade" "$RC"
+grep -qE "^# (>>>|<<<) syn-arcade" "$RC"
 [ $? != 0 ]
 check "remove takes the block back out" $?
+
+grep -q "spawn syn-arcade" "$RC"
+[ $? != 0 ]
+check "...and every bind with it" $?
 
 says "$SA" binds remove | grep -q "nothing to remove"
 check "removing twice is not an error" $?
@@ -793,7 +801,7 @@ check "removing the block keeps the rest of the config" $?
 # is.
 { cat "$SYSRC"; echo "# >>> syn-arcade"; echo "bind = super+F11 spawn x"; } > "$RC"
 "$SA" binds remove >/dev/null 2>&1
-grep -q "syn-arcade" "$RC"
+grep -qE "^# (>>>|<<<) syn-arcade" "$RC" || grep -q "spawn syn-arcade" "$RC"
 [ $? != 0 ]
 check "an unterminated block is still removed" $?
 
@@ -851,6 +859,58 @@ cp "$RC" "$T/rc-before"
 "$SA" binds refresh --quiet >/dev/null 2>&1
 cmp -s "$T/rc-before" "$RC"
 check "...and does not touch the file" $?
+
+# ── ensure: the keys have to work on a machine nobody configured ────────────
+#
+# ⚠ THE GAP `refresh` LEFT ON PURPOSE, and it made three shortcuts unreachable
+# on every stock install. Nothing ever ran `binds install`: the package cannot
+# write a home directory, the session profile only ever refreshed, and refresh
+# deliberately does nothing when there is no block. So super+F10 — the ONLY key
+# that opens big screen mode — was in the defaults, in `binds show` and in the
+# documentation, and did nothing at all when pressed.
+rm -rf "$XDG_CONFIG_HOME/synui"
+
+"$SA" binds ensure >/dev/null 2>&1
+grep -q "^bind = super+F10 spawn syn-arcade big toggle$" "$RC"
+check "ensure writes a block where there is none" $?
+
+grep -q "^bind = super+F11 spawn syn-arcade hud toggle$" "$RC" &&
+    grep -q "^bind = super+F12 spawn syn-arcade hud cycle$" "$RC"
+check "...with all three gaming keys" $?
+
+cp "$RC" "$T/rc-ensure"
+"$SA" binds ensure --quiet >/dev/null 2>&1
+cmp -s "$T/rc-ensure" "$RC"
+check "...and a second login does not touch the file" $?
+
+# ⚠ AND A DELIBERATE REMOVAL STAYS REMOVED. This runs at every login: without a
+# marker, `binds remove` would be undone by the next one, for ever — the same
+# "a setting that will not stay set" the guide-button marker exists to prevent.
+"$SA" binds remove >/dev/null 2>&1
+grep -q "^# syn-arcade: shortcuts removed" "$RC"
+check "remove leaves a line saying it was deliberate" $?
+
+"$SA" binds ensure >/dev/null 2>&1
+grep -q "syn-arcade big toggle" "$RC"
+[ $? != 0 ]
+check "...and ensure does not put the shortcuts back" $?
+
+says "$SA" binds ensure | grep -q "removed on purpose"
+check "...it says why it is doing nothing" $?
+
+# Asking for them back is either the command or deleting that line.
+"$SA" binds install >/dev/null 2>&1
+grep -q "^# syn-arcade: shortcuts removed" "$RC"
+[ $? != 0 ]
+check "installing again clears the marker" $?
+
+# ⚠ The session runs `binds ensure`, not `binds refresh` — the whole point of
+# the verb. A profile that refreshes is a profile that does nothing on the
+# machines this fixes.
+grep -q "binds ensure --quiet" data/syn-arcade.sh
+check "the login profile runs ensure" $?
+
+rm -f "$RC"
 
 # An autostart is in the same block and is re-rendered with it.
 cat > "$RC" <<'EOF'

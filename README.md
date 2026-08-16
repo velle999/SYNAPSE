@@ -669,12 +669,19 @@ already running*:
 syn-arcade hud toggle        # show it or hide it
 syn-arcade hud cycle         # move it to the next corner
 syn-arcade hud set font_size 24
-syn-arcade binds install     # bind the first two to Super+F11 / Super+F12
+syn-arcade binds install     # rebind them: --toggle=, --cycle=, --big=
 ```
 
-`binds install` writes two ordinary `bind =` lines into your `synuirc`, so the
-`Super`+`/` shortcuts palette can rebind them like any other key. It is not done
-for you — nothing here edits your compositor config until you ask it to.
+The three gaming keys — `Super`+`F11` (toggle the overlay), `Super`+`F12` (move
+it) and `Super`+`F10` (big screen mode) — are **there on a fresh install**. Your
+session runs `syn-arcade binds ensure`, which writes them into your `synuirc` if
+nothing has, and adds any key a newer version defines to a block that already
+exists. They are ordinary `bind =` lines, so the `Super`+`/` shortcuts palette
+can rebind them like any other key, and `binds install` sets your own combos.
+
+`binds remove` takes them out and they **stay** out — it leaves a comment line
+in `synuirc` saying so, which is what stops the next login putting them back.
+Delete that line (or run `binds install`) to have them again.
 
 <details>
 <summary>Why a keybind can change the overlay mid-game</summary>
