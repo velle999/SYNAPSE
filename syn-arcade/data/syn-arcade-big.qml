@@ -295,7 +295,12 @@ ShellRoot {
                 else if (cmd === "hide") shell.stepAside()
                 else if (cmd === "toggle") {
                     if (shell.away) shell.comeBack(); else shell.stepAside()
-                } else if (cmd === "quit") Qt.quit()
+                // ⚠ THE SAME QUIT AS THE TILE'S, through the same function.
+                // `big stop` from a terminal and Quit from the sofa are one
+                // action, and a second Qt.quit() here would be a way out that
+                // left the headless music player behind — which is the whole
+                // thing the tile stopped doing.
+                } else if (cmd === "quit") shell.quitNow()
             }
         }
     }
@@ -401,6 +406,26 @@ ShellRoot {
 
     function toggleVisualizer() {
         if (shell.visualizerRunning()) { shell.comeBack(); return }
+
+        // ⚠ IT ONLY *STARTS* FROM THE TELEVISION'S OWN SCREEN, and that is not
+        // caution — it is the difference between a shortcut and a hazard.
+        //
+        // `big nav` keeps reading the pad while this interface is stepped
+        // aside; that is how Guide comes back from inside a game. So the chord
+        // is live in the game too — and L3+R3 is a REAL BINDING in plenty of
+        // them (sprint, melee, crouch). Left ungated, a shortcut meant for a
+        // launcher would throw a full-screen visualizer over somebody's game
+        // mid-fight, several times an evening.
+        //
+        // ⚠ AND `away` IS BOTH CONDITIONS AT ONCE, which is why there is one
+        // test rather than two: it is true while an application is in front,
+        // and true when Guide has simply put the interface away. Neither is a
+        // moment when somebody asking for the visualizer meant this one.
+        //
+        // Turning it OFF is above this and deliberately not gated: that press
+        // always arrives while stepped aside, because the visualizer is what
+        // is on the screen.
+        if (shell.away) return
 
         // ⚠ THE TILE HAS TO EXIST. projectM is an optional dependency, so on a
         // machine without it there is no visualizer tile at all — and a
@@ -1644,6 +1669,34 @@ ShellRoot {
     // looks like a button that did nothing.
     //
     // Returns whether it took the item, so the caller can carry on.
+    // ── quitting, which now has one thing to do first ───────────────────────
+    //
+    // ⚠ A TIMER AS WELL AS onExited, and it is not belt-and-braces: quitting
+    // is the one action with no way back. `release` sends a SIGTERM and waits
+    // for the socket to go, which is fast — but "fast" is not "guaranteed",
+    // and a Quit that hangs on a music player refusing to die would be a
+    // television nobody can get out of. Whichever happens first wins.
+    property bool quitting: false
+
+    Process {
+        id: releaseProc
+        command: [shell.bin, "big", "music", "release"]
+        onExited: if (shell.quitting) Qt.quit()
+    }
+
+    Timer {
+        id: quitTimer
+        interval: 4000
+        onTriggered: Qt.quit()
+    }
+
+    function quitNow() {
+        if (shell.quitting) return	// already on the way out
+        shell.quitting = true
+        releaseProc.running = true
+        quitTimer.restart()
+    }
+
     function runAction(it) {
         if (!it) return false
 
@@ -1664,8 +1717,19 @@ ShellRoot {
         // a tile the ordinary way out left big screen mode resident for the
         // rest of the session — and a layer-shell surface is not a window, so
         // nothing in the dock or the switcher could close it either.
+        //
+        // ⚠ AND IT LETS GO OF THE MUSIC FIRST, which is the same argument one
+        // level down. The player this interface starts is HEADLESS — a TUI on
+        // a pty with no terminal — so it has no window, it is not a toplevel
+        // for the dock or the switcher to reach, and synui's bar has no media
+        // controls. Quitting and leaving it playing is music with no way to
+        // stop it short of a terminal. Reported exactly that way.
+        //
+        // ⚠ `release` ENDS ONLY WHAT THIS PACKAGE STARTED — see the marker in
+        // big.c. A cliamp somebody has open in a terminal is theirs and is
+        // left alone.
         if (it.id === "quit") {
-            Qt.quit()
+            shell.quitNow()
             return true
         }
 
@@ -3867,7 +3931,7 @@ ShellRoot {
                     // Escape QUITS, where Guide steps aside. Somebody at a
                     // keyboard has a way back that somebody on a sofa does
                     // not, so the keyboard keeps the stronger verb.
-                    case Qt.Key_Escape:   Qt.quit(); break
+                    case Qt.Key_Escape:   shell.quitNow(); break
                     default: return
                     }
                     event.accepted = true

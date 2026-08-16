@@ -679,6 +679,26 @@ else
     echo "CHORD: launched and stopped by the shortcut alone (pid $VISPID2 is gone)"
 fi
 
+# ── …and it must NOT launch over something else ─────────────────────────────
+#
+# ⚠ `big nav` keeps reading the pad while this interface is stepped aside —
+# that is how Guide comes back from inside a game — so the chord is live in the
+# game too, and L3+R3 is a real binding in plenty of them. A shortcut meant for
+# a launcher must not throw a full-screen visualizer over somebody mid-fight.
+#
+# Guide first, to step aside with nothing running: that is the OTHER half of
+# the same guard, and the cheaper one to stage here.
+rm -f "$TMP/visualizer.pid"
+say guide 0.9                 # step aside, nothing in front
+say visualizer 1.4            # …and this must do nothing at all
+shot 03t-chord-ignored-while-away
+if [ -s "$TMP/visualizer.pid" ]; then
+    echo "GATE: the chord launched the visualizer while stepped aside — NOT gated"
+else
+    echo "GATE: the chord did nothing while stepped aside, as it must"
+fi
+say guide 0.9                 # back to the interface
+
 # Guide steps aside: the main surface must go, and the hint must appear.
 say guide 0.9
 shot 04-away

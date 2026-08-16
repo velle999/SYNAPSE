@@ -212,6 +212,59 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-33: the chord stays out of games, and Quit lets go of the music ───
+#
+# Both reported against 0.1.0-32, and both are the same shape of mistake: a
+# thing that keeps running after the moment it belonged to.
+#
+# ── the chord only STARTS from the television's own screen ──────────────────
+#
+# `big nav` keeps reading the pad while this interface is stepped aside — that
+# is how Guide comes back from inside a game — so L3+R3 was live in the game
+# too. And L3+R3 is a REAL BINDING in plenty of them: sprint, melee, crouch.
+# Left as it shipped, a shortcut meant for a launcher would throw a
+# full-screen visualizer over somebody's game mid-fight, several times an
+# evening.
+#
+# So it does not launch while the interface is away. ⚠ `away` is BOTH
+# conditions at once, which is why there is one test and not two: it is true
+# while an application is in front, and true when Guide has simply put the
+# interface away. Turning the visualizer OFF is above that guard and stays
+# ungated — that press always arrives while stepped aside, because the
+# visualizer is what is on the screen.
+#
+# ── Quit lets go of the music ───────────────────────────────────────────────
+#
+# Reported as "I select Quit and it stays open in the background, or at least
+# it leaves the music running". The second half was exactly right.
+#
+# The player this interface starts is HEADLESS — `script -qfc cliamp …`, a TUI
+# on a pty with no terminal attached. It has no window; it is not a toplevel,
+# so nothing in the dock or the switcher can reach it; and synui's bar has no
+# MPRIS controls. Quitting and leaving it playing is music with NO WAY TO STOP
+# IT short of opening a terminal and typing `cliamp stop`.
+#
+# ⚠ AND "ALWAYS STOP IT ON THE WAY OUT" IS THE WRONG FIX. A cliamp somebody
+# has open in a terminal is not headless and is not ours — big screen mode
+# drives it happily over the same socket while it is up, and ending it on the
+# way out would be this launcher reaching over somebody's music. So a marker in
+# $XDG_RUNTIME_DIR records the one thing that tells them apart: whether THIS
+# package started the player. `big music release` ends only what it claims,
+# and the claim is written only where a player was really started —
+# music_ensure_running()'s "already running" path deliberately does not make
+# one. It is dropped when the player stops, and when the player turns out to
+# have gone by itself.
+#
+# ⚠ EVERY WAY OUT GOES THROUGH ONE FUNCTION NOW. There were three doors onto
+# Qt.quit() — the tile, Escape, and `big stop` over the control socket — and a
+# fix applied to one of them would have been a way out that still left the
+# music behind.
+#
+# ⚠ AND QUITTING CANNOT HANG. `release` sends a SIGTERM and waits for the
+# socket to go, which is fast but not guaranteed; a four-second timer races the
+# exit handler, because a Quit that hung on a music player refusing to die
+# would be a television nobody can get out of.
+
 # ── 0.1.0-32: the visualizer on a shortcut — both stick clicks, or V ────────
 #
 # Asked for, and it is the right tile to give one to: the visualizer is the one
@@ -657,7 +710,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=32
+pkgrel=33
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

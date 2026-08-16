@@ -2988,6 +2988,60 @@ static bool music_socket_live(void)
  * which is why this returns early and why changing source has to go through
  * music_restart() rather than through here.
  */
+/*
+ * ── the marker: did WE start this player? ──────────────────────────────────
+ *
+ * Quitting big screen mode has to answer a question that only this file knows
+ * the answer to.
+ *
+ * cliamp here is HEADLESS — `script -qfc cliamp …`, a TUI on a pty with no
+ * terminal attached to it. It has no window, it is not a toplevel so nothing
+ * in the dock or the switcher can reach it, and synui's bar has no MPRIS
+ * controls. So a player this interface started and then walked away from is
+ * music with NO WAY TO STOP IT short of opening a terminal and typing
+ * `cliamp stop`. Reported exactly that way: Quit, and the music is still
+ * going.
+ *
+ * ⚠ AND "STOP IT ALWAYS" IS THE WRONG FIX, which is why this exists rather
+ * than a kill on the way out. A cliamp somebody started themselves, in a
+ * terminal they are looking at, is not headless and not ours — big screen mode
+ * will happily drive it over the same socket while it is up, and ending it on
+ * the way out would be this launcher reaching over somebody's music.
+ *
+ * So the marker records the one thing that distinguishes them: whether the
+ * player on that socket was started BY THIS PACKAGE. Written where the lock
+ * lives, in a tmpfs logind wipes at logout, so it cannot outlive the session
+ * that made it and be believed by the next one.
+ */
+static bool music_ours_path(char *buf, size_t n)
+{
+	const char *run = getenv("XDG_RUNTIME_DIR");
+	if (run && *run)
+		return snprintf(buf, n, "%s/syn-arcade-music.ours", run) < (int)n;
+	return snprintf(buf, n, "/tmp/syn-arcade-music-%u.ours",
+			(unsigned)getuid()) < (int)n;
+}
+
+static void music_mark_ours(bool ours)
+{
+	char path[SYN_PATH];
+	if (!music_ours_path(path, sizeof(path)))
+		return;
+	if (!ours) {
+		unlink(path);
+		return;
+	}
+	FILE *f = fopen(path, "w");
+	if (f)
+		fclose(f);
+}
+
+static bool music_is_ours(void)
+{
+	char path[SYN_PATH];
+	return music_ours_path(path, sizeof(path)) && access(path, F_OK) == 0;
+}
+
 static bool music_ensure_running(void)
 {
 	if (music_socket_live())
@@ -3014,8 +3068,15 @@ static bool music_ensure_running(void)
 	for (int i = 0; i < 30; i++) {		/* up to ~3s */
 		struct timespec ts = { 0, 100 * 1000 * 1000 };
 		nanosleep(&ts, NULL);
-		if (music_socket_live())
+		if (music_socket_live()) {
+			/* ⚠ MARKED ONLY WHERE ONE WAS ACTUALLY STARTED. The
+			 * early return at the top of this function — "already
+			 * running" — deliberately does not come through here,
+			 * because a player that was already up is somebody
+			 * else's. */
+			music_mark_ours(true);
 			return true;
+		}
 	}
 	return false;
 }
@@ -3066,10 +3127,48 @@ static bool music_stop_player(void)
 	for (int i = 0; i < 30; i++) {		/* up to ~3s */
 		struct timespec ts = { 0, 100 * 1000 * 1000 };
 		nanosleep(&ts, NULL);
-		if (!music_socket_live())
+		if (!music_socket_live()) {
+			/* Whatever we started is gone, so the claim goes with
+			 * it — including on the restart paths, where the next
+			 * ensure_running() makes it again. */
+			music_mark_ours(false);
 			return true;
+		}
 	}
 	return false;
+}
+
+/*
+ * Let go of the music on the way out.
+ *
+ * ⚠ ONLY WHAT THIS PACKAGE STARTED, which is the whole point — see the marker
+ * above. A player somebody has in a terminal is left exactly where it is.
+ *
+ * ⚠ AND IT IS NOT AN ERROR TO HAVE NOTHING TO DO. This runs on every Quit,
+ * including the overwhelmingly common one where no music was ever started, so
+ * "nothing to release" is a success and says nothing.
+ */
+static int big_music_release(void)
+{
+	if (!music_is_ours())
+		return EX_OK;
+
+	/* ⚠ THE CLAIM IS DROPPED WHEN THERE IS NOTHING LEFT TO CLAIM. A player
+	 * that has already gone — somebody quit it from its own interface, or
+	 * it crashed — leaves a marker that would otherwise outlive it for the
+	 * rest of the session and make the next Quit report a failure it could
+	 * do nothing about. */
+	if (!music_socket_live()) {
+		music_mark_ours(false);
+		return EX_OK;
+	}
+
+	if (!music_stop_player()) {
+		fputs("syn-arcade: the music player did not stop\n", stderr);
+		return EX_FAIL;
+	}
+	puts("stopped the music this session started");
+	return EX_OK;
 }
 
 /*
@@ -5197,6 +5296,7 @@ static int big_music(int argc, char **argv, bool rec)
 					     "toggle", "next", "prev", "stop",
 					     "vis", "source", "plex", "yt",
 					     "browse", "install", "setup",
+					     "release",
 					     NULL };
 	bool known = false;
 	for (int i = 0; verbs[i] && !known; i++)
@@ -5204,7 +5304,8 @@ static int big_music(int argc, char **argv, bool rec)
 	if (!known) {
 		fprintf(stderr, "syn-arcade: big music takes status, play, "
 				"pause, toggle, next, prev, stop, source, plex, "
-				"browse, install or setup (got '%s')\n", verb);
+				"yt, browse, install, setup or release "
+				"(got '%s')\n", verb);
 		return EX_USAGE;
 	}
 
@@ -5218,6 +5319,11 @@ static int big_music(int argc, char **argv, bool rec)
 
 	if (!strcmp(verb, "status"))
 		return big_music_status(rec);
+
+	/* The way out. Answered here, above everything that needs a player to
+	 * be running, because its whole job is that there should not be one. */
+	if (!strcmp(verb, "release"))
+		return big_music_release();
 
 	/*
 	 * Where the music comes from.

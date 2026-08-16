@@ -1960,6 +1960,25 @@ check "...and per controller, not per machine" $?
 grep -q 'if (nav_chord(p, code, down))' src/pad.c
 check "...and it is the one thing there that watches releases too" $?
 
+# ⚠ AND IT ONLY *STARTS* FROM THE TELEVISION'S OWN SCREEN.
+#
+# `big nav` keeps reading the pad while the interface is stepped aside — that
+# is how Guide comes back from inside a game — so the chord is live in the game
+# too, and L3+R3 is a REAL BINDING in plenty of them. Ungated, a shortcut meant
+# for a launcher throws a full-screen visualizer over somebody's game mid-fight.
+#
+# ⚠ `away` IS BOTH CONDITIONS AT ONCE, which is why it is one test: true while
+# an application is in front, and true when Guide has put the interface away.
+# Turning it OFF is above this guard and deliberately ungated — that press
+# always arrives while stepped aside, because the visualizer is what is on
+# screen.
+awk '/function toggleVisualizer/,/^    }/' "$BIGQML" | grep -q 'if (shell.away) return'
+check "...but it does not launch over a game, or with the interface away" $?
+
+awk '/function toggleVisualizer/,/^    }/' "$BIGQML" |
+    awk '/visualizerRunning/ { seen = 1 } /shell.away/ { exit !seen }'
+check "...while stopping it stays ungated, above that test" $?
+
 # The shell half. ⚠ BEFORE EVERY GUARD in nav(), because this addresses the
 # machine rather than the screen: it means the same thing with the Start menu
 # open, with a close dialog up, and with the selection parked on a media
@@ -2449,6 +2468,86 @@ check "the installer passes --noconfirm BEFORE the verb" $?
 ( PATH="$MSTUB:$STUB:$NOYT"; export PATH
   says "$SA" big music install ytmusic ) | grep -q "already installed"
 check "installing what is already there is a sentence, not a terminal" $?
+
+# ── quitting has to let go of the music ─────────────────────────────────────
+#
+# ⚠ REPORTED: Quit, and the music is still playing. The player this interface
+# starts is HEADLESS — `script -qfc cliamp …`, a TUI on a pty with no terminal
+# — so it has no window, it is not a toplevel for the dock or the switcher to
+# reach, and synui's bar has no MPRIS controls. Quitting and leaving it running
+# is music with NO WAY TO STOP IT short of opening a terminal.
+#
+# ⚠ AND "ALWAYS STOP IT" IS THE WRONG FIX. A cliamp somebody has open in a
+# terminal is not headless and not ours — big screen mode drives it happily
+# over the same socket while it is up, and ending it on the way out would be
+# this launcher reaching over somebody's music. So the marker records the one
+# thing that tells them apart: whether THIS package started it.
+MARK="$XDG_RUNTIME_DIR/syn-arcade-music.ours"
+rm -f "$MARK"
+
+# Nothing started, nothing to do — and the overwhelmingly common Quit, so it
+# must be silent and successful rather than an error nobody caused.
+out=$( PATH="$MSTUB:$STUB"; export PATH; says "$SA" big music release )
+[ -z "$out" ]
+check "releasing with no player of ours says nothing" $?
+
+( PATH="$MSTUB:$STUB"; export PATH; "$SA" big music release >/dev/null 2>&1 )
+[ "$?" = 0 ]
+check "...and is a success, not a failure nobody caused" $?
+
+# ⚠ NOT OURS, SO NOT TOUCHED. The stub answers as a live player throughout;
+# the only thing that changes is the marker.
+CLIAMP_STATE=playing
+( PATH="$MSTUB:$STUB"; export PATH
+  CLIAMP_LOG="$T/release.log"; export CLIAMP_LOG
+  : > "$CLIAMP_LOG"
+  "$SA" big music release >/dev/null 2>&1 )
+relmsg=$(cat "$T/release.log" 2>/dev/null)
+case "$relmsg" in *stop*) false ;; *) true ;; esac
+check "a player this package did not start is left alone" $?
+
+# ⚠ THE MARKER IS WRITTEN WHERE THE LOCK LIVES — a tmpfs logind wipes at
+# logout — so a claim cannot outlive the session that made it and be believed
+# by the next one.
+grep -q 'syn-arcade-music.ours' src/big.c
+check "the claim is recorded in the runtime directory" $?
+
+grep -q 'XDG_RUNTIME_DIR' src/big.c
+check "...which logind wipes, so it cannot outlive the session" $?
+
+# ⚠ MARKED ONLY WHERE ONE WAS ACTUALLY STARTED. music_ensure_running() returns
+# early when a player is already up, and that path must NOT claim it.
+awk '/static bool music_ensure_running/,/^}/' src/big.c |
+    awk '/music_socket_live\(\)\)/ { early = 1 } /music_mark_ours\(true\)/ { exit !early }'
+check "...and claimed only where a player was really started" $?
+
+# The claim is dropped with the player, on every path that ends one.
+awk '/static bool music_stop_player/,/^}/' src/big.c | grep -q 'music_mark_ours(false)'
+check "...and dropped again when it stops" $?
+
+# ⚠ AND WHEN THERE IS NOTHING LEFT TO CLAIM. A player that already went — quit
+# from its own interface, or crashed — would otherwise leave a marker that
+# outlived it and made every later Quit report a failure it could do nothing
+# about.
+awk '/static int big_music_release/,/^}/' src/big.c |
+    grep -q 'music_mark_ours(false)'
+check "...and when the player has already gone by itself" $?
+
+# The shell half: every way out goes through one function.
+grep -q 'function quitNow' "$BIGQML"
+check "the shell has one way out, not three" $?
+
+[ "$(grep -c 'shell.quitNow()' "$BIGQML")" -ge 3 ]
+check "...used by the tile, the keyboard and \`big stop\` alike" $?
+
+grep -q '"big", "music", "release"' "$BIGQML"
+check "...and it lets go of the music before it goes" $?
+
+# ⚠ A TIMER AS WELL AS onExited. Quitting is the one action with no way back,
+# and a Quit that hung on a music player refusing to die would be a television
+# nobody can get out of.
+awk '/id: quitTimer/,/^    }/' "$BIGQML" | grep -q 'Qt.quit()'
+check "...and cannot hang on a player that refuses to stop" $?
 
 # ── YouTube Music stations, which is what "plays like the radio does" means ──
 #
@@ -3889,8 +3988,16 @@ check "...and something brings it back" $?
 grep -A2 'if (it.id === "desktop")' "$BIGQML" | grep -q "shell.stepAside()"
 check "the Desktop tile steps aside and stays loaded" $?
 
-grep -A2 'if (it.id === "quit")' "$BIGQML" | grep -q "Qt.quit()"
+#
+# ⚠ THROUGH quitNow() SINCE 0.1.0-33, not Qt.quit() directly — the way out has
+# something to do first (let go of the headless music player) and there are
+# three doors onto it. The pair is still the assertion: Desktop steps aside,
+# Quit ends the process.
+grep -A2 'if (it.id === "quit")' "$BIGQML" | grep -q "shell.quitNow()"
 check "...and the Quit tile is the one that ends the process" $?
+
+awk '/function quitNow/,/^    }/' "$BIGQML" | grep -q 'releaseProc.running = true'
+check "...which really does end it, once the music is let go" $?
 
 grep -A2 'if (it.id === "desktop")' "$BIGQML" | grep -q "Qt.quit()"
 [ $? != 0 ]
