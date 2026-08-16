@@ -2827,7 +2827,12 @@ struct source {
  * they might subscribe to, then the two that always work. */
 static const struct source SOURCES[] = {
 	{ "plex",    "Plex",          "plex",    true  },
-	{ "ytmusic", "YouTube Music", "ytmusic", false },
+	/* ⚠ QUEUEABLE SINCE 0.1.0-29, and it took a station list to become so.
+	 * cliamp cannot be asked to search YouTube Music from outside its TUI,
+	 * but yt-dlp can enumerate any URL and `cliamp queue` takes what comes
+	 * out — so the contents ARE reachable from here, which is the only
+	 * thing this column has ever meant. See yt_stations(). */
+	{ "ytmusic", "YouTube Music", "ytmusic", true  },
 	{ "spotify", "Spotify",       "spotify", false },
 	{ "local",   "Local files",   NULL,      true  },
 	{ "radio",   "Radio",         "radio",   true  },
@@ -3114,6 +3119,69 @@ static bool music_titles_path(char *buf, size_t n)
 	return cache_path(buf, n, "music-titles.rec");
 }
 
+/*
+ * How a queued track is NAMED in the titles cache — the one home for that
+ * rule, because a writer and a reader that disagree about it produce a lookup
+ * that silently misses and a television showing a URL.
+ *
+ * ⚠ THE QUERY IS DROPPED, AND FOR ONE REASON: a track streamed from a Plex
+ * server carries `?X-Plex-Token=…`, somebody's credential, and nothing here
+ * writes one into a cache file. Which means nothing here may look one up with
+ * it either — hence both sides going through this.
+ *
+ * ⚠ EXCEPT ON YOUTUBE, WHERE THE QUERY IS THE IDENTITY. `?v=<id>` is not
+ * decoration on a YouTube URL, it is which song it is, and dropping it keyed
+ * every track on the site to `https://www.youtube.com/watch` — one bucket, and
+ * a fallback that named the song "watch". Measured exactly that way on the
+ * first station that played. So a YouTube URL is reduced to its video id and
+ * nothing else: no `list=`, no `t=`, no tracking parameters, and still no
+ * credential — YouTube does not put one there.
+ */
+static void music_key(const char *raw, char *out, size_t n)
+{
+	if (!out || !n)
+		return;
+	if (!raw || !*raw) {
+		out[0] = '\0';
+		return;
+	}
+
+	if (strstr(raw, "youtube.com/") || strstr(raw, "youtu.be/")) {
+		/* `?v=` or `&v=`, because a watch URL reached through a
+		 * playlist has the list first often enough. The short form
+		 * youtu.be/<id> carries the id as its PATH instead. */
+		const char *v = strstr(raw, "?v=");
+		if (!v)
+			v = strstr(raw, "&v=");
+		if (v)
+			v += 3;
+		else if ((v = strstr(raw, "youtu.be/")) != NULL)
+			v += 9;
+
+		if (v) {
+			char id[64];
+			size_t i = 0;
+			while (v[i] && v[i] != '&' && v[i] != '?' &&
+			       v[i] != '/' && i < sizeof(id) - 1) {
+				id[i] = v[i];
+				i++;
+			}
+			id[i] = '\0';
+			if (id[0]) {
+				snprintf(out, n,
+					 "https://www.youtube.com/watch?v=%s",
+					 id);
+				return;
+			}
+		}
+	}
+
+	snprintf(out, n, "%s", raw);
+	char *q = strchr(out, '?');
+	if (q)
+		*q = '\0';
+}
+
 /* Remember `path` is called `title`, appended to whatever is already known.
  * Called once per track by the queueing paths below. */
 static void music_title_remember(FILE *f, const char *path, const char *title)
@@ -3199,24 +3267,38 @@ static void music_read(char *state, size_t sn, char *title, size_t tn,
 		char raw[512] = "";
 		json_str(tr ? tr : json, NULL, "path", raw, sizeof(raw));
 
-		/* ⚠ THE KEY IS THE PATH WITHOUT ITS QUERY, and both sides of
-		 * the lookup have to agree on that. The query is where a Plex
-		 * token lives, so nothing here writes one into a cache file —
-		 * which means nothing here may look one up with it either. */
+		/* ⚠ THE KEY IS music_key's ANSWER AND NOTHING ELSE, because
+		 * both sides of the lookup have to agree on it. It used to be
+		 * spelled out here — strip everything from the `?` — and that
+		 * is the rule that keyed every YouTube track to
+		 * `https://www.youtube.com/watch`. */
 		char keyed[512];
-		snprintf(keyed, sizeof(keyed), "%s", raw);
-		char *q = strchr(keyed, '?');
-		if (q)
-			*q = '\0';
+		music_key(raw, keyed, sizeof(keyed));
 
 		if (title) {
 			json_str(tr ? tr : json, NULL, "title", title, tn);
-			/* A title that IS the path is cliamp saying it has no
-			 * name for this track — the queued case. Anything else
-			 * (a radio station, a local file it knows) is its own
-			 * answer and is left alone. */
-			if (raw[0] && strcmp(title, raw) == 0 &&
-			    !music_title_lookup(keyed, title, tn))
+
+			/*
+			 * ⚠ WHAT WE WROTE DOWN WINS, AND IT HAS TO BE ASKED
+			 * FIRST.
+			 *
+			 * This used to consult the cache only when cliamp's
+			 * title was character-for-character the path — its way
+			 * of saying it has no name for a queued track. That
+			 * test held for Plex and for local files and is FALSE
+			 * for YouTube: cliamp names such a track from the last
+			 * segment of its URL, so every song off a station
+			 * arrived on the television called `watch`. Measured
+			 * on the first station that played.
+			 *
+			 * The cache only ever holds tracks THIS FILE queued,
+			 * with the names their source gave them, so a hit is
+			 * always the better answer. A miss leaves whatever
+			 * cliamp said — a radio station, or a local file it
+			 * knows — exactly as before.
+			 */
+			if (!music_title_lookup(keyed, title, tn) &&
+			    raw[0] && strcmp(title, raw) == 0)
 				music_title_fallback(keyed, title, tn);
 		}
 		/* ⚠ The path is recorded too, and it is the one field that can
@@ -3518,13 +3600,10 @@ static int plex_play_album(const char *key)
 
 		/* What the television will call it. cliamp reports a queued
 		 * track's path as its title; this is the only place that knows
-		 * the real one. ⚠ Keyed WITHOUT the query, which is where the
-		 * token is — see music_read(). */
+		 * the real one. ⚠ Keyed through music_key(), which is where
+		 * the rule about the token in the query lives. */
 		char keyed[SYN_PATH];
-		snprintf(keyed, sizeof(keyed), "%s", what);
-		char *q = strchr(keyed, '?');
-		if (q)
-			*q = '\0';
+		music_key(what, keyed, sizeof(keyed));
 
 		char shown[SYN_PATH];
 		if (artist[0])
@@ -3709,6 +3788,472 @@ static int local_queue(void)
 	return EX_OK;
 }
 
+/* ── YouTube Music, without an account ───────────────────────────────────── */
+
+/*
+ * Stations, so YouTube Music PLAYS THROUGH THE TELEVISION rather than opening a
+ * music player somebody then has to drive with a d-pad.
+ *
+ * ── ⚠ AND IT NEEDS NO CREDENTIALS, WHICH IS THE WHOLE REASON THIS EXISTS ────
+ *
+ * The row used to dead-end at cliamp's own interface because browsing YouTube
+ * Music goes through the Data API, and cliamp v1.63.2 has no credentials to
+ * reach it with — see ytmusic_credentialed(). That is true of BROWSING and of
+ * nothing else. Measured on this machine, with no client ID anywhere:
+ *
+ *     yt-dlp --flat-playlist --print "%(title)s" --print "%(url)s" \
+ *            "ytsearch3:daft punk one more time"
+ *     → three titles and three watch URLs, exit 0
+ *
+ *     cliamp queue "https://www.youtube.com/watch?v=…"
+ *     → exit 0, and the player's `total` went 11 → 12
+ *
+ * So the two halves a television needs — find something, and play it — are both
+ * reachable without an account. resolve.go sends every YouTube URL through
+ * yt-dlp and the native client, neither of which ever sees an OAuth token. The
+ * account buys SEARCH INSIDE CLIAMP'S TUI, and this file does not need it.
+ *
+ * ── what a station IS ───────────────────────────────────────────────────────
+ *
+ * One line of ~/.config/syn-arcade/ytmusic.list: a URL, a tab, and what to call
+ * it. A playlist, an album, a mix or a single track — anything yt-dlp can
+ * enumerate, which is the same question as "can cliamp play it".
+ *
+ * ⚠ EXPANDED HERE RATHER THAN HANDED OVER WHOLE, and the reason is the title.
+ * cliamp reports a queued track's title as its PATH (see music_read), so a
+ * playlist queued as one URL plays perfectly and the television says
+ * `https://music.youtube.com/playlist?list=…` for twenty minutes. Enumerating
+ * it means every track has a name to remember, exactly as the Plex and local
+ * paths already do.
+ */
+#define YT_MAX	   60		/* tracks queued from one station           */
+#define YT_FIND	   12		/* results a search comes back with         */
+#define YT_TIMEOUT 25		/* seconds — a search crosses the internet  */
+
+static bool yt_stations_path(char *buf, size_t n)
+{
+	return config_path(buf, n, "syn-arcade/ytmusic.list");
+}
+
+/*
+ * Ask yt-dlp to enumerate something, into two parallel arrays.
+ *
+ * `spec` is either a URL or `ytsearchN:<words>` — one code path, because
+ * "expand this playlist" and "find me some songs" are the same question to
+ * yt-dlp and should not be two parsers here.
+ *
+ * ⚠ TWO `--print` FLAGS RATHER THAN ONE WITH A SEPARATOR IN IT. A title is
+ * somebody else's text and may contain any delimiter that could be chosen —
+ * tabs and pipes included. Two flags print two LINES per result, so the split
+ * is the newline yt-dlp puts there itself and no title can forge it.
+ *
+ * ⚠ `--flat-playlist`, so a playlist is listed rather than each entry being
+ * fetched. Without it this is one HTTP round trip per track and a station takes
+ * minutes to start.
+ *
+ * ⚠ `%(webpage_url)s`, NOT `%(url)s`, and the difference is silent. `url` is
+ * only filled in for entries of a FLAT PLAYLIST; asked of a single video it
+ * prints the literal string `NA`. Measured: `yt add <a watch URL>` resolved its
+ * title perfectly and stored `NA` beside it, which is a station that lists
+ * correctly and plays nothing. `webpage_url` is right for both shapes.
+ *
+ * ⚠ AND `--playlist-end`, because the cap has to be at the SOURCE. A YouTube
+ * mix (`list=RD<videoid>` — the endless station a track seeds, and the closest
+ * thing here to radio) enumerates 661 entries; taking the first sixty AFTER
+ * fetching them all is sixty tracks' worth of music behind ten times the wait.
+ */
+static int yt_enumerate(const char *spec, char titles[][256],
+			char urls[][SYN_PATH], int max)
+{
+	/* ⚠ The THIRD thing in this file that touches the internet, and so the
+	 * third that has to ask. A suite that reached YouTube would pass or
+	 * fail on whether the building had DNS that morning — and would be
+	 * asserting on somebody else's search results. */
+	if (!net_allowed())
+		return 0;
+
+	char end[16];
+	snprintf(end, sizeof(end), "%d", max);
+
+	char *out = run_capture((char *const[]){
+		(char *)"yt-dlp", (char *)"--flat-playlist",
+		(char *)"--no-warnings", (char *)"--ignore-errors",
+		(char *)"--playlist-end", end,
+		(char *)"--print", (char *)"%(title)s",
+		(char *)"--print", (char *)"%(webpage_url)s",
+		(char *)spec, NULL }, YT_TIMEOUT);
+	if (!out)
+		return 0;
+
+	int n = 0;
+	bool want_url = false;
+	char *save = NULL;
+	for (char *ln = strtok_r(out, "\n", &save); ln && n < max;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (!*t)
+			continue;
+
+		if (!want_url) {
+			snprintf(titles[n], 256, "%s", t);
+			want_url = true;
+			continue;
+		}
+
+		/* ⚠ A URL IS THE ONLY THING THAT COUNTS AS THE SECOND LINE.
+		 * yt-dlp writes its own notes to stdout on occasion, and a
+		 * pair knocked out of step turns every row after it into a
+		 * title pointing at somebody else's song. */
+		if (strncmp(t, "http", 4) != 0) {
+			snprintf(titles[n], 256, "%s", t);
+			continue;
+		}
+		snprintf(urls[n], SYN_PATH, "%s", t);
+		want_url = false;
+		n++;
+	}
+	free(out);
+	return n;
+}
+
+/*
+ * The stations, as rows.
+ *
+ * ⚠ A MISSING FILE IS NOT AN ERROR, it is a machine nobody has added a station
+ * to yet — which is every machine on the day it is installed. It says how to
+ * add one rather than answering an empty list, because an empty panel on a
+ * television is indistinguishable from a broken button.
+ */
+static int yt_stations(bool rec)
+{
+	char path[SYN_PATH];
+	char *text = NULL;
+	if (yt_stations_path(path, sizeof(path)))
+		text = read_file(path);
+
+	if (rec)
+		rec_row(3, "id", "name", "note");
+
+	int n = 0;
+	if (text) {
+		char *save = NULL;
+		for (char *ln = strtok_r(text, "\n", &save); ln;
+		     ln = strtok_r(NULL, "\n", &save)) {
+			char *t = trim(ln);
+			if (!*t || *t == '#')
+				continue;
+
+			/* URL first, name after a tab. The URL cannot contain
+			 * one and a name may contain anything else, which is
+			 * why the split is this way round. */
+			char *tab = strchr(t, '\t');
+			char *name = NULL;
+			if (tab) {
+				*tab = '\0';
+				name = trim(tab + 1);
+			}
+
+			char id[16];
+			snprintf(id, sizeof(id), "%d", n + 1);
+			if (rec)
+				rec_row(3, id, name && *name ? name : t, t);
+			else
+				printf("%-4s %-40s %s\n", id,
+				       name && *name ? name : t, t);
+			n++;
+		}
+		free(text);
+	}
+
+	if (!n && !rec)
+		printf("no YouTube Music stations yet — add one with\n"
+		       "    syn-arcade big music yt add <url>\n"
+		       "where <url> is a playlist, album, mix or track.\n");
+	return n ? EX_OK : EX_EMPTY;
+}
+
+/* The URL of station `id`, which is its 1-based position in the file. */
+static bool yt_station_url(const char *id, char *out, size_t n)
+{
+	int want = id ? atoi(id) : 0;
+	if (want < 1)
+		return false;
+
+	char path[SYN_PATH];
+	if (!yt_stations_path(path, sizeof(path)))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool found = false;
+	int i = 0;
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln && !found;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (!*t || *t == '#')
+			continue;
+		char *tab = strchr(t, '\t');
+		if (tab)
+			*tab = '\0';
+		if (++i == want) {
+			snprintf(out, n, "%s", trim(t));
+			found = true;
+		}
+	}
+	free(text);
+	return found;
+}
+
+/*
+ * Play something: a station id, or a URL directly.
+ *
+ * ⚠ THE PLAYER IS RESTARTED FIRST, for the reason plex_play_album gives in
+ * full: cliamp's `queue` APPENDS and there is no verb that clears a queue, so
+ * without this a second station goes behind the first and the television goes
+ * on playing what it was already playing. From four metres that is a button
+ * that did nothing.
+ */
+static int yt_play(const char *what)
+{
+	char url[SYN_PATH];
+	if (!what || !*what) {
+		fputs("syn-arcade: nothing to play\n", stderr);
+		return EX_USAGE;
+	}
+	if (strncmp(what, "http", 4) == 0)
+		snprintf(url, sizeof(url), "%s", what);
+	else if (!yt_station_url(what, url, sizeof(url))) {
+		fprintf(stderr, "syn-arcade: no station %s — `big music yt` "
+				"lists them\n", what);
+		return EX_USAGE;
+	}
+
+	if (!have("yt-dlp")) {
+		fputs("syn-arcade: yt-dlp is not installed, so nothing on "
+		      "YouTube can be resolved — synpkg install yt-dlp\n",
+		      stderr);
+		return EX_FAIL;
+	}
+
+	static char titles[YT_MAX][256];
+	static char urls[YT_MAX][SYN_PATH];
+	int n = yt_enumerate(url, titles, urls, YT_MAX);
+	if (!n) {
+		fputs("syn-arcade: nothing playable came back from that URL\n",
+		      stderr);
+		return EX_EMPTY;
+	}
+
+	/*
+	 * ⚠ THE SOURCE IS SET FIRST, AND IT IS NOT BOOKKEEPING — IT IS WHAT
+	 * MAKES THE QUEUE EMPTY.
+	 *
+	 * `--provider` is a start-up flag, so the restart below comes up on
+	 * whatever `music_source` says. Measured on this machine, on a fresh
+	 * player: `--provider radio` arrives with ELEVEN stations already
+	 * queued and `--provider ytmusic` with nothing at all. So a station
+	 * played while the setting still said radio queued sixty YouTube
+	 * tracks at positions 12..71 and `toggle` played Lofi Stream — the
+	 * press worked perfectly and the television played internet radio.
+	 *
+	 * Writing it is also the honest thing: playing a YouTube Music station
+	 * IS the machine's music coming from YouTube Music, and the picker
+	 * would say so the moment it was next opened either way.
+	 */
+	const struct source *yt = source_by_id("ytmusic");
+	if (yt && music_source() != yt)
+		big_conf_set("music_source", yt->id);
+
+	if (!music_restart()) {
+		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* Truncated, not appended: this map describes the queue, and the queue
+	 * was just replaced. Same contract as the Plex path. */
+	char cache[SYN_PATH];
+	FILE *tf = NULL;
+	if (music_titles_path(cache, sizeof(cache)) && mkdir_parents(cache) == 0)
+		tf = fopen(cache, "w");
+
+	/*
+	 * ⚠ THE FIRST TRACK IS QUEUED AND STARTED BEFORE THE REST ARE QUEUED,
+	 * and on a television that is the difference between a button that
+	 * works and a button that appears not to.
+	 *
+	 * A station is up to YT_MAX tracks and each one is its own `cliamp
+	 * queue` — a process apiece, because there is no verb that takes a
+	 * list. Queueing the lot first means a quarter of a minute of silence
+	 * after the press, which from four metres is indistinguishable from
+	 * nothing having happened; the natural response is to press it again,
+	 * and now two stations are loading. Started first, the music is playing
+	 * while the rest of the queue fills in behind it.
+	 *
+	 * ⚠ And its title is remembered BEFORE the toggle, so the first thing
+	 * Now Playing says is the track rather than the URL.
+	 */
+	int queued = 0;
+	for (int i = 0; i < n; i++) {
+		char *out = run_capture((char *const[]){
+			(char *)"cliamp", (char *)"queue", urls[i], NULL }, 15);
+		free(out);
+
+		char keyed[SYN_PATH];
+		music_key(urls[i], keyed, sizeof(keyed));
+		music_title_remember(tf, keyed, titles[i]);
+		queued++;
+
+		/* `toggle`, not `play` — a player that has just started is
+		 * `stopped`, and resume does nothing from there. */
+		if (i == 0) {
+			if (tf)
+				fflush(tf);
+			music_cmd("toggle");
+		}
+	}
+	if (tf)
+		fclose(tf);
+
+	/*
+	 * ⚠ AND ASKED AGAIN IF IT DID NOT TAKE. The early `toggle` above is
+	 * sent one queue-command after the player came up, and once in three
+	 * runs here it landed while cliamp was still resolving the first track:
+	 * the toggle did nothing, the remaining fifty-nine tracks queued
+	 * perfectly, and the machine sat at `stopped` for as long as it was
+	 * left. A station that starts most of the time is the worst kind of
+	 * button, because the answer to it is to press it again — which
+	 * reloads the whole queue.
+	 *
+	 * By here the queue is full and several seconds have passed, so this
+	 * is the same question with the race gone. ⚠ Conditional, and it has
+	 * to be: `toggle` from `playing` is PAUSE, so sending it unconditially
+	 * would stop the music it just started.
+	 */
+	/*
+	 * ⚠ AND NOTHING ASKS AGAIN HERE, WHICH IS DELIBERATE AND WAS LEARNED
+	 * THE EXPENSIVE WAY.
+	 *
+	 * The obvious belt-and-braces — read the state once the queue is full,
+	 * and toggle again if it is not `playing` — was written, and it turned
+	 * a reliable station into one that started about half the time.
+	 *
+	 * `toggle` from `playing` is PAUSE, and the state LAGS the command:
+	 * measured second by second, the queue finishes at t+4s and cliamp
+	 * does not report `playing` until t+6s, because it is still resolving
+	 * the first track through yt-dlp. So the check ran two seconds early
+	 * EVERY time, always saw `stopped`, and always sent a second toggle —
+	 * which cancelled the start it was meant to insure. Whether the music
+	 * played came down to which of the two toggles cliamp processed first.
+	 *
+	 * Measured both ways round, four runs each: with the second toggle,
+	 * two of four never played; without it, four of four played by t+6s.
+	 *
+	 * "Not playing yet" is not "did not take". A checker for this would
+	 * have to WAIT for the state to settle, and there is nothing for it to
+	 * fix once it has.
+	 */
+
+	printf("queued %d track%s\n", queued, queued == 1 ? "" : "s");
+	return EX_OK;
+}
+
+/*
+ * Find something, as rows the television can draw.
+ *
+ * ⚠ NOT A ROW THAT PLAYS BY ITSELF. The results are `id = url`, so choosing one
+ * is `big music yt <url>` and goes through exactly the path a station does.
+ */
+static int yt_search(const char *query, bool rec)
+{
+	if (!query || !*query) {
+		fputs("syn-arcade: big music yt search takes something to "
+		      "search for\n", stderr);
+		return EX_USAGE;
+	}
+	if (!have("yt-dlp")) {
+		fputs("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* ⚠ NOT A SHELL STRING. The query is somebody's typing and goes into
+	 * ONE argv element, so a quote or a semicolon in a song title is a
+	 * character in a search rather than something yt-dlp's caller has to
+	 * escape. */
+	char spec[512];
+	snprintf(spec, sizeof(spec), "ytsearch%d:%s", YT_FIND, query);
+
+	static char titles[YT_FIND][256];
+	static char urls[YT_FIND][SYN_PATH];
+	int n = yt_enumerate(spec, titles, urls, YT_FIND);
+
+	if (rec)
+		rec_row(3, "id", "name", "note");
+	for (int i = 0; i < n; i++) {
+		if (rec)
+			rec_row(3, urls[i], titles[i], "");
+		else
+			printf("%-60s %s\n", titles[i], urls[i]);
+	}
+
+	if (!n && !rec)
+		puts("nothing came back for that");
+	return n ? EX_OK : EX_EMPTY;
+}
+
+/*
+ * Keep one.
+ *
+ * ⚠ THE NAME IS RESOLVED RATHER THAN ASKED FOR. A station whose name has to be
+ * typed is a station nobody adds, and yt-dlp already knows what the thing is
+ * called — one `--flat-playlist` enumeration, first title, done.
+ */
+static int yt_add(const char *url)
+{
+	if (!url || strncmp(url, "http", 4) != 0) {
+		fputs("syn-arcade: big music yt add takes a URL\n", stderr);
+		return EX_USAGE;
+	}
+
+	char name[320] = "";	/* title + the " — mix" suffix */
+	if (have("yt-dlp")) {
+		static char titles[1][256];
+		static char urls[1][SYN_PATH];
+		if (yt_enumerate(url, titles, urls, 1) == 1) {
+			/* ⚠ A MIX IS NAMED AFTER ITS SEED, so a track and the
+			 * endless station it seeds resolve to the SAME title —
+			 * two rows on the television with identical names and
+			 * very different behaviour. `list=RD…` is YouTube's own
+			 * marker for the generated station, so the row can say
+			 * which one it is. */
+			if (strstr(url, "list=RD"))
+				snprintf(name, sizeof(name), "%s — mix",
+					 titles[0]);
+			else
+				snprintf(name, sizeof(name), "%s", titles[0]);
+		}
+	}
+
+	char path[SYN_PATH];
+	if (!yt_stations_path(path, sizeof(path)) || mkdir_parents(path) != 0) {
+		fputs("syn-arcade: could not open the station list\n", stderr);
+		return EX_FAIL;
+	}
+
+	FILE *f = fopen(path, "a");
+	if (!f) {
+		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		return EX_FAIL;
+	}
+	fprintf(f, "%s\t%s\n", url, name[0] ? name : url);
+	fclose(f);
+
+	printf("added %s\n", name[0] ? name : url);
+	return EX_OK;
+}
+
 /* ── the source picker ───────────────────────────────────────────────────── */
 
 /*
@@ -3867,20 +4412,17 @@ static bool ytmusic_credentialed(void)
  */
 static const char *source_action(const struct source *s)
 {
+	/* ⚠ YouTube Music ANSWERS BEFORE THE QUEUEABLE SPLIT, because the one
+	 * thing it needs is not a queue and not an account: it is yt-dlp, which
+	 * is what resolves a URL into something cliamp can play. With it the
+	 * row opens this package's own station list; without it there is
+	 * nothing to open and the row offers to install it. The OAuth client
+	 * gates cliamp's own SEARCH and nothing here — see
+	 * ytmusic_credentialed(), and the note below that says so. */
+	if (strcmp(s->id, "ytmusic") == 0)
+		return have("yt-dlp") ? "yt" : "install";
+
 	if (!s->queueable) {
-		/* ⚠ TWO GATES ON THIS ONE ROW, IN ORDER, AND THE SECOND WAS
-		 * MISSING. yt-dlp is what PLAYS a YouTube URL and the OAuth
-		 * client is what BROWSES for one; having the first has never
-		 * implied the second. Without this the row went straight from
-		 * "press to install yt-dlp" to "opens cliamp" — and opening
-		 * cliamp showed no YouTube Music at all. See
-		 * ytmusic_credentialed() for the measurement. */
-		if (strcmp(s->id, "ytmusic") == 0) {
-			if (!have("yt-dlp"))
-				return "install";
-			if (!ytmusic_credentialed())
-				return "setup";
-		}
 		if (strcmp(s->id, "spotify") == 0 &&
 		    !cliamp_conf_section("[spotify]"))
 			return "setup";
@@ -3931,23 +4473,26 @@ static int big_music_sources(bool rec)
 		else if (strcmp(act, "install") == 0)
 			note = "needs yt-dlp — press to install it";
 
-		/* ⚠ THE NOTE IS PER SOURCE, NOT PER ACTION. Both of these are
-		 * `setup` and they are not the same errand: one is a password
-		 * on a subscription, the other is a pair of keys out of a
-		 * Google Cloud project. A note keyed on the action alone told
-		 * somebody setting up YouTube Music that they needed Spotify
-		 * Premium.
-		 *
-		 * ⚠ AND IT NAMES THE MODE, because the wizard's own default is
-		 * the one that does not work here: "Use built-in credentials
-		 * (recommended)" writes `enabled = true` against an empty
-		 * credential pool, and the row would come straight back to
-		 * this note having looked like it succeeded. */
+		/* ⚠ THE NOTE IS PER SOURCE, NOT PER ACTION. `setup` is only
+		 * Spotify's now, but it was briefly both, and a note keyed on
+		 * the action alone told somebody setting up YouTube Music that
+		 * they needed Spotify Premium. Keyed on the source it cannot
+		 * say that again whatever else grows a `setup`. */
 		else if (strcmp(act, "setup") == 0)
-			note = strcmp(s->id, "ytmusic") == 0
-				? "press to sign in — pick \"my own OAuth "
-				  "credentials\", not the built-in ones"
-				: "press to sign in — needs Spotify Premium";
+			note = strcmp(s->id, "spotify") == 0
+				? "press to sign in — needs Spotify Premium"
+				: "press to sign in";
+
+		/* ⚠ THE ONE THING THIS ROW STILL CANNOT DO, said on the row
+		 * rather than discovered by pressing it. Stations play here
+		 * with no account at all; searching INSIDE cliamp goes through
+		 * the Data API, and cliamp v1.63.2 has no credentials to reach
+		 * it with. Somebody who wants that has somewhere to go, and
+		 * somebody who does not is not being sent to a wizard for a
+		 * row that already works. */
+		else if (strcmp(act, "yt") == 0 && !ytmusic_credentialed())
+			note = "stations play here — cliamp's own search "
+			       "needs an OAuth client";
 		else if (!s->queueable)
 			note = "opens cliamp";
 
@@ -4198,6 +4743,7 @@ static int big_music_setup(void)
  * the only other thing that parses an argument list. */
 static const char *first_operand(int argc, char **argv);
 static const char *second_operand(int argc, char **argv);
+static const char *third_operand(int argc, char **argv);
 
 /* ⚠ The verb is the first OPERAND, not argv[0], and `rec` is the caller's.
  * `--rec` is a global flag everywhere else in this command — `big music --rec
@@ -4214,8 +4760,8 @@ static int big_music(int argc, char **argv, bool rec)
 	 * sends somebody to edit a config file over a missing letter. */
 	static const char *const verbs[] = { "status", "play", "pause",
 					     "toggle", "next", "prev", "stop",
-					     "vis", "source", "plex", "browse",
-					     "install", "setup",
+					     "vis", "source", "plex", "yt",
+					     "browse", "install", "setup",
 					     NULL };
 	bool known = false;
 	for (int i = 0; verbs[i] && !known; i++)
@@ -4254,6 +4800,28 @@ static int big_music(int argc, char **argv, bool rec)
 	if (!strcmp(verb, "plex")) {
 		const char *key = second_operand(argc, argv);
 		return key ? plex_play_album(key) : plex_albums(rec);
+	}
+
+	/*
+	 * YouTube Music. Same shape as `plex` — a list, and playing one off it
+	 * — with two more for keeping the list, because unlike a Plex server
+	 * there is nothing on the other end that already knows what somebody
+	 * wants to listen to.
+	 *
+	 * ⚠ `search` and `add` BEFORE the fall-through, and the fall-through
+	 * takes a station id OR a URL. A search result's id IS its URL, so the
+	 * shell plays one with exactly the command it plays a station with and
+	 * there is no second path to keep in step.
+	 */
+	if (!strcmp(verb, "yt")) {
+		const char *a = second_operand(argc, argv);
+		if (!a)
+			return yt_stations(rec);
+		if (!strcmp(a, "search"))
+			return yt_search(third_operand(argc, argv), rec);
+		if (!strcmp(a, "add"))
+			return yt_add(third_operand(argc, argv));
+		return yt_play(a);
 	}
 
 	/* cliamp's own interface, for the sources nothing else can reach. */
@@ -6273,6 +6841,24 @@ static const char *second_operand(int argc, char **argv)
 		if (seen)
 			return argv[i];
 		seen = true;
+	}
+	return NULL;
+}
+
+/* And the one after THAT — `big music yt search <words>`, `big music yt add
+ * <url>`. ⚠ It is one operand, not the rest of the line: a search is passed as
+ * a single argv element by everything that calls it, which is what keeps a
+ * quote or a semicolon in a song title a character rather than an escaping
+ * problem for the caller. */
+static const char *third_operand(int argc, char **argv)
+{
+	int seen = 0;
+	for (int i = 0; i < argc; i++) {
+		if (argv[i][0] == '-')
+			continue;
+		if (seen == 2)
+			return argv[i];
+		seen++;
 	}
 	return NULL;
 }

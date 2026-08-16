@@ -2086,8 +2086,14 @@ if [ "$1" = status ]; then
     if [ "$st" = off ]; then
         printf '{"ok":false,"error":"not running"}'
     else
+        # ⚠ TITLE AND PATH ARE SEPARATE, and the default is that they are the
+        # same string — which is cliamp saying it has no name for a queued
+        # track, and was the only case this stub could produce. It is NOT the
+        # only case that happens: for a YouTube URL cliamp invents a title from
+        # the last path segment ("watch"), and a stub that could not say that
+        # is a stub that passed while every song on a station was called watch.
         printf '{"ok":true,"state":"%s","track":{"title":"%s","path":"%s"}}' \
-            "$st" "$CLIAMP_TRACK" "$CLIAMP_TRACK"
+            "$st" "${CLIAMP_TITLE:-$CLIAMP_TRACK}" "$CLIAMP_TRACK"
     fi
     exit 0
 fi
@@ -2098,6 +2104,7 @@ exit 0
 EOF
 chmod +x "$MSTUB/cliamp"
 export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK="" CLIAMP_STATE="playing"
+export CLIAMP_TITLE=""
 export CLIAMP_UP="$T/cliamp.up"
 : > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP"
 
@@ -2273,70 +2280,73 @@ yt() { ( PATH="$MSTUB:$STUB:$NOYT"; export PATH; says "$SA" big music "$@" ); }
 # ── ⚠ AND yt-dlp WAS NEVER THE WHOLE STORY, WHICH IS THE SECOND DEAD END ─────
 #
 # Reported from the sofa after the install row worked: "it just says open with
-# cliamp but cliamp never got setup and I don't see how". Both halves true
-# again, and this time the row was the one lying.
+# cliamp but cliamp never got setup and I don't see how".
 #
 # yt-dlp is what PLAYS a YouTube URL; a Google OAuth desktop client is what
-# BROWSES for one, and the row's `browse` action is the second of those. cliamp
-# v1.63.2 ships an EMPTY fallback credential pool
-# (external/ytmusic/fallback.go: `var fallbackCredentials []oauthCreds`), so
-# with no client_id/client_secret in config.toml it prints
+# BROWSES for one, and `browse` was the second of those. cliamp v1.63.2 ships an
+# EMPTY fallback credential pool (external/ytmusic/fallback.go:
+# `var fallbackCredentials []oauthCreds`), so with no client_id/client_secret in
+# config.toml it prints
 #
 #     YouTube: no credentials available (configure client_id/client_secret …)
 #
 # to a stderr nobody on a sofa reads, and registers no YouTube provider at all.
 # Measured against the installed binary in a config directory of its own.
 #
-# So the gate is the CREDENTIALS, not the section — and these four assertions
-# are the four states a machine can be in.
+# ⚠ SO THE ROW STOPPED DEPENDING ON THAT ALTOGETHER. Since 0.1.0-29 YouTube
+# Music has its own STATIONS here — yt-dlp enumerates any URL and `cliamp queue`
+# takes what comes out, neither of which ever sees a credential — so the action
+# is `yt` and the only thing it needs is yt-dlp. What the OAuth client still
+# gates is cliamp's own search, which is what the note says.
 rm -f "$CLIAMPCONF"
 yt source --rec |
-    awk -F'\t' '$1 == "ytmusic" && $4 == "setup" { f = 1 } END { exit !f }'
-check "yt-dlp installed but no OAuth client is SETUP, not browse" $?
+    awk -F'\t' '$1 == "ytmusic" && $4 == "yt" { f = 1 } END { exit !f }'
+check "with yt-dlp the row is this package's own stations, not cliamp" $?
 
-# ⚠ THE WIZARD'S OWN DEFAULT, and it is the state that used to look ready.
-# "Use built-in credentials (recommended)" writes exactly this and nothing
-# else, against a pool with nothing in it.
+# ⚠ AND IT DOES NOT DEPEND ON CREDENTIALS, in either direction. The wizard's own
+# default writes exactly this against an empty pool, and it changes nothing here
+# — which is the point: stations play without an account at all.
 printf '[ytmusic]\nenabled = true\n' > "$CLIAMPCONF"
 yt source --rec |
-    awk -F'\t' '$1 == "ytmusic" && $4 == "setup" { f = 1 } END { exit !f }'
+    awk -F'\t' '$1 == "ytmusic" && $4 == "yt" { f = 1 } END { exit !f }'
 # ⚠ NO BACKTICKS IN A CHECK LABEL. They are a command substitution inside the
 # double quotes, and the arguments to `check` expand LEFT TO RIGHT — so the
 # substitution runs and replaces $? before the second argument is expanded.
 # Written as "`enabled = true` alone", this assertion reported the exit status
 # of "enabled: command not found" (127) and failed against passing code.
-check "...and enabled = true alone is not set up, whatever the wizard says" $?
+check "...whatever enabled = true does or does not mean to cliamp" $?
 
-yt source | grep -q 'my own OAuth credentials'
-check "...so the row names the mode that works, not just 'sign in'" $?
+# The note is the one place the credentials still matter, and it is a note
+# rather than a gate: somebody who wants cliamp's own search is told where to
+# go, and somebody who does not is not sent to a wizard for a row that works.
+rm -f "$CLIAMPCONF"
+yt source | grep -q "cliamp's own search"
+check "...and the row says what an OAuth client would still buy" $?
 
 # ⚠ A KEY THAT IS PRESENT AND EMPTY IS NOT A CREDENTIAL. Cheap to get wrong —
 # a check for the key rather than for its value passes on this file.
 printf '[ytmusic]\nclient_id     = ""\nclient_secret = ""\n' > "$CLIAMPCONF"
-yt source --rec |
-    awk -F'\t' '$1 == "ytmusic" && $4 == "setup" { f = 1 } END { exit !f }'
+yt source | grep -q "cliamp's own search"
 check "...and empty keys are not credentials either" $?
 
-# The other side, so none of the above passes against a row that says `setup`
-# unconditionally.
+# The other side, so the note is not simply always printed.
 printf '[ytmusic]\nenabled = true\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
     > "$CLIAMPCONF"
-yt source --rec |
-    awk -F'\t' '$1 == "ytmusic" && $4 == "browse" { f = 1 } END { exit !f }'
-check "...and a real OAuth client is what finally opens cliamp" $?
+ytnote=$(yt source | grep '^ytmusic')
+case "$ytnote" in *"cliamp's own search"*) false ;; *) true ;; esac
+check "...and a machine with an OAuth client is not told to get one" $?
 
 # ⚠ `[yt]` and `[youtube]` are the SAME SECTION to cliamp (config.go normalises
-# all three), so a machine set up under either name must not be sent back to
-# the wizard by us.
+# all three), so a machine set up under either name must be read as set up.
 printf '[youtube]\nclient_id     = "1234.apps.googleusercontent.com"\nclient_secret = "s3cr3t"\n' \
     > "$CLIAMPCONF"
-yt source --rec |
-    awk -F'\t' '$1 == "ytmusic" && $4 == "browse" { f = 1 } END { exit !f }'
+ytnote=$(yt source | grep '^ytmusic')
+case "$ytnote" in *"cliamp's own search"*) false ;; *) true ;; esac
 check "...under [ytmusic], [youtube] or [yt], as cliamp reads them" $?
 
-# ⚠ AND THE NOTE IS PER SOURCE, NOT PER ACTION. Both services answer `setup`
-# and they are not the same errand; the note used to be keyed on the action, so
-# setting up YouTube Music said "needs Spotify Premium".
+# ⚠ AND THE NOTE IS PER SOURCE, NOT PER ACTION. It was keyed on the action, and
+# `setup` was briefly both services — so setting up YouTube Music said "needs
+# Spotify Premium".
 #
 # ⚠ Captured rather than piped into `grep -q`. This is the negative half, and
 # `grep -q` exits the instant it matches — which closes the pipe under the
@@ -2370,6 +2380,177 @@ check "the installer passes --noconfirm BEFORE the verb" $?
 ( PATH="$MSTUB:$STUB:$NOYT"; export PATH
   says "$SA" big music install ytmusic ) | grep -q "already installed"
 check "installing what is already there is a sentence, not a terminal" $?
+
+# ── YouTube Music stations, which is what "plays like the radio does" means ──
+#
+# ⚠ THE POINT OF THE WHOLE THING: no account, no OAuth client, no cliamp TUI.
+# yt-dlp enumerates a URL and `cliamp queue` takes what comes out — measured on
+# this machine with no credentials anywhere, a search returned titles and watch
+# URLs and a queued URL took the player's total from 11 to 12.
+#
+# ⚠ yt-dlp IS STUBBED HERE, and it is not only about the network being off. A
+# suite that really searched YouTube would be asserting on somebody else's
+# search results, which change hourly. The stub answers in yt-dlp's own shape:
+# one line per --print flag, title then URL.
+YTB="$T/yt-bin"
+mkdir -p "$YTB"
+cat > "$YTB/yt-dlp" <<'STUB'
+#!/bin/sh
+# The spec is the last argument. Two lines per result, title then URL, exactly
+# as `--print "%(title)s" --print "%(webpage_url)s"` prints them.
+for last in "$@"; do :; done
+case "$last" in
+    ytsearch*) printf 'Found One\nhttps://www.youtube.com/watch?v=aaaaaaaaaaa\n'
+               printf 'Found Two\nhttps://www.youtube.com/watch?v=bbbbbbbbbbb\n' ;;
+    *list=RD*) printf 'Seed Track\nhttps://www.youtube.com/watch?v=ccccccccccc\n'
+               printf 'Second Of The Mix\nhttps://www.youtube.com/watch?v=ddddddddddd\n' ;;
+    *)         printf 'One Single Track\nhttps://www.youtube.com/watch?v=eeeeeeeeeee\n' ;;
+esac
+exit 0
+STUB
+chmod +x "$YTB/yt-dlp"
+
+# ⚠ SYN_ARCADE_NO_NET IS TURNED OFF FOR THESE, and only these. yt_enumerate
+# refuses to run at all while it is set — the same seatbelt the news and the
+# server discovery have — so a station test needs it off, and the stub above is
+# what makes that safe.
+ytrun() { ( PATH="$YTB:$MSTUB:$STUB"; export PATH
+            SYN_ARCADE_NO_NET=0; export SYN_ARCADE_NO_NET
+            says "$SA" big music "$@" ); }
+
+YTLIST="$XDG_CONFIG_HOME/syn-arcade/ytmusic.list"
+rm -f "$YTLIST"
+
+# An empty list is not an error, it is a machine nobody has added one to — and
+# it has to say HOW, because an empty panel on a television is a broken button.
+ytrun yt | grep -q 'big music yt add'
+check "an empty station list says how to add one" $?
+
+# ⚠ THE NAME IS RESOLVED, NOT TYPED. A station you have to name is one nobody
+# adds, and yt-dlp already knows what the thing is called.
+ytrun yt add "https://www.youtube.com/watch?v=eeeeeeeeeee" >/dev/null 2>&1
+grep -q 'One Single Track' "$YTLIST"
+check "adding a station resolves its name from yt-dlp" $?
+
+grep -q '^https://www.youtube.com/watch?v=eeeeeeeeeee	' "$YTLIST"
+check "...and stores the URL first, tab, then the name" $?
+
+# ⚠ A MIX IS NAMED AFTER ITS SEED, so without this a track and the endless
+# station it seeds are two rows with the same name and very different
+# behaviour. `list=RD…` is YouTube's own marker for the generated station.
+ytrun yt add "https://www.youtube.com/watch?v=ccccccccccc&list=RDccccccccccc" >/dev/null 2>&1
+grep -q 'Seed Track — mix' "$YTLIST"
+check "...and a mix is not given the same name as its seed track" $?
+
+ytrun yt --rec | awk -F'\t' '$1 == "2" { f = 1 } END { exit !f }'
+check "stations are numbered by their position in the file" $?
+
+# ⚠ A URL IS NOT A STATION ID, and both have to work: a search result's id IS
+# its URL, so the shell plays one with the same command it plays a station
+# with. This is the refusal for neither.
+( PATH="$YTB:$MSTUB:$STUB"; export PATH; "$SA" big music yt 99 >/dev/null 2>&1 )
+[ "$?" = 2 ]
+check "a station number nobody has is a usage error, not silence" $?
+
+# ⚠ COMMENTS AND BLANK LINES SKIPPED — it is a file people edit by hand, and a
+# commented-out station that still counted would renumber every row under it.
+printf '# a note\n\nhttps://www.youtube.com/watch?v=fffffffffff\tKept\n' > "$YTLIST"
+ytrun yt --rec | awk -F'\t' '$1 == "1" && $2 == "Kept" { f = 1 } END { exit !f }'
+check "a hand-edited list may have comments and blank lines" $?
+
+# The refusal that keeps the network off in the rest of the suite.
+#
+# ⚠ Captured, not piped into `grep -q`. Negative assertion, same trap as the
+# note above: `grep -q` closes the pipe the moment it matches and the writer
+# dies of SIGPIPE, which `set -o pipefail` reports as 141 — and 141 is not 0,
+# so a MATCH would read here as "it refused".
+ytoff=$( PATH="$YTB:$MSTUB:$STUB"; export PATH
+         says "$SA" big music yt search "anything" )
+case "$ytoff" in
+    *"Found One"*) false ;;
+    *) true ;;
+esac
+check "a search refuses while SYN_ARCADE_NO_NET is set" $?
+
+ytrun yt search "anything" --rec |
+    awk -F'\t' '$2 == "Found One" { f = 1 } END { exit !f }'
+check "...and finds things with it off, keyed by URL so playing one is one path" $?
+
+ytrun yt search 2>&1 | grep -q "takes something to search for"
+check "...and a search with nothing to search for says so" $?
+
+# ── the key a queued track is remembered under ──────────────────────────────
+#
+# ⚠ `?v=` IS THE IDENTITY ON YOUTUBE, and the rule used to be "strip everything
+# from the ?" — which is right for Plex, where the query is a token nothing here
+# may write into a cache, and wrong for YouTube, where it keyed every song on
+# the site to `https://www.youtube.com/watch`. Measured: the first station that
+# played showed every track called "watch".
+grep -q 'static void music_key' src/big.c
+check "there is exactly one home for how a queued track is keyed" $?
+
+grep -q 'music_key(raw, keyed, sizeof(keyed))' src/big.c
+check "...and the reader goes through it" $?
+
+# ⚠ AND THE BEHAVIOUR, not only the shape. Both halves of the regression are
+# here: the KEY has to keep `?v=`, and the lookup has to be tried even though
+# cliamp DID give the track a title of its own ("watch", off the end of the
+# URL). Either half alone leaves the television naming every song `watch`.
+TITLES="$XDG_CACHE_HOME/syn-arcade/music-titles.rec"
+mkdir -p "$(dirname "$TITLES")"
+printf 'https://www.youtube.com/watch?v=zzzzzzzzzzz\tThe Real Song Name\n' > "$TITLES"
+( CLIAMP_TRACK="https://www.youtube.com/watch?v=zzzzzzzzzzz&list=RDzzzzzzzzzzz"
+  CLIAMP_TITLE="watch"
+  export CLIAMP_TRACK CLIAMP_TITLE
+  music status ) | grep -q 'The Real Song Name'
+check "a queued YouTube track is named from what queued it, not 'watch'" $?
+
+# ⚠ THE OTHER SIDE: a track nothing here queued keeps cliamp's own answer. A
+# radio station has a real name and must not be replaced by a cache miss.
+( CLIAMP_TRACK="http://radio.cliamp.stream/lofi/stream"
+  CLIAMP_TITLE="Lofi Stream"
+  export CLIAMP_TRACK CLIAMP_TITLE
+  music status ) | grep -q 'Lofi Stream'
+check "...and a station cliamp DOES know keeps the name it gave" $?
+rm -f "$TITLES"
+
+[ "$(grep -c 'music_key(' src/big.c)" -ge 4 ]
+check "...as do the writers, rather than spelling the rule out again" $?
+
+# ⚠ AND THE PLEX RULE SURVIVED IT. The token must still never reach the cache.
+grep -q 'X-Plex-Token' src/big.c && ! grep -q 'X-Plex-Token=%s".*titles' src/big.c
+check "...and a Plex token still never reaches the titles cache" $?
+
+# ── and the SHELL has to know about all of it ───────────────────────────────
+#
+# ⚠ THE SECOND-ROSTER TRAP, which is what hid the last one. big.c can answer
+# `yt` in the action column all day; if the QML has no page for it the row
+# does nothing at all, and nothing warns. Each of these is one end of a wire
+# whose other end is asserted above.
+grep -q 'sourceSetProc.next === "yt"' "$BIGQML"
+check "choosing YouTube Music opens the stations page" $?
+
+grep -q 'shell.menuPage === "yt") return shell.ytItems' "$BIGQML"
+check "...which is a page of the same menu, not a second panel" $?
+
+grep -q '"big", "music", "yt", "--rec"' "$BIGQML"
+check "...listed by big.c rather than by a copy of the list here" $?
+
+grep -q 'it.kind === "yt"' "$BIGQML"
+check "...and pressing A on a station plays it" $?
+
+grep -q '"big", "music", "yt", it.id' "$BIGQML"
+check "...through the same verb the id came from" $?
+
+# ⚠ GUARDED ON `running`, like chooseSource and playAlbum. A station takes a
+# few seconds to load, which is exactly long enough to press A twice — and
+# `running = true` on an already-running quickshell Process is a SILENT no-op.
+grep -q 'if (ytPlayProc.running) return' "$BIGQML"
+check "...once, however many times A is pressed" $?
+
+# The empty state is the first thing most people will see on that page.
+grep -q 'No stations yet' "$BIGQML"
+check "an empty stations page says how to add one" $?
 
 # ── the media buttons: whatever is playing, not just cliamp ─────────────────
 #

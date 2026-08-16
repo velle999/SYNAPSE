@@ -212,6 +212,71 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-29: YouTube Music PLAYS on the television now, and needs no ───────
+# ── account to do it ────────────────────────────────────────────────────────
+#
+# 0.1.0-28 stopped the YouTube Music row lying about what it needed. This is
+# the other half: it does the thing.
+#
+# ⚠ THE FACT THE WHOLE RELEASE TURNS ON — the account is for BROWSING, and for
+# nothing else. cliamp's `resolve.go` sends every YouTube URL through yt-dlp
+# and the native client, neither of which ever sees an OAuth token; the Data
+# API is only how its TUI searches. Measured on this machine with no
+# credentials anywhere:
+#
+#     yt-dlp --flat-playlist --print "%(title)s" --print "%(webpage_url)s" \
+#            "ytsearch3:daft punk one more time"     → titles and watch URLs
+#     cliamp queue "https://www.youtube.com/watch?v=…" → the queue went 11 → 12
+#
+# So both halves a television needs — find something, and play it — were
+# reachable all along. `big music yt` is a station list: one line of
+# ~/.config/syn-arcade/ytmusic.list per station, a URL and a name, and a
+# station is anything yt-dlp can enumerate — a playlist, an album, a track, or
+# a `list=RD…` MIX, which is YouTube's own endless station and the closest
+# thing here to radio. Choosing one queues it and starts it through exactly the
+# path a Plex album takes, and the Start menu grows a page for it.
+#
+# `big music yt search <words>` is there too, and returns rows whose id IS the
+# URL — so the shell will play a search result with the same command it plays a
+# station with when the television grows a way to type.
+#
+# ── three things measured rather than assumed ───────────────────────────────
+#
+# ⚠ THE SOURCE IS WRITTEN BEFORE THE PLAYER IS RESTARTED, and that is what
+# makes the queue empty. `--provider` is a start-up flag: a fresh cliamp on
+# `radio` arrives with ELEVEN stations already queued and one on `ytmusic` with
+# nothing at all. A station played while the setting still said radio queued
+# sixty tracks at positions 12..71 and `toggle` played Lofi Stream — the press
+# worked perfectly and the television played internet radio.
+#
+# ⚠ THE FIRST TRACK IS STARTED BEFORE THE REST ARE QUEUED. Sixty tracks is
+# sixty `cliamp queue` processes; queueing the lot first is a quarter of a
+# minute of silence after the press, which from four metres is a dead button.
+# Started first, music is playing at t+6s while the queue fills behind it.
+#
+# ⚠ AND NOTHING TOGGLES A SECOND TIME. The obvious insurance — check the state
+# once the queue is full, toggle again if it is not playing — was written, and
+# it turned a reliable station into one that started about half the time.
+# `toggle` from `playing` is PAUSE and the state LAGS the command by about two
+# seconds, so the check ran early every time, always saw `stopped`, and always
+# cancelled the start it was meant to insure. Two of four runs never played
+# with it; four of four without.
+#
+# ── and the title, which is the bug that would have shipped ─────────────────
+#
+# cliamp reports a queued track's title as its PATH, so everything this package
+# queues writes down the real name against a key. That key was "the path with
+# everything from the `?` dropped" — right for Plex, whose query is a token
+# that must never reach a cache file, and WRONG FOR YOUTUBE, where `?v=` is
+# which song it is. Every track on the site keyed to
+# `https://www.youtube.com/watch`, and the television called every song on a
+# station `watch`. `music_key()` is the one home for that rule now, and cliamp
+# naming a track itself no longer stops us looking up the name we wrote down.
+#
+# ⚠ Adding a station is still a command line — the on-screen keyboard types
+# into the window UNDERNEATH the shell, so there is nothing on the television
+# to type a URL into yet. The page says so rather than looking empty.
+
 # ── 0.1.0-28: asking the visualizer to stop is not the same as it ───────────
 # ── stopping, and YouTube Music never had credentials to browse with ────────
 #
@@ -429,7 +494,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=28
+pkgrel=29
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

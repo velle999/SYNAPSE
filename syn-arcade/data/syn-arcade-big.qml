@@ -954,6 +954,28 @@ ShellRoot {
         }
     }
 
+    // The YouTube Music stations, which are the same shape as the albums: a
+    // list from big.c, and choosing one queues it and starts it.
+    //
+    // ⚠ NEEDS NO ACCOUNT. Everything else about YouTube Music on this system
+    // does — cliamp cannot search it without a Google OAuth client and does not
+    // ship one — but a station is a URL, and yt-dlp resolves those for nobody
+    // in particular. See yt_stations() in big.c.
+    property var ytItems: []
+
+    Process {
+        id: ytProc
+        command: [shell.bin, "big", "music", "yt", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.ytItems = shell.parseRecords(this.text).map(r => ({
+                    id: r.id, name: r.name, kind: "yt", note: ""
+                }))
+                shell.menuBusy = ""
+            }
+        }
+    }
+
     function refreshSources() {
         if (!sourcesProc.running) sourcesProc.running = true
     }
@@ -987,11 +1009,12 @@ ShellRoot {
     // ⚠ AND THE MENU HAS PAGES NOW. The picker and the album list are the same
     // list on a different page rather than a second panel: one delegate, one
     // set of keys, and a d-pad that cannot end up driving the thing underneath.
-    property string menuPage: "main"		// main | source | albums
+    property string menuPage: "main"		// main | source | albums | yt
 
     readonly property var menuItems: {
         if (shell.menuPage === "source") return shell.sourceItems
         if (shell.menuPage === "albums") return shell.albumItems
+        if (shell.menuPage === "yt") return shell.ytItems
 
         const out = []
         if (shell.musicLive)
@@ -1014,6 +1037,14 @@ ShellRoot {
             shell.menuBusy = "Reading the library…"
             shell.albumItems = []
             if (!albumsProc.running) albumsProc.running = true
+        }
+        if (page === "yt") {
+            // A file read rather than a network round trip, so this is said
+            // for the moment rather than the minute — but said, because the
+            // list arrives asynchronously either way.
+            shell.menuBusy = "Reading your stations…"
+            shell.ytItems = []
+            if (!ytProc.running) ytProc.running = true
         }
     }
 
@@ -1672,6 +1703,12 @@ ShellRoot {
             // this only has to launch what the row said.
             if (sourceSetProc.next === "albums") {
                 shell.openMenuPage("albums")
+            } else if (sourceSetProc.next === "yt") {
+                // ⚠ A PAGE, NOT A LAUNCH. YouTube Music used to open cliamp
+                // here and cliamp had nothing to show — no credentials, so no
+                // YouTube provider at all. It has its own stations now, drawn
+                // by this shell and played through the same queue Plex uses.
+                shell.openMenuPage("yt")
             } else if (sourceSetProc.next === "browse") {
                 shell.menuOpen = false
                 shell.menuPage = "main"
@@ -1715,6 +1752,27 @@ ShellRoot {
         }
     }
 
+    // ⚠ SAME GUARD, SAME REASON as chooseSource: `running = true` on a
+    // quickshell Process that is already running is a SILENT no-op, and a
+    // station takes a few seconds to load — which is exactly long enough for
+    // somebody to press A again.
+    function playYt(it) {
+        if (ytPlayProc.running) return
+        shell.menuBusy = "Loading " + it.name + "…"
+        ytPlayProc.command = [shell.bin, "big", "music", "yt", it.id]
+        ytPlayProc.running = true
+    }
+
+    Process {
+        id: ytPlayProc
+        onExited: {
+            shell.menuBusy = ""
+            shell.menuPage = "main"
+            shell.menuIndex = 0
+            shell.refreshMusic()
+        }
+    }
+
     function menuActivate() {
         const it = shell.menuItems[shell.menuIndex]
         if (!it) return
@@ -1734,6 +1792,10 @@ ShellRoot {
         }
         if (it.kind === "album") {
             shell.playAlbum(it)
+            return
+        }
+        if (it.kind === "yt") {
+            shell.playYt(it)
             return
         }
 
@@ -3114,10 +3176,14 @@ ShellRoot {
                     // a menu of "Grandmaster Flash and the Furious Five" are
                     // not the same panel, and elide is not an answer when
                     // every row ends in the same three dots.
-                    width: Math.min(parent.width * (shell.menuPage === "albums"
-                                                    ? 0.60 : 0.42),
-                                    win.u * (shell.menuPage === "albums"
-                                             ? 34 : 24))
+                    //
+                    // ⚠ AND ON THE STATIONS PAGE, for the same reason and more
+                    // so: a station's name is whatever YouTube calls the thing,
+                    // which is routinely a sentence.
+                    readonly property bool wideMenu: shell.menuPage === "albums"
+                                                     || shell.menuPage === "yt"
+                    width: Math.min(parent.width * (wideMenu ? 0.60 : 0.42),
+                                    win.u * (wideMenu ? 34 : 24))
                     height: menuCol.implicitHeight + win.u * 2.4
                     radius: win.u * 0.8
                     color: "#1a1430"
@@ -3135,6 +3201,7 @@ ShellRoot {
                                 if (shell.menuBusy) return shell.menuBusy.toUpperCase()
                                 if (shell.menuPage === "source") return "MUSIC SOURCE"
                                 if (shell.menuPage === "albums") return "PLEX ALBUMS"
+                                if (shell.menuPage === "yt") return "YOUTUBE MUSIC"
                                 return shell.musicLive ? "NOW PLAYING" : "SYSTEM"
                             }
                             color: win.dim
@@ -3415,10 +3482,21 @@ ShellRoot {
                             bottomPadding: win.u * 0.4
                             color: win.dim
                             font.pixelSize: win.u * 0.9
+                            // ⚠ THE STATIONS PAGE IS EMPTY ON EVERY MACHINE ON
+                            // THE DAY IT IS INSTALLED, so this is the first
+                            // thing most people will read on it — and "nothing
+                            // to choose from" would be the third dead end this
+                            // row has had. It names the command instead.
                             text: shell.menuPage === "albums"
                                 ? "Nothing came back from Plex. Check the "
                                   + "server, or run `cliamp setup` to give it "
                                   + "an address and a token."
+                                : shell.menuPage === "yt"
+                                ? "No stations yet. Add one from a terminal "
+                                  + "with\n\n    syn-arcade big music yt add "
+                                  + "<url>\n\nwhere <url> is a YouTube Music "
+                                  + "playlist, album, mix or track. A mix "
+                                  + "(list=RD…) plays on like a radio station."
                                 : "Nothing to choose from."
                         }
                     }
