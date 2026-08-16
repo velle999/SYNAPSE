@@ -42,6 +42,15 @@ cd() { :; }
 # an unstubbed run of that would `sudo pacman -Syy` on whatever machine is
 # running the suite.
 sync_pacman_dbs() { echo "SYNC"; }
+# ⚠ ALSO not optional, and for a sharper reason than the one above. Unstubbed,
+# this is `sudo -v` — a real password prompt, from a test suite, on whatever
+# machine is running it; and on a box where the credential happens to be cached
+# it would instead fork a background loop holding root open past the test.
+# Stubbed here so the ordering assertions below test WHERE it is called from,
+# which is the part that can regress. The loop's own semantics — that it never
+# creates a credential, and never outlives its parent — are tested separately
+# at the end of this file, where sudo itself is a stub.
+sudo_keepalive_start() { echo "KEEPALIVE"; }
 # Stands in for build-all.sh: records the filter it was handed.
 build_all_recorder() { echo "BUILD [$*]"; }
 STUB
@@ -187,26 +196,71 @@ case "$out" in
     *)      ok "an apply with nothing to build does not refresh" ;;
 esac
 
-# pacman_dbs_stale against fixtures, which is the only way to reach the two
+# ── and the one password is asked for in the same window ────────────────────
+#
+# ⚠ The keep-alive has to start BEFORE the refresh, not merely before the
+# build. Both need root; if it started after, the refresh would raise the
+# FIRST prompt itself and the "asked once, here is why" explanation would
+# print after the thing it explains.
+out=$(run_apply '"synui 1 2"' '""')
+case "$out" in
+    *KEEPALIVE*SYNC*BUILD*) ok "the password is asked for before the refresh AND the build" ;;
+    *SYNC*KEEPALIVE*)       bad "the refresh prompted before the keep-alive did: $out" ;;
+    *)                      bad "no keep-alive in an apply that builds: $out" ;;
+esac
+out=$(run_apply '' '')
+case "$out" in
+    *KEEPALIVE*) bad "an apply with nothing to build still asked for a password: $out" ;;
+    *)           ok "an apply with nothing to build asks for no password" ;;
+esac
+
+# pacman_dbs_state against fixtures, which is the only way to reach these
 # conditions without waiting a day or corrupting a real mirror copy.
-stale_says() {   # stale_says <dir>
+#
+# ⚠ It answers WHICH refresh, not merely whether one is needed, and the
+# distinction is the whole point: -Syy re-downloads every database (~12-25 MB)
+# while -Sy downloads only what changed. Paying the expensive one on every
+# apply was the cost this replaced.
+state_says() {   # state_says <dir>
     { harness; echo "SYNC_DIR=$1"; echo 'DB_FRESH_SECS=600'
-      sed -n '/^pacman_dbs_stale() {/,/^}/p' "$script"
-      echo 'if pacman_dbs_stale; then echo STALE; else echo FRESH; fi'
-    } > "$tmp/stale.sh"
-    bash "$tmp/stale.sh"
+      sed -n '/^pacman_dbs_state() {/,/^}/p' "$script"
+      echo 'out=$(pacman_dbs_state); echo "${out:-CURRENT}"'
+    } > "$tmp/state.sh"
+    bash "$tmp/state.sh"
 }
 mkdir -p "$tmp/fresh" "$tmp/old" "$tmp/badsig" "$tmp/empty"
 : > "$tmp/fresh/core.db"; : > "$tmp/fresh/core.db.sig"
 : > "$tmp/old/core.db";   touch -d '2 hours ago' "$tmp/old/core.db"
 # The signature written BEFORE the database it signs — a good signature over
-# different content, which pacman calls a corrupted database.
+# different content, which pacman calls a corrupted database. This is the ONE
+# case a plain -Sy cannot clear, because -Sy keeps the cached signature.
 : > "$tmp/badsig/core.db"; : > "$tmp/badsig/core.db.sig"
 touch -d '2 days ago' "$tmp/badsig/core.db.sig"
-check "a database synced a minute ago is fresh"       FRESH "$(stale_says "$tmp/fresh")"
-check "a database two hours old is stale"             STALE "$(stale_says "$tmp/old")"
-check "a signature older than its database is stale"  STALE "$(stale_says "$tmp/badsig")"
-check "no databases at all counts as stale"           STALE "$(stale_says "$tmp/empty")"
+check "a database synced a minute ago needs no refresh" CURRENT "$(state_says "$tmp/fresh")"
+check "a database two hours old needs the CHEAP one"    sync    "$(state_says "$tmp/old")"
+check "a signature older than its database forces -Syy" force   "$(state_says "$tmp/badsig")"
+check "no databases at all forces -Syy"                 force   "$(state_says "$tmp/empty")"
+
+# ⚠ The escalation is what makes preferring the cheap refresh safe: a stale
+# signature that appears BETWEEN the check and the sync — the mirror updating
+# mid-run, which is exactly how the case arises — is caught from what pacman
+# says rather than paid for in advance by every other run.
+sig_fail() {
+    { harness
+      sed -n '/^db_sig_failure() {/,/^}/p' "$script"
+      echo "if db_sig_failure \"\$1\"; then echo ESCALATE; else echo GIVEUP; fi"
+    } > "$tmp/sigfail.sh"
+    bash "$tmp/sigfail.sh" "$1"
+}
+check "a signature complaint escalates to -Syy" ESCALATE \
+    "$(sig_fail 'error: core: signature from "Arch Linux" is invalid')"
+check "a corrupt database escalates too"        ESCALATE \
+    "$(sig_fail 'error: failed to update core (invalid or corrupted database)')"
+# ⚠ Not everything that fails a -Sy is fixed by downloading more. A mirror that
+# is down, or no network at all, would have the expensive refresh fail in the
+# same way a second time — for nothing, and slowly.
+check "a mirror that is down does NOT escalate"  GIVEUP \
+    "$(sig_fail 'error: failed retrieving file from mirror : Connection timed out')"
 
 echo ""
 echo "=== names are validated before anything is fetched ==="
@@ -253,6 +307,104 @@ if grep -q '"kitty"' "$qml"; then
     bad "something in the GUI is still pinned to kitty"
 else
     ok "...and nothing is still pinned to kitty for that flag"
+fi
+
+echo ""
+echo "=== the one password is held for the build, and not a moment longer ==="
+#
+# Every property here is a safety property, so none of them can be tested
+# against the real sudo: an unstubbed run would either prompt from a test
+# suite or — worse, on a machine with a cached credential — leave a live
+# root-refreshing loop behind after the suite exited. sudo is a function.
+cat > "$tmp/ka_prelude.sh" <<PRE
+C_DIM=""; C_R=""
+say()  { echo "\$*"; }
+info() { echo "info \$*"; }
+CRED="$tmp/ka.cred"
+CALLS="$tmp/ka.calls"
+: > "\$CALLS"
+# -n refreshes an EXISTING credential and can never create one; -v is the
+# password prompt, and it says so out loud so a test can assert it did not
+# happen.
+sudo() {
+    case "\$1" in
+      -n) echo n >> "\$CALLS"; [ -f "\$CRED" ] ;;
+      -v) echo PROMPTED; : > "\$CRED" ;;
+       *) return 0 ;;
+    esac
+}
+sleep() { command sleep 0.05; }
+PRE
+sed -n '/^SUDO_KEEPALIVE_PID=""/p'            "$script" >> "$tmp/ka_prelude.sh"
+sed -n '/^sudo_keepalive_stop() {/,/^}/p'     "$script" >> "$tmp/ka_prelude.sh"
+sed -n '/^sudo_keepalive_start() {/,/^}/p'    "$script" >> "$tmp/ka_prelude.sh"
+
+ka_run() {   # ka_run <body> ; stdin is /dev/null — NOT a terminal
+    { cat "$tmp/ka_prelude.sh"; printf '%s\n' "$1"; } > "$tmp/ka_case.sh"
+    bash "$tmp/ka_case.sh" </dev/null 2>&1
+}
+
+# A credential already cached — the common case, since setup_src may have
+# reached for sudo already. Nothing to ask for, so nothing should be asked.
+: > "$tmp/ka.cred"
+out=$(ka_run 'sudo_keepalive_start; echo "rc=$?"; sudo_keepalive_stop')
+case "$out" in
+    *PROMPTED*) bad "asked for a password it already had: $out" ;;
+    *rc=0*)     ok  "a cached credential is held without asking again" ;;
+    *)          bad "the keep-alive did not start: $out" ;;
+esac
+
+# ⚠ THE ONE THAT MATTERS. No credential and no terminal is the GUI's position,
+# and a background `sudo -v` there blocks forever on a prompt nobody can see.
+# It has to decline and let the caller decide.
+rm -f "$tmp/ka.cred"
+out=$(ka_run 'sudo_keepalive_start; echo "rc=$?"')
+case "$out" in
+    *PROMPTED*) bad "prompted for a password with no terminal to type into: $out" ;;
+    *rc=1*)     ok  "no credential and no terminal declines instead of prompting" ;;
+    *)          bad "expected a refusal, got: $out" ;;
+esac
+
+# The refresh has to actually repeat — a loop that runs once holds nothing open.
+: > "$tmp/ka.cred"
+out=$(ka_run 'sudo_keepalive_start; command sleep 0.4; sudo_keepalive_stop; wc -l < "$CALLS"')
+n=$(printf '%s' "$out" | tail -1 | tr -d ' ')
+if [ "${n:-0}" -ge 3 ]; then ok "the credential is refreshed repeatedly ($n times in 0.4s)"
+else bad "the keep-alive refreshed $n time(s) — it is not holding anything open"; fi
+
+# Stopping it has to actually reap it.
+out=$(ka_run 'sudo_keepalive_start; pid=$SUDO_KEEPALIVE_PID; sudo_keepalive_stop
+              kill -0 "$pid" 2>/dev/null && echo ALIVE || echo GONE')
+case "$out" in
+    *GONE*) ok "stopping the keep-alive kills the refresher" ;;
+    *)      bad "the refresher survived its stop: $out" ;;
+esac
+
+# ⚠ AND THE BELT, TESTED WITHOUT THE BRACES. The EXIT trap cannot run when the
+# parent is SIGKILLed — a crash, an OOM kill, a `kill -9` on a hung build — and
+# that is precisely when an orphaned loop holding a passwordless root
+# credential open would be worst. Only the loop's own parent check can save it,
+# so the trap is taken away here to prove that check works on its own.
+: > "$tmp/ka.cred"
+{ cat "$tmp/ka_prelude.sh"
+  echo "sudo_keepalive_start; echo \$SUDO_KEEPALIVE_PID > $tmp/ka.child; command sleep 30"
+} > "$tmp/ka_orphan.sh"
+bash "$tmp/ka_orphan.sh" </dev/null >/dev/null 2>&1 &
+ka_parent=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$tmp/ka.child" ] && break; command sleep 0.1; done
+ka_child=$(cat "$tmp/ka.child" 2>/dev/null)
+kill -9 "$ka_parent" 2>/dev/null
+# Reap it here, quietly. Left to be noticed asynchronously, bash prints its own
+# "Killed" job line into the middle of the suite's output.
+wait "$ka_parent" 2>/dev/null
+command sleep 0.5
+if [ -z "$ka_child" ]; then
+    bad "the keep-alive never recorded a refresher pid"
+elif kill -0 "$ka_child" 2>/dev/null; then
+    kill -9 "$ka_child" 2>/dev/null
+    bad "a SIGKILLed run left a root-refreshing loop behind (pid $ka_child)"
+else
+    ok "a SIGKILLed run leaves no refresher behind, trap or no trap"
 fi
 
 echo ""

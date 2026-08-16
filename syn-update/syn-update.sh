@@ -208,24 +208,73 @@ DB_FRESH_SECS="${SYN_UPDATE_DB_FRESH_SECS:-600}"
 # actually matter — how old the database is, and whether its signature predates
 # it — not a flag the caller has to pass (an older syn-update dies on an
 # argument it does not know, so a flag from synpkg would break on version skew).
-pacman_dbs_stale() {
-    local db sig now mtime found=0
+# ── WHICH refresh, and it is not always the expensive one ────────────────────
+#
+# ⚠ -Sy AND -Syy ARE NOT THE SAME COST, and this used to run the expensive one
+# unconditionally.
+#
+#   -Sy   asks each mirror whether its database has changed and downloads only
+#         the ones that have. On a machine synced an hour ago that is a handful
+#         of HTTP requests and no payload — under a second.
+#   -Syy  downloads EVERY database whether it changed or not. ~12-25 MB and
+#         tens of seconds on a slow mirror, every single apply.
+#
+# The doubled y exists for ONE failure and it is worth being precise about it: a
+# mirror that updated its .db between pacman's two fetches leaves a CACHED .db.sig
+# that no longer matches, and pacman then refuses to load ANY repository. Plain
+# -Sy is happy to keep that cached signature, so -Sy cannot fix it — but that is
+# the only thing -Sy cannot fix, and it is rare.
+#
+# So the expensive one is paid for when it is the answer, and not otherwise:
+#
+#   · signature older than its database on disk  → -Syy, that is the case above
+#   · database older than DB_FRESH_SECS          → -Sy, which is what closes the
+#                                                  404-on-a-rotated-out-version
+#                                                  gap, and is nearly free
+#   · -Sy came back complaining about a signature or a corrupt database
+#                                                → escalate to -Syy and retry
+#
+# The escalation is the part that makes the cheap path safe to prefer: the
+# expensive refresh still happens on the run that needs it, discovered from what
+# pacman actually said rather than paid for in advance by every other run.
+#
+# Which db needs which. Prints "force" if any signature predates its database,
+# "sync" if any database is simply older than the window, and nothing when
+# everything is current.
+pacman_dbs_state() {
+    local db sig now mtime found=0 want=""
     now=$(date +%s)
     for db in "$SYNC_DIR"/*.db; do
         [ -f "$db" ] || continue
         found=1
         sig="$db.sig"
-        [ -f "$sig" ] && [ "$sig" -ot "$db" ] && return 0
-        mtime=$(stat -c %Y "$db" 2>/dev/null) || return 0
-        [ $((now - mtime)) -gt "$DB_FRESH_SECS" ] && return 0
+        # ⚠ A signature OLDER than the database it signs is the stale-sig case,
+        # and it is the only one a plain -Sy will not clear.
+        if [ -f "$sig" ] && [ "$sig" -ot "$db" ]; then
+            printf 'force\n'
+            return 0
+        fi
+        mtime=$(stat -c %Y "$db" 2>/dev/null) || { printf 'force\n'; return 0; }
+        [ $((now - mtime)) -gt "$DB_FRESH_SECS" ] && want="sync"
     done
-    # No databases at all is not "fresh" — it is a system that has never synced.
-    [ "$found" = 1 ] || return 0
-    return 1
+    # No databases at all is not "fresh" — it is a system that has never synced,
+    # and there is nothing on disk for -Sy to compare against.
+    [ "$found" = 1 ] || { printf 'force\n'; return 0; }
+    [ -n "$want" ] && printf '%s\n' "$want"
+    return 0
+}
+
+# Did pacman fail in the way that only a forced refresh fixes? Matched on what
+# it prints, because the exit status is the same 1 for every database problem.
+db_sig_failure() {
+    printf '%s' "$1" | grep -qiE "signature|corrupt|invalid or corrupted|GPGME|keyring"
 }
 
 sync_pacman_dbs() {
-    if ! pacman_dbs_stale; then
+    local state
+    state=$(pacman_dbs_state)
+
+    if [ -z "$state" ]; then
         ok "pacman's databases are current (synced within ${DB_FRESH_SECS}s)"
         return 0
     fi
@@ -234,14 +283,38 @@ sync_pacman_dbs() {
     # command instead of failing at an invisible prompt — the build below may
     # still succeed against what is on disk, and refusing to try would be worse.
     if ! can_sudo; then
+        # Name the refresh this machine actually needs. Telling someone to run
+        # the 25 MB one when a plain -Sy would do is how the expensive command
+        # becomes the one everybody reaches for by habit.
+        local fix="sudo pacman -Sy"
+        [ "$state" = force ] && fix="sudo pacman -Syy"
         warn "cannot refresh pacman's databases from here (no cached credential, no terminal).
-    Run:  sudo pacman -Syy"
+    Run:  $fix"
         return 0
     fi
 
-    info "refreshing pacman's databases (pacman -Syy)"
-    sudo pacman -Syy ||
-        warn "database refresh failed — building against the databases already on disk"
+    if [ "$state" = force ]; then
+        info "refreshing pacman's databases (pacman -Syy — a signature is older than its database)"
+        sudo pacman -Syy --noconfirm ||
+            warn "database refresh failed — building against the databases already on disk"
+        return 0
+    fi
+
+    info "refreshing pacman's databases (pacman -Sy)"
+    local out rc
+    out=$(sudo pacman -Sy --noconfirm 2>&1); rc=$?
+    printf '%s\n' "$out"
+    [ "$rc" = 0 ] && return 0
+
+    # ⚠ THE ESCALATION, and it is why the cheap path is safe to take first.
+    if db_sig_failure "$out"; then
+        info "that looks like a stale signature — forcing a full refresh (pacman -Syy)"
+        sudo pacman -Syy --noconfirm ||
+            warn "database refresh failed — building against the databases already on disk"
+        return 0
+    fi
+
+    warn "database refresh failed — building against the databases already on disk"
 }
 
 # ── preconditions ────────────────────────────────────────────
@@ -277,6 +350,67 @@ need_tools() {
 # directory from syn-install, so this fires only on an older install or after
 # someone removed it: say what to run instead of failing at an invisible prompt.
 can_sudo() { sudo -n true 2>/dev/null || [ -t 0 ]; }
+
+# ── ONE password for the whole run ───────────────────────────────────────────
+#
+# ⚠ sudo's credential expires after `timestamp_timeout`, which is FIVE MINUTES
+# by default and is not set to anything else on a stock SynapseOS box. An apply
+# is one authentication followed by a build that runs for far longer than that:
+# synui alone is minutes, and build-all.sh reaches for sudo again after EVERY
+# component it finishes (`pacman -U`). So the timestamp expires mid-run and sudo
+# stops to ask again — three or four times in a full rebuild, at unpredictable
+# moments, long after the person who typed the first password walked away.
+# The build then sits at an invisible prompt inside build-all.sh's output.
+#
+# So: authenticate ONCE, up front, and hold the credential open for as long as
+# this script lives. `sudo -n true` refreshes an existing timestamp without
+# prompting; it cannot CREATE one, which is what makes the loop safe — if the
+# credential is ever gone, the loop quietly does nothing rather than popping a
+# prompt in the background.
+#
+# ⚠ It must not outlive the run. Two things stop that: the loop tests that this
+# script's pid is still alive on every iteration, and the EXIT trap kills it.
+# A refresher left running would hold a passwordless root credential open for
+# whoever is at the keyboard.
+#
+# ⚠ Refreshed every 60s against a 300s timeout, not every 250s. sleep is not a
+# scheduler: a machine that is compiling on every core can be late, and being
+# late once is the whole failure this exists to prevent.
+SUDO_KEEPALIVE_PID=""
+
+sudo_keepalive_stop() {
+    [ -n "$SUDO_KEEPALIVE_PID" ] || return 0
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
+    wait "$SUDO_KEEPALIVE_PID" 2>/dev/null
+    SUDO_KEEPALIVE_PID=""
+}
+
+# Ask now, once, and say why — a bare password prompt from a script that has so
+# far only printed git output is the kind of thing people type into without
+# knowing what asked.
+sudo_keepalive_start() {
+    [ -n "$SUDO_KEEPALIVE_PID" ] && return 0
+
+    # Already passwordless (a cached credential, or NOPASSWD): nothing to hold
+    # open, and nothing to explain.
+    if ! sudo -n true 2>/dev/null; then
+        [ -t 0 ] || return 1     # no terminal to prompt on — caller decides
+        say ""
+        info "asking for your password once, now — it is held for the whole build"
+        say "${C_DIM}  (sudo forgets after 5 minutes; a full rebuild is longer than that,${C_R}"
+        say "${C_DIM}   and every component finishes with a \`pacman -U\`)${C_R}"
+        sudo -v || return 1
+    fi
+
+    local parent=$$
+    ( while kill -0 "$parent" 2>/dev/null; do
+          sudo -n true 2>/dev/null || exit 0
+          sleep 60
+      done ) &
+    SUDO_KEEPALIVE_PID=$!
+    trap sudo_keepalive_stop EXIT INT TERM
+    return 0
+}
 
 setup_src() {
     if [ -d "$SRC/.git" ]; then
@@ -723,9 +857,18 @@ cmd_apply() {
     say "${C_DIM}  (build-all.sh orders these itself; arguments are a filter, not a sequence)${C_R}"
     say ""
 
+    # ⚠ ONE password, asked HERE — before the database refresh and before
+    # build-all.sh, both of which need root, and while somebody is still
+    # watching. Held open for the rest of the run, so sudo's five-minute
+    # timestamp cannot expire in the middle of a compositor build and stop at a
+    # prompt nobody is there to answer. See sudo_keepalive_start().
+    #
+    # It is deliberately AFTER the "nothing to build" return above: an apply
+    # with no work must not ask for a password at all.
+    sudo_keepalive_start || true
+    say ""
+
     # Databases first, while somebody is still watching — see sync_pacman_dbs().
-    # It is deliberately AFTER the "nothing to build" return above: an apply with
-    # no work must not ask for a password.
     sync_pacman_dbs
     say ""
 
@@ -803,7 +946,7 @@ refresh_local_repo() {
 
     prune_superseded
     rebuild_db
-    sudo pacman -Sy --quiet >/dev/null 2>&1 || true
+    sudo pacman -Sy --quiet --noconfirm >/dev/null 2>&1 || true
     [ "$copied" -gt 0 ] && ok "published $copied package(s) to $LOCAL_REPO"
     [ "$reconciled" -gt 0 ] &&
         ok "published $reconciled installed package(s) the repo was missing"
@@ -902,9 +1045,12 @@ syn-update $VERSION — update an installed SynapseOS from git
 
 Usage:
   syn-update check          Fetch and show what would change (default, read-only)
-  syn-update apply          Fetch, refresh pacman's databases (-Syy), rebuild
-                            the changed components, install them, and install
-                            any component the tree has gained since
+  syn-update apply          Fetch, refresh pacman's databases, rebuild the
+                            changed components, install them, and install any
+                            component the tree has gained since.
+                            Asks for your password ONCE, up front, and holds it
+                            for the whole build — sudo forgets after five
+                            minutes and a full rebuild is much longer.
   syn-update apply <name>…  Only the components named. build-all.sh still walks
                             its own order, so the names are a filter and not a
                             sequence. Warns when a named component depends on
@@ -921,7 +1067,12 @@ Environment:
   SYN_UPDATE_REF            Branch to track (default: main)
   SYN_UPDATE_SRC            Where the source tree lives (default: /var/lib/synapse-src)
   SYN_UPDATE_DB_FRESH_SECS  How recently pacman's databases must have been synced
-                            for apply to skip its own -Syy (default: 600)
+                            for apply to skip refreshing them (default: 600).
+                            Past that it runs `pacman -Sy`, which downloads only
+                            what changed; the expensive `-Syy` is kept for the
+                            one case -Sy cannot fix — a cached signature older
+                            than the database it signs — and for a -Sy that
+                            comes back complaining about one.
 
 Components are rebuilt from source with makepkg, so this needs base-devel and
 each component's makedepends. Components with a large prebuilt payload
