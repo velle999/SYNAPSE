@@ -96,6 +96,42 @@ function first_arg(rest,   a) {
 	gsub(/[ \t]/, "", a)
 	return a
 }
+# Mask string literals, keeping them DISTINCT from one another.
+#
+# Masking at all is needed so a "//" or "/*" inside a literal is not read as the
+# start of a comment. But collapsing every literal to the SAME token makes two
+# calls that name two different files look like one name checked and then
+# opened:
+#
+#     access("data/syn-arcade.qml", R_OK)      ->  access("")
+#     execlp("quickshell", "quickshell", ...)  ->  execlp("")   /* "same" name */
+#
+# That is not a near miss — nothing opens the checked path and the two literals
+# have no characters in common. It reported syn-arcade/src/main.c on the commit
+# that introduced the component and every commit after it, which is a scanner
+# that cries wolf on a shape this repo uses in five binaries.
+#
+# So the literal keeps its own characters, with everything but alphanumerics
+# folded to "_": distinct bodies stay distinct, and nothing left inside the
+# token can open a comment, a string or a block.
+function maskstrings(s,   out, i, j, body) {
+	out = ""
+	while ((i = index(s, "\"")) > 0) {
+		out = out substr(s, 1, i - 1)
+		s = substr(s, i + 1)
+		j = index(s, "\"")
+		# No closing quote on this line. Leave the remainder exactly as
+		# the old regex did (it simply failed to match) rather than
+		# swallowing calls that may follow it.
+		if (j == 0)
+			return out s
+		body = substr(s, 1, j - 1)
+		s = substr(s, j + 1)
+		gsub(/[^A-Za-z0-9]/, "_", body)
+		out = out "\"STR_" body "\""
+	}
+	return out s
+}
 # Drop comments, carrying /* */ across lines. Not fussiness: this file is a
 # repo where the fix for a finding is usually a comment EXPLAINING the finding,
 # so a scanner that reads comments reports every explanation of itself as a new
@@ -136,7 +172,7 @@ FNR == 1 { delete checked; delete checkline; delete checkfn; delete checkdepth; 
 
 	line = $0
 	# strings first, so a "//" inside one is not read as a comment
-	gsub(/"[^"]*"/, "\"\"", line)
+	line = maskstrings(line)
 	line = decomment(line)
 	if (bare) {
 		emit(FILENAME, FNR, "toctou-ok with no reason given")
@@ -275,18 +311,47 @@ if [ "$selftest" -eq 1 ]; then
 	    /* Do not write lstat(p) and then open(p) here. */
 	    int fd = open(p, O_RDONLY | O_NOFOLLOW);
 	}
+	void two_literals(void) {
+	    if (access("/etc/one", R_OK) != 0) return;
+	    execlp("some-program", "some-program", (char *)NULL);
+	}
+	void same_literal(void) {
+	    if (access("/etc/one", R_OK) != 0) return;
+	    int fd = open("/etc/one", O_RDONLY);        /* 45: FINDING */
+	}
 	EOF
 
-	out=$(scan "$fixture" || true)
+	# The output goes to a FILE and the assertions grep the file. Not style:
+	# `printf ... | grep -q` under `set -o pipefail` reports 141 the moment
+	# grep exits on its first match and printf takes the SIGPIPE, so a
+	# MATCHING assertion fails — and only once the output is long enough not
+	# to fit the pipe buffer, which is how it hid here.
+	out=$(mktemp -t toctou-out.XXXXXX)
+	trap 'rm -f "$fixture" "$out"' EXIT
+	scan "$fixture" >"$out" 2>&1 || true
+
 	fails=0
-	got=$(printf '%s\n' "$out" | grep -c ':[0-9]*: ' || true)
-	[ "$got" -eq 2 ] || { echo "SELF-TEST: expected 2 findings, got $got"; printf '%s\n' "$out"; fails=1; }
-	for want in 4 10; do
-		printf '%s\n' "$out" | grep -q ":$want: open(p)" \
-			|| { echo "SELF-TEST: the planted bug on line $want was not found"; fails=1; }
+	got=$(grep -c ':[0-9]*: ' "$out" || true)
+	[ "$got" -eq 3 ] || { echo "SELF-TEST: expected 3 findings, got $got"; cat "$out"; fails=1; }
+
+	# Two planted bugs on a VARIABLE, and one on a literal path checked and
+	# then opened by the same name.
+	for want in '4:open(p)' '10:open(p)' '45:open("STR__etc_one")'; do
+		grep -q ":${want%%:*}: ${want#*:}" "$out" \
+			|| { echo "SELF-TEST: the planted bug on line ${want%%:*} was not found"; fails=1; }
 	done
+
+	# And the false positive this scanner shipped with: two DIFFERENT string
+	# literals are two different names. Without this the fix is one gsub away
+	# from being tidied back out, and the failure is a red build on every
+	# component that checks for a data file and then execs a program.
+	if grep -q 'execlp("STR_some_program")' "$out"; then
+		echo "SELF-TEST: two different literals were read as one name"
+		fails=1
+	fi
+
 	[ "$fails" -eq 0 ] || exit 1
-	echo "ok: self-test — finds both planted bugs, and nothing else"
+	echo "ok: self-test — finds all three planted bugs, and nothing else"
 	exit 0
 fi
 

@@ -79,6 +79,12 @@ ShellRoot {
     // Wayland protocol tells a layer-shell client where the pointer is.
     readonly property string wantOutput: Quickshell.env("SYN_BIG_OUTPUT") || ""
 
+    // The dendrite mark for the header, resolved by big.c against its own data
+    // directory — the same icon_file() path every tile glyph takes. Empty on a
+    // machine where the drawing did not ship, and the header then simply has no
+    // emblem rather than a broken-image box.
+    readonly property string logoFile: Quickshell.env("SYN_BIG_LOGO") || ""
+
     // ── the data ────────────────────────────────────────────────────────────
     //
     // The library is fetched once: a scan is dozens of stat() calls per game
@@ -616,11 +622,24 @@ ShellRoot {
     //
     // The shelf a tile belongs on is a property of the TILE, decided in big.c,
     // so adding one there puts it in the right place with no change here. The
-    // ORDER of the shelves is this file's business, and it is: what somebody
-    // who just turned the television on wants, then the library, then the
-    // things that are not games, then the machine's own switches — which are
-    // last so they cannot be hit on the way to something else — and then the
-    // news, which is the one shelf nobody is navigating TO.
+    // ORDER of the shelves is this file's business, and it is three rows:
+    //
+    //     1  the library, which is what somebody turned the television on for
+    //     2  the launchers, the media and the applications — one row, packed
+    //     3  the headlines, which is the one shelf nobody is navigating TO
+    //
+    // ⚠ THE GAMES SHELF IS FIRST NOW, and that is the change the rest follow
+    // from. Play used to sit above it: two tiles across the top of a
+    // television, with the fifty covers somebody actually came for pushed a
+    // row down. A launcher's first row should be its content.
+    //
+    // ⚠ AND THE MACHINE'S OWN SWITCHES ARE NO LONGER A SHELF. Sleep, restart
+    // and power off are not things anybody browses to — they were a row of the
+    // television spent on four buttons pressed once a day, and a row that has
+    // to be scrolled past on the way to the news. They live behind Start now;
+    // see `menuItems` below. They are still `shelf = system` in big.c, because
+    // where a tile goes is still decided there — this file is what stopped
+    // drawing them in a row.
     function byShelf(name) {
         return shell.apps.filter(a => a.shelf === name)
     }
@@ -636,11 +655,16 @@ ShellRoot {
         if (shell.windows.length)
             out.push({ title: "Running", kind: "running", items: shell.windows })
 
-        const play = shell.byShelf("play")
-        if (play.length) out.push({ title: "Play", kind: "app", items: play })
-
         if (shell.games.length)
             out.push({ title: "Games", kind: "game", items: shell.games })
+
+        // ── one row: Play, Media, Apps ──────────────────────────────────────
+        //
+        // All three are `kind: "app"`, which is what marks them as a BAR — a
+        // short shelf that shares a row and scrolls rather than claiming one.
+        // See isBar() and the packer.
+        const play = shell.byShelf("play")
+        if (play.length) out.push({ title: "Play", kind: "app", items: play })
 
         // Installed media applications first, then whatever answered on the
         // network — a Plex client on this machine is a better tile than the
@@ -651,14 +675,16 @@ ShellRoot {
         const apps = shell.byShelf("apps")
         if (apps.length) out.push({ title: "Apps", kind: "app", items: apps })
 
-        const sys = shell.byShelf("system")
-        if (sys.length) out.push({ title: "System", kind: "action", items: sys })
-
         if (shell.news.length)
             out.push({ title: "News", kind: "news", items: shell.news })
 
         return out
     }
+
+    // What is behind the Start button: the machine's own switches, in the
+    // order big.c lists them — the way out first, because it is the one
+    // somebody reaches for without having decided anything.
+    readonly property var menuItems: shell.byShelf("system")
 
     // ── shelves that share a row: BANDS ─────────────────────────────────────
     //
@@ -714,6 +740,29 @@ ShellRoot {
     // its neighbours.
     readonly property real bandSqueeze: 0.85
 
+    // ── a BAR: a shelf that would rather scroll than own a row ──────────────
+    //
+    // The rule above — a shelf that has to scroll keeps its own row — is a rule
+    // about TRAVEL, and it is right for the library: half a row is half the
+    // tiles per press, so narrowing fifty covers doubles how far somebody
+    // pushes a stick to cross them. It is wrong for a handful of launchers.
+    // Play, Media and Apps between them are a fixed, small roster that somebody
+    // crosses in two presses either way, and giving each of them a row of its
+    // own is how the television ended up with more rows than screen.
+    //
+    // So these three are BARS: they always share one row, whatever the
+    // arithmetic says, and any of them that runs out of width scrolls right.
+    //
+    // ⚠ THIS IS WHAT RESERVES ROOM FOR HEROIC AND LUTRIS. Both are already in
+    // apps_table() behind a have() check, so they appear on the Play bar the
+    // day they are installed — and without this rule that arrival would be a
+    // silent RELAYOUT: four launchers no longer fit beside Media and Apps at
+    // the 15% squeeze, the packer would break the row in three, and installing
+    // a game launcher would rearrange the whole television. Now the bar takes
+    // its share of the row and the extra tiles go off the right-hand edge with
+    // the peek that says so.
+    function isBar(sh) { return sh.kind === "app" }
+
     function bandScale(band) {
         let tiles = 0, fixed = 0
         for (let i = 0; i < band.length; i++) {
@@ -737,28 +786,63 @@ ShellRoot {
             // A lone shelf that does not fit is the library or the headlines:
             // it keeps its tiles at full size and the strip's own snapping
             // deals with what runs off the edge.
-            const s = cur.length === 1 ? 1 : shell.bandScale(shs)
-            let used = 0
+            //
+            // ⚠ FLOORED AT THE SQUEEZE, never below it. A band of bars is
+            // packed whether or not it fits, so bandScale can now answer with
+            // something far under 0.85 — and letting that through would draw a
+            // launcher tile at half the size of a cover, which stops reading as
+            // the same kind of thing rather than as a smaller one. Past the
+            // floor the width is shared out instead and the bars scroll.
+            const s = cur.length === 1
+                    ? 1
+                    : Math.max(shell.bandSqueeze, shell.bandScale(shs))
+
             const w = shs.map(sh => shell.shelfTiles(sh) * s + shell.shelfFixed(sh))
+            let used = 0
             for (let i = 0; i < w.length; i++) used += w[i]
-            const spare = Math.max(0, shell.rowUnits - used) / w.length
-            out.push(cur.map((r, i) => ({
-                row: r,
-                units: cur.length === 1 ? shell.rowUnits : w[i] + spare,
-                scale: s
-            })))
+
+            // Three ways a row is divided, and they are three different
+            // situations rather than three cases of one:
+            //   one shelf   takes the row
+            //   it fits     each shelf gets what it asked for, and the slack
+            //               is split evenly so the row reaches both edges
+            //   it does not each shelf gets its SHARE of the row — the bar
+            //               that wanted most keeps most — and whatever does
+            //               not fit inside that share scrolls
+            let units
+            if (cur.length === 1)
+                units = w.map(() => shell.rowUnits)
+            else if (used <= shell.rowUnits) {
+                const spare = (shell.rowUnits - used) / w.length
+                units = w.map(x => x + spare)
+            } else
+                units = w.map(x => x * shell.rowUnits / used)
+
+            out.push(cur.map((r, i) => ({ row: r, units: units[i], scale: s })))
             cur = []
         }
 
         for (let i = 0; i < shell.shelves.length; i++) {
             const sh = shell.shelves[i]
+            const bar = shell.isBar(sh)
+
+            // ⚠ A BAR JOINS THE BAR BAND UNCONDITIONALLY — no trial, no
+            // squeeze test. This is the one place the "a shelf that scrolls
+            // keeps its own row" rule is deliberately not applied; see isBar.
+            if (bar && cur.length && shell.isBar(shell.shelves[cur[0]])) {
+                cur.push(i)
+                continue
+            }
+
             // Does it still work with this one added? If not, the band ends
             // here and this shelf starts the next one — which may itself be a
             // shelf that fits nowhere, and then it is a row of its own.
             const trial = cur.map(r => shell.shelves[r]).concat([sh])
             if (cur.length && shell.bandScale(trial) < shell.bandSqueeze) close()
             cur.push(i)
-            if (shell.bandScale([sh]) < shell.bandSqueeze) close()
+            // …and a bar is never closed for not fitting, or the first one
+            // would take a row of its own before the second could join it.
+            if (!bar && shell.bandScale([sh]) < shell.bandSqueeze) close()
         }
         close()
         return out
@@ -1042,25 +1126,7 @@ ShellRoot {
             return
         }
 
-        // "Desktop" is the way out and the only thing here that really quits:
-        // closing this IS going back to the desktop, which was there
-        // underneath all along.
-        if (it.id === "desktop") {
-            Qt.quit()
-            return
-        }
-
-        // Sleep, restart and power off deliberately do NOT get out of the way:
-        // the machine is either coming back to this screen or going away
-        // entirely, and dropping to the desktop for the half second in between
-        // is a flash of somebody's email on a television.
-        if (it.kind === "action") {
-            actionProc.command = [shell.bin, "big", "run", it.id]
-            actionProc.running = true
-            shell.launchingName = it.name || ""
-            launchingTimer.restart()
-            return
-        }
+        if (shell.runAction(it)) return
 
         // Already running: this is a way BACK to it, not a second copy.
         if (shell.activeApp && shell.activeApp.id === it.id) {
@@ -1072,6 +1138,83 @@ ShellRoot {
     }
 
     Process { id: actionProc }
+
+    // ── the machine's own switches ──────────────────────────────────────────
+    //
+    // ⚠ ONE IMPLEMENTATION, and that is the whole reason this is a function.
+    // These used to be reachable only as tiles on a shelf; they are now
+    // reachable only from the Start menu, and the shelf path is still here
+    // because `activate()` must keep working for a `kind: "action"` tile that
+    // arrives from big.c on some other shelf. Two copies of "what Sleep does"
+    // is how one of them ends up not restarting the launch overlay, which
+    // looks like a button that did nothing.
+    //
+    // Returns whether it took the item, so the caller can carry on.
+    function runAction(it) {
+        if (!it) return false
+
+        // "Desktop" is the way out and the only thing here that really quits:
+        // closing this IS going back to the desktop, which was there
+        // underneath all along.
+        if (it.id === "desktop") {
+            Qt.quit()
+            return true
+        }
+
+        // Sleep, restart and power off deliberately do NOT get out of the way:
+        // the machine is either coming back to this screen or going away
+        // entirely, and dropping to the desktop for the half second in between
+        // is a flash of somebody's email on a television.
+        if (it.kind === "action") {
+            actionProc.command = [shell.bin, "big", "run", it.id]
+            actionProc.running = true
+            shell.launchingName = it.name || ""
+            launchingTimer.restart()
+            return true
+        }
+
+        return false
+    }
+
+    // ── the Start menu ──────────────────────────────────────────────────────
+    //
+    // Where the system row went. Four buttons pressed once a day do not earn a
+    // row of a television, and the row they had was one more thing to scroll
+    // past on the way to the headlines — but they cannot be BURIED either,
+    // because "how do I turn this off" has to have an answer that is one
+    // button from anywhere.
+    //
+    // Start is that button, and the keyboard's spelling of it is P. Escape
+    // still quits and Backspace is still Back; P is free, and unlike a
+    // modifier chord it is one key somebody can find while holding a pad in
+    // the other hand.
+    property bool menuOpen: false
+    property int menuIndex: 0
+
+    function menuToggle() {
+        if (shell.menuOpen) { shell.menuOpen = false; return }
+        // Nothing behind it is not an empty menu, it is no menu. big.c emits
+        // the four switches unconditionally, so this is the state during the
+        // first frames before `big apps` has answered.
+        if (!shell.menuItems.length) return
+        shell.menuIndex = 0
+        shell.menuOpen = true
+    }
+
+    function menuMove(d) {
+        const n = shell.menuItems.length
+        if (!n) return
+        shell.menuIndex = Math.max(0, Math.min(n - 1, shell.menuIndex + d))
+    }
+
+    function menuActivate() {
+        const it = shell.menuItems[shell.menuIndex]
+        // Closed FIRST. Sleep comes back to this screen, and coming back to a
+        // menu somebody left open half an hour ago is the interface having
+        // remembered the wrong thing.
+        shell.menuOpen = false
+        shell.runAction(it)
+    }
 
     // ── one place where every input arrives ─────────────────────────────────
     //
@@ -1099,6 +1242,22 @@ ShellRoot {
             return
         }
 
+        // The Start menu owns every button while it is up, for the same reason
+        // and drawn UNDER the close question, which is the order these two are
+        // guarded in here.
+        if (shell.menuOpen) {
+            switch (cmd) {
+            case "up":     shell.menuMove(-1); break
+            case "down":   shell.menuMove(1); break
+            case "accept": shell.menuActivate(); break
+            case "back":
+            case "menu":
+            case "guide":  shell.menuOpen = false; break
+            default: break
+            }
+            return
+        }
+
         switch (cmd) {
         case "up":         shell.moveRow(-1); break
         case "down":       shell.moveRow(1); break
@@ -1107,6 +1266,12 @@ ShellRoot {
         case "page-left":  shell.moveCol(-6); break
         case "page-right": shell.moveCol(6); break
         case "accept":     shell.activate(); break
+        // ⚠ START IS THE ONE BUTTON WITH A DIFFERENT JOB ON EACH SIDE OF
+        // STEPPING ASIDE. Here it is the machine's own switches; while an
+        // application is up it is the on-screen keyboard (see navAway). That
+        // is not an inconsistency to tidy away — there is nothing to type into
+        // on this screen, and nothing to suspend from behind somebody's game.
+        case "menu":       shell.menuToggle(); break
         // Back goes UP a shelf, and from the top one it steps aside. A button
         // that does nothing at the top of the screen is a button somebody
         // presses three times before reaching for the keyboard they left on
@@ -1366,9 +1531,14 @@ ShellRoot {
                 id: header
                 anchors { top: parent.top; left: parent.left; right: parent.right }
                 anchors.margins: win.u * 1.6
-                height: win.u * 3
+                // 3.4 rather than 3: the dendrite mark stands beside two lines
+                // of type and has to be taller than they are to read as an
+                // emblem rather than a stray glyph, and it is bounded by this
+                // box. The 0.4u comes off the stage, which scrolls anyway.
+                height: win.u * 3.4
 
                 Column {
+                    id: wordmark
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: win.u * 0.2
@@ -1386,6 +1556,62 @@ ShellRoot {
                         font.pixelSize: win.u * 0.8
                         font.letterSpacing: win.u * 0.16
                     }
+                }
+
+                // The dendrite mark, beside the wordmark rather than above or
+                // behind it — the same pairing synui's welcome panel uses, so
+                // the television and the desktop introduce the system the same
+                // way.
+                //
+                // ⚠ ANCHORED TO THE WORDMARK, not placed in a Row with it. A
+                // Row positions its children by x and refuses to position one
+                // that anchors itself, so the two would silently overlap at the
+                // left margin the first time somebody added a vertical anchor
+                // to keep the mark centred against two lines of type.
+                Image {
+                    id: mark
+                    anchors.left: wordmark.right
+                    anchors.leftMargin: win.u * 0.9
+                    anchors.verticalCenter: wordmark.verticalCenter
+                    // ⚠ THE DRAWING IS NOT CENTRED IN ITS OWN CANVAS. The mark
+                    // spans y −464…272 of a 1024 box centred on 512, so its ink
+                    // sits about 9% of the box ABOVE the middle — centre the
+                    // box on the type and the emblem reads as floating. This
+                    // pushes the box down by that much so the INK lines up.
+                    anchors.verticalCenterOffset: height * 0.094
+
+                    source: shell.logoFile ? "file://" + shell.logoFile : ""
+                    visible: status === Image.Ready
+
+                    // Tied to the wordmark's own size: the emblem has to keep
+                    // its footing beside the type at every screen shape, and a
+                    // fixed multiple of u drifts against text that is already
+                    // a multiple of u.
+                    //
+                    // ⚠ BIGGER THAN THE TYPE IT STANDS BESIDE, because the ink
+                    // fills only about three quarters of the canvas in each
+                    // direction. Matched to the wordmark's height it rendered
+                    // a third smaller than it looks here and read as a stray
+                    // mark rather than an emblem.
+                    //
+                    // ⚠ AND BOUNDED BY THE HEADER, which is not belt and
+                    // braces: at 1.3x the type it stood 11px PAST the bottom of
+                    // its own box and into the banner underneath. Nothing
+                    // clips there, so it drew fine — until a wider piece of
+                    // game logo art reached the same place, which is a
+                    // collision nobody would think to look for in the header.
+                    height: Math.min(wordmark.height * 1.3, header.height * 0.95)
+                    width: height
+                    fillMode: Image.PreserveAspectFit
+                    // An SVG is rasterised at sourceSize, NOT at the drawn
+                    // size — left alone it decodes at the 1024x1024 in the file
+                    // and is then scaled down, which is a megabyte of texture
+                    // for a mark two centimetres across. Twice the drawn height
+                    // is enough for a 2x screen.
+                    sourceSize.width: Math.round(height * 2)
+                    sourceSize.height: Math.round(height * 2)
+                    smooth: true
+                    asynchronous: true
                 }
 
                 Column {
@@ -1751,6 +1977,25 @@ ShellRoot {
                                         // flick from a touchpad would fight the
                                         // selection for control of the same list.
                                         interactive: false
+
+                                        // ⚠ CLIPPED AT THE SHELF, and until bars
+                                        // shared a row it did not need to be. A
+                                        // shelf that overflowed always had the whole
+                                        // row to itself, so what ran past its right
+                                        // edge ran to the edge of the SCREEN and the
+                                        // stage's own clip caught it. Three bars on
+                                        // one row means the thing to the right of a
+                                        // shelf is another shelf: Play's half-tile
+                                        // peek was drawn ON TOP of Media's first
+                                        // tile, and Media's on top of Apps's. It did
+                                        // not read as a clipping bug either — it read
+                                        // as two tiles at slightly wrong positions.
+                                        //
+                                        // The margins below are what make this safe:
+                                        // a selected tile grows by 3% of its width at
+                                        // each side, into 1.6u of room that is inside
+                                        // these bounds rather than past them.
+                                        clip: true
                                         // Room for a selected tile to grow into at
                                         // either end, and for the first tile to sit
                                         // clear of the screen edge.
@@ -1993,6 +2238,13 @@ ShellRoot {
                             ]
                             if (running) out.push({ k: "X", v: "Close" })
                             out.push({ k: "LB/RB", v: "Jump" })
+                            // Start is where sleep, restart and power off went
+                            // when they stopped being a row. A switch nobody
+                            // can find is a switch that is not there, and this
+                            // legend is the only place on a television it can
+                            // be advertised.
+                            if (shell.menuItems.length)
+                                out.push({ k: "Start", v: "System" })
                             out.push({ k: "Guide",
                                        v: shell.activeApp ? "Resume" : "Desktop" })
                             return out
@@ -2067,6 +2319,135 @@ ShellRoot {
                     text: "Starting " + shell.launchingName + "…"
                     color: win.ink
                     font.pixelSize: win.u * 1.8
+                }
+            }
+
+            // ── the Start menu ──────────────────────────────────────────────
+            //
+            // The machine's own switches, off the shelves and behind one
+            // button. Dimmed screen behind it and the guard at the top of
+            // nav(), the same shape as the close question below — and drawn
+            // BEFORE it, so that if both ever coexist the question is on top,
+            // which is the order nav() guards them in.
+            //
+            // Bottom left, above the legend that names the button that opened
+            // it. A menu that appears in the middle of a television covers the
+            // thing somebody was looking at when they pressed Start.
+            Rectangle {
+                anchors.fill: parent
+                visible: shell.menuOpen
+                color: "#cc05060a"
+
+                // A real mouse is still a thing on this machine; clicking away
+                // is the same "no" that B is.
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: shell.menuOpen = false
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.leftMargin: win.u * 1.6
+                    // ⚠ TO ITS OWN PARENT, with the footer's height as a
+                    // NUMBER. `anchors.bottom: footer.top` is a generation too
+                    // far — the footer is a sibling of the dimmed backdrop,
+                    // not of this panel — and Qt answers that with one
+                    // "cannot anchor to an item that isn't a parent or
+                    // sibling" line and then draws the panel at y=0. It looked
+                    // like a deliberate top-left menu until the rig rendered
+                    // it against the row it is supposed to sit above.
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: footer.height + win.u * 1.2
+                    width: Math.min(parent.width * 0.42, win.u * 24)
+                    height: menuCol.implicitHeight + win.u * 2.4
+                    radius: win.u * 0.8
+                    color: "#1a1430"
+                    border.width: Math.max(1, win.u * 0.08)
+                    border.color: win.accent
+
+                    Column {
+                        id: menuCol
+                        anchors.centerIn: parent
+                        width: parent.width - win.u * 1.6
+                        spacing: win.u * 0.3
+
+                        Text {
+                            text: "SYSTEM"
+                            color: win.dim
+                            font.pixelSize: win.u * 0.8
+                            font.letterSpacing: win.u * 0.12
+                            font.bold: true
+                            leftPadding: win.u * 0.7
+                            bottomPadding: win.u * 0.3
+                        }
+
+                        Repeater {
+                            model: shell.menuItems
+
+                            Rectangle {
+                                id: entry
+                                required property var modelData
+                                required property int index
+
+                                readonly property bool chosen:
+                                    shell.menuIndex === entry.index
+
+                                width: menuCol.width
+                                height: win.u * 2.6
+                                radius: win.u * 0.4
+                                color: entry.chosen ? "#2b2450" : "transparent"
+                                border.width: entry.chosen
+                                              ? Math.max(1, win.u * 0.08) : 0
+                                border.color: win.accent
+
+                                // ⚠ CLICK ONLY, never hover. A hovered entry
+                                // that moved the selection would be the tile
+                                // bug this file already has a comment about:
+                                // Qt re-delivers hover at the last cursor
+                                // position on every dirty frame, so a menu
+                                // opening under a stationary pointer would
+                                // choose whatever it opened under.
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        shell.menuIndex = entry.index
+                                        shell.menuActivate()
+                                    }
+                                }
+
+                                Image {
+                                    id: entryIcon
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: win.u * 0.7
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    height: win.u * 1.4
+                                    width: height
+                                    source: entry.modelData.iconfile
+                                            ? "file://" + entry.modelData.iconfile
+                                            : ""
+                                    visible: status === Image.Ready
+                                    fillMode: Image.PreserveAspectFit
+                                    sourceSize.width: Math.round(height * 2)
+                                    sourceSize.height: Math.round(height * 2)
+                                    smooth: true
+                                }
+
+                                // ⚠ Anchored to the icon whether or not the
+                                // icon DREW. An invisible Image still has a
+                                // width, so a machine missing one glyph keeps
+                                // its menu in a column instead of shuffling
+                                // one row left.
+                                Text {
+                                    anchors.left: entryIcon.right
+                                    anchors.leftMargin: win.u * 0.7
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: entry.modelData.name || ""
+                                    color: entry.chosen ? win.ink : win.dim
+                                    font.pixelSize: win.u * 1.0
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2221,6 +2602,11 @@ ShellRoot {
                     // to on a build machine.
                     case Qt.Key_X:
                     case Qt.Key_Delete:   shell.nav("search"); break
+                    // The keyboard's spelling of Start. Escape quits and
+                    // Backspace is Back, so neither of the obvious keys was
+                    // free — and a modifier chord is the wrong shape for a
+                    // screen somebody is looking at from a sofa.
+                    case Qt.Key_P:        shell.nav("menu"); break
                     // Escape QUITS, where Guide steps aside. Somebody at a
                     // keyboard has a way back that somebody on a sofa does
                     // not, so the keyboard keeps the stronger verb.

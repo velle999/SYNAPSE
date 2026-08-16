@@ -84,6 +84,24 @@ printf '#!/bin/sh\nprintf %%s "{\\"text\\":\\"20:15\\",\\"date\\":\\"Fri 15 Augu
     > "$TMP/bin/synui-clock"
 chmod +x "$TMP/bin/synui-clock"
 
+# ⚠ LUTRIS AND HEROIC, STUBBED ONTO PATH, and this is not padding.
+#
+# apps_table() lists both behind a have() check, so on a machine with neither
+# the Play bar is two tiles and the row it shares with Media and Apps fits with
+# room to spare — which is the ONE case that proves nothing. The case that
+# matters is the day somebody installs a game launcher: four tiles on Play no
+# longer fit beside the other two shelves at the 15% squeeze, and before the
+# bar rule the packer answered that by breaking the row into three. Installing
+# Lutris would have rearranged the whole television.
+#
+# So the rig renders the crowded row, because the roomy one cannot tell a
+# working packer from a broken one. Nothing is ever executed: `big run` is
+# already a sleep, and these exist only to be FOUND.
+for launcher in lutris heroic; do
+    printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/$launcher"
+    chmod +x "$TMP/bin/$launcher"
+done
+
 mkfifo "$TMP/nav.fifo"
 
 # Seeded caches, so the news and media shelves have something to draw without
@@ -338,7 +356,13 @@ exec 9<> "$TMP/nav.fifo"
 say() { printf '%s\n' "$1" >&9; sleep "${2:-0.35}"; }
 
 # ── the shell ───────────────────────────────────────────────────────────────
+#
+# ⚠ SYN_BIG_LOGO by hand, because this rig starts quickshell DIRECTLY and never
+# runs `big start` — which is where the header's dendrite mark is resolved. Left
+# unset the header simply draws no emblem, so every screenshot would show the
+# wordmark alone and look exactly like a working header.
 QT_QPA_PLATFORM=wayland QS_APP_ID=syn-arcade-big SYNARCADE_BIN=syn-arcade \
+    SYN_BIG_LOGO="$PWD/data/icons/synapse.svg" \
     quickshell -p "$QML" > "$TMP/qs.log" 2>&1 &
 QS_PID=$!
 sleep 4
@@ -353,12 +377,14 @@ shot 01-main
 
 # ── the library, which is what the top of the screen DRESSES ────────────────
 #
-# ⚠ 01-main sits on the Play shelf, where the selected tile is an APPLICATION:
-# no hero, no logo, and a banner that is text on black. Every screenshot this
-# rig produced was of that state, so the art band could have been drawing
-# nothing at all and nothing here would have said so. The band only exists
-# with a GAME selected, and it has three states which are three code paths:
-say down 0.6
+# ⚠ THE LIBRARY IS THE FIRST ROW NOW, so 01-main already sits on a GAME — where
+# it used to sit on the Play shelf, whose selected tile is an APPLICATION: no
+# hero, no logo, and a banner that is text on black. Every screenshot this rig
+# took before 0.1.0-13 was of that state, so the art band could have been
+# drawing nothing at all and nothing here would have said so.
+#
+# The band has three states, which are three code paths, and they are reached
+# by walking ALONG the first row rather than down into it:
 shot 01b-game-art        # 220: hero + logo — the dressed banner
 say right; say right 0.6
 shot 01c-game-no-logo    # 280: hero but NO logo — the text title over art
@@ -367,23 +393,42 @@ shot 01d-game-no-hero    # 300: cover only — banner over an empty band
 
 # ── BANDS: shelves that fit are drawn side by side ─────────────────────────
 #
-# ⚠ DOWN IS NO LONGER ONE SHELF. Six shelves pack into four rows on a 16:9
-# screen — Play, Games, then Media+Apps across one row and System+News across
-# the next — so a walk written as "five downs to reach the news" now stops two
-# rows short and screenshots something else entirely while still looking like
-# it worked. The number of presses between two shelves is a fact about the
-# SCREEN now, which is why these steps say where they expect to land.
-say down; say down 0.6
-shot 02-system-news          # the last band: two shelves, one row
+# ⚠ DOWN IS NOT ONE SHELF, AND THE COUNT CHANGED AGAIN IN 0.1.0-16. The screen
+# is three rows now — Games, then Play+Media+Apps packed across one, then the
+# headlines — because the system switches left the shelves for the Start menu
+# and the three short shelves are BARS that always share a row. A walk written
+# against the old four rows stops on the wrong one and screenshots something
+# else entirely while still looking like it worked, which is why every step
+# below says where it expects to land.
+say down 0.6
+shot 02-bar-row              # Play, Media and Apps: three shelves, one row
 
 # Right runs ALONG a band and crosses into the shelf drawn beside it — the
-# thing a suite of greps cannot show. Four presses from Desktop is one past the
-# end of System, which lands on the first headline.
+# thing a suite of greps cannot show. From the first Play tile that is two
+# crossings: out of Play into Media, and out of Media into Apps.
 say right; say right; say right; say right 0.6
-shot 02b-crossed-into-news
+shot 02b-crossed-along-the-bar
+
+say down 0.6
+shot 03-news                 # the third row, on its own
 
 say up 0.5
-shot 03-media-apps
+shot 03b-back-on-the-bar
+
+# ── the Start menu ──────────────────────────────────────────────────────────
+#
+# Where the system switches went. Opened, moved down one, and closed with B.
+#
+# ⚠ NO `accept` ANYWHERE NEAR THIS. The first entry is Desktop, whose whole job
+# is Qt.quit() — an accept here would end the run at screenshot four with
+# everything after it silently missing, and a rig that stops early looks a lot
+# like a rig that finished.
+say menu 0.8
+shot 03c-start-menu
+say down 0.4
+shot 03d-start-menu-moved
+say back 0.6
+shot 03e-start-menu-closed
 
 # Guide steps aside: the main surface must go, and the hint must appear.
 say guide 0.9
@@ -397,8 +442,8 @@ shot 05-back
 # turns `big run` into a sleep, so "an application is running" is true with no
 # application involved.
 say up; say up; say up; say up; say up 0.4    # to the top, wherever we were
-say down; say down 0.6                        # Play → Games → the Media/Apps band
-say right; say right; say right 0.5           # along Media, then across into Apps
+say down 0.6                                  # Games → the Play/Media/Apps row
+say right; say right; say right; say right 0.5 # along Play and Media into Apps
 shot 06-apps-shelf
 say accept 1.4
 shot 07-launched

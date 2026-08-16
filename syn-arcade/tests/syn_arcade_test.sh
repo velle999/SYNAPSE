@@ -1347,6 +1347,31 @@ check "a failed fetch leaves the cached headlines alone" $?
 says "$SA" big media --rec | head -1 | grep -q "^id.*name.*url.*source"
 check "media --rec names its columns" $?
 
+# ── the same server, found twice ────────────────────────────────────────────
+#
+# ⚠ A SERVER THAT ANSWERS ITS OWN BROADCAST DESCRIBED ITSELF TWICE. The
+# localhost probe exists because a server does not RELIABLY answer itself — but
+# plenty do, and then the same Plex is added once as 192.168.x.x from the GDM
+# reply and once as 127.0.0.1 from the probe. servers_add() deduplicates on the
+# URL, and those are two different strings, so the Media shelf carried Plex
+# twice: once under the server's own name and once as "Plex (this machine)".
+#
+# From the sofa that does not read as a bug — it reads as two servers, and
+# pressing either one works. That is why it shipped.
+#
+# ⚠ STRUCTURAL, and it has to be here: this suite is hermetic
+# (SYN_ARCADE_NO_NET=1), so no assertion in it can make a server answer. The
+# behaviour was proven against the live network, where `big media --refresh`
+# went from two rows to one and kept the server's OWN name.
+grep -q 'static bool addr_is_local(const char \*ip)' src/big.c
+check "discovery can tell this machine's own addresses" $?
+
+grep -q '!have_local_server(out, n, "plex") &&' src/big.c
+check "...and does not probe localhost for a Plex it already found here" $?
+
+grep -q '!have_local_server(out, n, "jellyfin") &&' src/big.c
+check "...nor for a Jellyfin" $?
+
 printf 'id\tname\turl\tsource\tkind\nplex-1\tLiving%%20Room\thttps://example.com:32400/web\tplex\tserver\n' \
     > "$XDG_CACHE_HOME/syn-arcade/media.tsv"
 
@@ -1940,20 +1965,149 @@ check "the mouse runs only while the interface is out of the way" $?
 grep -q 'shell.activeApp.pointer === "1" && !shell.oskOpen' "$BIGQML"
 check "...only for a tile that wants one, and never under the keyboard" $?
 
-# ── the news shelf ──────────────────────────────────────────────────────────
-
+# ── the three rows, in order ────────────────────────────────────────────────
+#
+# Games, then Play/Media/Apps across one row, then the headlines. The order is
+# compared by LINE NUMBER, because the shelves are pushed in display order and
+# there is no QML engine here to ask.
 grep -q 'title: "News"' "$BIGQML"
 check "there is a news shelf" $?
 
-grep -q 'title: "System", kind: "action"' "$BIGQML"
-check "...and the machine's own switches are still their own shelf" $?
-
-# The order asked for: news BELOW the system row. Compared by line number,
-# because the shelves are pushed in display order.
-sysline=$(grep -n 'title: "System"' "$BIGQML" | head -1 | cut -d: -f1)
+gamesline=$(grep -n 'title: "Games"' "$BIGQML" | head -1 | cut -d: -f1)
+playline=$(grep -n 'title: "Play"' "$BIGQML" | head -1 | cut -d: -f1)
+mediline=$(grep -n 'title: "Media"' "$BIGQML" | head -1 | cut -d: -f1)
+appsline=$(grep -n 'title: "Apps"' "$BIGQML" | head -1 | cut -d: -f1)
 newsline=$(grep -n 'title: "News"' "$BIGQML" | head -1 | cut -d: -f1)
-[ "$newsline" -gt "$sysline" ]
-check "news comes after the system row" $?
+
+# ⚠ Every one of these has to be a NUMBER before they are compared. A renamed
+# shelf makes its variable empty, and `[ "" -gt 5 ]` is a shell ERROR, not a
+# false — which prints a diagnostic beside a check that then reports whatever
+# the previous command left in $?. That is how two of these looked like passes
+# on the run that renamed System.
+numeric=1
+for v in "$gamesline" "$playline" "$mediline" "$appsline" "$newsline"; do
+	case $v in ''|*[!0-9]*) numeric=0 ;; esac
+done
+[ "$numeric" -eq 1 ]
+check "every shelf the order is asserted on still exists" $?
+
+# ⚠ THE LIBRARY IS THE FIRST ROW. Play used to sit above it — two launcher
+# tiles across the top of a television, with the covers somebody turned it on
+# for pushed a row down.
+[ "$gamesline" -lt "$playline" ]
+check "the library is the first row, above the launchers" $?
+
+[ "$playline" -lt "$mediline" ] && [ "$mediline" -lt "$appsline" ]
+check "...then Play, Media and Apps, in that order along one row" $?
+
+[ "$newsline" -gt "$appsline" ]
+check "...and the headlines are last" $?
+
+# ── the machine's own switches are NOT a shelf ──────────────────────────────
+#
+# ⚠ THE INVERSE ASSERTION, and it is the one worth having. Four buttons pressed
+# once a day cost a whole row of the television and one more scroll on the way
+# to the news. They are still `shelf = system` in big.c — where a tile goes is
+# still decided there — so what this pins is that THIS file stopped pushing
+# them into `shelves`, which is a thing a later edit could put back in one line
+# without anything warning.
+! grep -q 'title: "System"' "$BIGQML"
+check "the system switches are no longer a row of the screen" $?
+
+grep -q 'readonly property var menuItems: shell.byShelf("system")' "$BIGQML"
+check "...they are what is behind Start" $?
+
+# One implementation of what Sleep does. Reachable from the menu now and from a
+# shelf tile still, and two copies is how one of them stops restarting the
+# launch overlay — which reads as a button that did nothing.
+grep -q 'function runAction(it)' "$BIGQML"
+check "an action has one implementation, not one per way in" $?
+
+grep -q 'if (shell.runAction(it)) return' "$BIGQML"
+check "...and the tile path goes through it" $?
+
+# The menu owns every button while it is up, exactly as the close question
+# does. Without the guard the d-pad keeps moving the selection behind the
+# overlay and A means something other than what is drawn under the cursor.
+grep -q 'if (shell.menuOpen) {' "$BIGQML"
+check "the Start menu is modal to the controller" $?
+
+grep -q 'case "menu":       shell.menuToggle(); break' "$BIGQML"
+check "Start opens it" $?
+
+grep -q 'case Qt.Key_P:        shell.nav("menu"); break' "$BIGQML"
+check "...and P is the keyboard's spelling of Start" $?
+
+# A switch nobody can find is a switch that is not there, and on a television
+# the legend is the only place it can be advertised.
+grep -q 'k: "Start", v: "System"' "$BIGQML"
+check "...and the legend says so" $?
+
+# Closed BEFORE the action runs: sleep comes back to this screen, and coming
+# back to a menu left open half an hour ago is the interface having remembered
+# the wrong thing.
+#
+# ⚠ SCOPED TO THE FUNCTION, and the whole-file version of this was wrong. There
+# are four `menuOpen = false` in the file — the toggle, the nav guard, the
+# backdrop's click — and the last of them is in the OVERLAY, hundreds of lines
+# below menuActivate. A `tail -1` therefore compared a line in the drawing
+# against a line in the logic and reported the order backwards.
+awk '/function menuActivate\(\)/,/^    }$/' "$BIGQML" > "$T/menuactivate.qml"
+menuclose=$(grep -n 'shell.menuOpen = false' "$T/menuactivate.qml" | head -1 | cut -d: -f1)
+menurun=$(grep -n 'shell.runAction(it)' "$T/menuactivate.qml" | head -1 | cut -d: -f1)
+case ${menuclose:-x}${menurun:-x} in
+	*[!0-9]*) false ;;
+	*) [ "$menuclose" -lt "$menurun" ] ;;
+esac
+check "...and it closes before the switch it chose is thrown" $?
+
+# ── a BAR: a shelf that would rather scroll than own a row ──────────────────
+#
+# ⚠ THIS IS WHAT RESERVES ROOM FOR HEROIC AND LUTRIS. Both are already in
+# apps_table() behind a have() check, so they join the Play bar the day they
+# are installed — and without this rule that arrival is a silent RELAYOUT:
+# four launchers no longer fit beside Media and Apps at the 15% squeeze, the
+# packer breaks the row in three, and installing a game launcher rearranges the
+# whole television.
+grep -q 'function isBar(sh) { return sh.kind === "app" }' "$BIGQML"
+check "Play, Media and Apps are bars" $?
+
+grep -q 'if (bar && cur.length && shell.isBar(shell.shelves\[cur\[0\]\])) {' "$BIGQML"
+check "...so they share a row whatever the arithmetic says" $?
+
+grep -q 'if (!bar && shell.bandScale(\[sh\]) < shell.bandSqueeze) close()' "$BIGQML"
+check "...and a bar is never sent to a row of its own for not fitting" $?
+
+# Past the squeeze the row is SHARED OUT instead of overflowing the screen. A
+# band whose widths add up to more than the row is a Row drawn off the edge of
+# the television, and the last bar simply is not there.
+grep -q 'units = w.map(x => x \* shell.rowUnits / used)' "$BIGQML"
+check "a band that cannot fit shares the row out in proportion" $?
+
+grep -q 'Math.max(shell.bandSqueeze, shell.bandScale(shs))' "$BIGQML"
+check "...with the tiles floored at the same 15% the strip allows" $?
+
+# ── the dendrite mark ───────────────────────────────────────────────────────
+#
+# Resolved in C through icon_file(), like every tile glyph, so the header draws
+# from the source tree and the installed tree without knowing which it is.
+grep -q 'SYN_BIG_LOGO' "$BIGQML"
+check "the header takes its emblem from a path C resolved" $?
+
+grep -q 'setenv("SYN_BIG_LOGO", icon_file("synapse"), 1)' src/big.c
+check "...and big.c is what resolves it" $?
+
+[ -f data/icons/synapse.svg ]
+check "...and the drawing is in the tree" $?
+
+grep -q "data/icons/synapse.svg" meson.build
+check "...and ships" $?
+
+# ⚠ ANCHORED TO THE WORDMARK, not placed in a Row with it. A Row refuses to
+# position a child that anchors itself, so the two would silently overlap at
+# the left margin.
+grep -q 'anchors.left: wordmark.right' "$BIGQML"
+check "the mark sits beside the wordmark" $?
 
 # ── the layout answers to the screen's SHAPE, not only its height ───────────
 #

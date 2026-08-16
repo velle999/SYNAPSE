@@ -120,6 +120,11 @@ install_data(
   'data/icons/sleep.svg',
   'data/icons/restart.svg',
   'data/icons/poweroff.svg',
+  # Not a tile glyph: the dendrite mark beside the wordmark in the header.
+  # It goes through icon_file() like the rest, which is what lets the header
+  # draw from the source tree and from the installed tree without knowing
+  # which it is.
+  'data/icons/synapse.svg',
   install_dir: get_option('datadir') / 'syn-arcade' / 'icons')
 
 # Scalable only: Qt renders the SVG at whatever size the dock or the menu asks

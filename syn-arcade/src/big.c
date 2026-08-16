@@ -70,6 +70,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <signal.h>
@@ -2071,6 +2072,86 @@ static bool gdm_field(const char *text, const char *key, char *out, size_t n)
 	return false;
 }
 
+/* The host out of "http://192.168.40.153:32400/web". */
+static bool url_host(const char *url, char *out, size_t n)
+{
+	if (!url || !out || n == 0)
+		return false;
+
+	const char *p = strstr(url, "://");
+	p = p ? p + 3 : url;
+
+	size_t w = 0;
+	while (*p && *p != ':' && *p != '/' && w + 1 < n)
+		out[w++] = *p++;
+	out[w] = '\0';
+	return w > 0;
+}
+
+/*
+ * Is this address one of THIS machine's own?
+ *
+ * ⚠ THE SERVER THAT ANSWERS ITS OWN BROADCAST IS WHY THIS EXISTS. The localhost
+ * probe below is there because a server does not RELIABLY answer itself — but
+ * plenty of them do, and then the same server has described itself twice under
+ * two different addresses: once as 192.168.40.153 in the GDM reply and once as
+ * 127.0.0.1 from the probe. servers_add() deduplicates on the URL, and those
+ * are two different strings, so the Media shelf showed Plex twice — once under
+ * the server's own name and once as "Plex (this machine)".
+ *
+ * From four metres away that does not read as a bug. It reads as two servers,
+ * and pressing the wrong one is indistinguishable from pressing the right one,
+ * which is why it survived a release: everything WORKED, there was just one
+ * tile too many.
+ *
+ * It covers a second duplicate that has nothing to do with loopback: a machine
+ * with Wi-Fi and Ethernet on one subnet gets a reply per interface, each naming
+ * the address it arrived on.
+ */
+static bool addr_is_local(const char *ip)
+{
+	if (!ip || !*ip)
+		return false;
+	if (strncmp(ip, "127.", 4) == 0)
+		return true;
+
+	struct ifaddrs *list = NULL;
+	if (getifaddrs(&list) != 0)
+		return false;		/* cannot tell: keep both, do not lose one */
+
+	bool local = false;
+	for (struct ifaddrs *p = list; p && !local; p = p->ifa_next) {
+		if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET)
+			continue;
+
+		const struct sockaddr_in *sin =
+			(const struct sockaddr_in *)(const void *)p->ifa_addr;
+		char mine[INET_ADDRSTRLEN] = "";
+		if (inet_ntop(AF_INET, &sin->sin_addr, mine, sizeof(mine)) &&
+		    strcmp(mine, ip) == 0)
+			local = true;
+	}
+
+	freeifaddrs(list);
+	return local;
+}
+
+/* Has a server of this kind already been found ON THIS MACHINE, under whatever
+ * address it chose to announce itself with? */
+static bool have_local_server(const server_t *out, int n, const char *source)
+{
+	for (int i = 0; i < n; i++) {
+		if (strcmp(out[i].source, source) != 0)
+			continue;
+
+		char host[128];
+		if (url_host(out[i].url, host, sizeof(host)) &&
+		    addr_is_local(host))
+			return true;
+	}
+	return false;
+}
+
 /* Is something listening on this port of this host? A connect() with a short
  * timeout, which is the only question that matters — a Plex server on this
  * machine is one that has port 32400 open. */
@@ -2219,11 +2300,19 @@ static int media_discover(server_t *out, int max)
 	if (plex >= 0) close(plex);
 	if (jelly >= 0) close(jelly);
 
-	/* …and this machine, which does not answer its own broadcast. */
-	if (port_open("127.0.0.1", 32400, 200))
+	/* …and this machine, which does not RELIABLY answer its own broadcast.
+	 *
+	 * ⚠ Skipped when it already has. See addr_is_local: a server that both
+	 * replies and is listening on loopback is one server, and adding it
+	 * again under a second address put Plex on the shelf twice. The reply
+	 * is preferred over the probe because the reply carries the server's
+	 * OWN name — "synapse" rather than "Plex (this machine)". */
+	if (!have_local_server(out, n, "plex") &&
+	    port_open("127.0.0.1", 32400, 200))
 		servers_add(out, &n, max, "plex", "Plex (this machine)",
 			    "http://127.0.0.1:32400/web");
-	if (port_open("127.0.0.1", 8096, 200))
+	if (!have_local_server(out, n, "jellyfin") &&
+	    port_open("127.0.0.1", 8096, 200))
 		servers_add(out, &n, max, "jellyfin", "Jellyfin (this machine)",
 			    "http://127.0.0.1:8096");
 
@@ -3117,6 +3206,13 @@ static int big_start(const char *output, bool detach)
 	char out[128] = "";
 	resolve_output(output, out, sizeof(out));
 	setenv("SYN_BIG_OUTPUT", out, 1);
+
+	/* The dendrite mark for the header. Resolved HERE for the same reason
+	 * every tile glyph is: the shell is a renderer handed a path that
+	 * exists or an empty string, and it never has to know where this
+	 * package installed itself or that there is a source tree. An empty
+	 * value draws no emblem rather than a broken-image box. */
+	setenv("SYN_BIG_LOGO", icon_file("synapse"), 1);
 
 	/* OVERWRITTEN, not merely set — the inherited-QS_APP_ID accident.
 	 * Every app in this suite hands its whole environment to what it
