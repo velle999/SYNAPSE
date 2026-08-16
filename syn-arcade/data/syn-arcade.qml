@@ -154,6 +154,114 @@ FloatingWindow {
         }
     }
 
+    // ── the mapping wizard ──────────────────────────────────────────────────
+    //
+    // ⚠ THE ONE TAB THAT EXISTS FOR A BROKEN CONTROLLER COULD NOT FIX ONE. It
+    // listed mappings, removed them, and to ADD one told you to go and find
+    // antimicrox — so the window's answer to "my pad's buttons are in the
+    // wrong places" was the name of another program. That is not a settings
+    // panel, it is a note about where the settings panel would be.
+    //
+    // `map learn` is a conversation: it prints one record per thing that
+    // happens and reads one word per line back. This end of it is a reader and
+    // three buttons; the binary decides everything, including which control
+    // comes next, so the terminal wizard and this one cannot drift.
+    property bool   wizOn: false
+    property string wizPad: ""
+    property var    wizAsk: ({})
+    property var    wizBound: []
+    property string wizNote: ""
+
+    Process {
+        id: wizProc
+        stdinEnabled: true
+        stdout: SplitParser {
+            onRead: (line) => root.wizLine(line)
+        }
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.status = root.oneLine(this.text)
+        }
+        onExited: {
+            root.wizOn = false
+            root.reload()
+        }
+    }
+
+    // ⚠ COLUMNS BY NAME, from the record's own first line, exactly as
+    // parseRecords does for the collected readers. A wizard that hard-coded
+    // "field four is the control" would be a second place to update when a
+    // column is added in C, and the failure would be a silently mislabelled
+    // prompt rather than an error.
+    property var wizCols: []
+
+    function wizLine(raw) {
+        const line = raw.replace(/\n$/, "")
+        // map_add's own report comes down the same stream once the wizard
+        // finishes — plain sentences, no tabs. Those belong in the status bar.
+        if (line.indexOf("\t") < 0) {
+            if (line.trim() !== "") root.status = line.trim()
+            return
+        }
+
+        const f = line.split("\t").map(root.disp)
+        if (root.wizCols.length === 0 || f[0] === "event") {
+            root.wizCols = f
+            return
+        }
+        const r = {}
+        for (let i = 0; i < root.wizCols.length; i++) r[root.wizCols[i]] = f[i] || ""
+
+        switch (r.event) {
+        case "pad":
+            root.wizPad = r.detail
+            root.wizBound = []
+            root.wizNote = ""
+            break
+        case "ask":
+            root.wizAsk = r
+            root.wizNote = ""
+            break
+        case "bound":
+            root.wizBound = root.wizBound.concat([
+                { control: r.control, binding: r.binding }])
+            break
+        case "skipped":
+            root.wizBound = root.wizBound.concat([
+                { control: r.control, binding: "" }])
+            break
+        // ⚠ Not an error and not a refusal to continue: it is the same
+        // question again, with the reason. Two controls on one button is
+        // always a mis-press, and recording it would give the pad a B that is
+        // also an A — which shows up much later, in a game, as a button that
+        // does two things.
+        case "taken":
+            root.wizNote = "That is already " + r.detail + " — try another."
+            break
+        case "cancelled":
+        case "error":
+            root.status = r.detail
+            break
+        default:
+            break
+        }
+    }
+
+    function wizStart() {
+        root.status = ""
+        root.wizCols = []
+        root.wizAsk = ({})
+        root.wizBound = []
+        root.wizNote = ""
+        root.wizPad = ""
+        root.wizOn = true
+        wizProc.command = [root.bin, "map", "learn", "--rec"]
+        wizProc.running = true
+    }
+
+    function wizSay(word) {
+        if (wizProc.running) wizProc.write(word + "\n")
+    }
+
     Process {
         id: bindsProc
         stdout: StdioCollector {
@@ -468,15 +576,183 @@ FloatingWindow {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: "For a pad whose buttons come out in the wrong places. Add a "
-                            + "mapping string from antimicrox or the SDL gamepad tool with "
-                            + "`syn-arcade map add`; every SDL game reads them."
+                        visible: !root.wizOn
+                        text: "For a pad whose buttons come out in the wrong places. "
+                            + "Press each control once and this writes the mapping; every "
+                            + "SDL game reads it from the next launch."
                         color: root.dim
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
                     }
 
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !root.wizOn
+                        spacing: 8
+
+                        ArcButton {
+                            text: "Set up with the controller"
+                            primary: true
+                            onTriggered: root.wizStart()
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "or paste one:"
+                            color: root.dim
+                            font.pixelSize: 12
+                        }
+                        // The paste path stays, because somebody who already
+                        // HAS a working string should not have to press
+                        // twenty-one buttons to use it. It is second, and it
+                        // is no longer the only way in.
+                        Rectangle {
+                            Layout.preferredWidth: 220
+                            implicitHeight: 30
+                            radius: 6
+                            color: root.panelHi
+                            TextInput {
+                                id: pasteField
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: root.ink
+                                font.pixelSize: 12
+                                clip: true
+                                selectByMouse: true
+                                onAccepted: if (text.trim() !== "") {
+                                    root.run(["map", "add", text.trim()])
+                                    text = ""
+                                }
+                            }
+                        }
+                        ArcButton {
+                            text: "Add"
+                            onTriggered: if (pasteField.text.trim() !== "") {
+                                root.run(["map", "add", pasteField.text.trim()])
+                                pasteField.text = ""
+                            }
+                        }
+                    }
+
+                    // ── the wizard, while it is running ───────────────────
+                    //
+                    // ⚠ EVERY WORD ON THIS PANEL COMES FROM THE BINARY,
+                    // including which control is being asked for and what to
+                    // call it. A window that kept its own list of controls
+                    // would be a second list to fall out of step with the one
+                    // deciding the order — and the symptom of that is a
+                    // mapping where every binding is one control out, which is
+                    // well-formed, loads fine, and plays wrong.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: root.wizOn
+                        radius: 8
+                        color: root.panelHi
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 20
+                            spacing: 10
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.wizPad || "looking for a controller…"
+                                color: root.dim
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+
+                            Item { Layout.fillHeight: true }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.wizAsk.detail ? "Press " + root.wizAsk.detail
+                                                         : "…"
+                                color: root.ink
+                                font.pixelSize: 26
+                                font.bold: true
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.wizNote
+                                visible: root.wizNote !== ""
+                                color: root.bad
+                                font.pixelSize: 13
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.wizAsk.total
+                                      ? (Number(root.wizAsk.index) + 1) + " of "
+                                        + root.wizAsk.total
+                                      : ""
+                                color: root.dim
+                                font.pixelSize: 13
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            // A thin bar rather than a number alone: on a
+                            // twenty-one step walk the useful question is "how
+                            // much is left", and that is a length.
+                            Rectangle {
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.preferredWidth: 320
+                                Layout.preferredHeight: 4
+                                radius: 2
+                                color: root.panel
+                                Rectangle {
+                                    height: parent.height
+                                    radius: parent.radius
+                                    color: root.accent
+                                    width: root.wizAsk.total
+                                           ? parent.width * root.wizBound.length
+                                             / Number(root.wizAsk.total)
+                                           : 0
+                                    Behavior on width {
+                                        NumberAnimation { duration: 150 }
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true }
+
+                            Text {
+                                Layout.fillWidth: true
+                                // Skipping is not failure and must not read as
+                                // it: plenty of pads have no Guide button and
+                                // no second stick, and a wizard that cannot be
+                                // told so is a wizard nobody finishes.
+                                text: "A control this pad does not have — skip it."
+                                color: root.dim
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            RowLayout {
+                                Layout.alignment: Qt.AlignHCenter
+                                spacing: 8
+                                ArcButton {
+                                    text: "Skip"
+                                    onTriggered: root.wizSay("skip")
+                                }
+                                ArcButton {
+                                    text: "Back"
+                                    onTriggered: root.wizSay("back")
+                                }
+                                ArcButton {
+                                    text: "Cancel"
+                                    onTriggered: root.wizSay("cancel")
+                                }
+                            }
+                        }
+                    }
+
                     ListView {
+                        visible: !root.wizOn
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -528,10 +804,12 @@ FloatingWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        visible: root.maps.length === 0
-                        text: "No mappings added."
+                        visible: !root.wizOn && root.maps.length === 0
+                        text: "No mappings added — the pads SDL already knows are working "
+                            + "from its own database, and need nothing here."
                         color: root.dim
                         font.pixelSize: 12
+                        wrapMode: Text.WordWrap
                     }
                 }
 

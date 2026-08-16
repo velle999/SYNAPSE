@@ -35,17 +35,26 @@
  * is re-read by each game as it starts, so a mapping fixed now works in the
  * next game launched without touching the session.
  *
- * ── Why mappings are pasted and not generated ───────────────────────────────
+ * ── This file is the DATABASE. sdlwiz.c is where a mapping comes from ───────
  *
- * Producing a correct mapping means watching a person press all seventeen
- * controls in a known order and recording which raw code each one sent. That
- * is a wizard, and it is `antimicrox` or the SDL project's own gamepad tool,
- * both of which do it well. Reimplementing it here would be a worse copy of a
- * solved thing.
+ * ⚠ THIS COMMENT USED TO ARGUE THAT MAPPINGS ARE PASTED AND NOT GENERATED —
+ * that producing one means watching somebody press seventeen controls in a
+ * known order, that this is a wizard, that antimicrox and the SDL project's
+ * own tool both do it well, and that a worse copy of a solved thing is not
+ * worth writing.
  *
- * What was actually missing on this desktop is everything AROUND that: a file
- * SDL is told to read, a way to see what is in it, and a way to take one back
- * out when it turns out to be wrong. That is what this is.
+ * Every clause of that was true and the conclusion was still wrong, because of
+ * where it left the person holding the pad: the one tab in this application
+ * that exists for a broken controller could list mappings and remove them, and
+ * to ADD one it named a program this desktop does not ship. See sdlwiz.c,
+ * which is the wizard, and which asks SDL for every number in the line rather
+ * than reimplementing SDL's internals.
+ *
+ * What lives HERE is everything around that: the file SDL is told to read, a
+ * way to see what is in it, the refusals that catch a mapping SDL would
+ * silently ignore, and a way to take one back out when it turns out to be
+ * wrong. The wizard ends by calling map_add_line() below, so a learned mapping
+ * and a pasted one go through exactly the same door.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -129,8 +138,11 @@ static bool mapping_ok(const char *line)
 	if (!mapping_parse(line, &m)) {
 		fputs("syn-arcade: that is not a mapping line. The format is\n"
 		      "  <32-hex-GUID>,<Name>,a:b0,b:b1,…,platform:Linux\n"
-		      "Tools that produce one: antimicrox, or the SDL project's\n"
-		      "gamepad tool.\n", stderr);
+		      "\n"
+		      "If you do not have one, do not go and find one:\n"
+		      "      syn-arcade map learn\n"
+		      "presses through the controls with you and writes it.\n",
+		      stderr);
 		return false;
 	}
 
@@ -306,6 +318,14 @@ static int map_add(const char *line)
 	return EX_OK;
 }
 
+/* Exposed for the wizard in sdlwiz.c: it assembles a line and this writes it,
+ * so the refusals, the replace-don't-append rule and the file header have one
+ * implementation rather than two that drift. */
+int map_add_line(const char *line)
+{
+	return map_add(line);
+}
+
 static int map_remove(const char *what)
 {
 	char path[4096];
@@ -421,6 +441,13 @@ int cmd_map(int argc, char **argv)
 		}
 		return map_add(argv[1]);
 	}
+
+	/* ⚠ The wizard is the FIRST thing offered, not a footnote under `add`.
+	 * Somebody reaching for `map` has a pad that misbehaves; they do not
+	 * have a mapping string, and telling them to go and produce one
+	 * elsewhere is what this command used to do. */
+	if (strcmp(sub, "learn") == 0)
+		return map_learn(argc - 1, argv + 1);
 
 	if (strcmp(sub, "remove") == 0) {
 		if (argc < 2) {

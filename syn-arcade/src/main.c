@@ -53,6 +53,7 @@ static void usage(FILE *f)
 "\n"
 "Controller mappings — for a pad whose buttons come out in the wrong places\n"
 "  map                     the mappings you have added\n"
+"  map learn [<pad>]       press each control once and write the mapping\n"
 "  map add '<mapping>'     add one (quote it), replacing any for the same pad\n"
 "  map remove <guid|name>  take one back out\n"
 "  map path                where the database is, and whether SDL reads it\n"

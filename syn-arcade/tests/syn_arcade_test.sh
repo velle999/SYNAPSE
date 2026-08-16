@@ -241,6 +241,89 @@ check "the record still carries the plain state, not the explanation" $?
 # in the expectation of something else.
 GUIQML=data/syn-arcade.qml
 
+# ── the mapping wizard ──────────────────────────────────────────────────────
+#
+# ⚠ THE ONE TAB THAT EXISTS FOR A BROKEN CONTROLLER COULD NOT FIX ONE. Mappings
+# listed and removed; to ADD one it named another program. The window's answer
+# to "my pad's buttons are in the wrong places" was the name of a program it
+# does not ship.
+#
+# End to end this is mapwiz_rig.sh, which builds a uinput pad, presses all
+# twenty-one controls and then hands the result back to SDL — the only check
+# that distinguishes a plausible-looking mapping from one that works, because
+# SDL refusing a mapping is silent. These pin what a later edit could undo.
+WIZC=src/sdlwiz.c
+
+says "$SA" map bogus-verb 2>&1 | grep -q "unknown map command"
+check "map still refuses a verb it does not have" $?
+
+"$SA" 2>&1 | grep -q "map learn"
+check "the wizard is in the help, where somebody with a bad pad will look" $?
+
+# ⚠ dlopen, NOT a link. meson.build argues that libSDL has no business being
+# linked into a tool that must work over SSH, and the wizard does not break
+# that: SDL is opened at run time by the one command that needs it, so `pads
+# list` on a machine without SDL still works. A plain dependency() would put
+# libSDL3 in DT_NEEDED and nothing would warn.
+[ "$(ldd "$SA" | grep -c SDL)" = 0 ]
+check "the binary does not link SDL — the wizard opens it at run time" $?
+
+grep -q 'dlopen(SDL_SONAME' "$WIZC"
+check "...through dlopen" $?
+
+grep -q '#define SDL_SONAME "libSDL3.so.0"' "$WIZC"
+check "...by SONAME, so a machine without SDL's headers still has the library" $?
+
+# ⚠ SDL COMPUTES THE GUID AND THE INDICES. A mapping names controls by SDL's
+# joystick indices and is keyed on SDL's GUID; neither is derivable from evdev,
+# and getting either wrong fails SILENTLY — SDL declines the mapping and the
+# pad behaves exactly as before, which is the fault the person is escaping.
+grep -q 'GetJoystickGUID' "$WIZC"
+check "the GUID comes from SDL rather than being worked out here" $?
+
+# ⚠ THE RELEASE IS NOT THE NEXT ANSWER. A release does not arrive with its
+# press — it lands a moment later, while the next question is already up. The
+# first build recorded a trigger correctly and then took that trigger's return
+# to rest as the answer to the control after it, and everything from there was
+# one press behind: a mapping that is well-formed, loads fine, and plays wrong.
+# Nobody doing this by hand can see it happen.
+grep -q 'wiz_settle(j, bind\[i\])' "$WIZC"
+check "a control is not asked for until the last press was let go" $?
+
+# An ended stdin polls READY for ever. `map learn </dev/null` would spin a core
+# with a wizard on screen that looks like it is politely waiting.
+grep -q 'static bool ended = false' "$WIZC"
+check "an ended stdin is remembered instead of polled for ever" $?
+
+# The wizard assembles the line; map_add writes it — the same refusals, the
+# same replace-don't-append rule, the same file header as the paste path.
+grep -q 'return map_add_line(line)' "$WIZC"
+check "the wizard writes through the same path as a pasted mapping" $?
+
+grep -q 'platform:Linux' "$WIZC"
+check "...and puts platform:Linux on it, without which SDL ignores it" $?
+
+grep -q '"Set up with the controller"' "$GUIQML"
+check "the window can set a mapping up itself" $?
+
+grep -q 'map", "learn", "--rec"' "$GUIQML"
+check "...through the same stream the terminal wizard uses" $?
+
+# ⚠ The prompts come from the binary. A window with its OWN list of controls
+# would be a second list to fall out of step with the one deciding the order,
+# and the symptom is every binding one control out.
+grep -q 'root.wizAsk.detail' "$GUIQML"
+check "...and the control being asked for is the binary's word, not the window's" $?
+
+# A refusal test, and it looks at the VISIBLE strings rather than the file:
+# the comment above this code in the QML explains what it used to say, and a
+# plain grep would fail on the explanation for the fix.
+! grep -E '^\s*(text|value):' "$GUIQML" | grep -q 'antimicrox'
+check "the window no longer sends anybody to another program" $?
+
+! grep -E '^\s*\+ "' "$GUIQML" | grep -q 'antimicrox'
+check "...not on a continuation line either" $?
+
 grep -q '"Show in games"' "$GUIQML"
 check "the window's button says where the overlay will appear" $?
 

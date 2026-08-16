@@ -3,6 +3,8 @@ project('syn-arcade', 'c',
   license: 'GPL-2.0-or-later',
   default_options: ['c_std=c11', 'warning_level=2', 'werror=false'])
 
+cc = meson.get_compiler('c')
+
 conf = configuration_data()
 conf.set_quoted('SYNARCADE_VERSION', meson.project_version())
 conf.set_quoted('SYNARCADE_DATADIR',
@@ -26,11 +28,28 @@ configure_file(output: 'config.h', configuration: conf)
 #               kernel already describes every attached device in
 #               /sys/class/input, which is also what makes the discovery path
 #               testable against a fixture.
+#
+#               ⚠ ONE command needs it anyway and STILL does not link it.
+#               `map learn` writes SDL's mapping format, which is keyed on
+#               SDL's GUID and numbered with SDL's joystick indices — neither
+#               of which can be derived from evdev, and both of which fail
+#               SILENTLY when got wrong. So it asks SDL, through dlopen at run
+#               time: the headers below are for the structures and the enums
+#               (an SDL_Event laid out by hand is an ABI trap), nothing is
+#               linked, sdl3 is an OPTdepend, and every other command still
+#               works on a machine that has never had SDL installed.
 #   libudev     the same list, behind a library and a daemon, with nothing
 #               here needing hotplug events.
 #   libevdev    a wrapper over the ioctls in pad.c. Six of them are used.
 wayland_client = dependency('wayland-client')
 wayland_scanner = find_program('wayland-scanner')
+
+# ⚠ INCLUDES ONLY — partial_dependency, so this contributes -I and NOTHING to
+# the link line. A plain dependency() here would put libSDL3 in DT_NEEDED and
+# make it a hard runtime dependency of `pads list` over SSH, which is exactly
+# what the note above refuses. Check with:
+#     ldd build/syn-arcade | grep -c SDL     → 0
+sdl3_headers = dependency('sdl3').partial_dependency(includes: true, compile_args: true)
 
 # ⚠ VENDORED, not taken from the wlr-protocols package, and deliberately: that
 # package is not installed on a stock SynapseOS box (nothing else needs it),
@@ -56,13 +75,14 @@ sources = files(
   'src/pad.c',
   'src/binds.c',
   'src/sdlmap.c',
+  'src/sdlwiz.c',
   'src/big.c',
   'src/vptr.c',
 )
 
 executable('syn-arcade',
   sources + [virtual_pointer_header, virtual_pointer_code],
-  dependencies: [wayland_client],
+  dependencies: [wayland_client, sdl3_headers, cc.find_library('dl', required: false)],
   include_directories: include_directories('include', '.'),
   install: true)
 

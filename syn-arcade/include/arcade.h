@@ -155,6 +155,16 @@ int cmd_binds(int argc, char **argv);
 
 int cmd_map(int argc, char **argv);
 
+/* Writes an assembled mapping line through the same refusals and the same
+ * replace-don't-append rule as `map add`. The wizard is the other caller. */
+int map_add_line(const char *line);
+
+/* ── sdlwiz.c ────────────────────────────────────────────────────────────── */
+
+/* `map learn` — ask SDL what the pad's buttons are called, one press at a
+ * time, and write the mapping. Reached through cmd_map(). */
+int map_learn(int argc, char **argv);
+
 /* ── big.c ───────────────────────────────────────────────────────────────── */
 
 int cmd_big(int argc, char **argv);

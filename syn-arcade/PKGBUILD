@@ -212,7 +212,7 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=14
+pkgrel=15
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -254,7 +254,12 @@ depends+=('mangohud')
 # rather than taken from the wlr-protocols package, which is NOT installed on a
 # stock SynapseOS box: depending on it would make the tree unbuildable on the
 # machine it ships to for the sake of one 150-line MIT file.
-makedepends=('meson' 'ninja' 'gcc' 'wayland')
+# ⚠ sdl3 is a BUILD dependency and NOT a runtime one. `map learn` writes SDL's
+# mapping format, whose GUID and joystick indices only SDL can supply, so it
+# opens libSDL3 through dlopen at run time — the headers are here for the
+# structures and the enums (an SDL_Event laid out by hand is a silent ABI trap)
+# and nothing is linked. Check with: ldd /usr/bin/syn-arcade | grep -c SDL → 0
+makedepends=('meson' 'ninja' 'gcc' 'wayland' 'sdl3')
 
 optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mode'
             'wtype: big screen mode’s on-screen keyboard types through it — without it the keyboard draws and types nothing'
@@ -267,9 +272,8 @@ optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mo
             'strawberry: the Music tile (elisa, amberol, rhythmbox, lollypop, clementine, audacious, deadbeef, quodlibet, tauon, plexamp, spotify and vlc are tried in that order)'
             'plex-desktop: the Plex tile — a Plex server on the network is found by broadcast either way'
             'jellyfin-media-player: the Jellyfin tile, likewise'
-            'antimicrox: build a controller mapping by pressing every button'
             'sdl2-compat: SDL2 games that read the controller mappings'
-            'sdl3: SDL3 games that read the controller mappings')
+            'sdl3: SDL3 games read the mappings — and `syn-arcade map learn` needs it to WRITE one, because the GUID and the button numbers in a mapping are SDL’s own')
 
 source=("syn-arcade-0.1.0.tar.gz")
 sha256sums=('SKIP')
