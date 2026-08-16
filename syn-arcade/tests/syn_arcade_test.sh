@@ -1399,6 +1399,84 @@ check "turning it off takes the line back out" $?
 grep -q "spawn syn-arcade big toggle" "$RC"
 check "...and leaves the key that opens it" $?
 
+# ── which screen it opens on ────────────────────────────────────────────────
+#
+# The regression this covers: big screen mode used to open on "wherever the
+# pointer is", unconditionally, and the case it is most used in — `big autostart
+# on`, opening AT LOGIN — has no pointer position worth reading. The ten-foot
+# interface opened on whatever monitor the cursor was parked on, which on a desk
+# with a portrait side panel is routinely not the television.
+#
+# synctl is STUBBED rather than called. The real one would reach the live
+# compositor (and answer with the developer's own monitors, which is a suite
+# that passes or fails depending on what is plugged in). The stub prints the
+# shape ipc.c prints, with the primary and the focused output deliberately
+# DIFFERENT — a fixture where they agree cannot tell the two rules apart.
+
+echo
+echo "which screen"
+
+STUB="$T/bin"
+mkdir -p "$STUB"
+cat > "$STUB/synctl" <<'EOF'
+#!/bin/sh
+[ "$1" = outputs ] || exit 1
+printf '%s\n' '[{"name":"DP-3","at":[1080,1080],"size":[2560,1440],"scale":1.00,"primary":true,"focused":false},{"name":"DP-2","at":[1080,0],"size":[1920,1080],"scale":1.00,"primary":false,"focused":false},{"name":"HDMI-A-1","at":[0,1080],"size":[1080,1920],"scale":1.00,"primary":false,"focused":true}]'
+EOF
+chmod +x "$STUB/synctl"
+REAL_PATH=$PATH
+PATH="$STUB:$PATH"
+export PATH
+
+BIGCONF="$XDG_CONFIG_HOME/syn-arcade/big.conf"
+mkdir -p "$(dirname "$BIGCONF")"
+rm -f "$BIGCONF"
+
+says "$SA" big | grep -q "screen         DP-3 (primary)"
+check "with no config it takes the PRIMARY screen, not the focused one" $?
+
+# The old behaviour, still available to anybody who wants it — this is the one
+# assertion proving the setting is a choice rather than a rename.
+printf 'output = focused\n' > "$BIGCONF"
+says "$SA" big | grep -q "screen         HDMI-A-1 (focused)"
+check "output = focused restores follow-the-pointer" $?
+
+printf 'output = DP-2\n' > "$BIGCONF"
+says "$SA" big | grep -q "screen         DP-2 (DP-2)"
+check "a connector name pins it to that screen" $?
+
+# Comments and whitespace, because this file is meant to be edited by hand.
+printf '# which screen\n\n   output   =   DP-2   \n' > "$BIGCONF"
+says "$SA" big | grep -q "screen         DP-2"
+check "comments and loose whitespace parse" $?
+
+# ⚠ A monitor named six months ago may be unplugged today. Falling back
+# silently would put the interface on the first screen with nothing anywhere
+# saying why — the exact failure this whole section exists to stop.
+printf 'output = DP-99\n' > "$BIGCONF"
+says "$SA" big | grep -q "no output called 'DP-99'"
+check "a name that matches no connector says so" $?
+
+says "$SA" big | grep -q "screen         DP-3"
+check "...and falls back to the primary screen" $?
+
+# No synui, no synctl: no preference, and the QML takes its first screen. A
+# launcher that refused to open because it could not decide which monitor to be
+# on would be a worse answer than being on the wrong one.
+#
+# ⚠ In a SUBSHELL, not `PATH=… says …`. An assignment preceding a shell
+# FUNCTION persists after the call in bash, so the inline spelling would take
+# the stub off the path for everything below this line — and the stub is what
+# keeps the rest of the suite off the live compositor.
+rm -f "$BIGCONF"
+( PATH=$REAL_PATH; export PATH; says "$SA" big ) | grep -q "screen         first screen"
+check "with no compositor to ask it falls back rather than failing" $?
+
+# The stub stays on the path for the remainder of the run, deliberately: it
+# answers `outputs` and exits 1 for everything else, which is what "no synctl"
+# already looks like to this binary. Anything added below that needs the real
+# one is a test that would be reaching the live desktop.
+
 # ── the guide button ────────────────────────────────────────────────────────
 #
 # The watcher that makes the pad's GUIDE button open big screen mode from the

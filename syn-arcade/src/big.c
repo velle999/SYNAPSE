@@ -2733,24 +2733,42 @@ static int keys_stream(void)
 /* ── the shell ───────────────────────────────────────────────────────────── */
 
 /*
- * Which screen big screen mode should open on, when nobody said.
+ * Which screen big screen mode should open on.
  *
- * "Wherever I am" is the only answer a person means, and a layer-shell client
- * cannot work it out: there is no Wayland protocol that tells one where the
- * pointer or the keyboard focus is. synui knows, because it is the compositor,
- * and `synctl outputs` already prints it — the same reason synui has to pass an
- * output name into the start menu rather than letting it choose.
+ * A layer-shell client cannot work this out for itself: there is no Wayland
+ * protocol that tells one where the pointer or the keyboard focus is, and none
+ * that says which monitor a person calls their main one. synui knows both,
+ * because it is the compositor, and `synctl outputs` prints them — the same
+ * reason synui has to pass an output name into the start menu rather than
+ * letting it choose.
  *
- * Resolved HERE and not in the QML so that the shell is handed a name, and a
- * person running `syn-arcade big start` from a terminal on the second monitor
- * gets big screen mode on the second monitor.
+ * Resolved HERE and not in the QML so that the shell is handed a name, and so
+ * that `big status` can say where the next start will land.
  *
- * Failure is not an error: no synui, no synctl, or output printed in some shape
- * this does not recognise all mean "no preference", and the shell falls back to
- * the first screen. A launcher that refuses to open because it could not decide
- * which monitor to be on would be a worse answer than being on the wrong one.
+ * ⚠ THE DEFAULT IS `primary`, AND `focused` IS WHY.
+ *
+ * This used to be "wherever the pointer is", unconditionally. That reads well —
+ * it is what a person running `big start` from a terminal on the second monitor
+ * means — but it has no answer at all for the case big screen mode is most used
+ * in: `big autostart on`, where the shell opens AT LOGIN. Nobody has pointed at
+ * anything yet, so the cursor is wherever the compositor parked it, and the ten-
+ * foot interface opens on whatever monitor that happened to be — a portrait side
+ * panel as readily as the television. Nothing about that is diagnosable from the
+ * screen it lands on.
+ *
+ * synui had already answered the same question for game windows: game_output
+ * defaults to `primary` for exactly this reason (see game.c and the comment on
+ * server_primary_output — "no primary is what makes SDL games open on an
+ * arbitrary monitor"). Two gaming tools on one desktop disagreeing about which
+ * screen is the gaming screen is the papercut nobody remembers the answer to,
+ * so this takes synui's answer and its spelling.
+ *
+ * `primary` is not the raw flag: ipc.c reports the EFFECTIVE primary, which
+ * falls back to the largest enabled output, so it is always somebody. That
+ * matters here — a fresh install where nobody has pressed the display panel's
+ * p key still resolves, and it resolves to the biggest screen.
  */
-static bool focused_output(char *buf, size_t n)
+static bool output_flagged(const char *flag, char *buf, size_t n)
 {
 	FILE *p = popen("synctl outputs 2>/dev/null", "r");
 	if (!p)
@@ -2763,11 +2781,14 @@ static bool focused_output(char *buf, size_t n)
 		return false;
 	json[got] = '\0';
 
-	/* One object per output, and "name" comes before "focused" in each. So
+	char want[32];
+	snprintf(want, sizeof(want), "\"%s\":true", flag);
+
+	/* One object per output, and "name" comes before both flags in each. So
 	 * walk the objects and answer with the name of the one that claims the
-	 * focus — no JSON parser for a shape this file also controls. */
+	 * flag — no JSON parser for a shape this file also controls. */
 	for (char *obj = strtok(json, "{"); obj; obj = strtok(NULL, "{")) {
-		if (!strstr(obj, "\"focused\":true"))
+		if (!strstr(obj, want))
 			continue;
 		char *nm = strstr(obj, "\"name\":\"");
 		if (!nm)
@@ -2780,6 +2801,106 @@ static bool focused_output(char *buf, size_t n)
 		return snprintf(buf, n, "%s", nm) < (int)n;
 	}
 	return false;
+}
+
+/* Is that connector actually here? Asked before honouring a name out of the
+ * config, because a monitor named in a file six months ago may be unplugged
+ * today, and handing the shell a name that matches no screen is worse than
+ * having no preference: Quickshell.screens has nothing to match, and the
+ * interface opens on the first screen with no sign of why. */
+static bool output_exists(const char *name)
+{
+	FILE *p = popen("synctl outputs 2>/dev/null", "r");
+	if (!p)
+		return false;
+
+	char json[4096];
+	size_t got = fread(json, 1, sizeof(json) - 1, p);
+	pclose(p);
+	if (got == 0)
+		return false;
+	json[got] = '\0';
+
+	char want[160];
+	snprintf(want, sizeof(want), "\"name\":\"%s\"", name);
+	return strstr(json, want) != NULL;
+}
+
+/*
+ * The configured preference: `output = primary | focused | <connector>` in
+ * ~/.config/syn-arcade/big.conf.
+ *
+ * A whole file for one key looks like a lot, and it is deliberate: this is the
+ * setting somebody reaches for when the television is not where the interface
+ * opened, and a setting that can only be spelled as a flag on a command line is
+ * no use to `big autostart`, which is the case that needs it most.
+ */
+static void big_output_pref(char *buf, size_t n)
+{
+	snprintf(buf, n, "primary");
+
+	char path[SYN_PATH];
+	if (!config_path(path, sizeof(path), "syn-arcade/big.conf"))
+		return;
+	char *text = read_file(path);
+	if (!text)
+		return;
+
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (!*t || *t == '#')
+			continue;
+		char *eq = strchr(t, '=');
+		if (!eq)
+			continue;
+		*eq = '\0';
+		char *key = trim(t);
+		char *val = trim(eq + 1);
+		if (strcmp(key, "output") == 0 && *val)
+			snprintf(buf, n, "%s", val);
+	}
+	free(text);
+}
+
+/*
+ * The whole policy, in one place: --output, then the config, then the default.
+ *
+ * Never fails. No synui, no synctl, an unplugged monitor named in the config, or
+ * output printed in some shape this does not recognise all mean "no preference",
+ * and the shell falls back to its first screen. A launcher that refused to open
+ * because it could not decide which monitor to be on would be a worse answer
+ * than being on the wrong one.
+ */
+static void resolve_output(const char *cli, char *buf, size_t n)
+{
+	buf[0] = '\0';
+
+	char pref[128];
+	if (cli && *cli)
+		snprintf(pref, sizeof(pref), "%s", cli);
+	else
+		big_output_pref(pref, sizeof(pref));
+
+	if (strcmp(pref, "focused") == 0) {
+		output_flagged("focused", buf, n);
+		return;
+	}
+	if (strcmp(pref, "primary") == 0) {
+		output_flagged("primary", buf, n);
+		return;
+	}
+
+	/* A connector name. Honoured only if it is plugged in — otherwise say
+	 * so and fall back, rather than opening somewhere unexplained. */
+	if (output_exists(pref)) {
+		snprintf(buf, n, "%s", pref);
+		return;
+	}
+	fprintf(stderr, "syn-arcade: no output called '%s' — using the primary "
+			"screen (`synctl outputs` lists them)\n", pref);
+	output_flagged("primary", buf, n);
 }
 
 static const char *big_qml(void)
@@ -2920,12 +3041,9 @@ static int big_start(const char *output, bool detach)
 
 	/* Which screen. The QML needs a name it can match against
 	 * Quickshell.screens; with nothing to go on it takes the first, so ask
-	 * the compositor which one has focus before falling back to that. */
+	 * the compositor before falling back to that. See resolve_output. */
 	char out[128] = "";
-	if (output && *output)
-		snprintf(out, sizeof(out), "%s", output);
-	else
-		focused_output(out, sizeof(out));
+	resolve_output(output, out, sizeof(out));
 	setenv("SYN_BIG_OUTPUT", out, 1);
 
 	/* OVERWRITTEN, not merely set — the inherited-QS_APP_ID accident.
@@ -3218,6 +3336,17 @@ static int big_status(bool rec)
 	char gamebuf[32];
 	snprintf(gamebuf, sizeof(gamebuf), "%d", games);
 
+	/* Where the NEXT start will land, and the rule that decided it. Worth a
+	 * line because the failure this answers — the interface opening on the
+	 * wrong monitor — leaves no evidence anywhere else, and the screen it
+	 * opened on is the one thing that cannot explain itself. */
+	char pref[128], screen[128] = "";
+	big_output_pref(pref, sizeof(pref));
+	resolve_output(NULL, screen, sizeof(screen));
+	char screenbuf[300];
+	snprintf(screenbuf, sizeof(screenbuf), "%s (%s)",
+		 screen[0] ? screen : "first screen", pref);
+
 	if (rec) {
 		rec_row(3, "field", "value", "action");
 		rec_row(3, "running", running ? "yes" : "no",
@@ -3225,6 +3354,7 @@ static int big_status(bool rec)
 		rec_row(3, "pid", pidbuf, "detail");
 		rec_row(3, "at login", autostart ? "on" : "off",
 			autostart ? "action:autostart-off" : "action:autostart-on");
+		rec_row(3, "screen", screenbuf, "detail");
 		rec_row(3, "guide button", guide ? "on" : "off",
 			guide ? "action:guide-off" : "action:guide-on");
 		rec_row(3, "Steam", steam_found ? root : "NOT FOUND", "detail");
@@ -3241,6 +3371,7 @@ static int big_status(bool rec)
 	       running && pid > 0 ? "  pid " : "",
 	       running && pid > 0 ? pidbuf : "");
 	printf("  at login       %s\n", autostart ? "on" : "off");
+	printf("  screen         %s\n", screenbuf);
 	printf("  guide button   %s\n", guide ? "on — opens this from the desktop"
 	     : "off (`syn-arcade big guide on`)");
 	printf("  Steam          %s\n", steam_found ? root
