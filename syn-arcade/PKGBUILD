@@ -212,6 +212,46 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-31: the browser prompt takes a NUMBER ─────────────────────────────
+#
+# Reported the first time the sign-in was used, and it is entirely fair:
+#
+#     1  firefox   · installed here
+#     2  vivaldi   · installed here
+#     …
+#     Browser (or Enter to cancel): 1
+#     syn-arcade: yt-dlp cannot read cookies from '1'
+#
+# 0.1.0-30 printed an unnumbered list and asked for a NAME. Everything else on
+# this system takes a number — the search picker two rows away takes a number —
+# and spelling out `vivaldi` on an on-screen keyboard is precisely the errand
+# the terminal trick exists to keep short. So the list is numbered, and the
+# INSTALLED browsers are numbered first: on a machine with one browser the
+# answer is `1` rather than however far down a fixed list it happened to sit.
+#
+# A name still works, for whoever is at a keyboard. ⚠ The digit test is on the
+# WHOLE answer rather than the first character, or `2fast` would be a number
+# and a browser whose name began with a digit could never be typed.
+#
+# ── three things the assertions for it got wrong first ──────────────────────
+#
+# Worth writing down, because each one failed against code that was correct:
+#
+#   · `script` was called by NAME inside the cut-down stub PATH, which is a
+#     REPLACEMENT of three directories and does not contain /usr/bin. Command
+#     not found, no output, four assertions red.
+#   · `grep -q` on the pipe, for a pattern matching the FOURTH line of a
+#     nine-line list: it exits on the match, the writer dies of SIGPIPE, and
+#     pipefail reports 141. The assertions whose text sat at the END of the
+#     output got away with it. The answer goes to a FILE now.
+#   · `firefox$` as an anchor, against output that came off a PTY and therefore
+#     ends every line CR-LF. The anchor cannot match with the CR still to come.
+#
+# And the fixture itself: `have()` shells out with the PATH it was handed, so
+# inside the suite NOTHING is installed. The test now stubs `chromium` — THIRD
+# in the fixed list — and asserts it comes back as 1, which makes the
+# reordering the thing under test rather than the printing.
+
 # ── 0.1.0-30: your OWN playlists, and a search you can type from the sofa ───
 #
 # 0.1.0-29 put YouTube Music stations on the television. Two things were still
@@ -568,7 +608,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=30
+pkgrel=31
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

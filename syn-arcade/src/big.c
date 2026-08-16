@@ -4410,13 +4410,45 @@ static int yt_login(const char *browser)
 		if (!can_be_asked())
 			return term_run_and_hold("syn-arcade big music yt login");
 
+		/*
+		 * ⚠ NUMBERED, AND INSTALLED FIRST, BECAUSE THE ANSWER IS BEING
+		 * TYPED WITH A D-PAD.
+		 *
+		 * This asked for a browser by NAME and printed an unnumbered
+		 * list beside it. Reported immediately, and it was the obvious
+		 * thing to do: somebody read a list, typed `1`, and got
+		 * "yt-dlp cannot read cookies from '1'". The search picker two
+		 * rows away takes a number, every other list on this system
+		 * takes a number, and spelling out `vivaldi` on an on-screen
+		 * keyboard is exactly the errand the terminal trick exists to
+		 * keep short.
+		 *
+		 * ⚠ The order is what is NUMBERED, so what is installed comes
+		 * first: on a machine with one browser the answer is `1`
+		 * rather than however far down the fixed list it happened to
+		 * sit. A name is still accepted, because from a shell prompt
+		 * that is the obvious thing to type.
+		 */
+		const char *shown[16];
+		bool here[16];
+		int n = 0;
+		for (int pass = 0; pass < 2 && n < 16; pass++)
+			for (int i = 0; YT_BROWSERS[i] && n < 16; i++) {
+				bool installed = have(YT_BROWSERS[i]);
+				if (installed != (pass == 0))
+					continue;
+				shown[n] = YT_BROWSERS[i];
+				here[n] = installed;
+				n++;
+			}
+
 		puts("Which browser are you signed in to YouTube with?");
 		puts("");
-		for (int i = 0; YT_BROWSERS[i]; i++)
-			printf("    %s%s\n", YT_BROWSERS[i],
-			       have(YT_BROWSERS[i]) ? "   · installed here" : "");
+		for (int i = 0; i < n; i++)
+			printf("  %2d  %s%s\n", i + 1, shown[i],
+			       here[i] ? "   · installed here" : "");
 		puts("");
-		fputs("Browser (or Enter to cancel): ", stdout);
+		fputs("Number or name (Enter to cancel): ", stdout);
 		fflush(stdout);
 
 		char line[64];
@@ -4426,6 +4458,22 @@ static int yt_login(const char *browser)
 		if (!*t) {
 			puts("nothing changed.");
 			return EX_OK;
+		}
+
+		/* ⚠ ALL digits, not "starts with one": `chrome` must not be
+		 * read as a number, and neither must `2fast`. */
+		bool numeric = true;
+		for (const char *p = t; *p && numeric; p++)
+			numeric = *p >= '0' && *p <= '9';
+
+		if (numeric) {
+			int pick = atoi(t);
+			if (pick < 1 || pick > n) {
+				fprintf(stderr, "syn-arcade: there is no %d on "
+						"that list\n", pick);
+				return EX_USAGE;
+			}
+			return yt_login(shown[pick - 1]);
 		}
 		return yt_login(t);
 	}

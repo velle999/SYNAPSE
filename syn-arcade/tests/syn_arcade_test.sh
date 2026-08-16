@@ -2555,6 +2555,92 @@ check "...and the machine is not left claiming to be signed in" $?
 [ "$?" = 2 ]
 check "...and a browser yt-dlp cannot read is refused outright" $?
 
+# ── ⚠ THE PROMPT TAKES A NUMBER, because the answer is typed with a d-pad ────
+#
+# Reported the first time it was used: the list was printed unnumbered and the
+# prompt asked for a name, so somebody read it, typed `1`, and got "yt-dlp
+# cannot read cookies from '1'". The search picker two rows away takes a
+# number, every other list on this system takes a number, and spelling out
+# `vivaldi` on an on-screen keyboard is the errand the terminal trick exists to
+# keep short.
+#
+# ⚠ DRIVEN ON A PTY, and it has to be: the prompt only appears when there IS a
+# terminal (see can_be_asked), so a piped stdin makes the verb go off and OPEN
+# one instead of answering. `script` is enough here — this is a line at a time,
+# not a full-screen interface.
+#
+# ⚠ `script` IS RESOLVED BEFORE THE PATH IS CUT DOWN. The stub PATH is a
+# REPLACEMENT — three directories, so that which yt-dlp and which cliamp get
+# found is decided by this file — and /usr/bin is not one of them. Calling
+# `script` by name inside it is "command not found", the pipeline produces
+# nothing, and all four of these assertions fail against working code. They
+# did.
+#
+# ⚠ AND THE ANSWER GOES TO A FILE, NOT INTO `grep -q`. This is the SIGPIPE
+# trap the file header describes, and it bites hardest exactly here: `grep -q`
+# exits the instant it matches, closing the pipe under a writer that is still
+# going, and `set -o pipefail` reports the writer's 141. The three assertions
+# whose text appears at the END of the output got away with it; the one that
+# matches the FOURTH LINE of a nine-line list failed every time, against code
+# that was correct. Greping a FILE has no writer to kill.
+SCRIPT=$(command -v script)
+YTASK="$T/ytask.out"
+rm -f "$BIGCONF"
+ytask() { ( PATH="$YTB:$MSTUB:$STUB"; export PATH
+            SYN_ARCADE_NO_NET=0; export SYN_ARCADE_NO_NET
+            printf '%s\n' "$1" |
+            "$SCRIPT" -qfc "$SA big music yt login" /dev/null > "$YTASK" 2>&1 )
+          return 0; }
+
+ytask 2
+grep -q "signed in with vivaldi" "$YTASK"
+check "the browser prompt takes the NUMBER beside the name" $?
+
+# ⚠ INSTALLED FIRST, so the numbers mean something on a machine with one
+# browser rather than pointing at wherever it sat in a fixed list.
+#
+# ⚠ CHROMIUM, and the choice is the assertion. It is THIRD in big.c's fixed
+# list, so a version that simply printed that list in order would put it at 3
+# and this would fail — which is what makes the reordering the thing being
+# tested rather than the printing.
+#
+# ⚠ And it is stubbed HERE because `have()` shells out with the PATH it was
+# given, which for these is the cut-down stub PATH. On the real machine firefox
+# and vivaldi are installed; inside this suite NOTHING is, so an assertion
+# looking for any "installed here" at all failed against correct code.
+printf '#!/bin/sh\nexit 0\n' > "$YTB/chromium"; chmod +x "$YTB/chromium"
+ytask ""
+grep -qE '^ *1 +chromium +· installed here' "$YTASK"
+check "...numbered with what is installed at the top" $?
+
+# The other side: something NOT installed keeps its place further down, so the
+# list is still the whole list rather than only what is here.
+#
+# ⚠ `[[:space:]]*$` RATHER THAN `$`. This came off a PTY, so every line ends
+# CR-LF and an anchor placed straight after the word cannot match — the CR is
+# still to come. Written as `firefox$` this failed against a list that was
+# exactly right.
+grep -qE '^ *[2-9] +firefox[[:space:]]*$' "$YTASK"
+check "...with the rest still offered below it" $?
+rm -f "$YTB/chromium"
+
+# A name still works, because from a shell prompt that is what somebody types.
+rm -f "$BIGCONF"
+ytask vivaldi
+grep -q "signed in with vivaldi" "$YTASK"
+check "...and a name still works, for whoever is at a keyboard" $?
+
+# ⚠ ALL digits, not "starts with a digit" — `chrome` must not be read as a
+# number, and neither must `2fast`.
+grep -q 'numeric = \*p >= .0. && \*p <= .9.' src/big.c
+check "...and a name that begins with a digit is still a name" $?
+
+rm -f "$BIGCONF"
+ytask 99
+grep -q "there is no 99 on that list" "$YTASK"
+check "...while a number nobody offered is a refusal, not a browser called 99" $?
+rm -f "$BIGCONF"
+
 # ── the page is not all stations ────────────────────────────────────────────
 #
 # ⚠ WHICH ERRANDS EXIST IS big.c's ANSWER. Whether this machine has a YouTube
