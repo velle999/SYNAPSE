@@ -2195,8 +2195,14 @@ if [ "$1" = status ]; then
         # only case that happens: for a YouTube URL cliamp invents a title from
         # the last path segment ("watch"), and a stub that could not say that
         # is a stub that passed while every song on a station was called watch.
-        printf '{"ok":true,"state":"%s","track":{"title":"%s","path":"%s"}}' \
-            "$st" "${CLIAMP_TITLE:-$CLIAMP_TRACK}" "$CLIAMP_TRACK"
+        # ⚠ `total` IS ABSENT ON AN EMPTY QUEUE, which is what cliamp really
+        # does — measured, a player with nothing queued prints no such key at
+        # all rather than a zero. It is the difference between a player that
+        # can be resumed and one that has nothing to resume, and a stub that
+        # always claimed a queue could not tell the two apart.
+        printf '{"ok":true,"state":"%s","track":{"title":"%s","path":"%s"}%s}' \
+            "$st" "${CLIAMP_TITLE:-$CLIAMP_TRACK}" "$CLIAMP_TRACK" \
+            "${CLIAMP_TOTAL:+,\"total\":$CLIAMP_TOTAL}"
     fi
     exit 0
 fi
@@ -2207,7 +2213,7 @@ exit 0
 EOF
 chmod +x "$MSTUB/cliamp"
 export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK="" CLIAMP_STATE="playing"
-export CLIAMP_TITLE=""
+export CLIAMP_TITLE="" CLIAMP_TOTAL=""
 export CLIAMP_UP="$T/cliamp.up"
 : > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP"
 
@@ -2951,6 +2957,172 @@ check "...as do the writers, rather than spelling the rule out again" $?
 # ⚠ AND THE PLEX RULE SURVIVED IT. The token must still never reach the cache.
 grep -q 'X-Plex-Token' src/big.c && ! grep -q 'X-Plex-Token=%s".*titles' src/big.c
 check "...and a Plex token still never reaches the titles cache" $?
+
+# ── the Music tile has to have something to PLAY ────────────────────────────
+#
+# ⚠ REPORTED AFTER 0.1.0-33: music could not be started at all any more. Two
+# facts that are harmless apart:
+#
+#   · THE QUEUE DOES NOT SURVIVE THE PLAYER. `--provider` is a start-up flag
+#     and what it preloads is all a fresh player has — eleven stations on
+#     radio, NOTHING on ytmusic, plex or local, whose queues this file fills a
+#     track at a time over the socket.
+#   · SINCE 0.1.0-33 THE PLAYER DOES NOT SURVIVE QUIT, because a headless
+#     player left running is music with no way to stop it.
+#
+# Together: press Quit, press Music, and the tile starts a bare player, sends
+# `toggle` to an empty queue, and plays silence. It looked like a working
+# button on a broken machine. Measured on this one — `big music play` left
+# cliamp answering `"state":"stopped","index":-1` with no `total` at all.
+#
+# So whatever fills a queue writes down what filled it, and the tile puts it
+# back.
+LAST="$XDG_CACHE_HOME/syn-arcade/music-last.rec"
+
+# ⚠ `script` IS STUBBED, AND ONLY HERE. music_ensure_running() starts the
+# player through `script -qfc cliamp… /dev/null` — a pty with no window, see
+# the note on --daemon above — and the runner PATHs in this file are
+# REPLACEMENTS with no /usr/bin in them. Without this the start is "command
+# not found", every replay below returns "cliamp did not come up", and the
+# assertions fail against working code. It is kept out of $MSTUB so that the
+# sections above, which assert that a player is NOT started, keep testing that
+# against the same missing-binary conditions they were written under.
+LSTUB="$T/last-bin"
+mkdir -p "$LSTUB"
+cat > "$LSTUB/script" <<'EOF'
+#!/bin/sh
+# The pty is what the real one is for, and a suite has no use for it. What
+# matters is that the command inside really runs, so the cliamp stub sees
+# --provider and marks the player up — a stub that could not come up would
+# make music_ensure_running() give up and every caller bail out BEFORE the
+# thing under test. That has cost this file four assertions before.
+#
+# ⚠ `eval`, NOT `sh -c`. The runner PATH here is a REPLACEMENT of four
+# directories and /bin is not one of them, so `sh` by name is not found, the
+# command inside never runs, and the player never comes up — which reads as
+# "cliamp did not come up" and fails every assertion below against working
+# code. It did. The shebang works because it is an absolute path; nothing
+# inside may be.
+cmd=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -*c) cmd="$2"; shift 2 ;;
+        *)   shift ;;
+    esac
+done
+[ -n "$cmd" ] && eval "$cmd"
+exit 0
+EOF
+chmod +x "$LSTUB/script"
+
+lastrun() { ( PATH="$LSTUB:$YTB:$MSTUB:$STUB"; export PATH
+              SYN_ARCADE_NO_NET=0; export SYN_ARCADE_NO_NET
+              "$SA" big music "$@" ); }
+
+printf 'music_source = ytmusic\n' > "$BIGCONF"
+rm -f "$LAST" "$MARK"
+: > "$CLIAMP_LOG"
+
+# Playing a station is what makes the record — and it is written where the
+# queue really filled, not where the press arrived.
+lastrun yt "https://www.youtube.com/watch?v=eeeeeeeeeee" >/dev/null 2>&1
+grep -q 'ytmusic' "$LAST"
+check "playing a station writes down what was playing" $?
+
+# ⚠ THE STATION, NOT THE TRACKS IT ENUMERATED TO. A `list=RD…` mix answers
+# differently every time it is asked — that is what a mix IS — so remembering
+# the tracks would resume a station that no longer exists.
+grep -q 'watch%3Fv%3Deeeeeeeeeee' "$LAST"
+check "...as the station that was asked for, not the tracks it resolved to" $?
+
+# THE BUG ITSELF: player gone, queue gone with it, and the tile has to put the
+# music back rather than start a silent player.
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP" "$MARK"
+( CLIAMP_STATE=off; export CLIAMP_STATE; lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp queue https://www.youtube.com/watch?v=eeeeeeeeeee' "$CLIAMP_LOG"
+check "pressing Music with no player puts the last station back on" $?
+
+# ⚠ BOTH HALVES, and they fail separately — this is the older lesson in this
+# file. A queue with no `toggle` is a television that says it is playing and is
+# silent; a `toggle` with no queue is the bug being fixed.
+grep -q 'cliamp toggle' "$CLIAMP_LOG"
+check "...and starts it, rather than filling a queue nobody plays" $?
+
+# ⚠ THE DISCRIMINATING ONE. A player that is up WITH A QUEUE must be resumed,
+# not reloaded: reloading would restart the station from its first track every
+# time somebody pressed Music after a pause, which is a worse bug than the one
+# being fixed and would look exactly like a working button.
+: > "$CLIAMP_LOG"
+( CLIAMP_STATE=paused; CLIAMP_TOTAL=11; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp queue' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "a player with something queued is resumed, not loaded again" $?
+
+grep -q 'cliamp toggle' "$CLIAMP_LOG"
+check "...with the verb that starts a paused player" $?
+
+# ⚠ AND ONLY OUR OWN PLAYER IS RESTARTED. Putting a station back means
+# music_restart() — `--provider` is a start-up flag and there is no other way —
+# and a cliamp somebody has open in a terminal is not this launcher's to
+# restart. Same marker, and the same argument, as `release` above.
+: > "$CLIAMP_LOG"; rm -f "$MARK"
+( CLIAMP_STATE=stopped; export CLIAMP_STATE; lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp queue' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "a player this package did not start is not reloaded under somebody" $?
+
+# The twin: the same empty player, claimed. Without this the assertion above
+# passes for a version that never resumes anything at all.
+: > "$CLIAMP_LOG"; : > "$MARK"
+( CLIAMP_STATE=stopped; export CLIAMP_STATE; lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp queue' "$CLIAMP_LOG"
+check "...and one it did start, with an empty queue, is filled again" $?
+rm -f "$MARK"
+
+# ⚠ A RECORD BELONGS TO ITS SOURCE. Replaying a station goes through yt_play(),
+# which WRITES `music_source` — so resuming one after somebody deliberately
+# moved the picker to Plex would silently undo the choice they just made.
+printf 'music_source = plex\n' > "$BIGCONF"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP"
+( CLIAMP_STATE=off; export CLIAMP_STATE; lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp queue' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "a station is not resumed over the source somebody chose instead" $?
+
+grep -q '^music_source = plex$' "$BIGCONF"
+check "...so the source they chose is still the source" $?
+
+# A machine that has never played anything is not an error — it is every
+# machine on its first day, and the tile still starts the player.
+printf 'music_source = ytmusic\n' > "$BIGCONF"
+rm -f "$LAST" "$CLIAMP_UP"
+( CLIAMP_STATE=off; export CLIAMP_STATE; lastrun play >/dev/null 2>&1 )
+[ "$?" = 0 ]
+check "a machine that has never played anything is not a failure" $?
+
+# The other two queueing paths write the same record, and ⚠ the Plex one
+# records the RATING KEY. The URLs cliamp is handed carry the token; nothing
+# here writes one into a cache file, which is the rule music_key() exists for.
+awk '/static int plex_play_album/,/^}/' src/big.c |
+    grep -q 'music_last_remember("plex", key)'
+check "a Plex album is remembered by its key, never by its track URLs" $?
+
+awk '/static int local_queue/,/^}/' src/big.c | grep -q 'music_last_remember'
+check "...and the local library remembers its directory too" $?
+
+# ⚠ AFTER THE BAIL-OUT, not before it. An album that turned out to have no
+# playable tracks is not something to resume, and a record written on the way
+# in would make the tile replay a failure for the rest of the session.
+awk '/static int plex_play_album/,/^}/' src/big.c |
+    awk '/no playable tracks/ { bail = 1 }
+         /music_last_remember/ && bail { good = 1 }
+         END { exit !good }'
+check "...and only where a queue really filled" $?
+
+rm -f "$LAST" "$MARK" "$CLIAMP_UP" "$BIGCONF"
+: > "$CLIAMP_LOG"
+CLIAMP_STATE=playing; export CLIAMP_STATE
 
 # ── and the SHELL has to know about all of it ───────────────────────────────
 #

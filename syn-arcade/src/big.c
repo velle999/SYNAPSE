@@ -926,6 +926,29 @@ static bool json_true(const char *text, const char *end, const char *key)
 	return p && (!end || p < end);
 }
 
+/*
+ * One number out of a JSON object, or `def` when the key is not there.
+ *
+ * ⚠ ABSENT IS NOT ZERO EVERYWHERE, which is why the default is the caller's to
+ * choose. cliamp omits `"total"` entirely when its queue is empty rather than
+ * printing 0 — measured — so the one caller here asks for 0 and gets the same
+ * answer either way, but nothing about that is general.
+ */
+static long json_int(const char *text, const char *end, const char *key,
+		     long def)
+{
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char *p = strstr(text, pat);
+	if (!p || (end && p >= end))
+		return def;
+	p += strlen(pat);
+	while (*p == ' ' || *p == ':') p++;
+	if (*p != '-' && (*p < '0' || *p > '9'))
+		return def;
+	return strtol(p, NULL, 10);
+}
+
 /* ── what this machine can do ────────────────────────────────────────────── */
 
 /*
@@ -3343,21 +3366,120 @@ static void music_title_fallback(const char *path, char *out, size_t n)
 }
 
 /*
+ * ── what was playing last, so the Music tile has something to play ─────────
+ *
+ * ⚠ THE QUEUE DOES NOT SURVIVE THE PLAYER, AND SINCE 0.1.0-33 THE PLAYER DOES
+ * NOT SURVIVE QUIT. Those two facts are harmless apart and together they made
+ * the Music tile do nothing at all.
+ *
+ * `--provider` is a start-up flag, and what it preloads is the whole of the
+ * queue a fresh player comes up with: measured on this machine, `radio` brings
+ * eleven stations and `ytmusic` brings NOTHING. Every other queue here is one
+ * this file filled, track by track, over cliamp's socket — and nothing on the
+ * other end writes it down. So a player that has been stopped and started
+ * again is an empty one, and `toggle` on an empty queue is silence.
+ *
+ * Until 0.1.0-33 that was hidden by the player outliving big screen mode: Quit
+ * left it running with its queue, so the next press was a genuine resume. Now
+ * that Quit lets go of the music — which it must, or the music cannot be
+ * stopped at all — pressing Music started a bare player on a source with no
+ * preloaded queue and played nothing. Reported exactly that way.
+ *
+ * So whatever fills a queue writes down what filled it, and the Music tile
+ * puts it back. ⚠ THE SOURCE IS PART OF THE RECORD, not decoration: replaying
+ * a YouTube station goes through yt_play(), which SETS `music_source`, so
+ * replaying one after somebody deliberately moved to Plex would quietly undo
+ * the choice they just made. A record from another source is not this source's
+ * to resume.
+ *
+ * ⚠ AND IT IS A REFERENCE, NEVER A TRACK URL. What goes in is a Plex rating
+ * key, a station URL or a music directory — the thing that was asked for. The
+ * URLs cliamp is actually handed carry the Plex token, and nothing here writes
+ * one into a cache file; see music_key() for the other half of that rule.
+ */
+static bool music_last_path(char *buf, size_t n)
+{
+	return cache_path(buf, n, "music-last.rec");
+}
+
+static void music_last_remember(const char *source, const char *what)
+{
+	if (!source || !*source || !what || !*what)
+		return;
+
+	char path[SYN_PATH];
+	if (!music_last_path(path, sizeof(path)) || mkdir_parents(path) != 0)
+		return;
+
+	/* ⚠ TRUNCATED, not appended. There is one last thing, and a file that
+	 * grew a line per press would be read by whichever line came first. */
+	FILE *f = fopen(path, "w");
+	if (!f)
+		return;
+	rec_frow(f, 2, source, what);
+	fclose(f);
+}
+
+static bool music_last_read(char *source, size_t sn, char *what, size_t wn)
+{
+	if (source && sn) source[0] = '\0';
+	if (what && wn) what[0] = '\0';
+
+	char path[SYN_PATH];
+	if (!music_last_path(path, sizeof(path)))
+		return false;
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	bool ok = false;
+	char *nl = strchr(text, '\n');
+	if (nl)
+		*nl = '\0';
+	char *tab = strchr(text, '\t');
+	if (tab) {
+		*tab = '\0';
+		char *s = pct_decode(text);
+		char *w = pct_decode(tab + 1);
+		if (s && w && *s && *w) {
+			snprintf(source, sn, "%s", s);
+			snprintf(what, wn, "%s", w);
+			ok = true;
+		}
+		free(s);
+		free(w);
+	}
+	free(text);
+	return ok;
+}
+
+/*
  * `state` is empty when there is nothing to control, and that is the signal the
  * menu keys off — an absent row rather than a dead one.
  */
-/* One read of the player's state, for everything that needs one. */
+/*
+ * One read of the player's state, for everything that needs one.
+ *
+ * ⚠ `total` IS HOW MANY TRACKS ARE QUEUED, and it is asked here rather than by
+ * a second status call because this function is the one door onto that answer
+ * — two readers of the same JSON are two readers that can disagree about it.
+ * cliamp omits the key entirely on an empty queue, so 0 means "nothing to
+ * play", which is a different thing from `stopped` and is the difference
+ * between resuming and having something to resume.
+ */
 static void music_read(char *state, size_t sn, char *title, size_t tn,
-		       char *path, size_t pn)
+		       char *path, size_t pn, long *total)
 {
 	if (state && sn) state[0] = '\0';
 	if (title && tn) title[0] = '\0';
 	if (path && pn) path[0] = '\0';
+	if (total) *total = 0;
 
 	char *json = run_capture((char *const[]){ "cliamp", "status", "--json",
 						  NULL }, 2);
 	if (json && (strstr(json, "\"ok\":true") || strstr(json, "\"ok\": true"))) {
 		if (state) json_str(json, NULL, "state", state, sn);
+		if (total) *total = json_int(json, NULL, "total", 0);
 		/* ⚠ Scoped to the track object. `title` is a common enough key
 		 * that searching the whole document would one day find
 		 * somebody else's. */
@@ -3413,7 +3535,7 @@ static int big_music_status(bool rec)
 {
 	char state[32], title[256], path[512];
 	music_read(state, sizeof(state), title, sizeof(title),
-		   path, sizeof(path));
+		   path, sizeof(path), NULL);
 
 	if (rec) {
 		rec_row(3, "state", "title", "path");
@@ -3721,6 +3843,13 @@ static int plex_play_album(const char *key)
 		return EX_EMPTY;
 	}
 
+	/* ⚠ THE RATING KEY, NOT THE TRACK URLS. Those carry the Plex token —
+	 * see music_last_remember() — and the key is what would be asked for
+	 * again anyway. Written where the queue really filled, so an album
+	 * that turned out to have nothing playable is not what the tile
+	 * resumes. */
+	music_last_remember("plex", key);
+
 	/* `toggle`, not `play` — see big_music: a player that has just started
 	 * is `stopped`, and resume does nothing from there. */
 	music_cmd("toggle");
@@ -3881,6 +4010,10 @@ static int local_queue(void)
 	}
 	if (titles)
 		fclose(titles);
+
+	/* The directory, which is the whole of what was asked for here — this
+	 * source has no smaller unit than "the music on this machine". */
+	music_last_remember("local", dir);
 
 	music_cmd("toggle");
 	printf("queued %d track%s from %s\n", n, n == 1 ? "" : "s", dir);
@@ -4390,6 +4523,12 @@ static int yt_play(const char *what)
 	 * have to WAIT for the state to settle, and there is nothing for it to
 	 * fix once it has.
 	 */
+
+	/* ⚠ THE STATION, NOT THE SIXTY URLS IT ENUMERATED TO. A `list=RD…` mix
+	 * answers differently every time it is asked — that is what a mix is —
+	 * so remembering the tracks would resume a station that no longer
+	 * exists, while remembering the station resumes the station. */
+	music_last_remember("ytmusic", url);
 
 	printf("queued %d track%s\n", queued, queued == 1 ? "" : "s");
 	return EX_OK;
@@ -5087,7 +5226,7 @@ static int big_music_source_set(const char *id)
 	 * somebody opened the list. An empty state is "there is nothing to
 	 * control" — see music_read(). */
 	char was[32];
-	music_read(was, sizeof(was), NULL, 0, NULL, 0);
+	music_read(was, sizeof(was), NULL, 0, NULL, 0, NULL);
 	const bool was_running = was[0] != '\0';
 	const bool was_playing = strcmp(was, "playing") == 0;
 
@@ -5273,6 +5412,54 @@ static int big_music_setup(void)
 	return term_run_and_hold("cliamp setup");
 }
 
+/*
+ * Put back what was playing last — the other half of music_last_remember().
+ *
+ * ⚠ IT LIVES DOWN HERE FOR ONE REASON: it calls the three paths that fill a
+ * queue, and all three are defined above it. A forward declaration apiece
+ * would be three more places to keep in step with a signature, for a function
+ * with exactly one caller.
+ *
+ * ⚠ AND "NOTHING REMEMBERED" IS NOT AN EXIT CODE. It cannot be: yt_play()
+ * already answers EX_EMPTY for "nothing playable came back from that URL",
+ * which is a real failure worth printing, and a caller that could not tell the
+ * two apart would fall through to starting a bare player and calling it fine.
+ * So the outcome goes out by pointer and the answer here is whether there was
+ * one at all.
+ */
+static bool music_play_last(int *rc)
+{
+	char src[32], what[SYN_PATH];
+	if (!music_last_read(src, sizeof(src), what, sizeof(what)))
+		return false;
+
+	/* ⚠ ONLY FOR THE SOURCE THAT IS CHOSEN NOW. Replaying a YouTube
+	 * station goes through yt_play(), which WRITES `music_source` — so
+	 * resuming one after somebody moved the picker to Plex would silently
+	 * undo the choice they had just made. */
+	const struct source *cur = music_source();
+	if (!cur || strcmp(cur->id, src) != 0)
+		return false;
+
+	if (!strcmp(src, "plex")) {
+		*rc = plex_play_album(what);
+		return true;
+	}
+	if (!strcmp(src, "ytmusic")) {
+		*rc = yt_play(what);
+		return true;
+	}
+	if (!strcmp(src, "local")) {
+		*rc = local_queue();
+		return true;
+	}
+
+	/* radio and spotify fill no queue of ours, so neither can have written
+	 * one of these. A record naming one is a file from a later version, or
+	 * a hand-edited one; either way there is nothing here to replay. */
+	return false;
+}
+
 /* Declared rather than moved: they belong with the dispatch below, which is
  * the only other thing that parses an argument list. */
 static const char *first_operand(int argc, char **argv);
@@ -5397,6 +5584,42 @@ static int big_music(int argc, char **argv, bool rec)
 	 * which is a surprising amount to happen because somebody pressed
 	 * pause. */
 	if (!strcmp(verb, "play")) {
+		/*
+		 * ⚠ AN EMPTY QUEUE IS NOT SOMETHING TO RESUME, IT IS SOMETHING
+		 * TO FILL — and that is what the Music tile got wrong.
+		 *
+		 * A player that has just started has whatever `--provider`
+		 * preloaded and nothing else: eleven stations on radio,
+		 * NOTHING on ytmusic, plex or local, because those queues are
+		 * ones this file fills a track at a time and nothing on the
+		 * other end writes one down. Until 0.1.0-33 that never showed,
+		 * because Quit left the player running and its queue with it,
+		 * so the next press really was a resume. Now that Quit lets go
+		 * of the music, the tile came up on a bare player and played
+		 * silence. Reported from the sofa exactly that way.
+		 *
+		 * So: something queued → resume it, which is the old
+		 * behaviour and the common one. Nothing queued → put back what
+		 * was playing last, which is what somebody pressing Music
+		 * meant either way.
+		 *
+		 * ⚠ AND ONLY OUR OWN PLAYER IS RESTARTED. Replaying goes
+		 * through music_restart() — `--provider` is a start-up flag,
+		 * so there is no other way to change a source — and a cliamp
+		 * somebody has open in a terminal is not this launcher's to
+		 * restart. Same marker, and the same argument, as `release`.
+		 */
+		bool live = music_socket_live();
+		long queued = 0;
+		if (live)
+			music_read(NULL, 0, NULL, 0, NULL, 0, &queued);
+
+		if (!live || (queued == 0 && music_is_ours())) {
+			int rc;
+			if (music_play_last(&rc))
+				return rc;
+		}
+
 		if (!music_ensure_running()) {
 			fputs("syn-arcade: cliamp did not come up\n", stderr);
 			return EX_FAIL;
@@ -5410,7 +5633,7 @@ static int big_music(int argc, char **argv, bool rec)
 		 * and there is silence. `toggle` is what begins playback from a
 		 * standing start, and it is also the right verb from `paused`. */
 		char state[32];
-		music_read(state, sizeof(state), NULL, 0, NULL, 0);
+		music_read(state, sizeof(state), NULL, 0, NULL, 0, NULL);
 		return music_cmd(strcmp(state, "playing") == 0 ? "play"
 							       : "toggle");
 	}
@@ -5704,7 +5927,8 @@ static bool transport_pick(struct playing *p)
 	 * MPRIS title is the file path, and music_read knows the name. */
 	if (!strcmp(p->who, "cliamp")) {
 		char state[32], title[256];
-		music_read(state, sizeof(state), title, sizeof(title), NULL, 0);
+		music_read(state, sizeof(state), title, sizeof(title), NULL, 0,
+			   NULL);
 		if (state[0])
 			snprintf(p->state, sizeof(p->state), "%s", state);
 		if (title[0])

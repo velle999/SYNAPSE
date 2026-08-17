@@ -212,6 +212,53 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-34: the Music tile has something to play again ───────────────────
+#
+# Reported straight after 0.1.0-33: music could not be started at all any more,
+# and the Music tile should bring back whatever was playing last. One sentence,
+# and both halves are the same fix.
+#
+# ⚠ THE PREVIOUS RELEASE IS WHAT EXPOSED IT, AND IT WAS STILL THE RIGHT FIX.
+# Two facts, harmless apart:
+#
+#   · THE QUEUE DOES NOT SURVIVE THE PLAYER. `--provider` is a start-up flag
+#     and what it preloads is the whole of what a fresh player has — measured
+#     on this machine, `radio` comes up with eleven stations and `ytmusic`
+#     with NOTHING. Every other queue here is one this package fills a track
+#     at a time over cliamp's socket, and nothing on the other end writes it
+#     down.
+#   · SINCE 0.1.0-33 THE PLAYER DOES NOT SURVIVE QUIT, because a headless
+#     player left running is music with no way to stop it.
+#
+# Together: Quit, then press Music, and the tile started a bare player, sent
+# `toggle` to an empty queue and played silence. Everything about it looked
+# like it worked — the tile responded, the player came up, the Now Playing row
+# appeared. Measured before the fix: `"state":"stopped","index":-1`, and no
+# `total` key at all, which is how cliamp says the queue is empty.
+#
+# So whatever fills a queue now writes down what filled it, and the tile puts
+# it back: press Music on a machine with no player and the last station,
+# album or library comes back on. A player that is up WITH something queued is
+# resumed exactly as before — reloading it would restart the station from its
+# first track every time somebody pressed Music after a pause, which is a
+# worse bug wearing the same clothes.
+#
+# ⚠ THE RECORD CARRIES ITS SOURCE, and that is not bookkeeping. Replaying a
+# YouTube station goes through the same path that PLAYS one, which writes
+# `music_source` — so resuming a station after somebody had deliberately moved
+# the picker to Plex would silently undo the choice they just made. A record
+# from another source is not this source's to resume.
+#
+# ⚠ AND IT IS A REFERENCE, NEVER A TRACK URL: a Plex rating key, a station
+# URL, a music directory — the thing that was asked for. The URLs cliamp is
+# actually handed carry the Plex token, and nothing here writes one into a
+# cache file.
+#
+# ⚠ ONLY OUR OWN PLAYER IS RESTARTED, on the same marker and the same argument
+# as `release` in -33: putting a station back means restarting the player,
+# because `--provider` is a start-up flag, and a cliamp somebody has open in a
+# terminal is not this launcher's to restart.
+#
 # ── 0.1.0-33: the chord stays out of games, and Quit lets go of the music ───
 #
 # Both reported against 0.1.0-32, and both are the same shape of mistake: a
@@ -710,7 +757,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=33
+pkgrel=34
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
