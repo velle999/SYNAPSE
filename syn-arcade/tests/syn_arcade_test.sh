@@ -1261,8 +1261,15 @@ check "the glyphs stay inside SVG Tiny: $rich" $?
 # A Plex server found on the network and Plex installed on this machine are the
 # same thing on the shelf, so they get the same drawing — which means the media
 # records carry a glyph too.
+#
+# ⚠ ASKED FOR BY NAME, not by position. This used to assert `iconfile` was the
+# LAST column, which was true when it was the newest one and stopped being true
+# the moment `pointer` and `keys` went on after it — and the rule for this file
+# is that new columns go on the END. A test that pins the final field forbids
+# the one change the format is designed for, and it fails on the correct fix
+# rather than on a mistake.
 printf '%s\n' "$(says "$SA" big media --rec)" |
-    awk -F'\t' 'NR==1 { exit ($NF == "iconfile") ? 0 : 1 }'
+    awk -F'\t' 'NR==1 { for (i = 1; i <= NF; i++) if ($i == "iconfile") exit 0; exit 1 }'
 check "media --rec carries a glyph for what it found" $?
 
 # ── filling the screen, and the toggle that can undo it ─────────────────────
@@ -1437,6 +1444,52 @@ check "a failed fetch leaves the cached headlines alone" $?
 
 says "$SA" big media --rec | head -1 | grep -q "^id.*name.*url.*source"
 check "media --rec names its columns" $?
+
+# ── a server tile gets a mouse and a keyboard ───────────────────────────────
+#
+# ⚠ THE COLUMNS WERE MISSING AND NOTHING SAID SO. The shell gates the
+# controller-as-mouse and the on-screen keyboard on `activeApp.pointer === "1"`
+# and `.keys === "1"`, read BY NAME out of these records. A media server tile
+# was written with six columns and neither of those was among them, so the
+# lookup returned `undefined`, which is not "1" — and pressing Plex opened a
+# browser on a television with no way to move the cursor and no way to type,
+# while every app tile on the same shelf had both.
+#
+# It reads as a Plex problem or a pad problem and it is neither. That is why
+# the assertion is on the COLUMNS rather than on anything about Plex: the tile
+# behind them is a URL opened in a browser, which is the one thing on the whole
+# interface that CANNOT be driven by words on a pipe.
+says "$SA" big media --rec | head -1 | grep -q 'pointer.*keys'
+check "media --rec carries the pointer and keys columns" $?
+
+# Hermetic, so no server answers and there are no rows to check here — the
+# value written per row is pinned structurally instead.
+grep -q 'icon_file(found\[i\].source), "1", "1")' src/big.c
+check "...and every server tile is given both" $?
+
+# ── a cache from before those columns existed ───────────────────────────────
+#
+# ⚠ READABLE IS NOT CORRECT. Columns go on the END of this file and are read by
+# name precisely so an older cache keeps working, and a six-column one does —
+# it just has no `pointer`, which silently means "no mouse". Age cannot tell
+# that apart from a good cache, so the header is asked directly.
+#
+# Without this the fix would look like it had not worked: the update lands, the
+# television comes on, and the FIRST press of Plex is still served out of the
+# file the old build left behind — for up to MEDIA_TTL, which is ten minutes of
+# looking exactly like the bug that was just fixed.
+printf 'id\tname\turl\tsource\tkind\ticonfile\nplex-1\tOld\thttps://example.com:32400/web\tplex\tserver\t\n' \
+    > "$XDG_CACHE_HOME/syn-arcade/media.tsv"
+says "$SA" big media --rec | head -1 | grep -q 'pointer'
+check "a cache written before the pointer column is not trusted" $?
+
+# The other direction, and it is the half that keeps the guard honest: a cache
+# that HAS the columns must still be used, or every television would rediscover
+# the network on every draw and the cache would be decorative.
+printf 'id\tname\turl\tsource\tkind\ticonfile\tpointer\tkeys\nplex-7\tKept\thttps://example.com:32400/web\tplex\tserver\t\t1\t1\n' \
+    > "$XDG_CACHE_HOME/syn-arcade/media.tsv"
+says "$SA" big media --rec | grep -q '^plex-7	Kept'
+check "...but a cache that has them is still served from" $?
 
 # ── the same server, found twice ────────────────────────────────────────────
 #

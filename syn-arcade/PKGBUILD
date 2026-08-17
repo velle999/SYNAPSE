@@ -212,6 +212,49 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-37: the Plex tile opened with no mouse and no keyboard ────────────
+#
+# Reported as "the controller mouse isn't working when I launch Plex in big
+# screen like the rest of the apps" — and the comparison in that sentence is
+# the whole diagnosis. Every app tile beside it on the Media shelf had a mouse.
+# Plex did not.
+#
+# ⚠ IT IS NOT THE PLEX TILE. There is no Plex tile on this machine. Only
+# `plex-media-server` is installed — the SERVER — and neither plex-desktop nor
+# plexhtpc is, so apps_table() adds no Plex row at all. What is on the shelf is
+# the server DISCOVERED on the network by GDM broadcast, and pressing that is
+# not launching an application: it is opening somebody's web interface in a
+# browser.
+#
+# ⚠ AND THE TWO KINDS OF TILE CAME OUT OF DIFFERENT TABLES WITH DIFFERENT
+# COLUMNS. `big apps` emits eleven columns including `pointer` and `keys`;
+# `big media` emitted six, and neither of those was among them. The shell gates
+# the controller-as-mouse and the on-screen keyboard on those columns BY NAME —
+# `shell.activeApp.pointer === "1"` — so a record without the column read
+# `undefined`, which is not "1", and both were simply never started.
+#
+# Nothing warned. The tile launched, the browser opened full-screen on the
+# television, and the pad did nothing — which reads from a sofa as a Plex
+# problem, a browser problem or a pad problem, and is none of the three. The
+# pad has now been innocent a fourth time.
+#
+# The fix is the two columns, appended per this file's own rule, and always 1:
+# unlike an app tile this is not a judgement call, because a server tile is a
+# URL in a browser and a browser is the exact case the pointer was written for.
+# The news shelf, which opens a browser by the very same route, has always
+# passed "1"/"1" — this shelf was never given the columns to pass.
+#
+# ⚠ AND THE CACHE FROM THE OLD BUILD IS REJECTED, which is not fussiness. The
+# shell's first draw reads media.tsv WITHOUT --refresh, columns are read by
+# name so a six-column file stays perfectly readable, and age cannot tell "old"
+# from "wrong". Without the check the update would land and the first press of
+# Plex would still have no mouse — for the ten minutes of MEDIA_TTL, which is
+# ten minutes of looking exactly like the bug that was just fixed.
+#
+# ⚠ One existing test asserted `iconfile` was the LAST media column. That was
+# true only while it was the newest one, and it made the format's documented
+# rule — new columns go on the END — into something that fails the suite. It
+# now asks for the column by name, like the shell does.
 # ── 0.1.0-36: the toggle was LOST, and -35 answered it by skipping ──────────
 #
 # Reported as "the music isn't starting when I click the Music tab, and when I
@@ -863,7 +906,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=36
+pkgrel=37
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -2660,6 +2660,41 @@ static int media_discover(server_t *out, int max)
 #define MEDIA_TTL 600		/* ten minutes: a server does not move often */
 
 /*
+ * Whether a cached media.tsv was written by a build that knew about the
+ * `pointer` column.
+ *
+ * ⚠ THIS IS NOT VERSIONING THE CACHE, and it is deliberately not a schema
+ * number. The rule for this file is that columns go on the END and are read by
+ * NAME, precisely so an older cache stays readable — and it does. The problem
+ * is narrower: a cache written before `pointer` existed is READABLE but WRONG
+ * in a way nobody can see, because the missing column reads as `undefined` and
+ * a server tile then launches with no mouse. Age cannot tell the two apart, so
+ * the header is asked directly.
+ *
+ * Without this the fix would arrive and appear not to work for up to
+ * MEDIA_TTL — the update lands, the television comes on, and the FIRST press
+ * of Plex is still served from the file the old build wrote. Ten minutes of
+ * looking exactly like the bug that was just fixed is worth these few lines.
+ *
+ * A cache that cannot be read at all says false and is simply re-discovered.
+ */
+static bool cache_has_pointer(const char *path)
+{
+	char *text = read_file(path);
+	if (!text)
+		return false;
+
+	/* The header only: a URL or a server's name could contain anything,
+	 * and this question is about the columns. */
+	char *nl = strchr(text, '\n');
+	if (nl)
+		*nl = '\0';
+	bool ok = strstr(text, "\tpointer") != NULL;
+	free(text);
+	return ok;
+}
+
+/*
  * The media servers, from the cache or from the network.
  *
  * Cached because this is on the path of drawing a screen. Nine hundred
@@ -2674,7 +2709,7 @@ static int big_media(bool rec, bool refresh)
 		return EX_FAIL;
 
 	long age = file_age(path);
-	if (!refresh && age >= 0 && age < MEDIA_TTL) {
+	if (!refresh && age >= 0 && age < MEDIA_TTL && cache_has_pointer(path)) {
 		if (rec) {
 			if (cache_print(path))
 				return EX_OK;
@@ -2721,13 +2756,39 @@ static int big_media(bool rec, bool refresh)
 		 * The glyph comes off `source` — plex, jellyfin — which is the
 		 * same name the installed application's tile files its drawing
 		 * under, so a Plex server on the network and Plex on this
-		 * machine look like the same thing on the shelf. They are. */
-		rec_frow(mem, 6, "id", "name", "url", "source", "kind",
-			 "iconfile");
+		 * machine look like the same thing on the shelf. They are.
+		 *
+		 * ⚠ `pointer` AND `keys`, ALWAYS 1, and their absence was a bug.
+		 * These are the same two columns apps_table() gives every tile,
+		 * and the shell gates the controller-as-mouse and the on-screen
+		 * keyboard on them BY NAME — `activeApp.pointer === "1"`. A
+		 * record without the column reads `undefined`, which is not
+		 * "1", so a server tile launched with no mouse and no keyboard
+		 * while every app tile beside it on the same shelf had both.
+		 * Reported from the sofa as "the controller mouse isn't working
+		 * when I launch Plex like the rest of the apps".
+		 *
+		 * They are not a judgement call here the way they are in
+		 * apps_table(). A server tile has no program behind it: it is a
+		 * URL, and pressing it opens somebody's web interface in a
+		 * browser (big_run → big_open). That is the case the pointer
+		 * was WRITTEN for — a browser takes pointer events and cannot
+		 * be handed words on a pipe — and the case the keyboard is for,
+		 * since a media server's web interface wants a login and a
+		 * search box. The news shelf, which opens a browser by the very
+		 * same route, has always passed "1"/"1"; this shelf was simply
+		 * never given the columns to pass.
+		 *
+		 * ⚠ ON THE END, per the rule above, so a six-column media.tsv
+		 * cached by an older build stays readable — it just has no
+		 * mouse until MEDIA_TTL expires and the next refresh rewrites
+		 * it. Ten minutes, not a reinstall. */
+		rec_frow(mem, 8, "id", "name", "url", "source", "kind",
+			 "iconfile", "pointer", "keys");
 		for (int i = 0; i < n; i++)
-			rec_frow(mem, 6, found[i].id, found[i].name,
+			rec_frow(mem, 8, found[i].id, found[i].name,
 				 found[i].url, found[i].source, "server",
-				 icon_file(found[i].source));
+				 icon_file(found[i].source), "1", "1");
 		fclose(mem);
 	}
 
@@ -2742,8 +2803,8 @@ static int big_media(bool rec, bool refresh)
 		if (buf)
 			fputs(buf, stdout);
 		else
-			rec_row(6, "id", "name", "url", "source", "kind",
-				"iconfile");
+			rec_row(8, "id", "name", "url", "source", "kind",
+				"iconfile", "pointer", "keys");
 	} else if (n == 0) {
 		puts("no Plex or Jellyfin server answered on this network");
 	} else {
