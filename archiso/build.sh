@@ -1287,6 +1287,11 @@ Architecture = auto
 ParallelDownloads = 5
 SigLevel    = Required DatabaseOptional
 LocalFileSigLevel = Optional
+# The Pac-Man progress bar, on by default on SynapseOS. Undocumented and in no
+# stock pacman.conf, but a real option — `pacman-conf ILoveCandy` knows it — and
+# a bare key with no value. syn-install writes the same line into the INSTALLED
+# system's pacman.conf; this one is only for the live session.
+ILoveCandy
 
 [core]
 Include = /etc/pacman.d/mirrorlist

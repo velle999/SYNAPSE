@@ -1269,6 +1269,43 @@ multi_select() {
     done
 }
 
+# ── ILoveCandy ────────────────────────────────────────────
+#
+# pacman's Pac-Man progress bar, on by default on SynapseOS. Takes the file so
+# the test can hand it a fixture; the installer passes /mnt/etc/pacman.conf.
+#
+# INSERTED RATHER THAN UNCOMMENTED, which is the opposite of the [multilib] rule
+# further down and for a plain reason: ILoveCandy is undocumented and ships in
+# no stock pacman.conf, so there is no commented line to turn on. It is a real
+# option — `pacman-conf ILoveCandy` recognises it — and a bare key with no
+# value, like UseSyslog beside it.
+#
+# The anchor is '# Misc options', the stock comment heading the block that holds
+# Color, NoProgressBar and VerbosePkgLists: that is where this belongs and where
+# a user goes looking for it. '[options]' is the fallback for a pacman.conf
+# carrying no such comment — landing at the top of the section is untidy but
+# correct, and the alternative is the option silently not being written.
+#
+# `0,/re/` bounds the substitution to the FIRST match, so a file with a stray
+# later match cannot get a second copy, and '&' re-emits the anchor so this
+# inserts AFTER it rather than replacing it.
+#
+# Returns non-zero if the line is not there afterwards. An anchor that moved
+# makes sed write nothing and say nothing, and a default that quietly did not
+# apply is the kind of thing nobody notices until they go looking for it.
+pacman_conf_enable_candy() {  # pacman_conf_enable_candy <pacman.conf>
+    _pcc_file=$1
+    [ -f "$_pcc_file" ] || return 1
+    if ! grep -q '^ILoveCandy' "$_pcc_file"; then
+        if grep -q '^# Misc options$' "$_pcc_file"; then
+            sed -i '0,/^# Misc options$/s//&\nILoveCandy/' "$_pcc_file"
+        else
+            sed -i '0,/^\[options\]$/s//&\nILoveCandy/' "$_pcc_file"
+        fi
+    fi
+    grep -q '^ILoveCandy' "$_pcc_file"
+}
+
 # Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
 # pure decision functions above and stops HERE, before the root check, the
 # EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
@@ -2649,6 +2686,11 @@ cat >> /mnt/etc/pacman.conf << REPOEOF
 SigLevel = Optional TrustAll
 Server = file:///var/cache/synapseos
 REPOEOF
+
+# The Pac-Man progress bar, on by default. Cosmetic, so a failure warns and the
+# install carries on — see pacman_conf_enable_candy() above the test seam.
+pacman_conf_enable_candy /mnt/etc/pacman.conf \
+    || warn "Could not enable ILoveCandy in /etc/pacman.conf (cosmetic only)."
 
 # ── [multilib], only when Steam was asked for ─────────────
 #
