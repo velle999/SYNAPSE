@@ -120,7 +120,7 @@ pkgver=0.1.0
 #   see-through alpha it took for a glass desktop after the blur behind it was
 #   torn down: a menu with a SHARP wallpaper through it, which is the one outcome
 #   worse than the slab this change set out to remove.
-pkgrel=380
+pkgrel=381
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -59,6 +59,12 @@ void theme_state_load_config(syn_config_t *c) { (void)c; }
  * that cannot link does not fail — it is skipped by anyone running a single
  * target, and only `meson test` in full says so. */
 void theme_glass_refresh(syn_server_t *s) { (void)s; }
+/* And its neighbour, added in -381 for the same kind of reason: uifx_apply()
+ * pushes the resolved glass into render.c's cache so that a panel rendered from
+ * the apply hook draws at the alpha the config now says, rather than at the one
+ * the previous frame resolved. render.c is the scene graph and is not linked
+ * here either. */
+void panel_chrome_sync(syn_server_t *s) { (void)s; }
 /* Stubbed for the same reason theme.state is, one line up: its real reader
  * lives in notif.c, which drags in sd-bus and the scene graph. dnd.state's
  * reload survival — the property this file exists to guard — is asserted

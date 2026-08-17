@@ -597,6 +597,15 @@ static void theme_repaint(syn_server_t *s)
      * surfaces and finds every setter already holding the value it wants. */
     layer_glass_all(s);
 
+    /* And the compositor's own panels, for the ordering reason spelt out in
+     * uifx_apply(): the resolved glass is a pushed cache that panel_chrome_sync()
+     * refreshes on the next FRAME, while a panel bakes its alpha into its rect
+     * at RENDER time — and every caller of this renders before that frame runs.
+     * Pushing it here is what stops a theme switch, a transparency toggle or a
+     * config reload leaving a panel drawn at the previous desktop's alpha over
+     * this one's blur. */
+    panel_chrome_sync(s);
+
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         if (o->scene_output)

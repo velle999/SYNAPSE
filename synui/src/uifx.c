@@ -247,14 +247,42 @@ void uifx_apply(syn_server_t *s)
      * so turning this row off takes glass away from synui's own panels and from
      * the shell's menus — neither of which is reached by anything above.
      *
-     * The panels look after themselves (panel_chrome_sync() re-pushes the factor
-     * every frame), so what this is really for is the shell: it reads
-     * `glass_surfaces` out of theme.state, and without the re-export it would
-     * hold the see-through alpha it took for a glass desktop after the blur
-     * behind it was gone. Cheap, and unconditional on purpose — asking whether
-     * the blur row in particular moved would mean tracking that here, and the
-     * call is idempotent for every other row on the page. */
+     * The shell reads `glass_surfaces` out of theme.state, and without the
+     * re-export it would hold the see-through alpha it took for a glass desktop
+     * after the blur behind it was gone. Cheap, and unconditional on purpose —
+     * asking whether the blur row in particular moved would mean tracking that
+     * here, and the call is idempotent for every other row on the page. */
     theme_glass_refresh(s);
+
+    /*
+     * ⚠ AND THE PANELS DO *NOT* LOOK AFTER THEMSELVES, WHICH IS WHAT THIS LINE
+     * IS FOR. The claim that they do — panel_chrome_sync() re-pushes the factor
+     * every frame — is true of the BLUR and false of the ALPHA, and the two
+     * halves landing a frame apart is the whole bug.
+     *
+     * panel_chrome_sync() runs from output_frame(), i.e. on the next FRAME. But
+     * a panel's alpha is not read at frame time: panel_bg_color() bakes it into
+     * the background rect at RENDER time, and the render that follows a row
+     * moving happens here, in the apply hook, before that frame ever runs. So
+     * the control panel redrew itself with the glass resolved from the config as
+     * it stood BEFORE the row moved, and one frame later panel_chrome_sync()
+     * flipped the blur to match the config as it stands now.
+     *
+     * The visible failure is the direction that removes glass: the blur is torn
+     * down immediately while the panel is still painted at the see-through alpha
+     * it had, so the sharp wallpaper shows straight through a panel that is
+     * meant to be solid. It then stays wrong — nothing re-renders a panel on its
+     * own — until something unrelated does, which in practice is the hover
+     * redraw you get by moving the pointer over a row.
+     *
+     * Pushing here rather than teaching the render path to resolve for itself:
+     * g_panel_glass is a pushed cache precisely so that thirty renderers need no
+     * config handle, and panel_chrome_sync() is already the one pusher. It is
+     * idempotent and cheap by construction (twenty-nine pointer tests and
+     * setters that early-return when nothing moved), which is what makes it safe
+     * to call from an apply hook as well as from a frame.
+     */
+    panel_chrome_sync(s);
 
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;

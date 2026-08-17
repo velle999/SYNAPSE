@@ -128,15 +128,19 @@ PanelWindow {
      * `chrome` still gates it: the visualiser has no card, so it has no card to
      * make glass either.
      *
-     * WHY THIS IS NOT A REAL BLUR
+     * THE BLUR IS REAL, AND IT IS THE COMPOSITOR'S
      *
-     * The dock's glass is a scenefx blur node the compositor creates behind its
-     * own buffer. Nothing here can ask for one — these are ordinary layer
-     * surfaces and the compositor blurs windows, not arbitrary clients — so what
-     * is drawn is the rest of the recipe: the falloff, the specular hairline,
-     * the rim, at an alpha that tracks the dock's. Theme.widgetAlpha lifts it
-     * enough that small text still reads without the blur underneath it; see the
-     * note there.
+     * It did not use to be: this said "nothing here can ask for one", because
+     * synui applied no effects to layer surfaces at all and what a glass widget
+     * drew was the rest of the recipe without the frosting. Since -379 the
+     * surface asks by name (WlrLayershell.namespace below) and layer.c puts a
+     * scenefx blur node behind it, the same one the dock has. What this draws is
+     * the falloff, the specular hairline and the rim ON TOP of that.
+     *
+     * Theme.widgetAlpha still carries the lift it was given for the unblurred
+     * case. Deliberately left alone here: it is the dock's own opacity plus a
+     * constant, so moving it is a change to how the widgets and the dock relate
+     * to each other, and that is a separate decision from this one.
      */
     readonly property bool glass: win.chrome && Theme.widgetsGlass
 
@@ -169,10 +173,44 @@ PanelWindow {
     readonly property int    mx:    WidgetLayout.x(widgetId, homeMarginX)
     readonly property int    my:    WidgetLayout.y(widgetId, homeMarginY)
 
-    // Room around the card for the shadow to spread into. The card's visible
+    /* ── Does this card cast its own shadow? ─────────────────────────────────
+     *
+     * ⚠ NOT WHILE THE COMPOSITOR IS FROSTING BEHIND IT, AND THE REASON IS THE
+     * SHAPE OF THE BLUR'S MASK RATHER THAN TASTE.
+     *
+     * layer.c limits the backdrop blur to where this client actually paints, so
+     * that a full-screen surface with a small card in it frosts the card and not
+     * the screen. That mask is a STENCIL, and the test it is built with is
+     * `discard_transparent && gl_FragColor.a == 0.0` (scenefx tex.frag) — so the
+     * stencil keeps every pixel whose alpha is merely NON-ZERO, and the blur
+     * inside it is drawn at full strength.
+     *
+     * A drop shadow is faint, not transparent. These rings are black at 0.045 to
+     * 0.09 and spread nine pixels past the card, so on a frosted desktop they
+     * stencil in a nine-pixel band that the compositor then fills with the same
+     * blur that is under the card. What was a shadow you had to look for became
+     * a wide frosted halo around every widget — and nothing on the control panel
+     * moves it, because the shadow rows there are uifx.c's and reach window
+     * frames only. These rings are literals in this file.
+     *
+     * So the two mechanisms do not stack: where there is a blur, the blur IS the
+     * lift, and the card carries the rim and the specular and nothing else.
+     *
+     * Keyed on Theme.glassSurfaces — is the compositor frosting — and NOT on
+     * `win.glass`, which is whether this card PAINTS itself as glass. They come
+     * apart: `widget_glass = off` on a glass desktop draws the chamfered HUD, and
+     * its shadow strokes are twenty pixels wide, so that combination is the worst
+     * halo of the two rather than an exception to it. The namespace is claimed
+     * unconditionally below, so the frosting is not the card's to opt out of.
+     */
+    readonly property bool ownShadow: !Theme.glassSurfaces
+
+    // Room around the card for that shadow to spread into. The card's visible
     // edge still sits `mx` from the screen edge, so the pad is invisible in the
-    // layout and the home margins mean what they say.
-    readonly property int pad: chrome ? 16 : 0
+    // layout and the home margins mean what they say. No shadow, no pad — which
+    // is also what shrinks the frosted patch back to the card itself, since the
+    // surface is what the blur node is sized from.
+    readonly property int pad: (chrome && win.ownShadow) ? 16 : 0
 
     property bool dragging: false
 
@@ -268,6 +306,7 @@ PanelWindow {
                 Item {
                     id: glassShadow
                     anchors.fill: parent
+                    visible: win.ownShadow
 
                     // The drop, as a plain property with the Behavior on IT
                     // rather than on each ring's anchors.topMargin: a Behavior
@@ -360,6 +399,7 @@ PanelWindow {
                 // shadow is; a centred halo would just look like a second glow.
                 Item {
                     anchors.fill: parent
+                    visible: win.ownShadow
                     y: win.dragging ? 9 : 4
                     Behavior on y { NumberAnimation { duration: Theme.animNormal } }
                     Repeater {
