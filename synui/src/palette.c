@@ -31,8 +31,8 @@
  *
  * ── What is thrown away, and why ──────────────────────────────────────────
  *
- * Near-black, blown-out and unsaturated pixels are dropped before binning.
- * They are the majority of most wallpapers and they carry no hue: a photograph
+ * Near-black and unsaturated pixels are dropped before binning. They are the
+ * majority of most wallpapers and they carry no hue: a photograph
  * that is 70% dark sky would otherwise elect "very slightly blue black" as the
  * accent, which is a colour nothing can be drawn in. Dropping them is also what
  * lets this answer HONESTLY on a greyscale wallpaper — with nothing chromatic
@@ -54,19 +54,43 @@
  * across two bins and lose to a smaller flat region. */
 #define HUE_BINS 24
 
-/* A pixel has to clear all three to vote. Tuned against real wallpapers rather
- * than derived: the numbers that matter are that `V_MIN` is above JPEG's noise
- * floor in shadows and `S_MIN` is above the chroma a grey picks up from
- * compression. */
+/* A pixel has to clear both to vote. Tuned against real wallpapers rather than
+ * derived: the numbers that matter are that `V_MIN` is above JPEG's noise floor
+ * in shadows and `S_MIN` is above the chroma a grey picks up from compression. */
 #define S_MIN 0.18   /* below this it is a grey wearing a tint */
 #define V_MIN 0.12   /* shadow noise */
-/* ⚠ A BLOWN HIGHLIGHT IS BRIGHT *AND* WASHED OUT, and it takes both to say so.
- * `v > V_MAX` alone rejects a vivid yellow — #F5E128 is v = 0.96, s = 0.84,
- * about as real a colour as a wallpaper carries — so a yellow image came back
- * as "no usable hue". Clipping drains saturation on its way to white; that is
- * what tells a blown pixel from a bright one. */
-#define V_MAX   0.96
-#define S_BLOWN 0.45 /* above V_MAX, this much chroma still means a colour */
+
+/* ⚠ AND THERE IS NO BRIGHTNESS TEST, WHICH IS THE POINT.
+ *
+ * There was one: pixels above v = 0.96 carrying less than 0.45 saturation were
+ * dropped as blown highlights, on the reasoning that clipping drains saturation
+ * on its way to white. Both halves of that are true and the rule was still
+ * wrong, because S_MIN had already made it redundant — a genuinely clipped
+ * pixel is heading for s = 0 and never survives S_MIN to reach a brightness
+ * test at all. The only pixels the rule actually removed were the ones between
+ * the two thresholds: bright, and chromatic enough to have cleared S_MIN.
+ * That band is not clipping. That band is PASTEL.
+ *
+ * ⚠ AND PASTEL IS WHERE PINK LIVES. This is the bug that found it: a wallpaper
+ * that is 97% Sanrio pink came back "no usable hue" and the desktop stayed
+ * cyan, while every vivid hue on the wheel answered correctly. The reason pink
+ * alone showed it is that pink is the one colour whose ORDINARY form is a
+ * pastel — say "blue" and a person means the vivid one, but say "pink" and they
+ * already mean a pale, unsaturated red. Vivid pink has its own names, magenta
+ * and fuchsia and hot pink, and those all worked. So the rule read as
+ * hue-neutral and behaved as "no pink", and nothing in it mentions hue.
+ *
+ * The house wallpaper was being misread the same way and nobody noticed: the
+ * dendrite mark is densest at v = 1.0, s = 0.3–0.5, so its brightest and most
+ * characteristic pixels were the discarded ones and the accent came off the
+ * dimmer remainder — #7084FF for a mark that measures hue 255. It reads #A080E8
+ * now, which is the colour the picture actually is.
+ *
+ * Near-white pixels do not need a cliff in any case: the mid-tone bell in the
+ * weight below already puts a v = 1.0 pixel at 0.47 of its saturation, so
+ * brightness is discounted as a CURVE by the thing that was always going to
+ * handle it better. Two mechanisms for one job, and the crude one was
+ * overruling the careful one. */
 
 /* How much chromatic signal it takes to name a colour at all.
  *
@@ -250,7 +274,6 @@ bool syn_palette_from_pixels(const unsigned char *data, int w, int h,
             double hu, sa, va;
             rgb_to_hsv(r, g, b, &hu, &sa, &va);
             if (sa < S_MIN || va < V_MIN) continue;
-            if (va > V_MAX && sa < S_BLOWN) continue;
 
             /* Weight by saturation, so a vivid patch outvotes a large washed
              * one — which is what a person means by "the colour of that

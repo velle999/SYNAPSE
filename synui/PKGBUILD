@@ -56,7 +56,29 @@ pkgver=0.1.0
 #   without logging; a `terminal =` longer than 63 bytes was truncated in
 #   silence into a path that could never run; and `synctl dispatch` answered
 #   {"ok":true} to an action name it had never heard of.
-pkgrel=377
+# 378: Prism could not see pink. A wallpaper that is 97% Sanrio pink came back
+#   "no usable hue" and the desktop kept its fallback cyan, while every vivid
+#   hue on the wheel answered correctly — so the fault looked hue-specific and
+#   was not: the blown-highlight rule dropped anything brighter than v = 0.96
+#   carrying under 0.45 saturation, and S_MIN had already made that rule
+#   redundant. A pixel genuinely clipping toward white heads for s = 0 and never
+#   survives S_MIN to reach a brightness test; the only pixels the rule removed
+#   were bright ones chromatic enough to have passed it. That band is PASTEL.
+#   ⚠ It surfaced as "pink is broken" because pink is the one colour whose
+#   ordinary form IS a pastel — "blue" means the vivid one, "pink" already means
+#   a pale red, and vivid pink is called magenta or fuchsia and always worked.
+#   The rule is gone rather than retuned: the mid-tone bell in the weight already
+#   discounts a v = 1.0 pixel to 0.47 of its saturation, so brightness was being
+#   handled as a curve by the careful mechanism and as a cliff by the crude one.
+#   The house wallpaper was misread the same way and nobody noticed — the
+#   dendrite mark is densest at v = 1.0, s = 0.3–0.5, so its most characteristic
+#   pixels were the discarded ones and it measured #7084FF for a mark whose hue
+#   is 255. It reads #A080E8 now, which is what the picture is.
+#   Two tests: a wall-to-wall pastel pink must be nameable, and so must every
+#   pastel hue on the wheel — stating it for pink alone would let the next
+#   threshold re-break the other eleven. The greyscale and smeared-chroma
+#   refusals are untouched and still assert.
+pkgrel=378
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

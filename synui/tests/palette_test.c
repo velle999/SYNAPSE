@@ -326,6 +326,93 @@ static void test_dark_panel_is_legible(void)
     printf("  legible on a dark panel too ........ ok\n");
 }
 
+/* ── 11. A pastel is a colour, and pink is the pastel ─────── */
+/*
+ * ⚠ THE THIRD THING THAT WAS WRONG, and it hid behind a rule that mentions no
+ * hue at all. Pixels brighter than v = 0.96 with less than 0.45 saturation were
+ * dropped as blown highlights — but S_MIN already rejects anything actually
+ * clipping toward white, so the only pixels that rule ever removed were bright
+ * ones chromatic enough to have cleared S_MIN. That band is pastel.
+ *
+ * It shows up as "pink does not work" and nothing else, because pink is the one
+ * colour a person names whose ordinary form IS a pastel: "blue" means the vivid
+ * one, "pink" already means a pale red. Vivid pink is called magenta or fuchsia
+ * and always worked, which is what made the fault look hue-specific.
+ *
+ * #F6BBD4 is the Sanrio pink that produced it — v = 0.96, s = 0.24, squarely in
+ * the band — on a wallpaper that is nearly all of it.
+ */
+
+static void test_a_pastel_is_a_colour(void)
+{
+    unsigned char *px = canvas();
+    fill_rows(px, 0, H, 246, 187, 212);          /* pastel pink, wall to wall */
+
+    syn_palette_t p;
+    if (!syn_palette_from_pixels(px, W, H, W * 4, 0.011, &p) || !p.ok) {
+        printf("    a wallpaper that is entirely pastel pink came back as "
+               "'no usable hue'\n");
+        printf("    — asked what colour that picture is, a person answers "
+               "instantly.\n");
+        assert(0);
+    }
+    /* Pink is red-dominant with blue second and green last. What must not come
+     * back is a colour that has lost the pink: the ordering IS the hue. */
+    if (!(p.accent[0] >= p.accent[2] && p.accent[2] > p.accent[1])) {
+        printf("    pastel pink elected #%02X%02X%02X — not a pink\n",
+               (int)(p.accent[0] * 255), (int)(p.accent[1] * 255),
+               (int)(p.accent[2] * 255));
+        assert(0);
+    }
+    free(px);
+    printf("  a pastel is a colour ............... ok\n");
+}
+
+/* ── 12. …and brightness alone never disqualifies one ─────── */
+/*
+ * The guard that keeps the rule from coming back. Every hue on the wheel, at
+ * the brightness and saturation a pastel actually has, has to be nameable —
+ * this is a property of the extractor, not a fact about pink, and stating it
+ * for one hue would let the next threshold re-break the other eleven.
+ *
+ * The pairing with test 9 is the real assertion: this image is a pale FLAT
+ * field and must be accepted, that one is pale SMEARED chroma and must be
+ * refused. Concentration is what separates them, which is the same answer the
+ * logo-versus-noise question got.
+ */
+
+static void test_pastels_all_round_the_wheel(void)
+{
+    for (int deg = 0; deg < 360; deg += 30) {
+        /* HSV(deg, 0.24, 0.97) by hand — pastel, and above any old V_MAX. */
+        double c = 0.97 * 0.24, m = 0.97 - c;
+        double x = c * (1.0 - fabs(fmod(deg / 60.0, 2.0) - 1.0));
+        double r, g, b;
+        if      (deg <  60) { r = c; g = x; b = 0; }
+        else if (deg < 120) { r = x; g = c; b = 0; }
+        else if (deg < 180) { r = 0; g = c; b = x; }
+        else if (deg < 240) { r = 0; g = x; b = c; }
+        else if (deg < 300) { r = x; g = 0; b = c; }
+        else                { r = c; g = 0; b = x; }
+
+        unsigned char *px = canvas();
+        fill_rows(px, 0, H, (int)((r + m) * 255 + 0.5),
+                            (int)((g + m) * 255 + 0.5),
+                            (int)((b + m) * 255 + 0.5));
+
+        syn_palette_t p;
+        if (!syn_palette_from_pixels(px, W, H, W * 4, 0.011, &p) || !p.ok) {
+            printf("    a wallpaper that is entirely pastel hue %d came back "
+                   "as 'no usable hue'\n", deg);
+            printf("    — a bright colour is still a colour; only a "
+                   "COLOURLESS one may be refused.\n");
+            assert(0);
+        }
+        free(px);
+    }
+    printf("  every pastel hue is nameable ....... ok\n");
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -340,6 +427,8 @@ int main(void)
     test_a_mark_on_black();
     test_smeared_chroma_refused();
     test_dark_panel_is_legible();
+    test_a_pastel_is_a_colour();
+    test_pastels_all_round_the_wheel();
     printf("palette_test: all ok\n");
     return 0;
 }
