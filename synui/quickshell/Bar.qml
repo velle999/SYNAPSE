@@ -30,6 +30,17 @@ PanelWindow {
 
     readonly property string outName: modelData.name
 
+    /*
+     * This screen's strip palette — the ink, the washes and the background, all
+     * resolved against the wallpaper under THIS bar rather than under the desk.
+     *
+     * A clear bar's ink comes off the wallpaper (Theme.barInks), and a wallpaper
+     * is a different picture on every monitor. The desktop-wide fold vetoes when
+     * two screens disagree, which is how one letterboxed television put an opaque
+     * strip back on all three bars — see Theme.barInks for the measurement.
+     */
+    readonly property var pal: Theme.barPalette(bar.screen)
+
     readonly property bool autohide: BarConfig.get(bar.outName, "autohide")
 
     // Wanted up when it is not hiding at all, while the pointer is anywhere over
@@ -194,7 +205,7 @@ PanelWindow {
                 y: bar.stripY
                 width: parent.width - 2 * Theme.barGap
                 height: Theme.barHeight
-                color: Theme.bg
+                color: bar.pal.bg
 
                 /*
                  * `ends` still touches the screen edge, so only the pair of
@@ -275,13 +286,13 @@ PanelWindow {
                 // bar, it is a line. (A single boolean binding, deliberately —
                 // never a second ternary on this item, see the anchors above.)
                 Rectangle {
-                    visible: !Theme.clearBar
+                    visible: !bar.pal.clear
                     anchors { left: parent.left; right: parent.right
                               leftMargin: Theme.barRadius
                               rightMargin: Theme.barRadius }
                     y: BarConfig.atBottom ? 0 : parent.height - height
                     height: Theme.accentHeight
-                    color: Theme.barAccent
+                    color: bar.pal.accent
                 }
 
                 // ── Left: start button, then virtual desktops ────

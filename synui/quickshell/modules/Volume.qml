@@ -41,9 +41,9 @@ BarModule {
     icon: muted ? Icons.volMuted
                 : (volume >= 66 ? Icons.volHigh
                 : (volume >= 33 ? Icons.volMed : Icons.volLow))
-    iconColor: muted ? Theme.barDim : Theme.barGlyph
+    iconColor: muted ? root.pal.dim : root.pal.glyph
     text: muted ? "muted" : (volume + "%")
-    textColor: muted ? Theme.barDim : Theme.barFg
+    textColor: muted ? root.pal.dim : root.pal.fg
     // The equalizer line only appears when there is something to explain. With
     // it on, the device named above is "SynapseOS Equalizer" — a sink nobody
     // plugged in — and the tooltip is where that stops being a mystery. It is

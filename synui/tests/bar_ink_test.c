@@ -21,9 +21,20 @@
  *      background. Rounding that band to the nearer side is exactly the bug
  *      this exists to stop: it would ship an unreadable bar and call it Tahoe.
  *
- *   3. Two monitors that need different answers have no shared answer. The
- *      bar's palette is a QML singleton — one value for every screen — so
- *      picking a side means the other screen's clock is the one that vanishes.
+ *   3. Two monitors that need different answers have no shared answer — and
+ *      THE BAR NO LONGER ASKS FOR ONE. syn_ink_combine still vetoes, because a
+ *      single surface lying across a dark screen and a pale one really does
+ *      have no ink that reads on both; that is what a menu dragged over the
+ *      seam needs. But the bar is not one surface. It is a separate layer
+ *      surface on every output, over its own strip of its own wallpaper, so it
+ *      reads a per-output answer and the veto never reaches it.
+ *
+ *      Measured on a three-monitor desk: two desktops at 0.67 wanted dark ink
+ *      and a television showing the same wallpaper letterboxed — its top row of
+ *      cells being the black band — wanted light. The fold said `none`, and
+ *      macOS 26 and Prism, the two presets whose whole look is a bar that is
+ *      not there, put an opaque strip back on all three screens. One black band
+ *      on one television turned the glass off for the desktop.
  *
  * The boundaries are asserted as PROPERTIES (this luminance clears target with
  * this ink) rather than as the numbers 0.183 and 0.230, so a change to
@@ -128,6 +139,33 @@ int main(void)
           "an unmeasured monitor vetoes");
     check(syn_ink_combine(SYN_INK_NONE, SYN_INK_LIGHT) == SYN_INK_NONE,
           "…in either order");
+
+    /*
+     * …and the per-output answers the bar actually reads, which the fold above
+     * must not be able to reach.
+     *
+     * This is the letterboxed-television case in arithmetic: two screens whose
+     * top strips are a pale 0.67 and a black 0.00. Every one of them has a
+     * perfectly good ink of its own; only the FOLD has none. A bar that asked
+     * the fold went opaque on all three screens, which is the bug — so what is
+     * asserted here is that the three answers are genuinely independent, and
+     * that the veto is the odd one out rather than the verdict.
+     */
+    const double desktop_lum = 0.67;   /* two 1440p desktops */
+    const double tv_lum      = 0.00;   /* the letterbox band under the bar   */
+    syn_ink_t on_desktop = syn_ink_for_backdrop(desktop_lum, CONTRAST_TARGET);
+    syn_ink_t on_tv      = syn_ink_for_backdrop(tv_lum,      CONTRAST_TARGET);
+
+    check(on_desktop == SYN_INK_DARK,  "a pale desktop's own strip takes dark ink");
+    check(on_tv      == SYN_INK_LIGHT, "a black letterbox band takes light ink");
+    check(syn_ink_combine(on_desktop, on_tv) == SYN_INK_NONE,
+          "…and folded together they have no answer — which is why the bar "
+          "stopped asking");
+    /* The closest ink is per-output too, or the scrim would flip direction on
+     * the screen that did not cause the veto. */
+    check(syn_ink_best(desktop_lum) == SYN_INK_DARK &&
+          syn_ink_best(tv_lum)      == SYN_INK_LIGHT,
+          "the closest ink is per-output as well");
 
     /* ── 4. The tokens the bar parses ─────────────────────────────────── */
     /* backdrop.state is read by a regex in Theme.qml, which accepts exactly

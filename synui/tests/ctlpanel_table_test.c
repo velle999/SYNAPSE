@@ -48,9 +48,13 @@
  */
 static int applied_uifx, applied_input, applied_layout, applied_deco;
 static int applied_dock, applied_nightlight, applied_cursor, applied_deskicons;
-static int applied_wallpaper;
+static int applied_wallpaper, applied_glass_export;
 
 void uifx_apply(syn_server_t *s)              { (void)s; applied_uifx++; }
+/* The Glass rows re-export the resolved alphas to theme.state, which is how the
+ * bar and the widgets learn where the slider went. theme.c is not linked here;
+ * the sync itself is config.c's and IS linked, so it runs for real. */
+void theme_glass_refresh(syn_server_t *s)     { (void)s; applied_glass_export++; }
 void input_reload_config(syn_server_t *s)     { (void)s; applied_input++; }
 void deco_refresh_all(syn_server_t *s)        { (void)s; applied_deco++; }
 void dock_rebuild(syn_server_t *s)            { (void)s; applied_dock++; }
@@ -617,6 +621,90 @@ static void test_auto_rung(void)
     printf("  auto rung ................ ok\n");
 }
 
+/* ── 3d. A glass row is pinned exactly when it has an opinion ─
+ *
+ * The Glass slider drives five rows, and dragging one is what takes it off the
+ * slider — there is no separate pin control, because taking hold of a row IS the
+ * act of claiming it. What that leaves to get wrong is the RELEASE, and there
+ * are two ways back to "no opinion" that are not the Delete key:
+ *
+ *   * dragging the value back to exactly its compiled default, and
+ *   * stepping a row with an auto rung back onto that rung, which is the row
+ *     saying explicitly that it declines to answer.
+ *
+ * Pinning on every move and never unpinning leaves both of those pinned. Both
+ * then drop their key from settings.state (ctl_persist writes only non-defaults)
+ * — so the pin outlives the number it was pinning, the modified dot goes out on
+ * a row that is no longer following the slider, and on the auto rung the slider
+ * is blocked by a row explicitly declining to have a view.
+ *
+ * The rule is one line in ctl_adjust and this is what says it holds: a row is
+ * pinned exactly when settings.state records it.
+ */
+static void test_glass_pin_tracks_default(void)
+{
+    /* Bar opacity is the one driven row that has an auto rung, so it covers
+     * both halves. Its default IS the rung. */
+    const int row = CTL_ROW_BAR_OPACITY;
+    assert(select_row(row));
+    assert(g_s.config.glass_sync);           /* the sync ships on */
+
+    /* The sync only drives anything once there is a level to follow. */
+    g_s.config.glass_level = 55;
+
+    assert((g_s.config.glass_pins & SYN_GLASS_PIN_BAR) == 0);
+
+    /* In off the rung: an opinion, so a pin. */
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    assert(g_s.config.glass_pins & SYN_GLASS_PIN_BAR);
+    assert(!ctlpanel_row_is_default(&g_s, row));
+
+    /* Further along: still an opinion, still pinned. */
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    assert(g_s.config.glass_pins & SYN_GLASS_PIN_BAR);
+
+    /* Back down onto the rung. "Follow the theme" is not a value, and a row
+     * declining to answer must not be holding the slider off. */
+    while (!ctlpanel_row_is_default(&g_s, row))
+        ctlpanel_key(&g_s, XKB_KEY_Left, 0);
+    assert((g_s.config.glass_pins & SYN_GLASS_PIN_BAR) == 0);
+
+    /* …and the pin set is not merely forgotten in memory: a pin that outlived
+     * its settings.state line would put the row back on the slider some days
+     * later, which is the bug this whole rule is for. */
+    syn_server_t fresh;
+    memset(&fresh, 0, sizeof(fresh));
+    synui_config_load(&fresh.config);
+    assert((fresh.config.glass_pins & SYN_GLASS_PIN_BAR) == 0);
+
+    /* The other half, on a row whose default is a NUMBER rather than a rung:
+     * out and back to exactly the default releases it too. */
+    const int drow = CTL_ROW_DOCK_OPACITY;
+    assert(select_row(drow));
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    assert(g_s.config.glass_pins & SYN_GLASS_PIN_DOCK);
+    ctlpanel_key(&g_s, XKB_KEY_Left, 0);
+    assert(ctlpanel_row_is_default(&g_s, drow));
+    assert((g_s.config.glass_pins & SYN_GLASS_PIN_DOCK) == 0);
+
+    /* And it round trips: pinned, reloaded from disk, still pinned. */
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    assert(g_s.config.glass_pins & SYN_GLASS_PIN_DOCK);
+    memset(&fresh, 0, sizeof(fresh));
+    synui_config_load(&fresh.config);
+    assert(fresh.config.glass_pins & SYN_GLASS_PIN_DOCK);
+
+    /* Delete puts it back, pin and all. */
+    ctlpanel_key(&g_s, XKB_KEY_Delete, 0);
+    assert((g_s.config.glass_pins & SYN_GLASS_PIN_DOCK) == 0);
+    memset(&fresh, 0, sizeof(fresh));
+    synui_config_load(&fresh.config);
+    assert((fresh.config.glass_pins & SYN_GLASS_PIN_DOCK) == 0);
+
+    g_s.config.glass_level = SYN_GLASS_UNSET;
+    printf("  glass pins ............... ok\n");
+}
+
 /* ── 4. Search reaches rows by label and by synuirc key ────── */
 
 static void test_search(void)
@@ -824,6 +912,7 @@ int main(void)
     test_every_row_round_trips();
     test_every_enum_option_round_trips();
     test_auto_rung();
+    test_glass_pin_tracks_default();
     test_search();
     test_apply_hooks();
     test_bind_combo_round_trip();

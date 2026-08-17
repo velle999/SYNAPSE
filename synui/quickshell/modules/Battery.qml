@@ -33,10 +33,10 @@ BarModule {
                       : pct >= 45 ? Icons.batHalf
                       : pct >= 20 ? Icons.batQuarter
                       : Icons.batEmpty)
-    iconColor: charging ? Theme.barGreen
-                        : (pct <= 10 ? Theme.barRed : pct <= 20 ? Theme.barClock : Theme.barGlyph)
+    iconColor: charging ? root.pal.green
+                        : (pct <= 10 ? root.pal.red : pct <= 20 ? root.pal.clock : root.pal.glyph)
     text: full ? "full" : (pct + "%")
-    textColor: (!charging && pct <= 10) ? Theme.barRed : Theme.barFg
+    textColor: (!charging && pct <= 10) ? root.pal.red : root.pal.fg
 
     tooltipText: {
         if (!dev) return "Battery"

@@ -330,6 +330,24 @@ static const struct ctl_item ctl_items[] = {
       .vmin = 0.0f, .vmax = 100.0f, .vstep = 5.0f, .unit = "%",
       .vauto = "Auto", .vzero = "Off", .apply = CTL_APPLY_GLASS,
       .help = "Auto follows the theme \xc2\xb7 Off is never glass \xc2\xb7 or set how much you see through" },
+    /* What makes the row above a MASTER rather than a fourth opinion. On, the
+     * five rows it drives — the two window opacities, the terminal, the bar and
+     * the dock — are recomputed from it and marked "synced". Dragging one of
+     * those by hand pins it and it stops following; switching this back on
+     * releases every pin at once. See glass_sync in synui.h. */
+    { CTL_ROW_GLASS_SYNC,   CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Sync all glass", NULL,
+      .key = "glass_sync", .off = CFG(glass_sync), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_GLASS,
+      .help = "Every surface follows Glass above. Change one and it keeps its "
+              "own until you switch this back on" },
+    /* The one guard on the whole scheme, and the one row that says so out loud:
+     * a surface measures the wallpaper under it and raises its own alpha until
+     * its text clears AA. Off is "I said clear, I meant clear". */
+    { CTL_ROW_GLASS_LEGIBILITY, CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Legibility correction", NULL,
+      .key = "glass_legibility", .off = CFG(glass_legibility), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_GLASS,
+      .help = "Surfaces go less see-through where their text would not read. "
+              "Off draws exactly what you asked for" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
@@ -578,8 +596,14 @@ static const struct ctl_item ctl_items[] = {
       .help = "Glass frosts the wallpaper behind the bar. Auto follows the theme" },
     { CTL_ROW_DOCK_OPACITY,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock opacity", NULL,
       .key = "dock_opacity", .off = CFG(dock_opacity), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.20f, .vmax = 1.00f, .vstep = 0.05f, .apply = CTL_APPLY_DOCK,
-      .help = "1.00 hides the wallpaper behind the bar completely" },
+      /* Down to a real 0.00: the icons are painted over the body at full
+       * opacity, so the bottom of this range is a row of icons floating on the
+       * wallpaper rather than a dock nobody can find. The 0.20 that used to be
+       * here was one of five separate floors on the same setting — see the
+       * dock_opacity note in config.c. */
+      .vmin = 0.00f, .vmax = 1.00f, .vstep = 0.05f, .apply = CTL_APPLY_DOCK,
+      .help = "0.00 leaves the icons alone on the wallpaper; 1.00 hides it "
+              "completely" },
     { CTL_ROW_DOCK_RADIUS,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock corners", NULL,
       .key = "dock_radius", .off = CFG(dock_radius), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 64, .vstep = 2, .unit = "px", .apply = CTL_APPLY_DOCK,
@@ -1052,9 +1076,36 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
         break;
 
     case CTL_APPLY_GLASS:
+        /*
+         * ⚠ THE SYNC HAS TO RE-RUN HERE, NOT ONLY AT LOAD, and until it did the
+         * Glass row was a slider you had to log out to see the effect of.
+         * synui_config_apply_glass_sync() was called from exactly one place —
+         * the tail of synui_config_load — so moving the row wrote a new level
+         * into the config and nothing recomputed the five alphas that level is
+         * FOR. The panels changed, because syn_glass_resolve() reads the level
+         * live; the windows, the terminal, the bar and the dock did not.
+         *
+         * Then theme_glass_refresh(), which re-saves theme.state — where the
+         * bar and the widgets read the resolved bar_opacity and dock_opacity.
+         * That is the only path across the process boundary, so a slider move
+         * that skipped it would move the compositor's half of the desktop and
+         * leave quickshell's half behind.
+         *
+         * And the dock, which paints its body from dock_opacity and has to be
+         * rebuilt to pick a new one up — it is not part of the buffer walk
+         * uifx_apply does.
+         */
+        synui_config_apply_glass_sync(&s->config);
+        uifx_apply(s);
+        theme_glass_refresh(s);
+        dock_rebuild(s);
+        dock_relayout(s);
+        ctlpanel_repaint(s);
+        break;
+
     case CTL_APPLY_SHADOW:
     case CTL_APPLY_BLURDATA:
-        /* One hook for all three: uifx_apply() pushes the global blur data,
+        /* One hook for both: uifx_apply() pushes the global blur data,
          * re-walks every buffer for opacity and corner radius, and rebuilds
          * each frame's shadow and halo nodes. The filters panel already drives
          * its rows through it, so these rows and that panel cannot end up
@@ -1128,6 +1179,28 @@ static int ctl_store_write(syn_server_t *s, const struct ctl_item *it)
         return 0;
     }
     return 0;
+}
+
+/*
+ * ── Which glass rows have been taken off the slider ──────────────────────────
+ *
+ * One writer for the pin set, because the bitmask and its settings.state line
+ * have to move together: a pin that is set in memory and not written comes back
+ * released at the next login, which is a row that quietly starts following the
+ * slider again some days after you took it off.
+ */
+static void ctl_glass_pins_set(syn_server_t *s, int pins)
+{
+    if (s->config.glass_pins == pins) return;
+    s->config.glass_pins = pins;
+
+    char buf[256];
+    syn_glass_pins_format(pins, buf, sizeof(buf));
+    /* Empty is DROPPED, not written as an empty value — both parse back the
+     * same, and a key that only appears when it has something to say is the
+     * difference between a state file you can read and one you have to. */
+    if (buf[0]) settings_state_set("glass_pinned", buf);
+    else        settings_state_clear("glass_pinned");
 }
 
 /*
@@ -1228,6 +1301,60 @@ static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
     ctl_put(s, it, v);
     if (ctl_get(&s->config, it) == before) return 0;   /* already at the end */
 
+    /*
+     * ── Editing a synced row is how you pin it ───────────────────────────────
+     *
+     * ⚠ BEFORE ctl_apply, AND THAT ORDER IS THE WHOLE FEATURE. CTL_APPLY_GLASS
+     * re-runs the sync, and the sync overwrites every row it still drives — so a
+     * pin set afterwards would be set on a field that had already been put back
+     * to the slider's number, and the drag would appear to do nothing at all.
+     *
+     * There is no separate "pin" control and there should not be: taking hold of
+     * a row IS the act of claiming it, and a switch you had to find and flip
+     * first would make the common case — nudge the dock, keep everything else
+     * together — a two-step. Switching the sync off entirely is still there for
+     * anyone who wants the old five-independent-rows desktop.
+     *
+     * ⚠ SET OR CLEARED, NEVER JUST SET, AND THE RULE IS THE ROW'S OWN DEFAULT:
+     * a row is pinned exactly when settings.state records it.
+     *
+     * Pinning on every move alone leaves two states the panel cannot draw
+     * honestly, both reached by an ordinary drag. Take the dock down and back up
+     * to exactly 0.72 and the value IS the compiled default — so ctl_persist
+     * drops the key, the modified dot goes out, and the pin survives with
+     * nothing anywhere recording the number it pins. Worse on a row with an auto
+     * rung: Right then Left puts Bar opacity back on "Follow the theme", which is
+     * the row saying it has NO opinion, and it would have been pinned there —
+     * the slider blocked by a row that is explicitly declining to answer.
+     *
+     * So the pin tracks the value: an opinion pins, and returning to the default
+     * — by the arrow, exactly as Delete does it — releases. One rule, and it is
+     * the same one settings.state already follows.
+     */
+    int pin = syn_glass_pin_by_name(it->key);
+    if (pin && s->config.glass_sync)
+        ctl_glass_pins_set(s, ctlpanel_row_is_default(s, it->row)
+                              ? (s->config.glass_pins & ~pin)
+                              : (s->config.glass_pins | pin));
+
+    /* …and switching the sync back ON releases the lot. This is the "until
+     * someone turns auto sync back on" half: one flip re-claims every row that
+     * was ever taken, rather than making you hunt down which ones you moved. */
+    if (it->row == CTL_ROW_GLASS_SYNC && s->config.glass_sync)
+        ctl_glass_pins_set(s, 0);
+
+    /*
+     * ── …and the master rows handing the five back ───────────────────────────
+     *
+     * Auto, and Sync off, are both "the slider is no longer driving these". The
+     * rows must go back to what the next login will give them, or the desktop on
+     * screen and the desktop in settings.state stop being the same desktop — see
+     * synui_config_glass_release(). Before ctl_apply for the reason the pin is.
+     */
+    if ((it->row == CTL_ROW_GLASS_LEVEL || it->row == CTL_ROW_GLASS_SYNC) &&
+        !(s->config.glass_sync && syn_glass_set(&s->config)))
+        synui_config_glass_release(&s->config);
+
     ctl_apply(s, it->apply);
     ctl_persist(s, it);
     return 1;
@@ -1253,7 +1380,24 @@ static int ctl_reset(syn_server_t *s, const struct ctl_item *it)
     if (it->external) return 0;
     if (ctlpanel_row_is_default(s, it->row)) return 0;
 
+    /* Resetting a glass row RELEASES it back to the slider, which is the honest
+     * reading of Delete on this panel: the key is dropped from settings.state, so
+     * the row no longer records an opinion, and a pin left behind would be an
+     * opinion recorded in the other file. Before the apply, for the reason the
+     * pin in ctl_adjust is — the sync runs inside it. */
+    ctl_glass_pins_set(s, s->config.glass_pins & ~syn_glass_pin_by_name(it->key));
+
     ctl_put(s, it, ctl_get(synui_config_defaults(), it));
+
+    /* Delete on the sync row puts it back ON, which is the same release-the-lot
+     * that switching it on by hand is. Delete on the Glass row puts the level
+     * back to Auto, which is the same hand-back ctl_adjust does above. */
+    if (it->row == CTL_ROW_GLASS_SYNC && s->config.glass_sync)
+        ctl_glass_pins_set(s, 0);
+    if ((it->row == CTL_ROW_GLASS_LEVEL || it->row == CTL_ROW_GLASS_SYNC) &&
+        !(s->config.glass_sync && syn_glass_set(&s->config)))
+        synui_config_glass_release(&s->config);
+
     ctl_apply(s, it->apply);
     if (it->key) settings_state_clear(it->key);
 
@@ -1596,6 +1740,25 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         const struct ctl_item *it = ctl_item(row);
         if (it && it->vtype != CTL_VAL_NONE) ctl_format(it, ctl_get(&s->config, it), 0, buf, n);
         else                                 buf[0] = '\0';
+
+        /*
+         * A row the Glass slider is currently driving says so, and shows the
+         * number as well as the word.
+         *
+         * Both halves matter. Without "synced" the five rows look like five
+         * independent settings that mysteriously move on their own, which is
+         * exactly the complaint the sync exists to answer; without the number
+         * you cannot see WHAT the slider decided, and the row stops being a
+         * readout of the desktop. The tag disappears the moment you drag the
+         * row, because dragging it is what pins it — so the row's own state is
+         * the whole explanation of why it did or did not move.
+         */
+        if (it && buf[0] && syn_glass_drives(&s->config,
+                                (syn_glass_pin_t)syn_glass_pin_by_name(it->key))) {
+            char v[64];
+            snprintf(v, sizeof(v), "%s", buf);
+            snprintf(buf, n, "synced \xc2\xb7 %s", v);
+        }
         break;
     }
     }

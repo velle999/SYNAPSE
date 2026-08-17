@@ -122,6 +122,31 @@ QtObject {
      */
     property string barInkBest: ""
 
+    /*
+     * ── …and both of them asked of ONE SCREEN ────────────────
+     *
+     * ⚠ THERE IS ONE BAR PER OUTPUT, SO THE PAIR ABOVE IS ONE ANSWER FOR ALL OF
+     * THEM, AND THAT IS THE BUG THIS EXISTS TO FIX.
+     *
+     * backdrop_export() folds the monitors with syn_ink_combine, which vetoes on
+     * disagreement — the right answer for ONE surface lying across two screens,
+     * and the wrong one for the bar, which is a separate layer surface on each
+     * output with its own strip of its own wallpaper underneath it.
+     *
+     * What that cost, measured on a three-monitor desk: two 1440p desktops whose
+     * top strip was 0.67 wanted dark ink, and a television showing the same
+     * wallpaper letterboxed — so its top row of cells is the black band — wanted
+     * light. The fold said "none", `barInkUsed` went empty, `clearBar` went
+     * false, and macOS 26 and Prism, the two presets whose entire look is a bar
+     * that is not there, put an opaque strip back on ALL THREE SCREENS. One
+     * black band on one television turned the glass off for the desktop.
+     *
+     * Keyed by connector name. Empty for a bar reading a backdrop.state written
+     * before these lines existed, which is what barInkOn() falls back for.
+     */
+    property var barInks: ({})       // output name → "dark" | "light" | anything else
+    property var barInkBests: ({})
+
     // ── The wallpaper's own colours ──────────────────────
     //
     // SYNAPSE Prism takes its accent off the wallpaper (synui's palette.c), and
@@ -183,6 +208,18 @@ QtObject {
             const bv = b ? b[1] : "none"
             root.barInkBest = (bv === "dark" || bv === "light") ? bv : ""
 
+            // …and the same two answers asked of ONE screen. Absent from a
+            // backdrop.state written by an older synui, and barInkOn() falls
+            // back to the folded pair above when a name is missing — so a bar
+            // on that synui behaves exactly as it did before these existed.
+            const inks = {}, bests = {}
+            const ire = /^\s*bar_ink(_best)?\.(\S+)\s*=\s*(\S+)\s*$/gm
+            let im
+            while ((im = ire.exec(t)) !== null)
+                (im[1] ? bests : inks)[im[2]] = im[3]
+            root.barInks = inks
+            root.barInkBests = bests
+
             // The per-output luminance grids, for every surface that is not the
             // bar. Absent from a backdrop.state written by an older synui, and
             // an empty map is exactly the "nothing measured" that inkFor()
@@ -197,7 +234,10 @@ QtObject {
             }
             root.lumGrids = g
         }
-        onLoadFailed: { root.barInk = ""; root.barInkBest = ""; root.lumGrids = ({}) }
+        onLoadFailed: {
+            root.barInk = ""; root.barInkBest = ""; root.lumGrids = ({})
+            root.barInks = ({}); root.barInkBests = ({})
+        }
     }
 
     /*
@@ -457,6 +497,10 @@ QtObject {
     // of the same wallpaper: walk up from what was asked until full-strength
     // text clears AA on the composite.
     function popupAlphaOn(bd) {
+        // ⚠ The correction is a setting, and off means off — the same switch
+        // render.c's panel_alpha_floor() answers to. Half the desktop obeying it
+        // would be worse than neither half doing.
+        if (!BarConfig.legibility) return root.popupAlpha
         if (!bd || !(bd.lum >= 0)) return root.popupAlpha
         const surf = root.lumOf(root.popupBg)
         const ink  = root.lumOf(root.fg)
@@ -563,6 +607,118 @@ QtObject {
     readonly property color barGreen:  barPick("#a6e3a1", "#166534")
     readonly property color barRed:    barPick("#f38ba8", "#b91c1c")
     readonly property color barOrange: barPick("#f9e2af", "#8a6d00")
+
+    /* ── The same strip palette, for ONE screen ──────────────
+     *
+     * Everything above is the folded answer, and it stays: it is what a surface
+     * with no screen to name still gets, and on a single-monitor desktop it and
+     * the per-output answer are the same two values.
+     *
+     * These are what Bar.qml and BarModule read. The bar is per-output and its
+     * backdrop is per-output, so its ink has to be too — see `barInks`.
+     */
+    function inkNamed(v) { return (v === "dark" || v === "light") ? v : "" }
+
+    function barInkOn(name) {
+        return (name && root.barInks[name] !== undefined)
+             ? root.inkNamed(root.barInks[name]) : root.barInk
+    }
+    function barInkBestOn(name) {
+        return (name && root.barInkBests[name] !== undefined)
+             ? root.inkNamed(root.barInkBests[name]) : root.barInkBest
+    }
+    function barInkUsedOn(name) {
+        const i = root.barInkOn(name)
+        return i !== "" ? i : root.barInkBestOn(name)
+    }
+
+    /*
+     * The two halves of "is this screen's bar clear", exactly as clearBar and
+     * barScrim ask them of the desktop as a whole.
+     *
+     * ⚠ WITH THE LEGIBILITY CORRECTION OFF, ASKING IS ENOUGH. "No ink survives
+     * this wallpaper, so keep your background" is a correction like any other —
+     * the most visible one on the desktop, in fact, since it is the difference
+     * between a clear bar and an opaque strip — and the switch that turns the
+     * others off has to turn this off too or it would be a switch that does
+     * everything except the thing people notice. The scrim goes with it: it is
+     * the same correction, applied more gently.
+     */
+    function clearBarOn(name) {
+        if (root.barAlphaAsked !== 0) return false
+        return !BarConfig.legibility || root.barInkUsedOn(name) !== ""
+    }
+    function barScrimOn(name) {
+        return BarConfig.legibility && root.clearBarOn(name)
+                                    && root.barInkOn(name) === ""
+    }
+
+    /*
+     * One object with everything a bar on `screen` draws with.
+     *
+     * A function returning an object rather than a dozen `barFgOn(name)`
+     * properties, because every one of them turns on the SAME two booleans: a
+     * caller that resolved `clear` for the fg and again for the hover wash is a
+     * caller that can get the two out of step. Bound as
+     * `readonly property var pal: Theme.barPalette(screen)`, so it re-evaluates
+     * when the screen changes and when backdrop.state does — the bindings track
+     * the properties this reads, the same way popupAlphaOn() is tracked.
+     *
+     * A null screen is a real case (a module whose window has not been assigned
+     * one yet) and answers with the folded desktop-wide values, which is what
+     * every one of these was before this existed.
+     */
+    /*
+     * The same thing, taking the WINDOW a module is in rather than its screen.
+     *
+     * `QsWindow.window` is typed as a bare QObject, so dotting `.screen` off it
+     * at each of the fifteen call sites is fifteen qmllint warnings for one fact
+     * qmllint cannot know. One untyped hop, here, and the callers pass what they
+     * actually have.
+     */
+    function barPaletteOf(win) { return root.barPalette(win ? win.screen : null) }
+
+    function barPalette(screen) {
+        const n     = screen ? screen.name : ""
+        const clear = root.clearBarOn(n)
+        const used  = root.barInkUsedOn(n)
+        // A clear bar with a measured ink takes it; one drawn clear ANYWAY —
+        // the correction switched off over an unmeasurable wallpaper — has
+        // nothing to take, and falls back to the scheme's own direction. That
+        // is a guess, and it is the only honest one available: it is what the
+        // theme's designer chose for the surface this strip replaced.
+        const dark  = (clear && used !== "") ? (used === "light") : !root.isLight
+        const ink   = dark ? "#ffffff" : "#1d1d1f"
+        const wash  = Qt.color(ink)
+        function pk(d, l) { return dark ? d : l }
+        return {
+            clear:    clear,
+            scrim:    root.barScrimOn(n),
+            inkOnDark: dark,
+            ink:      ink,
+            bg:       root.barScrimOn(n)
+                        ? (dark ? Qt.rgba(0, 0, 0, root.scrimAlpha)
+                                : Qt.rgba(1, 1, 1, root.scrimAlpha))
+                      : clear ? Qt.rgba(0, 0, 0, 0)
+                      /* Asked for clear and refused it — no legible ink on this
+                       * screen — falls to the scheme's own alpha, which is the
+                       * same rung `bgAlpha` lands a refused bar on. */
+                      : root.themed("bar", 11, 11, 20,
+                                    root.barAlphaAsked > 0 ? root.barAlphaAsked
+                                                           : root.bgAlphaDefault),
+            fg:       clear ? ink : root.fg,
+            glyph:    clear ? ink : root.cyan,
+            accent:   clear ? ink : root.magenta,
+            clock:    clear ? ink : root.yellow,
+            hoverBg:  clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.18) : root.hoverBg,
+            activeBg: clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.28) : root.activeBg,
+            dim:      pk("#3a4a52", "#6b7280"),
+            blue:     pk("#4dabff", "#1d4ed8"),
+            green:    pk("#a6e3a1", "#166534"),
+            red:      pk("#f38ba8", "#b91c1c"),
+            orange:   pk("#f9e2af", "#8a6d00"),
+        }
+    }
 
     // ── Metrics ──────────────────────────────────────────
     // 28px matches the waybar height the compositor already lays out around:
@@ -697,20 +853,25 @@ QtObject {
 
     /*
      * …and how transparent they are when they do. The ASK was that the widgets
-     * match the dock, so this is the dock's own opacity rather than a second
-     * number that starts equal to it and drifts the first time either is
-     * touched. config.c's default is 0.72 and it clamps to 0.20-1.00; BarConfig
-     * re-does that clamp for the same reason it re-does corner_radius's.
+     * match the dock, so this is the dock's own opacity — verbatim.
      *
-     * Not applied verbatim, though, and the difference is the point: the dock
-     * is a bar of icons with a real blur behind it, and a widget is a card of
-     * SMALL TEXT on whatever the wallpaper happens to be. Quickshell's layer
-     * surfaces get no backdrop blur here — that is a compositor node the dock
-     * has and these do not — so the same alpha over an unblurred photograph is a
-     * sysmon readout nobody can read. The lift is what buys the text a surface
-     * while still tracking the slider.
+     * ⚠ IT USED TO BE `dockOpacity + 0.16`, AND THE REASON THAT LIFT EXISTED IS
+     * NO LONGER TRUE. It was written when quickshell's layer surfaces got no
+     * backdrop blur — "a compositor node the dock has and these do not" — so the
+     * same alpha over an unblurred photograph really was a sysmon readout nobody
+     * could read. Since -379 the card claims `WlrLayershell.namespace =
+     * "synui-glass"` and layer.c puts the dock's own blur node behind it
+     * (WidgetFrame.qml says so at the top). The lift outlived its reason and
+     * became what it looks like: a constant that stopped the widgets ever
+     * matching the thing they are defined as matching, and stopped them reaching
+     * clear at all — with the dock at 0.00 the widgets still drew at 0.16.
+     *
+     * Legibility is measured now rather than bought with a constant: see
+     * `legibility` and popupAlphaOn(), which asks the wallpaper under THIS card
+     * whether its text still reads and raises only that card only as far as it
+     * has to.
      */
-    readonly property real widgetAlpha: Math.min(1.0, BarConfig.dockOpacity + 0.16)
+    readonly property real widgetAlpha: BarConfig.dockOpacity
 
     property FileView chromeFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/theme.state"

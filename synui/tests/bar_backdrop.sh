@@ -306,6 +306,50 @@ else
     fails=$((fails + 1))
 fi
 
+# ── the answer is published PER OUTPUT ───────────────────────
+#
+# ⚠ THE FOLDED `bar_ink` IS NOT WHAT A BAR DRAWS ANY MORE, and this is the check
+# that says the replacement is actually in the file.
+#
+# backdrop_export() folds every monitor with syn_ink_combine, which vetoes on
+# disagreement. That is right for ONE surface lying across two screens and wrong
+# for the bar, which is a separate layer surface on each output over its own
+# strip of its own wallpaper. On a three-monitor desk — two desktops at 0.67 and
+# a television showing the same wallpaper letterboxed, so its top row of cells is
+# the black band — the fold said `none`, and macOS 26 and Prism, the two presets
+# whose whole look is a bar that is not there, put an opaque strip back on ALL
+# THREE screens.
+#
+# So each output publishes its own pair. One headless output here, which is what
+# this rig has, so what is asserted is the INTERFACE: the per-output keys exist,
+# they are named for the connector, and they say the same thing the fold does
+# when there is only one screen to fold. The disagreement itself is arithmetic
+# and is pinned in bar_ink_test.c, which needs no compositor to have two screens.
+out=$(sed -n 's/^grid\.\([^=]*\)=.*/\1/p' "$STATE" | head -1)
+if [ -z "$out" ]; then
+    printf '  FAIL  no grid.<output> line to name an output from\n'
+    fails=$((fails + 1))
+else
+    per_ink=$(sed -n "s/^bar_ink\.$out=\(.*\)\$/\1/p" "$STATE")
+    per_best=$(sed -n "s/^bar_ink_best\.$out=\(.*\)\$/\1/p" "$STATE")
+    if [ -z "$per_ink" ] || [ -z "$per_best" ]; then
+        printf '  FAIL  no bar_ink.%s / bar_ink_best.%s in backdrop.state\n' "$out" "$out"
+        fails=$((fails + 1))
+    else
+        printf '  ok    the ink is published per output (%s)\n' "$out"
+    fi
+    # One screen, so the fold has nothing to veto against and the two must agree.
+    # If they ever diverge here the fold has grown an opinion of its own, which
+    # is a bar drawing one thing while the file says another.
+    if [ "$per_ink" = "$(ink)" ] && [ "$per_best" = "$(best)" ]; then
+        printf '  ok    …and one screen folds to its own answer\n'
+    else
+        printf '  FAIL  one screen: fold says %s/%s, the output says %s/%s\n' \
+            "$(ink)" "$(best)" "$per_ink" "$per_best"
+        fails=$((fails + 1))
+    fi
+fi
+
 if [ "$fails" -eq 0 ]; then
     printf 'bar_backdrop: all checks passed\n'
     exit 0

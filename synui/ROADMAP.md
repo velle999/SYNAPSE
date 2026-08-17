@@ -1382,3 +1382,99 @@ It also holds the fallback down — with syntty off PATH the next installed name
 runs, so the fix cannot be satisfied by a chain of one — and pins that an
 explicit `terminal =` arrives unwrapped, since that setting can carry arguments
 and a `command -v` loop would look for a program with a space in its name.
+
+### One amount of glass, and the rows allowed to leave it  *(done)*
+
+Three complaints with one shape: the Glass slider was not a master, the two
+presets built on a clear bar had stopped drawing one, and the dock and the
+widgets could not reach clear at all.
+
+**The bar went solid on macOS 26 and Prism, and one television did it.**
+`backdrop_export()` folds every monitor's ink with `syn_ink_combine`, which
+vetoes on disagreement — right for *one* surface lying across two screens, and
+wrong for the bar, which is a separate layer surface on each output over its own
+strip of its own wallpaper.
+
+- [x] **Measured on the three-monitor desk that reported it.** Two 1440p
+      desktops read 0.67 under the strip and wanted dark ink; the television
+      shows the same wallpaper letterboxed, so its top row of cells is the black
+      band, and it wanted light. The fold said `none`, `clearBar` went false, and
+      an opaque strip came back on **all three screens**.
+- [x] **`bar_ink.<output>` / `bar_ink_best.<output>`** beside the folded pair,
+      which stays for a bar older than this. `Theme.barPalette(screen)` resolves
+      the ink, the washes and the background for one screen and hands back one
+      object — a dozen `…On(name)` properties would be a dozen chances for the
+      fg and the hover wash to disagree about whether the bar is clear.
+- [x] **Fifteen call sites take it from the window they are in**, through
+      `barPaletteOf(QsWindow.window)`: `QsWindow.window` is typed as a bare
+      QObject, so dotting `.screen` off it at each site is fifteen qmllint
+      warnings for a fact qmllint cannot know.
+
+**`glass_sync`, and pins.** The Glass row already overwrote `active_opacity`,
+`inactive_opacity` and `bar_opacity` — unconditionally, with no way to keep a
+value set by hand — and never touched `dock_opacity` or `foot_alpha` at all. So
+the one control for "how much glass does this desktop have" moved three of five
+surfaces and could be overruled on none of them.
+
+- [x] **All five follow it**, and the bar and the dock land on the *same* number:
+      they are the same kind of surface, and a desktop whose top strip and bottom
+      strip are see-through by different amounts is what one slider is for.
+- [x] **Dragging a driven row pins it** — there is no separate pin control,
+      because taking hold of a row *is* claiming it. `Sync all glass` back on
+      releases every pin at once.
+- [x] **A row is pinned exactly when settings.state records it.** Pinning on
+      every move and never releasing leaves two states the panel cannot draw
+      honestly: a value dragged back to its own default (key dropped, dot gone,
+      pin surviving with nothing recording the number it pins), and a row stepped
+      back onto its `auto` rung — the row saying it has *no* opinion, pinned
+      there, blocking the slider.
+- [x] **Auto is no longer a one-way door.** It used to stop writing the five
+      alphas and leave the last values it wrote in the config with nothing
+      recording them: the screen kept them for the session and the next login,
+      rebuilt from settings.state, did not have them. `synui_config_glass_release()`
+      hands every unpinned row back to its compiled default.
+- [x] **The slider reaches the bar and the widgets**, which it never did: those
+      are quickshell's and read `bar_opacity`/`dock_opacity` out of settings.state,
+      a file the slider does not write, because a synced value is not a value
+      anybody chose. The resolved numbers go to `theme.state` — written **only**
+      for rows the sync still owns, so a pinned row is simply absent and
+      settings.state shows through, and the shell needs no notion of pinning.
+- [x] **…and theme.state stays quiet about a pinned row.** It is read *after*
+      settings.state, so `active_opacity` and `foot_alpha` have always beaten the
+      control panel's own file — harmless until the sync started resolving them.
+      Pin Terminal glass, log out, and the synced number would have overwritten it.
+
+**`glass_legibility`, and the end of the arbitrary floors.** Five separate
+numbers guarded `dock_opacity`, none of them agreeing on what they guarded
+against: config.c's 0.20, the row's `vmin` 0.20, `dock_paint_body`'s 0.05,
+BarConfig's re-clamp to 0.20, and the widgets' `+0.16`. All gone.
+
+- [x] **0.00 is a row of icons on the wallpaper.** The icons are painted over the
+      body at full opacity, so the bottom of the range was never "a dock nobody
+      can find" — it was the one thing the floors made unreachable.
+- [x] **The chrome of a surface cannot be more present than the surface.** The
+      dock's outline, rim and specular and the widgets' rim, specular and shadow
+      rings carry their own literal alphas, so a body at 0.00 left the shape drawn
+      in full — a rectangle of nothing with a bright edge round it. A ramp that is
+      1.0 above 0.35, so nothing anyone has configured moves.
+- [x] **The widgets are the dock's opacity, verbatim.** The `+0.16` lift was
+      written when quickshell's layer surfaces got no backdrop blur; since -379
+      the card claims the `synui-glass` namespace and layer.c puts the dock's own
+      blur node behind it. The lift outlived its reason and became a constant that
+      stopped the widgets ever matching the thing they are defined as matching.
+- [x] **The measured floor is a switch, not a law.** `panel_alpha_floor()` and
+      `popupAlphaOn()` raise a surface's alpha until its text clears AA against
+      the wallpaper under it — measured rather than guessed, and still the
+      default. Off draws exactly what was asked, including nothing, and takes the
+      window and terminal curves to 0 and the clear bar's "no legible ink, keep
+      your background" with it. A guard that is invisible when it fires is one
+      that has to be turnable off.
+
+`glass_sync_test.c` drives the resolution against the pin set — all five move,
+each curve is monotonic across 0..100, a pin holds through any travel, release
+restores only unpinned rows, and every pin round trips through its name (they
+*are* the synuirc keys, which is what lets a pin be looked up off the ctl_item
+table). `ctlpanel_table_test` drives the real key handler for the pin invariant
+including both release paths and a reload from disk. `bar_ink_test.c` gained the
+letterboxed-television case as arithmetic; `bar_backdrop.sh` asserts the
+per-output keys are in the file and that one screen folds to its own answer.

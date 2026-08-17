@@ -145,6 +145,19 @@ QtObject {
      */
     property real barOpacity: -1
 
+    /*
+     * ── May a surface overrule its own alpha to stay readable? ───────────────
+     *
+     * The shell's half of `glass_legibility`. popupAlphaOn() in Theme is the QML
+     * twin of render.c's panel_alpha_floor(), and both have to answer to the same
+     * switch or half the desktop would obey it — the compositor's thirty panels —
+     * while the start menu, the mixer and the widgets quietly kept correcting
+     * themselves. Exported to theme.state rather than read out of settings.state
+     * for the reason bar_opacity below is: it is a resolved answer, and the file
+     * the shell already watches for glass_surfaces is where resolved answers go.
+     */
+    property bool legibility: true
+
     // Where a popup hanging off the bar starts, given its height. One place
     // rather than a `Theme.barHeight + 2` at each anchor site: a bottom bar's
     // popups have to go UP, and every one of those sites would otherwise be a
@@ -184,6 +197,18 @@ QtObject {
     }
 
     function applyGlobals() {
+        /*
+         * ⚠ HOISTED, AND GUARDED, BECAUSE THIS RUNS DURING CONSTRUCTION. The
+         * three FileViews above are blockLoading, so their onLoaded fires while
+         * this object is still being built — and themeStateFile is declared
+         * LAST, so it is the one that may not exist yet. `themeStateFile.text()`
+         * inline would throw a TypeError there, and a QML exception inside a
+         * signal handler is silent: the first pass would simply not run, and
+         * every value it resolves would sit at its declared default until some
+         * other file happened to change. Read once, defensively, and the rest of
+         * this function is plain string work.
+         */
+        const themeState = root.themeStateFile ? root.themeStateFile.text() : ""
         // settings.state wins where it has the key, synuirc where it does not.
         const v = root.readKey(settingsFile.text(), "bar_edge")
                   || root.readKey(synuircFile.text(), "bar_edge")
@@ -214,10 +239,32 @@ QtObject {
                   || root.readKey(synuircFile.text(), "widget_glass")
         root.widgetGlass = (w === "on" || w === "off") ? w : "auto"
 
-        const d = root.readKey(settingsFile.text(), "dock_opacity")
+        /*
+         * ⚠ theme.state COMES FIRST ON THESE TWO, AND IT IS THE WHOLE REASON THE
+         * GLASS SLIDER REACHES THE BAR AT ALL.
+         *
+         * `dock_opacity` and `bar_opacity` are the two surfaces the slider
+         * drives that this process draws. The compositor resolves the level onto
+         * its own config and exports the answer to theme.state — but the slider
+         * does NOT write settings.state, because a synced value is not a value
+         * anybody chose, so reading only the two files below meant the level
+         * moved and the bar and the widgets stayed exactly where they were.
+         *
+         * Precedence and pinning are the same mechanism here: theme.c writes
+         * these keys ONLY for the rows the sync still owns (syn_glass_drives), so
+         * a row the user has taken hold of is simply absent and settings.state —
+         * where the control panel wrote their number — shows through. This side
+         * needs no idea that pinning exists.
+         */
+        const d = root.readKey(themeState, "dock_opacity")
+                  || root.readKey(settingsFile.text(), "dock_opacity")
                   || root.readKey(synuircFile.text(), "dock_opacity")
         const dn = parseFloat(d)
-        if (!isNaN(dn)) root.dockOpacity = Math.max(0.20, Math.min(1.0, dn))
+        // ⚠ NOT re-floored at 0.20. config.c clamps this to 0.00-1.00 and that
+        // is the range; the 0.20 that used to be here was a third copy of a
+        // floor the compositor had already dropped, and it is what stopped the
+        // widgets following the dock all the way down.
+        if (!isNaN(dn)) root.dockOpacity = Math.max(0.0, Math.min(1.0, dn))
 
         // The bar's own. Same pair, same order. Assigned on every pass rather
         // than only when it parses, because unlike the four above this one has
@@ -225,13 +272,20 @@ QtObject {
         // the key from settings.state when the row returns to its default, and a
         // guard that only ever wrote a parsed number would leave the bar on the
         // last figure the user scrolled past.
-        const b = root.readKey(settingsFile.text(), "bar_opacity")
+        const b = root.readKey(themeState, "bar_opacity")
+                  || root.readKey(settingsFile.text(), "bar_opacity")
                   || root.readKey(synuircFile.text(), "bar_opacity")
         const bn = parseFloat(b)
         // `auto` and an absent key are the same instruction; so is a typo, for
         // the reason cornerRadius clamps rather than trusting the file.
         root.barOpacity = (b === "auto" || isNaN(bn)) ? -1
                                                       : Math.max(0, Math.min(1, bn))
+
+        // An export, so theme.state only. Absent means a synui too old to write
+        // it, and the honest answer for that is the behaviour those machines
+        // already have — the correction on.
+        root.legibility =
+            root.readKey(themeState, "glass_legibility") !== "off"
     }
 
     property FileView synuircFile: FileView {
@@ -275,6 +329,19 @@ QtObject {
         watchChanges: true
         blockLoading: true
         printErrors: false      // absent until an effects row is changed
+        onFileChanged: reload()
+        onLoaded: root.applyGlobals()
+        onLoadFailed: root.applyGlobals()
+    }
+
+    /* theme.state — the compositor's resolved answers, and the highest-precedence
+     * source for the two opacity keys above. Watched, not blocking: unlike the
+     * corner radius none of these decides an exclusive zone, so arriving a frame
+     * late costs a repaint rather than a session-long wrong layout. */
+    property FileView themeStateFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/theme.state"
+        watchChanges: true
+        printErrors: false      // absent until a theme has been picked
         onFileChanged: reload()
         onLoaded: root.applyGlobals()
         onLoadFailed: root.applyGlobals()

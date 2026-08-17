@@ -620,6 +620,43 @@ static void backdrop_export(syn_server_t *s)
     if (!seen) { ink = SYN_INK_NONE; best = SYN_INK_NONE; }
 
     /*
+     * The per-output half, and the reason the fold above is no longer the whole
+     * answer.
+     *
+     * ⚠ THERE IS ONE BAR PER SCREEN, SO THE VETO WAS ANSWERING A QUESTION NOBODY
+     * ASKED. `bar_ink` folds every monitor into a single ink and hands back NONE
+     * when they disagree — correct for ONE surface spanning two screens, and
+     * exactly wrong for the bar, which is a separate layer surface on each
+     * output with its own strip of its own wallpaper underneath it.
+     *
+     * Measured on this box: two 0.67 desktops and a television whose wallpaper
+     * is letterboxed, so its top row of cells is black. Two screens wanted dark
+     * ink, one wanted light, the fold said NONE — and macOS 26 and Prism, the two
+     * presets whose whole look is a bar that is not there, put an opaque strip
+     * back on ALL THREE. One screen's black band turned the glass off everywhere.
+     *
+     * So each output publishes its own pair and the bar reads the one for the
+     * screen it is on. The folded keys stay, unchanged and still first in the
+     * file: they are what a bar older than this reads, and on a single-monitor
+     * desktop — which is what every one of them was tested on — the fold and the
+     * per-output answer are the same two values.
+     */
+    char grids[SYN_LUM_CELLS * 6 * 4 + 2048];
+    size_t gl = 0;
+    grids[0] = '\0';
+    wl_list_for_each(o, &s->outputs, link) {
+        int used = snprintf(grids + gl, sizeof(grids) - gl,
+                            "bar_ink.%s=%s\nbar_ink_best.%s=%s\n",
+                            o->wlr_output->name,
+                            syn_ink_name(syn_ink_for_backdrop(o->wp_top_lum,
+                                                              CONTRAST_TARGET)),
+                            o->wlr_output->name,
+                            syn_ink_name(syn_ink_best(o->wp_top_lum)));
+        if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+        gl += (size_t)used;
+    }
+
+    /*
      * The grid, as the text the shell reads it back as. Built before the
      * change test below because it is PART of that test: the two bar inks can
      * sit perfectly still across a wallpaper change that moves every cell — a
@@ -631,9 +668,6 @@ static void backdrop_export(syn_server_t *s)
      * on. Two decimals: the ink flips over a band about 0.05 wide, so the third
      * would be describing differences narrower than the decision it feeds.
      */
-    char grids[SYN_LUM_CELLS * 6 * 4 + 1024];
-    size_t gl = 0;
-    grids[0] = '\0';
     wl_list_for_each(o, &s->outputs, link) {
         int used = snprintf(grids + gl, sizeof(grids) - gl, "grid.%s=",
                             o->wlr_output->name);
@@ -675,7 +709,11 @@ static void backdrop_export(syn_server_t *s)
                "# its own must use to be legible on the wallpaper behind it.\n"
                "#\n"
                "# bar_ink/bar_ink_best answer for the BAR, whose position is a\n"
-               "# constant. grid.<output> answers for everything else: a %dx%d\n"
+               "# constant. They are folded across every monitor, so two screens\n"
+               "# that want opposite inks veto each other: bar_ink.<output> and\n"
+               "# bar_ink_best.<output> are the same question asked of ONE screen,\n"
+               "# and are what a bar reads for the output it is on.\n"
+               "# grid.<output> answers for everything else: a %dx%d\n"
                "# grid of mean relative luminance over that output, row-major,\n"
                "# in the output's own 0..1 coordinates. A menu opens where the\n"
                "# pointer is, so it folds the cells it actually covers.\n"
@@ -697,8 +735,17 @@ static void backdrop_export(syn_server_t *s)
     last = ink;
     last_best = best;
     snprintf(last_grids, sizeof(last_grids), "%s", grids);
+    /* ⚠ THE FOLDED ANSWER IS NOT WHAT THE BAR DRAWS ANY MORE, so the per-output
+     * pairs are logged beside it. A three-monitor desktop reads "none" here and
+     * still has a clear bar on two of them, and a line that showed only the fold
+     * would look like the bug it is the fix for. */
     wlr_log(WLR_INFO, "synui: wallpaper: bar ink is %s (best %s)",
             syn_ink_name(ink), syn_ink_name(best));
+    wl_list_for_each(o, &s->outputs, link)
+        wlr_log(WLR_INFO, "synui: wallpaper: bar ink on %s is %s (best %s)",
+                o->wlr_output->name,
+                syn_ink_name(syn_ink_for_backdrop(o->wp_top_lum, CONTRAST_TARGET)),
+                syn_ink_name(syn_ink_best(o->wp_top_lum)));
 }
 
 /* Every cell "not measured". The seed for an output that has no picture to look

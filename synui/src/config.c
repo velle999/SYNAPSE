@@ -154,8 +154,26 @@
  *   dock_edge = bottom|top|left|right   (left/right draw a vertical column)
  *   dock_style = auto|solid|glass  (auto = glass on a glass theme; see
  *                                   dock_style_is_glass)
- *   dock_opacity = 0.72         (0.20-1.00; how much wallpaper shows through)
+ *   dock_opacity = 0.72         (0.00-1.00; how much wallpaper shows through.
+ *                                0.00 is a row of icons on the wallpaper — the
+ *                                icons are opaque whatever this says)
  *   dock_radius = 26            (px; clamped to half the bar's thickness)
+ *
+ * One slider for the whole desktop's glass, and the switches around it
+ * (synui.h's glass_sync / glass_pins / glass_legibility):
+ *   glass_level = auto|off|0-100  (how much you see through; auto = the theme)
+ *   glass_sync  = on|off        (default on; every per-surface alpha below
+ *                                follows glass_level — the two window
+ *                                opacities, foot_alpha, bar_opacity and
+ *                                dock_opacity)
+ *   glass_pinned = dock_opacity bar_opacity ...
+ *                               (rows taken OFF the slider. Written by the
+ *                                control panel when a driven row is dragged;
+ *                                switching glass_sync back on clears the lot)
+ *   glass_legibility = on|off   (default on; a surface may raise its own alpha
+ *                                until its text clears AA against the wallpaper
+ *                                behind it. Off draws exactly what was asked,
+ *                                including nothing at all)
  *
  * …and one the compositor parses but does not act on, because its reader is
  * quickshell (WidgetFrame.qml). Here so the key has one spelling and one clamp,
@@ -1012,6 +1030,17 @@ static void config_set_defaults(syn_config_t *cfg)
      * where the theme is applied, not here — a default that depended on the
      * theme would be a second place the theme is decided. */
     cfg->glass_level      = SYN_GLASS_UNSET;
+    /* On, and it costs nothing on a desktop that has never set a level: the sync
+     * only does anything once glass_level is something other than unset, so this
+     * default changes no existing machine. What it does change is what happens
+     * the FIRST time somebody moves the Glass row — which is the whole point,
+     * since a master control that has to be switched on before it is a master is
+     * a master nobody finds. */
+    cfg->glass_sync       = 1;
+    cfg->glass_pins       = 0;
+    /* On: every surface still measures its own backdrop and refuses an alpha its
+     * text cannot survive. Off is the escape hatch, not the default. */
+    cfg->glass_legibility = 1;
     cfg->active_opacity   = 1.00f;
     cfg->inactive_opacity = 0.92f;
     /* Unset: foot follows the slider exactly as before until someone sets a
@@ -1399,7 +1428,8 @@ const syn_config_t *synui_config_defaults(void)
     return &def;
 }
 
-/* glass_level, resolved onto the individual alphas every consumer already
+/*
+ * glass_level, resolved onto the individual alphas every consumer already
  * reads.
  *
  * Applied HERE, after every source has been read, and that ordering is the
@@ -1412,15 +1442,87 @@ const syn_config_t *synui_config_defaults(void)
  * Unset is a no-op, so the twelve themes that are not Prism keep exactly the
  * opacities they were tuned with, and so does a synuirc written before this
  * key existed.
+ *
+ * ⚠ EVERY SURFACE, AND EVERY ONE OF THEM RELEASABLE — which is the pair of
+ * changes this grew. It used to write three fields unconditionally: the two
+ * window opacities and the bar, leaving the dock and the terminal behind and
+ * giving a user who wanted to keep one of the three no way to say so. So a
+ * desktop set from the slider had two surfaces at the wrong amount of glass, and
+ * a desktop set by hand had three rows that would be overwritten at the next
+ * login without ever having been touched. syn_glass_drives() is both halves of
+ * the question — is the sync on, and is this row still the slider's — and every
+ * field goes through it.
+ *
+ * Called from the runtime path too (ctl_apply's CTL_APPLY_GLASS), not only at
+ * load, because the slider has to move the desktop while you are looking at it.
  */
-static void config_apply_glass_level(syn_config_t *cfg)
+/*
+ * The other direction: the slider has let go, so give the rows it was driving
+ * back.
+ *
+ * ⚠ WITHOUT THIS, "AUTO" WAS A ONE-WAY DOOR. Moving the Glass row writes five
+ * alphas; moving it back to Auto only stops writing them, and the last values it
+ * wrote stay in the config with nothing recording that anybody chose them. A
+ * desktop that passed through 40% on its way back to Auto kept 40%'s dock and
+ * bar for the rest of the session and then jumped somewhere else at the next
+ * login, because settings.state — which is what the login rebuilds from — never
+ * had those numbers in it. The screen and the file disagreed, and the file won
+ * later, which is the worst order for that to happen in.
+ *
+ * The compiled defaults are exactly the right source, and only because a driven
+ * row is by definition one the user has NOT set: the moment they set it, it is
+ * pinned, and a pinned row is skipped here and keeps the value settings.state
+ * holds for it. So this restores "no opinion" to precisely the fields that have
+ * none.
+ *
+ * ⚠ NOT called from the load path, and that is not an oversight. At load a
+ * synuirc `dock_opacity = 0.5` on a desktop with no level set is an opinion —
+ * one written by hand, which is a place pins do not reach — and resetting it to
+ * the compiled default would be this function quietly deleting a config line.
+ * The release is an ACTION, taken when a control is moved; the two callers are
+ * the two master rows in ctlpanel.c and there should never be a third.
+ */
+void synui_config_glass_release(syn_config_t *cfg)
+{
+    const syn_config_t *def = synui_config_defaults();
+
+    if (!(cfg->glass_pins & SYN_GLASS_PIN_ACTIVE))
+        cfg->active_opacity = def->active_opacity;
+    if (!(cfg->glass_pins & SYN_GLASS_PIN_INACTIVE))
+        cfg->inactive_opacity = def->inactive_opacity;
+    if (!(cfg->glass_pins & SYN_GLASS_PIN_FOOT))
+        cfg->foot_alpha = def->foot_alpha;
+    if (!(cfg->glass_pins & SYN_GLASS_PIN_BAR))
+        cfg->bar_opacity = def->bar_opacity;
+    if (!(cfg->glass_pins & SYN_GLASS_PIN_DOCK))
+        cfg->dock_opacity = def->dock_opacity;
+}
+
+void synui_config_apply_glass_sync(syn_config_t *cfg)
 {
     if (!syn_glass_set(cfg)) return;
 
-    cfg->active_opacity   = syn_glass_window_alpha(cfg);
-    cfg->inactive_opacity = cfg->active_opacity - 0.06f;
-    if (cfg->inactive_opacity < 0.50f) cfg->inactive_opacity = 0.50f;
-    cfg->bar_opacity      = syn_glass_bar_alpha(cfg);
+    if (syn_glass_drives(cfg, SYN_GLASS_PIN_ACTIVE))
+        cfg->active_opacity = syn_glass_window_alpha(cfg);
+
+    /* The unfocused pair follows the focused one rather than the level: what it
+     * expresses is "a step further back than whatever you are using", and a
+     * second curve would let the two cross. Its own floor goes with the
+     * legibility switch for the same reason the window curve's does. */
+    if (syn_glass_drives(cfg, SYN_GLASS_PIN_INACTIVE)) {
+        cfg->inactive_opacity = cfg->active_opacity - 0.06f;
+        float floor = cfg->glass_legibility ? 0.50f : 0.00f;
+        if (cfg->inactive_opacity < floor) cfg->inactive_opacity = floor;
+    }
+
+    if (syn_glass_drives(cfg, SYN_GLASS_PIN_FOOT))
+        cfg->foot_alpha = syn_glass_foot_alpha(cfg);
+
+    if (syn_glass_drives(cfg, SYN_GLASS_PIN_BAR))
+        cfg->bar_opacity = syn_glass_bar_alpha(cfg);
+
+    if (syn_glass_drives(cfg, SYN_GLASS_PIN_DOCK))
+        cfg->dock_opacity = syn_glass_dock_alpha(cfg);
 }
 
 void synui_config_load(syn_config_t *cfg)
@@ -1458,7 +1560,7 @@ void synui_config_load(syn_config_t *cfg)
         notif_dnd_state_load_config(cfg);
         binds_state_load(cfg);
         config_apply_ui_font(cfg);
-        config_apply_glass_level(cfg);
+        synui_config_apply_glass_sync(cfg);
         return;
     }
 
@@ -1554,7 +1656,7 @@ void synui_config_load(syn_config_t *cfg)
     config_apply_ui_font(cfg);
     /* And the same argument for the glass slider, one line later: it is an
      * explicit answer that has to win over the theme's own opacities. */
-    config_apply_glass_level(cfg);
+    synui_config_apply_glass_sync(cfg);
 }
 
 /*
@@ -1761,6 +1863,31 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             if (cfg->glass_level < 0)   cfg->glass_level = 0;
             if (cfg->glass_level > 100) cfg->glass_level = 100;
         }
+    }
+    else if (strcmp(key, "glass_sync") == 0)
+        cfg->glass_sync = strcmp(val, "on") == 0;
+    else if (strcmp(key, "glass_legibility") == 0)
+        cfg->glass_legibility = strcmp(val, "on") == 0;
+    else if (strcmp(key, "glass_pinned") == 0) {
+        /*
+         * Which rows have been taken off the slider, by name. Space-separated,
+         * and the whole line REPLACES what came before rather than adding to it:
+         * settings.state is the later source and has to be able to say "nothing
+         * is pinned" as well as "these are", which an accumulating parse could
+         * not express without inventing a token for empty.
+         *
+         * An unknown name is ignored rather than refused. A settings.state
+         * written by a later synui that pins a row this one does not have is a
+         * file to read what you can out of, not one to reject — and the row it
+         * names cannot be wrongly driven here, because it does not exist.
+         */
+        cfg->glass_pins = 0;
+        char buf[256];
+        snprintf(buf, sizeof(buf), "%s", val);
+        char *save = NULL;
+        for (char *t = strtok_r(buf, " ,\t", &save); t;
+             t = strtok_r(NULL, " ,\t", &save))
+            cfg->glass_pins |= syn_glass_pin_by_name(t);
     }
     else if (strcmp(key, "active_opacity") == 0)
         cfg->active_opacity = (float)atof(val);
@@ -2318,9 +2445,24 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "dock_opacity") == 0) {
         cfg->dock_opacity = (float)atof(val);
-        /* Floored well above zero: an invisible dock is indistinguishable from
-         * a broken one, and `dock_enabled = off` is how you ask for no dock. */
-        if (cfg->dock_opacity < 0.20f) cfg->dock_opacity = 0.20f;
+        /*
+         * ⚠ THE 0.20 FLOOR IS GONE, AND IT WAS THE WRONG ANSWER TO A REAL
+         * QUESTION. It read "an invisible dock is indistinguishable from a
+         * broken one, and `dock_enabled = off` is how you ask for no dock" —
+         * true of the dock's BODY, and the body is not the dock. Its icons are
+         * drawn on top of this and stay fully opaque at every value, so 0.00 is
+         * a row of icons floating on the wallpaper, which is a thing people
+         * actually want and the one thing this made unreachable.
+         *
+         * It was also not the only floor: dock_paint_body clamped to 0.05, the
+         * row's own vmin was 0.20, BarConfig re-clamped to 0.20 on the shell
+         * side, and the widgets added 0.16 on top. Five numbers guarding the
+         * same setting, none of them agreeing on what it was guarding against.
+         * Legibility is measured now, per surface, against the wallpaper that
+         * is actually behind it — see glass_legibility and panel_alpha_floor —
+         * so the range here is the range.
+         */
+        if (cfg->dock_opacity < 0.00f) cfg->dock_opacity = 0.00f;
         if (cfg->dock_opacity > 1.00f) cfg->dock_opacity = 1.00f;
     }
     else if (strcmp(key, "dock_radius") == 0) {

@@ -587,6 +587,24 @@ state_reload_test = executable('state_reload_test',
   build_by_default : false)
 test('state_reload', state_reload_test)
 
+# One slider for the whole desktop's glass, and the rows allowed to walk away
+# from it. config.c's resolution against the pin set — no compositor and no
+# panel, because the decision is syn_glass_drives() and that is where it lives.
+# Guards the pair of bugs the sync was written for: a Glass row that moved three
+# of five surfaces and could be overruled on none of them, and an Auto that
+# stopped writing the alphas without giving them back.
+# Only config.c and settings.c for real. The state-file readers config.c calls
+# on the way past are stubbed in the test: what is under test is the RESOLUTION
+# against the pin set, and state_reload_test is what links those readers for
+# real to prove a load does not drop them.
+glass_sync_test = executable('glass_sync_test',
+  ['tests/glass_sync_test.c', 'src/config.c', 'src/settings.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('glass_sync', glass_sync_test)
+
 # The control panel's item table against the config parser. Every row that names
 # a synuirc key is adjusted, persisted, reloaded from disk and reset — so a
 # mistyped key or a copied offset fails here rather than as "that setting

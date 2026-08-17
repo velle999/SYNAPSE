@@ -137,10 +137,11 @@ PanelWindow {
      * scenefx blur node behind it, the same one the dock has. What this draws is
      * the falloff, the specular hairline and the rim ON TOP of that.
      *
-     * Theme.widgetAlpha still carries the lift it was given for the unblurred
-     * case. Deliberately left alone here: it is the dock's own opacity plus a
-     * constant, so moving it is a change to how the widgets and the dock relate
-     * to each other, and that is a separate decision from this one.
+     * Theme.widgetAlpha carried a +0.16 lift for the unblurred case for one
+     * release after that stopped being true, and it is gone: the widgets are the
+     * dock's opacity exactly, which is what "the widgets match the dock" was
+     * always supposed to mean, and it is what lets them reach clear when the
+     * dock does. See the note on Theme.widgetAlpha.
      */
     readonly property bool glass: win.chrome && Theme.widgetsGlass
 
@@ -204,6 +205,20 @@ PanelWindow {
      * unconditionally below, so the frosting is not the card's to opt out of.
      */
     readonly property bool ownShadow: !Theme.glassSurfaces
+
+    /*
+     * How present this card's own CHROME is — the rim, the specular, the shadow
+     * rings. Each of those carries its own literal alpha, so a card dropped to
+     * `widget_glass` at 0.00 drew nothing but a bright outline and a highlight
+     * hanging in mid-air, which reads as a rendering fault rather than as glass.
+     *
+     * The same ramp dock_paint_body() uses, and for the same reason: 1.0
+     * everywhere above 0.35, so no card anyone has configured moves, and falling
+     * to 0 with the surface under it. The chrome of a surface cannot be more
+     * present than the surface.
+     */
+    readonly property real chromeAlpha:
+        Theme.widgetAlpha < 0.35 ? Theme.widgetAlpha / 0.35 : 1.0
 
     // Room around the card for that shadow to spread into. The card's visible
     // edge still sits `mx` from the screen edge, so the pad is invisible in the
@@ -325,7 +340,8 @@ PanelWindow {
                             anchors.topMargin: -modelData.m + glassShadow.drop
                             radius: win.glassRadius + modelData.m
                             color: Qt.rgba(0, 0, 0,
-                                           modelData.a * (win.dragging ? 1.6 : 1))
+                                           modelData.a * win.chromeAlpha
+                                           * (win.dragging ? 1.6 : 1))
                         }
                     }
                 }
@@ -357,8 +373,8 @@ PanelWindow {
                     // signal the HUD outline gives.
                     border.width: 1
                     border.color: win.dragging ? Theme.yellow
-                                : Theme.isLight ? Qt.rgba(0, 0, 0, 0.14)
-                                                : Qt.rgba(1, 1, 1, 0.20)
+                                : Theme.isLight ? Qt.rgba(0, 0, 0, 0.14 * win.chromeAlpha)
+                                                : Qt.rgba(1, 1, 1, 0.20 * win.chromeAlpha)
                     Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
                 }
 
@@ -372,7 +388,8 @@ PanelWindow {
                         topMargin: 1
                     }
                     height: 1
-                    color: Qt.rgba(1, 1, 1, Theme.isLight ? 0.80 : 0.28)
+                    color: Qt.rgba(1, 1, 1,
+                                   (Theme.isLight ? 0.80 : 0.28) * win.chromeAlpha)
                 }
             }
 

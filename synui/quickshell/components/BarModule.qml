@@ -37,8 +37,18 @@ Rectangle {
 
     property string text: ""
     property string icon: ""                 // optional leading glyph
-    property color  iconColor: Theme.barGlyph
-    property color  textColor: Theme.barFg
+    /*
+     * This screen's strip palette. A clear bar takes its ink off the wallpaper,
+     * and the wallpaper is a different picture on every monitor — so the ink is
+     * per-output too. `root.QsWindow.window` is the bar this module was placed
+     * in; null until it is, which Theme.barPalette answers with the folded
+     * desktop-wide values. See Theme.barInks.
+     */
+    readonly property var pal:
+        Theme.barPaletteOf(root.QsWindow.window)
+
+    property color  iconColor: root.pal.glyph
+    property color  textColor: root.pal.fg
     property string tooltipText: ""
     property bool   active: false            // draws the magenta wash
 
@@ -63,8 +73,8 @@ Rectangle {
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
     radius: Theme.pillRadius
 
-    color: root.active ? Theme.barActiveBg
-                       : (mouse.containsMouse ? Theme.barHoverBg : "transparent")
+    color: root.active ? root.pal.activeBg
+                       : (mouse.containsMouse ? root.pal.hoverBg : "transparent")
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
     // A press that only changes colour is easy to miss on a 20px target; the
@@ -75,7 +85,7 @@ Rectangle {
     // Active modules get a hairline in the accent so "on" survives a theme
     // whose activeBg wash is subtle against its own bar colour.
     border.width: root.active ? 1 : 0
-    border.color: Theme.barAccent
+    border.color: root.pal.accent
 
     Row {
         id: row

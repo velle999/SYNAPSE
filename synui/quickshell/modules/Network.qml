@@ -33,9 +33,9 @@ BarModule {
         default:         return Icons.netDisconnected
         }
     }
-    iconColor: kind === "none" ? Theme.barAccent
-             : kind === "disabled" ? Theme.barDim
-             : Theme.barGlyph
+    iconColor: kind === "none" ? root.pal.accent
+             : kind === "disabled" ? root.pal.dim
+             : root.pal.glyph
     text: kind === "wifi" ? (signal_ + "%") : ""
 
     tooltipText: {

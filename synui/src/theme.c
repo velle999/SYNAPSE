@@ -642,11 +642,28 @@ static void theme_state_save(syn_server_t *s)
     /* Translucency lives here too so the sliders survive a restart, same file as
      * the theme name they sit beside in the appearance panels. */
     fprintf(f, "transparency=%s\n", s->config.transparency ? "on" : "off");
-    fprintf(f, "active_opacity=%.2f\n", s->config.active_opacity);
+    /*
+     * ⚠ NOT WRITTEN FOR A ROW THE USER HAS PINNED, and that guard is new because
+     * the Glass sync made an old hazard reachable.
+     *
+     * theme.state is read AFTER settings.state (see synui_config_load), so these
+     * two keys have always beaten the control panel's own file — which was
+     * harmless while they only ever held a value the theme or the transparency
+     * slider had put there. The sync changed that: it resolves foot_alpha and
+     * active_opacity from the level, and they land here on the way past. Pin the
+     * Terminal glass row, log out, and theme.state's synced number would have
+     * overwritten the one you pinned it to, in the one file the panel does not
+     * write. A pin exists only because the control panel set it, and the panel
+     * wrote settings.state at the same moment — so a pinned row is settings.state's
+     * outright and this file must stay quiet about it.
+     */
+    if (!(s->config.glass_pins & SYN_GLASS_PIN_ACTIVE))
+        fprintf(f, "active_opacity=%.2f\n", s->config.active_opacity);
     /* Only written once set, so an untouched foot_alpha stays absent from the
      * file and keeps following the slider rather than being frozen at a value
      * the user never chose. */
-    if (s->config.foot_alpha >= 0.0f)
+    if (s->config.foot_alpha >= 0.0f &&
+        !(s->config.glass_pins & SYN_GLASS_PIN_FOOT))
         fprintf(f, "foot_alpha=%.2f\n", s->config.foot_alpha);
     /*
      * An EXPORT, not a setting: nothing reads this back into the config, and
@@ -719,6 +736,36 @@ static void theme_state_save(syn_server_t *s)
      */
     fprintf(f, "glass_surfaces=%s\n",
             syn_glass_active(&s->config) ? "on" : "off");
+
+    /*
+     * ── The Glass slider's answer, for the two surfaces that are not ours ────
+     *
+     * ⚠ WITHOUT THIS THE SLIDER DID NOT REACH THE BAR OR THE WIDGETS AT ALL, and
+     * the reason is a process boundary that nothing else in the chain crosses.
+     *
+     * synui_config_apply_glass_sync() resolves the level onto bar_opacity and
+     * dock_opacity in the compositor's own syn_config_t, which is everything the
+     * compositor draws. The bar and the desktop widgets are quickshell's, and
+     * BarConfig reads those two keys out of settings.state — a file the slider
+     * never writes, because a synced value is not a value anybody chose. So the
+     * level moved, the panels and the dock body followed, and the strip across
+     * the top of the screen stayed exactly where it was: "one desktop, one
+     * amount of glass" with the most visible surface on the desktop opted out.
+     *
+     * So the RESOLVED numbers travel, in the file the shell already watches for
+     * square_chrome and glass_surfaces, and BarConfig gives them precedence over
+     * settings.state. Written only for the rows the sync currently owns: a
+     * pinned row is absent, and absent is what hands the key back to
+     * settings.state — so the shell needs no notion of pinning, and the one
+     * place that decides which surfaces the slider drives stays syn_glass_
+     * drives(). `glass_sync=off` empties the block for the same reason.
+     */
+    fprintf(f, "glass_legibility=%s\n",
+            s->config.glass_legibility ? "on" : "off");
+    if (syn_glass_drives(&s->config, SYN_GLASS_PIN_BAR))
+        fprintf(f, "bar_opacity=%.2f\n", syn_glass_bar_alpha(&s->config));
+    if (syn_glass_drives(&s->config, SYN_GLASS_PIN_DOCK))
+        fprintf(f, "dock_opacity=%.2f\n", syn_glass_dock_alpha(&s->config));
     fclose(f);
 }
 
@@ -843,6 +890,7 @@ static void theme_push_panel_colors(const syn_config_t *cfg)
      * eventually — "eventually" being one frame of the wrong picture on exactly
      * the action whose whole point is to change how the desktop looks. */
     render_set_panel_glass(syn_glass_resolve(cfg));
+    render_set_panel_legibility(cfg->glass_legibility != 0);
 }
 
 /* Copy a preset's colours + opacity levels into a config, nothing more — no

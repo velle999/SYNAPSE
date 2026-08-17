@@ -22,6 +22,11 @@ import ".."
  */
 Row {
     id: root
+
+    // This screen's strip palette — a clear bar's ink comes off the wallpaper,
+    // which is a different picture on every monitor. See Theme.barInks.
+    readonly property var pal:
+        Theme.barPaletteOf(root.QsWindow.window)
     spacing: Theme.moduleGap
 
     Repeater {
@@ -34,7 +39,7 @@ Row {
             width: Theme.iconSize + 12
             height: Theme.barHeight
             radius: Theme.radius
-            color: mouse.containsMouse ? Theme.barHoverBg : "transparent"
+            color: mouse.containsMouse ? root.pal.hoverBg : "transparent"
             Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
             IconImage {

@@ -26,7 +26,7 @@ BarModule {
     // waybar colours #custom-clock with the theme's clock_fg, not the glyph
     // colour — and that value exists precisely because #ffd319 is illegible on
     // a light bar. Using the glyph colour here would have left clockFg unread.
-    textColor: Theme.barClock
+    textColor: root.pal.clock
     tooltipText: clockTip
 
     onClicked: calendar.running = true

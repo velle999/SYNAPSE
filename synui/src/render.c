@@ -284,9 +284,20 @@ static syn_glass_t g_panel_glass = { -1.0f, 1.0f };
 static syn_backdrop_t g_panel_backdrop = { -1.0, SYN_INK_NONE, SYN_INK_NONE };
 static float          g_panel_drawn_alpha = 1.0f;
 
+/* Whether panel_alpha_floor() is allowed to overrule the alpha it is handed.
+ * Pushed beside the glass for the same reason and by the same two callers: the
+ * thirty renderers below hold no config handle, and the switch that turns this
+ * off is a control-panel row rather than a theme change. */
+static bool g_panel_legibility = true;
+
 void render_set_panel_glass(syn_glass_t glass)
 {
     g_panel_glass = glass;
+}
+
+void render_set_panel_legibility(bool on)
+{
+    g_panel_legibility = on;
 }
 
 /*
@@ -316,6 +327,16 @@ void render_set_panel_glass(syn_glass_t glass)
  */
 static float panel_alpha_floor(float want)
 {
+    /*
+     * ⚠ THE CORRECTION IS A SETTING NOW, AND OFF MEANS OFF. This walk is what
+     * stops a panel being drawn at an alpha its own text cannot survive, and it
+     * is measured rather than guessed — but "measured" is not the same as "not
+     * overridable". A desktop asked for a clear panel and got 0.78 back with
+     * nothing on screen to say why, which is the one failure mode a guard like
+     * this has: it is invisible when it fires. The row that turns it off is in
+     * Appearance, beside the slider it corrects. */
+    if (!g_panel_legibility) return want;
+
     double back = g_panel_backdrop.lum;
     if (back < 0.0 || want >= 1.0f) return want;
 
@@ -8570,6 +8591,7 @@ void panel_chrome_sync(syn_server_t *s)
     const syn_glass_t glass_now = syn_glass_resolve(&s->config);
     const bool        glass     = syn_glass_active(&s->config);
     render_set_panel_glass(glass_now);
+    render_set_panel_legibility(s->config.glass_legibility != 0);
 
 #define PANEL_BG(n)     { &s->n##_ui.bg, NULL }
 #define PANEL_FULL(n)   { &s->n##_ui.bg, &s->n##_ui.accent }

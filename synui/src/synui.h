@@ -1521,6 +1521,8 @@ typedef enum {
     CTL_ROW_GLASS_HALO,
     CTL_ROW_FOOT_ALPHA,
     CTL_ROW_GLASS_LEVEL,
+    CTL_ROW_GLASS_SYNC,        /* do the per-surface rows follow the slider  */
+    CTL_ROW_GLASS_LEGIBILITY,  /* may a surface overrule its own alpha       */
     CTL_ROW_INACTIVE_OPACITY,
 
     CTL_ROW_SHADOW,
@@ -3101,6 +3103,53 @@ typedef struct {
      * to nothing.
      */
     int   glass_level;           /* 0..100, or -1 for "not set" */
+    /*
+     * ── One slider, and the rows that follow it ──────────────
+     *
+     * `glass_sync` is what makes the Glass row above a MASTER rather than a
+     * fourth opinion. On (the default), every per-surface alpha below is
+     * recomputed from the level whenever it moves: the windows, the terminal,
+     * the bar, the dock, the widgets. Off, each row stands alone and the level
+     * reaches only the surfaces that have no row of their own.
+     *
+     * ⚠ IT WAS ALREADY HALF-TRUE AND THAT WAS THE PROBLEM. config_apply_glass_
+     * level() has always overwritten active_opacity, inactive_opacity and
+     * bar_opacity from the level — unconditionally, with no way to keep a value
+     * you had set by hand — while dock_opacity and foot_alpha were never touched
+     * at all. So the one control that says "how much glass does this desktop
+     * have" moved three of the five surfaces, could not be overruled on any of
+     * them, and left the other two behind. Both halves of that are fixed here:
+     * the sync is a switch, and it covers everything.
+     *
+     * `glass_pins` is the override. Dragging one of those rows by hand sets its
+     * bit, and a pinned row is left exactly where it was put no matter where the
+     * slider goes — so "sync everything except the dock" is expressible, which
+     * is the shape people actually want. Turning the sync switch back ON clears
+     * every pin at once and re-claims the lot; resetting a row (Delete) clears
+     * just that one. Persisted by NAME (see syn_glass_pin_names) rather than as
+     * a number, so the file stays readable and adding a pin cannot renumber the
+     * ones already written.
+     */
+    int   glass_sync;            /* default 1 */
+    int   glass_pins;            /* bitmask of syn_glass_pin_t; default 0 */
+    /*
+     * Whether a surface is allowed to overrule the alpha it was asked for, to
+     * keep the text on it legible.
+     *
+     * On (the default) is everything this desktop already did: panel_alpha_
+     * floor() and Theme.qml's popupAlphaOn() measure the wallpaper under each
+     * surface and walk the alpha up until full-strength ink clears 4.5:1, and
+     * the window and terminal curves stop short of nothing for the same reason.
+     * It is measured rather than guessed, and it is the right default.
+     *
+     * Off is the answer to "I said clear, I meant clear". No floor, no walk-up,
+     * and the two curves open to their full range — every surface draws exactly
+     * the alpha it was given, including zero. A desktop can then be made
+     * genuinely unreadable, which is the point of it being a switch and not a
+     * heuristic: the guard is worth having and it is not worth being unable to
+     * turn off.
+     */
+    int   glass_legibility;      /* default 1 */
     float active_opacity;        /* focused window, 0.5..1.0; default 1.0 */
     float inactive_opacity;      /* unfocused windows; default 0.92 */
 
@@ -3731,13 +3780,122 @@ static inline bool syn_glass_set(const syn_config_t *cfg)
     return cfg->glass_level >= 0;
 }
 
-/* Window chrome. 1.00 down to 0.62 — the floor is where a window still has
- * findable edges over a busy photograph, measured rather than guessed. */
+/*
+ * Which rows the slider drives, one bit each, and the name each is persisted
+ * under. Bits rather than a flag per field because they are written as ONE
+ * settings.state line — `glass_pinned = dock_opacity bar_opacity` — and a
+ * desktop that pinned nothing has no line at all.
+ *
+ * The names ARE the synuirc keys of the rows they pin, deliberately: the pin
+ * file says which SETTINGS you took control of, in the same vocabulary the
+ * settings themselves use, so it can be read without this table in front of you.
+ */
+typedef enum {
+    SYN_GLASS_PIN_ACTIVE   = 1 << 0,   /* active_opacity   */
+    SYN_GLASS_PIN_INACTIVE = 1 << 1,   /* inactive_opacity */
+    SYN_GLASS_PIN_FOOT     = 1 << 2,   /* foot_alpha       */
+    SYN_GLASS_PIN_BAR      = 1 << 3,   /* bar_opacity      */
+    SYN_GLASS_PIN_DOCK     = 1 << 4,   /* dock_opacity     */
+} syn_glass_pin_t;
+
+#define SYN_GLASS_PIN_ALL (SYN_GLASS_PIN_ACTIVE | SYN_GLASS_PIN_INACTIVE | \
+                           SYN_GLASS_PIN_FOOT | SYN_GLASS_PIN_BAR | \
+                           SYN_GLASS_PIN_DOCK)
+
+/* The one roster. A row's pin and the row's synuirc key are the same string, so
+ * a pin can be looked up from the ctl_item table with no second mapping. */
+static const struct { int bit; const char *key; } syn_glass_pin_names[] = {
+    { SYN_GLASS_PIN_ACTIVE,   "active_opacity"   },
+    { SYN_GLASS_PIN_INACTIVE, "inactive_opacity" },
+    { SYN_GLASS_PIN_FOOT,     "foot_alpha"       },
+    { SYN_GLASS_PIN_BAR,      "bar_opacity"      },
+    { SYN_GLASS_PIN_DOCK,     "dock_opacity"     },
+};
+
+/* 0 for a name that is not a pinnable row — including NULL, which is what a
+ * bespoke ctl_item with no `key` hands in. */
+static inline int syn_glass_pin_by_name(const char *key)
+{
+    if (!key) return 0;
+    for (size_t i = 0; i < sizeof(syn_glass_pin_names) /
+                           sizeof(syn_glass_pin_names[0]); i++)
+        if (strcmp(syn_glass_pin_names[i].key, key) == 0)
+            return syn_glass_pin_names[i].bit;
+    return 0;
+}
+
+/* …and back the other way, as the settings.state line. Writes an empty string
+ * for no pins, which is what tells the caller to DROP the key rather than write
+ * it — an empty value would parse back as "nothing pinned" too, but a key that
+ * only appears when it says something is a file you can read at a glance. */
+static inline void syn_glass_pins_format(int pins, char *buf, size_t n)
+{
+    size_t at = 0;
+    if (n) buf[0] = '\0';
+    for (size_t i = 0; i < sizeof(syn_glass_pin_names) /
+                           sizeof(syn_glass_pin_names[0]); i++) {
+        if (!(pins & syn_glass_pin_names[i].bit)) continue;
+        int used = snprintf(buf + at, n - at, "%s%s",
+                            at ? " " : "", syn_glass_pin_names[i].key);
+        if (used < 0 || (size_t)used >= n - at) break;
+        at += (size_t)used;
+    }
+}
+
+/*
+ * Is this surface the slider's to move right now? Both halves in one question,
+ * because every caller needs both and one that asked only about the pin would
+ * follow the slider on a desktop that had switched the sync off.
+ *
+ * ⚠ A pin of 0 IS NOT A PIN and answers false. It is what syn_glass_pin_by_name
+ * hands back for every row that is not one of the five, and `!(pins & 0)` is
+ * true — so without this line the control panel would have marked all hundred
+ * rows "synced", including the ones that have nothing to do with glass.
+ */
+static inline bool syn_glass_drives(const syn_config_t *cfg, syn_glass_pin_t pin)
+{
+    if (!pin) return false;
+    return cfg->glass_sync && syn_glass_set(cfg) && !(cfg->glass_pins & pin);
+}
+
+/*
+ * Window chrome. 1.00 down to 0.62 — the floor is where a window still has
+ * findable edges over a busy photograph, measured rather than guessed.
+ *
+ * …unless the legibility correction is off, and then the curve opens all the
+ * way to nothing. The 0.62 is a real measurement of a real problem — a window
+ * you can see straight through is one you cannot find the edges of — and it is
+ * still what the desktop does by default. It is not a reason the setting should
+ * be unreachable: see glass_legibility.
+ */
 static inline float syn_glass_window_alpha(const syn_config_t *cfg)
 {
     if (!syn_glass_set(cfg)) return -1.0f;
     float t = (float)cfg->glass_level / 100.0f;
-    return 1.00f - 0.38f * t;
+    return 1.00f - (cfg->glass_legibility ? 0.38f : 1.00f) * t;
+}
+
+/*
+ * The terminal, which needs its OWN number and not the window's.
+ *
+ * foot and syntty draw their own background alpha with the glyphs left opaque,
+ * so the same value over a near-black terminal background reads far more solid
+ * than over a light GTK window — tracking the window curve 1:1 made a
+ * comfortable desktop into an almost-opaque terminal, which is the whole reason
+ * foot_alpha exists as a separate key.
+ *
+ * 0.60 of the range against the window's 0.38: at the house level of 55 that is
+ * 0.67, which is where this box's hand-tuned synuirc already sat (0.70) — the
+ * curve is fitted to the answer someone reached by eye rather than the other way
+ * round. With the legibility correction off it goes to nothing, and a terminal
+ * whose background is gone is still perfectly readable: the glyphs never fade.
+ */
+static inline float syn_glass_foot_alpha(const syn_config_t *cfg)
+{
+    if (!syn_glass_set(cfg)) return -1.0f;
+    float t = (float)cfg->glass_level / 100.0f;
+    float a = 1.00f - (cfg->glass_legibility ? 0.60f : 1.00f) * t;
+    return a < 0.0f ? 0.0f : a;
 }
 
 /* synui's own panels: see syn_panel_glass_factor() below, which is where this
@@ -3754,6 +3912,22 @@ static inline float syn_glass_bar_alpha(const syn_config_t *cfg)
     float t = (float)cfg->glass_level / 100.0f;
     float a = 0.95f - 0.95f * t;
     return a < 0.0f ? 0.0f : a;
+}
+
+/*
+ * The dock, which takes the bar's number exactly.
+ *
+ * Not a curve of its own, and that is the point of it being a function at all:
+ * the bar and the dock are the same KIND of surface — a strip of chrome floating
+ * on the wallpaper with opaque glyphs drawn over it — and a desktop where the
+ * top strip and the bottom one are see-through by different amounts is the
+ * three-different-amounts-of-glass the sync exists to end. Its 0.72 default
+ * still stands wherever the sync is off or the row is pinned; this is only what
+ * the slider hands it.
+ */
+static inline float syn_glass_dock_alpha(const syn_config_t *cfg)
+{
+    return syn_glass_bar_alpha(cfg);
 }
 
 /*
@@ -6108,6 +6282,14 @@ void synmon_want_refresh(syn_server_t *s);
 
 /* ── config.c ────────────────────────────────────────────── */
 void synui_config_load(syn_config_t *cfg);
+/* Re-resolve the Glass slider onto every unpinned per-surface alpha. Called at
+ * the end of a config load, and again whenever a glass row moves — the slider
+ * has to move the desktop while you are looking at it. See glass_sync. */
+void synui_config_apply_glass_sync(syn_config_t *cfg);
+/* …and the release, for when the slider lets go: every unpinned per-surface
+ * alpha back to its compiled default. An ACTION taken by the two master rows,
+ * never part of a config load — see the function's own note. */
+void synui_config_glass_release(syn_config_t *cfg);
 
 /* ── Binds, as data ──────────────────────────────────────────
  *
@@ -7081,6 +7263,9 @@ void render_set_panel_surface(const float bg[4], const float ink[4]);
  * for a desktop that is not glass. Pushed from theme_push_panel_colors() and
  * from panel_chrome_sync(); see the cache's comment in render.c for why both. */
 void render_set_panel_glass(syn_glass_t glass);
+/* May a panel overrule the alpha it was asked for to keep its text legible?
+ * Pushed beside the glass, from the same two places. See glass_legibility. */
+void render_set_panel_legibility(bool on);
 
 /* Shared translucency controls behind the control-panel + theme-manager sliders.
  * set_opacity clamps the focused level to 0.50..1.00 and derives the unfocused

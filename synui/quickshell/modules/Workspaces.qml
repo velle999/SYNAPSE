@@ -17,6 +17,11 @@ import ".."
 Item {
     id: root
 
+    // This screen's strip palette — a clear bar's ink comes off the wallpaper,
+    // which is a different picture on every monitor. See Theme.barInks.
+    readonly property var pal:
+        Theme.barPaletteOf(root.QsWindow.window)
+
     // This used to reserve the launcher's width at its left edge, because the
     // compositor drew the "◢ SYNAPSE" button over the bar's top-left corner and
     // hit-tested it there — anything placed under it was invisible AND
@@ -52,10 +57,10 @@ Item {
 
                 // Three states worth telling apart at a glance: the one you are
                 // on, ones holding windows you can go back to, and empty ones.
-                color: pill.active ? Theme.barActiveBg
-                                   : (mouse.containsMouse ? Theme.barHoverBg : "transparent")
+                color: pill.active ? root.pal.activeBg
+                                   : (mouse.containsMouse ? root.pal.hoverBg : "transparent")
                 border.width: pill.active ? 1 : 0
-                border.color: Theme.barAccent
+                border.color: root.pal.accent
                 Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
                 Text {
@@ -63,8 +68,8 @@ Item {
                     text: pill.modelData.id
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
-                    color: pill.active ? Theme.barFg
-                                       : (pill.occupied ? Theme.barGlyph : Theme.barDim)
+                    color: pill.active ? root.pal.fg
+                                       : (pill.occupied ? root.pal.glyph : root.pal.dim)
                     Behavior on color { ColorAnimation { duration: Theme.animFast } }
                 }
 

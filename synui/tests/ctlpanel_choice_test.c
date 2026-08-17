@@ -174,6 +174,12 @@ bool syn_config_path(char *buf, size_t n, const char *leaf)
  * ctlpanel_table_test covers, with config.c and settings.c linked for real.
  */
 void uifx_apply(syn_server_t *s)              { (void)s; }
+/* The two the Glass rows reach for. Neither is exercised here — what the sync
+ * resolves is ctlpanel_table_test's and backdrop_test's — but both have to
+ * resolve for this to link. */
+void theme_glass_refresh(syn_server_t *s)            { (void)s; }
+void synui_config_apply_glass_sync(syn_config_t *c)  { (void)c; }
+void synui_config_glass_release(syn_config_t *c)     { (void)c; }
 void input_reload_config(syn_server_t *s)     { (void)s; }
 void deco_refresh_all(syn_server_t *s)        { (void)s; }
 void nightlight_apply(syn_server_t *s)        { (void)s; }

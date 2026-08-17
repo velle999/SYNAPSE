@@ -594,9 +594,31 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
                             int bar_w, int bar_h, double radius, bool glass)
 {
     const float *pb = s->config.panel_bg;
+    /* config.c has already clamped this to 0.00-1.00. It is NOT re-floored here:
+     * the 0.05 that used to sit on this line was a second, quieter guard against
+     * the same "invisible dock" the 0.20 in config.c was aimed at, and between
+     * them a row set to 0.00 drew a body you could still see. The icons are
+     * painted over this at full opacity, so a zero body is a row of icons on the
+     * wallpaper — see the note on dock_opacity in config.c. */
     double a = s->config.dock_opacity;
-    if (a < 0.05) a = 0.05;
-    if (a > 1.0)  a = 1.0;
+    if (a < 0.0) a = 0.0;
+    if (a > 1.0) a = 1.0;
+
+    /*
+     * How present the dock's CHROME is — the outline, the rim, the specular.
+     *
+     * ⚠ A CLEAR DOCK WITH AN OUTLINE IS NOT A CLEAR DOCK. Those three strokes
+     * carry their own literal alphas, so dropping the body to 0.00 left the
+     * shape drawn in full: a rectangle of nothing with a bright edge round it,
+     * which reads as a rendering fault rather than as glass.
+     *
+     * A ramp and not a cutoff, and it bites only at the bottom of the range:
+     * 1.0 everywhere above 0.35, so every dock anyone has ever configured looks
+     * exactly as it did, and falling to 0 with the body under it. The rule it
+     * states is the one that was missing — the chrome of a surface cannot be
+     * more present than the surface.
+     */
+    double chrome_a = a < 0.35 ? a / 0.35 : 1.0;
 
     cairo_rounded_rect(cr, 0, 0, bar_w, bar_h, radius);
 
@@ -627,7 +649,7 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
          * visible against a wallpaper. */
         cairo_set_source_rgba(cr, s->config.panel_accent[0],
                               s->config.panel_accent[1],
-                              s->config.panel_accent[2], 0.55);
+                              s->config.panel_accent[2], 0.55 * chrome_a);
         cairo_set_line_width(cr, 1.5);
         cairo_stroke(cr);
         return;
@@ -658,8 +680,8 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
 
     /* The rim. Whichever of black/white shows on this theme's surface, kept
      * faint: it is there to give the pane an edge, not to outline the dock. */
-    if (pale) cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.13);
-    else      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.22);
+    if (pale) cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.13 * chrome_a);
+    else      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.22 * chrome_a);
     cairo_set_line_width(cr, 1.0);
     cairo_stroke(cr);
 
@@ -670,7 +692,7 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
      * the surface, so it does not follow the pale/dark split above. */
     double inset = 1.5, r = radius;
     cairo_set_line_width(cr, 1.0);
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, pale ? 0.75 : 0.38);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, (pale ? 0.75 : 0.38) * chrome_a);
     switch (edge) {
     case SYN_DOCK_EDGE_TOP:
         cairo_move_to(cr, r, bar_h - inset);
