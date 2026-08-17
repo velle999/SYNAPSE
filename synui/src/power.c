@@ -173,7 +173,7 @@ static void power_set_dim(syn_server_t *s, bool on)
  *
  * Prefix, not exact: the connector is eDP-1 / LVDS-1 / DSI-1, and the index is
  * not always 1 on a machine with more than one internal panel. */
-static bool output_is_internal(struct wlr_output *o)
+bool output_is_internal(struct wlr_output *o)
 {
     static const char *const internal[] = { "eDP-", "LVDS-", "DSI-" };
     for (size_t i = 0; i < sizeof(internal) / sizeof(internal[0]); i++)
@@ -260,6 +260,48 @@ bool power_docked(syn_server_t *s)
  * A machine with no mains-side supply at all is a desktop (or a kernel that
  * does not report one) and counts as plugged in — treating it as "on battery"
  * would apply the wrong lid setting to the case with no battery in it. */
+/*
+ * Does this machine have a battery — i.e. is it a laptop?
+ *
+ * Read from the same sysfs tree as power_on_ac() and overridable by the same
+ * compile-time define, so lid_test can drive it too.
+ *
+ * `hdmi_audio = auto` resolves through this. Following a screen's audio is
+ * what you want on a laptop plugged into a TV and is a nuisance on a desk
+ * where the monitors are always connected and their HDMI pins are live all the
+ * time — the dev box here has two displays advertising audio it has never used.
+ * "Has a battery" is the sharpest available proxy for that difference, and
+ * unlike a hardcoded default it is right on both machines with no setting.
+ *
+ * A machine with no power supplies at all reads as a desktop, which is the safe
+ * direction: the failure is "sound did not follow", not "sound moved to a
+ * screen I am not using".
+ */
+bool power_has_battery(void)
+{
+    DIR *d = opendir(SYNUI_POWER_SUPPLY_DIR);
+    if (!d) return false;
+
+    bool found = false;
+    struct dirent *e;
+    while ((e = readdir(d)) && !found) {
+        if (e->d_name[0] == '.') continue;
+
+        char path[288], type[32] = "";
+        snprintf(path, sizeof(path), "%s/%s/type",
+                 SYNUI_POWER_SUPPLY_DIR, e->d_name);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;
+        if (!fgets(type, sizeof(type), f)) type[0] = '\0';
+        fclose(f);
+        type[strcspn(type, "\r\n")] = '\0';
+
+        if (strcmp(type, "Battery") == 0) found = true;
+    }
+    closedir(d);
+    return found;
+}
+
 bool power_on_ac(void)
 {
     DIR *d = opendir(SYNUI_POWER_SUPPLY_DIR);

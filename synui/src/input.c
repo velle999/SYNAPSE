@@ -1008,6 +1008,18 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         cmdbar_ask_window(s);
     } else if (strcmp(action, "displays") == 0) {
         dispcfg_toggle(s);
+    } else if (strcmp(action, "display_mode") == 0) {
+        /* Bare cycles Extend → Duplicate → Built-in off, the way a laptop's
+         * display key does. With an argument it SETS one, so a script (or a
+         * dock's hotplug rule) can ask for a specific arrangement rather than
+         * having to know which one is current and count steps to it. */
+        if (arg && arg[0]) {
+            int m = display_mode_from_name(arg);
+            if (m >= 0) dispcfg_set_mode_cfg(s, m);
+            else wlr_log(WLR_ERROR, "synui: display_mode: unknown '%s'", arg);
+        } else {
+            dispcfg_cycle_mode(s);
+        }
     } else if (strcmp(action, "wallpaper") == 0) {
         /* Bare (Super+W, the control panel row) opens the picker. With a path
          * it sets that wallpaper outright, which is what the Antiquity theme

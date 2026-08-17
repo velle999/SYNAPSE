@@ -174,15 +174,170 @@ PanelWindow {
                 ["Utility",     "Accessories"]
             ]
 
+            // The SECOND pass, tested only when nothing in catTable matched.
+            // These are registered "additional" categories — the freedesktop
+            // spec says an entry may carry them WITHOUT a main one, and plenty
+            // do. Testing them is the difference between filing a thing and
+            // shrugging it into "Other", which is what this menu used to do.
+            //
+            // Deliberately after the main table, never merged into it: an entry
+            // that says `Game;Emulator` is a game, and an entry that says
+            // `Utility;TextEditor` is the Utility the author chose to lead with.
+            readonly property var catTable2: [
+                ["WebBrowser",       "Internet"],
+                ["InstantMessaging", "Internet"],
+                ["P2P",              "Internet"],
+                ["FileTransfer",     "Internet"],
+                ["Player",           "Multimedia"],
+                ["Recorder",         "Multimedia"],
+                ["Music",            "Multimedia"],
+                ["TV",               "Multimedia"],
+                ["Photography",      "Graphics"],
+                ["RasterGraphics",   "Graphics"],
+                ["VectorGraphics",   "Graphics"],
+                ["2DGraphics",       "Graphics"],
+                ["3DGraphics",       "Graphics"],
+                ["Scanning",         "Graphics"],
+                ["TextEditor",       "Accessories"],
+                ["Calculator",       "Accessories"],
+                ["Archiving",        "Accessories"],
+                ["Compression",      "Accessories"],
+                ["FileManager",      "Accessories"],
+                ["TerminalEmulator", "System"],
+                ["Monitor",          "System"],
+                ["Security",         "System"],
+                ["PackageManager",   "System"],
+                ["Filesystem",       "System"],
+                ["WordProcessor",    "Office"],
+                ["Spreadsheet",      "Office"],
+                ["Presentation",     "Office"],
+                ["Dictionary",       "Office"],
+                ["Publishing",       "Office"],
+                ["Calendar",         "Office"],
+                ["IDE",              "Development"],
+                ["Debugger",         "Development"],
+                ["Building",         "Development"],
+                ["GUIDesigner",      "Development"],
+                ["Translation",      "Development"],
+                ["HardwareSettings", "Settings"],
+                ["Printing",         "Settings"],
+                ["Emulator",         "Games"],
+                ["ArcadeGame",       "Games"],
+                ["BlockGame",        "Games"],
+                ["SportsGame",       "Games"]
+            ]
+
+            // THE LAST RESORT, for an entry carrying no usable Categories at
+            // all — which is commoner than it should be among proprietary
+            // installers. DaVinci Resolve ships `Categories=` absent entirely,
+            // as does rofi; both used to land in "Other" beside each other,
+            // which is the "lazy" this replaces.
+            //
+            // Matched against the entry's own prose (name, generic name,
+            // comment, keywords), so it is the vendor's description doing the
+            // filing rather than a hardcoded list of applications. Resolve's
+            // comment names "editing", "colour correction" and "audio post
+            // production", and that is enough to put it in Multimedia.
+            //
+            // Ordered: the first hit wins, so the narrow words come before the
+            // broad ones. Nothing here is a substitute for real Categories — an
+            // entry SYNAPSE itself ships must carry them.
+            readonly property var wordTable: [
+                [/\b(browser|web)\b/i,                                  "Internet"],
+                [/\b(chat|messeng|irc|e-?mail)\b/i,                      "Internet"],
+                [/\b(video|audio|music|player|media|movie|editing|post production)\b/i,
+                                                                         "Multimedia"],
+                [/\b(photo|image|paint|draw|graphic|colou?r correction)\b/i,
+                                                                         "Graphics"],
+                [/\b(game|arcade|emulator)\b/i,                          "Games"],
+                [/\b(terminal|console|shell)\b/i,                        "System"],
+                [/\b(disk|partition|filesystem|monitor|task manager)\b/i, "System"],
+                [/\b(editor|notepad)\b/i,                                "Accessories"],
+                [/\b(theme|wallpaper|appearance)\b/i,                    "Settings"],
+                [/\b(setup|installer|configur|settings|preferences)\b/i,  "Settings"]
+            ]
+
             function categoryOf(entry) {
                 const cats = entry.categories || []
                 for (const pair of rowModel.catTable)
+                    if (cats.indexOf(pair[0]) >= 0) return pair[1]
+                for (const pair of rowModel.catTable2)
                     if (cats.indexOf(pair[0]) >= 0) return pair[1]
                 // Wine writes a shortcut per imported program, most with no
                 // category at all. Left alone they scatter into "Other" among
                 // the genuinely uncategorised, which on a box with a few games
                 // installed is most of the menu.
-                return (entry.id || "").indexOf("wine-") === 0 ? "Wine" : "Other"
+                if ((entry.id || "").indexOf("wine-") === 0) return "Wine"
+
+                const prose = [entry.name, entry.genericName, entry.comment,
+                               (entry.keywords || []).join(" ")]
+                              .filter(x => x).join(" ")
+                for (const pair of rowModel.wordTable)
+                    if (pair[0].test(prose)) return pair[1]
+
+                return "Other"
+            }
+
+            // ── Things on disk that are not applications ─────
+            //
+            // A .desktop file is not evidence that a human ever wants to launch
+            // the thing. A Wine prefix in particular writes one shortcut per
+            // Start Menu item the installer created, which means uninstallers,
+            // readmes, "Visit our web site", registration forms and — for
+            // anything that shipped an SDK — several dozen developer tools. On
+            // this desk that was 50 of the 65 entries under Wine: the menu was
+            // mostly noise with the games buried in it.
+            //
+            // Hidden, never launched-and-broken: the .desktop file is untouched
+            // and every one of these still runs from a terminal or from
+            // synfiles. See data/menu-hidden.conf for the other half of this
+            // (specific ids) and for how to put one back.
+            //
+            // ⚠ These are hidden from SEARCH as well as from the pages. That is
+            // deliberate and it is the one place this is not merely tidying:
+            // typing "sims" and being offered "Uninstall The Sims" one row from
+            // "The Sims" is a genuinely dangerous list to arrow through.
+
+            // Runs a document or a URL, not a program. The only universal rule
+            // here — everything below it is scoped to Wine, because outside a
+            // Wine prefix these words appear in the names of real applications
+            // ("Help" is a program on some systems; "Documentation" is a
+            // category Qt Assistant legitimately claims).
+            readonly property var reDocExec: /\.(url|htm|html|txt|chm|hlp|pdf|rtf|nfo)\b/i
+            readonly property var reUninst:  /(uninst|unins0)/i
+            // The DirectX SDK installs ~30 tools into the Start Menu. They are
+            // real programs and they are developer tooling for a toolkit the
+            // user installed to run a GAME.
+            readonly property var reSdkPath: /DirectX (SDK|Utilities|Documentation)|Windows DirectX/i
+            readonly property var reWineNoise: [
+                /^uninstall\b/i, /\breadme\b/i, /\bdocumentation\b/i, /\bmanual\b/i,
+                /\brelease notes\b/i, /\bhelp\b/i, /\bregistration\b/i, /^register\b/i,
+                /\bcontact support\b/i, /\btechnical support\b/i, /^visit\b/i,
+                /\bweb ?page\b/i, /\bweb ?site\b/i, /\bhomepage\b/i,
+                // Multiplayer matchmaking services that shut down two decades
+                // ago. The shortcut opens a dead URL.
+                /\bon mplayer\.com$/i, /\bon heat$/i,
+                /\bupdates?$/i
+            ]
+
+            function isNoise(entry) {
+                const id   = entry.id || ""
+                const name = entry.name || ""
+                // execString is the raw Exec line; a missing one cannot be
+                // tested and is not evidence of anything either way.
+                const ex   = entry.command ? entry.command.join(" ")
+                                           : (entry.execString || "")
+
+                if (rowModel.reDocExec.test(ex))    return true
+                if (/winebrowser/i.test(ex))        return true
+
+                if (id.indexOf("wine-") !== 0) return false
+
+                if (rowModel.reUninst.test(ex))     return true
+                if (rowModel.reSdkPath.test(id))    return true
+                for (const re of rowModel.reWineNoise)
+                    if (re.test(name)) return true
+                return false
             }
 
             // TRAP: `DesktopEntries.applications` is populated LAZILY, and only
@@ -198,8 +353,15 @@ PanelWindow {
             // detail, and it costs nothing.
             readonly property var apps: {
                 const out = {}
+                const hidden = MenuState.hiddenIds
                 for (const e of DesktopEntries.applications.values) {
                     if (e.noDisplay) continue
+                    // The two filters, in cost order: a hash lookup of the id
+                    // the user (or the shipped list) named, then the pattern
+                    // rules. Both drop the entry from the pages AND from
+                    // search — see isNoise() for why search is included.
+                    if (hidden[e.id]) continue
+                    if (rowModel.isNoise(e)) continue
                     const c = rowModel.categoryOf(e)
                     if (!out[c]) out[c] = []
                     out[c].push(e)

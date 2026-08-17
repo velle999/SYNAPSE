@@ -35,7 +35,7 @@ pkgver=0.1.0
 #   rescan at all. It is a plain deskicons_reload and deliberately NOT
 #   deskicons_arrange — arranging clears every cell an icon has been dragged
 #   into, and a "refresh" that rearranges the desktop is not a refresh.
-pkgrel=375
+pkgrel=376
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -338,6 +338,15 @@ package() {
     install -Dm644 config/wireplumber.service.d/10-synapse-spa-data-dir.conf \
         "$pkgdir/usr/lib/systemd/user/wireplumber.service.d/10-synapse-spa-data-dir.conf"
 
+    # The start menu's curated not-an-application list. Data rather than a table
+    # in StartMenu.qml because it is a judgement about other people's packages,
+    # and a judgement has to be overridable without editing QML — MenuState
+    # reads this first and ~/.config/synui/menu-hidden.conf second, so a `!id`
+    # line at home puts any of these back. Not in backup=: this file is ours to
+    # revise on upgrade, and the user's edits belong in their own copy.
+    install -Dm644 data/menu-hidden.conf \
+        "$pkgdir/usr/share/synui/menu-hidden.conf"
+
     # System-wide MangoHud defaults. The session sets MANGOHUD=1, so the Vulkan
     # layer loads in every game regardless of launcher; this file is what keeps
     # the overlay hidden until Shift_R+F12 rather than up from launch. Without
@@ -604,6 +613,15 @@ package() {
     # systemd/synui-apply-font.sh.
     install -Dm755 systemd/synui-apply-font.sh \
         "$pkgdir/usr/bin/synui-apply-font"
+
+    # Moves the default audio sink to a screen when one is plugged in, and back
+    # when it goes. synui fires it from the output hotplug paths when
+    # `hdmi_audio` resolves to on (auto = laptops). It owns every part of the
+    # decision that needs the PipeWire graph — in particular the ELD check that
+    # tells a connector with a display on it from the half-dozen dormant HDMI
+    # pins a GPU advertises permanently. See systemd/synui-hdmi-audio.sh.
+    install -Dm755 systemd/synui-hdmi-audio.sh \
+        "$pkgdir/usr/bin/synui-hdmi-audio"
 
     # The transparency slider fires this to set foot's own background alpha, so a
     # translucent terminal keeps opaque text ("text on glass"). No-op without foot.

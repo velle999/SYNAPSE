@@ -76,6 +76,14 @@ Item {
     // A radio, not a colour cue: on a light theme "dim vs bright" is nearly
     // invisible, and this mark is the only thing saying which device sound
     // actually comes out of. Same reasoning as BarMenu's [x] checkboxes.
+    //
+    // ⚠ It carries its OWN MouseArea. It used to have none — only the device
+    // NAME beside it was clickable — so the one thing in the panel drawn as a
+    // button was the one thing that was not one, and clicking the mark to pick
+    // an output did nothing at all, silently. Reported as the mixer not letting
+    // you choose an output; the radio was there the whole time and was inert.
+    // Margins widen the target past the ~14px glyph, which is under the 20px
+    // floor a pointer can reliably hit.
     Text {
         id: radio
         visible: row.selectable
@@ -84,6 +92,12 @@ Item {
         color: row.selected ? Theme.cyan : Theme.fgDim
         font.family: Theme.fontFamily
         font.pixelSize: 11
+
+        MouseArea {
+            anchors { fill: parent; margins: -4 }
+            enabled: row.selectable
+            onClicked: row.selectRequested()
+        }
     }
 
     Text {

@@ -70,6 +70,13 @@
  * that a deliberate pick does not feel like it was ignored. */
 #define CTL_MODEL_SETTLE_SECS  0.7
 
+/* The same idea for the font size / text scale rows. Shorter than the model
+ * row's because what is deferred is a handful of config rewrites rather than a
+ * multi-gigabyte load: long enough that a held arrow key runs the script once
+ * instead of once per repeat, short enough that a single press does not feel
+ * ignored. */
+#define CTL_FONT_SETTLE_SECS   0.45
+
 static double ctl_now_secs(void)
 {
     struct timespec ts;
@@ -231,6 +238,21 @@ struct ctl_item {
     int             nnames;
     syn_ctl_apply_t apply;
     syn_ctl_store_t store;     /* which file holds it; 0 = settings.state */
+    /*
+     * The value is NOT in syn_config_t, so `off` means nothing and must never
+     * be dereferenced. Set on the font size and text scale rows, which live in
+     * font.state — a file the rest of the suite writes too.
+     *
+     * A flag rather than "off == 0", because 0 is a legitimate offset: it is
+     * whatever field syn_config_t happens to declare first, and a row naming
+     * that field would be indistinguishable. Getting this wrong reads the top
+     * of the config struct as an int and formats it as the row's value, which
+     * is a plausible-looking number and therefore the worst kind of wrong.
+     *
+     * vtype/vmin/vmax/vstep/unit stay meaningful — they are what the row is
+     * FORMATTED and stepped by. Only the storage is elsewhere.
+     */
+    bool            external;
     const char     *help;      /* one line, drawn in the footer */
 };
 
@@ -253,6 +275,26 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_CURSOR,       CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Cursor theme",     "cursor"    },
     { CTL_ROW_UI_FONT,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "UI font",          "font",
       .help = "The family every synui panel draws in. Previews live; Esc puts it back" },
+    /* No .key and no .off: these two are NOT synui config keys. They live in
+     * ~/.config/synui/font.state, which synfiles, syn-settings, syn-disks and
+     * the bar all read and which synfiles also writes — so the value is read
+     * off the file on every repaint and written through synui-apply-font(1).
+     * Giving them a config field would create the second source of truth the
+     * scale was moved into font.state to remove. vmin/vmax/vstep are still
+     * honoured, by ctlpanel_adjust_font() rather than by ctl_adjust(); the
+     * script clamps to the same range and is the authority.
+     *
+     * Two rows and not one because they are two settings: a point size means
+     * nothing to a window that lays itself out in pixels, which is every
+     * quickshell window in the suite. */
+    { CTL_ROW_UI_FONT_SIZE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Font size",         NULL,
+      .vtype = CTL_VAL_INT, .vmin = 6, .vmax = 24, .vstep = 1, .unit = "pt",
+      .external = true,
+      .help = "Applications: GTK, Qt and the terminal. Applies when you stop" },
+    { CTL_ROW_UI_TEXT_SCALE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Text scale",       NULL,
+      .vtype = CTL_VAL_INT, .vmin = 75, .vmax = 175, .vstep = 5, .unit = "%",
+      .external = true,
+      .help = "The bar and the SYNAPSE apps — Files, Settings, Disks, Software" },
     { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL,
       .help = "Focused-window opacity. Left/Right adjust; Enter switches it off" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
@@ -650,6 +692,14 @@ static const struct ctl_item ctl_items[] = {
     /* Display */
     { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Display settings", "displays",
       .section = "Screens" },
+    /* Handled by id in ctlpanel_activate()/ctlpanel_adjust_choice() rather than
+     * by the table, because setting it is not a field write: dispcfg has to
+     * re-flow the layout, change modes and move windows off a screen it is
+     * about to switch off. CHOICE so Left/Right step it and the row shows which
+     * of the three is on — the same shape as the AI-model row, without the
+     * settle, since none of these costs anything to enter and leave. */
+    { CTL_ROW_DISPLAY_MODE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE, "Screens", "displays",
+      .help = "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D" },
     { CTL_ROW_CLOCK,      CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Date & time",      "clock"    },
     { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL,
       .section = "Night light" },
@@ -669,6 +719,15 @@ static const struct ctl_item ctl_items[] = {
       .help = "Super+Shift+M anywhere. Hides toasts and mutes the chime; "
               "critical alerts still come through" },
     { CTL_ROW_SOUNDS,       CTL_CAT_SOUND, CTL_KIND_PANEL,  "Event sounds", "sounds" },
+    /* Tri-state, and `auto` is the useful position rather than a hedge: it
+     * resolves to on where following a screen is what you want (a laptop) and
+     * off where it is a nuisance (a desk whose monitors are always plugged in
+     * and whose HDMI pins are live all day). CTL_APPLY_NONE — this is read
+     * when a screen is plugged in, so the store IS the change. */
+    { CTL_ROW_HDMI_AUDIO,   CTL_CAT_SOUND, CTL_KIND_VALUE, "Screen audio", NULL,
+      .key = "hdmi_audio", .off = CFG(hdmi_audio), .vtype = CTL_VAL_TRI,
+      .apply = CTL_APPLY_NONE,
+      .help = "Move sound to a TV or monitor when you plug it in. Auto = laptops" },
     { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  "Equalizer", "equalizer",
       .help = "10-band system equalizer. Adds an output device while it is on" },
     { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record audio", NULL     },
@@ -1022,6 +1081,11 @@ static int ctl_store_write(syn_server_t *s, const struct ctl_item *it)
  */
 static void ctl_persist(syn_server_t *s, const struct ctl_item *it)
 {
+    /* font.state is written by synui-apply-font(1) and by nothing else, this
+     * panel included. Writing the number a second time into settings.state
+     * would give it two homes that disagree the moment synfiles moves the
+     * scale from its own dialog. */
+    if (it->external) return;
     if (ctl_store_write(s, it)) return;
     if (!it->key) return;
 
@@ -1036,6 +1100,11 @@ int ctlpanel_row_is_default(syn_server_t *s, int row)
 {
     const struct ctl_item *it = ctl_item(row);
     if (!it || it->vtype == CTL_VAL_NONE) return 1;   /* nothing to compare */
+    /* An external row has no field to read and no defaults snapshot to compare
+     * against — synui-apply-font owns both. Answering "default" suppresses the
+     * "· default" tag and the reset, which is right: the row cannot know, and
+     * claiming otherwise would put a wrong tag on a true value. */
+    if (it->external) return 1;
 
     float now = ctl_get(&s->config, it);
     float def = ctl_get(synui_config_defaults(), it);
@@ -1117,6 +1186,11 @@ static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
 static int ctl_reset(syn_server_t *s, const struct ctl_item *it)
 {
     if (!it || it->vtype == CTL_VAL_NONE) return 0;
+    /* Belt and braces: ctlpanel_row_is_default() already answers 1 for these,
+     * so the line below returns first. Stated anyway, because ctl_put() on a
+     * row with no field would write through a bogus offset — a silent memory
+     * corruption of whatever syn_config_t declares first. */
+    if (it->external) return 0;
     if (ctlpanel_row_is_default(s, it->row)) return 0;
 
     ctl_put(s, it, ctl_get(synui_config_defaults(), it));
@@ -1409,6 +1483,51 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * marker all live in aimodel.c and this only asks. */
         aimodel_row_value(s, buf, n);
         break;
+    case CTL_ROW_HDMI_AUDIO:
+        /* Auto is resolved on screen, the same way the game-mode row spells out
+         * what "auto" currently amounts to. "auto" alone would leave the one
+         * question this row is asked — will it move my sound or not? —
+         * unanswered on the only screen that mentions the setting, and the
+         * answer differs per machine by design. */
+        if (s->config.hdmi_audio > 0)       snprintf(buf, n, "on");
+        else if (s->config.hdmi_audio == 0) snprintf(buf, n, "off");
+        else snprintf(buf, n, "auto (%s)",
+                      power_has_battery() ? "on \xc2\xb7 laptop" : "off \xc2\xb7 desktop");
+        break;
+    case CTL_ROW_DISPLAY_MODE:
+        /* Words, not the config spellings: "external" is what the file says and
+         * "Built-in off" is what the setting DOES, which is the thing somebody
+         * reading this row wants to know. The two tables are allowed to differ
+         * here precisely because this row does not persist by lower-casing its
+         * display name the way the enum rows do — dispcfg_set_mode_cfg() writes
+         * syn_display_mode_names[] itself. */
+        switch (s->config.display_mode) {
+        case SYN_DISPLAY_MIRROR:   snprintf(buf, n, "Duplicate");    break;
+        case SYN_DISPLAY_EXTERNAL: snprintf(buf, n, "Built-in off"); break;
+        default:                   snprintf(buf, n, "Extend");       break;
+        }
+        break;
+    case CTL_ROW_UI_FONT_SIZE:
+    case CTL_ROW_UI_TEXT_SCALE: {
+        /* Read off font.state every time rather than cached, so the row is
+         * right when synfiles' own text-size slider moved the scale a moment
+         * ago. It is a four-line file read on a repaint of a panel that is
+         * open, which is nowhere near a hot path.
+         *
+         * While a change is settling the PENDING value is shown instead: the
+         * file still holds the old one, and a row that snapped back to it
+         * between the keypress and the apply would read as the key not having
+         * worked. */
+        int size = 0, scale = 0;
+        fontpick_state_read(&size, &scale);
+        int pend = (row == CTL_ROW_UI_FONT_SIZE) ? s->ctlpanel.font_pending_size
+                                                 : s->ctlpanel.font_pending_scale;
+        int v = pend > 0 ? pend
+                         : (row == CTL_ROW_UI_FONT_SIZE ? size : scale);
+        snprintf(buf, n, "%d %s", v,
+                 row == CTL_ROW_UI_FONT_SIZE ? "pt" : "%");
+        break;
+    }
     default: {
         /* The table-driven rows, which is now most of them: read the field the
          * item names and format it by its type. A row with no `off` at all —
@@ -1776,27 +1895,51 @@ static void ctlpanel_model_commit(syn_server_t *s)
     synui_render_ctlpanel(s);
 }
 
+/* Defined with the rest of the pending-change handling, below the panel's own
+ * show/hide — the tick is the earliest caller, not the natural home. */
+static void ctlpanel_font_commit(syn_server_t *s);
+
 /*
  * Called once per frame from output_frame. Returns 1 while it wants more frames.
  *
- * Two rows need it, and for different reasons. The AI-model row is waiting for
- * the cursor to settle before it commits a pick. The AI-backend row is waiting
- * for a value it does not own: it is read back from a file the synui-ai-backend
- * helper writes after restarting synapd, which lands whenever it lands, so the
- * panel has to look again rather than be told. Everything else on the panel is
- * state synui owns and changes synchronously, so the keypress that changed it
- * also repaints.
+ * Three rows need it now, and for different reasons. The AI-model row is
+ * waiting for the cursor to settle before it commits a pick; the two font.state
+ * rows are waiting for the same thing, to keep a held arrow key from running
+ * synui-apply-font once per repeat. The AI-backend row is waiting for a value
+ * it does not own: it is read back from a file the synui-ai-backend helper
+ * writes after restarting synapd, which lands whenever it lands, so the panel
+ * has to look again rather than be told. Everything else on the panel is state
+ * synui owns and changes synchronously, so the keypress that changed it also
+ * repaints.
  *
- * Both stop the moment they are done, so an idle panel costs nothing.
+ * All three stop the moment they are done, so an idle panel costs nothing.
  */
 int ctlpanel_tick(syn_server_t *s)
 {
-    /* Closing the panel abandons both: there is nothing left to repaint, and a
-     * pick the user walked away from is not one to act on. */
+    /* Closing the panel abandons the model pick and the backend poll: there is
+     * nothing left to repaint, and a pick the user walked away from is not one
+     * to act on. */
     if (!s->ctlpanel.visible) {
         s->ctlpanel.backend_poll_until = 0.0;
         s->ctlpanel.model_commit_at    = 0.0;
+        /* …but the font rows COMMIT rather than drop. ctlpanel_hide() already
+         * does this; the call here covers the panel being taken down by some
+         * other path (a lock, a session end) between the keypress and the
+         * settle. Committing twice is a no-op — the deadline is cleared. */
+        ctlpanel_font_commit(s);
         return 0;
+    }
+
+    if (s->ctlpanel.font_commit_at != 0.0) {
+        if (ctl_now_secs() >= s->ctlpanel.font_commit_at) {
+            ctlpanel_font_commit(s);
+            /* The row draws the pending value while one is set and the file's
+             * value once it is cleared, so the panel has to repaint here or it
+             * keeps showing a number that is now merely the truth by accident. */
+            synui_render_ctlpanel(s);
+        } else {
+            return 1;   /* still settling — keep the frames coming */
+        }
     }
 
     if (s->ctlpanel.model_commit_at != 0.0) {
@@ -1860,6 +2003,13 @@ void ctlpanel_show(syn_server_t *s)
     s->ctlpanel.child[0]  = '\0';
     s->ctlpanel.backend_poll_until = 0.0;
     s->ctlpanel.model_commit_at    = 0.0;
+    /* Nothing is pending on a panel that has only just opened. Cleared rather
+     * than assumed: ctlpanel_hide() commits and zeroes these, but the panel can
+     * also go down without it (a lock), and a stale pending value would draw a
+     * row at a number the desktop is not at. */
+    s->ctlpanel.font_commit_at     = 0.0;
+    s->ctlpanel.font_pending_size  = 0;
+    s->ctlpanel.font_pending_scale = 0;
     s->ctlpanel.poll_row  = CTL_ROW_AI_BACKEND;
     /* The AI-model row shows what synapd is running, which only arrives on a
      * status poll — ask for one, and put the row's cursor on the loaded model
@@ -1882,6 +2032,12 @@ void ctlpanel_hide(syn_server_t *s)
      * not mean to start, so it must not fire the load on the way out. A switch
      * ALREADY sent keeps running: that one is synapd's now, not the panel's. */
     s->ctlpanel.model_commit_at = 0.0;
+    /* The font rows go the OTHER way: a size still settling is APPLIED on the
+     * way out, not dropped. Closing the panel is not "I changed my mind", it is
+     * "I am done" — and unlike a model load there is nothing expensive or
+     * irreversible about honouring it. Dropping it here is what would make a
+     * quick change-and-close silently do nothing. */
+    ctlpanel_font_commit(s);
     /* …and any armed rebind. A capture that survived the close would make the
      * next chord typed at the desktop rebind a shortcut, which is the worst
      * shape of "it did something I did not ask for": silent, persistent, and
@@ -2083,12 +2239,60 @@ static void ctlpanel_scroll_to_cursor(syn_server_t *s)
  */
 static void ctlpanel_cancel_pending(syn_server_t *s)
 {
+    /* The font rows resolve here too, and they resolve the other way: leaving
+     * one APPLIES it. Every "the cursor left" path in this file — arrow keys,
+     * the pointer moving to another row, switching category, opening the
+     * search, Esc backing out of the pane — funnels through this function, so
+     * putting the commit here is what makes all of them agree.
+     *
+     * Esc included, deliberately. It means "not that" for a model load because
+     * that is expensive and one-way; a font size is neither, and in practice
+     * the settle has already fired by the time anyone reaches for Esc. A key
+     * that usually applied the change and occasionally did not, depending on
+     * how fast you pressed it, would be worse than one that always does.
+     *
+     * Before the early return below, which only concerns the model row. */
+    ctlpanel_font_commit(s);
+
     if (s->ctlpanel.model_commit_at == 0.0) return;
     s->ctlpanel.model_commit_at = 0.0;
     s->ctlpanel.status[0] = '\0';
     /* Put the row back on the model that is actually loaded, so an abandoned
      * cycle does not leave the panel naming one that never got asked for. */
     aimodel_row_sync(s);
+}
+
+/*
+ * Fire whatever the font rows have been sitting on.
+ *
+ * ⚠ This is the OPPOSITE of ctlpanel_cancel_pending() above, and deliberately
+ * so. Leaving the AI-model row abandons the pick, because loading a model is
+ * expensive and "I moved away" is how you say no. Leaving a font row must
+ * APPLY it: the number on screen is what the user asked for, the change is
+ * cheap and reversible, and a size that quietly reverted because the panel was
+ * closed too quickly is the sort of thing that reads as the setting being
+ * broken. So every exit path commits — moving off the row, closing the panel,
+ * Esc.
+ *
+ * Both can be pending at once (change the size, then the scale, inside one
+ * settle window). They are spawned back to back and the script serialises
+ * itself with flock — without that, whichever finished second would write the
+ * other's stale value back over it. See the lock at the top of
+ * synui-apply-font.sh.
+ */
+static void ctlpanel_font_commit(syn_server_t *s)
+{
+    if (s->ctlpanel.font_commit_at == 0.0) return;
+    s->ctlpanel.font_commit_at = 0.0;
+
+    if (s->ctlpanel.font_pending_size > 0) {
+        fontpick_push_size(s, s->ctlpanel.font_pending_size);
+        s->ctlpanel.font_pending_size = 0;
+    }
+    if (s->ctlpanel.font_pending_scale > 0) {
+        fontpick_push_scale(s, s->ctlpanel.font_pending_scale);
+        s->ctlpanel.font_pending_scale = 0;
+    }
 }
 
 static void ctlpanel_set_cat(syn_server_t *s, int cat)
@@ -2559,10 +2763,63 @@ static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
  * a key repeat has been held — and because "Border width: 7 px" says which
  * setting moved, which a number changing somewhere in a list of forty does not.
  */
+/*
+ * Left/Right on the two font.state rows.
+ *
+ * Same shape as the AI-model row and for the same reason, one order of
+ * magnitude cheaper: `synui-apply-font --size` rewrites kdeglobals, three GTK
+ * files, rofi's theme and every terminal's config, then SIGUSR1s the running
+ * terminals. Doing that on the keypress would put a held arrow key through the
+ * whole sequence once per repeat, and the terminals would strobe.
+ *
+ * So the row moves instantly (the pending value is what it draws) and the
+ * script is not run until the cursor has been still for CTL_FONT_SETTLE_SECS.
+ * Only the LAST value in a run of keypresses is ever applied.
+ */
+static int ctlpanel_adjust_font(syn_server_t *s, int row, int dir)
+{
+    const struct ctl_item *it = ctl_item(row);
+    if (!it) return 0;
+
+    int size = 0, scale = 0;
+    fontpick_state_read(&size, &scale);
+
+    const bool is_size = (row == CTL_ROW_UI_FONT_SIZE);
+    int *pend = is_size ? &s->ctlpanel.font_pending_size
+                        : &s->ctlpanel.font_pending_scale;
+
+    /* Step from the pending value once there is one, so a second press
+     * continues from where the first left it rather than from the file, which
+     * has not been written yet. */
+    int cur = *pend > 0 ? *pend : (is_size ? size : scale);
+    int v   = cur + dir * (int)it->vstep;
+
+    if (v < (int)it->vmin) v = (int)it->vmin;
+    if (v > (int)it->vmax) v = (int)it->vmax;
+    if (v == cur) {
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "%s is at its %s", it->label, dir < 0 ? "minimum" : "maximum");
+        return 1;
+    }
+
+    *pend = v;
+    s->ctlpanel.font_commit_at = ctl_now_secs() + CTL_FONT_SETTLE_SECS;
+
+    /* Says that it has not happened yet, because it has not. The alternative —
+     * a row showing 14pt while the desktop is still at 10 and nothing saying
+     * why — is the same confusion the AI-model row's message exists to avoid. */
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             "%s: %d %s \xc2\xb7 applies when you stop",
+             it->label, v, is_size ? "pt" : "%");
+    return 1;
+}
+
 static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
 {
     const struct ctl_item *it = ctl_item(row);
     if (!it || it->vtype == CTL_VAL_NONE) return 0;
+
+    if (it->external) return ctlpanel_adjust_font(s, row, dir);
 
     if (!ctl_adjust(s, it, dir)) {
         /* Already at the end of the range. Say so once rather than leaving the
@@ -2585,6 +2842,20 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
 
 static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
 {
+    if (row == CTL_ROW_DISPLAY_MODE) {
+        /* Acts on the keypress, unlike the model row below. Every one of the
+         * three is entered and left in a few milliseconds and none of them
+         * loses anything, so there is nothing a settle timer would protect. */
+        int m = (s->config.display_mode + dir + SYN_DISPLAY_MODE_COUNT)
+                % SYN_DISPLAY_MODE_COUNT;
+        dispcfg_set_mode_cfg(s, m);
+        char v[64];
+        ctlpanel_row_value(s, row, v, sizeof(v));
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "Screens: %s", v);
+        return;
+    }
+
     if (row != CTL_ROW_AI_MODEL) return;
 
     if (!aimodel_row_cycle(s, dir)) {

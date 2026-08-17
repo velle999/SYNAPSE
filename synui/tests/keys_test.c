@@ -89,6 +89,33 @@ void synui_child_reset_signals(void)         { }
  * process, so the row cannot just flip a flag the way the Dock row does. */
 void synui_spawn(const char *cmd)             { (void)cmd; }
 
+/* power.c is not linked here; the Screen audio row resolves `auto` through it.
+ * "no battery" is the desktop answer and keeps the row's value deterministic. */
+bool power_has_battery(void)                 { return false; }
+
+
+/* dispcfg.c is not linked here. The Screens row in ctlpanel.c calls into it to
+ * change the arrangement; what is under test is the row, not the re-flow. */
+void dispcfg_set_mode_cfg(syn_server_t *s, int mode) { (void)s; (void)mode; }
+
+/* dispcfg.c is not linked here; config.c parses `display_mode` through it.
+ * Stubbed the same way lid_action_from_name() is, and for the same reason. */
+int  display_mode_from_name(const char *n)   { (void)n; return -1; }
+
+
+/* fontpick.c is not linked here. The two font.state rows in ctlpanel.c reach
+ * it for the values they display and for the apply, so the panel needs these
+ * three to link. Fixed answers rather than a file read: what is under test is
+ * the TABLE, not the state file. */
+void fontpick_state_read(int *size, int *scale)
+{
+    if (size)  *size  = 10;
+    if (scale) *scale = 100;
+}
+void fontpick_push_size(syn_server_t *s, int size)   { (void)s; (void)size; }
+void fontpick_push_scale(syn_server_t *s, int scale) { (void)s; (void)scale; }
+
+
 /* panel.c dispatches a repaint to whichever panel is being dragged, which pulls
  * in the other two panels' renderers. Neither is exercised here. */
 void synui_render_calc(syn_server_t *s)    { (void)s; }

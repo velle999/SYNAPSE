@@ -74,6 +74,29 @@ void synui_child_reset_signals(void)          { }
 /* The Bar row shells out to stop or start the bar — it is a separate process,
  * so the row cannot just flip a flag the way the Dock row does. */
 void synui_spawn(const char *cmd)             { (void)cmd; }
+
+/* power.c is not linked here; the Screen audio row resolves `auto` through it.
+ * "no battery" is the desktop answer and keeps the row's value deterministic. */
+bool power_has_battery(void)                 { return false; }
+
+
+/* dispcfg.c is not linked here. The Screens row in ctlpanel.c calls into it to
+ * change the arrangement; what is under test is the row, not the re-flow. */
+void dispcfg_set_mode_cfg(syn_server_t *s, int mode) { (void)s; (void)mode; }
+
+
+/* fontpick.c is not linked here. The two font.state rows in ctlpanel.c reach
+ * it for the values they display and for the apply, so the panel needs these
+ * three to link. Fixed answers rather than a file read: what is under test is
+ * the TABLE, not the state file. */
+void fontpick_state_read(int *size, int *scale)
+{
+    if (size)  *size  = 10;
+    if (scale) *scale = 100;
+}
+void fontpick_push_size(syn_server_t *s, int size)   { (void)s; (void)size; }
+void fontpick_push_scale(syn_server_t *s, int scale) { (void)s; (void)scale; }
+
 void synui_binding_execute(syn_server_t *s, const char *a, const char *b)
 { (void)s; (void)a; (void)b; }
 int  synmon_send_reload(const char *m, char *o, size_t n)
@@ -201,6 +224,11 @@ void uifx_state_load_config(syn_config_t *c)
 void wallpaper_output_apply(syn_config_t *c, const char *n, const char *t, int m)
 { (void)c; (void)n; (void)t; (void)m; }
 int  lid_action_from_name(const char *n)      { (void)n; return 0; }
+
+/* dispcfg.c is not linked here; config.c parses `display_mode` through it.
+ * Stubbed the same way lid_action_from_name() is, and for the same reason. */
+int  display_mode_from_name(const char *n)   { (void)n; return -1; }
+
 int  wallpaper_mode_from_name(const char *n)  { (void)n; return 0; }
 /* A real implementation, not a no-op. The Icon order row round-trips THROUGH
  * this, so a stub that refused every name would fail that row for a reason

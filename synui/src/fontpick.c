@@ -368,6 +368,86 @@ static void fontpick_push_system(syn_server_t *s, const char *name)
     synui_spawn(cmd);
 }
 
+/* ── Size and scale ──────────────────────────────────────────
+ *
+ * Two more numbers in the same file, and NEITHER is a synui config key.
+ *
+ * That is the point. font.state is written by synui-apply-font(1) and read by
+ * the bar, synfiles, syn-settings, syn-disks, syn-update, syn-arsenal and
+ * synpkg; the text scale in particular is changed from synfiles' own settings
+ * dialog. A copy of either number in synui's config would be a second source of
+ * truth that silently wins the next time the control panel writes — which is
+ * exactly the bug the scale was moved into font.state to fix. So the control
+ * panel rows READ the file every time they are asked and WRITE through the
+ * script, and synui stores neither.
+ *
+ *   size   a POINT size, for GTK/Qt/kitty/rofi — i.e. applications
+ *   scale  a PERCENT, for the quickshell windows the suite draws itself
+ *
+ * They are separate settings and not two views of one, because a point size is
+ * meaningless to a window that lays itself out in pixels. See the long comment
+ * in synui-apply-font.sh.
+ */
+void fontpick_state_read(int *size, int *scale)
+{
+    /* The defaults the script uses when the file is absent, which is the normal
+     * case until somebody picks a font. Duplicated from synui-apply-font.sh
+     * because there is nothing to share them through — but a wrong answer here
+     * can only mis-LABEL a row, never mis-write one: the script clamps and owns
+     * the range, and the row writes an absolute value rather than a delta. */
+    if (size)  *size  = 10;
+    if (scale) *scale = 100;
+
+    char path[256];
+    syn_config_path(path, sizeof(path), "font.state");
+    if (!path[0]) return;
+
+    FILE *f = fopen(path, "re");
+    if (!f) return;
+
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        int v;
+        if (size && sscanf(line, "size=%d", &v) == 1 && v > 0)
+            *size = v;
+        else if (scale && sscanf(line, "scale=%d", &v) == 1 && v > 0)
+            *scale = v;
+    }
+    fclose(f);
+}
+
+/* Both take the same seat guard as fontpick_push_system(), and for the same
+ * reason: --size rewrites kdeglobals, the GTK files and the terminals' configs,
+ * which belong to the seat's desktop and not to a nested instance sharing its
+ * $HOME. --scale only writes font.state, but that file is the seat's too.
+ *
+ * The values are plain integers formatted by us, so unlike the family they
+ * carry no quoting problem — there is no path by which a digit becomes a shell
+ * metacharacter. */
+void fontpick_push_size(syn_server_t *s, int size)
+{
+    if (!synui_owns_seat(s)) {
+        wlr_log(WLR_INFO, "synui: no seat (headless/nested) — not pushing the "
+                          "UI font size to the desktop's apps");
+        return;
+    }
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "synui-apply-font --size %d", size);
+    synui_spawn(cmd);
+}
+
+void fontpick_push_scale(syn_server_t *s, int scale)
+{
+    if (!synui_owns_seat(s)) {
+        wlr_log(WLR_INFO, "synui: no seat (headless/nested) — not writing the "
+                          "text scale");
+        return;
+    }
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "synui-apply-font --scale %d", scale);
+    synui_spawn(cmd);
+}
+
 /* Commit the highlighted family: persist it so it survives a restart, keep
  * config.ui_font in step so anything reading the config sees the same answer,
  * and push it out to the toolkits.

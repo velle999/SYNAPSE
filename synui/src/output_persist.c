@@ -213,18 +213,33 @@ void output_persist_save(syn_server_t *s)
         struct wlr_box box;
         wlr_output_layout_get_box(s->output_layout, wo, &box);
 
+        /* A DETACHED output is out of the layout on purpose (external-only
+         * mode, or a lid close) and must not have that written down as its
+         * saved state. Two things would go wrong if it were: the box is
+         * {0,0,0,0} for an output the layout does not hold, so its position
+         * would be saved as the origin — on top of whatever really is there —
+         * and `enabled=0` would be restored at the next login, leaving the
+         * laptop panel dark on a machine with no external screen plugged in
+         * and no obvious way to get it back.
+         *
+         * The grid cell IS still saved: it is the arrangement the user chose
+         * and it does not stop being true while the screen is off. Only the
+         * facts that are consequences of being detached are skipped, so the
+         * entry keeps describing the screen as it was last actually used. */
+        e->grid_x    = o->grid_x;
+        e->grid_y    = o->grid_y;
+        e->primary    = o->primary;
+        e->deep_color = o->deep_color;
+        if (o->detached) continue;
+
         e->enabled   = wo->enabled;
         e->width     = wo->width;
         e->height    = wo->height;
         e->refresh   = wo->refresh;
         e->transform = (int)wo->transform;
         e->scale     = wo->scale;
-        e->grid_x    = o->grid_x;
-        e->grid_y    = o->grid_y;
         e->x         = box.x;
         e->y         = box.y;
-        e->primary    = o->primary;
-        e->deep_color = o->deep_color;
     }
 
     /* At most one primary. If a connected output claims it, it wins and every

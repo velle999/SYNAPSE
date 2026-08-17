@@ -84,6 +84,11 @@ void wallpaper_output_apply(syn_config_t *c, const char *name,
 { (void)c; (void)name; (void)tok; (void)mode; }
 
 int  lid_action_from_name(const char *n)      { (void)n; return 0; }
+
+/* dispcfg.c is not linked here; config.c parses `display_mode` through it.
+ * Stubbed the same way lid_action_from_name() is, and for the same reason. */
+int  display_mode_from_name(const char *n)   { (void)n; return -1; }
+
 int  wallpaper_mode_from_name(const char *n)  { (void)n; return 0; }
 bool syn_arrange_parse(const char *s, syn_arrange_t *out)
 { (void)s; (void)out; return false; }

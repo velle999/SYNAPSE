@@ -64,6 +64,82 @@ QtObject {
         }
     }
 
+    // ── Entries the menu does not list ───────────────────────────────────
+    //
+    // Two files, both `key = one .desktop id per line`, `#` comments, and a
+    // leading `!` to UN-hide:
+    //
+    //   /usr/share/synui/menu-hidden.conf     shipped, curated
+    //   ~/.config/synui/menu-hidden.conf      the user's, read second so it wins
+    //
+    // The shipped list is data and not a table in StartMenu.qml on purpose: it
+    // is a judgement about which packages install diagnostic satellites nobody
+    // opens from a start menu (avahi's demo browsers, hwloc's lstopo, the JDK's
+    // jconsole), and a judgement is exactly the thing a user has to be able to
+    // overrule without editing QML. `!lstopo.desktop` in the home file puts it
+    // back.
+    //
+    // This is a different mechanism from the pattern rules in StartMenu.qml's
+    // isNoise(): those describe SHAPES of non-application (an uninstaller, a
+    // shortcut to a readme) and cannot be enumerated, because every Wine prefix
+    // invents new ones. This file enumerates specific known entries.
+    //
+    // The id is the DesktopEntries id: the filename WITHOUT its `.desktop`
+    // extension (quickshell derives it with completeBaseName), and with a
+    // nested path flattened by '-' the way Wine's tree comes through — e.g.
+    // `lstopo`, or `wine-Programs-Maxis-The Sims-Uninstall The Sims`.
+    //
+    // A trailing `.desktop` is stripped on the way in anyway. Writing the
+    // filename is what anyone who has just run `ls /usr/share/applications`
+    // will do, and a hidden-entry file that silently ignores the line you
+    // wrote is worse than no file at all.
+    property var hiddenIds: ({})
+
+    function rebuildHidden() {
+        const out = {}
+        for (const text of [sysHidden.text(), userHidden.text()]) {
+            for (let line of (text || "").split("\n")) {
+                line = line.trim()
+                if (line === "" || line.startsWith("#")) continue
+
+                // A later file un-hides with `!id`; deleting the key rather
+                // than storing false keeps the lookup a plain truthiness test.
+                const off = line.startsWith("!")
+                let id = (off ? line.slice(1) : line).trim()
+                if (id.endsWith(".desktop")) id = id.slice(0, -8)
+                if (id === "") continue
+
+                if (off) delete out[id]
+                else     out[id] = true
+            }
+        }
+        root.hiddenIds = out
+    }
+
+    // Both follow Theme.qml's paletteFile pattern exactly: setting `path` is
+    // what starts the read, and `printErrors: false` because ABSENT is the
+    // normal case for both of them — the shipped file on an install that
+    // predates it, the home file on every box where nobody has hidden
+    // anything. A WARN per bar start for an expected miss is how a log becomes
+    // something nobody reads.
+    property FileView sysHidden: FileView {
+        path: "/usr/share/synui/menu-hidden.conf"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.rebuildHidden()
+        onLoadFailed: root.rebuildHidden()
+    }
+
+    property FileView userHidden: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/menu-hidden.conf"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.rebuildHidden()
+        onLoadFailed: root.rebuildHidden()
+    }
+
     // Is synpkg installed? "Software Manager" is omitted without it, and
     // "Update System" falls back to a raw `pacman -Syu`.
     //

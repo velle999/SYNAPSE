@@ -1417,6 +1417,11 @@ typedef enum {
     CTL_ROW_WALLPAPER,
     CTL_ROW_CURSOR,        /* cursor theme picker (curpick.c) */
     CTL_ROW_UI_FONT,       /* UI font picker (fontpick.c) */
+    /* The two numbers beside the family. Neither is a synui config key: both
+     * live in font.state, which synfiles and the rest of the suite also write,
+     * so these rows read the file and write through synui-apply-font(1). */
+    CTL_ROW_UI_FONT_SIZE,  /* point size, for GTK/Qt/terminal applications */
+    CTL_ROW_UI_TEXT_SCALE, /* percent, for the bar and the SYNAPSE apps */
     CTL_ROW_EFFECTS,       /* CRT post-process master switch */
     CTL_ROW_FILTERS,       /* …and the per-filter strengths behind it */
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch + level */
@@ -1434,11 +1439,13 @@ typedef enum {
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza */
     /* Display */
     CTL_ROW_DISPLAYS,
+    CTL_ROW_DISPLAY_MODE,  /* extend / duplicate / built-in off */
     CTL_ROW_NIGHTLIGHT,
     CTL_ROW_CLOCK,         /* date & time */
     /* Sound */
     CTL_ROW_DND,           /* Do Not Disturb: no toast, no chime */
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
+    CTL_ROW_HDMI_AUDIO,    /* follow a screen's audio sink when it is plugged in */
     CTL_ROW_EQUALIZER,     /* 10-band system equalizer (eq.c) */
     CTL_ROW_RECORD_AUDIO,  /* Super+Shift+R captures desktop sound too */
     CTL_ROW_RECORD_EDIT,   /* Super+Shift+R records an editable mezzanine */
@@ -1860,6 +1867,17 @@ typedef struct {
      * turn. So the row moves instantly and the request waits for the cursor to
      * stop, which is also what makes holding the key harmless. */
     double model_commit_at;
+    /* The font size / text scale rows' settle timer, on the same principle and
+     * for a cheaper reason: --size rewrites kdeglobals, three GTK files, rofi's
+     * theme and every terminal's config, and SIGUSR1s the running terminals.
+     * Doing that per keypress would put a key repeat through it forty times.
+     *
+     * The pending VALUES are held here rather than re-read from font.state,
+     * because the file does not have them yet — that is the whole point of the
+     * delay. 0 in either means nothing is pending for that row. */
+    double font_commit_at;
+    int    font_pending_size;
+    int    font_pending_scale;
     /* Pointer geometry, written by synui_render_ctlpanel(). Two grids because
      * the panel is two columns and a click has to know which one it landed in —
      * that is the same question Tab answers for the keyboard. Both carry the
@@ -2109,6 +2127,44 @@ typedef enum {
 /* Names for the panel, the config parser and power.state, indexed by
  * syn_lid_action_t. Defined in power.c; keep in step with the enum above. */
 extern const char *const syn_lid_action_names[SYN_LID_ACTION_COUNT];
+
+/*
+ * How the screens are arranged — one setting, three positions, the same three
+ * every desktop offers because they are the three questions someone plugging a
+ * TV into a laptop actually has.
+ *
+ * EXTEND is the grid dispcfg_rechain() packs: every screen its own space, laid
+ * out from grid_x/grid_y. It is what synui has always done and the default.
+ *
+ * MIRROR puts every screen at the same layout origin, so they all show the
+ * same thing. It also forces a mode: the largest resolution EVERY connected
+ * screen can do. Overlapping without that is easier and is not "duplicate" —
+ * a 1920x1080 laptop beside a 1280x720 projector would show the projector the
+ * top-left 1280x720 of the desktop and call it mirroring.
+ *
+ * EXTERNAL switches the built-in panel off and leaves it off: the closed-lid
+ * case, and the fix for windows opening on a laptop screen you are not looking
+ * at. It DETACHES rather than merely blanking — see syn_output::detached for
+ * why that distinction is the whole point.
+ *
+ * The order is the order the control panel cycles them in.
+ */
+typedef enum {
+    SYN_DISPLAY_EXTEND = 0,   /* every screen its own space (the grid) */
+    SYN_DISPLAY_MIRROR,       /* every screen shows the same thing */
+    SYN_DISPLAY_EXTERNAL,     /* built-in panel off; external screens only */
+    SYN_DISPLAY_MODE_COUNT,   /* keep last */
+} syn_display_mode_t;
+
+/* Indexed by syn_display_mode_t; defined in dispcfg.c. These are the synuirc /
+ * settings.state spellings. */
+extern const char *const syn_display_mode_names[SYN_DISPLAY_MODE_COUNT];
+
+/* Name → mode, or -1 for an unknown one. Callers use this rather than walking
+ * the array above: config.c and input.c both have to turn a word into a mode,
+ * and neither links dispcfg.c in the unit tests — a function they can stub,
+ * exactly as they already stub lid_action_from_name(). */
+int display_mode_from_name(const char *name);
 
 /* Which window the keyboard follows. See syn_config_t.focus_mode.
  *
@@ -3217,6 +3273,15 @@ typedef struct {
      * only meaningful while night_light is on. */
     int   night_light;          /* default 0 */
     int   night_light_temp;     /* Kelvin, default 4000 */
+    /* How the screens are arranged: EXTEND / MIRROR / EXTERNAL. See
+     * syn_display_mode_t. Persisted as `display_mode` in settings.state. */
+    int   display_mode;         /* default SYN_DISPLAY_EXTEND */
+    /* Move the default audio sink to a screen that has just been plugged in,
+     * and back when it goes. Tri-state, like the libinput rows: -1 auto, 0 off,
+     * 1 on. AUTO means "on if this machine has a battery" — the behaviour is
+     * what a laptop meeting a TV wants and a nuisance on a desk whose monitors
+     * are permanently attached. See power_has_battery(). */
+    int   hdmi_audio;           /* default -1 (auto) */
     int   dock_height;          /* px thickness, default 64 */
     int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
@@ -4035,6 +4100,33 @@ struct syn_output {
      * At most one output has this set; xwayland_apply_primary() pushes it
      * to the X server. Persisted in outputs.conf as primary=1. */
     int                      primary;
+
+    /*
+     * OUT OF THE OUTPUT LAYOUT ON PURPOSE — the screen is off and nothing may
+     * place a window on it. Set by "external screen only" (and by a lid close
+     * that blanks the built-in panel); cleared when the panel comes back.
+     *
+     * ⚠ Committing an output disabled is NOT enough to stop windows landing on
+     * it, and believing otherwise is a real bug that shipped. wlroots'
+     * wlr_output_layout_output_at() does not test `enabled`: it walks the
+     * layout comparing boxes, and a disabled output keeps both its box and its
+     * place in the list (output_layout_output_get_box() just calls
+     * wlr_output_effective_resolution, which still answers for a dark screen).
+     * So geom_persist's saved coordinates kept re-homing windows onto the
+     * switched-off laptop panel — an application would open, be given focus,
+     * and be invisible. Verified against wlroots 0.20's types/wlr_output_layout.c.
+     *
+     * The fix is to leave the layout entirely, which is what this flag records:
+     * wlr_output_layout_remove() on the way out, wlr_output_layout_add() back
+     * at the grid position on the way in. Everything that asks "which monitor
+     * is at this point" then answers honestly, with no changes of its own.
+     */
+    int                      detached;
+
+    /* The mode this output was in before Duplicate forced a common one, so
+     * leaving Duplicate can put it back. width == 0 means "nothing saved",
+     * which is the state outside mirror mode. */
+    int                      saved_mode_w, saved_mode_h, saved_mode_refresh;
 
     /* dispcfg.c: 10-bit (deep colour) scanout — the colour-depth column in
      * the display panel. `deep_color` is what the user asked for and what
@@ -5404,6 +5496,11 @@ int  dispcfg_click(syn_server_t *s, double lx, double ly, uint32_t button,
 int  dispcfg_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* 10-bit scanout. _set returns whether the backend accepted it; _probe fills
  * deep_color_capable. See the syn_output_t fields for why this is not HDR. */
+/* The screen arrangement — see syn_display_mode_t. `set` persists to
+ * settings.state and re-flows; `cycle` steps to the next and is what both the
+ * `display_mode` bind action and the panel's `m` key call. */
+void dispcfg_set_mode_cfg(syn_server_t *s, int mode);
+void dispcfg_cycle_mode(syn_server_t *s);
 int  dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable);
 void dispcfg_probe_deep_color(syn_server_t *s, syn_output_t *o);
 /* Read this connector's EDID and fill the hdr_* / wide_gamut fields — what the
@@ -5934,7 +6031,18 @@ bool power_docked(syn_server_t *s);
 /* True when a charger is plugged in. Read from /sys/class/power_supply at the
  * moment it is asked, so it is never stale; a machine that reports no mains
  * supply at all (a desktop) counts as on mains. */
+/* The built-in laptop panel, by connector type (eDP-/LVDS-/DSI- prefix) —
+ * wlroots names a DRM output after its connector, so this is the same test
+ * every other compositor uses to tell a lid from a monitor. Defined in power.c
+ * and shared: dispcfg.c needs it to know which screen "external only" turns
+ * off, and sound.c to know which one cannot carry audio. Three private copies
+ * of one strncasecmp is how they drift. */
+bool output_is_internal(struct wlr_output *o);
+
 bool power_on_ac(void);
+/* Is there a battery — i.e. is this a laptop? What `hdmi_audio = auto`
+ * resolves through. See the comment on the definition in power.c. */
+bool power_has_battery(void);
 /* Which of the three lid cases is live right now — "docked", "plugged in" or
  * "on battery". The panel names it so the rows do not have to spell out their
  * own precedence. */
@@ -6388,6 +6496,15 @@ void synui_render_sound(syn_server_t *s);
  * are no-ops if udev is unavailable — a desktop with no device notifications is
  * a smaller loss than a compositor that will not start. */
 void sound_udev_init(syn_server_t *s);
+
+/* Move the default audio sink to a screen that has just been plugged in
+ * (connected != 0), or back off it when one goes. Called from the output
+ * hotplug paths; a no-op unless `hdmi_audio` resolves to on. The graph work is
+ * synui-hdmi-audio(1)'s — see the block comment in sound.c. */
+void sound_hdmi_follow(syn_server_t *s, int connected);
+/* Whether it would act: `hdmi_audio` with `auto` resolved against
+ * power_has_battery(). The control-panel row shows this. */
+int  sound_hdmi_follow_enabled(syn_server_t *s);
 void sound_udev_finish(syn_server_t *s);
 
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
@@ -6998,6 +7115,16 @@ int  fontpick_click(syn_server_t *s, double lx, double ly, uint32_t button,
                     uint32_t time_msec);
 int  fontpick_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_fontpick(syn_server_t *s);
+
+/* The two NUMBERS in font.state — the point size applications get and the
+ * percent scale the suite's own quickshell windows get. Read straight off the
+ * file on every ask and written only through synui-apply-font(1): the file is
+ * shared with synfiles/syn-settings/syn-disks/the bar, and a copy of either
+ * number in synui's config would be a second source of truth. Either pointer
+ * may be NULL. See the block comment in fontpick.c. */
+void fontpick_state_read(int *size, int *scale);
+void fontpick_push_size(syn_server_t *s, int size);
+void fontpick_push_scale(syn_server_t *s, int scale);
 
 /* ── emoji.c (emoji picker) ──────────────────────────────────
  *

@@ -214,6 +214,22 @@
  *   lid_close_ac_action = suspend        (charger plugged in)
  *   lid_close_docked_action = ignore     (external monitor; beats both)
  *
+ * Screens (Super+D, or control panel ▸ Display ▸ Screens) — how the monitors
+ * are arranged. `extend` gives each its own space from the arrangement grid;
+ * `mirror` puts them all at the same origin and forces the largest resolution
+ * they all share, so they show the same thing; `external` switches the
+ * built-in laptop panel off and DETACHES it from the layout, which is the
+ * closed-lid case and what stops windows opening on a screen that is off:
+ *   display_mode = extend                (extend|mirror|external)
+ *
+ * Screen audio (control panel ▸ Sound ▸ Screen audio) — move the default audio
+ * sink to a TV or monitor when one is plugged in, and back when it goes.
+ * `auto` is on where this is wanted (a machine with a battery) and off where
+ * it is a nuisance (a desk whose monitors never leave). synui-hdmi-audio(1)
+ * does the work and decides, from the ALSA ELD, whether an attached display
+ * can take audio at all:
+ *   hdmi_audio = auto                    (auto|on|off)
+ *
  * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
  * entry to type a passphrase into, so there is nothing native to point at yet:
  *   network_cmd = foot -e nmtui
@@ -927,6 +943,8 @@ static void config_set_defaults(syn_config_t *cfg)
     strncpy(cfg->terminal, "syntty", sizeof(cfg->terminal) - 1);
     cfg->night_light = 0;
     cfg->night_light_temp = 4000;
+    cfg->display_mode = SYN_DISPLAY_EXTEND;
+    cfg->hdmi_audio = -1;   /* auto: on iff the machine has a battery */
     cfg->autostart_count = 1;
     strncpy(cfg->autostart[0], "syntty", sizeof(cfg->autostart[0]) - 1);
     cfg->border_width = BORDER_WIDTH_DEFAULT;
@@ -1800,6 +1818,35 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if (k < 1000) k = 1000;
         if (k > 6500) k = 6500;
         cfg->night_light_temp = k;
+    }
+    else if (strcmp(key, "display_mode") == 0) {
+        /* By NAME, not index: the enum will grow and a saved 2 must not
+         * silently become a different arrangement after it does — the same
+         * rule the lid actions follow. An unknown word leaves the default,
+         * which is the arrangement that always works. */
+        int m = display_mode_from_name(val);
+        if (m >= 0) cfg->display_mode = m;
+        else wlr_log(WLR_ERROR, "synui: display_mode: unknown '%s'", val);
+    }
+    else if (strcmp(key, "hdmi_audio") == 0) {
+        /* Tri-state, and `auto` has to be spellable: it is the default, and a
+         * key that could only say on/off would give someone who wanted the
+         * default back no way to write it down. The control panel persists the
+         * same three words (ctl_format's CTL_VAL_TRI). */
+        /* `default` as well as `auto`, and this is not politeness: the control
+         * panel persists a CTL_VAL_TRI row by writing ctl_format()'s config
+         * spelling, which is the word "default". A parser that only knew "auto"
+         * would fail to read back the value the panel had just written — the
+         * setting would work all session and be gone at the next login, which
+         * is the exact failure mode settings.state sharing config_parse_kv()
+         * exists to make impossible. `auto` is documented because it is the
+         * clearer word to write by hand. */
+        if      (strcmp(val, "auto") == 0 ||
+                 strcmp(val, "default") == 0) cfg->hdmi_audio = -1;
+        else if (strcmp(val, "on")   == 0)    cfg->hdmi_audio =  1;
+        else if (strcmp(val, "off")  == 0)    cfg->hdmi_audio =  0;
+        else wlr_log(WLR_ERROR, "synui: hdmi_audio: unknown '%s' "
+                                "(auto|on|off)", val);
     }
     else if (strcmp(key, "cursor_theme") == 0)
         strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);

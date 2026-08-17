@@ -1002,6 +1002,23 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_move_to(cr, 18, 30);
     syn_show_text(cr, "DISPLAY SETTINGS");
 
+    /* The arrangement, beside the title. It changes what every row below
+     * MEANS — in Duplicate the positions are all (0,0) by design, and in
+     * built-in-off one of the rows describes a screen that is switched off —
+     * so a panel that did not say which mode it was in would read as broken in
+     * two of its three states. */
+    {
+        const char *m = s->config.display_mode == SYN_DISPLAY_MIRROR
+                            ? "DUPLICATE"
+                      : s->config.display_mode == SYN_DISPLAY_EXTERNAL
+                            ? "BUILT-IN OFF"
+                            : "EXTEND";
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_LABEL, 1.0);
+        cairo_move_to(cr, 210, 30);
+        syn_show_text(cr, m);
+    }
+
     /* Separator */
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
@@ -1080,7 +1097,14 @@ void synui_render_dispcfg(syn_server_t *s)
         syn_show_text(cr, wo->name);
 
         char col[48];
-        snprintf(col, sizeof(col), "%dx%d", w, h);
+        /* A detached screen has no size worth printing — it is switched off and
+         * out of the layout, and its last mode would read as one it is in. Say
+         * what is true instead, in the column the reader is already looking at
+         * for "what is this screen doing". */
+        if (d->order[i]->detached)
+            snprintf(col, sizeof(col), "off");
+        else
+            snprintf(col, sizeof(col), "%dx%d", w, h);
         cairo_move_to(cr, 190, y);
         syn_show_text(cr, col);
 
@@ -1177,7 +1201,8 @@ void synui_render_dispcfg(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 40);
     syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
-                        "p set primary (X11/game default)");
+                        "p set primary (X11/game default) \xc2\xb7 "
+                        "m arrangement");
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 "
                         "d 10-bit colour (deep colour, not HDR) \xc2\xb7 "

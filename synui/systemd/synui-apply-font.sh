@@ -2,6 +2,8 @@
 # synui-apply-font — push the chosen UI font out to the whole desktop.
 #
 #   synui-apply-font <family> [size]   apply it everywhere and remember it
+#   synui-apply-font --size <pt>       change the size, keep the family
+#   synui-apply-font --scale <pct>     the suite's text scale (75-175)
 #   synui-apply-font --default         back to each toolkit's own default
 #   synui-apply-font --reapply         re-assert what was last applied
 #   synui-apply-font status            key=value, what is in force
@@ -52,10 +54,51 @@ set -uo pipefail
 STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/synui"
 STATE="$STATE_DIR/font.state"
 
+# ── One writer at a time ────────────────────────────────────────────────────
+#
+# Every run of this script is a READ-MODIFY-WRITE of font.state: state_load at
+# the bottom, then a branch that changes one field, then state_save writing all
+# four. Two runs overlapping therefore lose one of the two settings — the second
+# to load holds the first's stale value and writes it back over the update.
+#
+# That is not hypothetical. `family`+`size` and `scale` are changed from
+# different places on purpose (the control panel's Appearance rows, synfiles'
+# own text-size slider, the font picker), and the control panel can have a size
+# and a scale change settle within a few hundred milliseconds of each other.
+# The symptom is the classic one for a lost update: the setting you changed
+# FIRST silently reverts, with both commands reporting success.
+#
+# Held on a FILE DESCRIPTOR for the life of the process, not taken around a
+# section: the lock has to span state_load at the bottom of this file and the
+# state_save inside whichever branch runs, and a descriptor held from here does
+# that without every branch having to remember to.
+#
+# ⚠ NOT `exec flock … "$0" "$@"`, which is the more obvious spelling and was the
+# first one written here. Re-execing the script needs the script to be
+# EXECUTABLE, and it is 0644 in the repo (the PKGBUILD installs it 0755). So
+# `bash synui-apply-font.sh --size 14` — how it is run from a test, and from a
+# checkout — died with "flock: failed to execute …: Permission denied" and
+# exit 69, having written nothing. The descriptor form has no such dependency.
+#
+# -w rather than a blocking wait: a stuck holder must not wedge the font picker
+# for ever. Failing to get the lock is not fatal — it means running
+# unserialised, which is exactly what every release before this one did.
+mkdir -p "$STATE_DIR" 2>/dev/null
+if command -v flock >/dev/null 2>&1 && exec 9>"$STATE_DIR/.font.lock" 2>/dev/null; then
+    flock -w 10 9 2>/dev/null ||
+        echo "synui-apply-font: could not lock $STATE_DIR/.font.lock within 10s;" \
+             "continuing unserialised" >&2
+fi
+
 # The size every toolkit gets when none is given. 10pt is what KDE and GTK both
 # ship as their default; the picker has no size row, so this is what "pick a
 # family" means in a world where a font setting is a family AND a size.
 DEFAULT_SIZE=10
+# The range `--size` clamps to. 6pt is the floor below which the panel chrome
+# stops being legible at all; 24 is well past what anyone reads prose at and is
+# there for the "I cannot see this screen" case rather than for taste.
+SIZE_MIN=6
+SIZE_MAX=24
 
 # ── The text scale ─────────────────────────────────────────────────────────
 #
@@ -110,6 +153,30 @@ clamp_scale() {
     (( n < SCALE_MIN )) && n=$SCALE_MIN
     (( n > SCALE_MAX )) && n=$SCALE_MAX
     printf '%s' "$n"
+}
+
+clamp_size() {
+    local n=${1//[!0-9]/}
+    [[ -n $n ]] || n=$DEFAULT_SIZE
+    (( n < SIZE_MIN )) && n=$SIZE_MIN
+    (( n > SIZE_MAX )) && n=$SIZE_MAX
+    printf '%s' "$n"
+}
+
+# What `sans` currently resolves to. Needed because a SIZE cannot be expressed
+# on its own: GTK's gtk-font-name, Qt's font string, kitty's font_family and
+# rofi's theme all carry ONE value that is a family AND a size, and there is no
+# spelling of "whatever family you were going to use, at 12pt". So changing the
+# size with no family ever picked has to name a family, and the only honest one
+# to name is the one the box was already going to resolve to.
+#
+# The side effect — the family stops being "the toolkit's own default" and
+# becomes a pinned name — is real, and it is why `--default` still exists to
+# undo the whole thing. It is preferable to a size row that silently does
+# nothing until you have also picked a family, which is how this would fail
+# otherwise: no error, no change, no clue.
+default_family() {
+    fc-match -f '%{family[0]}' sans 2>/dev/null || echo "DejaVu Sans"
 }
 
 # Is this family monospaced? Asked of fontconfig rather than guessed from the
@@ -464,6 +531,18 @@ case "${1:-status}" in
     state_save
     ;;
 
+--size)
+    # Sets the POINT size alone, keeping whatever family is in force. What the
+    # control panel's Appearance ▸ Font size row calls.
+    #
+    # Unlike --scale this cannot be a state-file write: the size is carried in
+    # the same value as the family in every file apply() touches, so it has to
+    # go through the full push. See default_family() for why a size with no
+    # family picked has to invent one.
+    size=$(clamp_size "${2:-$DEFAULT_SIZE}")
+    apply "${family:-$(default_family)}" "$size"
+    ;;
+
 --reapply)
     # What synui-apply-theme calls. Silent and successful when no font has ever
     # been picked — the common case, and not an error.
@@ -479,7 +558,7 @@ status)
     ;;
 
 -h|--help)
-    sed -n '2,8p' "$0"
+    sed -n '2,9p' "$0"
     ;;
 
 *)

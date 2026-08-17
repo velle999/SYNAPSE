@@ -248,6 +248,47 @@ void sound_play(syn_server_t *s, syn_sound_event_t evt)
  * The monitor fd goes on the wl_event_loop like every other watcher in synui
  * (see synapd_mon.c, notif.c): no thread, no poll, and it dies with the display.
  */
+/* ── Screen audio ────────────────────────────────────────────
+ *
+ * Plugging a laptop into a TV and getting no sound out of it is a complaint
+ * with a boring cause: the display's audio sink turns up in the graph and
+ * nothing makes it the default, because wireplumber ranks the built-in speakers
+ * higher and is right to, most of the time.
+ *
+ * synui is the process that knows a screen just appeared, so it is the one that
+ * can say "now". It does not touch PipeWire itself — synui-hdmi-audio(1) owns
+ * every part of the decision that needs the graph, and in particular the ELD
+ * check that tells a connector with a display on it from the half-dozen dormant
+ * HDMI pins every GPU advertises. See that script's header.
+ *
+ * Resolved per call rather than cached: `auto` depends on the machine, and the
+ * user can change the row between one hotplug and the next.
+ */
+int sound_hdmi_follow_enabled(syn_server_t *s)
+{
+    if (s->config.hdmi_audio > 0) return 1;
+    if (s->config.hdmi_audio == 0) return 0;
+    return power_has_battery() ? 1 : 0;
+}
+
+void sound_hdmi_follow(syn_server_t *s, int connected)
+{
+    if (!sound_hdmi_follow_enabled(s)) return;
+
+    /* Same seat guard the font and theme pushes take: the default sink belongs
+     * to the seat's session, and a nested or headless synui shares the user's
+     * PipeWire graph with the desktop it is running inside. A test instance
+     * moving the real desktop's audio is precisely the class of accident the
+     * guard exists for. */
+    if (!synui_owns_seat(s)) return;
+
+    /* The helper blocks for up to 8s waiting for the sink to appear — it must
+     * not run on the compositor's thread, and synui_spawn() is a fork+exec that
+     * does not wait. */
+    synui_spawn(connected ? "synui-hdmi-audio follow"
+                          : "synui-hdmi-audio restore");
+}
+
 static int udev_readable(int fd, uint32_t mask, void *data)
 {
     (void)fd; (void)mask;

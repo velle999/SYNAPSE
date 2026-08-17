@@ -248,6 +248,13 @@ syn_output_t *server_primary_output(syn_server_t *s)
     int64_t best_area = -1;
 
     wl_list_for_each(o, &s->outputs, link) {
+        /* A detached screen is out of the layout and switched off; it cannot be
+         * the X11 primary even when it is the one the user picked. Without this
+         * an SDL game launched with the lid shut would open full-screen on the
+         * dark laptop panel, which is the same class of bug as windows landing
+         * there — see syn_output::detached. The choice is not forgotten, only
+         * ignored while the screen is off: reattaching restores it. */
+        if (o->detached) continue;
         if (o->primary) return o;          /* explicit choice */
         if (!o->wlr_output->enabled) continue;
 
@@ -618,6 +625,10 @@ static void output_destroy(struct wl_listener *listener, void *data)
             synui_render_cmdbar(server);
         /* Drop the freed output from the display panel's arrangement. */
         dispcfg_outputs_changed(server);
+        /* …and take the sound off it, if that is where it went. The helper
+         * checks whether any display with audio is left before it acts, so
+         * unplugging one of two screens is correctly a no-op. */
+        sound_hdmi_follow(server, 0);
     }
     if (!server->shutting_down)
         output_mgmt_update(server);
@@ -751,6 +762,12 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * the saved primary coming back, or it is now the largest and so wins
      * the fallback in server_primary_output(). */
     xwayland_apply_primary(server);
+
+    /* If the screen carries audio, move the sound to it. Fired for EVERY new
+     * output, including the internal panel at startup: the helper's ELD check
+     * is what decides whether there is anything to move to, and duplicating
+     * that test here would be a second opinion free to disagree with it. */
+    sound_hdmi_follow(server, 1);
 
     output_mgmt_update(server);
 }
