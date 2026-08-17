@@ -112,4 +112,96 @@ syn_ink_t syn_ink_combine(syn_ink_t a, syn_ink_t b);
  * "none". Never NULL. */
 const char *syn_ink_name(syn_ink_t ink);
 
+/* ── The wallpaper under a SURFACE, not just under the bar ──
+ *
+ * Everything above this line answers one question about one strip: the bar sits
+ * at a known edge, so a single mean over its rows is the whole of what it needs.
+ * Nothing else on the desktop has a fixed home. A menu opens where the pointer
+ * is, the calculator opens in the middle, and a widget sits wherever it was
+ * dragged — so "which ink is legible on the wallpaper" stopped being one answer
+ * per monitor the moment anything but the bar had to ask it.
+ *
+ * A GRID rather than a second strip, or a mean over the whole picture. The mean
+ * is what a per-output answer collapses to, and it is wrong in exactly the case
+ * that made this necessary: a photograph with a bright sky over dark ground
+ * averages to the mid-tone band where NEITHER ink passes, so every panel on the
+ * desktop would take the scrim while most of them sat over ground that black
+ * text reads on perfectly well.
+ *
+ * ⚠ THE CELLS ARE SIZED AGAINST THE BLUR, not against the panels. What a glass
+ * panel actually sits on is the FROSTED wallpaper, and a blur is a local mean —
+ * so a cell wants to be about the width the blur kernel already smears, and
+ * measuring finer than that would be measuring detail the user cannot see
+ * through the panel anyway. 16x9 puts a cell at ~160 logical px on this box's
+ * 2560x1440, which is that scale.
+ */
+#define SYN_LUM_COLS  16
+#define SYN_LUM_ROWS   9
+#define SYN_LUM_CELLS (SYN_LUM_COLS * SYN_LUM_ROWS)
+
+/*
+ * What a surface of luminance `surface_lum` drawn at `alpha` over a backdrop of
+ * luminance `backdrop_lum` actually reads as. alpha 1 is the surface untouched,
+ * alpha 0 is the backdrop untouched.
+ *
+ * ⚠ MIXED IN THE ENCODING THE GPU MIXES IN, which is not the one these numbers
+ * are in. Relative luminance is linear-light; scenefx blends 8-bit sRGB values
+ * without linearising them first. Mixing the two luminances directly would
+ * describe a compositor that works in linear light and would put the answer
+ * several hundredths out in the midtones — which is the whole width of the band
+ * where the ink flips, so it is the difference between a scrim and no scrim.
+ *
+ * A negative backdrop is "not measured" and passes the surface straight
+ * through: an unmeasurable wallpaper must not be allowed to invent a luminance.
+ */
+double syn_lum_over(double surface_lum, double alpha, double backdrop_lum);
+
+/* Contrast between two things already expressed as luminances. syn_contrast()
+ * takes an r,g,b for the ink because its callers have one; the callers here have
+ * a MEAN over wallpaper pixels on one side and often a mean on the other, and
+ * neither ever existed as a triple. */
+double syn_contrast_lum(double a, double b);
+
+/* The 0..1 sRGB channel value of a neutral grey with this relative luminance —
+ * srgb_to_linear's inverse, wrapped for the one caller outside this file.
+ *
+ * render.c needs it to build a stand-in for the surface a glass panel actually
+ * presents: the ink floor (syn_ink_floor) wants a COLOUR, and what shows through
+ * a see-through panel is the panel's own colour mixed with a wallpaper whose
+ * hue was never measured — only its luminance. A grey of that luminance is the
+ * honest stand-in, and it is exact for every question the floor asks, because
+ * those are all contrast and contrast is a function of luminance alone. */
+double syn_lum_to_srgb(double lum);
+
+/* The backdrop under one box, in the two answers the bar already asks for.
+ * `lum` is the mean over the cells it covers and is what syn_lum_over() wants;
+ * the two inks are for the surface itself, and follow the bar's contract
+ * exactly — `ink` is "clear is safe here", `best` is "clear is safe once you
+ * have dimmed it this way", and NONE from `ink` with a real `best` is a scrim.
+ */
+typedef struct {
+    double    lum;   /* mean luminance under the box, or -1 if unmeasured   */
+    syn_ink_t ink;   /* the ink that clears `target` over ALL of it         */
+    syn_ink_t best;  /* the closer of the two, whether or not it clears     */
+} syn_backdrop_t;
+
+/*
+ * Fold the cells a box covers into one of those.
+ *
+ * The box is given in FRACTIONS of the output (0..1) rather than pixels, so
+ * this stays pure arithmetic over the grid and needs to know nothing about
+ * monitors, scale factors or layout coordinates. A box off the edge is clamped;
+ * a box of no area still samples the cell it lands in, because a zero-width
+ * panel is a panel that has not been laid out yet rather than one with no
+ * backdrop.
+ *
+ * ⚠ `ink` FOLDS WITH syn_ink_combine, so a box straddling a dark cell and a
+ * pale one gets NONE — the same "no shared answer" the two-monitor case gets,
+ * for the same reason. One panel draws ONE colour of text, and a panel lying
+ * half on sky and half on shadow has no single colour that reads on both.
+ */
+void syn_backdrop_for_box(const double *grid, double fx, double fy,
+                          double fw, double fh, double target,
+                          syn_backdrop_t *out);
+
 #endif /* SYNUI_CONTRAST_H */

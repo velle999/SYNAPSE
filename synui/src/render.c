@@ -272,27 +272,135 @@ static inline void set_ink(cairo_t *cr, double level, double a)
  * switches and would otherwise each have to remember to push. The frame-rate
  * push costs one float store.
  */
-static float g_panel_glass = 1.0f;
+static syn_glass_t g_panel_glass = { -1.0f, 1.0f };
 
-void render_set_panel_glass(float factor)
+/* The wallpaper under the panel currently being drawn, and the alpha that panel
+ * ended up at. Both pushed by panel_bg_color() before the renderer draws
+ * anything, and both read by everything downstream that has to know what the
+ * text is really sitting on — see panel_effective_surface(), which is where the
+ * argument for them is written out. Same file-scope-cache reasoning as the two
+ * above: render runs on the main loop only, and thirty renderers would
+ * otherwise each need to carry them. */
+static syn_backdrop_t g_panel_backdrop = { -1.0, SYN_INK_NONE, SYN_INK_NONE };
+static float          g_panel_drawn_alpha = 1.0f;
+
+void render_set_panel_glass(syn_glass_t glass)
 {
-    g_panel_glass = factor;
+    g_panel_glass = glass;
 }
 
-/* The panel surface itself, at the alpha the caller wants. Panels differ in how
- * transparent they are (a menu is glassier than the lock screen), so the alpha
- * stays with the panel and only the colour comes from here.
+/*
+ * The lowest alpha at which this panel's OWN text still reads on what shows
+ * through it. The measured replacement for SYN_GLASS_PANEL_FLOOR.
  *
- * That per-panel alpha is also the ONLY roster of those numbers, which is why
- * glass scales what the caller passed instead of replacing it: the ladder the
- * panels were tuned as a set survives, and there is no second table of alphas
- * here to drift from the literals at the call sites. */
-static inline void panel_bg_color(float out[4], float alpha)
+ * ⚠ THE OLD FLOOR WAS ONE NUMBER FOR EVERY PANEL, EVERY THEME AND EVERY
+ * WALLPAPER, and that is the whole reason it had to be set so high. 0.62 is
+ * where a dense panel stops carrying over the WORST wallpaper anyone might
+ * have — so every desktop paid the worst case, including the ones showing a
+ * flat dark photograph that black-on-glass would have read on perfectly well at
+ * 0.20. It also could not be honest in the other direction: on a pale theme
+ * over a pale wallpaper, 0.62 was not enough and there was nothing to say so.
+ *
+ * The question asked instead is the one that actually matters, and it is asked
+ * per panel, per region, per theme: does full-strength text still clear AA on
+ * the composite? Walk the alpha up from what was asked until it does. A desktop
+ * whose wallpaper is kind to its theme keeps the alpha it asked for and goes as
+ * clear as the bar; one whose wallpaper fights it pays only as much as that
+ * particular panel over that particular patch actually costs.
+ *
+ * The step is coarse (0.02) on purpose — it is a legibility floor, not a
+ * gradient, and a finer walk would spend iterations distinguishing alphas no
+ * eye separates. Unmeasured backdrop returns the ask untouched: -1 means the
+ * compositor cannot see what is back there (wallpaper-engine), and inventing a
+ * floor for it would put the opaque slab back on exactly one wallpaper source.
+ */
+static float panel_alpha_floor(float want)
 {
+    double back = g_panel_backdrop.lum;
+    if (back < 0.0 || want >= 1.0f) return want;
+
+    double surf = syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
+    double ink  = syn_rel_luminance(g_panel_ink[0], g_panel_ink[1], g_panel_ink[2]);
+
+    for (float a = want; a < 1.0f; a += 0.02f)
+        if (syn_contrast_lum(ink, syn_lum_over(surf, a, back)) >= CONTRAST_TARGET)
+            return a;
+    return 1.0f;
+}
+
+/* Push one panel's backdrop, so the alpha decision and the ink decision are
+ * asked of the same measurement rather than of two. */
+static void panel_measure(syn_server_t *s, int px, int py, int pw, int ph)
+{
+    struct wlr_box box = { .x = px, .y = py, .width = pw, .height = ph };
+    wallpaper_backdrop_for_box(s, &box, CONTRAST_TARGET, &g_panel_backdrop);
+}
+
+/* Settle on an alpha and recolour everything that depends on it. Assumes
+ * panel_measure() has already run for this panel. */
+static void panel_bg_color_at(float out[4], float a)
+{
+    g_panel_drawn_alpha = a;
+    /* Before the caller draws anything, which is the ordering the whole scheme
+     * rests on: the ladder, the accent and the status colours are all recomputed
+     * here against the surface this panel is about to present. */
+    panel_legibility_recompute();
+
     out[0] = g_panel_bg[0];
     out[1] = g_panel_bg[1];
     out[2] = g_panel_bg[2];
-    out[3] = syn_glass_apply(g_panel_glass, alpha);
+    out[3] = a;
+}
+
+/*
+ * The panel surface itself, over the wallpaper the panel is about to be drawn
+ * on. `alpha` is what that panel was TUNED at — a menu is glassier than the task
+ * manager's dense table — and it is still the only roster of those numbers, so
+ * there is no second table here to drift from the literals at the call sites.
+ *
+ * ⚠ ON A GLASS DESKTOP THE TUNED VALUE IS REPLACED, NOT SCALED, and that is a
+ * deliberate reversal. It used to be a factor, which preserved the ladder
+ * between panels; the ladder is exactly what stopped the panels matching the
+ * bar, because a surface tuned at 0.985 and one tuned at 0.88 cannot both land
+ * on the bar's number while keeping their distance from each other. The tuned
+ * value still decides everything on a desktop that has NOT asked — see
+ * syn_glass_apply.
+ *
+ * ⚠ THE BOX IS NOT DECORATION. Every renderer already computes it a line or two
+ * above — it is what it positions its scene tree at — and passing it is what
+ * lets the ink be chosen against the wallpaper under THIS panel rather than
+ * against an average of the whole screen. It is a required argument rather than
+ * an optional push, for the same reason the alphas live at the call sites: a
+ * renderer that forgot would silently draw its text against the wrong surface,
+ * and the compiler is the only thing that can promise none of them do.
+ */
+static void panel_bg_color(syn_server_t *s, float out[4], float alpha,
+                           int px, int py, int pw, int ph)
+{
+    /* Measured first: the floor needs a backdrop to ask against. */
+    panel_measure(s, px, py, pw, ph);
+    panel_bg_color_at(out, panel_alpha_floor(syn_glass_apply(g_panel_glass, alpha)));
+}
+
+/*
+ * A panel that is opaque because it has to be, not because a theme said so.
+ *
+ * Exactly one caller — the crop tool, whose margins would otherwise show the
+ * desktop through the picture it exists to let you frame. It still takes the
+ * theme's panel COLOUR and still pushes the backdrop, so its text is corrected
+ * like everyone else's; only the alpha is refused.
+ *
+ * A named function rather than a magic 1.0, because "1.0" stopped meaning
+ * anything the moment glass became an absolute alpha: every other panel's tuned
+ * value is discarded in favour of the desktop's, and there would be nothing to
+ * distinguish a panel that merely happened to be tuned opaque from one that
+ * must be. The distinction is now in the call.
+ */
+static void panel_bg_color_solid(syn_server_t *s, float out[4],
+                                 int px, int py, int pw, int ph)
+{
+    panel_measure(s, px, py, pw, ph);
+    panel_bg_color_at(out, 1.0f);
 }
 
 /* ── Legibility on a PALE panel ──────────────────────────────
@@ -361,14 +469,64 @@ static float g_stat[STAT_COUNT][3] = {
  * here rather than in each of the ~190 set_ink() calls, most of which pass a
  * bare number rather than a named rung and would have had to be revisited one
  * by one. Dark surfaces set the floor to zero and keep every value they had. */
+/* ── What the panel is actually drawn ON ─────────────────────
+ *
+ * The corrector below used to measure against g_panel_bg — the panel's own
+ * colour, which is the right surface for an OPAQUE panel and is what every
+ * panel was until glass reached the chrome. A see-through panel does not
+ * present its own colour to the text on it: it presents its colour MIXED with
+ * whatever the wallpaper is doing behind that particular panel, and at alpha
+ * 0.45 most of what the ink has to fight is the wallpaper.
+ *
+ * So the surface the whole legibility chain answers to is the composite, and
+ * the two things it needs are pushed here by panel_bg_color() — which every
+ * renderer already calls, before it draws a single glyph.
+ *
+ * ⚠ THIS IS WHY NOTHING ELSE HAD TO CHANGE. The ink ladder's floor, the accent
+ * correction and the status colours were all already functions of "the surface
+ * luminance"; they were simply being handed the wrong surface. Give them the
+ * composite and the whole ladder re-measures itself against the wallpaper for
+ * free, on every panel, at whatever alpha it ended up drawing at.
+ */
+
+/* The panel's colour as it READS at that alpha over that backdrop: a stand-in
+ * built by mixing toward a neutral grey of the backdrop's luminance.
+ *
+ * Grey because the wallpaper's HUE under a panel was never measured — the grid
+ * carries luminance and nothing else (contrast.h says why). That costs nothing
+ * here: every question below is a contrast question, and contrast depends on
+ * luminance alone, so a grey of the right luminance is not an approximation to
+ * the answers, only to the colour. */
+static void panel_effective_surface(float out[3], double *lum_out)
+{
+    double back = g_panel_backdrop.lum;
+    if (back < 0.0 || g_panel_drawn_alpha >= 1.0f) {
+        for (int i = 0; i < 3; i++) out[i] = g_panel_bg[i];
+        *lum_out = syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
+        return;
+    }
+    double a = g_panel_drawn_alpha;
+    double g = syn_lum_to_srgb(back);
+    for (int i = 0; i < 3; i++)
+        out[i] = (float)(a * g_panel_bg[i] + (1.0 - a) * g);
+    *lum_out = syn_lum_over(
+        syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]), a, back);
+}
+
 static void panel_legibility_recompute(void)
 {
-    double lum = syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
+    float surf[3];
+    double lum;
+    panel_effective_surface(surf, &lum);
+
     g_panel_lum = lum;               /* what set_hue() corrects against */
     syn_contrast_fix(g_panel_accent, g_panel_accent_ink, lum);
     for (int i = 0; i < STAT_COUNT; i++)
         syn_contrast_fix(stat_dark[i], g_stat[i], lum);
-    g_ink_floor = syn_ink_floor(g_panel_bg, g_panel_ink, INK_TEXT_MIN);
+    /* The ladder's floor against the same composite, so a rung that has become
+     * illegible over a bright wallpaper is lifted exactly as it is on a pale
+     * theme — one mechanism, two causes of the same problem. */
+    g_ink_floor = syn_ink_floor(surf, g_panel_ink, INK_TEXT_MIN);
 }
 
 /* cairo_set_source_rgba with the active panel accent at alpha `a`, corrected for
@@ -491,7 +649,7 @@ void synui_render_welcome(syn_server_t *s)
 
     /* Background rect */
     float color[4];
-    panel_bg_color(color, 0.92f);
+    panel_bg_color(s, color, 0.92f, px, py, pw, ph);
     if (!s->welcome_ui.bg) {
         s->welcome_ui.bg = wlr_scene_rect_create(s->welcome_ui.tree,
                                                    pw, ph, color);
@@ -687,7 +845,7 @@ void synui_render_cmdbar(syn_server_t *s)
 
     /* Background */
     float color[4];
-    panel_bg_color(color, 0.95f);
+    panel_bg_color(s, color, 0.95f, bx, by, bw, bh);
     if (!s->cmdbar_ui.bg) {
         s->cmdbar_ui.bg = wlr_scene_rect_create(s->cmdbar_ui.tree,
                                                   bw, bh, color);
@@ -794,7 +952,7 @@ void synui_render_overlay(syn_server_t *s)
 
     /* Background */
     float color[4];
-    panel_bg_color(color, 0.88f);
+    panel_bg_color(s, color, 0.88f, px, py, pw, ph);
     if (!s->overlay_ui.bg) {
         s->overlay_ui.bg = wlr_scene_rect_create(s->overlay_ui.tree,
                                                    pw, ph, color);
@@ -1003,7 +1161,7 @@ void synui_render_dispcfg(syn_server_t *s)
     /* Background + accent; the panel height depends on the monitor count,
      * so resize them on every render (hotplug can change the count). */
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->dispcfg_ui.bg)
@@ -1283,7 +1441,7 @@ void synui_render_wppick(syn_server_t *s)
      * small-type path under every row, and at 0.94 whatever is behind the panel
      * (the welcome menu, or the wallpaper itself) reads straight through them. */
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->wppick_ui.bg)
@@ -1518,7 +1676,7 @@ void synui_render_power(syn_server_t *s)
     hit_set_rows(&p->hit, 12, top -16, pw - 24, row_h, POWER_ROW_COUNT);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->power_ui.bg)
@@ -1659,7 +1817,7 @@ void synui_render_saver(syn_server_t *s)
     hit_set_rows(&v->hit, 12, top - 16, pw - 24, row_h, SAVER_ROW_COUNT);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->saver_ui.bg)
@@ -1842,7 +2000,7 @@ void synui_render_curpick(syn_server_t *s)
     /* Same near-opaque background as the wallpaper picker, and for the same
      * reason: every row carries a small-type path underneath it. */
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->curpick_ui.bg)
@@ -2006,7 +2164,7 @@ void synui_render_fontpick(syn_server_t *s)
     hit_set_first(&s->fontpick.hit, s->fontpick.scroll);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->fontpick_ui.bg)
@@ -2227,7 +2385,7 @@ void synui_render_emoji(syn_server_t *s)
     hit_set_first(&s->emoji.hit, s->emoji.scroll * EMOJI_COLS);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->emoji_ui.bg)
@@ -2515,7 +2673,7 @@ void synui_render_calc(syn_server_t *s)
     hit_set_first(&s->calc.hit, 0);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->calc_ui.bg)
@@ -2773,7 +2931,7 @@ void synui_render_eq(syn_server_t *s)
     hit_set_rows(&s->eq.hit, 12, top, pw - 24, row_h, total);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->eq_ui.bg)
@@ -2932,7 +3090,7 @@ static void render_crop_pick(syn_server_t *s)
     /* Near-opaque, like the other pickers: every row carries a small-type path
      * underneath it and the desktop showing through makes that unreadable. */
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     if (!s->crop_ui.bg)
         s->crop_ui.bg = wlr_scene_rect_create(s->crop_ui.tree, pw, ph, bg_color);
     else
@@ -3068,9 +3226,17 @@ void synui_render_crop(syn_server_t *s)
 
     /* An opaque backdrop. The image rarely fills the screen and the desktop
      * showing through the margins makes the edges of the picture impossible to
-     * find, which is the one thing this panel is for. */
+     * find, which is the one thing this panel is for.
+     *
+     * ⚠ AND IT HAS TO SAY SO, rather than passing 1.0 and trusting that to
+     * survive. It used to: glass was a FACTOR, so an alpha of 1.0 came out at
+     * whatever the factor was and the floor kept it well above see-through.
+     * Glass is an absolute alpha now — the desktop's bar_opacity — so 1.0 would
+     * be discarded like every other tuned value and the crop tool would open at
+     * 0.45 with the desktop showing straight through the margins it exists to
+     * hide. This is the one panel whose opacity is FUNCTION rather than style. */
     float bg_color[4];
-    panel_bg_color(bg_color, 1.0f);
+    panel_bg_color_solid(s, bg_color, ob.x, ob.y, pw, ph);
     if (!s->crop_ui.bg)
         s->crop_ui.bg = wlr_scene_rect_create(s->crop_ui.tree, pw, ph, bg_color);
     else
@@ -3287,7 +3453,7 @@ void synui_render_filters(syn_server_t *s)
     hit_set_rows(&fl->hit, 12, top -18, pw - 24, row_h, rows);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->filters_ui.bg)
@@ -3441,7 +3607,7 @@ void synui_render_widgets(syn_server_t *s)
     hit_set_rows(&w->hit, 12, top -18, pw - 24, row_h, WIDGET_ROW_COUNT);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->widgets_ui.bg)
@@ -4238,7 +4404,7 @@ void synui_render_aimodel(syn_server_t *s)
     hit_set_first(&am->hit, am->scroll);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->aimodel_ui.bg)
@@ -4528,7 +4694,7 @@ void synui_render_sound(syn_server_t *s)
     hit_set_rows(&snd->hit, 12, top -16, pw - 24, row_h, SOUND_ROW_COUNT);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->sound_ui.bg)
@@ -4723,7 +4889,7 @@ void synui_render_clock(syn_server_t *s)
     hit_set_rows(&c->hit, 12, top - 18, pw - 24, row_h, CLOCK_SETTING_ROWS);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->clock_ui.bg)
@@ -4859,7 +5025,7 @@ void synui_render_calendar(syn_server_t *s)
     hit_set_rows(&cal->hit, grid_x, grid_y + 12, 7 * cell_w, cell_h, 6);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.96f);
+    panel_bg_color(s, bg_color, 0.96f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->cal_ui.bg)
@@ -5024,7 +5190,7 @@ void synui_render_ctlpanel(syn_server_t *s)
     hit_set_panel(&cp->hit_items, px, py, pw, ph);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->ctlpanel_ui.bg)
@@ -5512,7 +5678,7 @@ void synui_render_keys(syn_server_t *s)
     hit_set_first(&k->hit, first);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->keys_ui.bg)
@@ -5761,7 +5927,7 @@ void synui_render_thememgr(syn_server_t *s)
     hit_set_first(&tm->hit, first);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->thememgr_ui.bg)
@@ -5946,7 +6112,7 @@ void synui_render_clipboard(syn_server_t *s)
                  c->count < CLIP_ROWS ? c->count : CLIP_ROWS);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->clip_ui.bg)
@@ -6411,7 +6577,7 @@ void synui_render_bt(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->bt_ui.tree->node);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.94f);
+    panel_bg_color(s, bg_color, 0.94f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->bt_ui.bg)
@@ -6719,7 +6885,7 @@ void synui_render_taskmgr(syn_server_t *s)
      * screen's menu text ghost straight through the rows and the small type
      * stops being readable. */
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->taskmgr_ui.bg)
@@ -7000,7 +7166,7 @@ void synui_render_news(syn_server_t *s)
      * table of small type, and at 0.94 the (animated) wallpaper reads through
      * the headlines. */
     float bg_color[4];
-    panel_bg_color(bg_color, 0.985f);
+    panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->news_ui.bg)
@@ -7203,7 +7369,7 @@ void synui_render_dockmenu(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->dockmenu_ui.tree->node);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.96f);
+    panel_bg_color(s, bg_color, 0.96f, s->dockmenu.x, s->dockmenu.y, pw, ph);
     if (!s->dockmenu_ui.bg)
         s->dockmenu_ui.bg = wlr_scene_rect_create(s->dockmenu_ui.tree,
                                                   pw, ph, bg_color);
@@ -7282,7 +7448,7 @@ void synui_render_deskmenu(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->deskmenu_ui.tree->node);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.96f);
+    panel_bg_color(s, bg_color, 0.96f, s->deskmenu.x, s->deskmenu.y, pw, ph);
     if (!s->deskmenu_ui.bg)
         s->deskmenu_ui.bg = wlr_scene_rect_create(s->deskmenu_ui.tree,
                                                   pw, ph, bg_color);
@@ -7853,7 +8019,7 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
     wlr_scene_node_raise_to_top(&s->alttab_ui.tree->node);
 
     float bg_color[4];
-    panel_bg_color(bg_color, 0.93f);
+    panel_bg_color(s, bg_color, 0.93f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->alttab_ui.bg) {
@@ -8401,9 +8567,9 @@ void panel_chrome_sync(syn_server_t *s)
      * The factor reaches a panel's colour on its next render (the alpha is
      * baked into the rect when the panel paints), which is what theme_repaint()
      * is for; the blur below needs no repaint and takes effect immediately. */
-    const float glass_factor = syn_panel_glass_factor(&s->config);
-    const bool  glass        = glass_factor < 1.0f;
-    render_set_panel_glass(glass_factor);
+    const syn_glass_t glass_now = syn_glass_resolve(&s->config);
+    const bool        glass     = syn_glass_active(&s->config);
+    render_set_panel_glass(glass_now);
 
 #define PANEL_BG(n)     { &s->n##_ui.bg, NULL }
 #define PANEL_FULL(n)   { &s->n##_ui.bg, &s->n##_ui.accent }

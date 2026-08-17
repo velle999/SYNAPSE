@@ -833,7 +833,7 @@ static void theme_push_panel_colors(const syn_config_t *cfg)
      * old solidity. panel_chrome_sync() re-pushes every frame and would catch it
      * eventually — "eventually" being one frame of the wrong picture on exactly
      * the action whose whole point is to change how the desktop looks. */
-    render_set_panel_glass(syn_panel_glass_factor(cfg));
+    render_set_panel_glass(syn_glass_resolve(cfg));
 }
 
 /* Copy a preset's colours + opacity levels into a config, nothing more — no

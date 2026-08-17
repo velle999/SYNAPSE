@@ -78,10 +78,22 @@ PopupWindow {
         onTriggered: menu.visible = false
     }
 
+    /* What the wallpaper is doing under this menu. The anchor rect is relative
+     * to the BAR window, which layer-shell has pinned to a screen edge spanning
+     * its full width — so the rect's own coordinates are the screen's, and no
+     * translation is needed. The screen comes off the bar window for the same
+     * reason the anchor does: a PopupWindow is not an Item and cannot find
+     * either for itself (see barWindow above). */
+    readonly property var backdrop: menu.barWindow
+        ? Theme.backdropFor(menu.barWindow.screen,
+                            menu.anchor.rect.x, menu.anchor.rect.y,
+                            menu.implicitWidth, menu.implicitHeight)
+        : null
+
     Rectangle {
         anchors.fill: parent
         radius: Theme.panelRadius
-        color: Theme.popupBg
+        color: Theme.popupBgOn(menu.backdrop)
         border.color: Theme.magenta
         border.width: 1
 
@@ -149,7 +161,7 @@ PopupWindow {
                             verticalCenter: parent.verticalCenter
                         }
                         text: row.modelData.label
-                        color: row.on ? Theme.fg : Theme.fgDim
+                        color: row.on ? Theme.popupFgOn(menu.backdrop) : Theme.fgDim
                         font.family: Theme.fontFamily
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -182,7 +194,7 @@ PopupWindow {
                 Text {
                     anchors.centerIn: parent
                     text: "Done"
-                    color: Theme.fg
+                    color: Theme.popupFgOn(menu.backdrop)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                 }

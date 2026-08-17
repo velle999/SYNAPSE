@@ -150,10 +150,19 @@ PopupWindow {
         }
     }
 
+    /* What the wallpaper is doing under the mixer. Same reasoning as BarMenu's:
+     * the anchor rect is in the bar window's coordinates and the bar spans a
+     * screen edge, so those are the screen's coordinates too. */
+    readonly property var backdrop: mixer.barWindow
+        ? Theme.backdropFor(mixer.barWindow.screen,
+                            mixer.anchor.rect.x, mixer.anchor.rect.y,
+                            mixer.implicitWidth, mixer.implicitHeight)
+        : null
+
     Rectangle {
         anchors.fill: parent
         radius: Theme.panelRadius
-        color: Theme.popupBg
+        color: Theme.popupBgOn(mixer.backdrop)
         border.color: Theme.magenta
         border.width: 1
 

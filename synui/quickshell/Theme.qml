@@ -182,8 +182,100 @@ QtObject {
             const b = t.match(/^\s*bar_ink_best\s*=\s*(\S+)\s*$/m)
             const bv = b ? b[1] : "none"
             root.barInkBest = (bv === "dark" || bv === "light") ? bv : ""
+
+            // The per-output luminance grids, for every surface that is not the
+            // bar. Absent from a backdrop.state written by an older synui, and
+            // an empty map is exactly the "nothing measured" that inkFor()
+            // already has to answer for a video wallpaper — so the upgrade path
+            // is the one that was already there.
+            const g = {}
+            const re = /^\s*grid\.(\S+)\s*=\s*([-0-9.,]+)\s*$/gm
+            let mm
+            while ((mm = re.exec(t)) !== null) {
+                const cells = mm[2].split(",").map(parseFloat)
+                if (cells.length === root.lumCols * root.lumRows) g[mm[1]] = cells
+            }
+            root.lumGrids = g
         }
-        onLoadFailed: { root.barInk = ""; root.barInkBest = "" }
+        onLoadFailed: { root.barInk = ""; root.barInkBest = ""; root.lumGrids = ({}) }
+    }
+
+    /*
+     * ── Which ink reads on the wallpaper under THIS surface ──
+     *
+     * The bar's two questions, asked for a box instead of for the top strip.
+     * Everything the shell draws that is not the bar — the start menu, the bar's
+     * own menus, the mixer, the widgets, the OSD — opens where it is put, so
+     * "which ink is legible" stopped being one answer per desktop the moment
+     * they went see-through too.
+     *
+     * ⚠ THE GRID IS THE COMPOSITOR'S, NOT A SECOND MEASUREMENT. synui measures
+     * the wallpaper it painted and publishes the cells; this only folds the ones
+     * a box covers. The alternative — the shell sampling the screen itself —
+     * would be a second answer that could disagree with the one the compositor's
+     * own panels are using, and the whole point is that a menu and the control
+     * panel beside it are the same amount of glass in the same direction.
+     */
+    readonly property int lumCols: 16
+    readonly property int lumRows: 9
+    property var lumGrids: ({})
+
+    // Contrast of a fixed ink against a backdrop luminance, WCAG. The ink
+    // luminances are the same two constants contrast.h names, so the C side and
+    // this agree on where the band is rather than each rounding it its own way.
+    readonly property real inkDarkLum:  0.0122771   // #1D1D1F
+    readonly property real inkLightLum: 1.0         // #FFFFFF
+    function lumContrast(a, b) {
+        const hi = Math.max(a, b), lo = Math.min(a, b)
+        return (hi + 0.05) / (lo + 0.05)
+    }
+
+    /*
+     * Fold the cells a box covers into { lum, ink, best } — the same three
+     * things syn_backdrop_for_box() returns on the C side, in the same order of
+     * preference. `ink` is "clear is safe here", `best` is "clear is safe once
+     * you have dimmed it this way", and `ink` empty with a real `best` is a
+     * scrim. Disagreeing cells veto, exactly as two monitors do for the bar: one
+     * surface draws one colour of text, and a menu lying half on sky and half on
+     * shadow has no single colour that reads on both.
+     *
+     * Screen coordinates in, so callers pass what they already have. A surface
+     * on a screen synui has not measured gets lum -1 and no ink, which every
+     * caller has to read as "keep the background you had".
+     */
+    function backdropFor(screen, x, y, w, h) {
+        const none = { lum: -1, ink: "", best: "" }
+        if (!screen) return none
+        const cells = root.lumGrids[screen.name]
+        if (!cells || screen.width <= 0 || screen.height <= 0) return none
+
+        const c0 = Math.max(0, Math.min(root.lumCols - 1,
+                            Math.floor(x / screen.width  * root.lumCols)))
+        const r0 = Math.max(0, Math.min(root.lumRows - 1,
+                            Math.floor(y / screen.height * root.lumRows)))
+        const c1 = Math.max(c0, Math.min(root.lumCols - 1,
+                            Math.floor((x + w) / screen.width  * root.lumCols)))
+        const r1 = Math.max(r0, Math.min(root.lumRows - 1,
+                            Math.floor((y + h) / screen.height * root.lumRows)))
+
+        let sum = 0, n = 0, ink = null, best = null
+        for (let r = r0; r <= r1; r++) {
+            for (let c = c0; c <= c1; c++) {
+                const l = cells[r * root.lumCols + c]
+                if (!(l >= 0)) return none      // one unmeasured cell vetoes
+                sum += l; n++
+                const cd = root.lumContrast(root.inkDarkLum,  l)
+                const cl = root.lumContrast(root.inkLightLum, l)
+                // 4.5 is CONTRAST_TARGET; neither passing is a real answer and
+                // the important one — that is the band the scrim exists for.
+                const one  = (cd < 4.5 && cl < 4.5) ? "" : (cd >= cl ? "dark" : "light")
+                const bst  = cd >= cl ? "dark" : "light"
+                ink  = ink  === null ? one : (ink  === one ? ink  : "")
+                best = best === null ? bst : (best === bst ? best : "")
+            }
+        }
+        if (!n) return none
+        return { lum: sum / n, ink: ink || "", best: best || "" }
     }
 
     // The ink actually drawn: the safe one where there is one, the closest one
@@ -261,9 +353,41 @@ QtObject {
      * the theme's own popupAlpha, where it states one, still wins outright.
      */
     readonly property real  popupAlphaGlass: 0.86
-    readonly property real  popupAlpha: p.popupAlpha !== undefined ? p.popupAlpha
-                                      : root.glassSurfaces ? root.popupAlphaGlass
-                                      : 0.97
+
+    /*
+     * ⚠ theme.json's popupAlpha IS NOT A THEME'S OPINION, and reading it as one
+     * is why none of the above ever ran.
+     *
+     * The line looked like the barAlpha resolution three properties up — "the
+     * theme states one, so the theme wins" — but the two keys are not the same
+     * kind of thing. synui-apply-theme.sh writes barAlpha only where a preset
+     * has an answer, and writes popupAlpha ALWAYS: it is `menu_alpha`, a
+     * constant of the SCHEME (0.97 dark, 0.99 light) that no preset can
+     * override, emitted into every theme.json on the way past. So the key was
+     * always present, the test always passed, and `popupAlphaGlass` was
+     * unreachable on every desktop that has ever run — the start menu opened as
+     * a 0.97 slab in front of frosted windows no matter what the theme was.
+     *
+     * So the resolution goes to the desktop's own number instead, and to the
+     * SAME number the bar uses. That is the whole of "the menus match the bar":
+     * barAlphaAsked is bar_opacity where the user has set one and the theme's
+     * barAlpha otherwise, and the C side resolves exactly that field for
+     * synui's own panels (syn_glass_resolve). One number, one desktop.
+     *
+     * ⚠ AND IT IS NOT FLOORED HERE. The old 0.86 was a guess at "as low as a
+     * menu can go anywhere", and it is replaced by asking: backdropFor() says
+     * which ink reads on the wallpaper under this particular surface, and the
+     * scrim covers the band where neither does. A menu can follow the bar all
+     * the way down because it now has the same machinery the bar had.
+     *
+     * The scheme constant is still the fallback for a desktop that has set no
+     * opacity and whose theme is not glass — the twelve retro presets, which
+     * should look exactly as they always did.
+     */
+    readonly property real  popupAlpha:
+        root.barAlphaAsked >= 0   ? root.barAlphaAsked
+      : root.glassSurfaces        ? root.popupAlphaGlass
+      : (p.popupAlpha !== undefined ? p.popupAlpha : 0.97)
 
     // The scrim is BLACK or WHITE and not the theme's bar colour, which is the
     // one place this diverges from `bg` meaning "the theme's surface at some
@@ -277,6 +401,85 @@ QtObject {
         : themed("bar", 11, 11, 20, bgAlpha)
     readonly property color bgSolid: themed("bar",   11, 11, 20, 1.0)
     readonly property color popupBg: themed("popup", 11, 11, 20, popupAlpha)
+
+    /*
+     * ── A popup that knows what it is sitting on ─────────────
+     *
+     * popupBg above is the surface at the alpha the desktop ASKED for, which is
+     * all a solid menu ever needed. Once the menus follow the bar down they need
+     * the other half of what the bar has: the bar can be drawn at 0.00 only
+     * because backdrop.state tells it which ink survives there, and a menu that
+     * took the same number without the same knowledge would just be an
+     * unreadable menu.
+     *
+     * Two moves, in this order, and the order is the point:
+     *
+     *   1. RAISE THE ALPHA until the theme's own ink reads on the composite.
+     *      Preferred because it keeps the theme's colours — the menu is still
+     *      recognisably Gruvbox, or Prism, just less see-through in the one spot
+     *      where the wallpaper was fighting it.
+     *   2. Only if that runs out, FLIP THE INK to the black or white the
+     *      backdrop actually carries. That is the bar's answer, and it is the
+     *      last resort here because a menu has more to lose by abandoning its
+     *      palette than a bar with six glyphs on it does.
+     *
+     * A surface over an unmeasured wallpaper keeps exactly what it asked for:
+     * -1 means synui cannot see what is back there, and guessing would put the
+     * slab back on one wallpaper source and nowhere else.
+     */
+
+    // Relative luminance of a QML colour, WCAG. Same curve as contrast.c's
+    // syn_rel_luminance — the two sides decide the same things about the same
+    // pixels and must not each round the transfer function their own way.
+    function lumOf(c) {
+        function lin(v) { return v <= 0.03928 ? v / 12.92
+                                              : Math.pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+    }
+
+    // A surface of luminance `s` at `a` over a backdrop of luminance `b`.
+    // Mixed in the ENCODING the GPU mixes in, for the reason syn_lum_over()
+    // spells out: a linear mix of luminances is several hundredths out in the
+    // midtones, which is the whole width of the band the ink flips in.
+    function lumOver(s, a, b) {
+        if (!(b >= 0)) return s
+        if (a >= 1) return s
+        if (a <= 0) return b
+        function enc(v) { return v <= 0.0031308 ? v * 12.92
+                                                : 1.055 * Math.pow(v, 1 / 2.4) - 0.055 }
+        function lin(v) { return v <= 0.03928 ? v / 12.92
+                                              : Math.pow((v + 0.055) / 1.055, 2.4) }
+        return lin(a * enc(s) + (1 - a) * enc(b))
+    }
+
+    // The alpha this popup actually has to draw at, given what is behind it.
+    // The QML twin of render.c's panel_alpha_floor(), asking the same question
+    // of the same wallpaper: walk up from what was asked until full-strength
+    // text clears AA on the composite.
+    function popupAlphaOn(bd) {
+        if (!bd || !(bd.lum >= 0)) return root.popupAlpha
+        const surf = root.lumOf(root.popupBg)
+        const ink  = root.lumOf(root.fg)
+        for (let a = root.popupAlpha; a < 1.0; a += 0.02)
+            if (root.lumContrast(ink, root.lumOver(surf, a, bd.lum)) >= 4.5) return a
+        return 1.0
+    }
+
+    // …and the ink to draw on it. The theme's own wherever the alpha above could
+    // be found; the backdrop's black-or-white where it could not.
+    function popupFgOn(bd) {
+        if (!bd || !(bd.lum >= 0)) return root.fg
+        const a = root.popupAlphaOn(bd)
+        if (a < 1.0) return root.fg
+        const which = bd.ink !== "" ? bd.ink : bd.best
+        if (which === "") return root.fg
+        return which === "light" ? "#ffffff" : "#1d1d1f"
+    }
+
+    // The surface itself at that alpha. What a popup binds its background to.
+    function popupBgOn(bd) {
+        return themed("popup", 11, 11, 20, root.popupAlphaOn(bd))
+    }
 
     // The washes track the colours they tint, so a hover on a Gruvbox bar is
     // Gruvbox rather than the old cyan.

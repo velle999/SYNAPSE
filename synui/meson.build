@@ -743,6 +743,17 @@ panel_contrast_test = executable('panel_contrast_test',
   build_by_default : false)
 test('panel_contrast', panel_contrast_test)
 
+# The grid the bar's strip grew into, once every surface that is not the bar
+# had to ask what it was drawn on. Links contrast.c and nothing else, for the
+# same reason panel_contrast does: it is arithmetic over a grid and two
+# luminances, and a test that needed a compositor to reach it would not be run.
+backdrop_test = executable('backdrop_test',
+  ['tests/backdrop_test.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('backdrop', backdrop_test)
+
 # The other half of contrast.c, and the one with a failure mode a screenshot
 # cannot show: a bar with NO background of its own (macOS 26) is drawn on the
 # wallpaper, so its ink is chosen from the wallpaper — and there is a band of

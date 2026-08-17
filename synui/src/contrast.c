@@ -98,7 +98,7 @@ void syn_contrast_fix(const float in[3], float out[3], double surface_lum)
 /* Both arguments are already luminances, which syn_contrast's are not: the ink
  * here is one of two fixed colours and the backdrop is a MEAN over thousands of
  * wallpaper pixels, so neither side ever exists as an r,g,b triple. */
-static double contrast_lum(double a, double b)
+double syn_contrast_lum(double a, double b)
 {
     double hi = a > b ? a : b;
     double lo = a > b ? b : a;
@@ -109,8 +109,8 @@ syn_ink_t syn_ink_for_backdrop(double lum, double target)
 {
     if (lum < 0.0) return SYN_INK_NONE;   /* not measured */
 
-    double c_dark  = contrast_lum(SYN_INK_DARK_LUM,  lum);
-    double c_light = contrast_lum(SYN_INK_LIGHT_LUM, lum);
+    double c_dark  = syn_contrast_lum(SYN_INK_DARK_LUM,  lum);
+    double c_light = syn_contrast_lum(SYN_INK_LIGHT_LUM, lum);
 
     /* At AA there is a band — roughly 0.18 to 0.23 — where a backdrop is too
      * pale for white and too dark for black. Real wallpapers land in it (an
@@ -128,7 +128,7 @@ syn_ink_t syn_ink_for_backdrop(double lum, double target)
 syn_ink_t syn_ink_best(double lum)
 {
     if (lum < 0.0) return SYN_INK_NONE;   /* not measured */
-    return contrast_lum(SYN_INK_DARK_LUM, lum) >= contrast_lum(SYN_INK_LIGHT_LUM, lum)
+    return syn_contrast_lum(SYN_INK_DARK_LUM, lum) >= syn_contrast_lum(SYN_INK_LIGHT_LUM, lum)
                ? SYN_INK_DARK : SYN_INK_LIGHT;
 }
 
@@ -145,6 +145,94 @@ const char *syn_ink_name(syn_ink_t ink)
     case SYN_INK_LIGHT: return "light";
     default:            return "none";
     }
+}
+
+/* ── The wallpaper under a surface ───────────────────────── */
+
+/* srgb_to_linear's inverse: a linear-light value back to the encoding the
+ * framebuffer and every colour literal in this tree are written in. */
+double syn_lum_to_srgb(double c)
+{
+    if (c <= 0.0) return 0.0;
+    if (c >= 1.0) return 1.0;
+    return c <= 0.0031308 ? c * 12.92
+                          : 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+double syn_lum_over(double surface_lum, double alpha, double backdrop_lum)
+{
+    if (backdrop_lum < 0.0) return surface_lum;   /* not measured */
+    if (alpha >= 1.0) return surface_lum;
+    if (alpha <= 0.0) return backdrop_lum;
+
+    /* Out and back through the transfer function, so the mix happens on the
+     * values the GPU mixes — see the header. Both ends are treated as greys of
+     * the given luminance, which is exact for the mix itself: the blend is
+     * per-channel and linear in each, so the luminance of the result is the
+     * same weighted sum of encoded channels whatever hues the two sides are. */
+    double s = syn_lum_to_srgb(surface_lum);
+    double b = syn_lum_to_srgb(backdrop_lum);
+    return srgb_to_linear(alpha * s + (1.0 - alpha) * b);
+}
+
+void syn_backdrop_for_box(const double *grid, double fx, double fy,
+                          double fw, double fh, double target,
+                          syn_backdrop_t *out)
+{
+    out->lum  = -1.0;
+    out->ink  = SYN_INK_NONE;
+    out->best = SYN_INK_NONE;
+    if (!grid) return;
+
+    /* Clamp into the output. A panel can legitimately hang off the edge (the
+     * dock menu at the screen's corner), and the cells it does cover are the
+     * honest answer for the part of it that is on screen. */
+    if (fw < 0.0) { fx += fw; fw = -fw; }
+    if (fh < 0.0) { fy += fh; fh = -fh; }
+    double x0 = fx < 0.0 ? 0.0 : fx > 1.0 ? 1.0 : fx;
+    double y0 = fy < 0.0 ? 0.0 : fy > 1.0 ? 1.0 : fy;
+    double x1 = fx + fw, y1 = fy + fh;
+    x1 = x1 < 0.0 ? 0.0 : x1 > 1.0 ? 1.0 : x1;
+    y1 = y1 < 0.0 ? 0.0 : y1 > 1.0 ? 1.0 : y1;
+
+    int c0 = (int)(x0 * SYN_LUM_COLS), c1 = (int)(x1 * SYN_LUM_COLS);
+    int r0 = (int)(y0 * SYN_LUM_ROWS), r1 = (int)(y1 * SYN_LUM_ROWS);
+    if (c0 >= SYN_LUM_COLS) c0 = SYN_LUM_COLS - 1;
+    if (r0 >= SYN_LUM_ROWS) r0 = SYN_LUM_ROWS - 1;
+    if (c1 >= SYN_LUM_COLS) c1 = SYN_LUM_COLS - 1;
+    if (r1 >= SYN_LUM_ROWS) r1 = SYN_LUM_ROWS - 1;
+    /* A zero-area box still samples the one cell it lands in — see the header:
+     * that is a panel awaiting layout, not a panel with nothing behind it. */
+    if (c1 < c0) c1 = c0;
+    if (r1 < r0) r1 = r0;
+
+    double sum   = 0.0;
+    int    n     = 0;
+    bool   seen  = false;
+    syn_ink_t ink = SYN_INK_NONE, best = SYN_INK_NONE;
+
+    for (int r = r0; r <= r1; r++) {
+        for (int c = c0; c <= c1; c++) {
+            double l = grid[r * SYN_LUM_COLS + c];
+            if (l < 0.0) {
+                /* One unmeasured cell vetoes the box, exactly as one
+                 * unmeasured monitor vetoes the clear bar. */
+                out->lum = -1.0; out->ink = SYN_INK_NONE; out->best = SYN_INK_NONE;
+                return;
+            }
+            sum += l; n++;
+            syn_ink_t this_one  = syn_ink_for_backdrop(l, target);
+            syn_ink_t this_best = syn_ink_best(l);
+            ink  = seen ? syn_ink_combine(ink,  this_one)  : this_one;
+            best = seen ? syn_ink_combine(best, this_best) : this_best;
+            seen = true;
+        }
+    }
+    if (!n) return;
+
+    out->lum  = sum / n;
+    out->ink  = ink;
+    out->best = best;
 }
 
 /* Windows 95 is the theme with the least room to work in: black on its #C0C0C0

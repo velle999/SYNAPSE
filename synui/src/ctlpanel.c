@@ -234,6 +234,19 @@ struct ctl_item {
      * the rung is recognised.
      */
     const char     *vauto;
+    /*
+     * What the row calls ZERO, where zero is a mode rather than an amount.
+     *
+     * A row can have both this and `vauto` — the Glass row does, and needs to:
+     * its bottom two rungs are "let the theme decide" and "no glass at all",
+     * which are opposite instructions that a bare "0 %" one step under a bare
+     * "-1 %" gave a user no way to tell apart. Named, the ladder reads
+     * Auto / Off / 5% … 100%, and the two modes are visibly modes.
+     *
+     * Display only: `vauto` needs a config spelling because its value is a
+     * sentinel the file cannot carry, and zero does not — it is just zero.
+     */
+    const char     *vzero;
     const char *const *names;  /* CTL_VAL_ENUM options */
     int             nnames;
     syn_ctl_apply_t apply;
@@ -308,10 +321,15 @@ static const struct ctl_item ctl_items[] = {
      * opacities they were tuned with, and turning this on is an explicit act
      * whose result the two rows below then show. */
     { CTL_ROW_GLASS_LEVEL,  CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glass",            NULL,
+      /* ⚠ vmin STAYS 0 even though 0 is now a named mode rather than an amount.
+       * The auto rung is defined as "one step below the minimum" (ctl_step), so
+       * lifting vmin to 5 would put Auto where Off is and drop Off off the
+       * bottom of the row entirely. Three rungs, in this order: Auto, Off, then
+       * 5% upward. */
       .key = "glass_level", .off = CFG(glass_level), .vtype = CTL_VAL_INT,
       .vmin = 0.0f, .vmax = 100.0f, .vstep = 5.0f, .unit = "%",
-      .vauto = "Follow the theme", .apply = CTL_APPLY_GLASS,
-      .help = "How much of the desktop you see through — windows, panels and the bar together" },
+      .vauto = "Auto", .vzero = "Off", .apply = CTL_APPLY_GLASS,
+      .help = "Auto follows the theme \xc2\xb7 Off is never glass \xc2\xb7 or set how much you see through" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
@@ -955,24 +973,51 @@ static void ctl_format(const struct ctl_item *it, float v, int for_config,
         break;
     }
 
+    /*
+     * ⚠ THE TWO NAMED RUNGS ARE CHECKED FOR BOTH NUMERIC TYPES, and that is a
+     * fix rather than a tidy-up. The vauto test used to live inside the FLOAT
+     * case only, so an INT row with a `.vauto` — which is the Appearance ▸ Glass
+     * row, the one row that has one — drew its deferring rung as the raw
+     * sentinel: the panel said "-1 %" where it meant "Auto", and wrote "-1"
+     * where it meant "auto".
+     *
+     * That is most of why the row was impossible to read. Its bottom end went
+     * "-1 %", "0 %", "5 %" — two of those three being modes rather than
+     * amounts, and neither of them saying so — and the middle one, a real and
+     * deliberate "no glass at all", was a plausible-looking number sitting
+     * exactly where a user aiming for "let the theme decide" would land.
+     *
+     * `-1` also does not survive the round trip: config.c clamps a negative
+     * glass_level to 0, so a row left on Auto and written as "-1" comes back as
+     * Off. One spelling in the file whatever the row calls the rung on screen,
+     * so config_parse_kv has a single token to recognise.
+     */
     case CTL_VAL_INT:
-        if (!for_config && it->unit) snprintf(buf, n, "%d %s", (int)v, it->unit);
-        else                          snprintf(buf, n, "%d", (int)v);
-        break;
-
-    case CTL_VAL_FLOAT:
-        /* The rung below the minimum, where the row has one: synui defers, and
-         * the row says to what. One word in the file whatever the row calls it
-         * on screen, so config_parse_kv has a single spelling to recognise. */
+    case CTL_VAL_FLOAT: {
         if (it->vauto && v < it->vmin) {
             snprintf(buf, n, "%s", for_config ? "auto" : it->vauto);
             break;
         }
-        /* Two decimals is enough for every float here (opacities, blur weights,
-         * a shadow sigma) and reads better than the six %g would give. */
-        if (!for_config && it->unit) snprintf(buf, n, "%.2f %s", v, it->unit);
-        else                          snprintf(buf, n, "%.2f", v);
+        /* And the other end of the same confusion: a row whose zero is a MODE
+         * rather than a quantity says so. Only on screen — the config file
+         * keeps the number, because 0 is a perfectly good value for it and
+         * inventing a token would be a second spelling to parse. */
+        if (it->vzero && !for_config && v == 0.0f) {
+            snprintf(buf, n, "%s", it->vzero);
+            break;
+        }
+        if (it->vtype == CTL_VAL_INT) {
+            if (!for_config && it->unit) snprintf(buf, n, "%d %s", (int)v, it->unit);
+            else                          snprintf(buf, n, "%d", (int)v);
+        } else {
+            /* Two decimals is enough for every float here (opacities, blur
+             * weights, a shadow sigma) and reads better than the six %g would
+             * give. */
+            if (!for_config && it->unit) snprintf(buf, n, "%.2f %s", v, it->unit);
+            else                          snprintf(buf, n, "%.2f", v);
+        }
         break;
+    }
 
     default:
         buf[0] = '\0';

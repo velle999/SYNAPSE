@@ -73,7 +73,18 @@ PanelWindow {
         // whose every window and menu has gone square is the same split this
         // change closes everywhere else.
         radius: Theme.panelRadius
-        color: Theme.popupBg
+        /* The card is centred horizontally and sits a bar's height in from its
+         * anchored edge — the same box layer-shell gives the surface, so the
+         * screen coordinates can be reconstructed from what is declared above
+         * rather than measured. */
+        readonly property var backdrop: Theme.backdropFor(root.screen,
+            (root.screen.width - root.implicitWidth) / 2,
+            BarConfig.atBottom
+                ? root.screen.height - Theme.barHeight - 10 - root.implicitHeight
+                : Theme.barHeight + 10,
+            root.implicitWidth, root.implicitHeight)
+
+        color: Theme.popupBgOn(card.backdrop)
         border.color: Theme.magenta
         border.width: 1
 

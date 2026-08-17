@@ -48,6 +48,17 @@ void transparency_set_enabled(syn_server_t *s, int on) { (void)s; (void)on; }
 void transparency_set_opacity(syn_server_t *s, float o) { (void)s; (void)o; }
 void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
 void theme_state_load_config(syn_config_t *c) { (void)c; }
+/* uifx_apply() calls this to re-export `glass_surfaces` and re-assert the
+ * shell's layer blur when the backdrop-blur switch moves. It lives in theme.c,
+ * which is not linked here and would drag in the scene graph — and none of it
+ * is on the load path this file tests.
+ *
+ * ⚠ ITS ABSENCE BROKE THE LINK RATHER THAN THE TEST, which is why it is worth
+ * a comment: uifx.c grew the call in synui 0.1.0-379 and this list was not
+ * given anything to satisfy it, so state_reload_test stopped BUILDING. A test
+ * that cannot link does not fail — it is skipped by anyone running a single
+ * target, and only `meson test` in full says so. */
+void theme_glass_refresh(syn_server_t *s) { (void)s; }
 /* Stubbed for the same reason theme.state is, one line up: its real reader
  * lives in notif.c, which drags in sd-bus and the scene graph. dnd.state's
  * reload survival — the property this file exists to guard — is asserted

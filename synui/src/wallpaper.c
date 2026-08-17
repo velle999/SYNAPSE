@@ -516,6 +516,74 @@ static void palette_export(syn_server_t *s)
                           "the theme's own accent stands");
 }
 
+/*
+ * What is behind a box, in LAYOUT coordinates — the question every surface that
+ * is not the bar has to ask, and the only public way into the grid.
+ *
+ * Here rather than in contrast.c because it is the half that knows about
+ * monitors: contrast.c does the arithmetic over one grid in 0..1 fractions and
+ * deliberately depends on nothing in the tree, so the conversion from layout
+ * pixels — which needs the output layout, and needs to handle a panel that
+ * straddles two screens — lives on this side of that line.
+ *
+ * ⚠ TWO MONITORS FOLD THE SAME WAY TWO CELLS DO, with syn_ink_combine, so a
+ * panel dragged across the seam between a dark screen and a pale one gets NONE
+ * and takes the scrim. That is the same answer backdrop_export() gives the bar
+ * for the same situation, and for the same reason: one surface, one ink.
+ */
+void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
+                                double target, syn_backdrop_t *out)
+{
+    out->lum  = -1.0;
+    out->ink  = SYN_INK_NONE;
+    out->best = SYN_INK_NONE;
+    if (!s || !box) return;
+
+    double sum  = 0.0;
+    double area = 0.0;
+    bool   seen = false;
+    syn_ink_t ink = SYN_INK_NONE, best = SYN_INK_NONE;
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        struct wlr_box ob;
+        wlr_output_layout_get_box(s->output_layout, o->wlr_output, &ob);
+        if (ob.width <= 0 || ob.height <= 0) continue;
+
+        /* The part of the box on THIS output. A panel entirely on another
+         * screen contributes nothing and must not drag its backdrop in. */
+        int ix0 = box->x > ob.x ? box->x : ob.x;
+        int iy0 = box->y > ob.y ? box->y : ob.y;
+        int ix1 = box->x + box->width  < ob.x + ob.width
+                ? box->x + box->width  : ob.x + ob.width;
+        int iy1 = box->y + box->height < ob.y + ob.height
+                ? box->y + box->height : ob.y + ob.height;
+        if (ix1 <= ix0 || iy1 <= iy0) continue;
+
+        syn_backdrop_t part;
+        syn_backdrop_for_box(o->wp_lum_grid,
+                             (double)(ix0 - ob.x) / ob.width,
+                             (double)(iy0 - ob.y) / ob.height,
+                             (double)(ix1 - ix0)  / ob.width,
+                             (double)(iy1 - iy0)  / ob.height,
+                             target, &part);
+
+        /* Weighted by how much of the panel is on this screen, so the mean is
+         * the mean over the panel rather than over the monitors it touches. */
+        double w = (double)(ix1 - ix0) * (double)(iy1 - iy0);
+        if (part.lum >= 0.0) { sum += part.lum * w; area += w; }
+
+        ink  = seen ? syn_ink_combine(ink,  part.ink)  : part.ink;
+        best = seen ? syn_ink_combine(best, part.best) : part.best;
+        seen = true;
+    }
+
+    if (!seen || area <= 0.0) return;
+    out->lum  = sum / area;
+    out->ink  = ink;
+    out->best = best;
+}
+
 static void backdrop_export(syn_server_t *s)
 {
     /* No synui_owns_seat() guard, deliberately, and it is worth saying why: this
@@ -551,13 +619,45 @@ static void backdrop_export(syn_server_t *s)
     }
     if (!seen) { ink = SYN_INK_NONE; best = SYN_INK_NONE; }
 
+    /*
+     * The grid, as the text the shell reads it back as. Built before the
+     * change test below because it is PART of that test: the two bar inks can
+     * sit perfectly still across a wallpaper change that moves every cell — a
+     * new picture with the same average darkness at the top — and the start
+     * menu's ink keys off the cells, not off the bar's answer.
+     *
+     * One line per output, named by connector, because the grid is in that
+     * output's own 0..1 coordinates and a popup asks about the screen it opened
+     * on. Two decimals: the ink flips over a band about 0.05 wide, so the third
+     * would be describing differences narrower than the decision it feeds.
+     */
+    char grids[SYN_LUM_CELLS * 6 * 4 + 1024];
+    size_t gl = 0;
+    grids[0] = '\0';
+    wl_list_for_each(o, &s->outputs, link) {
+        int used = snprintf(grids + gl, sizeof(grids) - gl, "grid.%s=",
+                            o->wlr_output->name);
+        if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+        gl += (size_t)used;
+        for (int i = 0; i < SYN_LUM_CELLS && gl + 8 < sizeof(grids); i++) {
+            used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
+                            i ? "," : "", o->wp_lum_grid[i]);
+            if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+            gl += (size_t)used;
+        }
+        if (gl + 2 < sizeof(grids)) { grids[gl++] = '\n'; grids[gl] = '\0'; }
+    }
+
     /* Written only on a CHANGE. Every relayout repaints, and the bar watches
      * this path — rewriting an identical file would have it reload and repaint
-     * itself for each of them. Both values are compared: the safe ink can sit
-     * still while the best one moves (a wallpaper drifting across the band), and
-     * that move is exactly what changes which way the scrim goes. */
+     * itself for each of them. All three values are compared: the safe ink can
+     * sit still while the best one moves (a wallpaper drifting across the band),
+     * and that move is exactly what changes which way the scrim goes — and the
+     * grid can move while both inks hold still. */
     static syn_ink_t last = -1, last_best = -1;
-    if (ink == last && best == last_best) return;
+    static char last_grids[sizeof(grids)] = "";
+    if (ink == last && best == last_best && strcmp(grids, last_grids) == 0)
+        return;
 
     char path[256];
     if (!syn_config_path(path, sizeof(path), "backdrop.state")) return;
@@ -571,10 +671,19 @@ static void backdrop_export(syn_server_t *s)
                 tmp, strerror(errno));
         return;
     }
-    fprintf(f, "# Generated by synui — which ink a bar with no background of its\n"
-               "# own must use to be legible on the wallpaper behind it.\n");
+    fprintf(f, "# Generated by synui — which ink a surface with no background of\n"
+               "# its own must use to be legible on the wallpaper behind it.\n"
+               "#\n"
+               "# bar_ink/bar_ink_best answer for the BAR, whose position is a\n"
+               "# constant. grid.<output> answers for everything else: a %dx%d\n"
+               "# grid of mean relative luminance over that output, row-major,\n"
+               "# in the output's own 0..1 coordinates. A menu opens where the\n"
+               "# pointer is, so it folds the cells it actually covers.\n"
+               "# -1 in either form means the wallpaper could not be measured.\n",
+            SYN_LUM_COLS, SYN_LUM_ROWS);
     fprintf(f, "bar_ink=%s\n", syn_ink_name(ink));
     fprintf(f, "bar_ink_best=%s\n", syn_ink_name(best));
+    fputs(grids, f);
     fclose(f);
 
     /* Renamed rather than written in place, for the same reason theme.json is:
@@ -587,8 +696,87 @@ static void backdrop_export(syn_server_t *s)
     }
     last = ink;
     last_best = best;
+    snprintf(last_grids, sizeof(last_grids), "%s", grids);
     wlr_log(WLR_INFO, "synui: wallpaper: bar ink is %s (best %s)",
             syn_ink_name(ink), syn_ink_name(best));
+}
+
+/* Every cell "not measured". The seed for an output that has no picture to look
+ * at, and the value each of the early returns in paint_output() leaves behind —
+ * same contract as wp_top_lum's -1, one per cell. */
+static void grid_clear(double grid[SYN_LUM_CELLS])
+{
+    for (int i = 0; i < SYN_LUM_CELLS; i++) grid[i] = -1.0;
+}
+
+/* And every cell at one known luminance: the branches that KNOW what is on
+ * screen without having painted a picture — the `none` wallpaper's solid rect
+ * and the matrix rain's seed — for the same reason they set wp_top_lum rather
+ * than leaving it -1. A flat backdrop is measured, it just happens to be
+ * measured everywhere at once. */
+static void grid_fill(double grid[SYN_LUM_CELLS], double lum)
+{
+    for (int i = 0; i < SYN_LUM_CELLS; i++) grid[i] = lum;
+}
+
+/*
+ * The whole picture, as a coarse grid of mean luminances.
+ *
+ * One pass over the buffer, accumulating into whichever cell each pixel falls
+ * in, rather than SYN_LUM_CELLS passes over the sub-rectangles: the buffer is
+ * up to 3840x2160 and the strip measurement beside it already walks a slice of
+ * the same pixels, so the cost that matters is how many times the image is
+ * touched, not the arithmetic per pixel.
+ *
+ * ⚠ SUBSAMPLED, and that is safe here in a way it would not be for the palette.
+ * Luminance is a MEAN, so every fourth pixel in each direction estimates it to
+ * far better than the width of the band the ink flips in; a palette is a mode,
+ * and dropping pixels can drop the very cluster it exists to find. That is why
+ * palette_measure() walks the buffer whole and this does not.
+ */
+static void grid_luminance(cairo_surface_t *dst, double grid[SYN_LUM_CELLS])
+{
+    grid_clear(grid);
+
+    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return;
+    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return;
+
+    cairo_surface_flush(dst);
+    const unsigned char *data = cairo_image_surface_get_data(dst);
+    if (!data) return;
+
+    int w      = cairo_image_surface_get_width(dst);
+    int h      = cairo_image_surface_get_height(dst);
+    int stride = cairo_image_surface_get_stride(dst);
+    if (w <= 0 || h <= 0) return;
+
+    /* Every fourth pixel, but never coarser than one sample per cell edge: on a
+     * small output four could otherwise step clean over a whole column. */
+    int stepx = w / (SYN_LUM_COLS * 4); if (stepx < 1) stepx = 1;
+    int stepy = h / (SYN_LUM_ROWS * 4); if (stepy < 1) stepy = 1;
+
+    double sum[SYN_LUM_CELLS] = { 0.0 };
+    long   n[SYN_LUM_CELLS]   = { 0 };
+
+    for (int y = 0; y < h; y += stepy) {
+        const unsigned char *row = data + (size_t)y * stride;
+        int r = (int)((long)y * SYN_LUM_ROWS / h);
+        if (r >= SYN_LUM_ROWS) r = SYN_LUM_ROWS - 1;
+        for (int x = 0; x < w; x += stepx) {
+            int c = (int)((long)x * SYN_LUM_COLS / w);
+            if (c >= SYN_LUM_COLS) c = SYN_LUM_COLS - 1;
+            /* Premultiplied ARGB32 over an opaque wallpaper, so straight —
+             * the same reasoning as strip_luminance() above, which see. */
+            const unsigned char *px = row + (size_t)x * 4;
+            sum[r * SYN_LUM_COLS + c] += 0.2126 * syn_srgb_lut(px[2]) +
+                                         0.7152 * syn_srgb_lut(px[1]) +
+                                         0.0722 * syn_srgb_lut(px[0]);
+            n[r * SYN_LUM_COLS + c]++;
+        }
+    }
+
+    for (int i = 0; i < SYN_LUM_CELLS; i++)
+        if (n[i] > 0) grid[i] = sum[i] / (double)n[i];
 }
 
 /* Paint (or clear) a single output's wallpaper buffer from the server's
@@ -608,6 +796,10 @@ static void paint_output(syn_output_t *o)
      * returns early is a failure — no resolution yet, no buffer — and has
      * genuinely measured nothing. */
     o->wp_top_lum = -1.0;
+    /* And the grid, on exactly the same terms and in the same breath — every
+     * branch below that answers one of them answers both, so a panel can never
+     * be reading the previous wallpaper's backdrop while the bar is not. */
+    grid_clear(o->wp_lum_grid);
 
     syn_wallpaper_src_t src;
     const char *path;
@@ -631,6 +823,7 @@ static void paint_output(syn_output_t *o)
          * one frame of "unmeasured" on its way to the same answer, which the
          * bar would wear as a flash of its opaque background. */
         o->wp_top_lum = solid_backdrop_lum();
+        grid_fill(o->wp_lum_grid, o->wp_top_lum);
         return;
     }
 
@@ -645,8 +838,10 @@ static void paint_output(syn_output_t *o)
          * wallpaper-engine, which is an external client painting its own
          * surface over the top of all this: there the compositor genuinely
          * cannot see what the bar is drawn on, and -1 is the honest answer. */
-        if (src != SYN_WP_SRC_WPENGINE)
+        if (src != SYN_WP_SRC_WPENGINE) {
             o->wp_top_lum = solid_backdrop_lum();
+            grid_fill(o->wp_lum_grid, o->wp_top_lum);
+        }
         return;
     }
 
@@ -677,6 +872,12 @@ static void paint_output(syn_output_t *o)
     if (rows < 1) rows = 1;
     o->wp_top_lum = strip_luminance(cairo_get_target(cr), rows,
                                     s->config.bar_edge);
+
+    /* And the rest of the screen, for every surface that is not the bar. Off
+     * the same finished buffer and in the same breath as the strip: two walks
+     * of one image beats painting it twice, and it keeps the bar's answer and
+     * the panels' answers describing the same frame. */
+    grid_luminance(cairo_get_target(cr), o->wp_lum_grid);
 
     /* And the palette, off the WHOLE image rather than the bar strip — the
      * colour of a wallpaper is not the colour of its top 34 rows, which on a
@@ -741,6 +942,15 @@ void wallpaper_relayout(syn_server_t *s)
 void wallpaper_backdrop_measured(syn_output_t *o, double lum)
 {
     o->wp_top_lum = lum;
+    /*
+     * The rain gets the strip's answer for every cell, which is a stand-in
+     * everywhere else in this file but is very nearly exact here: the matrix
+     * backend draws the same falling columns over the same black at the same
+     * density across the whole output, so one region of it measures like any
+     * other. A photograph is the case that needs a real grid; a texture that is
+     * statistically flat does not have one to find.
+     */
+    grid_fill(o->wp_lum_grid, lum);
     /* Straight to the fold, not through paint_output: the caller is a backend
      * that painted the background itself, and repainting the static wallpaper
      * here would tear down the buffer it just drew. backdrop_export writes only

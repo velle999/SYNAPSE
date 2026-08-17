@@ -133,7 +133,15 @@ PanelWindow {
                 Math.min(root.screen.height - Theme.barHeight - 16,
                          searchBox.height + list.contentHeight + 4))
 
-        color: Theme.popupBg
+        /* What the wallpaper is doing under THIS menu, at the size and place it
+         * ended up. A property rather than a call inside the colour binding so
+         * both the surface and the ink re-resolve from one evaluation, and so
+         * the dependencies (the panel's own geometry, the screen, the published
+         * grid) are declared in one place. */
+        readonly property var backdrop:
+            Theme.backdropFor(root.screen, panel.x, panel.y, panel.width, panel.height)
+
+        color: Theme.popupBgOn(panel.backdrop)
         border.color: Theme.magenta
         border.width: 1
         radius: Theme.panelRadius
@@ -722,7 +730,7 @@ PanelWindow {
                 text: MenuState.search !== "" ? MenuState.search
                     : MenuState.page   !== "" ? MenuState.page
                                               : "Type to search…"
-                color: MenuState.search !== "" ? Theme.fg : Theme.fgDim
+                color: MenuState.search !== "" ? Theme.popupFgOn(panel.backdrop) : Theme.fgDim
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize
             }
@@ -780,7 +788,7 @@ PanelWindow {
                     text: rowItem.modelData.kind === "page" ? rowItem.modelData.label + "  ▸"
                         : rowItem.modelData.kind === "back" ? "◂  Back"
                                                             : rowItem.modelData.label
-                    color: rowItem.header ? Theme.magenta : Theme.fg
+                    color: rowItem.header ? Theme.magenta : Theme.popupFgOn(panel.backdrop)
                     opacity: rowItem.header ? 1.0 : (rowItem.current ? 1.0 : 0.82)
                     font.family: Theme.fontFamily
                     font.pixelSize: rowItem.header ? 10 : Theme.fontSize

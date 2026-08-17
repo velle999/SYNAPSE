@@ -3788,86 +3788,140 @@ static inline bool theme_is_glass(const syn_config_t *cfg)
  */
 #define SYN_GLASS_PANEL_DEFAULT 55
 
-/* Where a panel stops. Below this its ink stops carrying over a busy wallpaper
- * no matter how good the contrast against the panel's own colour is — the same
- * measured argument as the window floor in syn_glass_window_alpha(), one
- * surface further in, and higher because a panel is dense text rather than a
- * client's own picture. */
-#define SYN_GLASS_PANEL_FLOOR 0.62f
+/*
+ * How see-through synui's own chrome is: ONE resolved answer, in the two shapes
+ * a panel can need it.
+ *
+ * `alpha` >= 0 is an absolute alpha for every panel, and it is the desktop's
+ * bar_opacity — the whole point of this being one struct rather than one float.
+ * The bar and the chrome had two different see-through-nesses and no way to be
+ * told they were meant to be the same thing: bar_opacity took the bar to 0.45
+ * while the panels sat on a factor that could not take them below 0.66 and the
+ * shell's menus stayed at 0.97, so a desktop set up to be glass was glass in
+ * three different amounts. Setting the bar now sets the chrome.
+ *
+ * ⚠ bar_opacity IS ALREADY THE RESOLVED ANSWER, which is why this reads it and
+ * not the row or the slider. config_apply_glass_level() writes glass_level into
+ * it after every source has been read, so "the slider moved" and "the Bar
+ * opacity row moved" arrive here as the same number, and neither needs its own
+ * path. -1 is that field's own "nobody has chosen", not a level of zero.
+ *
+ * `factor` is the fallback for exactly that case, and is the tuned ladder this
+ * grew out of: a multiplier on the alpha each panel was designed at, so a menu
+ * stays glassier than the task manager's dense table. It is what a desktop that
+ * has never touched either control still gets from its theme.
+ */
+typedef struct {
+    float alpha;    /* absolute alpha for every panel, or -1 for the ladder */
+    float factor;   /* the ladder's multiplier; 1.0 is "not glass"          */
+} syn_glass_t;
 
 /*
- * How see-through synui's own panels are, as a FACTOR on the alpha each panel
- * was tuned at. 1.0 is "not glass" and every caller passes straight through.
+ * ⚠ NO FLOOR HERE, AND THAT IS DELIBERATE. There used to be one — a single
+ * SYN_GLASS_PANEL_FLOOR of 0.62, below which no panel was allowed to go — and
+ * it was the reason the panels could not match the bar however low the slider
+ * went. It was also the wrong KIND of answer: one number standing in for "will
+ * this text read", asked once, for every panel, every theme and every wallpaper
+ * at once, and therefore pinned to the worst case any of them might hit.
  *
- * ⚠ THE BASE ALPHA STAYS WITH THE PANEL, and that is the whole shape of this.
- * Each render_* function passes the solidity it was designed at — a menu is
- * glassier than the task manager's table, which is glassier than the lock
- * screen — and this scales them together so the ladder they were tuned as a set
- * survives. One alpha for all thirty would make the dense ones unreadable at
- * whatever level made the sparse ones look like glass, and there would be no
- * number that fixed both. It also means the panels' own literals stay the only
- * roster of those numbers: there is no second table here to drift from them.
+ * render.c's panel_alpha_floor() asks the real question instead — does THIS
+ * panel's ink still clear AA on THIS patch of wallpaper at this alpha — and
+ * raises the alpha only as far as that answer needs. So the floor moved to
+ * where the backdrop is known, and this is free to hand back whatever was
+ * asked for.
  */
-static inline float syn_panel_glass_factor(const syn_config_t *cfg)
+static inline float syn_glass_apply(syn_glass_t g, float base)
 {
-    /* ⚠ BLUR IS A CONDITION, NOT JUST A LATER CALL. A panel dropped to 0.79
+    if (g.alpha >= 0.0f) return g.alpha;
+    if (g.factor >= 1.0f) return base;
+    return base * g.factor;
+}
+
+/*
+ * Resolve the desktop's config into that answer. The one place the question
+ * "how see-through is the chrome" is decided; everything else applies it.
+ */
+static inline syn_glass_t syn_glass_resolve(const syn_config_t *cfg)
+{
+    syn_glass_t off = { -1.0f, 1.0f };
+
+    /* ⚠ BLUR IS A CONDITION, NOT JUST A LATER CALL. A panel dropped to 0.45
      * with nothing frosting behind it is not glass, it is a menu you can read
      * the wallpaper's text through. Off is better than half, so the alpha and
      * the blur answer to the same question. Transparency is the user's master
      * switch and means what it says. */
-    if (!cfg->transparency || !cfg->blur) return 1.0f;
+    if (!cfg->transparency || !cfg->blur) return off;
 
     /*
-     * An explicit glass_level is an answer for ANY theme. It is the same slider
-     * that already moves the windows and the bar on every preset, and a desktop
-     * where dragging it frosts the windows but leaves synui's own panels solid
-     * is exactly the half-applied look this is here to remove.
+     * ⚠ THE SLIDER IS READ BEFORE bar_opacity, AND THE ORDER IS LOAD-BEARING.
      *
-     * Unset falls back to the THEME, and that fallback is the whole of the bug
-     * this fixes: Prism reached through the theme manager writes no glass_level
-     * anywhere, so gating on the level alone left the house glass theme with
-     * thirty solid panels. Unset means "nobody chose a level", never "nobody
-     * wanted glass" — the preset already answered the second question.
+     * config_apply_glass_level() has already written the level into bar_opacity
+     * by the time anything calls this — that is how one slider moves the bar —
+     * so reading bar_opacity first would read the slider's own output back as
+     * if it were an independent choice. That is not a stylistic worry: the
+     * level's bottom rung, OFF, resolves to syn_glass_bar_alpha(0) = 0.95,
+     * because 0.95 is the alpha a NORMAL bar draws at. Read back naively, the
+     * one setting whose whole meaning is "no glass" would have turned the
+     * chrome 0.95-translucent and switched the blur on.
+     *
+     * So an explicit level answers here, on its own terms, and 0 means off.
+     */
+    if (syn_glass_set(cfg)) {
+        if (cfg->glass_level <= 0) return off;
+        /* The bar's number for that level, which is what makes this a MATCH
+         * rather than a second opinion: the bar is about to draw at exactly
+         * this, because config_apply_glass_level gave it the same call. */
+        syn_glass_t g = { syn_glass_bar_alpha(cfg), 1.0f };
+        return g;
+    }
+
+    /*
+     * Otherwise the bar's own row, where the desktop has set one. This is the
+     * half that makes the chrome match a bar the user dialled in by hand rather
+     * than through the slider — same field, same number, one desktop.
+     */
+    if (cfg->bar_opacity >= 0.0f) {
+        syn_glass_t g = { cfg->bar_opacity, 1.0f };
+        return g;
+    }
+
+    /*
+     * And with neither, the tuned ladder off the THEME.
+     *
+     * Unset means "nobody chose a level", never "nobody wanted glass" — the
+     * preset already answered the second question, and gating on the level
+     * alone left the house glass theme with thirty solid panels.
      *
      * A theme that is neither glass nor given a level keeps the opacities it
      * was tuned with, which is the twelve retro presets and is why they see
      * nothing of any of this.
      */
-    int level = syn_glass_set(cfg)   ? cfg->glass_level
-              : theme_is_glass(cfg)  ? SYN_GLASS_PANEL_DEFAULT
-                                     : 0;
-    if (level <= 0) return 1.0f;
-    return 1.00f - 0.30f * ((float)level / 100.0f);
+    if (!theme_is_glass(cfg)) return off;
+
+    syn_glass_t g = { -1.0f,
+                      1.00f - 0.30f * (SYN_GLASS_PANEL_DEFAULT / 100.0f) };
+    return g;
 }
 
 /*
  * Is the desktop drawing GLASS right now — the one question every surface that
  * wants to be see-through has to ask, spelt once.
  *
- * Defined as "the panels are being made translucent", rather than as its own
+ * Defined as "the chrome is being made translucent", rather than as its own
  * copy of the theme/transparency/blur test, so the frosting behind a surface
  * and the see-through-ness of the surface itself can never disagree. The
  * failure mode of two copies is a desktop where the control panel is frosted
  * and the clock beside it is a slab, which reads as a bug in the theme rather
  * than as two conditions drifting apart.
+ *
+ * ⚠ AN ALPHA OF EXACTLY 1.0 IS NOT GLASS, which is the case a `bar_opacity = 1`
+ * desktop lands on: it has answered "how see-through", and the answer was "not
+ * at all". Frosting behind a surface nothing shows through is invisible work.
  */
 static inline bool syn_glass_active(const syn_config_t *cfg)
 {
-    return syn_panel_glass_factor(cfg) < 1.0f;
-}
-
-/* Apply that factor to one panel's tuned alpha, and stop at the floor.
- *
- * The floor is applied HERE rather than folded into the factor because it is
- * per panel: it depends on where that panel started, and a factor cannot know
- * that. A desktop that is not glass returns the base untouched, floor included
- * — a preset that deliberately tuned a panel to 0.50 keeps it.
- */
-static inline float syn_glass_apply(float factor, float base)
-{
-    if (factor >= 1.0f) return base;
-    float a = base * factor;
-    return a < SYN_GLASS_PANEL_FLOOR ? SYN_GLASS_PANEL_FLOOR : a;
+    syn_glass_t g = syn_glass_resolve(cfg);
+    return g.alpha >= 0.0f ? g.alpha < 1.0f : g.factor < 1.0f;
 }
 
 /* The relative luminance of the surface synui's OWN panels are drawn on.
@@ -4429,6 +4483,20 @@ struct syn_output {
      * those two choices and nowhere else. What is left is genuinely unknowable:
      * wallpaper-engine, an external client painting over the top of us. */
     double                   wp_top_lum;
+    /*
+     * The same measurement for the REST of the desktop: a SYN_LUM_COLS x
+     * SYN_LUM_ROWS grid of mean relative luminances over this output's
+     * wallpaper, row-major, each cell -1 on the same "genuinely unknowable"
+     * terms as wp_top_lum above.
+     *
+     * wp_top_lum answers for the bar and nothing else, because the bar is the
+     * one surface whose position is a constant. Everything else synui draws
+     * opens where it is put — so once the panels and the shell's menus went
+     * see-through too, "what is behind this surface" needed an answer that
+     * depends on WHICH surface. syn_backdrop_for_box() folds the cells a panel
+     * covers; see contrast.h for why a grid rather than one mean per monitor.
+     */
+    double                   wp_lum_grid[SYN_LUM_CELLS];
     /* The small palette taken off THIS output's wallpaper (palette.c). Per
      * output because per-monitor wallpapers are a thing, and the desktop-wide
      * answer is folded from these — see palette_export(). */
@@ -6161,6 +6229,13 @@ void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output
  * renders to a GPU buffer the painter above never sees and so is the only thing
  * that can measure it. */
 void wallpaper_backdrop_measured(syn_output_t *o, double lum);
+/* What is behind a box, for every surface that is not the bar: the luminance to
+ * hand syn_lum_over(), and the two inks in the bar's own contract (see
+ * contrast.h). Handles a panel that straddles two monitors. `lum` is -1 and both
+ * inks are NONE when the wallpaper there could not be measured, which callers
+ * must read as "keep the surface you already had" — never as a dark backdrop. */
+void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
+                                double target, syn_backdrop_t *out);
 void wallpaper_reload(syn_server_t *s);
 /* The small palette taken off the wallpaper, or NULL when no monitor's
  * wallpaper offered a usable hue. Owned by wallpaper.c and valid until the next
@@ -7005,7 +7080,7 @@ void render_set_panel_surface(const float bg[4], const float ink[4]);
 /* The glass factor panel_bg_color() scales every panel's tuned alpha by — 1.0
  * for a desktop that is not glass. Pushed from theme_push_panel_colors() and
  * from panel_chrome_sync(); see the cache's comment in render.c for why both. */
-void render_set_panel_glass(float factor);
+void render_set_panel_glass(syn_glass_t glass);
 
 /* Shared translucency controls behind the control-panel + theme-manager sliders.
  * set_opacity clamps the focused level to 0.50..1.00 and derives the unfocused
