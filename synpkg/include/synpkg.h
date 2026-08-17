@@ -84,6 +84,14 @@ char **pconf_repo_list(size_t *n);                          /* malloc'd argv-ish
 void   pconf_free_list(char **list, size_t n);
 int    pconf_siglevel(const char *repo);                    /* ALPM_SIG_* bitmask */
 
+/* ── progress.c — pacman's progress bar, ILoveCandy and all ─────────────────
+ * `key` is what the bar is FOR (a package name, a filename): it resets the
+ * chomp's animation state, which matters because alpm interleaves parallel
+ * downloads. Both are silent in TSV mode and whenever stderr is not a terminal,
+ * so no caller needs to check either. */
+void progress_draw(const char *key, const char *label, int percent);
+void progress_end(void);   /* close the line, if one is open. Idempotent. */
+
 /* ── alpmctx.c ──────────────────────────────────────────────────────────── */
 /* `for_write` installs the transaction callbacks and is what a mutation needs;
  * a query handle skips them so nothing prints during a --tsv listing. */

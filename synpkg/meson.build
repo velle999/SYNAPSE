@@ -25,6 +25,7 @@ sources = files(
   'src/main.c',
   'src/util.c',
   'src/pconf.c',
+  'src/progress.c',
   'src/alpmctx.c',
   'src/query.c',
   'src/trans.c',
@@ -83,3 +84,18 @@ test('synpkg', find_program('tests/synpkg_test.sh'),
      args: [meson.current_build_dir() / 'synpkg'],
      workdir: meson.current_source_dir(),
      timeout: 300)
+
+# The progress bar, driven directly. Its own binary because the one branch that
+# decides whether anything is drawn is isatty(stderr), and reaching that from
+# the real synpkg means a real transaction against a real mirror — see the
+# driver's header. It links the three files it actually needs rather than the
+# whole suite, so a compile error in a verb cannot make this look broken.
+progress_test = executable('progress_test',
+  ['tests/progress_test.c', 'src/progress.c', 'src/pconf.c', 'src/util.c'],
+  include_directories: include_directories('include', '.'),
+  dependencies: [alpm],
+  install: false)
+test('progress', find_program('tests/progress_test.sh'),
+     args: [progress_test],
+     workdir: meson.current_source_dir(),
+     timeout: 120)

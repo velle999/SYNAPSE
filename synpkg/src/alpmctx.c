@@ -149,7 +149,15 @@ static void cb_question(void *ctx, alpm_question_t *question)
 }
 
 /* alpm's progress callback fires per percent; in human mode we redraw one line,
- * in TSV mode we stay silent so the GUI's stdout carries records only. */
+ * in TSV mode we stay silent so the GUI's stdout carries records only.
+ *
+ * ⚠ THE COUNTER GOES IN THE LABEL, not beside the bar, and that is not a
+ * cosmetic choice: progress.c owns the whole line so that it can decide how
+ * much of it is bar, and a caller printing its own prefix first would be
+ * writing into a width progress.c had already budgeted. So "(3/162) foo" is one
+ * string handed over, and the KEY is the package alone — the counter changes
+ * with every package and would reset the chomp on each one anyway, but naming
+ * the package is what makes the reset mean something. */
 static void cb_progress(void *ctx, alpm_progress_t kind, const char *pkg,
                         int percent, size_t howmany, size_t current)
 {
@@ -157,11 +165,10 @@ static void cb_progress(void *ctx, alpm_progress_t kind, const char *pkg,
 	(void)kind;
 	if (g_out == OUT_TSV || !pkg)
 		return;
-	fprintf(stderr, "\r%s(%zu/%zu)%s %-32.32s %3d%%",
-	        C_DIM(), current, howmany, C_RESET(), pkg, percent);
-	if (percent == 100)
-		fputc('\n', stderr);
-	fflush(stderr);
+
+	char label[256];
+	snprintf(label, sizeof label, "(%zu/%zu) %s", current, howmany, pkg);
+	progress_draw(pkg, label, percent);
 }
 
 /* Downloading is the LONGEST part of installing a kernel — a couple of hundred
@@ -208,20 +215,22 @@ static void cb_download(void *ctx, const char *filename,
 		last_pct = pct;
 		snprintf(last_file, sizeof last_file, "%s", filename);
 
-		fprintf(stderr, "\r%sdownloading%s %-32.32s %3d%%",
-		        C_DIM(), C_RESET(), filename, pct);
-		fflush(stderr);
+		progress_draw(filename, filename, pct);
 		break;
 	}
 	case ALPM_DOWNLOAD_COMPLETED:
 		/* Ends the redrawn line, so the next thing printed does not land on
 		 * top of it. Named at verbose only, as before — the difference is
-		 * that the line above it now existed. */
-		if (last_pct >= 0) {
-			fputc('\n', stderr);
-			last_pct = -1;
-			last_file[0] = '\0';
-		}
+		 * that the line above it now existed.
+		 *
+		 * ⚠ progress_end() UNCONDITIONALLY, not `if (last_pct >= 0)`. A file
+		 * served from the cache completes without ever reporting progress, so
+		 * this callback is the only one that fires — and the old guard was the
+		 * front-end's own idea of whether a line was open, which is now
+		 * progress.c's to know. Asking it is idempotent; guessing was not. */
+		progress_end();
+		last_pct = -1;
+		last_file[0] = '\0';
 		if (g_verbose)
 			fprintf(stderr, "  %sdownloaded%s %s\n", C_DIM(), C_RESET(), filename);
 		fflush(stderr);
