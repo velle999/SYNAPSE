@@ -38,14 +38,19 @@ Rectangle {
     property string text: ""
     property string icon: ""                 // optional leading glyph
     /*
-     * This screen's strip palette. A clear bar takes its ink off the wallpaper,
-     * and the wallpaper is a different picture on every monitor — so the ink is
-     * per-output too. `root.QsWindow.window` is the bar this module was placed
-     * in; null until it is, which Theme.barPalette answers with the folded
-     * desktop-wide values. See Theme.barInks.
+     * The palette for the strip THIS MODULE covers. A clear bar takes its ink
+     * off what is behind it, which is a different picture on every monitor — and,
+     * once a window can sit under the bar, a different one at each end of the
+     * same monitor. So the ink is per-output AND per-module. `root.QsWindow.window`
+     * is the bar this module was placed in; null until it is, which Theme
+     * answers with the folded desktop-wide values. See Theme.barStrips.
+     *
+     * `root.x`/`root.width` are named so the binding re-runs when this module
+     * moves or resizes — see Theme.barPaletteSpan for why they cannot simply be
+     * read on the other side.
      */
     readonly property var pal:
-        Theme.barPaletteOf(root.QsWindow.window)
+        Theme.barPaletteSpan(root.QsWindow.window, root, root.x, root.width)
 
     property color  iconColor: root.pal.glyph
     property color  textColor: root.pal.fg

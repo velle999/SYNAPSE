@@ -224,6 +224,7 @@ synui_exe = executable('synui',
     'src/contrast.c',
     'src/effects.c',
     'src/wallpaper.c',
+    'src/barscan.c',
   'src/palette.c',
     'src/matrix.c',
     'src/imgdec.c',
@@ -928,6 +929,21 @@ stubborn_client = executable('stubborn_client',
   ['tests/stubborn_client.c', xdg_shell_client_h, xdg_shell_c],
   dependencies : [wayland_client],
   build_by_default : false)
+
+# The other half of the bar's backdrop, and the half bar_backdrop.sh cannot
+# reach: what is under the bar when it is not the wallpaper. Needs a real client
+# with real pixels, because the measurement it pins is a GPU readback of one —
+# so it takes the same stubborn_client the layout tests use.
+#
+# ⚠ meson kills a test at 30s and calls that a BUILD failure, and this one waits
+# on a 400ms poll four times over. 120s is the roomy figure the other
+# client-driven tests use.
+bar_scene_strip = find_program('tests/bar_scene_strip.sh')
+test('bar_scene_strip', bar_scene_strip,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
 
 resize_heal = find_program('tests/resize_heal.sh')
 test('resize_heal', resize_heal,

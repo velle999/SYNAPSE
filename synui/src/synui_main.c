@@ -2127,6 +2127,10 @@ int synui_init(syn_server_t *s)
     /* Task manager: creates its poll timer (disarmed) and probes for a GPU. */
     taskmgr_init(s);
 
+    /* What is under the bar, which is the wallpaper only until a window covers
+     * it. After the outputs exist, so the first tick has something to scan. */
+    barscan_init(s);
+
     /* News: loads the cached river off disk and parks a fetch thread on its
      * condvar. Nothing goes near the network until the panel is opened. */
     news_init(s);
@@ -2380,6 +2384,7 @@ void synui_destroy(syn_server_t *s)
     saver_finish(s);
     power_finish(s);
     taskmgr_finish(s);
+    barscan_finish(s);
     news_finish(s);
     aimodel_finish(s);
     clipboard_finish(s);

@@ -641,7 +641,10 @@ static void backdrop_export(syn_server_t *s)
      * desktop — which is what every one of them was tested on — the fold and the
      * per-output answer are the same two values.
      */
-    char grids[SYN_LUM_CELLS * 6 * 4 + 2048];
+    /* Per output: one grid of SYN_LUM_CELLS and one bar strip of SYN_LUM_COLS,
+     * six characters a cell ("-1.00," is the longest), times the four monitors
+     * this is sized for, plus room for the key names. */
+    char grids[(SYN_LUM_CELLS + SYN_LUM_COLS) * 6 * 4 + 2048];
     size_t gl = 0;
     grids[0] = '\0';
     wl_list_for_each(o, &s->outputs, link) {
@@ -676,6 +679,37 @@ static void backdrop_export(syn_server_t *s)
         for (int i = 0; i < SYN_LUM_CELLS && gl + 8 < sizeof(grids); i++) {
             used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
                             i ? "," : "", o->wp_lum_grid[i]);
+            if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+            gl += (size_t)used;
+        }
+        if (gl + 2 < sizeof(grids)) { grids[gl++] = '\n'; grids[gl] = '\0'; }
+    }
+
+    /*
+     * And what is actually UNDER THE BAR, which is the wallpaper only until
+     * something covers it — barscan.c, measured off the scene graph.
+     *
+     * One row of SYN_LUM_COLS, the same columns as the grid above, so the bar
+     * can fold the two together cell for cell: a column reading -1 here is one
+     * no window covers, and the bar takes the grid's top-row cell for it. That
+     * is why this is published as a row of luminances rather than as a row of
+     * inks — the fallback has to happen BEFORE the ink is decided, or a column
+     * that means "ask the wallpaper" would first have to become an ink and then
+     * be talked out of it.
+     *
+     * Emitted for every output unconditionally, all -1 included: a bar reading
+     * a file whose row for its output is missing cannot tell "nothing covers
+     * the bar" from "this synui does not measure that", and those want opposite
+     * behaviour.
+     */
+    wl_list_for_each(o, &s->outputs, link) {
+        int used = snprintf(grids + gl, sizeof(grids) - gl, "bar_strip.%s=",
+                            o->wlr_output->name);
+        if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+        gl += (size_t)used;
+        for (int i = 0; i < SYN_LUM_COLS && gl + 8 < sizeof(grids); i++) {
+            used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
+                            i ? "," : "", o->bar_strip_lum[i]);
             if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
             gl += (size_t)used;
         }
@@ -717,8 +751,15 @@ static void backdrop_export(syn_server_t *s)
                "# grid of mean relative luminance over that output, row-major,\n"
                "# in the output's own 0..1 coordinates. A menu opens where the\n"
                "# pointer is, so it folds the cells it actually covers.\n"
-               "# -1 in either form means the wallpaper could not be measured.\n",
-            SYN_LUM_COLS, SYN_LUM_ROWS);
+               "# -1 in either form means the wallpaper could not be measured.\n"
+               "#\n"
+               "# bar_strip.<output> is the one row that is NOT about the\n"
+               "# wallpaper: %d luminances across the strip the bar occupies,\n"
+               "# measured off what is actually on screen under it — a window\n"
+               "# under an auto-hiding bar, or one dragged over the strip. -1\n"
+               "# HERE MEANS NOTHING COVERS THAT COLUMN, which is the ordinary\n"
+               "# case and not a failure: take grid.<output>'s top row for it.\n",
+            SYN_LUM_COLS, SYN_LUM_ROWS, SYN_LUM_COLS);
     fprintf(f, "bar_ink=%s\n", syn_ink_name(ink));
     fprintf(f, "bar_ink_best=%s\n", syn_ink_name(best));
     fputs(grids, f);
@@ -958,6 +999,13 @@ void wallpaper_init(syn_server_t *s)
 
 void wallpaper_output_created(syn_output_t *o)
 {
+    /* ⚠ SEEDED BEFORE THE FIRST EXPORT, because a calloc'd syn_output_t reads
+     * 0.0 here and 0.0 is not "nothing covers this column" — it is BLACK, the
+     * one value that would flip a bar to white ink on a wallpaper it never
+     * looked at. barscan.c's own scan re-clears this every tick; this is the
+     * window between an output appearing and that tick landing. */
+    for (int i = 0; i < SYN_LUM_COLS; i++) o->bar_strip_lum[i] = -1.0;
+
     paint_output(o);
     /* A monitor arriving is a monitor the bar has to be legible on too, and it
      * can carry a wallpaper of its own. wallpaper_relayout() covers the reverse
@@ -1004,6 +1052,18 @@ void wallpaper_backdrop_measured(syn_output_t *o, double lum)
      * on a CHANGE, so a backend that reports every frame costs a compare. */
     backdrop_export(o->server);
     palette_export(o->server);
+}
+
+/* Just the export, with no measuring and no painting.
+ *
+ * barscan.c's input is the SCENE, so what it changes is already on screen by
+ * the time it notices — there is nothing to repaint and no picture to re-walk,
+ * only a file to bring up to date. Not palette_export() with it: the palette
+ * comes off the wallpaper image, which a window moving over the bar does not
+ * touch. */
+void wallpaper_backdrop_republish(syn_server_t *s)
+{
+    backdrop_export(s);
 }
 
 void wallpaper_reload(syn_server_t *s)

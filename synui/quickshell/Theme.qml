@@ -233,10 +233,25 @@ QtObject {
                 if (cells.length === root.lumCols * root.lumRows) g[mm[1]] = cells
             }
             root.lumGrids = g
+
+            // And the one row that is NOT the wallpaper: what is actually under
+            // the bar, column by column (barscan.c). A column of -1 is one that
+            // nothing covers, which is the ordinary case — barStripAt() takes
+            // the wallpaper's own top-row cell for those. Absent from an older
+            // synui's backdrop.state, and an empty map means every column falls
+            // back, which is precisely the behaviour that predates this.
+            const bs = {}
+            const bre = /^\s*bar_strip\.(\S+)\s*=\s*([-0-9.,]+)\s*$/gm
+            let bm
+            while ((bm = bre.exec(t)) !== null) {
+                const cols = bm[2].split(",").map(parseFloat)
+                if (cols.length === root.lumCols) bs[bm[1]] = cols
+            }
+            root.barStrips = bs
         }
         onLoadFailed: {
             root.barInk = ""; root.barInkBest = ""; root.lumGrids = ({})
-            root.barInks = ({}); root.barInkBests = ({})
+            root.barInks = ({}); root.barInkBests = ({}); root.barStrips = ({})
         }
     }
 
@@ -259,6 +274,24 @@ QtObject {
     readonly property int lumCols: 16
     readonly property int lumRows: 9
     property var lumGrids: ({})
+
+    /*
+     * output name → lumCols luminances across the BAR STRIP, from barscan.c.
+     *
+     * The wallpaper is not always what is behind the bar. It is whenever the bar
+     * reserves its exclusive zone, which is the default and is why this did not
+     * exist for a long time — but an auto-hiding bar reserves nothing and every
+     * maximized window comes up underneath it, and a floating window can be
+     * dragged over the strip on any bar at all. In both, the strip of wallpaper
+     * wp_top_lum measured is not on screen, and the bar inks itself for a
+     * picture the user cannot see.
+     *
+     * ⚠ -1 IS "NOTHING COVERS THIS COLUMN", NOT "UNMEASURABLE", and the two
+     * want opposite handling: unmeasurable means keep your background, uncovered
+     * means the wallpaper's answer is the right one after all. barStripAt()
+     * resolves it per column, which is the only place the two grids meet.
+     */
+    property var barStrips: ({})
 
     // Contrast of a fixed ink against a backdrop luminance, WCAG. The ink
     // luminances are the same two constants contrast.h names, so the C side and
@@ -677,6 +710,170 @@ QtObject {
      * actually have.
      */
     function barPaletteOf(win) { return root.barPalette(win ? win.screen : null) }
+
+    /*
+     * ── The bar, asked one SECTION at a time ─────────────────
+     *
+     * Everything above answers for a whole bar, because for a whole bar's worth
+     * of releases the backdrop was the wallpaper strip and the wallpaper strip
+     * was one number. Once a WINDOW can be under the bar, the strip stops being
+     * uniform at the window's edge: the workspace pills sit on wallpaper and the
+     * clock sits on a dark browser, and one ink for the pair is wrong at one end
+     * or the other. That edge is a hard boundary in the middle of a surface,
+     * which is exactly what the per-output fix was NOT — that one moved a veto
+     * off a boundary that was never inside a single surface.
+     *
+     * `x`/`w` are in the BAR WINDOW's coordinates, which is what a module has:
+     * the bar spans its output, so they are the output's own coordinates offset
+     * by nothing. A module passes its own geometry and gets the palette for the
+     * strip it personally covers.
+     */
+
+    /* The luminances under [x, x+w) on this screen's bar, one per column the
+     * span touches, with the wallpaper answering for every column no window
+     * covers. Empty when this screen has been measured for neither. */
+    function barStripAt(screen, x, w) {
+        const out = []
+        if (!screen || screen.width <= 0) return out
+
+        const strip = root.barStrips[screen.name]
+        const grid  = root.lumGrids[screen.name]
+        if (!strip && !grid) return out
+
+        const c0 = Math.max(0, Math.min(root.lumCols - 1,
+                            Math.floor(x / screen.width * root.lumCols)))
+        const c1 = Math.max(c0, Math.min(root.lumCols - 1,
+                            Math.ceil((x + w) / screen.width * root.lumCols) - 1))
+
+        for (let c = c0; c <= c1; c++) {
+            // The scene's answer first, and ONLY where it has one. This is the
+            // whole fallback: -1 from barscan is a column with nothing over the
+            // wallpaper, so the wallpaper's top row is not a second-best guess
+            // there, it is the correct measurement.
+            const s = strip ? strip[c] : -1
+            if (s >= 0) { out.push(s); continue }
+            // Row 0 of the grid is the top of the output. A bottom bar wants the
+            // LAST row, for the same reason wallpaper.c measures the strip on
+            // the edge the bar is actually on.
+            const row = BarConfig.atBottom ? root.lumRows - 1 : 0
+            const g = grid ? grid[row * root.lumCols + c] : -1
+            out.push(g >= 0 ? g : -1)
+        }
+        return out
+    }
+
+    /*
+     * The palette for one section of the bar: barPalette's answer, re-decided
+     * against what is under THIS span.
+     *
+     * Falls all the way back to barPalette(screen) whenever the span has no
+     * measurement of its own, so a module that asks about a screen synui has not
+     * measured — or one on a build with no barscan — gets exactly what it got
+     * before this function existed.
+     *
+     * ⚠ THE VETO STILL APPLIES WITHIN A SPAN, and it has to: syn_ink_combine's
+     * rule is that one surface draws one colour of text, and a single module
+     * lying half on a dark window and half on pale wallpaper genuinely has no
+     * colour that reads on both. Such a module takes the scrim, which is the
+     * same answer the whole bar used to take for the same reason — only now it
+     * is one module wearing it instead of all of them.
+     */
+    function barPaletteAt(screen, x, w) {
+        const base = root.barPalette(screen)
+        if (!base.clear) return base        // an opaque bar has no backdrop problem
+
+        const cells = root.barStripAt(screen, x, w)
+        if (cells.length === 0) return base
+
+        let ink = null, best = null
+        for (let i = 0; i < cells.length; i++) {
+            const l = cells[i]
+            if (!(l >= 0)) return base      // one unmeasured column and the span
+                                            // has no better answer than the bar's
+            const cd = root.lumContrast(root.inkDarkLum,  l)
+            const cl = root.lumContrast(root.inkLightLum, l)
+            const one = (cd < 4.5 && cl < 4.5) ? "" : (cd >= cl ? "dark" : "light")
+            const bst = cd >= cl ? "dark" : "light"
+            ink  = ink  === null ? one : (ink  === one ? ink  : "")
+            best = best === null ? bst : (best === bst ? best : "")
+        }
+        ink = ink || ""; best = best || ""
+
+        /*
+         * ⚠ A SECTION MAY CHANGE THE INK'S DIRECTION BUT NEVER WHETHER THERE IS
+         * A SCRIM, and that is a deliberate limit rather than an oversight.
+         *
+         * The scrim is drawn by ONE rectangle spanning the whole bar (Bar.qml's
+         * `color: bar.pal.bg`), so "this third of the bar is scrimmed" is not a
+         * thing the bar can currently express. Rather than half-express it —
+         * hand a module the `best` ink and let it draw over a backdrop nobody
+         * dimmed, which is the unreadable case the scrim exists to prevent —
+         * a span with no SAFE ink defers to the bar's own answer entirely.
+         *
+         * The one exception is where the bar has already laid its scrim: the
+         * dimming is on screen over this span too, so following the span's own
+         * `best` under it is strictly better than following the whole bar's.
+         */
+        if (ink !== "")
+            return root.barPaletteInked(base, ink === "light", false)
+        if (base.scrim && best !== "")
+            return root.barPaletteInked(base, best === "light", true)
+        return base
+    }
+
+    /*
+     * The form a bar MODULE calls: its window, itself, and its own geometry.
+     *
+     * ⚠ `x` AND `w` ARE PASSED RATHER THAN READ OFF `item`, and the reason is
+     * that this is called from a binding. mapToItem() is a function call the QML
+     * engine cannot see into, so a binding that only called it would never
+     * re-run — a module would keep the ink for wherever it happened to be when
+     * the bar was first laid out, and the media module, which resizes with every
+     * track, would be wrong most of the time. Naming them in the caller's
+     * argument list is what puts them in the binding's dependency set.
+     *
+     * The lookup itself still needs mapToItem: a module knows its x within the
+     * Row it sits in, and the strip is indexed in the bar window's coordinates.
+     *
+     * The untyped `win.screen` hop stays HERE, in Theme.qml, for the same reason
+     * barPaletteOf() exists — QsWindow.window is a bare QObject, and dotting
+     * .screen off it at every call site is a qmllint warning per site.
+     */
+    function barPaletteSpan(win, item, x, w) {
+        if (!win || !item) return root.barPalette(win ? win.screen : null)
+        const p = item.mapToItem(null, 0, 0)
+        return root.barPaletteAt(win.screen, p.x, w > 0 ? w : item.width)
+    }
+
+    /* barPaletteAt() and barPalette() differ only in HOW they arrive at the two
+     * booleans — which way the ink runs, and whether it needs a scrim under it.
+     * Spelt once so the fifteen colours below cannot drift between the two. */
+    function barPaletteInked(base, dark, scrim) {
+        if (dark === base.inkOnDark && scrim === base.scrim) return base
+        const ink  = dark ? "#ffffff" : "#1d1d1f"
+        const wash = Qt.color(ink)
+        function pk(d, l) { return dark ? d : l }
+        return {
+            clear:     base.clear,
+            scrim:     scrim,
+            inkOnDark: dark,
+            ink:       ink,
+            bg:        scrim ? (dark ? Qt.rgba(0, 0, 0, root.scrimAlpha)
+                                     : Qt.rgba(1, 1, 1, root.scrimAlpha))
+                             : Qt.rgba(0, 0, 0, 0),
+            fg:        ink,
+            glyph:     ink,
+            accent:    ink,
+            clock:     ink,
+            hoverBg:   Qt.rgba(wash.r, wash.g, wash.b, 0.18),
+            activeBg:  Qt.rgba(wash.r, wash.g, wash.b, 0.28),
+            dim:       pk("#3a4a52", "#6b7280"),
+            blue:      pk("#4dabff", "#1d4ed8"),
+            green:     pk("#a6e3a1", "#166534"),
+            red:       pk("#f38ba8", "#b91c1c"),
+            orange:    pk("#f9e2af", "#8a6d00"),
+        }
+    }
 
     function barPalette(screen) {
         const n     = screen ? screen.name : ""

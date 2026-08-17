@@ -4671,6 +4671,26 @@ struct syn_output {
      * covers; see contrast.h for why a grid rather than one mean per monitor.
      */
     double                   wp_lum_grid[SYN_LUM_CELLS];
+    /*
+     * What is under the BAR on this output, which is not always the wallpaper —
+     * SYN_LUM_COLS columns across the bar strip, measured off the scene graph
+     * rather than off the picture (barscan.c).
+     *
+     * ⚠ -1 HERE MEANS "NOTHING OF OURS COVERS THIS COLUMN", NOT "UNKNOWABLE".
+     * It is the ordinary case, not a failure: with the bar reserving its
+     * exclusive zone nothing is under it and every column reads -1, and the
+     * consumer falls back to the matching column of wp_lum_grid's top row. That
+     * fallback is why a desktop that has never had a window under its bar
+     * publishes exactly the numbers it published before this array existed.
+     *
+     * A column is only filled when a window (or a decoration, or a bottom-layer
+     * surface) actually sits between the wallpaper and the bar, which happens
+     * two ways: the bar is auto-hiding, so it reserves nothing and maximized
+     * windows come up underneath it, or a floating window has been dragged over
+     * the strip. Both are arrangements a user makes on purpose, and in both the
+     * wallpaper's answer describes pixels that are not on screen.
+     */
+    double                   bar_strip_lum[SYN_LUM_COLS];
     /* The small palette taken off THIS output's wallpaper (palette.c). Per
      * output because per-monitor wallpapers are a thing, and the desktop-wide
      * answer is folded from these — see palette_export(). */
@@ -4780,6 +4800,11 @@ struct syn_server {
         } per[SYN_WP_PEROUT_MAX];
         int per_n;
     } wallpaper;
+
+    /* barscan.c: re-scans what is under the bar. A poll rather than a damage
+     * hook — see BARSCAN_INTERVAL_MS for why a covering client's every frame is
+     * not a reason to re-ink a bar. */
+    struct wl_event_source     *barscan_timer;
 
     struct wlr_xdg_shell      *xdg_shell;
     struct wlr_layer_shell_v1  *layer_shell;
@@ -6418,7 +6443,24 @@ void wallpaper_backdrop_measured(syn_output_t *o, double lum);
  * must read as "keep the surface you already had" — never as a dark backdrop. */
 void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
                                 double target, syn_backdrop_t *out);
+/* Re-run the backdrop export without re-measuring the wallpaper.
+ *
+ * For barscan.c, whose input changes when a WINDOW moves and not when the
+ * picture does, so it has nothing to repaint and no measurement to redo — only
+ * a file to bring up to date. Safe on a timer: the export writes only when the
+ * text it would write differs from the text it last wrote. */
+void wallpaper_backdrop_republish(syn_server_t *s);
 void wallpaper_reload(syn_server_t *s);
+
+/* ── barscan.c ───────────────────────────────────────────── */
+/* Measure what is under the bar on every output into syn_output_t's
+ * bar_strip_lum[], then republish. See barscan.c's header for why this exists
+ * at all — in short, a bar that reserves no exclusive zone, or a floating
+ * window dragged over the strip, puts something other than the wallpaper behind
+ * the glass, and the wallpaper's answer then describes pixels nobody can see. */
+void barscan_scan(syn_server_t *s);
+void barscan_init(syn_server_t *s);
+void barscan_finish(syn_server_t *s);
 /* The small palette taken off the wallpaper, or NULL when no monitor's
  * wallpaper offered a usable hue. Owned by wallpaper.c and valid until the next
  * wallpaper change — callers read it, they do not keep it. */
