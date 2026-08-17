@@ -221,6 +221,44 @@ static void test_explicit_choice(void)
     printf("  an explicit choice, verbatim ....... ok\n");
 }
 
+/* ── 6. An EMPTY terminal is still a terminal ──────────────── */
+/*
+ * The field starts empty (the struct is zeroed on every reload) and the
+ * defaults fill it, so an empty one means something upstream went wrong. What
+ * it must NOT mean is an empty command: spawn() returns -1 on one without
+ * forking, so the key did nothing, logged nothing, and `synctl dispatch term`
+ * still answered {"ok":true}. That reached a live desktop, and every part of it
+ * was individually correct — which is why this is a test and not a comment.
+ *
+ * The contract is the same as `syntty`: whatever is installed, opens.
+ */
+
+static void test_empty_is_not_nothing(void)
+{
+    stub("syntty", 0);
+
+    syn_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));       /* terminal[0] == '\0' */
+
+    char cmd[192];
+    synui_terminal_cmd(&cfg, cmd, sizeof(cmd));
+
+    if (cmd[0] == '\0') {
+        printf("    an empty `terminal` produced an empty command, and\n"
+               "    spawn() does not fork on one — the key would do nothing,\n"
+               "    silently, and the IPC would still report success.\n");
+        assert(0);
+    }
+
+    char ran[256];
+    run_chain("", ran, sizeof(ran));
+    if (strcmp(ran, "syntty\n") != 0) {
+        printf("    with terminal empty, these ran:\n%s", ran);
+        assert(0);
+    }
+    printf("  an empty setting still opens one ... ok\n");
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -232,6 +270,7 @@ int main(void)
     test_falls_back_when_missing();
     test_nothing_installed();
     test_explicit_choice();
+    test_empty_is_not_nothing();
     rig_cleanup();
     printf("terminal_chain_test: all ok\n");
     return 0;

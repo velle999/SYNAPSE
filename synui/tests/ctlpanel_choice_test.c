@@ -123,10 +123,11 @@ void fontpick_push_scale(syn_server_t *s, int scale) { (void)s; (void)scale; }
 void synui_render_calc(syn_server_t *s)    { (void)s; }
 void synui_render_taskmgr(syn_server_t *s) { (void)s; }
 
-void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
+bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     (void)s; (void)arg;
     snprintf(last_action, sizeof(last_action), "%s", action ? action : "");
+    return true;
 }
 
 int synmon_send_reload(const char *model_name, char *out, size_t out_len)

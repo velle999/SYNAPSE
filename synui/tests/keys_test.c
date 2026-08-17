@@ -121,13 +121,14 @@ void fontpick_push_scale(syn_server_t *s, int scale) { (void)s; (void)scale; }
 void synui_render_calc(syn_server_t *s)    { (void)s; }
 void synui_render_taskmgr(syn_server_t *s) { (void)s; }
 
-void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
+bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     (void)s;
     dispatches++;
     hidden_before_dispatch = !g_s.keys.visible;
     snprintf(last_action, sizeof(last_action), "%s", action ? action : "");
     snprintf(last_arg,    sizeof(last_arg),    "%s", arg    ? arg    : "");
+    return true;
 }
 
 int synmon_send_reload(const char *m, char *o, size_t n)

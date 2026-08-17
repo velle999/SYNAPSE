@@ -57,6 +57,7 @@ const char *const syn_theme_names[SYN_THEME_COUNT] = {
     [SYN_THEME_MACOS26]    = "macos26",
     [SYN_THEME_AQUA]       = "aqua",
     [SYN_THEME_PLATINUM]   = "platinum",
+    [SYN_THEME_PRISM]      = "prism",
 };
 
 /* What the panel shows a human. */
@@ -76,6 +77,7 @@ const char *theme_name(syn_theme_t t)
     case SYN_THEME_MACOS26:    return "macOS 26 (Tahoe)";
     case SYN_THEME_AQUA:       return "Mac OS X 10.0 (Aqua)";
     case SYN_THEME_PLATINUM:   return "Mac OS 8.1 (Platinum)";
+    case SYN_THEME_PRISM:      return "SYNAPSE Prism";
     default:                   return "?";
     }
 }
@@ -454,6 +456,57 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .glyph_r = 61, .glyph_g = 61, .glyph_b = 143,
         .base_r = 221, .base_g = 221, .base_b = 221,        /* #DDDDDD */
         .text_r = 0, .text_g = 0, .text_b = 0,
+    },
+    /* SYNAPSE PRISM — the house theme, and what a fresh install boots into.
+     *
+     * ⚠ THE ACCENT HERE IS A FALLBACK, NOT THE THEME. Prism's colour comes off
+     * the WALLPAPER (palette.c), live, and is substituted over the four accent
+     * fields below whenever there is one to substitute. What is written here is
+     * what a greyscale wallpaper gets, and what is on screen for the fraction
+     * of a second before the first measurement lands. It is deliberately the
+     * house cyan rather than a neutral: a fallback nobody notices is a fallback
+     * nobody finds out is being used.
+     *
+     * Everything that is NOT the accent is fixed, and that is the design. A
+     * theme whose chrome colour also came off the wallpaper would be a
+     * different theme on every picture, and the glass would have nothing
+     * constant to be glass AGAINST. So: one dark, desaturated, near-neutral
+     * surface at low alpha, and the wallpaper supplies the colour through it.
+     *
+     * Dark rather than light, unlike Tahoe. Glass over an arbitrary photograph
+     * is a contrast problem, and a dark surface is the one that survives a
+     * bright wallpaper — a pale glass over a white beach is a panel with no
+     * edges. syn_contrast_fix() then has room to work in, because the corrector
+     * is a no-op on a dark surface and would otherwise be dragging every
+     * measured accent around on the theme a fresh install ships with. */
+    [SYN_THEME_PRISM] = {
+        /* A hairline, like Tahoe's, but dark: the frame is the edge of a piece
+         * of glass, not a border drawn round a window. */
+        .border_norm  = { 0.180f, 0.196f, 0.235f, 1.0f },  /* #2E323C */
+        .border_focus = { 0.000f, 0.839f, 0.898f, 1.0f },  /* #00D6E5 — the fallback accent */
+        .border_ai    = { 0.545f, 0.451f, 0.984f, 1.0f },  /* #8B73FB */
+        .border_warn  = { 1.000f, 0.353f, 0.404f, 1.0f },  /* #FF5A67 */
+        /* The glass itself. Near-neutral and only faintly blue — a tint with a
+         * hue of its own fights whatever the wallpaper supplies, and the two
+         * together are what make a "themed" desktop look muddy. */
+        .tb_norm       = { 0.106f, 0.118f, 0.145f, 1.0f },  /* #1B1E25 */
+        .tb_focus      = { 0.145f, 0.161f, 0.196f, 1.0f },  /* #252932 */
+        .tb_grad_norm  = { 0.086f, 0.098f, 0.122f, 1.0f },  /* #16191F */
+        .tb_grad_focus = { 0.118f, 0.133f, 0.165f, 1.0f },  /* #1E222A */
+        .face          = { 0.098f, 0.110f, 0.137f, 1.0f },  /* #191C23 */
+        .chrome = SYN_CHROME_LIQUID,
+        .tb_text       = { 0.545f, 0.573f, 0.627f, 1.0f },  /* #8B92A0 secondary */
+        .tb_text_focus = { 0.902f, 0.918f, 0.945f, 1.0f },  /* #E6EAF1 */
+        /* Ships translucent, because a theme built on glass with the glass
+         * turned off is the theme with the point removed — the same argument
+         * macOS 26's entry makes. `glass_level` moves both of these together
+         * and can take them to fully clear. */
+        .active_opacity = 0.90f, .inactive_opacity = 0.84f,
+        .panel_accent  = { 0.000f, 0.839f, 0.898f, 1.0f },  /* the fallback again */
+        .scheme = "dark", .accent_r = 0, .accent_g = 214, .accent_b = 229,
+        .glyph_r = 0, .glyph_g = 214, .glyph_b = 229,
+        .base_r = 25, .base_g = 28, .base_b = 35,           /* #191C23 */
+        .text_r = 230, .text_g = 234, .text_b = 241,        /* #E6EAF1 */
     },
 };
 
@@ -895,6 +948,68 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
     if (save) theme_state_save(s);
     wlr_log(WLR_INFO, "synui: theme applied: %s (scheme %s)",
             syn_theme_names[theme], p->scheme);
+}
+
+/*
+ * SYNAPSE Prism's accent, from the wallpaper.
+ *
+ * This is the whole difference between Prism and every other preset: the twelve
+ * others carry their accent in theme_presets[], and Prism carries a FALLBACK
+ * there and takes the real one off whatever is on the desktop.
+ *
+ * ── Why only the accents move ─────────────────────────────────────────────
+ *
+ * The chrome colours, the panel surface and the text stay exactly as the preset
+ * declares them. A theme whose SURFACE also came off the wallpaper would be a
+ * different theme on every picture, and the glass would have nothing constant
+ * to be glass against — the point of glass is that you see the wallpaper
+ * THROUGH something, and if the something is also the wallpaper there is no
+ * theme left. So: one fixed dark surface, and the colour comes through it.
+ *
+ * ── Why this is not synui-apply-theme ─────────────────────────────────────
+ *
+ * ⚠ THIS RUNS ON EVERY WALLPAPER CHANGE, INCLUDING EVERY SLIDE OF A
+ * SLIDESHOW. synui-apply-theme is ~20 seconds of shelling out to kwriteconfig
+ * and gsettings; running it here would make changing wallpaper a twenty-second
+ * operation and rewrite the toolkit palette dozens of times an hour. The
+ * toolkit's accent therefore tracks the THEME, and synui's own panels track the
+ * WALLPAPER — a split that is visible if you look for it (Dolphin's highlight
+ * does not follow the picture) and is the right trade for not making the
+ * desktop unusable.
+ *
+ * A no-op on every other theme, and on Prism with a greyscale wallpaper: the
+ * fallback in the preset is what stands, which is why that fallback is the
+ * house cyan and not a neutral nobody would notice being used.
+ */
+void theme_refresh_wallpaper_accent(syn_server_t *s)
+{
+    if (s->config.theme != SYN_THEME_PRISM) return;
+
+    const syn_palette_t *p = wallpaper_palette(s);
+    if (!p || !p->ok) {
+        /* Back to the preset's fallback — a wallpaper switched from a
+         * photograph to a greyscale one must not leave the last picture's
+         * colour on the panels. Cheap: it is the same copy the theme switch
+         * does, minus the spawn. */
+        theme_load_colors(&s->config, s->config.theme);
+        theme_push_panel_colors(&s->config);
+        theme_repaint(s);
+        return;
+    }
+
+    /* Four fields, and no others. panel_accent is what synui's own panels draw
+     * their headers, selections and rules with; border_color_focus is the frame of
+     * the window you are in. Both are "the thing you are pointing at", which is
+     * exactly what an accent off the wallpaper should colour. */
+    for (int i = 0; i < 3; i++) {
+        s->config.panel_accent[i] = p->accent[i];
+        s->config.border_color_focus[i] = p->accent[i];
+    }
+    s->config.panel_accent[3] = 1.0f;
+    s->config.border_color_focus[3] = 1.0f;
+
+    theme_push_panel_colors(&s->config);
+    theme_repaint(s);
 }
 
 void theme_apply(syn_server_t *s, syn_theme_t theme, int save)

@@ -97,8 +97,8 @@ void fontpick_state_read(int *size, int *scale)
 void fontpick_push_size(syn_server_t *s, int size)   { (void)s; (void)size; }
 void fontpick_push_scale(syn_server_t *s, int scale) { (void)s; (void)scale; }
 
-void synui_binding_execute(syn_server_t *s, const char *a, const char *b)
-{ (void)s; (void)a; (void)b; }
+bool synui_binding_execute(syn_server_t *s, const char *a, const char *b)
+{ (void)s; (void)a; (void)b; return true; }
 int  synmon_send_reload(const char *m, char *o, size_t n)
 { (void)m; (void)o; (void)n; return 0; }
 

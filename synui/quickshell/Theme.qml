@@ -122,6 +122,50 @@ QtObject {
      */
     property string barInkBest: ""
 
+    // ── The wallpaper's own colours ──────────────────────
+    //
+    // SYNAPSE Prism takes its accent off the wallpaper (synui's palette.c), and
+    // publishes it here on every wallpaper change. Read exactly like
+    // backdrop.state next door, and for the same reason: quickshell cannot ask
+    // the compositor anything, so a derived fact travels as a file.
+    //
+    // ⚠ NOT theme.json. That file is written by synui-apply-theme, which is
+    // ~20 seconds of kwriteconfig and gsettings — it changes when the THEME
+    // does, and this changes when the WALLPAPER does, which on a slideshow is
+    // every few minutes.
+    //
+    // Empty string means "no palette": either the wallpaper had no usable hue
+    // (a greyscale photograph), or synui is older than this file. Both are
+    // answered the same way — fall through to the theme's own accent — so
+    // neither needs telling apart here.
+    property string wpAccent: ""
+    property string wpAccentDim: ""
+    property string wpSecondary: ""
+
+    // ⚠ NOT `paletteFile` — that name is taken, by the theme.json reader at the
+    // top of this file. QML answers a duplicate property with "Type Theme
+    // unavailable" three imports up the chain, so the bar does not load AT ALL
+    // and the error names shell.qml rather than this line. qmllint does not
+    // catch it; the bar_opacity rig, which actually starts the shell, does.
+    property FileView wpPaletteFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/palette.state"
+        watchChanges: true
+        printErrors: false          // absent until a wallpaper has been measured
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const ok = /^\s*ok\s*=\s*yes\s*$/m.test(t)
+            function hex(key) {
+                const m = t.match(new RegExp("^\\s*" + key + "\\s*=\\s*(#[0-9A-Fa-f]{6})\\s*$", "m"))
+                return (ok && m) ? m[1] : ""
+            }
+            root.wpAccent    = hex("accent")
+            root.wpAccentDim = hex("accent_dim")
+            root.wpSecondary = hex("secondary")
+        }
+        onLoadFailed: { root.wpAccent = ""; root.wpAccentDim = ""; root.wpSecondary = "" }
+    }
+
     property FileView backdropFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/backdrop.state"
         watchChanges: true
@@ -216,13 +260,25 @@ QtObject {
 
     // The washes track the colours they tint, so a hover on a Gruvbox bar is
     // Gruvbox rather than the old cyan.
-    readonly property color hoverBg:  themed("glyph",   5, 217, 232, 0.15)
-    readonly property color activeBg: themed("accent", 255,  41, 109, 0.20)
+    //
+    // The wallpaper's accent wins where there is one — that IS Prism, and on
+    // every other theme the file is absent or says no and these fall straight
+    // through to themed() unchanged.
+    readonly property color hoverBg:  root.wpAccentDim !== ""
+        ? Qt.rgba(Qt.color(root.wpAccentDim).r, Qt.color(root.wpAccentDim).g,
+                  Qt.color(root.wpAccentDim).b, 0.15)
+        : themed("glyph",   5, 217, 232, 0.15)
+    readonly property color activeBg: root.wpAccent !== ""
+        ? Qt.rgba(Qt.color(root.wpAccent).r, Qt.color(root.wpAccent).g,
+                  Qt.color(root.wpAccent).b, 0.20)
+        : themed("accent", 255,  41, 109, 0.20)
 
     // ── Ink ──────────────────────────────────────────────
     readonly property color fg:      p.fg      ? Qt.color(p.fg)      : "#c8e3ee"
     readonly property color cyan:    themed("glyph",   5, 217, 232, 1.0)   // module glyphs
-    readonly property color magenta: themed("accent", 255,  41, 109, 1.0)  // accent + underline
+    readonly property color magenta: root.wpAccent !== ""
+        ? Qt.color(root.wpAccent)
+        : themed("accent", 255,  41, 109, 1.0)  // accent + underline
     readonly property color yellow:  p.clockFg ? Qt.color(p.clockFg) : "#ffd319"
 
     // Not themed, because these carry MEANING rather than style: green is

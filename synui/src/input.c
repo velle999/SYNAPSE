@@ -676,7 +676,7 @@ void synui_start_menu_open(syn_server_t *s)
 }
 
 /* Execute a bind action (see config.c for the names and defaults). */
-void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
+bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     syn_workspace_t *ws = server_active_workspace(s);
 
@@ -963,7 +963,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, -1);
     } else if (strcmp(action, "float_toggle") == 0) {
         syn_view_t *v = s->focused_view;
-        if (!v) return;
+        if (!v) return true;
         v->floating = !v->floating;
         /* Reflow the remaining tiled windows first, then place this one. */
         layout_apply(s, ws);
@@ -985,7 +985,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             view_apply_fullscreen(s, s->focused_view,
                                   !s->focused_view->fullscreen);
     } else if (strcmp(action, "maximize_toggle") == 0) {
-        if (!s->focused_view) return;
+        if (!s->focused_view) return true;
         view_apply_maximized(s, s->focused_view, !s->focused_view->maximized);
     } else if (strcmp(action, "decorations_toggle") == 0) {
         /* Global, not per-window: the titlebar is chrome the compositor owes
@@ -1296,15 +1296,15 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * floating and fullscreen windows carry their own absolute geometry, so
          * translate or re-cover them onto it explicitly. */
         syn_view_t *v = s->focused_view;
-        if (!v || !v->mapped) return;
+        if (!v || !v->mapped) return true;
         syn_output_t *cur = v->output ? v->output : server_focused_output(s);
-        if (!cur) return;
+        if (!cur) return true;
         bool prev = arg && strcmp(arg, "prev") == 0;
         /* Step one element in the wl_list, wrapping past the head sentinel. */
         struct wl_list *node = prev ? cur->link.prev : cur->link.next;
         if (node == &s->outputs) node = prev ? s->outputs.prev : s->outputs.next;
         syn_output_t *next = wl_container_of(node, next, link);
-        if (!next || next == cur) return;                  /* only one monitor */
+        if (!next || next == cur) return true;                  /* only one monitor */
 
         struct wlr_box from, to;
         output_box_of(s, cur,  &from);
@@ -1339,7 +1339,9 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         focus_view(s, v, view_surface(v));
     } else {
         wlr_log(WLR_ERROR, "synui: unknown bind action '%s'", action);
+        return false;
     }
+    return true;
 }
 
 /* Welcome-menu navigation: only unmodified Up/Down/j/k, Enter and Escape are

@@ -224,6 +224,7 @@ synui_exe = executable('synui',
     'src/contrast.c',
     'src/effects.c',
     'src/wallpaper.c',
+  'src/palette.c',
     'src/matrix.c',
     'src/imgdec.c',
     'src/wppick.c',
@@ -740,6 +741,16 @@ bar_ink_test = executable('bar_ink_test',
   dependencies : [cc.find_library('m', required : false)],
   build_by_default : false)
 test('bar_ink', bar_ink_test)
+
+# The palette SYNAPSE Prism takes off the wallpaper. Pure — pixels in, colours
+# out — so it links contrast.c and nothing else, and its images are built in
+# the test rather than shipped as fixtures nobody can read the intent of.
+palette_test = executable('palette_test',
+  ['tests/palette_test.c', 'src/palette.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('palette', palette_test)
 
 # The panel pointer contract, on a real panel. There is no way to synthesise a
 # click into a headless synui — no virtual-pointer protocol, no input devices on

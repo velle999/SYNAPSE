@@ -1007,6 +1007,11 @@ static void config_set_defaults(syn_config_t *cfg)
     memcpy(cfg->titlebar_grad_focus, cfg->titlebar_color_focus, sizeof(cfg->titlebar_grad_focus));
     memcpy(cfg->chrome_face,         cfg->border_color_norm,    sizeof(cfg->chrome_face));
     cfg->transparency     = 0;
+    /* Unset, not 0: every theme but Prism has hand-tuned opacities and a
+     * level of 0 would flatten them all to solid. Prism's own default is set
+     * where the theme is applied, not here — a default that depended on the
+     * theme would be a second place the theme is decided. */
+    cfg->glass_level      = SYN_GLASS_UNSET;
     cfg->active_opacity   = 1.00f;
     cfg->inactive_opacity = 0.92f;
     /* Unset: foot follows the slider exactly as before until someone sets a
@@ -1394,6 +1399,30 @@ const syn_config_t *synui_config_defaults(void)
     return &def;
 }
 
+/* glass_level, resolved onto the individual alphas every consumer already
+ * reads.
+ *
+ * Applied HERE, after every source has been read, and that ordering is the
+ * whole design: the slider is an explicit answer to "how see-through is this
+ * desktop", so it has to win over the theme's own opacities and over the
+ * per-key ones in settings.state — otherwise moving it would do nothing on any
+ * machine that had ever touched the opacity row, which is every machine that
+ * has one.
+ *
+ * Unset is a no-op, so the twelve themes that are not Prism keep exactly the
+ * opacities they were tuned with, and so does a synuirc written before this
+ * key existed.
+ */
+static void config_apply_glass_level(syn_config_t *cfg)
+{
+    if (!syn_glass_set(cfg)) return;
+
+    cfg->active_opacity   = syn_glass_window_alpha(cfg);
+    cfg->inactive_opacity = cfg->active_opacity - 0.06f;
+    if (cfg->inactive_opacity < 0.50f) cfg->inactive_opacity = 0.50f;
+    cfg->bar_opacity      = syn_glass_bar_alpha(cfg);
+}
+
 void synui_config_load(syn_config_t *cfg)
 {
     config_set_defaults(cfg);
@@ -1429,6 +1458,7 @@ void synui_config_load(syn_config_t *cfg)
         notif_dnd_state_load_config(cfg);
         binds_state_load(cfg);
         config_apply_ui_font(cfg);
+        config_apply_glass_level(cfg);
         return;
     }
 
@@ -1522,6 +1552,9 @@ void synui_config_load(syn_config_t *cfg)
      * rather than one source's guess — which is why it is applied here and
      * nowhere else. */
     config_apply_ui_font(cfg);
+    /* And the same argument for the glass slider, one line later: it is an
+     * explicit answer that has to win over the theme's own opacities. */
+    config_apply_glass_level(cfg);
 }
 
 /*
@@ -1538,8 +1571,21 @@ void synui_config_load(syn_config_t *cfg)
  */
 void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
 {
-    if (strcmp(key, "terminal") == 0)
-        strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
+    if (strcmp(key, "terminal") == 0) {
+        /* ⚠ A TRUNCATED VALUE IS WORSE THAN A REFUSED ONE. The field is 64
+         * bytes; strncpy cuts a longer value silently and leaves a path that
+         * looks plausible in the file, cannot possibly run, and fails with no
+         * message anywhere — the key does nothing and nothing says why.
+         * Refuse it, keep whatever was already there, and name the limit. */
+        if (strlen(val) >= sizeof(cfg->terminal)) {
+            wlr_log(WLR_ERROR, "synui: terminal = %.40s… is %zu bytes; the "
+                               "limit is %zu. Ignored, keeping '%s' — use a "
+                               "wrapper on PATH for a long command.",
+                    val, strlen(val), sizeof(cfg->terminal) - 1, cfg->terminal);
+        } else {
+            strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
+        }
+    }
     else if (strcmp(key, "autostart") == 0 && cfg->autostart_count < SYN_AUTOSTART_MAX)
         strncpy(cfg->autostart[cfg->autostart_count++], val, 127);
     else if (strcmp(key, "border_width") == 0) {
@@ -1705,6 +1751,17 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "transparency") == 0)
         cfg->transparency = strcmp(val, "on") == 0;
+    else if (strcmp(key, "glass_level") == 0) {
+        /* `off` is a spelling of "no opinion", so a config can hand the
+         * decision back to the theme without deleting the line. */
+        if (strcmp(val, "off") == 0 || strcmp(val, "auto") == 0) {
+            cfg->glass_level = SYN_GLASS_UNSET;
+        } else {
+            cfg->glass_level = atoi(val);
+            if (cfg->glass_level < 0)   cfg->glass_level = 0;
+            if (cfg->glass_level > 100) cfg->glass_level = 100;
+        }
+    }
     else if (strcmp(key, "active_opacity") == 0)
         cfg->active_opacity = (float)atof(val);
     else if (strcmp(key, "inactive_opacity") == 0)

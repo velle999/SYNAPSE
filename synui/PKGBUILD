@@ -35,7 +35,28 @@ pkgver=0.1.0
 #   rescan at all. It is a plain deskicons_reload and deliberately NOT
 #   deskicons_arrange — arranging clears every cell an icon has been dragged
 #   into, and a "refresh" that rearranges the desktop is not a refresh.
-pkgrel=376
+# 377: SYNAPSE Prism — a fourteenth theme, and the one a FRESH INSTALL boots
+#   into (syn-install writes `theme = prism`; the compiled default stays
+#   `synapse`, because changing it would restyle every existing desktop that
+#   never picked a theme, silently, on the next upgrade).
+#   It is glass like macOS 26 and takes its ACCENT off the wallpaper, live, on
+#   every wallpaper change: palette.c bins the image by hue, weights by
+#   saturation, and returns three colours — accent, a quieter sibling, and a
+#   measured second hue. Published as palette.state for the bar (NOT through
+#   synui-apply-theme, which is ~20s of kwriteconfig and would run on every
+#   slide of a slideshow) and pushed straight into synui's own panels.
+#   ⚠ A greyscale wallpaper is answered honestly: `ok=no`, and the preset's own
+#   cyan stands. Inventing a colour there is worse than not having the feature.
+#   Also `glass_level` — one 0..100 slider for how much of the desktop you see
+#   through, resolved onto the windows, the panels and the bar with a different
+#   number each, because the same alpha is pleasant on a window and unreadable
+#   on a dense panel row.
+#   Plus three silent failures found while chasing a dead Super+Return:
+#   an empty `terminal =` produced an EMPTY command and spawn() then did nothing
+#   without logging; a `terminal =` longer than 63 bytes was truncated in
+#   silence into a path that could never run; and `synctl dispatch` answered
+#   {"ok":true} to an action name it had never heard of.
+pkgrel=377
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

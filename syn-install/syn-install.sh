@@ -4273,6 +4273,23 @@ PROFILEEOF
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
 cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
 terminal = syntty
+# SYNAPSE Prism — the house theme, and what a fresh install boots into.
+#
+# ⚠ WRITTEN HERE RATHER THAN COMPILED IN, and that is the whole point. synui's
+# built-in default is still `synapse`, so an EXISTING machine that never picked
+# a theme keeps the desktop it has: changing the compiled default would restyle
+# every one of them on the next upgrade, silently, which is not something an
+# update is allowed to do. A fresh install has no desktop to preserve.
+#
+# Prism is glass, and it takes its accent off the wallpaper — live, on every
+# wallpaper change. A greyscale wallpaper has no colour to give and the theme's
+# own cyan stands; the journal says which is happening.
+theme = prism
+# One slider for how much of the desktop you see through: 0 solid, 100 as clear
+# as it goes. It drives the windows, synui's own panels and the bar together,
+# each with the number that surface needs. Delete the line to hand the decision
+# back to the theme's own opacities.
+glass_level = 55
 # greetd launches synui after login.
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it

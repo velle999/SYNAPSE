@@ -297,6 +297,21 @@ static const struct ctl_item ctl_items[] = {
       .help = "The bar and the SYNAPSE apps — Files, Settings, Disks, Software" },
     { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL,
       .help = "Focused-window opacity. Left/Right adjust; Enter switches it off" },
+    /* ONE slider for the whole desktop's glass, above the per-surface rows it
+     * drives. It is an integer 0..100 rather than an alpha because it is not
+     * one: the windows, the panels and the bar get different numbers out of it
+     * (syn_glass_* in synui.h), since the same alpha that is pleasant on a
+     * 1200px window makes a dense panel row unreadable.
+     *
+     * `vauto` is what "nobody has chosen" looks like on the row, and it is the
+     * compiled default — so the twelve themes that are not Prism keep the
+     * opacities they were tuned with, and turning this on is an explicit act
+     * whose result the two rows below then show. */
+    { CTL_ROW_GLASS_LEVEL,  CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glass",            NULL,
+      .key = "glass_level", .off = CFG(glass_level), .vtype = CTL_VAL_INT,
+      .vmin = 0.0f, .vmax = 100.0f, .vstep = 5.0f, .unit = "%",
+      .vauto = "Follow the theme", .apply = CTL_APPLY_GLASS,
+      .help = "How much of the desktop you see through — windows, panels and the bar together" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,

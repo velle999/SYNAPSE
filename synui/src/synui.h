@@ -47,6 +47,12 @@
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+
+/* The wallpaper-derived palette SYNAPSE Prism draws with, and the contrast
+ * maths every colour decision here goes through. Both are pure and standalone —
+ * neither includes this file — so they can sit above everything. */
+#include "palette.h"
+#include "contrast.h"
 #include <wlr/xwayland.h>
 #include <xkbcommon/xkbcommon.h>
 #include <cairo.h>
@@ -1344,6 +1350,19 @@ typedef enum {
     SYN_THEME_MACOS26,       /* macOS 26 "Tahoe" — liquid glass, very rounded */
     SYN_THEME_AQUA,          /* Mac OS X 10.0 — Aqua pinstripes, traffic lights */
     SYN_THEME_PLATINUM,      /* Mac OS 8.1 — Platinum grey, racing stripes */
+    /* SYNAPSE Prism — the house theme, and the one a fresh install boots into.
+     *
+     * ⚠ APPENDED, never inserted. `theme.state` holds the token and not the
+     * number, so the ORDER here is not a compatibility surface — but the
+     * control panel's theme page walks this enum, and a desktop's muscle memory
+     * for "three down from the top" is a real thing to preserve. New themes go
+     * on the end.
+     *
+     * Prism is glass like macOS 26 and takes its COLOUR off the wallpaper —
+     * see palette.c. Its own entry in theme_presets[] is therefore a FALLBACK
+     * palette rather than the theme: it is what a greyscale wallpaper gets, and
+     * what shows before the first wallpaper has been measured. */
+    SYN_THEME_PRISM,
     SYN_THEME_COUNT,
 } syn_theme_t;
 
@@ -1501,6 +1520,7 @@ typedef enum {
     CTL_ROW_CLIP_CSD_MARGIN,
     CTL_ROW_GLASS_HALO,
     CTL_ROW_FOOT_ALPHA,
+    CTL_ROW_GLASS_LEVEL,
     CTL_ROW_INACTIVE_OPACITY,
 
     CTL_ROW_SHADOW,
@@ -3059,6 +3079,28 @@ typedef struct {
      * Applied compositor-side to every buffer under a window, so it covers native
      * and XWayland clients (Firefox, Dolphin) uniformly, without their help. */
     int   transparency;          /* default 0 (opaque) */
+    /*
+     * glass_level — ONE slider for how much of the desktop you can see through,
+     * 0 (solid) to 100 (as clear as it goes). -1 means "no opinion": the
+     * individual keys below stand on their own, which is every theme but Prism
+     * and every config written before this existed.
+     *
+     * It is a level and not a set of alphas because the four surfaces it moves
+     * — window chrome, synui's panels, the bar and the dock — do NOT want the
+     * same number. Glass over a photograph reads far more solid on a small
+     * panel than on a full-screen window, so a single alpha applied to all four
+     * gives a desktop where the windows are see-through and the panels look
+     * broken. syn_glass_* below derive each from this one, and the mapping is
+     * the feature.
+     *
+     * ⚠ It never reaches 0 alpha on the window chrome. A window you can see
+     * straight through is one you cannot find the edges of, and "fully
+     * transparent" is a thing people ask for once and regret immediately — so
+     * 100 is the clearest that still leaves a window legible, and the bar,
+     * which HAS no content of its own to lose, is the one surface that does go
+     * to nothing.
+     */
+    int   glass_level;           /* 0..100, or -1 for "not set" */
     float active_opacity;        /* focused window, 0.5..1.0; default 1.0 */
     float inactive_opacity;      /* unfocused windows; default 0.92 */
 
@@ -3606,7 +3648,8 @@ static inline int chrome_is_mac(const syn_config_t *cfg)
  * syn_ink_for_backdrop() in contrast.h. */
 static inline float theme_bar_alpha(const syn_config_t *cfg)
 {
-    return cfg->theme == SYN_THEME_MACOS26 ? 0.0f : -1.0f;
+    return (cfg->theme == SYN_THEME_MACOS26 ||
+            cfg->theme == SYN_THEME_PRISM) ? 0.0f : -1.0f;
 }
 
 /*
@@ -3646,12 +3689,21 @@ static inline float theme_bar_alpha(const syn_config_t *cfg)
  *
  * `names` is never the user's string: only the two shipped defaults reach it,
  * so there is nothing here for a config file to inject through.
+ *
+ * ⚠ AN EMPTY `terminal` TAKES THE CHAIN, and that is not tidiness. It used to
+ * fall through to the `!names` arm and write an empty buf; spawn() then
+ * returns -1 without forking and without logging, and the IPC answered
+ * {"ok":true} on top of it — so the most-pressed key on the machine did
+ * NOTHING, said nothing, and reported success. That happened on a live desktop
+ * and took an hour to find, because every part in isolation was correct.
+ * There is no state of this field that should silently mean "no terminal".
  */
 static inline void synui_terminal_cmd(const syn_config_t *cfg,
                                       char *buf, size_t n)
 {
     const char *names = NULL;
-    if      (strcmp(cfg->terminal, "syntty") == 0) names = "syntty kitty foot alacritty xterm";
+    if      (cfg->terminal[0] == '\0')             names = "syntty kitty foot alacritty xterm";
+    else if (strcmp(cfg->terminal, "syntty") == 0) names = "syntty kitty foot alacritty xterm";
     else if (strcmp(cfg->terminal, "kitty")  == 0) names = "kitty syntty foot alacritty xterm";
 
     if (!names) {
@@ -3661,6 +3713,52 @@ static inline void synui_terminal_cmd(const syn_config_t *cfg,
     snprintf(buf, n,
              "for t in %s; do command -v \"$t\" >/dev/null 2>&1 && exec \"$t\"; done",
              names);
+}
+
+/* ── glass_level: one slider, four surfaces ───────────────
+ *
+ * Each of these is the level mapped onto what that surface actually needs.
+ * They are separate functions rather than one scale factor because the numbers
+ * are not proportional to each other — see the field's comment.
+ *
+ * A level of -1 (unset) is answered with the sentinel each caller already has
+ * for "nobody chose", so nothing here overrides a config that never asked.
+ */
+#define SYN_GLASS_UNSET (-1)
+
+static inline bool syn_glass_set(const syn_config_t *cfg)
+{
+    return cfg->glass_level >= 0;
+}
+
+/* Window chrome. 1.00 down to 0.62 — the floor is where a window still has
+ * findable edges over a busy photograph, measured rather than guessed. */
+static inline float syn_glass_window_alpha(const syn_config_t *cfg)
+{
+    if (!syn_glass_set(cfg)) return -1.0f;
+    float t = (float)cfg->glass_level / 100.0f;
+    return 1.00f - 0.38f * t;
+}
+
+/* synui's own panels. They hold dense text, so they stay more solid than a
+ * window at the same level: the same alpha that is pleasant on a 1200px window
+ * makes a control-panel row unreadable. */
+static inline float syn_glass_panel_alpha(const syn_config_t *cfg)
+{
+    if (!syn_glass_set(cfg)) return -1.0f;
+    float t = (float)cfg->glass_level / 100.0f;
+    return 1.00f - 0.30f * t;
+}
+
+/* The bar, and the only surface that goes all the way to nothing. It has no
+ * content of its own to lose — its modules draw straight onto the wallpaper,
+ * and the ink for that is what backdrop.state is for. */
+static inline float syn_glass_bar_alpha(const syn_config_t *cfg)
+{
+    if (!syn_glass_set(cfg)) return -1.0f;
+    float t = (float)cfg->glass_level / 100.0f;
+    float a = 0.95f - 0.95f * t;
+    return a < 0.0f ? 0.0f : a;
 }
 
 /*
@@ -3679,7 +3777,22 @@ static inline void synui_terminal_cmd(const syn_config_t *cfg,
  */
 static inline bool theme_is_glass(const syn_config_t *cfg)
 {
-    return cfg->theme == SYN_THEME_MACOS26;
+    return cfg->theme == SYN_THEME_MACOS26 ||
+           cfg->theme == SYN_THEME_PRISM;
+}
+
+/* The relative luminance of the surface synui's OWN panels are drawn on.
+ *
+ * The one number the wallpaper palette has to be corrected against: those
+ * colours are drawn on a panel, not on the wallpaper they came from, and
+ * correcting against the wrong surface is how a measured yellow lands at
+ * 1.4:1. Reads cfg->panel_bg, which theme_load_colors() has already resolved
+ * from the preset (alpha 0 there means "derive from the base"), so this is the
+ * final answer rather than the preset's opinion. */
+static inline double theme_panel_surface_lum(const syn_config_t *cfg)
+{
+    return syn_rel_luminance(cfg->panel_bg[0], cfg->panel_bg[1],
+                             cfg->panel_bg[2]);
 }
 
 /* Whether the dock paints itself as glass, with AUTO resolved. */
@@ -4227,6 +4340,10 @@ struct syn_output {
      * those two choices and nowhere else. What is left is genuinely unknowable:
      * wallpaper-engine, an external client painting over the top of us. */
     double                   wp_top_lum;
+    /* The small palette taken off THIS output's wallpaper (palette.c). Per
+     * output because per-monitor wallpapers are a thing, and the desktop-wide
+     * answer is folded from these — see palette_export(). */
+    syn_palette_t            wp_palette;
 
     /* matrix.c: the animated wallpaper's per-frame GPU buffer + swapchain,
      * a sibling of wallpaper_buf under wallpaper_tree. Only one of the two
@@ -5948,7 +6065,11 @@ void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output
  * renders to a GPU buffer the painter above never sees and so is the only thing
  * that can measure it. */
 void wallpaper_backdrop_measured(syn_output_t *o, double lum);
-void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from current config */
+void wallpaper_reload(syn_server_t *s);
+/* The small palette taken off the wallpaper, or NULL when no monitor's
+ * wallpaper offered a usable hue. Owned by wallpaper.c and valid until the next
+ * wallpaper change — callers read it, they do not keep it. */
+const syn_palette_t *wallpaper_palette(syn_server_t *s);           /* re-decode + repaint from current config */
 
 /* ── imgdec.c ────────────────────────────────────────────── */
 
@@ -6762,6 +6883,10 @@ void theme_state_load_config(syn_config_t *cfg);
  * Startup passes push_apps=1 so the toolkits are reskinned too; a reload passes
  * 0, since nothing outside the compositor changed. Never saves. */
 void theme_apply_from_config(syn_server_t *s, int push_apps);
+/* Re-derive SYNAPSE Prism's accent from the wallpaper that is on screen now.
+ * A no-op under every other theme. Called by wallpaper.c after a measurement,
+ * which is the only thing that can change the answer. */
+void theme_refresh_wallpaper_accent(syn_server_t *s);
 /* `synctl dispatch theme <arg>` — a preset token ("dark"), or three #rrggbb
  * colours (accent, panel surface, ink) to apply as a custom palette. Returns 0
  * and logs when the argument is neither. Bare `theme` opens the picker instead;
@@ -6963,8 +7088,16 @@ void synui_render_bt(syn_server_t *s);
 
 /* Run a bind action by name (input.c owns the dispatch table). The control
  * panel's rows are actions, so they go through exactly the path a keybind
- * does rather than reimplementing it. */
-void synui_binding_execute(syn_server_t *s, const char *action, const char *arg);
+ * does rather than reimplementing it.
+ *
+ * Returns whether the name MATCHED an action — not whether that action
+ * succeeded, which for a fire-and-forget spawn is not knowable here. It exists
+ * so `synctl dispatch` can stop answering {"ok":true} to a typo: the compositor
+ * already logs `unknown bind action`, but the journal is not where somebody
+ * scripting against the socket is looking. Every other caller ignores it,
+ * because a keybind and a control-panel row can only carry names this file
+ * defines. */
+bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg);
 /* Open the waybar start menu, by synthesizing a click on its bar surface —
  * waybar's menu is a GTK popup with no IPC to open it. See input.c. */
 void synui_start_menu_open(syn_server_t *s);

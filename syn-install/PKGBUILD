@@ -13,7 +13,12 @@ pkgver=0.1.0
 #   without a window ONLY with that player — every other one opens a window
 #   somebody then has to get out of with a gamepad — so a fresh install without
 #   it had half of big screen mode described and absent.
-pkgrel=79
+# 80: a fresh install boots into SYNAPSE Prism — `theme = prism` and
+#   `glass_level = 55` in the synuirc this writes. NOT synui's compiled default,
+#   which stays `synapse`: an existing machine that never picked a theme must
+#   keep the desktop it has, and an upgrade that silently restyles one is not
+#   something this project does. A fresh install has no desktop to preserve.
+pkgrel=80
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

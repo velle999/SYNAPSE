@@ -310,7 +310,22 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         const char *arg = "";
         if (sp) { *sp = '\0'; arg = sp + 1; }
 
-        synui_binding_execute(s, rest, arg);
+        /* ⚠ ANSWER HONESTLY. This was an unconditional {"ok":true}, so a typo'd
+         * action — or one renamed out from under a script — reported success
+         * while doing nothing at all. The compositor logs `unknown bind action`
+         * either way, but a caller reading this socket is not reading the
+         * journal, and "ok" is the one answer it cannot act on.
+         *
+         * Still no report of whether the action WORKED: most of them spawn and
+         * return, so there is nothing truthful to say. Matched, not succeeded. */
+        if (!synui_binding_execute(s, rest, arg)) {
+            /* bjson_str, not bputs: `rest` is whatever came down the socket,
+             * and a quote in it would otherwise break the document open. */
+            bputs(out, "{\"error\":\"unknown action\",\"action\":");
+            bjson_str(out, rest);
+            bputs(out, "}\n");
+            return;
+        }
         bputs(out, "{\"ok\":true}\n");
         return;
     }

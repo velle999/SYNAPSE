@@ -26,7 +26,16 @@
  * did not end up being the process sh exec'd. */
 pid_t synui_spawn_pid(const char *cmd)
 {
-    if (!cmd || !*cmd) return -1;
+    /* ⚠ SAY SO. This returning -1 in silence is how a keybind comes to do
+     * nothing at all: the caller built an empty command, nothing forked,
+     * nothing was logged, and `synctl dispatch` answered {"ok":true} over the
+     * top of it. An empty command here is always a bug in the caller — there is
+     * no legitimate "spawn nothing" — so it belongs in the journal. */
+    if (!cmd || !*cmd) {
+        wlr_log(WLR_ERROR, "synui: spawn refused an empty command — "
+                           "whatever built it produced nothing to run");
+        return -1;
+    }
     pid_t pid = fork();
     if (pid == 0) {
         setsid();
