@@ -3589,7 +3589,17 @@ static int big_music_status(bool rec)
  * WAIT for the settle rather than to sample once. Fifteen seconds is more than
  * twice the longest start measured here, and nothing acts until it is up.
  */
-#define MUSIC_SETTLE_MS  15000		/* > 2× the longest measured start */
+/*
+ * ⚠ THE FIRST WAIT IS SHORT NOW, AND THAT IS SAFE BECAUSE OF WHAT FOLLOWS IT.
+ * It was fifteen seconds when the only answer to a stalled start was to SKIP
+ * the track — a wait that long was the price of not throwing away a song that
+ * was merely slow. The answer now is to ask the same track again, which costs
+ * nothing if it was already starting, so the wait only has to be longer than a
+ * healthy start (measured 2–4s on this machine, 8s of headroom here).
+ */
+#define MUSIC_SETTLE_MS   5000		/* > the longest measured healthy start */
+#define MUSIC_NUDGE_MS    5000		/* and how long a re-ask is given     */
+#define MUSIC_NUDGE_MAX       3		/* re-asks before the track is blamed */
 #define MUSIC_RETRY_MS   12000		/* the same patience, one track along */
 #define MUSIC_SKIP_MAX       3		/* a whole dead playlist is not ours */
 
@@ -3671,6 +3681,58 @@ static bool music_insist_lock(int *fd)
 	return true;
 }
 
+/*
+ * ── the first toggle is LOST, and the track is not the problem ─────────────
+ *
+ * ⚠ MEASURED, AFTER THREE RELEASES OF GUESSING AT IT. A player that has just
+ * come up and been given its first track answers `toggle` by doing nothing,
+ * often enough to be the normal case on this machine — and then sits at
+ * `stopped` for as long as it is left. Sent a SECOND toggle, on the SAME
+ * track, it starts within four seconds. Watched directly against the real
+ * player: stuck at 12s, one plain `toggle`, playing at 16s.
+ *
+ * That is the whole fault, and every release before this one mistook it for a
+ * dead track: 0.1.0-35's rescue answered a stalled start with `next`, so it
+ * SKIPPED A PERFECTLY GOOD SONG — velle's entry 1 reports `public`, plays on
+ * its own in two seconds, and was skipped anyway — and then waited another
+ * twelve seconds to do it again. Thirty-four seconds from press to sound, and
+ * two songs missing from the front of the queue.
+ *
+ * So the recovery is now ASK AGAIN before ASK ELSEWHERE: re-toggle the same
+ * track, up to MUSIC_NUDGE_MAX times, and only once that has failed is a skip
+ * even considered — by which point the track really is the suspect.
+ *
+ * ⚠ AND A NUDGE THAT LANDS LATE IS UNDONE. `toggle` from `playing` is PAUSE,
+ * and the settle above samples once a second, so there is a narrow window
+ * where a track starts just as the nudge goes out. Left alone that is a button
+ * that stops the music it was sent to start — the exact fault 0.1.0-29 shipped
+ * — so a `paused` player found immediately after a nudge is toggled back.
+ */
+static bool music_nudge(void)
+{
+	char state[32];
+	music_read(state, sizeof(state), NULL, 0, NULL, 0, NULL);
+	if (!strcmp(state, "playing"))
+		return true;
+	if (!state[0])
+		return true;		/* the player has gone; nothing to do */
+
+	music_cmd("toggle");
+
+	if (!music_settled(MUSIC_NUDGE_MS))
+		return false;
+
+	/* ⚠ Did that PAUSE it rather than start it? music_settled treats
+	 * `paused` as "leave this alone", which is right for a person pressing
+	 * pause and wrong for a pause this function just caused. */
+	music_read(state, sizeof(state), NULL, 0, NULL, 0, NULL);
+	if (!strcmp(state, "paused")) {
+		music_cmd("toggle");
+		return music_settled(MUSIC_NUDGE_MS);
+	}
+	return true;
+}
+
 static void music_start_insist(void)
 {
 	int lock = -1;
@@ -3678,6 +3740,18 @@ static void music_start_insist(void)
 		return;
 
 	if (!music_settled(MUSIC_SETTLE_MS)) {
+		/* ⚠ THE SAME TRACK, FIRST. See music_nudge(): a stalled start
+		 * is a lost toggle far more often than it is a dead song, and
+		 * skipping is not reversible from a sofa. */
+		bool going = false;
+		for (int i = 0; i < MUSIC_NUDGE_MAX && !going; i++)
+			going = music_nudge();
+		if (going) {
+			if (lock >= 0)
+				close(lock);
+			return;
+		}
+
 		int skipped = 0;
 		for (int i = 0; i < MUSIC_SKIP_MAX && !skipped; i++) {
 			/* ⚠ `next` MOVES THE TRACK BUT DOES NOT START IT —
@@ -4225,6 +4299,8 @@ static int local_queue(void)
 #define YT_MAX	   60		/* tracks queued from one station           */
 #define YT_FIND	   12		/* results a search comes back with         */
 #define YT_TIMEOUT 25		/* seconds — a search crosses the internet  */
+#define YT_VERIFY      8	/* head tracks ASKED about before queueing  */
+#define YT_VERIFY_SECS 20	/* one of those questions, at the outside   */
 
 /* Declared rather than moved: it belongs beside the source picker below, with
  * the rest of what reads cliamp's own config — but the stations list has to
@@ -4417,6 +4493,58 @@ static int yt_enumerate(const char *spec, char titles[][256],
  * add one rather than answering an empty list, because an empty panel on a
  * television is indistinguishable from a broken button.
  */
+/*
+ * ── will this one actually PLAY? ───────────────────────────────────────────
+ *
+ * ⚠ THE QUESTION THE ENUMERATION CANNOT ANSWER, and the reason the Music tile
+ * looked broken for three releases.
+ *
+ * `--flat-playlist` is what makes reading a station fast enough to be a button
+ * — one request for the whole list instead of one per track — and its entries
+ * carry a real title, a real duration and a real view count for videos that
+ * answer "Video unavailable" the moment anything tries to play them.
+ * `%(availability)s` is `null` for EVERY entry in that listing, available or
+ * not, so there is nothing in it to filter on. Measured on velle's own
+ * playlist: entry 0 is dead, entries 1 and 2 are fine, and all three look
+ * identical on the way in.
+ *
+ * Asked about ONE video, though, yt-dlp answers immediately and definitively:
+ *
+ *     yt-dlp --simulate --print "%(id)s" <dead>   → rc 1 in 2s
+ *     yt-dlp --simulate --print "%(id)s" <good>   → rc 0 in 1s
+ *
+ * and run_capture() already turns a non-zero exit into NULL. So this costs
+ * about a second and removes the whole problem at its source, rather than
+ * discovering it fifteen seconds later with the television silent.
+ *
+ * ⚠ WITH THE SESSION, for the same reason every other enumeration carries it:
+ * a members-only or otherwise gated track is playable for the signed-in person
+ * and not for anybody else, and asking without the cookies would drop tracks
+ * that would have played perfectly.
+ */
+static bool yt_playable(const char *url)
+{
+	char browser[64];
+	bool signed_in = yt_cookie_browser(browser, sizeof(browser));
+
+	char *out = signed_in
+		? run_capture((char *const[]){
+			(char *)"yt-dlp", (char *)"--simulate",
+			(char *)"--no-warnings",
+			(char *)"--cookies-from-browser", browser,
+			(char *)"--print", (char *)"%(id)s",
+			(char *)url, NULL }, YT_VERIFY_SECS)
+		: run_capture((char *const[]){
+			(char *)"yt-dlp", (char *)"--simulate",
+			(char *)"--no-warnings",
+			(char *)"--print", (char *)"%(id)s",
+			(char *)url, NULL }, YT_VERIFY_SECS);
+
+	bool ok = out && *trim(out);
+	free(out);
+	return ok;
+}
+
 static int yt_stations(bool rec)
 {
 	char path[SYN_PATH];
@@ -4580,6 +4708,46 @@ static int yt_play(const char *what)
 	}
 
 	/*
+	 * ⚠ THE FRONT OF THE QUEUE IS ASKED ABOUT BEFORE IT IS PLAYED, and
+	 * this is the fix the last two releases were circling.
+	 *
+	 * A dead track at position 0 leaves cliamp `stopped` for ever — no
+	 * skip, no error, nothing on any stream — so the television answered a
+	 * press with silence. 0.1.0-35 rescued that AFTERWARDS, waiting out a
+	 * fifteen-second settle before skipping, and measured on velle's own
+	 * playlist that came to THIRTY-FOUR SECONDS and two skipped tracks
+	 * before a note was heard. From four metres, thirty-four seconds of
+	 * nothing is a button that does not work — which is exactly how it was
+	 * reported, twice.
+	 *
+	 * ⚠ AND ONE OF THOSE TWO SKIPS WAS A GOOD TRACK. Asked on its own,
+	 * entry 1 of that playlist reports `public` and plays in two seconds;
+	 * the rescue skipped it anyway. Waiting for a symptom and then guessing
+	 * is worse than asking, and this is the asking.
+	 *
+	 * ⚠ BOUNDED, IN BOTH DIRECTIONS. At most YT_VERIFY questions, because a
+	 * station whose first eight tracks are all dead is not something to
+	 * spend a minute proving — the queue is filled from wherever this got
+	 * to and music_start_insist() is still behind it. And it never runs
+	 * past the END of the list: `head < n` is what stops an all-dead
+	 * playlist queueing nothing at all.
+	 */
+	int head = 0;
+	while (head < n && head < YT_VERIFY && !yt_playable(urls[head]))
+		head++;
+
+	if (head >= n) {
+		fputs("syn-arcade: nothing in that list will play — the "
+		      "tracks may be unavailable in this country\n", stderr);
+		return EX_EMPTY;
+	}
+	if (head)
+		fprintf(stderr, "syn-arcade: %d track%s at the front of that "
+				"list will not play — starting past %s\n",
+			head, head == 1 ? "" : "s",
+			head == 1 ? "it" : "them");
+
+	/*
 	 * ⚠ THE SOURCE IS SET FIRST, AND IT IS NOT BOOKKEEPING — IT IS WHAT
 	 * MAKES THE QUEUE EMPTY.
 	 *
@@ -4627,8 +4795,11 @@ static int yt_play(const char *what)
 	 * ⚠ And its title is remembered BEFORE the toggle, so the first thing
 	 * Now Playing says is the track rather than the URL.
 	 */
+	/* ⚠ FROM `head`, NOT FROM ZERO. The tracks before it were asked and
+	 * said no; queueing them anyway would put the dead one back at
+	 * position 0 and undo the whole check above. */
 	int queued = 0;
-	for (int i = 0; i < n; i++) {
+	for (int i = head; i < n; i++) {
 		char *out = run_capture((char *const[]){
 			(char *)"cliamp", (char *)"queue", urls[i], NULL }, 15);
 		free(out);
@@ -4640,7 +4811,7 @@ static int yt_play(const char *what)
 
 		/* `toggle`, not `play` — a player that has just started is
 		 * `stopped`, and resume does nothing from there. */
-		if (i == 0) {
+		if (i == head) {
 			if (tf)
 				fflush(tf);
 			music_cmd("toggle");

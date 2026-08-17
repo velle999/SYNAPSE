@@ -2194,7 +2194,7 @@ if [ "$1" = status ]; then
     # which is the one thing a real player never does — and a player that can
     # never begin playing is a fixture that cannot tell "it started" from "it
     # is stuck", the exact distinction the code below this line exists for.
-    [ "$st" = stopped ] && [ -f "${CLIAMP_PLAYING:-}" ] && st=playing
+    [ "$st" = stopped ] && [ -s "${CLIAMP_PLAYING:-}" ] && st=playing
     if [ "$st" = off ]; then
         printf '{"ok":false,"error":"not running"}'
     else
@@ -2223,9 +2223,34 @@ fi
 # YouTube URL that cannot be resolved leaves cliamp `stopped` for ever, with no
 # error on any stream and no skip of its own. While $CLIAMP_STUCK exists this
 # stub is on such a track and `toggle` does nothing at all; `next` moves off it.
-[ "$1" = next ] && rm -f "${CLIAMP_STUCK:-}"
-[ "$1" = toggle ] && [ ! -f "${CLIAMP_STUCK:-}" ] && : > "$CLIAMP_PLAYING"
-[ "$1" = stop ] && rm -f "${CLIAMP_PLAYING:-}"
+# ⚠ NOTHING IN HERE MAY CALL A PROGRAM. The runners below hand this stub a
+# PATH that is a REPLACEMENT — three or four stub directories and no /bin — so
+# `cat`, `rm` and friends are "command not found" and their failure is SILENT.
+# This cost an afternoon: `rm -f "$CLIAMP_STUCK"` on the `next` line below
+# never once removed anything, so the fixture could not model a player
+# RECOVERING, and a new assertion failed against code that was correct.
+#
+# So state is a FILE'S EMPTINESS, tested with -s and cleared with `: >`, both
+# of which are shell builtins.
+[ "$1" = next ] && : > "${CLIAMP_STUCK:-/dev/null}"
+
+# ⚠ AND A TOGGLE THAT IS SIMPLY LOST, which is a different thing again and is
+# the one that was actually happening. A player that has just come up answers
+# its first toggle by doing nothing — measured against the real cliamp: stuck
+# at 12s, one plain re-toggle, playing at 16s. $CLIAMP_DEAF holds how many
+# toggles are swallowed before one lands. Without this the fixture could only
+# model a DEAD TRACK, so "skip it" looked like the right answer to a stall and
+# a perfectly good song was thrown away.
+if [ "$1" = toggle ] && [ -n "${CLIAMP_DEAF:-}" ] && [ -s "$CLIAMP_DEAF" ]; then
+    read n < "$CLIAMP_DEAF"
+    if [ "${n:-0}" -gt 0 ]; then
+        n=$((n - 1))
+        printf '%s' "$n" > "$CLIAMP_DEAF"
+        exit 0
+    fi
+fi
+[ "$1" = toggle ] && [ ! -s "${CLIAMP_STUCK:-}" ] && printf 1 > "$CLIAMP_PLAYING"
+[ "$1" = stop ] && : > "${CLIAMP_PLAYING:-/dev/null}"
 exit 0
 EOF
 chmod +x "$MSTUB/cliamp"
@@ -2233,6 +2258,7 @@ export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK="" CLIAMP_STATE="playing"
 export CLIAMP_TITLE="" CLIAMP_TOTAL=""
 export CLIAMP_UP="$T/cliamp.up"
 export CLIAMP_PLAYING="$T/cliamp.playing" CLIAMP_STUCK="$T/cliamp.stuck"
+export CLIAMP_DEAF="$T/cliamp.deaf"
 
 # ⚠ THE WAITS ARE CUT DOWN FOR THE WHOLE RUN. music_start_insist() waits
 # fifteen seconds for the player to settle before it decides a track will not
@@ -2678,6 +2704,56 @@ check "...and finds things with it off, keyed by URL so playing one is one path"
 
 ytrun yt search 2>&1 | grep -q "takes something to search for"
 check "...and a search with nothing to search for says so" $?
+
+# ── ⚠ THE FRONT OF THE QUEUE IS ASKED ABOUT BEFORE IT IS PLAYED ─────────────
+#
+# `--flat-playlist` is what makes reading a station fast enough to be a button,
+# and its entries carry a real title, duration and view count for videos that
+# answer "Video unavailable" the moment anything plays them. `%(availability)s`
+# is null for EVERY entry there, so there is nothing in that listing to filter
+# on — measured on velle's own playlist, where entry 0 is dead and entries 1
+# and 2 are fine and all three look identical on the way in.
+#
+# Asked about ONE video, yt-dlp answers in about a second and run_capture()
+# turns its non-zero exit into NULL:
+#
+#     yt-dlp --simulate --print "%(id)s" <dead>  → rc 1
+#     yt-dlp --simulate --print "%(id)s" <good>  → rc 0
+grep -q '"--simulate"' src/big.c
+check "the head of a station is asked whether it will play" $?
+
+# ⚠ THE FUNCTION IS CUT OUT INTO A FILE, not piped into `grep -q`. That is the
+# SIGPIPE trap this file has already paid for twice: grep exits the instant it
+# matches, awk dies of SIGPIPE, and `set -o pipefail` reports 141 — so four
+# assertions went red against source that matched perfectly. The ones whose
+# pattern happens to sit near the END of the extract get away with it, which is
+# what makes it look like only some of them are broken.
+YTPLAY="$T/yt_play.c"
+awk '/static int yt_play/,/^}/' src/big.c > "$YTPLAY"
+awk '/static bool yt_playable/,/^}/' src/big.c > "$T/yt_playable.c"
+
+grep -q 'while (head < n && head < YT_VERIFY && !yt_playable' "$YTPLAY"
+check "...walking past the ones that say no" $?
+
+# ⚠ FROM `head`, NOT FROM ZERO. Queueing the dead ones anyway would put one
+# back at position 0 and undo the whole check.
+grep -q 'for (int i = head; i < n; i++)' "$YTPLAY"
+check "...and the queue starts at the first one that said yes" $?
+
+grep -q 'if (i == head)' "$YTPLAY"
+check "...which is also the one that gets the first toggle" $?
+
+# ⚠ BOUNDED IN BOTH DIRECTIONS: at most YT_VERIFY questions, and never past the
+# end of the list — `head < n` is what stops an all-dead playlist queueing
+# nothing at all and reporting success.
+grep -q 'if (head >= n)' "$YTPLAY"
+check "...and a list where nothing will play says so" $?
+
+# ⚠ WITH THE SESSION. A members-only track is playable for the signed-in person
+# and not for anybody else; asking without the cookies would drop tracks that
+# would have played perfectly.
+grep -q 'cookies-from-browser' "$T/yt_playable.c"
+check "...asked as the signed-in person, where there is a session" $?
 
 # ── signing in, which is a BROWSER and not a Google Cloud project ───────────
 #
@@ -3166,11 +3242,46 @@ check "...and only where a queue really filled" $?
 # it is inconsistent. Which is exactly this — and which is what the fix does
 # on somebody's behalf.
 printf 'music_source = ytmusic\n' > "$BIGCONF"
-: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; : > "$CLIAMP_STUCK"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING" "$CLIAMP_DEAF"; echo 1 > "$CLIAMP_STUCK"
 ( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
   lastrun play ) >/dev/null 2>&1
 grep -q 'cliamp next' "$CLIAMP_LOG"
 check "a queue that will not start is stepped past, not left in silence" $?
+
+# ── ⚠ BUT A LOST TOGGLE IS NOT A DEAD TRACK, AND IT IS THE COMMON CASE ──────
+#
+# Measured against the real player: a cliamp that has just come up answers its
+# first toggle by doing NOTHING, and sits at `stopped` indefinitely. A second
+# toggle — on the SAME track — starts it within four seconds. Watched
+# directly: stuck at 12s, one plain re-toggle, playing at 16s.
+#
+# 0.1.0-35 answered that stall with `next`, so it threw away a song that was
+# never broken: velle's entry 1 reports `public`, plays on its own in two
+# seconds, and was skipped anyway — twice, at fifteen seconds apiece, for
+# thirty-four seconds of silence before a note was heard. Reported as "the
+# music isn't starting, and when I load a playlist I have to skip to get it to
+# play". This is that, and the assertion is that NOTHING IS SKIPPED.
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING" "$CLIAMP_STUCK"; echo 1 > "$CLIAMP_DEAF"
+( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun play ) >/dev/null 2>&1
+deaf=$(cat "$CLIAMP_LOG")
+case "$deaf" in *"cliamp next"*) false ;; *) true ;; esac
+check "a lost toggle is asked again, not answered by skipping a good track" $?
+
+[ "$(grep -c 'cliamp toggle' "$CLIAMP_LOG")" -ge 2 ]
+check "...by re-toggling the same track" $?
+
+[ -s "$CLIAMP_PLAYING" ]
+check "...and the music really is playing afterwards" $?
+
+# ⚠ AND THE SKIP IS STILL THERE BEHIND IT. Re-asking cannot rescue a track that
+# genuinely will not play, so a stuck one must still be stepped past once the
+# re-asks are spent — otherwise this fix would trade one silence for another.
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING" "$CLIAMP_DEAF"; echo 1 > "$CLIAMP_STUCK"
+( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+check "...while a track that truly will not play is still stepped past" $?
 
 # ⚠ BOTH HALVES. `next` moves the track but does NOT start it — measured: the
 # player sits at the new index, still stopped, and `play` (resume) does nothing
@@ -3184,7 +3295,7 @@ check "...and started again on the track it moved to" $?
 # half the time: the state LAGS the command, the check ran two seconds early
 # every time, and `toggle` from `playing` is PAUSE. Nothing may touch a player
 # that is playing.
-: > "$CLIAMP_LOG"; rm -f "$CLIAMP_STUCK"; : > "$CLIAMP_PLAYING"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_STUCK"; printf 1 > "$CLIAMP_PLAYING"
 ( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
   lastrun play ) >/dev/null 2>&1
 grep -q 'cliamp next' "$CLIAMP_LOG"
@@ -3194,7 +3305,7 @@ check "a player that really did start is never skipped or toggled again" $?
 # ⚠ NOR A PAUSED ONE. Pausing is a decision somebody made while this was
 # watching, and pressing on through it would be the program playing music over
 # the top of a person.
-: > "$CLIAMP_LOG"; : > "$CLIAMP_STUCK"
+: > "$CLIAMP_LOG"; echo 1 > "$CLIAMP_STUCK"
 ( CLIAMP_STATE=paused; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
   lastrun play ) >/dev/null 2>&1
 grep -q 'cliamp next' "$CLIAMP_LOG"
@@ -3203,7 +3314,7 @@ check "...and a player somebody paused is left paused" $?
 
 # ⚠ AN EMPTY QUEUE IS NOT A TRACK THAT WILL NOT PLAY, it is no track at all,
 # and skipping through it would be a minute of pressing `next` against nothing.
-: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; : > "$CLIAMP_STUCK"; rm -f "$LAST"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; echo 1 > "$CLIAMP_STUCK"; rm -f "$LAST"
 ( CLIAMP_STATE=stopped; export CLIAMP_STATE; lastrun play ) >/dev/null 2>&1
 grep -q 'cliamp next' "$CLIAMP_LOG"
 [ $? != 0 ]
@@ -3211,7 +3322,7 @@ check "...and an empty queue is not skipped through either" $?
 
 # The Now Playing row's A button is the other way somebody asks a stalled queue
 # to start, and it sends the bare verb.
-: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; : > "$CLIAMP_STUCK"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; echo 1 > "$CLIAMP_STUCK"
 ( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
   lastrun toggle ) >/dev/null 2>&1
 grep -q 'cliamp next' "$CLIAMP_LOG"

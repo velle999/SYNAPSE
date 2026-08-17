@@ -212,6 +212,69 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-36: the toggle was LOST, and -35 answered it by skipping ──────────
+#
+# Reported as "the music isn't starting when I click the Music tab, and when I
+# load a playlist it won't play — I have to skip to get it to play". Measured
+# on velle's own playlist against the real player, and the previous fix was
+# wrong about WHY.
+#
+# ⚠ THE FIRST TOGGLE IS SIMPLY LOST. A cliamp that has just come up and been
+# given its first track answers `toggle` by doing nothing, often enough to be
+# the normal case here — and then sits at `stopped` indefinitely. Sent a SECOND
+# toggle, on the SAME track, it starts within four seconds. Watched directly:
+# stuck at 12s, one plain re-toggle, playing at 16s.
+#
+# 0.1.0-35 mistook that stall for a dead track and answered it with `next`. So
+# it THREW AWAY A SONG THAT WAS NEVER BROKEN — entry 1 of that playlist reports
+# `public`, plays on its own in two seconds, and was skipped anyway — then
+# waited twelve seconds and did it again. Thirty-four seconds from press to
+# sound, with two songs missing off the front. From four metres, thirty-four
+# seconds of nothing IS a button that does not work.
+#
+# So the recovery asks again before it asks elsewhere: re-toggle the same
+# track, up to three times, and only then consider a skip. ⚠ A re-ask that
+# lands late is undone — `toggle` from `playing` is PAUSE, and the settle
+# samples once a second, so a `paused` player found straight after a nudge is
+# toggled back. That is the 0.1.0-29 fault, guarded rather than risked.
+#
+# ⚠ AND THE FIRST WAIT IS FIVE SECONDS NOW, NOT FIFTEEN. Fifteen was the price
+# of skipping being the only answer: throwing away a merely-slow song is
+# expensive, so it had to be nearly certain. Re-asking costs nothing if the
+# track was already starting, so the wait only has to beat a healthy start
+# (measured 2–4s).
+#
+# ── and the one track that really was dead ──────────────────────────────────
+#
+# ⚠ THE FRONT OF THE QUEUE IS ASKED BEFORE IT IS PLAYED. `--flat-playlist` is
+# what makes reading a station fast enough to be a button, and its entries
+# carry a real title, duration and view count for videos that answer "Video
+# unavailable" the moment anything plays them; `%(availability)s` is null for
+# every entry there, available or not, so there is nothing in that listing to
+# filter on. Asked about ONE video, yt-dlp answers in about a second and
+# run_capture() turns its non-zero exit into NULL:
+#
+#     yt-dlp --simulate --print "%(id)s" <dead>  → rc 1 in 2s
+#     yt-dlp --simulate --print "%(id)s" <good>  → rc 0 in 1s
+#
+# so a dead head is walked past before the queue is filled, rather than
+# discovered fifteen seconds later with the television silent. Bounded at eight
+# questions, never past the end of the list, and asked WITH the session so a
+# members-only track is not dropped from under the person it plays for.
+#
+# Measured end to end on the reported playlist: 34s and two songs lost, down to
+# 9–10s and the right song.
+#
+# ── ⚠ AND THE FIXTURE COULD NOT HAVE CAUGHT ANY OF IT ───────────────────────
+#
+# The stub is handed a PATH that is a REPLACEMENT — stub directories and no
+# /bin — so `cat` and `rm` inside it are "command not found", silently. Which
+# means `rm -f "$CLIAMP_STUCK"` on its `next` line NEVER REMOVED ANYTHING: the
+# fixture could model a player that was stuck and could not model one
+# RECOVERING, which is exactly the half these two releases got wrong. It is
+# builtin-only now — state is a file's emptiness, tested with -s and cleared
+# with `: >` — and `$CLIAMP_DEAF` models the lost toggle that started all this.
+
 # ── 0.1.0-35: a track that will not play, and the silence it made ──────────
 #
 # The other half of what -34 was reported for, and the half that was still
@@ -800,7 +863,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=35
+pkgrel=36
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
