@@ -1,7 +1,27 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
-pkgrel=13
+# 14: a REBUILD and nothing else. ffmpeg 8 -> 9 moved libavcodec from .so.62 to
+# .so.63 (and libavformat, libavutil, libswresample with it), and this package
+# links all four directly, so the engine stopped starting the moment ffmpeg
+# upgraded:
+#
+#   linux-wallpaperengine: error while loading shared libraries:
+#   libavcodec.so.62: cannot open shared object file
+#
+# ⚠ AND IT FAILED WHERE NOBODY LOOKS. synui-wpengine redirects the engine into
+# $XDG_RUNTIME_DIR/synui-wpengine.<output>.log and launches it detached, so a
+# wallpaper that never starts is indistinguishable from one that started and
+# drew nothing: the picker reports success, the screen keeps synui's own
+# wallpaper, and the reason is one line in a file in /run that is gone at the
+# next reboot. The state file was then cleared by picking a static wallpaper
+# instead, which is what a person does next — so the live wallpapers simply
+# stopped, silently, with nothing left on disk to say why.
+#
+# `depends` names ffmpeg unversioned, which is correct — this is a soname
+# coupling, not a version one, and the answer to a soname bump is a rebuild.
+# Expect to bump this line again the next time ffmpeg rolls a major.
+pkgrel=14
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
