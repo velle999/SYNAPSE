@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import ".."
 
 /*
@@ -26,6 +27,11 @@ PanelWindow {
 
     required property var modelData
     screen: modelData
+
+    // Frosted on a glass theme — see StartMenu.qml. Like the start menu this is
+    // a full-screen surface with the editor drawn inside it, and for the same
+    // reason it is safe: the blur is masked to what the client paints.
+    WlrLayershell.namespace: "synui-glass"
 
     // Which note this is open on. NOT read straight out of PostItState: the
     // editor has to know what it was editing at the moment that changes, or a

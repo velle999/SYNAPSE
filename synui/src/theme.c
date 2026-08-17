@@ -588,6 +588,15 @@ static void col_ink_for(float out[4], const float bg[4], const float want[4])
 
 static void theme_repaint(syn_server_t *s)
 {
+    /* The shell's layer surfaces — the start menu, the widgets, the OSD — do
+     * not commit just because the theme changed, so nothing else would tell
+     * their blur that glass has just been turned on or off. Here rather than in
+     * each caller because this is the tail every one of them already shares
+     * (theme_apply, transparency_set_enabled, the blur toggle, a config reload),
+     * and it is idempotent: on a change that was only a colour it walks a few
+     * surfaces and finds every setter already holding the value it wants. */
+    layer_glass_all(s);
+
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         if (o->scene_output)
@@ -683,7 +692,57 @@ static void theme_state_save(syn_server_t *s)
      */
     fprintf(f, "glass_chrome=%s\n",
             theme_is_glass(&s->config) ? "on" : "off");
+    /*
+     * Whether the desktop is ACTUALLY drawing glass right now, which is not the
+     * same question as the line above and is the one the shell's popups need.
+     *
+     * glass_chrome is a fact about the PRESET. This is syn_glass_active() — the
+     * preset AND transparency AND blur — and it is exported rather than
+     * recomputed in QML because two of those three are not in this file at all:
+     * `blur` is a synuirc key the bar has never read, and a popup that dropped
+     * to 0.86 because the theme is Prism, on a machine where blur is off, would
+     * be a see-through menu with a sharp wallpaper behind it. That is the one
+     * outcome worse than a slab.
+     *
+     * Same upgrade path as glass_chrome above: absent means a synui too old to
+     * export it, and the reader's honest answer for that is "not glass", which
+     * is the desktop those machines already have.
+     */
+    fprintf(f, "glass_surfaces=%s\n",
+            syn_glass_active(&s->config) ? "on" : "off");
     fclose(f);
+}
+
+/*
+ * The UI FX page's "Backdrop blur" switch, which is the one input to
+ * syn_glass_active() that is NOT a theme change and NOT a transparency change.
+ *
+ * Both of those already come through this file and pick up the tail they share
+ * (theme_repaint's layer walk, theme_state_save's export). The blur switch does
+ * not: it writes straight through the int pointer in uifx.c's row table and
+ * calls uifx_apply(), which knows about scene blur data, window alpha and
+ * decorations — and nothing about glass. So it needs both halves handed to it.
+ *
+ * ⚠ THE EXPORT IS THE HALF THAT MATTERS, and it is the one nothing else would
+ * catch. The compositor's own panels are safe without it, because
+ * panel_chrome_sync() re-pushes the factor every frame — but the shell reads
+ * `glass_surfaces` out of theme.state, and nothing rewrites that file when blur
+ * is switched off. The start menu and the widgets would keep the 0.86 alpha
+ * they took for a glass desktop while the blur behind them was being torn down,
+ * which is a see-through menu with a SHARP wallpaper through it: the one
+ * outcome theme_state_save's own comment calls worse than a slab.
+ *
+ * The layer walk is here for the reason it is in theme_repaint — a widget
+ * sitting idle does not commit, so layer_glass_apply() never runs for it and
+ * its blur companion would outlive the switch that turned it off.
+ *
+ * Not folded into theme_repaint(): that is a repaint, uifx_apply() already
+ * damages every output for its own reasons, and this has to SAVE as well.
+ */
+void theme_glass_refresh(syn_server_t *s)
+{
+    theme_state_save(s);
+    layer_glass_all(s);
 }
 
 /* The unfocused level always trails the focused one by a hair, so one slider
@@ -768,6 +827,13 @@ static void theme_push_panel_colors(const syn_config_t *cfg)
 {
     render_set_panel_accent(cfg->panel_accent);
     render_set_panel_surface(cfg->panel_bg, cfg->panel_ink);
+    /* Glass is a property of the theme too, so it travels with the colours:
+     * switching to Prism has to reach the panels in the same push that recolours
+     * them, or the first repaint after the switch draws the new surface at the
+     * old solidity. panel_chrome_sync() re-pushes every frame and would catch it
+     * eventually — "eventually" being one frame of the wrong picture on exactly
+     * the action whose whole point is to change how the desktop looks. */
+    render_set_panel_glass(syn_panel_glass_factor(cfg));
 }
 
 /* Copy a preset's colours + opacity levels into a config, nothing more — no

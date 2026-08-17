@@ -280,6 +280,79 @@ void syn_buffer_backdrop_blur(struct wlr_scene_buffer *buffer, bool want,
     blur_set(buffer, want, corner_radii_all(radius > 0 ? radius : 0));
 }
 
+/* ── The same companion, behind a RECT synui coloured itself ──
+ *
+ * Every compositor-drawn panel is a coloured wlr_scene_rect with a cairo buffer
+ * of ink sitting on top of it — see panel_bg_color() and panel_chrome_sync().
+ * So the surface a panel IS made of is the rect, and a panel that is glass
+ * needs the blur behind THAT. Behind the text buffer would frost the ink's own
+ * bounding box and leave the panel body a flat slab, which is the picture you
+ * get from blurring the thing you can see instead of the thing you see through.
+ *
+ * Two differences from the buffer path above, both because a rect is a uniform
+ * fill rather than a picture:
+ *
+ *   - No transparency mask source. The mask exists to stop the blur leaking
+ *     into the parts a CLIENT left transparent; a rect has no such parts, and
+ *     its rounded corners come from the radii it is handed. There is also no
+ *     honest thing to pass — the mask wants the buffer being blurred behind,
+ *     and here that is a rect, which is not a wlr_scene_buffer at all.
+ *   - The size comes from the rect's own width/height. A client's buffer lands
+ *     its new size a frame after the resize it was configured for, which is
+ *     what blur_sync_geometry() has to chase; a panel sets its rect's size in
+ *     the same render that decides it, so there is nothing to lag behind.
+ *
+ * Shares the addon type and the destroy listener with the buffer path, so the
+ * "the scene tore the blur node down under us" case is handled in one place
+ * rather than in a copy that could learn it later.
+ */
+void syn_rect_backdrop_blur(struct wlr_scene_rect *rect, bool want, int radius)
+{
+    if (!rect) return;
+
+    struct wlr_addon *a = wlr_addon_find(&rect->node.addons, rect,
+                                         &blur_addon_impl);
+    struct buffer_blur *bb = NULL;
+    if (a) bb = wl_container_of(a, bb, addon);
+
+    if (!want) {
+        if (bb) blur_addon_destroy(&bb->addon);
+        return;
+    }
+
+    /* Nothing on screen yet — a panel whose rect has never been sized. Keep the
+     * companion (the panel is about to be rendered) and just stop drawing it. */
+    if (rect->width <= 0 || rect->height <= 0) {
+        if (bb && bb->blur) wlr_scene_node_set_enabled(&bb->blur->node, false);
+        return;
+    }
+
+    if (!bb) {
+        struct wlr_scene_tree *parent = rect->node.parent;
+        if (!parent) return;
+
+        bb = calloc(1, sizeof(*bb));
+        if (!bb) return;
+        bb->blur = wlr_scene_blur_create(parent, rect->width, rect->height);
+        if (!bb->blur) { free(bb); return; }
+
+        bb->blur_destroy.notify = blur_node_destroyed;
+        wl_signal_add(&bb->blur->node.events.destroy, &bb->blur_destroy);
+        wlr_addon_init(&bb->addon, &rect->node.addons, rect, &blur_addon_impl);
+    }
+    if (!bb->blur) return;
+
+    /* Every setter early-returns when the value is unchanged, so this is cheap
+     * enough for panel_chrome_sync() to run over all of them every frame. */
+    wlr_scene_blur_set_size(bb->blur, rect->width, rect->height);
+    wlr_scene_blur_set_corner_radius(bb->blur, radius > 0 ? radius : 0);
+    /* Sibling of its rect, so the rect's offset in their shared parent is the
+     * whole answer — same argument as blur_sync_geometry(). */
+    wlr_scene_node_set_position(&bb->blur->node, rect->node.x, rect->node.y);
+    wlr_scene_node_place_below(&bb->blur->node, &rect->node);
+    wlr_scene_node_set_enabled(&bb->blur->node, true);
+}
+
 /* ── Applying alpha + scenefx glass to a whole window ─────── */
 struct view_effect_params {
     float alpha;

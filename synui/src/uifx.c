@@ -242,6 +242,20 @@ void uifx_apply(syn_server_t *s)
 
     anim_apply_alpha_all(s);
 
+    /* The blur switch is also a GLASS switch, and this page is the only way it
+     * moves. syn_glass_active() is "the theme asked AND transparency AND blur",
+     * so turning this row off takes glass away from synui's own panels and from
+     * the shell's menus — neither of which is reached by anything above.
+     *
+     * The panels look after themselves (panel_chrome_sync() re-pushes the factor
+     * every frame), so what this is really for is the shell: it reads
+     * `glass_surfaces` out of theme.state, and without the re-export it would
+     * hold the see-through alpha it took for a glass desktop after the blur
+     * behind it was gone. Cheap, and unconditional on purpose — asking whether
+     * the blur row in particular moved would mean tracking that here, and the
+     * call is idempotent for every other row on the page. */
+    theme_glass_refresh(s);
+
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link) {

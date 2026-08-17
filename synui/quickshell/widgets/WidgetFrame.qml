@@ -186,6 +186,11 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Bottom
 
+    // Frosted on a glass theme — see StartMenu.qml. `widget_glass` already
+    // decides whether the CARD paints itself as glass; this is the other half,
+    // the blur behind it, which no client can do for itself.
+    WlrLayershell.namespace: "synui-glass"
+
     anchors {
         left:   win.dragging || win.fillWidth || win.edgeH === "left"
         right:  win.dragging || win.fillWidth || win.edgeH === "right"

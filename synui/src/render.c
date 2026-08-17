@@ -257,15 +257,42 @@ static inline void set_ink(cairo_t *cr, double level, double a)
         g_panel_bg[2] + (g_panel_ink[2] - g_panel_bg[2]) * level, a);
 }
 
+/* How see-through the panels are drawing right now: the factor a glass theme
+ * applies to the alpha each panel was tuned at, or 1.0 for a desktop that is not
+ * glass. See syn_panel_glass_factor().
+ *
+ * A pushed file-scope value for the same reason the surface above is one —
+ * panel_bg_color() is called from thirty render functions and this keeps every
+ * one of them free of a config handle.
+ *
+ * ⚠ IT IS PUSHED FROM TWO PLACES AND NEEDS BOTH. theme_push_panel_colors() is
+ * the theme switch, and panel_chrome_sync() is every frame — the second is what
+ * makes it impossible to leave stale, because the things that turn glass off
+ * (the transparency toggle, the blur switch, a config reload) are not theme
+ * switches and would otherwise each have to remember to push. The frame-rate
+ * push costs one float store.
+ */
+static float g_panel_glass = 1.0f;
+
+void render_set_panel_glass(float factor)
+{
+    g_panel_glass = factor;
+}
+
 /* The panel surface itself, at the alpha the caller wants. Panels differ in how
  * transparent they are (a menu is glassier than the lock screen), so the alpha
- * stays with the panel and only the colour comes from here. */
+ * stays with the panel and only the colour comes from here.
+ *
+ * That per-panel alpha is also the ONLY roster of those numbers, which is why
+ * glass scales what the caller passed instead of replacing it: the ladder the
+ * panels were tuned as a set survives, and there is no second table of alphas
+ * here to drift from the literals at the call sites. */
 static inline void panel_bg_color(float out[4], float alpha)
 {
     out[0] = g_panel_bg[0];
     out[1] = g_panel_bg[1];
     out[2] = g_panel_bg[2];
-    out[3] = alpha;
+    out[3] = syn_glass_apply(g_panel_glass, alpha);
 }
 
 /* ── Legibility on a PALE panel ──────────────────────────────
@@ -8366,6 +8393,18 @@ void panel_chrome_sync(syn_server_t *s)
      * neither one thing nor the other. */
     const int r = chrome_corner_radius(&s->config);
 
+    /* Glass, on the same walk and for the same reason the radius is here: it is
+     * a fact about the desktop that every panel has to agree on, and a roster
+     * that already exists is worth more than a second one that could disagree
+     * with it. See g_panel_glass for why the push happens every frame.
+     *
+     * The factor reaches a panel's colour on its next render (the alpha is
+     * baked into the rect when the panel paints), which is what theme_repaint()
+     * is for; the blur below needs no repaint and takes effect immediately. */
+    const float glass_factor = syn_panel_glass_factor(&s->config);
+    const bool  glass        = glass_factor < 1.0f;
+    render_set_panel_glass(glass_factor);
+
 #define PANEL_BG(n)     { &s->n##_ui.bg, NULL }
 #define PANEL_FULL(n)   { &s->n##_ui.bg, &s->n##_ui.accent }
     const struct panel_chrome panels[] = {
@@ -8394,8 +8433,14 @@ void panel_chrome_sync(syn_server_t *s)
 #undef PANEL_FULL
 
     for (size_t i = 0; i < sizeof(panels) / sizeof(panels[0]); i++) {
-        if (*panels[i].bg)
+        if (*panels[i].bg) {
             wlr_scene_rect_set_corner_radius(*panels[i].bg, r);
+            /* Behind the BACKGROUND rect, not the ink buffer above it, and at
+             * the same radius so the frosted patch stops where the corner does.
+             * `false` tears the companion down, so turning glass off leaves no
+             * blur nodes behind for the next theme to render through. */
+            syn_rect_backdrop_blur(*panels[i].bg, glass, r);
+        }
         if (panels[i].accent && *panels[i].accent)
             wlr_scene_rect_set_corner_radii(*panels[i].accent,
                                             corner_radii_top(r));

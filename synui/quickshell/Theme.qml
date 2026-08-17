@@ -243,7 +243,27 @@ QtObject {
                                       : root.clearBar ? 0.0
                                       : root.barAlphaAsked > 0
                                         ? root.barAlphaAsked : root.bgAlphaDefault
-    readonly property real  popupAlpha: p.popupAlpha !== undefined ? p.popupAlpha : 0.97
+    /*
+     * The start menu, the bar's menu, the mixer, the widgets and the OSD.
+     *
+     * 0.97 is "solid, with the barest hint that something is behind it", which
+     * is right for the twelve themes that are not glass and wrong for the ones
+     * that are: on a glass theme every one of these opened as a slab in front of
+     * windows that were themselves frosted. synui frosts what is behind them now
+     * (layer.c keys off the `synui-glass` namespace) — and a blur behind an
+     * opaque surface is invisible, so this is the half that makes it show.
+     *
+     * ⚠ NOT as low as the compositor's own panels go. These carry dense rows of
+     * small text over an UNKNOWN backdrop, and unlike synui's panels they have
+     * no ink ladder that re-measures itself against the surface — the numbers in
+     * this file were chosen against popupBg as it stands. 0.86 is where the
+     * wallpaper reads through clearly and a 10px menu row still holds together;
+     * the theme's own popupAlpha, where it states one, still wins outright.
+     */
+    readonly property real  popupAlphaGlass: 0.86
+    readonly property real  popupAlpha: p.popupAlpha !== undefined ? p.popupAlpha
+                                      : root.glassSurfaces ? root.popupAlphaGlass
+                                      : 0.97
 
     // The scrim is BLACK or WHITE and not the theme's bar colour, which is the
     // one place this diverges from `bg` meaning "the theme's surface at some
@@ -455,6 +475,18 @@ QtObject {
      */
     property bool squareChromeGlass: false
 
+    /*
+     * …and whether that glass is actually being DRAWN, which is a different
+     * question with a different answer.
+     *
+     * squareChromeGlass is the PRESET's intent. This is the resolved fact —
+     * preset AND transparency AND blur — and it is the one popupAlpha keys off,
+     * because a popup made see-through on a desktop with blur switched off is a
+     * menu with a sharp wallpaper behind it rather than glass. synui exports it
+     * as `glass_surfaces`; see theme.c for why it is not derived here.
+     */
+    property bool glassSurfaces: false
+
     // What the desktop widgets actually do. The one property WidgetFrame reads.
     readonly property bool widgetsGlass:
         BarConfig.widgetGlass === "on"  ? true :
@@ -497,10 +529,18 @@ QtObject {
             // answer for both that and a theme that really is not glass.
             const g = t.match(/^\s*glass_chrome\s*=\s*(\S+)\s*$/m)
             root.squareChromeGlass = !!g && g[1] === "on"
+            // Whether glass is actually being DRAWN — the preset having asked
+            // for it, transparency on, and blur on. Not derivable from the line
+            // above: see theme.c, which exports it for exactly that reason.
+            // Absent is a synui too old to say, and "off" is the desktop those
+            // machines already have.
+            const gs = t.match(/^\s*glass_surfaces\s*=\s*(\S+)\s*$/m)
+            root.glassSurfaces = !!gs && gs[1] === "on"
         }
         onLoadFailed: {
             root.squareChrome = false
             root.squareChromeGlass = false
+            root.glassSurfaces = false
         }
     }
 

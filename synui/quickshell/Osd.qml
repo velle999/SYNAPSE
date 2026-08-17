@@ -18,6 +18,10 @@ PanelWindow {
     required property var modelData
     screen: modelData
 
+    // Frosted on a glass theme — see StartMenu.qml for what the namespace does
+    // and why the bar does not carry it.
+    WlrLayershell.namespace: "synui-glass"
+
     // Empty output means the focus probe has not answered yet — fall back to
     // the primary screen so the very first keypress after login still shows
     // something rather than nothing.

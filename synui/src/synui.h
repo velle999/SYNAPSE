@@ -3740,15 +3740,10 @@ static inline float syn_glass_window_alpha(const syn_config_t *cfg)
     return 1.00f - 0.38f * t;
 }
 
-/* synui's own panels. They hold dense text, so they stay more solid than a
- * window at the same level: the same alpha that is pleasant on a 1200px window
- * makes a control-panel row unreadable. */
-static inline float syn_glass_panel_alpha(const syn_config_t *cfg)
-{
-    if (!syn_glass_set(cfg)) return -1.0f;
-    float t = (float)cfg->glass_level / 100.0f;
-    return 1.00f - 0.30f * t;
-}
+/* synui's own panels: see syn_panel_glass_factor() below, which is where this
+ * curve ended up. It is a FACTOR on the alpha each panel was tuned at rather
+ * than one alpha for all of them, and it has to ask theme_is_glass(), which is
+ * declared further down — so the panel half of glass_level lives there. */
 
 /* The bar, and the only surface that goes all the way to nothing. It has no
  * content of its own to lose — its modules draw straight onto the wallpaper,
@@ -3779,6 +3774,100 @@ static inline bool theme_is_glass(const syn_config_t *cfg)
 {
     return cfg->theme == SYN_THEME_MACOS26 ||
            cfg->theme == SYN_THEME_PRISM;
+}
+
+/* The level a glass theme uses when nobody has set glass_level.
+ *
+ * ⚠ UNSET MEANS "NOBODY CHOSE A LEVEL", NEVER "NOBODY WANTED GLASS" — the theme
+ * already answered the second question. syn-install writes 55 into a fresh
+ * install's synuirc, so without this a desktop that reached Prism through the
+ * theme manager would be the same theme with solid panels, which is exactly the
+ * half-applied look this is meant to remove. Same number as syn-install's, and
+ * it has to stay that way: the two are the same decision written twice because
+ * one of them has to survive a synuirc that predates the key.
+ */
+#define SYN_GLASS_PANEL_DEFAULT 55
+
+/* Where a panel stops. Below this its ink stops carrying over a busy wallpaper
+ * no matter how good the contrast against the panel's own colour is — the same
+ * measured argument as the window floor in syn_glass_window_alpha(), one
+ * surface further in, and higher because a panel is dense text rather than a
+ * client's own picture. */
+#define SYN_GLASS_PANEL_FLOOR 0.62f
+
+/*
+ * How see-through synui's own panels are, as a FACTOR on the alpha each panel
+ * was tuned at. 1.0 is "not glass" and every caller passes straight through.
+ *
+ * ⚠ THE BASE ALPHA STAYS WITH THE PANEL, and that is the whole shape of this.
+ * Each render_* function passes the solidity it was designed at — a menu is
+ * glassier than the task manager's table, which is glassier than the lock
+ * screen — and this scales them together so the ladder they were tuned as a set
+ * survives. One alpha for all thirty would make the dense ones unreadable at
+ * whatever level made the sparse ones look like glass, and there would be no
+ * number that fixed both. It also means the panels' own literals stay the only
+ * roster of those numbers: there is no second table here to drift from them.
+ */
+static inline float syn_panel_glass_factor(const syn_config_t *cfg)
+{
+    /* ⚠ BLUR IS A CONDITION, NOT JUST A LATER CALL. A panel dropped to 0.79
+     * with nothing frosting behind it is not glass, it is a menu you can read
+     * the wallpaper's text through. Off is better than half, so the alpha and
+     * the blur answer to the same question. Transparency is the user's master
+     * switch and means what it says. */
+    if (!cfg->transparency || !cfg->blur) return 1.0f;
+
+    /*
+     * An explicit glass_level is an answer for ANY theme. It is the same slider
+     * that already moves the windows and the bar on every preset, and a desktop
+     * where dragging it frosts the windows but leaves synui's own panels solid
+     * is exactly the half-applied look this is here to remove.
+     *
+     * Unset falls back to the THEME, and that fallback is the whole of the bug
+     * this fixes: Prism reached through the theme manager writes no glass_level
+     * anywhere, so gating on the level alone left the house glass theme with
+     * thirty solid panels. Unset means "nobody chose a level", never "nobody
+     * wanted glass" — the preset already answered the second question.
+     *
+     * A theme that is neither glass nor given a level keeps the opacities it
+     * was tuned with, which is the twelve retro presets and is why they see
+     * nothing of any of this.
+     */
+    int level = syn_glass_set(cfg)   ? cfg->glass_level
+              : theme_is_glass(cfg)  ? SYN_GLASS_PANEL_DEFAULT
+                                     : 0;
+    if (level <= 0) return 1.0f;
+    return 1.00f - 0.30f * ((float)level / 100.0f);
+}
+
+/*
+ * Is the desktop drawing GLASS right now — the one question every surface that
+ * wants to be see-through has to ask, spelt once.
+ *
+ * Defined as "the panels are being made translucent", rather than as its own
+ * copy of the theme/transparency/blur test, so the frosting behind a surface
+ * and the see-through-ness of the surface itself can never disagree. The
+ * failure mode of two copies is a desktop where the control panel is frosted
+ * and the clock beside it is a slab, which reads as a bug in the theme rather
+ * than as two conditions drifting apart.
+ */
+static inline bool syn_glass_active(const syn_config_t *cfg)
+{
+    return syn_panel_glass_factor(cfg) < 1.0f;
+}
+
+/* Apply that factor to one panel's tuned alpha, and stop at the floor.
+ *
+ * The floor is applied HERE rather than folded into the factor because it is
+ * per panel: it depends on where that panel started, and a factor cannot know
+ * that. A desktop that is not glass returns the base untouched, floor included
+ * — a preset that deliberately tuned a panel to 0.50 keeps it.
+ */
+static inline float syn_glass_apply(float factor, float base)
+{
+    if (factor >= 1.0f) return base;
+    float a = base * factor;
+    return a < SYN_GLASS_PANEL_FLOOR ? SYN_GLASS_PANEL_FLOOR : a;
 }
 
 /* The relative luminance of the surface synui's OWN panels are drawn on.
@@ -5545,6 +5634,13 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box);
 void layer_shell_init(syn_server_t *s);            /* create global + wire signal */
 void layer_arrange_output(syn_output_t *output);   /* place layers, update usable */
 void layer_output_destroy(syn_output_t *output);   /* close surfaces on a dead output */
+/* Backdrop blur behind the shell's own layer surfaces — the start menu, the
+ * widgets, the OSD, and the bar's menus by way of their parent. Driven per
+ * commit from layer.c; layer_glass_all() is for the events that change the
+ * ANSWER without committing anything (theme switch, transparency/blur toggles,
+ * config reload). The BAR is deliberately excluded — see layer.c. */
+void layer_glass_apply(syn_layer_surface_t *ls);
+void layer_glass_all(syn_server_t *s);
 /* Hide/show an output's TOP-layer panels so a fullscreen view can cover them. */
 void layer_update_occlusion(syn_server_t *s, syn_output_t *o);
 void layer_update_occlusion_all(syn_server_t *s);
@@ -6906,6 +7002,10 @@ void theme_preview_colors(syn_theme_t t, float caption[4], float accent[4]);
  * theme_load_colors so a theme switch (or a synuirc `theme =`) reskins the UI. */
 void render_set_panel_accent(const float rgb[4]);
 void render_set_panel_surface(const float bg[4], const float ink[4]);
+/* The glass factor panel_bg_color() scales every panel's tuned alpha by — 1.0
+ * for a desktop that is not glass. Pushed from theme_push_panel_colors() and
+ * from panel_chrome_sync(); see the cache's comment in render.c for why both. */
+void render_set_panel_glass(float factor);
 
 /* Shared translucency controls behind the control-panel + theme-manager sliders.
  * set_opacity clamps the focused level to 0.50..1.00 and derives the unfocused
@@ -6914,6 +7014,11 @@ void render_set_panel_surface(const float bg[4], const float ink[4]);
  * alpha to every window and persist to theme.state. */
 void transparency_set_opacity(syn_server_t *s, float active);
 void transparency_set_enabled(syn_server_t *s, int on);
+/* Re-export `glass_surfaces` and re-assert the shell's layer blur after
+ * something changed syn_glass_active() WITHOUT going through this file. That is
+ * the UI FX backdrop-blur switch and nothing else — a theme switch and the
+ * transparency toggle already share theme.c's own tail. See theme.c. */
+void theme_glass_refresh(syn_server_t *s);
 
 void theme_show(syn_server_t *s);
 void theme_hide(syn_server_t *s);
@@ -7534,6 +7639,11 @@ void anim_apply_alpha(syn_view_t *view);
  */
 void syn_buffer_backdrop_blur(struct wlr_scene_buffer *buffer, bool want,
                               int radius);
+/* The same, behind a coloured rect rather than a painted buffer — which is what
+ * every one of synui's own panels is backed by. Driven from panel_chrome_sync()
+ * over the whole panel roster; see anim.c for why a rect needs no transparency
+ * mask and cannot lag its own size. */
+void syn_rect_backdrop_blur(struct wlr_scene_rect *rect, bool want, int radius);
 /* Re-assert the glass halo's place under the frame's chrome. Called by the
  * decoration pass, which lowers the border and shadow on its own schedule; a
  * no-op unless glass_halo is set. See anim.c. */

@@ -18,6 +18,96 @@
 
 #include "synui.h"
 
+/* ── Glass behind the shell's own layer surfaces ──────────── */
+/*
+ * The start menu, the mixer, the bar's right-click menu, the widgets and the
+ * OSD are quickshell layer surfaces, and synui applied NO effects to layer
+ * surfaces at all — so on a glass theme they were the one family of system
+ * chrome still drawing as a solid slab while the windows behind them frosted.
+ * That is what "the glass should reach the system menus too" was about; the
+ * compositor-drawn half is panel_chrome_sync()'s.
+ *
+ * ⚠ THE BAR IS DELIBERATELY NOT IN THIS. It is a quickshell PanelWindow like
+ * the rest, so the namespace is what separates them — the shell marks the
+ * surfaces it wants frosted as SYN_GLASS_NAMESPACE and the bar keeps the plain
+ * one. The bar already has a whole tuned opacity system of its own (bar_opacity,
+ * the clear bar, the scrim and the backdrop ink), all of it measured WITHOUT a
+ * blur underneath, and a clear bar paints nothing but its glyphs — so blurring
+ * it by namespace would put a frosted halo behind each glyph and quietly
+ * invalidate the contrast those numbers were chosen for. Frosting the bar is a
+ * change to that system, not to this one.
+ *
+ * The mask source inside syn_buffer_backdrop_blur() is what makes this safe on
+ * a surface like the start menu, whose layer surface is the WHOLE SCREEN with a
+ * transparent click-catcher and the menu drawn as a rectangle inside it: the
+ * blur lands only where the client actually paints, so the menu frosts and the
+ * catcher stays clear. Without it this would frost the entire output.
+ *
+ * No corner radius is passed for the same reason — the shape comes from what
+ * the client painted, and quickshell has already rounded it.
+ */
+#define SYN_GLASS_NAMESPACE "synui-glass"
+
+static void layer_blur_buffer(struct wlr_scene_buffer *buffer,
+                              int sx, int sy, void *data)
+{
+    (void)sx; (void)sy;
+    syn_buffer_backdrop_blur(buffer, *(const bool *)data, 0);
+}
+
+/* Is this one of the shell's own surfaces at all? Popups are keyed off this
+ * rather than off their own namespace, which they do not have: an xdg_popup
+ * inherits the identity of the layer surface that opened it, so the bar's menus
+ * and the mixer are reached through the BAR — which is why they get glass while
+ * the bar itself does not. */
+static bool layer_is_shell(const syn_layer_surface_t *ls)
+{
+    const char *ns = ls->layer_surface->namespace;
+    return ns && (strcmp(ns, "quickshell") == 0 ||
+                  strcmp(ns, SYN_GLASS_NAMESPACE) == 0);
+}
+
+static bool layer_wants_glass(const syn_layer_surface_t *ls)
+{
+    const char *ns = ls->layer_surface->namespace;
+    return ns && strcmp(ns, SYN_GLASS_NAMESPACE) == 0;
+}
+
+/* Idempotent, and cheap for the same reason the panel walk is: every setter
+ * underneath early-returns when nothing moved, and `want = false` on a buffer
+ * with no companion does nothing. So this can run on every commit, which is
+ * what keeps the blur the same size as the surface it sits behind. */
+void layer_glass_apply(syn_layer_surface_t *ls)
+{
+    if (!ls || !ls->scene) return;
+
+    /* ⚠ ONLY THE SURFACES THAT ASKED, and this must be an early return rather
+     * than a walk with want=false. A layer surface's xdg_popups are scene trees
+     * created UNDER its own (see layer_surface_new_popup), so walking the bar to
+     * clear blur it never had would also walk the mixer and the bar menu and
+     * clear theirs — which layer_popup_glass() had just set. The two would then
+     * fight on every commit and the mixer would flicker between frosted and
+     * flat. Surfaces that never opt in are simply not touched here. */
+    if (!layer_wants_glass(ls)) return;
+
+    bool want = syn_glass_active(&ls->server->config);
+    wlr_scene_node_for_each_buffer(&ls->scene->tree->node,
+                                   layer_blur_buffer, &want);
+}
+
+/* Re-assert glass over every layer surface on the desktop. For the events that
+ * change the ANSWER rather than the geometry — a theme switch, the transparency
+ * or blur toggles, a config reload — none of which commit anything. */
+void layer_glass_all(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        syn_layer_surface_t *ls;
+        wl_list_for_each(ls, &o->layer_surfaces, link)
+            layer_glass_apply(ls);
+    }
+}
+
 /* ── Keyboard focus helpers ──────────────────────────────── */
 static void layer_keyboard_enter(syn_server_t *s, struct wlr_surface *surface)
 {
@@ -212,6 +302,12 @@ static void layer_surface_commit(struct wl_listener *listener, void *data)
                                 s->layer_tree[ls->layer]);
     }
 
+    /* On EVERY commit, plain buffer ones included: the blur companion is sized
+     * from the buffer, so a menu that changes height — a search that filters its
+     * rows down — would otherwise keep the frosted patch it opened at. Same
+     * staleness the window blur has to chase in blur_sync_geometry(). */
+    layer_glass_apply(ls);
+
     /* (Re)arrange on the initial commit (to send the first configure) and
      * whenever geometry-affecting state changed — but not on plain buffer
      * commits, which would loop configure/ack forever. */
@@ -232,10 +328,34 @@ typedef struct {
     struct wl_listener    destroy;
 } syn_layer_popup_t;
 
+/* Glass for a menu the shell opened off one of its own surfaces — the bar's
+ * right-click menu and the mixer, which are xdg_popups parented to the BAR.
+ *
+ * Keyed on the parent being a shell surface rather than on a namespace of its
+ * own, because a popup has none. That is also what lets the bar's menus be
+ * frosted while the bar is not: the menu is reached through this path and the
+ * bar is only ever reached through layer_glass_apply(), which skips it.
+ */
+static void layer_popup_glass(syn_layer_popup_t *lp)
+{
+    struct wlr_scene_tree *tree = lp->popup->base->data;
+    if (!tree) return;
+    bool want = syn_glass_active(&lp->ls->server->config) &&
+                layer_is_shell(lp->ls);
+    wlr_scene_node_for_each_buffer(&tree->node, layer_blur_buffer, &want);
+}
+
 static void layer_popup_commit(struct wl_listener *listener, void *data)
 {
     (void)data;
     syn_layer_popup_t *lp = wl_container_of(listener, lp, commit);
+
+    /* Before the initial-commit gate: a popup's blur has to be re-synced on
+     * every commit, because the companion node is sized from the buffer and a
+     * menu that grows a submenu or reflows its rows would otherwise keep the
+     * frosted patch it had at the size it opened at. */
+    layer_popup_glass(lp);
+
     if (!lp->popup->base->initial_commit)
         return;
 

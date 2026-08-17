@@ -78,7 +78,49 @@ pkgver=0.1.0
 #   pastel hue on the wheel — stating it for pink alone would let the next
 #   threshold re-break the other eleven. The greyscale and smeared-chroma
 #   refusals are untouched and still assert.
-pkgrel=378
+# 379: the glass reaches the system menus. Prism frosted the WINDOWS and left
+#   every piece of chrome synui draws itself as a solid slab — the control panel,
+#   the task manager, the desktop and dock menus, the clock, the calculator, and
+#   the shell's own start menu, mixer and widgets. Reported as the glass stopping
+#   at the window frames and never reaching the system menus.
+#   Two families, two mechanisms, because they are two different kinds of
+#   surface. synui's own thirty panels are a coloured scene RECT with a cairo
+#   buffer of ink on top, so the blur belongs behind the rect and the alpha
+#   belongs to the fill: syn_rect_backdrop_blur() is the companion-node
+#   machinery the windows already use, pointed at a rect, and panel_chrome_sync()
+#   drives it over the panel roster it was already walking every frame. The
+#   shell's popups are layer surfaces, which synui applied NO effects to at all;
+#   they now ask for glass by NAME (WlrLayershell.namespace = "synui-glass") and
+#   layer.c frosts what is behind them.
+#   ⚠ THE BAR IS DELIBERATELY EXCLUDED. It is a quickshell PanelWindow like the
+#   start menu, so only the namespace separates them, and its opacity system
+#   (bar_opacity, the clear bar, the scrim, the backdrop ink) was measured
+#   WITHOUT a blur underneath — a clear bar paints nothing but its glyphs, so
+#   frosting it by namespace would put a halo behind each one and invalidate the
+#   contrast those numbers were chosen for. The bar's MENUS are glass, reached
+#   through the popup path rather than through the bar.
+#   ⚠ AND THE CASE THIS TURNS ON IS glass_level BEING UNSET. Only syn-install
+#   writes that key, so a machine that reached Prism through the theme manager
+#   has none — keying the panels off the level alone would have left the house
+#   glass theme solid on exactly the desktops most likely to run it. Unset means
+#   "nobody chose a level", never "nobody wanted glass"; the preset already
+#   answered that. An explicit level still answers for any theme, matching what
+#   it already does to the windows and the bar.
+#   Each panel keeps the alpha it was tuned at and glass SCALES it, so the dense
+#   table stays denser than the six-row menu; a floor stops the sparsest one
+#   going where its ink cannot carry. panel_glass_test sweeps every level against
+#   every alpha in use for both directions, because "never more solid" and "never
+#   under the floor" are the kind of claim a curve change breaks in one direction
+#   while looking fine in the other.
+#   ⚠ AND THE UI FX BLUR SWITCH IS A GLASS SWITCH. syn_glass_active() is "the
+#   theme asked AND transparency AND blur", and of those three only the first two
+#   go through theme.c — which is where both the theme.state export and the layer
+#   walk live. The blur row writes through uifx.c's pointer table and calls
+#   uifx_apply(), so without theme_glass_refresh() there the shell would keep the
+#   see-through alpha it took for a glass desktop after the blur behind it was
+#   torn down: a menu with a SHARP wallpaper through it, which is the one outcome
+#   worse than the slab this change set out to remove.
+pkgrel=379
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

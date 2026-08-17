@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 
 /*
  * The SYNAPSE start menu.
@@ -68,6 +69,16 @@ PanelWindow {
     // have made it screen-height MINUS the bar, and the panel would have been
     // pushed a second bar's worth down inside it.
     exclusionMode: ExclusionMode.Ignore
+
+    // Ask synui to frost what is behind the menu on a glass theme. The
+    // compositor keys the backdrop blur off this namespace and nothing else —
+    // the bar is a PanelWindow too and deliberately keeps the plain one, so the
+    // name is the whole of how they are told apart. See layer.c.
+    //
+    // Safe on a surface that is the WHOLE SCREEN with a transparent catcher in
+    // it: the blur is masked to where the client actually paints, so the panel
+    // below frosts and the catcher stays clear.
+    WlrLayershell.namespace: "synui-glass"
 
     // The whole point of the port. Without it the menu is deaf, which is exactly
     // the waybar failure it replaces.

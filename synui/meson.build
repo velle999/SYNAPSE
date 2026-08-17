@@ -601,6 +601,19 @@ ctlpanel_table_test = executable('ctlpanel_table_test',
   build_by_default : false)
 test('ctlpanel_table', ctlpanel_table_test)
 
+# How see-through synui's own thirty panels are on a glass theme. The case it
+# exists for is glass_level UNSET: only a fresh install writes that key, so a
+# machine that reached Prism through the theme manager had none, and keying the
+# panels off the level alone left the house glass theme drawing solid slabs.
+# Pure functions of a syn_config_t, so it links nothing.
+panel_glass_test = executable('panel_glass_test',
+  ['tests/panel_glass_test.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('panel_glass', panel_glass_test)
+
 # What Super+Return actually runs. The fallback chain used to be
 # `syntty || kitty || …`, and `||` fires on a NON-ZERO exit — which for a
 # terminal is the exit status of the shell inside it, so closing the window
