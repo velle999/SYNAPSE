@@ -88,28 +88,113 @@
                          #   enables multilib and [cachyos]
     blackarch = true;    # the repo and keyring, no tools
     nix       = true;    # nix + Home Manager (`syn nix`)
+  };
 
-    chibi   = true;
-    vibe    = true;
-    nexus   = false;
-    tepris  = false;
-    arsenal = true;
+  # ── Which SynapseOS packages ────────────────────────────────────────────
+  #
+  # EVERY one of them, including the ones that used to be installed whatever
+  # you answered. Read only when preset = "custom"; on any other preset these
+  # answer nothing and are listed as unused, which is accurate.
+  #
+  # What you CANNOT do is drop something a package you kept depends on. Those
+  # are turned back on and named on screen rather than silently obeyed:
+  #   synui → syntty · synnet → synapd · vibe → synapd + syn-confine ·
+  #   firstboot → syn-model · any ai_model → syn-model
+  comp = {
+    synui      = true;   # the compositor. Without it, desktop = must not be synui
+    synapd     = true;   # the local LLM daemon
+    synsh      = true;
+    synguard   = true;   # synguard + the kernel module, together
+    synnet     = true;
+    synpkg     = true;   # the package manager
+    synfiles   = true;   # the file manager
+    syntty     = true;   # the terminal
+    synsettings = true;
+    syndisks   = true;
+    synedit    = true;
+    synupdate  = true;   # WITHOUT THIS the machine can never receive a fix
+    syn        = true;   # the top-level `syn` CLI
+    synmodel   = true;   # `syn model download`
+    synfirstboot = true;
+    synconfine = true;   # the Landlock sandbox vibe's shell tool runs in
+    fetch      = true;   # the About OS readout
+
+    arcade   = true;     # syn-arcade: overlay, pads, big screen mode
+    cliamp   = true;     # the player big screen mode drives
+    arsenal  = true;
+    chibi    = true;
+    vibe     = true;
     wpengine = true;     # the SynapseOS animated wallpapers + their renderer
                          #   (~317 MB); no Steam needed. Off leaves synui's
                          #   wallpaper picker with no Wallpaper Engine rows.
+    nexus    = false;    # both of these pull in Firefox as a dependency
+    tepris   = false;
   };
 
-  # Dropping a core daemon stops this being SynapseOS, so it is behind its own
-  # question. Leave it false and the six core_* keys are never read.
-  customise_core = false;
-  # core = {
-  #   synapd = true;
-  #   synsh  = true;
-  #   synnet = true;
-  #   guard  = true;
-  #   synui  = true;
-  #   update = true;
-  # };
+  # ── Ordinary software ───────────────────────────────────────────────────
+  #
+  # Nothing here is ours; every name is in core/extra. Also custom-only.
+  # Omitted keys are the Standard default, which is Firefox and nothing else —
+  # a machine with no browser at all was the gap this closes.
+  # One key per line, and that is not house style: the drift check in
+  # tests/config_test.sh reads this file a line at a time and takes the FIRST
+  # `name =` on it, so two on one line would document one and quietly leave the
+  # other looking undocumented — or worse, documented and unread.
+  sw = {
+    # Web and communication
+    firefox     = true;
+    chromium    = false;
+    vivaldi     = false;
+    thunderbird = false;
+    discord     = false;
+    telegram    = false;
+    signal      = false;
+    keepassxc   = false;
+    qbittorrent = false;
+    syncthing   = false;
+    # Audio and video
+    vlc       = false;
+    mpv       = false;
+    obs       = false;
+    audacity  = false;
+    kdenlive  = false;
+    handbrake = false;
+    spotify   = false;
+    # Office and graphics
+    libreoffice = false;
+    gimp        = false;
+    inkscape    = false;
+    krita       = false;
+    blender     = false;
+    calibre     = false;
+    # Development and admin
+    code        = false;
+    neovim      = false;
+    gitlfs      = false;
+    docker      = false;
+    virtmanager = false;
+    gparted     = false;
+    btop        = false;
+    filezilla   = false;
+    remmina     = false;
+    archivers   = false;   # 7zip + unrar
+    # Games, launchers and helpers. Steam is want.steam above, not here: it is
+    # the only one that turns on a second architecture and a third repository.
+    lutris       = false;
+    prism        = false;
+    retroarch    = false;
+    dolphinemu   = false;
+    ppsspp       = false;
+    scummvm      = false;
+    dosbox       = false;
+    mame         = false;
+    protontricks = false;
+    winetricks   = false;
+    goverlay     = false;
+    antimicrox   = false;
+    openrgb      = false;
+    corectrl     = false;
+  };
 
   selection_ok = true;         # the read-back of everything above
 

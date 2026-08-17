@@ -52,11 +52,11 @@ cd "$(dirname "$0")/.."
 
 # ── Tables ───────────────────────────────────────────────────
 
-# On the ISO but named in neither of syn-install's SEL_CORE / SEL_APPS, with
-# the reason it still reaches an installed system — or why it should not.
+# On the ISO but not a row in syn-install's component table, with the reason it
+# still reaches an installed system — or why it should not.
 #
-# packages.x86_64 is what the LIVE environment gets; SEL_CORE and SEL_APPS are
-# what the TARGET gets, and nothing makes the two agree. That gap shipped an
+# packages.x86_64 is what the LIVE environment gets; the component table is
+# what the TARGET can be given, and nothing makes the two agree. That gap shipped an
 # ISO carrying four Wallpaper Engine wallpapers whose picker found zero of them
 # on every machine installed from it, because linux-wallpaperengine and
 # synapse-wallpapers were in packages.x86_64 and in neither list here.
@@ -481,24 +481,33 @@ check_iso() {
 # ── Check 4: the ISO and the installer agree ─────────────────
 #
 # A third and fourth list, after KNOWN= and COMPONENTS: archiso's PACKAGES says
-# what the live ISO carries, syn-install's SEL_CORE/SEL_APPS say what a target
-# gets. They are written by hand, independently, and a package in the first and
-# neither of the second is invisible on every installed machine while working
-# perfectly on the media it came from — which is the hardest kind of gap to
-# see, because testing the ISO does not test it.
+# what the live ISO carries, syn-install's component table says what a target
+# can be given. They are written by hand, independently, and a package in the
+# first and not the second is invisible on every installed machine while
+# working perfectly on the media it came from — which is the hardest kind of
+# gap to see, because testing the ISO does not test it.
+#
+# ⚠ IT IS THE TABLE NOW, NOT `SEL_CORE="…"`. Every SynapseOS package became a
+# checkbox, so those two variables are BUILT by sel_packages() from
+# SEL_COMPONENTS and no longer hold a literal list. Scraping the old
+# assignments after that change found `core)` and `app)` — the arms of the
+# case that builds them — and reported every real package as undelivered.
+# Being a row on the page is what "an install path delivers it" means; whether
+# the box is ticked by default is the std/full column, which select_test.sh
+# covers.
 
 check_installer() {
     local p bad=$FINDINGS
     local inst=syn-install/syn-install.sh
     [ -f "$inst" ] || { fail installer "$inst is missing"; return 0; }
 
-    # Every name any SEL_CORE/SEL_APPS assignment mentions, including the
-    # `SEL_APPS="$SEL_APPS foo"` appends the Custom branch is built from.
+    # Field 5 of every comp_ row: the packages that row installs. sw_ rows are
+    # deliberately skipped — they name Arch packages, not ours.
     local sel
-    sel=$(grep -oE 'SEL_(CORE|APPS)="[^"]*"' "$inst" \
-          | sed -E 's/^SEL_(CORE|APPS)="//; s/"$//; s/\$SEL_(CORE|APPS)//' \
-          | tr ' ' '\n' | grep -vE '^\$|^$' | sort -u)
-    [ -n "$sel" ] || { fail installer "could not read SEL_CORE/SEL_APPS from $inst"; return 0; }
+    sel=$(grep -oE '^[[:space:]]*"comp_[a-z0-9_]+\|[^"]*"' "$inst" \
+          | tr -d '"' | cut -d'|' -f5 \
+          | tr ' ' '\n' | grep -vE '^$' | sort -u)
+    [ -n "$sel" ] || { fail installer "could not read the component table from $inst"; return 0; }
 
     # dir -> pkgname, because one disagrees (linux-wallpaperengine-pkg builds
     # linux-wallpaperengine) and a name check that assumed they matched would
@@ -514,8 +523,8 @@ check_installer() {
 
     for p in $sel; do
         [ -n "${ours[$p]:-}" ] || fail installer \
-            "syn-install names '$p', which this repo does not build" \
-            "SEL_CORE/SEL_APPS may only name packages the ISO's local repo carries." \
+            "syn-install's component table names '$p', which this repo does not build" \
+            "A comp_ row may only name packages the ISO's local repo carries." \
             "pacstrap fails the install at this package."
     done
 
@@ -528,10 +537,10 @@ check_installer() {
         [ -n "${EXEMPT_INSTALLER[$p]:-}" ] && continue
         [ -n "${EXEMPT_INSTALLER[$n]:-}" ] && continue
         fail installer \
-            "'$n' is on the ISO but in neither SEL_CORE nor SEL_APPS" \
+            "'$n' is on the ISO but is not a row in syn-install's component table" \
             "The live ISO carries it and no install path delivers it, so it works on" \
             "the media and is missing on every machine installed from that media —" \
-            "which testing the ISO cannot show. Add it to SEL_APPS (or SEL_CORE), or" \
+            "which testing the ISO cannot show. Add a row for it to SEL_COMPONENTS, or" \
             "to this script's EXEMPT_INSTALLER with the reason it still arrives."
     done
 

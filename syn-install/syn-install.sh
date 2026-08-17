@@ -960,6 +960,315 @@ config_report_unused() {
   reached (partition keys on an 'erase' install, for instance)."
 }
 
+# ── What to install: the pick lists ───────────────────────
+#
+# EVERY SynapseOS package is a checkbox, and so is a shelf of ordinary software
+# people install on the first evening anyway. Two things were wrong before:
+#
+# 1. Eleven of our own packages were installed unconditionally — synpkg,
+#    synfiles, syn-settings, syn-disks, syn-edit, syntty, syn, syn-model,
+#    syn-firstboot, syn-confine, fetch — and Custom could not decline any of
+#    them. "You get the whole suite or you hand-edit afterwards" is not a
+#    choice, and the reasons each one was unconditional ("a desktop with no
+#    file manager is broken") are arguments for a DEFAULT, not for a rule.
+# 2. An installed SynapseOS had NO WEB BROWSER unless the Full preset happened
+#    to pull one in as nexus-chat's dependency. The live ISO ships Firefox;
+#    the machine installed from it did not.
+#
+# What stays forced is only what pacman would force anyway — synui depends on
+# syntty, synnet and vibe depend on synapd, vibe depends on syn-confine,
+# syn-firstboot depends on syn-model. sel_resolve_deps() turns those back on
+# and SAYS SO, because a checkbox that silently un-ticks itself is worse than
+# one that was never offered.
+#
+# ROW FORMAT — key|std|full|group|packages|label|description
+#
+#   key          the profile key, and what the graphical installer writes
+#   std / full   ticked by default under Standard / Full (Minimal is `group`)
+#   group        core  the spine a Minimal install still gets
+#                app   ours, but an application — Minimal clears these
+#                sw    not ours at all; from core/extra/multilib
+#   packages     what pacman is actually asked for; more than one is allowed
+#                and they travel together (synguard + its module; the
+#                wallpaper renderer + the wallpapers it plays)
+#   label        <= 13 chars, description <= 15 — the two-column page below is
+#                77 columns wide and a terminal is 80
+#
+# Keys are `comp_` for ours and `sw_` for everything else, so the vocabulary
+# check in tests/config_test.sh can find them without a list of its own.
+SEL_COMPONENTS=(
+    "comp_synui|1|1|core|synui|SYNAPSE UI|the desktop"
+    "comp_synapd|1|1|core|synapd|synapd|the AI daemon"
+    "comp_synsh|1|1|core|synsh|synsh|the AI shell"
+    "comp_synguard|1|1|core|synguard synapse_kmod|synguard|security watch"
+    "comp_synnet|1|1|core|synnet|synnet|network policy"
+    "comp_synpkg|1|1|core|synpkg|Software|package manager"
+    "comp_synfiles|1|1|core|synfiles|Files|file manager"
+    "comp_syntty|1|1|core|syntty|Terminal|the terminal"
+    "comp_synsettings|1|1|core|syn-settings|Settings|system settings"
+    "comp_syndisks|1|1|core|syn-disks|Disks|disks + format"
+    "comp_synedit|1|1|core|syn-edit|Editor|the text editor"
+    "comp_synupdate|1|1|core|syn-update|Updates|receives fixes"
+    "comp_syn|1|1|core|syn|syn|top-level CLI"
+    "comp_synmodel|1|1|core|syn-model|Models|fetch AI models"
+    "comp_synfirstboot|1|1|core|syn-firstboot|First boot|first-run setup"
+    "comp_synconfine|1|1|core|syn-confine|Sandbox|Landlock jail"
+    "comp_fetch|1|1|core|fetch|About OS|the OS readout"
+    "comp_arcade|1|1|app|syn-arcade|Arcade|pads + overlay"
+    "comp_cliamp|1|1|app|cliamp|cliamp|music player"
+    "comp_arsenal|1|1|app|syn-arsenal|Arsenal|BlackArch tools"
+    "comp_chibi|1|1|app|chibi|Chibi|voice companion"
+    "comp_vibe|1|1|app|vibe|Vibe|AI coding help"
+    "comp_wpengine|1|1|app|linux-wallpaperengine synapse-wallpapers|Wallpapers|animated, 317MB"
+    "comp_nexus|0|1|app|nexus-chat|Nexus Chat|chat (+Firefox)"
+    "comp_tepris|0|1|app|tepris|TEPRIS|game (+Firefox)"
+)
+
+# The shelf. Nothing here is ours and nothing here is required — the point is
+# that the answer to "where is my browser" is a tick on the install screen
+# rather than a search after the reboot.
+#
+# ⚠ EVERY NAME MUST BE IN core/extra/multilib. The target has our local repo
+# and the Arch mirrors and nothing else at this point: [blackarch] is only
+# added when WANT_BLACKARCH is taken and [cachyos] only with Steam, and the AUR
+# is not a repository at all. A name pacman cannot resolve does not fail
+# loudly — it loses the WHOLE transaction it is in, which is the mistake the
+# Full preset made with samsung-m2020.
+SEL_SW_WEB=(
+    "sw_firefox|1|1|sw|firefox|Firefox|web browser"
+    "sw_chromium|0|0|sw|chromium|Chromium|web browser"
+    "sw_vivaldi|0|0|sw|vivaldi|Vivaldi|web browser"
+    "sw_thunderbird|0|1|sw|thunderbird|Thunderbird|mail client"
+    "sw_discord|0|0|sw|discord|Discord|voice + chat"
+    "sw_telegram|0|0|sw|telegram-desktop|Telegram|messaging"
+    "sw_signal|0|0|sw|signal-desktop|Signal|messaging"
+    "sw_keepassxc|0|1|sw|keepassxc|KeePassXC|password vault"
+    "sw_qbittorrent|0|0|sw|qbittorrent|qBittorrent|torrents"
+    "sw_syncthing|0|0|sw|syncthing|Syncthing|file sync"
+)
+SEL_SW_MEDIA=(
+    "sw_vlc|0|1|sw|vlc|VLC|plays anything"
+    "sw_mpv|0|1|sw|mpv|mpv|minimal player"
+    "sw_obs|0|0|sw|obs-studio|OBS Studio|record + stream"
+    "sw_audacity|0|0|sw|audacity|Audacity|audio editor"
+    "sw_kdenlive|0|0|sw|kdenlive|Kdenlive|video editor"
+    "sw_handbrake|0|0|sw|handbrake|HandBrake|transcode video"
+    "sw_spotify|0|0|sw|spotify-launcher|Spotify|streaming"
+)
+SEL_SW_OFFICE=(
+    "sw_libreoffice|0|1|sw|libreoffice-fresh|LibreOffice|documents"
+    "sw_gimp|0|1|sw|gimp|GIMP|image editing"
+    "sw_inkscape|0|0|sw|inkscape|Inkscape|vector drawing"
+    "sw_krita|0|0|sw|krita|Krita|painting"
+    "sw_blender|0|0|sw|blender|Blender|3D"
+    "sw_calibre|0|0|sw|calibre|Calibre|ebooks"
+)
+SEL_SW_DEV=(
+    "sw_code|0|0|sw|code|VS Code|editor (OSS)"
+    "sw_neovim|0|0|sw|neovim|Neovim|modal editor"
+    "sw_gitlfs|0|0|sw|git-lfs|git-lfs|large files"
+    "sw_docker|0|0|sw|docker|Docker|containers"
+    "sw_virtmanager|0|0|sw|virt-manager|virt-manager|VMs (libvirt)"
+    "sw_gparted|0|0|sw|gparted|GParted|partitions"
+    "sw_btop|0|1|sw|btop|btop|process monitor"
+    "sw_filezilla|0|0|sw|filezilla|FileZilla|FTP/SFTP"
+    "sw_remmina|0|0|sw|remmina|Remmina|remote desktop"
+    "sw_archivers|0|1|sw|7zip unrar|Archivers|7zip + unrar"
+)
+# Steam is NOT here — it is WANT_STEAM, because it is the only item on any of
+# these pages that turns on a whole second architecture ([multilib], the lib32
+# tree) and a third repository ([cachyos], for Proton). Everything below is an
+# ordinary package from extra.
+SEL_SW_GAMES=(
+    "sw_lutris|0|0|sw|lutris|Lutris|game launcher"
+    "sw_prism|0|0|sw|prismlauncher|Prism|Minecraft"
+    "sw_retroarch|0|0|sw|retroarch|RetroArch|emulator front"
+    "sw_dolphinemu|0|0|sw|dolphin-emu|Dolphin|GameCube/Wii"
+    "sw_ppsspp|0|0|sw|ppsspp|PPSSPP|PSP"
+    "sw_scummvm|0|0|sw|scummvm|ScummVM|point-and-click"
+    "sw_dosbox|0|0|sw|dosbox|DOSBox|DOS games"
+    "sw_mame|0|0|sw|mame|MAME|arcade"
+    "sw_protontricks|0|0|sw|protontricks|Protontricks|per-game fixes"
+    "sw_winetricks|0|0|sw|winetricks|Winetricks|Wine fixes"
+    "sw_goverlay|0|0|sw|goverlay|GOverlay|MangoHud config"
+    "sw_antimicrox|0|0|sw|antimicrox|AntiMicroX|pad remapping"
+    "sw_openrgb|0|0|sw|openrgb|OpenRGB|lighting"
+    "sw_corectrl|0|0|sw|corectrl|CoreCtrl|GPU/CPU tuning"
+)
+
+# Every list, so the walkers below need no second copy of the set.
+SEL_ALL_LISTS=(SEL_COMPONENTS SEL_SW_WEB SEL_SW_MEDIA SEL_SW_OFFICE SEL_SW_DEV SEL_SW_GAMES)
+
+declare -A PICKED=()     # key -> 0|1, the answer for every row above
+
+# sel_reset <full|standard|minimal>
+#
+# Fills PICKED from the table. Presets are columns rather than three separate
+# lists in three places, which is what let Full and Minimal drift apart from
+# the Custom questionnaire before.
+sel_reset() {
+    local __preset=$1 __list __row key std full group rest
+    for __list in "${SEL_ALL_LISTS[@]}"; do
+        local -n __rows="$__list"
+        for __row in "${__rows[@]}"; do
+            IFS='|' read -r key std full group rest <<<"$__row"
+            case "$__preset" in
+                full)     PICKED[$key]=$full ;;
+                minimal)  [ "$group" = core ] && PICKED[$key]=1 || PICKED[$key]=0 ;;
+                *)        PICKED[$key]=$std ;;
+            esac
+        done
+    done
+}
+
+# sel_on <key> — is that row ticked?
+sel_on() { [ "${PICKED[$1]:-0}" = 1 ]; }
+
+# sel_packages <group>… — the pacman names for every ticked row in those groups
+sel_packages() {
+    local __want=" $* " __list __row key std full group pkgs out=""
+    for __list in "${SEL_ALL_LISTS[@]}"; do
+        local -n __rows="$__list"
+        for __row in "${__rows[@]}"; do
+            IFS='|' read -r key std full group pkgs _ <<<"$__row"
+            case "$__want" in *" $group "*) ;; *) continue ;; esac
+            [ "${PICKED[$key]:-0}" = 1 ] && out="$out $pkgs"
+        done
+    done
+    echo $out          # unquoted: collapses the runs of spaces
+}
+
+# sel_label <key> — for the messages the dependency pass prints
+sel_label() {
+    local __list __row key std full group pkgs label
+    for __list in "${SEL_ALL_LISTS[@]}"; do
+        local -n __rows="$__list"
+        for __row in "${__rows[@]}"; do
+            IFS='|' read -r key std full group pkgs label _ <<<"$__row"
+            [ "$key" = "$1" ] && { echo "$label"; return 0; }
+        done
+    done
+    echo "$1"
+}
+
+# sel_resolve_deps — turn on what a ticked row cannot run without.
+#
+# These are the HARD depends in our own PKGBUILDs, and they are the reason
+# "everything is optional" does not mean "any combination installs". pacman
+# would pull each one in regardless; doing it here means the summary, the
+# package count and the service enablement all agree with what lands on the
+# disk, instead of the summary being the one place that lies.
+#
+# Adding a rule: check `depends=` in the PKGBUILD, not what you remember.
+sel_resolve_deps() {
+    local forced="" pair need by
+    # need:because
+    for pair in comp_syntty:comp_synui \
+                comp_synapd:comp_synnet \
+                comp_synapd:comp_vibe \
+                comp_synconfine:comp_vibe \
+                comp_synmodel:comp_synfirstboot; do
+        need=${pair%%:*}; by=${pair#*:}
+        if sel_on "$by" && ! sel_on "$need"; then
+            PICKED[$need]=1
+            forced="$forced
+    $(sel_label "$need") — $(sel_label "$by") depends on it"
+        fi
+    done
+    # A model with no daemon to load it, and a daemon with no model, are both
+    # legal and both worth a word: the first is a gigabytes-long download that
+    # nothing on the machine can read.
+    if [ "${WANT_MODEL:-0}" = 1 ] && [ "${MODEL_CHOICE:-none}" != none ] && ! sel_on comp_synmodel; then
+        PICKED[comp_synmodel]=1
+        forced="$forced
+    Models — an AI model was chosen and syn-model is what downloads it"
+    fi
+    [ -n "$forced" ] && warn "Added back, because something you kept requires it:$forced"
+    return 0
+}
+
+# multi_select <title> <array name> — one page of checkboxes.
+#
+# Two columns because the component page is 25 rows and a terminal is 24 lines
+# tall; the widths in the row format above are what keep it inside 80 columns.
+#
+# A profile answers these one row at a time (comp_synui=no), exactly like every
+# other question here, so an unattended install never sees this page and a
+# PARTIAL profile still gets asked about the rows it left out — which is the
+# same contract `answer` has everywhere else in this script.
+multi_select() {
+    local __title=$1 __arr=$2
+    local -n __rows="$__arr"
+    local n=${#__rows[@]} i j idx rows line cell
+    local -a keys=() labels=() descs=()
+    local key std full group pkgs label desc unanswered=0 ans tok
+
+    for ((i = 0; i < n; i++)); do
+        IFS='|' read -r key std full group pkgs label desc <<<"${__rows[$i]}"
+        keys+=("$key"); labels+=("$label"); descs+=("$desc")
+        if [ -n "${ANSWERS[$key]+set}" ]; then
+            ANSWERS_USED[$key]=1
+            case "${ANSWERS[$key],,}" in
+                y|yes|true|on|1)   PICKED[$key]=1 ;;
+                n|no|false|off|0)  PICKED[$key]=0 ;;
+                *) die "config: $key=${ANSWERS[$key]} is not yes or no" ;;
+            esac
+        else
+            unanswered=1
+        fi
+    done
+
+    rows=$(( (n + 1) / 2 ))
+    while :; do
+        echo ""
+        echo "  $(bold "$__title")"
+        echo ""
+        for ((i = 0; i < rows; i++)); do
+            line=""
+            for j in 0 1; do
+                idx=$(( i + j * rows ))
+                [ "$idx" -lt "$n" ] || continue
+                # ⚠ The PRECISION, not just the width. `%-15s` pads a short
+                # description and does nothing at all to a long one, so a
+                # sixteenth character pushes the row to 80 columns and the
+                # terminal wraps the right-hand column onto its own line —
+                # which reads as a layout bug in a page nobody edited.
+                # `%-15.15s` truncates instead, so the grid cannot be broken by
+                # a row added later.
+                printf -v cell '[%s] %2d) %-13.13s %-15.15s' \
+                    "$([ "${PICKED[${keys[$idx]}]:-0}" = 1 ] && echo x || echo ' ')" \
+                    "$((idx + 1))" "${labels[$idx]}" "${descs[$idx]}"
+                [ "$j" = 0 ] && line="  $cell " || line="$line$cell"
+            done
+            echo "${line%"${line##*[![:space:]]}"}"
+        done
+        echo ""
+
+        # Answered in full by a profile: printed for the transcript, not asked.
+        [ "$unanswered" = 1 ] || return 0
+
+        prompt "Toggle [numbers, 'all', 'none', Enter = accept]:"
+        read -r ans
+        [ -n "${ans//[[:space:]]/}" ] || return 0
+        for tok in $ans; do
+            case "${tok,,}" in
+                all)  for key in "${keys[@]}"; do PICKED[$key]=1; done ;;
+                none) for key in "${keys[@]}"; do PICKED[$key]=0; done ;;
+                ''|*[!0-9]*)
+                    fail "\"$tok\" is not a number, 'all' or 'none'" ;;
+                *)
+                    idx=$((tok - 1))
+                    if [ "$idx" -ge 0 ] && [ "$idx" -lt "$n" ]; then
+                        key=${keys[$idx]}
+                        [ "${PICKED[$key]:-0}" = 1 ] && PICKED[$key]=0 || PICKED[$key]=1
+                    else
+                        fail "$tok is not on this page (1-$n)"
+                    fi ;;
+            esac
+        done
+    done
+}
+
 # Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
 # pure decision functions above and stops HERE, before the root check, the
 # EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
@@ -2035,10 +2344,11 @@ step "Step 4 — Choose What to Install"
 # The loop is in place rather than a re-exec like the disk plan: pacstrap has
 # already run by here, so restarting the installer would repartition the disk.
 # What makes looping safe is that the defaults below are re-initialised on every
-# pass — WANT_*, SEL_CORE and SEL_APPS all start from Standard again, so a second
-# pass cannot inherit an app the first one appended to SEL_APPS.
+# pass — WANT_* and every row in PICKED start from Standard again, so a second
+# pass cannot inherit a package the first one ticked.
 while :; do
-    # Defaults = Standard.
+    # Defaults = Standard, for the checkbox pages and the y/n groups alike.
+    sel_reset standard
     WANT_MODEL=1          # fetch a gguf — WHICH one is asked below
     MODEL_CHOICE=mistral-7b
     MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)"
@@ -2064,62 +2374,19 @@ while :; do
     # the root filesystem that grows with every generation kept, which is not a
     # cost an Enter-through install should quietly take on.
     WANT_NIX=0            # nix + Home Manager — see "Configuring Nix"
-    # `fetch` is core, not an app, and that is a decision rather than an
-    # oversight: the control panel's System ▸ About OS row runs it, so on a
-    # Minimal install — the one preset that clears SEL_APPS entirely — an
-    # optional fetch would leave a settings row that opens a terminal and
-    # reports command not found. It is 90 KB and depends on nothing but glibc,
-    # which is the whole reason it can be unconditional.
-    # synpkg is CORE for the same reason fetch is, only more so: it is the
-    # package manager. A Minimal install clears SEL_APPS entirely, and a
-    # SynapseOS with no way to install software is not a smaller system, it is
-    # a broken one. Its hard depends are glibc/pacman/curl, all already in the
-    # pacstrap set, so it costs a few hundred KB; the GUI, Flatpak and AUR
-    # paths are optdepends and a Minimal install pays for none of them.
-    # synfiles is CORE for the third time the same argument has been made,
-    # after fetch and synpkg: it is THE file manager since 2026-08-10, it
-    # depends on nothing but glibc and shared-mime-info, and a desktop where
-    # clicking a folder does nothing is not a smaller system but a broken one.
-    # There is no second file manager to choose any more: Dolphin was the
-    # optional extra here (WANT_FILEMGR) and nothing opened it by default.
-    # `synpkg install dolphin` after the fact.
-    # syntty is CORE for the same reason synfiles is: a desktop where nothing
-    # opens a prompt is not a smaller system but a broken one. It is 359 KB, it
-    # depends on freetype/fontconfig/wayland/xkbcommon and nothing else, and it
-    # links no GL — so it is also the terminal that still opens on a machine
-    # where the GPU stack does not. It is the DEFAULT since synui 0.1.0-359 and
-    # synui depends on it; kitty is still installed by the pacstrap above and is
-    # still what a synuirc written before 359 names, but it is an optdepend now
-    # and can be removed.
-    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-edit syntty syn-confine fetch"
-    # linux-wallpaperengine and synapse-wallpapers travel TOGETHER and are never
-    # split. The renderer without our wallpapers is a player with nothing to
-    # play on a box that has no Steam; our wallpapers without the renderer is
-    # worse — synui's picker lists the rows and applying one does nothing,
-    # because wppick scans /usr/share/synapse/wallpapers/431960 whether or not
-    # anything can render what it finds.
+    # Which SynapseOS packages and which shelf software: SEL_COMPONENTS and the
+    # five SEL_SW_* tables above the test seam, one row per checkbox, with the
+    # Standard and Full defaults as columns of the table rather than as three
+    # separate lists that can drift apart. sel_reset() has just filled PICKED
+    # from the Standard column; the preset arms below re-fill it, and Custom
+    # draws the pages.
     #
-    # They were on the LIVE ISO (archiso/packages.x86_64) and in neither list
-    # here, so every installed system had a picker that found zero Wallpaper
-    # Engine wallpapers while the media it was installed from shipped four.
-    # packages.x86_64 is what the live environment gets; these two lists are
-    # what the TARGET gets, and nothing makes them agree.
-    #
-    # SEL_APPS, not SEL_CORE: 305 MB of CEF for the renderer plus 12 MB of
-    # video. Minimal is "core daemons only" and stays that way — with neither
-    # installed the picker honestly shows no Wallpaper Engine rows at all,
-    # which is the correct answer there rather than a broken one.
-    # syn-arcade is in the Standard set rather than only in Full: it is a
-    # ~140 KB binary whose one real dependency is mangohud (~2 MB from extra),
-    # and this is a distribution that ships CachyOS Proton — a desktop that
-    # cannot tell you whether your controller works, or put an FPS counter on
-    # screen, is missing something Standard should have. Minimal still clears
-    # SEL_APPS entirely.
-    # cliamp travels with syn-arcade for the same reason it is on the ISO: big
-    # screen mode's Music tile plays without a window ONLY with this player, and
-    # a feature that is described in the package and absent from every fresh
-    # install is not being offered. ~30 MB.
-    SEL_APPS="chibi vibe syn-arsenal syn-arcade cliamp linux-wallpaperengine synapse-wallpapers"
+    # linux-wallpaperengine and synapse-wallpapers are ONE row on purpose. The
+    # renderer without our wallpapers is a player with nothing to play on a box
+    # that has no Steam; our wallpapers without the renderer is worse — synui's
+    # picker lists the rows and applying one does nothing, because wppick scans
+    # /usr/share/synapse/wallpapers/431960 whether or not anything can render
+    # what it finds. Same for synguard and its kernel module.
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
@@ -2127,11 +2394,12 @@ while :; do
     # the same six shared items and put the only difference — Steam — at the
     # far right, past 100 columns, where a terminal cut it off: Full and
     # Standard read as the same preset. Every line here stays under 80.
-    echo "    $(bold '1)') Full      — Standard + Steam + Nix + Nexus Chat + TEPRIS"
-    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Wine, phone,"
-    echo "                   Chibi + Vibe + Arsenal        (default)"
+    echo "    $(bold '1)') Full      — Standard + Steam + Nix + more software"
+    echo "    $(bold '2)') Standard  — the SynapseOS suite, Firefox, AI model,"
+    echo "                   Bluetooth, printing, Wine, phone   (default)"
     echo "    $(bold '3)') Minimal   — core daemons only: none of the above"
-    echo "    $(bold '4)') Custom    — pick each item individually"
+    echo "    $(bold '4)') Custom    — tick every package yourself, ours and"
+    echo "                   the ordinary software people install anyway"
     echo ""
     echo "  Every preset except Minimal then asks WHICH AI model to download,"
     echo "  and skipping it is one of the answers."
@@ -2150,14 +2418,14 @@ while :; do
             # package with it — and is only rescued by the one-at-a-time retry
             # in the verify step. `syn printer samsung` installs the driver
             # from Samsung after the install, which is the supported route.
-            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal syn-arcade cliamp linux-wallpaperengine synapse-wallpapers"
+            sel_reset full
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1
             success "Full install selected"
             ;;
         3)
-            SEL_APPS=""
+            sel_reset minimal
             WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
             WANT_WINE=0; WANT_PHONE=0; WANT_STEAM=0
             WANT_BLACKARCH=0; WANT_NIX=0
@@ -2165,11 +2433,42 @@ while :; do
             ;;
         4)
             echo ""
-            echo "  Answer y/n for each. The default (shown in caps) is the Standard install."
+            echo "  Two kinds of question. First the packages, as pages of"
+            echo "  checkboxes; then the handful of options that are a whole"
+            echo "  subsystem rather than a package."
             echo ""
 
-            # Apps. Descriptions rather than bare package names — "syn-arsenal"
-            # tells a first-time installer nothing about what it would be giving up.
+            # ── The checkbox pages ────────────────────────
+            #
+            # EVERY SynapseOS package is here, including the ones that used to
+            # be installed whatever you answered. What keeps a nonsense
+            # combination from reaching pacman is sel_resolve_deps() below,
+            # which re-ticks what a kept package hard-depends on and names it.
+            #
+            # No M2020 question anywhere on these pages: the driver is not on
+            # the media to install, and naming a package the local repo does
+            # not carry loses the whole transaction it is in.
+            # `syn printer samsung` fetches it from Samsung afterwards.
+            multi_select "SynapseOS packages — everything the system is made of" \
+                         SEL_COMPONENTS
+            echo ""
+            echo "  And the software people install on the first evening anyway."
+            echo "  All of it is in the Arch repositories; none of it is ours."
+            multi_select "Web and communication" SEL_SW_WEB
+            multi_select "Audio and video"       SEL_SW_MEDIA
+            multi_select "Office and graphics"   SEL_SW_OFFICE
+            multi_select "Development and admin" SEL_SW_DEV
+            multi_select "Games, launchers and helpers" SEL_SW_GAMES
+
+            # ── The subsystem questions ───────────────────
+            #
+            # These stay one-at-a-time y/n rather than joining a page: each one
+            # is a repository, an architecture or a service, not a name pacman
+            # installs — and each has a sentence of consequence that does not
+            # fit in a 15-column description.
+            echo ""
+            echo "  The rest is y/n. The default (shown in caps) is Standard."
+            echo ""
             ask_opt() {   # ask_opt <varname> <default 0|1> <description>
                 local __var=$1 __def=$2 __desc=$3 __hint __ans
                 if [ "$__def" = 1 ]; then __hint="[Y/n]"; else __hint="[y/N]"; fi
@@ -2182,18 +2481,6 @@ while :; do
                 esac
             }
 
-            ask_opt want_chibi   1 "Chibi — voice companion + security sentinel"
-            ask_opt want_vibe    1 "Vibe — local AI coding assistant"
-            ask_opt want_nexus   0 "Nexus Chat — peer-to-peer chat"
-            ask_opt want_tepris  0 "TEPRIS — block game"
-            # No M2020 question: the driver is not on the media to install.
-            # `syn printer samsung` fetches it from Samsung afterwards.
-            ask_opt want_arsenal 1 "SYNAPSE Arsenal — browse/install BlackArch security tooling"
-            # One question for the pair — see the SEL_APPS comment above for why
-            # they are never split. The size is worth naming: it is the second
-            # largest thing on this page after Steam.
-            ask_opt want_wpengine 1 "Animated wallpapers — the SynapseOS Wallpaper Engine set, no Steam needed (~317 MB)"
-            echo ""
             # No "AI model? y/n" here: the model question is asked once for
             # every preset below, and "None" is one of its answers.
             ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
@@ -2204,47 +2491,16 @@ while :; do
             ask_opt WANT_BLACKARCH  1 "BlackArch security repo — ~5000 tools browsable in SYNAPSE Arsenal"
             ask_opt WANT_NIX        0 "Nix + Home Manager — a declarative user environment beside pacman ('syn nix')"
 
-            SEL_APPS=""
-            [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
-            [ "$want_vibe"   = 1 ] && SEL_APPS="$SEL_APPS vibe"
-            [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
-            [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
-            [ "$want_arsenal" = 1 ] && SEL_APPS="$SEL_APPS syn-arsenal"
-            [ "$want_wpengine" = 1 ] && SEL_APPS="$SEL_APPS linux-wallpaperengine synapse-wallpapers"
-            SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
-
-            # Core daemons, offered last and separately. Dropping one is allowed —
-            # it was asked for — but it stops being SynapseOS, so it is behind an
-            # extra question rather than in the same list as a block game.
-            echo ""
-            prompt "Customise the core daemons too? Removing any means this is no longer SynapseOS [y/N]:"
-            answer customise_core core_custom -m yes=y,no=n,true=y,false=n || true
-            if [ "${core_custom,,}" = y ] || [ "${core_custom,,}" = yes ]; then
-                warn "The core daemons are what SynapseOS is. Deselecting them produces
-  an Arch system with some SynapseOS parts, and the AI, security and
-  desktop features will not work as documented."
-                echo ""
-                ask_opt core_synapd  1 "synapd — the LLM daemon (everything AI depends on)"
-                ask_opt core_synui   1 "synui — the Wayland compositor / desktop"
-                ask_opt core_synsh   1 "synsh — the AI-native shell"
-                ask_opt core_synnet  1 "synnet — network policy daemon"
-                ask_opt core_guard   1 "synguard + kernel module — security monitor"
-                ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
-
-                # synpkg, synfiles and syntty are unconditional here too —
-                # Custom lets the user drop synapd or synui, but not the package
-                # manager, not the file manager and not the terminal.
-                SEL_CORE="syn syn-model syn-firstboot synpkg synfiles syn-settings syn-disks syn-edit syntty"
-                [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
-                [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
-                [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"
-                [ "$core_synnet" = 1 ] && SEL_CORE="$SEL_CORE synnet"
-                [ "$core_guard"  = 1 ] && SEL_CORE="$SEL_CORE synguard synapse_kmod"
-                [ "$core_update" = 1 ] && SEL_CORE="$SEL_CORE syn-update"
-                SEL_CORE=$(echo $SEL_CORE)
-
-                [ "$core_update" = 1 ] || warn "syn-update deselected: this machine will have no way to receive
-  another SynapseOS package. Fixing that later means reinstalling."
+            # The two deselections worth stopping on. Both are allowed — they
+            # were asked for — but each has a consequence that only shows up
+            # weeks later, and by then the install screen is long forgotten.
+            sel_on comp_synupdate || warn "syn-update deselected: this machine will have no way to receive
+  another SynapseOS package. Fixing that later means installing it by hand
+  from the ISO, or reinstalling."
+            if ! sel_on comp_synui && ! sel_on comp_synapd; then
+                warn "Neither the desktop nor the AI daemon was kept. That is an Arch
+  system with some SynapseOS tools on it, which is a supported answer —
+  but nothing in the documentation will describe the machine you get."
             fi
             success "Custom install configured"
             ;;
@@ -2322,16 +2578,34 @@ while :; do
         MODEL_CHOICE=none
     fi
 
+    # Dependencies BEFORE the read-back, never after it: sel_resolve_deps re-ticks
+    # what a kept package cannot run without, and the summary is the one place
+    # the user finds out. Resolving it after the confirmation would make the
+    # summary the only thing on screen that is not what gets installed.
+    #
+    # It also runs on every preset, not just Custom — Minimal drops the app
+    # group wholesale, and Full turns everything on, so neither can produce a
+    # broken pair, but a profile can name any combination it likes.
+    sel_resolve_deps
+
+    # The three lists downstream still speaks in. `core` is what decides service
+    # enablement below; `sw` is not ours and is installed in its own transaction
+    # after the SynapseOS one, so a name that has been renamed upstream cannot
+    # take our packages down with it.
+    SEL_CORE="$(sel_packages core)"
+    SEL_APPS="$(sel_packages app)"
+    SEL_SOFTWARE="$(sel_packages sw)"
+
     # Read the selection back before touching the disk. A picker whose result you
     # only discover afterwards is worse than no picker.
     echo ""
     echo "  $(bold 'Installing:')"
     echo "    Core     : $(echo $SEL_CORE | wc -w) package(s)"
     echo "    Apps     : ${SEL_APPS:-none}"
+    echo "    Software : ${SEL_SOFTWARE:-none}"
     echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo "$MODEL_LABEL — downloaded during the install" || echo 'none — the AI is inert until "syn model download"')"
     echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
     echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
-    echo "    Files    : synfiles"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
     echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope + CachyOS Proton, enables multilib and [cachyos])' || echo no)"
@@ -2419,8 +2693,18 @@ fi
 # offload was on), and plain `cp` dereferenced the soname symlinks, writing
 # three identical 4 MB regular files per library instead of a symlink chain,
 # which is what made ldconfig warn "is not a symbolic link" on every pacman run.
-arch-chroot /mnt pacman -Sy --noconfirm $SEL_CORE $SEL_APPS \
-    2>&1 || warn "Some SynapseOS packages failed to install — verifying below"
+#
+# Guarded on being non-empty: every SynapseOS package is a checkbox now, so
+# "none of them" is a legal answer, and `pacman -Sy` with no targets is a
+# database refresh that reports success — which would read as a transaction
+# that worked.
+if [ -n "$SEL_CORE$SEL_APPS" ]; then
+    arch-chroot /mnt pacman -Sy --noconfirm $SEL_CORE $SEL_APPS \
+        2>&1 || warn "Some SynapseOS packages failed to install — verifying below"
+else
+    arch-chroot /mnt pacman -Sy --noconfirm 2>&1 || true
+    warn "No SynapseOS packages were selected. This will be an Arch system."
+fi
 
 # ── Hard verify the SynapseOS packages landed ─────────────
 #
@@ -2516,13 +2800,33 @@ step "Step 6 — Desktop Environment"
 
 echo "  Choose a desktop environment:"
 echo ""
-echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+# Row 1 is only honest while synui is on the disk. Deselecting it in step 4 is
+# now a supported answer, and offering "SynapseUI" afterwards would install
+# greetd, quickshell and a session that has no compositor to start — a machine
+# that boots to a login screen and cannot get past it.
+if sel_on comp_synui; then
+    echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+else
+    echo "    $(bold '1)') SynapseUI  — NOT AVAILABLE: synui was not selected"
+fi
 echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
 echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
 echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
 echo ""
-pick "Choice [1-4, default=1]:" desktop de_choice 1 "1 2 3 4" \
-     -m synui=1,kde=2,gnome=3,tty=4
+if sel_on comp_synui; then
+    pick "Choice [1-4, default=1]:" desktop de_choice 1 "1 2 3 4" \
+         -m synui=1,kde=2,gnome=3,tty=4
+else
+    # A profile that asks for both is a contradiction, and quietly resolving it
+    # either way would hand back a machine nobody asked for. Say which two keys
+    # disagree and stop — before the desktop is installed, not after.
+    case "${ANSWERS[desktop]:-}" in
+        synui|1) die "config: desktop=synui, but comp_synui=no — the desktop cannot be
+  installed without the compositor. Set one of the two." ;;
+    esac
+    pick "Choice [2-4, default=4]:" desktop de_choice 4 "2 3 4" \
+         -m kde=2,gnome=3,tty=4
+fi
 DE_CHOICE="$de_choice"
 
 case "$DE_CHOICE" in
@@ -3107,6 +3411,52 @@ if [ "$WANT_BLACKARCH" = 1 ]; then
     rm -f /mnt/tmp/strap.sh
     [ "$ba_ok" = 1 ] || warn "BlackArch was not enabled. The system is otherwise complete;
   add it later with 'sudo syn arsenal --enable-repo'."
+fi
+
+# ── The software shelf ────────────────────────────────────
+#
+# Everything ticked on the five SEL_SW_* pages: an ordinary pacman transaction
+# from core/extra, nothing SynapseOS-specific about any of it.
+#
+# LAST, and in its OWN transaction, for two reasons that are really the same
+# one. It is the only part of the install where the names are somebody else's
+# to rename — a package that moved repositories or was dropped upstream would,
+# in one shared transaction, take every SynapseOS package with it (the
+# samsung-m2020 shape) — and a failure here costs the user a program they can
+# install in one command afterwards, not a machine that will not boot. So it
+# runs after the system is complete, warns rather than dies, and retries the
+# failures one at a time so a single bad name fails alone and is NAMED.
+#
+# --needed because several of these are already on the disk by then: wine and
+# winetricks, mangohud and goverlay, gamescope. Re-installing them would work
+# and would waste the download.
+if [ -n "${SEL_SOFTWARE:-}" ]; then
+    header
+    step "Installing software"
+    echo "  $(echo $SEL_SOFTWARE | wc -w) package(s) from the Arch repositories:"
+    echo "    $SEL_SOFTWARE"
+    echo ""
+    if ! arch-chroot /mnt pacman -S --noconfirm --needed $SEL_SOFTWARE 2>&1; then
+        warn "That transaction failed — retrying each package on its own so the
+  ones that are fine still land, and the one that is not gets named."
+        sw_failed=""
+        for p in $SEL_SOFTWARE; do
+            arch-chroot /mnt pacman -S --noconfirm --needed "$p" 2>&1 \
+                || sw_failed="$sw_failed $p"
+        done
+        [ -n "$sw_failed" ] && warn "Not installed:$sw_failed
+  Nothing else is affected. Install them later with 'synpkg install <name>'."
+    fi
+    # Docker's daemon is the one item on those pages that is inert until a unit
+    # is on, and a Docker that is installed and does nothing reads as broken.
+    # Enabled, not started: there is no running system here to start it in.
+    case " $SEL_SOFTWARE " in
+        *" docker "*) arch-chroot /mnt systemctl enable docker.service 2>/dev/null || true ;;
+    esac
+    case " $SEL_SOFTWARE " in
+        *" syncthing "*) arch-chroot /mnt systemctl --global enable syncthing.service 2>/dev/null || true ;;
+    esac
+    success "Software installed"
 fi
 
 # ── Configure system ──────────────────────────────────────

@@ -122,6 +122,14 @@ consumed=$( { grep -ohE '(^|;)[[:space:]]*answer [a-z_0-9]+ [A-Za-z_][A-Za-z_0-9
                   sed -E 's/^[[:space:]]*pick "[^"]*" //' | awk '{print $1}'
               grep -ohE '^[[:space:]]*ask_opt [A-Za-z_0-9]+' "$script" |
                   awk '{print tolower($2)}'
+              # The checkbox pages. Their keys are the first field of a row in
+              # one of the SEL_* tables rather than an `answer` call site —
+              # multi_select() reads the key out of the row, so the table IS
+              # the call site, and there are ~70 of them. A row whose key does
+              # not start comp_/sw_ is invisible here, which is why the format
+              # comment in syn-install.sh says the prefix is load-bearing.
+              grep -ohE '^[[:space:]]*"(comp|sw)_[a-z0-9_]+\|' "$script" |
+                  tr -d '" ' | cut -d'|' -f1
             } | sort -u)
 
 # Keys the example documents. Commented-out ones count -- being shown as an
@@ -129,9 +137,16 @@ consumed=$( { grep -ohE '(^|;)[[:space:]]*answer [a-z_0-9]+ [A-Za-z_][A-Za-z_0-9
 # underscore exactly as render.nix does.
 # Block headers may themselves be commented out (`core` is), so the optional #
 # is on every pattern here, not just the leaves.
+#
+# Any `name = {` opens a block rather than a hardcoded list of two. When this
+# knew only about `want` and `core`, adding the comp/sw pages would have made
+# seventy correctly-documented keys read as undocumented — and the obvious
+# "fix" is to add them to the list here, which is one more place the vocabulary
+# lives.
 documented=$(awk '
-    /^ *#? *want *= *\{/ { blk = "want"; next }
-    /^ *#? *core *= *\{/ { blk = "core"; next }
+    /^ *#? *[a-z_0-9]+ *= *\{/ {
+        blk = $0; sub(/^ *#? */, "", blk); sub(/ *=.*/, "", blk); next
+    }
     /^ *#? *\}; *$/      { blk = "";     next }
     match($0, /^ *#? *[a-z_0-9]+ *=/) {
         k = $0; sub(/^ *#? */, "", k); sub(/ *=.*/, "", k)
@@ -182,7 +197,16 @@ if [ -f "$gui" ]; then
     # quoted `word=` in the whole file was too loose and swept up the shell
     # sentinels the install chain reports its status with
     # (__syn_install_exit=), demanding the installer consume them as settings.
-    gui_keys=$(grep -E 'L\.push\(' "$gui" | grep -oE '"[a-z_0-9]+=' | tr -d '"=' | sort -u)
+    #
+    # The checkbox keys are NOT literals in an L.push — buildConfig() walks the
+    # window's own packGroups table and pushes `row.key + "="`, so the table is
+    # where they are declared and the table is what this reads. That makes this
+    # a genuine drift check between two tables that must agree row for row,
+    # rather than a check that a loop exists.
+    gui_keys=$( { grep -E 'L\.push\(' "$gui" | grep -oE '"[a-z_0-9]+=' | tr -d '"='
+                  grep -oE 'key: "(comp|sw)_[a-z0-9_]+"' "$gui" |
+                      sed 's/key: //; s/"//g'
+                } | sort -u)
     for k in $gui_keys; do
         check "GUI key $k is one the installer reads" yes \
               "$(grep -qxF "$k" <<<"$consumed" && echo yes || echo no)"
@@ -202,8 +226,17 @@ if [ -f "$gui" ]; then
         check "Custom question $k is answered by the GUI" yes \
               "$(grep -qxF "$k" <<<"$gui_keys" && echo yes || echo no)"
     done
-    check "Custom question customise_core is answered by the GUI" yes \
-          "$(grep -qxF customise_core <<<"$gui_keys" && echo yes || echo no)"
+
+    # The checkbox pages have exactly the same hazard, and ~70 times over.
+    # multi_select() draws its page and blocks on `read -r` as soon as ONE row
+    # on it is unanswered — so a component the window forgets to write does not
+    # install a package with a default, it hangs the graphical install on a
+    # page nobody can see. Every row, in both directions.
+    for k in $(grep -ohE '^[[:space:]]*"(comp|sw)_[a-z0-9_]+\|' "$script" |
+                   tr -d '" ' | cut -d'|' -f1 | sort -u); do
+        check "checkbox $k is answered by the GUI" yes \
+              "$(grep -qxF "$k" <<<"$gui_keys" && echo yes || echo no)"
+    done
 else
     echo "  (no syn-install-gui.qml — skipped)"
 fi

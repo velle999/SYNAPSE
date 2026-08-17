@@ -1,10 +1,19 @@
 pkgname=syn-install
 pkgver=0.1.0
+# 79: every package is a checkbox, and there is a shelf of ordinary software.
+#   Eleven of our own — synpkg, synfiles, syn-settings, syn-disks, syn-edit,
+#   syntty, syn, syn-model, syn-firstboot, syn-confine, fetch — were installed
+#   whatever the answer, and Custom could not decline any of them. All of them
+#   are rows on a page now; what stays forced is only what pacman would force
+#   anyway, and sel_resolve_deps() re-ticks that and says which and why.
+#   Also 47 programs from core/extra across five pages, because an installed
+#   SynapseOS shipped with NO WEB BROWSER unless the Full preset happened to
+#   pull one in as nexus-chat's dependency.
 # 78: cliamp in SEL_APPS, beside syn-arcade. Big screen mode's Music tile plays
 #   without a window ONLY with that player — every other one opens a window
 #   somebody then has to get out of with a gamepad — so a fresh install without
 #   it had half of big screen mode described and absent.
-pkgrel=78
+pkgrel=79
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

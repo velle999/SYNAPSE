@@ -55,6 +55,16 @@ FloatingWindow {
     // nothing on screen and every later launch exits 0 having drawn nothing.
     onClosed: Qt.quit()
 
+    // Every checkbox starts at its Standard value, which is what aPreset starts
+    // at. Without this `picks` is an empty object, every row draws unticked, and
+    // a Custom install that nobody touched would write "no" to all of them.
+    Component.onCompleted: root.applyPresetPicks(root.aPreset)
+
+    // Deselecting the compositor while SynapseUI is the chosen desktop leaves
+    // two answers that contradict each other. Move the desktop rather than let
+    // the script refuse the pair twenty minutes into an install.
+    onPicksChanged: if (aDesktop === "synui" && !pickOn("comp_synui")) aDesktop = "tty"
+
     readonly property string bin: Quickshell.env("SYN_INSTALL_BIN") || "syn-install"
     // Where the profile is written. /run is a tmpfs, which is the point: it
     // holds a password until the install reads it and never reaches a disk.
@@ -112,17 +122,11 @@ FloatingWindow {
     property string aModel: "mistral-7b"
     // ── Custom, and why every one of these has a default ────────────────────
     //
-    // Custom is the text installer's fourth preset, and it asks nineteen y/n
-    // questions. Every one of them has to be written by this window when the
-    // preset is custom, because a key left out is a question asked at a terminal
-    // nobody is looking at — so these ARE the answers, and their defaults are
-    // Standard's, exactly as `ask_opt`'s defaults are.
-    property bool aChibi: true
-    property bool aVibe: true
-    property bool aNexus: false
-    property bool aTepris: false
-    property bool aArsenal: true
-    property bool aWpengine: true
+    // Custom is the text installer's fourth preset. Every question it asks has
+    // to be written by this window, because a key left out is a question asked
+    // at a terminal nobody is looking at — the install stops on a prompt behind
+    // the window with nothing on screen saying why. So these ARE the answers,
+    // and their defaults are Standard's, exactly as the script's are.
     property bool aBluetooth: true
     property bool aPrinting: true
     property bool aWine: true
@@ -130,16 +134,167 @@ FloatingWindow {
     property bool aSteam: false
     property bool aBlackarch: true
     property bool aNix: false
-    // The core daemons sit behind their own gate, the way the text installer
-    // gates them: dropping one is allowed because it was asked for, but it is
-    // not offered in the same list as a block game.
-    property bool aCustomCore: false
-    property bool aCoreSynapd: true
-    property bool aCoreSynui: true
-    property bool aCoreSynsh: true
-    property bool aCoreSynnet: true
-    property bool aCoreGuard: true
-    property bool aCoreUpdate: true
+
+    // ── The checkbox pages ──────────────────────────────────────────────────
+    //
+    // A TABLE, not seventy hand-written Check blocks, and it mirrors
+    // SEL_COMPONENTS / SEL_SW_* in syn-install.sh row for row: same keys, same
+    // order, same std/full defaults, same `min` column. The window renders it
+    // and buildConfig() walks it, so adding a package here is one line in each
+    // of two files instead of five places in this one.
+    //
+    // `min` means "a Minimal install keeps it" — the script's `core` group.
+    // Nothing in the sw groups is ever min.
+    readonly property var packGroups: [
+        { title: "SynapseOS packages",
+          note: "Everything the system is made of. What you cannot drop is what "
+              + "something else you kept depends on — those are turned back on "
+              + "and named before anything is installed.",
+          rows: [
+            { key: "comp_synui",       std: 1, full: 1, min: 1, label: "SYNAPSE UI — the Wayland desktop" },
+            { key: "comp_synapd",      std: 1, full: 1, min: 1, label: "synapd — the local AI daemon" },
+            { key: "comp_synsh",       std: 1, full: 1, min: 1, label: "synsh — the AI-native shell" },
+            { key: "comp_synguard",    std: 1, full: 1, min: 1, label: "synguard + kernel module" },
+            { key: "comp_synnet",      std: 1, full: 1, min: 1, label: "synnet — network policy" },
+            { key: "comp_synpkg",      std: 1, full: 1, min: 1, label: "Software — the package manager" },
+            { key: "comp_synfiles",    std: 1, full: 1, min: 1, label: "Files — the file manager" },
+            { key: "comp_syntty",      std: 1, full: 1, min: 1, label: "Terminal (synui depends on it)" },
+            { key: "comp_synsettings", std: 1, full: 1, min: 1, label: "Settings" },
+            { key: "comp_syndisks",    std: 1, full: 1, min: 1, label: "Disks" },
+            { key: "comp_synedit",     std: 1, full: 1, min: 1, label: "Editor" },
+            { key: "comp_synupdate",   std: 1, full: 1, min: 1, label: "syn-update — how fixes arrive" },
+            { key: "comp_syn",         std: 1, full: 1, min: 1, label: "syn — the top-level CLI" },
+            { key: "comp_synmodel",    std: 1, full: 1, min: 1, label: "syn-model — fetch AI models" },
+            { key: "comp_synfirstboot", std: 1, full: 1, min: 1, label: "syn-firstboot" },
+            { key: "comp_synconfine",  std: 1, full: 1, min: 1, label: "syn-confine — the sandbox" },
+            { key: "comp_fetch",       std: 1, full: 1, min: 1, label: "fetch — the About OS readout" },
+            { key: "comp_arcade",      std: 1, full: 1, min: 0, label: "Arcade — overlay, pads, big screen" },
+            { key: "comp_cliamp",      std: 1, full: 1, min: 0, label: "cliamp — the music player" },
+            { key: "comp_arsenal",     std: 1, full: 1, min: 0, label: "Arsenal — BlackArch browser" },
+            { key: "comp_chibi",       std: 1, full: 1, min: 0, label: "Chibi — voice companion" },
+            { key: "comp_vibe",        std: 1, full: 1, min: 0, label: "Vibe — AI coding assistant" },
+            { key: "comp_wpengine",    std: 1, full: 1, min: 0, label: "Animated wallpapers (~317 MB)" },
+            { key: "comp_nexus",       std: 0, full: 1, min: 0, label: "Nexus Chat (pulls in Firefox)" },
+            { key: "comp_tepris",      std: 0, full: 1, min: 0, label: "TEPRIS (pulls in Firefox)" }
+          ] },
+        { title: "Web and communication",
+          note: "None of this is ours; every name is in the Arch repositories. "
+              + "Firefox is on by default because an installed SynapseOS used to "
+              + "arrive with no browser at all.",
+          rows: [
+            { key: "sw_firefox",     std: 1, full: 1, min: 0, label: "Firefox" },
+            { key: "sw_chromium",    std: 0, full: 0, min: 0, label: "Chromium" },
+            { key: "sw_vivaldi",     std: 0, full: 0, min: 0, label: "Vivaldi" },
+            { key: "sw_thunderbird", std: 0, full: 1, min: 0, label: "Thunderbird — mail" },
+            { key: "sw_discord",     std: 0, full: 0, min: 0, label: "Discord" },
+            { key: "sw_telegram",    std: 0, full: 0, min: 0, label: "Telegram" },
+            { key: "sw_signal",      std: 0, full: 0, min: 0, label: "Signal" },
+            { key: "sw_keepassxc",   std: 0, full: 1, min: 0, label: "KeePassXC — passwords" },
+            { key: "sw_qbittorrent", std: 0, full: 0, min: 0, label: "qBittorrent" },
+            { key: "sw_syncthing",   std: 0, full: 0, min: 0, label: "Syncthing — file sync" }
+          ] },
+        { title: "Audio and video", note: "",
+          rows: [
+            { key: "sw_vlc",       std: 0, full: 1, min: 0, label: "VLC" },
+            { key: "sw_mpv",       std: 0, full: 1, min: 0, label: "mpv" },
+            { key: "sw_obs",       std: 0, full: 0, min: 0, label: "OBS Studio" },
+            { key: "sw_audacity",  std: 0, full: 0, min: 0, label: "Audacity" },
+            { key: "sw_kdenlive",  std: 0, full: 0, min: 0, label: "Kdenlive" },
+            { key: "sw_handbrake", std: 0, full: 0, min: 0, label: "HandBrake" },
+            { key: "sw_spotify",   std: 0, full: 0, min: 0, label: "Spotify" }
+          ] },
+        { title: "Office and graphics", note: "",
+          rows: [
+            { key: "sw_libreoffice", std: 0, full: 1, min: 0, label: "LibreOffice" },
+            { key: "sw_gimp",        std: 0, full: 1, min: 0, label: "GIMP" },
+            { key: "sw_inkscape",    std: 0, full: 0, min: 0, label: "Inkscape" },
+            { key: "sw_krita",       std: 0, full: 0, min: 0, label: "Krita" },
+            { key: "sw_blender",     std: 0, full: 0, min: 0, label: "Blender" },
+            { key: "sw_calibre",     std: 0, full: 0, min: 0, label: "Calibre" }
+          ] },
+        { title: "Development and admin", note: "",
+          rows: [
+            { key: "sw_code",        std: 0, full: 0, min: 0, label: "VS Code (OSS build)" },
+            { key: "sw_neovim",      std: 0, full: 0, min: 0, label: "Neovim" },
+            { key: "sw_gitlfs",      std: 0, full: 0, min: 0, label: "git-lfs" },
+            { key: "sw_docker",      std: 0, full: 0, min: 0, label: "Docker" },
+            { key: "sw_virtmanager", std: 0, full: 0, min: 0, label: "virt-manager" },
+            { key: "sw_gparted",     std: 0, full: 0, min: 0, label: "GParted" },
+            { key: "sw_btop",        std: 0, full: 1, min: 0, label: "btop" },
+            { key: "sw_filezilla",   std: 0, full: 0, min: 0, label: "FileZilla" },
+            { key: "sw_remmina",     std: 0, full: 0, min: 0, label: "Remmina" },
+            { key: "sw_archivers",   std: 0, full: 1, min: 0, label: "7zip + unrar" }
+          ] },
+        { title: "Games, launchers and helpers",
+          note: "Steam is in the options below rather than here: it is the only "
+              + "one that turns on a second architecture and a third repository.",
+          rows: [
+            { key: "sw_lutris",       std: 0, full: 0, min: 0, label: "Lutris" },
+            { key: "sw_prism",        std: 0, full: 0, min: 0, label: "Prism — Minecraft" },
+            { key: "sw_retroarch",    std: 0, full: 0, min: 0, label: "RetroArch" },
+            { key: "sw_dolphinemu",   std: 0, full: 0, min: 0, label: "Dolphin — GameCube/Wii" },
+            { key: "sw_ppsspp",       std: 0, full: 0, min: 0, label: "PPSSPP — PSP" },
+            { key: "sw_scummvm",      std: 0, full: 0, min: 0, label: "ScummVM" },
+            { key: "sw_dosbox",       std: 0, full: 0, min: 0, label: "DOSBox" },
+            { key: "sw_mame",         std: 0, full: 0, min: 0, label: "MAME" },
+            { key: "sw_protontricks", std: 0, full: 0, min: 0, label: "Protontricks" },
+            { key: "sw_winetricks",   std: 0, full: 0, min: 0, label: "Winetricks" },
+            { key: "sw_goverlay",     std: 0, full: 0, min: 0, label: "GOverlay — MangoHud" },
+            { key: "sw_antimicrox",   std: 0, full: 0, min: 0, label: "AntiMicroX — pad remap" },
+            { key: "sw_openrgb",      std: 0, full: 0, min: 0, label: "OpenRGB" },
+            { key: "sw_corectrl",     std: 0, full: 0, min: 0, label: "CoreCtrl" }
+          ] }
+    ]
+
+    // key -> bool, for every row above.
+    //
+    // ⚠ NEVER mutate this in place. Assigning to a property of the SAME object
+    // changes nothing QML can see — no binding re-evaluates, so the tick does
+    // not move and the answer written at the end is whatever the object started
+    // as. setPick() copies, edits the copy, and assigns.
+    property var picks: ({})
+
+    function setPick(k, v) {
+        const p = Object.assign({}, root.picks)
+        p[k] = v
+        root.picks = p
+    }
+    function pickOn(k) { return root.picks[k] === true }
+
+    // Fill every row from the preset's column — the same three columns
+    // sel_reset() reads in the script, so the window and the terminal cannot
+    // disagree about what Standard means.
+    function applyPresetPicks(preset) {
+        const p = {}
+        for (let g = 0; g < root.packGroups.length; g++) {
+            const rows = root.packGroups[g].rows
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i]
+                p[r.key] = (preset === "full" ? r.full
+                          : preset === "minimal" ? r.min
+                          : r.std) === 1
+            }
+        }
+        root.picks = p
+    }
+
+    // The dependencies the script re-ticks in sel_resolve_deps(). Mirrored here
+    // so the window agrees with the machine BEFORE the summary rather than
+    // after: this is the list of hard `depends=` in our own PKGBUILDs.
+    //   need : because
+    readonly property var packDeps: [
+        ["comp_syntty",     "comp_synui"],
+        ["comp_synapd",     "comp_synnet"],
+        ["comp_synapd",     "comp_vibe"],
+        ["comp_synconfine", "comp_vibe"],
+        ["comp_synmodel",   "comp_synfirstboot"]
+    ]
+    function forcedOn(key) {
+        for (let i = 0; i < root.packDeps.length; i++)
+            if (root.packDeps[i][0] === key && root.pickOn(root.packDeps[i][1])) return true
+        if (key === "comp_synmodel" && root.aPreset !== "minimal" && root.aModel !== "none") return true
+        return false
+    }
     property string aUser: "syn"
     property string aFullname: ""
     property string aPass: ""
@@ -318,6 +473,15 @@ FloatingWindow {
             if (aEncrypt && aLuks.length < 8)
                 return "The encryption passphrase needs at least 8 characters."
         }
+        // The Software page can now produce a machine with no desktop and no
+        // terminal on it. That is a supported answer — but not one to arrive at
+        // by accident, so it is caught on the page it was made on rather than
+        // being discovered on the summary.
+        if (n === 2 && aPreset === "custom") {
+            if (!pickOn("comp_synpkg") && !pickOn("comp_synui"))
+                return "With neither the package manager nor the desktop, this install "
+                     + "has no way to add either one back. Keep at least one."
+        }
         if (n === 3) {
             if (!/^[a-z_][a-z0-9_-]*$/.test(aUser))
                 return "A username is lower-case letters, digits, - and _, and cannot start with a digit."
@@ -442,22 +606,43 @@ FloatingWindow {
         for (const p of pairs) if (p[0]) out.push(p[1])
         return out.join(", ")
     }
-    function customApps() {
-        return joinPicked([[aChibi, "Chibi"], [aVibe, "Vibe"], [aNexus, "Nexus Chat"],
-                           [aTepris, "TEPRIS"], [aArsenal, "Arsenal"],
-                           [aWpengine, "Animated wallpapers"]])
+    // Counts, not names: twenty-five components and forty-seven programs do not
+    // fit in a summary row, and a list that elides is worse than a number.
+    function pickedCount(prefix) {
+        let n = 0
+        for (let g = 0; g < packGroups.length; g++) {
+            const rows = packGroups[g].rows
+            for (let i = 0; i < rows.length; i++)
+                if (rows[i].key.indexOf(prefix) === 0
+                    && (pickOn(rows[i].key) || forcedOn(rows[i].key))) n++
+        }
+        return n
+    }
+    // The SynapseOS packages that were turned OFF, because that is the short
+    // list and the one worth reading twice.
+    function customCompDropped() {
+        const out = []
+        const rows = packGroups[0].rows
+        for (let i = 0; i < rows.length; i++)
+            if (!pickOn(rows[i].key) && !forcedOn(rows[i].key))
+                out.push(rows[i].label.split(" — ")[0])
+        return out.join(", ")
+    }
+    // And the ordinary software that was turned on, which IS worth naming: it is
+    // the half of the page somebody ticked deliberately.
+    function customSoftware() {
+        const out = []
+        for (let g = 1; g < packGroups.length; g++) {
+            const rows = packGroups[g].rows
+            for (let i = 0; i < rows.length; i++)
+                if (pickOn(rows[i].key)) out.push(rows[i].label.split(" — ")[0])
+        }
+        return out.join(", ")
     }
     function customOpts() {
         return joinPicked([[aBluetooth, "Bluetooth"], [aPrinting, "printing"], [aWine, "Wine"],
                            [aPhone, "KDE Connect"], [aSteam, "Steam"],
                            [aBlackarch, "BlackArch repo"], [aNix, "Nix"]])
-    }
-    // The daemons that were turned OFF, because that is the short list and the
-    // one worth reading twice.
-    function customCoreDropped() {
-        return joinPicked([[!aCoreSynapd, "synapd"], [!aCoreSynui, "synui"],
-                           [!aCoreSynsh, "synsh"], [!aCoreSynnet, "synnet"],
-                           [!aCoreGuard, "synguard"], [!aCoreUpdate, "syn-update"]])
     }
 
     // The two-column grid. Custom's three lines are NOT here: they are sentences
@@ -482,11 +667,11 @@ FloatingWindow {
 
     function customRows() {
         if (aPreset !== "custom") return []
-        const R = [["Apps", customApps() || "none"], ["Options", customOpts() || "none"]]
-        if (aCustomCore) {
-            const off = customCoreDropped()
-            R.push(["Core", off ? "WITHOUT " + off : "all of it"])
-        }
+        const off = customCompDropped()
+        const R = [["SynapseOS", pickedCount("comp_") + " package(s)"
+                                 + (off ? " — WITHOUT " + off : "")],
+                   ["Software", customSoftware() || "none"],
+                   ["Options", customOpts() || "none"]]
         return R
     }
 
@@ -511,17 +696,20 @@ FloatingWindow {
         // refuses one under 8 characters, so short_passphrase_ok is never asked.
         if (aEncrypt) L.push("luks_passphrase=" + aLuks)
         L.push("preset=" + aPreset)
-        // Custom is nineteen further questions, and they are asked ONLY under
-        // custom — writing them under any other preset would put them in the
-        // unused-key report. The core six are asked only when the gate is open,
-        // for the same reason.
+        // Custom's questions are asked ONLY under custom — writing them under
+        // any other preset would put them in the unused-key report, which is
+        // the report that has to stay quiet to be worth reading.
+        //
+        // EVERY checkbox, not just the ticked ones: multi_select() draws its
+        // page and blocks on `read -r` the moment one row on it is unanswered,
+        // so an omitted key is not a default, it is a hung install behind a
+        // window. tests/config_test.sh checks both directions of this.
         if (aPreset === "custom") {
-            L.push("want_chibi=" + yn(aChibi))
-            L.push("want_vibe=" + yn(aVibe))
-            L.push("want_nexus=" + yn(aNexus))
-            L.push("want_tepris=" + yn(aTepris))
-            L.push("want_arsenal=" + yn(aArsenal))
-            L.push("want_wpengine=" + yn(aWpengine))
+            for (let g = 0; g < packGroups.length; g++) {
+                const rows = packGroups[g].rows
+                for (let i = 0; i < rows.length; i++)
+                    L.push(rows[i].key + "=" + yn(pickOn(rows[i].key) || forcedOn(rows[i].key)))
+            }
             L.push("want_bluetooth=" + yn(aBluetooth))
             L.push("want_printing=" + yn(aPrinting))
             L.push("want_wine=" + yn(aWine))
@@ -529,15 +717,6 @@ FloatingWindow {
             L.push("want_steam=" + yn(aSteam))
             L.push("want_blackarch=" + yn(aBlackarch))
             L.push("want_nix=" + yn(aNix))
-            L.push("customise_core=" + yn(aCustomCore))
-            if (aCustomCore) {
-                L.push("core_synapd=" + yn(aCoreSynapd))
-                L.push("core_synui=" + yn(aCoreSynui))
-                L.push("core_synsh=" + yn(aCoreSynsh))
-                L.push("core_synnet=" + yn(aCoreSynnet))
-                L.push("core_guard=" + yn(aCoreGuard))
-                L.push("core_update=" + yn(aCoreUpdate))
-            }
         }
         // The model question is asked on every preset except minimal.
         if (aPreset !== "minimal") L.push("ai_model=" + aModel)
@@ -1225,27 +1404,31 @@ FloatingWindow {
                     Column {
                         width: parent.width
                         spacing: 6
+                        // Picking a preset re-fills every checkbox from that
+                        // preset's column, so switching to Custom afterwards
+                        // starts from what the preset meant rather than from
+                        // whatever was ticked two presets ago.
                         Choice {
                             width: parent.width; text: "Full"
-                            subtext: "Standard + Steam + Nix + Nexus Chat + TEPRIS"
+                            subtext: "Standard + Steam + Nix + more software"
                             checked: root.aPreset === "full"
-                            onPicked: root.aPreset = "full"
+                            onPicked: { root.aPreset = "full"; root.applyPresetPicks("full") }
                         }
                         Choice {
                             width: parent.width; text: "Standard"
-                            subtext: "AI model, Bluetooth, printing, Wine, phone, Chibi + Vibe + Arsenal"
+                            subtext: "the SynapseOS suite, Firefox, AI model, Bluetooth, printing, Wine, phone"
                             checked: root.aPreset === "standard"
-                            onPicked: root.aPreset = "standard"
+                            onPicked: { root.aPreset = "standard"; root.applyPresetPicks("standard") }
                         }
                         Choice {
                             width: parent.width; text: "Minimal"
-                            subtext: "core daemons only — no apps, no model, none of the above"
+                            subtext: "core daemons only — no apps, no software, no model"
                             checked: root.aPreset === "minimal"
-                            onPicked: root.aPreset = "minimal"
+                            onPicked: { root.aPreset = "minimal"; root.applyPresetPicks("minimal") }
                         }
                         Choice {
                             width: parent.width; text: "Custom"
-                            subtext: "choose each app and each option below"
+                            subtext: "tick every package yourself, ours and the ordinary software"
                             checked: root.aPreset === "custom"
                             onPicked: root.aPreset = "custom"
                         }
@@ -1253,97 +1436,163 @@ FloatingWindow {
 
                     // ── Custom ──────────────────────────────────────────────
                     //
-                    // The same questions the text installer asks under Custom,
-                    // in the same order, with the same defaults. Two columns
-                    // because they are two lists there too: what to install, and
-                    // what to turn on.
+                    // The same pages the text installer draws, from the same
+                    // table: SynapseOS packages first, then five groups of
+                    // ordinary software, then the handful of options that are a
+                    // subsystem rather than a package.
+                    //
+                    // Two columns per group, because twenty-five checkboxes in
+                    // one column is a page nobody reads to the bottom of. The
+                    // whole thing is inside the Flickable this page already has.
                     Column {
                         width: parent.width
-                        spacing: 10
+                        spacing: 14
                         visible: root.aPreset === "custom"
 
                         Rectangle { width: parent.width; height: 1; color: root.cLine }
 
-                        Row {
-                            spacing: 40
-                            Column {
-                                spacing: 2
+                        // ⚠ ids, not `parent.modelData`. A Repeater's parent is
+                        // the layout it fills, and a QQuickItem has no
+                        // modelData — `parent.parent.modelData.rows` type-checks
+                        // as an unqualified lookup, resolves to undefined at
+                        // run time, and renders an empty group with no error
+                        // anywhere. qmllint names it; nothing else does.
+                        Repeater {
+                            model: root.packGroups
+                            delegate: Column {
+                                id: grp
+                                required property var modelData
+                                width: parent.width
+                                spacing: 4
+
                                 Text {
-                                    text: "Applications"; color: root.cDim; font.pixelSize: 12
+                                    text: grp.modelData.title
+                                    color: root.cText
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                }
+                                Text {
+                                    text: grp.modelData.note
+                                    visible: grp.modelData.note !== ""
+                                    color: root.cDim
+                                    font.pixelSize: 11
+                                    width: grp.width
+                                    wrapMode: Text.WordWrap
                                     bottomPadding: 4
                                 }
-                                Check {
-                                    text: "Chibi — voice companion + security sentinel"
-                                    checked: root.aChibi
-                                    onToggled: root.aChibi = !root.aChibi
-                                }
-                                Check {
-                                    text: "Vibe — local AI coding assistant"
-                                    checked: root.aVibe
-                                    onToggled: root.aVibe = !root.aVibe
-                                }
-                                Check {
-                                    text: "Nexus Chat — peer-to-peer chat"
-                                    checked: root.aNexus
-                                    onToggled: root.aNexus = !root.aNexus
-                                }
-                                Check {
-                                    text: "TEPRIS — block game"
-                                    checked: root.aTepris
-                                    onToggled: root.aTepris = !root.aTepris
-                                }
-                                Check {
-                                    text: "SYNAPSE Arsenal — browse BlackArch tooling"
-                                    checked: root.aArsenal
-                                    onToggled: root.aArsenal = !root.aArsenal
-                                }
-                                Check {
-                                    // The renderer and our wallpapers, always
-                                    // together: either alone is a picker that
-                                    // lists rows nothing can play, or a player
-                                    // with nothing to play.
-                                    text: "Animated wallpapers — no Steam needed (~317 MB)"
-                                    checked: root.aWpengine
-                                    onToggled: root.aWpengine = !root.aWpengine
+                                Grid {
+                                    id: grid
+                                    columns: 2
+                                    width: grp.width
+                                    Repeater {
+                                        model: grp.modelData.rows
+                                        delegate: Item {
+                                            id: cell
+                                            required property var modelData
+                                            width: Math.floor(grid.width / 2)
+                                            height: 26
+                                            Check {
+                                                anchors.left: cell.left
+                                                anchors.verticalCenter: cell.verticalCenter
+                                                // A forced row is ticked and
+                                                // says why, rather than being
+                                                // silently re-ticked at the
+                                                // machine — the summary and the
+                                                // install then agree.
+                                                text: cell.modelData.label
+                                                    + (root.forcedOn(cell.modelData.key) ? "  (required)" : "")
+                                                checked: root.pickOn(cell.modelData.key)
+                                                    || root.forcedOn(cell.modelData.key)
+                                                onToggled: {
+                                                    if (root.forcedOn(cell.modelData.key)) return
+                                                    root.setPick(cell.modelData.key,
+                                                                 !root.pickOn(cell.modelData.key))
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            Column {
-                                spacing: 2
-                                Text {
-                                    text: "Options"; color: root.cDim; font.pixelSize: 12
-                                    bottomPadding: 4
-                                }
+                        }
+
+                        Rectangle { width: parent.width; height: 1; color: root.cLine }
+
+                        Text {
+                            text: "Options"
+                            color: root.cText
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+                        Text {
+                            text: "Not packages: a repository, an architecture or a service. "
+                                + "Each is a decision with a consequence that does not fit on a "
+                                + "checkbox above."
+                            color: root.cDim
+                            font.pixelSize: 11
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                        }
+                        Grid {
+                            columns: 2
+                            width: parent.width
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "Bluetooth"
                                     checked: root.aBluetooth
                                     onToggled: root.aBluetooth = !root.aBluetooth
                                 }
+                            }
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "Printing (CUPS)"
                                     checked: root.aPrinting
                                     onToggled: root.aPrinting = !root.aPrinting
                                 }
+                            }
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "Wine — run Windows .exe/.msi"
                                     checked: root.aWine
                                     onToggled: root.aWine = !root.aWine
                                 }
+                            }
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "KDE Connect — pair a phone"
                                     checked: root.aPhone
                                     onToggled: root.aPhone = !root.aPhone
                                 }
+                            }
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "Steam + game stack + Proton (~3.1 GB)"
                                     checked: root.aSteam
                                     onToggled: root.aSteam = !root.aSteam
                                 }
+                            }
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "BlackArch repo — ~5000 tools, none installed"
                                     checked: root.aBlackarch
                                     onToggled: root.aBlackarch = !root.aBlackarch
                                 }
+                            }
+                            Item {
+                                width: Math.floor(parent.width / 2); height: 26
                                 Check {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "Nix + Home Manager"
                                     checked: root.aNix
                                     onToggled: root.aNix = !root.aNix
@@ -1351,84 +1600,29 @@ FloatingWindow {
                             }
                         }
 
-                        Rectangle { width: parent.width; height: 1; color: root.cLine }
-
-                        // Behind its own gate, exactly as the text installer
-                        // gates it. Dropping a core daemon is allowed — it was
-                        // asked for — but it stops being SynapseOS, so it is not
-                        // in the same list as a block game.
-                        Check {
-                            text: "Customise the core daemons too"
-                            checked: root.aCustomCore
-                            onToggled: root.aCustomCore = !root.aCustomCore
-                        }
-                        Column {
+                        // The two deselections worth stopping on, said where they
+                        // are made rather than in a summary line: without
+                        // syn-update the machine can never receive another
+                        // SynapseOS package, and without the compositor the
+                        // Desktop page below has nothing to offer.
+                        Text {
+                            text: "syn-update is off: this machine will have no way to receive "
+                                + "another SynapseOS package. Fixing that later means installing "
+                                + "it by hand from the ISO, or reinstalling."
+                            color: root.cErr
+                            font.pixelSize: 11
+                            visible: !root.pickOn("comp_synupdate")
                             width: parent.width
-                            spacing: 6
-                            visible: root.aCustomCore
-                            Text {
-                                text: "The core daemons are what SynapseOS is. Turning one off "
-                                    + "produces an Arch system with some SynapseOS parts, and the "
-                                    + "AI, security and desktop features will not work as documented. "
-                                    + "The package manager and the file manager stay either way."
-                                color: root.cWarn
-                                font.pixelSize: 11
-                                width: parent.width
-                                wrapMode: Text.WordWrap
-                            }
-                            Row {
-                                spacing: 40
-                                Column {
-                                    spacing: 2
-                                    Check {
-                                        text: "synapd — the LLM daemon"
-                                        checked: root.aCoreSynapd
-                                        onToggled: root.aCoreSynapd = !root.aCoreSynapd
-                                    }
-                                    Check {
-                                        text: "synui — the compositor / desktop"
-                                        checked: root.aCoreSynui
-                                        onToggled: root.aCoreSynui = !root.aCoreSynui
-                                    }
-                                    Check {
-                                        text: "synsh — the AI-native shell"
-                                        checked: root.aCoreSynsh
-                                        onToggled: root.aCoreSynsh = !root.aCoreSynsh
-                                    }
-                                }
-                                Column {
-                                    spacing: 2
-                                    Check {
-                                        text: "synnet — network policy daemon"
-                                        checked: root.aCoreSynnet
-                                        onToggled: root.aCoreSynnet = !root.aCoreSynnet
-                                    }
-                                    Check {
-                                        text: "synguard + kernel module"
-                                        checked: root.aCoreGuard
-                                        onToggled: root.aCoreGuard = !root.aCoreGuard
-                                    }
-                                    Check {
-                                        text: "syn-update"
-                                        checked: root.aCoreUpdate
-                                        onToggled: root.aCoreUpdate = !root.aCoreUpdate
-                                    }
-                                }
-                            }
-                            // The one deselection that cannot be undone later,
-                            // said at the moment it is made rather than in a
-                            // summary line: without syn-update the machine has no
-                            // way to receive another SynapseOS package, and
-                            // fixing that means reinstalling.
-                            Text {
-                                text: "syn-update is off: this machine will have no way to receive "
-                                    + "another SynapseOS package. Fixing that later means reinstalling."
-                                color: root.cErr
-                                font.pixelSize: 11
-                                visible: !root.aCoreUpdate
-                                width: parent.width
-                                wrapMode: Text.WordWrap
-                            }
+                            wrapMode: Text.WordWrap
+                        }
+                        Text {
+                            text: "synui is off: this will not be a SynapseOS desktop. The Desktop "
+                                + "page offers KDE, GNOME or no GUI."
+                            color: root.cWarn
+                            font.pixelSize: 11
+                            visible: !root.pickOn("comp_synui")
+                            width: parent.width
+                            wrapMode: Text.WordWrap
                         }
                     }
 
@@ -1523,10 +1717,19 @@ FloatingWindow {
                     Text { text: "Desktop"; color: root.cDim; font.pixelSize: 12 }
                     Row {
                         spacing: 6
+                        // Only honest while synui is ticked on the Software
+                        // page. Choosing it otherwise writes desktop=synui
+                        // against comp_synui=no, which the script refuses by
+                        // name — better to refuse the click than to let the
+                        // install stop twenty minutes later.
                         Choice {
-                            width: 200; text: "SynapseUI"; subtext: "the native compositor"
+                            width: 200; text: "SynapseUI"
+                            subtext: root.pickOn("comp_synui") ? "the native compositor"
+                                                               : "synui is not selected"
+                            enabled: root.pickOn("comp_synui")
+                            opacity: root.pickOn("comp_synui") ? 1.0 : 0.45
                             checked: root.aDesktop === "synui"
-                            onPicked: root.aDesktop = "synui"
+                            onPicked: if (root.pickOn("comp_synui")) root.aDesktop = "synui"
                         }
                         Choice {
                             width: 150; text: "KDE Plasma"

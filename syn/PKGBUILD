@@ -1,6 +1,12 @@
 pkgname=syn
 pkgver=0.1.0
-pkgrel=17
+# 18: profile-example.nix documents the installer's new vocabulary — every
+#   SynapseOS package is a `comp = { … }` key and every shelf program an
+#   `sw = { … }` one, replacing the want.chibi/core.synapd pairs. A profile
+#   written against the old keys still installs; its app keys land in the
+#   unused-key report at the end, which is where a stale profile is supposed
+#   to surface.
+pkgrel=18
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

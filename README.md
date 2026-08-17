@@ -90,6 +90,56 @@ whole-disk install with optional **LUKS2 full-disk encryption**, or — on UEFI,
 where the disk already holds another OS — a non-destructive **dual-boot** install
 into existing free space, reusing the machine's ESP.
 
+### Choosing what goes on it
+
+Four presets, and the fourth is the interesting one:
+
+| | |
+|---|---|
+| **Full** | Standard plus Steam, Nix, and a wider software shelf |
+| **Standard** | the SynapseOS suite, Firefox, an AI model, Bluetooth, printing, Wine, phone pairing |
+| **Minimal** | the core daemons only — no apps, no software, no model |
+| **Custom** | tick every package yourself |
+
+**Custom is genuinely every package.** Not "the apps, and the daemons behind a
+second question" — one page of checkboxes with all twenty-five SynapseOS
+packages on it, the compositor and the package manager and the file manager
+included. What you cannot switch off is only what pacman would pull in anyway:
+`synui` hard-depends on `syntty`, `synnet` and `vibe` on `synapd`, `vibe` on
+`syn-confine`, `syn-firstboot` on `syn-model`. Those are re-ticked **and named**
+before anything is installed, because a checkbox that silently un-ticks itself
+is worse than one that was never offered.
+
+```
+  SynapseOS packages — everything the system is made of
+
+  [x]  1) SYNAPSE UI    the desktop     [x] 14) Models        fetch AI models
+  [x]  2) synapd        the AI daemon   [x] 15) First boot    first-run setup
+  [x]  3) synsh         the AI shell    [x] 16) Sandbox       Landlock jail
+  …
+  Toggle [numbers, 'all', 'none', Enter = accept]:
+```
+
+Then five pages of **ordinary software** from the Arch repositories — web and
+communication, audio and video, office and graphics, development and admin,
+games and launchers. Firefox is ticked by default on every preset but Minimal,
+which closes a real gap: an installed SynapseOS used to arrive with **no web
+browser at all** unless you happened to pick Full, where Nexus Chat dragged one
+in as a dependency.
+
+The graphical installer draws the same table as the same checkboxes, and every
+answer is a key in an install profile, so an unattended install picks the same
+set:
+
+```nix
+preset = "custom";
+comp = { synui = true; chibi = false; tepris = false; };
+sw   = { firefox = true; vlc = true; docker = true; };
+```
+
+`/usr/share/syn/nix/profile-example.nix` documents every key, and a key that
+answers nothing is **reported at the end of the install** rather than ignored.
+
 ---
 
 ## Staying up to date
@@ -161,6 +211,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synfiles`** | The file manager, and what a folder opens in. One C binary does the work — listing, properties, search, trash, undo, archives — and three front-ends render what it prints: a quickshell window with tabs, split view, thumbnails and drag-and-drop (`synfiles gui`), an arrow-key browser in the terminal for a machine whose desktop will not start (`synfiles tui`), and the commands themselves. Delete means the XDG trash, and anything that changed files can be undone — the permanent delete is behind `--yes` and no key or click reaches it. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
 | **`syn-settings`** | The settings app. Displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, default applications, and where configuration actually lives. It reports what the system *reports* — every pane reads the real source (`localectl`, `timedatectl`, `wlr-randr`, `rfkill`, `bootctl`, `/etc/fstab`) rather than a cache of its own — and each row says **which file decided it**, so a setting that came from a fallback does not read like one you chose. The Kernel pane installs, removes and switches kernels on all three bootloaders. `syn-settings gui [pane]`, or `--rec <pane>` for the records the window parses. |
 | **`syn-edit`** | The text editor. One modal engine — press `i` to insert, `Escape` to stop, `:w` to write — driving a terminal editor, a graphical window, and a scripting mode with no terminal at all: `syn-edit run -k 'ggdG'` or `-c '%s/a/b/g'` applies keys and ex commands to a file and prints the result, which is how its own test suite drives it. Syntax highlighting, and it guesses the language from the file. |
+| **`syntty`** | The terminal, and the default one. A Wayland terminal that **links no GL at all** — wl_shm, xdg-shell, xkbcommon and libc; cells become pixels on the CPU in the exact format a compositor wants. 359 KB, up in 5.8 ms, and it repaints only what changed (68× less work than a full frame at 4K). Tabs, the alternate screen, the pointer, copy and paste, a config file, the kitty keyboard and graphics protocols, and OSC 133 prompt marks that `synsh` emits at the other end. It matters on the ISO regardless of which terminal is default: a GL context is the one thing a live image cannot count on across unfamiliar hardware, and a rescue disk that cannot open a prompt cannot rescue anything. |
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
 | **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
@@ -172,6 +223,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 |---|---|
 | **`vibe`** | Local AI coding assistant — an agentic read/write/edit/bash/grep loop. Reuses the model already resident in `synapd` (no second model, no extra VRAM), and confirms before destructive tools. `vibe` in a terminal; `VIBE_BACKEND=ollama` to swap backends. |
 | **`chibi`** | Voice-interactive AI companion with a security-sentinel aspect over `synguard`'s verdict feed. See the [Chibi wiki page](https://github.com/velle999/SYNAPSE/wiki/Chibi). |
+| **`cliamp`** | A terminal music player in the shape of Winamp ([bjarneo/cliamp](https://github.com/bjarneo/cliamp), MIT, upstream) — and the player big screen mode *drives* rather than launches: it streams its own FFT bands, which is what the visualizer draws. |
 | **`nexus-chat`**, **`tepris`** | Bundled web apps (Firefox app-mode packages). |
 
 Supporting pieces: `syn-install`, `syn-firstboot`, `syn-model`, `syn-crypt`,
@@ -246,15 +298,15 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) — `tap_key = super\|ctrl\|alt\|shift\|none` moves it, or `F2` on that row in the palette |
 | `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
 | `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable; `F2` on a row moves it to another key |
-| `Super`+`Return` | Open a terminal |
+| `Super`+`Return` | Open a terminal (`syntty` — see [The terminal](#the-terminal)) |
 | `Super`+`Space` | App launcher (rofi, `-show drun`) |
 | `Super`+`=` | Command bar — synsh intents and output capture |
 | `Super`+`Backspace` | Ask the AI |
 | `Super`+`A` | Neural activity overlay |
-| `Super`+`D` | Display settings |
+| `Super`+`D` | Display settings — resolution, refresh, arrangement, and `m` to cycle `display_mode` (extend / mirror / external) |
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
-| `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
+| `Super`+`T` | Theme manager — thirteen: SYNAPSE / Dark / XP / 95, **macOS 26 / Aqua / Platinum**, plus six riced palettes |
 | `Super`+`Shift`+`T` | Tile this desktop — switches to the tiling layout from wherever you are and drags every dragged, snapped, floated or maximized window back into it |
 | `Super`+`Shift`+`Y` | Cascade this desktop — small overlapping cards dealt into a grid of piles, each card at most a third of the screen wide and half of it tall |
 | `Super`+`Shift`+`G` | Arrange the desktop *without* leaving the layout you are on — puts every window you have dragged back where the layout wants it. On a floating desktop that is the inset grid ("G for grid"); this is the one tidy-up that leaves a floating desktop floating |
@@ -279,6 +331,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Z` | Screensaver and lock-screen appearance |
 | `Ctrl`+`Alt`+`Delete` | Task manager (processes, CPU/RAM/GPU) |
 | `Super`+`G` | Game mode |
+| `Super`+`F10` | Big screen mode — the ten-foot interface for a television (see [Gaming](#gaming)) |
+| `Super`+`F11` / `Super`+`F12` | MangoHud overlay: toggle / move it, inside a game that is already running |
 | `Super`+`L` | Lock screen |
 | `Super`+`B` | Bluetooth |
 | `Super`+`Shift`+`B` | Night light (blue-light filter) |
@@ -338,6 +392,63 @@ writes a DNxHR `.mov` beside the original, or record straight to that format
 with **Control panel ▸ Sound ▸ Record for editing**. The second skips a lossy
 generation but costs roughly 1 GB a minute against a few hundred KB for an
 ordinary take, so it is off by default and the panel row says the rate out loud.
+
+### The terminal
+
+`Super`+`Return` opens **`syntty`**, the system's own terminal and the default
+one since synui 0.1.0-359. It is the window every other program on this list
+runs inside, so it was written the same way they were: small, measured, and
+linking nothing it does not need.
+
+**It links no GL.** wl_shm, xdg-shell, xkbcommon and libc — no EGL, no toolkit,
+no cairo. `render.c` turns cells into `XRGB8888`, which is already the format
+wl_shm wants, so the buffer crosses to the compositor with no conversion and no
+library in between. That is the reason it belongs on the live ISO whatever your
+default is: a GL context is the one thing an installer image cannot count on
+across unfamiliar GPUs, and a live session with no way to open a prompt is a
+rescue disk that cannot rescue anything.
+
+| | |
+|---|---|
+| Binary | **359 KB** (kitty: 65 MiB) |
+| Window on screen | **5.8 ms** |
+| 4K interactive edit | **68× less work** than a full repaint — same pixels |
+| Parse 2.56 MB | 96.1 ms → **44.5 ms** |
+
+What is in it: tabs (a tab is a whole session — its own grid, parser, pty and
+child — sharing only the window, the font and the renderer, so a second one
+costs tens of kilobytes rather than a second process), the **alternate screen**,
+the **pointer** for selection *and* for the programs that ask for mouse
+reporting, copy and paste in both directions including `OSC 52`, key repeat,
+`DECCKM`, scrollback, and the **kitty keyboard and graphics protocols** — so
+`Ctrl`+`I` and `Tab` are finally distinguishable, and `icat` puts an image in
+the window.
+
+`syntty` and `synsh` ship **OSC 133** together — the de-facto semantic-prompt
+protocol, so the terminal knows where a prompt, its input and its output begin.
+They are the standard's marks rather than ours, so any terminal that already
+speaks them gets the same thing from our shell.
+
+It **follows the desktop theme** rather than carrying its own palette, honours
+`DECTCEM` (a program that hides the cursor gets a window with no cursor drawn),
+and answers `ESC ] 11 ; ?` — "what colour are you?" — honestly, which is what
+lets a program pick text colours that are legible against the actual background.
+
+```ini
+# ~/.config/syntty/syntty.conf — key = value, one per line
+font        = JetBrains Mono
+font-size   = 12
+scrollback  = 5000
+```
+
+```bash
+syntty                       # a shell
+syntty -e htop               # run one command; what every launcher emits
+syntty --hold -e ./build.sh  # keep the output on screen after it exits
+```
+
+`kitty` is still installable and still works — nothing in SynapseOS opens it any
+more, which is also why `synpkg remove kitty` succeeds now.
 
 ### Files
 
@@ -530,6 +641,31 @@ should not start making noises or redecorating a desktop nobody asked it to.
 The CRT filters are off on a fresh install too; turn them on with `Super`+`E`.
 `Tab` on that panel is the second page: rounded corners, drop shadow, backdrop
 blur and translucency, each on a knob you turn while watching the window change.
+
+**Text size is desktop-wide**, not per-application: family and scale, under
+*Appearance* in the control panel, written to the one `font.state` that `synui`,
+`synfiles` and the rest of the suite all read. Leaving the row applies it —
+closing the panel is "I am done", not "I changed my mind".
+
+**The bar can be clear.** `bar_opacity` is a setting of yours rather than one
+theme's private property — set it to `0` under any of the thirteen and the strip
+disappears, leaving its contents over the wallpaper. Its **ink is then measured
+off the wallpaper** underneath, so the clock stays legible over a bright picture
+instead of being whatever the palette said. The dock and the desktop widgets
+render through the same compositor glass. (Two wallpaper choices paint no picture
+to measure — `none` and `matrix` — so the bar keeps a solid strip there rather
+than guessing.)
+
+**Screens** are one setting with three positions: `display_mode = extend |
+mirror | external`, cycled with `m` in `Super`+`D`, from Control panel ▸ Display
+▸ Screens, or `synctl dispatch display_mode [name]`. `mirror` forces the largest
+resolution every screen shares — overlapping a 1080p panel and a 720p projector
+without that is not duplication, it is showing the projector a crop. `external`
+switches the built-in panel off, refuses when there is no external screen, and
+re-runs itself on every hotplug, so unplugging the television gives a laptop its
+own screen back. Screen audio follows: `hdmi_audio = auto|on|off`, keyed off the
+ALSA ELD rather than the sink's name, because a GPU advertises an HDMI sink per
+pin whether or not a display is on it.
 
 **Animations** are two settings, not one, under *Windows → Animation* in the
 control panel (`Super`+`C`) or in `synuirc`. A window opening can be `off`,
@@ -758,9 +894,48 @@ broadcast; **headlines**; and the machine's own switches — desktop, sleep,
 restart, power off. Every tile there is one that works: nothing is listed that is
 not installed.
 
+**Music has a source**, because a television in a room full of people is as often
+a stereo as a console. The source is a setting — Control panel of its own on the
+Start row, or `syn-arcade big music source <id>` — and it can be your **Plex or
+Jellyfin** library (found on the network by broadcast, browsable by album from
+the sofa), **YouTube Music**, internet radio, or the local library:
+
+```bash
+syn-arcade big music source          # what is available, and which is picked
+syn-arcade big music play|toggle|next|prev
+syn-arcade big music plex            # albums in the Plex library
+syn-arcade big music setup           # sign in, in a terminal
+```
+
+The player is `cliamp`, and big screen mode **drives** it rather than launching
+it — a Now Playing row in Start controls playback without putting anything on
+screen, and the same row is where the media buttons live.
+
+> **YouTube Music needs no account to play.** Signing in is a *browser* — Google
+> cookies, not an API key — and it is for **browsing**: your own playlists, and a
+> search you can type from the sofa with the on-screen keyboard. Playback works
+> signed out.
+
+The **visualizer** (projectM) is a tile, a Start row, and a chord — **both stick
+clicks**, or `V` — because it is the one thing somebody turns on while something
+is already playing. Behind the Now Playing row it draws `cliamp`'s own FFT bands,
+streamed a frame per line.
+
+**A tile press fills the television.** From four metres away a titlebar and a
+strip of wallpaper around the edge are the whole difference between an appliance
+and somebody's computer left switched on, so launching from a tile fullscreens
+what it opened.
+
+For a game that has no idea what a 1440p screen is, `syn-arcade fit new` builds
+the gamescope wrapper — `gamescope -w 1024 -h 768 -W 2560 -H 1440 -f -F fsr` —
+and gives it a menu entry, so an old title fills the screen instead of sitting as
+a postage stamp in the middle of it.
+
 **It steps aside rather than closing.** Opening the browser, the terminal or the
 controller window hides big screen mode and leaves it running; it comes back when
-you close what you opened, or the moment you press **Guide**. That button works
+you close what you opened, or the moment you press **Guide**. `big stop` closes
+it for good — a layer-shell surface is not a toplevel, so it appears in no dock
+and no window switcher, and without that verb "hidden" was the only exit. That button works
 in both directions — inside big screen mode it takes you to the desktop, and from
 the desktop it brings big screen mode back, which is a small watcher (`big guard`)
 your session starts to read the pad while nothing of ours is on screen.
@@ -875,7 +1050,8 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
-| `syn-arcade` | The game assistant — `hud toggle/cycle/set/path/adopt` drives the MangoHud overlay inside a running game, `pads list/info/test/rumble/calibrate` covers controllers outside Steam, `map add/remove` overrides SDL button mappings, `binds install` puts the overlay on `Super`+`F11` / `Super`+`F12`, and `big start`/`big autostart on` opens the ten-foot big screen interface on `Super`+`F10` or at login. `syn-arcade gui` opens the window. See [Gaming](#gaming) |
+| `syntty` | The terminal — `syntty` for a shell, `-e CMD` to run one, `--hold` to keep the output after it exits, `--config`/`--no-config` for the config file. See [The terminal](#the-terminal) |
+| `syn-arcade` | The game assistant — `hud toggle/cycle/set/path/adopt` drives the MangoHud overlay inside a running game, `pads list/info/test/rumble/calibrate` covers controllers outside Steam, `map add/remove` overrides SDL button mappings, `fit new`/`fit run` wraps a low-resolution game in the gamescope line that scales it to the screen, `binds install` puts the overlay on `Super`+`F11` / `Super`+`F12`, and `big start`/`big autostart on` opens the ten-foot big screen interface on `Super`+`F10` or at login — with `big music …` for what it plays and `big music source` for where that comes from. `syn-arcade gui` opens the window. See [Gaming](#gaming) |
 | `syn-arsenal` | Browse and install BlackArch security tooling by category — a window by default, `--tui` in the terminal, `--enable-repo` to add the repository |
 | `syn-confine` | Run a command inside a kernel-enforced allowlist — `syn-confine --ro /usr --rw ~/project -- ./build.sh`. `--print` shows the resolved policy without running anything |
 | `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
@@ -1156,6 +1332,13 @@ and then runs unattended.
 
 ### Cutting a release
 
+0. **`tools/preflight.sh`** — it refuses a commit that cannot ship. A source
+   edit with no `pkgrel` bump (pacman compares `pkgver-pkgrel`, so nothing
+   rebuilds and the fix never arrives), a component in one of the six build
+   lists and not the others, a package built into the ISO's repo but never
+   installed onto the image or the reverse, a build order that only fails on a
+   fresh host. `--self-test` proves the detectors still fire, which matters
+   because a matcher that matches nothing prints `ok`.
 1. Bump **`iso_version`** in `archiso/profiledef.sh` and nothing else — in
    particular leave `SYNAPSEOS_VERSION` in `archiso/build.sh` alone, as it
    tracks the component series rather than the image.
@@ -1202,9 +1385,10 @@ SPDX identifiers, per component:
 | Scope | License |
 |---|---|
 | `synapse_kmod` (kernel module) | `GPL-2.0-only` — it links the kernel |
-| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `synfiles`, `vibe`, `chibi` | `GPL-2.0-or-later` |
+| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `synfiles`, `syn-settings`, `syn-disks`, `syn-edit`, `syn-confine`, `syntty`, `syn-arcade`, `vibe`, `chibi` | `GPL-2.0-or-later` |
 | `synpkg` | `GPL-2.0-or-later` — it links `libalpm`, which is, so it can be nothing else |
 | `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
+| `cliamp` | `MIT`, upstream — packaged from [bjarneo/cliamp](https://github.com/bjarneo/cliamp) at a pinned tag; it is the player big screen mode drives |
 | `synui/quickshell-antiquity/` and its three wallpapers | `MIT`, © 2026 [diinki](https://github.com/diinki) — a port of [linux-antiquity](https://github.com/diinki/linux-antiquity); notice kept as `LICENSE.antiquity` |
 | Boska, Recia, Quilon (bundled with Antiquity) | © [Indian Type Foundry](https://www.indiantypefoundry.com/), via Fontshare — their licence requires naming the faces and crediting ITF's ownership; `quickshell-antiquity/FONTS.md` is that credit |
 | `MaterialSymbolsSharp` (bundled with Antiquity) | `Apache-2.0`, © Google LLC |
