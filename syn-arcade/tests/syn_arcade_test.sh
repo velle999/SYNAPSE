@@ -1893,7 +1893,10 @@ check "big music vis streams cliamp's own bands" $?
 # state a player that has just started is in. Sending it there starts the
 # player and plays nothing: the tile responds, the row appears, and there is
 # silence.
-grep -q 'music_cmd(strcmp(state, "playing") == 0 ? "play"' src/big.c
+awk '/if \(!strcmp\(verb, "play"\)\)/,/^	}/' src/big.c |
+    awk '/strcmp\(state, "playing"\)/ { seen = 1 }
+         seen && /music_cmd\("toggle"\)/ { good = 1 }
+         END { exit !good }'
 check "a cold start is toggled into playing, not merely resumed" $?
 
 # The stream is bounded by the menu being open. Twenty frames a second behind a
@@ -2186,6 +2189,12 @@ echo "cliamp $*" >> "$CLIAMP_LOG"
 if [ "$1" = status ]; then
     st="${CLIAMP_STATE:-playing}"
     [ "$st" = off ] && [ -f "$CLIAMP_UP" ] && st=stopped
+    # ⚠ A TOGGLE THAT ACTUALLY STARTS THE MUSIC. Until this the stub could
+    # answer "stopped" for ever however many transport commands it was sent,
+    # which is the one thing a real player never does — and a player that can
+    # never begin playing is a fixture that cannot tell "it started" from "it
+    # is stuck", the exact distinction the code below this line exists for.
+    [ "$st" = stopped ] && [ -f "${CLIAMP_PLAYING:-}" ] && st=playing
     if [ "$st" = off ]; then
         printf '{"ok":false,"error":"not running"}'
     else
@@ -2209,13 +2218,30 @@ fi
 # Anything carrying --provider IS a start: that is the only way the flag is
 # ever passed, and music_ensure_running() is the only thing that passes it.
 [ "$1" = "--provider" ] && : > "$CLIAMP_UP"
+
+# ⚠ A TRACK THAT WILL NOT PLAY, which is a real and silent thing: a queued
+# YouTube URL that cannot be resolved leaves cliamp `stopped` for ever, with no
+# error on any stream and no skip of its own. While $CLIAMP_STUCK exists this
+# stub is on such a track and `toggle` does nothing at all; `next` moves off it.
+[ "$1" = next ] && rm -f "${CLIAMP_STUCK:-}"
+[ "$1" = toggle ] && [ ! -f "${CLIAMP_STUCK:-}" ] && : > "$CLIAMP_PLAYING"
+[ "$1" = stop ] && rm -f "${CLIAMP_PLAYING:-}"
 exit 0
 EOF
 chmod +x "$MSTUB/cliamp"
 export CLIAMP_LOG="$T/cliamp.log" CLIAMP_TRACK="" CLIAMP_STATE="playing"
 export CLIAMP_TITLE="" CLIAMP_TOTAL=""
 export CLIAMP_UP="$T/cliamp.up"
-: > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP"
+export CLIAMP_PLAYING="$T/cliamp.playing" CLIAMP_STUCK="$T/cliamp.stuck"
+
+# ⚠ THE WAITS ARE CUT DOWN FOR THE WHOLE RUN. music_start_insist() waits
+# fifteen seconds for the player to settle before it decides a track will not
+# play — right on a television, and a suite meson kills at 120s cannot afford
+# it a dozen times over. The BEHAVIOUR under test is unchanged; only the clock
+# is.
+export SYN_ARCADE_MUSIC_WAIT_MS=1000
+
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_UP" "$CLIAMP_PLAYING" "$CLIAMP_STUCK"
 
 # ⚠ In a SUBSHELL for the same reason the synctl stub note above gives: an
 # assignment in front of a shell FUNCTION persists after the call in bash.
@@ -3120,7 +3146,100 @@ awk '/static int plex_play_album/,/^}/' src/big.c |
          END { exit !good }'
 check "...and only where a queue really filled" $?
 
-rm -f "$LAST" "$MARK" "$CLIAMP_UP" "$BIGCONF"
+# ── a track that will not play, and the silence it makes ───────────────────
+#
+# ⚠ MEASURED AGAINST A REAL PLAYER, and it is the second half of the same
+# report: a queued YouTube URL that cannot be resolved leaves cliamp `stopped`
+# FOR EVER. It does not skip it, it does not end the queue, it says nothing on
+# any stream this program can read. Watched for 24 seconds: no movement.
+#
+# ⚠ AND THE TRACK LOOKS PERFECT ON THE WAY IN. Enumeration is
+# `--flat-playlist` — the playlist's own listing, which is what makes it fast
+# enough to press a button for — and that listing gives a real title, duration
+# and view count for a video that answers "Video unavailable" the moment
+# anything tries to play it, cookies or not. `%(availability)s` is NA there, so
+# there is nothing to filter on. The playlist this was found in had its dead
+# track FIRST, and pressing Music queued fifty-four tracks perfectly and played
+# silence.
+#
+# Reported as: it will not play unless you skip and then play, and even then
+# it is inconsistent. Which is exactly this — and which is what the fix does
+# on somebody's behalf.
+printf 'music_source = ytmusic\n' > "$BIGCONF"
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; : > "$CLIAMP_STUCK"
+( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+check "a queue that will not start is stepped past, not left in silence" $?
+
+# ⚠ BOTH HALVES. `next` moves the track but does NOT start it — measured: the
+# player sits at the new index, still stopped, and `play` (resume) does nothing
+# from there. A skip with no toggle behind it is a queue moved one along and
+# still silent, which is the bug wearing a different hat.
+[ "$(grep -c 'cliamp toggle' "$CLIAMP_LOG")" -ge 2 ]
+check "...and started again on the track it moved to" $?
+
+# ⚠ THE ASSERTION THIS FILE ALREADY PAID FOR ONCE. An "insurance toggle" was
+# written here before and turned a reliable station into one that started about
+# half the time: the state LAGS the command, the check ran two seconds early
+# every time, and `toggle` from `playing` is PAUSE. Nothing may touch a player
+# that is playing.
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_STUCK"; : > "$CLIAMP_PLAYING"
+( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "a player that really did start is never skipped or toggled again" $?
+
+# ⚠ NOR A PAUSED ONE. Pausing is a decision somebody made while this was
+# watching, and pressing on through it would be the program playing music over
+# the top of a person.
+: > "$CLIAMP_LOG"; : > "$CLIAMP_STUCK"
+( CLIAMP_STATE=paused; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "...and a player somebody paused is left paused" $?
+
+# ⚠ AN EMPTY QUEUE IS NOT A TRACK THAT WILL NOT PLAY, it is no track at all,
+# and skipping through it would be a minute of pressing `next` against nothing.
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; : > "$CLIAMP_STUCK"; rm -f "$LAST"
+( CLIAMP_STATE=stopped; export CLIAMP_STATE; lastrun play ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "...and an empty queue is not skipped through either" $?
+
+# The Now Playing row's A button is the other way somebody asks a stalled queue
+# to start, and it sends the bare verb.
+: > "$CLIAMP_LOG"; rm -f "$CLIAMP_PLAYING"; : > "$CLIAMP_STUCK"
+( CLIAMP_STATE=stopped; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun toggle ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+check "the Now Playing button rescues a stalled queue too" $?
+
+# ⚠ …AND ONLY WHEN IT IS A START. `toggle` is two verbs wearing one name: from
+# `playing` it is PAUSE, and a pause that then insisted on playing again would
+# be a button that cannot turn the music off.
+: > "$CLIAMP_LOG"
+( CLIAMP_STATE=playing; CLIAMP_TOTAL=54; export CLIAMP_STATE CLIAMP_TOTAL
+  lastrun toggle ) >/dev/null 2>&1
+grep -q 'cliamp next' "$CLIAMP_LOG"
+[ $? != 0 ]
+check "...but a toggle that means PAUSE is left alone" $?
+
+# ⚠ ONE RESCUE AT A TIME. Waiting is long enough that the natural response is
+# to press again, and two of these are two processes sending `next` and
+# `toggle` on their own timers — where the second's toggle lands on the music
+# the first just started and PAUSES it.
+grep -q 'LOCK_EX | LOCK_NB' src/big.c && grep -q 'syn-arcade-music.start' src/big.c
+check "a second press cannot fight the first for the queue" $?
+
+# And the escape hatch that keeps this suite inside meson's timeout is a
+# documented fixture knob, not a behaviour change.
+grep -q 'SYN_ARCADE_MUSIC_WAIT_MS' src/big.c
+check "the settle can be shortened for a fixture, and only for one" $?
+
+rm -f "$LAST" "$MARK" "$CLIAMP_UP" "$BIGCONF" "$CLIAMP_STUCK" "$CLIAMP_PLAYING"
 : > "$CLIAMP_LOG"
 CLIAMP_STATE=playing; export CLIAMP_STATE
 

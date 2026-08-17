@@ -212,6 +212,49 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-35: a track that will not play, and the silence it made ──────────
+#
+# The other half of what -34 was reported for, and the half that was still
+# broken after it: Plex and radio played, YouTube would not start unless it was
+# skipped and then played, and even then only sometimes — and the Music tile
+# never started anything at all.
+#
+# ⚠ MEASURED AGAINST A REAL PLAYER, because this one could not be reasoned out
+# from the outside: A QUEUED YOUTUBE URL THAT CANNOT BE RESOLVED LEAVES CLIAMP
+# `stopped` FOR EVER. It does not skip the track, it does not end the queue, it
+# writes nothing to any stream this program can read. Watched for 24 seconds:
+# no movement at all.
+#
+# ⚠ AND SUCH A TRACK LOOKS PERFECT ON THE WAY IN. Stations are enumerated with
+# `--flat-playlist` — YouTube's own listing for the playlist rather than a
+# resolution of each entry, which is what makes it fast enough to be a button —
+# and that listing hands back a real title, a real duration and a real view
+# count for a video that answers "Video unavailable" the instant anything tries
+# to play it, signed in or not. `%(availability)s` is `NA` there, so there is
+# nothing to filter on. A playlist somebody built over years will have a few;
+# this machine's had EIGHT, and one of them was first in the list.
+#
+# So: 54 tracks queued perfectly, `toggle` sent to the one at the front, and a
+# television playing nothing. Skipping moved off it, and whether the next track
+# worked decided whether it was worth doing — which is exactly how it was
+# reported.
+#
+# The player is now asked to start and then asked whether it really did. Still
+# stopped once the state has settled → step past that track and start again,
+# up to three times, then say so rather than pretending.
+#
+# ⚠ THE WAIT IS THE WHOLE THING, and this package has the scars: a "make sure
+# it started" check was written once before and turned a reliable station into
+# one that started about half the time, because the state LAGS the command and
+# `toggle` from `playing` is PAUSE. Fifteen seconds is more than twice the
+# longest start ever measured here, nothing acts until it is up, and a player
+# that is playing or paused is never touched.
+#
+# ⚠ ONE RESCUE AT A TIME, on a kernel lock. Fifteen seconds is long enough
+# that the natural answer is to press the button again, and two of these are
+# two processes sending `next` and `toggle` on their own timers — the second
+# landing on the music the first has just started.
+#
 # ── 0.1.0-34: the Music tile has something to play again ───────────────────
 #
 # Reported straight after 0.1.0-33: music could not be started at all any more,
@@ -757,7 +800,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=34
+pkgrel=35
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

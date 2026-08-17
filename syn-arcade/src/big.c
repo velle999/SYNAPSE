@@ -3551,6 +3551,170 @@ static int big_music_status(bool rec)
 	return EX_OK;
 }
 
+/*
+ * ── a track that will not play, and the silence it makes ───────────────────
+ *
+ * ⚠ MEASURED, NOT GUESSED, and it is the whole reason this exists: a queued
+ * YouTube URL that cannot be resolved leaves cliamp `stopped` FOR EVER. It
+ * does not skip it, it does not stop the queue, it does not say anything on
+ * any stream this program can read — it simply never starts. Watched here for
+ * 24 seconds against a real player: state `stopped`, no movement, no error.
+ *
+ * ⚠ AND SUCH A TRACK LOOKS PERFECTLY FINE ON THE WAY IN. Enumeration is
+ * `--flat-playlist`, which asks YouTube for the playlist's own listing rather
+ * than resolving each entry — that is what makes it fast enough to press a
+ * button for. The listing gives a real title, a real duration and a real view
+ * count for a video that answers "Video unavailable" the moment anybody tries
+ * to play it, cookies or no cookies. Region locks and rights withdrawals both
+ * look like this, and `%(availability)s` is `NA` in a flat listing, so there
+ * is nothing to filter on. Somebody's own playlist, made over years, will have
+ * a few. This one had its dead track FIRST.
+ *
+ * Reported from the sofa as "it doesn't want to play unless I skip and then
+ * play, and it's inconsistent" — which is exactly right, and is this: skipping
+ * moves off the track that will not play, and whether the next one works
+ * decides whether it was worth doing.
+ *
+ * So the player is asked to start, and then asked whether it really did.
+ *
+ * ⚠ THE WAIT IS THE POINT, AND THIS FILE HAS THE SCARS TO PROVE IT. A "make
+ * sure it started" check was written once before and made a reliable station
+ * start about half the time, because the state LAGS the command — the queue
+ * finishes at t+4s and cliamp does not report `playing` until t+6s while it
+ * resolves the first track through yt-dlp. That check ran two seconds early
+ * every time, always saw `stopped`, and always sent a second `toggle`, which
+ * from `playing` is PAUSE and cancelled the start it was insuring.
+ *
+ * The lesson was "not playing yet is not did not take", and the answer is to
+ * WAIT for the settle rather than to sample once. Fifteen seconds is more than
+ * twice the longest start measured here, and nothing acts until it is up.
+ */
+#define MUSIC_SETTLE_MS  15000		/* > 2× the longest measured start */
+#define MUSIC_RETRY_MS   12000		/* the same patience, one track along */
+#define MUSIC_SKIP_MAX       3		/* a whole dead playlist is not ours */
+
+/*
+ * ⚠ THE WAITS ARE OVERRIDABLE FOR THE SUITE, AND FOR NOTHING ELSE — the same
+ * arrangement SYN_ARCADE_NO_NET and SYN_ARCADE_SYSFS already have in this
+ * file. Fifteen seconds is the right answer on a television and the wrong one
+ * inside a test run that meson kills at two minutes: without this, the
+ * assertions that drive a stalled queue take a minute apiece and turn a
+ * passing suite into a failed BUILD.
+ */
+static int music_wait_ms(int def)
+{
+	const char *s = getenv("SYN_ARCADE_MUSIC_WAIT_MS");
+	if (s && *s) {
+		long v = strtol(s, NULL, 10);
+		if (v > 0 && v < 120000)
+			return (int)v;
+	}
+	return def;
+}
+
+static bool music_settled(int ms)
+{
+	ms = music_wait_ms(ms);
+	for (int waited = 0; waited < ms; waited += 1000) {
+		struct timespec ts = { 1, 0 };
+		nanosleep(&ts, NULL);
+
+		char state[32];
+		music_read(state, sizeof(state), NULL, 0, NULL, 0, NULL);
+
+		if (!strcmp(state, "playing"))
+			return true;
+
+		/* ⚠ PAUSED IS A DECISION SOMEBODY MADE while this was
+		 * watching, and an empty state is a player that has gone. Both
+		 * mean there is nothing here to rescue, and carrying on would
+		 * be this program pressing play over the top of a person. */
+		if (!strcmp(state, "paused") || !state[0])
+			return true;
+	}
+	return false;
+}
+
+/*
+ * ⚠ ONE OF THESE AT A TIME, AND THE LOCK IS NOT TIDINESS.
+ *
+ * Waiting fifteen seconds is a long time on a sofa, and the natural response
+ * to a button that has not answered is to press it again. Two of these running
+ * at once are two processes sending `next` and `toggle` at a queue on their
+ * own timers — and `toggle` from `playing` is PAUSE, so the second one would
+ * stop the music the first one had just got going. That is the same shape of
+ * fault as the "insurance toggle" this file already paid for once.
+ *
+ * The lock is the kernel's, held for exactly as long as the process lives and
+ * released however it dies, so a rescue killed halfway leaves nothing behind
+ * to block the next one. Failing to take it is not an error: it means one is
+ * already in flight, which is precisely what the second press wanted.
+ */
+static bool music_insist_lock(int *fd)
+{
+	char path[SYN_PATH];
+	const char *run = getenv("XDG_RUNTIME_DIR");
+	if (run && *run)
+		snprintf(path, sizeof(path), "%s/syn-arcade-music.start", run);
+	else
+		snprintf(path, sizeof(path), "/tmp/syn-arcade-music-%u.start",
+			 (unsigned)getuid());
+
+	*fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+	if (*fd < 0)
+		return true;		/* no lock to be had: carry on alone */
+	if (flock(*fd, LOCK_EX | LOCK_NB) != 0) {
+		close(*fd);
+		*fd = -1;
+		return false;
+	}
+	return true;
+}
+
+static void music_start_insist(void)
+{
+	int lock = -1;
+	if (!music_insist_lock(&lock))
+		return;
+
+	if (!music_settled(MUSIC_SETTLE_MS)) {
+		int skipped = 0;
+		for (int i = 0; i < MUSIC_SKIP_MAX && !skipped; i++) {
+			/* ⚠ `next` MOVES THE TRACK BUT DOES NOT START IT —
+			 * measured: after a skip the player sits at the new
+			 * index, still `stopped`, and `play` (which is resume)
+			 * does nothing from there. `toggle` is what begins
+			 * playback from a standing start, exactly as it is
+			 * everywhere else in this file. */
+			music_cmd("next");
+
+			/* ⚠ A BEAT BETWEEN THEM. `next` and `toggle` are two
+			 * commands over one socket and the index moves on
+			 * cliamp's own timing; sent back to back, the toggle
+			 * can land on the track being left rather than the one
+			 * being moved to. */
+			struct timespec beat = { 1, 0 };
+			nanosleep(&beat, NULL);
+
+			music_cmd("toggle");
+			if (music_settled(MUSIC_RETRY_MS))
+				skipped = i + 1;
+		}
+
+		if (skipped)
+			fprintf(stderr, "syn-arcade: skipped %d track%s that "
+					"would not play\n", skipped,
+				skipped == 1 ? "" : "s");
+		else
+			fputs("syn-arcade: nothing at the front of the queue "
+			      "would play — the tracks may be unavailable in "
+			      "this country\n", stderr);
+	}
+
+	if (lock >= 0)
+		close(lock);
+}
+
 /* ── the Plex library, reached without a Plex client ─────────────────────── */
 
 /*
@@ -4531,6 +4695,14 @@ static int yt_play(const char *what)
 	music_last_remember("ytmusic", url);
 
 	printf("queued %d track%s\n", queued, queued == 1 ? "" : "s");
+
+	/* ⚠ AND ONLY NOW IS IT ASKED WHETHER IT REALLY STARTED. This is the
+	 * check the note above forbids taking early, and by here the queue is
+	 * full and several seconds have passed — see music_start_insist(),
+	 * which waits for the settle rather than sampling once. A station
+	 * whose first track is region-locked is otherwise a press that queues
+	 * fifty-four tracks perfectly and plays silence. */
+	music_start_insist();
 	return EX_OK;
 }
 
@@ -5633,9 +5805,26 @@ static int big_music(int argc, char **argv, bool rec)
 		 * and there is silence. `toggle` is what begins playback from a
 		 * standing start, and it is also the right verb from `paused`. */
 		char state[32];
-		music_read(state, sizeof(state), NULL, 0, NULL, 0, NULL);
-		return music_cmd(strcmp(state, "playing") == 0 ? "play"
-							       : "toggle");
+		long have = 0;
+		music_read(state, sizeof(state), NULL, 0, NULL, 0, &have);
+		if (!strcmp(state, "playing"))
+			return music_cmd("play");
+
+		music_cmd("toggle");
+
+		/* ⚠ AND THEN IT IS ASKED WHETHER IT STARTED. A queue whose
+		 * current track cannot be resolved leaves cliamp `stopped` for
+		 * ever with nothing said anywhere — which is a Music tile that
+		 * responds to every press and never makes a sound. Reported
+		 * exactly that way; see music_start_insist().
+		 *
+		 * ⚠ ONLY WITH SOMETHING QUEUED. An empty queue is not a track
+		 * that will not play, it is no track at all, and skipping
+		 * through it would be a minute of the program pressing `next`
+		 * against nothing. */
+		if (have > 0)
+			music_start_insist();
+		return EX_OK;
 	}
 
 	/*
@@ -5675,7 +5864,26 @@ static int big_music(int argc, char **argv, bool rec)
 			fputs("syn-arcade: no music player is running\n", stderr);
 			return EX_FAIL;
 		}
-		return music_cmd(verb);
+
+		/* ⚠ `toggle` IS TWO VERBS WEARING ONE NAME, and only one of
+		 * them is a start. From `playing` it is pause and there is
+		 * nothing to insist on; from `stopped` it is play, and it is
+		 * the Now Playing row's A button — the other way somebody on a
+		 * sofa asks a stalled queue to start. Asked BEFORE the command,
+		 * because afterwards the answer is the one being tested for. */
+		char state[32];
+		long have = 0;
+		if (!strcmp(verb, "toggle"))
+			music_read(state, sizeof(state), NULL, 0, NULL, 0,
+				   &have);
+		else
+			state[0] = '\0';
+
+		int rc = music_cmd(verb);
+		if (!strcmp(verb, "toggle") && !strcmp(state, "stopped") &&
+		    have > 0)
+			music_start_insist();
+		return rc;
 	}
 
 	return EX_OK;		/* unreachable: the verb list above is closed */
