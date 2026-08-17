@@ -530,6 +530,14 @@ static void palette_export(syn_server_t *s)
  * panel dragged across the seam between a dark screen and a pale one gets NONE
  * and takes the scrim. That is the same answer backdrop_export() gives the bar
  * for the same situation, and for the same reason: one surface, one ink.
+ *
+ * ⚠ AND THE GRID IT ASKS IS NOT THE WALLPAPER'S ANY MORE. It is the wallpaper
+ * with barscan.c's scene measurement laid over the top, cell by cell — because
+ * a panel over a browser is over the browser, and measuring the picture the
+ * browser covers is how the control panel came up inked for a photograph nobody
+ * could see. Resolved HERE and not in contrast.c for the same reason the layout
+ * arithmetic is here: contrast.c takes one grid and knows nothing about
+ * monitors, and which of two grids answers for a cell is a fact about a screen.
  */
 void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
                                 double target, syn_backdrop_t *out)
@@ -560,8 +568,18 @@ void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
                 ? box->y + box->height : ob.y + ob.height;
         if (ix1 <= ix0 || iy1 <= iy0) continue;
 
+        /* The two grids folded into the one contrast.c takes. -1 in scene_lum
+         * is "nothing of ours covers this cell", which is the ordinary case and
+         * the one where the wallpaper's own answer is not a second-best guess
+         * but the correct measurement — the same per-cell rule Theme.qml's
+         * barStripAt() applies to the bar's row. */
+        double grid[SYN_LUM_CELLS];
+        for (int i = 0; i < SYN_LUM_CELLS; i++)
+            grid[i] = o->scene_lum[i] >= 0.0 ? o->scene_lum[i]
+                                             : o->wp_lum_grid[i];
+
         syn_backdrop_t part;
-        syn_backdrop_for_box(o->wp_lum_grid,
+        syn_backdrop_for_box(grid,
                              (double)(ix0 - ob.x) / ob.width,
                              (double)(iy0 - ob.y) / ob.height,
                              (double)(ix1 - ix0)  / ob.width,
@@ -641,10 +659,11 @@ static void backdrop_export(syn_server_t *s)
      * desktop — which is what every one of them was tested on — the fold and the
      * per-output answer are the same two values.
      */
-    /* Per output: one grid of SYN_LUM_CELLS and one bar strip of SYN_LUM_COLS,
-     * six characters a cell ("-1.00," is the longest), times the four monitors
-     * this is sized for, plus room for the key names. */
-    char grids[(SYN_LUM_CELLS + SYN_LUM_COLS) * 6 * 4 + 2048];
+    /* Per output: TWO grids of SYN_LUM_CELLS (the wallpaper's and the scene's)
+     * and one bar strip of SYN_LUM_COLS, six characters a cell ("-1.00," is the
+     * longest), times the four monitors this is sized for, plus room for the
+     * key names. */
+    char grids[(SYN_LUM_CELLS * 2 + SYN_LUM_COLS) * 6 * 4 + 2048];
     size_t gl = 0;
     grids[0] = '\0';
     wl_list_for_each(o, &s->outputs, link) {
@@ -679,6 +698,44 @@ static void backdrop_export(syn_server_t *s)
         for (int i = 0; i < SYN_LUM_CELLS && gl + 8 < sizeof(grids); i++) {
             used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
                             i ? "," : "", o->wp_lum_grid[i]);
+            if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+            gl += (size_t)used;
+        }
+        if (gl + 2 < sizeof(grids)) { grids[gl++] = '\n'; grids[gl] = '\0'; }
+    }
+
+    /*
+     * …and the same grid measured off what is ACTUALLY THERE (barscan.c), which
+     * is the wallpaper only until a window covers it.
+     *
+     * The bar's row below is this question asked of one strip, and it came
+     * first only because the bar was the first surface a window could get
+     * behind. Everything else the shell draws opens where it is put, so every
+     * one of them had the same problem the moment it went see-through: a start
+     * menu over a dark browser was choosing its ink from the picture the
+     * browser covers.
+     *
+     * ⚠ SAME MEANING OF -1 AS THE BAR'S ROW, NOT AS grid.<output>'S. Here it is
+     * "nothing of ours covers this cell" — the ordinary case, and the one where
+     * grid.<output>'s cell is the right answer rather than a fallback. In
+     * grid.<output> it means the wallpaper could not be measured at all, which
+     * is a surface that must keep its background. Two rows, two vocabularies,
+     * and a consumer that folds them the wrong way round would put an opaque
+     * slab on every desktop with an empty screen.
+     *
+     * Emitted for every output unconditionally, all -1 included, so that a
+     * reader can tell "nothing covers anything" from "this synui does not
+     * measure that" — and so that switching `scene_ink` off publishes a row of
+     * -1 rather than removing the row, which is the same distinction.
+     */
+    wl_list_for_each(o, &s->outputs, link) {
+        int used = snprintf(grids + gl, sizeof(grids) - gl, "scene.%s=",
+                            o->wlr_output->name);
+        if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+        gl += (size_t)used;
+        for (int i = 0; i < SYN_LUM_CELLS && gl + 8 < sizeof(grids); i++) {
+            used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
+                            i ? "," : "", o->scene_lum[i]);
             if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
             gl += (size_t)used;
         }
@@ -753,12 +810,15 @@ static void backdrop_export(syn_server_t *s)
                "# pointer is, so it folds the cells it actually covers.\n"
                "# -1 in either form means the wallpaper could not be measured.\n"
                "#\n"
-               "# bar_strip.<output> is the one row that is NOT about the\n"
-               "# wallpaper: %d luminances across the strip the bar occupies,\n"
-               "# measured off what is actually on screen under it — a window\n"
-               "# under an auto-hiding bar, or one dragged over the strip. -1\n"
-               "# HERE MEANS NOTHING COVERS THAT COLUMN, which is the ordinary\n"
-               "# case and not a failure: take grid.<output>'s top row for it.\n",
+               "# scene.<output> and bar_strip.<output> are the rows that are\n"
+               "# NOT about the wallpaper: the same %dx%d grid, and %d\n"
+               "# luminances across the strip the bar occupies, measured off\n"
+               "# what is actually on screen there — the window a menu opened\n"
+               "# over, or one under an auto-hiding bar. -1 IN THESE TWO MEANS\n"
+               "# NOTHING COVERS THAT CELL, which is the ordinary case and not\n"
+               "# a failure: take grid.<output>'s matching cell for it.\n"
+               "# Both are all -1 while `scene_ink` is off.\n",
+            SYN_LUM_COLS, SYN_LUM_ROWS,
             SYN_LUM_COLS, SYN_LUM_ROWS, SYN_LUM_COLS);
     fprintf(f, "bar_ink=%s\n", syn_ink_name(ink));
     fprintf(f, "bar_ink_best=%s\n", syn_ink_name(best));
@@ -1003,8 +1063,11 @@ void wallpaper_output_created(syn_output_t *o)
      * 0.0 here and 0.0 is not "nothing covers this column" — it is BLACK, the
      * one value that would flip a bar to white ink on a wallpaper it never
      * looked at. barscan.c's own scan re-clears this every tick; this is the
-     * window between an output appearing and that tick landing. */
-    for (int i = 0; i < SYN_LUM_COLS; i++) o->bar_strip_lum[i] = -1.0;
+     * window between an output appearing and that tick landing. Both arrays,
+     * for the same reason: a black grid would tell every menu on the new screen
+     * to draw white text on a wallpaper nothing has measured. */
+    for (int i = 0; i < SYN_LUM_COLS; i++)  o->bar_strip_lum[i] = -1.0;
+    for (int i = 0; i < SYN_LUM_CELLS; i++) o->scene_lum[i]     = -1.0;
 
     paint_output(o);
     /* A monitor arriving is a monitor the bar has to be legible on too, and it

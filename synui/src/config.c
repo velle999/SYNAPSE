@@ -174,6 +174,10 @@
  *                                until its text clears AA against the wallpaper
  *                                behind it. Off draws exactly what was asked,
  *                                including nothing at all)
+ *   scene_ink = on|off          (default on; does a see-through surface measure
+ *                                the WINDOW behind it, or only the wallpaper?
+ *                                Off is the wallpaper alone, which is what
+ *                                every release before this one did)
  *
  * …and one the compositor parses but does not act on, because its reader is
  * quickshell (WidgetFrame.qml). Here so the key has one spelling and one clamp,
@@ -1221,6 +1225,7 @@ static void config_set_defaults(syn_config_t *cfg)
      * Mac dock has, without becoming a lozenge on a 200px dock. */
     cfg->dock_radius       = 26;
     cfg->widget_glass      = SYN_WIDGET_GLASS_AUTO;
+    cfg->scene_ink         = 1;
     cfg->dock_pin_count    = 0;
     cfg->launcher_style    = SYN_LAUNCHER_TEXT;
     /* A tapped Super opens the start menu, the way it does everywhere else —
@@ -2475,6 +2480,9 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         else if (strcmp(val, "off")  == 0) cfg->widget_glass = SYN_WIDGET_GLASS_OFF;
         else if (strcmp(val, "on")   == 0) cfg->widget_glass = SYN_WIDGET_GLASS_ON;
         else wlr_log(WLR_ERROR, "synui: widget_glass: unknown '%s'", val);
+    }
+    else if (strcmp(key, "scene_ink") == 0) {
+        cfg->scene_ink = strcmp(val, "on") == 0;
     }
     else if (strcmp(key, "dock_pin") == 0) {
         /* space-separated app_ids/.desktop basenames */

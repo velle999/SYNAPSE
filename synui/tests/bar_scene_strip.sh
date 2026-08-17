@@ -21,6 +21,15 @@
 # the interface: barscan.c fills it off the scene graph, and Theme.qml folds the
 # columns each module covers. No bar and no pixels are needed.
 #
+# …and `scene.<output>` beside it, which is the same question asked of the WHOLE
+# screen rather than of the bar's one strip. The bar was never the only surface
+# with a backdrop it could not see — the start menu, the bar's menus, the mixer,
+# the OSD and every panel synui draws open WHERE THEY ARE PUT, which is over a
+# window far more often than over the wallpaper, and each of them was choosing
+# its ink from the picture that window covers. Same bug, same measurement, one
+# grid wider; `scene_ink` is the switch, and section 3d proves off means off
+# without the row disappearing.
+#
 # ⚠ THE DISCRIMINATING ASSERTION IS THE DISAGREEMENT. A near-black wallpaper
 # with a WHITE window over it must publish `bar_ink=light` (the wallpaper's
 # answer, unchanged) AND a bar strip that reads white. A scan that merely echoed
@@ -139,12 +148,20 @@ echo "compositor: WAYLAND_DISPLAY=$SOCK  output=$OUTNAME"
 
 ink()   { sed -n 's/^bar_ink=\(.*\)$/\1/p' "$STATE" 2>/dev/null; }
 strip() { sed -n "s/^bar_strip\.$OUTNAME=\(.*\)$/\1/p" "$STATE" 2>/dev/null; }
+# The same measurement over the WHOLE output — 16x9 cells, what every surface
+# that is not the bar folds. `grid.` is the WALLPAPER's and is deliberately not
+# read here except to prove the two disagree.
+scene() { sed -n "s/^scene\.$OUTNAME=\(.*\)$/\1/p" "$STATE" 2>/dev/null; }
+wpgrid() { sed -n "s/^grid\.$OUTNAME=\(.*\)$/\1/p" "$STATE" 2>/dev/null; }
 
 # The lowest and highest column in the row, so an assertion can say "every
 # column" without sixteen greps. Empty row prints nothing, which every caller
 # below reads as "not published yet".
 strip_min() { strip | tr ',' '\n' | sort -g | head -1; }
 strip_max() { strip | tr ',' '\n' | sort -g | tail -1; }
+scene_min() { scene | tr ',' '\n' | sort -g | head -1; }
+scene_max() { scene | tr ',' '\n' | sort -g | tail -1; }
+wp_max()    { wpgrid | tr ',' '\n' | sort -g | tail -1; }
 
 # The file is written from the compositor on its own schedule (barscan.c polls),
 # so wait for the VALUE rather than sleeping a guessed number of seconds.
@@ -167,6 +184,13 @@ await() {  # await <shell-test> <description>
 await '[ -n "$(strip)" ]' "the bar strip row is published for this output"
 await '[ "$(strip_max)" = "-1.00" ]' \
       "…and with no window on screen every column reads -1"
+
+# The whole-screen grid, on the same terms and for the same reason. It is what
+# the start menu, the bar's own menus, the mixer and the OSD fold — every
+# surface whose position is not a constant, which is every surface but the bar.
+await '[ -n "$(scene)" ]' "the scene grid is published for this output"
+await '[ "$(scene_max)" = "-1.00" ]' \
+      "…and with an empty screen every cell reads -1 too"
 
 # The wallpaper half is untouched by any of this: a near-black picture still
 # wants light ink, and that is what a bar with nothing under it draws.
@@ -237,6 +261,43 @@ await '[ "$(strip_min)" != "-1.00" ] && \
        awk -v v="$(strip_min)" "BEGIN{exit !(v > 0.9)}"' \
       "an UNDECORATED window reports the client's own white pixels"
 
+# ── 3c. the GRID says the same thing about the whole screen ──
+#
+# The strip is one row of the answer; this is all of it, and it is what a menu
+# opened anywhere on the screen actually folds. The window covers the output, so
+# every cell should read the client's white — and the same discriminating check
+# applies: the WALLPAPER grid under it is still near-black, so a scan that fell
+# back would publish ~0.00 here and pass nothing.
+await '[ -n "$(scene_min)" ] && [ "$(scene_min)" != "-1.00" ] && \
+       awk -v v="$(scene_min)" "BEGIN{exit !(v > 0.9)}"' \
+      "the scene grid reads the client's white on every cell"
+
+WP=$(wp_max)
+if awk -v v="$WP" 'BEGIN{exit !(v < 0.05)}'; then
+    ok "…while the wallpaper grid under it is still near-black ($WP)"
+else
+    bad "the wallpaper grid read $WP — it is not measuring the picture any more"
+fi
+
+# ── 3d. …and `scene_ink = off` puts it all back ──────────────
+#
+# ⚠ THE ASSERTION IS THAT THE ROWS SURVIVE AND GO EMPTY, not that they vanish.
+# A reader cannot tell a missing row from a synui too old to publish one, and
+# the two want opposite behaviour — so off is a row of -1, which is the same
+# "the wallpaper answers here" an empty screen publishes. The window is still on
+# screen for this check, which is what makes it about the switch rather than
+# about the window.
+printf 'scene_ink = off\n' >> "$CFG/synuirc"
+synctl dispatch wallpaper_reload >/dev/null 2>&1
+await '[ "$(scene_max)" = "-1.00" ] && [ "$(strip_max)" = "-1.00" ]' \
+      "scene_ink = off empties both rows with the window still up"
+
+# …and back on, so that "off" is proven to be the switch and not the reload.
+sed -i 's/^scene_ink = off$/scene_ink = on/' "$CFG/synuirc"
+synctl dispatch wallpaper_reload >/dev/null 2>&1
+await '[ "$(scene_max)" != "-1.00" ] && [ "$(strip_max)" != "-1.00" ]' \
+      "…and back on fills them again"
+
 # ── 4. it goes back when the window does ─────────────────────
 #
 # Not a formality: the columns are re-cleared at the top of every scan, and a
@@ -246,6 +307,8 @@ for p in $CLIENT_PIDS; do kill -TERM "$p" 2>/dev/null; done
 CLIENT_PIDS=
 await '[ "$(strip_max)" = "-1.00" ]' \
       "closing it puts every column back to -1"
+await '[ "$(scene_max)" = "-1.00" ]' \
+      "…and every cell of the grid with it"
 
 echo
 if [ "$fails" -eq 0 ]; then

@@ -1,5 +1,33 @@
 /*
- * barscan.c — what is ACTUALLY under the bar.
+ * barscan.c — what is ACTUALLY under a see-through surface.
+ *
+ * Two measurements, one walk, and the file is named for the first of them
+ * because the bar was the first surface that needed it:
+ *
+ *   - bar_strip_lum[], SYN_LUM_COLS columns across the strip the bar occupies
+ *   - scene_lum[], the same question over the WHOLE output, cell for cell with
+ *     wallpaper.c's wp_lum_grid — which is what every surface that is not the
+ *     bar asks, because every one of them opens where it is put
+ *
+ * The second exists because the bar was never the only surface with a backdrop
+ * it could not see. The start menu, the bar's own menus, the mixer, the OSD and
+ * the thirty panels synui draws all measured the WALLPAPER under themselves and
+ * inked accordingly — correct on an empty desktop and wrong on every other one,
+ * because a menu opened over a browser is over the browser, not over the
+ * photograph the browser is covering. Same bug, same fix, one grid wider.
+ *
+ * ⚠ THE SCAN IS A SETTING — `scene_ink`, on by default, read at the top of
+ * every scan through scene_ink_on(). With it off both arrays stay -1, which is
+ * already "nothing covers this cell" and puts every consumer back on the
+ * wallpaper alone; nothing else has to be told. That is why the clear is
+ * unconditional and the gate is the line after it.
+ *
+ * The bill it buys out of is bounded and worth stating, because "reads pixels
+ * back off the GPU 2.5 times a second" invites worse arithmetic than the truth:
+ * with nothing covering the wallpaper the walk finds nothing and reads NOTHING,
+ * and with every cell covered by one maximized window a row coalesces to a
+ * single band read — nine an output, ~80 KB each. It is the runs and the bands
+ * that make that true; see scan_grid() and BARSCAN_BAND.
  *
  * wallpaper.c answers "what is under the bar" with the wallpaper, because for
  * most of this compositor's life that was the whole answer: the bar reserves an
@@ -80,6 +108,36 @@
  * band 0.05 wide. */
 #define BARSCAN_STEP 4
 
+/*
+ * How many logical rows of each GRID cell are actually read back.
+ *
+ * ⚠ THE GRID CANNOT AFFORD THE STRIP'S "READ ALL OF IT". The strip is 34 rows
+ * of one screen; the grid is every row of every screen, and reading each cell
+ * whole is the entire framebuffer off the GPU 2.5 times a second — 14 MB per
+ * output per tick on a 1440p monitor, which is a stall on the main loop in
+ * service of a number that decides between two colours of text.
+ *
+ * So a band across the middle of each cell instead: full cell WIDTH, this many
+ * rows. On a 1440p screen that is 160x8 rather than 160x160, 5 KB a cell and
+ * 720 KB an output, and the sample is still 1280 pixels spread the whole way
+ * across the cell — a mean well inside the 0.05-wide band the ink flips in for
+ * anything short of a cell that is horizontally striped on exactly this pitch.
+ * Full width and not a centred square for exactly that reason: the width is
+ * where the variation a menu cares about lives.
+ */
+#define BARSCAN_BAND 8
+
+/* Mean alpha below which a buffer is DECLINED rather than measured.
+ *
+ * ⚠ A CLIENT'S BUFFER IS PREMULTIPLIED, so reading r/g/b off a half-transparent
+ * surface returns half its colour and calls it dark. The scene node's own
+ * `opacity` catches a window synui faded; it says nothing about a surface the
+ * client drew see-through itself, which since the grid arrived is a whole class
+ * of node the walk now reaches — the desktop widgets are bottom-layer surfaces
+ * and are exactly that. Declining is the honest answer: -1 falls back to the
+ * wallpaper, which is most of what shows through such a surface anyway. */
+#define BARSCAN_OPAQUE_MEAN 0.9
+
 /* ── Scene-graph geometry ────────────────────────────────── */
 
 /* The layout-space box of a LEAF node, or false for a node with no area this
@@ -139,13 +197,23 @@ static struct wlr_scene_node *leaf_at(struct wlr_scene_node *n, int lx, int ly)
 }
 
 /*
- * The topmost leaf under the BAR at (lx,ly).
+ * The topmost leaf UNDER THE SHELL at (lx,ly).
  *
  * See the header comment: the root's children are walked top-first and nothing
  * is considered until the walk has passed layer_tree[TOP], which is the tree the
  * bar itself lives in.
+ *
+ * ⚠ THAT CUT IS WHAT KEEPS THE GRID OUT OF ITS OWN ANSWER, and it is the reason
+ * the grid needed no cut of its own. quickshell's popups — the start menu, the
+ * bar's menus, the mixer, the OSD — are layer surfaces on TOP, and synui's own
+ * panels are trees created after layer_tree[OVERLAY] and therefore above it
+ * (synui_main.c says so where it makes them). So every surface that asks this
+ * question is on the far side of the cut from the answer, and a menu can never
+ * measure itself, its neighbour, or the bar. The one class of surface below the
+ * cut that is ours is the desktop widgets, on BOTTOM — and those are
+ * see-through, so BARSCAN_OPAQUE_MEAN declines them.
  */
-static struct wlr_scene_node *leaf_under_bar(syn_server_t *s, int lx, int ly)
+static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
 {
     struct wlr_scene_node *bar_tree =
         &s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_TOP]->node;
@@ -187,39 +255,57 @@ static struct wlr_scene_node *leaf_under_bar(syn_server_t *s, int lx, int ly)
 
 /* ── Reading a leaf's luminance ──────────────────────────── */
 
-/* Mean relative luminance of `n` over `want` (layout coords), or -1 if this
- * node cannot answer — it is see-through, or its pixels cannot be read.
+/*
+ * Mean relative luminance of `n` over `want` (layout coords), split into `cells`
+ * equal columns and written into `out[0..cells)`. Every cell is -1 if this node
+ * cannot answer — it is see-through, or its pixels cannot be read.
+ *
+ * ⚠ `cells` IS AN OPTIMISATION AND NOTHING ELSE: one call with cells=4 and four
+ * calls over the quarters produce the same four numbers. It exists because the
+ * grid asks about a whole row of cells at once and the same window usually
+ * covers a run of them — a maximized browser is nine readbacks an output that
+ * way and a hundred and forty-four the other, and the readback is a stall on
+ * the main loop rather than a cost per byte. The strip calls it with cells=1,
+ * which is the shape this function had before the grid existed.
  *
  * The two node types are genuinely different questions. A RECT is a colour
  * synui chose and already knows exactly; a BUFFER is a client's pixels and has
  * to come off the GPU. Decorations are rects, which is why a window dragged
- * under the bar by its titlebar costs no readback at all. */
-static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
-                       const struct wlr_box *want)
+ * under the bar by its titlebar costs no readback at all.
+ */
+static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
+                         const struct wlr_box *want, int cells, double *out)
 {
+    for (int i = 0; i < cells; i++) out[i] = -1.0;
+
     struct wlr_box box;
-    if (!leaf_box(n, &box)) return -1.0;
+    if (!leaf_box(n, &box)) return;
 
     struct wlr_box hit;
-    if (!wlr_box_intersection(&hit, &box, want)) return -1.0;
-    if (hit.width <= 0 || hit.height <= 0) return -1.0;
+    if (!wlr_box_intersection(&hit, &box, want)) return;
+    if (hit.width <= 0 || hit.height <= 0) return;
 
     if (n->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *r = wl_container_of(n, r, node);
-        if (r->color[3] < BARSCAN_OPAQUE_ALPHA) return -1.0;
+        if (r->color[3] < BARSCAN_OPAQUE_ALPHA) return;
         /* scene rect colours are straight sRGB 0..1, so they go through the
          * same linearisation the pixel path does — just without the 0..255
          * lookup table, which is what syn_srgb_lut is. */
         double lr = syn_srgb_lut((int)lround(r->color[0] * 255.0));
         double lg = syn_srgb_lut((int)lround(r->color[1] * 255.0));
         double lb = syn_srgb_lut((int)lround(r->color[2] * 255.0));
-        return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        double lum = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        /* One colour over the whole rect, so every cell of the run gets it —
+         * and the cells the rect does not reach get it too, because a run is
+         * only ever built out of cells this same node was found at. */
+        for (int i = 0; i < cells; i++) out[i] = lum;
+        return;
     }
 
     struct wlr_scene_buffer *sb = wl_container_of(n, sb, node);
-    if (!sb->buffer) return -1.0;
-    if (sb->opacity < BARSCAN_OPAQUE_ALPHA) return -1.0;
-    if (sb->dst_width <= 0 || sb->dst_height <= 0) return -1.0;
+    if (!sb->buffer) return;
+    if (sb->opacity < BARSCAN_OPAQUE_ALPHA) return;
+    if (sb->dst_width <= 0 || sb->dst_height <= 0) return;
 
     /*
      * ⚠ A ROTATED OR FLIPPED BUFFER IS DECLINED RATHER THAN GUESSED AT.
@@ -228,7 +314,7 @@ static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
      * measurement: -1 falls back to the wallpaper, a wrong number inks the bar
      * confidently backwards.
      */
-    if (sb->transform != WL_OUTPUT_TRANSFORM_NORMAL) return -1.0;
+    if (sb->transform != WL_OUTPUT_TRANSFORM_NORMAL) return;
 
     /* Layout rect → buffer pixels. dst_width/height is what the node occupies
      * on screen; buffer->width/height is what it is stored at, and a scaled
@@ -248,7 +334,7 @@ static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
         src.width  = sb->buffer->width  - src.x;
     if (src.y + src.height > sb->buffer->height)
         src.height = sb->buffer->height - src.y;
-    if (src.width <= 0 || src.height <= 0) return -1.0;
+    if (src.width <= 0 || src.height <= 0) return;
 
     /*
      * ⚠ A CLIENT'S BUFFER IS NOT ONE wlr_texture_from_buffer() CAN IMPORT, and
@@ -274,28 +360,30 @@ static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
         tex = wlr_texture_from_buffer(s->renderer, sb->buffer);
         own = tex != NULL;
     }
-    if (!tex) return -1.0;
+    if (!tex) return;
 
     uint32_t fmt = wlr_texture_preferred_read_format(tex);
     int bpp;
-    /* Which byte is which. Only the 32-bit packed orders are handled; anything
-     * else declines, for the same reason the transform above does. */
-    int ri, gi, bi;
+    /* Which byte is which, and where the ALPHA is — `ai` is -1 for the two
+     * formats that have none, which is the compact way of saying "this buffer
+     * is opaque by construction". Only the 32-bit packed orders are handled;
+     * anything else declines, for the same reason the transform above does. */
+    int ri, gi, bi, ai;
     switch (fmt) {
-    case DRM_FORMAT_XRGB8888:
-    case DRM_FORMAT_ARGB8888: bpp = 4; ri = 2; gi = 1; bi = 0; break;
-    case DRM_FORMAT_XBGR8888:
-    case DRM_FORMAT_ABGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; break;
+    case DRM_FORMAT_XRGB8888: bpp = 4; ri = 2; gi = 1; bi = 0; ai = -1; break;
+    case DRM_FORMAT_ARGB8888: bpp = 4; ri = 2; gi = 1; bi = 0; ai =  3; break;
+    case DRM_FORMAT_XBGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; ai = -1; break;
+    case DRM_FORMAT_ABGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; ai =  3; break;
     default:
         if (own) wlr_texture_destroy(tex);
-        return -1.0;
+        return;
     }
 
     size_t stride = (size_t)src.width * (size_t)bpp;
     unsigned char *data = malloc(stride * (size_t)src.height);
     if (!data) {
         if (own) wlr_texture_destroy(tex);
-        return -1.0;
+        return;
     }
 
     struct wlr_texture_read_pixels_options opts = {
@@ -310,29 +398,64 @@ static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
     if (own) wlr_texture_destroy(tex);
     if (!ok) {
         free(data);
-        return -1.0;
+        return;
     }
 
-    double sum = 0.0;
-    long n_px = 0;
+    /*
+     * One pass, `cells` accumulators. A pixel's cell is its column scaled into
+     * the run, which is the same arithmetic the caller used to build the run in
+     * the first place — so a cell here is the cell the caller will store.
+     *
+     * The alpha is accumulated over the WHOLE read rather than per cell, and
+     * that is deliberate: half-transparency is a property of a surface, not of
+     * a strip of it, and a per-cell test would keep the opaque half of a
+     * see-through window and drop the rest — which is worse than either answer,
+     * because a menu straddling the two would fold a real luminance together
+     * with a -1 and take the -1's veto without knowing why.
+     */
+    double sum[SYN_LUM_COLS] = { 0 };
+    long   n_px[SYN_LUM_COLS] = { 0 };
+    double a_sum = 0.0;
+    long   a_n   = 0;
+    if (cells > SYN_LUM_COLS) cells = SYN_LUM_COLS;   /* never, but bounded */
+
     for (int y = 0; y < src.height; y += BARSCAN_STEP) {
         const unsigned char *row = data + (size_t)y * stride;
         for (int x = 0; x < src.width; x += BARSCAN_STEP) {
             const unsigned char *px = row + (size_t)x * bpp;
-            sum += 0.2126 * syn_srgb_lut(px[ri]) +
-                   0.7152 * syn_srgb_lut(px[gi]) +
-                   0.0722 * syn_srgb_lut(px[bi]);
-            n_px++;
+            int c = (int)((long)x * cells / src.width);
+            if (c < 0) c = 0;
+            if (c >= cells) c = cells - 1;
+            sum[c] += 0.2126 * syn_srgb_lut(px[ri]) +
+                      0.7152 * syn_srgb_lut(px[gi]) +
+                      0.0722 * syn_srgb_lut(px[bi]);
+            n_px[c]++;
+            if (ai >= 0) { a_sum += px[ai] / 255.0; a_n++; }
         }
     }
     free(data);
-    return n_px ? sum / (double)n_px : -1.0;
+
+    /* See BARSCAN_OPAQUE_MEAN: a premultiplied surface read as if it were
+     * opaque comes back darker than anything on screen, so it declines. */
+    if (a_n && a_sum / (double)a_n < BARSCAN_OPAQUE_MEAN) return;
+
+    for (int i = 0; i < cells; i++)
+        if (n_px[i]) out[i] = sum[i] / (double)n_px[i];
+}
+
+/* The single-cell form, which is what the bar strip asks. */
+static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
+                       const struct wlr_box *want)
+{
+    double one = -1.0;
+    leaf_lum_run(s, n, want, 1, &one);
+    return one;
 }
 
 /* ── The scan ────────────────────────────────────────────── */
 
 /*
- * Fill one output's bar_strip_lum[].
+ * Fill one output's bar_strip_lum[] — the BAR's row.
  *
  * The strip is the same SYN_BAR_STRIP_LOGICAL rows wallpaper.c measures, on the
  * same edge — this has to describe the SAME region the wallpaper answer
@@ -346,34 +469,105 @@ static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
  * width once the covering node is known — it is the search that samples one
  * point, not the measurement.
  */
-static void scan_output(syn_server_t *s, syn_output_t *o)
+static void scan_strip(syn_server_t *s, syn_output_t *o,
+                       const struct wlr_box *ob)
 {
-    for (int i = 0; i < BARSCAN_COLS; i++) o->bar_strip_lum[i] = -1.0;
-
-    if (!o->wlr_output || !o->wlr_output->enabled) return;
-
-    struct wlr_box ob;
-    wlr_output_layout_get_box(s->output_layout, o->wlr_output, &ob);
-    if (ob.width <= 0 || ob.height <= 0) return;
-
     int strip = SYN_BAR_STRIP_LOGICAL;
-    if (strip > ob.height) strip = ob.height;
+    if (strip > ob->height) strip = ob->height;
     int top = (s->config.bar_edge == SYN_BAR_EDGE_BOTTOM)
-            ? ob.y + ob.height - strip : ob.y;
+            ? ob->y + ob->height - strip : ob->y;
 
     for (int c = 0; c < BARSCAN_COLS; c++) {
-        int x0 = ob.x + (int)((int64_t)ob.width * c       / BARSCAN_COLS);
-        int x1 = ob.x + (int)((int64_t)ob.width * (c + 1) / BARSCAN_COLS);
+        int x0 = ob->x + (int)((int64_t)ob->width * c       / BARSCAN_COLS);
+        int x1 = ob->x + (int)((int64_t)ob->width * (c + 1) / BARSCAN_COLS);
         if (x1 <= x0) continue;
 
         struct wlr_scene_node *n =
-            leaf_under_bar(s, (x0 + x1) / 2, top + strip / 2);
+            leaf_under_shell(s, (x0 + x1) / 2, top + strip / 2);
         if (!n) continue;   /* nothing of ours here — the wallpaper answers */
 
         struct wlr_box want = { x0, top, x1 - x0, strip };
         double lum = leaf_lum(s, n, &want);
         if (lum >= 0.0) o->bar_strip_lum[c] = lum;
     }
+}
+
+/*
+ * …and one output's scene_lum[] — the same question over the WHOLE screen, for
+ * every surface whose position is not a constant.
+ *
+ * ⚠ THE ROW IS SCANNED AS RUNS OF ONE NODE, NOT AS SIXTEEN INDEPENDENT CELLS,
+ * and that is the difference between this being affordable and not. The probe
+ * is a tree walk and is cheap; the readback is a stall on the main loop, and a
+ * maximized window covers all sixteen columns of a row with the same node. So
+ * the sixteen probes stand, the run of equal nodes is coalesced, and one read
+ * fills the whole run — nine readbacks an output for a full-screen window
+ * rather than a hundred and forty-four.
+ *
+ * A run is only ever ONE node, so the fold is exact rather than an
+ * approximation: leaf_lum_run splits the pixels it read at the same column
+ * boundaries this loop used to find them.
+ */
+static void scan_grid(syn_server_t *s, syn_output_t *o,
+                      const struct wlr_box *ob)
+{
+    struct wlr_scene_node *hit[SYN_LUM_COLS];
+    int edge[SYN_LUM_COLS + 1];
+
+    for (int c = 0; c <= SYN_LUM_COLS; c++)
+        edge[c] = ob->x + (int)((int64_t)ob->width * c / SYN_LUM_COLS);
+
+    for (int r = 0; r < SYN_LUM_ROWS; r++) {
+        int y0 = ob->y + (int)((int64_t)ob->height * r       / SYN_LUM_ROWS);
+        int y1 = ob->y + (int)((int64_t)ob->height * (r + 1) / SYN_LUM_ROWS);
+        if (y1 <= y0) continue;
+
+        /* The band actually read: BARSCAN_BAND rows about the cell's middle,
+         * clamped to a cell too short to hold one. See BARSCAN_BAND. */
+        int mid  = (y0 + y1) / 2;
+        int band = y1 - y0 < BARSCAN_BAND ? y1 - y0 : BARSCAN_BAND;
+        int by   = mid - band / 2;
+        if (by < y0) by = y0;
+        if (by + band > y1) by = y1 - band;
+
+        for (int c = 0; c < SYN_LUM_COLS; c++)
+            hit[c] = edge[c + 1] > edge[c]
+                   ? leaf_under_shell(s, (edge[c] + edge[c + 1]) / 2, mid)
+                   : NULL;
+
+        for (int c = 0; c < SYN_LUM_COLS; ) {
+            if (!hit[c]) { c++; continue; }   /* the wallpaper answers here */
+
+            int end = c + 1;
+            while (end < SYN_LUM_COLS && hit[end] == hit[c]) end++;
+
+            struct wlr_box want = { edge[c], by, edge[end] - edge[c], band };
+            double lum[SYN_LUM_COLS];
+            leaf_lum_run(s, hit[c], &want, end - c, lum);
+            for (int i = c; i < end; i++)
+                if (lum[i - c] >= 0.0) o->scene_lum[r * SYN_LUM_COLS + i] = lum[i - c];
+
+            c = end;
+        }
+    }
+}
+
+static void scan_output(syn_server_t *s, syn_output_t *o)
+{
+    /* Cleared first and unconditionally, which is what makes the switch and a
+     * closing window the same code path: everything below only ever FILLS. */
+    for (int i = 0; i < BARSCAN_COLS; i++)  o->bar_strip_lum[i] = -1.0;
+    for (int i = 0; i < SYN_LUM_CELLS; i++) o->scene_lum[i]     = -1.0;
+
+    if (!scene_ink_on(&s->config)) return;
+    if (!o->wlr_output || !o->wlr_output->enabled) return;
+
+    struct wlr_box ob;
+    wlr_output_layout_get_box(s->output_layout, o->wlr_output, &ob);
+    if (ob.width <= 0 || ob.height <= 0) return;
+
+    scan_strip(s, o, &ob);
+    scan_grid(s, o, &ob);
 }
 
 void barscan_scan(syn_server_t *s)

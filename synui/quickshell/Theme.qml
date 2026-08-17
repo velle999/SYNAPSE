@@ -234,6 +234,22 @@ QtObject {
             }
             root.lumGrids = g
 
+            // …and the same grid measured off what is ACTUALLY on screen
+            // (barscan.c), which is the wallpaper only until a window covers
+            // it. -1 here means "nothing covers this cell", NOT "unmeasurable"
+            // — backdropFor() takes lumGrids' matching cell for those. Absent
+            // from an older synui's backdrop.state, and from any desktop with
+            // `scene_ink` off; an empty map means every cell falls back, which
+            // is precisely the behaviour that predates this.
+            const sg = {}
+            const sre = /^\s*scene\.(\S+)\s*=\s*([-0-9.,]+)\s*$/gm
+            let sm
+            while ((sm = sre.exec(t)) !== null) {
+                const cells = sm[2].split(",").map(parseFloat)
+                if (cells.length === root.lumCols * root.lumRows) sg[sm[1]] = cells
+            }
+            root.sceneGrids = sg
+
             // And the one row that is NOT the wallpaper: what is actually under
             // the bar, column by column (barscan.c). A column of -1 is one that
             // nothing covers, which is the ordinary case — barStripAt() takes
@@ -252,6 +268,7 @@ QtObject {
         onLoadFailed: {
             root.barInk = ""; root.barInkBest = ""; root.lumGrids = ({})
             root.barInks = ({}); root.barInkBests = ({}); root.barStrips = ({})
+            root.sceneGrids = ({})
         }
     }
 
@@ -274,6 +291,27 @@ QtObject {
     readonly property int lumCols: 16
     readonly property int lumRows: 9
     property var lumGrids: ({})
+
+    /*
+     * output name → the same grid, measured off the SCENE (barscan.c).
+     *
+     * ⚠ THE WALLPAPER IS NOT WHAT IS BEHIND A MENU, and for a whole release's
+     * worth of surfaces it was the only thing any of them could ask about. The
+     * bar got the answer first because the bar was the first surface a window
+     * could get behind — but the start menu, the bar's own menus, the mixer and
+     * the OSD open WHERE THEY ARE PUT, and on a desktop with anything running
+     * that is over a window far more often than over the picture. A menu opened
+     * over a dark browser was choosing its ink from the pale photograph the
+     * browser covers, which is the same bug with a bigger surface on it.
+     *
+     * ⚠ -1 MEANS "NOTHING COVERS THIS CELL", exactly as it does in barStrips
+     * and NOT as it does in lumGrids. There the value means the wallpaper could
+     * not be measured and the surface must keep its background; here it means
+     * the wallpaper IS the backdrop and its cell is the correct answer rather
+     * than a second-best guess. backdropFor() resolves the two per cell, which
+     * is the only place they meet.
+     */
+    property var sceneGrids: ({})
 
     /*
      * output name → lumCols luminances across the BAR STRIP, from barscan.c.
@@ -321,6 +359,11 @@ QtObject {
         if (!screen) return none
         const cells = root.lumGrids[screen.name]
         if (!cells || screen.width <= 0 || screen.height <= 0) return none
+        // The scene's answer where it has one, per CELL. Absent for a desktop
+        // with `scene_ink` off, or a synui too old to publish it, and then
+        // every cell falls through to the wallpaper below — which is what this
+        // function did before the scene grid existed.
+        const scene = root.sceneGrids[screen.name]
 
         const c0 = Math.max(0, Math.min(root.lumCols - 1,
                             Math.floor(x / screen.width  * root.lumCols)))
@@ -334,7 +377,9 @@ QtObject {
         let sum = 0, n = 0, ink = null, best = null
         for (let r = r0; r <= r1; r++) {
             for (let c = c0; c <= c1; c++) {
-                const l = cells[r * root.lumCols + c]
+                const i = r * root.lumCols + c
+                const s = scene ? scene[i] : -1
+                const l = s >= 0 ? s : cells[i]
                 if (!(l >= 0)) return none      // one unmeasured cell vetoes
                 sum += l; n++
                 const cd = root.lumContrast(root.inkDarkLum,  l)
@@ -542,15 +587,69 @@ QtObject {
         return 1.0
     }
 
-    // …and the ink to draw on it. The theme's own wherever the alpha above could
-    // be found; the backdrop's black-or-white where it could not.
+    /*
+     * …and the ink to draw on it: the theme's own wherever it still reads on
+     * what this popup is about to present, the backdrop's black-or-white where
+     * it does not.
+     *
+     * ⚠ THE TEST IS THE CONTRAST AT THE ALPHA ACTUALLY DRAWN, and it used to be
+     * `popupAlphaOn(bd) < 1.0` — "the walk found an alpha, so the theme's ink is
+     * safe". That reads as a shorthand for this and is one, right up until the
+     * walk does not run: popupAlphaOn returns the asked-for alpha untouched when
+     * `glass_legibility` is off, which is never 1.0, so the shorthand answered
+     * "safe" for every backdrop on earth and the flip was unreachable.
+     *
+     * That is not a corner. A macOS 26 or Prism desktop asks barAlpha 0, so
+     * popupAlpha is 0 — the start menu has NO surface of its own, exactly like
+     * the clear bar — and with the correction off it drew the theme's dark ink
+     * straight onto whatever was there. Over a dark window that is a menu of
+     * invisible text, and the bar sitting above it was choosing black or white
+     * per module the whole time (barPaletteAt).
+     *
+     * ⚠ AND THE FLIP IS NOT GATED ON glass_legibility, deliberately. That switch
+     * means "do not make my glass opaque" — it governs the ALPHA. Choosing which
+     * of two inks to draw at the alpha the user asked for takes nothing away
+     * from them, and it is precisely what clearBarOn() already does for the bar
+     * with the correction off. A menu that stays as see-through as it was asked
+     * to be and becomes readable is the whole point of the setting.
+     *
+     * With the correction ON nothing here moves: popupAlphaOn has already walked
+     * the alpha up until this same contrast passes, so the test passes and the
+     * theme keeps its colours — and where the walk ran out at 1.0 the test fails
+     * and the ink flips, which is what the old shorthand did.
+     */
     function popupFgOn(bd) {
         if (!bd || !(bd.lum >= 0)) return root.fg
-        const a = root.popupAlphaOn(bd)
-        if (a < 1.0) return root.fg
+        const a    = root.popupAlphaOn(bd)
+        const surf = root.lumOf(root.popupBg)
+        const ink  = root.lumOf(root.fg)
+        if (root.lumContrast(ink, root.lumOver(surf, a, bd.lum)) >= 4.5)
+            return root.fg
         const which = bd.ink !== "" ? bd.ink : bd.best
         if (which === "") return root.fg
         return which === "light" ? "#ffffff" : "#1d1d1f"
+    }
+
+    /*
+     * The DIM ink for the same surface — placeholder text, a menu row that is
+     * off, the second line of a pair.
+     *
+     * fgDim is a fixed pair of greys chosen against popupBg, so on a popup whose
+     * ink has flipped it is the one label left in the palette the flip just
+     * abandoned: a #6b7280 "Type to search" on a menu drawing white on a dark
+     * window. It follows the flip instead, at the same 65% the greys already sit
+     * at relative to the ink they accompany, so a row that is off still reads as
+     * off rather than as a row that is missing.
+     */
+    function popupFgDimOn(bd) {
+        const fg = root.popupFgOn(bd)
+        if (Qt.colorEqual(fg, root.fg)) return root.fgDim
+        // ⚠ Qt.color() and not `fg` directly: popupFgOn hands back a STRING in
+        // the flipped case and a colour in the other, which a property binding
+        // coerces for free and `.r` on a JS string does not — it is undefined,
+        // and Qt.rgba(undefined…) is a silent black.
+        const c = Qt.color(fg)
+        return Qt.rgba(c.r, c.g, c.b, 0.65)
     }
 
     // The surface itself at that alpha. What a popup binds its background to.

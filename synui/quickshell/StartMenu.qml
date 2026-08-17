@@ -730,7 +730,8 @@ PanelWindow {
                 text: MenuState.search !== "" ? MenuState.search
                     : MenuState.page   !== "" ? MenuState.page
                                               : "Type to search…"
-                color: MenuState.search !== "" ? Theme.popupFgOn(panel.backdrop) : Theme.fgDim
+                color: MenuState.search !== "" ? Theme.popupFgOn(panel.backdrop)
+                                               : Theme.popupFgDimOn(panel.backdrop)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize
             }

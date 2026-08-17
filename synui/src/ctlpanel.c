@@ -348,6 +348,25 @@ static const struct ctl_item ctl_items[] = {
       .apply = CTL_APPLY_GLASS,
       .help = "Surfaces go less see-through where their text would not read. "
               "Off draws exactly what you asked for" },
+    /* WHAT the row above measures against, which was the wallpaper and only the
+     * wallpaper until barscan.c. Its own row rather than a mode of Legibility
+     * because it is a different kind of setting: legibility is "may a surface
+     * overrule itself", this is "what is it looking at", and the two are worth
+     * having independently — a desktop can want honest measurements and no
+     * correction, which is precisely where the start menu ends up reading its
+     * ink straight off the window it opened over.
+     *
+     * ⚠ CTL_APPLY_NONE IS LITERALLY RIGHT, AND THE HELP LINE HAS TO SAY SO:
+     * barscan.c reads this at the top of every scan, so the row lands on the
+     * next tick and nothing here has to push it. It must NOT push a repaint —
+     * the scan clears both grids before it fills them, so switching this off
+     * publishes -1 across the board and every surface is back on the wallpaper
+     * by itself, with no second path to keep in step. */
+    { CTL_ROW_SCENE_INK,    CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Live backdrop", NULL,
+      .key = "scene_ink", .off = CFG(scene_ink), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_NONE,
+      .help = "Menus and panels ink themselves off the window behind them "
+              "rather than the wallpaper it covers. Lands within a second" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,

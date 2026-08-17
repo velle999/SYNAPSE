@@ -1523,6 +1523,7 @@ typedef enum {
     CTL_ROW_GLASS_LEVEL,
     CTL_ROW_GLASS_SYNC,        /* do the per-surface rows follow the slider  */
     CTL_ROW_GLASS_LEGIBILITY,  /* may a surface overrule its own alpha       */
+    CTL_ROW_SCENE_INK,         /* does it read the windows or the wallpaper  */
     CTL_ROW_INACTIVE_OPACITY,
 
     CTL_ROW_SHADOW,
@@ -3387,6 +3388,24 @@ typedef struct {
     /* Read by quickshell, not by the compositor. Parsed here so `widget_glass`
      * has one spelling and one clamp — see syn_widget_glass_t. */
     syn_widget_glass_t widget_glass;   /* default AUTO */
+    /*
+     * Whether a see-through surface measures the SCENE behind it — the window
+     * it actually opened over — or only the wallpaper.
+     *
+     * ⚠ A PLAIN TOGGLE AND NOT THE auto|off|on THE TWO ROWS ABOVE USE, and the
+     * missing `auto` is the point. The obvious auto is "follow the theme", via
+     * syn_glass_active() — and it would resolve OFF on a desktop that has
+     * dragged Bar opacity to 0 on a retro preset, which is a bar with no
+     * background of its own and exactly the surface barscan.c was written for.
+     * That is a shipped behaviour (0.1.0-383) quietly undone by a default, and
+     * "the theme decides" is not worth one of those. So: on, everywhere, until
+     * somebody says otherwise.
+     *
+     * Acted on by barscan.c, which reads it at the top of every scan; the shell
+     * needs no notion of it, because off publishes a grid of -1 and -1 already
+     * means "the wallpaper answers here".
+     */
+    int   scene_ink;            /* default 1 */
     /* launcher.c: the synui-drawn start-menu button. Default TEXT. */
     syn_launcher_style_t launcher_style;
 
@@ -4098,6 +4117,19 @@ static inline bool syn_glass_active(const syn_config_t *cfg)
     return g.alpha >= 0.0f ? g.alpha < 1.0f : g.factor < 1.0f;
 }
 
+/*
+ * Does this desktop measure what is ACTUALLY behind a see-through surface, or
+ * only the wallpaper? See scene_ink for why this is not a resolved `auto`.
+ *
+ * A function rather than a bare field read because it is asked from three
+ * places that must never drift — the scan, the export and the test — and
+ * because it is the natural seam if the answer ever does grow a condition.
+ */
+static inline bool scene_ink_on(const syn_config_t *cfg)
+{
+    return cfg->scene_ink != 0;
+}
+
 /* The relative luminance of the surface synui's OWN panels are drawn on.
  *
  * The one number the wallpaper palette has to be corrected against: those
@@ -4691,6 +4723,29 @@ struct syn_output {
      * wallpaper's answer describes pixels that are not on screen.
      */
     double                   bar_strip_lum[SYN_LUM_COLS];
+    /*
+     * …and the same question asked of the WHOLE output rather than of the bar's
+     * one strip: a SYN_LUM_COLS x SYN_LUM_ROWS grid, cell for cell with
+     * wp_lum_grid above, of what is actually on screen there (barscan.c).
+     *
+     * The bar was the first surface to need this because it is the first one a
+     * window could get behind, but it was never the only one that could: the
+     * start menu, the bar's own menus, the mixer, the OSD and every panel synui
+     * draws open WHERE THEY ARE PUT, which on a busy desktop is over a window
+     * far more often than over the wallpaper. Each of them measured the picture
+     * behind the window and inked itself for a photograph nobody could see —
+     * the same bug the bar had, on every surface that is not the bar.
+     *
+     * ⚠ -1 MEANS "NOTHING OF OURS COVERS THIS CELL", exactly as it does for
+     * bar_strip_lum, and the consumer falls back to wp_lum_grid's matching cell.
+     * So a desktop with an empty screen publishes the numbers it always did, and
+     * the fallback is resolved per CELL rather than per surface — a menu lying
+     * half on a window and half on the wallpaper folds one of each.
+     *
+     * Filled only while `scene_ink` resolves on (see scene_ink_on): with it off
+     * this is all -1 and every consumer is back to the wallpaper alone.
+     */
+    double                   scene_lum[SYN_LUM_CELLS];
     /* The small palette taken off THIS output's wallpaper (palette.c). Per
      * output because per-monitor wallpapers are a thing, and the desktop-wide
      * answer is folded from these — see palette_export(). */

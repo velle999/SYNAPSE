@@ -161,7 +161,8 @@ PopupWindow {
                             verticalCenter: parent.verticalCenter
                         }
                         text: row.modelData.label
-                        color: row.on ? Theme.popupFgOn(menu.backdrop) : Theme.fgDim
+                        color: row.on ? Theme.popupFgOn(menu.backdrop)
+                                      : Theme.popupFgDimOn(menu.backdrop)
                         font.family: Theme.fontFamily
                         font.pixelSize: 11
                         elide: Text.ElideRight
