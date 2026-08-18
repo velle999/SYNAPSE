@@ -107,6 +107,11 @@ static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Rig
  * the only one of the three that is not an override. */
 static const char *const ctl_names_dock_style[]   = { "Auto", "Solid", "Glass" };
 static const char *const ctl_names_widget_glass[] = { "Auto", "Off", "On" };
+/* syn_wp_accent_t, same three positions and the same spellings — a separate
+ * array rather than sharing the one above because the two enums are free to
+ * grow apart, and a shared table is how a fourth position on one of them
+ * silently renames the other. */
+static const char *const ctl_names_wp_accent[]   = { "Auto", "Off", "On" };
 static const char *const ctl_names_arrange[]   = { "Name", "Type", "Size", "Date" };
 static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blue" };
 /* Order matches syn_focus_mode_t, and these ARE the synuirc spellings — the
@@ -367,6 +372,16 @@ static const struct ctl_item ctl_items[] = {
       .apply = CTL_APPLY_NONE,
       .help = "Menus and panels ink themselves off the window behind them "
               "rather than the wallpaper it covers. Lands within a second" },
+    /* ⚠ CTL_APPLY_WPACCENT AND NOT CTL_APPLY_REPAINT. Turning this on does not
+     * redraw anything with a colour it already has — it CHANGES the colour, and
+     * the colour lives in two places: synui's own panel fields (theme.c) and
+     * palette.state, which the bar and the widgets watch. One apply reaches
+     * both, because it goes through the export that publishes the decision. */
+    { CTL_ROW_WP_ACCENT,    CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Wallpaper accent", NULL,
+      .key = "wallpaper_accent", .off = CFG(wallpaper_accent), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_wp_accent), .apply = CTL_APPLY_WPACCENT,
+      .help = "Take the accent off the wallpaper instead of the theme. "
+              "Auto is Prism, which is built on it, and nothing else" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
@@ -1164,6 +1179,14 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
 
     case CTL_APPLY_WALLPAPER:
         wallpaper_relayout(s);
+        ctlpanel_repaint(s);
+        break;
+
+    /* No wallpaper_relayout() with it: the per-output measurement is cached and
+     * the picture on screen is not what changed. This re-publishes the answer
+     * and re-resolves the desktop's colours from it. */
+    case CTL_APPLY_WPACCENT:
+        wallpaper_accent_refresh(s);
         ctlpanel_repaint(s);
         break;
 

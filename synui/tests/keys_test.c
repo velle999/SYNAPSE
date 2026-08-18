@@ -157,6 +157,7 @@ void nightlight_toggle(syn_server_t *s)              { (void)s; }
 void cursor_reload(syn_server_t *s)                  { (void)s; }
 void deskicons_reload(syn_server_t *s)               { (void)s; }
 void wallpaper_relayout(syn_server_t *s)             { (void)s; }
+void wallpaper_accent_refresh(syn_server_t *s)      { (void)s; }
 void record_audio_toggle(syn_server_t *s)            { (void)s; }
 void record_edit_toggle(syn_server_t *s)             { (void)s; }
 void sound_state_refresh(syn_server_t *s)            { (void)s; }

@@ -48,7 +48,7 @@
  */
 static int applied_uifx, applied_input, applied_layout, applied_deco;
 static int applied_dock, applied_nightlight, applied_cursor, applied_deskicons;
-static int applied_wallpaper, applied_glass_export;
+static int applied_wallpaper, applied_glass_export, applied_wpaccent;
 
 void uifx_apply(syn_server_t *s)              { (void)s; applied_uifx++; }
 /* The Glass rows re-export the resolved alphas to theme.state, which is how the
@@ -63,6 +63,7 @@ void nightlight_apply(syn_server_t *s)        { (void)s; applied_nightlight++; }
 void cursor_reload(syn_server_t *s)           { (void)s; applied_cursor++; }
 void deskicons_reload(syn_server_t *s)        { (void)s; applied_deskicons++; }
 void wallpaper_relayout(syn_server_t *s)      { (void)s; applied_wallpaper++; }
+void wallpaper_accent_refresh(syn_server_t *s) { (void)s; applied_wpaccent++; }
 void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 { (void)s; (void)ws; applied_layout++; }
 
@@ -781,6 +782,12 @@ static void test_apply_hooks(void)
          * because the failure is silent: the bar moves either way, and only the
          * one theme that draws a clear bar shows the stale answer. */
         { CTL_ROW_BAR_EDGE,      &applied_wallpaper,  "wallpaper"  },
+        /* Wallpaper accent moves a COLOUR, and the colour lives in two places:
+         * synui's own panel fields and palette.state, which the bar watches.
+         * The export is what reaches both, so a row that merely repainted would
+         * leave the bar on the picture's colour with the panels off it — and
+         * the panels are the half nobody is looking at while they flip it. */
+        { CTL_ROW_WP_ACCENT,     &applied_wpaccent,   "wpaccent"   },
     };
 
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {

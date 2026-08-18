@@ -178,6 +178,10 @@
  *                                the WINDOW behind it, or only the wallpaper?
  *                                Off is the wallpaper alone, which is what
  *                                every release before this one did)
+ *   wallpaper_accent = auto|off|on
+ *                               (default auto = Prism and nothing else. Whether
+ *                                the accent is MEASURED off the wallpaper
+ *                                (palette.c) instead of taken from the theme)
  *
  * …and one the compositor parses but does not act on, because its reader is
  * quickshell (WidgetFrame.qml). Here so the key has one spelling and one clamp,
@@ -1226,6 +1230,7 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->dock_radius       = 26;
     cfg->widget_glass      = SYN_WIDGET_GLASS_AUTO;
     cfg->scene_ink         = 1;
+    cfg->wallpaper_accent  = SYN_WP_ACCENT_AUTO;
     cfg->dock_pin_count    = 0;
     cfg->launcher_style    = SYN_LAUNCHER_TEXT;
     /* A tapped Super opens the start menu, the way it does everywhere else —
@@ -2480,6 +2485,12 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         else if (strcmp(val, "off")  == 0) cfg->widget_glass = SYN_WIDGET_GLASS_OFF;
         else if (strcmp(val, "on")   == 0) cfg->widget_glass = SYN_WIDGET_GLASS_ON;
         else wlr_log(WLR_ERROR, "synui: widget_glass: unknown '%s'", val);
+    }
+    else if (strcmp(key, "wallpaper_accent") == 0) {
+        if      (strcmp(val, "auto") == 0) cfg->wallpaper_accent = SYN_WP_ACCENT_AUTO;
+        else if (strcmp(val, "off")  == 0) cfg->wallpaper_accent = SYN_WP_ACCENT_OFF;
+        else if (strcmp(val, "on")   == 0) cfg->wallpaper_accent = SYN_WP_ACCENT_ON;
+        else wlr_log(WLR_ERROR, "synui: wallpaper_accent: unknown '%s'", val);
     }
     else if (strcmp(key, "scene_ink") == 0) {
         cfg->scene_ink = strcmp(val, "on") == 0;

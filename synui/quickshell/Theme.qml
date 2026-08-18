@@ -180,9 +180,28 @@ QtObject {
         onLoaded: {
             const t = this.text()
             const ok = /^\s*ok\s*=\s*yes\s*$/m.test(t)
+            /*
+             * …and whether this desktop DRAWS with what the picture offered,
+             * which is a setting and not a fact about the wallpaper: Control
+             * panel ▸ Appearance ▸ Wallpaper accent, `auto` being Prism and
+             * nothing else.
+             *
+             * ⚠ THE BAR TOOK IT ON EVERY THEME BEFORE THIS LINE. The compositor
+             * substituted the measured colour into its own panels only on Prism
+             * (theme.c) and wrote this file regardless, so a macOS 26 desktop
+             * had systemBlue panels and a bar, menus and widgets the colour of
+             * the wallpaper — half a feature nobody had asked for and no switch
+             * could reach.
+             *
+             * Absent means YES, which is what a palette.state written by a synui
+             * with no such switch meant. That file is rewritten on the first
+             * export of every session, so the window where it matters is one
+             * login long.
+             */
+            const use = !/^\s*use\s*=\s*no\s*$/m.test(t)
             function hex(key) {
                 const m = t.match(new RegExp("^\\s*" + key + "\\s*=\\s*(#[0-9A-Fa-f]{6})\\s*$", "m"))
-                return (ok && m) ? m[1] : ""
+                return (ok && use && m) ? m[1] : ""
             }
             root.wpAccent    = hex("accent")
             root.wpAccentDim = hex("accent_dim")

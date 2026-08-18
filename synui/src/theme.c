@@ -982,6 +982,19 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
     theme_load_colors(&s->config, theme);
     theme_push_panel_colors(&s->config);
 
+    /* …and then the wallpaper's colour back over the top of it, where this
+     * desktop takes one.
+     *
+     * ⚠ HERE, AND NOT AT THE END. The substitution writes panel_accent and
+     * border_color_focus, which are exactly what the window loop below re-tints
+     * the chrome with and what dock_relayout() rebuilds the dock's outline from.
+     * Run after them and a switch TO Prism came up with the preset's cyan on
+     * every border and dock until something else forced a repaint — which is
+     * what happened before this call existed at all: the only thing that ever
+     * resolved the accent was a WALLPAPER change, so picking the theme built on
+     * the wallpaper's colour did not take it. */
+    theme_refresh_wallpaper_accent(s);
+
     /* Re-tint every window's chrome (the titlebar buffer is redrawn with the new
      * caption colours) and re-push opacity, since the inactive level may have
      * moved. Only touches mapped windows; unmapped ones re-read cfg when shown. */
@@ -1106,15 +1119,31 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
  */
 void theme_refresh_wallpaper_accent(syn_server_t *s)
 {
-    if (s->config.theme != SYN_THEME_PRISM) return;
+    /* ⚠ THE GATE IS THE SETTING, NOT THE THEME, and it used to be
+     * `theme != PRISM`. Same answer by default — wp_accent_on() resolves AUTO
+     * to exactly that — but a desktop that wants its accent off the picture on
+     * macOS 26, or Prism with the picture's colour switched off, can now say
+     * so. Control panel ▸ Appearance ▸ Wallpaper accent. */
+    const syn_palette_t *p = wp_accent_on(&s->config) ? wallpaper_palette(s) : NULL;
 
-    const syn_palette_t *p = wallpaper_palette(s);
     if (!p || !p->ok) {
-        /* Back to the preset's fallback — a wallpaper switched from a
-         * photograph to a greyscale one must not leave the last picture's
-         * colour on the panels. Cheap: it is the same copy the theme switch
-         * does, minus the spawn. */
-        theme_load_colors(&s->config, s->config.theme);
+        /* Back to the theme's own colour — a wallpaper switched from a
+         * photograph to a greyscale one, or the row moved to Off, must not
+         * leave the last picture's colour on the panels. Cheap: it is the same
+         * copy the theme switch does, minus the spawn.
+         *
+         * ⚠ A PUSHED PALETTE IS NOT THE PRESET'S. The bar's theme picker can
+         * put three colours into the config (theme_apply_custom), and reloading
+         * the preset over them would throw away a palette the user picked —
+         * which nothing here would have said, and which no "revert" exists to
+         * get back. That was unreachable while this ran on Prism alone; it is
+         * one Off away on any theme now. */
+        if (s->config.theme_custom)
+            theme_apply_custom(s, s->config.theme_custom_accent,
+                               s->config.theme_custom_base,
+                               s->config.theme_custom_ink, 0);
+        else
+            theme_load_colors(&s->config, s->config.theme);
         theme_push_panel_colors(&s->config);
         theme_repaint(s);
         return;

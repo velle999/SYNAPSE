@@ -1186,6 +1186,17 @@ test('bar_opacity', bar_opacity,
      depends : [synui_exe],
      timeout : 180)
 
+# `wallpaper_accent`: whether the desktop's accent is MEASURED off the picture
+# or taken from the theme — `auto|off|on`, auto being Prism and nothing else.
+# The assertion is palette.state's `use=`, because that is the one decision both
+# halves of the desktop read: theme.c substitutes it into synui's own panels,
+# and quickshell takes it out of the file. They disagreed before it existed.
+wallpaper_accent = find_program('tests/wallpaper_accent.sh')
+test('wallpaper_accent', wallpaper_accent,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 180)
+
 # `postit_ink`: the note is the one widget whose content somebody typed, and on
 # a glass desktop it has no card to be typed on — widgetAlpha follows the dock,
 # and a dock at 0.00 puts 12px body text straight onto the wallpaper in an ink

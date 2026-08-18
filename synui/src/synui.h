@@ -1524,6 +1524,7 @@ typedef enum {
     CTL_ROW_GLASS_SYNC,        /* do the per-surface rows follow the slider  */
     CTL_ROW_GLASS_LEGIBILITY,  /* may a surface overrule its own alpha       */
     CTL_ROW_SCENE_INK,         /* does it read the windows or the wallpaper  */
+    CTL_ROW_WP_ACCENT,         /* accent off the wallpaper, or out of the theme */
     CTL_ROW_INACTIVE_OPACITY,
 
     CTL_ROW_SHADOW,
@@ -1645,6 +1646,7 @@ typedef enum {
     CTL_APPLY_CURSOR,    /* reload the cursor theme at the new size       */
     CTL_APPLY_DESKICONS, /* redraw the desktop icon grid                  */
     CTL_APPLY_WALLPAPER, /* repaint every output's wallpaper              */
+    CTL_APPLY_WPACCENT,  /* re-resolve the accent off the wallpaper       */
 } syn_ctl_apply_t;
 
 /* What activating a row does. The distinction is not cosmetic: only CTL_KIND_PANEL
@@ -2701,6 +2703,28 @@ typedef enum {
     SYN_WIDGET_GLASS_ON,
 } syn_widget_glass_t;
 
+/*
+ * Whether the desktop's accent is taken off the WALLPAPER (palette.c) instead
+ * of out of the theme — and the same three positions, in the same order, for
+ * the same reason.
+ *
+ * ⚠ AUTO IS PRISM AND ONLY PRISM, which is what this used to be with no way to
+ * say otherwise: the substitution was `if (theme != PRISM) return`, so the one
+ * theme built around it had it and no other theme could. Prism IS "the colour
+ * comes off the picture" — its preset accent is documented as a fallback for a
+ * greyscale wallpaper — so that stays the default, and every other preset is a
+ * designer's dozen colours whose accent means something where it sits.
+ *
+ * ⚠ AND `auto` HERE IS NOT THE `auto` scene_ink REFUSED TO HAVE. That one would
+ * have resolved off a setting the user had moved for another purpose; this
+ * resolves off the THEME, which is the thing being described.
+ */
+typedef enum {
+    SYN_WP_ACCENT_AUTO = 0,   /* on for Prism, off for the twelve presets */
+    SYN_WP_ACCENT_OFF,
+    SYN_WP_ACCENT_ON,
+} syn_wp_accent_t;
+
 /* The start-menu launcher (launcher.c) synui draws in the top-left of every
  * output — the "◢ SYNAPSE" button that used to be a waybar module. Text is the
  * old look; logo swaps it for the dendrite emblem (SYNUI_DATADIR/logo.svg). */
@@ -3406,6 +3430,12 @@ typedef struct {
      * means "the wallpaper answers here".
      */
     int   scene_ink;            /* default 1 */
+
+    /* Does the accent come off the wallpaper? See syn_wp_accent_t, and
+     * wp_accent_on() for the resolution — which is what everything asks,
+     * because AUTO is not an answer anything can act on. */
+    syn_wp_accent_t wallpaper_accent;   /* default AUTO */
+
     /* launcher.c: the synui-drawn start-menu button. Default TEXT. */
     syn_launcher_style_t launcher_style;
 
@@ -4128,6 +4158,30 @@ static inline bool syn_glass_active(const syn_config_t *cfg)
 static inline bool scene_ink_on(const syn_config_t *cfg)
 {
     return cfg->scene_ink != 0;
+}
+
+/*
+ * …and the same shape for the wallpaper accent: AUTO resolved against the
+ * theme, so that nothing downstream has to know which theme that is.
+ *
+ * ⚠ ASKED BY BOTH SIDES OF THE DESKTOP, which is the whole reason it is one
+ * function. theme.c substitutes the measured colour into synui's own panels and
+ * the focused border; the BAR, the menus and the widgets take it out of
+ * palette.state instead (Theme.qml's wpAccent), because quickshell cannot ask
+ * the compositor anything. Those two were never actually asking the same
+ * question — the substitution was gated on Prism and the file was not — so a
+ * macOS 26 desktop had systemBlue panels and a bar the colour of the
+ * wallpaper, and nothing anywhere said that was a choice. palette_export()
+ * publishes this answer beside the colours now, so both halves read one
+ * decision.
+ */
+static inline bool wp_accent_on(const syn_config_t *cfg)
+{
+    switch (cfg->wallpaper_accent) {
+    case SYN_WP_ACCENT_ON:  return true;
+    case SYN_WP_ACCENT_OFF: return false;
+    default:                return cfg->theme == SYN_THEME_PRISM;
+    }
 }
 
 /* The relative luminance of the surface synui's OWN panels are drawn on.
@@ -6520,6 +6574,11 @@ void barscan_finish(syn_server_t *s);
  * wallpaper offered a usable hue. Owned by wallpaper.c and valid until the next
  * wallpaper change — callers read it, they do not keep it. */
 const syn_palette_t *wallpaper_palette(syn_server_t *s);           /* re-decode + repaint from current config */
+/* Re-publish palette.state and re-resolve the desktop's accent from it. The one
+ * entry point for "the ANSWER changed without the wallpaper changing" — the
+ * control panel row, a theme switch, a reload. No re-decode: the per-output
+ * measurement it folds is already cached. */
+void wallpaper_accent_refresh(syn_server_t *s);
 
 /* ── imgdec.c ────────────────────────────────────────────── */
 
