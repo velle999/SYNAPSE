@@ -150,6 +150,15 @@ static int clock_set(const char *key, const char *val)
 	backup_once(path);
 	int rc = write_atomic(path, out);
 	free(out);
+
+	/* The GUI never gets here — it greys these rows outside synui, off the
+	 * same helper. The CLI has no such gate and a power user typing this from
+	 * a GNOME session would otherwise get silence and a clock that did not
+	 * change. The write is still the right thing to do: it applies at the next
+	 * synui login. It just has to SAY so. */
+	if (rc == 0 && syn_synui_only())
+		printf("written — %s is the session running, so this takes effect "
+		       "at your next synui login\n", syn_session_desktop());
 	return rc;
 }
 
@@ -257,6 +266,18 @@ static void row_or_unknown(const char *key, const char *text,
 	rec_row("%s\t%s\t%s\t%s", key, val, detail, action);
 }
 
+/* The action for one of the three clock knobs. Not installed is "-": there is
+ * nothing to offer and nothing to explain. Installed but another desktop is
+ * running is `unavailable:<desktop>` — an action that EXISTS and cannot be
+ * taken here, which is what greys the row rather than hiding that it is a
+ * setting at all. */
+static const char *clock_action(int have_clock, const char *elsewhere,
+                                const char *verb)
+{
+	if (!have_clock) return "-";
+	return elsewhere ? elsewhere : verb;
+}
+
 int pane_time(void)
 {
 	rec_header("key\tvalue\tdetail\taction");
@@ -288,28 +309,42 @@ int pane_time(void)
 	}
 
 	/* ── How the desktop writes it ────────────────────────────────────── */
+	//
+	// Two different reasons these three might not be settable, and they are
+	// worth telling apart. No synui-clock at all means synui is not installed:
+	// the setting has no reader anywhere. Another desktop running means it is
+	// installed and simply is not the thing drawing the clock in front of you
+	// — the write would land in clock.state, report success, and change
+	// nothing on screen. Only the second one names a desktop.
 	int have_clock = have_cmd("synui-clock");
+	const char *elsewhere = syn_synui_only();
+
+	char why[160];
+	if (elsewhere)
+		snprintf(why, sizeof why,
+		         "synui's clock — %s draws its own and never reads this",
+		         syn_session_desktop());
 
 	char fmt[16];
 	clock_get("format", "12", fmt, sizeof fmt);
 	rec_row("time-format\t%s\t%s\t%s",
 	        !strcmp(fmt, "24") ? "24-hour" : "12-hour",
-	        "the bar, the lock screen and the desktop clock",
-	        have_clock ? "choice:time-format" : "-");
+	        elsewhere ? why : "the bar, the lock screen and the desktop clock",
+	        clock_action(have_clock, elsewhere, "choice:time-format"));
 
 	char secs[16];
 	clock_get("seconds", "0", secs, sizeof secs);
 	rec_row("time-seconds\t%s\t%s\t%s",
 	        atoi(secs) ? "on" : "off",
-	        "seconds in the bar clock",
-	        have_clock ? "toggle:time-seconds" : "-");
+	        elsewhere ? why : "seconds in the bar clock",
+	        clock_action(have_clock, elsewhere, "toggle:time-seconds"));
 
 	char date[64], label[LAYOUT_LABEL_CAP + 48];
 	clock_get("date", "iso", date, sizeof date);
 	layout_label(date, label, sizeof label);
 	rec_row("date-format\t%s\t%s\t%s", label,
-	        "the order the date is written in",
-	        have_clock ? "choice:date-format" : "-");
+	        elsewhere ? why : "the order the date is written in",
+	        clock_action(have_clock, elsewhere, "choice:date-format"));
 
 	/* Not a setting — the result of the three above, drawn by the thing that
 	 * draws the bar. A pane that offers "Day first" and never shows what that
@@ -318,7 +353,8 @@ int pane_time(void)
 	char prev[256];
 	if (clock_preview(prev, sizeof prev))
 		rec_row("desktop-clock\t%s\t%s\t-", prev,
-		        "what the bar is showing right now");
+		        elsewhere ? "what synui's bar WOULD show — it is not running"
+		                  : "what the bar is showing right now");
 	else
 		rec_row("desktop-clock\tunknown\t%s\t-",
 		        have_clock ? "synui-clock returned nothing"
@@ -372,6 +408,34 @@ int do_choices(int argc, char **argv)
 		for (int i = 0; i < n; i++)
 			rec_row("%s\t%s\t%s", ls[i].id, ls[i].label,
 			        !strcmp(ls[i].id, cur) ? "current" : "-");
+		return 0;
+	}
+
+	/* The AI backend's three settable values. Asked of the helper for the
+	 * CURRENT one rather than read off a file, because the answer has to come
+	 * from the MASK first: a hand-placed `systemctl mask synapd.service` means
+	 * the backend is off no matter what any state file says, and a row that
+	 * disagreed with systemd would cycle the user through a daemon that
+	 * cannot start.
+	 *
+	 * `auto` is not offered. It is a state the machine can be IN — nobody has
+	 * chosen yet — and not one you can ask for; there is no verb for it in
+	 * synui-ai-backend, and a button that quietly did nothing is worse than
+	 * three that work. */
+	if (!strcmp(key, "ai-backend")) {
+		char cur[32] = "";
+		if (have_cmd("synui-ai-backend")) {
+			char *a[] = { (char *)"synui-ai-backend", (char *)"status", NULL };
+			run_capture_quiet(a, cur, sizeof cur);
+			cur[strcspn(cur, "\n")] = '\0';
+			tsv_clean(cur);
+		}
+		rec_row("gpu\tGPU  (offload every layer)\t%s",
+		        !strcmp(cur, "gpu") ? "current" : "-");
+		rec_row("cpu\tCPU  (no GPU offload)\t%s",
+		        !strcmp(cur, "cpu") ? "current" : "-");
+		rec_row("off\tOff  (mask the daemon)\t%s",
+		        !strcmp(cur, "off") ? "current" : "-");
 		return 0;
 	}
 

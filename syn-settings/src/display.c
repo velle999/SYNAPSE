@@ -128,9 +128,20 @@ static int name_cmp(const void *a, const void *b)
 
 int pane_display(void)
 {
+	/* The compositor half of this pane is synui's alone: synctl talks to
+	 * synui and nothing else answers it. Under KDE or GNOME the right answer
+	 * for those three columns is "-" — unsupported — and NOT "not driven",
+	 * which claims the head is dark when another compositor is scanning out
+	 * to it perfectly well. The kernel columns beside them are true on every
+	 * desktop, so the pane is still worth opening; it just stops speaking for
+	 * a compositor it cannot see. */
+	int mine = syn_session_is_synui();
+
 	char json[8192] = "";
-	char *synctl_argv[] = { (char *)"synctl", (char *)"outputs", NULL };
-	run_capture(synctl_argv, json, sizeof json);
+	if (mine) {
+		char *synctl_argv[] = { (char *)"synctl", (char *)"outputs", NULL };
+		run_capture(synctl_argv, json, sizeof json);
+	}
 
 	DIR *d = opendir("/sys/class/drm");
 	if (!d) {
@@ -197,7 +208,8 @@ int pane_display(void)
 
 		rec_row("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
 		        shortname, status, enabled, mode, edidbuf,
-		        driven ? size : "not driven", at, scale, action);
+		        driven ? size : mine ? "not driven" : "-",
+		        at, scale, action);
 		free(names[i]);
 	}
 	return 0;

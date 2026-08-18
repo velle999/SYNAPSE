@@ -117,6 +117,27 @@ void ensure_parent(const char *path);
  * because a value that contains one silently invents a column. */
 void tsv_clean(char *s);
 
+/* ── Which desktop is actually running ──────────────────────────────────────
+ *
+ * Some settings here belong to synui alone — the clock format, the terminal it
+ * launches — and are written into synui's own configuration. On a SynapseOS
+ * box running KDE or GNOME they are inert: the write succeeds and nothing
+ * changes, because nothing in that session reads the file. A row asks these
+ * before offering such a setting. See the heading in src/util.c for how the
+ * answer is arrived at, and why no graphical session at all is not a refusal.
+ */
+
+/* The desktop this session is running, as a name fit for prose AND for an
+ * action-column argument: "synui", "GNOME", "KDE", or "" when there is no
+ * graphical session. Computed once. */
+const char *syn_session_desktop(void);
+int syn_session_is_synui(void);
+
+/* For a synui-only row: NULL when this session can use the setting, otherwise
+ * the ready-made action token — "unavailable:GNOME" — that greys the row in
+ * the GUI and names the reason in the CLI table. */
+const char *syn_synui_only(void);
+
 /* ── Bootloaders ────────────────────────────────────────────────────────────
  *
  * SynapseOS installs one of three, and each answers "can I boot this kernel?"
@@ -186,6 +207,7 @@ int pane_apps(void);
 /* The system clock beside the DESKTOP clock — what time it is, and how the
  * bar, the lock screen and the desktop widget write it. See src/time.c. */
 int pane_time(void);
+int pane_ai(void);
 
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *

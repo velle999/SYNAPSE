@@ -80,11 +80,22 @@ int do_modes(int argc, char **argv)
 		return 1;
 	}
 
+	/* wlr-output-management is a wlroots protocol. synui implements it; KWin
+	 * and mutter do not, so under KDE or GNOME wlr-randr connects to a real
+	 * Wayland session and still lists nothing. Asking "is this a Wayland
+	 * session?" is the wrong question there, and it is one this can answer
+	 * itself — so it names the desktop that is in the way instead. */
 	char out[65536] = "";
 	char *a[] = { (char *)"wlr-randr", NULL };
 	if (run_capture(a, out, sizeof out) != 0 || !out[0]) {
-		fprintf(stderr, "syn-settings: wlr-randr reported nothing — "
-		                "is this a Wayland session?\n");
+		const char *d = syn_session_desktop();
+		if (*d && strcmp(d, "synui"))
+			fprintf(stderr, "syn-settings: %s does not implement "
+			                "wlr-output-management — modes can only be set "
+			                "from a synui session\n", d);
+		else
+			fprintf(stderr, "syn-settings: wlr-randr reported nothing — "
+			                "is this a Wayland session?\n");
 		return 1;
 	}
 

@@ -582,9 +582,30 @@ int pane_apps(void)
 		                  : how == 2 ? "fallback" : "none";
 		const char *detail = how ? src : "nothing installed handles this";
 
-		rec_row("%s\t%s\t%s\t%s\t%s\tapp:%s",
+		/* Every role above this one is decided by mimeapps.list, which every
+		 * desktop reads — those rows are settable wherever this app runs.
+		 * `terminal` is the odd one out in this way too: it is written to
+		 * synuirc and read by synui, so under KDE or GNOME setting it would
+		 * report success and change nothing about what those desktops open.
+		 * See syn_synui_only() in src/util.c. */
+		char act[80];
+		/* Sized off src, which is a full path and the same PATH_CAP + 128 the
+		 * declaration above uses, plus room for the sentence around it. */
+		char why[PATH_CAP + 320];
+		const char *elsewhere = role_is_terminal(r) ? syn_synui_only() : NULL;
+		if (elsewhere) {
+			snprintf(act, sizeof act, "%s", elsewhere);
+			snprintf(why, sizeof why,
+			         "%s — read by synui, and %s is the session running",
+			         how ? src : "synuirc", syn_session_desktop());
+			detail = why;
+		} else {
+			snprintf(act, sizeof act, "app:%s", r->id);
+		}
+
+		rec_row("%s\t%s\t%s\t%s\t%s\t%s",
 		        r->label, name[0] ? name : "-", state, r->detail,
-		        detail, r->id);
+		        detail, act);
 	}
 
 	return 0;
@@ -791,6 +812,14 @@ static int set_terminal(const char *term)
 	char *argv[] = { (char *)"pkill", (char *)"-HUP", (char *)"-x",
 	                 (char *)"synui", NULL };
 	run_quiet(argv);
+
+	/* The GUI greys this row outside synui, off the same helper; the CLI has
+	 * no such gate. Without this line a user typing it from a GNOME session
+	 * gets a clean exit, a written file, and a Ctrl+Alt+T that still opens
+	 * whatever GNOME opens — success reported, nothing changed. */
+	if (syn_synui_only())
+		printf("written — %s is the session running and launches its own "
+		       "terminal; this applies under synui\n", syn_session_desktop());
 	return 0;
 }
 

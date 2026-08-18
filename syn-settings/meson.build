@@ -31,6 +31,7 @@ sources = files(
   'src/boot.c',
   'src/apps.c',
   'src/time.c',
+  'src/ai.c',
 )
 
 executable('syn-settings', sources,

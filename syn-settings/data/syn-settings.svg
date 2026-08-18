@@ -1,21 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- syn-settings — the SynapseOS settings app.
-
-     Three sliders, in the dendrite purple the rest of the suite uses.
-
-     Deliberately NOT the theme's `preferences-system`, which is what this
-     shipped before: a stock name is whatever the icon theme decides, and on
-     Breeze it is the same grey gear that every settings-ish application in the
-     menu already wears. synfiles learned this the expensive way — it shipped
-     `system-file-manager`, which on Breeze is literally Dolphin's icon, and
-     put two file managers in the dock wearing one face.
-
-     Sliders rather than a gear for the same reason: a gear is the one shape
-     every other configuration tool has already taken.
-
-     Scalable only. Qt renders this at whatever size the dock asks for.
--->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- ⚠ This comment lives INSIDE <svg>, and every comment in this file has
+       to stay here. gdk-pixbuf identifies an image by SNIFFING ITS FIRST 256
+       BYTES for a format signature, and librsvg's signature is the literal
+       "<svg". A header comment before the root element pushes "<svg" past
+       byte 256, and the file stops being an SVG as far as GTK is concerned:
+
+         gdk-pixbuf-error-quark: Couldn't recognize the image file format
+
+       Not a parse error and not a warning — a blank square in the GNOME app
+       grid, which is exactly what this icon was until 2026-08-18. It never
+       showed on synui or KDE, because Qt parses the XML properly instead of
+       sniffing it, so the whole class of bug is invisible on a Qt desktop.
+       tools/preflight.sh checks the byte offset on every commit. -->
+  <!-- syn-settings — the SynapseOS settings app.
+
+       Three sliders, in the dendrite purple the rest of the suite uses.
+
+       Deliberately NOT the theme's `preferences-system`, which is what this
+       shipped before: a stock name is whatever the icon theme decides, and on
+       Breeze it is the same grey gear that every settings-ish application in the
+       menu already wears. synfiles learned this the expensive way — it shipped
+       `system-file-manager`, which on Breeze is literally Dolphin's icon, and
+       put two file managers in the dock wearing one face.
+
+       Sliders rather than a gear for the same reason: a gear is the one shape
+       every other configuration tool has already taken.
+
+       Scalable only. Qt renders this at whatever size the dock asks for.
+  -->
   <defs>
     <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#a78bfa"/>

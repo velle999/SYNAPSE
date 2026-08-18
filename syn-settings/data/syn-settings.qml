@@ -191,6 +191,7 @@ FloatingWindow {
         { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
         { id: "apps",      label: "Default Apps", blurb: "what opens each kind of file — and whether anybody actually chose it" },
         { id: "kernel",    label: "Kernel",   blurb: "every kernel on offer, which are installed, and which one you booted" },
+        { id: "ai",        label: "AI",       blurb: "the backend switch, the units that can restart it behind your back, and which model is on disk" },
         { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"
@@ -338,10 +339,26 @@ FloatingWindow {
     }
     function actionArg(a)  { const i = a.indexOf(":"); return i < 0 ? "" : a.substring(i + 1) }
 
+    // `unavailable:<desktop>` — a setting that EXISTS and cannot be taken in
+    // this session, because it is one synui reads and synui is not what is
+    // running. The third state the table needed: "-" says there is nothing
+    // here to set, a verb says here is one you can set, and this says here is
+    // one you cannot, and names what is in the way. Without it the clock
+    // format under GNOME was a live control that wrote a file, said nothing,
+    // and changed nothing on screen.
+    function rowBlocked(r) {
+        return root.actionHas(root.rowAction(r), "unavailable")
+    }
+    function rowBlockedBy(r) {
+        return root.actionArgFor(root.rowAction(r), "unavailable")
+    }
+
     function selectRow(i) {
         const r = root.rows[i]
         const a = root.rowAction(r)
-        if (a === "-" || a === "") { root.selRow = -1; root.selAction = ""; return }
+        if (a === "-" || a === "" || root.actionHas(a, "unavailable")) {
+            root.selRow = -1; root.selAction = ""; return
+        }
         root.selRow = i
         root.selAction = a
         root.selKey = r[0]
@@ -939,8 +956,14 @@ FloatingWindow {
                 required property int index
                 width: table.width
                 height: 26
+                // A setting this session cannot take. Distinct from both
+                // "actionable" and "just a fact": it is drawn dimmed, with a
+                // dimmed edge where an actionable row has an accent one, so
+                // the table says "this is a setting, and not one for you here"
+                // rather than hiding it or pretending it will work.
+                readonly property bool blocked: root.rowBlocked(dataRow.modelData)
                 readonly property bool actionable:
-                    root.rowAction(dataRow.modelData) !== "-"
+                    root.rowAction(dataRow.modelData) !== "-" && !dataRow.blocked
                 readonly property bool chosen: root.selRow === dataRow.index
 
                 color: dataRow.chosen ? root.wash(0.20)
@@ -955,8 +978,8 @@ FloatingWindow {
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                     width: 2
-                    color: root.cAccent
-                    visible: dataRow.actionable
+                    color: dataRow.blocked ? root.cDim : root.cAccent
+                    visible: dataRow.actionable || dataRow.blocked
                     opacity: dataRow.chosen ? 1.0 : 0.55
                 }
 
@@ -972,8 +995,13 @@ FloatingWindow {
                             visible: index !== root.actionCol
                             elide: Text.ElideRight
                             text: modelData
-                            color: index === 0 ? root.cText
-                                               : root.tone(root.cols[index] || "", modelData)
+                            // One colour for the whole row when it is blocked.
+                            // tone() would otherwise paint the VALUE green for
+                            // "12-hour" on a row that cannot be changed —
+                            // colour saying "good" on a dead control.
+                            color: dataRow.blocked ? root.cDim
+                                 : index === 0 ? root.cText
+                                 : root.tone(root.cols[index] || "", modelData)
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                     }
@@ -986,7 +1014,17 @@ FloatingWindow {
                                                     : Qt.ArrowCursor
                     onClicked: {
                         if (dataRow.actionable) root.selectRow(dataRow.index)
-                        else { root.selRow = -1; root.selAction = "" }
+                        else {
+                            root.selRow = -1; root.selAction = ""
+                            // Clicking something greyed out should say why.
+                            // The reason is in the detail column, which is the
+                            // first thing to elide on a narrow window — which
+                            // is exactly when somebody clicks it to find out.
+                            if (dataRow.blocked)
+                                root.status = "synui only — "
+                                            + root.rowBlockedBy(dataRow.modelData)
+                                            + " is the session running"
+                        }
                     }
                 }
             }

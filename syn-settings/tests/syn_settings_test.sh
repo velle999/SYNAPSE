@@ -50,7 +50,7 @@ check_table() {
 
 echo "syn-settings smoke tests"
 
-for pane in display region network bluetooth power kernel system apps; do
+for pane in display region network bluetooth power kernel system apps time ai; do
     check_table "$pane"
 done
 
@@ -74,7 +74,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|unavailable:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -87,7 +87,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps; do
+for pane in display region network bluetooth power kernel apps time ai; do
     check_actions "$pane"
 done
 
@@ -1202,6 +1202,104 @@ for evil in "firefox" "base" "../../etc/passwd" "linux-lts-evil"; do
     fi
 done
 
+# ── settings this session cannot use ────────────────────────────────────────
+#
+# A handful of settings here are synui's alone — the clock format, the terminal
+# synui launches — because they are written into synui's own configuration. On
+# a SynapseOS box running KDE or GNOME the write succeeds and NOTHING changes:
+# no part of that session reads the file. That is the worst failure a settings
+# app has, and it is invisible, so it is tested rather than trusted.
+#
+# The environment is forced both ways. Testing only the current session would
+# pass on any developer box and cover nothing: this machine is synui, so the
+# blocked branch would never run.
+#
+# XDG_RUNTIME_DIR goes too. Without it the socket probe would still find a live
+# synui through $XDG_RUNTIME_DIR/synui-0.sock and report "synui" no matter what
+# XDG_CURRENT_DESKTOP says — the check would pass while testing nothing.
+as_desktop() {
+    env -u SYNUI_SOCKET -u WAYLAND_DISPLAY -u XDG_RUNTIME_DIR \
+        XDG_CURRENT_DESKTOP="$1" "$BIN" "${@:2}"
+}
+cell() { awk -F'\t' -v k="$2" -v c="$3" '$1 == k { print $c }' <<<"$1"; }
+
+for de in GNOME KDE; do
+    t=$(as_desktop "$de" --rec time)
+    n=0
+    for key in time-format time-seconds date-format; do
+        [ "$(cell "$t" "$key" 4)" = "unavailable:$de" ] && n=$((n + 1))
+    done
+    [ "$n" = 3 ] && ok "$de: all three clock knobs are marked unavailable" \
+                 || bad "$de: only $n/3 clock knobs are marked unavailable"
+
+    # The reason has to NAME the desktop. "synui only" alone leaves somebody
+    # looking for a synui they are already running.
+    case "$(cell "$t" time-format 3)" in
+        *"$de"*) ok "$de: the reason names the desktop in the way" ;;
+        *)       bad "$de: the detail column does not name $de" ;;
+    esac
+
+    a=$(as_desktop "$de" --rec apps)
+    [ "$(cell "$a" Terminal 6)" = "unavailable:$de" ] \
+        && ok "$de: the terminal role is marked unavailable" \
+        || bad "$de: the terminal role still offers a write"
+
+    # And ONLY that one. Every other role is decided by mimeapps.list, which
+    # every desktop reads — greying those would be a regression that took a
+    # working setting away from KDE and GNOME users.
+    blocked=$(tail -n +2 <<<"$a" | awk -F'\t' '$6 ~ /^unavailable:/ { print $1 }' | tr '\n' ' ')
+    [ "$blocked" = "Terminal " ] \
+        && ok "$de: no other application role was greyed with it" \
+        || bad "$de: greyed roles are '$blocked', expected only Terminal"
+
+    # "not driven" claims the head is dark. Under another compositor that is
+    # false — it is scanning out perfectly well, this just cannot see it — and
+    # the protocol already has a value for "cannot be answered here": "-".
+    d=$(as_desktop "$de" --rec display)
+    if grep -q 'not driven' <<<"$d"; then
+        bad "$de: the display pane still says 'not driven' for another compositor"
+    else
+        ok "$de: the compositor columns read '-' rather than claiming a dark head"
+    fi
+done
+
+# Both names synui logs in under. greetd exports "synui"; a display manager
+# reading the session file exports "SynapseOS". Matching one of them would grey
+# every synui-only row on half of the login paths — and the half that broke
+# would be whichever one the developer does not use.
+for name in synui SynapseOS synui:wlroots ubuntu:SynapseOS; do
+    v=$(cell "$(as_desktop "$name" --rec time)" time-format 4)
+    [ "$v" = "choice:time-format" ] \
+        && ok "XDG_CURRENT_DESKTOP=$name is recognised as synui" \
+        || bad "XDG_CURRENT_DESKTOP=$name greyed a synui row ($v)"
+done
+
+# The distributions that prepend to the list prepend their OWN brand, so the
+# desktop is the LAST component. Reading the first names "ubuntu" as the thing
+# in the way, which is not a desktop anybody can go and change.
+v=$(cell "$(as_desktop ubuntu:GNOME --rec time)" time-format 4)
+[ "$v" = "unavailable:GNOME" ] \
+    && ok "ubuntu:GNOME is named as GNOME, not as ubuntu" \
+    || bad "ubuntu:GNOME resolved to '$v'"
+
+# No graphical session at all is deliberately NOT a refusal: over SSH or on a
+# TTY the write still lands in synui's config and applies at the next synui
+# login, which is a reasonable thing to do. Greying it there would take the CLI
+# away from the case a settings tool is most often needed in.
+v=$(env -u SYNUI_SOCKET -u WAYLAND_DISPLAY -u XDG_RUNTIME_DIR \
+        -u XDG_CURRENT_DESKTOP "$BIN" --rec time | awk -F'\t' '$1=="time-format"{print $4}')
+[ "$v" = "choice:time-format" ] \
+    && ok "a TTY with no desktop is not a refusal" \
+    || bad "no desktop greyed a synui row ($v)"
+
+# The CLI has no grey. It must SAY that the write it just made is not the one
+# that changes the screen, or it reports success and does nothing visible.
+out=$(as_desktop GNOME --dry-run set time-format 24 2>&1 || true)
+case "$out" in
+    *would\ write*) ok "--dry-run still changes nothing under another desktop" ;;
+    *)              bad "dry-run set time-format printed: $out" ;;
+esac
+
 # ── the window follows the desktop font ─────────────────────────────────────
 # This pane is where the font gets PICKED, so it is the one window that must
 # never drift from font.state. The file carries the desktop's family AND its
@@ -1238,7 +1336,7 @@ if [ -f "$QML" ]; then
     # reader and the window are two files, and adding a verb to one of them is
     # exactly the kind of half-change that looks finished and clicks dead.
     verbs=$(
-        for pane in display region network bluetooth power kernel apps; do
+        for pane in display region network bluetooth power kernel apps time ai; do
             pout=$("$BIN" --rec "$pane") || continue
             pcol=$(head -1 <<<"$pout" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
             [ -n "$pcol" ] || continue
@@ -1250,6 +1348,25 @@ if [ -f "$QML" ]; then
     done
     [ -z "$missing" ] && ok "every action verb the reader emits appears in the QML" \
                       || bad "verb(s) the QML never mentions:$missing"
+
+    # `unavailable` is the one verb the loop above cannot catch on its own: it
+    # is only emitted when the session is NOT synui, and the machine running
+    # this suite is. So it is checked directly — and checked for the part that
+    # actually greys the row, not merely for the word appearing somewhere.
+    #
+    # The trap this guards is specific. `actionable` is what draws the accent
+    # edge, the pointing cursor and the editor strip, and it was
+    # `rowAction(...) !== "-"`. An `unavailable:GNOME` cell is not "-", so
+    # without the second half of that condition every blocked row would render
+    # as a live control whose Apply button builds `syn-settings unavailable
+    # GNOME` — a dead button, which is exactly what this column exists to
+    # prevent.
+    grep -q 'function rowBlocked' "$QML" \
+        && ok "the window knows what a blocked row is" \
+        || bad "syn-settings.qml has no rowBlocked()"
+    grep -q '!== "-" && !dataRow.blocked' "$QML" \
+        && ok "a blocked row is not actionable" \
+        || bad "actionable does not exclude blocked rows — they render as live controls"
 
     n=$(grep -c 'Qt.application.font' "$QML" || true)
     [ "$n" = 0 ] && ok "no fallback pins the startup font" \

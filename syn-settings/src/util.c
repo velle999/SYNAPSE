@@ -654,3 +654,119 @@ int scrape_field(const char *text, const char *key, char *out, size_t cap)
 	}
 	return 0;
 }
+
+/* ── Which desktop is actually running ──────────────────────────────────────
+ *
+ * Several settings in this app are synui's alone: the clock format, the
+ * seconds and date-order knobs, the terminal synui launches. They are written
+ * to synui's own configuration, and on a SynapseOS box running KDE or GNOME
+ * they are inert — the file is written, the setting is saved, and NOTHING
+ * changes, because nothing in that session reads it. That is the worst shape
+ * a settings app has: a control that reports success and does nothing.
+ *
+ * So the rows ask this first, and mark themselves unavailable rather than
+ * offering a write whose only effect is to be ignored.
+ *
+ * Two sources, in this order:
+ *
+ *   1. synui's IPC socket. The strongest evidence there is — the compositor
+ *      creates it on startup and removes it on exit, so its presence means a
+ *      synui is running and reachable RIGHT NOW. Resolved exactly the way
+ *      synctl(1) resolves it, and only stat()ed: this must never connect and
+ *      never send, or a settings pane refreshing in the background becomes a
+ *      client of whatever session the environment happens to point at.
+ *
+ *   2. XDG_CURRENT_DESKTOP. Needed because it is also the answer for the
+ *      desktop that is NOT synui — a socket that is absent tells you synui is
+ *      not running, not which desktop replaced it, and the row wants to name
+ *      it. Note that synui appears under TWO names depending on how the
+ *      session was started: greetd exports "synui", a display manager reading
+ *      the session file exports "SynapseOS". Both are matched; matching one
+ *      would grey every synui-only row on half the login paths.
+ *
+ * No graphical session at all — a TTY, an SSH login — is deliberately NOT a
+ * refusal. There the write still lands in synui's config and applies at the
+ * next synui login, which is a perfectly reasonable thing to do over SSH.
+ */
+
+/* Does synui's IPC socket exist? See the note above on why this only stat()s. */
+static int synui_socket_present(void)
+{
+	char path[512];
+	const char *sock = getenv("SYNUI_SOCKET");
+	if (sock && *sock) {
+		snprintf(path, sizeof path, "%s", sock);
+	} else {
+		const char *runtime = getenv("XDG_RUNTIME_DIR");
+		const char *disp    = getenv("WAYLAND_DISPLAY");
+		if (!runtime || !*runtime) return 0;
+		snprintf(path, sizeof path, "%s/synui-%s.sock",
+		         runtime, (disp && *disp) ? disp : "0");
+	}
+	struct stat st;
+	return stat(path, &st) == 0 && S_ISSOCK(st.st_mode);
+}
+
+/* One component of XDG_CURRENT_DESKTOP against one name, case-insensitively —
+ * the spec says the variable is a colon-separated list and says nothing that
+ * makes its case reliable. */
+static int desktop_listed(const char *list, const char *name)
+{
+	size_t nlen = strlen(name);
+	for (const char *p = list; p && *p; ) {
+		const char *sep = strchr(p, ':');
+		size_t len = sep ? (size_t)(sep - p) : strlen(p);
+		if (len == nlen && strncasecmp(p, name, nlen) == 0) return 1;
+		p = sep ? sep + 1 : NULL;
+	}
+	return 0;
+}
+
+const char *syn_session_desktop(void)
+{
+	static char name[64];
+	static int done = 0;
+	if (done) return name;
+	done = 1;
+
+	if (synui_socket_present()) {
+		snprintf(name, sizeof name, "synui");
+		return name;
+	}
+
+	const char *cur = getenv("XDG_CURRENT_DESKTOP");
+	if (!cur || !*cur) { name[0] = '\0'; return name; }
+	if (desktop_listed(cur, "synui") || desktop_listed(cur, "SynapseOS")) {
+		snprintf(name, sizeof name, "synui");
+		return name;
+	}
+
+	/* The LAST component, not the first: the spec orders the list most-generic
+	 * last, and the distributions that prepend to it prepend their own brand —
+	 * "ubuntu:GNOME" is GNOME, and a row that says "ubuntu is running" names
+	 * the wrong thing. */
+	const char *last = cur;
+	for (const char *sep; (sep = strchr(last, ':')); ) last = sep + 1;
+	snprintf(name, sizeof name, "%s", last);
+	tsv_clean(name);
+	/* This string becomes an action-column argument, and an action cell is a
+	 * SPACE-SEPARATED LIST of verb:arg — a desktop with a space in its name
+	 * would split into two tokens, one of which is not a verb. */
+	for (char *p = name; *p; p++)
+		if (*p == ' ') *p = '-';
+	return name;
+}
+
+int syn_session_is_synui(void)
+{
+	return strcmp(syn_session_desktop(), "synui") == 0;
+}
+
+const char *syn_synui_only(void)
+{
+	static char act[80];
+	const char *d = syn_session_desktop();
+	if (!*d || !strcmp(d, "synui")) return NULL;
+	snprintf(act, sizeof act, "unavailable:%s", d);
+	return act;
+}

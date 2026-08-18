@@ -8,7 +8,28 @@ pkgname=syn-settings
 # "$name-0.1.0/" for every component it builds. Bumping pkgver without changing
 # that leaves makepkg looking for a tarball nothing creates.
 pkgver=0.1.0
-pkgrel=29
+# 30: an AI pane, because AI was reachable from exactly one place — synui's
+#   control panel. The installer offers KDE and GNOME, and on either of them
+#   there was no way to see whether synapd was running, no way to turn it off,
+#   and no way to find out which model it would load. The daemon was still
+#   there holding GPU memory; only the switch was missing.
+#   ⚠ IT DOES NOT REIMPLEMENT THE SWITCH. Turning the AI off correctly is four
+#   closed resurrection paths deep — socket activation, the LAN bridge socket,
+#   three separate Wants=, and a reboot — so `off` MASKS synapd.socket and
+#   synapd.service and records the choice outside /run. All of that is
+#   synui-ai-backend(1), covered by synui's tests/ai_backend_off.sh, and this
+#   pane calls it. A second implementation of "off must hold" is a second thing
+#   to get wrong, and the first took four attempts.
+#   The pane names the SOCKETS as well as the service: a pane that showed only
+#   synapd.service would read "inactive" on a machine where the next message
+#   anybody sends starts it again.
+#   ⚠ The acceleration row is enumerated from the ggml backend libraries in
+#   /usr/lib, not from a guessed per-variant directory. The first draft looked
+#   for /usr/lib/synapse-llama/cuda and reported "no build found" on a machine
+#   running synapse-llama-cuda — the packages install into /usr/bin and
+#   /usr/lib and no such directory has ever existed. Same trap power.c
+#   documents for the sleep hooks.
+pkgrel=30
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

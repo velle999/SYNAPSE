@@ -101,6 +101,24 @@ int do_set(int argc, char **argv)
 	 * stays a READ on the Bluetooth pane, because a hard block is a physical
 	 * switch and no amount of software can clear it — showing it is the point,
 	 * offering to toggle it would be a lie. */
+	/* The AI backend. Handed straight to synui-ai-backend(1), which owns
+	 * every part of making this stick — off has to MASK synapd.socket and
+	 * synapd.service, not stop them, and record the choice outside /run. Four
+	 * separate resurrection paths were closed in that helper; a second
+	 * implementation here would reopen all four.
+	 *
+	 * The helper self-elevates with `sudo -n` for the writes, so this stays a
+	 * plain exec and the privilege question is answered in one place. */
+	if (!strcmp(key, "ai-backend")) {
+		if (strcmp(val, "gpu") && strcmp(val, "cpu") && strcmp(val, "off"))
+			return refuse("ai-backend takes gpu, cpu or off");
+		if (!have_cmd("synui-ai-backend"))
+			return refuse("synui-ai-backend is not installed "
+			              "(it ships with the synui package)");
+		char *a[] = { (char *)"synui-ai-backend", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "wifi")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("wifi takes on or off");
