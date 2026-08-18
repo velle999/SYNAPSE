@@ -86,6 +86,10 @@ ShellRoot {
         model: Quickshell.screens
         delegate: Pizza {}
     }
+    Variants {
+        model: Quickshell.screens
+        delegate: Tuxagotchi {}
+    }
     /*
      * The notes. One window per NOTE per screen, which is why this model is
      * built by hand instead of being Quickshell.screens like the others: the

@@ -23,7 +23,7 @@ STATE="$CONF_HOME/synui/widgets.state"
 # Where a dragged widget's corner is remembered. NOT written here — see `home`.
 POS="$CONF_HOME/synui/widgets.pos"
 
-WIDGETS="visualizer sysmon clock launcher postit pizza"
+WIDGETS="visualizer sysmon clock launcher postit pizza tux"
 
 usage() {
     cat <<EOF
@@ -42,6 +42,13 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
                                     and it opens pizza near you. Put a URL in
                                     ~/.config/synui/pizza.url to send it to your
                                     own pizza place instead
+  synui-widgets tux on              Tuxagotchi: a virtual pet. Feed it, play
+                                    with it, clean up after it, put its light
+                                    out at night and give it medicine when it
+                                    is ill — it beeps when it wants something.
+                                    Lives in ~/.config/synui/tuxagotchi.state;
+                                    delete that file to start again with a new
+                                    egg. The speaker in its corner mutes it.
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
@@ -54,7 +61,8 @@ still goes through to the desktop. Double-clicking a grip sends that one widget
 home; the command above sends all of them.
 
 The visualiser needs cava (an optdepend); without it that widget stays dark
-however this file is set.
+however this file is set. Tuxagotchi needs pw-play or paplay to make a sound;
+without either it is a silent pet and everything else about it still works.
 EOF
 }
 

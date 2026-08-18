@@ -1293,6 +1293,20 @@ test('wallpaper_live_ink', wallpaper_live_ink,
      depends : [synui_exe, wp_live_gl_client],
      timeout : 180)
 
+# `tux_screen`: Tuxagotchi is almost entirely a PICTURE — a pixel penguin that
+# walks, blinks, eats, sleeps, sickens, ages and dies — and every other way of
+# looking at that picture means running a desktop and waiting hours for the pet
+# to be in the mood you wanted to check. TuxShell and TuxScreen import QtQuick
+# and tuxart.js and nothing else, so this renders seventeen pets under the
+# offscreen platform with the software renderer, then proves each mood DRAWS by
+# grabbing every LCD on its own and finding pairs that must differ. That last
+# part is the test: a misspelled sprite is `undefined`, draws nothing, and
+# reports nothing anywhere — the first draft passed with the mess deleted.
+tux_screen = find_program('tests/tux_screen.sh')
+test('tux_screen', tux_screen,
+     args    : [meson.current_source_dir() / 'quickshell'],
+     timeout : 120)
+
 # `postit_ink`: the note is the one widget whose content somebody typed, and on
 # a glass desktop it has no card to be typed on — widgetAlpha follows the dock,
 # and a dock at 0.00 puts 12px body text straight onto the wallpaper in an ink

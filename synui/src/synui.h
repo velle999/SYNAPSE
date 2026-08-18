@@ -1198,6 +1198,7 @@ typedef enum {
     WIDGET_ROW_LAUNCHER,
     WIDGET_ROW_POSTIT,
     WIDGET_ROW_PIZZA,
+    WIDGET_ROW_TUX,
     WIDGET_ROW_COUNT,
 } syn_widget_row_t;
 
@@ -1455,7 +1456,7 @@ typedef enum {
     CTL_ROW_WIDGET_GLASS,  /* desktop widgets take the dock's glass, or keep the HUD */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_BAR_SHELL,     /* which QML tree synui-bar starts: SYNAPSE or Antiquity */
-    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza */
+    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza, pet */
     /* Display */
     CTL_ROW_DISPLAYS,
     CTL_ROW_DISPLAY_MODE,  /* extend / duplicate / built-in off */
