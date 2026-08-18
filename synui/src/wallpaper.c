@@ -33,6 +33,11 @@
 #include <drm_fourcc.h>
 
 #include <scenefx/types/wlr_scene.h>
+#include <wlr/render/allocator.h>
+#include <wlr/render/drm_format_set.h>
+#include <wlr/render/swapchain.h>
+#include <wlr/render/pass.h>
+#include <wlr/render/wlr_renderer.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/util/log.h>
 
@@ -658,7 +663,7 @@ static syn_layer_surface_t *live_wallpaper_surface(syn_output_t *o)
 }
 
 /*
- * Read the client's buffer into the ARGB32 palette.c expects.
+ * Read a texture into the ARGB32 palette.c expects.
  *
  * ⚠ THE PREFERRED READ FORMAT IS NOT ALWAYS THE ONE THE PALETTE READS. palette.c
  * takes native-endian ARGB32 — B, G, R, A in memory on little-endian — and a
@@ -667,54 +672,98 @@ static syn_layer_surface_t *live_wallpaper_surface(syn_output_t *o)
  * exchanged, so a warm wallpaper themes the desktop cold and every check of the
  * form "did we get a colour" passes. Swapped here, in place.
  */
-static unsigned char *live_read_argb32(struct wlr_texture *tex,
-                                       int *w_out, int *h_out, size_t *stride_out)
+static unsigned char *tex_read_argb32(struct wlr_texture *tex,
+                                      int *w_out, int *h_out, size_t *stride_out,
+                                      char *why, size_t whyn)
 {
     int w = tex->width, h = tex->height;
-    if (w <= 0 || h <= 0) return NULL;
+    if (w <= 0 || h <= 0) {
+        snprintf(why, whyn, "the texture is %dx%d", w, h);
+        return NULL;
+    }
     /* A guard against a client that committed something absurd, not a policy:
      * the read is one malloc of w*h*4 and this is the only place its size comes
      * from outside synui. */
-    if ((long)w * h > 64L * 1024 * 1024) return NULL;
+    if ((long)w * h > 64L * 1024 * 1024) {
+        snprintf(why, whyn, "the texture is absurdly large (%dx%d)", w, h);
+        return NULL;
+    }
 
     uint32_t fmt = wlr_texture_preferred_read_format(tex);
-    bool swap;
+    int bpp;         /* bytes per pixel the read produces */
+    bool swap;       /* its red and blue are the other way round */
     switch (fmt) {
     case DRM_FORMAT_XRGB8888:
-    case DRM_FORMAT_ARGB8888: swap = false; break;
+    case DRM_FORMAT_ARGB8888: bpp = 4; swap = false; break;
     case DRM_FORMAT_XBGR8888:
-    case DRM_FORMAT_ABGR8888: swap = true;  break;
+    case DRM_FORMAT_ABGR8888: bpp = 4; swap = true;  break;
+    /* ⚠ AND THE 24-BIT PAIR, WHICH IS WHAT AN OPAQUE BUFFER ANSWERS. The copy
+     * below is allocated in the output's swapchain format, which is XRGB8888 —
+     * no alpha bits, so GLES reports GL_RGB/GL_UNSIGNED_BYTE and wlroots names
+     * that BGR888: three bytes per pixel, not four. Declining it cost the whole
+     * measurement once already. */
+    case DRM_FORMAT_RGB888:   bpp = 3; swap = false; break;
+    case DRM_FORMAT_BGR888:   bpp = 3; swap = true;  break;
     /* Anything else declines rather than guesses — same call barscan.c makes,
      * and for the same reason: a wrong measurement is worse than none, because
      * none falls back to the picture underneath and wrong repaints the desktop
      * confidently. */
-    default: return NULL;
+    default:
+        snprintf(why, whyn, "its read format %.4s (0x%08x) is not one palette.c reads",
+                 (const char *)&fmt, fmt);
+        return NULL;
     }
 
-    size_t stride = (size_t)w * 4;
-    unsigned char *data = malloc(stride * (size_t)h);
-    if (!data) return NULL;
+    size_t read_stride = (size_t)w * (size_t)bpp;
+    unsigned char *raw = malloc(read_stride * (size_t)h);
+    if (!raw) {
+        snprintf(why, whyn, "out of memory for a %dx%d read", w, h);
+        return NULL;
+    }
 
     struct wlr_texture_read_pixels_options opts = {
-        .data    = data,
+        .data    = raw,
         .format  = fmt,
-        .stride  = (uint32_t)stride,
+        .stride  = (uint32_t)read_stride,
         .dst_x   = 0,
         .dst_y   = 0,
         .src_box = { .x = 0, .y = 0, .width = w, .height = h },
     };
     if (!wlr_texture_read_pixels(tex, &opts)) {
-        free(data);
+        snprintf(why, whyn, "the renderer would not read the texture back "
+                            "(%.4s, %dx%d)", (const char *)&fmt, w, h);
+        free(raw);
         return NULL;
     }
 
-    if (swap) {
-        for (size_t i = 0; i < stride * (size_t)h; i += 4) {
-            unsigned char t = data[i];
-            data[i] = data[i + 2];
-            data[i + 2] = t;
+    /* palette.c reads native-endian ARGB32 — B, G, R, A in memory on
+     * little-endian.
+     *
+     * ⚠ THE SWAP IS NOT OPTIONAL AND ITS ABSENCE DOES NOT FAIL. Handing a
+     * reversed buffer over measures the picture with its reds and blues
+     * exchanged, so a warm wallpaper themes the desktop cold and every check of
+     * the form "did we get a colour" still passes. */
+    size_t stride = (size_t)w * 4;
+    unsigned char *data = (bpp == 4) ? raw : malloc(stride * (size_t)h);
+    if (!data) {
+        snprintf(why, whyn, "out of memory for a %dx%d read", w, h);
+        free(raw);
+        return NULL;
+    }
+    for (int y = 0; y < h; y++) {
+        const unsigned char *src = raw + (size_t)y * read_stride;
+        unsigned char *dst = data + (size_t)y * stride;
+        for (int x = 0; x < w; x++) {
+            const unsigned char *sp = src + (size_t)x * bpp;
+            unsigned char b, g, r, a;
+            if (swap) { b = sp[2]; g = sp[1]; r = sp[0]; }
+            else      { b = sp[0]; g = sp[1]; r = sp[2]; }
+            a = bpp == 4 ? sp[3] : 0xff;
+            unsigned char *dp = dst + (size_t)x * 4;
+            dp[0] = b; dp[1] = g; dp[2] = r; dp[3] = a;
         }
     }
+    if (data != raw) free(raw);
 
     *w_out = w;
     *h_out = h;
@@ -722,21 +771,126 @@ static unsigned char *live_read_argb32(struct wlr_texture *tex,
     return data;
 }
 
+/* The measurement is a histogram over ~40k sampled pixels (palette.c), so the
+ * copy it walks does not want to be a 4K frame: at 3840x2160 that is a 33 MB
+ * malloc and a 33 MB glReadPixels, per output, per retry. Scaled to this on the
+ * long edge, the GPU does the reduction and the answer is the same one. */
+#define WP_LIVE_READ_MAX 640
+
+/*
+ * ⚠ A CLIENT'S TEXTURE IS OFTEN ONE THE COMPOSITOR CAN ONLY SAMPLE, NEVER READ.
+ *
+ * The pixels arrive as a DMA-BUF, and whether that import is a plain
+ * GL_TEXTURE_2D or a GL_TEXTURE_EXTERNAL_OES is the driver's decision, per
+ * format and modifier. NVIDIA reports LINEAR as external-only on this hardware,
+ * and scenefx's fx_texture_bind() refuses to hang an FBO off an external
+ * texture — which makes wlr_texture_preferred_read_format() answer
+ * DRM_FORMAT_INVALID and wlr_texture_read_pixels() return false, NEITHER OF
+ * THEM LOGGING ANYTHING. Reading the client's texture directly therefore worked
+ * for a wl_shm wallpaper (swaybg, and the test that shipped with 387) and
+ * failed for the real one, silently, landing back on the invisible static
+ * picture — exactly the bug 387 was supposed to have fixed.
+ *
+ * Sampling, however, is the one thing every texture can do: it is what the
+ * compositor does with this surface on every frame. So draw it into a small
+ * buffer synui owns — an ordinary render buffer, never external — and read
+ * THAT. The render pass also does the downscale for free.
+ */
+static unsigned char *live_read_argb32(syn_output_t *o, struct wlr_texture *tex,
+                                       int *w_out, int *h_out, size_t *stride_out,
+                                       char *why, size_t whyn)
+{
+    syn_server_t *s = o->server;
+    if (!s->renderer || !s->allocator) {
+        snprintf(why, whyn, "no renderer/allocator to sample it with");
+        return NULL;
+    }
+    int tw = tex->width, th = tex->height;
+    if (tw <= 0 || th <= 0) {
+        snprintf(why, whyn, "the texture is %dx%d", tw, th);
+        return NULL;
+    }
+
+    int w = tw, h = th;
+    int longest = tw > th ? tw : th;
+    if (longest > WP_LIVE_READ_MAX) {
+        w = tw * WP_LIVE_READ_MAX / longest;
+        h = th * WP_LIVE_READ_MAX / longest;
+        if (w < 1) w = 1;
+        if (h < 1) h = 1;
+    }
+
+    /* The output's own swapchain format, because that is the one already known
+     * to be both renderable and importable here — the same choice effects.c
+     * makes for its offscreen pass. Asking the renderer for a format list is
+     * not an option: wlroots 0.20 publishes only the sampling one. */
+    if (!o->wlr_output->swapchain) {
+        snprintf(why, whyn, "the output has no swapchain to borrow a format from");
+        return NULL;
+    }
+    struct wlr_buffer *dst = wlr_allocator_create_buffer(
+        s->allocator, w, h, &o->wlr_output->swapchain->format);
+    if (!dst) {
+        snprintf(why, whyn, "could not allocate a %dx%d buffer to sample into", w, h);
+        return NULL;
+    }
+
+    struct wlr_render_pass *pass =
+        wlr_renderer_begin_buffer_pass(s->renderer, dst, NULL);
+    if (!pass) {
+        snprintf(why, whyn, "could not open a render pass on the copy");
+        wlr_buffer_drop(dst);
+        return NULL;
+    }
+    /* BLEND_NONE: the wallpaper's own alpha must not mix the copy with whatever
+     * the fresh buffer happens to hold. */
+    wlr_render_pass_add_texture(pass, &(struct wlr_render_texture_options){
+        .texture     = tex,
+        .dst_box     = { .x = 0, .y = 0, .width = w, .height = h },
+        .filter_mode = WLR_SCALE_FILTER_BILINEAR,
+        .blend_mode  = WLR_RENDER_BLEND_MODE_NONE,
+    });
+    if (!wlr_render_pass_submit(pass)) {
+        snprintf(why, whyn, "the render pass onto the copy failed");
+        wlr_buffer_drop(dst);
+        return NULL;
+    }
+
+    struct wlr_texture *copy = wlr_texture_from_buffer(s->renderer, dst);
+    if (!copy) {
+        snprintf(why, whyn, "the copy could not be imported back as a texture");
+        wlr_buffer_drop(dst);
+        return NULL;
+    }
+
+    unsigned char *data = tex_read_argb32(copy, w_out, h_out, stride_out, why, whyn);
+    wlr_texture_destroy(copy);
+    wlr_buffer_drop(dst);
+    return data;
+}
+
 /* One attempt. true when this output now has an answer worth keeping. */
-static bool live_measure(syn_output_t *o)
+static bool live_measure(syn_output_t *o, char *why, size_t whyn)
 {
     syn_layer_surface_t *ls = live_wallpaper_surface(o);
-    if (!ls) return false;
+    if (!ls) {
+        snprintf(why, whyn, "no background surface covers the output");
+        return false;
+    }
 
     struct wlr_surface *surf = ls->layer_surface->surface;
     /* The wrapper wlroots made when the client attached — see the header
      * comment. Its texture is BORROWED. */
-    if (!surf->buffer || !surf->buffer->texture) return false;
+    if (!surf->buffer || !surf->buffer->texture) {
+        snprintf(why, whyn, "the surface has no %s yet",
+                 surf->buffer ? "texture" : "committed buffer");
+        return false;
+    }
 
     int w = 0, h = 0;
     size_t stride = 0;
-    unsigned char *data = live_read_argb32(surf->buffer->texture,
-                                           &w, &h, &stride);
+    unsigned char *data = live_read_argb32(o, surf->buffer->texture,
+                                           &w, &h, &stride, why, whyn);
     if (!data) return false;
 
     syn_palette_t p;
@@ -755,27 +909,38 @@ static bool live_measure(syn_output_t *o)
 static int live_tick(void *data)
 {
     syn_output_t *o = data;
+    char why[160] = "";
 
     /* Not a wallpaper after all — a background-layer surface that does not
      * cover the screen — or one that has gone away since. Nothing measured and
      * nothing published: wallpaper_live_gone() owns the going-away half, and
-     * publishing here would write a log line for every panel that ever mapped
-     * on the background layer. */
-    if (!live_wallpaper_surface(o)) return 0;
+     * an INFO line here would be one for every panel that ever mapped on the
+     * background layer. It is worth a DEBUG one, though: "the engine is
+     * running and the accent never moved" and "synui never saw a wallpaper" are
+     * the two halves of the same complaint and nothing else tells them apart. */
+    if (!live_wallpaper_surface(o)) {
+        wlr_log(WLR_DEBUG, "synui: palette: %s live tick found no background "
+                "surface covering the output", o->wlr_output->name);
+        return 0;
+    }
 
     /* Still black, or still loading its scene. Come back. */
-    if (!live_measure(o) && --o->wp_live_tries > 0) {
+    if (!live_measure(o, why, sizeof why) && --o->wp_live_tries > 0) {
         wl_event_source_timer_update(o->wp_live_timer, WP_LIVE_SETTLE_MS);
         return 0;
     }
 
     /* Three outcomes and three words, because "the desktop is not on the live
      * wallpaper's colour" has three quite different causes and this log line is
-     * where anybody asking why will look first. */
-    wlr_log(WLR_INFO, "synui: palette: %s live wallpaper measured %s",
+     * where anybody asking why will look first — with, for the unreadable case,
+     * the reason. "nothing readable" on its own was true for a month and said
+     * nothing about which of half a dozen gates the buffer fell at. */
+    wlr_log(WLR_INFO, "synui: palette: %s live wallpaper measured %s%s%s",
             o->wlr_output->name,
             !o->wp_live_have ? "nothing readable"
-                             : o->wp_live.ok ? "a hue" : "no usable hue");
+                             : o->wp_live.ok ? "a hue" : "no usable hue",
+            (!o->wp_live_have && why[0]) ? " — " : "",
+            (!o->wp_live_have && why[0]) ? why : "");
     palette_export(o->server);
     return 0;
 }

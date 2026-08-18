@@ -89,6 +89,30 @@ layer_shell_c = custom_target('wlr-layer-shell-unstable-v1-protocol.c',
   input   : layer_shell_xml,
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# The client side of the same protocol, for tests/wp_live_gl_client.c — the
+# stand-in live wallpaper that paints with the GPU. wlroots gives the compositor
+# the server half only.
+layer_shell_client_h = custom_target('wlr-layer-shell-unstable-v1-client-protocol.h',
+  output  : 'wlr-layer-shell-unstable-v1-client-protocol.h',
+  input   : layer_shell_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+# …and linux-dmabuf, for that client's `--linear` mode: the one way to hand the
+# compositor a buffer it imports as GL_TEXTURE_EXTERNAL_OES on purpose.
+linux_dmabuf_client_xml = join_paths(
+  wayland_protos.get_variable('pkgdatadir'),
+  'stable/linux-dmabuf/linux-dmabuf-v1.xml')
+
+linux_dmabuf_client_h = custom_target('linux-dmabuf-v1-client-protocol.h',
+  output  : 'linux-dmabuf-v1-client-protocol.h',
+  input   : linux_dmabuf_client_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+linux_dmabuf_client_c = custom_target('linux-dmabuf-v1-protocol.c',
+  output  : 'linux-dmabuf-v1-protocol.c',
+  input   : linux_dmabuf_client_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 # wlr-output-power-management: its wlroots header exposes the mode enum from the
 # generated protocol header, so we vendor + generate it too.
 output_power_xml = join_paths(meson.project_source_root(),
@@ -161,6 +185,9 @@ idle_inhibit_client_c = custom_target('idle-inhibit-unstable-v1-protocol.c',
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
 wayland_client = dependency('wayland-client')
+wayland_egl    = dependency('wayland-egl')   # tests/wp_live_gl_client.c only
+gbm_dep        = dependency('gbm')           # ditto: its --linear DMA-BUF mode
+libdrm_dep     = dependency('libdrm')        # ditto: drm_fourcc.h
 
 synui_exe = executable('synui',
   sources : [
@@ -1220,6 +1247,37 @@ wallpaper_live_accent = find_program('tests/wallpaper_live_accent.sh')
 test('wallpaper_live_accent', wallpaper_live_accent,
      args    : [synui_exe.full_path()],
      depends : [synui_exe],
+     timeout : 180)
+
+# `wallpaper_live_gpu_accent`: the same question asked with a GPU client, which
+# is the only kind a real live wallpaper is. swaybg commits wl_shm, imported as
+# a plain GL_TEXTURE_2D that reads back; linux-wallpaperengine commits a
+# DMA-BUF, which on NVIDIA imports as GL_TEXTURE_EXTERNAL_OES — and scenefx
+# refuses to bind those to an FBO, so BOTH wlr_texture_preferred_read_format()
+# and wlr_texture_read_pixels() fail without a word. The swaybg test passed
+# through all of that. This one runs the measurement against a client that
+# paints with EGL/GLES, so the accent has to come off a texture the compositor
+# can only sample, never read.
+wp_live_gl_client = executable('wp_live_gl_client',
+  sources : [
+    'tests/wp_live_gl_client.c',
+    layer_shell_client_h,
+    layer_shell_c,
+    linux_dmabuf_client_h,
+    linux_dmabuf_client_c,
+    # layer-shell's generated code names xdg_popup_interface (get_popup), so a
+    # client linking it needs xdg-shell's glue too — the compositor never
+    # noticed because wlroots hands it that.
+    xdg_shell_c,
+  ],
+  dependencies : [wayland_client, wayland_egl, egl, glesv2, gbm_dep, libdrm_dep],
+  build_by_default : false,
+  install : false)
+
+wallpaper_live_gpu_accent = find_program('tests/wallpaper_live_gpu_accent.sh')
+test('wallpaper_live_gpu_accent', wallpaper_live_gpu_accent,
+     args    : [synui_exe.full_path(), wp_live_gl_client.full_path()],
+     depends : [synui_exe, wp_live_gl_client],
      timeout : 180)
 
 # `postit_ink`: the note is the one widget whose content somebody typed, and on
