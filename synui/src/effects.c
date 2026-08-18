@@ -100,10 +100,10 @@ static const char *frag_fmt =
      * PH_HOT/PH_HOTMAX let a hard-driven dot outrun its own phosphor so
      * the core reads white with the tint surviving in the falloff. */
     "#define PH_GAMMA  2.2\n"
-    "#define PH_GAIN   1.9\n"
+    "#define PH_GAIN   2.4\n"
     "#define PH_HOT    0.55\n"
     "#define PH_HOTMAX 0.75\n"
-    "#define BLOOM_THRESH 0.35\n"
+    "#define BLOOM_THRESH 0.32\n"
     "varying vec2 v_uv;\n"
     "uniform %s u_tex;\n"
     "uniform float u_scan;\n"
@@ -205,7 +205,7 @@ static const char *frag_fmt =
     "                  + 0.25 * max(e3 - BLOOM_THRESH, 0.0);\n"
     "        }\n"
     "        glow *= 0.0714286;\n" /* /14 : ring weights sum to 8*(1+0.5+0.25) */
-    "        col += u_tint * glow * u_bloom * 2.2 * u_mono;\n"
+    "        col += u_tint * glow * u_bloom * 3.0 * u_mono;\n"
     "    }\n"
     "    gl_FragColor = vec4(col, g.a);\n"
     "}\n";
@@ -411,10 +411,28 @@ struct fx_params {
 
 /* The phosphor tints (RGB), indexed by syn_phosphor_t. A white pixel comes out
  * exactly this colour; darker pixels ramp toward black through it. */
+/*
+ * ⚠ These are FITTED to a reference photograph of a real tube, not taken from a
+ * phosphor datasheet, and amber deliberately departs from textbook P3 (#FFB000,
+ * g = 0.69). Measured on the mid-lit falloff — pixels with 0.30 < R < 0.70,
+ * which is where the tint actually lives, the hot core having whitened away:
+ *
+ *     reference photo   G/R 0.488   B/R 0.187
+ *     amber g=0.70      G/R 0.733   B/R 0.128   ← read as mustard/brown
+ *     amber g=0.48      G/R 0.485   B/R 0.187
+ *
+ * Because tint.r is 1.0, a screenshot's RED channel recovers the shader's own
+ * `e` exactly, so candidate tints can be re-rendered offline from any live
+ * capture and measured against the photo — no rebuild, no live compositor. That
+ * is how these numbers were reached; see project_synui_phosphor_crt_curve.
+ * Rendered G/R comes out within 0.005 of tint.g, so the table reads directly.
+ */
 static const float phosphor_tint[SYN_PHOSPHOR_COUNT][3] = {
     [SYN_PHOSPHOR_OFF]   = { 1.00f, 1.00f, 1.00f },   /* unused (mono 0) */
-    [SYN_PHOSPHOR_GREEN] = { 0.25f, 1.00f, 0.30f },   /* P1 CRT green */
-    [SYN_PHOSPHOR_AMBER] = { 1.00f, 0.70f, 0.12f },   /* P3 amber */
+    /* P1, warmed: 0.25/0.30 put more BLUE than red in it, which reads faintly
+     * minty. Real P1 sits a touch to the yellow side of green. */
+    [SYN_PHOSPHOR_GREEN] = { 0.32f, 1.00f, 0.20f },   /* P1 CRT green */
+    [SYN_PHOSPHOR_AMBER] = { 1.00f, 0.48f, 0.18f },   /* P3 amber, fitted */
     [SYN_PHOSPHOR_WHITE] = { 1.00f, 0.97f, 0.92f },   /* P4 warm white */
 };
 
