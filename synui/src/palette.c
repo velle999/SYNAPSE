@@ -128,6 +128,37 @@
  * reason there is a second one. */
 #define SECOND_MIN_DEG 55.0
 
+/* …and how much of the picture it has to BE.
+ *
+ * ⚠ THE ACCENT HAD TO PROVE ITSELF TWICE AND THE SECONDARY NOT AT ALL. The
+ * accent clears CHROMA_FLOOR and then TOP_BIN_SHARE; the secondary's only test
+ * was `bin_w[i] > 0.0`. So once the bins near the accent were excluded,
+ * WHATEVER WAS LEFT WON, however little of the image it was — and what is left
+ * on a photograph is chroma noise, a shadow, a sliver of sky.
+ *
+ * That is not a hypothetical. Measured over the shipped wallpapers, on a
+ * desktop that is 73.5% olive the clock came off a 1.96% patch of sky and on
+ * one that is 74.7% pink it came off a 1.8% sliver of gold. Both were plainly
+ * wrong to look at and neither logged anything: `secondary_measured=yes` is
+ * true of a bin holding one part in five hundred.
+ *
+ * 0.08 is not tuned, it is READ OFF THE CORPUS — the eighteen wallpapers split
+ * with nothing at all between them:
+ *
+ *     a real second colour   XP's sky 36.0%, Sanrio 21.7%, 95's 14.4%, 13.6%
+ *     ---------------------- nothing lands in here ---------------------------
+ *     noise and slivers      shire 4.3%, 3.8%, 2.7%, 2.0%, 1.8% … autumn 0.17%
+ *
+ * ⚠ SINGLE-BIN ON PURPOSE, and it costs something. A genuine second colour
+ * straddling a bin boundary is split in half and can fall under the floor —
+ * shire.png's sky is 4.2% + 4.3% across bins 13/14 and reads as 8.5% to a
+ * person. Merging neighbours would recover it and would also recover every
+ * smeared noise floor the concentration test exists to reject, which is the
+ * trade TOP_BIN_SHARE already made for the accent. Failing here means falling
+ * back to the accent's own hue, which is never WRONG, only quieter — and that
+ * is the failure worth having. */
+#define SECOND_MIN_SHARE 0.08
+
 /* The band the accent is pushed into before it is used. A wallpaper's dominant
  * hue arrives at whatever saturation and lightness the photograph had; an
  * interface colour has to be visible on a panel and not shout. These clamp
@@ -237,6 +268,54 @@ static void to_ui_band(const float in[3], double surface_lum, float out[3])
     hsv_to_rgb(h, s, v, out);
 }
 
+/* The last step every measured colour takes: darken it on a pale surface,
+ * lighten it on a dark one, until it can be read there. Split out because the
+ * accent has to finish it BEFORE the fallback secondary can be derived. */
+static void correct_for_surface(const float in[3], double surface_lum,
+                                float out[3])
+{
+    if (surface_lum > SURFACE_PALE)
+        syn_contrast_fix(in, out, surface_lum);
+    else
+        lift_to_contrast(in, surface_lum, out);
+}
+
+/*
+ * The secondary when the picture does not have one: the accent's own hue,
+ * moved only in saturation and value.
+ *
+ * ⚠ THIS REPLACED A 150° ROTATION, which invented a hue and had no way to be
+ * right. On a wallpaper that is 99.995% one pink it produced a MINT GREEN
+ * clock — a colour not within 150° of anything in the image. The argument for
+ * rotating was that a derived second colour makes a desktop "one hue smeared
+ * over it", and that argument holds for a wallpaper that HAS two colours,
+ * which is exactly the case that still measures. It does not hold for one that
+ * has a single colour: there the choice is not between two hues and one, it is
+ * between the picture's hue and a hue from nowhere.
+ *
+ * ⚠ AND IT MUST BE DERIVED FROM THE FINISHED ACCENT, NOT FED THROUGH
+ * to_ui_band(). The band clamps saturation UP to UI_S_MIN — so paling a colour
+ * and then banding it hands back the accent VERBATIM, and the clock silently
+ * becomes the icon colour with every test still passing.
+ *
+ * Direction follows the surface for the reason accent_dim's does: on a dark
+ * panel "a quieter shade of this" means paler, and on a pale one it means
+ * deeper. Corrected afterwards either way, because a pale colour on a pale
+ * panel is the one combination that stops being text.
+ */
+static void pale_of(const float in[3], double surface_lum, float out[3])
+{
+    double h, s, v;
+    rgb_to_hsv(in[0], in[1], in[2], &h, &s, &v);
+
+    s *= 0.55;
+    v = surface_lum > 0.5 ? v * 0.80 : fmin(1.0, v * 1.10);
+
+    float shade[3];
+    hsv_to_rgb(h, s, v, shade);
+    correct_for_surface(shade, surface_lum, out);
+}
+
 bool syn_palette_from_pixels(const unsigned char *data, int w, int h,
                              int stride, double surface_lum,
                              syn_palette_t *out)
@@ -317,50 +396,51 @@ bool syn_palette_from_pixels(const unsigned char *data, int w, int h,
     double acc_h, acc_s, acc_v;
     rgb_to_hsv(raw_accent[0], raw_accent[1], raw_accent[2],
                &acc_h, &acc_s, &acc_v);
+    (void)acc_s; (void)acc_v;   /* the hue is all the selection below needs */
 
     /* The secondary: the heaviest bin far enough round the wheel to read as a
      * different colour. Measured, not rotated — see the header. */
     int second = -1;
     for (int i = 0; i < HUE_BINS; i++) {
         if (bin_w[i] <= 0.0) continue;
+        /* Enough of the picture to be one of its colours — see
+         * SECOND_MIN_SHARE. Without this the heaviest REMAINING bin wins by
+         * default, and on most photographs that bin is noise. */
+        if (bin_w[i] / voted < SECOND_MIN_SHARE) continue;
         double hu = (i + 0.5) * (360.0 / HUE_BINS);
         if (hue_gap(hu, acc_h) < SECOND_MIN_DEG) continue;
         if (second < 0 || bin_w[i] > bin_w[second]) second = i;
     }
-
-    float raw_second[3];
-    if (second >= 0) {
-        raw_second[0] = (float)(bin_r[second] / bin_w[second]);
-        raw_second[1] = (float)(bin_g[second] / bin_w[second]);
-        raw_second[2] = (float)(bin_b[second] / bin_w[second]);
-        out->measured_secondary = true;
-    } else {
-        /* A single-hue wallpaper — a sunset, a plain gradient. There is no
-         * second colour in the image, so rotate rather than refuse: a panel
-         * still needs two colours, and saying so on the row it is drawn in is
-         * what `measured_secondary` is for. 150° is far enough to be plainly
-         * different without landing on the complement, which on a warm
-         * wallpaper is the one hue that looks like a mistake. */
-        hsv_to_rgb(fmod(acc_h + 150.0, 360.0), acc_s, acc_v, raw_second);
-        out->measured_secondary = false;
-    }
-
-    float band_accent[3], band_second[3];
-    to_ui_band(raw_accent, surface_lum, band_accent);
-    to_ui_band(raw_second, surface_lum, band_second);
 
     /* ⚠ THE CORRECTOR, LAST AND ALWAYS. Everything above is about what colour
      * the wallpaper IS; this is the only step that asks whether it can be read
      * on the surface it will be drawn on. Skipping it is how a pale desktop
      * ends up with a yellow accent at 1.4:1 — text that is not there at all —
      * and it is a no-op on a dark surface, so it costs the usual case nothing.
-     */
-    if (surface_lum > SURFACE_PALE) {
-        syn_contrast_fix(band_accent, out->accent, surface_lum);
-        syn_contrast_fix(band_second, out->secondary, surface_lum);
+     *
+     * The accent finishes first and alone, because the fallback secondary is
+     * derived from the FINISHED accent — see pale_of(). */
+    float band_accent[3];
+    to_ui_band(raw_accent, surface_lum, band_accent);
+    correct_for_surface(band_accent, surface_lum, out->accent);
+
+    if (second >= 0) {
+        float raw_second[3] = {
+            (float)(bin_r[second] / bin_w[second]),
+            (float)(bin_g[second] / bin_w[second]),
+            (float)(bin_b[second] / bin_w[second]),
+        };
+        float band_second[3];
+        to_ui_band(raw_second, surface_lum, band_second);
+        correct_for_surface(band_second, surface_lum, out->secondary);
+        out->measured_secondary = true;
     } else {
-        lift_to_contrast(band_accent, surface_lum, out->accent);
-        lift_to_contrast(band_second, surface_lum, out->secondary);
+        /* No second colour in the picture — a sunset, a plain gradient, or a
+         * photograph whose only other hue is a sliver. A panel still needs two
+         * colours, and saying where this one came from is what
+         * `measured_secondary` is for. */
+        pale_of(out->accent, surface_lum, out->secondary);
+        out->measured_secondary = false;
     }
 
     /* accent_dim: the accent, quieter. Derived on purpose — this one IS meant

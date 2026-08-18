@@ -150,8 +150,35 @@ static void test_secondary_differs(void)
 }
 
 /* ── 4. One hue still yields two colours, and says so ──────── */
+/*
+ * The stand-in used to be the accent's hue turned 150°, and the reason it is
+ * now a SHADE is that 150° from a wallpaper's only colour is a colour from
+ * nowhere: on a wallpaper that is 99.995% one pink it produced a mint green.
+ * So the assertion is no longer "it is different", it is "it is the same hue,
+ * and it is still legible" — which is the whole of the new contract.
+ */
 
-static void test_single_hue_rotates(void)
+static void hsv_of(const float c[3], double *h, double *s, double *v)
+{
+    double mx = fmax(c[0], fmax(c[1], c[2]));
+    double mn = fmin(c[0], fmin(c[1], c[2]));
+    double d  = mx - mn;
+    *v = mx;
+    *s = mx <= 0.0 ? 0.0 : d / mx;
+    if (d <= 0.0) { *h = 0.0; return; }
+    if      (mx == c[0]) *h = 60.0 * fmod((c[1] - c[2]) / d, 6.0);
+    else if (mx == c[1]) *h = 60.0 * ((c[2] - c[0]) / d + 2.0);
+    else                 *h = 60.0 * ((c[0] - c[1]) / d + 4.0);
+    if (*h < 0.0) *h += 360.0;
+}
+
+static double hue_apart(double a, double b)
+{
+    double d = fabs(a - b);
+    return d > 180.0 ? 360.0 - d : d;
+}
+
+static void test_single_hue_pales(void)
 {
     unsigned char *px = canvas();
     for (int y = 0; y < H; y++)                  /* a blue gradient, one hue */
@@ -163,7 +190,106 @@ static void test_single_hue_rotates(void)
 
     /* A stand-in is fine. Claiming it came off the picture is not. */
     assert(!p.measured_secondary);
-    printf("  one hue rotates, and admits it ..... ok\n");
+
+    double ah, as, av, sh, ss, sv;
+    hsv_of(p.accent, &ah, &as, &av);
+    hsv_of(p.secondary, &sh, &ss, &sv);
+
+    if (hue_apart(ah, sh) > 6.0) {
+        printf("    accent hue %.0f, secondary hue %.0f — the stand-in for a "
+               "one-colour wallpaper\n", ah, sh);
+        printf("    invented a hue the picture does not contain.\n");
+        assert(0);
+    }
+    /* Same hue is only right if it is also plainly a different SHADE —
+     * otherwise the clock has silently become the icon colour, which is what
+     * feeding it through to_ui_band() does. */
+    if (ss >= as) {
+        printf("    secondary saturation %.2f is not below the accent's %.2f "
+               "— it was banded back\n", ss, as);
+        printf("    into the accent and the two are now one colour.\n");
+        assert(0);
+    }
+    /* It is the CLOCK. It is text. */
+    if (syn_contrast(p.secondary[0], p.secondary[1], p.secondary[2], 0.05)
+        < CONTRAST_TARGET) {
+        printf("    the stand-in secondary is %.2f:1 on a dark panel\n",
+               syn_contrast(p.secondary[0], p.secondary[1], p.secondary[2],
+                            0.05));
+        assert(0);
+    }
+    free(px);
+    printf("  one hue pales, and admits it ....... ok\n");
+}
+
+/* ── 4b. A sliver is not a second colour ───────────────────── */
+/*
+ * The bug this whole floor exists for. The image is overwhelmingly one colour
+ * with a THIN band of a foreign one — a patch of sky over a hillside, a sliver
+ * of gold in a pink cartoon. Measured on the shipped wallpapers, a 1.8%-2.0%
+ * band was winning the secondary outright and painting the clock with it,
+ * because the only test it had to pass was "there is something here".
+ *
+ * ⚠ THE DISCRIMINATING PART IS WHICH COLOUR, NOT WHETHER THERE IS ONE. A test
+ * that asks "did we get a secondary" passed for the entire life of the bug.
+ */
+
+static void test_a_sliver_is_not_a_second_colour(void)
+{
+    unsigned char *px = canvas();
+    fill_rows(px, 0, H - 4, 200, 60, 90);        /* pink, ~98% of it */
+    fill_rows(px, H - 4, H, 40, 90, 220);        /* a 2% band of blue */
+
+    syn_palette_t p;
+    assert(syn_palette_from_pixels(px, W, H, W * 4, 0.05, &p));
+    assert(p.ok);
+
+    if (p.measured_secondary) {
+        printf("    a 2%% band was taken as the wallpaper's second colour "
+               "(%.2f %.2f %.2f)\n",
+               p.secondary[0], p.secondary[1], p.secondary[2]);
+        printf("    — that is the sliver of sky that made the clock blue.\n");
+        assert(0);
+    }
+    if (dominant(p.secondary) == 'b') {
+        printf("    the secondary came back blue-dominant off a 98%% pink "
+               "image\n");
+        assert(0);
+    }
+    free(px);
+    printf("  a sliver is refused, not taken ..... ok\n");
+}
+
+/* ── 4c. …and a real second colour is still taken ──────────── */
+/*
+ * The other half, and the one that stops the floor from being a way to never
+ * have a secondary at all. Stating the refusal alone would let the floor climb
+ * until every wallpaper fell back to a shade of its own accent.
+ */
+
+static void test_a_real_second_colour_survives(void)
+{
+    unsigned char *px = canvas();
+    fill_rows(px, 0, 140, 200, 60, 90);          /* pink, 70% */
+    fill_rows(px, 140, H, 40, 90, 220);          /* blue, 30% */
+
+    syn_palette_t p;
+    assert(syn_palette_from_pixels(px, W, H, W * 4, 0.05, &p));
+    assert(p.ok);
+
+    if (!p.measured_secondary) {
+        printf("    a 30%% blue field was refused as a second colour — the "
+               "floor is too high\n");
+        assert(0);
+    }
+    if (dominant(p.secondary) != 'b') {
+        printf("    30%% of the image is blue and the secondary came back "
+               "(%.2f %.2f %.2f)\n",
+               p.secondary[0], p.secondary[1], p.secondary[2]);
+        assert(0);
+    }
+    free(px);
+    printf("  a real second colour survives ...... ok\n");
 }
 
 /* ── 5. Legible on the surface it is for ───────────────────── */
@@ -420,7 +546,9 @@ int main(void)
     test_greyscale_refuses();
     test_minority_hue_wins();
     test_secondary_differs();
-    test_single_hue_rotates();
+    test_single_hue_pales();
+    test_a_sliver_is_not_a_second_colour();
+    test_a_real_second_colour_survives();
     test_corrected_for_the_surface();
     test_deterministic();
     test_bad_input();

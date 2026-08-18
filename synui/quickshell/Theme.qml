@@ -730,8 +730,20 @@ QtObject {
      *
      * The clock takes `secondary`, which palette.c measures FROM A DIFFERENT
      * PART OF THE IMAGE precisely so there is a second hue to tell states apart
-     * with. Deriving it off the accent instead — a rotation, a shade — is how a
-     * "themed" desktop ends up as one hue smeared over everything.
+     * with. Deriving it off the accent instead is how a "themed" desktop ends
+     * up as one hue smeared over everything — SO LONG AS THE PICTURE HAS A
+     * SECOND COLOUR TO MEASURE.
+     *
+     * ⚠ MOST WALLPAPERS DO NOT, and until pkgrel 390 nothing checked. The
+     * secondary was simply the heaviest hue bin far enough round the wheel,
+     * with no floor under it, so on a photograph it came off whatever was left
+     * — a sliver of sky, a shadow, chroma noise. A desktop 73.5% olive took a
+     * 1.96% patch of sky and ran a BLUE clock; one 74.7% pink took a 1.8%
+     * sliver and ran an ORANGE one. palette.c now requires a real share of the
+     * image (SECOND_MIN_SHARE) and otherwise hands back a pale shade of the
+     * accent, hue intact. `secondary_measured` in palette.state says which,
+     * and nothing here needs to branch on it: both are colours the picture
+     * actually contains.
      */
     readonly property color cyan:    root.wpAccent !== ""
         ? Qt.color(root.wpAccent)
