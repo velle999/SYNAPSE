@@ -146,7 +146,7 @@ pkgver=0.1.0
 #   ⚠ desktop-file-validate wants an X- prefix on both. Ignore it — OnlyShowIn
 #   is compared literally against XDG_CURRENT_DESKTOP, so X-SynapseOS matches
 #   nothing and the prefix would hide every entry everywhere.
-pkgrel=395
+pkgrel=396
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

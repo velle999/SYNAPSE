@@ -349,6 +349,89 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box)
  * client's LUT: a backend that cannot take the transform fails the WHOLE commit
  * otherwise, trading a colour tint for a dead output.
  */
+/*
+ * The right-edge damage trace (project_synui_right_edge_stale_strip).
+ *
+ * DP-3 intermittently keeps two stale columns at its right edge — proven to be
+ * the compositor and not the capture: a grim region that OVERHANGS the output
+ * puts the artifact at the SCREEN position and leaves the capture buffer's own
+ * end clean. Those two columns are exactly the focused window's right border
+ * ring, and deco.c draws that ring symmetrically, so the hole is in what gets
+ * damaged and re-rendered rather than in the rect.
+ *
+ * This is the measurement that separates the two remaining candidates. Every
+ * frame, ask whether the damage the scene just built actually reaches the
+ * rightmost border_width columns. Damage that systematically stops short points
+ * at the damage ring / buffer-age accounting; damage that covers the edge while
+ * the screen still shows stale pixels points at the render pass instead.
+ *
+ * What is logged is deliberately NOT "damage missed the edge": a small partial
+ * repaint away from the edge misses it every frame and is entirely correct, so
+ * that trace would print once a second forever and say nothing. The anomaly is
+ * a WIDE repaint — half the output or more — that still stops short of the last
+ * columns. That is a frame that repainted almost everything and left exactly
+ * the border ring behind, which is the shape of the artifact on screen.
+ *
+ * Always on, because the bug is intermittent and a trace nobody has switched on
+ * is a trace that is off when it happens. It costs one region query per frame
+ * and stays silent unless a wide repaint actually stops short, then at most one
+ * summary line per second per output. The counters live on syn_output_t: this
+ * function runs once per OUTPUT and a static would let three screens overwrite
+ * each other, which is how the 393 trace lied.
+ *
+ * Only the plain path is instrumented. effects.c commits whole-output damage
+ * every frame by construction, so the CRT filter masks this bug entirely —
+ * which is also the workaround.
+ */
+static void edge_damage_trace(syn_output_t *output,
+                              const struct wlr_output_state *st)
+{
+    struct wlr_output *wo = output->wlr_output;
+    int bw = output->server->config.border_width;
+    if (bw <= 0) return;
+
+    int w = 0, h = 0;
+    wlr_output_transformed_resolution(wo, &w, &h);
+    if (w <= bw || h <= 0) return;
+
+    /* No damage field committed means the whole buffer is damaged. */
+    int short_by = 0;
+    bool covered = true, wide = false;
+    if (st->committed & WLR_OUTPUT_STATE_DAMAGE) {
+        pixman_box32_t edge = { .x1 = w - bw, .y1 = 0, .x2 = w, .y2 = h };
+        covered = pixman_region32_contains_rectangle(
+                      (pixman_region32_t *)&st->damage, &edge) == PIXMAN_REGION_IN;
+        const pixman_box32_t *ext =
+            pixman_region32_extents((pixman_region32_t *)&st->damage);
+        wide = (ext->x2 - ext->x1) * 2 >= w && (ext->y2 - ext->y1) * 2 >= h;
+        short_by = w - ext->x2;
+    }
+
+    if (covered) {
+        output->edge_dmg_hit++;
+    } else if (wide) {
+        output->edge_dmg_miss++;
+        if (short_by == bw) output->edge_dmg_full++;
+    } else {
+        return;                 /* a small repaint away from the edge: normal */
+    }
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int64_t ms = (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    if (output->edge_dmg_miss == 0) { output->edge_dmg_log_ms = ms; return; }
+    if (ms - output->edge_dmg_log_ms < 1000) return;
+    output->edge_dmg_log_ms = ms;
+
+    wlr_log(WLR_INFO, "synui: edge-damage: %s %dx%d bw=%d — %u WIDE repaint(s) "
+            "stopped short of the last %d column(s) (%u of them by exactly %d px), "
+            "%u frame(s) reached the edge; this frame short by %d, buffer %p",
+            wo->name, w, h, bw, output->edge_dmg_miss, bw,
+            output->edge_dmg_full, bw, output->edge_dmg_hit,
+            short_by, (void *)st->buffer);
+    output->edge_dmg_hit = output->edge_dmg_miss = output->edge_dmg_full = 0;
+}
+
 static void scene_commit_nightlight(syn_output_t *output)
 {
     struct wlr_scene_output *scene_output = output->scene_output;
@@ -367,6 +450,7 @@ static void scene_commit_nightlight(syn_output_t *output)
         wlr_output_state_finish(&state);
         return;
     }
+    edge_damage_trace(output, &state);
 
     /* NULL is night light off, and committing it is how the screen gets its
      * colour back — an identity transform every backend can honour. */

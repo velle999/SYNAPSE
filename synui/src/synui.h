@@ -4783,6 +4783,17 @@ struct syn_output {
      * was switched off. */
     int                      nightlight_temp;
 
+    /* synui_main.c: the right-edge damage trace. Per OUTPUT, never a function
+     * static — the commit path runs once per output and a shared static would
+     * make three screens overwrite each other's counts (the 393 trace did
+     * exactly that). See project_synui_right_edge_stale_strip. */
+    uint32_t                 edge_dmg_hit;    /* frames whose damage reached the
+                                               * rightmost border_width columns */
+    uint32_t                 edge_dmg_miss;   /* frames whose damage stopped short */
+    uint32_t                 edge_dmg_full;   /* of those misses, how many were
+                                               * whole-output damage anyway */
+    int64_t                  edge_dmg_log_ms; /* last summary, CLOCK_MONOTONIC ms */
+
     /* wallpaper.c: this output's painted background, parented under
      * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
     struct wlr_scene_buffer *wallpaper_buf;
