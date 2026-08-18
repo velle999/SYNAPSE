@@ -213,14 +213,62 @@ static bool barscan_dbg(void)
     return on == 1;
 }
 
-/* Which strip column leaf_lum_run is being asked about, so its own bails can
- * name one. -1 while the grid scan runs, which does not trace. */
-static int g_dbg_col = -1;
+/*
+ * ⚠ THE STATE IS PER OUTPUT, BECAUSE THE SCAN IS.
+ *
+ * scan_strip() runs once per screen, and one shared prev[] made each screen's
+ * answer overwrite the one before it: on a three-monitor desktop every line
+ * printed as a CHANGE, the heartbeat never fired once in a whole session, and
+ * the log alternated "col N -> 0.236" / "col N -> nothing" every 400 ms with
+ * nothing on any screen moving. A trace whose lines cannot be attributed to a
+ * screen is worse than no trace, so the lines name one too.
+ *
+ * Slots are matched by output pointer and never freed. A trace owns no
+ * lifetimes: an address reused by a later output costs one spurious first line,
+ * which is the right price. Past BARSCAN_DBG_SLOTS screens the extra ones do
+ * not trace, which is a limit no desk reaches.
+ */
+#define BARSCAN_DBG_SLOTS 8
+
+struct barscan_dbg {
+    const syn_output_t *o;
+    double prev[BARSCAN_COLS];
+    int    beat;
+};
+
+static struct barscan_dbg *dbg_for(const syn_output_t *o)
+{
+    static struct barscan_dbg slots[BARSCAN_DBG_SLOTS];
+    static int used;
+
+    for (int i = 0; i < used; i++)
+        if (slots[i].o == o) return &slots[i];
+    if (used >= BARSCAN_DBG_SLOTS) return NULL;
+
+    struct barscan_dbg *d = &slots[used++];
+    d->o = o;
+    d->beat = 0;
+    /* -2 is "nothing has been reported for this column yet", which is neither a
+     * luminance nor the -1 that means the wallpaper answers. */
+    for (int i = 0; i < BARSCAN_COLS; i++) d->prev[i] = -2.0;
+    return d;
+}
+
+static const char *out_name(const syn_output_t *o)
+{
+    return o && o->wlr_output && o->wlr_output->name ? o->wlr_output->name : "?";
+}
+
+/* Which strip column leaf_lum_run is being asked about, and on which screen, so
+ * its own bails can name both. -1 while the grid scan runs, which does not
+ * trace. */
+static int         g_dbg_col = -1;
+static const char *g_dbg_out = "?";
 
 #define BARSCAN_BAIL(reason, ...) do { \
     if (barscan_dbg() && g_dbg_col >= 0) \
-        wlr_log(WLR_INFO, "synui: barscan: col %d declined: " reason, \
-                g_dbg_col, ##__VA_ARGS__); \
+        wlr_log(WLR_INFO, "synui: barscan: %s col %d declined: " reason, \
+                g_dbg_out, g_dbg_col, ##__VA_ARGS__); \
 } while (0)
 
 static double lum_premult_over(double src, double scale, double alpha,
@@ -270,6 +318,23 @@ static bool leaf_box(struct wlr_scene_node *n, struct wlr_box *out)
 }
 
 /*
+ * ⚠ A RECT THAT PAINTS NOTHING HERE IS NOT WHAT IS UNDER THE BAR.
+ *
+ * A rect's clipped_region is a render-time cutout, and a walk that stops at the
+ * node's box cannot see it — so deco.c's border rect, which is the size of the
+ * whole frame with the content clipped out, answered for every point inside
+ * every window. The strip probes the middle of a 34px band at the top of the
+ * screen; a window's own border and titlebar are 28px, nothing above the border
+ * covers that row, and the bar spent a whole session inking itself off its own
+ * chrome instead of the window. syn_clip_hides() carries the geometry and the
+ * rest of that story.
+ */
+static bool rect_clipped_out(const struct wlr_scene_rect *r, int rx, int ry)
+{
+    return syn_clip_hides(&r->clipped_region, rx, ry);
+}
+
+/*
  * The first leaf at (lx,ly) walking this subtree top-first, or NULL.
  *
  * Deliberately NOT wlr_scene_node_at(): that one starts at the scene root and
@@ -297,7 +362,15 @@ static struct wlr_scene_node *leaf_at(struct wlr_scene_node *n, int lx, int ly)
 
     struct wlr_box box;
     if (!leaf_box(n, &box)) return NULL;
-    return wlr_box_contains_point(&box, lx, ly) ? n : NULL;
+    if (!wlr_box_contains_point(&box, lx, ly)) return NULL;
+
+    /* A rect that paints nothing here is not what is under the bar; keep
+     * walking. See rect_clipped_out() for what this costs and what it fixes. */
+    if (n->type == WLR_SCENE_NODE_RECT) {
+        struct wlr_scene_rect *r = wl_container_of(n, r, node);
+        if (rect_clipped_out(r, lx - box.x, ly - box.y)) return NULL;
+    }
+    return n;
 }
 
 /*
@@ -414,6 +487,21 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
 
     if (n->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *r = wl_container_of(n, r, node);
+        /* Which rect, in the terms that identify it: the colour IS the name —
+         * 0.032 is Prism's border_norm and nothing else — and the clip says
+         * whether it paints where it was asked. Symmetric with the buffer
+         * geometry line below, and for the same reason: a number with no
+         * provenance is what let the bar read its own chrome for four
+         * releases. */
+        if (barscan_dbg() && g_dbg_col >= 0)
+            wlr_log(WLR_INFO,
+                    "synui: barscan: %s col %d rect rgba %.3f %.3f %.3f %.3f "
+                    "box %d,%d %dx%d clip %d,%d %dx%d",
+                    g_dbg_out, g_dbg_col, r->color[0], r->color[1],
+                    r->color[2], r->color[3], box.x, box.y, box.width,
+                    box.height, r->clipped_region.area.x,
+                    r->clipped_region.area.y, r->clipped_region.area.width,
+                    r->clipped_region.area.height);
         /* scene rect colours are straight sRGB 0..1, so they go through the
          * same linearisation the pixel path does — just without the 0..255
          * lookup table, which is what syn_srgb_lut is. Straight and not
@@ -580,9 +668,9 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
 
     if (barscan_dbg() && g_dbg_col >= 0)
         wlr_log(WLR_INFO,
-                "synui: barscan: col %d read buf %dx%d dst %dx%d scale %.3fx%.3f "
-                "src %d,%d %dx%d node %d,%d %dx%d opacity %.2f",
-                g_dbg_col, sb->buffer->width, sb->buffer->height,
+                "synui: barscan: %s col %d read buf %dx%d dst %dx%d scale "
+                "%.3fx%.3f src %d,%d %dx%d node %d,%d %dx%d opacity %.2f",
+                g_dbg_out, g_dbg_col, sb->buffer->width, sb->buffer->height,
                 sb->dst_width, sb->dst_height, sx, sy,
                 src.x, src.y, src.width, src.height,
                 box.x, box.y, box.width, box.height, sb->opacity);
@@ -648,12 +736,11 @@ static double wp_cell(const syn_output_t *o, int r, int c)
 static void scan_strip(syn_server_t *s, syn_output_t *o,
                        const struct wlr_box *ob)
 {
-    /* What the trace last reported, per column, so it can stay quiet while
-     * nothing moves. Debug-only, one output's worth: with the trace off it is
-     * never read, and with it on the interesting machine has one screen whose
-     * bar is wrong. */
-    static double dbg_prev[BARSCAN_COLS] = { [0 ... BARSCAN_COLS - 1] = -2.0 };
-    static int    dbg_beat;
+    /* What the trace last reported for THIS output, per column, so it can stay
+     * quiet while nothing moves. NULL with the trace off, and every line below
+     * is guarded on it. */
+    struct barscan_dbg *dbg = barscan_dbg() ? dbg_for(o) : NULL;
+    const char *on = out_name(o);
 
     int strip = SYN_BAR_STRIP_LOGICAL;
     if (strip > ob->height) strip = ob->height;
@@ -675,11 +762,23 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
         struct wlr_scene_node *n =
             leaf_under_shell(s, (x0 + x1) / 2, top + strip / 2);
         if (!n) {
-            /* nothing of ours here — the wallpaper answers */
-            if (barscan_dbg() && dbg_prev[c] >= -0.5) {
-                wlr_log(WLR_INFO, "synui: barscan: col %d -> nothing over the "
-                                  "wallpaper (was %.3f)", c, dbg_prev[c]);
-                dbg_prev[c] = -1.0;
+            /* nothing of ours here — the wallpaper answers.
+             *
+             * ⚠ THIS BRANCH HEARTBEATS TOO. It used to print on the transition
+             * alone, so once every column on every screen had settled to
+             * "nothing" the trace went silent — and a silent trace cannot be
+             * told from a scan that has stopped running, which is the one state
+             * a change-only trace was supposed not to hide. */
+            if (dbg) {
+                bool moved = dbg->prev[c] >= -0.5;
+                if (moved)
+                    wlr_log(WLR_INFO, "synui: barscan: %s col %d -> nothing "
+                                      "over the wallpaper (was %.3f)",
+                            on, c, dbg->prev[c]);
+                else if (dbg->beat == 0)
+                    wlr_log(WLR_INFO, "synui: barscan: %s col %d still nothing "
+                                      "over the wallpaper [heartbeat]", on, c);
+                if (moved) dbg->prev[c] = -1.0;
             }
             continue;
         }
@@ -689,27 +788,29 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
         /* The strip's own, folded — live-aware for the same reason wp_cell is. */
         if (!(back >= 0.0)) back = wallpaper_strip_lum(o);
 
-        g_dbg_col = barscan_dbg() ? c : -1;
+        g_dbg_col = dbg ? c : -1;
+        g_dbg_out = on;
         double lum = leaf_lum(s, n, &want, back);
         g_dbg_col = -1;
+        g_dbg_out = "?";
 
         if (lum >= 0.0) o->bar_strip_lum[c] = lum;
 
         /* On a CHANGE, and on a heartbeat. A column stuck on a wrong number is
          * the failure being chased, and a trace that only fires on change would
          * go silent for exactly the state worth seeing. */
-        if (barscan_dbg()) {
-            bool moved = !(fabs(lum - dbg_prev[c]) < 0.005);
-            if (moved || dbg_beat == 0)
+        if (dbg) {
+            bool moved = !(fabs(lum - dbg->prev[c]) < 0.005);
+            if (moved || dbg->beat == 0)
                 wlr_log(WLR_INFO,
-                        "synui: barscan: col %d %s %.3f (backdrop %.3f, node "
-                        "type %d)%s", c, moved ? "->" : "still", lum, back,
+                        "synui: barscan: %s col %d %s %.3f (backdrop %.3f, node "
+                        "type %d)%s", on, c, moved ? "->" : "still", lum, back,
                         (int)n->type, moved ? "" : " [heartbeat]");
-            if (moved) dbg_prev[c] = lum;
+            if (moved) dbg->prev[c] = lum;
         }
     }
 
-    if (barscan_dbg() && ++dbg_beat >= BARSCAN_DBG_BEAT) dbg_beat = 0;
+    if (dbg && ++dbg->beat >= BARSCAN_DBG_BEAT) dbg->beat = 0;
 }
 
 /*

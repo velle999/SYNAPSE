@@ -4149,6 +4149,64 @@ static inline bool syn_glass_active(const syn_config_t *cfg)
 }
 
 /*
+ * Does a rect's clipped_region HIDE the point (rx,ry), node-local?
+ *
+ * ⚠ A clipped_region IS A RENDER-TIME CUTOUT AND NOTHING ELSE KNOWS IT.
+ * wlr_scene_node_at() reports a hit anywhere in the node's box, and so does any
+ * hand-rolled walk that stops at the box — which is how a window's border came
+ * to answer for the whole window. deco.c draws that border as ONE rect the size
+ * of the frame with the content clipped out, leaving a ring border_width thick:
+ * box the whole window, paint a hairline round the edge.
+ *
+ * deco.c handles the input side by lowering the border to the bottom of the
+ * frame, and says so where it does it. That works where something above covers
+ * the point and fails where nothing does — the 28px of border and titlebar at a
+ * window's top, which is exactly the strip a top bar sits over. barscan.c read
+ * the border's COLOUR there for a row the border does not paint, so the bar
+ * inked itself off its own chrome (measured 2026-08-18: a whole session of
+ * strip values with not one window buffer among them, 0.032 being Prism's
+ * border_norm to three decimals).
+ *
+ * Here rather than in barscan.c because the geometry is the testable half and
+ * the scene walk is not: clipbox_test.c asks this function the same question
+ * the scan asks it.
+ */
+static inline bool syn_clip_hides(const struct clipped_region *cr,
+                                  int rx, int ry)
+{
+    const struct wlr_box *a = &cr->area;
+    if (a->width <= 0 || a->height <= 0) return false;   /* nothing clipped */
+    if (rx < a->x || ry < a->y ||
+        rx >= a->x + a->width || ry >= a->y + a->height) return false;
+
+    /* The cutout's corners are ROUNDED, so a point inside a corner's square but
+     * outside its quarter-circle is still painted — that is the ring thickening
+     * round the curve, and calling it hidden would put the scan back on the
+     * wallpaper for the few pixels where the border is at its widest. */
+    const struct fx_corner_radii *c = &cr->corners;
+    const struct { int cx, cy, rad; bool left, top; } q[4] = {
+        { a->x + c->top_left,
+          a->y + c->top_left,                     c->top_left,     true,  true  },
+        { a->x + a->width  - 1 - c->top_right,
+          a->y + c->top_right,                    c->top_right,    false, true  },
+        { a->x + a->width  - 1 - c->bottom_right,
+          a->y + a->height - 1 - c->bottom_right, c->bottom_right, false, false },
+        { a->x + c->bottom_left,
+          a->y + a->height - 1 - c->bottom_left,  c->bottom_left,  true,  false },
+    };
+    for (int i = 0; i < 4; i++) {
+        if (q[i].rad <= 0) continue;
+        if ((q[i].left ? rx < q[i].cx : rx > q[i].cx) &&
+            (q[i].top  ? ry < q[i].cy : ry > q[i].cy)) {
+            long dx = rx - q[i].cx, dy = ry - q[i].cy;
+            if (dx * dx + dy * dy > (long)q[i].rad * q[i].rad)
+                return false;
+        }
+    }
+    return true;
+}
+
+/*
  * Does this desktop measure what is ACTUALLY behind a see-through surface, or
  * only the wallpaper? See scene_ink for why this is not a resolved `auto`.
  *

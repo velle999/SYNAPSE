@@ -587,6 +587,19 @@ test('deskdrop', deskdrop_test)
 # The row/column arithmetic every panel's pointer handler sits on. Pure
 # geometry, so it needs no compositor at all — but it does need synui.h, which
 # drags in wlroots and cairo for their types.
+# A rect's clipped_region is a RENDER-time cutout, and barscan.c's walk had no
+# way to know it: deco.c's border is one rect the size of the whole frame with
+# the content clipped out, so it answered for every point inside every window
+# and the bar inked itself off its own chrome. Pure geometry, same as hit_test —
+# synui.h carries the function, this says it still agrees with the paint.
+clipbox_test = executable('clipbox_test',
+  ['tests/clipbox_test.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('clipbox', clipbox_test)
+
 hit_test = executable('hit_test',
   ['tests/hit_test.c', 'src/hit.c'],
   include_directories : include_directories('src'),
