@@ -1,11 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- syn-edit — a sheet of text with a block caret on it.
-
-     The block caret is the whole point: it is what a modal editor looks like,
-     and it distinguishes this from every other document icon at a glance. In
-     the dendrite purple the rest of the suite uses (#a78bfa), so syn-edit,
-     synfiles and syn-disks read as one family in the dock. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- ⚠ This comment lives INSIDE <svg>, and every comment in this file has
+       to stay here. gdk-pixbuf identifies an image by SNIFFING ITS FIRST 256
+       BYTES for a format signature, and librsvg's signature is the literal
+       "<svg". A header comment before the root element pushes "<svg" past
+       byte 256, and the file stops being an SVG as far as GTK is concerned:
+
+         gdk-pixbuf-error-quark: Couldn't recognize the image file format
+
+       Not a parse error and not a warning — a blank square in the GNOME app
+       grid, which is exactly what this icon was until 2026-08-18. It never
+       showed on synui or KDE, because Qt parses the XML properly instead of
+       sniffing it, so the whole class of bug is invisible on a Qt desktop.
+       tools/preflight.sh checks the byte offset on every commit. -->
+  <!-- syn-edit — a sheet of text with a block caret on it.
+
+       The block caret is the whole point: it is what a modal editor looks like,
+       and it distinguishes this from every other document icon at a glance. In
+       the dendrite purple the rest of the suite uses (#a78bfa), so syn-edit,
+       synfiles and syn-disks read as one family in the dock. -->
   <!-- the sheet -->
   <path d="M11 5h18l8 8v30a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"
         fill="#2a2438" stroke="#a78bfa" stroke-width="2" stroke-linejoin="round"/>

@@ -1,15 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- syntty — a terminal window with a prompt and a block cursor.
-
-     The prompt chevron and the block cursor are the whole drawing: they are
-     what a terminal looks like from across a room, and together they read as
-     "a place you type" rather than as another dark rectangle. In the dendrite
-     purple the rest of the suite uses (#a78bfa), so syntty, syn-edit, synfiles
-     and syn-disks sit in the dock as one family.
-
-     The title bar is thinner than a real one on purpose: at 22 px in a menu
-     the window frame has to survive, and a two-pixel bar disappears. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- ⚠ This comment lives INSIDE <svg>, and every comment in this file has
+       to stay here. gdk-pixbuf identifies an image by SNIFFING ITS FIRST 256
+       BYTES for a format signature, and librsvg's signature is the literal
+       "<svg". A header comment before the root element pushes "<svg" past
+       byte 256, and the file stops being an SVG as far as GTK is concerned:
+
+         gdk-pixbuf-error-quark: Couldn't recognize the image file format
+
+       Not a parse error and not a warning — a blank square in the GNOME app
+       grid, which is exactly what this icon was until 2026-08-18. It never
+       showed on synui or KDE, because Qt parses the XML properly instead of
+       sniffing it, so the whole class of bug is invisible on a Qt desktop.
+       tools/preflight.sh checks the byte offset on every commit. -->
+  <!-- syntty — a terminal window with a prompt and a block cursor.
+
+       The prompt chevron and the block cursor are the whole drawing: they are
+       what a terminal looks like from across a room, and together they read as
+       "a place you type" rather than as another dark rectangle. In the dendrite
+       purple the rest of the suite uses (#a78bfa), so syntty, syn-edit, synfiles
+       and syn-disks sit in the dock as one family.
+
+       The title bar is thinner than a real one on purpose: at 22 px in a menu
+       the window frame has to survive, and a two-pixel bar disappears. -->
   <!-- the window -->
   <rect x="5" y="8" width="38" height="32" rx="3"
         fill="#2a2438" stroke="#a78bfa" stroke-width="2"/>

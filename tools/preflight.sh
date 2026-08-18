@@ -752,6 +752,74 @@ check_order() {
     return 0
 }
 
+# ── Check 8: an icon GTK cannot see ──────────────────────────
+#
+# gdk-pixbuf identifies an image by SNIFFING THE FIRST 256 BYTES of the file
+# for a format signature, and librsvg registers the literal "<svg" as its own.
+# An SVG whose root element starts after byte 256 — which is what a long
+# explanatory header comment before <svg> does — is not recognised as an image
+# at all:
+#
+#   gdk-pixbuf-error-quark: Couldn't recognize the image file format
+#
+# The failure is silent and desktop-specific, which is what made it expensive.
+# Qt parses the XML properly instead of sniffing it, so on synui and on KDE
+# every one of these icons drew perfectly; under GNOME the same file was a
+# blank square in the app grid. Five shipped icons were in that state on ISO
+# 0.2.9 — syn-settings, syn-arcade, syntty, syn-disks and syn-edit — and the
+# house style of a documented header comment is exactly what put them there,
+# so the rule needs enforcing rather than remembering.
+#
+# The fix is never to delete the comment: move it INSIDE <svg>, which is where
+# synfiles.svg had it all along and why synfiles was the one that worked.
+#
+# Only icons that get INSTALLED are checked. A working-file SVG nothing ships
+# is not a bug, and failing on one would teach people to skip this script.
+
+check_icons() {
+    local f off base bad=$FINDINGS n=0 icons=""
+
+    # Exactly the SVGs some .desktop points at as its icon — not every SVG in
+    # the tree. Two of them are installed from a PKGBUILD rather than living
+    # under data/, so a path glob missed them; and the tree also holds SVGs
+    # that are never icons at all, including one that is a QML file wearing a
+    # .svg extension (synui's Qt VectorImage assets) and syn-arcade's tile art,
+    # which quickshell renders directly. Failing on those would be noise, and
+    # noise is what teaches people to skip this script.
+    icons=" $(git ls-files '*.desktop' | xargs -r grep -h '^Icon=' \
+              | cut -d= -f2- | tr -d '\r' | sort -u | tr '\n' ' ') "
+
+    while IFS= read -r f; do
+        base=${f##*/}; base=${base%.svg}
+        case "$icons" in *" $base "*) ;; *) continue ;; esac
+        n=$((n + 1))
+
+        # The byte offset of "<svg", or nothing when the file has no root at
+        # all (a gzipped .svg, or something that is not an SVG despite the
+        # name — both of which gdk-pixbuf also declines).
+        off=$(LC_ALL=C grep -abo -m1 '<svg' "$f" | cut -d: -f1)
+        if [ -z "$off" ]; then
+            fail icons "$f is named as an icon but has no <svg> element" \
+                "Either it is gzipped or it is not an SVG. gdk-pixbuf declines" \
+                "it either way and the app shows a blank icon on GTK desktops."
+            continue
+        fi
+        [ "$off" -le 255 ] && continue
+        fail icons "$f starts <svg> at byte $off — GTK will not read it" \
+            "gdk-pixbuf sniffs only the first 256 bytes for the format" \
+            "signature, so this file is 'unrecognized' and the icon is BLANK" \
+            "in the GNOME app grid. It still draws on synui and KDE, because" \
+            "Qt parses the XML rather than sniffing it — which is why this" \
+            "shipped." \
+            "Fix: move the header comment INSIDE the <svg> element, as" \
+            "synfiles/data/synfiles.svg does. Do not delete it."
+    done < <(git ls-files '*.svg')
+
+    [ "$FINDINGS" -eq "$bad" ] && ok icons \
+        "$n app icon(s) — every root element is inside gdk-pixbuf's sniff window"
+    return 0
+}
+
 # ── Run ──────────────────────────────────────────────────────
 
 case "$MODE" in
@@ -766,6 +834,7 @@ check_iso
 check_installer
 check_pkgver
 check_order
+check_icons
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \
