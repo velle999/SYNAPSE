@@ -657,6 +657,19 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wlr_output->data = output;
     wl_list_init(&output->layer_surfaces);
 
+    /* ⚠ -1 IS "NOT MEASURED" AND calloc GIVES 0.0, WHICH IS "BLACK". Every one
+     * of these is filled before anything reads it in the ordinary case — the
+     * wallpaper on the paint below, the scan on its first tick — but the
+     * ordinary case is not the one that matters: a wallpaper that has not
+     * painted yet (no resolution, no buffer) leaves the grid exactly as it was
+     * found, and barscan.c composites a see-through window against it. A cell
+     * of 0.0 says "this window is over black" and inks confidently backwards;
+     * -1 says "I cannot see", which every consumer already handles. */
+    output->wp_top_lum = -1.0;
+    for (int i = 0; i < SYN_LUM_CELLS; i++)     output->wp_lum_grid[i] = -1.0;
+    for (int i = 0; i < SYN_LUM_CELLS; i++)     output->scene_lum[i]   = -1.0;
+    for (int i = 0; i < SYN_LUM_COLS; i++)  output->bar_strip_lum[i]   = -1.0;
+
     /* Seed the dispcfg grid cell from connection order — one row, in the
      * order outputs were plugged in — matching wlr_output_layout_add_auto's
      * left-to-right placement below. The display panel (Super+D) is where

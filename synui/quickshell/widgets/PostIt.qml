@@ -46,6 +46,23 @@ WidgetFrame {
     accent: Theme.yellow
     interactive: true
 
+    /*
+     * The writing goes on whatever this card turns out to be sitting on, rather
+     * than on the theme's idea of a surface — see inkOnBackdrop in WidgetFrame.
+     *
+     * This is the widget that needed it. A note is a paragraph of body text at
+     * 12px, it is the only thing on the desktop the user wrote themselves, and
+     * with the dock at 0.00 its card is not a card at all: the words are on the
+     * wallpaper, in an ink the theme picked to sit on a pane that is not there.
+     * On macOS 26 that ink is #1D1D1F and the note goes dark-on-dark.
+     *
+     * The ACCENT is deliberately left alone. Yellow is what says "note" — it is
+     * the header tag, the rule and the + — and it is a colour with a meaning
+     * rather than ink on a surface, the same reason the bar keeps a red battery
+     * red on a clear strip.
+     */
+    inkOnBackdrop: true
+
     // Bottom-left is the one corner nothing else claims: the quick-launch strip
     // is top-left, the system monitor top-right, the big clock bottom-right.
     // Notes cascade up and to the right from there — see PostItState.
@@ -84,7 +101,7 @@ WidgetFrame {
         anchors { top: parent.top; left: parent.left; right: parent.right; bottom: foot.top }
         anchors.bottomMargin: 4
         text: root.empty ? "click to write something" : root.text
-        color: root.empty ? Theme.fgDim : Theme.fg
+        color: root.empty ? root.inkDim : root.ink
         font.family: Theme.fontFamily
         font.pixelSize: 12
         lineHeight: 16
@@ -113,7 +130,7 @@ WidgetFrame {
         text: plus.hovered ? plus.hint
             : del.hovered  ? del.hint
             : hover.containsMouse ? "click to edit" : ""
-        color: Theme.fgDim
+        color: root.inkDim
         font.family: Theme.fontFamily
         font.pixelSize: 9
         elide: Text.ElideRight
@@ -149,7 +166,7 @@ WidgetFrame {
             // terminal.
             visible: PostItState.ids.length > 1
             glyph: root.armed ? "!" : "×"
-            tint: root.armed ? Theme.red : Theme.fgDim
+            tint: root.armed ? Theme.red : root.inkDim
             hint: root.armed ? "again to delete" : "delete this note"
             onActivated: {
                 // Two presses, because this throws away something only the user

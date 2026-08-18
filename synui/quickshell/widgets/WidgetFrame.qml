@@ -164,6 +164,82 @@ PanelWindow {
     // through.
     property bool interactive: false
 
+    /* ── Ink, off what this card is actually sitting on ──────────────────────
+     *
+     * Opt-in, and the post-it is the one that asks. Everything else on this
+     * desktop that can reach clear — the bar per module, the start menu, the
+     * bar's own menus, the mixer, the OSD — chooses its ink from a measurement
+     * of what is behind it rather than from the theme, because a theme's ink is
+     * chosen against the theme's own surface and a card at `widgetAlpha` 0.00
+     * has no surface: it is text on the wallpaper. macOS 26 is #1D1D1F on
+     * whatever the picture is, which on a dark wallpaper is a note you cannot
+     * read, and the desktop's dock opacity is all it takes to get there.
+     *
+     * ⚠ WHY IT IS A SWITCH AND NOT SIMPLY WHAT WIDGETS DO. A backdrop is only
+     * worth asking for where the answer can change something. The visualiser
+     * has no card and no text; the clock, the monitor and the quick-launch draw
+     * their own accent-coloured readouts, which are not the theme's ink and
+     * would need a colour rule of their own rather than this one. The note is
+     * the widget whose content is a paragraph of body text somebody typed, and
+     * it is the one velle asked for. The rest can turn it on a line at a time.
+     *
+     * ⚠ AND THE BACKDROP IS THE WALLPAPER, NOT THE SCENE, WITHOUT THIS FILE
+     * DOING ANYTHING ABOUT IT. Widgets are on BOTTOM: every window is above
+     * them, so a cell of `scene.<output>` that reports a window is a cell where
+     * this card is covered and nobody is reading it anyway. barscan.c prunes the
+     * BOTTOM layer from its own walk for the other half of that — a card must
+     * never measure itself — so what is left for an uncovered widget is the
+     * wallpaper's own grid, which is exactly the question being asked.
+     */
+    property bool inkOnBackdrop: false
+
+    /*
+     * Where the card is on the SCREEN, which is what Theme.backdropFor folds.
+     *
+     * Derived from the resting anchors rather than from `card.x/y`, which are
+     * surface-local and only meaningful mid-drag. So the answer follows a widget
+     * to wherever it is dropped — commitDrag writes the layout, mx/my re-derive,
+     * this re-evaluates — and simply does not chase it during the gesture, which
+     * is the one time nobody is reading the note.
+     *
+     * ⚠ MEASURED IN THE USABLE AREA, WHICH IS THE SCREEN MINUS THE BAR. The
+     * margins are, so this inherits it: a top-anchored widget is really the
+     * bar's height further down than this says. A grid cell is a ninth of the
+     * screen and the bar is a fortieth of it, so it changes the cell only for a
+     * widget within a few pixels of a row boundary — and the fold is over the
+     * cells the card covers, which for a card this tall is two rows either way.
+     */
+    readonly property int cardScreenX: !win.screenData ? 0
+        : win.fillWidth        ? 0
+        : win.edgeH === "left" ? win.mx
+                               : Math.max(0, win.screenData.width - win.cardWidth - win.mx)
+    readonly property int cardScreenY: !win.screenData ? 0
+        : win.edgeV === "top"  ? win.my
+                               : Math.max(0, win.screenData.height - win.cardHeight - win.my)
+
+    // null — not a zero backdrop — for a widget that has not asked, because
+    // that is what every Theme function below reads as "no measurement, keep
+    // what the theme said". A widget that has not opted in is untouched by all
+    // of this, down to the alpha its card paints at.
+    readonly property var backdrop: (win.inkOnBackdrop && win.screenData)
+        ? Theme.backdropFor(win.screenData, win.cardScreenX, win.cardScreenY,
+                            win.fillWidth ? win.screenData.width : win.cardWidth,
+                            win.cardHeight)
+        : null
+
+    /*
+     * The alpha the card actually paints at, and the alpha its ink is judged
+     * against — one number, so the two cannot come apart.
+     *
+     * The HUD frame is an opaque gradient whatever `widgetAlpha` says, so on a
+     * non-glass card the surface is 1.0 and the theme's ink is the right ink by
+     * construction. Glass is where the question exists.
+     */
+    readonly property real surfaceAlpha: Theme.widgetAlphaOn(win.backdrop)
+    readonly property color ink:    Theme.inkOn(win.backdrop,
+                                                win.glass ? win.surfaceAlpha : 1.0)
+    readonly property color inkDim: Theme.dimOf(win.ink)
+
     // ── Position ─────────────────────────────────────────
     // A stored position wins over the home one, and only for a widget that has
     // one — so a widget nobody has touched keeps following its designed corner,
@@ -218,7 +294,7 @@ PanelWindow {
      * present than the surface.
      */
     readonly property real chromeAlpha:
-        Theme.widgetAlpha < 0.35 ? Theme.widgetAlpha / 0.35 : 1.0
+        win.surfaceAlpha < 0.35 ? win.surfaceAlpha / 0.35 : 1.0
 
     // Room around the card for that shadow to spread into. The card's visible
     // edge still sits `mx` from the screen edge, so the pad is invisible in the
@@ -358,11 +434,11 @@ PanelWindow {
                         GradientStop {
                             position: 0.0
                             color: win.lift(Theme.popupBg, Theme.isLight ? 0.35 : 0.13,
-                                            Theme.widgetAlpha * 0.88)
+                                            win.surfaceAlpha * 0.88)
                         }
                         GradientStop {
                             position: 1.0
-                            color: win.lift(Theme.popupBg, 0.0, Theme.widgetAlpha)
+                            color: win.lift(Theme.popupBg, 0.0, win.surfaceAlpha)
                         }
                     }
 

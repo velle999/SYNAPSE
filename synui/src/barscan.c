@@ -52,6 +52,41 @@
  * fallback is the whole safety story: the common case is not merely unchanged,
  * it is not even computed differently.
  *
+ * ── Why a SEE-THROUGH window is composited and not declined ──────────────────
+ *
+ * ⚠ THIS FILE ONCE ANSWERED "I CANNOT SEE THAT" FOR EVERY WINDOW ON THE TWO
+ * THEMES THE MEASUREMENT EXISTS FOR, WHICH IS AS GOOD AS BEING SWITCHED OFF.
+ *
+ * A node under the cut is not always solid. Two ways, and both are ordinary:
+ * synui fades windows itself (active_opacity/inactive_opacity, a scene node
+ * modifier), and a client can draw its own surface see-through (foot_alpha, the
+ * desktop widgets), which arrives as a buffer whose PREMULTIPLIED pixels read
+ * darker than anything on screen. Either way the pixels alone are not what the
+ * user is looking at.
+ *
+ * The old answer was to decline both — -1, "the wallpaper answers here" — on
+ * the grounds that most of what shows through such a surface is the wallpaper
+ * anyway. That is defensible for a 30%-opaque terminal and indefensible for the
+ * case it actually hit: macOS 26 fades to 0.94/0.88 and Prism to 0.90/0.84, so
+ * on the two glass presets EVERY window was under the 0.9 gate — Prism did not
+ * measure so much as a focused one — and `scene.<output>` stayed a full row of
+ * -1 with a screen full of windows. Live backdrop read `on` and did nothing.
+ *
+ * So the fade is composited instead of being treated as a failure. It is not a
+ * guess: the node opacity is synui's own number, the buffer's mean alpha is in
+ * the pixels we already read, and what is behind is the wallpaper cell this
+ * same grid is published beside. The mix goes through the encoding the GPU
+ * mixes in (syn_lum_over/syn_lum_to_srgb, see contrast.h).
+ *
+ * ⚠ AND IT IS NEVER WORSE THAN THE -1 IT REPLACES, which is what makes it safe
+ * where it is approximate. Compositing against the WALLPAPER is exact for a
+ * tiled window and for a lone floating one; where a see-through window sits
+ * over ANOTHER window it is wrong by whatever that window differs from the
+ * picture — and that is precisely the answer -1 already produced, plus the top
+ * window's own tint at its own alpha. An unmeasurable wallpaper still declines,
+ * because then there is nothing to composite against and inventing a number is
+ * how a bar gets inked confidently backwards.
+ *
  * ── Why a scan and not a readback of the frame ───────────────────────────────
  *
  * The obvious implementation is to read the output's own front buffer back over
@@ -97,10 +132,19 @@
  */
 #define BARSCAN_INTERVAL_MS 400
 
-/* Below this the node is not the backdrop, it is something in front of it, and
- * we keep descending. Not 1.0: clients round their own opacity, and a window at
- * "fully opaque" routinely arrives as 0.996. */
+/* Opaque enough to answer WITHOUT knowing what is behind it.
+ *
+ * This is no longer the line between "measured" and "declined" — a see-through
+ * node is composited against the wallpaper (see the header). It is what is left
+ * of that question for the one case where compositing is impossible: an
+ * unmeasurable wallpaper, where a node this solid is still its own answer and
+ * anything fainter has nothing to be drawn over. Not 1.0: clients round their
+ * own opacity, and a window at "fully opaque" routinely arrives as 0.996. */
 #define BARSCAN_OPAQUE_ALPHA 0.9
+
+/* …and solid enough that nothing shows through at all, so the composite is the
+ * surface itself and the backdrop need not even be looked at. */
+#define BARSCAN_SOLID_ALPHA 0.999
 
 /* Every Nth pixel, both axes, when averaging a readback. The strip is 34
  * logical rows of a screen that is 2560 wide; a mean over every pixel and a
@@ -127,16 +171,40 @@
  */
 #define BARSCAN_BAND 8
 
-/* Mean alpha below which a buffer is DECLINED rather than measured.
+/*
+ * What a surface actually reads as once what is behind it shows through.
  *
- * ⚠ A CLIENT'S BUFFER IS PREMULTIPLIED, so reading r/g/b off a half-transparent
- * surface returns half its colour and calls it dark. The scene node's own
- * `opacity` catches a window synui faded; it says nothing about a surface the
- * client drew see-through itself, which since the grid arrived is a whole class
- * of node the walk now reaches — the desktop widgets are bottom-layer surfaces
- * and are exactly that. Declining is the honest answer: -1 falls back to the
- * wallpaper, which is most of what shows through such a surface anyway. */
-#define BARSCAN_OPAQUE_MEAN 0.9
+ * `src` is the luminance read off the node and `scale` the node opacity the
+ * compositor multiplies it by — separate arguments because a client's buffer is
+ * PREMULTIPLIED and a scene node's opacity is not: the pixels already carry the
+ * client's own alpha folded into them, and the node's fade is applied to that
+ * result. `alpha` is the coverage the two come to together, which is what
+ * decides how much of `back` survives.
+ *
+ * Mixed in the encoding the GPU mixes in, for the reason syn_lum_over() spells
+ * out — a linear mix of luminances is several hundredths out in the midtones,
+ * which is the entire width of the band the ink flips in. This is that function
+ * with the source pre-scaled rather than weighted, which is the difference
+ * between premultiplied pixels and a straight colour.
+ */
+static double lum_premult_over(double src, double scale, double alpha,
+                               double back)
+{
+    if (alpha >= BARSCAN_SOLID_ALPHA) return src;
+    /* Nothing to composite against: solid enough still answers for itself, and
+     * anything fainter is a surface we cannot say the colour of. */
+    if (!(back >= 0.0))
+        return alpha >= BARSCAN_OPAQUE_ALPHA ? src : -1.0;
+    if (alpha <= 0.0) return back;
+
+    double e = syn_lum_to_srgb(src) * scale
+             + (1.0 - alpha) * syn_lum_to_srgb(back);
+    if (e < 0.0) e = 0.0;
+    if (e > 1.0) e = 1.0;
+    /* Both sides are treated as greys of their luminance, which is exact for
+     * the mix: the blend is per-channel and linear in each. */
+    return syn_rel_luminance(e, e, e);
+}
 
 /* ── Scene-graph geometry ────────────────────────────────── */
 
@@ -209,9 +277,20 @@ static struct wlr_scene_node *leaf_at(struct wlr_scene_node *n, int lx, int ly)
  * panels are trees created after layer_tree[OVERLAY] and therefore above it
  * (synui_main.c says so where it makes them). So every surface that asks this
  * question is on the far side of the cut from the answer, and a menu can never
- * measure itself, its neighbour, or the bar. The one class of surface below the
- * cut that is ours is the desktop widgets, on BOTTOM — and those are
- * see-through, so BARSCAN_OPAQUE_MEAN declines them.
+ * measure itself, its neighbour, or the bar.
+ *
+ * ⚠ EXCEPT THE ONE CLASS OF SURFACE BELOW THE CUT THAT IS ALSO OURS: the
+ * desktop widgets, on BOTTOM. They were kept out of the answer by accident —
+ * they are see-through, and the see-through case used to decline — so the
+ * moment a fade became something this file COMPOSITES rather than refuses, a
+ * post-it asking which ink reads under it would have been reading its own card.
+ * The layer is pruned for that reason, and it costs nothing else: what is
+ * behind a widget is the wallpaper, which is what -1 hands the consumer
+ * anyway, and every window is above them.
+ *
+ * BACKGROUND is deliberately NOT pruned with it. That layer is where a live
+ * wallpaper (linux-wallpaperengine) draws, and it is genuinely the backdrop —
+ * the one wallpaper.c cannot measure, because it never painted it.
  */
 static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
 {
@@ -237,6 +316,11 @@ static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
         s->wallpaper_tree ? &s->wallpaper_tree->node : NULL;
     struct wlr_scene_node *wp_rect = s->bg_rect ? &s->bg_rect->node : NULL;
 
+    /* Ours, and below the cut: see the note above on why the widgets are not
+     * part of the answer they ask. */
+    struct wlr_scene_node *widget_tree =
+        &s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]->node;
+
     bool below = false;
     struct wlr_scene_node *child;
     wl_list_for_each_reverse(child, &s->scene->tree.children, link) {
@@ -246,7 +330,8 @@ static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
             if (child == bar_tree) below = true;
             continue;
         }
-        if (child == wp_tree || child == wp_rect) continue;
+        if (child == wp_tree || child == wp_rect || child == widget_tree)
+            continue;
         struct wlr_scene_node *hit = leaf_at(child, lx, ly);
         if (hit) return hit;
     }
@@ -258,7 +343,12 @@ static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
 /*
  * Mean relative luminance of `n` over `want` (layout coords), split into `cells`
  * equal columns and written into `out[0..cells)`. Every cell is -1 if this node
- * cannot answer — it is see-through, or its pixels cannot be read.
+ * cannot answer — its pixels cannot be read, or it is see-through over a
+ * wallpaper that could not be measured either.
+ *
+ * `back[0..cells)` is the wallpaper's own answer for those same cells, which is
+ * what a see-through node is composited against. -1 there is "the wallpaper
+ * could not be measured", exactly as it is in wp_lum_grid.
  *
  * ⚠ `cells` IS AN OPTIMISATION AND NOTHING ELSE: one call with cells=4 and four
  * calls over the quarters produce the same four numbers. It exists because the
@@ -274,7 +364,8 @@ static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
  * under the bar by its titlebar costs no readback at all.
  */
 static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
-                         const struct wlr_box *want, int cells, double *out)
+                         const struct wlr_box *want, int cells,
+                         const double *back, double *out)
 {
     for (int i = 0; i < cells; i++) out[i] = -1.0;
 
@@ -287,24 +378,34 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
 
     if (n->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *r = wl_container_of(n, r, node);
-        if (r->color[3] < BARSCAN_OPAQUE_ALPHA) return;
         /* scene rect colours are straight sRGB 0..1, so they go through the
          * same linearisation the pixel path does — just without the 0..255
-         * lookup table, which is what syn_srgb_lut is. */
+         * lookup table, which is what syn_srgb_lut is. Straight and not
+         * premultiplied, which is why this is syn_lum_over() and the buffer
+         * path below is not: deco.c folds a fading window's opacity into
+         * color[3] and leaves the colour alone (a rect has no set_opacity). */
         double lr = syn_srgb_lut((int)lround(r->color[0] * 255.0));
         double lg = syn_srgb_lut((int)lround(r->color[1] * 255.0));
         double lb = syn_srgb_lut((int)lround(r->color[2] * 255.0));
         double lum = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        double a   = r->color[3];
         /* One colour over the whole rect, so every cell of the run gets it —
          * and the cells the rect does not reach get it too, because a run is
-         * only ever built out of cells this same node was found at. */
-        for (int i = 0; i < cells; i++) out[i] = lum;
+         * only ever built out of cells this same node was found at. What each
+         * cell does NOT share is the wallpaper behind it. */
+        for (int i = 0; i < cells; i++) {
+            if (a >= BARSCAN_SOLID_ALPHA)   { out[i] = lum; continue; }
+            if (!(back[i] >= 0.0)) {
+                out[i] = a >= BARSCAN_OPAQUE_ALPHA ? lum : -1.0;
+                continue;
+            }
+            out[i] = syn_lum_over(lum, a, back[i]);
+        }
         return;
     }
 
     struct wlr_scene_buffer *sb = wl_container_of(n, sb, node);
     if (!sb->buffer) return;
-    if (sb->opacity < BARSCAN_OPAQUE_ALPHA) return;
     if (sb->dst_width <= 0 || sb->dst_height <= 0) return;
 
     /*
@@ -406,17 +507,19 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
      * the run, which is the same arithmetic the caller used to build the run in
      * the first place — so a cell here is the cell the caller will store.
      *
-     * The alpha is accumulated over the WHOLE read rather than per cell, and
-     * that is deliberate: half-transparency is a property of a surface, not of
-     * a strip of it, and a per-cell test would keep the opaque half of a
-     * see-through window and drop the rest — which is worse than either answer,
-     * because a menu straddling the two would fold a real luminance together
-     * with a -1 and take the -1's veto without knowing why.
+     * ⚠ THE ALPHA IS ACCUMULATED PER CELL, and it used to be one mean over the
+     * whole read. That was right while a see-through surface was DECLINED:
+     * half-transparency was a yes/no about the surface, and splitting it per
+     * cell would have kept the opaque half of a window and dropped the rest, so
+     * a menu straddling the two would have folded a real luminance together
+     * with a -1 and taken the veto without knowing why. There is no veto now —
+     * every cell gets a composite — and the coverage a cell is composited at is
+     * a fact about that cell. It is what makes a window with a rounded corner,
+     * or a terminal with an opaque panel in it, read as what it looks like.
      */
-    double sum[SYN_LUM_COLS] = { 0 };
+    double sum[SYN_LUM_COLS]  = { 0 };
     long   n_px[SYN_LUM_COLS] = { 0 };
-    double a_sum = 0.0;
-    long   a_n   = 0;
+    double a_sum[SYN_LUM_COLS] = { 0 };
     if (cells > SYN_LUM_COLS) cells = SYN_LUM_COLS;   /* never, but bounded */
 
     for (int y = 0; y < src.height; y += BARSCAN_STEP) {
@@ -430,29 +533,49 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
                       0.7152 * syn_srgb_lut(px[gi]) +
                       0.0722 * syn_srgb_lut(px[bi]);
             n_px[c]++;
-            if (ai >= 0) { a_sum += px[ai] / 255.0; a_n++; }
+            /* No alpha channel is opaque by construction — see `ai`. */
+            a_sum[c] += ai >= 0 ? px[ai] / 255.0 : 1.0;
         }
     }
     free(data);
 
-    /* See BARSCAN_OPAQUE_MEAN: a premultiplied surface read as if it were
-     * opaque comes back darker than anything on screen, so it declines. */
-    if (a_n && a_sum / (double)a_n < BARSCAN_OPAQUE_MEAN) return;
-
-    for (int i = 0; i < cells; i++)
-        if (n_px[i]) out[i] = sum[i] / (double)n_px[i];
+    for (int i = 0; i < cells; i++) {
+        if (!n_px[i]) continue;
+        double lum = sum[i] / (double)n_px[i];
+        /* The client's own coverage and synui's fade of it are two different
+         * numbers and multiply: the fade is applied to a buffer that already
+         * carries the client's alpha. */
+        double a   = a_sum[i] / (double)n_px[i] * sb->opacity;
+        out[i] = lum_premult_over(lum, sb->opacity, a, back[i]);
+    }
 }
 
 /* The single-cell form, which is what the bar strip asks. */
 static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
-                       const struct wlr_box *want)
+                       const struct wlr_box *want, double back)
 {
     double one = -1.0;
-    leaf_lum_run(s, n, want, 1, &one);
+    leaf_lum_run(s, n, want, 1, &back, &one);
     return one;
 }
 
 /* ── The scan ────────────────────────────────────────────── */
+
+/*
+ * The WALLPAPER's own answer for one cell — what a see-through node in that
+ * cell is composited against.
+ *
+ * This is the same number the consumer falls back to when a cell reads -1, and
+ * that is the point: a window at alpha 0 composites to exactly the value the
+ * cell would have published without it, so the two paths meet rather than
+ * disagreeing at the edges. -1 means the wallpaper could not be measured (a
+ * video wallpaper, or one that has not been painted yet).
+ */
+static double wp_cell(const syn_output_t *o, int r, int c)
+{
+    if (r < 0 || r >= SYN_LUM_ROWS || c < 0 || c >= SYN_LUM_COLS) return -1.0;
+    return o->wp_lum_grid[r * SYN_LUM_COLS + c];
+}
 
 /*
  * Fill one output's bar_strip_lum[] — the BAR's row.
@@ -474,8 +597,15 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
 {
     int strip = SYN_BAR_STRIP_LOGICAL;
     if (strip > ob->height) strip = ob->height;
-    int top = (s->config.bar_edge == SYN_BAR_EDGE_BOTTOM)
-            ? ob->y + ob->height - strip : ob->y;
+    bool bottom = s->config.bar_edge == SYN_BAR_EDGE_BOTTOM;
+    int top = bottom ? ob->y + ob->height - strip : ob->y;
+
+    /* The wallpaper row the strip lies in — its own edge, so a see-through
+     * window under a bottom bar is composited over the bottom of the picture
+     * and not the top of it. Coarser than wp_top_lum, which measures the strip
+     * itself, and per COLUMN, which wp_top_lum is not: the same cell the
+     * consumer falls back to for this column. */
+    int wp_row = bottom ? SYN_LUM_ROWS - 1 : 0;
 
     for (int c = 0; c < BARSCAN_COLS; c++) {
         int x0 = ob->x + (int)((int64_t)ob->width * c       / BARSCAN_COLS);
@@ -487,7 +617,9 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
         if (!n) continue;   /* nothing of ours here — the wallpaper answers */
 
         struct wlr_box want = { x0, top, x1 - x0, strip };
-        double lum = leaf_lum(s, n, &want);
+        double back = wp_cell(o, wp_row, c);
+        if (!(back >= 0.0)) back = o->wp_top_lum;   /* the strip's own, folded */
+        double lum = leaf_lum(s, n, &want, back);
         if (lum >= 0.0) o->bar_strip_lum[c] = lum;
     }
 }
@@ -543,7 +675,9 @@ static void scan_grid(syn_server_t *s, syn_output_t *o,
 
             struct wlr_box want = { edge[c], by, edge[end] - edge[c], band };
             double lum[SYN_LUM_COLS];
-            leaf_lum_run(s, hit[c], &want, end - c, lum);
+            double back[SYN_LUM_COLS];
+            for (int i = c; i < end; i++) back[i - c] = wp_cell(o, r, i);
+            leaf_lum_run(s, hit[c], &want, end - c, back, lum);
             for (int i = c; i < end; i++)
                 if (lum[i - c] >= 0.0) o->scene_lum[r * SYN_LUM_COLS + i] = lum[i - c];
 

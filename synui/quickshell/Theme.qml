@@ -570,22 +570,37 @@ QtObject {
         return lin(a * enc(s) + (1 - a) * enc(b))
     }
 
-    // The alpha this popup actually has to draw at, given what is behind it.
-    // The QML twin of render.c's panel_alpha_floor(), asking the same question
-    // of the same wallpaper: walk up from what was asked until full-strength
-    // text clears AA on the composite.
-    function popupAlphaOn(bd) {
+    /*
+     * The alpha a surface that ASKED for `from` actually has to draw at, given
+     * what is behind it. The QML twin of render.c's panel_alpha_floor(), asking
+     * the same question of the same wallpaper: walk up from what was asked
+     * until full-strength text clears AA on the composite.
+     *
+     * Takes the asked-for alpha rather than reading popupAlpha itself, because
+     * the popups are not the only surface that reaches clear: a desktop widget
+     * follows the DOCK's opacity (widgetAlpha), and on a desktop with the dock
+     * at 0.00 that is a card with no surface at all. One walk, so the two
+     * cannot answer differently about the same wallpaper.
+     */
+    function alphaWalkOn(bd, from) {
         // ⚠ The correction is a setting, and off means off — the same switch
         // render.c's panel_alpha_floor() answers to. Half the desktop obeying it
         // would be worse than neither half doing.
-        if (!BarConfig.legibility) return root.popupAlpha
-        if (!bd || !(bd.lum >= 0)) return root.popupAlpha
+        if (!BarConfig.legibility) return from
+        if (!bd || !(bd.lum >= 0)) return from
         const surf = root.lumOf(root.popupBg)
         const ink  = root.lumOf(root.fg)
-        for (let a = root.popupAlpha; a < 1.0; a += 0.02)
+        for (let a = from; a < 1.0; a += 0.02)
             if (root.lumContrast(ink, root.lumOver(surf, a, bd.lum)) >= 4.5) return a
         return 1.0
     }
+
+    function popupAlphaOn(bd)  { return root.alphaWalkOn(bd, root.popupAlpha) }
+
+    // …and the same for a desktop widget's card. See widgetAlpha: it is the
+    // dock's opacity verbatim, so a desktop whose dock is clear has widgets
+    // whose text is on the wallpaper exactly as the bar's is.
+    function widgetAlphaOn(bd) { return root.alphaWalkOn(bd, root.widgetAlpha) }
 
     /*
      * …and the ink to draw on it: the theme's own wherever it still reads on
@@ -618,9 +633,8 @@ QtObject {
      * theme keeps its colours — and where the walk ran out at 1.0 the test fails
      * and the ink flips, which is what the old shorthand did.
      */
-    function popupFgOn(bd) {
+    function inkOn(bd, a) {
         if (!bd || !(bd.lum >= 0)) return root.fg
-        const a    = root.popupAlphaOn(bd)
         const surf = root.lumOf(root.popupBg)
         const ink  = root.lumOf(root.fg)
         if (root.lumContrast(ink, root.lumOver(surf, a, bd.lum)) >= 4.5)
@@ -629,6 +643,8 @@ QtObject {
         if (which === "") return root.fg
         return which === "light" ? "#ffffff" : "#1d1d1f"
     }
+
+    function popupFgOn(bd) { return root.inkOn(bd, root.popupAlphaOn(bd)) }
 
     /*
      * The DIM ink for the same surface — placeholder text, a menu row that is
@@ -641,16 +657,17 @@ QtObject {
      * at relative to the ink they accompany, so a row that is off still reads as
      * off rather than as a row that is missing.
      */
-    function popupFgDimOn(bd) {
-        const fg = root.popupFgOn(bd)
+    function dimOf(fg) {
         if (Qt.colorEqual(fg, root.fg)) return root.fgDim
-        // ⚠ Qt.color() and not `fg` directly: popupFgOn hands back a STRING in
-        // the flipped case and a colour in the other, which a property binding
+        // ⚠ Qt.color() and not `fg` directly: inkOn hands back a STRING in the
+        // flipped case and a colour in the other, which a property binding
         // coerces for free and `.r` on a JS string does not — it is undefined,
         // and Qt.rgba(undefined…) is a silent black.
         const c = Qt.color(fg)
         return Qt.rgba(c.r, c.g, c.b, 0.65)
     }
+
+    function popupFgDimOn(bd) { return root.dimOf(root.popupFgOn(bd)) }
 
     // The surface itself at that alpha. What a popup binds its background to.
     function popupBgOn(bd) {

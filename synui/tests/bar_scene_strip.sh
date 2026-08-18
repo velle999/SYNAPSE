@@ -310,6 +310,58 @@ await '[ "$(strip_max)" = "-1.00" ]' \
 await '[ "$(scene_max)" = "-1.00" ]' \
       "…and every cell of the grid with it"
 
+# ── 5. a FADED window is COMPOSITED, not declined ────────────
+#
+# ⚠ THE CHECK THAT WOULD HAVE CAUGHT THE FEATURE BEING OFF ON THE TWO THEMES IT
+# WAS BUILT FOR. Everything above runs on the default theme, where synui fades
+# nothing and every window arrives at opacity 1.0. macOS 26 fades to 0.94/0.88
+# and Prism to 0.90/0.84 — all four under the 0.9 gate this file used to decline
+# at — so `scene.` stayed a full row of -1 with a screen full of windows and
+# Live backdrop read `on` while measuring nothing.
+#
+# The window is mapped AFTER the reload so the fade is applied at map time,
+# which is the one path that does not depend on a reload re-seating an opacity
+# on a window that is already up.
+#
+# ⚠ THE FADE IS SET IN theme.state AND NOT IN synuirc, because theme.state is
+# read AFTER it and wins (synui_config_load) — synui writes one at startup, so
+# an `active_opacity` appended to synuirc here is overridden by the 1.00 in the
+# file synui itself just saved and the window comes up solid. `transparency` is
+# the master switch for the whole lever (anim_view_opacity), so it goes too.
+#
+# ⚠ AND THE ASSERTION IS A BAND, NOT "SOMETHING WAS MEASURED". An opaque white
+# client faded to 0.88 over a near-black wallpaper composites to lin(0.88) ≈
+# 0.75, and the three ways this can be wrong are all outside that band: -1 if
+# the fade is declined, ~1.00 if it is read as though the window were solid, and
+# ~0.00 if the walk fell back to the wallpaper.
+{
+    printf 'theme=synapse\ntransparency=on\n'
+    printf 'active_opacity=0.88\n'
+} > "$CFG/theme.state"
+kill -HUP "$SYNUI_PID" 2>/dev/null
+sleep 0.5
+
+"$CLIENT" 0 60 >>"$TMP/client.out" 2>>"$TMP/client.err" &
+CLIENT_PIDS="$CLIENT_PIDS $!"
+i=0
+while [ $i -lt 40 ]; do
+    [ "$(synctl clients | grep -c '"app_id":"stubborn"')" -ge 1 ] && break
+    i=$((i + 1)); sleep 0.1
+done
+[ "$(synctl clients | grep -c '"app_id":"stubborn"')" -ge 1 ] \
+    || fail "the faded client never mapped: $(cat "$TMP/client.err")"
+
+await '[ "$(scene_max)" != "-1.00" ] && \
+       awk -v v="$(scene_max)" "BEGIN{exit !(v > 0.55 && v < 0.95)}"' \
+      "a FADED window is measured as what it looks like, not declined"
+
+FADED=$(scene_max)
+if awk -v v="$FADED" 'BEGIN{exit !(v < 0.95)}'; then
+    ok "…which is the client's white DIMMED by the fade ($FADED, not 1.00)"
+else
+    bad "the fade was ignored — $FADED is the client read as though it were solid"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
     echo "bar_scene_strip: PASS"

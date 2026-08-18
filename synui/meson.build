@@ -1186,6 +1186,18 @@ test('bar_opacity', bar_opacity,
      depends : [synui_exe],
      timeout : 180)
 
+# `postit_ink`: the note is the one widget whose content somebody typed, and on
+# a glass desktop it has no card to be typed on — widgetAlpha follows the dock,
+# and a dock at 0.00 puts 12px body text straight onto the wallpaper in an ink
+# the theme chose for a surface that is not there. Captures the note over a
+# near-black wallpaper on the LIGHT glass theme, which is the one arrangement
+# where the two possible answers are #1d1d1f and #ffffff.
+postit_ink = find_program('tests/postit_ink.sh')
+test('postit_ink', postit_ink,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # What a bar with NO background is drawn on. macOS 26's menu bar is clear, so its
 # ink comes from the wallpaper rather than the palette, and the compositor writes
 # which ink survives to backdrop.state. bar_ink_test.c pins the arithmetic; this
