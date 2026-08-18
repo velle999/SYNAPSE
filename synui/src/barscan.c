@@ -110,6 +110,7 @@
 #include "contrast.h"
 
 #include <drm_fourcc.h>
+#include <math.h>      /* fabs, for the debug trace's change test */
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/render/wlr_texture.h>
@@ -187,6 +188,41 @@
  * with the source pre-scaled rather than weighted, which is the difference
  * between premultiplied pixels and a straight colour.
  */
+/* ── Tracing why a column reads what it reads ────────────────────────────────
+ *
+ * Off unless SYNUI_BARSCAN_DEBUG is set in the compositor's environment, and
+ * silent in steady state: a line comes out only when a column's answer CHANGES,
+ * plus a heartbeat every BARSCAN_DBG_BEAT scans so a value that is stuck can be
+ * told from one nobody is computing. 400 ms x 16 columns is far too much to log
+ * unconditionally, and a trace nobody can read is a trace nobody uses.
+ *
+ * It exists because the failure this chases does not look like a failure: every
+ * bail in the read path below is a bare `return`, scan_output() has already
+ * cleared the row to -1, and scan_strip() only ever FILLS — so a column that
+ * bails reads as "nothing here" and a column that composites wrongly reads as a
+ * confident number. Both are silent, and the second one inks the bar backwards.
+ * (Measured 2026-08-18: 0.24 published for thirty seconds while the pixels
+ * under the bar were 0.058 — dark ink chosen at 4.71:1 over light's 3.62:1.)
+ */
+#define BARSCAN_DBG_BEAT 25
+
+static bool barscan_dbg(void)
+{
+    static int on = -1;
+    if (on < 0) on = getenv("SYNUI_BARSCAN_DEBUG") != NULL;
+    return on == 1;
+}
+
+/* Which strip column leaf_lum_run is being asked about, so its own bails can
+ * name one. -1 while the grid scan runs, which does not trace. */
+static int g_dbg_col = -1;
+
+#define BARSCAN_BAIL(reason, ...) do { \
+    if (barscan_dbg() && g_dbg_col >= 0) \
+        wlr_log(WLR_INFO, "synui: barscan: col %d declined: " reason, \
+                g_dbg_col, ##__VA_ARGS__); \
+} while (0)
+
 static double lum_premult_over(double src, double scale, double alpha,
                                double back)
 {
@@ -370,11 +406,11 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     for (int i = 0; i < cells; i++) out[i] = -1.0;
 
     struct wlr_box box;
-    if (!leaf_box(n, &box)) return;
+    if (!leaf_box(n, &box)) { BARSCAN_BAIL("node has no box"); return; }
 
     struct wlr_box hit;
-    if (!wlr_box_intersection(&hit, &box, want)) return;
-    if (hit.width <= 0 || hit.height <= 0) return;
+    if (!wlr_box_intersection(&hit, &box, want)) { BARSCAN_BAIL("node does not meet the strip"); return; }
+    if (hit.width <= 0 || hit.height <= 0) { BARSCAN_BAIL("empty intersection"); return; }
 
     if (n->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *r = wl_container_of(n, r, node);
@@ -405,8 +441,8 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     }
 
     struct wlr_scene_buffer *sb = wl_container_of(n, sb, node);
-    if (!sb->buffer) return;
-    if (sb->dst_width <= 0 || sb->dst_height <= 0) return;
+    if (!sb->buffer) { BARSCAN_BAIL("scene buffer has no buffer"); return; }
+    if (sb->dst_width <= 0 || sb->dst_height <= 0) { BARSCAN_BAIL("dst %dx%d", sb->dst_width, sb->dst_height); return; }
 
     /*
      * ⚠ A ROTATED OR FLIPPED BUFFER IS DECLINED RATHER THAN GUESSED AT.
@@ -415,7 +451,7 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
      * measurement: -1 falls back to the wallpaper, a wrong number inks the bar
      * confidently backwards.
      */
-    if (sb->transform != WL_OUTPUT_TRANSFORM_NORMAL) return;
+    if (sb->transform != WL_OUTPUT_TRANSFORM_NORMAL) { BARSCAN_BAIL("transform %d", (int)sb->transform); return; }
 
     /* Layout rect → buffer pixels. dst_width/height is what the node occupies
      * on screen; buffer->width/height is what it is stored at, and a scaled
@@ -435,7 +471,7 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
         src.width  = sb->buffer->width  - src.x;
     if (src.y + src.height > sb->buffer->height)
         src.height = sb->buffer->height - src.y;
-    if (src.width <= 0 || src.height <= 0) return;
+    if (src.width <= 0 || src.height <= 0) { BARSCAN_BAIL("src box empty after clamp"); return; }
 
     /*
      * ⚠ A CLIENT'S BUFFER IS NOT ONE wlr_texture_from_buffer() CAN IMPORT, and
@@ -461,7 +497,7 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
         tex = wlr_texture_from_buffer(s->renderer, sb->buffer);
         own = tex != NULL;
     }
-    if (!tex) return;
+    if (!tex) { BARSCAN_BAIL("no texture for this buffer"); return; }
 
     uint32_t fmt = wlr_texture_preferred_read_format(tex);
     int bpp;
@@ -476,6 +512,7 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     case DRM_FORMAT_XBGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; ai = -1; break;
     case DRM_FORMAT_ABGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; ai =  3; break;
     default:
+        BARSCAN_BAIL("unhandled read format 0x%08x", fmt);
         if (own) wlr_texture_destroy(tex);
         return;
     }
@@ -498,6 +535,8 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     bool ok = wlr_texture_read_pixels(tex, &opts);
     if (own) wlr_texture_destroy(tex);
     if (!ok) {
+        BARSCAN_BAIL("read_pixels refused %dx%d at %d,%d",
+                     src.width, src.height, src.x, src.y);
         free(data);
         return;
     }
@@ -538,6 +577,15 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
         }
     }
     free(data);
+
+    if (barscan_dbg() && g_dbg_col >= 0)
+        wlr_log(WLR_INFO,
+                "synui: barscan: col %d read buf %dx%d dst %dx%d scale %.3fx%.3f "
+                "src %d,%d %dx%d node %d,%d %dx%d opacity %.2f",
+                g_dbg_col, sb->buffer->width, sb->buffer->height,
+                sb->dst_width, sb->dst_height, sx, sy,
+                src.x, src.y, src.width, src.height,
+                box.x, box.y, box.width, box.height, sb->opacity);
 
     for (int i = 0; i < cells; i++) {
         if (!n_px[i]) continue;
@@ -600,6 +648,13 @@ static double wp_cell(const syn_output_t *o, int r, int c)
 static void scan_strip(syn_server_t *s, syn_output_t *o,
                        const struct wlr_box *ob)
 {
+    /* What the trace last reported, per column, so it can stay quiet while
+     * nothing moves. Debug-only, one output's worth: with the trace off it is
+     * never read, and with it on the interesting machine has one screen whose
+     * bar is wrong. */
+    static double dbg_prev[BARSCAN_COLS] = { [0 ... BARSCAN_COLS - 1] = -2.0 };
+    static int    dbg_beat;
+
     int strip = SYN_BAR_STRIP_LOGICAL;
     if (strip > ob->height) strip = ob->height;
     bool bottom = s->config.bar_edge == SYN_BAR_EDGE_BOTTOM;
@@ -619,15 +674,42 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
 
         struct wlr_scene_node *n =
             leaf_under_shell(s, (x0 + x1) / 2, top + strip / 2);
-        if (!n) continue;   /* nothing of ours here — the wallpaper answers */
+        if (!n) {
+            /* nothing of ours here — the wallpaper answers */
+            if (barscan_dbg() && dbg_prev[c] >= -0.5) {
+                wlr_log(WLR_INFO, "synui: barscan: col %d -> nothing over the "
+                                  "wallpaper (was %.3f)", c, dbg_prev[c]);
+                dbg_prev[c] = -1.0;
+            }
+            continue;
+        }
 
         struct wlr_box want = { x0, top, x1 - x0, strip };
         double back = wp_cell(o, wp_row, c);
         /* The strip's own, folded — live-aware for the same reason wp_cell is. */
         if (!(back >= 0.0)) back = wallpaper_strip_lum(o);
+
+        g_dbg_col = barscan_dbg() ? c : -1;
         double lum = leaf_lum(s, n, &want, back);
+        g_dbg_col = -1;
+
         if (lum >= 0.0) o->bar_strip_lum[c] = lum;
+
+        /* On a CHANGE, and on a heartbeat. A column stuck on a wrong number is
+         * the failure being chased, and a trace that only fires on change would
+         * go silent for exactly the state worth seeing. */
+        if (barscan_dbg()) {
+            bool moved = !(fabs(lum - dbg_prev[c]) < 0.005);
+            if (moved || dbg_beat == 0)
+                wlr_log(WLR_INFO,
+                        "synui: barscan: col %d %s %.3f (backdrop %.3f, node "
+                        "type %d)%s", c, moved ? "->" : "still", lum, back,
+                        (int)n->type, moved ? "" : " [heartbeat]");
+            if (moved) dbg_prev[c] = lum;
+        }
     }
+
+    if (barscan_dbg() && ++dbg_beat >= BARSCAN_DBG_BEAT) dbg_beat = 0;
 }
 
 /*
