@@ -25,10 +25,11 @@ An Arch-based operating system with a local LLM wired into the system layer — 
 
 <img src="docs/screenshots/synui-desktop.png" alt="synui — the SynapseOS compositor" width="900">
 
-<sub><i>synui, the wlroots compositor: native quickshell bar, application menu, auto-hiding dock.</i></sub>
-<img src="docs/screenshots//synapse-20260717-215931.png" alt="synui — amber crt effects on" width="900">
+<sub><i>synui, the wlroots compositor: native quickshell bar, start menu, desktop widgets and auto-hiding dock.</i></sub>
 
-<sub><i>CRT post-process filters example in amber phosphor.</i></sub>
+<img src="docs/screenshots/synui-crt.png" alt="synui — amber CRT post-process filter over a fastfetch readout" width="900">
+
+<sub><i>The optional CRT post-process pass, in amber phosphor.</i></sub>
 </div>
 
 ---
