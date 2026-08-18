@@ -4819,6 +4819,27 @@ struct syn_output {
      * question back to the static image underneath it. */
     syn_palette_t            wp_live;
     bool                     wp_live_have;
+    /*
+     * …and the same substitution for the INK, which is a second question asked
+     * of the same picture and was left behind by the palette fix.
+     *
+     * wp_lum_grid/wp_top_lum above are measured off the buffer wallpaper.c
+     * PAINTS. Under a live wallpaper that buffer is covered edge to edge, so
+     * every surface with no background of its own was choosing its ink from an
+     * image nobody can see — a start menu over a white Workshop scene taking
+     * light ink because the static picture underneath it is a dark photograph.
+     * Measured off the client's own copy in live_lum_measure(), and preferred
+     * over the painted answer by wallpaper_lum_grid()/wallpaper_strip_lum()
+     * while it stands.
+     *
+     * ⚠ A SEPARATE `have` FROM wp_live_have. The palette can decline a picture
+     * (greyscale) and still be a real answer; luminance has no such case, but
+     * the two are filled by different code on different failure paths and a
+     * shared flag would let one publish on the strength of the other.
+     */
+    double                   wp_live_lum_grid[SYN_LUM_CELLS];
+    double                   wp_live_top_lum;
+    bool                     wp_live_lum_have;
     /* The engine paints black for a second or two while it loads its scene, so
      * the first read is usually "no usable hue". Retried a few times rather
      * than believed — see palette_live_tick(). */
@@ -6605,6 +6626,13 @@ void wallpaper_accent_refresh(syn_server_t *s);
  * back to the picture synui paints itself. Both are cheap and both are safe to
  * call for a layer surface that turns out not to be a wallpaper: the check for
  * "does it cover the screen" is inside. */
+/* The wallpaper's own luminance answers, live-aware: the copy measured off a
+ * live wallpaper client when there is one, the painted buffer otherwise. EVERY
+ * reader goes through these — barscan.c's fallback, backdrop_export()'s ink and
+ * grid, and wallpaper_backdrop_for_box() — so that which picture answers is
+ * decided in one place rather than six. */
+const double *wallpaper_lum_grid(const syn_output_t *o);
+double wallpaper_strip_lum(const syn_output_t *o);
 void wallpaper_live_appeared(syn_output_t *o);
 void wallpaper_live_gone(syn_output_t *o);
 /* Drop the settle timer. For output teardown. */

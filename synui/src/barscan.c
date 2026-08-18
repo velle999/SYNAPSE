@@ -574,7 +574,12 @@ static double leaf_lum(syn_server_t *s, struct wlr_scene_node *n,
 static double wp_cell(const syn_output_t *o, int r, int c)
 {
     if (r < 0 || r >= SYN_LUM_ROWS || c < 0 || c >= SYN_LUM_COLS) return -1.0;
-    return o->wp_lum_grid[r * SYN_LUM_COLS + c];
+    /* ⚠ NOT o->wp_lum_grid DIRECTLY — under a live wallpaper the painted buffer
+     * that grid describes is covered edge to edge by the engine's own surface,
+     * and a see-through window composited against it is composited against a
+     * picture nobody can see. wallpaper_lum_grid() is where that substitution
+     * is made, once. */
+    return wallpaper_lum_grid(o)[r * SYN_LUM_COLS + c];
 }
 
 /*
@@ -618,7 +623,8 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
 
         struct wlr_box want = { x0, top, x1 - x0, strip };
         double back = wp_cell(o, wp_row, c);
-        if (!(back >= 0.0)) back = o->wp_top_lum;   /* the strip's own, folded */
+        /* The strip's own, folded — live-aware for the same reason wp_cell is. */
+        if (!(back >= 0.0)) back = wallpaper_strip_lum(o);
         double lum = leaf_lum(s, n, &want, back);
         if (lum >= 0.0) o->bar_strip_lum[c] = lum;
     }

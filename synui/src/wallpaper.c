@@ -354,19 +354,21 @@ static double solid_backdrop_lum(void)
  * nothing to measure. `edge` picks which end of the buffer — a bar moved to the
  * bottom is drawn on the bottom of the wallpaper, and measuring the top there
  * would answer a question nobody asked. */
-static double strip_luminance(cairo_surface_t *dst, int rows, syn_bar_edge_t edge)
+/*
+ * The pixels half, over a raw ARGB32 buffer.
+ *
+ * Split out from the cairo wrapper below because the LIVE wallpaper is not a
+ * cairo surface and never can be: it is a client's texture sampled into a
+ * buffer synui owns (live_read_argb32), and the whole point of measuring it is
+ * that it is the picture actually on screen. Same arithmetic, same byte order,
+ * one implementation — two would drift, and the drift would be invisible until
+ * a desktop inked one way with a static wallpaper and the other way with a
+ * live one showing the same image.
+ */
+static double strip_luminance_px(const unsigned char *data, int w, int h,
+                                 int stride, int rows, syn_bar_edge_t edge)
 {
-    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return -1.0;
-    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return -1.0;
-
-    cairo_surface_flush(dst);
-    const unsigned char *data = cairo_image_surface_get_data(dst);
-    if (!data) return -1.0;
-
-    int w      = cairo_image_surface_get_width(dst);
-    int h      = cairo_image_surface_get_height(dst);
-    int stride = cairo_image_surface_get_stride(dst);
-    if (w <= 0 || h <= 0 || rows <= 0) return -1.0;
+    if (!data || w <= 0 || h <= 0 || rows <= 0) return -1.0;
     if (rows > h) rows = h;
 
     int y0 = edge == SYN_BAR_EDGE_BOTTOM ? h - rows : 0;
@@ -386,6 +388,18 @@ static double strip_luminance(cairo_surface_t *dst, int rows, syn_bar_edge_t edg
         }
     }
     return sum / ((double)w * rows);
+}
+
+static double strip_luminance(cairo_surface_t *dst, int rows, syn_bar_edge_t edge)
+{
+    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return -1.0;
+    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return -1.0;
+
+    cairo_surface_flush(dst);
+    return strip_luminance_px(cairo_image_surface_get_data(dst),
+                              cairo_image_surface_get_width(dst),
+                              cairo_image_surface_get_height(dst),
+                              cairo_image_surface_get_stride(dst), rows, edge);
 }
 
 /* Fold every output's answer into one and publish it. ONE value, because the
@@ -448,6 +462,31 @@ const syn_palette_t *wallpaper_palette(syn_server_t *s)
         if (o->wp_palette.ok) return &o->wp_palette;
     }
     return NULL;
+}
+
+/*
+ * The same substitution, for the two luminance answers — see wallpaper_palette()
+ * above, which is this choice made for the colour.
+ *
+ * Per OUTPUT rather than first-with-an-answer, because ink is a fact about a
+ * screen: one monitor on a Workshop scene and two on the static picture is an
+ * ordinary desktop, and folding them would be answering a question nobody asked
+ * (the same mistake bar_ink's cross-monitor veto made).
+ *
+ * ⚠ NO `.ok`-STYLE FALLBACK, deliberately. A live wallpaper that measures 0.5
+ * is a real answer; handing that case back to the painted buffer would be
+ * exactly the bug — inking from a picture that is covered edge to edge. The
+ * only way back to the static answer is the live wallpaper going away, which
+ * wallpaper_live_gone() handles by clearing the flag.
+ */
+const double *wallpaper_lum_grid(const syn_output_t *o)
+{
+    return o->wp_live_lum_have ? o->wp_live_lum_grid : o->wp_lum_grid;
+}
+
+double wallpaper_strip_lum(const syn_output_t *o)
+{
+    return o->wp_live_lum_have ? o->wp_live_top_lum : o->wp_top_lum;
 }
 
 /* Publish it, for the bar and the widgets — the same contract backdrop.state
@@ -869,6 +908,46 @@ static unsigned char *live_read_argb32(syn_output_t *o, struct wlr_texture *tex,
     return data;
 }
 
+/* Both defined further down, beside the painted measurement they are the other
+ * half of — declared here because the live path measures the same two things
+ * off a different picture. */
+static void grid_luminance_px(const unsigned char *data, int w, int h,
+                              int stride, double grid[SYN_LUM_CELLS]);
+static void backdrop_export(syn_server_t *s);
+
+/*
+ * The INK half of a live wallpaper measurement, off the same copy the palette
+ * was taken from.
+ *
+ * ⚠ THE COPY IS IN THE OUTPUT'S OWN ORIENTATION ALREADY. It is the client's
+ * surface texture, and a layer surface is sized and drawn in logical output
+ * coordinates — the output transform is applied when the scene is composited,
+ * not to the buffer the client committed. So a rotated monitor needs nothing
+ * done here, and the grid lands cell for cell on the painted one it replaces,
+ * which is measured at wlr_output_transformed_resolution() for the same reason.
+ *
+ * ⚠ The strip's row count has to be rescaled. `rows` is SYN_BAR_STRIP_LOGICAL
+ * in the pixels of the buffer being measured, and this buffer is not the
+ * output's size — live_read_argb32 scales the long edge to WP_LIVE_READ_MAX.
+ * Passing the logical 34 would measure a band several times too deep on a 4K
+ * screen and quietly average the bar's own strip together with what is below it.
+ */
+static void live_lum_measure(syn_output_t *o, const unsigned char *data,
+                             int w, int h, int stride)
+{
+    struct wlr_box box;
+    wlr_output_layout_get_box(o->server->output_layout, o->wlr_output, &box);
+    if (box.height <= 0) return;
+
+    grid_luminance_px(data, w, h, stride, o->wp_live_lum_grid);
+
+    int rows = (int)lround(SYN_BAR_STRIP_LOGICAL * (double)h / box.height);
+    if (rows < 1) rows = 1;
+    o->wp_live_top_lum = strip_luminance_px(data, w, h, stride, rows,
+                                            o->server->config.bar_edge);
+    o->wp_live_lum_have = true;
+}
+
 /* One attempt. true when this output now has an answer worth keeping. */
 static bool live_measure(syn_output_t *o, char *why, size_t whyn)
 {
@@ -899,6 +978,14 @@ static bool live_measure(syn_output_t *o, char *why, size_t whyn)
      * from is not the surface they land on. */
     syn_palette_from_pixels(data, w, h, (int)stride,
                             theme_panel_surface_lum(&o->server->config), &p);
+
+    /* The ink, off the same copy and before it goes. Two questions of one
+     * picture and one readback — and, more to the point, one place where "this
+     * screen's wallpaper is somebody else's" is established. Splitting them
+     * would put the accent on the live picture and leave the ink on the hidden
+     * one, which is the state this fixes. */
+    live_lum_measure(o, data, w, h, (int)stride);
+
     free(data);
 
     o->wp_live = p;
@@ -942,6 +1029,12 @@ static int live_tick(void *data)
             (!o->wp_live_have && why[0]) ? " — " : "",
             (!o->wp_live_have && why[0]) ? why : "");
     palette_export(o->server);
+    /* ⚠ AND THE INK, which is not the palette. backdrop_export() writes only on
+     * a change, so this costs nothing on the retries that measure the same
+     * picture again — and without it the grid stays the painted one until the
+     * next thing that happens to re-export, which on a desktop nobody is
+     * touching is never. */
+    backdrop_export(o->server);
     return 0;
 }
 
@@ -966,10 +1059,14 @@ void wallpaper_live_appeared(syn_output_t *o)
 
 void wallpaper_live_gone(syn_output_t *o)
 {
-    if (o->wp_live_have) {
+    if (o->wp_live_have || o->wp_live_lum_have) {
         o->wp_live_have = false;
+        o->wp_live_lum_have = false;
         memset(&o->wp_live, 0, sizeof(o->wp_live));
         palette_export(o->server);
+        /* …and the ink back to the painted picture, which is on screen again
+         * the instant the engine's surface unmaps. */
+        backdrop_export(o->server);
     }
 
     /* ⚠ AND THEN ASK AGAIN, rather than deciding here that there is no live
@@ -993,6 +1090,7 @@ void wallpaper_live_finish(syn_output_t *o)
         o->wp_live_timer = NULL;
     }
     o->wp_live_have = false;
+    o->wp_live_lum_have = false;
 }
 
 /*
@@ -1052,10 +1150,10 @@ void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
          * the one where the wallpaper's own answer is not a second-best guess
          * but the correct measurement — the same per-cell rule Theme.qml's
          * barStripAt() applies to the bar's row. */
+        const double *wp = wallpaper_lum_grid(o);
         double grid[SYN_LUM_CELLS];
         for (int i = 0; i < SYN_LUM_CELLS; i++)
-            grid[i] = o->scene_lum[i] >= 0.0 ? o->scene_lum[i]
-                                             : o->wp_lum_grid[i];
+            grid[i] = o->scene_lum[i] >= 0.0 ? o->scene_lum[i] : wp[i];
 
         syn_backdrop_t part;
         syn_backdrop_for_box(grid,
@@ -1108,8 +1206,9 @@ static void backdrop_export(syn_server_t *s)
 
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
-        syn_ink_t this_one = syn_ink_for_backdrop(o->wp_top_lum, CONTRAST_TARGET);
-        syn_ink_t this_best = syn_ink_best(o->wp_top_lum);
+        double lum = wallpaper_strip_lum(o);
+        syn_ink_t this_one = syn_ink_for_backdrop(lum, CONTRAST_TARGET);
+        syn_ink_t this_best = syn_ink_best(lum);
         ink  = seen ? syn_ink_combine(ink, this_one)   : this_one;
         best = seen ? syn_ink_combine(best, this_best) : this_best;
         seen = true;
@@ -1149,10 +1248,10 @@ static void backdrop_export(syn_server_t *s)
         int used = snprintf(grids + gl, sizeof(grids) - gl,
                             "bar_ink.%s=%s\nbar_ink_best.%s=%s\n",
                             o->wlr_output->name,
-                            syn_ink_name(syn_ink_for_backdrop(o->wp_top_lum,
+                            syn_ink_name(syn_ink_for_backdrop(wallpaper_strip_lum(o),
                                                               CONTRAST_TARGET)),
                             o->wlr_output->name,
-                            syn_ink_name(syn_ink_best(o->wp_top_lum)));
+                            syn_ink_name(syn_ink_best(wallpaper_strip_lum(o))));
         if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
         gl += (size_t)used;
     }
@@ -1176,7 +1275,7 @@ static void backdrop_export(syn_server_t *s)
         gl += (size_t)used;
         for (int i = 0; i < SYN_LUM_CELLS && gl + 8 < sizeof(grids); i++) {
             used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
-                            i ? "," : "", o->wp_lum_grid[i]);
+                            i ? "," : "", wallpaper_lum_grid(o)[i]);
             if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
             gl += (size_t)used;
         }
@@ -1324,8 +1423,9 @@ static void backdrop_export(syn_server_t *s)
     wl_list_for_each(o, &s->outputs, link)
         wlr_log(WLR_INFO, "synui: wallpaper: bar ink on %s is %s (best %s)",
                 o->wlr_output->name,
-                syn_ink_name(syn_ink_for_backdrop(o->wp_top_lum, CONTRAST_TARGET)),
-                syn_ink_name(syn_ink_best(o->wp_top_lum)));
+                syn_ink_name(syn_ink_for_backdrop(wallpaper_strip_lum(o),
+                                                  CONTRAST_TARGET)),
+                syn_ink_name(syn_ink_best(wallpaper_strip_lum(o))));
 }
 
 /* Every cell "not measured". The seed for an output that has no picture to look
@@ -1361,21 +1461,13 @@ static void grid_fill(double grid[SYN_LUM_CELLS], double lum)
  * and dropping pixels can drop the very cluster it exists to find. That is why
  * palette_measure() walks the buffer whole and this does not.
  */
-static void grid_luminance(cairo_surface_t *dst, double grid[SYN_LUM_CELLS])
+/* The pixels half, for the same reason strip_luminance_px() is one: the live
+ * wallpaper arrives as a raw buffer, not a cairo surface. */
+static void grid_luminance_px(const unsigned char *data, int w, int h,
+                              int stride, double grid[SYN_LUM_CELLS])
 {
     grid_clear(grid);
-
-    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return;
-    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return;
-
-    cairo_surface_flush(dst);
-    const unsigned char *data = cairo_image_surface_get_data(dst);
-    if (!data) return;
-
-    int w      = cairo_image_surface_get_width(dst);
-    int h      = cairo_image_surface_get_height(dst);
-    int stride = cairo_image_surface_get_stride(dst);
-    if (w <= 0 || h <= 0) return;
+    if (!data || w <= 0 || h <= 0) return;
 
     /* Every fourth pixel, but never coarser than one sample per cell edge: on a
      * small output four could otherwise step clean over a whole column. */
@@ -1404,6 +1496,20 @@ static void grid_luminance(cairo_surface_t *dst, double grid[SYN_LUM_CELLS])
 
     for (int i = 0; i < SYN_LUM_CELLS; i++)
         if (n[i] > 0) grid[i] = sum[i] / (double)n[i];
+}
+
+static void grid_luminance(cairo_surface_t *dst, double grid[SYN_LUM_CELLS])
+{
+    grid_clear(grid);
+
+    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return;
+    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return;
+
+    cairo_surface_flush(dst);
+    grid_luminance_px(cairo_image_surface_get_data(dst),
+                      cairo_image_surface_get_width(dst),
+                      cairo_image_surface_get_height(dst),
+                      cairo_image_surface_get_stride(dst), grid);
 }
 
 /* Paint (or clear) a single output's wallpaper buffer from the server's

@@ -673,6 +673,12 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * -1 says "I cannot see", which every consumer already handles. */
     output->wp_top_lum = -1.0;
     for (int i = 0; i < SYN_LUM_CELLS; i++)     output->wp_lum_grid[i] = -1.0;
+    /* The live pair on the same terms. Guarded by wp_live_lum_have, so the
+     * calloc'd zeroes could never be read — seeded anyway so that a reader
+     * added later cannot inherit "black" from the allocator. */
+    output->wp_live_top_lum = -1.0;
+    output->wp_live_lum_have = false;
+    for (int i = 0; i < SYN_LUM_CELLS; i++) output->wp_live_lum_grid[i] = -1.0;
     for (int i = 0; i < SYN_LUM_CELLS; i++)     output->scene_lum[i]   = -1.0;
     for (int i = 0; i < SYN_LUM_COLS; i++)  output->bar_strip_lum[i]   = -1.0;
 

@@ -1280,6 +1280,19 @@ test('wallpaper_live_gpu_accent', wallpaper_live_gpu_accent,
      depends : [synui_exe, wp_live_gl_client],
      timeout : 180)
 
+# `wallpaper_live_ink`: the same substitution, asked of the OTHER measurement
+# taken off the same picture. 388 moved the accent onto the live wallpaper and
+# left the luminance grid on the painted one, so every surface with no
+# background of its own — the bar, the start menu, the panels, the widgets —
+# went on choosing its ink from an image the engine covers completely. A pale
+# Workshop wallpaper therefore got light text on it. Near-black static picture,
+# near-white live one, and the assertion is which way the ink goes.
+wallpaper_live_ink = find_program('tests/wallpaper_live_ink.sh')
+test('wallpaper_live_ink', wallpaper_live_ink,
+     args    : [synui_exe.full_path(), wp_live_gl_client.full_path()],
+     depends : [synui_exe, wp_live_gl_client],
+     timeout : 180)
+
 # `postit_ink`: the note is the one widget whose content somebody typed, and on
 # a glass desktop it has no card to be typed on — widgetAlpha follows the dock,
 # and a dock at 0.00 puts 12px body text straight onto the wallpaper in an ink
