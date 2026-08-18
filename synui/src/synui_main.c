@@ -383,6 +383,41 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box)
  * every frame by construction, so the CRT filter masks this bug entirely —
  * which is also the workaround.
  */
+/*
+ * "Repaint this whole output" — said so that BOTH halves of the scene hear it.
+ *
+ * ⚠ `wlr_damage_ring_add_whole(&scene_output->damage_ring)` is only half of it,
+ * and the missing half is invisible until you measure the committed frame.
+ * scenefx's own scene_output_damage() (wlr_scene.c) updates TWO things:
+ *
+ *     wlr_damage_ring_add(&scene_output->damage_ring, …)   what is RE-RENDERED
+ *     pixman_region32_union(&scene_output->pending_commit_damage, …)
+ *                                                          what is REPORTED
+ *
+ * and wlr_scene_output_build_state() publishes the second one —
+ * `wlr_output_state_set_damage(state, &scene_output->pending_commit_damage)`.
+ * Poking the ring directly therefore re-renders the output while telling the
+ * commit that only the scene's own node damage changed. That helper is static
+ * in scenefx and there is no public wlr_scene_output_damage_whole(), which is
+ * how the three call sites here came to reach for the ring instead.
+ *
+ * Measured consequence, DP-3 with blur on (so the add_whole below runs EVERY
+ * frame): the committed damage still stopped exactly border_width short of the
+ * right edge, and the 396 trace logged "0 frame(s) reached the edge" for
+ * minutes on end. If the whole-output damage had reached the state, not one
+ * frame could have missed. See project_synui_right_edge_stale_strip.
+ *
+ * The ring add stays — it is what makes the scene re-render — and the flag is
+ * consumed after wlr_scene_output_build_state() by overriding the state's
+ * damage with the full output rect, which is public API and lands exactly where
+ * the trace measures.
+ */
+static void syn_output_damage_whole(syn_output_t *output)
+{
+    wlr_damage_ring_add_whole(&output->scene_output->damage_ring);
+    output->damage_whole_pending = true;
+}
+
 static void edge_damage_trace(syn_output_t *output,
                               const struct wlr_output_state *st)
 {
@@ -464,6 +499,24 @@ static void scene_commit_nightlight(syn_output_t *output)
         wlr_output_state_finish(&state);
         return;
     }
+    /*
+     * A forced whole-output repaint has to reach the STATE, not just the ring:
+     * build_state fills the damage in from scene_output->pending_commit_damage,
+     * which never heard about it. Set after build_state so it overrides, and
+     * before the trace so the trace measures what is actually committed.
+     */
+    if (output->damage_whole_pending) {
+        /* ⚠ BUFFER coordinates — wo->width/height, NOT
+         * wlr_output_transformed_resolution(). scenefx clips
+         * pending_commit_damage to exactly these, and on the rotated
+         * HDMI-A-1 the transformed pair is the other way round. */
+        pixman_region32_t whole;
+        pixman_region32_init_rect(&whole, 0, 0, wo->width, wo->height);
+        wlr_output_state_set_damage(&state, &whole);
+        pixman_region32_fini(&whole);
+        output->damage_whole_pending = false;
+    }
+
     edge_damage_trace(output, &state);
 
     /* NULL is night light off, and committing it is how the screen gets its
@@ -591,7 +644,7 @@ static void output_frame(struct wl_listener *listener, void *data)
      * frames coming so it animates at the output's refresh rate. Damage the
      * scene so the effects/plain commit below actually re-renders. */
     if (matrix_output_frame(output)) {
-        wlr_damage_ring_add_whole(&scene_output->damage_ring);
+        syn_output_damage_whole(output);
         wlr_output_schedule_frame(output->wlr_output);
     }
 
@@ -616,20 +669,25 @@ static void output_frame(struct wl_listener *listener, void *data)
      * — which is already the expensive path — and only on outputs with damage.
      */
     if (output->server->config.blur)
-        wlr_damage_ring_add_whole(&scene_output->damage_ring);
+        syn_output_damage_whole(output);
 
     /* A night light change has no damage of its own — the pixels are identical,
      * only the LUT they are scanned out through moves — so on a still screen
      * the commit below would be skipped and the toggle would do nothing until
      * something else happened to repaint. Damage the output for it. */
     if (output->nightlight_temp != nightlight_effective_temp(output->server))
-        wlr_damage_ring_add_whole(&scene_output->damage_ring);
+        syn_output_damage_whole(output);
 
     /* GLES post-process pass when available; plain scene commit otherwise
      * (and whenever any step of the effects pass fails). Both paths carry night
      * light on the output state they commit — see scene_commit_nightlight. */
+    /* effects.c commits whole-output damage by construction, so when it takes
+     * the frame the request is already honoured — drop it rather than letting
+     * it ride to some later plain commit. */
     if (!effects_output_commit(output))
         scene_commit_nightlight(output);
+    else
+        output->damage_whole_pending = false;
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);

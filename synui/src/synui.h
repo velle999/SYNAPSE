@@ -4794,6 +4794,12 @@ struct syn_output {
                                                * whole-output damage anyway */
     int64_t                  edge_dmg_log_ms; /* last summary, CLOCK_MONOTONIC ms */
 
+    /* synui_main.c: this frame asked for a WHOLE-output repaint (blur, the
+     * matrix wallpaper, a night light change). Recorded because adding it to
+     * the scene's damage ring is only half of saying so — see
+     * syn_output_damage_whole(). Cleared by the commit that honours it. */
+    bool                     damage_whole_pending;
+
     /* wallpaper.c: this output's painted background, parented under
      * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
     struct wlr_scene_buffer *wallpaper_buf;
