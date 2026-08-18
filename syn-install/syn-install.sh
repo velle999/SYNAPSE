@@ -2885,10 +2885,37 @@ case "$DE_CHOICE" in
         ;;
     3)
         echo "  Installing GNOME..."
-        arch-chroot /mnt pacman -S --noconfirm \
-            gnome gdm \
+        # NOT the `gnome` group. The group is 58 packages and roughly a third
+        # of them are a second copy of something SynapseOS already ships, which
+        # is what an app grid holding both Files and Nautilus, both Text Editor
+        # and gnome-text-editor, and two calculators actually looks like. The
+        # session is what is wanted from GNOME here; the applications are not.
+        #
+        # DROPPED because SynapseOS ships the same thing:
+        #   nautilus→synfiles  gnome-text-editor→syn-edit  gnome-console→syntty
+        #   gnome-disk-utility→syn-disks  gnome-software→synpkg
+        #   gnome-calculator→synui's Calculator  gnome-system-monitor→synui's
+        #   task manager  gnome-music/decibels/showtime→cliamp  epiphany→firefox
+        #
+        # DROPPED as tour/PIM/docs noise on a distro that is not a general
+        # desktop: gnome-tour gnome-user-docs yelp gnome-maps gnome-weather
+        #   gnome-contacts gnome-clocks gnome-calendar gnome-characters
+        #   gnome-font-viewer gnome-logs gnome-connections gnome-remote-desktop
+        #   gnome-user-share rygel snapshot sushi grilo-plugins gst-thumbnailers
+        #
+        # KEPT deliberately even though they are GNOME apps: loupe, papers,
+        # simple-scan, baobab and gnome-color-manager fill gaps SynapseOS has
+        # no answer for (image viewer, PDF, scanner, disk usage, colour
+        # profiles). Dropping those would not be de-duplicating, it would be
+        # removing the only thing that does the job.
+        arch-chroot /mnt pacman -S --noconfirm --needed \
+            gdm gnome-shell gnome-session gnome-settings-daemon \
+            gnome-control-center gnome-keyring gnome-menus gnome-backgrounds \
+            xdg-desktop-portal-gnome xdg-user-dirs-gtk tecla malcontent orca \
+            gvfs gvfs-afc gvfs-mtp gvfs-gphoto2 gvfs-smb gvfs-nfs \
+            loupe papers simple-scan baobab gnome-color-manager \
             2>&1 || warn "Some GNOME packages failed to install"
-        success "GNOME installed"
+        success "GNOME installed (session only — SynapseOS apps, not GNOME's)"
         ;;
     4) echo "  No GUI will be installed." ;;
     *)
@@ -3848,27 +3875,30 @@ if [ -f /etc/os-release ]; then
     echo "  os-release: copied from live system"
 fi
 
-# issue and motd — the same reasoning as os-release, and they were the two the
-# block above forgot. Without this the installed system keeps the STOCK Arch
-# `\S{PRETTY_NAME} \r (\l)` issue and an empty motd forever: the branded pair
-# only ever existed in the ISO's airootfs, so the boot banner had no path onto
-# a disk and nobody had seen it on an installed system.
+# issue — the same reasoning as os-release. Without this the installed system
+# keeps the STOCK Arch `\S{PRETTY_NAME} \r (\l)` issue forever: the branded
+# banner only ever existed in the ISO's airootfs, so it had no path onto a disk
+# and nobody had seen it on an installed system.
 #
 # Note that on tty1 it still will not show, and that part is deliberate:
 # synui.service declares Conflicts=getty@tty1.service, so no getty runs there.
-# The banner is for tty2-tty6 and any serial console; motd shows on every
-# console and SSH login.
-for _id in issue motd; do
-    if [ -f "/etc/$_id" ]; then
-        cp "/etc/$_id" "/mnt/etc/$_id"
-        echo "  $_id: copied from live system"
-    fi
-done
+# The banner is for tty2-tty6 and any serial console.
+#
+# ⛔ motd IS NOT COPIED WITH IT — see the motd written after the desktop case
+# below. The live media's motd talks about the live media, and it does not stay
+# on a console where only the person who typed a password reads it.
+if [ -f /etc/issue ]; then
+    cp /etc/issue /mnt/etc/issue
+    echo "  issue: copied from live system"
+fi
 
-# Branded fastfetch logo, if shipped on the live ISO.
-if [ -f /usr/share/synapseos/logo.txt ]; then
+# Branding — the fastfetch console mark and the raster/vector logos beside it.
+# The whole directory rather than logo.txt alone: the login-screen branding
+# below reads logo.svg, and a distro that ships its mark on the ISO and not on
+# the machine installed from it has the mark in the one place nobody keeps.
+if [ -d /usr/share/synapseos ]; then
     mkdir -p /mnt/usr/share/synapseos
-    cp /usr/share/synapseos/logo.txt /mnt/usr/share/synapseos/logo.txt
+    cp -a /usr/share/synapseos/. /mnt/usr/share/synapseos/ 2>/dev/null || true
 fi
 
 # ── Copy service files from live ISO ─────────────────────
@@ -4153,6 +4183,31 @@ SDDMEOF
     3)
         echo "DE=gnome" > /mnt/etc/synapseos/desktop.conf
         arch-chroot /mnt systemctl enable gdm.service 2>/dev/null || true
+
+        # Login-screen branding. Arch's gdm points org.gnome.login-screen's
+        # `logo` at the Arch logo, so an installed SynapseOS greets you with
+        # somebody else's mark on the first screen it ever shows you. A
+        # system-db drop-in is the supported way to change it and does not
+        # depend on what the default happens to be this release.
+        #
+        # banner-message-enable is pinned off alongside it. It is already the
+        # default and it is NOT what put the live media's text on that screen
+        # (that was pam_motd, fixed where the motd is written) — it is here so
+        # that a future GNOME which does turn it on cannot put an unreviewed
+        # wall of text back on the login screen.
+        if [ -f /usr/share/synapseos/logo.svg ]; then
+            install -Dm644 /usr/share/synapseos/logo.svg \
+                /mnt/usr/share/pixmaps/synapseos-logo.svg
+            mkdir -p /mnt/etc/dconf/db/gdm.d /mnt/etc/dconf/profile
+            printf 'user-db:user\nsystem-db:gdm\n' > /mnt/etc/dconf/profile/gdm
+            cat > /mnt/etc/dconf/db/gdm.d/01-synapseos << 'GDMDCONF'
+[org/gnome/login-screen]
+logo='/usr/share/pixmaps/synapseos-logo.svg'
+banner-message-enable=false
+GDMDCONF
+            arch-chroot /mnt dconf update 2>/dev/null || true
+            echo "  GDM: SynapseOS logo on the login screen"
+        fi
         echo "  Desktop: GNOME (GDM login screen)"
         ;;
     4)
@@ -4187,6 +4242,7 @@ case ":${PATH}:" in
     *":$HOME/.local/bin:"*) ;;
     *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
+
 export XDG_SESSION_TYPE=wayland
 # Portal backend routing (synui-portals.conf); unset ⇒ no screen sharing.
 export XDG_CURRENT_DESKTOP=synui
@@ -4310,6 +4366,37 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
     fi
 fi
 PROFILEEOF
+
+# ── motd ─────────────────────────────────────────────────
+# WRITTEN, never copied from the live system, and the reason is a screenshot of
+# a GDM login screen on an installed machine reading "No AI model ships on this
+# media" and "To install to disk: syn-install" under an Arch Linux logo.
+#
+# ⚠ A GRAPHICAL LOGIN SHOWS THE motd. pam_motd emits it as a PAM_TEXT_INFO
+# message, and GDM (and SDDM) render PAM's messages in the login dialog — so
+# the motd is not the "shown once you are already in" file it is on a console.
+# Every line of it is read by someone who has not logged in yet, on the first
+# screen they ever see of the machine they just installed.
+#
+# So it says what is true of THIS machine: the desktop that was actually
+# chosen, and nothing about install media. The live ISO's own motd stays as it
+# is — it is correct there, and that is the only place it was ever correct.
+case "$(cat /mnt/etc/synapseos/desktop.conf 2>/dev/null)" in
+    DE=kde)   _motd_de="KDE Plasma" ;;
+    DE=gnome) _motd_de="GNOME" ;;
+    DE=tty)   _motd_de="none (console only)" ;;
+    *)        _motd_de="synui" ;;
+esac
+{
+    printf '  SynapseOS %s — Where the kernel thinks.\n\n' "$RELEASE"
+    printf '  Desktop:   %s\n' "$_motd_de"
+    printf '  Services:  synapd  synnet  synguard  synapse_kmod\n'
+    printf '  Shell:     synsh    (type naturally or use shell commands)\n\n'
+    printf '  Settings:  syn-settings        Software:  synpkg\n'
+    printf '  Updates:   syn-update          Help:      syn --help\n'
+} > /mnt/etc/motd
+unset _motd_de
+echo "  motd: written for this installation"
 
 # synui config
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"

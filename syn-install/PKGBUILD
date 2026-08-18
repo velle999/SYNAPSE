@@ -18,7 +18,26 @@ pkgver=0.1.0
 #   which stays `synapse`: an existing machine that never picked a theme must
 #   keep the desktop it has, and an upgrade that silently restyles one is not
 #   something this project does. A fresh install has no desktop to preserve.
-pkgrel=82
+# 83: three things a GNOME install got wrong, all first seen on one screenshot
+#   of its login screen.
+#   - The motd is WRITTEN for the installed machine, not copied off the live
+#     media. ⚠ A GRAPHICAL LOGIN SHOWS THE motd — pam_motd emits it as a
+#     PAM_TEXT_INFO message and GDM renders PAM's messages in the login dialog —
+#     so an installed machine was greeting its owner with "No AI model ships on
+#     this media" and "To install to disk: syn-install", and naming synui as the
+#     compositor on a box installed with GNOME. It now names the desktop that
+#     was actually chosen. /etc/issue is still copied; only motd changed.
+#   - GDM wore the ARCH logo, because that is what Arch's gdm sets
+#     org.gnome.login-screen `logo` to. A dconf system-db drop-in points it at
+#     /usr/share/pixmaps/synapseos-logo.svg, and the branding directory is now
+#     copied whole rather than logo.txt alone.
+#   - GNOME is the SESSION now, not the `gnome` group. The group is 58 packages
+#     and a third of them duplicate something SynapseOS ships — the app grid
+#     held two file managers, two text editors, two calculators and two
+#     software centres. The list names what it keeps and the comment says what
+#     it dropped and why. ⚠ kde-applications-meta on the KDE path is the same
+#     problem an order of magnitude larger and is deliberately NOT changed here.
+pkgrel=83
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
