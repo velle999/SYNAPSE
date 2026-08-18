@@ -4805,6 +4805,26 @@ struct syn_output {
      * answer is folded from these — see palette_export(). */
     syn_palette_t            wp_palette;
 
+    /* …and the same taken off a wallpaper synui did NOT paint.
+     *
+     * A live wallpaper (synui-wpengine, driving linux-wallpaperengine) is a
+     * wlr-layer-shell BACKGROUND client that covers wallpaper_tree entirely, so
+     * the picture on screen and the picture wp_palette was measured from are
+     * two different images — and the one the accent came off is the one nobody
+     * can see. Measured off the client's own buffer instead (palette_live_*),
+     * and preferred over wp_palette while it stands.
+     *
+     * `wp_live_have` rather than leaning on wp_live.ok: a live wallpaper that
+     * measures greyscale is a real answer and must not silently hand the
+     * question back to the static image underneath it. */
+    syn_palette_t            wp_live;
+    bool                     wp_live_have;
+    /* The engine paints black for a second or two while it loads its scene, so
+     * the first read is usually "no usable hue". Retried a few times rather
+     * than believed — see palette_live_tick(). */
+    struct wl_event_source  *wp_live_timer;
+    int                      wp_live_tries;
+
     /* matrix.c: the animated wallpaper's per-frame GPU buffer + swapchain,
      * a sibling of wallpaper_buf under wallpaper_tree. Only one of the two
      * is ever populated (chosen by config.wallpaper_src). NULL when the
@@ -6579,6 +6599,16 @@ const syn_palette_t *wallpaper_palette(syn_server_t *s);           /* re-decode 
  * control panel row, a theme switch, a reload. No re-decode: the per-output
  * measurement it folds is already cached. */
 void wallpaper_accent_refresh(syn_server_t *s);
+/* A BACKGROUND layer surface mapped or unmapped on this output — a live
+ * wallpaper appearing or going away. The first arms a settle timer and measures
+ * the client's own buffer; the second drops that answer and hands the question
+ * back to the picture synui paints itself. Both are cheap and both are safe to
+ * call for a layer surface that turns out not to be a wallpaper: the check for
+ * "does it cover the screen" is inside. */
+void wallpaper_live_appeared(syn_output_t *o);
+void wallpaper_live_gone(syn_output_t *o);
+/* Drop the settle timer. For output teardown. */
+void wallpaper_live_finish(syn_output_t *o);
 
 /* ── imgdec.c ────────────────────────────────────────────── */
 

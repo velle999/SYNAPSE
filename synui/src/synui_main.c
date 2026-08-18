@@ -564,6 +564,12 @@ static void output_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
     wl_list_remove(&output->link);
+    /* OUTSIDE the shutdown guard, unlike every other teardown below: this is an
+     * armed event-loop timer holding a pointer to the syn_output_t about to be
+     * freed, and a shutdown that leaves it armed is a use-after-free with a
+     * deadline on it. */
+    wallpaper_live_finish(output);
+
     /* Clear the back-pointer before freeing: the dying wlr_output may still be
      * momentarily reachable via the output layout, and server_focused_output()
      * dereferences ->data — leave it NULL so that lookup skips this output. */

@@ -710,11 +710,54 @@ QtObject {
 
     // ── Ink ──────────────────────────────────────────────
     readonly property color fg:      p.fg      ? Qt.color(p.fg)      : "#c8e3ee"
-    readonly property color cyan:    themed("glyph",   5, 217, 232, 1.0)   // module glyphs
+
+    /*
+     * ── …and the three the wallpaper is allowed to move ──
+     *
+     * `magenta` alone took the measured accent to begin with, and that left the
+     * feature half-applied on the desktop it was built for: the underline and
+     * the hover wash followed the picture while every module GLYPH stayed the
+     * preset's cyan and the clock stayed its yellow. From the outside that is
+     * not "the accent is the wallpaper's", it is two colours off the wallpaper
+     * and two off a theme, on the same bar.
+     *
+     * ⚠ GLYPH AND ACCENT TAKE THE SAME COLOUR, AND THAT IS NOT A SHORTCUT.
+     * Prism's own preset already has them equal — theme.json writes
+     * glyph = accent = #00D6E5 — with the clock as the one colour that differs.
+     * So this reproduces the structure the theme already has, in the picture's
+     * colours rather than the preset's, instead of inventing a split the theme
+     * never had.
+     *
+     * The clock takes `secondary`, which palette.c measures FROM A DIFFERENT
+     * PART OF THE IMAGE precisely so there is a second hue to tell states apart
+     * with. Deriving it off the accent instead — a rotation, a shade — is how a
+     * "themed" desktop ends up as one hue smeared over everything.
+     */
+    readonly property color cyan:    root.wpAccent !== ""
+        ? Qt.color(root.wpAccent)
+        : themed("glyph",   5, 217, 232, 1.0)   // module glyphs
     readonly property color magenta: root.wpAccent !== ""
         ? Qt.color(root.wpAccent)
         : themed("accent", 255,  41, 109, 1.0)  // accent + underline
+
+    /*
+     * ⚠ `yellow` IS NOT THE CLOCK'S COLOUR ANY MORE, and it must not become the
+     * wallpaper's.
+     *
+     * It started as one — it is theme.json's clockFg — and the rest of the
+     * shell then borrowed it for the things that are yellow because yellow
+     * MEANS something: a widget being dragged, a CPU meter over 70%, an EQ band
+     * clipping, the post-it. Retinting it would turn a drag handle violet and a
+     * warning coral, which is a wallpaper deciding what "careful" looks like.
+     *
+     * So the clock gets its own name and the meanings keep theirs. Every
+     * consumer that means "the clock" reads `clock`; every consumer that means
+     * "warning" or "the post-it" keeps reading `yellow`.
+     */
     readonly property color yellow:  p.clockFg ? Qt.color(p.clockFg) : "#ffd319"
+    readonly property color clock:   root.wpSecondary !== ""
+        ? Qt.color(root.wpSecondary)
+        : root.yellow
 
     // Not themed, because these carry MEANING rather than style: green is
     // charging, red is a battery about to die. They only switch on light/dark,
@@ -755,7 +798,7 @@ QtObject {
     readonly property color barFg:     root.clearBar ? root.barInkColor : root.fg
     readonly property color barGlyph:  root.clearBar ? root.barInkColor : root.cyan
     readonly property color barAccent: root.clearBar ? root.barInkColor : root.magenta
-    readonly property color barClock:  root.clearBar ? root.barInkColor : root.yellow
+    readonly property color barClock:  root.clearBar ? root.barInkColor : root.clock
 
     // A 15% accent wash over a photograph is not a hover state, it is nothing.
     // On a clear strip the wash is the ink, at the strength it takes to read as
@@ -1041,7 +1084,7 @@ QtObject {
             fg:       clear ? ink : root.fg,
             glyph:    clear ? ink : root.cyan,
             accent:   clear ? ink : root.magenta,
-            clock:    clear ? ink : root.yellow,
+            clock:    clear ? ink : root.clock,
             hoverBg:  clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.18) : root.hoverBg,
             activeBg: clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.28) : root.activeBg,
             dim:      pk("#3a4a52", "#6b7280"),

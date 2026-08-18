@@ -270,6 +270,14 @@ static void layer_surface_map(struct wl_listener *listener, void *data)
     /* A panel/launcher can map right under a cursor that never moved; it needs
      * wl_pointer.enter now, not on the next physical nudge. */
     pointer_rebase(ls->server);
+
+    /* A BACKGROUND surface covering the screen is a live wallpaper (this is
+     * how synui-wpengine paints one), and it hides the picture wallpaper.c
+     * measured the accent off. Asked here rather than at the wpengine helper,
+     * because what makes it the wallpaper is that it is on screen — an engine
+     * synui never launched counts exactly as much. */
+    if (ls->layer == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND)
+        wallpaper_live_appeared(ls->output);
 }
 
 static void layer_surface_unmap(struct wl_listener *listener, void *data)
@@ -286,6 +294,11 @@ static void layer_surface_unmap(struct wl_listener *listener, void *data)
         layer_arrange_output(ls->output);
     /* A dismissed launcher/menu uncovers whatever was beneath it. */
     pointer_rebase(s);
+
+    /* …and a live wallpaper going away uncovers the one synui paints, whose
+     * colour is the one that should be on the panels again. */
+    if (ls->layer == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND && !s->shutting_down)
+        wallpaper_live_gone(ls->output);
 }
 
 static void layer_surface_commit(struct wl_listener *listener, void *data)

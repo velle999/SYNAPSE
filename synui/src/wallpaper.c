@@ -30,8 +30,10 @@
 
 #include <cairo.h>
 #include <jpeglib.h>
+#include <drm_fourcc.h>
 
 #include <scenefx/types/wlr_scene.h>
+#include <wlr/render/wlr_texture.h>
 #include <wlr/util/log.h>
 
 #include "contrast.h"
@@ -424,8 +426,22 @@ static void palette_measure(syn_output_t *o, cairo_surface_t *surf,
 const syn_palette_t *wallpaper_palette(syn_server_t *s)
 {
     syn_output_t *o;
-    wl_list_for_each(o, &s->outputs, link)
+    wl_list_for_each(o, &s->outputs, link) {
+        /* ⚠ THE LIVE ONE ANSWERS FIRST, AND IT ANSWERS EVEN WHEN IT SAYS NO.
+         *
+         * A monitor showing a Workshop wallpaper is not showing the picture in
+         * o->wp_palette — that image is painted, covered by the engine's own
+         * BACKGROUND surface, and nobody can see it. Falling through to it on a
+         * greyscale live wallpaper would take the accent off a hidden picture,
+         * which is the whole bug this replaced. `wp_live_have` is the flag for
+         * "this screen's wallpaper is somebody else's", and `.ok` inside it is
+         * that wallpaper's own answer. */
+        if (o->wp_live_have) {
+            if (o->wp_live.ok) return &o->wp_live;
+            continue;
+        }
         if (o->wp_palette.ok) return &o->wp_palette;
+    }
     return NULL;
 }
 
@@ -569,6 +585,249 @@ static void palette_export(syn_server_t *s)
 void wallpaper_accent_refresh(syn_server_t *s)
 {
     palette_export(s);
+}
+
+/* ── The wallpaper synui did NOT paint ───────────────────── */
+/*
+ * A live wallpaper is a CLIENT, and the accent came off the picture underneath
+ * it.
+ *
+ * synui-wpengine runs linux-wallpaperengine as a wlr-layer-shell BACKGROUND
+ * surface, and synui creates layer_tree[BACKGROUND] above its own
+ * wallpaper_tree — so the engine's output covers wallpaper.c's painted buffer
+ * completely. Everything above this line still measured that buffer, so a
+ * desktop running a Workshop wallpaper took its accent off whatever static
+ * image happened to be configured: on this box the house logo's violet, on a
+ * fresh install the shipped default, and in both cases a colour that is not
+ * anywhere on the screen. It looked exactly like the feature being broken for
+ * live wallpapers, because from the outside it is.
+ *
+ * ⚠ THE PIXELS ARE THE CLIENT'S, SO wlr_texture_from_buffer() IS THE WRONG
+ * CALL — it returns NULL for a wlr_client_buffer, silently, which reads as "no
+ * wallpaper there". The texture is already on the wrapper; borrow it and never
+ * destroy it. barscan.c learnt this the expensive way (383) and its comment is
+ * the long version.
+ *
+ * ── Why a timer, and why several ──────────────────────────────────────────
+ *
+ * The engine maps its surface before it has anything to draw: a scene
+ * wallpaper spends a second or two compiling shaders and loading assets, and
+ * the first committed frames are black. Black measures as "no usable hue",
+ * which is indistinguishable from an honest greyscale wallpaper — so a single
+ * read at map time answers correctly only for the wallpapers that happen to
+ * start fast. Read on a settle timer, and keep reading while the answer is
+ * still "nothing", up to WP_LIVE_TRIES. A wallpaper that genuinely has no hue
+ * costs the retries and then stands as `have` with `ok = false`, which is the
+ * right answer and is NOT the same as having no live wallpaper at all.
+ *
+ * ── Why not on every frame ────────────────────────────────────────────────
+ *
+ * Because the desktop would then be re-themed continuously. A video wallpaper's
+ * dominant hue changes shot to shot, and panel colours that chase it are not a
+ * theme, they are a strobe. One answer per wallpaper, exactly like a static
+ * picture — the engine's wallpaper is chosen by a person, and that choice is
+ * when the colour is allowed to move.
+ */
+#define WP_LIVE_SETTLE_MS 1200
+#define WP_LIVE_TRIES     6
+
+/* The BACKGROUND layer surface that covers this output, or NULL.
+ *
+ * Not keyed on a namespace. linux-wallpaperengine's is its own business and a
+ * second engine would have another; what makes a surface the wallpaper is that
+ * it is on the background layer and it covers the screen. The 3/4 slack is for
+ * a client that leaves a margin or rounds its size down at a fractional scale —
+ * a background surface that small is still the thing behind everything.
+ */
+static syn_layer_surface_t *live_wallpaper_surface(syn_output_t *o)
+{
+    struct wlr_box full;
+    wlr_output_layout_get_box(o->server->output_layout, o->wlr_output, &full);
+    if (full.width <= 0 || full.height <= 0) return NULL;
+
+    syn_layer_surface_t *ls, *found = NULL;
+    wl_list_for_each(ls, &o->layer_surfaces, link) {
+        if (ls->layer != ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND) continue;
+        struct wlr_surface *surf = ls->layer_surface->surface;
+        if (!surf || !surf->mapped) continue;
+        if (surf->current.width  * 4 < full.width  * 3) continue;
+        if (surf->current.height * 4 < full.height * 3) continue;
+        found = ls;
+    }
+    return found;
+}
+
+/*
+ * Read the client's buffer into the ARGB32 palette.c expects.
+ *
+ * ⚠ THE PREFERRED READ FORMAT IS NOT ALWAYS THE ONE THE PALETTE READS. palette.c
+ * takes native-endian ARGB32 — B, G, R, A in memory on little-endian — and a
+ * texture may prefer the byte-reversed XBGR/ABGR pair instead. Handing those
+ * over unswapped does not fail: it measures a picture with its reds and blues
+ * exchanged, so a warm wallpaper themes the desktop cold and every check of the
+ * form "did we get a colour" passes. Swapped here, in place.
+ */
+static unsigned char *live_read_argb32(struct wlr_texture *tex,
+                                       int *w_out, int *h_out, size_t *stride_out)
+{
+    int w = tex->width, h = tex->height;
+    if (w <= 0 || h <= 0) return NULL;
+    /* A guard against a client that committed something absurd, not a policy:
+     * the read is one malloc of w*h*4 and this is the only place its size comes
+     * from outside synui. */
+    if ((long)w * h > 64L * 1024 * 1024) return NULL;
+
+    uint32_t fmt = wlr_texture_preferred_read_format(tex);
+    bool swap;
+    switch (fmt) {
+    case DRM_FORMAT_XRGB8888:
+    case DRM_FORMAT_ARGB8888: swap = false; break;
+    case DRM_FORMAT_XBGR8888:
+    case DRM_FORMAT_ABGR8888: swap = true;  break;
+    /* Anything else declines rather than guesses — same call barscan.c makes,
+     * and for the same reason: a wrong measurement is worse than none, because
+     * none falls back to the picture underneath and wrong repaints the desktop
+     * confidently. */
+    default: return NULL;
+    }
+
+    size_t stride = (size_t)w * 4;
+    unsigned char *data = malloc(stride * (size_t)h);
+    if (!data) return NULL;
+
+    struct wlr_texture_read_pixels_options opts = {
+        .data    = data,
+        .format  = fmt,
+        .stride  = (uint32_t)stride,
+        .dst_x   = 0,
+        .dst_y   = 0,
+        .src_box = { .x = 0, .y = 0, .width = w, .height = h },
+    };
+    if (!wlr_texture_read_pixels(tex, &opts)) {
+        free(data);
+        return NULL;
+    }
+
+    if (swap) {
+        for (size_t i = 0; i < stride * (size_t)h; i += 4) {
+            unsigned char t = data[i];
+            data[i] = data[i + 2];
+            data[i + 2] = t;
+        }
+    }
+
+    *w_out = w;
+    *h_out = h;
+    *stride_out = stride;
+    return data;
+}
+
+/* One attempt. true when this output now has an answer worth keeping. */
+static bool live_measure(syn_output_t *o)
+{
+    syn_layer_surface_t *ls = live_wallpaper_surface(o);
+    if (!ls) return false;
+
+    struct wlr_surface *surf = ls->layer_surface->surface;
+    /* The wrapper wlroots made when the client attached — see the header
+     * comment. Its texture is BORROWED. */
+    if (!surf->buffer || !surf->buffer->texture) return false;
+
+    int w = 0, h = 0;
+    size_t stride = 0;
+    unsigned char *data = live_read_argb32(surf->buffer->texture,
+                                           &w, &h, &stride);
+    if (!data) return false;
+
+    syn_palette_t p;
+    /* Corrected against synui's own panel, exactly as the static measurement
+     * is: these colours are drawn ON panels, and the surface they are extracted
+     * from is not the surface they land on. */
+    syn_palette_from_pixels(data, w, h, (int)stride,
+                            theme_panel_surface_lum(&o->server->config), &p);
+    free(data);
+
+    o->wp_live = p;
+    o->wp_live_have = true;
+    return p.ok;
+}
+
+static int live_tick(void *data)
+{
+    syn_output_t *o = data;
+
+    /* Not a wallpaper after all — a background-layer surface that does not
+     * cover the screen — or one that has gone away since. Nothing measured and
+     * nothing published: wallpaper_live_gone() owns the going-away half, and
+     * publishing here would write a log line for every panel that ever mapped
+     * on the background layer. */
+    if (!live_wallpaper_surface(o)) return 0;
+
+    /* Still black, or still loading its scene. Come back. */
+    if (!live_measure(o) && --o->wp_live_tries > 0) {
+        wl_event_source_timer_update(o->wp_live_timer, WP_LIVE_SETTLE_MS);
+        return 0;
+    }
+
+    /* Three outcomes and three words, because "the desktop is not on the live
+     * wallpaper's colour" has three quite different causes and this log line is
+     * where anybody asking why will look first. */
+    wlr_log(WLR_INFO, "synui: palette: %s live wallpaper measured %s",
+            o->wlr_output->name,
+            !o->wp_live_have ? "nothing readable"
+                             : o->wp_live.ok ? "a hue" : "no usable hue");
+    palette_export(o->server);
+    return 0;
+}
+
+/*
+ * ⚠ ARMED OFF THE LAYER, NOT OFF THE MEASUREMENT. Asking
+ * live_wallpaper_surface() here and returning early would tie this to
+ * wlr_surface.mapped already being true at the instant the map signal fires,
+ * which is wlroots' business and not a fact worth depending on; the tick asks
+ * the same question 1.2s later, when the answer also accounts for a client that
+ * committed its real size on the frame after it mapped.
+ */
+void wallpaper_live_appeared(syn_output_t *o)
+{
+    if (!o->wp_live_timer) {
+        o->wp_live_timer = wl_event_loop_add_timer(
+            wl_display_get_event_loop(o->server->display), live_tick, o);
+        if (!o->wp_live_timer) return;
+    }
+    o->wp_live_tries = WP_LIVE_TRIES;
+    wl_event_source_timer_update(o->wp_live_timer, WP_LIVE_SETTLE_MS);
+}
+
+void wallpaper_live_gone(syn_output_t *o)
+{
+    if (o->wp_live_have) {
+        o->wp_live_have = false;
+        memset(&o->wp_live, 0, sizeof(o->wp_live));
+        palette_export(o->server);
+    }
+
+    /* ⚠ AND THEN ASK AGAIN, rather than deciding here that there is no live
+     * wallpaper left.
+     *
+     * This fires for every background-layer unmap, and two of them are not the
+     * end of anything: a second background client, and an engine RESTART —
+     * synui-wpengine stops one process and starts another whenever a single
+     * monitor's wallpaper changes, so an unmap and a map arrive a frame or two
+     * apart. Re-arming costs one timer that finds nothing and returns; reading
+     * the unmapping surface's own `mapped` flag to tell the cases apart would
+     * make this depend on whether wlroots clears it before or after it emits,
+     * which is exactly the kind of ordering this file should not know about. */
+    wallpaper_live_appeared(o);
+}
+
+void wallpaper_live_finish(syn_output_t *o)
+{
+    if (o->wp_live_timer) {
+        wl_event_source_remove(o->wp_live_timer);
+        o->wp_live_timer = NULL;
+    }
+    o->wp_live_have = false;
 }
 
 /*

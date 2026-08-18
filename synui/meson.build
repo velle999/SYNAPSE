@@ -1197,6 +1197,31 @@ test('wallpaper_accent', wallpaper_accent,
      depends : [synui_exe],
      timeout : 180)
 
+# `wallpaper_accent_widgets`: WHERE the measured colours land. The accent used
+# to substitute into `magenta` alone, so the underline followed the picture
+# while every module glyph kept the preset's cyan and the clock its yellow. Two
+# widgets in one capture: LAUNCH must come out the measured ACCENT and CLOCK the
+# measured SECONDARY. Both were #00D6E5 while it was half-applied, and
+# `secondary` was published but read by nothing at all.
+wallpaper_accent_widgets = find_program('tests/wallpaper_accent_widgets.sh')
+test('wallpaper_accent_widgets', wallpaper_accent_widgets,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
+# `wallpaper_live_accent`: WHICH picture the accent is measured off. A live
+# wallpaper is a BACKGROUND layer client covering synui's own painted buffer, so
+# the image that used to answer was the one underneath it — invisible, and
+# usually a leftover. swaybg stands in for linux-wallpaperengine; the assertion
+# is that a green client over a magenta wallpaper makes the published accent
+# GREEN, and magenta again when it unmaps. "Is there an accent" passed
+# throughout the bug.
+wallpaper_live_accent = find_program('tests/wallpaper_live_accent.sh')
+test('wallpaper_live_accent', wallpaper_live_accent,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 180)
+
 # `postit_ink`: the note is the one widget whose content somebody typed, and on
 # a glass desktop it has no card to be typed on — widgetAlpha follows the dock,
 # and a dock at 0.00 puts 12px body text straight onto the wallpaper in an ink

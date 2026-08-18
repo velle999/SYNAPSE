@@ -24,7 +24,11 @@ WidgetFrame {
     widgetId: "clock"
     shown: WidgetState.clock
     label: "CLOCK"
-    accent: Theme.cyan
+    /* The clock's own colour, not the glyph one — see Theme.qml's `clock`. On a
+     * desktop taking its palette off the wallpaper this is the SECOND measured
+     * hue, which is what keeps a clock the size of this one from being the same
+     * violet as every icon on the bar above it. */
+    accent: Theme.clock
 
     homeEdgeH: "right"; homeEdgeV: "bottom"
     homeMarginX: 22
