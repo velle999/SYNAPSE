@@ -6032,15 +6032,34 @@ void synui_render_thememgr(syn_server_t *s)
     }
 
     /* "there is more above/below" — without these a windowed list reads as the
-     * whole list, and the themes off-screen may as well not exist. */
+     * whole list, and the themes off-screen may as well not exist.
+     *
+     * ⚠ AND A BARE ARROW WAS NOT ENOUGH. It was there, at 11px and INK_LABEL,
+     * alone against the panel's right edge with no row beside it — and it read
+     * as a mark on the panel rather than as a control. On the 0.2.9 ISO the
+     * live session came up on SYNAPSE, which is index 0, so the window opened
+     * on rows 0-9 and stopped at Bubblegum: macOS 26, Aqua, Platinum and Prism
+     * were reported MISSING FROM THE BUILD by someone looking straight at the
+     * ▼ that said otherwise. So say the number. "4 more" is a sentence about
+     * the list; a triangle is a decoration, and the difference is whether
+     * anyone presses Down.
+     *
+     * Same font size and same anchor points as before deliberately — the panel
+     * geometry is a laid-out thing and this is a legibility fix, not a
+     * relayout. */
     if (rows < SYN_THEME_COUNT) {
+        char more[32];
         cairo_set_font_size(cr, 11);
-        set_ink(cr, INK_LABEL, 0.9);
-        if (first > 0)
-            draw_right(cr, pw - THM_PAD, THM_TOP - 32, "\xe2\x96\xb2");
-        if (first + rows < SYN_THEME_COUNT)
-            draw_right(cr, pw - THM_PAD, THM_TOP + rows * THM_ROW_H - 8,
-                       "\xe2\x96\xbc");
+        set_ink(cr, INK_TEXT, 0.85);
+        if (first > 0) {
+            snprintf(more, sizeof(more), "\xe2\x96\xb2 %d more", first);
+            draw_right(cr, pw - THM_PAD, THM_TOP - 32, more);
+        }
+        if (first + rows < SYN_THEME_COUNT) {
+            snprintf(more, sizeof(more), "%d more \xe2\x96\xbc",
+                     SYN_THEME_COUNT - (first + rows));
+            draw_right(cr, pw - THM_PAD, THM_TOP + rows * THM_ROW_H - 8, more);
+        }
     }
 
     /* Transparency slider: a track filled in proportion to the focused-window

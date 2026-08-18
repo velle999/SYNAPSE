@@ -375,6 +375,30 @@ start_output() {
     # box with no Steam from showing a wallpaper it already had on disk.
     # `wtype`, not `type`: a local named `type` shadows the shell builtin for
     # the rest of the function.
+    #
+    # ⚠ BUT `--assets-dir` MUST STILL BE PASSED, AND MUST NAME A DIRECTORY THAT
+    # EXISTS. "Renders without the assets tree" is true of the wallpaper; it is
+    # NOT true of the flag. Omit it and the engine does not shrug and carry on —
+    # it goes looking for Steam's copy of Wallpaper Engine, fails, and EXITS:
+    #
+    #     Cannot find directory for steam app wallpaper_engine: assets
+    #     Cannot find a valid assets folder, resolved to
+    #         "/usr/lib/linux-wallpaperengine/assets"
+    #
+    # That is every machine without Wallpaper Engine bought on Steam — which is
+    # the live ISO and every fresh install, i.e. exactly the machines the four
+    # wallpapers in $SYSROOT exist for. An EMPTY directory is enough: upstream
+    # only requires the path to resolve, and a video wallpaper never reads it.
+    #
+    # ⚠ AND IT FAILS LOOKING LIKE IT WORKED. The engine commits one buffer
+    # before it dies, so its dead layer surface keeps that frame on the
+    # background layer; synui is not watching the process and nothing repaints.
+    # The desktop shows a still picture that never moves, the picker says the
+    # wallpaper was applied, and the only record is the runtime log — which
+    # /run clears at the next boot. Verified on the 0.2.9 ISO (synui 390,
+    # linux-wallpaperengine 0.1.0-14): with the flag omitted `pgrep
+    # linux-wallpaperengine` finds nothing seconds after "applying"; with it
+    # pointed at an empty directory the process is still there.
     local assets=() dir wtype
     if [ -d "$ASSETS" ]; then
         assets=(--assets-dir "$ASSETS")
@@ -384,6 +408,12 @@ start_output() {
             echo "synui-wpengine: $id is a scene wallpaper and needs Wallpaper" \
                  "Engine's assets at $ASSETS — skipping $out" >&2
             return 1
+        fi
+        # In $RUNDIR rather than $SYSROOT: the wallpaper tree is read-only on
+        # the live image, and this wants to be gone at the next boot in case a
+        # real assets tree has turned up by then.
+        if mkdir -p "$RUNDIR/synui-wpengine-assets" 2>/dev/null; then
+            assets=(--assets-dir "$RUNDIR/synui-wpengine-assets")
         fi
     fi
 
@@ -527,6 +557,15 @@ cmd_status() {
         fi
     done < "$STATE"
 }
+
+# Test seam. Sourcing the script gets at the functions above without running a
+# command — which matters more here than usual: every verb goes through
+# `outputs()`, and `synctl outputs` talks to whatever compositor the ambient
+# WAYLAND_DISPLAY names. That is the LIVE seat, so a test that dispatched a verb
+# would start engines on the developer's real screens.
+if [ -n "${SYNUI_WPENGINE_SOURCE_ONLY:-}" ]; then
+    return 0 2>/dev/null || exit 0
+fi
 
 case "${1:-}" in
     list)    cmd_list ;;

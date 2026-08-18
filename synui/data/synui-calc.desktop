@@ -13,3 +13,14 @@ Terminal=false
 StartupNotify=false
 Categories=Utility;Calculator;
 Keywords=calc;calculator;math;arithmetic;sum;
+# ⛔ SYNUI ONLY — same reasoning as the other synctl entries: under KDE or GNOME
+# nothing is listening on synui's socket and this was a menu item that did
+# nothing at all. Both desktop names, because the identity is inconsistent
+# (synui-session exports `synui`, the wayland-session file says `SynapseOS`).
+# ⚠ `desktop-file-validate` calls both names "unregistered" and wants an X-
+# prefix. IGNORE IT — the prefix would BREAK this. Implementations compare
+# OnlyShowIn literally against the entries in XDG_CURRENT_DESKTOP, so
+# X-SynapseOS does not match SynapseOS and the entry would vanish everywhere.
+# Every wlroots compositor that ships menu entries does the same thing. Nothing
+# in this build runs the validator; runtime behaviour is the contract.
+OnlyShowIn=synui;SynapseOS;

@@ -1,0 +1,33 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Volume Mixer
+GenericName=Audio Settings
+Comment=Outputs, inputs and per-application volume
+# A compositor panel, not a program: synctl asks synui to open exactly what the
+# keybind opens. StartupNotify is off because no window ever appears, so a
+# startup spinner would spin until it timed out.
+Exec=synctl dispatch sound
+Icon=audio-volume-high
+Terminal=false
+StartupNotify=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=sound;audio;volume;mixer;speaker;microphone;output;input;eq;
+# ⛔ SYNUI ONLY. `synctl dispatch` talks to a running synui over its socket;
+# under KDE or GNOME there is nothing listening and the entry would be a menu
+# item that silently does nothing. Hidden there rather than shown and dead.
+#
+# ⚠ BOTH NAMES, and that is not belt-and-braces — the desktop identity is
+# genuinely inconsistent today. A greetd login runs /usr/local/bin/synui-session,
+# which exports XDG_CURRENT_DESKTOP=synui; a display-manager login reads
+# /usr/share/wayland-sessions/synui.desktop, whose DesktopNames is SynapseOS —
+# and a live ISO session gets synui from synui.service. Naming one of them hides
+# these entries on the other login paths. See the portal config that was killed
+# by the same split.
+# ⚠ `desktop-file-validate` calls both names "unregistered" and wants an X-
+# prefix. IGNORE IT — the prefix would BREAK this. Implementations compare
+# OnlyShowIn literally against the entries in XDG_CURRENT_DESKTOP, so
+# X-SynapseOS does not match SynapseOS and the entry would vanish everywhere.
+# Every wlroots compositor that ships menu entries does the same thing. Nothing
+# in this build runs the validator; runtime behaviour is the contract.
+OnlyShowIn=synui;SynapseOS;

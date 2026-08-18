@@ -43,6 +43,23 @@ autostart = kdeconnect-indicator
 # system's is written by syn-install and has no such line.
 autostart = syn-install-gui --if-requested
 
+# ── Theme ─────────────────────────────────────────────────
+# SYNAPSE Prism, which is what a fresh install boots into: syn-install writes
+# `theme = prism` into the new user's synuirc (syn-install.sh, the SYNUIRC
+# heredoc). Without this line the live session did NOT match — synui's compiled
+# default is SYN_THEME_SYNAPSE (config.c), so the ISO booted into the neon
+# theme and the desktop someone tries before installing was not the desktop
+# they got afterwards.
+#
+# It also fixes what read as "the new themes are missing". The Super+T panel
+# windows its list to the rows that fit the screen and centres that window on
+# the ACTIVE theme (render.c). Active = SYNAPSE is index 0, so on the ISO's
+# 1280x800 the panel opened on rows 0-9 and stopped at Bubblegum — macOS 26,
+# Aqua, Platinum and Prism were all below the fold behind one small grey ▼.
+# Active = Prism is the last index, so the window clamps to the END of the list
+# and the four newest themes are the ones on screen.
+theme = prism
+
 # Window appearance
 border_width = 2
 gap = 8

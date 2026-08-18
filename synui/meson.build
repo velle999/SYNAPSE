@@ -365,7 +365,34 @@ syn_calc = executable('syn-calc',
 # /usr/share/applications and nothing else. One file serves both. It is a
 # compositor panel rather than a program, so its Exec asks synui to open the
 # same thing the keybind does.
-install_data('data/synui-calc.desktop',
+# The compositor's own panels, as menu entries.
+#
+# Reported as "no control panel access under KDE or GNOME" — which was true in
+# both directions. Under synui the panels existed only as keybinds, so nothing
+# in a searchable menu led to them; under KDE or GNOME the one entry that DID
+# exist (the calculator) was a dead button, because `synctl dispatch` needs a
+# synui listening on the other end.
+#
+# Every one of these carries OnlyShowIn=synui;SynapseOS; — see the note in the
+# files. They make the panels findable by name and by keyword inside synui, and
+# they do not appear at all on a desktop that cannot open them.
+#
+# ⚠ AI IS NOT IN THIS LIST BY DESIGN. `aimodel` is the model chooser, which is
+# a synui panel like the rest — but managing the BACKEND (off/gpu/cpu, and the
+# units that restart it) has to work where synui is not running at all. That
+# lives in syn-settings' AI pane, which is a normal program and shows up
+# everywhere.
+install_data(['data/synui-calc.desktop',
+              'data/synui-ctlpanel.desktop',
+              'data/synui-theme.desktop',
+              'data/synui-taskmgr.desktop',
+              'data/synui-sound.desktop',
+              'data/synui-keys.desktop',
+              'data/synui-widgets.desktop',
+              'data/synui-aimodel.desktop',
+              'data/synui-filters.desktop',
+              'data/synui-clipboard.desktop',
+              'data/synui-calendar.desktop'],
              install_dir : get_option('prefix') / get_option('datadir') / 'applications')
 
 # Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
@@ -1292,6 +1319,23 @@ test('wallpaper_live_ink', wallpaper_live_ink,
      args    : [synui_exe.full_path(), wp_live_gl_client.full_path()],
      depends : [synui_exe, wp_live_gl_client],
      timeout : 180)
+
+# `wpengine_assets_dir`: the live wallpaper never played on a machine that does
+# not own Wallpaper Engine on Steam — the ISO and every fresh install, which is
+# every machine the four wallpapers in synapse-wallpapers were packaged for.
+# synui-wpengine omitted `--assets-dir` when Steam's assets tree was missing,
+# because a video wallpaper does not read it. The WALLPAPER does not; the ENGINE
+# does — with no such flag it hunts for Steam's copy of the app, fails, and
+# exits. It commits one buffer before it goes, so the dead layer surface keeps
+# that frame and the desktop shows a still picture that never moves: the picker
+# reports success and the only contrary evidence is a log under /run.
+#
+# Needs no compositor — the script is SOURCED and start_output() called with a
+# stub engine, deliberately, since every VERB runs `synctl outputs` against the
+# ambient WAYLAND_DISPLAY, which is the developer's live seat.
+wpengine_assets_dir = find_program('tests/wpengine_assets_dir.sh')
+test('wpengine_assets_dir', wpengine_assets_dir,
+     timeout : 60)
 
 # `tux_screen`: Tuxagotchi is almost entirely a PICTURE — a pixel penguin that
 # walks, blinks, eats, sleeps, sickens, ages and dies — and every other way of

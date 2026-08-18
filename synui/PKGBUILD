@@ -120,7 +120,33 @@ pkgver=0.1.0
 #   see-through alpha it took for a glass desktop after the blur behind it was
 #   torn down: a menu with a SHARP wallpaper through it, which is the one outcome
 #   worse than the slab this change set out to remove.
-pkgrel=391
+# 392: the live wallpaper never played on a machine that does not own Wallpaper
+#   Engine on Steam — which is the ISO and every fresh install, i.e. exactly the
+#   machines the four wallpapers synapse-wallpapers ships exist for.
+#   synui-wpengine passed `--assets-dir` only when Steam's assets tree was there
+#   and otherwise omitted the flag, on the (correct) grounds that a video
+#   wallpaper never reads that tree. The wallpaper does not; the ENGINE does:
+#   with no `--assets-dir` it hunts for Steam's copy, fails, and exits. It now
+#   always passes one, falling back to an empty directory under $XDG_RUNTIME_DIR.
+#   ⚠ THE FAILURE LOOKED LIKE SUCCESS. The engine commits one buffer before
+#   dying, its dead layer surface keeps that frame, and synui does not watch the
+#   process — so the desktop showed a still picture that never moved and the
+#   picker reported the wallpaper applied. The one line saying otherwise was in
+#   $XDG_RUNTIME_DIR, which /run clears at the next boot.
+#   Also 392: the compositor's panels are menu entries now. Reported as "no
+#   control panel access under KDE or GNOME", which was true in both
+#   directions — under synui the panels were keybinds and nothing searchable
+#   led to them, and under KDE/GNOME the one entry that did exist (the
+#   calculator) was a dead button, because `synctl dispatch` needs a synui
+#   listening. Eleven entries with Keywords, all OnlyShowIn=synui;SynapseOS;.
+#   ⚠ BOTH NAMES ON PURPOSE: a greetd login exports XDG_CURRENT_DESKTOP=synui
+#   and a display-manager login gets SynapseOS from the wayland-session file.
+#   That split is a real bug of its own and is NOT fixed here; naming one of
+#   them would hide the entries on the other login path.
+#   ⚠ desktop-file-validate wants an X- prefix on both. Ignore it — OnlyShowIn
+#   is compared literally against XDG_CURRENT_DESKTOP, so X-SynapseOS matches
+#   nothing and the prefix would hide every entry everywhere.
+pkgrel=392
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
