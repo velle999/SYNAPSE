@@ -94,6 +94,16 @@ static const char *frag_fmt =
     "precision highp float;\n"
     "#define SCAN_PITCH 3.0\n"
     "#define SCAN_DEPTH 0.55\n"
+    /* Phosphor transfer curve. PH_GAMMA > 1 is the whole point: unlit
+     * phosphor is BLACK, so the dim end has to be crushed, not lifted.
+     * PH_GAIN puts the driven end back up where a lit beam sits, and
+     * PH_HOT/PH_HOTMAX let a hard-driven dot outrun its own phosphor so
+     * the core reads white with the tint surviving in the falloff. */
+    "#define PH_GAMMA  2.2\n"
+    "#define PH_GAIN   1.9\n"
+    "#define PH_HOT    0.55\n"
+    "#define PH_HOTMAX 0.75\n"
+    "#define BLOOM_THRESH 0.35\n"
     "varying vec2 v_uv;\n"
     "uniform %s u_tex;\n"
     "uniform float u_scan;\n"
@@ -109,6 +119,10 @@ static const char *frag_fmt =
      * with what the viewer calls horizontal. */
     "uniform float u_swap;\n"
     "uniform float u_bloom;\n"
+    "float phos(vec3 c) {\n"
+    "    float lum = dot(c, vec3(0.299, 0.587, 0.114));\n"
+    "    return clamp(pow(lum, PH_GAMMA) * PH_GAIN, 0.0, 1.0);\n"
+    "}\n"
     "vec2 curve(vec2 uv) {\n"
     "    uv = uv * 2.0 - 1.0;\n"
     "    vec2 off = uv.yx * uv.yx * u_curv * 0.12;\n"
@@ -154,31 +168,43 @@ static const char *frag_fmt =
     "                (1.0 - clamp(vg.x * vg.y * 18.0, 0.0, 1.0));\n"
     "    vec3 col = vec3(r, g.g, b) * scan * vig;\n"
     "    /* Monochrome phosphor: collapse to luminance and paint it in one tint.\n"
-    "     * pow() lifts the midtones so the tint glows like a phosphor screen\n"
-    "     * instead of reading as a flat colourize; u_mono blends it in. */\n"
+    "     * The curve is what makes it read as a lit tube rather than a colour\n"
+    "     * wash — see PH_GAMMA. It matters most under glass: a window at\n"
+    "     * foot_alpha 0 has a blurred wallpaper for a backdrop, and a curve\n"
+    "     * that lifts turns that haze into a screen-wide tint. Beam\n"
+    "     * saturation on top, or the brightest pixel the pass can emit is\n"
+    "     * exactly u_tint and the text looks printed instead of lit. */\n"
     "    if (u_mono > 0.0) {\n"
-    "        float lum = dot(col, vec3(0.299, 0.587, 0.114));\n"
-    "        vec3 ph = u_tint * pow(lum, 0.85);\n"
+    "        float e = phos(col);\n"
+    "        vec3 ph = mix(u_tint, vec3(1.0),\n"
+    "                      smoothstep(PH_HOT, 1.0, e) * PH_HOTMAX) * e;\n"
     "        col = mix(col, ph, u_mono);\n"
     "    }\n"
     "    /* Phosphor bloom: a lit dot on a real tube spills a soft halo into its\n"
     "     * neighbours, so highlights glow instead of ending at a hard edge.\n"
-    "     * Cheap single-pass take — sample two rings around the fragment, keep\n"
-    "     * only what is bright (BLOOM_THRESH), and add it back in the phosphor\n"
-    "     * tint. Gated on u_mono: no phosphor, nothing to bleed. */\n"
+    "     * Cheap single-pass take — sample three rings around the fragment,\n"
+    "     * keep only what is bright (BLOOM_THRESH), and add it back in the\n"
+    "     * phosphor tint. Gated on u_mono: no phosphor, nothing to bleed.\n"
+    "     *\n"
+    "     * The taps are thresholded on phos(), not on raw luminance, so the\n"
+    "     * threshold means the same thing here as the tint does above. On raw\n"
+    "     * luminance it does not: a merely bright wallpaper clears a raw\n"
+    "     * threshold and blooms the whole screen, while text over glass sits\n"
+    "     * under it and blooms nothing. The curve separates the two first. */\n"
     "    if (u_mono > 0.0 && u_bloom > 0.0) {\n"
     "        vec2 px = 1.0 / u_size;\n"
     "        float glow = 0.0;\n"
     "        for (int i = 0; i < 8; i++) {\n"
     "            float a = float(i) * 0.7853982;\n"
     "            vec2 dir = vec2(cos(a), sin(a));\n"
-    "            float l1 = dot(texture2D(u_tex, uv + dir * px * 3.0).rgb,\n"
-    "                           vec3(0.299, 0.587, 0.114));\n"
-    "            float l2 = dot(texture2D(u_tex, uv + dir * px * 6.0).rgb,\n"
-    "                           vec3(0.299, 0.587, 0.114));\n"
-    "            glow += max(l1 - 0.55, 0.0) + 0.5 * max(l2 - 0.55, 0.0);\n"
+    "            float e1 = phos(texture2D(u_tex, uv + dir * px *  3.0).rgb);\n"
+    "            float e2 = phos(texture2D(u_tex, uv + dir * px *  6.0).rgb);\n"
+    "            float e3 = phos(texture2D(u_tex, uv + dir * px * 11.0).rgb);\n"
+    "            glow += max(e1 - BLOOM_THRESH, 0.0)\n"
+    "                  + 0.50 * max(e2 - BLOOM_THRESH, 0.0)\n"
+    "                  + 0.25 * max(e3 - BLOOM_THRESH, 0.0);\n"
     "        }\n"
-    "        glow *= 0.08333;\n"   /* /12 : the ring weights sum to 8*(1+0.5) */
+    "        glow *= 0.0714286;\n" /* /14 : ring weights sum to 8*(1+0.5+0.25) */
     "        col += u_tint * glow * u_bloom * 2.2 * u_mono;\n"
     "    }\n"
     "    gl_FragColor = vec4(col, g.a);\n"
@@ -232,7 +258,14 @@ static GLuint compile(GLenum type, const char *src)
 static GLuint build_program(const char *prelude, const char *sampler)
 {
     char frag[8192];
-    snprintf(frag, sizeof(frag), frag_fmt, prelude, sampler);
+    int need = snprintf(frag, sizeof(frag), frag_fmt, prelude, sampler);
+    if (need < 0 || (size_t)need >= sizeof(frag)) {
+        /* snprintf truncates in silence, and a shader cut mid-statement fails
+         * to compile with an error pointing at the wrong thing entirely. */
+        wlr_log(WLR_ERROR, "effects: shader source needs %d bytes, buffer is %zu",
+                need, sizeof(frag));
+        return 0;
+    }
 
     GLuint vs = compile(GL_VERTEX_SHADER, vert_src);
     GLuint fs = compile(GL_FRAGMENT_SHADER, frag);
