@@ -175,6 +175,29 @@ void settings_state_clear(const char *key)
     settings_state_write();
 }
 
+/*
+ * The pin set, and its settings.state line, written together.
+ *
+ * ONE writer, because the bitmask and the `glass_pinned` line have to move as a
+ * unit: a pin set in memory and not written comes back released at the next
+ * login — a row that quietly rejoins the slider some days after it was taken
+ * off it. That was ctlpanel.c's rule and ctlpanel.c's alone, which is exactly
+ * how transparency_set_opacity() came to edit a driven row without claiming it.
+ */
+void synui_glass_pins_store(syn_config_t *cfg, int pins)
+{
+    if (!cfg || cfg->glass_pins == pins) return;
+    cfg->glass_pins = pins;
+
+    char buf[256];
+    syn_glass_pins_format(pins, buf, sizeof(buf));
+    /* Empty is DROPPED, not written as an empty value — both parse back the
+     * same, and a key that only appears when it has something to say is the
+     * difference between a state file you can read and one you have to. */
+    if (buf[0]) settings_state_set("glass_pinned", buf);
+    else        settings_state_clear("glass_pinned");
+}
+
 void settings_state_load(syn_config_t *cfg)
 {
     g_over_n = 0;

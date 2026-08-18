@@ -832,6 +832,58 @@ static void glass_push(syn_server_t *s)
     synui_spawn(cmd);
 }
 
+/*
+ * The transparency slider edits a row the Glass sync DRIVES — so it has to
+ * claim it, exactly as dragging the row in the control panel does.
+ *
+ * The sync was specified to drive every glass row until somebody edits one, and
+ * to hand that row back only when auto sync is switched on again. ctlpanel.c
+ * implemented that and nothing else did: transparency_set_opacity() is the
+ * funnel for BOTH Super+E's Window opacity row (uifx.c, UIFX_ROW_OPACITY) and
+ * the theme manager's -/= keys, and neither touched glass_pins. So the value
+ * applied, theme_state_save() wrote it to theme.state — which it is only
+ * willing to do BECAUSE the row reads as unpinned — and then the next login
+ * read theme.state and, one line later in synui_config_load(),
+ * synui_config_apply_glass_sync() overwrote it with syn_glass_window_alpha().
+ * At glass_level = 100 that is 1.00 - 0.38 = 0.62, every single time: the
+ * window opacity going back to 62% at every login was this, and 62% is not a
+ * default anywhere — it is the floor of the curve at the top of the slider.
+ *
+ * Pinning also moves where the value LIVES. theme_state_save() stays quiet
+ * about a pinned row so settings.state can show through (theme.state is read
+ * last and would otherwise win), so the pin and the settings.state value have
+ * to be written in the same breath or the number is simply lost at the next
+ * login — the pin without the value is worse than neither.
+ *
+ * ⚠ Must run BEFORE theme_state_save(), which asks the pin whether to write.
+ */
+static void transparency_claim_active(syn_server_t *s)
+{
+    syn_config_t *cfg = &s->config;
+
+    /* Nothing is driving this row — no slider set, or the sync switched off —
+     * so there is no pin to claim and theme.state keeps the value as it always
+     * has. Claiming here would strand it in settings.state for no reason. */
+    if (!syn_glass_set(cfg) || !cfg->glass_sync) return;
+
+    /* Compared at the precision it is STORED at (%.2f), not float epsilon:
+     * a row dialled back onto the slider's own answer has no opinion again and
+     * must RELEASE, or it sits pinned to a value nothing recorded a choice of —
+     * the invariant ctlpanel_row_is_default() keeps for the panel's rows. */
+    float d = cfg->active_opacity - syn_glass_window_alpha(cfg);
+    if (d < 0) d = -d;
+    if (d < 0.005f) {
+        synui_glass_pins_store(cfg, cfg->glass_pins & ~SYN_GLASS_PIN_ACTIVE);
+        settings_state_clear("active_opacity");
+        return;
+    }
+
+    synui_glass_pins_store(cfg, cfg->glass_pins | SYN_GLASS_PIN_ACTIVE);
+    char val[32];
+    snprintf(val, sizeof(val), "%.2f", cfg->active_opacity);
+    settings_state_set("active_opacity", val);
+}
+
 void transparency_set_opacity(syn_server_t *s, float active)
 {
     if (active < 0.50f) active = 0.50f;
@@ -847,6 +899,7 @@ void transparency_set_opacity(syn_server_t *s, float active)
      * work. The theme switch that DOES change its colours rebuilds it in
      * theme_apply(). */
     theme_repaint(s);
+    transparency_claim_active(s);
     theme_state_save(s);
 }
 
@@ -856,13 +909,18 @@ void transparency_set_enabled(syn_server_t *s, int on)
     /* Enabling while the focused level is still 1.0 shows nothing — the window
      * you are looking at is the focused one. Drop to a clearly translucent
      * default so "on" actually looks on (Firefox included: it is just a window). */
+    int bumped = 0;
     if (on && s->config.active_opacity > 0.98f) {
         s->config.active_opacity   = 0.90f;
         s->config.inactive_opacity = inactive_from_active(0.90f);
+        bumped = 1;
     }
     anim_apply_alpha_all(s);
     glass_push(s);
     theme_repaint(s);
+    /* Only when the switch actually MOVED the opacity. Flipping translucency off
+     * and on again must not quietly pin a row nobody dragged. */
+    if (bumped) transparency_claim_active(s);
     theme_state_save(s);
 }
 

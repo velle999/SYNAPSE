@@ -1233,16 +1233,10 @@ static int ctl_store_write(syn_server_t *s, const struct ctl_item *it)
  */
 static void ctl_glass_pins_set(syn_server_t *s, int pins)
 {
-    if (s->config.glass_pins == pins) return;
-    s->config.glass_pins = pins;
-
-    char buf[256];
-    syn_glass_pins_format(pins, buf, sizeof(buf));
-    /* Empty is DROPPED, not written as an empty value — both parse back the
-     * same, and a key that only appears when it has something to say is the
-     * difference between a state file you can read and one you have to. */
-    if (buf[0]) settings_state_set("glass_pinned", buf);
-    else        settings_state_clear("glass_pinned");
+    /* The body moved to settings.c so the transparency slider — which is not
+     * this panel and edits the same driven row — writes the pin the same way.
+     * See synui_glass_pins_store(). */
+    synui_glass_pins_store(&s->config, pins);
 }
 
 /*

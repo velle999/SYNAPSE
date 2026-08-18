@@ -390,6 +390,20 @@ static void edge_damage_trace(syn_output_t *output,
     int bw = output->server->config.border_width;
     if (bw <= 0) return;
 
+    /*
+     * ⚠ st->damage is in BUFFER coordinates; wlr_output_transformed_resolution()
+     * answers in LOGICAL ones, and on a rotated output those are not the same
+     * axes. Comparing them made HDMI-A-1 (1080x1920 portrait, buffer 1920x1080)
+     * report `short by -840` — 1080 - 1920 — on essentially every frame: pure
+     * noise, and noise that read as the anomaly this trap exists to catch.
+     *
+     * Rotated outputs are skipped rather than un-rotated. The bug being hunted
+     * is DP-3's, DP-3 is WL_OUTPUT_TRANSFORM_NORMAL, and mapping the SCREEN's
+     * right edge onto a buffer band per transform is code that would only ever
+     * be exercised by the false positive it exists to suppress.
+     */
+    if (wo->transform != WL_OUTPUT_TRANSFORM_NORMAL) return;
+
     int w = 0, h = 0;
     wlr_output_transformed_resolution(wo, &w, &h);
     if (w <= bw || h <= 0) return;

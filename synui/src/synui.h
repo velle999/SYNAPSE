@@ -8254,6 +8254,7 @@ void record_state_load(syn_config_t *cfg);         /* lay record.state over synu
  */
 void settings_state_load(syn_config_t *cfg);            /* lay it over synuirc */
 void settings_state_set(const char *key, const char *val);  /* set + rewrite   */
+void synui_glass_pins_store(syn_config_t *cfg, int pins); /* pin set + its line */
 void settings_state_clear(const char *key);             /* forget = use default */
 int  settings_state_has(const char *key);               /* is it overridden?   */
 

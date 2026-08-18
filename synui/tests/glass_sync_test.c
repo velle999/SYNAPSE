@@ -395,6 +395,53 @@ int main(void)
           syn_glass_pin_by_name("inactive_opacity") == SYN_GLASS_PIN_INACTIVE,
           "each pin is named for the synuirc key it pins");
 
+    /* ── 12. The 62% that came back every login ───────────────────────── */
+    /*
+     * Reported 2026-08-18: the window opacity went back to 62% at every login,
+     * overriding what had been set, and 62% looked like nobody's default.
+     * It is not a default and never was: 0.62 is where
+     * syn_glass_window_alpha() lands at the TOP of the slider —
+     * 1.00 - 0.38 * 1.00 — and this desktop had `glass_level = 100`.
+     *
+     * The route in was that transparency_set_opacity() — the funnel for BOTH
+     * Super+E's Window opacity row and the theme manager's -/= keys — edited
+     * this driven row without claiming it. So the value went to theme.state,
+     * synui_config_load() read theme.state, and one line later the sync
+     * overwrote it. The pin is the whole fix, so the number is nailed down here
+     * in both directions.
+     */
+    {
+        syn_config_t cfg;
+
+        at_level(&cfg, 100, 0);
+        check(near(cfg.active_opacity, 0.62f),
+              "level 100, unpinned: the window collapses to exactly 0.62 — "
+              "the curve's floor, not anybody's default");
+
+        /* The same desktop with the row claimed, which is what the slider now
+         * does. 0.86 is a value only a person would pick. */
+        memcpy(&cfg, def, sizeof(cfg));
+        cfg.glass_level    = 100;
+        cfg.glass_pins     = SYN_GLASS_PIN_ACTIVE;
+        cfg.active_opacity = 0.86f;
+        synui_config_apply_glass_sync(&cfg);
+        check(near(cfg.active_opacity, 0.86f),
+              "…and pinned, it survives the sync the login runs");
+
+        /* The unfocused window is deliberately NOT pinned with it: it trails
+         * whatever the focused one ended up at, so a pinned 0.86 must pull it
+         * to 0.80 rather than leaving it on the slider's own 0.56. */
+        check(near(cfg.inactive_opacity, 0.80f),
+              "…and the unfocused window trails the PINNED value, not the "
+              "slider's");
+
+        /* The default level is unset, so a desktop that never touched the Glass
+         * row cannot be reset to 0.62 by any of this. */
+        check(def->glass_level == SYN_GLASS_UNSET &&
+              !near(def->active_opacity, 0.62f),
+              "and 0.62 is reachable only by setting the slider to 100");
+    }
+
     if (fails == 0) { printf("glass_sync_test: OK\n"); return 0; }
     printf("glass_sync_test: %d check(s) failed\n", fails);
     return 1;
