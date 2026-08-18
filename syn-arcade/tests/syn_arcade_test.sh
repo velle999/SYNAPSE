@@ -4823,6 +4823,50 @@ else
     rm -f "$LOCKF"
 fi
 
+# ── big screen refuses a compositor that cannot show it ─────────────────────
+#
+# Big screen mode is two quickshell PanelWindows — wlr-layer-shell surfaces —
+# and layer-shell is a wlroots protocol that mutter has never implemented.
+# Under GNOME the shell started, mapped nothing and exited: an app-grid entry
+# that did nothing when clicked, with no error anywhere. Confirmed on a GNOME
+# session 2026-08-18, which is also when the guard went in.
+#
+# Checked at the SOURCE rather than by running it. Exercising the real path
+# needs a compositor without layer-shell, and there is no way to conjure one
+# in a build that would not also risk driving the live seat — which this
+# suite's own rigs have done before. What can rot silently is the ORDER: the
+# probe has to run before quickshell is spawned, or the refusal is printed
+# after the thing it was meant to prevent has already started.
+BIGSRC="$(dirname "$0")/../src/big.c"
+if [ -f "$BIGSRC" ]; then
+    grep -q 'zwlr_layer_shell_v1' "$BIGSRC" \
+        && ok "big start asks the registry for layer-shell" \
+        || bad "big.c no longer probes for zwlr_layer_shell_v1"
+
+    # The probe is asked of the REGISTRY, not of a desktop name. A list of
+    # desktop names is wrong about every wlroots compositor not on it, and
+    # wrong about both names synui itself logs in under.
+    if grep -n 'have_layer_shell()' "$BIGSRC" | grep -q 'XDG_CURRENT_DESKTOP'; then
+        bad "the layer-shell test reads XDG_CURRENT_DESKTOP instead of the registry"
+    else
+        ok "the layer-shell test asks the compositor, not the desktop name"
+    fi
+
+    guard=$(grep -n 'have_layer_shell() == 0' "$BIGSRC" | head -1 | cut -d: -f1)
+    spawn=$(grep -n 'quickshell' "$BIGSRC" | awk -F: -v g="${guard:-0}" '$1 > g {print $1; exit}')
+    if [ -n "$guard" ] && [ -n "$spawn" ] && [ "$guard" -lt "$spawn" ]; then
+        ok "the refusal comes before quickshell is started"
+    else
+        bad "the layer-shell guard does not precede the quickshell spawn"
+    fi
+
+    # -1 means "no display to ask", which must NOT be a refusal: a machine
+    # that cannot answer has to be allowed to try.
+    grep -q 'have_layer_shell() == 0' "$BIGSRC" \
+        && ok "only a definite no refuses — an unanswerable probe does not" \
+        || bad "the guard refuses on anything but a definite no"
+fi
+
 # ── verdict ─────────────────────────────────────────────────────────────────
 
 echo

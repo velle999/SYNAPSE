@@ -85,6 +85,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <wayland-client.h>
+
 /*
  * How long a path this file is willing to store as a STARTING POINT — a Steam
  * root or a library directory. Composed paths built from one get a buffer this
@@ -7404,6 +7406,64 @@ static const char *big_qml(void)
  *       out from under it. Same failure as any other launcher; see
  *       spawn_detached().
  */
+/* ── Can this compositor show a big screen at all? ───────────────────────────
+ *
+ * Big screen mode is TWO quickshell PanelWindows, which are wlr-layer-shell
+ * surfaces. That protocol is a wlroots one: synui offers it, KWin offers it,
+ * and mutter never has. Under GNOME the shell starts, fails to map anything,
+ * and exits — no window, no error the user ever sees, an entry in the app grid
+ * that does nothing when clicked. Confirmed on a GNOME session, 2026-08-18.
+ *
+ * Asked of the REGISTRY rather than of XDG_CURRENT_DESKTOP. The desktop name
+ * is a policy answer to a technical question: it is wrong about a wlroots
+ * compositor nobody has heard of, wrong about the two names synui itself logs
+ * in under, and would have to be edited every time either list changes. The
+ * registry is the compositor answering for itself.
+ *
+ * Compared against the interface NAME as a string, so this needs no generated
+ * protocol binding and adds nothing to the build — nothing here binds the
+ * global, it only asks whether it is advertised.
+ *
+ * Returns 1 yes, 0 no, -1 cannot be told (no display to ask). -1 is NOT a
+ * refusal: a machine that cannot answer must not be blocked from trying, which
+ * is the same posture the synctl callers above take.
+ */
+struct ls_probe { int found; };
+
+static void ls_global(void *data, struct wl_registry *reg, uint32_t name,
+		      const char *iface, uint32_t version)
+{
+	(void)reg; (void)name; (void)version;
+	if (strcmp(iface, "zwlr_layer_shell_v1") == 0)
+		((struct ls_probe *)data)->found = 1;
+}
+
+static void ls_global_remove(void *data, struct wl_registry *reg, uint32_t name)
+{
+	(void)data; (void)reg; (void)name;
+}
+
+static const struct wl_registry_listener ls_listener = {
+	.global        = ls_global,
+	.global_remove = ls_global_remove,
+};
+
+static int have_layer_shell(void)
+{
+	struct wl_display *d = wl_display_connect(NULL);
+	if (!d)
+		return -1;
+
+	struct ls_probe p = { 0 };
+	struct wl_registry *reg = wl_display_get_registry(d);
+	wl_registry_add_listener(reg, &ls_listener, &p);
+	wl_display_roundtrip(d);		/* one trip: the globals arrive together */
+
+	wl_registry_destroy(reg);
+	wl_display_disconnect(d);
+	return p.found;
+}
+
 static int big_start(const char *output, bool detach)
 {
 	if (!getenv("WAYLAND_DISPLAY")) {
@@ -7414,6 +7474,20 @@ static int big_start(const char *output, bool detach)
 	if (!have("quickshell")) {
 		fputs("syn-arcade: quickshell is not installed — "
 		      "synpkg install quickshell\n", stderr);
+		return EX_FAIL;
+	}
+
+	/* Before quickshell, so the refusal comes from the thing that knows why
+	 * rather than as silence from a shell that started and mapped nothing. */
+	if (have_layer_shell() == 0) {
+		const char *de = getenv("XDG_CURRENT_DESKTOP");
+		fprintf(stderr,
+			"syn-arcade: %s does not offer zwlr_layer_shell_v1, and "
+			"big screen mode is built from layer-shell surfaces — "
+			"there is nothing it can map here.\n"
+			"            It needs synui, or another wlroots-based "
+			"compositor.\n",
+			(de && *de) ? de : "this compositor");
 		return EX_FAIL;
 	}
 

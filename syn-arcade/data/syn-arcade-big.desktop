@@ -22,3 +22,30 @@ Terminal=false
 # is also why it never appears in the window list or the alt-tab ring.
 Categories=Game;
 Keywords=big;screen;picture;tv;television;couch;controller;gamepad;steam;bigpicture;launcher;arcade;
+
+# Big screen mode is two quickshell PanelWindows — wlr-layer-shell surfaces —
+# and layer-shell is a wlroots protocol. mutter has never implemented it, so
+# under GNOME this entry started a shell that mapped nothing and exited: an
+# icon in the app grid that does nothing when clicked, with no error anywhere.
+# Confirmed on a GNOME session, 2026-08-18.
+#
+# KWin DOES implement layer-shell, so the surfaces would map under KDE — and
+# they would then misbehave, because the tile hand-off and the fullscreen
+# toggle both go through `synctl dispatch` and nothing answers it outside
+# synui. Mapping and misbehaving is worse than not appearing, so this is
+# OnlyShowIn rather than NotShowIn=GNOME.
+#
+# BOTH names, because the desktop identity depends on how the session was
+# started: greetd exports synui, a display manager reading the session file
+# exports SynapseOS. Naming one hides the entry on the other login path.
+#
+# ⚠ desktop-file-validate will ask for an X- prefix on these. Ignoring it is
+# correct: OnlyShowIn is compared LITERALLY against the entries in
+# XDG_CURRENT_DESKTOP, so X-SynapseOS matches nothing and would hide this
+# everywhere, which is the opposite of the intent.
+#
+# The Arcade entry beside this one is deliberately NOT gated. It is an
+# ordinary FloatingWindow and most of what it configures — MangoHud, pads,
+# deadzones — has nothing to do with the compositor. It was tested working
+# under GNOME on the same day.
+OnlyShowIn=synui;SynapseOS;
