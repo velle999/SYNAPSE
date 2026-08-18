@@ -18,7 +18,7 @@ pkgver=0.1.0
 #   which stays `synapse`: an existing machine that never picked a theme must
 #   keep the desktop it has, and an upgrade that silently restyles one is not
 #   something this project does. A fresh install has no desktop to preserve.
-pkgrel=81
+pkgrel=82
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

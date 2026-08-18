@@ -7,7 +7,7 @@
 # handing you `syn arsenal --enable-repo` is most of what a first run is for.
 pkgname=syn-arsenal
 pkgver=0.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc="SYNAPSE Arsenal: browse and install BlackArch security tooling by category"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

@@ -46,6 +46,10 @@ install_data('data/syn-disks.svg',
 install_data('data/syn-disks.desktop',
              install_dir: get_option('datadir') / 'applications')
 
+# ⚠ A TIMEOUT, because meson's default is 30 SECONDS and a test it kills is a
+# BUILD failure, not a test failure. The suite ran in four seconds until it grew
+# the wallpaper-accent check, which starts a real QML engine three times.
 test('syn-disks', find_program('tests/syn_disks_test.sh'),
      args: [meson.current_build_dir() / 'syn-disks'],
-     workdir: meson.current_source_dir())
+     workdir: meson.current_source_dir(),
+     timeout: 120)

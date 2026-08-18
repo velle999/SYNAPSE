@@ -70,6 +70,52 @@ FloatingWindow {
         onLoadFailed: root.p = ({})
     }
 
+    // ── …and the colour the WALLPAPER offers ────────────────────────────────
+    //
+    // synui measures a small palette off the wallpaper and publishes it here;
+    // the bar reads this same file, in synui's quickshell/Theme.qml. This
+    // window read theme.json alone, so on a desktop with the wallpaper accent
+    // switched on the bar went the colour of the picture and every app window
+    // beside it stayed the preset's — the half-applied feature 387 fixed
+    // inside the bar, one process further out.
+    //
+    // A file and not the bar's Theme singleton: that singleton lives in synui's
+    // package and this is a different one, and an import across the two breaks
+    // the moment either is installed alone. The contract is the file, exactly
+    // as it already is for theme.json.
+    //
+    // ⚠ `ok` AND `use` BOTH HAVE TO HOLD. `ok` is the PICTURE's answer — a
+    // greyscale wallpaper has no hue to offer. `use` is the SETTING (Control
+    // panel ▸ Appearance ▸ Wallpaper accent, where auto means Prism and nothing
+    // else) and synui writes the file whichever way it is set. Reading the
+    // colour without checking it is how the bar came to wear the wallpaper on
+    // themes that never asked for it (386).
+    //
+    // Missing, unreadable, or refused all come out as the empty string, which
+    // falls through to the theme's own accent below — the same answer as a
+    // desktop that has never measured one, or a synui too old to write the
+    // file. None of those needs telling apart here.
+    //
+    // ⚠ NOT `paletteFile`. That name is theme.json's reader in some of these
+    // windows, and QML answers a duplicate property by refusing to load the
+    // TYPE, naming a line that is not this one.
+    property string wpAccent: ""
+
+    property FileView wpPaletteFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/palette.state"
+        watchChanges: true
+        printErrors: false          // absent until a wallpaper has been measured
+        onFileChanged: reload()
+        onLoaded: {
+            const t   = this.text()
+            const ok  = /^\s*ok\s*=\s*yes\s*$/m.test(t)
+            const use = !/^\s*use\s*=\s*no\s*$/m.test(t)
+            const m   = t.match(/^\s*accent\s*=\s*(#[0-9A-Fa-f]{6})\s*$/m)
+            root.wpAccent = (ok && use && m) ? m[1] : ""
+        }
+        onLoadFailed: root.wpAccent = ""
+    }
+
     // theme.json writes accent/glyph/bar/popup as [r,g,b] ARRAYS and only
     // fg/clockFg as hex strings. Reading an array key as a string was the
     // second bug here: a QML `color` handed a JS array fails to convert, so the
@@ -134,7 +180,9 @@ FloatingWindow {
     // and should read as such — but still above the 3:1 floor on both schemes.
     readonly property color cDim: pick("#8b93a7", "#4a5568")
 
-    readonly property color cAccentRaw: themed("accent", 78, 201, 176, 1.0)
+    readonly property color cAccentRaw: root.wpAccent !== ""
+                                        ? Qt.color(root.wpAccent)
+                                        : themed("accent", 78, 201, 176, 1.0)
     // The accent is drawn as TEXT — the title, the Install label — and not just
     // as a wash, so it has to carry. Measured against cPanel because that is
     // the harder of the two surfaces either way: on a light scheme cBg is the

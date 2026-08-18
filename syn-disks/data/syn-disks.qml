@@ -84,6 +84,52 @@ FloatingWindow {
         onLoadFailed: root.p = ({})
     }
 
+    // ── …and the colour the WALLPAPER offers ────────────────────────────────
+    //
+    // synui measures a small palette off the wallpaper and publishes it here;
+    // the bar reads this same file, in synui's quickshell/Theme.qml. This
+    // window read theme.json alone, so on a desktop with the wallpaper accent
+    // switched on the bar went the colour of the picture and every app window
+    // beside it stayed the preset's — the half-applied feature 387 fixed
+    // inside the bar, one process further out.
+    //
+    // A file and not the bar's Theme singleton: that singleton lives in synui's
+    // package and this is a different one, and an import across the two breaks
+    // the moment either is installed alone. The contract is the file, exactly
+    // as it already is for theme.json.
+    //
+    // ⚠ `ok` AND `use` BOTH HAVE TO HOLD. `ok` is the PICTURE's answer — a
+    // greyscale wallpaper has no hue to offer. `use` is the SETTING (Control
+    // panel ▸ Appearance ▸ Wallpaper accent, where auto means Prism and nothing
+    // else) and synui writes the file whichever way it is set. Reading the
+    // colour without checking it is how the bar came to wear the wallpaper on
+    // themes that never asked for it (386).
+    //
+    // Missing, unreadable, or refused all come out as the empty string, which
+    // falls through to the theme's own accent below — the same answer as a
+    // desktop that has never measured one, or a synui too old to write the
+    // file. None of those needs telling apart here.
+    //
+    // ⚠ NOT `paletteFile`. That name is theme.json's reader in some of these
+    // windows, and QML answers a duplicate property by refusing to load the
+    // TYPE, naming a line that is not this one.
+    property string wpAccent: ""
+
+    property FileView wpPaletteFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/palette.state"
+        watchChanges: true
+        printErrors: false          // absent until a wallpaper has been measured
+        onFileChanged: reload()
+        onLoaded: {
+            const t   = this.text()
+            const ok  = /^\s*ok\s*=\s*yes\s*$/m.test(t)
+            const use = !/^\s*use\s*=\s*no\s*$/m.test(t)
+            const m   = t.match(/^\s*accent\s*=\s*(#[0-9A-Fa-f]{6})\s*$/m)
+            root.wpAccent = (ok && use && m) ? m[1] : ""
+        }
+        onLoadFailed: root.wpAccent = ""
+    }
+
     function themed(key, r, g, b, a) {
         const c = root.p[key]
         return (c && c.length === 3) ? Qt.rgba(c[0] / 255, c[1] / 255, c[2] / 255, a)
@@ -119,7 +165,10 @@ FloatingWindow {
                                    ? cInk
                                    : (lum(cBg) > 0.18 ? "#12141a" : "#e6e9ef")
     readonly property color cDim:    pick("#8b93a7", "#4a5568")
-    readonly property color cAccent: readable(themed("accent", 78, 201, 176, 1.0), cPanel, 4.5)
+    readonly property color cAccentRaw: root.wpAccent !== ""
+                                        ? Qt.color(root.wpAccent)
+                                        : themed("accent", 78, 201, 176, 1.0)
+    readonly property color cAccent: readable(cAccentRaw, cPanel, 4.5)
     // Meaning, not decoration — so these are held to the same contrast rule as
     // the accent rather than being fixed hexes that vanish on a pale theme.
     readonly property color cWarn: readable(pick("#e0af68", "#8a5a00"), cBg, 4.5)

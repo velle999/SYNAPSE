@@ -1258,6 +1258,68 @@ else
     bad "syn-settings.qml not found beside the tests: $QML"
 fi
 
+# ── the wallpaper's accent reaches this window ──────────────────────────────
+#
+# 387 gave the BAR the colour synui measures off the wallpaper, and only the
+# bar: every app window beside it kept the preset's accent, so a desktop with
+# the switch on wore two colours at once — the picture's on the bar, the
+# theme's on Files, Software, Disks and the rest. These windows read
+# ~/.config/synui/palette.state now, and this is the check that they do.
+#
+# ⚠ IT LOADS THE FILE IN A REAL ENGINE rather than grepping for the property.
+# A duplicate property name is the trap this feature has sprung before: the
+# file PARSES, qmllint is happy, and the type then refuses to LOAD, naming a
+# line that is not the one at fault. Only running it can tell.
+#
+# Three cases, because two of them are the ones already got wrong once:
+#   use=yes  the MEASURED colour;
+#   use=no   the theme's own, because `use` is the SETTING and synui writes
+#            the file whichever way it is set — reading the colour without
+#            checking it is how the bar came to wear a wallpaper on themes
+#            that never asked for one (386);
+#   ok=no    the theme's own, the picture having no usable hue to give.
+if [ -f "$QML" ] && command -v quickshell >/dev/null 2>&1; then
+    WPT=$(mktemp -d)
+    mkdir -p "$WPT/home/.config/synui" "$WPT/run"
+    # A preset accent that is nothing like the measured one, so "it took the
+    # wallpaper's" and "it kept the theme's" cannot be confused for each other.
+    cat > "$WPT/home/.config/synui/theme.json" <<'WPJSON'
+{ "scheme": "dark", "accent": [0,214,229], "glyph": [0,214,229],
+  "bar": [25,28,35], "popup": [17,21,28], "fg": "#c8e3ee" }
+WPJSON
+    # A COPY with a probe timer appended INSIDE the root object — outside its
+    # final brace the file is a syntax error and this would "fail" on a QML
+    # that is perfectly good.
+    awk 'BEGIN{RS="\0"} {
+            n = match($0, /}[ \t\r\n]*$/)
+            printf "%s\n    Timer { running: true; interval: 1200; repeat: false;\n             onTriggered: { console.log(\"WPACCENT=\" + root.cAccent); Qt.quit() } }\n%s", substr($0,1,n-1), substr($0,n)
+         }' "$QML" > "$WPT/probe.qml"
+    # ⚠ QT_ASSUME_STDERR_HAS_CONSOLE=1, or console.log() prints NOTHING at all
+    # and every case below reads as an empty accent — a green suite that tested
+    # the engine's silence. GSETTINGS_BACKEND=memory because the fake HOME has
+    # no dconf for Qt's platform theme to find.
+    wp_accent() {  # wp_accent <use> <ok> -> the colour the window resolves
+        printf 'use=%s\nok=%s\naccent=#6479FF\naccent_dim=#37438C\nsecondary=#C68F14\n' \
+               "$1" "$2" > "$WPT/home/.config/synui/palette.state"
+        HOME="$WPT/home" XDG_RUNTIME_DIR="$WPT/run" QT_QPA_PLATFORM=offscreen \
+        GSETTINGS_BACKEND=memory QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+        timeout 30 quickshell -p "$WPT/probe.qml" 2>&1 |
+            sed -n 's/.*WPACCENT=\(#[0-9a-fA-F]*\).*/\1/p' | head -1
+    }
+    [ "$(wp_accent yes yes)" = "#6479ff" ] \
+        && ok "the measured wallpaper accent reaches the window" \
+        || bad "the window ignores palette.state and stays on the preset accent"
+    [ "$(wp_accent no yes)" = "#00d6e5" ] \
+        && ok "wallpaper_accent off leaves the theme's accent alone" \
+        || bad "the window wears the wallpaper with use=no in palette.state"
+    [ "$(wp_accent yes no)" = "#00d6e5" ] \
+        && ok "a wallpaper with no usable hue falls back to the theme" \
+        || bad "the window took a colour out of a palette.state saying ok=no"
+    rm -rf "$WPT"
+else
+    echo "  skip  quickshell not installed, cannot check the wallpaper accent"
+fi
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"
     exit 1

@@ -69,6 +69,52 @@ ShellRoot {
         onLoadFailed: root.pal = ({})
     }
 
+    // ── …and the colour the WALLPAPER offers ────────────────────────────────
+    //
+    // synui measures a small palette off the wallpaper and publishes it here;
+    // the bar reads this same file, in synui's quickshell/Theme.qml. This
+    // window read theme.json alone, so on a desktop with the wallpaper accent
+    // switched on the bar went the colour of the picture and every app window
+    // beside it stayed the preset's — the half-applied feature 387 fixed
+    // inside the bar, one process further out.
+    //
+    // A file and not the bar's Theme singleton: that singleton lives in synui's
+    // package and this is a different one, and an import across the two breaks
+    // the moment either is installed alone. The contract is the file, exactly
+    // as it already is for theme.json.
+    //
+    // ⚠ `ok` AND `use` BOTH HAVE TO HOLD. `ok` is the PICTURE's answer — a
+    // greyscale wallpaper has no hue to offer. `use` is the SETTING (Control
+    // panel ▸ Appearance ▸ Wallpaper accent, where auto means Prism and nothing
+    // else) and synui writes the file whichever way it is set. Reading the
+    // colour without checking it is how the bar came to wear the wallpaper on
+    // themes that never asked for it (386).
+    //
+    // Missing, unreadable, or refused all come out as the empty string, which
+    // falls through to the theme's own accent below — the same answer as a
+    // desktop that has never measured one, or a synui too old to write the
+    // file. None of those needs telling apart here.
+    //
+    // ⚠ NOT `paletteFile`. That name is theme.json's reader in some of these
+    // windows, and QML answers a duplicate property by refusing to load the
+    // TYPE, naming a line that is not this one.
+    property string wpAccent: ""
+
+    property FileView wpPaletteFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/palette.state"
+        watchChanges: true
+        printErrors: false          // absent until a wallpaper has been measured
+        onFileChanged: reload()
+        onLoaded: {
+            const t   = this.text()
+            const ok  = /^\s*ok\s*=\s*yes\s*$/m.test(t)
+            const use = !/^\s*use\s*=\s*no\s*$/m.test(t)
+            const m   = t.match(/^\s*accent\s*=\s*(#[0-9A-Fa-f]{6})\s*$/m)
+            root.wpAccent = (ok && use && m) ? m[1] : ""
+        }
+        onLoadFailed: root.wpAccent = ""
+    }
+
     // [r,g,b] 0..255 → colour, or `fb` when the key is missing or malformed.
     function rgbOf(key, fb) {
         const c = root.pal[key]
@@ -84,6 +130,30 @@ ShellRoot {
         return Qt.rgba(ch(a.r, b.r), ch(a.g, b.g), ch(a.b, b.b), 1)
     }
 
+    // ── Legibility ──────────────────────────────────────────────────────────
+    //
+    // The contrast corrector synfiles, synpkg, syn-disks and the bar all carry.
+    // It is here for the WALLPAPER accent alone — see cAccent below for why the
+    // theme's own accent is deliberately not put through it.
+    function lum(c) {
+        function ch(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+    }
+    function contrast(a, b) {
+        const la = lum(a), lb = lum(b)
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+    }
+    function readable(c, on, want) {
+        if (contrast(c, on) >= want) return c
+        const up = lum(on) <= 0.18
+        let out = c
+        for (let i = 0; i < 16; i++) {
+            out = up ? Qt.lighter(out, 1.25) : Qt.darker(out, 1.25)
+            if (contrast(out, on) >= want) return out
+        }
+        return up ? "#ffffff" : "#000000"
+    }
+
     readonly property color cBg:      rgbOf("popup", "#11151c")
     // The panel and the rules are positions between the surface and the ink, so
     // they invert with the theme instead of staying a fixed dark slate.
@@ -91,7 +161,13 @@ ShellRoot {
     readonly property color cLine:    mix(cBg, cText, 0.18)
     readonly property color cText:    root.pal.fg ? root.pal.fg : "#dbe4ee"
     readonly property color cDim:     mix(cBg, cText, 0.58)
-    readonly property color cAccent:  rgbOf("accent", "#38bdf8")
+    // ⚠ THE CORRECTOR RUNS ON THE MEASURED COLOUR ONLY, and the asymmetry is
+    // the point: a theme's accent was chosen by a person against these exact
+    // surfaces, and a hue lifted off a photograph was not. Putting the preset
+    // through it as well would re-tint windows this change is not about.
+    readonly property color cAccent:  root.wpAccent !== ""
+                                      ? readable(Qt.color(root.wpAccent), cBg, 4.5)
+                                      : rgbOf("accent", "#38bdf8")
     // Success and warning carry meaning, so they are picked per scheme rather
     // than derived — the dark pair is unreadable on a light surface.
     readonly property color cOk:      palLight ? "#1a7f3d" : "#5ee68a"
