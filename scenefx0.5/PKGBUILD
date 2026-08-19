@@ -32,7 +32,7 @@
 pkgname=scenefx0.5
 _pkgname=scenefx
 pkgver=0.5
-pkgrel=2
+pkgrel=3
 pkgdesc='wlr_scene fork with corner radius, blur and shadows (wlroots 0.20)'
 arch=('x86_64')
 url='https://github.com/wlrfx/scenefx'
@@ -47,8 +47,9 @@ source=("$_pkgname-$pkgver.tar.gz::https://github.com/wlrfx/scenefx/archive/refs
         'drag_icon.c'
         'output_layout.c'
         'wlr-layer-shell-unstable-v1.xml'
-        '0001-blur-normal-transform-on-rotated-outputs.patch')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        '0001-blur-normal-transform-on-rotated-outputs.patch'
+        '0002-fragment-highp-when-the-driver-supports-it.patch')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
     cd "$srcdir/$_pkgname-$pkgver"
@@ -60,6 +61,14 @@ prepare() {
     #    `|| true` — a patch that stops applying after a version bump must fail
     #    the build loudly rather than silently shipping the bug back.
     patch -p1 < "$srcdir/0001-blur-normal-transform-on-rotated-outputs.patch"
+
+    #    The second is REQUIRED on any output wider than 2048: NVIDIA's GLES2
+    #    does not define GL_FRAGMENT_PRECISION_HIGH, so every fragment shader's
+    #    precision guard fell through to mediump and coordinates past 2048
+    #    landed on a 2 px grid — which ate the whole right border of a window
+    #    maximized on DP-3 (2560 wide) while the left, top and bottom were
+    #    perfect. Same rule: no `|| true`.
+    patch -p1 < "$srcdir/0002-fragment-highp-when-the-driver-supports-it.patch"
 
     # 1. Drop the ported wlroots scene helper TUs into scenefx's scene dir.
     cp "$srcdir"/surface.c "$srcdir"/subsurface_tree.c "$srcdir"/xdg_shell.c \

@@ -1,0 +1,235 @@
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Subject: [PATCH] fragment highp when the driver has it, not when it says so
+
+Every fragment shader here opens with
+
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
+    precision mediump float;
+    #endif
+
+and on NVIDIA's GLES2 that macro is NOT defined, while
+glGetShaderPrecisionFormat(GL_FRAGMENT_SHADER, GL_HIGH_FLOAT) answers with a
+full 23-bit mantissa. The macro means "advertised", not "supported", so the
+whole renderer silently compiled at mediump — fp16, which is exact only to
+2048 and then steps in 2s.
+
+That is a rendering bug for any output wider than 2048. corner_alpha() compares
+absolute fragment coordinates against the rect and its clipped region:
+
+    vec2 relative_pos = (gl_FragCoord.xy - position);
+    if (relative_pos.x > size.x) { ... }
+
+At x = 2558 on a 2560-wide output the two sides of that comparison round to the
+same fp16 value, the pixel is judged to be inside the clipped-out area, and the
+fragment is discarded. A window's 2 px border ring is exactly that wide, so a
+maximized window on a 2560x1440 output loses its entire right border while the
+left, top and bottom (all below 2048) are perfect. The rounded corners survive,
+because near a corner corner_alpha() takes the SDF branch instead of the plain
+inside/outside one.
+
+Measured on an RTX 3060, GLES2 610.57.04, rendering this exact shader with
+synui's uniforms (2560x1440 rect, 2 px ring, outer radius 8) and reading the
+mid-height row back:
+
+    width   right-hand columns lit
+     1024   yes        2044  yes        2048  yes        2050  yes
+     2056   NO         2560  NO         3840  NO         7680  NO
+
+llvmpipe renders the same call correctly, which is what makes this look like a
+compositor bug rather than a shader one.
+
+Fixed by asking the driver rather than the preprocessor: link_program() probes
+glGetShaderPrecisionFormat once and prepends `#define FX_HAS_HIGHP 1` to every
+fragment source when fragment highp is genuinely available, and the guards
+honour it alongside the standard macro. Hardware with no fragment highp still
+gets mediump, exactly as before. With the fix the same sweep is "yes" at every
+width through 7680.
+
+This is not only the border: every rounded corner, shadow, blur clip region and
+texture sample past x=2048 was being placed on a 2 px grid.
+
+diff -ruN a/render/fx_renderer/shaders/blur_effects.frag b/render/fx_renderer/shaders/blur_effects.frag
+--- a/render/fx_renderer/shaders/blur_effects.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/blur_effects.frag	2026-08-18 22:46:04.957903859 -0500
+@@ -1,4 +1,9 @@
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders/box_shadow.frag b/render/fx_renderer/shaders/box_shadow.frag
+--- a/render/fx_renderer/shaders/box_shadow.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/box_shadow.frag	2026-08-18 22:46:04.957964179 -0500
+@@ -1,6 +1,11 @@
+ // Writeup: https://madebyevan.com/shaders/fast-rounded-rectangle-shadows/
+ 
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders/quad.frag b/render/fx_renderer/shaders/quad.frag
+--- a/render/fx_renderer/shaders/quad.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/quad.frag	2026-08-18 22:46:04.958041640 -0500
+@@ -4,7 +4,12 @@
+ #error "Missing shader preamble"
+ #endif
+ 
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders/quad_grad.frag b/render/fx_renderer/shaders/quad_grad.frag
+--- a/render/fx_renderer/shaders/quad_grad.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/quad_grad.frag	2026-08-18 22:46:04.958081990 -0500
+@@ -1,6 +1,11 @@
+ #define LEN %d
+ 
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders/quad_grad_round.frag b/render/fx_renderer/shaders/quad_grad_round.frag
+--- a/render/fx_renderer/shaders/quad_grad_round.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/quad_grad_round.frag	2026-08-18 22:46:04.958120900 -0500
+@@ -1,6 +1,11 @@
+ #define LEN %d
+ 
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders/quad_round.frag b/render/fx_renderer/shaders/quad_round.frag
+--- a/render/fx_renderer/shaders/quad_round.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/quad_round.frag	2026-08-18 22:46:04.958158550 -0500
+@@ -1,4 +1,9 @@
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders/tex.frag b/render/fx_renderer/shaders/tex.frag
+--- a/render/fx_renderer/shaders/tex.frag	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders/tex.frag	2026-08-18 22:46:04.958196710 -0500
+@@ -13,7 +13,12 @@
+ #extension GL_OES_EGL_image_external : require
+ #endif
+ 
+-#ifdef GL_FRAGMENT_PRECISION_HIGH
++/* SynapseOS: NVIDIA's GLES2 supports fragment highp (glGetShaderPrecisionFormat
++ * reports 23 mantissa bits) but does NOT define GL_FRAGMENT_PRECISION_HIGH, so
++ * this guard silently fell through to mediump — fp16, exact only to 2048 — and
++ * every coordinate past that quantised to a 2 px grid. FX_HAS_HIGHP is defined
++ * by link_program() after asking the driver. See the 0002 patch header. */
++#if defined(GL_FRAGMENT_PRECISION_HIGH) || defined(FX_HAS_HIGHP)
+ precision highp float;
+ #else
+ precision mediump float;
+diff -ruN a/render/fx_renderer/shaders.c b/render/fx_renderer/shaders.c
+--- a/render/fx_renderer/shaders.c	2026-06-28 00:36:32.000000000 -0500
++++ b/render/fx_renderer/shaders.c	2026-08-18 22:46:28.940701259 -0500
+@@ -1,6 +1,8 @@
+ #include <EGL/egl.h>
++#include <stdbool.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ #include <wlr/util/log.h>
+ #include <scenefx/types/fx/clipped_region.h>
+ 
+@@ -37,13 +39,59 @@
+ 	return shader;
+ }
+ 
++/*
++ * Does this driver give fragment shaders highp?
++ *
++ * GLSL ES 1.00 advertises that through the GL_FRAGMENT_PRECISION_HIGH macro,
++ * which is what every shader here guards on — but the macro being absent means
++ * "not advertised", not "not supported". NVIDIA's GLES2 leaves it undefined
++ * while glGetShaderPrecisionFormat() reports a full 23-bit fragment highp, so
++ * the guards fell through to mediump on the one driver SynapseOS actually runs
++ * on. Ask the driver instead, and hand the answer to the preprocessor.
++ *
++ * Cached: this is a driver property, and link_program() runs once per shader.
++ */
++static bool fragment_has_highp(void) {
++	static int cached = -1;
++	if (cached < 0) {
++		GLint range[2] = {0, 0}, precision = 0;
++		glGetShaderPrecisionFormat(GL_FRAGMENT_SHADER, GL_HIGH_FLOAT,
++			range, &precision);
++		/* Per spec, an unsupported precision answers 0,0,0. */
++		cached = (precision > 0 && range[0] > 0 && range[1] > 0);
++		wlr_log(WLR_DEBUG, "fx_renderer: fragment highp %s (macro %s, "
++			"glGetShaderPrecisionFormat %d bits)",
++			cached ? "available" : "unavailable",
++#ifdef GL_FRAGMENT_PRECISION_HIGH
++			"defined",
++#else
++			"NOT defined",
++#endif
++			precision);
++	}
++	return cached == 1;
++}
++
+ GLuint link_program(const GLchar *frag_src) {
+ 	GLuint vert = compile_shader(GL_VERTEX_SHADER, common_vert_src);
+ 	if (!vert) {
+ 		goto error;
+ 	}
+ 
+-	GLuint frag = compile_shader(GL_FRAGMENT_SHADER, frag_src);
++	/* Prepended, not appended: a precision statement only governs declarations
++	 * that come after it, and the guard it feeds is the first thing in every
++	 * fragment source. */
++	const char *prelude = fragment_has_highp() ? "#define FX_HAS_HIGHP 1\n" : "";
++	size_t frag_len = strlen(prelude) + strlen(frag_src) + 1;
++	GLchar *frag_full = malloc(frag_len);
++	if (!frag_full) {
++		glDeleteShader(vert);
++		goto error;
++	}
++	snprintf(frag_full, frag_len, "%s%s", prelude, frag_src);
++
++	GLuint frag = compile_shader(GL_FRAGMENT_SHADER, frag_full);
++	free(frag_full);
+ 	if (!frag) {
+ 		glDeleteShader(vert);
+ 		goto error;
