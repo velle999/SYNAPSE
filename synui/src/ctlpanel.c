@@ -418,6 +418,10 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_EFFECT_BLOOM, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor glow", NULL,
       .key = "effect_bloom", .off = CFG(effect_bloom), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
+    { CTL_ROW_EFFECT_LIFT, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor lift", NULL,
+      .key = "effect_lift", .off = CFG(effect_lift), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
+      .help = "How far the unlit field glows: 0 keeps it black, up lights the raster" },
 
     /* ── Windows ─────────────────────────────────────────────
      *

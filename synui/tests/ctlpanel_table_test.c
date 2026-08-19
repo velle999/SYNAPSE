@@ -203,6 +203,7 @@ void filters_state_load_config(syn_config_t *c)
     c->effect_phosphor   = f->effect_phosphor;
     c->effect_mono       = f->effect_mono;
     c->effect_bloom      = f->effect_bloom;
+    c->effect_lift       = f->effect_lift;
 }
 
 void uifx_state_save(syn_server_t *s)

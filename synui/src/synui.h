@@ -879,6 +879,7 @@ typedef enum {
     FILTER_ROW_PHOSPHOR,
     FILTER_ROW_MONO,
     FILTER_ROW_BLOOM,
+    FILTER_ROW_LIFT,
     FILTER_ROW_COUNT,
 } syn_filter_row_t;
 
@@ -1574,6 +1575,7 @@ typedef enum {
     CTL_ROW_EFFECT_PHOSPHOR,
     CTL_ROW_EFFECT_MONO,
     CTL_ROW_EFFECT_BLOOM,
+    CTL_ROW_EFFECT_LIFT,
 
     CTL_ROW_GAME_MODE,
     CTL_ROW_GAME_OUTPUT,
@@ -3259,6 +3261,8 @@ typedef struct {
     int   effect_phosphor;   /* syn_phosphor_t tint; SYN_PHOSPHOR_OFF = colour */
     float effect_mono;       /* 0..1 blend toward the phosphor tint */
     float effect_bloom;      /* 0..1 phosphor glow bleed; only bites with mono */
+    float effect_lift;       /* 0..1 phosphor transfer curve: 0 crushes the
+                              * unlit field to black, 1 lets it glow */
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];

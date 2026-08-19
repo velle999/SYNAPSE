@@ -1113,6 +1113,10 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->effect_phosphor   = SYN_PHOSPHOR_OFF;   /* colour, until a tint is picked */
     cfg->effect_mono       = 0.90f;              /* strong monochrome when it is */
     cfg->effect_bloom      = 0.55f;              /* phosphor glow, the way a real tube blooms */
+    /* A touch of lift: the unlit field reads as a tube that is switched on
+     * rather than a black rectangle, without tinting a bare desktop. Both
+     * ends of this slider have shipped as the only setting; see effects.c. */
+    cfg->effect_lift       = 0.40f;
 
     {
         static const float norm[4]  = COLOR_BORDER_NORM;
@@ -1998,6 +2002,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->effect_mono = clamp01(strtof(val, NULL));
     else if (strcmp(key, "effect_bloom") == 0)
         cfg->effect_bloom = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_lift") == 0)
+        cfg->effect_lift = clamp01(strtof(val, NULL));
     else if (strcmp(key, "xkb_rules") == 0)
         strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
     else if (strcmp(key, "xkb_model") == 0)

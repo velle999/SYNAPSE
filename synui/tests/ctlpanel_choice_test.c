@@ -180,6 +180,12 @@ void uifx_apply(syn_server_t *s)              { (void)s; }
 void theme_glass_refresh(syn_server_t *s)            { (void)s; }
 void synui_config_apply_glass_sync(syn_config_t *c)  { (void)c; }
 void synui_config_glass_release(syn_config_t *c)     { (void)c; }
+/* settings.c's one writer for the pin mask. The state-file half is already
+ * stubbed above; the mask itself is real, because the rows under test read
+ * it back. Added when 397 gave ctlpanel.c this call and neither of these two
+ * link lines a definition for it. */
+void synui_glass_pins_store(syn_config_t *cfg, int pins)
+{ if (cfg) cfg->glass_pins = pins; }
 void input_reload_config(syn_server_t *s)     { (void)s; }
 void deco_refresh_all(syn_server_t *s)        { (void)s; }
 void nightlight_apply(syn_server_t *s)        { (void)s; }

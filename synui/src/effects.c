@@ -52,6 +52,7 @@ struct syn_effects {
     GLuint prog[2];
     GLint  u_tex[2], u_scan[2], u_curv[2], u_aberr[2], u_size[2];
     GLint  u_time[2], u_glitch[2], u_mono[2], u_tint[2], u_swap[2], u_bloom[2];
+    GLint  u_curve[2];
 
     /* Animation clocks (CLOCK_MONOTONIC seconds). While any of these is
      * live the frame pass keeps damaging + scheduling, so the animation
@@ -94,13 +95,21 @@ static const char *frag_fmt =
     "precision highp float;\n"
     "#define SCAN_PITCH 3.0\n"
     "#define SCAN_DEPTH 0.55\n"
-    /* Phosphor transfer curve. PH_GAMMA > 1 is the whole point: unlit
-     * phosphor is BLACK, so the dim end has to be crushed, not lifted.
-     * PH_GAIN puts the driven end back up where a lit beam sits, and
-     * PH_HOT/PH_HOTMAX let a hard-driven dot outrun its own phosphor so
-     * the core reads white with the tint surviving in the falloff. */
-    "#define PH_GAMMA  2.2\n"
-    "#define PH_GAIN   2.4\n"
+    /* Phosphor transfer curve, as (gamma, gain) in u_curve — driven by the
+     * Phosphor lift slider, because where this curve should sit is a matter
+     * of taste and not of fact, and it had been recompiled twice trying to
+     * settle it by argument.
+     *
+     * gamma > 1 crushes the dim end: unlit phosphor is BLACK, and under
+     * glass a window's backdrop is a blurred wallpaper at ~0.10 luminance,
+     * not black, so a curve that LIFTS turns that haze into a screen-wide
+     * tint. gain puts the driven end back up where a lit beam sits. Lower
+     * gamma brings the unlit field back as a visible warm raster — the same
+     * pixels either way, which is exactly why it is a knob. See
+     * fx_phosphor_curve() for the two endpoints and where they came from.
+     *
+     * PH_HOT/PH_HOTMAX let a hard-driven dot outrun its own phosphor so the
+     * core reads white with the tint surviving in the falloff. */
     "#define PH_HOT    0.55\n"
     "#define PH_HOTMAX 0.75\n"
     "#define BLOOM_THRESH 0.32\n"
@@ -119,9 +128,10 @@ static const char *frag_fmt =
      * with what the viewer calls horizontal. */
     "uniform float u_swap;\n"
     "uniform float u_bloom;\n"
+    "uniform vec2  u_curve;\n"   /* x = PH_GAMMA, y = PH_GAIN */
     "float phos(vec3 c) {\n"
     "    float lum = dot(c, vec3(0.299, 0.587, 0.114));\n"
-    "    return clamp(pow(lum, PH_GAMMA) * PH_GAIN, 0.0, 1.0);\n"
+    "    return clamp(pow(lum, u_curve.x) * u_curve.y, 0.0, 1.0);\n"
     "}\n"
     "vec2 curve(vec2 uv) {\n"
     "    uv = uv * 2.0 - 1.0;\n"
@@ -322,6 +332,7 @@ static bool effects_gl_setup(struct syn_effects *fx)
         fx->u_tint[i]   = glGetUniformLocation(fx->prog[i], "u_tint");
         fx->u_swap[i]   = glGetUniformLocation(fx->prog[i], "u_swap");
         fx->u_bloom[i]  = glGetUniformLocation(fx->prog[i], "u_bloom");
+        fx->u_curve[i]  = glGetUniformLocation(fx->prog[i], "u_curve");
     }
 
     if (!fx->prog[0]) {
@@ -405,6 +416,7 @@ static bool any_view_alerted(syn_server_t *s)
 struct fx_params {
     float scan, curv, aberr, glitch;
     float mono, tint[3], bloom;
+    float curve[2];          /* phosphor transfer (gamma, gain) */
     double time;
     bool animating;
 };
@@ -412,29 +424,60 @@ struct fx_params {
 /* The phosphor tints (RGB), indexed by syn_phosphor_t. A white pixel comes out
  * exactly this colour; darker pixels ramp toward black through it. */
 /*
- * ⚠ These are FITTED to a reference photograph of a real tube, not taken from a
- * phosphor datasheet, and amber deliberately departs from textbook P3 (#FFB000,
- * g = 0.69). Measured on the mid-lit falloff — pixels with 0.30 < R < 0.70,
- * which is where the tint actually lives, the hot core having whitened away:
+ * Measured on the mid-lit falloff — pixels with 0.30 < R < 0.70, which is where
+ * the tint actually lives, the hot core having whitened away:
  *
- *     reference photo   G/R 0.488   B/R 0.187
- *     amber g=0.70      G/R 0.733   B/R 0.128   ← read as mustard/brown
- *     amber g=0.48      G/R 0.485   B/R 0.187
+ *     amber g=0.70      G/R 0.716   ← the look this desktop is fitted to
+ *     amber g=0.48      G/R 0.485   ← reads red-orange, not amber
  *
  * Because tint.r is 1.0, a screenshot's RED channel recovers the shader's own
  * `e` exactly, so candidate tints can be re-rendered offline from any live
- * capture and measured against the photo — no rebuild, no live compositor. That
- * is how these numbers were reached; see project_synui_phosphor_crt_curve.
- * Rendered G/R comes out within 0.005 of tint.g, so the table reads directly.
+ * capture and compared — no rebuild, no live compositor. That is how these
+ * numbers were reached; see project_synui_phosphor_crt_curve. Rendered G/R
+ * comes out within 0.005 of tint.g, so the table reads directly.
+ *
+ * ⚠ 0.48 was fitted to a photograph of a real tube and shipped for one pkgrel.
+ * It is the datasheet-honest answer and it is the WRONG one on an LCD: against
+ * a screenshot of this desktop it reads red. Textbook P3 (#FFB000, g = 0.69) is
+ * where it belongs. Fit the tint to the SCREENSHOT, not to the tube.
  */
 static const float phosphor_tint[SYN_PHOSPHOR_COUNT][3] = {
     [SYN_PHOSPHOR_OFF]   = { 1.00f, 1.00f, 1.00f },   /* unused (mono 0) */
     /* P1, warmed: 0.25/0.30 put more BLUE than red in it, which reads faintly
      * minty. Real P1 sits a touch to the yellow side of green. */
     [SYN_PHOSPHOR_GREEN] = { 0.32f, 1.00f, 0.20f },   /* P1 CRT green */
-    [SYN_PHOSPHOR_AMBER] = { 1.00f, 0.48f, 0.18f },   /* P3 amber, fitted */
+    [SYN_PHOSPHOR_AMBER] = { 1.00f, 0.70f, 0.12f },   /* P3 amber, #FFB000 */
     [SYN_PHOSPHOR_WHITE] = { 1.00f, 0.97f, 0.92f },   /* P4 warm white */
 };
+
+/*
+ * The Phosphor lift slider, as the (gamma, gain) pair phos() runs on.
+ *
+ * Both endpoints are measured, not invented. Every window on this desktop has a
+ * blurred wallpaper for a backdrop sitting at ~0.10 luminance (foot_alpha 0),
+ * and what that 0.10 comes out as is the whole difference between the two looks
+ * this filter has had:
+ *
+ *     lift 0.0   gamma 2.2  gain 2.4   backdrop -> 0.016   dead black
+ *     lift 1.0   gamma 1.2  gain 1.6   backdrop -> 0.103   the field glows
+ *
+ * There is nothing in the signal that separates a lit terminal backdrop from an
+ * empty desktop — they are the same luminance — so no curve gets a glowing
+ * raster under text without also tinting the bare desktop. Which of those two
+ * you want is taste, and taste is what a slider is for. Interpolating linearly
+ * in both terms keeps the mid-lit end roughly put (lum 0.5 -> 0.52..0.62 across
+ * the range) while the dim end travels, which is the axis the eye reads.
+ *
+ * BLOOM_THRESH is safe across the whole range: even at lift 1.0 the backdrop
+ * reaches 0.103 against a 0.32 threshold, so lifting the field never blooms it.
+ */
+static void fx_phosphor_curve(float lift, float out[2])
+{
+    if (lift < 0.0f) lift = 0.0f;
+    if (lift > 1.0f) lift = 1.0f;
+    out[0] = 2.2f - 1.0f * lift;   /* gamma */
+    out[1] = 2.4f - 0.8f * lift;   /* gain  */
+}
 
 static bool fx_compute(syn_server_t *s, struct fx_params *p)
 {
@@ -468,6 +511,8 @@ static bool fx_compute(syn_server_t *s, struct fx_params *p)
     p->bloom = s->config.effect_bloom;
     if (p->bloom < 0.0f) p->bloom = 0.0f;
     if (p->bloom > 1.0f) p->bloom = 1.0f;
+
+    fx_phosphor_curve(s->config.effect_lift, p->curve);
 
     /* L3: aberration ramps up on focus change and decays back. */
     if (fx->pulse_until > now) {
@@ -644,6 +689,7 @@ bool effects_output_commit(syn_output_t *output)
     glUniform3f(fx->u_tint[p],   prm.tint[0], prm.tint[1], prm.tint[2]);
     glUniform1f(fx->u_swap[p],   swap);
     glUniform1f(fx->u_bloom[p],  prm.bloom);
+    glUniform2f(fx->u_curve[p],  prm.curve[0], prm.curve[1]);
     /* Wrapped so float precision stays fine on long uptimes. */
     glUniform1f(fx->u_time[p], (GLfloat)fmod(prm.time, 3600.0));
     glUniform2f(fx->u_size[p], (GLfloat)w, (GLfloat)h);
