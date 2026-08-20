@@ -207,6 +207,45 @@ rule quarantine-exec-from-dev {
 #       watch it in `alert` first.
 #
 # ─────────────────────────────────────────────────────────────────────────────
+# ⛔ IF A RULE HERE EVER LOCKS YOU OUT — READ THIS BEFORE YOU REINSTALL
+#
+# It has happened once already, so this is a procedure rather than a
+# precaution. A deny rule on the USERSPACE path kills the opener's process
+# tree, and if the thing it matches is something every program does, every
+# program on the machine is torn down — including the one you would use to fix
+# it. That is what `deny-ld-preload` did before it carried `access write`: ld.so
+# opens that file on every exec.
+#
+# YOU DO NOT NEED TO REINSTALL. Nothing is damaged — no filesystem, no package
+# state, no configuration. One rule is matching something it should not, and
+# the machine is fine the moment synguard is not running.
+#
+#   1. At the boot menu press `e` (GRUB) or `e`/Tab (limine) and append to the
+#      kernel line:
+#
+#          systemd.mask=synguard.service
+#
+#      That masks it for THAT BOOT ONLY; nothing persists. Boot, fix the rule
+#      or delete the file it is matching, reboot.
+#
+#   2. If that will not take, `init=/bin/bash` on the same line skips systemd
+#      altogether — no synguard at all. Then:
+#
+#          mount -o remount,rw /
+#          rm -f /etc/synguard/rules.d/50-default-deny.rules
+#
+#   3. `synapse.bpf_enforce=0` is NOT this. It disarms the KERNEL gate only,
+#      and a userspace deny keeps killing regardless. It is the escape hatch
+#      for a bad kernel refusal, not for a bad rule.
+#
+# ⚠ AND IF THE MACHINE IS ALREADY IN THAT STATE AND STILL RESPONDING:
+# sg_kill_tree SIGSTOPs a tree before tearing it down, and a teardown that does
+# not complete leaves the process STOPPED rather than dead. So things are
+# usually resumable — `kill -CONT %1` will let a stopped command finish. And
+# `[[ -e /some/path ]]` is a shell BUILTIN, so it can check state without
+# needing an exec that would be stopped in its turn.
+#
+# ─────────────────────────────────────────────────────────────────────────────
 # TURNING THIS OFF
 #
 # Nothing here needs to be edited to disable it — the file is the unit of

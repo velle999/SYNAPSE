@@ -55,7 +55,16 @@ pkgver=0.1.0
 #   already-planted preload" property goes with it — it was only ever available
 #   to the kernel path, and it is not worth a rule that bricks a box on the
 #   other one. policy_test pins the access mode.
-pkgrel=38
+# 39: the way out, written down where the rules are. A deny rule that matches
+#   something every program does takes the whole machine with it, and the first
+#   time that happened the owner's conclusion was "I will have to reinstall".
+#   They did not: systemd.mask=synguard.service for ONE boot fixes it, or
+#   init=/bin/bash if that will not take. ⚠ synapse.bpf_enforce=0 is NOT the
+#   answer — it disarms the KERNEL gate only, and a userspace deny keeps
+#   killing. Also: sg_kill_tree SIGSTOPs before tearing down, so a machine in
+#   that state is usually resumable with kill -CONT, and `[[ -e path ]]` is a
+#   builtin that needs no exec.
+pkgrel=39
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
