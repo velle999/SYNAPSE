@@ -57,21 +57,47 @@ typing. Run it where you can reach the keyboard anyway.
 - [ ] `synapse.bpf_enforce=0` on the kernel command line brings the VM up
       detect-only, with the canary readable. This is the way back from a bad
       rule and it must be verified before anybody needs it.
-- [ ] Planting `/etc/ld.so.preload` and then running anything shows the open
-      refused, the process still running, and the preload not applied — the
-      "degrades an infected machine to a working one" claim, observed.
-      ⚠ **Reported as passing on the first run and it had not been tested**:
-      the rig planted the file with the gate already armed, the rule refused
-      the O_CREAT, the file was never created, and the next check then failed
-      to read a file that did not exist and scored that as success. It would
-      have passed identically with the rule doing nothing. The rig plants while
-      unarmed and verifies the plant took now; **needs a re-run**.
+- [x] Planting `/etc/ld.so.preload` shows the open refused, the process still
+      running, and the preload not applied. **Observed 2026-08-20** — and in
+      four parts, because the first two attempts each passed for the wrong
+      reason: while armed the file **cannot even be created**; planted while
+      unarmed it really is on disk (checked against the filesystem, not against
+      an exit code that is non-zero precisely when the plant worked); a normal
+      program still runs with it in place; and the file itself is refused.
+      ⚠ Twice reported as passing before it was actually testing anything —
+      once because the rule refused the O_CREAT so the file never existed, once
+      because the plant's scope was killed and the status read as failure.
 - [ ] A normal desktop session comes up, logs in, and runs for an hour with no
       rule firing. The false-positive rate of these three rules is asserted;
-      it has not been measured.
+      it has not been measured. **This is now the only thing standing between
+      here and a decision on `--bpf-enforce`** — and it is worth doing whether
+      or not the gate is ever armed, because the userspace path acts on these
+      rules today, on every machine, and that is what took a laptop down.
 
-**Then, and only then**, decide whether `--bpf-enforce` belongs in the shipped
-unit. Recording the answer here either way.
+**The answer, recorded 2026-08-20: NOT YET, and the reason is not the gate.**
+
+Every safety property held — warmup, fail-open on a wedge, re-arm on recovery,
+and the counters attributed each open to the right reason (`denied=1`,
+`warmup=1`, exactly the two reads the rig made). 16 checks, 0 failures.
+
+What argues against arming it is what the exercise found on the way. Three real
+bugs in three runs, none of them findable by reading the code:
+
+- a kernel refusal left **no trace in the journal** — the counter was logged
+  once at boot and never again, so a gate that had refused thousands of opens
+  looked identical to one that had refused none;
+- the rig **killed itself**, having protected its reads with a scope and not
+  its writes, in a file whose own header explains why that matters;
+- `deny-ld-preload` **took a laptop down**, because ld.so opens that file on
+  every exec and the USERSPACE path can only kill, not refuse.
+
+That last one is the point. The thing that broke the machine was not the
+kernel gate; it was a userspace rule that the gate had nothing to do with, and
+arming the gate would not have prevented it. So the remaining risk is not in
+this item at all — it is the false-positive box below, which needs a day of
+ordinary use rather than a script.
+
+Revisit when that box closes.
 
 ## 2. Attacker-controlled text reaching the AI classifier
 
