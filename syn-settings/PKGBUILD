@@ -29,7 +29,20 @@ pkgver=0.1.0
 #   running synapse-llama-cuda — the packages install into /usr/bin and
 #   /usr/lib and no such directory has ever existed. Same trap power.c
 #   documents for the sleep hooks.
-pkgrel=30
+# 31: the Network pane's firewall rows say what the firewall IS. They said
+#   "ruleset: not read" before, with an honest note that `nft list` needs root
+#   — honest and useless: the box HAS a default-drop input firewall and the
+#   pane could not say so, which is the same silence that had it believed
+#   missing. synnet publishes its state world-readable now, so the rows report
+#   the PREFERENCE, the STATE and the SERVICE separately, and the row carries
+#   `choice:firewall` — on/off through `pkexec synnet --firewall`, never by
+#   writing synnet's files from here.
+#   ⚠ ABSENT PREFERENCE MEANS ON, the same rule synnet applies. Reading a
+#   missing file as "off" would report an unfiltered machine that is filtered.
+#   ⚠ Nothing here reads the kernel: "what synnet believes" is not "what
+#   nftables holds", and presenting the first as the second is the claim this
+#   area already got wrong once.
+pkgrel=31
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

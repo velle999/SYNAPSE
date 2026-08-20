@@ -212,7 +212,90 @@ const char *synnet_fw_state_path(void) {
     return (e && *e) ? e : SYNNET_FW_STATE;
 }
 
+/* Defined below, beside the state file it writes. Forward-declared because the
+ * off switch publishes too — a firewall that was turned off and a firewall that
+ * was never asserted are different answers, and --status has to be able to give
+ * the first one. */
+static void firewall_publish_state(const char *state);
+
+const char *synnet_fw_pref_path(void) {
+    const char *e = getenv("SYNNET_FW_PREF_FILE");
+    return (e && *e) ? e : SYNNET_FW_PREF;
+}
+
+/*
+ * Is the firewall wanted?
+ *
+ * ⚠ EVERY FAILURE READS AS ON. No file, unreadable, empty, garbage — all of
+ * them mean "nobody has said otherwise", and the only safe reading of that for
+ * a firewall is that it stays up. The one string that turns it off is the exact
+ * word `off`; anything else, including a truncated write, leaves the box
+ * filtered. A parser that fails open is a parser that disarms a machine because
+ * a disk filled up.
+ */
+int synnet_firewall_enabled(void) {
+    FILE *f = fopen(synnet_fw_pref_path(), "r");
+    if (!f) return 1;
+
+    char buf[32] = "";
+    if (!fgets(buf, sizeof(buf), f)) { fclose(f); return 1; }
+    fclose(f);
+
+    buf[strcspn(buf, "\r\n")] = '\0';
+    /* Leading and trailing space, because this file is meant to be editable by
+     * hand and `echo off > file` is not the only way somebody will write it. */
+    char *p = buf;
+    while (*p == ' ' || *p == '\t') p++;
+    size_t n = strlen(p);
+    while (n && (p[n-1] == ' ' || p[n-1] == '\t')) p[--n] = '\0';
+
+    return strcmp(p, "off") != 0;
+}
+
+int synnet_firewall_set_enabled(int on) {
+    char dir[PATH_MAX];
+    snprintf(dir, sizeof(dir), "%s", synnet_fw_pref_path());
+    char *slash = strrchr(dir, '/');
+    if (slash && slash != dir) {
+        *slash = '\0';
+        if (mkdir(dir, 0755) != 0 && errno != EEXIST) return -1;
+    }
+
+    /* Written whole and renamed: the daemon reads this every minute, and a
+     * half-written file is a firewall decided by a race. */
+    char tmp[PATH_MAX];
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", synnet_fw_pref_path())
+            >= (int)sizeof(tmp))
+        return -1;
+
+    FILE *f = fopen(tmp, "w");
+    if (!f) return -1;
+    fprintf(f, "%s\n", on ? "on" : "off");
+    if (fclose(f) != 0) { unlink(tmp); return -1; }
+    if (rename(tmp, synnet_fw_pref_path()) != 0) { unlink(tmp); return -1; }
+    return 0;
+}
+
+/* Take the input chain away, and nothing else.
+ *
+ * ⚠ NOT `delete table` and emphatically not `flush ruleset`. The egress
+ * `blocked` set lives in the same table and holds every address the AI has
+ * flagged; turning off the INPUT firewall must not silently unblock all of
+ * them. Deleting a chain that is not there is not an error worth reporting —
+ * "off" is a state, not an operation that has to have found something to do.
+ */
+int synnet_nft_drop_firewall(void) {
+    run_nft("nft delete chain inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+            " 2>/dev/null");
+    firewall_publish_state("off");
+    return 0;
+}
+
 static void firewall_publish(int active) {
+    firewall_publish_state(active ? "active" : "failed");
+}
+
+static void firewall_publish_state(const char *state) {
     /* Create the directory if it is not there.
      *
      * systemd's RuntimeDirectory= makes /run/synnet when the SERVICE starts, so
@@ -243,8 +326,7 @@ static void firewall_publish(int active) {
             "trust=lan\n"
             "since=%lld\n"
             "reasserts=%lu\n",
-            active ? "active" : "failed",
-            (long long)time(NULL), g_fw_reasserts);
+            state, (long long)time(NULL), g_fw_reasserts);
     fclose(f);
     if (rename(tmp, synnet_fw_state_path()) != 0)
         unlink(tmp);
@@ -544,12 +626,22 @@ int synnet_init(synnet_state_t *s) {
          * it, and nothing rebuilt it until the next daemon restart. A box can
          * sit unfiltered for a week that way and its own log still says the
          * firewall came up, because it did, once. */
-        if (synnet_nft_ensure_firewall() != 0)
+        if (!synnet_firewall_enabled()) {
+            /* Somebody turned it off and meant it. Say so at WARNING and every
+             * start: an unfiltered box is worth a line in the journal each
+             * boot, and this is the one setting here that makes the machine
+             * less safe than the default. */
+            syslog(LOG_WARNING, "synnet: input firewall is OFF by preference "
+                                "(%s) — this box is not ingress-filtered",
+                   synnet_fw_pref_path());
+            synnet_nft_drop_firewall();
+        } else if (synnet_nft_ensure_firewall() != 0) {
             syslog(LOG_WARNING, "synnet: input firewall setup failed — "
                                 "the box is not ingress-filtered");
-        else
+        } else {
             syslog(LOG_INFO, "synnet: base input firewall active "
                              "(LAN-trust, default-drop)");
+        }
     } else {
         syslog(LOG_INFO, "synnet: dry-run — monitoring only, nftables untouched");
     }
@@ -587,7 +679,15 @@ void synnet_run(synnet_state_t *s) {
          *
          * Skipped under --dry-run, which promises not to touch nftables at all.
          */
-        if (tick % 6 == 0 && !s->dry_run && !synnet_firewall_present()) {
+        /* ⚠ THE PREFERENCE IS RE-READ HERE, not cached at start. That is what
+         * makes the settings pane's off switch work at all: it writes the file
+         * and tears the chain down, and without this the very next tick would
+         * put the chain back — the re-assert would be undoing the user rather
+         * than the flush it exists for. */
+        if (tick % 6 == 0 && !s->dry_run && !synnet_firewall_enabled()) {
+            /* Nothing to do, and nothing to say: an off firewall staying off is
+             * not news once a minute. The boot line above already said it. */
+        } else if (tick % 6 == 0 && !s->dry_run && !synnet_firewall_present()) {
             g_fw_reasserts++;
             if (synnet_nft_ensure_firewall() == 0)
                 syslog(LOG_WARNING, "synnet: input firewall had gone — rebuilt "
@@ -691,7 +791,15 @@ int synnet_status(void) {
     /* ── 1. what synnet says it did ─────────────────────────── */
     const char *st = fw_state_get("state");
     printf("  Input firewall\n");
-    if (st[0] == '\0') {
+    if (!synnet_firewall_enabled()) {
+        /* Checked BEFORE the published state, because "off" is a decision and
+         * every other line here describes a machine that is trying to be
+         * filtered. Reporting "not asserted" for a firewall somebody switched
+         * off would send them looking for a fault. */
+        printf("    OFF — switched off in %s.\n", synnet_fw_pref_path());
+        printf("    Nothing inbound is filtered. Turn it back on with\n");
+        printf("    `sudo synnet --firewall on`, or in Settings ▸ Network.\n");
+    } else if (st[0] == '\0') {
         printf("    not asserted — no %s.\n", synnet_fw_state_path());
         printf("    The daemon publishes that file at start; if synnet is\n");
         printf("    running and it is missing, the daemon predates this or\n");

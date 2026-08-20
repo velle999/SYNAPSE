@@ -237,6 +237,13 @@ int do_set_clock(const char *key, const char *val);
  * `modes`, because the date layouts come from synui-clock rather than from
  * anything this package can hardcode. */
 int do_choices(int argc, char **argv);
+
+/* Is synnet's input firewall wanted? Reads /etc/synnet/firewall, where ABSENT
+ * MEANS ON — the same rule synnet itself applies, and it has to be the same
+ * one: a pane that read a missing file as "off" would report an unfiltered
+ * machine that is in fact filtered, which is the failure this whole area
+ * already had once. Defined in network.c, beside the rows that show it. */
+int synnet_firewall_on(void);
 int do_unit(int argc, char **argv);
 
 /* Bring one interface up or down, wired or wireless. */

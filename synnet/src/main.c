@@ -25,7 +25,10 @@ static void usage(void) {
         "  --debug         Verbose logging\n"
         "  --dry-run       Monitor only, no blocking\n"
         "  --status        Show the firewall, the live ruleset and the blocklist\n"
-        "  --firewall      Apply the base input firewall now (root)\n"
+        "  --firewall [on|off]\n"
+        "                  Apply the base input firewall now, or switch it on\n"
+        "                  or off for good. Off is remembered, or the daemon\n"
+        "                  would put it back within the minute. (root)\n"
         "  --allow <ip>    Allow IP\n"
         "  --block <ip>    Block IP\n"
         "  -h, --help      This help\n",
@@ -42,6 +45,18 @@ int main(int argc, char *argv[]) {
         else if (!strcmp(argv[i], "--status")) {
             return synnet_status();
         } else if (!strcmp(argv[i], "--firewall")) {
+            /* `--firewall`, `--firewall on`, `--firewall off`. The bare form is
+             * "apply it now" and stays what it was; the two words are the
+             * PREFERENCE, which is what the settings pane writes.
+             *
+             * ⚠ OFF HAS TO BE PERSISTED, not just applied. The daemon rebuilds
+             * a missing chain once a minute, so tearing it down without
+             * recording the preference is a switch that flips itself back
+             * within sixty seconds — the re-assert undoing the user instead of
+             * the flush it exists for. */
+            const char *want = (i + 1 < argc &&
+                                (!strcmp(argv[i+1], "on") ||
+                                 !strcmp(argv[i+1], "off"))) ? argv[++i] : NULL;
             /* Apply it now, without waiting for the once-a-minute check or a
              * daemon restart. Not merely convenience: the firewall used to be
              * reachable ONLY as a side effect of starting the daemon, so the
@@ -56,6 +71,29 @@ int main(int argc, char *argv[]) {
                                 "(sudo synnet --firewall)\n");
                 return 1;
             }
+            if (want && synnet_firewall_set_enabled(!strcmp(want, "on")) != 0) {
+                fprintf(stderr, "synnet: could not write %s\n",
+                        synnet_fw_pref_path());
+                return 1;
+            }
+
+            if (want && !strcmp(want, "off")) {
+                synnet_nft_drop_firewall();
+                printf("synnet: input firewall OFF — nothing inbound is "
+                       "filtered. `synnet --firewall on` puts it back.\n");
+                return 0;
+            }
+
+            /* Applying while the preference says off would be a lie that lasts
+             * a minute: the next tick reads the file and takes the chain away
+             * again. Say what is actually in the way. */
+            if (!want && !synnet_firewall_enabled()) {
+                fprintf(stderr, "synnet: the firewall is switched off in %s — "
+                                "`synnet --firewall on` to turn it back on\n",
+                        synnet_fw_pref_path());
+                return 1;
+            }
+
             if (synnet_nft_ensure_firewall() != 0) {
                 fprintf(stderr, "synnet: could not apply the input firewall — "
                                 "this box is NOT ingress-filtered\n");

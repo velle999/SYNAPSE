@@ -30,7 +30,18 @@ pkgver=0.1.0
 #   `nft` failing as root was reported as "the input chain is NOT loaded in the
 #   kernel", which is equally untrue when nft is simply not installed, as in a
 #   container. --status checks for nft before drawing that conclusion.
-pkgrel=7
+# 8: the firewall gets an OFF switch, and it is remembered. Settings ▸ Network
+#   can turn it off now, which needs more than deleting the chain: the daemon
+#   re-checks once a minute and would put it straight back — the re-assert
+#   undoing the user instead of the flush it exists for. `synnet --firewall
+#   on|off` writes /etc/synnet/firewall and the daemon re-READS it every tick.
+#   ⚠ ABSENT MEANS ON, and so does unreadable, empty or garbage: the one string
+#   that disarms the box is the exact word `off`. A parser that failed open
+#   would unfilter a machine because a disk filled up.
+#   ⚠ Off deletes the input CHAIN only — never the table, never `flush ruleset`
+#   — or turning off ingress filtering would silently unblock every address the
+#   AI has flagged, which lives in the same table.
+pkgrel=8
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

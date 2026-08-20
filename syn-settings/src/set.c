@@ -119,6 +119,30 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
+	/* The firewall.
+	 *
+	 * ⚠ THROUGH synnet, not by writing /etc/synnet/firewall here. Off is two
+	 * operations that have to happen together — record the preference AND take
+	 * the chain down — and synnet already does both in one place. Writing only
+	 * the file from here would leave the chain up until the daemon next looked;
+	 * writing only the chain would have the daemon put it back within the
+	 * minute. A second implementation gets exactly one of those wrong.
+	 *
+	 * pkexec, as the boot pane does: loading an nftables chain needs root, and
+	 * no polkit policy of our own ships — so pkexec demands admin
+	 * authentication, which is the right bar for the one setting in this app
+	 * that makes the machine less safe. */
+	if (!strcmp(key, "firewall")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("firewall takes on or off");
+		if (!have_cmd("synnet"))
+			return refuse("synnet is not installed — it is what applies the "
+			              "firewall on this system");
+		char *a[] = { (char *)"pkexec", (char *)"synnet",
+		              (char *)"--firewall", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "wifi")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("wifi takes on or off");

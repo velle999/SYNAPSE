@@ -411,6 +411,28 @@ int do_choices(int argc, char **argv)
 		return 0;
 	}
 
+	/* The firewall, on or off.
+	 *
+	 * ⚠ THE LABELS SAY WHAT HAPPENS, not what the switch is called. This is the
+	 * one setting in this app that makes the machine less safe than it shipped,
+	 * and "Off" on its own does not tell somebody that their laptop will start
+	 * answering strangers on café Wi-Fi. Every other row here can be undone by
+	 * flipping it back; this one can be undone after something has already
+	 * connected.
+	 *
+	 * The current value comes from the same file synnet reads, with the same
+	 * rule — absent means ON. A settings pane that defaulted the display to
+	 * "off" on a box with no preference file would be reporting an unfiltered
+	 * machine that is in fact filtered. */
+	if (!strcmp(key, "firewall")) {
+		int on = synnet_firewall_on();
+		rec_row("on	On — refuse unsolicited connections from outside "
+		        "the local network	%s", on ? "current" : "-");
+		rec_row("off	Off — answer anything that reaches this machine, "
+		        "on any network	%s", on ? "-" : "current");
+		return 0;
+	}
+
 	/* The AI backend's three settable values. Asked of the helper for the
 	 * CURRENT one rather than read off a file, because the answer has to come
 	 * from the MASK first: a hand-placed `systemctl mask synapd.service` means

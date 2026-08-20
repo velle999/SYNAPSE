@@ -52,6 +52,28 @@
  * anyone able to set this daemon's environment already controls its startup. */
 const char *synnet_fw_state_path(void);
 
+/* The user's PREFERENCE, which is a different thing from the state above:
+ * `/etc/synnet/firewall` holds "on" or "off", and off means the daemon does not
+ * assert the input chain and does not rebuild it in the re-assert tick.
+ *
+ * ⚠ WITHOUT A PERSISTED PREFERENCE, "OFF" LASTS AT MOST A MINUTE. The daemon
+ * re-checks the chain once a minute and puts it back, so a switch that only
+ * deleted the chain would be undone by the thing that exists to undo exactly
+ * that. Anything offering an off switch — the settings pane does — has to write
+ * here, not just tear the chain down.
+ *
+ * Absent means ON. A box that has never expressed a preference is filtered;
+ * that is the whole point of shipping a firewall, and a missing file must never
+ * be the thing that disarms it. */
+#define SYNNET_FW_PREF     "/etc/synnet/firewall"
+const char *synnet_fw_pref_path(void);   /* honours $SYNNET_FW_PREF_FILE */
+int  synnet_firewall_enabled(void);      /* 1 unless the preference says off */
+int  synnet_firewall_set_enabled(int on);/* write the preference; 0 on success */
+/* Tear the input chain down. Leaves the table and the egress `blocked` set
+ * alone — those are a different policy and dropping them with this would
+ * silently unblock every IP the AI has flagged. */
+int  synnet_nft_drop_firewall(void);
+
 typedef enum {
     SYNNET_ACTION_ALLOW  = 0,
     SYNNET_ACTION_BLOCK  = 1,

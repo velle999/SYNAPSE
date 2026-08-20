@@ -1349,6 +1349,99 @@ if [ -f "$QML" ]; then
     [ -z "$missing" ] && ok "every action verb the reader emits appears in the QML" \
                       || bad "verb(s) the QML never mentions:$missing"
 
+    # ── The firewall rows ───────────────────────────────────────────────────
+    #
+    # These replaced a row that said "ruleset: not read". That was honest —
+    # `nft list ruleset` needs root — and useless: the box HAS a firewall,
+    # synnet applies a default-drop input chain at every start, and the pane
+    # could not say so. The rows read what synnet publishes instead.
+    #
+    # Every state is driven through the two file paths, because none of them
+    # can be produced on demand on the machine running this: a failed apply, a
+    # firewall rebuilt nine times, a daemon that has not published yet.
+    fwdir=$(mktemp -d)
+    fwstate="$fwdir/state"; fwpref="$fwdir/pref"
+    fwrow() { SYNNET_FW_STATE_FILE="$fwstate" SYNNET_FW_PREF_FILE="$fwpref" \
+              "$BIN" --rec network | grep "^firewall	input filtering"; }
+
+    # ⚠ ABSENT MEANS ON. A pane that read a missing preference file as "off"
+    # would report an unfiltered machine that is in fact filtered — the same
+    # class of wrong answer these rows exist to remove. No preference file is
+    # the normal state of every box that has never touched the setting.
+    rm -f "$fwpref"
+    printf 'state=active\nreasserts=0\n' > "$fwstate"
+    case "$(fwrow | cut -f3)" in
+        on) ok "an asserted firewall with no preference file reads as ON" ;;
+        *)  bad "a firewall with no preference file read as '$(fwrow | cut -f3)'" ;;
+    esac
+
+    printf 'off\n' > "$fwpref"
+    case "$(fwrow | cut -f3)" in
+        off) ok "a preference of off reads as OFF even while the state says active" ;;
+        *)   bad "the preference did not override the published state" ;;
+    esac
+    rm -f "$fwpref"
+
+    printf 'state=failed\n' > "$fwstate"
+    case "$(fwrow | cut -f3)" in
+        failed) ok "a firewall that could not be applied reads as FAILED" ;;
+        *)      bad "a failed apply read as '$(fwrow | cut -f3)'" ;;
+    esac
+    # ⚠ It must not read as "on" — that is the one wrong answer that matters,
+    # and the difference between the two is a machine that is filtered and one
+    # that only believes it is.
+    case "$(fwrow | cut -f3)" in
+        on) bad "a FAILED firewall reported itself as on" ;;
+        *)  ok "…and never as on" ;;
+    esac
+
+    rm -f "$fwstate"
+    case "$(fwrow | cut -f3)" in
+        unknown) ok "no published state reads as unknown, not as on or off" ;;
+        *)       bad "an unpublished state read as '$(fwrow | cut -f3)'" ;;
+    esac
+
+    # The rebuild counter is a row only when it has happened. A zero would be a
+    # row about nothing.
+    printf 'state=active\nreasserts=0\n' > "$fwstate"
+    SYNNET_FW_STATE_FILE="$fwstate" SYNNET_FW_PREF_FILE="$fwpref" \
+        "$BIN" --rec network | grep -q "^firewall	rebuilt" \
+        && bad "a zero rebuild count still drew a row" \
+        || ok "no rebuild row when the firewall has not been rebuilt"
+
+    printf 'state=active\nreasserts=9\n' > "$fwstate"
+    SYNNET_FW_STATE_FILE="$fwstate" SYNNET_FW_PREF_FILE="$fwpref" \
+        "$BIN" --rec network | grep -q "^firewall	rebuilt	9" \
+        && ok "a firewall that keeps vanishing gets a row with the count" \
+        || bad "the rebuild count was not reported"
+
+    # The row has to be actionable, or it is a status display wearing a
+    # settings pane's clothes. `choice:` is the generic verb the QML already
+    # knows, so no dead button — the verb sweep above covers that.
+    printf 'state=active\nreasserts=0\n' > "$fwstate"
+    case "$(fwrow | cut -f6)" in
+        *choice:firewall*) ok "the firewall row offers the on/off choice" ;;
+        *) bad "the firewall row carries no action: $(fwrow | cut -f6)" ;;
+    esac
+
+    # …and the choice has to have both options with exactly one current.
+    cout=$(SYNNET_FW_PREF_FILE="$fwpref" "$BIN" choices firewall)
+    n=$(grep -c 'current' <<<"$cout")
+    [ "$n" = 1 ] && ok "exactly one firewall choice is marked current" \
+                 || bad "$n firewall choices are marked current"
+    grep -q '^on	' <<<"$cout" && grep -q '^off	' <<<"$cout" \
+        && ok "both on and off are offered" \
+        || bad "the firewall choice is missing an option"
+
+    # ⚠ The labels say what HAPPENS. "Off" alone does not tell somebody their
+    # laptop will start answering strangers; this is the one setting in the app
+    # that makes the machine less safe than it shipped.
+    grep '^off	' <<<"$cout" | grep -qi 'answer anything' \
+        && ok "the off label says what turning it off does" \
+        || bad "the off label does not describe the consequence"
+
+    rm -rf "$fwdir"
+
     # `unavailable` is the one verb the loop above cannot catch on its own: it
     # is only emitted when the session is NOT synui, and the machine running
     # this suite is. So it is checked directly — and checked for the part that
