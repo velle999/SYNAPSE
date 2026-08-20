@@ -255,7 +255,21 @@ pkgver=0.1.0
 #   connector that had no CRTC when first asked is re-tested rather than
 #   written off. tests/nightlight_test.c stubs the gamma size and fails on the
 #   old behaviour.
-pkgrel=408
+# 409: THE LIVE WALLPAPER SEGFAULTED ON AMD, and looked applied. The session
+#   exports MANGOHUD=1 so games get the overlay without a per-game wrapper, and
+#   MangoHud's Vulkan manifest declares enable_environment MANGOHUD=1 — so that
+#   one variable loads VK_LAYER_MANGOHUD_overlay into EVERY Vulkan client in the
+#   session. The wallpaper engine is one: mpv asks libavutil for a Vulkan hwdec
+#   device, and on an AMD Renoir laptop MangoHud's vkCreateDevice hook dies
+#   there (#1 libMangoHud.so, #4 vkCreateDevice, #7 av_hwdevice_ctx_create)
+#   before a frame is painted. ⚠ NVIDIA picks a different hwdec and never calls
+#   vkCreateDevice, so three engines run happily on the dev desktop while every
+#   AMD laptop gets a still picture and a core dump — the same blind spot that
+#   hid the --assets-dir bug. synui-wpengine now launches the engine with
+#   DISABLE_MANGOHUD=1 (the manifest's own disable_environment, which beats the
+#   enable) and MANGOHUD=0 for the GL side. An FPS overlay on the background
+#   layer was never wanted. tests/wpengine_mangohud.sh.
+pkgrel=409
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

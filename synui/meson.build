@@ -1425,6 +1425,18 @@ wpengine_assets_dir = find_program('tests/wpengine_assets_dir.sh')
 test('wpengine_assets_dir', wpengine_assets_dir,
      timeout : 60)
 
+# `wpengine_mangohud`: the second way the live wallpaper dies looking applied.
+# The session exports MANGOHUD=1 so games get the overlay without a per-game
+# wrapper, and MangoHud's Vulkan manifest makes that one variable load its layer
+# into EVERY Vulkan client — including the wallpaper engine, whose mpv asks
+# libavutil for a Vulkan hwdec device. On AMD that segfaults in MangoHud's own
+# vkCreateDevice hook before a frame is painted. NVIDIA picks another hwdec and
+# never calls it, so the development desktop cannot reproduce it — the same
+# blind spot as the assets-dir bug. Sourced and stubbed for the same reason.
+wpengine_mangohud = find_program('tests/wpengine_mangohud.sh')
+test('wpengine_mangohud', wpengine_mangohud,
+     timeout : 60)
+
 # `tux_screen`: Tuxagotchi is almost entirely a PICTURE — a pixel penguin that
 # walks, blinks, eats, sleeps, sickens, ages and dies — and every other way of
 # looking at that picture means running a desktop and waiting hours for the pet

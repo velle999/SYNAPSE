@@ -436,10 +436,43 @@ start_output() {
     local mouse=(--disable-mouse)
     [ "${SYNUI_WPENGINE_MOUSE:-0}" = 1 ] && mouse=()
 
+    # ⚠ DISABLE_MANGOHUD=1, AND IT IS NOT COSMETIC — IT IS WHY THE WALLPAPER
+    # RUNS AT ALL ON AMD.
+    #
+    # The session exports MANGOHUD=1 (see the synui-session heredoc in
+    # syn-install and the matching ~/.bash_profile block) so games get the
+    # overlay without a per-game wrapper. MangoHud's Vulkan manifest declares
+    # "enable_environment": {"MANGOHUD": "1"}, so that one variable loads
+    # VK_LAYER_MANGOHUD_overlay into EVERY Vulkan client in the session — and
+    # the wallpaper engine is one, because mpv asks libavutil for a Vulkan
+    # hwdec device.
+    #
+    # On an AMD Renoir laptop that segfaults the engine before it draws a
+    # frame, inside MangoHud's own vkCreateDevice hook:
+    #
+    #     #0  libvulkan.so.1
+    #     #1  libMangoHud.so + 0x41eca
+    #     #4  vkCreateDevice
+    #     #5  libavutil.so.61
+    #     #7  av_hwdevice_ctx_create
+    #     #8+ libmpv.so.2
+    #
+    # ⚠ NVIDIA NEVER SEES IT. mpv picks a different hwdec there, never calls
+    # vkCreateDevice, and the hook is never entered — so three engines run
+    # happily on the development desktop while every AMD laptop gets a still
+    # picture and a core dump. Same shape as the --assets-dir bug: invisible on
+    # the one machine it is tested on.
+    #
+    # DISABLE_MANGOHUD is the manifest's own "disable_environment" and beats
+    # the enable, so it is the knob to use rather than unsetting MANGOHUD and
+    # hoping. MANGOHUD=0 goes with it for the OpenGL side. An FPS overlay
+    # painted onto the background layer was never wanted anyway.
+    #
     # __GL_THREADED_OPTIMIZATIONS=0 is the upstream-documented NVIDIA workaround.
     # 9>&- drops the lock fd: the engine outlives this script, and an inherited
     # fd 9 would hold take_lock's flock for the whole session (see take_lock).
     __GL_THREADED_OPTIMIZATIONS=0 \
+    DISABLE_MANGOHUD=1 MANGOHUD=0 \
     setsid "$ENGINE" "${assets[@]}" --layer background "${mouse[@]}" \
         --fps "${SYNUI_WPENGINE_FPS:-30}" --silent \
         --screen-root "$out" --bg "$bg" --scaling fill "${props[@]}" \
