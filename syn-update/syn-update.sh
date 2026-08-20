@@ -906,8 +906,25 @@ cmd_check() {
 
     report
     say ""
-    { [ ${#CHANGED[@]} -gt 0 ] || [ ${#NEW[@]} -gt 0 ]; } &&
+    if [ ${#CHANGED[@]} -gt 0 ] || [ ${#NEW[@]} -gt 0 ]; then
         say "Run ${C_B}syn-update apply${C_R} to build and install them."
+    elif [ "$from" != "$to" ]; then
+        # ⚠ COMMITS AND PACKAGES ARE NOT THE SAME THING, and the report used to
+        # let you think they were. It listed everything that had landed
+        # upstream, then said "already current", and stopped — so a run that
+        # showed two commits and installed nothing read as an updater refusing
+        # to do its job.
+        #
+        # Most commits here change nothing this machine installs: documentation,
+        # CI, the archiso profile, a repo tool, or a component that is not on
+        # this box. Saying which is the difference between "there is an update
+        # it will not take" and "there was nothing in it for you".
+        say "Those commits changed nothing this machine installs — documentation,"
+        say "the ISO profile, repository tooling, or a component you do not have."
+        say ""
+        say "${C_DIM}\`syn-update apply\` still moves $SRC to that revision,${C_R}"
+        say "${C_DIM}which is where the repository's own tools live.${C_R}"
+    fi
     return 0
 }
 
@@ -989,6 +1006,18 @@ cmd_apply() {
     if [ ${#names[@]} -eq 0 ]; then
         say ""
         ok "nothing to build"
+        # ⚠ THE TREE MOVED ANYWAY. checkout_remote() ran above, so this machine
+        # now has the new source even though no package changed — and saying
+        # nothing about that is how "the updater did nothing" gets reported
+        # against a run that did the one thing it had to do. The repository's
+        # own scripts (tools/) are not packaged and live only here.
+        if [ "$from" != "$to" ]; then
+            say ""
+            say "$SRC is now at $(git -C "$SRC" rev-parse --short HEAD)."
+            say "${C_DIM}Nothing to build from it — the commits changed documentation,${C_R}"
+            say "${C_DIM}the ISO profile, repository tooling, or a component this${C_R}"
+            say "${C_DIM}machine does not have.${C_R}"
+        fi
         return 0
     fi
 

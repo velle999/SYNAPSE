@@ -10,7 +10,20 @@ pkgver=0.1.0
 # 36: cliamp joins COMPONENTS. ⚠ Adopting a COMPONENTS change takes TWO
 #   applies — the running process keeps the list it started with — so the first
 #   `syn-update apply` updates this script and the second one sees cliamp.
-pkgrel=39
+# 40: "the updater is just listing it, not trying to install". It was right and
+#   it did not say so. COMMITS AND PACKAGES ARE NOT THE SAME THING: `check`
+#   listed everything that had landed upstream, then reported "already
+#   current", so a run showing two commits and installing nothing read as an
+#   updater refusing to work. Most commits change nothing an installed machine
+#   installs — documentation, the ISO profile, a repo tool that is in no
+#   package, or a component this box does not have. Both paths say which now.
+#   ⚠ And `apply` moved $SRC even with nothing to build (checkout_remote runs
+#   before the early return) and never mentioned it — so the one thing that run
+#   DID do was invisible, and the repository's own tools/ scripts live only
+#   there. It now prints the revision the tree landed on. Only when it actually
+#   moved: a paragraph on every no-op run is the noise that stops people
+#   reading the output.
+pkgrel=40
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

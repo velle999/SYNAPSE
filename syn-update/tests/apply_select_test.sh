@@ -146,6 +146,47 @@ case "$out" in
 esac
 
 echo ""
+echo "=== commits that install nothing say so ==="
+#
+# THE COMPLAINT THIS EXISTS FOR (velle, 2026-08-20): "updater is just listing
+# it not trying to install". The tree was two commits ahead, `check` listed
+# both, and then said "everything build-all.sh can update is already current"
+# — which reads as an updater that can see an update and refuses to take it.
+#
+# It was right: one commit was a repo tool that is not in any package, the
+# other was syn-install, which an installed system correctly does not have.
+# COMMITS AND PACKAGES ARE NOT THE SAME THING, and the report let you think
+# they were by showing one and then reporting on the other.
+out=$(run_apply '' '')
+case "$out" in
+    *"nothing to build"*) ok "an apply with nothing to build still says so" ;;
+    *) bad "the nothing-to-build line went missing: $out" ;;
+esac
+case "$out" in
+    *"is now at"*)
+        ok "…and says the source tree moved anyway" ;;
+    *)  bad "an apply that advanced the tree said nothing about it — the
+       repository's own tools live there and are not packaged: $out" ;;
+esac
+case "$out" in
+    *"machine does not have"*|*"repository tooling"*)
+        ok "…and why there was nothing in it to build" ;;
+    *)  bad "no reason given for a commit that builds nothing: $out" ;;
+esac
+
+# ⚠ ONLY when the revision actually moved. A machine that is already at the
+# tip has nothing to explain, and a paragraph about tooling on every no-op run
+# is the noise that teaches people to stop reading the output.
+same=$( { harness
+          echo 'local_rev() { echo aaaaaaa; }; remote_rev() { echo aaaaaaa; }'
+          echo "CHANGED=(); NEW=(); DECLINED=(); SELECT=()"
+          echo 'cmd_apply'; } > "$tmp/same.sh"; bash "$tmp/same.sh" 2>&1)
+case "$same" in
+    *"is now at"*) bad "a machine already at the tip was told the tree moved: $same" ;;
+    *)             ok "a machine already at the tip is told nothing extra" ;;
+esac
+
+echo ""
 echo "=== the manifest decides what \"not installed\" MEANS ==="
 #
 # scan() has exactly one ambiguous state — a component that is in the tree and
