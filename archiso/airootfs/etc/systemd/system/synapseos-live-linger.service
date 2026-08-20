@@ -1,0 +1,46 @@
+[Unit]
+Description=Keep root's runtime directory alive for the live session
+Documentation=man:logind.conf(5) man:loginctl(1)
+# WHY THIS EXISTS
+#
+# The live image autologins root on tty1 through login(1), so pam_systemd opens
+# a logind SESSION and /run/user/0 becomes a logind-managed tmpfs. The wizard on
+# that tty then starts synui.service, which Conflicts=getty@tty1.service — so
+# root's only session ends, and logind's ordinary behaviour is to stop user@0
+# and unmount /run/user/0 with it.
+#
+# BOTH of synui's sockets live in that directory: the Wayland display and the
+# synctl IPC socket. Losing it mid-session is silent and total. The compositor
+# and the bar keep running on the fds they already hold, so the desktop looks
+# perfectly healthy, while nothing new can connect ever again — no terminal from
+# Super+Return, foot and syntty both exiting "no Wayland display", Super+I and
+# the bar's network module launching a terminal that dies the same way, and the
+# control panel never answering the menu because synctl cannot find the IPC
+# socket either. Five unrelated-looking faults, one missing directory.
+#
+# Lingering makes the teardown not happen at all, which is the only form of this
+# fix that does not depend on winning a race. synui.service is also ordered
+# After=getty@tty1.service so the stop job completes first, but logind's cleanup
+# runs asynchronously after that job, so ordering alone leaves a window open.
+#
+# Before=getty@tty1.service is the point: linger has to be on BEFORE root's first
+# session exists, or the session logind is deciding about is already open.
+#
+# Live image only. An installed system logs in through greetd, where the session
+# owns its own runtime directory for as long as the user is logged in.
+After=systemd-logind.service
+Before=getty@tty1.service
+ConditionPathExists=!/var/lib/systemd/linger/root
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# loginctl rather than writing the file, so logind is told rather than left to
+# notice. The fallback covers logind not being reachable this early: the file IS
+# the state loginctl would have written, and logind reads it when it next has to
+# decide whether to remove the directory.
+ExecStart=/usr/bin/loginctl enable-linger root
+ExecStart=-/usr/bin/install -Dm644 /dev/null /var/lib/systemd/linger/root
+
+[Install]
+WantedBy=multi-user.target

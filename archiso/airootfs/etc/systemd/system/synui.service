@@ -7,6 +7,32 @@ After=synapd.service seatd.service
 Wants=synapd.service
 Requires=seatd.service
 Conflicts=getty@tty1.service
+# ⚠ ORDERED, and the ordering is the whole point. Conflicts= does NOT imply one
+# — systemd.unit(5) says so in as many words — so without this the getty's STOP
+# job and this unit's START job race.
+#
+# What is being raced for is /run/user/0. agetty autologins root on tty1 through
+# login(1), so pam_systemd opens a logind SESSION and /run/user/0 becomes a
+# logind-managed tmpfs. The live wizard then runs `systemctl start synui.service`
+# from inside that session; Conflicts= stops the getty, root's last session ends,
+# and logind tears the runtime directory down.
+#
+# Lose the race and the failure is silent and total, because BOTH of synui's
+# sockets live in there — the Wayland display and the synctl IPC socket. synui
+# creates them, the bar connects, and THEN the directory goes away underneath.
+# The compositor and the bar keep running on the fds they already hold, so the
+# desktop looks completely healthy, and nothing new can ever connect again:
+# Super+Return opens no terminal, foot and syntty both exit "no Wayland display",
+# Super+I and the bar's network module launch a terminal that dies the same way,
+# and the control panel does not answer the menu because synctl cannot find the
+# IPC socket either. Every one of those reads as a separate broken feature.
+#
+# Belt and braces: /var/lib/systemd/linger/root on this image stops logind from
+# removing the directory at all. This line makes the ordering deterministic; the
+# linger file makes the teardown not happen. Neither alone is worth relying on —
+# ordering still leaves logind's cleanup running asynchronously after the stop
+# job completes.
+After=getty@tty1.service
 # If synui fails 3 times in 30s, stop trying and let getty take over
 # (StartLimit* live in [Unit]; systemd ignores them in [Service])
 StartLimitBurst=3
