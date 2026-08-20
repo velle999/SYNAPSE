@@ -26,6 +26,32 @@
  * the same `inet synnet` table as the egress set, in its own base chain. */
 #define SYNNET_NFT_INPUT   "input"
 
+/* Where the daemon publishes what it actually asserted, for `--status` to read.
+ *
+ * ⚠ THIS EXISTS BECAUSE THE FIREWALL WAS INVISIBLE. Reading the live ruleset
+ * needs CAP_NET_ADMIN, so `nft list` as an ordinary user fails — and
+ * synnet_status() used to take that failure as "no table" and print
+ * "daemon has not run". The box was fully firewalled and its own status
+ * command said it was not, which is a worse answer than saying nothing.
+ *
+ * The daemon writes this after every assert, so an unprivileged `--status` can
+ * report the firewall from the horse's mouth without needing to look at the
+ * kernel. The live ruleset is still consulted when we CAN look; the two are
+ * reported separately, because "what synnet believes" and "what the kernel
+ * holds" are different claims and conflating them is how the last bug happened.
+ *
+ * /run, so it cannot outlive a boot and claim a firewall that a reboot removed.
+ * The unit's RuntimeDirectory= creates the directory. */
+#define SYNNET_FW_STATE    "/run/synnet/firewall.state"
+/* …and where to look for it, honouring $SYNNET_FW_STATE_FILE.
+ *
+ * A RUNTIME override rather than the build-time one SYNNET_STATE_FILE uses,
+ * because this file is what `--status` reports and a test that has to rebuild
+ * the daemon to check a status string is a test nobody runs. It redirects
+ * where the STATUS is written and read, never what the firewall does — and
+ * anyone able to set this daemon's environment already controls its startup. */
+const char *synnet_fw_state_path(void);
+
 typedef enum {
     SYNNET_ACTION_ALLOW  = 0,
     SYNNET_ACTION_BLOCK  = 1,
@@ -69,4 +95,9 @@ int  synnet_query_ai(synnet_state_t *s, synnet_event_t *ev, char *out, size_t ou
 /* nftables enforcement (monitor.c) */
 int  synnet_nft_ensure(void);                 /* idempotent table/set/chain/rule */
 int  synnet_nft_ensure_firewall(void);        /* base input firewall (atomic, idempotent) */
+/* Is our input base chain still in the kernel? Root-only (it lists a chain);
+ * answers 0 for "no, or cannot tell". Used by the re-assert tick, which treats
+ * both the same way — rebuilding a chain that is already correct is harmless
+ * and rebuilding one that vanished is the point. */
+int  synnet_firewall_present(void);
 int  synnet_status(void);                      /* print nft set + ruleset, for --status */

@@ -1,6 +1,27 @@
 pkgname=synnet
 pkgver=0.1.0
-pkgrel=5
+# 6: THE FIREWALL WAS THERE AND THE STATUS COMMAND DENIED IT. synnet has
+#   applied a default-drop input chain at every start since it grew
+#   synnet_nft_ensure_firewall(), and `synnet --status` printed "no synnet table
+#   loaded — daemon has not run" regardless: listing an nftables object needs
+#   CAP_NET_ADMIN, so as an ordinary user that call ALWAYS failed, and the old
+#   status read any failure as absence. It never mentioned the input firewall at
+#   all either — only the egress block set. --status now makes three separate
+#   claims: what synnet ASSERTED (from /run/synnet/firewall.state, which the
+#   daemon publishes so an unprivileged answer is possible), what the KERNEL
+#   holds (only when it can look, and it says so when it cannot), and the
+#   blocklist.
+#   ⚠ AND THE "SELF-HEALS A FLUSH" COMMENT WAS FALSE. The chain was built once
+#   at start; `nft flush ruleset` from anything took it away until the next
+#   daemon restart, with the journal still showing the firewall came up —
+#   because it did, once. The monitor loop now re-checks once a minute and
+#   rebuilds, logging a running count, since "this happened at boot" and "this
+#   has happened forty times today" are different problems.
+#   New: `synnet --firewall` applies it now, without restarting the daemon and
+#   dropping the process event stream with it. tests/firewall_test.sh drives the
+#   status states through $SYNNET_FW_STATE_FILE and reads the real ruleset back
+#   out of a stub `nft`, so neither half needs root.
+pkgrel=6
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

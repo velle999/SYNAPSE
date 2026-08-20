@@ -24,7 +24,8 @@ static void usage(void) {
         "  --foreground    Run in foreground\n"
         "  --debug         Verbose logging\n"
         "  --dry-run       Monitor only, no blocking\n"
-        "  --status        Show current rules and stats\n"
+        "  --status        Show the firewall, the live ruleset and the blocklist\n"
+        "  --firewall      Apply the base input firewall now (root)\n"
         "  --allow <ip>    Allow IP\n"
         "  --block <ip>    Block IP\n"
         "  -h, --help      This help\n",
@@ -40,6 +41,30 @@ int main(int argc, char *argv[]) {
         else if (!strcmp(argv[i], "--debug"))      debug = 1;
         else if (!strcmp(argv[i], "--status")) {
             return synnet_status();
+        } else if (!strcmp(argv[i], "--firewall")) {
+            /* Apply it now, without waiting for the once-a-minute check or a
+             * daemon restart. Not merely convenience: the firewall used to be
+             * reachable ONLY as a side effect of starting the daemon, so the
+             * answer to "put it back" was `systemctl restart synnet`, which
+             * also drops the process event stream and the synapd connection.
+             *
+             * Needs root — it loads an nftables chain. Said here rather than
+             * letting nft's own message arrive on stderr, where it reads like a
+             * bug in synnet. */
+            if (geteuid() != 0) {
+                fprintf(stderr, "synnet: --firewall needs root "
+                                "(sudo synnet --firewall)\n");
+                return 1;
+            }
+            if (synnet_nft_ensure_firewall() != 0) {
+                fprintf(stderr, "synnet: could not apply the input firewall — "
+                                "this box is NOT ingress-filtered\n");
+                return 1;
+            }
+            printf("synnet: input firewall applied "
+                   "(default-drop input; loopback, established, ICMP, "
+                   "private-range sources and DHCP accepted)\n");
+            return 0;
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             usage(); return 0;
         } else if (!strcmp(argv[i], "--allow") && i+1 < argc) {

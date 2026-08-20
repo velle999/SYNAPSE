@@ -254,6 +254,16 @@ jobs:
         run: |
           ./syn/tests/resolve_test.sh
 
+      # The firewall, and whether the box can find out it has one. synnet has
+      # applied a default-drop input chain at every start for a while and
+      # `--status` denied it anyway — listing an nftables object needs
+      # CAP_NET_ADMIN, and any failure was read as "not there". Needs no root
+      # here: the state half is a fixture, and the ruleset half reads back what
+      # a stub `nft` was handed.
+      - name: Firewall and its status (synnet)
+        run: |
+          meson test -C synnet/_ci firewall --print-errorlogs
+
       - name: Daemon unit tests (synapd wire gate, synguard verdict feed)
         run: |
           meson test -C synapd/_ci wire --print-errorlogs
