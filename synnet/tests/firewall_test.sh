@@ -43,28 +43,74 @@ hasnt() { case "$2" in *"$1"*) bad "$3" ;; *) ok "$3" ;; esac; }
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 export SYNNET_FW_STATE_FILE="$tmp/firewall.state"
 
+# ⚠ THIS RUNS BOTH AS A USER AND AS ROOT. CI is a container running as root,
+# a developer is not, and the first version of this file assumed the second:
+# every assertion about "needs root" wording failed the moment it ran in CI.
+#
+# So the REGRESSION itself is tested without depending on privilege at all. The
+# bug was "any nft failure is read as absence", and a stub `nft` that exits
+# non-zero produces that failure for either user. Privilege only decides which
+# WORDING is expected, and those few checks say which case they are in.
+AM_ROOT=$([ "$(id -u)" = 0 ] && echo yes || echo no)
+echo "running as root: $AM_ROOT"
+
+mkdir -p "$tmp/bin"
+export NFT_LOG="$tmp/nft.log"
+
+# nft that cannot answer. Whatever the reason — no CAP_NET_ADMIN, no binary, a
+# container without nf_tables — synnet must not turn it into a claim that the
+# firewall is not there.
+stub_nft_failing() {
+    cat > "$tmp/bin/nft" <<'STUB'
+#!/bin/sh
+echo "nft: Operation not permitted" >&2
+exit 1
+STUB
+    chmod +x "$tmp/bin/nft"
+}
+
+# nft that works, and records the ruleset it was handed (it arrives on stdin
+# from a heredoc). ⚠ Must exit 0, or synnet reports failure and never gets as
+# far as publishing the state file.
+stub_nft_recording() {
+    cat > "$tmp/bin/nft" <<'STUB'
+#!/bin/sh
+printf '%s\n' "ARGV: $*" >> "$NFT_LOG"
+cat >> "$NFT_LOG" 2>/dev/null
+exit 0
+STUB
+    chmod +x "$tmp/bin/nft"
+}
+
+echo ""
 echo "=== --status tells the truth about the firewall ==="
 
 # ── 1. THE REGRESSION ───────────────────────────────────────────────────────
-# Nothing published, run unprivileged. It must not claim the daemon has not run
-# — it cannot know that from here, and saying so is what hid a live firewall.
-out=$("$SYNNET" --status 2>&1)
+# nft cannot answer, and nothing has been published. synnet knows two things
+# here and neither of them is "the daemon has not run".
+stub_nft_failing
+out=$(PATH="$tmp/bin:$PATH" "$SYNNET" --status 2>&1)
 hasnt "daemon has not run" "$out" \
-      "an unprivileged status does not claim the daemon has not run"
-has "Input firewall" "$out" "…and reports the input firewall at all"
-has "needs root" "$out" "…and says plainly that the live view needs root"
+      "an nft that cannot answer is not reported as an absent firewall"
+has "Input firewall" "$out" "…and the input firewall is reported at all"
 
-# Exit 0: a status command that cannot see everything has still answered.
-"$SYNNET" --status >/dev/null 2>&1
-[ $? = 0 ] && ok "an unprivileged status still exits 0" \
-            || bad "an unprivileged status exits non-zero"
+PATH="$tmp/bin:$PATH" "$SYNNET" --status >/dev/null 2>&1
+[ $? = 0 ] && ok "a status that cannot see everything still exits 0" \
+            || bad "status exits non-zero when it cannot read the ruleset"
+
+# The wording depends on WHY it cannot look, and that depends on privilege.
+if [ "$AM_ROOT" = no ]; then
+    has "needs root" "$out" "as a user, it says the live view needs root"
+else
+    hasnt "needs root" "$out" "as root, it does not tell root to become root"
+fi
 
 # ── 2. the three states the daemon can publish ──────────────────────────────
 printf 'state=active\npolicy=drop\ntrust=lan\nsince=1787000000\nreasserts=0\n' \
     > "$SYNNET_FW_STATE_FILE"
 out=$("$SYNNET" --status 2>&1)
 has "ACTIVE" "$out" "an asserted firewall reads as ACTIVE"
-hasnt "⚠ rebuilt" "$out" "…with no rebuild warning when it has not been rebuilt"
+hasnt "rebuilt" "$out" "…with no rebuild warning when it has not been rebuilt"
 
 printf 'state=active\nreasserts=7\n' > "$SYNNET_FW_STATE_FILE"
 out=$("$SYNNET" --status 2>&1)
@@ -85,27 +131,23 @@ echo "=== the ruleset synnet actually loads ==="
 
 # ── 3. what --firewall hands to nft ─────────────────────────────────────────
 #
-# A stub nft that records its stdin (the ruleset arrives on a heredoc) and its
-# argv. ⚠ It must exit 0, or synnet reports a failure and never gets as far as
-# writing the state file.
-mkdir -p "$tmp/bin"
-cat > "$tmp/bin/nft" <<'STUB'
-#!/bin/sh
-printf '%s\n' "ARGV: $*" >> "$NFT_LOG"
-cat >> "$NFT_LOG" 2>/dev/null
-exit 0
-STUB
-chmod +x "$tmp/bin/nft"
-export NFT_LOG="$tmp/nft.log"
+# --firewall refuses below root, on purpose: it loads a chain. As root we are
+# already there; as a user, fakeroot fakes exactly the geteuid() the guard
+# reads, and no real privilege is involved either way.
+stub_nft_recording
 : > "$NFT_LOG"
-
-# ⚠ --firewall refuses below root, on purpose — it loads a chain. `fakeroot`
-# only fakes uid to the process itself, which is exactly what geteuid() reads,
-# so it is the right tool here and no real privilege is involved.
-if ! command -v fakeroot >/dev/null 2>&1; then
-    echo "  SKIP  the ruleset checks need fakeroot to get past the root guard"
-else
+if [ "$AM_ROOT" = yes ]; then
+    PATH="$tmp/bin:$PATH" "$SYNNET" --firewall >/dev/null 2>&1
+    ran=yes
+elif command -v fakeroot >/dev/null 2>&1; then
     PATH="$tmp/bin:$PATH" fakeroot "$SYNNET" --firewall >/dev/null 2>&1
+    ran=yes
+else
+    echo "  SKIP  the ruleset checks need root or fakeroot to pass the guard"
+    ran=no
+fi
+
+if [ "$ran" = yes ]; then
     rules=$(cat "$NFT_LOG")
 
     has "type filter hook input priority 0 ; policy drop ;" "$rules" \
@@ -143,8 +185,13 @@ fi
 echo ""
 echo "=== the guard rails ==="
 
-out=$("$SYNNET" --firewall 2>&1)
-has "needs root" "$out" "--firewall below root says so rather than failing at nft"
+if [ "$AM_ROOT" = no ]; then
+    out=$("$SYNNET" --firewall 2>&1)
+    has "needs root" "$out" \
+        "--firewall below root says so rather than failing at nft"
+else
+    echo "  SKIP  the below-root guard cannot be checked while running as root"
+fi
 
 printf '%d passed, %d failed\n' "$pass" "$fails"
 [ "$fails" -eq 0 ]

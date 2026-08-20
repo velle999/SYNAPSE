@@ -717,6 +717,13 @@ int synnet_status(void) {
          * version turned a permission error into a factual claim about the
          * firewall. */
         printf("    (not shown — listing nftables needs root: sudo synnet --status)\n\n");
+    } else if (system("command -v nft >/dev/null 2>&1") != 0) {
+        /* ⚠ THE SAME LIE ONE LEVEL DOWN. `nft` failing does not mean the chain
+         * is absent — it also means nft is not installed, or is not on this
+         * process's PATH. Claiming "NOT loaded in the kernel" from that is the
+         * exact reasoning error this whole function was rewritten to remove,
+         * and it is the one a container hits first. */
+        printf("    (not shown — nft is not installed)\n\n");
     } else {
         int r = run_nft("nft list chain inet " SYNNET_NFT_TABLE " "
                         SYNNET_NFT_INPUT " 2>/dev/null");

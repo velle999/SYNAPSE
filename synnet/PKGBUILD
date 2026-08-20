@@ -21,7 +21,16 @@ pkgver=0.1.0
 #   dropping the process event stream with it. tests/firewall_test.sh drives the
 #   status states through $SYNNET_FW_STATE_FILE and reads the real ruleset back
 #   out of a stub `nft`, so neither half needs root.
-pkgrel=6
+# 7: the firewall test assumed it was not root, and CI is a container that is.
+#   Every "needs root" assertion failed there. The REGRESSION itself no longer
+#   depends on privilege at all: the bug was "any nft failure is read as
+#   absence", and a stub nft that exits non-zero produces that for either user.
+#   Privilege now only decides which WORDING is expected, and those checks say
+#   which case they are in. ⚠ It also found the same lie one level down —
+#   `nft` failing as root was reported as "the input chain is NOT loaded in the
+#   kernel", which is equally untrue when nft is simply not installed, as in a
+#   container. --status checks for nft before drawing that conclusion.
+pkgrel=7
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
