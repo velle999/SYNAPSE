@@ -29,7 +29,14 @@ before any of that is *observed* would be the exact failure this project keeps
 finding in itself: a protection everybody believes in that nobody has watched
 work.
 
-**Done when**, in the QEMU rig (`archiso`'s test script), with `--bpf-enforce`:
+**The rig:** `tools/bpf-enforce-check.sh`, run as root on the machine under
+test. It arms the gate, makes the observations and disarms — and because the
+escape hatch (`synapse.bpf_enforce=0`) lives in the boot menu and cannot be
+reached over SSH, it schedules a **dead-man timer before it arms anything**, so
+a machine that stops answering disarms itself in ten minutes without anybody
+typing. Run it where you can reach the keyboard anyway.
+
+**Done when**, with `--bpf-enforce`:
 
 - [ ] `systemd-run -q --collect cat /var/lib/synguard/bpf-canary` returns
       `Operation not permitted` **as root**, and `bpf-lsm: denied=` increments.
