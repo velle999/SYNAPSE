@@ -224,6 +224,128 @@ check "launcher installed where the hook execs it" "1" \
 check "syn.sh dispatches resolve" "1" \
       "$(grep -c 'resolve).*exec /usr/lib/syn/syn-resolve' "$here/../syn.sh")"
 
+# ── DaVinci Doctor: the porcelain contract ──────────────────────────────────
+#
+# `doctor --porcelain` is what the window reads, and the KEY is the contract.
+# Rewording a message is free; renaming a key silently empties a card in the
+# GUI — the check still runs, the window just stops describing it. That is the
+# same both-directions drift test syn-install's config_test.sh does for profile
+# keys, and for the same reason: two files, one vocabulary, no compiler.
+echo ""
+echo "=== doctor --porcelain ==="
+
+# `yes` when the pattern appears at all — see the note at its first use.
+has() { grep -q "$1" "$2" && echo yes || echo no; }
+
+qml="$here/../resolve.qml"
+[ -f "$qml" ] || { echo "  FAIL  resolve.qml is missing"; fails=$((fails + 1)); }
+
+# Run the doctor against a tree where NOTHING is installed. That is the state
+# the window exists for, and it is the one that emits every key: an installed
+# machine never emits `zip`, so testing on the developer's box would check half
+# of it. rc is ignored — "nothing is set up" is a failure exit by design.
+porc=$(SYN_RESOLVE_BIN="$tmp/none/resolve" \
+       SYN_RESOLVE_OUR_DESKTOP="$tmp/none/DaVinciResolve.desktop" \
+       SYN_RESOLVE_ICD_DIR="$tmp/none/vendors" \
+       HOME="$tmp/home" bash "$sr" doctor --porcelain 2>/dev/null || true)
+
+check "porcelain emits records" "yes" \
+      "$([ -n "$porc" ] && echo yes || echo no)"
+
+# Every line is exactly <key>\t<state>\t<text>, with a state the GUI knows.
+# A stray pretty-printed line here is the failure that would have the window
+# describing a machine it did not understand.
+badline=$(printf '%s\n' "$porc" |
+          awk -F'\t' 'NF < 3 || $2 !~ /^(ok|bad|warn|info)$/ { print; exit }')
+check "every record is key/state/text with a known state" "" "$badline"
+
+# No ANSI, no box drawing: the whole point of not parsing the pretty output.
+check "porcelain carries no escape sequences" "0" \
+      "$(printf '%s' "$porc" | grep -c $'\033' || true)"
+
+# Counts are the wrong assertion for these: a key the window reads in three
+# places is not a failure, and pinning the number turns an ordinary edit into a
+# red test.
+#
+# The keys the window asks for BY NAME. Read out of the QML rather than listed
+# here, so this cannot drift from what the window actually reads.
+for key in $(grep -oE '(stateOf|textOf|factOf)\("[a-z.]+"\)' "$qml" |
+             sed 's/.*("\(.*\)")/\1/' | sort -u); do
+    check "doctor emits '$key', which resolve.qml reads" "yes" \
+          "$(printf '%s\n' "$porc" | grep -q "^$key	" && echo yes || echo no)"
+done
+
+# …and the other direction: a CHECK the doctor makes that the window never
+# shows is a card somebody forgot to add.
+#
+# ⚠ Only the checks — ok/bad/warn. An `info` record is a fact offered to
+# whoever wants it (the GPU name, the ICD package), and requiring the window to
+# display every one of those would be requiring it to show its own workings.
+# `.hint` lines are the detail under a check and are shown with it, not
+# separately.
+for key in $(printf '%s\n' "$porc" |
+             awk -F'\t' '$2 != "info" { print $1 }' | sort -u); do
+    case "$key" in *.hint) continue ;; esac
+    check "resolve.qml shows '$key', which doctor checks" "yes" \
+          "$(has "\"$key\"" "$qml")"
+done
+
+echo ""
+echo "=== the window ==="
+
+# FloatingWindow, never PanelWindow: a PanelWindow needs zwlr_layer_shell_v1,
+# which mutter does not implement, so under GNOME it maps nothing at all — no
+# window, no error, no log. This is an ordinary app window and Resolve users are
+# not all on synui.
+check "the window is a FloatingWindow" "yes" "$(has '^    FloatingWindow {' "$qml")"
+# Anchored: the comment above it explains WHY not a PanelWindow, and an
+# unanchored grep would find that explanation and fail on it.
+check "…and not a PanelWindow" "no" "$(has '^ *PanelWindow {' "$qml")"
+
+# Closing it must quit, or `qs -n --no-duplicate` finds the windowless corpse on
+# the next launch and exits 0 without drawing anything — the "closed it, now it
+# will not reopen" bug, invisible because the exit status is success.
+check "closing the window quits the process" "1" \
+      "$(grep -c 'onClosed: Qt.quit()' "$qml")"
+
+# The privileged half goes to a terminal, because sudo with no tty cannot
+# prompt — and to syntty --hold, because a build that fails and then vanishes
+# takes its log with it.
+check "the build is handed to syntty --hold" "yes" \
+      "$(has '"syntty", "--hold"' "$qml")"
+check "nothing in the window runs sudo itself" "no" \
+      "$(has 'command: \["sudo"' "$qml")"
+
+# ⚠ ONE Process PER BUTTON. Assigning running = true to a Process that is
+# already running is a SILENT no-op in quickshell, so a shared, re-pointed
+# launcher does nothing on its second press and says nothing.
+check "install and setup have separate processes" "2" \
+      "$(grep -cE 'id: (installProc|setupProc)$' "$qml")"
+
+gui="$here/../syn-resolve-gui.sh"
+[ -f "$gui" ] || { echo "  FAIL  syn-resolve-gui.sh is missing"; fails=$((fails + 1)); }
+
+# The app_id, the .desktop basename and StartupWMClass are one name. synui's
+# dock resolves a window to its entry by "<app_id>.desktop"; a mismatch gives a
+# themed fallback icon and a click that does nothing, which looks normal.
+check "the launcher sets QS_APP_ID" "1" \
+      "$(grep -c 'QS_APP_ID="${QS_APP_ID:-syn-resolve-gui}"' "$gui")"
+check "the .desktop basename matches that app_id" "yes" \
+      "$(has 'syn-resolve-gui.desktop"' "$here/../PKGBUILD")"
+
+# A missing quickshell must produce a sentence, not a menu entry that does
+# nothing when clicked — errors from `qs` land on tty1 where nobody sees them.
+check "a missing quickshell is reported" "yes" \
+      "$(has 'zenity --error' "$gui")"
+
+# The icon: gdk-pixbuf sniffs the first 256 bytes, so an <svg> past that is not
+# an image to GTK and the entry is blank in the GNOME grid while looking
+# perfect everywhere else.
+svg="$here/../syn-resolve-gui.svg"
+check "the icon's <svg> is inside the sniff window" "yes" \
+      "$(off=$(head -c 256 "$svg" | grep -bo '<svg' | head -1 | cut -d: -f1)
+         [ -n "$off" ] && echo yes || echo no)"
+
 echo ""
 if [ "$fails" -eq 0 ]; then
     echo "all syn resolve checks passed"

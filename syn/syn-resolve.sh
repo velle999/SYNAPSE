@@ -80,6 +80,52 @@ bad()  { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 
+# ── One doctor, two readers ──────────────────────────────────
+#
+# `doctor --porcelain` emits the same checks as tab-separated records for
+# syn-resolve-gui, which is the DaVinci Doctor window:
+#
+#     <key>\t<ok|bad|warn|info>\t<text>
+#
+# ⚠ ONE EMITTER, NOT TWO. The obvious alternative — let the GUI parse the
+# pretty output — is what this file's sibling syn-update does, and it gets away
+# with it only because the same package ships both halves so they version
+# together. It is still the wrong shape: the pretty output carries ANSI, box
+# drawing and wrapped prose, and every one of those is a thing a parser can
+# trip on. Here the checks call chk() and chk() decides how to render, so the
+# two views cannot disagree about what was CHECKED — only about how it looks.
+#
+# The KEY is the contract, not the text. Reword a message freely; renaming a
+# key is a change to the GUI.
+PORCELAIN=
+
+chk() {
+    local key=$1 state=$2; shift 2
+    if [ -n "$PORCELAIN" ]; then
+        # Tabs are the separator, so anything containing one would split a
+        # record. Nothing here should, but the text includes package names and
+        # paths from the filesystem, so it is squeezed rather than trusted.
+        printf '%s\t%s\t%s\n' "$key" "$state" "$(printf '%s' "$*" | tr '\t' ' ')"
+        return
+    fi
+    case "$state" in
+        ok)   ok   "$*" ;;
+        bad)  bad  "$*" ;;
+        warn) warn "$*" ;;
+        *)    info "$*" ;;
+    esac
+}
+
+# Pretty-only decoration: headings, rules and blank lines. Silent under
+# --porcelain, where they would be records with no key.
+deco() { [ -n "$PORCELAIN" ] || printf '%s\n' "$*"; }
+
+# The mirror of deco(): a fact the GUI needs and the terminal reader does not.
+# "NVIDIA" and "opencl-nvidia" on lines of their own say nothing to somebody
+# reading the report — the checks below already name the GPU and the package
+# inside a sentence — but the window needs them as values rather than as prose.
+fact() { [ -n "$PORCELAIN" ] && printf '%s\tinfo\t%s\n' "$1" "$2"; return 0; }
+
 # ── The machine ──────────────────────────────────────────────
 
 # Same PCI sweep syn-install.sh uses to choose a graphics driver: class 0x03 is
@@ -134,72 +180,91 @@ cmd_doctor() {
            [ -n "$HAS_INTEL"  ] && echo Intel  || true )
     gpu=$(echo $gpu)
 
-    echo ""
-    echo "  +- DaVinci Resolve on SynapseOS --------------------+"
-    echo ""
+    deco ""
+    deco "  +- DaVinci Resolve on SynapseOS --------------------+"
+    deco ""
+
+    fact gpu "${gpu:-none}"
 
     owner=$(resolve_owner)
     if [ -n "$owner" ]; then
-        ok "Resolve installed at /opt/resolve  [$owner]"
+        chk resolve ok "Resolve installed at /opt/resolve  [$owner]"
     else
-        bad "Resolve is not installed"
-        info "syn resolve install   — after downloading the Linux .zip from"
-        info "                        blackmagicdesign.com (free registration)"
+        chk resolve bad "Resolve is not installed"
+        chk resolve.hint info "syn resolve install   — after downloading the Linux .zip from"
+        chk resolve.hint info "                        blackmagicdesign.com (free registration)"
         rc=1
+    fi
+
+    # The installer archive, if one is lying about. The GUI offers it as
+    # "found this, use it?" instead of making somebody go and find it again;
+    # the terminal reader gets the same sentence.
+    local zip
+    zip=$(ls -t "$HOME"/Downloads/DaVinci_Resolve*_Linux.zip 2>/dev/null | head -1)
+    if [ -z "$owner" ] && [ -n "$zip" ]; then
+        chk zip ok "Installer found: $zip"
+    elif [ -z "$owner" ]; then
+        chk zip bad "No DaVinci_Resolve_*_Linux.zip in ~/Downloads"
     fi
 
     # OpenCL. The one that fails late and says nothing useful when it is wrong.
     icd=$(icd_package)
+    fact opencl.pkg "${icd:-none}"
     if [ -z "$gpu" ]; then
-        warn "No PCI display controller found — a VM? Resolve needs a real GPU."
+        chk opencl warn "No PCI display controller found — a VM? Resolve needs a real GPU."
         rc=1
     elif have_icd; then
-        ok "OpenCL runtime present  [$gpu: $(ls "$ICD_DIR"/*.icd 2>/dev/null | xargs -n1 basename | tr '\n' ' ')]"
+        chk opencl ok "OpenCL runtime present  [$gpu: $(ls "$ICD_DIR"/*.icd 2>/dev/null | xargs -n1 basename | tr '\n' ' ')]"
         if [ -n "$icd" ] && ! pacman -Qq "$icd" >/dev/null 2>&1; then
-            warn "…but $icd is not installed, so that ICD may be for another GPU."
-            info "sudo syn resolve setup"
+            chk opencl warn "…but $icd is not installed, so that ICD may be for another GPU."
+            chk opencl.hint info "sudo syn resolve setup"
         fi
     else
-        bad "No OpenCL runtime — Resolve will refuse to start on a $gpu GPU"
-        info "sudo syn resolve setup   (installs $icd)"
+        chk opencl bad "No OpenCL runtime — Resolve will refuse to start on a $gpu GPU"
+        chk opencl.hint info "sudo syn resolve setup   (installs $icd)"
         rc=1
     fi
     command -v clinfo >/dev/null 2>&1 \
-        && info "clinfo reports $(clinfo -l 2>/dev/null | grep -c 'Device' || echo 0) OpenCL device(s)"
+        && chk opencl.devices info "clinfo reports $(clinfo -l 2>/dev/null | grep -c 'Device' || echo 0) OpenCL device(s)"
 
     # The session environment, which is the SynapseOS-specific half.
     if [ -f "$OUR_DESKTOP" ]; then
-        ok "Launch override in place  [$OUR_DESKTOP]"
+        chk override ok "Launch override in place  [$OUR_DESKTOP]"
     elif [ -n "$owner" ]; then
-        bad "No launch override — Resolve will inherit the session's Qt environment"
-        info "sudo syn resolve setup"
+        chk override bad "No launch override — Resolve will inherit the session's Qt environment"
+        chk override.hint info "sudo syn resolve setup"
         rc=1
+    else
+        # Not a failure while Resolve is absent: write_override copies from the
+        # packaged entry, which does not exist yet. Saying "missing" here would
+        # send somebody to fix something that cannot be fixed in this order.
+        chk override info "Applied after Resolve is installed"
     fi
 
     case ":${XDG_DATA_DIRS:-/usr/local/share:/usr/share}:" in
         *:/usr/local/share:*|*:/usr/local/share/:*) ;;
-        *) warn "XDG_DATA_DIRS excludes /usr/local/share, so the override cannot shadow"
-           info "the packaged entry. Current: ${XDG_DATA_DIRS:-<unset, spec default>}"
+        *) chk xdgdirs warn "XDG_DATA_DIRS excludes /usr/local/share, so the override cannot shadow"
+           chk xdgdirs.hint info "the packaged entry. Current: ${XDG_DATA_DIRS:-<unset, spec default>}"
            rc=1 ;;
     esac
 
     [ -n "${QT_QPA_PLATFORMTHEME:-}" ] \
-        && info "QT_QPA_PLATFORMTHEME=$QT_QPA_PLATFORMTHEME in this shell — the override clears it"
+        && chk qt info "QT_QPA_PLATFORMTHEME=$QT_QPA_PLATFORMTHEME in this shell — the override clears it"
 
     # The thing people actually report as "Resolve is broken".
-    echo ""
-    echo "  Codecs"
+    deco ""
+    deco "  Codecs"
     if [ -n "$owner" ] && [ "${owner#davinci-resolve-studio}" != "$owner" ]; then
-        ok "Studio edition — H.264/H.265 decode is supported"
+        chk codecs ok "Studio edition — H.264/H.265 decode is supported"
     else
-        warn "The FREE edition on Linux cannot decode H.264/H.265."
-        info "Footage from phones and most cameras imports as media offline."
-        info "syn resolve transcode <files>   — rewraps to DNxHR, which it reads"
+        chk codecs warn "The FREE edition on Linux cannot decode H.264/H.265."
+        chk codecs.hint info "Footage from phones and most cameras imports as media offline."
+        chk codecs.hint info "syn resolve transcode <files>   — rewraps to DNxHR, which it reads"
     fi
 
-    echo ""
-    echo "  +---------------------------------------------------+"
-    echo ""
+    deco ""
+    deco "  +---------------------------------------------------+"
+    deco ""
     return $rc
 }
 
@@ -599,6 +664,7 @@ usage() {
 syn resolve — DaVinci Resolve support on SynapseOS
 
   syn resolve doctor              What is installed, what is missing (default)
+  syn resolve gui                 The same, as a window that walks you through it
   sudo syn resolve setup          Apply the fixes: OpenCL runtime + launch env
   syn resolve install [zip]       Build the AUR package from a downloaded zip
   syn resolve transcode <file>..  Rewrap footage to DNxHR the free edition reads
@@ -611,11 +677,17 @@ HELP
 }
 
 case "${1:-doctor}" in
-    doctor|status)  shift 2>/dev/null; cmd_doctor ;;
+    doctor|status)
+        shift 2>/dev/null
+        # --porcelain is what the DaVinci Doctor window reads. Parsed, not
+        # displayed, so it must not gain colour, headings or wrapped prose.
+        case "${1:-}" in --porcelain) PORCELAIN=1 ;; esac
+        cmd_doctor ;;
     setup)          shift; cmd_setup "$@" ;;
     install)        shift; cmd_install "$@" ;;
     transcode)      shift; cmd_transcode "$@" ;;
     launch)         shift; cmd_launch "$@" ;;
+    gui)            shift; exec syn-resolve-gui "$@" ;;
     help|-h|--help) usage ;;
     *)              echo "Unknown command: $1"; usage; exit 1 ;;
 esac

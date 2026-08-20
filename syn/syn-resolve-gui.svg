@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    DaVinci Doctor.
+
+    ⚠ THE <svg> ELEMENT IS THE FIRST THING IN THE FILE, and this comment is
+    below it on purpose. gdk-pixbuf sniffs a type from the first 256 bytes, so
+    an SVG whose root starts past that is not an image to GTK at all: it draws
+    perfectly in the synui and KDE menus (Qt parses rather than sniffs) and is
+    simply blank in the GNOME grid. Five icons in this repo shipped that way.
+
+    A clapperboard being looked at through a glass. The first draft had a
+    stethoscope loop under the board for the "doctor" half; at 48px it read as
+    a stray hook. A magnifier says "inspect this" at any size, which is what
+    the window does.
+
+    currentColor for the board so a monochrome theme can recolour it; the glass
+    is the one fixed hue, and it is the accent every other window in this suite
+    already uses.
+  -->
+  <g fill="none" stroke="currentColor" stroke-width="2.6"
+     stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="14" width="30" height="22" rx="3"/>
+    <path d="M4 21 L34 21"/>
+    <path d="M10 14 L14 21 M18 14 L22 21 M26 14 L30 21"/>
+  </g>
+  <g fill="none" stroke="#38bdf8" stroke-width="3"
+     stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="31" r="8.5"/>
+    <path d="M38.5 37.5 L44 43"/>
+  </g>
+</svg>

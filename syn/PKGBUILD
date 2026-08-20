@@ -6,7 +6,28 @@ pkgver=0.1.0
 #   written against the old keys still installs; its app keys land in the
 #   unused-key report at the end, which is where a stale profile is supposed
 #   to surface.
-pkgrel=18
+# 19: DAVINCI DOCTOR — `syn resolve` gets a window. Getting Resolve running on
+#   Arch is four jobs in a fixed order and the order is what catches people:
+#   download the .zip (a registration form, the one step nothing can automate),
+#   build the AUR package from it, install an OpenCL runtime FOR THE GPU YOU
+#   HAVE, then shadow the packaged .desktop. `syn resolve` has done all of that
+#   for a while; what it lacked was anywhere to start if you did not know it
+#   existed. Drop the installer anywhere on the window, or Locate it, and it
+#   walks the rest, ticking each step off as the doctor confirms it.
+#   ⚠ The window reads `doctor --porcelain` — <key>TAB<state>TAB<text> from the
+#   SAME emitter as the terminal report (chk()), not a second copy of the
+#   checks and not a parse of the pretty output, which carries ANSI and wrapped
+#   prose. The KEY is the contract; resolve_test.sh cross-checks the vocabulary
+#   in BOTH directions.
+#   ⚠ The privileged half opens syntty --hold: makepkg and pacman need a
+#   terminal for sudo to prompt in, and --hold keeps a failed four-gigabyte
+#   build's log on screen. ⚠ FloatingWindow, never PanelWindow — mutter has no
+#   zwlr_layer_shell_v1, so a PanelWindow maps NOTHING under GNOME, and Resolve
+#   users are not all on synui (hence no OnlyShowIn either).
+#   ⚠ QS_APP_ID, the .desktop basename and StartupWMClass are one name, or the
+#   dock's "<app_id>.desktop" lookup finds nothing and the pinned icon is a
+#   themed fallback that does nothing when clicked.
+pkgrel=19
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -21,7 +42,20 @@ depends=('bash' 'systemd')
 # and the whole point of `syn resolve install` is that you fetch it yourself.
 optdepends=('nix: declarative user environment via `syn nix` (Home Manager)'
             'ffmpeg: DNxHR transcoding via `syn resolve transcode`'
-            'clinfo: OpenCL device listing in `syn resolve doctor`')
+            'clinfo: OpenCL device listing in `syn resolve doctor`'
+            # The DaVinci Doctor window is optional on purpose. Every SynapseOS
+            # install has quickshell already (synui's bar is built on it), so in
+            # practice it is always there — but a headless or minimal box should
+            # not be made to pull Qt in to get a command-line `syn`.
+            'quickshell: DaVinci Doctor, the setup window (`syn resolve gui`)'
+            'qt6-declarative: QtQuick runtime for that window'
+            # ⚠ syntty is where the window hands the privileged half: makepkg
+            # and pacman need a terminal for sudo to prompt in. --hold is what
+            # keeps the build log on screen after a failure, and syntty has had
+            # it since 0.1.0-27; an optdepend cannot express a version, which is
+            # why it is written here.
+            'syntty>=0.1.0-27: terminal the setup window hands the build to'
+            'zenity: file chooser and error dialogs for that window')
 # Flat, and it has to be: makepkg resolves a local source to its BASENAME in
 # $srcdir, so a "nix/flake.nix" entry is looked up as "flake.nix" beside the
 # PKGBUILD and the build dies with "not found in the build directory and is
@@ -32,11 +66,19 @@ source=("syn.sh"
         "syn-resolve.sh"
         "syn-printer.sh"
         "syn-resolve.hook"
+        "syn-resolve-gui.sh"
+        "resolve.qml"
+        "syn-resolve-gui.desktop"
+        "syn-resolve-gui.svg"
         "nix-flake.nix"
         "nix-home.nix"
         "nix-render.nix"
         "nix-profile-example.nix")
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -64,6 +106,26 @@ package() {
     # BASENAME (see the note above); it gets its real, ordered name here.
     install -Dm644 "$srcdir/syn-resolve.hook" \
                    "$pkgdir/usr/share/libalpm/hooks/74-syn-resolve.hook"
+
+    # ── DaVinci Doctor ──────────────────────────────────────────────────
+    #
+    # The window around `syn resolve`. In /usr/bin, unlike syn-resolve above,
+    # because this one IS meant to be found: it is a menu entry and a command
+    # somebody types.
+    install -Dm755 "$srcdir/syn-resolve-gui.sh" "$pkgdir/usr/bin/syn-resolve-gui"
+    install -Dm644 "$srcdir/resolve.qml" "$pkgdir/usr/share/syn/resolve.qml"
+
+    # ⚠ THE BASENAME MUST EQUAL THE WINDOW'S app_id (syn-resolve-gui), or
+    # synui's dock resolves the pinned window to nothing: the icon falls back to
+    # the theme and the click does nothing, which looks completely normal. Same
+    # trap syn-update.desktop documents.
+    install -Dm644 "$srcdir/syn-resolve-gui.desktop" \
+        "$pkgdir/usr/share/applications/syn-resolve-gui.desktop"
+
+    # Scalable only, in hicolor — the theme every icon theme inherits from, so
+    # the mark survives a theme switch.
+    install -Dm644 "$srcdir/syn-resolve-gui.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/syn-resolve-gui.svg"
 
     # Templates, not config. `syn nix init` copies these into
     # /etc/synapseos/nix once and never overwrites them again — home.nix

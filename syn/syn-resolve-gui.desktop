@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=DaVinci Doctor
+GenericName=DaVinci Resolve setup
+Comment=Get DaVinci Resolve running — drop the installer in and it walks the rest
+Exec=syn-resolve-gui
+Icon=syn-resolve-gui
+Terminal=false
+Categories=Settings;System;AudioVideo;
+Keywords=davinci;resolve;blackmagic;video;editor;opencl;install;setup;
+# ⚠ THE BASENAME MUST EQUAL THE WINDOW'S app_id, which syn-resolve-gui exports
+# as QS_APP_ID=syn-resolve-gui. synui's dock resolves a pinned app to its launch
+# command by a direct "<app_id>.desktop" lookup — see the header of
+# synui/src/icons.c — so a mismatch gives an icon that draws from the theme and
+# a dock entry that does nothing when clicked, which looks entirely normal.
+#
+# ⛔ NO OnlyShowIn. Unlike the synctl-driven entries in this suite, nothing here
+# needs synui: the window is quickshell talking to `syn resolve`, and somebody
+# running Resolve under KDE or GNOME on this box needs the setup help just as
+# much. It does hand the privileged steps to syntty, which ships with synui —
+# and if that is missing, the button reports it rather than the entry hiding.
+StartupNotify=true
+StartupWMClass=syn-resolve-gui
