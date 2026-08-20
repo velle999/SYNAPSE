@@ -24,6 +24,7 @@ sources = files(
   'src/places.c',
   'src/recent.c',
   'src/volumes.c',
+  'src/netscan.c',
   'src/fileops.c',
   'src/trash.c',
   'src/config.c',
@@ -64,6 +65,15 @@ install_data('data/mimeapps.list',
 # This suite is 6s natively and now starts a real QML engine, which on a
 # machine without a GPU is not 6s. 300 rather than off: a suite that genuinely
 # hangs must still fail.
+# Network discovery, against fakes. It cannot be tested any other way: a build
+# machine's network either has a NAS on it or it does not, and neither answer
+# proves the parser — while "found nothing" is the failure mode AND the normal
+# result, which is exactly how a broken probe hides.
+test('netscan', find_program('tests/netscan_test.sh'),
+     args: [meson.current_build_dir() / 'synfiles'],
+     workdir: meson.current_source_dir(),
+     timeout: 120)
+
 test('synfiles', find_program('tests/synfiles_test.sh'),
      args: [meson.current_build_dir() / 'synfiles'],
      workdir: meson.current_source_dir(),

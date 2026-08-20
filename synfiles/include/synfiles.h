@@ -190,6 +190,24 @@ int cmd_volumes(int argc, char **argv);
 int cmd_mount(int argc, char **argv);
 int cmd_unmount(int argc, char **argv);
 
+/* ── netscan.c — what is on this network, before anything is mounted ───────
+ *
+ * volumes.c lists network places that are already PATHS (gvfs has mounted
+ * them). This finds the ones that are not yet: mDNS through avahi-browse for
+ * anything modern, NetBIOS through nmblookup for the Windows machines that
+ * announce nothing else. Never a port scan — announcement is consent.
+ *
+ * Mounting is `gio mount` and nothing else: gvfs owns the credential prompt,
+ * the keyring and the FUSE mount, and once mounted a share is an ordinary
+ * directory to every other part of this program. */
+int cmd_netscan(int argc, char **argv);
+int cmd_netmount(int argc, char **argv);
+
+/* The local path a URI is mounted at, or NULL. gvfs derives its FUSE directory
+ * name from the URI's parts, so this is answerable without asking gvfs — which
+ * matters, because it is asked once per discovered row. Caller frees. */
+char *netscan_mounted_path(const char *uri);
+
 /* ── config.c — remembered settings ────────────────────────────────────────
  * Written through the BINARY, never by the GUI: quickshell's FileView silently
  * drops setText() on a path that does not exist yet, so a QML component owning

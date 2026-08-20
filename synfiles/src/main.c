@@ -41,6 +41,10 @@ static void usage(FILE *f)
 "  places unpin <path>\n"
 "  recent [--limit=N] [--existing]\n"
 "  volumes [--block|--network]\n"
+"  netscan [--hosts]       what is announced on this network — mDNS and\n"
+"                          NetBIOS. Nothing is mounted; the rows are offers\n"
+"  netmount <uri>          mount a discovered share with gvfs and print the\n"
+"                          local path it landed at\n"
 "  mount <device>          mount a volume through udisks2\n"
 "  unmount <device>        unmount it again\n"
 "\n"
@@ -175,6 +179,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "places"))  return cmd_places(rest_argc, rest);
 	if (!strcmp(cmd, "recent"))  return cmd_recent(rest_argc, rest);
 	if (!strcmp(cmd, "volumes")) return cmd_volumes(rest_argc, rest);
+	if (!strcmp(cmd, "netscan")) return cmd_netscan(rest_argc, rest);
+	if (!strcmp(cmd, "netmount")) return cmd_netmount(rest_argc, rest);
 	if (!strcmp(cmd, "trash"))   return cmd_trash(rest_argc, rest);
 	if (!strcmp(cmd, "mount"))   return cmd_mount(rest_argc, rest);
 	if (!strcmp(cmd, "unmount")) return cmd_unmount(rest_argc, rest);

@@ -22,6 +22,19 @@ pkgname=synfiles
 # component (build-all.sh:123), so bumping pkgver leaves makepkg looking for a
 # tarball nothing creates.
 pkgver=0.1.0
+# 53: NETWORK PLACES — the sidebar can find shares, not just show mounted ones.
+#   velle: "add network places in files that scans for network drives." The
+#   Network heading only appeared once something was ALREADY mounted, which is
+#   backwards for the one section whose problem is reaching a share you have not
+#   mounted yet: the only way to a NAS was to know its smb:// URI and type it.
+#   `synfiles netscan` asks mDNS (avahi-browse) and NetBIOS (nmblookup) — never
+#   a port sweep; announcement is consent — and enumerates each SMB host's
+#   shares as guest, dropping the administrative ones. `synfiles netmount <uri>`
+#   hands it to `gio mount` and prints where gvfs put it.
+#   ⚠ Arch's smbclient ships NO /etc/samba/smb.conf (that belongs to the server
+#   package), and the samba tools REFUSE TO RUN without one. `-s /dev/null` when
+#   there is none — and only then, or somebody's real workgroup config would be
+#   ignored.
 # 52: The vendor mimeapps.list answers for IMAGES too, not just folders — the
 #   same walkover that made a terminal the answer to "open this folder" had made
 #   a BROWSER the answer to "open this PNG", because SynapseOS shipped no image
@@ -33,7 +46,7 @@ pkgver=0.1.0
 # 50: Refresh on the FILE menu as well as the empty-space one. A pane full of
 #   files has no empty space to right-click, so the only menu reachable was the
 #   one without it — and F5 is no answer to somebody whose hand is on the mouse.
-pkgrel=52
+pkgrel=53
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -56,6 +69,13 @@ optdepends=('quickshell: the graphical browser (synfiles gui)'
             'xdg-utils: open files in their default application'
             'util-linux: the Devices sidebar (lsblk)'
             'gvfs: network places — SMB, SFTP and MTP shares'
+            # Discovery, which is a different job from mounting. Neither is
+            # required and neither is sufficient: avahi finds a NAS, a Mac and a
+            # modern Samba, and finds nothing at all in a house whose shares
+            # live on Windows machines that only answer NetBIOS. `netscan` says
+            # which one is missing rather than reporting an empty network.
+            'avahi: find network shares announced over mDNS'
+            'smbclient: find Windows shares over NetBIOS, and list what a server offers'
             'udisks2: mount removable media without root'
             # Images are read in-tree, by magic bytes; so are MP4 and MOV,
             # which carry their size in a track header. Matroska, WebM and AVI

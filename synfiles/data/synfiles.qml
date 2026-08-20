@@ -743,6 +743,15 @@ FloatingWindow {
             // trashing something onto a volume. Cheaper to re-read both than
             // to work out which operations could have moved them.
             volProc.running = true
+
+            // A netmount only learns WHERE the share landed by asking again:
+            // gvfs derives its FUSE directory from the URI and the command does
+            // not report it back. Re-scanned only when one is outstanding — a
+            // scan is subprocesses on the network, not a free refresh.
+            if (root.netPendingUri !== "" && !root.netScanning) {
+                root.netScanning = true
+                netProc.running = true
+            }
         }
     }
     property bool busy: false
@@ -1910,6 +1919,81 @@ FloatingWindow {
         }
     }
 
+    // ── Network discovery ───────────────────────────────────────────────────
+    //
+    // volumes.c lists network places that are already PATHS — gvfs has them
+    // mounted, so they are folders like any other. This is the step before
+    // that: `synfiles netscan` asks the network what it has (mDNS, and NetBIOS
+    // for the Windows machines that announce nothing else), and the rows it
+    // returns are OFFERS, not places. Nothing is mounted until one is clicked.
+    //
+    // On demand and never on a timer: a scan spawns avahi-browse and a
+    // smbclient per host, and doing that every time the sidebar refreshes would
+    // put a second of subprocesses in front of every navigation. It is also not
+    // something to do to a network nobody asked about.
+    property var netRows: []
+    property bool netScanning: false
+    property bool netScanned: false
+    property string netPendingUri: ""
+
+    // What to OFFER: discovered rows that are not already in the mounted list.
+    // Matched on the gvfs path when there is one, because a discovered share
+    // and its mount are the same thing under two names and listing both is how
+    // a sidebar starts lying about how many servers exist.
+    readonly property var netDiscovered: {
+        const mounted = root.networkVolumes.map(v => v.path)
+        return root.netRows.filter(r => r.kind === "share" || r.kind === "host")
+                           .filter(r => r.mounted !== "1" || mounted.indexOf(r.path) < 0)
+    }
+
+    function scanNetwork() {
+        if (root.netScanning) return
+        root.netScanning = true
+        root.statusLine = "looking for network shares…"
+        netProc.running = true
+    }
+
+    // Mount a discovered row, then go there. gvfs owns the credential prompt,
+    // so a share that needs a password is not a failure here — it is a dialogue
+    // somewhere else, and the refresh below picks it up when it succeeds.
+    function mountNetwork(row) {
+        if (!row.uri) return
+        if (row.mounted === "1" && row.path) { root.navigate(row.path, "dir"); return }
+        root.netPendingUri = row.uri
+        root.runOp(["netmount", root.disp(row.uri)], "mounting " + row.title + "…")
+    }
+
+    Process {
+        id: netProc
+        command: [root.bin, "--rec", "netscan"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.netRows = root.parseRecords(this.text)
+                root.netScanning = false
+                root.netScanned = true
+                root.statusLine = root.netRows.length > 0
+                    ? root.netRows.length + " network place(s) found"
+                    : "nothing announced itself on this network"
+
+                // A mount that was waiting on this scan to learn where it
+                // landed. Cleared unconditionally — a mount that failed must
+                // not leave a request that fires on some later scan and
+                // navigates out from under whatever the user is doing, which is
+                // the same rule pendingOpenDev follows for disks.
+                if (root.netPendingUri !== "") {
+                    const want = root.netPendingUri
+                    root.netPendingUri = ""
+                    for (const r of root.netRows) {
+                        if (r.uri === want && r.mounted === "1" && r.path) {
+                            root.navigate(r.path, "dir")
+                            break
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Process {
         id: volProc
         command: [root.bin, "--rec", "volumes"]
@@ -2472,10 +2556,13 @@ FloatingWindow {
                     }
 
                     Item { width: 1; height: 10 }
-                    SideHeading {
-                        text: "Network"
-                        visible: root.networkVolumes.length > 0
-                    }
+                    // ⚠ ALWAYS VISIBLE now, where it used to appear only once
+                    // something was already mounted. That is backwards for the
+                    // one section whose entire problem is that you cannot reach
+                    // a share you have not mounted yet: the heading was hidden
+                    // exactly when somebody was looking for it, and the only way
+                    // to reach a NAS was to know its smb:// URI and type it.
+                    SideHeading { text: "Network" }
 
                     Repeater {
                         model: root.networkVolumes
@@ -2489,6 +2576,34 @@ FloatingWindow {
                             onActivated: root.navigate(netRow.modelData.path, "dir")
                             onContextRequested: (gx, gy) => root.openDiskMenu(netRow.modelData, gx, gy)
                         }
+                    }
+
+                    // Discovered but not mounted — an OFFER. Dim for the same
+                    // reason an unmounted disk is dim: it is somewhere you can
+                    // go, not somewhere you are. Clicking mounts it through
+                    // gvfs and navigates when that succeeds.
+                    Repeater {
+                        model: root.netDiscovered
+                        delegate: SideRow {
+                            id: netFound
+                            required property var modelData
+                            label: netFound.modelData.title
+                            iconName: netFound.modelData.icon || "folder-network"
+                            dim: true
+                            trailing: "\u25b8"
+                            trailingHint: "mount " + root.disp(netFound.modelData.uri)
+                            onActivated: root.mountNetwork(netFound.modelData)
+                            onTrailingClicked: root.mountNetwork(netFound.modelData)
+                        }
+                    }
+
+                    SideRow {
+                        label: root.netScanning ? "Scanning\u2026"
+                             : root.netScanned  ? "Scan again"
+                                                : "Find network shares"
+                        iconName: "network-workgroup"
+                        dim: !root.netScanning
+                        onActivated: root.scanNetwork()
                     }
                 }
             }
