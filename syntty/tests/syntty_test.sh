@@ -745,6 +745,52 @@ shrunk=$(printf 'a\r\nb\r\nc\r\nd\r\ne\r\nf' | "$ST" --cols=10 --rows=6 dump - -
 printf '%s' "$shrunk" | seen '^cursor        1,2'
 check "...and the cursor follows the text up" $?
 
+# ⚠ ...AND THE SCREEN THAT IS NOT ON SHOW, which is where the real damage was.
+#
+# st_grid_alt_screen() is a POINTER SWAP: `alt` always holds whichever screen is
+# not current. st_grid_resize() rebuilt `screen` and updated g->cols/g->rows, and
+# never touched `alt` — so the stashed screen kept the OLD row count while every
+# reader was told the new one. st_grid_free() then frees g->alt[y].cells past the
+# end of a shorter array.
+#
+# It ABORTS: `free(): invalid pointer`, on resizing a window with any
+# full-screen program in it — lynx, vim, less, htop, man — because those are
+# precisely the programs that live on the alternate screen. It was reported as
+# "syntty not autoresizing when the window is resized", and the resize did not
+# fail to happen: it took the terminal down on the way, so nothing repainted.
+#
+# ⚠ EXIT STATUS IS THE ASSERTION HERE. The abort happens during teardown, AFTER
+# the screen has been dumped, so a test that only compared the text passed
+# against the broken build.
+printf '\033[?1049hALT-ONE\r\nALT-TWO' | "$ST" --cols=10 --rows=3 dump - --resize=20x6 >/dev/null 2>&1
+check "growing the window on the ALTERNATE screen does not abort" $?
+
+alt_screen=$(printf '\033[?1049hALT-ONE\r\nALT-TWO' | "$ST" --cols=10 --rows=3 dump - --resize=20x6 2>/dev/null)
+[ "$(printf '%s' "$alt_screen" | sed -n 1p)" = "ALT-ONE" ] \
+    && ok "...and the alternate screen keeps its text" \
+    || bad "...and the alternate screen keeps its text"
+
+# ⚠ SHRINKING IS THE SAFE DIRECTION, and this assertion passed even against the
+# broken build — said here so nobody reads it as the guard it is not. A smaller
+# g->rows keeps the free loop INSIDE the longer array, so it under-frees (a leak
+# the sanitiser build catches) rather than running off the end. It is kept
+# because the asymmetry is the whole shape of the bug, and a future change that
+# made shrinking overflow instead would have nothing else watching it.
+printf '\033[?1049hX\r\nY\r\nZ' | "$ST" --cols=20 --rows=6 dump - --resize=10x3 >/dev/null 2>&1
+check "shrinking on the alternate screen does not abort either" $?
+
+# Leaving the alternate screen after a resize hands back the screen that was
+# stashed BEFORE it — which is the other array the swap can land on.
+back=$(printf 'PRIMARY-A\r\nPRIMARY-B\r\n\033[?1049hALT\033[?1049l' \
+       | "$ST" --cols=10 --rows=3 dump - --resize=20x6 2>/dev/null)
+[ "$(printf '%s' "$back" | sed -n 1p)" = "PRIMARY-A" ] \
+    && ok "leaving the alternate screen after a resize restores the primary" \
+    || bad "leaving the alternate screen after a resize restores the primary"
+
+printf 'PRIMARY-A\r\nPRIMARY-B\r\n\033[?1049hALT\033[?1049l' \
+    | "$ST" --cols=10 --rows=3 dump - --resize=20x6 >/dev/null 2>&1
+check "...and does not abort on the way out" $?
+
 # ── the config file ─────────────────────────────────────────────────────────
 #
 # Flags only is not how anybody runs a terminal: `--font=` on every launch is a

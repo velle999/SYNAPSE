@@ -1186,6 +1186,47 @@ void st_delete_chars(st_grid_t *g, int n)
 	g->wrap_next = false;
 }
 
+/* Rebuild ONE screen's rows for a new size, freeing what it drops.
+ *
+ * Split out of st_grid_resize() so the alternate screen gets exactly the same
+ * treatment as the visible one — see the note at its only other call site. It
+ * reads the old geometry from arguments rather than from `g`, because it runs
+ * twice before g->cols/g->rows are updated.
+ */
+static st_row_t *rows_resize(st_grid_t *g, st_row_t *old,
+                             uint16_t oldrows, uint16_t oldcols,
+                             uint16_t cols, uint16_t rows)
+{
+	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
+	int keep  = oldrows < rows ? oldrows : rows;
+	int first = oldrows - keep;
+
+	for (int y = 0; y < rows; y++) {
+		int src = y + first;
+		if (src >= first && src < oldrows) {
+			ns[y] = old[src];
+			if (cols != oldcols) {
+				ns[y].cells = xrealloc(ns[y].cells,
+				                       (size_t)cols * sizeof(st_cell_t));
+				if (cols > ns[y].len)
+					memset(&ns[y].cells[ns[y].len], 0,
+					       (size_t)(cols - ns[y].len) * sizeof(st_cell_t));
+				ns[y].len = cols;
+				if (ns[y].hi > cols)
+					ns[y].hi = cols;
+			}
+		} else {
+			ns[y] = make_row(g, cols);
+		}
+	}
+	for (int y = 0; y < first; y++)
+		free(old[y].cells);
+	for (int y = first + keep; y < oldrows; y++)
+		free(old[y].cells);
+	free(old);
+	return ns;
+}
+
 void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 {
 	/* Every row is at a new size or a new place. */
@@ -1202,7 +1243,6 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	 * while the person is dragging the window edge. */
 	g->sel.active = false;
 
-	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
 	/* ⚠ SHRINKING DROPS FROM THE TOP, GROWING ADDS AT THE BOTTOM, and the
 	 * CURSOR MOVES WITH THE TEXT either way.
 	 *
@@ -1217,34 +1257,32 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	 * bottom of the screen and the cursor blinking at the top, and whatever was
 	 * typed next overwrote the top while the answers appeared at the bottom.
 	 * It took a screenshot to see; nothing in the suite could resize a grid. */
-	int keep  = g->rows < rows ? g->rows : rows;
-	int first = g->rows - keep;     /* rows dropped off the top; 0 when growing */
+	uint16_t oldrows = g->rows, oldcols = g->cols;
+	int keep  = oldrows < rows ? oldrows : rows;
+	int first = oldrows - keep;     /* rows dropped off the top; 0 when growing */
 
-	for (int y = 0; y < rows; y++) {
-		int src = y + first;
-		if (src >= first && src < g->rows) {
-			ns[y] = g->screen[src];
-			if (cols != g->cols) {
-				ns[y].cells = xrealloc(ns[y].cells,
-				                       (size_t)cols * sizeof(st_cell_t));
-				if (cols > ns[y].len)
-					memset(&ns[y].cells[ns[y].len], 0,
-					       (size_t)(cols - ns[y].len) * sizeof(st_cell_t));
-				ns[y].len = cols;
-				if (ns[y].hi > cols)
-					ns[y].hi = cols;
-			}
-		} else {
-			ns[y] = make_row(g, cols);
-		}
-	}
-	for (int y = 0; y < first; y++)
-		free(g->screen[y].cells);
-	for (int y = first + keep; y < g->rows; y++)
-		free(g->screen[y].cells);
+	g->screen = rows_resize(g, g->screen, oldrows, oldcols, cols, rows);
 
-	free(g->screen);
-	g->screen = ns;
+	/* ⚠ AND THE SCREEN THAT IS NOT ON SHOW. st_grid_alt_screen() is a POINTER
+	 * SWAP — `alt` always holds whichever screen is not current — so after this
+	 * function ran on `screen` alone, `alt` was left at the OLD row count while
+	 * g->rows described the new one. Everything that walks the stashed screen
+	 * reads g->rows rows out of a shorter array: st_grid_free() frees
+	 * g->alt[y].cells past the end, and swapping back hands the terminal rows
+	 * that were never allocated.
+	 *
+	 * It aborts. `free(): invalid pointer`, on resizing a window with ANY
+	 * full-screen program in it — lynx, vim, less, htop, man — because those
+	 * are exactly the programs that are on the alternate screen. Reported as
+	 * "syntty not autoresizing when the window is resized": the resize did not
+	 * fail to happen, it took the terminal down on the way.
+	 *
+	 * Same rule for both screens, deliberately. The stashed one is a screen
+	 * somebody is coming back to, and it should be the size of the window they
+	 * come back into. */
+	if (g->alt)
+		g->alt = rows_resize(g, g->alt, oldrows, oldcols, cols, rows);
+
 	g->cols = cols;
 	g->rows = rows;
 	for (uint32_t i = 0; i < g->npool; i++)
