@@ -109,7 +109,9 @@ static const char *frag_fmt =
      * fx_phosphor_curve() for the two endpoints and where they came from.
      *
      * PH_HOT/PH_HOTMAX let a hard-driven dot outrun its own phosphor so the
-     * core reads white with the tint surviving in the falloff. */
+     * core SATURATES with the tint surviving in the falloff. Toward full red
+     * and green but NOT toward full blue — see the mix() below for why that
+     * distinction is the difference between amber and cream. */
     "#define PH_HOT    0.55\n"
     "#define PH_HOTMAX 0.75\n"
     "#define BLOOM_THRESH 0.32\n"
@@ -184,9 +186,40 @@ static const char *frag_fmt =
     "     * that lifts turns that haze into a screen-wide tint. Beam\n"
     "     * saturation on top, or the brightest pixel the pass can emit is\n"
     "     * exactly u_tint and the text looks printed instead of lit. */\n"
+    /*
+     * ⚠ THE HOT CORE SATURATES TOWARD vec3(1.0, 1.0, u_tint.b), NOT TOWARD
+     * WHITE, AND THE BLUE CHANNEL IS THE WHOLE POINT.
+     *
+     * This was `vec3(1.0)`. A phosphor driven hard does not start emitting
+     * light it has no phosphor for — amber has essentially no blue in its
+     * spectrum at any drive level, so a core that whitens has to get its blue
+     * from somewhere the tube does not have. Mixing 75% toward white takes
+     * amber's blue from 0.12 to 0.78, and the highlights come out CREAM.
+     *
+     * Measured, against a photograph of a real amber tube and a capture of this
+     * filter (velle, 2026-08-19). Ratios rather than absolute colours, because
+     * those survive exposure and backdrop:
+     *
+     *                       G/R     B/R
+     *     real tube, hot    0.933   0.079     no blue, saturates to YELLOW
+     *     ours, hot         0.934   0.737     cream        <- the fault
+     *     predicted, white  0.925   0.780     confirms the cause
+     *     predicted, this   0.925   0.120     #ffec1f vs the tube's #feed14
+     *
+     * The G behaviour was already right and is untouched: G/R climbing 0.70 ->
+     * 0.925 is what makes a core read as driven rather than merely bright. Only
+     * B was wrong, and it was wrong in the one direction a spectrum cannot go.
+     *
+     * Per-phosphor by construction, so the other two need no table: green keeps
+     * its own low blue and saturates yellow-green (#d4ffcc -> #d4ff33), and
+     * white, whose tint.b is already 0.92, barely moves (#fffdfa -> #fffdeb).
+     *
+     * ⚠ This is the HUE half only. "Too dark" is the Phosphor lift slider
+     * (effect_lift, default 0.40) and is deliberately taste, not a constant.
+     */
     "    if (u_mono > 0.0) {\n"
     "        float e = phos(col);\n"
-    "        vec3 ph = mix(u_tint, vec3(1.0),\n"
+    "        vec3 ph = mix(u_tint, vec3(1.0, 1.0, u_tint.b),\n"
     "                      smoothstep(PH_HOT, 1.0, e) * PH_HOTMAX) * e;\n"
     "        col = mix(col, ph, u_mono);\n"
     "    }\n"

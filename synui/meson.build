@@ -1417,6 +1417,14 @@ test('cascade_grid', cascade_grid,
 # twice per keypress.
 # Closing a window must hand focus back to the one you were using, not to
 # whatever heads the stacking list — see the file for the report it comes from.
+# The phosphor hot core must saturate toward the phosphor's spectrum, not white
+# — the cream-highlight regression. No GPU needed; see the file for the limits.
+phosphor_tint = find_program('tests/phosphor_tint.sh')
+test('phosphor_tint', phosphor_tint,
+     args    : [meson.current_source_dir() / 'src/effects.c',
+                meson.current_source_dir() / 'tests/phosphor_replay.py'],
+     timeout : 30)
+
 close_focus_mru = find_program('tests/close_focus_mru.sh')
 test('close_focus_mru', close_focus_mru,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),
