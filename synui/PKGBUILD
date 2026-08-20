@@ -327,7 +327,25 @@ pkgver=0.1.0
 #   Event sounds gets data/synui-sounds.desktop, its own entry under its own
 #   name — it had one by accident before. tests/menu_apps.sh caught that the
 #   moment the mixer took its Exec, which is exactly what it is for.
-pkgrel=412
+# 413: the widgets that had no card were inked for one. WidgetFrame has carried
+#   `inkOnBackdrop` since the note needed it — measure what the card is actually
+#   sitting on and ink against THAT — and only the note ever opted in. At a
+#   glass level that takes a card to nothing, the system monitor and the big
+#   clock's date are text painted straight onto the wallpaper in a colour chosen
+#   for a dark pane. On a bright wallpaper they vanish.
+#   ⚠ The clock hid it for months by solving it ONE ELEMENT UP: the time is 42px
+#   with a black Text.Outline and survives anything, sitting directly above a
+#   12px date with neither outline nor card. Time perfectly readable, date gone
+#   — which reads as the date being broken rather than as the pair being inked
+#   for two different surfaces.
+#   ⚠ The HUD is the worst case, not an easier one: 9-10px glyphs, most of them
+#   the dim ink. Accents and load tints are deliberately NOT re-inked — red at
+#   90% is a colour with a MEANING, like the note's yellow and the bar's red
+#   battery.
+#   Also ships data/synapse-hannah-montana.png into /usr/share/backgrounds,
+#   which the Super+W picker already scans. NOT a theme: wallpaper_accent=auto
+#   is already ON for Prism, so picking it IS the theme.
+pkgrel=413
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

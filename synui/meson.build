@@ -458,6 +458,18 @@ install_data('data/synapse-logo.png',
              install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
 install_data('data/synapse-logo-electrified.png',
              install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
+# ⚠ NOT a theme. It is a wallpaper, and on Prism that is the whole of it:
+# `wallpaper_accent = auto` is already ON for Prism, so the desktop takes its
+# accent off whatever picture is up. Picking this one IS the "Hannah Montana
+# theme" — Prism, wearing it, re-tinted from it, live.
+#
+# A SYN_THEME_ entry would have been a byte-for-byte copy of Prism's palette
+# with a different name: a second table to keep in step, for no colour of its
+# own. Platinum and XP make the same call in theme.c — each names its signature
+# desktop in a comment and leaves it to Super+W, because a wallpaper is not
+# chrome.
+install_data('data/synapse-hannah-montana.png',
+             install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
 
 # Sanitizer environment for EVERY test, not just the ones that remember to set
 # it. smoke.sh and resize_heal.sh exported LSAN_OPTIONS themselves (they have

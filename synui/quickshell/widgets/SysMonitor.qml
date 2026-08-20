@@ -29,6 +29,24 @@ WidgetFrame {
     label: "SYS://MONITOR"
     accent: Theme.magenta
 
+    /*
+     * The readout goes on whatever this card turns out to be sitting on — the
+     * same opt-in the note takes, and for the same reason one file over.
+     *
+     * ⚠ THIS IS A HUD, WHICH MAKES IT THE WORST CASE, NOT AN EASIER ONE. Every
+     * glyph here is 9–10px and most of them are the dim ink: the labels, the
+     * bar troughs, the "18.9 / 31.2 GiB" line. At a glass level that takes the
+     * card to nothing, that is 9px of a colour chosen to sit on a dark pane,
+     * painted straight onto whatever the wallpaper happens to be. On a bright
+     * one it does not read at all — which is how it shipped, and what a purple
+     * wallpaper made obvious.
+     *
+     * The ACCENT and the load tints are deliberately left alone. Red at 90% and
+     * yellow at 70% are colours with a MEANING rather than ink on a surface,
+     * exactly as the note keeps its yellow and the bar keeps a red battery red.
+     */
+    inkOnBackdrop: true
+
     homeEdgeH: "right"; homeEdgeV: "top"
     homeMarginX: 18
     homeMarginY: Theme.barHeight + 18
@@ -81,7 +99,7 @@ WidgetFrame {
                     id: key
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     text: row.modelData.key
-                    color: Theme.fgDim
+                    color: root.inkDim
                     font.family: Theme.fontFamily
                     font.pixelSize: 10
                     font.letterSpacing: 1.2
@@ -117,7 +135,7 @@ WidgetFrame {
                             width: (meter.width - (meter.segments - 1) * meter.spacing) / meter.segments
                             height: parent.height
                             color: on ? (head ? Qt.lighter(row.tint, 1.5) : row.tint)
-                                      : Theme.fg
+                                      : root.ink
                             opacity: on ? (head ? 1.0 : 0.85) : 0.08
                             Behavior on opacity { NumberAnimation { duration: Theme.animNormal } }
                             Behavior on color   { ColorAnimation  { duration: Theme.animNormal } }
@@ -147,7 +165,7 @@ WidgetFrame {
             text: root.memTotalGiB > 0
                   ? root.memUsedGiB.toFixed(1) + " / " + root.memTotalGiB.toFixed(1) + " GiB"
                   : ""
-            color: Theme.fgDim
+            color: root.inkDim
             font.family: Theme.fontFamily
             font.pixelSize: 9
         }

@@ -30,6 +30,24 @@ WidgetFrame {
      * violet as every icon on the bar above it. */
     accent: Theme.clock
 
+    /*
+     * The date goes on whatever this card is sitting on. Same opt-in as the
+     * note and the system monitor.
+     *
+     * ⚠ THE TIME ALREADY SOLVED THIS ONE ELEMENT UP, WHICH IS WHY IT WAS EASY
+     * TO MISS. It is 42px in the theme's clock colour with a black
+     * `Text.Outline` behind it, so it survives any wallpaper — and it sits
+     * directly above a 12px date in the dim ink with no outline and no card
+     * under it. On a bright wallpaper the time is perfectly readable and the
+     * date beneath it is gone, which reads as the date being broken rather
+     * than as the pair being inked for two different surfaces.
+     *
+     * The TIME keeps its own colour: `Theme.clock` is the theme's statement
+     * about what a clock looks like, and the outline already carries it. Only
+     * the date, which had neither, is handed to the backdrop.
+     */
+    inkOnBackdrop: true
+
     homeEdgeH: "right"; homeEdgeV: "bottom"
     homeMarginX: 22
     // Clear of the visualiser when both are on — it is 110 tall at the bottom.
@@ -82,7 +100,7 @@ WidgetFrame {
         anchors { right: parent.right; top: time.bottom; topMargin: 2 }
         text: root.dateText
         visible: text !== ""
-        color: Theme.fgDim
+        color: root.inkDim
         font.family: Theme.fontFamily
         font.pixelSize: 12
         font.letterSpacing: 0.8
