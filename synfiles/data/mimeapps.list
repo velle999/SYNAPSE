@@ -25,6 +25,31 @@
 # synui-open-folder learned to refuse a terminal handler; this fixes the same
 # question for everything that does not go through synui-open-folder.
 #
+# ── The images ──────────────────────────────────────────────────────────────
+#
+# The same walkover, one file type over, and it landed somewhere worse than a
+# terminal: SynapseOS shipped NO image viewer at all, so the winner of
+# image/png came from mimeinfo.cache and was whichever installed thing happened
+# to declare the type — a BROWSER. Double-clicking a screenshot opened a new
+# tab. Nothing reported a problem, because a browser genuinely can display a
+# PNG.
+#
+# synui has a viewer now (src/crop.c — the panel the cropper was already half
+# of), and synui-view.desktop declares these types, so this line is what makes
+# it the answer rather than one more candidate.
+#
+# ⚠ It names a synui-only entry ON PURPOSE, and that entry runs a WRAPPER —
+# /usr/bin/synui-view-image — precisely so this is safe in a session where
+# synui is not the compositor: KIO skips a not-shown entry when it chooses a
+# default, and GLib, which does not, ends up running the wrapper, which hands
+# the file to whatever viewer that system does have. See
+# synui/systemd/synui-view-image.sh.
+#
+# Only the two formats the viewer can decode — PNG through cairo and JPEG
+# through imgdec.c. GIF, WebP, TIFF and SVG are deliberately left to whatever
+# already handles them: a vendor default that opens "Cannot open that image" is
+# worse than a browser tab.
+#
 # ── Why it is here and not in the installer ─────────────────────────────────
 #
 # syn-install used to write inode/directory into the new user's own
@@ -38,3 +63,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 [Default Applications]
 inode/directory=synfiles.desktop
+image/png=synui-view.desktop
+image/jpeg=synui-view.desktop

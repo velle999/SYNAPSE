@@ -2105,6 +2105,18 @@ check "mimeapps.list has the [Default Applications] group" $?
 grep -q '^Exec=synfiles gui %f$' data/synfiles.desktop
 check "the handler is passed the folder that was opened" $?
 
+# The IMAGE associations, added when synui grew a viewer. The .desktop that has
+# to agree with these lines is synui's, not ours — two packages cannot both own
+# /usr/share/applications/mimeapps.list, so the one vendor file carries an
+# association for somebody else's entry. synui's own suite checks the other half
+# (that synui-view.desktop declares these types); all this can check is that the
+# lines are here and name the file they mean to.
+grep -q '^image/png=synui-view.desktop$' data/mimeapps.list
+check "the vendor mimeapps.list opens PNGs in the SynapseOS image viewer" $?
+
+grep -q '^image/jpeg=synui-view.desktop$' data/mimeapps.list
+check "the vendor mimeapps.list opens JPEGs in the SynapseOS image viewer" $?
+
 # ── the window follows the desktop font ─────────────────────────────────────
 # ~/.config/synui/font.state carries the desktop's family AND its text scale.
 # Qt resolves an application's default font ONCE at startup, so both have to be
