@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Network
+GenericName=Network / Wi-Fi
+Comment=Join a Wi-Fi network, or bring an interface up or down
+# nmtui in a terminal, which is what the control panel's Network row opens and
+# what the compositor's `network` action does — one behaviour, declared once.
+# NOT syn-settings' network pane: that pane REPORTS (interfaces, radios,
+# firewall) and this entry is for somebody who wants to get on a network. The
+# pane is a row away in System settings.
+Exec=synctl dispatch network
+Icon=network-wireless
+Terminal=false
+StartupNotify=false
+Categories=Settings;Network;
+Keywords=network;wifi;wi-fi;wireless;ethernet;connect;nmtui;internet;
+# ⛔ SYNUI ONLY — see the note in the sibling entries. Under KDE or GNOME the
+# desktop's own network applet is the one that works.
+OnlyShowIn=synui;SynapseOS;

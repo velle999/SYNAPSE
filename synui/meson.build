@@ -401,7 +401,29 @@ install_data(['data/synui-calc.desktop',
               # there was no image viewer on SynapseOS at all and the system
               # answer to "open this PNG" was a browser.
               'data/synui-view.desktop',
-              'data/synui-crop.desktop'],
+              'data/synui-crop.desktop',
+              # ⛔ A PANEL REACHABLE ONLY BY A CHORD IS NOT A FEATURE ANYBODY
+              # CAN FIND. Eleven entries went in at 392 and the rest of the
+              # panels stayed keybind-only, which is the same bug in a smaller
+              # font: news was Super+R and nothing else, so the only way to
+              # learn it exists was to read config.c or the shortcut palette —
+              # and nobody opens a shortcut palette to discover an app they do
+              # not know about. Every panel a person would call an APP now has
+              # an entry; tests/menu_apps.sh fails the build when a new one
+              # does not.
+              'data/synui-news.desktop',
+              'data/synui-emoji.desktop',
+              'data/synui-wallpaper.desktop',
+              'data/synui-cursor.desktop',
+              'data/synui-displays.desktop',
+              'data/synui-saver.desktop',
+              'data/synui-overview.desktop',
+              'data/synui-equalizer.desktop',
+              'data/synui-bluetooth.desktop',
+              'data/synui-power.desktop',
+              'data/synui-record.desktop',
+              'data/synui-screenshot.desktop',
+              'data/synui-network.desktop'],
              install_dir : get_option('prefix') / get_option('datadir') / 'applications')
 
 # Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
@@ -1154,6 +1176,16 @@ test('game_actions', game_actions,
 # against fakes on PATH — the recursion guard is the case that cannot be caught
 # any other way, since the failure is a handler that calls xdg-open which calls
 # the handler.
+# Every panel is in the menus, not only on a chord. Derived from
+# SYN_PANEL_LIST — the roster the pointer and keyboard chains already walk — so
+# a panel added to the compositor fails this until somebody decides, in
+# writing, whether it is an app or not.
+menu_apps = find_program('tests/menu_apps.sh')
+test('menu_apps', menu_apps,
+     args    : [meson.current_source_dir() / 'src/input.c',
+                meson.current_source_dir() / 'data'],
+     timeout : 30)
+
 view_image = find_program('tests/view_image.sh')
 test('view_image', view_image,
      args    : [meson.current_source_dir() / 'systemd/synui-view-image.sh',

@@ -799,6 +799,16 @@ static const struct ctl_item ctl_items[] = {
      * settle, since none of these costs anything to enter and leave. */
     { CTL_ROW_DISPLAY_MODE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE, "Screens", "displays",
       .help = "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D" },
+    /* Where a MONITOR is configured, as opposed to arranged. The Displays panel
+     * above owns the arrangement, scale and the mode synui drives; syn-settings'
+     * display pane reads the connectors' KERNEL state beside it — EDID, the
+     * modes the hardware offers, what is actually plugged in — which a
+     * compositor panel showing its own view of the world cannot tell you when
+     * the two disagree, and that disagreement is the whole class of "the screen
+     * is there and nothing comes out of it". */
+    { CTL_ROW_MONITORS, CTL_CAT_DISPLAY, CTL_KIND_LAUNCH, "Monitor settings", "settings display",
+      .help = "Connectors, EDID and the modes the hardware offers (syn-settings)" },
+
     { CTL_ROW_CLOCK,      CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Date & time",      "clock"    },
     { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL,
       .section = "Night light" },
@@ -921,6 +931,17 @@ static const struct ctl_item ctl_items[] = {
      * synui does not own, so the panel closes rather than arming a return to
      * itself. There is nothing to come back to — the About box is the window,
      * and it closes on a keypress. */
+    /* syn-settings, the settings APP. The two are not rivals and the split is
+     * not arbitrary: THIS panel configures the desktop that is drawing it, and
+     * cannot exist where synui is not running; syn-settings configures the
+     * SYSTEM — clock, locale, kernel, default applications, the AI backend —
+     * and runs anywhere. Neither was findable from the other, so somebody
+     * looking for the timezone in the obvious place (Super+C) found nothing
+     * and had no way to learn where it actually lives. */
+    { CTL_ROW_SETTINGS, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, "System settings", "settings",
+      .section = "Tools",
+      .help = "Clock, locale, kernel, default apps — what the SYSTEM is set to" },
+
     { CTL_ROW_ABOUT, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, "About OS", "about",
       .section = "About",
       .help = "The mark, the machine, and what this desktop is currently set to" },
@@ -1888,6 +1909,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "bluetooth",         "Bluetooth" },
         { "printers",          "Printers" },
         { "about",             "About OS" },
+        { "settings",          "System settings (syn-settings)" },
         { "overview",          "Mission control (all windows)" },   /* unbound: Alt+Tab */
         { "keybinds",          "Rebind a shortcut" },
         { "night_light",       "Night light" },
@@ -2636,10 +2658,35 @@ static void ctlpanel_activate(syn_server_t *s)
         ctlpanel_open_child(s, ctl_row_action(row));
         return;
     case CTL_KIND_LAUNCH:
-    case CTL_KIND_ACTION:
+    case CTL_KIND_ACTION: {
+        /* Split the action from its argument on the first space, exactly as the
+         * bind parser does (config.c) — a row's action string IS a bind line,
+         * and "settings display" has to mean the same thing on a row as it does
+         * on a key. Passed whole it would be compared as one action name,
+         * match nothing, and the row would be a dead button that logs nothing.
+         *
+         * Only here. A PANEL row's action is also the token ctlpanel_child_closed()
+         * is armed with, so splitting it there would break the return path for
+         * a gain nothing wants: a panel is opened, not parameterised. */
+        const char *a = ctl_row_action(row);
+        char verb[64] = "", argbuf[128] = "";
+        if (a) {
+            const char *sp = strchr(a, ' ');
+            if (sp) {
+                size_t n = (size_t)(sp - a);
+                if (n >= sizeof(verb)) n = sizeof(verb) - 1;
+                memcpy(verb, a, n);
+                verb[n] = '\0';
+                while (*sp == ' ') sp++;
+                snprintf(argbuf, sizeof(argbuf), "%s", sp);
+            } else {
+                snprintf(verb, sizeof(verb), "%s", a);
+            }
+        }
         ctlpanel_hide(s);
-        synui_binding_execute(s, ctl_row_action(row), NULL);
+        if (verb[0]) synui_binding_execute(s, verb, argbuf[0] ? argbuf : NULL);
         return;
+    }
     case CTL_KIND_VALUE: {
         /* Enter on a number steps it forward, the same as Right. Not "nothing":
          * every other row on the panel does something on Enter, and a row that

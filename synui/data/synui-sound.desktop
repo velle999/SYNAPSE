@@ -7,7 +7,10 @@ Comment=Outputs, inputs and per-application volume
 # A compositor panel, not a program: synctl asks synui to open exactly what the
 # keybind opens. StartupNotify is off because no window ever appears, so a
 # startup spinner would spin until it timed out.
-Exec=synctl dispatch sound
+# ⚠ `sounds`, plural — the action's name. Same dead-button as the control
+# panel entry above it: `dispatch sound` matched nothing and did nothing from
+# 392 until 2026-08-20. Guarded by tests/menu_apps.sh now.
+Exec=synctl dispatch sounds
 Icon=audio-volume-high
 Terminal=false
 StartupNotify=false

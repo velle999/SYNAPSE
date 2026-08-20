@@ -1,0 +1,25 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=News
+GenericName=News Reader
+Comment=Hacker News, Lobsters, Arch news and security advisories, LWN, Phoronix
+# A compositor panel, not a program: synctl asks synui to open the same thing
+# the keybind does. StartupNotify is off because no window ever appears — a
+# startup spinner would hang until it timed out. See the note on this whole
+# family in meson.build: a panel reachable ONLY by a chord is a feature nobody
+# who did not read the source can find.
+Exec=synctl dispatch news
+Icon=message-news
+Terminal=false
+StartupNotify=false
+Categories=Network;News;
+Keywords=news;rss;feed;headlines;arch;hacker;lobsters;lwn;phoronix;
+# ⛔ SYNUI ONLY — under KDE or GNOME nothing is listening on synui's socket and
+# this would be a menu item that did nothing at all. Both desktop names: a
+# greetd login exports XDG_CURRENT_DESKTOP=synui and a display-manager login
+# gets SynapseOS from the wayland-session file.
+# ⚠ desktop-file-validate wants an X- prefix on both. Ignore it — OnlyShowIn is
+# compared literally against XDG_CURRENT_DESKTOP, so X-SynapseOS matches nothing
+# and the entry would vanish everywhere.
+OnlyShowIn=synui;SynapseOS;

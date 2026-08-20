@@ -183,7 +183,33 @@ pkgver=0.1.0
 #   The installed path is unchanged; the source file was renamed because the
 #   application entry is data/synui-crop.desktop and one name in two directories
 #   is a file you edit the wrong copy of.
-pkgrel=405
+# 406: the settings app and the control panel can each reach the other, and
+#   every panel is in the MENUS — velle: "don't make apps hotkey only must be
+#   in menus."
+#   System ▸ System settings and Display ▸ Monitor settings are LAUNCH rows onto
+#   syn-settings (the second lands on its display pane). The split between the
+#   two is real — this panel configures the desktop drawing it and cannot exist
+#   where synui is not running; syn-settings configures the SYSTEM and runs
+#   anywhere — but neither was findable from the other, so the timezone was
+#   nowhere a person looking in the obvious place would find it.
+#   ⚠ A control-panel row's action is a BIND LINE now: LAUNCH/ACTION rows split
+#   it on the first space, so "settings display" means on a row what it means on
+#   a key. Not PANEL rows — their action is also the token the return path is
+#   armed with.
+#   ⚠ The `settings` action WHITELISTS its pane rather than quoting it. It is
+#   reachable from the control socket and synui_spawn runs /bin/sh -c.
+#   Thirteen new menu entries: News, Emoji Picker, Wallpaper, Cursor Theme,
+#   Displays, Screensaver, Mission Control, Equalizer, Bluetooth, Power Saving,
+#   Record Screen, Screenshot, Network. Every one of them was reachable only by
+#   a chord, which means the only way to learn it existed was to read config.c.
+#   ⚠ AND TWO OF THE ELEVEN FROM 392 WERE DEAD BUTTONS: synui-ctlpanel.desktop
+#   dispatched `ctlpanel` and synui-sound.desktop dispatched `sound`, but the
+#   actions are `control` and `sounds`. An unknown action logs one line and
+#   returns, so both menu items highlighted and did nothing for fourteen
+#   pkgrels. tests/menu_apps.sh checks both halves now — every panel in
+#   SYN_PANEL_LIST is in the menus or exempt in writing, and every Exec here
+#   names an action input.c implements.
+pkgrel=406
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

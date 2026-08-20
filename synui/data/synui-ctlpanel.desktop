@@ -7,7 +7,13 @@ Comment=Every desktop setting synui owns — appearance, glass, bar, audio, powe
 # A compositor panel, not a program: synctl asks synui to open exactly what the
 # keybind opens. StartupNotify is off because no window ever appears, so a
 # startup spinner would spin until it timed out.
-Exec=synctl dispatch ctlpanel
+# ⚠ `control`, NOT `ctlpanel`. The action is named for what it opens, not for
+# the file it lives in, and this entry shipped with the file's name from 392
+# until 2026-08-20 — `synctl dispatch ctlpanel` reaches the unknown-action
+# branch, which logs a line nobody reads and returns. The menu item existed,
+# highlighted, and did nothing. tests/menu_apps.sh now checks every Exec here
+# against the actions input.c actually implements.
+Exec=synctl dispatch control
 Icon=preferences-system
 Terminal=false
 StartupNotify=false

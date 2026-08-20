@@ -1231,6 +1231,39 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * socket-activates the daemon rather than refusing the connection. The
          * control panel's Printers row and the start menu both land here. */
         synui_spawn("xdg-open http://localhost:631/");
+    } else if (strcmp(action, "settings") == 0) {
+        /* syn-settings — the settings APP, which is a normal program and not a
+         * compositor panel. The two are not rivals: the control panel is what
+         * the DESKTOP is set to (a panel can only configure the compositor
+         * drawing it), while syn-settings is what the SYSTEM is set to — the
+         * clock, the locale, the kernel, the default applications — and has to
+         * work where synui is not running at all. That is why the AI backend
+         * lives there and not here. Rows in both that lead to the other are the
+         * whole point: neither is findable from inside the other otherwise.
+         *
+         * The argument names a pane (Display ▸ Monitor settings passes
+         * `display`), and it is CHECKED AGAINST A LIST rather than quoted.
+         * synui_spawn() runs /bin/sh -c and this action is reachable from the
+         * control socket, so an unchecked argument is a command line anybody
+         * who can reach the socket gets to write. A whitelist is also the
+         * honest shape here: the panes are a fixed set that syn-settings itself
+         * enumerates, not free text. */
+        static const char *const panes[] = {
+            "display", "region", "time", "network", "bluetooth",
+            "power", "apps", "kernel", "ai", "system",
+        };
+        const char *pane = NULL;
+        if (arg && *arg) {
+            for (size_t i = 0; i < sizeof(panes) / sizeof(panes[0]); i++)
+                if (strcmp(arg, panes[i]) == 0) { pane = panes[i]; break; }
+            if (!pane)
+                wlr_log(WLR_ERROR, "synui: settings: unknown pane '%s'", arg);
+        }
+
+        char cmd[128];
+        if (pane) snprintf(cmd, sizeof(cmd), "syn-settings gui %s", pane);
+        else      snprintf(cmd, sizeof(cmd), "syn-settings gui");
+        synui_spawn(cmd);
     } else if (strcmp(action, "about") == 0) {
         /* "About OS" — areofyl/fetch in a terminal (about_cmd). Not a native
          * panel: everything an About box would show, fetch already gathers, and

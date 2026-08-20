@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Screenshot
+GenericName=Screenshot
+Comment=Select a region and copy it to the clipboard and ~/Pictures/Screenshots
+# ⚠ NOT a synctl dispatch, unlike the rest of this family: synui-screenshot is a
+# real program (systemd/synui-screenshot.sh, installed to /usr/bin) that drives
+# slurp and grim. The KEYBIND goes through `spawn` for the same reason — there
+# is no panel here to open.
+#
+# `region`, because that is the mode a person picking a menu item means. The
+# whole-screen shot is the Print key, which needs no menu entry to be found:
+# every keyboard has the key labelled.
+Exec=synui-screenshot region
+Icon=applets-screenshooter
+Terminal=false
+StartupNotify=false
+Categories=Graphics;Utility;
+Keywords=screenshot;screen;capture;region;grab;print;snip;
+# ⛔ SYNUI ONLY. slurp and grim speak wlr-screencopy and wlr-layer-shell, which
+# KDE's compositor does not implement — the entry would be a menu item that
+# fails with an error on a desktop that has its own screenshot tool anyway.
+OnlyShowIn=synui;SynapseOS;

@@ -1,5 +1,5 @@
 /*
- * news.c — news aggregator (Super+N)
+ * news.c — news aggregator (Super+R, and the News menu entry)
  *
  * A compositor-drawn modal panel over a river of RSS/Atom feeds: Hacker News
  * and Lobsters for the hacker end, and the feeds that actually break this
