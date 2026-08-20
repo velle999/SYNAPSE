@@ -55,7 +55,10 @@ pkgver=0.1.0
 #   `path:` (limine-entry-tool's key for the kernel). layout_test.sh gains a
 #   hash-pinned case both ways: files present passes, a genuinely missing file
 #   is still caught and reported de-hashed.
-pkgrel=85
+# 86: the checkbox page writes its answer to /etc/synapseos/components.conf.
+#   syn-update had no way to tell a component you declined from one the tree
+#   had gained since, so the first update reinstalled everything you unticked.
+pkgrel=86
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

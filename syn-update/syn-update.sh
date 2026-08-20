@@ -109,6 +109,131 @@ declare -A NEVER_ADD=(
     [limine-mkinitcpio-hook]="writes limine boot entries; on any other bootloader it would override the mkinitcpio hook and pull in limine"
 )
 
+# ── what this machine was OFFERED, and what it DECLINED ──────────────────────
+#
+# Every SynapseOS package is a CHECKBOX at install time (syn-install 79,
+# 2026-08-16). "Not installed" is therefore an ANSWER, not a gap — and scan()
+# could not tell the two apart. A component that existed in the tree and not on
+# the disk went straight into NEW and `apply` installed it, so somebody who
+# ticked eleven of the twenty-five components got the other fourteen back on
+# their first update. The only way to avoid it was to name every component by
+# hand, one at a time (`syn-update apply synui synapd …`), which is not
+# something anybody should have to know.
+#
+# The record is a file this tool and syn-install both write:
+#
+#     synui = selected
+#     vibe  = declined
+#
+# syn-install writes it from the picker at install time; `syn-update apply`
+# rewrites it from what is actually on the disk when a build finishes.
+#
+# The rule scan() applies to a component that is NOT installed:
+#
+#   named in the file (either state)
+#       This machine has been offered it and does not have it. That is the
+#       user's answer, in one direction or the other — a box left unticked, or
+#       a `pacman -R` afterwards. DECLINED: reported, never built.
+#
+#   NOT named in the file
+#       The tree has gained a component since this machine last looked. It was
+#       never on offer, so nobody has declined it. NEW, and installed, exactly
+#       as before.
+#
+# That second arm is what keeps the 2026-08-08 fix alive: synui pkgrel 317
+# pointed two start-menu rows at synpkg, a component that had only just landed
+# in COMPONENTS, and an updater that refuses to add anything ships the menu
+# without the thing it opens.
+#
+# NO FILE AT ALL is every system installed before this existed, and it is read
+# as "everything missing was declined", not as "nothing has ever been offered".
+# The other reading re-installs, once per machine, precisely the software this
+# change exists to stop installing. The first `apply` writes the file, so the
+# assumption is made once and never again; anything the tree gains AFTER that
+# is genuinely new and still arrives on its own. A component wrongly assumed
+# declined is never stuck — it is listed in its own section of every report,
+# with the command that installs it, and naming it is the opt-in.
+MANIFEST="${SYN_UPDATE_MANIFEST:-/etc/synapseos/components.conf}"
+
+# name -> selected|declined, and whether the file existed at all. The flag is
+# separate because an EMPTY manifest and an ABSENT one mean opposite things:
+# empty is "offered everything, took none of it", absent is "never asked".
+declare -A COMP_KNOWN=()
+MANIFEST_PRESENT=0
+
+load_manifest() {
+    COMP_KNOWN=(); MANIFEST_PRESENT=0
+    [ -r "$MANIFEST" ] || return 0
+    MANIFEST_PRESENT=1
+
+    local line name state
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=${line%%#*}
+        case $line in *=*) ;; *) continue ;; esac
+        name=${line%%=*}; state=${line#*=}
+        # Whitespace is stripped rather than assumed away: this file is meant
+        # to be readable and editable by hand, and `vibe = declined` with the
+        # spaces the example shows must parse.
+        name=${name//[[:space:]]/}; state=${state//[[:space:]]/}
+        [ -n "$name" ] || continue
+        COMP_KNOWN[$name]="${state:-declined}"
+    done < "$MANIFEST"
+    return 0
+}
+
+# Rewrite the manifest from what is on the disk NOW.
+#
+# Called from a successful `apply` and nowhere else. `check` is read-only and
+# stays that way, and a run that failed to build says nothing about what
+# anybody wanted.
+#
+# Computed from `pacman -Q` rather than from what this run decided to build, so
+# it also records the answer given with `pacman -R`: removing a component is a
+# decline, and the next update must not put it back — the same complaint from
+# the other direction.
+#
+# Only components that EXIST in the tree at this revision are written. Naming
+# one that does not exist yet would pre-decline a component nobody has been
+# shown, which is the 2026-08-08 bug written into a file.
+save_manifest() {
+    local tmp c inst
+    tmp=$(mktemp) || { warn "cannot write $MANIFEST (mktemp failed)"; return 0; }
+
+    {
+        say "# SynapseOS components this machine has been offered."
+        say "#"
+        say "# selected = installed here.  declined = offered and not taken."
+        say "#"
+        say "# syn-update will not ADD a component named here: an unticked box at"
+        say "# install time, or a later \`pacman -R\`, is an answer and it is kept."
+        say "# A component that is NOT named here has never been on offer on this"
+        say "# machine, so a new one still installs itself on the next update."
+        say "#"
+        say "# To take something you declined:   syn-update apply <component>"
+        say "# Written by syn-install, and rewritten by every \`syn-update apply\`."
+        for c in "${COMPONENTS[@]}"; do
+            [ -f "$SRC/$c/PKGBUILD" ] || continue
+            inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+            if [ -n "$inst" ]; then
+                printf '%s = selected\n' "$c"
+            else
+                printf '%s = declined\n' "$c"
+            fi
+        done
+    } > "$tmp"
+
+    # -D so /etc/synapseos is created on a system that has never had it. sudo
+    # is already held open by sudo_keepalive_start() at this point in an apply.
+    if sudo install -Dm644 "$tmp" "$MANIFEST"; then
+        [ "$MANIFEST_PRESENT" = 1 ] || ok "recorded your component selection in $MANIFEST"
+    else
+        warn "could not write $MANIFEST — the next update will assume the same
+    thing again, which is harmless but means this cannot record a new answer."
+    fi
+    rm -f "$tmp"
+    return 0
+}
+
 # ── output ───────────────────────────────────────────────────
 
 if [ -t 1 ]; then
@@ -540,6 +665,9 @@ CHANGED=()
 NEW=()
 SKIPPED=()
 BLOCKED=()
+# Components in the tree that this machine has been OFFERED and does not have.
+# Reported in full, built only when named on the command line. See MANIFEST.
+DECLINED=()
 
 # Component names named on the command line: `syn-update apply synui`. Empty
 # means "everything that changed", which is what apply has always done and
@@ -579,7 +707,11 @@ buildable_names() {
 }
 
 scan() {
-    CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=()
+    CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=(); DECLINED=()
+
+    # Read before the loop, not per component: the file is one stat and the
+    # loop asks about it twenty-five times.
+    load_manifest
 
     # Empty means the scrape failed, not that nothing is buildable — an update
     # must not be withheld because a guard could not read its own input.
@@ -608,7 +740,17 @@ scan() {
         # rest — so an older system updating to a tree it has never seen reports
         # the components it is genuinely missing, not every name in the list.
         if [ -z "$inst" ]; then
-            [ -n "${NEVER_ADD[$c]:-}" ] || NEW+=("$c $avail")
+            # Must never arrive on its own, whatever any file says.
+            [ -n "${NEVER_ADD[$c]:-}" ] && continue
+
+            # The whole point of the manifest: an absence this machine has
+            # already answered for is a CHOICE, and a choice is not an update.
+            # No manifest at all is read the same way — see the comment there.
+            if [ "$MANIFEST_PRESENT" = 1 ] && [ -z "${COMP_KNOWN[$c]+set}" ]; then
+                NEW+=("$c $avail")
+            else
+                DECLINED+=("$c $avail")
+            fi
             continue
         fi
 
@@ -672,6 +814,38 @@ report() {
             set -- $n
             printf '  %-16s %-14s %s\n' "$1" "$2" "(not installed here)"
         done
+    fi
+
+    # NOT an update, and NOT a problem — the user's own answer, read back.
+    #
+    # It gets a section rather than silence for the same reason UNSUPPORTED
+    # does: a component quietly left out forever is the bug this tool exists to
+    # remove, and "syn-update decided not to install vibe" has to be something
+    # you can read rather than something you deduce. It also carries the one
+    # command that changes the answer, because the point of the record is that
+    # it is a decision and not a verdict.
+    if [ ${#DECLINED[@]} -gt 0 ]; then
+        say ""
+        info "${#DECLINED[@]} component(s) available and NOT installed here"
+        printf '  %-16s %s\n' COMPONENT AVAILABLE
+        # The wording tracks how sure we are. With a manifest this IS the
+        # user's answer read back. Without one it is an assumption made on
+        # their behalf, and claiming they picked something they may never have
+        # been shown would be the report lying to cover the guess.
+        local d note="(you did not pick this)"
+        [ "$MANIFEST_PRESENT" = 1 ] || note="(not installed here)"
+        for d in "${DECLINED[@]}"; do
+            # shellcheck disable=SC2086
+            set -- $d
+            printf '  %-16s %-14s %s\n' "$1" "$2" "$note"
+        done
+        # shellcheck disable=SC2086
+        set -- ${DECLINED[0]}
+        say "  ${C_DIM}Left alone. To take one: ${C_R}syn-update apply $1${C_DIM} — and it stays.${C_R}"
+        if [ "$MANIFEST_PRESENT" != 1 ]; then
+            say "  ${C_DIM}(no $MANIFEST yet, so anything missing is read as not wanted;${C_R}"
+            say "  ${C_DIM} the next apply writes it and new components resume arriving.)${C_R}"
+        fi
     fi
 
     # A bug in OUR tree, not in this machine. Loud, and named as ours: the
@@ -778,12 +952,6 @@ cmd_apply() {
     scan
     report
 
-    if [ ${#CHANGED[@]} -eq 0 ] && [ ${#NEW[@]} -eq 0 ]; then
-        say ""
-        ok "nothing to build"
-        return 0
-    fi
-
     # CHANGED and NEW go into ONE build-all.sh invocation. They are reported
     # apart because they mean different things to the user, but they build
     # identically, and splitting the invocation would defeat build-all.sh's
@@ -794,6 +962,35 @@ cmd_apply() {
         set -- $e
         names+=("$1")
     done
+
+    # A DECLINED component becomes a candidate ONLY by being named.
+    #
+    # `syn-update apply vibe` on a machine that never installed vibe is not an
+    # accident — typing the name IS the opt-in, and it is the same gesture the
+    # per-row Install button in SYNAPSE Software makes. save_manifest() at the
+    # end of this run records the new answer from the disk, so it never has to
+    # be given a second time.
+    #
+    # A bare `apply` adds none of them. That is the whole change.
+    if [ ${#SELECT[@]} -gt 0 ]; then
+        local dsel ssel
+        for dsel in "${DECLINED[@]}"; do
+            # shellcheck disable=SC2086
+            set -- $dsel
+            for ssel in "${SELECT[@]}"; do
+                [ "$ssel" = "$1" ] && { names+=("$1"); break; }
+            done
+        done
+    fi
+
+    # AFTER the two lists above are folded together, not before: an apply that
+    # names nothing but a declined component has an empty CHANGED and an empty
+    # NEW and still has work to do.
+    if [ ${#names[@]} -eq 0 ]; then
+        say ""
+        ok "nothing to build"
+        return 0
+    fi
 
     # ── A named subset ────────────────────────────────────────────────────
     #
@@ -883,6 +1080,16 @@ cmd_apply() {
     fi
 
     refresh_local_repo
+
+    # Last, and only on success: the disk is now what the record describes.
+    #
+    # It is here rather than in `check` because writing it needs root, and this
+    # is the one command that already holds a password. A machine with nothing
+    # to build therefore never gains the file — which costs nothing, because
+    # the no-file reading and the file it would have written say the same thing
+    # until something actually changes.
+    save_manifest
+
     say ""
     ok "updated to $(git -C "$SRC" rev-parse --short HEAD)"
     say ""
@@ -1031,12 +1238,31 @@ cmd_status() {
     say "remote:    $REPO_URL ($REPO_REF)"
     say "revision:  $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null) $(git -C "$SRC" log -1 --format='%s' 2>/dev/null)"
     say ""
+    # Three columns, because "not installed" alone never said WHY, and the
+    # answer decides whether the next `apply` will do anything about it.
+    load_manifest
     printf '  %-16s %s\n' COMPONENT INSTALLED
-    local c inst
+    local c inst note
     for c in "${COMPONENTS[@]}"; do
         inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
-        printf '  %-16s %s\n' "$c" "${inst:-${C_DIM}not installed${C_R}}"
+        if [ -n "$inst" ]; then
+            printf '  %-16s %s\n' "$c" "$inst"
+            continue
+        fi
+        if [ -n "${NEVER_ADD[$c]:-}" ]; then
+            note="never added automatically"
+        elif [ "$MANIFEST_PRESENT" = 1 ] && [ -z "${COMP_KNOWN[$c]+set}" ]; then
+            note="new here — the next apply installs it"
+        else
+            note="not picked — syn-update apply $c"
+        fi
+        printf '  %-16s %-16s %s\n' "$c" "${C_DIM}not installed${C_R}" "${C_DIM}$note${C_R}"
     done
+
+    if [ "$MANIFEST_PRESENT" = 1 ]; then
+        say ""
+        say "${C_DIM}Your component selection: $MANIFEST${C_R}"
+    fi
 }
 
 usage() {
@@ -1048,6 +1274,9 @@ Usage:
   syn-update apply          Fetch, refresh pacman's databases, rebuild the
                             changed components, install them, and install any
                             component the tree has gained since.
+                            It does NOT install software you left unticked at
+                            install time, or removed later — see COMPONENTS YOU
+                            DID NOT PICK below.
                             Asks for your password ONCE, up front, and holds it
                             for the whole build — sudo forgets after five
                             minutes and a full rebuild is much longer.
@@ -1055,6 +1284,8 @@ Usage:
                             its own order, so the names are a filter and not a
                             sequence. Warns when a named component depends on
                             another that is also out of date and was not named.
+                            Naming a component you do not have INSTALLS it, and
+                            that answer is remembered.
   syn-update status         Show the source revision and installed versions
   syn-update help           This help
 
@@ -1066,6 +1297,8 @@ Environment:
   SYN_UPDATE_REPO           Source repository (default: the SynapseOS GitHub)
   SYN_UPDATE_REF            Branch to track (default: main)
   SYN_UPDATE_SRC            Where the source tree lives (default: /var/lib/synapse-src)
+  SYN_UPDATE_MANIFEST       The component selection record
+                            (default: /etc/synapseos/components.conf)
   SYN_UPDATE_DB_FRESH_SECS  How recently pacman's databases must have been synced
                             for apply to skip refreshing them (default: 600).
                             Past that it runs `pacman -Sy`, which downloads only
@@ -1073,6 +1306,25 @@ Environment:
                             one case -Sy cannot fix — a cached signature older
                             than the database it signs — and for a -Sy that
                             comes back complaining about one.
+
+COMPONENTS YOU DID NOT PICK
+
+Every SynapseOS package is a checkbox in the installer, so "not installed" is
+an answer and not a gap. syn-update keeps it: a component this machine has been
+offered and does not have is listed in its own section of the report and left
+alone, however far ahead of you the tree gets. Naming it installs it, once:
+
+    syn-update apply vibe
+
+and from then on it updates with everything else. Removing a component with
+`pacman -R` is the same answer in the other direction and is kept the same way.
+
+A component the tree has gained SINCE this machine last looked is different —
+nobody has declined it, so it installs on its own. That is how a new component
+the desktop depends on reaches a system that was installed before it existed.
+
+The record is /etc/synapseos/components.conf, written by the installer and
+rewritten by every apply. It is plain text and safe to edit.
 
 Components are rebuilt from source with makepkg, so this needs base-devel and
 each component's makedepends. Components with a large prebuilt payload

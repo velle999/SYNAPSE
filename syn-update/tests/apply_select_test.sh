@@ -36,6 +36,10 @@ need_not_root() { :; }; need_tools() { :; }; setup_src() { :; }; fetch_src() { :
 local_rev() { echo aaaaaaa; }; remote_rev() { echo bbbbbbb; }
 show_commits() { :; }; checkout_remote() { :; }; report() { :; }; scan() { :; }
 refresh_local_repo() { echo "REFRESH built=[${BUILT[*]}]"; }
+# Writes /etc/synapseos/components.conf through sudo. Stubbed so the assertions
+# below can check WHEN it is called — after a successful build and never before
+# one — without a password prompt or a write to the machine running the suite.
+save_manifest() { echo "MANIFEST"; }
 git() { echo shortrev; }
 cd() { :; }
 # ⚠ NOT optional. cmd_apply refreshes pacman's databases before it builds, and
@@ -56,7 +60,7 @@ build_all_recorder() { echo "BUILD [$*]"; }
 STUB
     echo "SRC=$repo"
     sed -n '/^COMPONENTS=(/,/^)/p' "$script"
-    echo 'BUILT=(); SELECT=()'
+    echo 'BUILT=(); SELECT=(); DECLINED=()'
     sed -n '/^component_deps() {/,/^}/p' "$script"
     # cmd_apply shells out to ./build-all.sh; point that at the recorder.
     sed -n '/^cmd_apply() {/,/^}/p' "$script" \
@@ -69,6 +73,7 @@ run_apply() {   # run_apply <changed-csv> <new-csv> <selected...>
         harness
         echo "CHANGED=($changed)"
         echo "NEW=($new)"
+        echo "DECLINED=($DECLINED_CSV)"
         # `printf '"%s" ' "$@"` with NO arguments still applies the format once
         # and emits an empty string, which made SELECT one element long and sent
         # the no-names case down the subset path. Emit the array only when there
@@ -82,6 +87,12 @@ run_apply() {   # run_apply <changed-csv> <new-csv> <selected...>
     } > "$tmp/run.sh"
     bash "$tmp/run.sh" 2>&1
 }
+
+# What run_apply puts in DECLINED. A variable rather than another positional,
+# because every existing call site passes the selection as "$@" and threading a
+# fourth argument through them would mean editing tests this change must not
+# touch.
+DECLINED_CSV=""
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
@@ -133,6 +144,190 @@ case "$out" in
     *"BUILD [synui synpkg"*) ok "apply with no names still builds everything changed" ;;
     *) bad "apply with no names changed behaviour: $out" ;;
 esac
+
+echo ""
+echo "=== the manifest decides what \"not installed\" MEANS ==="
+#
+# scan() has exactly one ambiguous state — a component that is in the tree and
+# not on the disk — and before /etc/synapseos/components.conf there was nothing
+# to disambiguate it with. These four cases are the whole rule.
+scan_harness() {
+    cat <<'STUB'
+warn() { echo "warn $*"; }
+buildable_names() { echo ""; }   # empty = scrape failed, block nothing
+pkgfield() { echo 9; }           # every component reads as 9-9 available
+# scan calls `pacman -Q <component>`; INSTALLED is the machine.
+pacman() {
+    case " $INSTALLED " in *" $2 "*) echo "$2 1-1"; return 0 ;; esac
+    return 1
+}
+vercmp() { echo 1; }             # 9-9 is always newer than 1-1
+STUB
+    echo "SRC=$repo"
+    sed -n '/^COMPONENTS=(/,/^)/p' "$script"
+    sed -n '/^declare -A UNSUPPORTED=(/,/^)/p' "$script"
+    sed -n '/^declare -A NEVER_ADD=(/,/^)/p' "$script"
+    sed -n '/^MANIFEST=/p' "$script"
+    echo 'declare -A COMP_KNOWN=(); MANIFEST_PRESENT=0'
+    sed -n '/^load_manifest() {/,/^}/p' "$script"
+    sed -n '/^scan() {/,/^}/p' "$script"
+}
+
+# scan_run <installed-list> <manifest-body|NOFILE> -> "CHANGED|NEW|DECLINED"
+scan_run() {
+    local installed=$1 manifest=$2
+    if [ "$manifest" = NOFILE ]; then
+        rm -f "$tmp/manifest.conf"
+    else
+        printf '%s\n' "$manifest" > "$tmp/manifest.conf"
+    fi
+    {
+        scan_harness
+        echo "MANIFEST=$tmp/manifest.conf"
+        echo "INSTALLED='$installed'"
+        cat <<'RUN'
+scan
+names() { local e; for e in "$@"; do set -- $e; printf '%s ' "$1"; done; }
+printf '%s|%s|%s
+' "$(names "${CHANGED[@]}")" "$(names "${NEW[@]}")" "$(names "${DECLINED[@]}")"
+RUN
+    } > "$tmp/scan.sh"
+    bash "$tmp/scan.sh" 2>/dev/null | tail -1
+}
+
+# scan_run returns "CHANGED|NEW|DECLINED". Pull the fields apart by hand: the
+# first cut of these assertions matched against ${out#*|}, which is NEW *and*
+# DECLINED, so "was it queued for install" and "was it left alone" were the
+# same test and both answered yes.
+field() { local f=$1 o=$2; case $f in
+    changed) printf ' %s ' "${o%%|*}" ;;
+    new)     o=${o#*|}; printf ' %s ' "${o%%|*}" ;;
+    dec)     printf ' %s ' "${o##*|}" ;;
+esac; }
+in_field() { case "$(field "$1" "$2")" in *" $3 "*) return 0 ;; esac; return 1; }
+
+# 1. Named in the manifest and absent = the user's answer. Never built.
+out=$(scan_run "synui vibe" "synui = selected
+vibe = selected
+cliamp = declined")
+in_field dec "$out" cliamp \
+    && ok "a component the manifest calls declined is DECLINED" \
+    || bad "declined component not classified: [$out]"
+in_field new "$out" cliamp \
+    && bad "a declined component was queued for install: [$out]" \
+    || ok "...and it was not queued as NEW"
+
+# 2. NOT named in the manifest = never on offer here. Still NEW, still installed.
+#    This is the 2026-08-08 fix and it has to survive the change.
+out=$(scan_run "synui" "synui = selected
+vibe = declined")
+in_field new "$out" cliamp \
+    && ok "a component the manifest has never heard of is NEW" \
+    || bad "a genuinely new component was not queued: [$out]"
+in_field dec "$out" vibe \
+    && ok "...while the one it HAS heard of stays declined" \
+    || bad "the declined component was not reported: [$out]"
+
+# 3. Removed after the fact. `pacman -R vibe` is the same answer given the
+#    other way round, and the manifest still says selected — what decides is
+#    that the machine has been OFFERED it, not which word is on the line.
+out=$(scan_run "synui" "synui = selected
+vibe = selected")
+in_field new "$out" vibe \
+    && bad "a component removed with pacman -R was reinstalled: [$out]" \
+    || ok "a component removed after the fact stays removed"
+
+# 4. No file at all — every system installed before this existed. Read as
+#    "everything missing was declined", because the other reading reinstalls
+#    exactly the software this change exists to stop installing.
+out=$(scan_run "synui" NOFILE)
+[ -z "$(field new "$out" | tr -d ' ')" ] \
+    && ok "with no manifest, nothing at all is queued for install" \
+    || bad "a manifest-less system still force-installed: [$out]"
+in_field dec "$out" vibe \
+    && ok "...and the missing components are reported as declined" \
+    || bad "a manifest-less system reported nothing at all: [$out]"
+
+# The parser has to survive a hand-edited file: this is documented as plain
+# text and safe to edit, and `vibe = declined` with spaces is what it shows.
+out=$(scan_run "synui" "  vibe   =   declined   # took it off
+# a comment
+")
+in_field new "$out" vibe \
+    && bad "spaces and a trailing comment broke the parse: [$out]" \
+    || ok "the manifest parses with spaces and comments"
+in_field new "$out" cliamp \
+    && ok "...and a name that is genuinely absent from it is still NEW" \
+    || bad "the hand-edited file was not read as present at all: [$out]"
+
+# NEVER_ADD outranks everything. syn-install is a disk partitioner and must not
+# arrive as an update whatever any file says.
+out=$(scan_run "synui" "synui = selected")
+case "$out" in
+    *syn-install*) bad "syn-install was queued: [$out]" ;;
+    *)             ok "NEVER_ADD still outranks the manifest" ;;
+esac
+
+echo ""
+echo "=== software the user did not pick is left alone ==="
+#
+# THE REGRESSION THIS SECTION EXISTS FOR. Every SynapseOS package is a checkbox
+# in the installer, so "not installed" is an answer. scan() used to file every
+# such component under NEW and apply installed it, handing back the whole suite
+# to somebody who had deliberately taken a third of it — and the only escape
+# was naming each component by hand on every single run.
+DECLINED_CSV='"vibe 0 5" "cliamp 0 3"'
+
+out=$(run_apply '"synui 1 2"' '""')
+case "$out" in
+    *vibe*|*cliamp*) bad "a bare apply built something the user declined: $out" ;;
+    *)               ok "a bare apply builds nothing the user declined" ;;
+esac
+case "$out" in
+    *"BUILD [synui"*) ok "...and still builds what IS installed and stale" ;;
+    *)                 bad "the declined guard swallowed a real update: $out" ;;
+esac
+
+# Naming it IS the opt-in, and it has to work even when nothing else is stale —
+# the early "nothing to build" return used to be computed from CHANGED and NEW
+# alone and would have returned before ever looking at the name.
+out=$(run_apply '' '' vibe)
+case "$out" in
+    *"BUILD [vibe]"*) ok "naming a declined component installs it" ;;
+    *)                bad "apply <declined> built nothing: $out" ;;
+esac
+case "$out" in
+    *MANIFEST*) ok "...and the new answer is written down" ;;
+    *)          bad "the manifest was not rewritten after the opt-in: $out" ;;
+esac
+
+# One name is one opt-in. The others stay declined.
+out=$(run_apply '' '' vibe)
+case "$out" in
+    *cliamp*) bad "opting into vibe dragged cliamp in too: $out" ;;
+    *)        ok "opting into one declined component takes only that one" ;;
+esac
+
+# An apply that genuinely has nothing to do must still not ask for a password,
+# and must not write the manifest — a run that built nothing has learned
+# nothing about what anybody wants.
+out=$(run_apply '' '')
+case "$out" in
+    *KEEPALIVE*|*MANIFEST*) bad "an apply with only declined components did work: $out" ;;
+    *)                      ok "declined components alone are not work to do" ;;
+esac
+
+# NEW is untouched: a component the tree has gained is not a component anybody
+# declined, and it still installs itself. This is the 2026-08-08 fix — synui
+# 317 pointed two start-menu rows at a synpkg that had only just landed.
+DECLINED_CSV='"vibe 0 5"'
+out=$(run_apply '"synui 1 2"' '"synpkg 0 20"')
+case "$out" in
+    *"BUILD [synui synpkg]"*) ok "a genuinely new component still installs itself" ;;
+    *) bad "the declined guard also blocked a new component: $out" ;;
+esac
+
+DECLINED_CSV=""
 
 echo ""
 echo "=== the dependency guard ==="

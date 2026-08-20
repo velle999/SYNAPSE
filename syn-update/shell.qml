@@ -274,6 +274,14 @@ ShellRoot {
             // "Could not determine update status" about a report it had
             // understood perfectly well.
             if (/NEW component\(s\) to install/.test(line))                 { section = "new"; continue }
+            // "N component(s) available and NOT installed here" — software the
+            // user did not tick at install time. syn-update reports these and
+            // does not build them, so they are NOT offered here either: a
+            // window that listed them under "will be installed" would be
+            // describing the behaviour this section exists to say is gone.
+            // The section still has to be RECOGNISED, or its rows fall through
+            // into whichever section came last.
+            if (/component\(s\) available and NOT installed here/.test(line))  { section = "declined"; continue }
             if (/not updatable from source/.test(line))                    { section = "blocked"; continue }
 
             if (section === "updates") {
@@ -288,6 +296,7 @@ ShellRoot {
                 if (m && m[1] !== "COMPONENT") nws.push({ name: m[1], to: m[2] })
                 continue
             }
+            if (section === "declined") continue
             if (section === "commits") {
                 m = line.match(/^\s{2}([0-9a-f]{7,})\s+(.*)$/)
                 if (m) cms.push({ hash: m[1], subject: m[2] })

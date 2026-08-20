@@ -1,9 +1,16 @@
 pkgname=syn-update
 pkgver=0.1.0
+# 39: an apply no longer installs what you did not pick. Every SynapseOS
+#   package is a checkbox in the installer, so "not installed" is an ANSWER —
+#   and scan() filed every such component under NEW and installed it, handing
+#   the whole suite back to anyone who took part of it. It now reads
+#   /etc/synapseos/components.conf: named there and absent = your answer, kept;
+#   absent from the file entirely = the tree gained it since, still installed.
+#   `syn-update apply <name>` is the opt-in and it is remembered.
 # 36: cliamp joins COMPONENTS. ⚠ Adopting a COMPONENTS change takes TWO
 #   applies — the running process keeps the list it started with — so the first
 #   `syn-update apply` updates this script and the second one sees cliamp.
-pkgrel=38
+pkgrel=39
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

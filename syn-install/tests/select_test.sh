@@ -218,6 +218,56 @@ check "and every key was marked used" yes \
       "$([ -n "${ANSWERS_USED[sw_mpv]+set}" ] && echo yes || echo no)"
 
 echo ""
+echo "=== the selection is written down for syn-update ==="
+#
+# The record is the only thing that lets syn-update tell "you did not want
+# this" apart from "the tree has gained a component". Without it, a machine
+# that took eleven of twenty-five components got the other fourteen back on
+# its first update — this whole page, undone, silently.
+#
+# What it must get right is the mapping: syn-update speaks in PACKAGE names,
+# and a row can carry more than one (comp_synguard is synguard AND
+# synapse_kmod), so a per-key file would leave half the suite unaccounted for.
+sel_reset standard
+PICKED[comp_vibe]=0
+PICKED[comp_synguard]=1
+PICKED[comp_nexus]=0
+man=$(sel_manifest)
+
+check "an unticked component is recorded as declined" yes       "$(grep -qx 'vibe = declined' <<<"$man" && echo yes || echo no)"
+check "a ticked one is recorded as selected" yes       "$(grep -qx 'synui = selected' <<<"$man" && echo yes || echo no)"
+check "a row carrying two packages records BOTH" yes       "$(grep -qx 'synguard = selected' <<<"$man" &&
+         grep -qx 'synapse_kmod = selected' <<<"$man" && echo yes || echo no)"
+
+# Arch packages are not ours to update and syn-update never touches them, so a
+# line about firefox would be a claim this file has no business making.
+check "the Arch shelf is not in the file" yes       "$(grep -q '^firefox' <<<"$man" && echo no || echo yes)"
+
+# EVERY comp_ row, ticked or not. A row that is simply absent reads to
+# syn-update as "never offered here", which is the one state that still
+# installs on its own — so an omission is the original bug, spelled differently.
+missing=""
+for row in "${SEL_COMPONENTS[@]}"; do
+    IFS='|' read -r key std full group pkgs _ <<<"$row"
+    for p in $pkgs; do
+        grep -qx "$p = \(selected\|declined\)" <<<"$man" || missing="$missing $p"
+    done
+done
+check "every component package has a line" "" "$missing"
+
+# Written from PICKED after sel_resolve_deps, so what the file says and what
+# pacman installs are the same set. Ticking vibe forces synapd and syn-confine
+# back on; the file has to agree.
+sel_reset minimal
+PICKED[comp_vibe]=1
+PICKED[comp_synapd]=0
+PICKED[comp_synconfine]=0
+sel_resolve_deps >/dev/null 2>&1
+man=$(sel_manifest)
+check "a dependency ticked back on is recorded as selected" yes       "$(grep -qx 'synapd = selected' <<<"$man" &&
+         grep -qx 'syn-confine = selected' <<<"$man" && echo yes || echo no)"
+
+echo ""
 echo "=== no page is wider than a terminal ==="
 #
 # 80 columns, and the pages are built to 77. printf's precision is what keeps

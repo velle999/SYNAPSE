@@ -1164,6 +1164,52 @@ sel_packages() {
     echo $out          # unquoted: collapses the runs of spaces
 }
 
+# sel_manifest — the record syn-update reads to know what was NOT wanted.
+#
+# Every SynapseOS package is a checkbox here, so an installed system can be
+# missing two thirds of the suite on purpose. syn-update had no way to see that:
+# "in the tree, not on the disk" read as "new, install it", and the first update
+# handed back every component the user had unticked. The only escape was naming
+# each component by hand on every run.
+#
+# So the picker writes its answer down. One line per PACKAGE — not per checkbox
+# key — because pacman package names are what syn-update speaks in, and a row
+# like comp_synguard covers two of them (synguard, synapse_kmod).
+#
+# Rows in the `sw` group are deliberately absent: those are Arch packages, and
+# syn-update neither builds nor adds them, so a line about them would be a claim
+# this file has no business making.
+#
+# Written from PICKED AFTER sel_resolve_deps(), so a package that was ticked
+# back on because something else needs it is recorded as selected — which is
+# what actually lands on the disk.
+sel_manifest() {
+    local __list __row key std full group pkgs p state
+    echo "# SynapseOS components this machine has been offered."
+    echo "#"
+    echo "# selected = installed here.  declined = offered and not taken."
+    echo "#"
+    echo "# syn-update will not ADD a component named here: an unticked box at"
+    echo "# install time, or a later \`pacman -R\`, is an answer and it is kept."
+    echo "# A component that is NOT named here has never been on offer on this"
+    echo "# machine, so a new one still installs itself on the next update."
+    echo "#"
+    echo "# To take something you declined:   syn-update apply <component>"
+    echo "# Written by syn-install, and rewritten by every \`syn-update apply\`."
+    for __list in "${SEL_ALL_LISTS[@]}"; do
+        local -n __rows="$__list"
+        for __row in "${__rows[@]}"; do
+            IFS='|' read -r key std full group pkgs _ <<<"$__row"
+            [ "$group" = core ] || [ "$group" = app ] || continue
+            state=declined
+            [ "${PICKED[$key]:-0}" = 1 ] && state=selected
+            for p in $pkgs; do
+                echo "$p = $state"
+            done
+        done
+    done
+}
+
 # sel_label <key> — for the messages the dependency pass prints
 sel_label() {
     local __list __row key std full group pkgs label
@@ -2835,6 +2881,21 @@ else
 fi
 
 success "SynapseOS packages installed"
+
+# ── Record what was picked, and what was not ──────────────
+#
+# syn-update reads this to tell a component the user DECLINED from one the tree
+# has gained since. Without it, "in the tree and not on the disk" is a single
+# undifferentiated state and the first `syn-update apply` reinstalls everything
+# that was unticked here — undoing this whole screen, silently, on a machine
+# whose owner already answered the question.
+#
+# Written even when nothing was selected: an empty selection is an answer too,
+# and the file's ABSENCE is what means "never asked".
+mkdir -p /mnt/etc/synapseos
+sel_manifest > /mnt/etc/synapseos/components.conf
+chmod 644 /mnt/etc/synapseos/components.conf
+success "Component selection recorded in /etc/synapseos/components.conf"
 
 # ── User account ─────────────────────────────────────────
 header
