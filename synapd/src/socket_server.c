@@ -57,8 +57,8 @@ static int g_socket_activated = 0;
 /* ── Work queue ───────────────────────────────────────────── */
 typedef struct work_item {
     int              client_fd;
-    pid_t            client_pid;
-    uid_t            client_uid;
+    pid_t            client_pid;   /* from SO_PEERCRED, never from the header */
+    uid_t            client_uid;   /* likewise — the kernel's, not claimed */
     syn_msg_header_t hdr;
     uint8_t         *payload;     /* heap-allocated, worker frees */
     synapd_state_t  *state;
@@ -645,7 +645,66 @@ static void *server_thread_fn(void *arg) {
                 work_item_t *w = calloc(1, sizeof(*w));
                 if (!w) { free(payload); close(cfd); continue; }
                 w->client_fd  = cfd;
-                w->client_pid = hdr.client_pid;
+
+                /* ── WHO IS ASKING, ACCORDING TO THE KERNEL ──────────────
+                 *
+                 * ⚠ NOT hdr.client_pid. That field is filled in by the
+                 * sender, and this used to be assigned straight from it —
+                 * identity supplied by the thing being observed, in the
+                 * daemon whose entire job is security telemetry.
+                 *
+                 * The socket is 0660 root:synapse, so this is not open to
+                 * the world; but any member of that group could claim to be
+                 * any PID, and the claim went two places that matter:
+                 * context_push() files the event under that PID in the
+                 * rolling context the model is later shown, and the anomaly
+                 * log names it. So attacker-controlled text could be filed
+                 * against somebody else's process and read back as that
+                 * process's history.
+                 *
+                 * SO_PEERCRED is the kernel's answer, taken at connect()
+                 * time and not forgeable by the peer. It is the credentials
+                 * of whoever opened this socket, which is the question.
+                 *
+                 * ⚠ It can still be STALE — the process may have exited and
+                 * its PID been reused since it connected. That is a much
+                 * smaller problem than a forgeable field, and it is the same
+                 * PID-reuse race synguard already re-verifies against before
+                 * it acts on anything. Nothing here kills a process; the
+                 * value is used for attribution, and attribution wants the
+                 * kernel's answer.
+                 */
+                struct ucred cred;
+                socklen_t credlen = sizeof(cred);
+                if (getsockopt(cfd, SOL_SOCKET, SO_PEERCRED,
+                               &cred, &credlen) == 0 && credlen == sizeof(cred)) {
+                    w->client_pid = (pid_t)cred.pid;
+                    w->client_uid = (uid_t)cred.uid;
+
+                    /* A client whose header disagrees with the kernel is
+                     * either buggy or lying, and this daemon is the right
+                     * place for that to be noticed rather than smoothed
+                     * over. 0 means "did not fill it in", which is not a
+                     * disagreement. */
+                    if (hdr.client_pid != 0 &&
+                        (pid_t)hdr.client_pid != w->client_pid)
+                        syn_log(LOG_WARNING,
+                                "socket_server: client claimed pid=%u, kernel "
+                                "says pid=%d uid=%d — using the kernel's",
+                                hdr.client_pid, w->client_pid, w->client_uid);
+                } else {
+                    /* No credentials means no attribution. Refusing the
+                     * request would be worse than attributing it to nobody:
+                     * this path is how the shell and the compositor ask
+                     * questions, and a daemon that stops answering because a
+                     * getsockopt failed is a broken desktop. 0 is "unknown",
+                     * and it is honest. */
+                    syn_log(LOG_WARNING, "socket_server: SO_PEERCRED failed on "
+                            "fd=%d (%s) — request attributed to no pid",
+                            cfd, strerror(errno));
+                    w->client_pid = 0;
+                    w->client_uid = (uid_t)-1;
+                }
                 w->hdr        = hdr;
                 w->payload    = payload;
                 w->state      = s;

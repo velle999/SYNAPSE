@@ -100,7 +100,15 @@ typedef struct {
     uint16_t flags;
     uint32_t payload_len;   /* bytes following this header */
     uint32_t request_id;    /* echoed in response */
-    uint32_t client_pid;    /* sender PID for privilege checks */
+    /* The sender's own idea of its PID.
+     *
+     * ⚠ ADVISORY ONLY — NEVER USE THIS FOR A PRIVILEGE CHECK, which is what
+     * this comment used to invite. It is filled in by the sender and a
+     * malicious one can put anything here. socket_server.c takes the real
+     * identity from SO_PEERCRED and logs a disagreement; the field is kept on
+     * the wire so existing clients are unchanged, and so the disagreement is
+     * observable at all. */
+    uint32_t client_pid;    /* advisory; the kernel's answer is what is used */
     uint64_t timestamp_ns;  /* CLOCK_MONOTONIC_RAW */
 } syn_msg_header_t;
 #pragma pack(pop)

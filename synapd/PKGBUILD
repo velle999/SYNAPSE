@@ -1,6 +1,26 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=42
+# 43: THE CLIENT SAID WHO IT WAS AND WE BELIEVED IT. The accept loop did
+#   `w->client_pid = hdr.client_pid` — identity supplied by the thing being
+#   observed, in the daemon whose whole job is security telemetry. The socket
+#   is 0660 root:synapse so it was never open to the world, but any member of
+#   that group could claim any PID, and the claim reached two places that
+#   matter: context_push() files the event under that PID in the rolling
+#   context the model is later shown, and the anomaly log names it — so
+#   attacker-controlled text could be filed against another process and read
+#   back as that process's history. Not a privilege escalation: nothing here
+#   kills anything, and synguard re-verifies identity itself before it acts.
+#   SO_PEERCRED now decides, and a header that CONTRADICTS the kernel is logged
+#   rather than smoothed over. ⚠ No credentials means attribution to NOBODY,
+#   never a fallback to the claim — that would hand the decision back to the
+#   sender by another route. ⚠ `client_uid` was in the work item and had NEVER
+#   been assigned: always 0 from calloc, which reads as root. Nothing consumed
+#   it, but the next thing that did would have believed every client was root.
+#   The header's own comment said "sender PID for privilege checks", which is
+#   an invitation; it now says advisory.
+#   Found by an outside review of the repo (GPT-5, via velle). The finding was
+#   real and correctly sized.
+pkgrel=43
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
