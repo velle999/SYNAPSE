@@ -38,21 +38,34 @@ typing. Run it where you can reach the keyboard anyway.
 
 **Done when**, with `--bpf-enforce`:
 
-- [ ] `systemd-run -q --collect cat /var/lib/synguard/bpf-canary` returns
-      `Operation not permitted` **as root**, and `bpf-lsm: denied=` increments.
-      Root refused on a file root owns is a thing only an LSM can do, so this
-      is the one observation that proves kernel enforcement rather than a
-      late kill.
-- [ ] The same command in the first 30 seconds after synguard attaches
-      **succeeds** — the warmup is real.
-- [ ] `kill -9` on synguard leaves the canary readable again — fail-open is
-      real and not just a code path.
+- [x] `systemd-run -q --collect cat /var/lib/synguard/bpf-canary` returns
+      `Operation not permitted` **as root**. Root refused on a file root owns
+      is a thing only an LSM can do, so this is the one observation that proves
+      kernel enforcement rather than a late kill. **Observed 2026-08-20 on the
+      laptop.**
+- [x] …and `bpf-lsm: denied=` increments. **This one failed first time, and it
+      was synguard rather than the kernel:** the counter was logged once at
+      startup and never again, so a refusal left no trace in the journal at
+      all. Fixed in 0.1.0-36 — logged on change, plus SIGUSR1 to sample on
+      demand.
+- [x] The same command in the first 30 seconds after synguard attaches
+      **succeeds** — the warmup is real. **Observed.**
+- [x] A wedged synguard (SIGSTOP, not kill — "alive but not answering" is the
+      case the heartbeat exists for) leaves the canary readable again, and it
+      goes back to being refused when synguard resumes. Fail-open is real in
+      both directions. **Observed.**
 - [ ] `synapse.bpf_enforce=0` on the kernel command line brings the VM up
       detect-only, with the canary readable. This is the way back from a bad
       rule and it must be verified before anybody needs it.
 - [ ] Planting `/etc/ld.so.preload` and then running anything shows the open
       refused, the process still running, and the preload not applied — the
       "degrades an infected machine to a working one" claim, observed.
+      ⚠ **Reported as passing on the first run and it had not been tested**:
+      the rig planted the file with the gate already armed, the rule refused
+      the O_CREAT, the file was never created, and the next check then failed
+      to read a file that did not exist and scored that as success. It would
+      have passed identically with the rule doing nothing. The rig plants while
+      unarmed and verifies the plant took now; **needs a re-run**.
 - [ ] A normal desktop session comes up, logs in, and runs for an hour with no
       rule firing. The false-positive rate of these three rules is asserted;
       it has not been measured.
