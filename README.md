@@ -51,8 +51,9 @@ adapted to it — one that knows the AI daemon exists.
 
 ## Quick start
 
-Grab the latest ISO from [Releases](https://github.com/velle999/SYNAPSE/releases/latest)
-and boot it. The live image asks one question, and it has three answers:
+Grab the latest ISO from [Releases](https://github.com/velle999/SYNAPSE/releases/latest),
+[write it to a USB stick](#getting-it-onto-a-usb-stick), and boot it. The live
+image asks one question, and it has three answers:
 
 ```
 1) Install SynapseOS     — right here, in this terminal
@@ -72,6 +73,61 @@ first-class answer. Until then `synapd` runs in shell-assist mode, so `syn
 status` reporting `model ✗ not installed` on live media is expected rather than
 a fault. See [The model](#the-model).
 
+### Getting it onto a USB stick
+
+The download is **split into `.part*` files** — GitHub caps a release asset at
+2 GiB and the image is bigger than that — so there is a join step before there
+is an ISO. Download every `.part*` file plus `SynapseOS-<ver>-x86_64.iso.sha256`
+into one folder. Joining is a plain byte-for-byte concatenation; the checksum is
+what tells you it worked.
+
+**Linux / macOS**
+
+```bash
+cat SynapseOS-<ver>-x86_64.iso.part* > SynapseOS-<ver>-x86_64.iso
+sha256sum -c SynapseOS-<ver>-x86_64.iso.sha256     # shasum -a 256 -c on macOS
+sudo dd if=SynapseOS-<ver>-x86_64.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+Check `/dev/sdX` with `lsblk` first, and write to the **disk** (`/dev/sdb`), not
+a partition on it (`/dev/sdb1`).
+
+**Windows** — most people installing a Linux distro are still on the OS they are
+leaving, so this path is supported rather than assumed away. In **Command
+Prompt**, in the folder you downloaded to:
+
+```bat
+copy /b SynapseOS-<ver>-x86_64.iso.part00 + SynapseOS-<ver>-x86_64.iso.part01 SynapseOS-<ver>-x86_64.iso
+certutil -hashfile SynapseOS-<ver>-x86_64.iso SHA256
+```
+
+Name every part, in order, joined by `+`. `/b` is **not optional**: without it
+`copy` runs in text mode and stops at the first `0x1A` byte — a few hundred KB
+into the image — leaving a short file, no error message, and a stick that will
+not boot. Compare what `certutil` prints against the contents of the `.sha256`
+file, or let **PowerShell** do it:
+
+```powershell
+(Get-FileHash -Algorithm SHA256 .\SynapseOS-<ver>-x86_64.iso).Hash -eq (((Get-Content .\SynapseOS-<ver>-x86_64.iso.sha256) -split '\s+')[0]).ToUpper()
+```
+
+`True` means the join is good. (`Get-FileHash` prints uppercase hex where
+`sha256sum` writes lowercase — same bytes, hence the `.ToUpper()`.)
+
+Then write it, with **[Rufus](https://rufus.ie/)** (pick the ISO, START, and
+choose **DD Image mode** when asked — this is a hybrid image, and ISO mode
+rebuilds boot files it has no reason to get right),
+**[balenaEtcher](https://etcher.balena.io/)** (nothing to configure), or
+**[Ventoy](https://www.ventoy.net/)** (copy the `.iso` onto an existing Ventoy
+stick and pick it from the menu — nothing is erased). **Writing a stick erases
+it**; Ventoy is the exception.
+
+Boot the stick from your firmware's boot menu — usually `F12`, `F11`, `Esc` or
+`Del` at power-on. Secure Boot has to be off, or SynapseOS enrolled; see
+[Secure Boot](https://github.com/velle999/SYNAPSE/wiki/Secure-Boot).
+
+### Trying it in a VM instead
+
 To take it for a spin without touching hardware:
 
 ```bash
@@ -85,6 +141,8 @@ and attaches a persistent 20 GB test disk. It asks for 8 GB of RAM by default,
 which is what a `--with-model` image wants; a stock ISO runs in 4 GB. Kernel and
 boot output are mirrored to the serial console — `View → serial0` in the QEMU
 window.
+
+### Installing it
 
 When you are ready to install, `syn-install` from the live session offers a
 whole-disk install with optional **LUKS2 full-disk encryption**, or — on UEFI,
