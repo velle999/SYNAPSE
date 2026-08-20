@@ -417,6 +417,37 @@ LIMINE
 check "a complete limine.conf passes" "no" \
     "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
 
+# ⚠ THE HASH PIN. limine-entry-tool (installed by the mkinitcpio hook, and re-run
+# by every future kernel) boots private per-kernel copies under
+# /boot/<machine-id>/<kernel>/ and pins each in limine.conf with a BLAKE2B-512
+# suffix written `path#<hash>`. The `#<hash>` is limine syntax, NOT part of the
+# filename — the file on disk has no hash. A checker that does not strip it tests
+# a path ending in 128 hex digits, which can never exist, and dies on EVERY
+# install that reaches the hook: reported 2026-08-20 as "a limine entry names a
+# file that is not on the ESP" over a perfectly bootable system.
+mkdir -p "$esp/deadbeef/linux"
+: > "$esp/deadbeef/linux/initramfs"
+: > "$esp/deadbeef/linux/vmlinuz"
+cat >> "$esp/limine.conf" << 'PINNED'
+
+/+SynapseOS (managed)
+  //linux
+    protocol: linux
+    path: boot():/deadbeef/linux/vmlinuz#fc76af6e9d952a3efac1eb7906ef27ab373162c865cf41297ffb2362805b4538
+    module_path: boot():/deadbeef/linux/initramfs#08c20b3ac414919c0a7ee17d58af1fbcf7b7dcfb4159cd849997fcb14f37539b
+PINNED
+check "a hash-pinned limine entry whose files exist passes" "no" \
+    "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
+
+# The real file gone, the pinned entry still present: the strip must not hide a
+# genuinely missing kernel, only the hash.
+rm -f "$esp/deadbeef/linux/initramfs"
+check "a hash-pinned entry whose file is MISSING is still caught" "yes" \
+    "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
+check "and it reports the de-hashed path" "limine.conf: /deadbeef/linux/initramfs" \
+    "$(esp_entry_missing_file "$esp")"
+: > "$esp/deadbeef/linux/initramfs"
+
 printf '     ////SynapseOS\n     kernel_path: boot():/limine_history/vmlinuz_gone\n' >> "$esp/limine.conf"
 check "a limine entry with no kernel is caught" "yes" \
     "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"

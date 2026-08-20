@@ -37,7 +37,25 @@ pkgver=0.1.0
 #     software centres. The list names what it keeps and the comment says what
 #     it dropped and why. ⚠ kde-applications-meta on the KDE path is the same
 #     problem an order of magnitude larger and is deliberately NOT changed here.
-pkgrel=84
+# 85: the install verified as FAILED but had succeeded. Reported 2026-08-20 with
+#   a screenshot: "Installation failed" over a log that was green to the last
+#   step, dying on
+#     ✗ a limine entry names a file that is not on the ESP —
+#       limine.conf: /<machine-id>/linux/initramfs#1dfefcbeb440…
+#   That #<128-hex> is limine's BLAKE2B-512 INTEGRITY PIN, written `path#<hash>`
+#   by limine-entry-tool — which the mkinitcpio hook installed one step earlier
+#   runs, and which every future kernel runs again. It boots private per-kernel
+#   copies under /boot/<machine-id>/<kernel>/, not /boot/vmlinuz-*, and pins each
+#   (see reference_limine_entry_dir_goes_stale). The `#<hash>` is limine SYNTAX,
+#   not part of the filename: the file on disk is `…/linux/initramfs`.
+#   esp_entry_missing_file() tested the whole string with [ -f ], so it looked
+#   for a file ending in 128 hex digits — which never exists — and died on every
+#   install that reached the hook, over a perfectly bootable system. It now
+#   strips the pin (p=${p%%#*}), guards on the boot(): prefix, and also matches
+#   `path:` (limine-entry-tool's key for the kernel). layout_test.sh gains a
+#   hash-pinned case both ways: files present passes, a genuinely missing file
+#   is still caught and reported de-hashed.
+pkgrel=85
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

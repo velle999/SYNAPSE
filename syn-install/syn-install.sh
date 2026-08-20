@@ -484,10 +484,36 @@ esp_entry_missing_file() {   # esp_entry_missing_file <esp-root>
     if [ -f "$esp/limine.conf" ]; then
         while read -r key val rest; do
             case "$key" in
-                kernel_path:|module_path:)
-                    p="${val#boot():}"
-                    [ -f "$esp/$p" ] || { echo "limine.conf: $p"; return 0; } ;;
+                kernel_path:|module_path:|path:) ;;
+                *) continue ;;
             esac
+
+            # Only ESP-relative paths are ours to check. limine also accepts
+            # uri()/tftp()/other roots, and a `path:` on a non-boot-entry line
+            # (a background, a module on another device) is not a file this
+            # verification knows how to locate. Skip anything without boot():.
+            case "$val" in
+                boot\(\):*) p="${val#boot():}" ;;
+                *) continue ;;
+            esac
+
+            # ⚠ STRIP limine's INTEGRITY PIN. limine-entry-tool — installed just
+            # above, and again by every future kernel's mkinitcpio hook — does
+            # not point at /boot/vmlinuz-linux. It boots private per-kernel
+            # copies under /boot/<machine-id>/<kernel>/ and pins each one in
+            # limine.conf with a BLAKE2B-512 hash written as `path#<hash>`:
+            #
+            #   module_path: boot():/<machine-id>/linux/initramfs#08c20b3a…
+            #
+            # The `#<hash>` is limine SYNTAX, not part of the filename — the file
+            # on disk is `…/linux/initramfs`. Without this strip, [ -f ] tests a
+            # path that ends in a 128-hex-digit suffix and can NEVER exist, so
+            # this check died on every install that reached the hook (the report
+            # was "a limine entry names a file that is not on the ESP" over a
+            # perfectly bootable system). See reference_limine_entry_dir_goes_stale.
+            p="${p%%#*}"
+
+            [ -f "$esp/$p" ] || { echo "limine.conf: $p"; return 0; }
         done < "$esp/limine.conf"
     fi
 
