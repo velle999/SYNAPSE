@@ -377,6 +377,15 @@ const char *sg_bpf_counters(char *buf, size_t len)
 	return buf;
 }
 
+unsigned long long sg_bpf_denies_total(void)
+{
+	struct sg_bpf_control c;
+
+	if (!g_attached || sg_bpf_read_control(&c) != 0)
+		return 0;
+	return (unsigned long long)c.denies_total;
+}
+
 int sg_bpf_enforcement_live(void)
 {
 	struct sg_bpf_control c;

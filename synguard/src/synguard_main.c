@@ -54,6 +54,21 @@ static void signal_handler(int sig)
         sg_log(LOG_INFO, "synguard: signal %d — shutting down", sig);
         g_state.running = 0;
         break;
+    case SIGUSR1:
+        /* Dump what the kernel gate has done, on demand.
+         *
+         * The on-change line in the loop reports refusals; this reports the
+         * whole picture — whether the gate is open, and WHY when it is closed.
+         * Asked for by hand ("is this thing actually armed right now") and by
+         * tools/bpf-enforce-check.sh, which needs a sample it can trust rather
+         * than a startup line that may be a minute stale.
+         *
+         * ⚠ Safe from a handler because sg_log is the only call and this
+         * subsystem's status read is a bounded map lookup. It does NOT touch
+         * the rule list, which SIGHUP does under a lock. */
+        g_state.want_bpf_status = 1;
+        break;
+
     case SIGHUP:
         sg_log(LOG_INFO, "synguard: SIGHUP — reloading rules");
         rules_free(&g_state);
@@ -73,6 +88,7 @@ static void setup_signals(void)
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT,  &sa, NULL);
     sigaction(SIGHUP,  &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL);
     sa.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa, NULL);
 }
@@ -215,11 +231,57 @@ static int run_event_loop(synguard_state_t *s)
      */
     time_t last_save  = time(NULL);
     time_t last_stats = time(NULL);
+#ifdef SYNGUARD_HAVE_BPF_LSM
+    /* What the kernel gate had refused when we last looked. See the block in
+     * the loop below. */
+    unsigned long long last_denies = 0;
+    int denies_primed = 0;
+#endif
 
     while (s->running) {
         sleep(1);
 
         time_t now = time(NULL);
+
+#ifdef SYNGUARD_HAVE_BPF_LSM
+        /*
+         * ⚠ A KERNEL REFUSAL WAS INVISIBLE. `bpf-lsm: denied=…` was logged
+         * exactly once, from the startup banner, and nothing ever re-emitted
+         * it — so a gate that had refused four thousand opens and one that had
+         * refused none produced identical journals for the life of the
+         * process. The one event this whole subsystem exists to produce left
+         * no trace at all.
+         *
+         * Found by the rig that was written to prove the gate works
+         * (tools/bpf-enforce-check.sh): it watched the counter across a
+         * refusal it had just caused, and the counter had not moved, because
+         * nothing had asked the kernel for it since boot.
+         *
+         * ON CHANGE, not on a timer. A refusal is rare and worth a line; a
+         * periodic dump of a number that is usually zero is the noise that
+         * teaches people to filter this subsystem out. The first read only
+         * primes the baseline — a daemon restarting with a non-zero counter
+         * has not just refused anything.
+         */
+        if (s->want_bpf_status) {
+            s->want_bpf_status = 0;
+            char st[256];
+            sg_log(LOG_INFO, "bpf-lsm: %s", sg_bpf_status(st, sizeof(st)));
+        }
+
+        {
+            unsigned long long d = sg_bpf_denies_total();
+            if (!denies_primed) {
+                last_denies = d;
+                denies_primed = 1;
+            } else if (d != last_denies) {
+                char st[256];
+                sg_log(LOG_WARNING, "bpf-lsm: REFUSED %llu since the last line — %s",
+                       d - last_denies, sg_bpf_status(st, sizeof(st)));
+                last_denies = d;
+            }
+        }
+#endif
 
         /* Flush baseline to disk every 5 minutes */
         if (now - last_save > 300) {

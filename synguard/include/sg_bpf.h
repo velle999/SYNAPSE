@@ -169,6 +169,12 @@ int  sg_bpf_read_control(struct sg_bpf_control *out);
  * is open RIGHT NOW with the reason if not. Always writes something. */
 const char *sg_bpf_status(char *buf, size_t len);
 
+/* How many opens the gate has refused, total, straight out of the control map.
+ * 0 when the gate is not attached — which is indistinguishable from "attached
+ * and has refused nothing", and deliberately so: the caller that cares
+ * (synguard_main's loop) is watching for CHANGE, and neither state changes. */
+unsigned long long sg_bpf_denies_total(void);
+
 /* One-line counters for the periodic stats: denials, and gate opens broken out
  * PER REASON — a sum is not actionable, but "4000 of them were a stale
  * heartbeat" points straight at the problem. */

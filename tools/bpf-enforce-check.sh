@@ -78,9 +78,27 @@ read_canary() {
         /usr/bin/cat "$CANARY" >/dev/null 2>&1
 }
 
+# ⚠ ASK, DO NOT SCRAPE THE BOOT LINE. `bpf-lsm: denied=…` used to be logged
+# once, from the startup banner, and never again — so reading it out of the
+# journal after causing a refusal read the value from BEFORE the refusal, and
+# this script reported "the counter did not move" against a gate that was
+# working perfectly. That was this rig's first real finding, and it was a
+# finding about synguard rather than about the kernel: a refusal left no trace
+# in the journal at all.
+#
+# synguard dumps a fresh line on SIGUSR1 now. Sample it that way, and give the
+# main loop a moment to service the flag — it is set in the handler and acted
+# on by a loop that ticks once a second.
+bpf_sample() {
+    local pid
+    pid=$(systemctl show synguard -p MainPID --value)
+    [ -n "$pid" ] && [ "$pid" != 0 ] && kill -USR1 "$pid" 2>/dev/null
+    sleep 2
+}
 gate_line()  { journalctl -u synguard -n 200 --no-pager 2>/dev/null |
                grep -o 'bpf-lsm: .*' | tail -1; }
-denied_now() { journalctl -u synguard -n 400 --no-pager 2>/dev/null |
+denied_now() { bpf_sample
+               journalctl -u synguard -n 400 --no-pager 2>/dev/null |
                grep -o 'denied=[0-9]*' | tail -1 | cut -d= -f2; }
 
 disarm() {
@@ -89,6 +107,23 @@ disarm() {
     systemctl daemon-reload 2>/dev/null
     systemctl restart synguard 2>/dev/null
     systemctl stop "$DEADMAN.timer" "$DEADMAN.service" 2>/dev/null
+}
+
+# Put the drop-in back and restart. Phase 4 needs the gate down to plant a file
+# the armed rule refuses to let it create, and up again to test it.
+rearm() {
+    mkdir -p "$DROPIN_DIR"
+    {
+        echo "[Service]"
+        echo "ExecStart="
+        echo "ExecStart=/usr/bin/synguard --foreground --mode enforce --rules /etc/synguard/rules.d/ --bpf-enforce"
+    } > "$DROPIN"
+    systemctl daemon-reload
+    systemctl restart synguard
+    # ⚠ Past the warmup, or every check after this reads an unarmed gate and
+    # scores it as the rule not working.
+    note "re-arming and waiting out the 30s warmup…"
+    sleep 34
 }
 
 cleanup() {
@@ -215,28 +250,73 @@ fi
 note "$(gate_line)"
 
 # ── 4. /etc/ld.so.preload: the rule that matters ─────────────────────────────
-head2 "4 · a planted /etc/ld.so.preload is refused, and nothing breaks"
+#
+# ⚠ THE PLANT HAPPENS BEFORE ARMING, and the first version of this got it
+# wrong in a way worth writing down. It planted the file with the gate already
+# armed — and the rule is `event open`, which refuses the O_CREAT too, so the
+# shell's redirect failed with "Operation not permitted" and the file was never
+# created. The next check then read a file that did not exist, failed, and was
+# scored as "the planted preload is refused". A PASS FOR THE WRONG REASON: it
+# would have passed identically with the rule doing nothing.
+#
+# So: plant while unarmed, re-arm, then test. That is also the honest scenario —
+# a rootkit that got in before synguard did.
+#
+# The write being refused while armed is a real and separate result, and it is
+# now asserted as itself rather than mistaken for this one.
+head2 "4 · a preload planted BEFORE synguard is refused, and nothing breaks"
 note "the claim: refusing the READ neuters an already-planted rootkit, and"
 note "glibc treats a failed open as 'no preload' — so the machine still works"
+
 if [ -e "$PRELOAD" ]; then
     skipm "$PRELOAD already exists — not touching it"
     note "this machine has one already, which is itself worth looking at"
 else
-    # A path that does not exist, so even if the rule failed entirely the only
-    # consequence is a loader warning. Never a real library.
-    echo "/nonexistent/$MARKER.so" > "$PRELOAD"
-    if systemd-run -q --wait --collect /bin/true 2>/dev/null; then
-        ok "a normal program still runs with the preload planted"
+    # First: with the gate ARMED, creating it must be refused. This is the
+    # protection working at the moment of the attack rather than after it.
+    if echo "/nonexistent/$MARKER.so" > "$PRELOAD" 2>/dev/null; then
+        bad "the armed gate allowed $PRELOAD to be CREATED"
+        rm -f "$PRELOAD"
     else
-        bad "a program failed to run — the refusal broke exec, which it must not"
+        ok "while armed, $PRELOAD cannot even be created"
     fi
-    if systemd-run -q --wait --collect /usr/bin/cat "$PRELOAD" >/dev/null 2>&1; then
-        bad "the planted $PRELOAD was READABLE — the rule did not act"
+
+    # Now the harder case: it is already there when synguard starts.
+    note "disarming to plant one, as a rootkit that arrived first would…"
+    disarm
+    sleep 3
+    if echo "/nonexistent/$MARKER.so" > "$PRELOAD" 2>/dev/null; then
+        # ⚠ Prove the plant took. Without this the re-arm below would be
+        # testing an empty directory again, which is how the first version of
+        # this phase fooled itself.
+        if grep -q "$MARKER" "$PRELOAD" 2>/dev/null; then
+            ok "planted $PRELOAD while unarmed (the file really is there)"
+        else
+            bad "the plant did not take — the rest of this phase is meaningless"
+        fi
+
+        rearm
+        if systemd-run -q --wait --collect /bin/true 2>/dev/null; then
+            ok "a normal program still runs with the preload in place"
+            note "glibc's failed open reads as 'no preload' — the machine works"
+        else
+            bad "a program failed to run — the refusal broke exec, which it must not"
+        fi
+        if systemd-run -q --wait --collect /usr/bin/cat "$PRELOAD" >/dev/null 2>&1; then
+            bad "the planted $PRELOAD was READABLE — the rule did not act"
+        else
+            ok "the planted $PRELOAD is refused, so its libraries never load"
+        fi
+
+        # Removing it needs the gate down again — the rule refuses the open
+        # either way round.
+        disarm; sleep 2
+        rm -f "$PRELOAD"
+        note "removed the test file"
+        rearm
     else
-        ok "the planted $PRELOAD is refused"
+        bad "could not plant $PRELOAD even while disarmed"
     fi
-    rm -f "$PRELOAD"
-    note "removed the test file"
 fi
 
 # ── 5. Fail-open when the daemon wedges ──────────────────────────────────────

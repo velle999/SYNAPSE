@@ -36,6 +36,7 @@
  */
 #pragma once
 
+#include <signal.h>   /* sig_atomic_t — see want_bpf_status */
 #include <stdint.h>
 #include <stdatomic.h>
 #include <stddef.h>
@@ -289,6 +290,11 @@ typedef struct synguard_state {
     sg_stats_t       stats;
 
     /* Rule engine */
+    /* Set by SIGUSR1, serviced in the main loop: dump what the kernel gate has
+     * done. A flag rather than the work itself, because the work logs and a
+     * signal handler is not the place for it. */
+    volatile sig_atomic_t want_bpf_status;
+
     sg_rule_t       *rules_head;
     int              rules_count;
     pthread_rwlock_t rules_lock;

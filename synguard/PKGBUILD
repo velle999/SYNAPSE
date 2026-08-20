@@ -22,7 +22,22 @@ pkgver=0.1.0
 #   lowering refuses. Verified by lower_test, not asserted. The kernel gate
 #   still needs --bpf-enforce, which the unit does NOT pass: these are
 #   after-the-fact kills until somebody arms it deliberately.
-pkgrel=35
+# 36: A KERNEL REFUSAL LEFT NO TRACE. `bpf-lsm: denied=…` was logged exactly
+#   once, from the startup banner, and nothing ever re-emitted it — so a gate
+#   that had refused four thousand opens and one that had refused none produced
+#   identical journals for the life of the process. The single event this
+#   subsystem exists to produce was invisible.
+#   Found by tools/bpf-enforce-check.sh on the first real run of the gate: it
+#   watched the counter across a refusal it had just caused and saw 0 -> 0,
+#   because nothing had asked the kernel for the number since boot. The gate
+#   was working perfectly; the reporting was not.
+#   Now logged ON CHANGE at WARNING (a refusal is rare and worth a line; a
+#   timer dumping a usually-zero number is the noise that gets a subsystem
+#   filtered out), with the first read only priming the baseline so a restart
+#   does not report old denials as new. SIGUSR1 dumps the full status on
+#   demand — whether the gate is open and WHY when it is closed — which is what
+#   the rig now samples instead of scraping a boot line.
+pkgrel=36
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
