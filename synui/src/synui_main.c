@@ -488,8 +488,14 @@ static void scene_commit_nightlight(syn_output_t *output)
     int temp = nightlight_effective_temp(output->server);
 
     /* wlr_scene_output_commit()'s own guard — with the addition that a night
-     * light change is worth a commit even when nothing on screen moved. */
-    if (temp == output->nightlight_temp &&
+     * light change is worth a commit even when nothing on screen moved.
+     *
+     * The LUT length counts as a change too: an output first asked before it
+     * had a CRTC reports a gamma size of 0 and gets the fallback length, which
+     * the driver then refuses. Without the dim in the comparison that refusal
+     * is stamped once and never revisited. */
+    size_t dim = nightlight_lut_dim(wo);
+    if (temp == output->nightlight_temp && dim == output->nightlight_dim &&
         !wlr_scene_output_needs_frame(scene_output))
         return;
 
@@ -521,7 +527,7 @@ static void scene_commit_nightlight(syn_output_t *output)
 
     /* NULL is night light off, and committing it is how the screen gets its
      * colour back — an identity transform every backend can honour. */
-    struct wlr_color_transform *nl = nightlight_color_transform(output->server);
+    struct wlr_color_transform *nl = nightlight_color_transform(output->server, wo);
     bool warm_ok = true;
     struct wlr_output_state warm = {0};
     if (wlr_output_state_copy(&warm, &state)) {
@@ -537,12 +543,14 @@ static void scene_commit_nightlight(syn_output_t *output)
     if (wlr_output_commit_state(wo, &state)) {
         if (!warm_ok)
             wlr_log(WLR_ERROR, "synui: nightlight: %s will not take the %dK "
-                    "transform — frame committed without it", wo->name, temp);
+                    "transform at %zu LUT entries — frame committed without it",
+                    wo->name, temp, dim);
         /* Stamped even when the transform was refused: a backend that says no
          * once says no to the same transform every frame, and retrying it per
          * frame would mean testing, and logging, at the refresh rate. The next
-         * temperature change asks again. */
+         * temperature change — or a change of LUT length — asks again. */
         output->nightlight_temp = temp;
+        output->nightlight_dim  = dim;
     }
 
     wlr_output_state_finish(&state);
@@ -675,7 +683,8 @@ static void output_frame(struct wl_listener *listener, void *data)
      * only the LUT they are scanned out through moves — so on a still screen
      * the commit below would be skipped and the toggle would do nothing until
      * something else happened to repaint. Damage the output for it. */
-    if (output->nightlight_temp != nightlight_effective_temp(output->server))
+    if (output->nightlight_temp != nightlight_effective_temp(output->server) ||
+        output->nightlight_dim  != nightlight_lut_dim(output->wlr_output))
         syn_output_damage_whole(output);
 
     /* GLES post-process pass when available; plain scene commit otherwise

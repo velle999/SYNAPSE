@@ -238,7 +238,24 @@ pkgver=0.1.0
 #   existing default printer stays the default. lpadmin is tried unprivileged
 #   first (a box whose policy allows it must not be made to authenticate) and
 #   falls back to pkexec, never sudo — there is no terminal to type into.
-pkgrel=407
+# 408: NIGHT LIGHT DID NOTHING ON A LAPTOP. nightlight.c built ONE 1024-entry
+#   colour transform for every output, on the stated reasoning that a transform
+#   is resampled by whatever consumes it so the dimension was ours to pick. It
+#   is not resampled: wlroots hands the LUT to the kernel at exactly the length
+#   it was built, and every driver checks that length against the CRTC's gamma
+#   size — i915's check_lut_size() demands an exact match, and the legacy
+#   drmModeCrtcSetGamma fallback (taken when a CRTC has no GAMMA_LUT property)
+#   rejects anything that is not crtc->gamma_size. 1024 was a guess that
+#   happened to be right here: this desk's NVIDIA CRTCs report GAMMA_LUT_SIZE
+#   1024, measured. Intel panels report 256 or 257, AMD 4096 — the test commit
+#   is refused, the frame goes out untinted, and the only trace is one
+#   WLR_ERROR line. The size now comes from wlr_output_get_gamma_size() per
+#   output, transforms are cached BY DIMENSION (a hybrid laptop needs two at
+#   once), and the committed dim is stamped beside the temperature so a
+#   connector that had no CRTC when first asked is re-tested rather than
+#   written off. tests/nightlight_test.c stubs the gamma size and fails on the
+#   old behaviour.
+pkgrel=408
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

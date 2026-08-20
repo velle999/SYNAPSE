@@ -4864,6 +4864,15 @@ struct syn_output {
      * was switched off. */
     int                      nightlight_temp;
 
+    /* nightlight.c: the LUT length that transform was built at. Committed
+     * beside the temperature because the temperature alone is not enough to
+     * know the committed transform is still the right one: a connector that
+     * had no CRTC when it was first asked reports a gamma size of 0, takes the
+     * fallback length, and is refused — and without this the refusal would be
+     * stamped and never retried once the CRTC arrived. 0 until the first
+     * commit, which no real gamma size ever is. */
+    size_t                   nightlight_dim;
+
     /* synui_main.c: the right-edge damage trace. Per OUTPUT, never a function
      * static — the commit path runs once per output and a shared static would
      * make three screens overwrite each other's counts (the 393 trace did
@@ -7700,8 +7709,20 @@ void nightlight_apply(syn_server_t *s);
 void nightlight_toggle(syn_server_t *s);
 /* The warmth, as the colour transform the OUTPUT STATE must carry (wlroots 0.20
  * replaced the gamma-LUT commit with this). NULL when night light is off.
- * Borrowed — do not unref. */
-struct wlr_color_transform *nightlight_color_transform(syn_server_t *s);
+ * Borrowed — do not unref.
+ *
+ * ⚠ The OUTPUT is not decoration. The transform's LUT is handed to the kernel
+ * at exactly the length it was built, and every driver checks that length
+ * against the CRTC's gamma size — so it is built per output, at whatever
+ * wlr_output_get_gamma_size() reports. A hard-coded 1024 matched NVIDIA and
+ * nothing else, which is why night light worked on the desktop and did nothing
+ * at all on the laptop. */
+struct wlr_color_transform *nightlight_color_transform(syn_server_t *s,
+                                                       struct wlr_output *wo);
+/* The LUT length that output's transform will be built at — the hardware's own
+ * gamma size, or the fallback where the backend reports none. Committed
+ * alongside the temperature so a connector that changes CRTC re-tests. */
+size_t nightlight_lut_dim(struct wlr_output *wo);
 /* The temperature that transform stands for: the configured Kelvin while night
  * light is on, 0 (identity) while it is off. What syn_output.nightlight_temp is
  * compared against to decide a commit is needed. */

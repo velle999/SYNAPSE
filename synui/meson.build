@@ -987,6 +987,21 @@ gguf_test = executable('gguf_test',
   build_by_default : false)
 test('gguf', gguf_test)
 
+# Night light's LUT length. The one input that decides whether a colour
+# transform is accepted at all is the CRTC's gamma size, and it is not
+# reachable from a test — a headless output reports none — so
+# wlr_output_get_gamma_size() is stubbed in the test executable, whose
+# definition wins over the shared library's. See the test's header: a
+# hard-coded 1024 matched the NVIDIA desktop and nothing else.
+nightlight_test = executable('nightlight_test',
+  ['tests/nightlight_test.c', 'src/nightlight.c'],
+  include_directories : include_directories('src'),
+  dependencies : [wlroots, wayland, pixman, libm, scenefx, xkbcommon,
+                  cairo, fontconfig],
+  c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
+  build_by_default : false)
+test('nightlight', nightlight_test)
+
 edid_hdr_test = executable('edid_hdr_test',
   ['tests/edid_hdr_test.c', 'src/edid.c'],
   include_directories : include_directories('src'),

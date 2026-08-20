@@ -829,7 +829,8 @@ bool effects_output_commit(syn_output_t *output)
      * refuses the transform fails the WHOLE commit, which here would mean a
      * dropped frame every frame rather than a missing tint. */
     int temp = nightlight_effective_temp(s);
-    struct wlr_color_transform *nl = nightlight_color_transform(s);
+    size_t nl_dim = nightlight_lut_dim(wo);
+    struct wlr_color_transform *nl = nightlight_color_transform(s, wo);
     bool warm_ok = true;
     struct wlr_output_state warm = {0};
     if (wlr_output_state_copy(&warm, &st2)) {
@@ -848,13 +849,18 @@ bool effects_output_commit(syn_output_t *output)
     if (ok) {
         if (!warm_ok)
             wlr_log(WLR_ERROR, "synui: nightlight: %s will not take the %dK "
-                    "transform — frame committed without it", wo->name, temp);
+                    "transform at %zu LUT entries — frame committed without it",
+                    wo->name, temp, nl_dim);
         /* Stamped for the same reason the scene path stamps it, and with the
          * same "asked once" rule for a refusal. Leaving it unstamped is not
          * merely untidy: output_frame() damages the whole output whenever this
          * disagrees with the effective temperature, so an effects session that
-         * never stamped repainted everything, every frame, forever. */
+         * never stamped repainted everything, every frame, forever.
+         *
+         * The dim goes with it, and output_frame compares that too — see
+         * scene_commit_nightlight. */
         output->nightlight_temp = temp;
+        output->nightlight_dim  = nl_dim;
     }
 
     wlr_buffer_unlock(dst);
