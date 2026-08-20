@@ -322,15 +322,23 @@ else
     note "disarming to plant one, as a rootkit that arrived first would…"
     disarm
     sleep 3
-    if plant_preload; then
-        # ⚠ Prove the plant took. Without this the re-arm below would be
-        # testing an empty directory again, which is how the first version of
-        # this phase fooled itself.
-        if grep -q "$MARKER" "$PRELOAD" 2>/dev/null; then
-            ok "planted $PRELOAD while unarmed (the file really is there)"
-        else
-            bad "the plant did not take — the rest of this phase is meaningless"
-        fi
+
+    # ⚠ IGNORE THE EXIT STATUS OF THE PLANT. `deny-ld-preload` matches
+    # `access write`, so creating this file is exactly what it is there to
+    # catch — and synguard's USERSPACE path kills the writer's tree a moment
+    # after the write has already succeeded. So the plant is expected to come
+    # back non-zero (its scope was killed) while the file IS on disk. Gating on
+    # the status would report "could not plant" against a plant that worked,
+    # and skip the whole phase.
+    #
+    # The FILE is the fact. Ask the filesystem, not the exit code.
+    plant_preload
+    sleep 3
+    if grep -q "$MARKER" "$PRELOAD" 2>/dev/null; then
+        ok "planted $PRELOAD while unarmed (the file really is there)"
+        note "the writer's scope was torn down for it, which is the userspace"
+        note "path doing its job — the file lands anyway, because a kill is"
+        note "after the fact and a write is not undone by one"
 
         rearm
         if systemd-run -q --wait --collect /bin/true 2>/dev/null; then
@@ -345,14 +353,15 @@ else
             ok "the planted $PRELOAD is refused, so its libraries never load"
         fi
 
-        # Removing it needs the gate down again — the rule refuses the open
-        # either way round.
+        # unlink() is not open(), so removing it matches nothing on either
+        # path and needs no ceremony.
         disarm; sleep 2
         unplant_preload
         note "removed the test file"
         rearm
     else
-        bad "could not plant $PRELOAD even while disarmed"
+        bad "could not plant $PRELOAD even while disarmed — the phase below"
+        note "would be testing a file that is not there, so it is skipped"
     fi
 fi
 
