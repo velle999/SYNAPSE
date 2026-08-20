@@ -849,6 +849,14 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_NETWORK,   CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Network / Wi-Fi", "network"   },
     { CTL_ROW_BLUETOOTH, CTL_CAT_NETWORK, CTL_KIND_PANEL,  "Bluetooth",       "bluetooth" },
     { CTL_ROW_PRINTERS,  CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Printers",        "printers"  },
+    /* The row that comes BEFORE opening an admin page. CUPS's web UI can do
+     * everything and starts by asking which discovery protocol to use and which
+     * driver to install — two questions whose answer, for any network printer
+     * sold this decade, is "ask the printer". This finds them and sets them up
+     * driverless, and reports by toast because the panel is gone by then. */
+    { CTL_ROW_PRINTERS_SCAN, CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Find printers",
+      "printers_scan",
+      .help = "Add every network printer that is not set up yet, driverless" },
 
     /* Power */
     { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power",
@@ -1910,6 +1918,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "printers",          "Printers" },
         { "about",             "About OS" },
         { "settings",          "System settings (syn-settings)" },
+        { "printers_scan",     "Find and add network printers" },
         { "overview",          "Mission control (all windows)" },   /* unbound: Alt+Tab */
         { "keybinds",          "Rebind a shortcut" },
         { "night_light",       "Night light" },

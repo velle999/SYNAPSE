@@ -1662,6 +1662,7 @@ typedef enum {
     CTL_ROW_AI_CTX_DECOR,
     CTL_ROW_NEWS_REFRESH,
     CTL_ROW_ABOUT,         /* System ▸ About OS — fetch, in a terminal */
+    CTL_ROW_PRINTERS_SCAN, /* Network ▸ Find printers — discover and add, driverless */
     CTL_ROW_SETTINGS,      /* System ▸ System settings — syn-settings, the APP */
     CTL_ROW_MONITORS,      /* Display ▸ Monitor settings — syn-settings' display pane */
     CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */

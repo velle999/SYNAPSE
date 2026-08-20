@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Add Printers
+GenericName=Printer Setup
+Comment=Find network printers and set them up, with no driver to choose
+# ⚠ NOT a synctl dispatch: synui-printers is a real program (it drives lpinfo
+# and lpadmin) and needs no compositor. The keybind path goes through the
+# `printers_scan` action only because a control-panel row has to name an action.
+#
+# --auto adds every printer that is not set up yet; --notify is what makes it
+# visible, because launched from a menu there is no terminal for it to report
+# to and a setup that says nothing is indistinguishable from one that did not
+# run. Nothing is overwritten: an existing queue is left alone and an existing
+# default printer stays the default.
+Exec=synui-printers add --auto --notify
+Icon=printer
+Terminal=false
+StartupNotify=false
+Categories=Settings;HardwareSettings;
+Keywords=printer;printing;cups;ipp;network;add;setup;discover;scan;
+# ⛔ SYNUI ONLY, for consistency with the rest of the entries this package ships
+# — under KDE or GNOME the desktop's own printer settings are the ones that
+# belong in its menus. The TOOL works anywhere; `synui-printers add --auto` is
+# a command line on any SynapseOS.
+OnlyShowIn=synui;SynapseOS;

@@ -423,7 +423,8 @@ install_data(['data/synui-calc.desktop',
               'data/synui-power.desktop',
               'data/synui-record.desktop',
               'data/synui-screenshot.desktop',
-              'data/synui-network.desktop'],
+              'data/synui-network.desktop',
+              'data/synui-printers.desktop'],
              install_dir : get_option('prefix') / get_option('datadir') / 'applications')
 
 # Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
@@ -1180,6 +1181,13 @@ test('game_actions', game_actions,
 # SYN_PANEL_LIST — the roster the pointer and keyboard chains already walk — so
 # a panel added to the compositor fails this until somebody decides, in
 # writing, whether it is an app or not.
+# Network printer discovery, against fake CUPS tools. It must not be tested any
+# other way: the real lpadmin would add queues to the machine running the build.
+printers = find_program('tests/printers.sh')
+test('printers', printers,
+     args    : [meson.current_source_dir() / 'systemd/synui-printers.sh'],
+     timeout : 60)
+
 menu_apps = find_program('tests/menu_apps.sh')
 test('menu_apps', menu_apps,
      args    : [meson.current_source_dir() / 'src/input.c',

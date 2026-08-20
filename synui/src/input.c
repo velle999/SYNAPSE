@@ -1231,6 +1231,15 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * socket-activates the daemon rather than refusing the connection. The
          * control panel's Printers row and the start menu both land here. */
         synui_spawn("xdg-open http://localhost:631/");
+    } else if (strcmp(action, "printers_scan") == 0) {
+        /* Find network printers and set them up, driverless. The `printers`
+         * action above opens CUPS's admin page, which is the right place to go
+         * when something needs configuring and the wrong place to start: it
+         * asks for a discovery protocol and a driver, and the answer to both
+         * for anything sold this decade is "ask the printer". synui-printers
+         * does that and reports by toast, because launched from a menu or a
+         * control-panel row there is no terminal for it to print to. */
+        synui_spawn("synui-printers add --auto --notify");
     } else if (strcmp(action, "settings") == 0) {
         /* syn-settings — the settings APP, which is a normal program and not a
          * compositor panel. The two are not rivals: the control panel is what

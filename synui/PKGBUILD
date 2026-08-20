@@ -209,7 +209,36 @@ pkgver=0.1.0
 #   pkgrels. tests/menu_apps.sh checks both halves now — every panel in
 #   SYN_PANEL_LIST is in the menus or exempt in writing, and every Exec here
 #   names an action input.c implements.
-pkgrel=406
+# 407: network printers find themselves. velle: "add printer scanning for
+#   network printers and auto add."
+#   The Printers row opened CUPS's web UI and that was the whole of printing
+#   support. It is a complete admin interface and the wrong FIRST answer to
+#   "there is a printer on my network": it opens by asking which discovery
+#   protocol to use and which driver to install, and for anything sold this
+#   decade the answer to both is "ask the printer".
+#   synui-printers(1) does that — `scan` lists what is out there and which of it
+#   is already set up, `add --auto` adds the rest with -m everywhere (IPP
+#   Everywhere, the printer describes its own capabilities). Network ▸ Find
+#   printers, and an Add Printers menu entry.
+#   ⚠ DISCOVERY IS lpinfo's, NOT avahi's: cupsd's dnssd backend already browses
+#   mDNS and already knows how to turn what it finds into a device URI it will
+#   accept, and assembling ipp:// URIs out of TXT records here would be a second
+#   worse copy of that. avahi is consulted for one thing — telling "no printers"
+#   apart from "cupsd is not browsing", which look identical and need different
+#   fixes.
+#   ⚠ lpinfo -l names its fields `uri` and `info`, NOT device-uri/device-info
+#   (those are the IPP attribute names, and the reasonable guess). The first
+#   version matched nothing, and the symptom on a network full of printers would
+#   have been "no network printers found" — a discovery tool whose failure mode
+#   is its normal result. Pinned in tests/printers.sh against the format strings
+#   in the binary itself.
+#   ⚠ Driverless ONLY. Guessing a PPD is how a printer produces forty blank
+#   pages; velle's own M2020W needs the Samsung ULD driver and is packaged
+#   separately. ⚠ Nothing is overwritten: an existing queue is skipped and an
+#   existing default printer stays the default. lpadmin is tried unprivileged
+#   first (a box whose policy allows it must not be made to authenticate) and
+#   falls back to pkexec, never sudo — there is no terminal to type into.
+pkgrel=407
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -307,7 +336,14 @@ depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 's
          # widget shells out in the first place. 200 KiB.
          'cava')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info')
-optdepends=('kitty: the terminal SynapseOS defaulted to before syntty — every synuirc written between synui 215 and 358 still names it, and anim.c draws it on glass'
+optdepends=(# Network printers: cups does the discovery (its own dnssd backend) and
+            # owns the queues; avahi is what makes the announcements visible at
+            # all. Neither is a hard dependency — a desktop with no printer
+            # should not pull in a print system — and synui-printers says which
+            # one is missing rather than reporting an empty network.
+            'cups: find and set up network printers (synui-printers)'
+            'avahi: the mDNS announcements network printers and shares make'
+            'kitty: the terminal SynapseOS defaulted to before syntty — every synuirc written between synui 215 and 358 still names it, and anim.c draws it on glass'
             'foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
             'imagemagick: same — most cursor makefiles render their PNGs with it'
@@ -754,6 +790,15 @@ package() {
     # compositor. See the header of systemd/synui-view-image.sh.
     install -Dm755 systemd/synui-view-image.sh \
         "$pkgdir/usr/bin/synui-view-image"
+
+    # Find network printers and set them up driverless. The control panel's
+    # Printers row opens CUPS's web UI, which is a complete admin interface and
+    # the wrong first answer to "there is a printer on my network" — it asks for
+    # a discovery protocol and a driver, and on anything sold this decade
+    # neither question has an interesting answer. See the script's header for
+    # why it is lpinfo and not avahi, and why driverless only.
+    install -Dm755 systemd/synui-printers.sh \
+        "$pkgdir/usr/bin/synui-printers"
 
     # Right-click an .iso in Dolphin -> Mount/Unmount Image, Write to USB Stick.
     # The service menu must be executable or KIO 6 skips it. See
