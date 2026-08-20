@@ -8,6 +8,40 @@
 # Requires: gh (authenticated), an ISO + .sha256/.b2sum in archiso/out.
 set -euo pipefail
 
+# ⚠ NOT UNDER sudo — and this is the whole reason for the guard rather than a
+# line in the header nobody re-reads.
+#
+# gh's credentials are PER USER: the token lives in $HOME/.config/gh/hosts.yml.
+# Run this with sudo and gh reads /root/.config/gh/hosts.yml, which on this box
+# does not exist, so it stops with "you need to authenticate" — on a machine
+# where `gh auth status` says, correctly, that you are logged in. Nothing about
+# the message names root or HOME, so the obvious reading is that the login has
+# broken, and re-running `gh auth login` fixes it for the user who was never the
+# problem. 0.2.9.1 was retried four times that way.
+#
+# Nothing here needs root either. It reads the ISO, writes split parts beside it
+# and uploads them; the build is what needs root, and build.sh gives the output
+# back to the invoking user when it is done.
+#
+# So: hand the job back to the user who typed sudo. Refuse outright only for a
+# real root login, where there is nobody to hand it to.
+if [[ "$(id -u)" -eq 0 ]]; then
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != 'root' ]]; then
+        echo "publish-release: gh is authenticated per user; re-running as $SUDO_USER" >&2
+        # -H so HOME follows, or gh looks in /root's config anyway and this
+        # accomplishes nothing. -- so a version that starts with a dash cannot
+        # be read as an option to sudo.
+        exec sudo -u "$SUDO_USER" -H -- "$0" "$@"
+    fi
+    echo "publish-release: run this as your own user, not root — gh's token lives in \$HOME/.config/gh" >&2
+    exit 1
+fi
+
+# ⚠ Leftovers from a previous root run are root-owned, and the split below is
+# SKIPPED when part00 exists — so the parts stay readable but .parts.sha256 is
+# rewritten every time, and that write is what fails. Say which files and why,
+# rather than letting the redirection die with "Permission denied" and no
+# subject.
 ver="${1:?usage: publish-release.sh <version>   e.g. publish-release.sh 0.1.0}"
 out="$(cd "$(dirname "$0")/out" && pwd)"
 # Resolved BEFORE the cd below, like $out is. It was relative once, which after
@@ -27,6 +61,15 @@ if [[ ! -f $iso.part00 ]]; then
     echo "splitting into 1900 MiB parts ..."
     split -b 1900M -d "$iso" "$iso.part"
 fi
+for f in "$iso".part[0-9]* "$iso.parts.sha256"; do
+    [[ -e $f ]] || continue
+    [[ -w $f ]] && continue
+    echo "publish-release: $out/$f is not writable by you — a previous run left it" >&2
+    echo "  owned by $(stat -c '%U' "$f"). Fix with:" >&2
+    echo "    sudo chown $(id -un) $out/$iso.part* $out/$iso.parts.sha256" >&2
+    exit 1
+done
+
 sha256sum "$iso".part[0-9]* > "$iso.parts.sha256"
 
 # The Windows join line, built from the parts that actually exist rather than
