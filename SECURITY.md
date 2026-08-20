@@ -125,6 +125,22 @@ defeats:
 - Secure Boot support, and LUKS from the installer
 - the AI backend can be turned off, and off survives a reboot
 
+## Work in progress
+
+`docs/SECURITY-ROADMAP.md` is the backlog behind this policy — what is known to
+be missing, in the order it is being done, with what "done" means for each. It
+is kept in the repository rather than in an issue tracker so that the honest
+answer to "is X covered yet" is one file away.
+
+Two things named there are worth knowing before you install anything:
+
+- **Releases are checksummed but not signed.** The `.sha256` proves the file is
+  intact, not that it came from us.
+- **Kernel-level enforcement is off by default.** `synguard`'s BPF-LSM gate is
+  not armed in the shipped unit, so its policy kills after the fact rather than
+  refusing a syscall. That is deliberate and it is also not yet verified in a
+  VM — which is why it is item one.
+
 ## Please do not
 
 - Run tests against machines that are not yours.
