@@ -310,7 +310,24 @@ pkgver=0.1.0
 #   view_step and view_escape now log at DEBUG what they did — nothing said
 #   which image was up, so "the arrows do nothing" and "the arrows moved to a
 #   file that would not decode" looked identical. tests/imgview_mouse.sh.
-pkgrel=411
+# 412: "Volume Mixer" in the menu opened EVENT SOUNDS. The real mixer — outputs,
+#   inputs, a slider per application stream — is quickshell's, a popup on the
+#   bar's volume module, and was reachable ONLY by right-clicking it. So the
+#   menu entry, whose Comment describes that mixer word for word, dispatched
+#   `sound` (no such action, dead from 392) and was then "fixed" to `sounds`,
+#   which exists and opens a different panel in a different process. A dead
+#   entry became a wrong one, which is worse: a dead entry gets reported, a
+#   wrong one gets lived with.
+#   The bar can be asked now. MixerState + an IpcHandler target, reached by a
+#   new `mixer` action through synui_bar_ipc() — the same client-ward route the
+#   start menu uses, factored out of synui_start_menu_open() now it has two
+#   callers. ⚠ The Connections block is SCREEN-SCOPED: Volume.qml is
+#   instantiated per monitor and without the output test one request opens a
+#   mixer on all three.
+#   Event sounds gets data/synui-sounds.desktop, its own entry under its own
+#   name — it had one by accident before. tests/menu_apps.sh caught that the
+#   moment the mixer took its Exec, which is exactly what it is for.
+pkgrel=412
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -62,6 +62,25 @@ ShellRoot {
         function close(): void                { MenuState.close() }
     }
 
+    // …and the volume mixer, the same way and for a sharper reason.
+    //
+    // The mixer is a popup on the bar's volume module and was reachable ONLY by
+    // right-clicking it. So the menu's "Volume Mixer" entry — which describes
+    // this mixer word for word — dispatched `sounds` and opened synui's Event
+    // sounds panel instead: a different thing, in a different process. There
+    // was no way for it to open this one, because nothing could ask the bar.
+    //
+    // ONE handler here rather than one inside Volume.qml: that module is
+    // instantiated per screen, so a handler in it would register the same IPC
+    // target once per monitor.
+    IpcHandler {
+        target: "mixer"
+
+        function toggle(output: string): void { MixerState.toggle(output) }
+        function open(output: string): void   { MixerState.show(output) }
+        function close(): void                { MixerState.close() }
+    }
+
     // Desktop widgets. All OFF until widgets.state says otherwise, and each
     // one shows on the primary output only — see WidgetState. They are
     // instantiated per screen anyway so that unplugging a monitor cannot strand

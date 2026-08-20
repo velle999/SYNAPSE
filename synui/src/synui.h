@@ -7923,6 +7923,10 @@ void synui_render_bt(syn_server_t *s);
 bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg);
 /* Open the waybar start menu, by synthesizing a click on its bar surface —
  * waybar's menu is a GTK popup with no IPC to open it. See input.c. */
+/* Ask the bar to do something, naming the focused output. The bar owns the
+ * start menu and the volume mixer; quickshell's IPC goes client-ward, which is
+ * the direction synui cannot go on its own. */
+void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn);
 void synui_start_menu_open(syn_server_t *s);
 
 void power_state_save(syn_server_t *s);

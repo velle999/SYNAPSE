@@ -7,10 +7,23 @@ Comment=Outputs, inputs and per-application volume
 # A compositor panel, not a program: synctl asks synui to open exactly what the
 # keybind opens. StartupNotify is off because no window ever appears, so a
 # startup spinner would spin until it timed out.
-# ⚠ `sounds`, plural — the action's name. Same dead-button as the control
-# panel entry above it: `dispatch sound` matched nothing and did nothing from
-# 392 until 2026-08-20. Guarded by tests/menu_apps.sh now.
-Exec=synctl dispatch sounds
+# ⚠ `mixer`, and the history here is worth the three lines.
+#
+# This entry is the VOLUME MIXER — outputs, inputs and a slider per application
+# stream, which is quickshell/components/Mixer.qml, a popup on the bar's volume
+# module. It was reachable only by right-clicking that module.
+#
+# So this Exec was `synctl dispatch sound`, which matched no action at all and
+# did nothing from synui 392. That got "fixed" on 2026-08-20 to `sounds` — an
+# action that exists, and opens synui's EVENT SOUNDS panel: a different thing,
+# in a different process, with nothing to do with a mixer. A dead entry became
+# a wrong one, which is worse, because a dead entry gets reported and a wrong
+# one gets lived with.
+#
+# `mixer` is the real thing. synui forwards it to the bar over quickshell's
+# IPC (input.c, synui_bar_ipc) exactly as it does the start menu, because that
+# is the only direction a compositor can talk to a layer-shell client.
+Exec=synctl dispatch mixer
 Icon=audio-volume-high
 Terminal=false
 StartupNotify=false

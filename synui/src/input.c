@@ -656,23 +656,36 @@ static uint32_t now_msec(void)
  * The focused output is passed along because synui is the only process that
  * knows it — there is no Wayland protocol that tells a layer-shell client which
  * monitor has focus, and the bar would otherwise have to guess or probe back. */
-void synui_start_menu_open(syn_server_t *s)
+/*
+ * Ask the bar to do something, naming the focused output.
+ *
+ * Split out of synui_start_menu_open() when the volume mixer became the second
+ * caller. The bar owns two things synui can only ask for — the start menu and
+ * the mixer — and both need the same two facts: which target, and which
+ * monitor has focus.
+ *
+ * execvp, not spawn(): spawn() goes through `/bin/sh -c` and this interpolates
+ * an output name. Those come from the kernel rather than from a user, but a
+ * shell in the path is a shell to get wrong later, and nothing here needs one.
+ */
+void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
 {
     syn_output_t *o = server_focused_output(s);
     const char *name = (o && o->wlr_output && o->wlr_output->name)
                        ? o->wlr_output->name : "";
 
-    /* execvp, not spawn(): spawn() goes through `/bin/sh -c` and this
-     * interpolates an output name. Those come from the kernel rather than from
-     * a user, but a shell in the path is a shell to get wrong later, and there
-     * is nothing here that needs one. */
     if (fork() == 0) {
         setsid();
         synui_child_reset_signals();
-        execlp("synui-bar", "synui-bar", "ipc", "call", "menu", "toggle",
+        execlp("synui-bar", "synui-bar", "ipc", "call", target, fn,
                name, (char *)NULL);
         _exit(1);
     }
+}
+
+void synui_start_menu_open(syn_server_t *s)
+{
+    synui_bar_ipc(s, "menu", "toggle");
 }
 
 /* Execute a bind action (see config.c for the names and defaults). */
@@ -1172,6 +1185,20 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * `spawn synui-widgets toggle` remains bindable for anyone who wants
          * the panel-less version back. */
         widgets_toggle(s);
+    } else if (strcmp(action, "mixer") == 0) {
+        /* The volume mixer, which lives in the BAR — outputs, inputs and a
+         * slider per application stream (quickshell/components/Mixer.qml).
+         *
+         * ⚠ IT IS NOT `sounds`. That is synui's own Event sounds panel, and
+         * synui-sound.desktop — the menu's "Volume Mixer" — dispatched it,
+         * because there was no way to ask the bar for the real mixer and
+         * `sounds` was the nearest thing that existed. A dead entry had been
+         * "fixed" into a wrong one.
+         *
+         * Same route as the start menu: quickshell's IPC goes client-ward,
+         * which is the direction synui cannot go on its own. See
+         * synui_start_menu_open() for why the output is passed in. */
+        synui_bar_ipc(s, "mixer", "toggle");
     } else if (strcmp(action, "sounds") == 0) {
         /* Super+S: event sounds. Everything is off until turned on here. */
         sound_toggle(s);

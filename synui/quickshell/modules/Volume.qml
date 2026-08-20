@@ -83,4 +83,40 @@ BarModule {
         // so the attached property resolves here and not inside Mixer.qml.
         barWindow: root.QsWindow.window
     }
+
+    /*
+     * …and the other way in: the menu entry, and anything else that asks synui
+     * for `mixer`.
+     *
+     * The right-click above is the discoverable route and stays the primary
+     * one. This exists because the mixer was reachable ONLY that way, which is
+     * how a "Volume Mixer" menu entry came to open synui's Event sounds panel
+     * instead — nothing could ask the bar for this one.
+     *
+     * ⚠ SCREEN-SCOPED. This module is instantiated per monitor, so every
+     * instance sees the same MixerState. Without the output test, one request
+     * opens a mixer on all three. MenuState/StartMenu solve it the same way.
+     *
+     * The anchor is the module's own position, exactly as the right-click
+     * computes it — so a mixer summoned from a menu lands under the volume
+     * module it belongs to rather than in the middle of the bar.
+     */
+    Connections {
+        target: MixerState
+        function onOpenChanged() {
+            const mine = !MixerState.output
+                      || MixerState.output === root.QsWindow.window.screen.name
+            if (MixerState.open && mine) {
+                if (!mixer.visible)
+                    mixer.toggleAt(root.mapToItem(null, 0, 0).x + root.width / 2)
+            } else if (!MixerState.open && mixer.visible) {
+                mixer.visible = false
+            }
+        }
+    }
+
+    // Closing it any other way — click-off, Escape, the right-click again —
+    // has to put the state back, or the next request is read as "already open"
+    // and toggles to closed instead of opening.
+    onMixerOpenChanged: if (!root.mixerOpen && MixerState.open) MixerState.close()
 }
