@@ -763,6 +763,16 @@ while IFS= read -r row; do
     check "row '${row%%|*}' has 5 columns" "5" "$(awk -F'|' '{print NF}' <<<"$row")"
 done <<<"$locale_rows"
 
+# The synuirc heredoc the installer writes, and one key out of it. Read from the
+# script's text rather than by running the installer, for the same reason
+# in_code() exists: this file partitions disks.
+synuirc_body() {
+    sed -n "/<< *'SYNUIRC'/,/^SYNUIRC\$/p" "$here/../syn-install.sh"
+}
+in_synuirc() {
+    synuirc_body | sed -n "s/^$1 *= *\(.*\)$/\1/p" | head -1
+}
+
 # The two namespaces must stay SEPARATE variables all the way to the files they
 # are written into. Collapsing them back to one is the original bug.
 check "the console keymap is what reaches vconsole.conf" "yes" \
@@ -771,6 +781,39 @@ check "the xkb layout, not the keymap, reaches synuirc" "yes" \
     "$(in_code 'SYNUI_XKB="$XKB_LAYOUT"')"
 check "the keymap is no longer fed straight to xkb" "no" \
     "$(in_code 'SYNUI_XKB="$KEYMAP"')"
+
+# ── THE GLASS DEFAULTS A FRESH INSTALL IS GIVEN ─────────────────────────────
+#
+# The synuirc this installer writes is the only thing that decides what a new
+# desktop looks like on its first boot, and one line in it was quietly deciding
+# it for ever: `glass_level = 55`.
+#
+# A NUMBER is an explicit answer, and an explicit answer survives a theme
+# switch — so every one of the twelve non-glass themes was handed Prism's level
+# instead of the opacities it was tuned with, on every machine, permanently. It
+# was redundant as well: synui gives a glass theme SYN_GLASS_PANEL_DEFAULT (the
+# same 55) when nobody has set a level, so the installer was writing down a
+# decision the compositor already makes correctly.
+#
+# These four checks are cheap and the failure they guard against is not: it is
+# invisible until somebody changes theme, and by then it is on every install
+# that shipped.
+glass_line=$(in_synuirc 'glass_level')
+check "a fresh install leaves glass_level on auto" "auto" "$glass_line"
+check "…and never writes a number, which would pin it off the theme" "no" \
+    "$(grep -qE '^glass_level *= *[0-9]' <<<"$(synuirc_body)" && echo yes || echo no)"
+
+check "the dock style follows the theme" "auto" "$(in_synuirc 'dock_style')"
+
+# ⚠ `on`, NOT `auto`, and the asymmetry is the point. The widgets are
+# quickshell and read theme.state — a file synui-apply-theme writes when
+# somebody PICKS a theme and which refuses to create itself otherwise. A fresh
+# install names a theme in synuirc and has never picked one, so theme.state
+# does not exist and `auto` leaves the widgets with nothing to follow: solid
+# widgets on a glass desktop. synui's own theme.c names `widget_glass = on` as
+# the answer for exactly this case.
+check "widget glass is explicitly on, because the widgets cannot ask" "on" \
+    "$(in_synuirc 'widget_glass')"
 
 # ── A SECOND KERNEL MUST BE BOOTABLE ON ALL THREE LOADERS ───────────────────
 #

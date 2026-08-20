@@ -4501,11 +4501,54 @@ terminal = syntty
 # wallpaper change. A greyscale wallpaper has no colour to give and the theme's
 # own cyan stands; the journal says which is happening.
 theme = prism
+# ── Glass: AUTO, and every word of that is deliberate ────────────────────────
+#
 # One slider for how much of the desktop you see through: 0 solid, 100 as clear
-# as it goes. It drives the windows, synui's own panels and the bar together,
-# each with the number that surface needs. Delete the line to hand the decision
-# back to the theme's own opacities.
-glass_level = 55
+# as it goes, `auto` to let the theme answer. It drives the windows, synui's own
+# panels and the bar together, each with the number that surface needs.
+#
+# ⚠ THIS USED TO SAY `glass_level = 55`, AND THAT IS WHY A FRESH INSTALL DID NOT
+# FOLLOW ITS THEME. A number here is an explicit answer, and an explicit answer
+# survives a theme switch: every one of the twelve non-glass themes was being
+# handed Prism's level instead of the opacities it was tuned with, for ever,
+# because the installer had written one down on the user's behalf.
+#
+# It was also redundant. synui already gives a GLASS theme
+# SYN_GLASS_PANEL_DEFAULT — the same 55 — when nobody has set a level, precisely
+# so a desktop that reached Prism through the theme manager is not the same
+# theme with solid panels. The two were "the same decision written twice", and
+# the copy in this file was the one that could be wrong.
+#
+# What changes visually on a fresh Prism install: the panels and the bar are
+# identical (both paths resolve to 55). Windows go from 0.79 to Prism's own
+# 0.90 — slightly less see-through, and 0.90 is the number the theme was
+# designed with.
+glass_level = auto
+
+# The dock's body: `auto` is glass on a glass theme and solid elsewhere. It is
+# already synui's compiled default and is written here to be visible rather than
+# to change anything — a fresh install that wants to know what it was given
+# should be able to read it in this file.
+dock_style = auto
+
+# ⚠ WIDGET GLASS IS `on` AND NOT `auto`, AND THIS IS THE ONE THAT NEEDS SAYING.
+#
+# `auto` means "follow the theme", and the desktop widgets cannot ask what the
+# theme is. They are quickshell, and they read theme.state — a file
+# synui-apply-theme writes when somebody PICKS a theme, and which deliberately
+# refuses to create itself otherwise (creating it would hand theme.state
+# precedence over settings.state's opacity keys on a desktop that never asked
+# for that).
+#
+# A fresh install names `theme = prism` in this file and has never picked a
+# theme, so theme.state does not exist. The compositor resolves its own chrome
+# and the dock in-process and looks right; the widgets have nothing to read and
+# come up solid on a glass desktop. `on` is the explicit answer for exactly that
+# case, and it is what synui's own theme.c names as the answer.
+#
+# Set it back to `auto` after picking any theme from the manager and it will
+# follow along like everything else.
+widget_glass = on
 # greetd launches synui after login.
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it

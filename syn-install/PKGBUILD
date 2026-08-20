@@ -58,7 +58,26 @@ pkgver=0.1.0
 # 86: the checkbox page writes its answer to /etc/synapseos/components.conf.
 #   syn-update had no way to tell a component you declined from one the tree
 #   had gained since, so the first update reinstalled everything you unticked.
-pkgrel=86
+# 87: a fresh install did not follow its own theme's glass. The synuirc this
+#   writes carried `glass_level = 55` — and a NUMBER is an explicit answer that
+#   survives a theme switch, so every one of the twelve non-glass themes was
+#   handed Prism's level instead of the opacities it was tuned with, on every
+#   machine, permanently. It was redundant too: synui already gives a glass
+#   theme SYN_GLASS_PANEL_DEFAULT (the same 55) when nobody sets a level, so
+#   this was the second copy of a decision the compositor already makes — and
+#   the copy that could be wrong. Now `auto`. Panels and bar are visually
+#   identical; windows go from 0.79 to Prism's own 0.90.
+#   ⚠ `widget_glass = on`, NOT auto, and the asymmetry is the point: the desktop
+#   widgets are quickshell and read theme.state, which synui-apply-theme writes
+#   only when somebody PICKS a theme and which refuses to create itself
+#   otherwise. A fresh install NAMES a theme and has never picked one, so
+#   theme.state does not exist and `auto` leaves the widgets nothing to follow —
+#   solid widgets on a glass desktop. synui's own theme.c names this as the
+#   answer for exactly this case.
+#   `dock_style = auto` written explicitly: already the compiled default, and
+#   this file should be readable as what the machine was given.
+#   Four checks in layout_test, including that a NUMBER never comes back.
+pkgrel=87
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
