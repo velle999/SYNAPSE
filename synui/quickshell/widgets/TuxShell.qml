@@ -42,6 +42,29 @@ Item {
     property color warn:   "#f38ba8"
     property color label:  "#8a929c"
     property color labelBright: "#c8e3ee"
+
+    /*
+     * The pen the case's MARKINGS are printed in, and the only colour in this
+     * file the desktop is allowed to move.
+     *
+     * The status bars, the scold, the game's arrows and the base under the bulb
+     * were drawn in `k` — Tux's own outline black — because they were drawn on
+     * the same sheet as the penguin. That is a pen chosen for a bird, not an ink
+     * chosen for a surface, and these are printed on the CARD: #16181d on the
+     * dark HUD is a shape you have to hunt for, before any wallpaper is
+     * involved. They are `i` now (see tuxart.js), which is what this tints.
+     *
+     * ⚠ ONLY THE MARKINGS. The fish, the biscuit, the pill, the bulb and the
+     * ball keep their own colours, `k` outlines and all — they are OBJECTS the
+     * toy gives you rather than ink on a case, exactly as the pet stays black,
+     * white and orange on a screen the theme chose. The default is `pal.i`
+     * itself, so a caller that says nothing gets the sheet as drawn.
+     */
+    property color iconInk: "#16181d"
+
+    // A new object per change, and never edited in place: a `var` reassigned to
+    // the same object does not notify, and every TuxPixels below is bound to it.
+    readonly property var iconTint: ({ "i": shell.iconInk })
     property bool  isLight: false
     property string fontFamily: "sans-serif"
     property string iconFamily: "sans-serif"
@@ -116,6 +139,7 @@ Item {
             id: glyph
             anchors.centerIn: parent
             rows: btn.rows
+            tint: shell.iconTint
             zoom: 2
             flip: btn.flip
             opacity: btn.dimmed ? 0.45 : (mouse.containsMouse ? 1.0 : 0.85)

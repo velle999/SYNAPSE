@@ -51,7 +51,22 @@ var pal = {
     "g": "#9aa0a6",   // headstone
     "y": "#e0ac1f",   // the light
     "j": "#4aa697",   // the ball
-    "q": "#4f9bd0"    // water
+    "q": "#4f9bd0",   // water
+    /*
+     * ⚠ THE PRINTED PEN, AND IT IS A SEPARATE CHARACTER FROM `k` ON PURPOSE.
+     *
+     * `k` is Tux's outline and the edge of the things he is given — the pill's
+     * capsule, the fish's eye. Those are OBJECTS, and they are drawn in the
+     * pen the penguin is drawn in whatever the desktop is doing.
+     *
+     * `i` is a MARKING printed on the case: the status bars, the scold, the
+     * game's arrows, the base under the bulb. It is nothing but ink on a
+     * surface, so it is the one colour the desktop is allowed to move —
+     * TuxShell.iconInk tints it, and this value is what it is without one.
+     * They are the same black today; they are not the same DECISION, and one
+     * character for both is what made the markings unreadable on the dark HUD.
+     */
+    "i": "#16181d"
 }
 
 /*
@@ -387,8 +402,8 @@ var iconLight = [
     ".yyyyyyy.",
     "..yyyyy..",
     "...yyy...",
-    "...kkk...",
-    "...kkk..."
+    "...iii...",
+    "...iii..."
 ]
 
 var iconPlay = [
@@ -414,34 +429,34 @@ var iconClean = [
 ]
 
 var iconStatus = [
-    ".......kk",
-    ".......kk",
-    "....kk.kk",
-    "....kk.kk",
-    ".kk.kk.kk",
-    ".kk.kk.kk",
-    ".kk.kk.kk"
+    ".......ii",
+    ".......ii",
+    "....ii.ii",
+    "....ii.ii",
+    ".ii.ii.ii",
+    ".ii.ii.ii",
+    ".ii.ii.ii"
 ]
 
 var iconScold = [
-    "...kkk...",
-    "...kkk...",
-    "...kkk...",
-    "...kkk...",
-    "...kkk...",
+    "...iii...",
+    "...iii...",
+    "...iii...",
+    "...iii...",
+    "...iii...",
     ".........",
-    "...kkk...",
-    "...kkk..."
+    "...iii...",
+    "...iii..."
 ]
 
 // The left/right the guessing game is played with, and the same arrows the
 // pet turns to face. One sprite, mirrored by the view for the other way.
 var iconArrow = [
-    "....k....",
-    "...kk....",
-    "..kkk....",
-    ".kkkkkkk.",
-    "..kkk....",
-    "...kk....",
-    "....k...."
+    "....i....",
+    "...ii....",
+    "..iii....",
+    ".iiiiiii.",
+    "..iii....",
+    "...ii....",
+    "....i...."
 ]

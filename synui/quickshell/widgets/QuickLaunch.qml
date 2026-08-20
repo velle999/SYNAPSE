@@ -27,6 +27,24 @@ WidgetFrame {
     accent: Theme.cyan
     interactive: true
 
+    /*
+     * The strip goes on whatever this card is sitting on — the same opt-in the
+     * note, the monitor and the clock's date take.
+     *
+     * ⚠ THE HOVER HID THIS, WHICH IS WHY IT LOOKED FINE TO ANYONE USING IT.
+     * The row under the pointer lights its edge and its number in the accent and
+     * washes itself at 0.13, so the row you are ABOUT TO CLICK is legible on
+     * anything — and every other row is 12px and 9px of the theme's ink on a
+     * card that at a low glass level is not there. You find that out by LOOKING
+     * at the strip rather than by using it, and looking at it is what it is for:
+     * this is the widget whose whole claim over the start menu is being
+     * always-visible.
+     *
+     * The accents stay accents. A lit edge and a lit number mean THIS ONE, the
+     * way red at 90% means hot on the monitor and the note keeps its yellow.
+     */
+    inkOnBackdrop: true
+
     homeEdgeH: "left"; homeEdgeV: "top"
     homeMarginX: 20
     homeMarginY: Theme.barHeight + 60
@@ -85,7 +103,7 @@ WidgetFrame {
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                     width: 2
-                    color: mouse.containsMouse ? root.accent : Theme.fg
+                    color: mouse.containsMouse ? root.accent : root.ink
                     opacity: mouse.containsMouse ? 1.0 : 0.13
                     Behavior on opacity { NumberAnimation { duration: Theme.animFast } }
                 }
@@ -94,7 +112,7 @@ WidgetFrame {
                     id: num
                     anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
                     text: String(row.index + 1).padStart(2, "0")
-                    color: mouse.containsMouse ? root.accent : Theme.fgDim
+                    color: mouse.containsMouse ? root.accent : root.inkDim
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     font.letterSpacing: 1
@@ -110,7 +128,7 @@ WidgetFrame {
                     spacing: 0
                     Text {
                         text: row.modelData.name
-                        color: Theme.fg
+                        color: root.ink
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
                         elide: Text.ElideRight
@@ -118,7 +136,7 @@ WidgetFrame {
                     }
                     Text {
                         text: "› " + row.modelData.sub
-                        color: Theme.fgDim
+                        color: root.inkDim
                         font.family: Theme.fontFamily
                         font.pixelSize: 9
                         elide: Text.ElideRight

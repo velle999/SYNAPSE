@@ -45,6 +45,31 @@ WidgetFrame {
     interactive: true
 
     /*
+     * The case the LCD is set into goes on whatever this card is sitting on —
+     * the same opt-in the note, the monitor and the clock's date take.
+     *
+     * ⚠ THE LCD HID THIS THE WAY THE TIME HID IT ON THE CLOCK. The screen is
+     * an opaque pane in a colour this widget chooses, so the pet, the hearts and
+     * the status card are legible on any wallpaper by construction and always
+     * were. Everything OUTSIDE that rectangle is not: the eight printed icons,
+     * the age line and the speaker are on the card, and at a glass level that
+     * takes the card to nothing they are on the picture. A toy whose screen
+     * works perfectly and whose buttons have gone reads as a drawing of a toy.
+     *
+     * ⚠ AND THE ICONS ARE THE HALF THAT WAS NEVER INKED AT ALL. tuxart.js
+     * prints the status bars, the scold and the arrows in `k` — #16181d, Tux's
+     * own outline black — which is a pen chosen for a penguin rather than an ink
+     * chosen for a surface, and it is near-invisible on the dark HUD before any
+     * wallpaper gets involved. `iconInk` hands the pen to the backdrop; see
+     * TuxShell.
+     *
+     * The LCD keeps its own colours, and so do the fish, the biscuit, the pill,
+     * the bulb and the ball: those are OBJECTS, the way the note keeps its
+     * yellow and the monitor keeps red at 90%.
+     */
+    inkOnBackdrop: true
+
+    /*
      * Under the system monitor on the right-hand edge, on the same terms the
      * pizza sits above the clock: a widget's home is expressed relative to
      * whatever else already claims that corner, so switching two on does not
@@ -88,8 +113,9 @@ WidgetFrame {
         lcdInk: root.lcdInk
         accent: root.accent
         warn: Theme.red
-        label: Theme.fgDim
-        labelBright: Theme.fg
+        label: root.inkDim
+        labelBright: root.ink
+        iconInk: root.ink
         isLight: Theme.isLight
         fontFamily: Theme.fontFamily
         iconFamily: Theme.iconFamily

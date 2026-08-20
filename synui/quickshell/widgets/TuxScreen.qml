@@ -165,7 +165,11 @@ Rectangle {
         anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 6 }
         rows: TuxArt.iconScold
         zoom: 2
-        tint: ({ "k": lcd.accent })
+        // `i` — the printed pen, which is what the scold is drawn in now that
+        // the case's markings are separable from Tux's own outline. Tinting the
+        // wrong character here is SILENT: TuxPixels falls back to pal, and the
+        // call would draw #16181d on a near-black LCD.
+        tint: ({ "i": lcd.accent })
         visible: lcd.pet && lcd.pet.attention && lcd.blinkOn
     }
 

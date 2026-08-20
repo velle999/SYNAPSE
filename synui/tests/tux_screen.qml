@@ -178,6 +178,12 @@ Window {
                     warn: "#f38ba8"
                     label: "#8a929c"
                     labelBright: "#c8e3ee"
+                    // The card's ink, which is what Tuxagotchi.qml hands it.
+                    // This rig's cells sit on a dark ground, so the markings
+                    // printed on the case take the light pen — and the sheet
+                    // shows the buttons the way the widget draws them rather
+                    // than the way tuxart.js happens to default them.
+                    iconInk: "#c8e3ee"
                     fontFamily: "sans-serif"
                     soundGlyph: "♪"
                     muteGlyph: "×"
