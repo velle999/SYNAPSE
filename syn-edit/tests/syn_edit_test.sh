@@ -976,6 +976,72 @@ else
     echo "  skip  quickshell not installed, cannot check the wallpaper accent"
 fi
 
+# ── task lists ──────────────────────────────────────────────────────────────
+#
+# The GUI's task panel reads the whole buffer and ticks a box by replacing ONE
+# character. Both halves rest on engine behaviour that is easy to break without
+# noticing, so both are pinned here rather than in the window — where they would
+# need a compositor to test at all.
+
+printf 'notes\n- [ ] first\nprose\n- [x] done\n  * [ ] indented\n' > "$T/tasks.md"
+
+# 1. `view <top> 0` is the request for EVERY line: serve.c falls back to the
+#    buffer length when view_rows is zero. The panel has no other way to see
+#    past the window, and a scan that saw only the visible lines would quietly
+#    list a fraction of the file.
+[ "$(printf 'view 0 0\nquit\n' | "$E" serve "$T/tasks.md" | grep -c '^L	')" -ge 5 ]
+check "view with zero rows emits the whole buffer" $?
+
+# 2. ...and it must not MOVE anything. The caret re-clamp in serve.c is guarded
+#    on view_rows, so a zero-row view is also the only one that cannot scroll
+#    the window — which is what makes it safe for a panel that only reads.
+printf 'keys 5G\nview 0 0\nquit\n' | "$E" serve "$T/tasks.md" \
+    | awk -F'\t' '$1=="S" && $2=="line"' | tail -1 | gq 'line	5'
+check "a whole-buffer scan leaves the caret where it was" $?
+
+# 3. Ticking is an ex substitution on ONE line. No column arithmetic, which is
+#    what keeps it right when the indent is a tab (see 6).
+printf 'ex 2s%%2F%%5C%%5B%%20%%5C%%5D%%2F%%5Bx%%5D%%2F\nex w %s\nquit\n' "$T/t1.md" \
+    | "$E" serve "$T/tasks.md" >/dev/null 2>&1
+gq '^- \[x\] first$' < "$T/t1.md"
+check "a task is ticked by a substitution on its own line" $?
+
+# 4. The same in reverse. [xX] because a list edited elsewhere has both.
+printf 'ex 4s%%2F%%5C%%5B%%5BxX%%5D%%5C%%5D%%2F%%5B%%20%%5D%%2F\nex w %s\nquit\n' "$T/t2.md" \
+    | "$E" serve "$T/tasks.md" >/dev/null 2>&1
+gq '^- \[ \] done$' < "$T/t2.md"
+check "a finished task is unticked, in either letter case" $?
+
+# 5. An indented task, where a column would no longer be a constant.
+printf 'ex 5s%%2F%%5C%%5B%%20%%5C%%5D%%2F%%5Bx%%5D%%2F\nex w %s\nquit\n' "$T/t3.md" \
+    | "$E" serve "$T/tasks.md" >/dev/null 2>&1
+gq '^  \* \[x\] indented$' < "$T/t3.md"
+check "an indented task ticks without knowing its column" $?
+
+# 6. ⚠ THE ONE THAT BIT, AND THE REASON THERE IS NO COLUMN ABOVE.
+#
+#    serve.c sends lines with tabs EXPANDED (expand_line), so counting
+#    characters in a record gives a DISPLAY column — while the engine's `|`
+#    motion counts the RAW line. On "\t- [ ] tabbed" the box is display column 8
+#    and raw column 5. The first version of the task panel computed the display
+#    column and sent `2G8|rx`, which replaces the "t" of "tabbed": the box is
+#    untouched, the task text is silently corrupted, and nothing reports
+#    anything. Both halves are pinned here so neither number can drift.
+printf 'x\n\t- [ ] tabbed\n' > "$T/tabtask.md"
+printf 'view 0 0\nquit\n' | "$E" serve "$T/tabtask.md" \
+    | gq '^L	2	\(%20\)\{4\}-%20%5B%20%5D'
+check "a tab-indented task arrives with its tab expanded" $?
+
+printf 'keys 2G8%%7Crx\nex w %s\nquit\n' "$T/tcol.md" \
+    | "$E" serve "$T/tabtask.md" >/dev/null 2>&1
+gq '^	- \[ \] xabbed$' < "$T/tcol.md"
+check "a DISPLAY column aimed at the engine hits the wrong character" $?
+
+printf 'ex 2s%%2F%%5C%%5B%%20%%5C%%5D%%2F%%5Bx%%5D%%2F\nex w %s\nquit\n' "$T/t4.md" \
+    | "$E" serve "$T/tabtask.md" >/dev/null 2>&1
+gq '^	- \[x\] tabbed$' < "$T/t4.md"
+check "the substitution ticks a tab-indented task and keeps the tab" $?
+
 # ── report ──────────────────────────────────────────────────────────────────
 
 echo

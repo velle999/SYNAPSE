@@ -274,6 +274,22 @@ FloatingWindow {
             root.pending.bufs.push({ idx: parseInt(f[1]), name: root.disp(f[2] || ""),
                                      modified: f[3] === "1", current: f[4] === "1" })
         } else if (tag === "E") {
+            /* ⚠ A SCAN'S FRAME MUST NOT BE DRAWN. It is the whole buffer — the
+             * renderer would lay out every line of the file for one frame, and
+             * on a large file that is a visible stall for a panel that is only
+             * reading. Harvest it, drop it, and put the real view back; the
+             * restore is itself a command, so the next frame repaints normally.
+             *
+             * root.st is deliberately NOT swapped here, which is what makes
+             * `root.top` below still the pre-scan top rather than the zero the
+             * scan just asked for. */
+            if (root.taskScanning) {
+                root.taskScanning = false
+                root.tasks = root.harvestTasks(root.pending.lines)
+                root.pending = ({ st: ({}), lines: [], spans: ({}), bufs: [] })
+                root.send("view " + root.top + " " + root.editorRows())
+                return
+            }
             root.st = root.pending.st
             root.lines = root.pending.lines
             root.spans = root.pending.spans
@@ -480,6 +496,96 @@ FloatingWindow {
     function actKeys(k) {
         if (root.inserting) root.sendKeys("<Esc>")
         root.sendKeys(k)
+    }
+
+    // ── Task lists ──────────────────────────────────────────────────────────
+    //
+    // Markdown task syntax, because it is what the files people keep task lists
+    // in already use — `- [ ] thing` and `- [x] done` survive being read in any
+    // other editor, committed, and rendered by every forge. Nothing here
+    // introduces a format of its own, so a list made in this panel is still a
+    // plain text file afterwards and a list made anywhere else opens in it.
+    //
+    // ⚠ THE ENGINE STILL OWNS THE BUFFER. Ticking a box does not edit text in
+    // QML — it sends the same keys a person would type. That keeps one undo
+    // history (u undoes a tick), keeps the TUI and the GUI in step, and means
+    // the panel cannot drift from the file it is describing.
+    property bool taskScanning: false
+    property var  tasks: []        // { line, dcol, done, text }
+
+    // One task line, or null.
+    //
+    // Deliberately carries no COLUMN. The obvious implementation of a tick is
+    // "replace the character between the brackets", and the obvious way to say
+    // where that is — count characters in l.text — is wrong on any line with a
+    // tab in front of the box. L records arrive tab-EXPANDED (serve.c's
+    // expand_line), so a character index into them is a DISPLAY column, while
+    // the engine's `|` motion counts the RAW line. On `\t- [ ] tabbed` those
+    // are column 8 and column 5, and aiming at 8 replaces the "t" of "tabbed":
+    // the box is untouched, the task text is quietly corrupted, and nothing
+    // reports a thing. Measured, and pinned in the suite.
+    function parseTask(l) {
+        if (!l) return null
+        const m = /^\s*(?:[-*+]|\d+\.)\s+\[([ xX])\]\s?(.*)$/.exec(l.text)
+        if (!m) return null
+        return { line: l.no, done: m[1] !== " ", text: m[2] }
+    }
+
+    function harvestTasks(ls) {
+        const out = []
+        for (let i = 0; i < ls.length; i++) {
+            const t = root.parseTask(ls[i])
+            if (t) out.push(t)
+        }
+        return out
+    }
+
+    // Ask for the WHOLE buffer, once.
+    //
+    // `view <top> 0` is the engine's own spelling for "every line": serve.c
+    // falls back to the buffer length when view_rows is zero. It is also the
+    // only view request that does NOT drag the top back to the caret, because
+    // that clamp is itself guarded on view_rows — so a scan cannot move the
+    // caret or scroll the window, which a panel that only READS must not do.
+    function taskScan() {
+        root.taskScanning = true
+        root.send("view 0 0")
+    }
+
+    // Tick or untick: a substitution on that one line.
+    //
+    // An ex range rather than a column motion, because a range needs no
+    // arithmetic and so cannot get the tab case wrong — see parseTask. The
+    // engine substitutes on the raw line and writes back the raw line, so an
+    // indent made of tabs stays tabs.
+    //
+    // Hitting the FIRST match on the line is correct here rather than merely
+    // convenient: parseTask only calls a line a task when the box sits between
+    // the bullet and the text, so there is nothing before it that `\[ \]`
+    // could match instead. Task text that mentions brackets is after it.
+    //
+    // [xX] because a list edited by hand or by another tool has both, and a
+    // tick that only understood one would refuse to clear half a file.
+    //
+    // <Esc> unconditionally: a box can be clicked while the buffer is in INSERT
+    // (the panel is not modal to the engine) and while a VISUAL selection is
+    // up, where `:` prefills the range `'<,'>` and would overwrite the line
+    // number this is asking for.
+    function taskToggle(t) {
+        if (!t) return
+        root.sendKeys("<Esc>")
+        root.sendEx(String(t.line)
+                    + (t.done ? "s/\\[[xX]\\]/[ ]/" : "s/\\[ \\]/[x]/"))
+        root.taskScan()
+    }
+
+    // The task on the line the caret is on, from the lines already on screen —
+    // the caret is always inside the view, so no scan is needed for this one.
+    function taskAtCaret() {
+        for (let i = 0; i < root.lines.length; i++)
+            if (root.lines[i].no === root.curLine)
+                return root.parseTask(root.lines[i])
+        return null
     }
 
     // Open the engine's command line on `:w <prefix>`.
@@ -1173,6 +1279,20 @@ FloatingWindow {
                             { label: "Undo", keys: "u", hint: "u" },
                             { label: "Redo", keys: "<C-r>", hint: "Ctrl+R" },
                             { label: "-", keys: "", hint: "" },
+                            // Task list. `o- [ ] ` deliberately LEAVES the
+                            // engine in INSERT with the caret after the bracket:
+                            // the next thing anybody wants after "new task" is
+                            // to type the task, and a menu item that dropped
+                            // them in NORMAL would eat that first word.
+                            { label: "Task list…", keys: "", act: "tasks", hint: "" },
+                            { label: "New task", keys: "o- [ ] ", hint: "" },
+                            { label: root.taskAtCaret()
+                                     ? (root.taskAtCaret().done ? "Untick this task"
+                                                                : "Tick this task")
+                                     : "Tick this task",
+                              keys: "", act: "tasktoggle", hint: "",
+                              off: root.taskAtCaret() === null },
+                            { label: "-", keys: "", hint: "" },
                             { label: "Find…", keys: "/", hint: "/" },
                             { label: "Replace…", keys: ":%s/", hint: "" },
                             { label: "-", keys: "", hint: "" },
@@ -1209,7 +1329,7 @@ FloatingWindow {
                                 text: ctxItem.modelData.label
                                 font.family: root.uiFont
                                 font.pixelSize: root.ui(12)
-                                color: root.cText
+                                color: ctxItem.modelData.off ? root.cDim : root.cText
                             }
                             Text {
                                 id: ctxHint
@@ -1230,9 +1350,13 @@ FloatingWindow {
                                     ctxMenu.open = false
                                     editor.forceActiveFocus()
                                     const m = ctxItem.modelData
+                                    if (m.off)                   return
                                     if (m.act === "open")        browser.show()
                                     else if (m.act === "save")   root.saveNow()
                                     else if (m.act === "saveas") root.saveAs()
+                                    else if (m.act === "tasks")  tasksPanel.show()
+                                    else if (m.act === "tasktoggle")
+                                        root.taskToggle(root.taskAtCaret())
                                     else if (m.keys !== "")      root.actKeys(m.keys)
                                 }
                             }
@@ -1496,6 +1620,199 @@ FloatingWindow {
                                  onTriggered: browser.enter(browser.rows[browser.sel]) }
                     ToolButton { label: "Cancel"; tip: "Esc"
                                  onTriggered: { browser.visible = false; editor.forceActiveFocus() } }
+                }
+            }
+        }
+
+        // ── Task list ───────────────────────────────────────────────────────
+        //
+        // Every `- [ ]` / `- [x]` line in the buffer, with a box that ticks it.
+        //
+        // It is a VIEW, not a second copy of the list: the rows come from a scan
+        // of the buffer and a tick is sent back as keys, so there is nothing
+        // here that can disagree with the file. Re-scanned after every tick and
+        // whenever it is opened, which is also what makes it correct after an
+        // edit made in the editor behind it, or an undo.
+        Rectangle {
+            id: tasksPanel
+            visible: false
+            anchors.centerIn: parent
+            width: Math.max(0, Math.min(parent.width - 60, Math.round(root.ui(560))))
+            height: Math.max(0, Math.min(parent.height - 60, Math.round(root.ui(420))))
+            radius: 8
+            clip: true
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.4) }
+            z: 300
+
+            readonly property int doneCount: {
+                let n = 0
+                for (let i = 0; i < root.tasks.length; i++) if (root.tasks[i].done) n++
+                return n
+            }
+
+            function show() {
+                root.taskScan()
+                tasksPanel.visible = true
+                tasksPanel.forceActiveFocus()
+            }
+            function hide() {
+                tasksPanel.visible = false
+                editor.forceActiveFocus()
+            }
+
+            Keys.onEscapePressed: tasksPanel.hide()
+
+            Column {
+                anchors { fill: parent; margins: 12 }
+                spacing: 8
+
+                Item {
+                    width: parent.width
+                    height: Math.round(root.ui(20))
+                    Text {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Tasks"
+                        font.family: root.uiFont
+                        font.pixelSize: root.ui(14)
+                        font.bold: true
+                        color: root.cText
+                    }
+                    Text {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.tasks.length === 0 ? ""
+                              : tasksPanel.doneCount + " of " + root.tasks.length + " done"
+                        font.family: root.uiFont
+                        font.pixelSize: root.ui(11)
+                        color: root.cDim
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 1; color: root.wash(0.25)
+                }
+
+                // The empty state says how to make one rather than just being
+                // blank — a panel with nothing in it and no explanation reads
+                // as broken rather than as "this file has no tasks".
+                Text {
+                    width: parent.width
+                    visible: root.tasks.length === 0
+                    text: "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\n"
+                          + "Right-click ▸ New task adds one."
+                    wrapMode: Text.WordWrap
+                    font.family: root.uiFont
+                    font.pixelSize: root.ui(12)
+                    color: root.cDim
+                }
+
+                ListView {
+                    id: tasksList
+                    visible: root.tasks.length > 0
+                    width: parent.width
+                    height: parent.height - Math.round(root.ui(20)) - 9 - taskFoot.height - 16
+                    clip: true
+                    model: root.tasks
+                    spacing: 2
+
+                    delegate: Item {
+                        id: taskRow
+                        required property var modelData
+                        width: tasksList.width
+                        height: Math.round(root.ui(26))
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            color: taskMa.containsMouse ? root.wash(0.15) : "transparent"
+                        }
+
+                        // The box. Clicking it ticks; clicking the text jumps.
+                        // Two targets rather than one, because "take me to it"
+                        // and "mark it off" are both things you want from a list
+                        // and a single click cannot mean both.
+                        Rectangle {
+                            id: taskBox
+                            anchors { left: parent.left; leftMargin: 6
+                                      verticalCenter: parent.verticalCenter }
+                            width: Math.round(root.ui(14))
+                            height: width
+                            radius: 3
+                            color: taskRow.modelData.done ? root.cGood : "transparent"
+                            border { width: 1
+                                     color: taskRow.modelData.done ? root.cGood
+                                                                   : root.wash(0.55) }
+                            Text {
+                                anchors.centerIn: parent
+                                visible: taskRow.modelData.done
+                                text: "\u2713"
+                                font.family: root.uiFont
+                                font.pixelSize: root.ui(11)
+                                font.bold: true
+                                color: root.cPanel
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.taskToggle(taskRow.modelData)
+                            }
+                        }
+
+                        Text {
+                            anchors { left: taskBox.right; leftMargin: 8
+                                      right: taskLine.left; rightMargin: 8
+                                      verticalCenter: parent.verticalCenter }
+                            elide: Text.ElideRight
+                            text: taskRow.modelData.text === ""
+                                  ? "(untitled task)" : taskRow.modelData.text
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(12)
+                            font.strikeout: taskRow.modelData.done
+                            color: taskRow.modelData.done ? root.cDim : root.cText
+                        }
+
+                        Text {
+                            id: taskLine
+                            anchors { right: parent.right; rightMargin: 8
+                                      verticalCenter: parent.verticalCenter }
+                            text: taskRow.modelData.line
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(10)
+                            color: root.cDim
+                        }
+
+                        MouseArea {
+                            id: taskMa
+                            anchors { left: taskBox.right; top: parent.top
+                                      right: parent.right; bottom: parent.bottom }
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.scrollToLine(taskRow.modelData.line - 1)
+                                tasksPanel.hide()
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    id: taskFoot
+                    width: parent.width
+                    spacing: 8
+                    ToolButton { label: "New task"
+                                 tip: "add a task at the caret"
+                                 onTriggered: {
+                                     tasksPanel.hide()
+                                     root.actKeys("o- [ ] ")
+                                 } }
+                    ToolButton { label: "Refresh"; tip: "re-read the file"
+                                 onTriggered: root.taskScan() }
+                    ToolButton { label: "Close"; tip: "Esc"
+                                 onTriggered: tasksPanel.hide() }
                 }
             }
         }
