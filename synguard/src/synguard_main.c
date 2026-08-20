@@ -266,7 +266,15 @@ static int run_event_loop(synguard_state_t *s)
         if (s->want_bpf_status) {
             s->want_bpf_status = 0;
             char st[256];
+            /* ⚠ BOTH, and the first version logged only the first.
+             *
+             * sg_bpf_status() is the summary — attached, how many rules, is
+             * the gate open and why not. sg_bpf_counters() is where `denied=`
+             * lives. They are different strings and only one of them carries
+             * the number, so a caller asking "has this refused anything" got a
+             * line that could not answer, and reported no. */
             sg_log(LOG_INFO, "bpf-lsm: %s", sg_bpf_status(st, sizeof(st)));
+            sg_log(LOG_INFO, "%s", sg_bpf_counters(st, sizeof(st)));
         }
 
         {
@@ -278,6 +286,7 @@ static int run_event_loop(synguard_state_t *s)
                 char st[256];
                 sg_log(LOG_WARNING, "bpf-lsm: REFUSED %llu since the last line — %s",
                        d - last_denies, sg_bpf_status(st, sizeof(st)));
+                sg_log(LOG_WARNING, "%s", sg_bpf_counters(st, sizeof(st)));
                 last_denies = d;
             }
         }

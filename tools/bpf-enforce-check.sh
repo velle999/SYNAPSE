@@ -78,6 +78,30 @@ read_canary() {
         /usr/bin/cat "$CANARY" >/dev/null 2>&1
 }
 
+# ⚠ AND EVERY WRITE TO /etc/ld.so.preload, FOR THE SAME REASON — which the
+# first version got wrong and paid for.
+#
+# The comment above says a deny tears down the opener's process tree, and only
+# the READS were protected. But `deny-ld-preload` matches `event open`, and a
+# shell redirect opens the file too — so the script's own `echo > $PRELOAD`
+# made synguard's USERSPACE path (which runs whether the kernel gate is armed
+# or not) kill the tree the script was in. Observed: "206763 Killed sleep 3",
+# and then the script itself left Stopped, because sg_kill_tree SIGSTOPs a tree
+# before tearing it down and the teardown did not complete. It never reached
+# its own cleanup, so it left a planted /etc/ld.so.preload behind on a live
+# machine — the exact thing its EXIT trap exists to prevent.
+#
+# A scope of its own, like the reads. The worst case is a dead scope.
+plant_preload() {
+    systemd-run -q --wait --collect \
+        /bin/sh -c "echo /nonexistent/$MARKER.so > $PRELOAD" >/dev/null 2>&1
+}
+unplant_preload() {
+    # unlink(), not open() — the rule does not match it, so this one is safe
+    # here. Kept as a function so the pairing is visible.
+    rm -f "$PRELOAD"
+}
+
 # ⚠ ASK, DO NOT SCRAPE THE BOOT LINE. `bpf-lsm: denied=…` used to be logged
 # once, from the startup banner, and never again — so reading it out of the
 # journal after causing a refusal read the value from BEFORE the refusal, and
@@ -243,9 +267,17 @@ fi
 after=$(denied_now)
 if [ -n "$after" ] && [ "${after:-0}" != "${before:-0}" ]; then
     ok "the denied counter moved (${before:-0} -> ${after})"
+elif journalctl -u synguard -n 50 --no-pager 2>/dev/null | grep -q 'REFUSED [1-9]'; then
+    # ⚠ The counter is the attribution, and there are two ways synguard can
+    # give it. `denied=` comes from sg_bpf_counters(); the on-change line says
+    # "REFUSED n". Reading only the first is how this check reported 0 -> 0
+    # against a journal that said "REFUSED 1" three lines further down —
+    # grepping for a token the line it was looking at does not contain.
+    ok "the gate reported the refusal ($(journalctl -u synguard -n 50 --no-pager |
+        grep -o 'REFUSED [0-9]*' | tail -1))"
 else
-    bad "the denied counter did not move (${before:-0} -> ${after:-?})"
-    note "the refusal may have come from somewhere other than the gate"
+    bad "no evidence the refusal came from the gate (${before:-0} -> ${after:-?})"
+    note "it may have come from somewhere else entirely"
 fi
 note "$(gate_line)"
 
@@ -274,18 +306,23 @@ if [ -e "$PRELOAD" ]; then
 else
     # First: with the gate ARMED, creating it must be refused. This is the
     # protection working at the moment of the attack rather than after it.
-    if echo "/nonexistent/$MARKER.so" > "$PRELOAD" 2>/dev/null; then
+    if plant_preload; then
         bad "the armed gate allowed $PRELOAD to be CREATED"
-        rm -f "$PRELOAD"
+        unplant_preload
     else
         ok "while armed, $PRELOAD cannot even be created"
     fi
+    # ⚠ The refusal above ALSO reaches the userspace path, which kills the
+    # opener's tree a moment later. That was a scope, not this script — but
+    # give synguard time to finish acting before doing anything else, or the
+    # next step races a teardown.
+    sleep 3
 
     # Now the harder case: it is already there when synguard starts.
     note "disarming to plant one, as a rootkit that arrived first would…"
     disarm
     sleep 3
-    if echo "/nonexistent/$MARKER.so" > "$PRELOAD" 2>/dev/null; then
+    if plant_preload; then
         # ⚠ Prove the plant took. Without this the re-arm below would be
         # testing an empty directory again, which is how the first version of
         # this phase fooled itself.
@@ -311,7 +348,7 @@ else
         # Removing it needs the gate down again — the rule refuses the open
         # either way round.
         disarm; sleep 2
-        rm -f "$PRELOAD"
+        unplant_preload
         note "removed the test file"
         rearm
     else

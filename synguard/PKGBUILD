@@ -37,7 +37,12 @@ pkgver=0.1.0
 #   does not report old denials as new. SIGUSR1 dumps the full status on
 #   demand — whether the gate is open and WHY when it is closed — which is what
 #   the rig now samples instead of scraping a boot line.
-pkgrel=36
+# 37: SIGUSR1 logged the summary and not the counters. sg_bpf_status() says
+#   attached/armed/gate-open; `denied=` lives in sg_bpf_counters(), and only
+#   the first was being logged — so a caller asking "has this refused
+#   anything" got a line that could not answer and concluded no. Both now, on
+#   SIGUSR1 and beside the on-change REFUSED line.
+pkgrel=37
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
