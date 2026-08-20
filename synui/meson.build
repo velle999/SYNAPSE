@@ -1415,6 +1415,15 @@ test('cascade_grid', cascade_grid,
 # user focused has to survive a reflow it did not ask for. velle, 2026-08-12 —
 # the volume OSD mapping reflowed the desktop and re-buried the focused window
 # twice per keypress.
+# Closing a window must hand focus back to the one you were using, not to
+# whatever heads the stacking list — see the file for the report it comes from.
+close_focus_mru = find_program('tests/close_focus_mru.sh')
+test('close_focus_mru', close_focus_mru,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 cascade_focus_top = find_program('tests/cascade_focus_top.sh')
 test('cascade_focus_top', cascade_focus_top,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

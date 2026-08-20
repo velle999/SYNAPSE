@@ -1696,22 +1696,48 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized)
 /* Focus the first mapped, non-minimized window on ws — or clear focus
  * entirely if there is none, so keyboard input can't keep flowing to a
  * hidden window. */
+/* Hand focus to a window on this workspace — the one the user was in LAST.
+ *
+ * ⚠ "first" is the name, not the rule, and taking the name literally is a bug
+ * anybody can see from across the room. ws->windows is in STACKING order (its
+ * own field comment in synui.h says so, next to focus_seq, which exists because
+ * of it). Walking it and taking the first hit means that closing a window hands
+ * focus to whichever window happens to sit at the head of the tiling list — and
+ * focus_view() raises what it focuses, so that window does not merely become
+ * active, it JUMPS IN FRONT of everything else.
+ *
+ * Which reads, from the outside, as: you close one application and an editor you
+ * have not touched in an hour throws itself to the top of the stack. Reported
+ * exactly that way, and reproduced by opening a window over syn-edit and closing
+ * it again.
+ *
+ * focus_seq is the answer and it is already maintained — input.c stamps it on
+ * every real focus change and Alt+Tab walks it. Ordering by it here costs one
+ * comparison and makes closing a window do the only thing that is not
+ * surprising: fall back to what you were using before it.
+ *
+ * The preference for the focused OUTPUT stays ahead of recency, deliberately.
+ * On a multi-monitor desk the most recently used window may be on a screen the
+ * user is not looking at, and throwing focus there on every close would be its
+ * own version of the same complaint.
+ */
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
 {
     /* The desktop spans every monitor, so prefer a window on the one the user
      * is actually looking at — otherwise switching desktops would throw focus
      * onto whichever screen happens to hold the list's first window. */
     syn_output_t *focused = server_focused_output(s);
-    syn_view_t *v, *fallback = NULL;
+    syn_view_t *v, *best = NULL, *fallback = NULL;
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->minimized) continue;
         if (v->output == focused) {
-            focus_view(s, v, view_surface(v));
-            return;
+            if (!best || v->focus_seq > best->focus_seq) best = v;
+        } else if (!fallback || v->focus_seq > fallback->focus_seq) {
+            fallback = v;
         }
-        if (!fallback) fallback = v;
     }
-    focus_view(s, fallback, fallback ? view_surface(fallback) : NULL);
+    syn_view_t *pick = best ? best : fallback;
+    focus_view(s, pick, pick ? view_surface(pick) : NULL);
 }
 
 /* ── Workspace switching ─────────────────────────────────── */
