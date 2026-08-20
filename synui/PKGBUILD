@@ -290,7 +290,27 @@ pkgver=0.1.0
 #   border on the usable edge, where the grab ring is off-screen or under the
 #   bar; the keybind and a drag of a perpendicular border are the ways back.
 #   tests/edge_expand.sh, driven by a real pointer (tests/vpointer_click.c).
-pkgrel=410
+# 411: THE IMAGE VIEWER DID NOTHING FROM THE APPLICATION MENU, and could not be
+#   left with the mouse. Two faults:
+#   ⚠ synui-view.desktop's Exec is `synui-view-image %f`, and %f with nothing
+#   selected expands to NOTHING — the wrapper printed a usage line to a stderr
+#   no launcher reads and exited 2. No window, no error, no log: precisely the
+#   failure that wrapper's own header describes and was written to fix, one
+#   case over. With no file it now dispatches `view` with no path, which is
+#   already defined as "open the recent-images list" and is what super+shift+i
+#   does.
+#   ⚠ The viewer is a full-screen panel with no window chrome, so Escape was
+#   the only way out and n/p the only way through the folder. It draws a close
+#   X at the top right and a chevron at each side now. The X means exactly what
+#   Escape means (back to the list when that is where the image came from), via
+#   one shared view_escape(). ⚠ crop_click tests the chrome BEFORE it starts a
+#   pan drag, or the buttons draw, highlight and do nothing. The chevrons are
+#   drawn only when the folder holds more than one image, and their rects are
+#   ZEROED otherwise so a stale one cannot answer for a button that is gone.
+#   view_step and view_escape now log at DEBUG what they did — nothing said
+#   which image was up, so "the arrows do nothing" and "the arrows moved to a
+#   file that would not decode" looked identical. tests/imgview_mouse.sh.
+pkgrel=411
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

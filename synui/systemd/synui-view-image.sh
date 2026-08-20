@@ -28,8 +28,31 @@
 set -u
 
 img=${1:-}
+
+# ── NO FILE AT ALL ──────────────────────────────────────────────────────────
+#
+# Which is what happens every time somebody picks "Image Viewer" out of the
+# application menu: Exec is `synui-view-image %f`, and %f with nothing selected
+# expands to nothing.
+#
+# This used to print a usage line and exit 2 — into a stderr no launcher reads.
+# So the menu entry did NOTHING AT ALL: no window, no error, no log. That is
+# precisely the failure this wrapper's own header describes and was written to
+# fix, one case over; it fixed the no-synui case and left the no-file one.
+#
+# `synctl dispatch view` with no path is already defined: the panel opens on its
+# recent-images list, which is exactly what super+shift+i does and exactly what
+# somebody choosing "Image Viewer" from a menu is asking for. Only when there is
+# no synui to ask does the usage line make sense, and then it is a person at a
+# terminal reading it.
 if [ -z "$img" ]; then
+    if command -v synctl >/dev/null 2>&1 &&
+       synctl dispatch view >/dev/null 2>&1; then
+        exit 0
+    fi
     echo "usage: synui-view-image FILE" >&2
+    echo "  (with no file it opens the viewer's recent-images list, which" >&2
+    echo "   needs a running synui to open it in)" >&2
     exit 2
 fi
 if [ ! -e "$img" ]; then

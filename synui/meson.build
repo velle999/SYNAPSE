@@ -1102,6 +1102,20 @@ test('resize_heal', resize_heal,
 # through `synctl dispatch`, where each failure is one readable step, and then
 # the gesture itself through a real pointer (tests/vpointer_click.c), because
 # "the dispatch works" says nothing about whether the border ever sees a press.
+# `imgview_mouse`: the image viewer is a full-screen panel with no window
+# chrome, so until it grew a close X and a chevron at each side, everything it
+# could do was on the keyboard — a picture opened by double-clicking a file
+# could not be dismissed by the hand that opened it. Driven with a real pointer,
+# because the failure being guarded against (testing the buttons AFTER the press
+# has already started a pan drag) draws and highlights them perfectly and leaves
+# them dead.
+imgview_mouse = find_program('tests/imgview_mouse.sh')
+test('imgview_mouse', imgview_mouse,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                vpointer_click.full_path()],
+     depends : [synui_exe, synctl_exe, vpointer_click],
+     timeout : 120)
+
 edge_expand = find_program('tests/edge_expand.sh')
 test('edge_expand', edge_expand,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

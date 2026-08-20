@@ -724,6 +724,28 @@ typedef struct {
     int from_view;                 /* the cropper was entered FROM the viewer —
                                     * Escape goes back to it, not to the desktop */
 
+    /* ── The viewer's mouse chrome ───────────────────────────
+     *
+     * Close, and step back and forward through the folder, as three rects the
+     * renderer fills in and crop_click() tests. In LAYOUT coordinates, like
+     * everything crop_click is handed — the renderer works output-local and
+     * adds the output origin when it records them.
+     *
+     * Why rects here rather than syn_hit_t: hit_set_close() gives exactly one
+     * button, and the viewer needs three. The picker's rows already own
+     * `hit`, and the two faces of this panel are never up at once, but a
+     * second meaning for the same struct is how a click ends up doing the
+     * other face's job.
+     *
+     * A zero-width rect is "not drawn", which is the state of prev/next when
+     * the folder holds one image. box_hit() below refuses those, so a stale
+     * rect from a previous render cannot answer for a button that is no
+     * longer on screen. */
+    struct wlr_box btn_close, btn_prev, btn_next;
+    /* Which of the three the pointer is over, for the hover highlight:
+     * 0 none, 1 close, 2 prev, 3 next. */
+    int btn_hover;
+
     /* Zoom as a MULTIPLE OF THE FITTED SCALE, never an absolute one. 1.0 is
      * "the whole picture", which is what the viewer opens on and what 0 puts
      * back — on any monitor, for any image. An absolute scale cannot mean that:

@@ -19,6 +19,11 @@
  *                                            and click the left button N times
  *                                            (default 2) inside the
  *                                            double-click window.
+ *        vpointer_click X Y right [N]      — the same, with the RIGHT button,
+ *                                            for opening a context menu.
+ *        vpointer_click X Y move           — move only, no button at all, to
+ *                                            put the pointer on something and
+ *                                            let a hover state settle.
  *        vpointer_click X Y drag TOX TOY   — press at (X,Y), travel to
  *                                            (TOX,TOY) in steps, release. The
  *                                            steps matter: an armed grab is
@@ -116,10 +121,17 @@ int main(int argc, char **argv)
         } \
     } while (0)
     NEG_CHECK(px, "X"); NEG_CHECK(py, "Y");
-    bool drag = argc > 4 && !strcmp(argv[3], "drag");
+    bool drag  = argc > 4 && !strcmp(argv[3], "drag");
+    bool right = argc > 3 && !strcmp(argv[3], "right");
+    bool moveonly = argc > 3 && !strcmp(argv[3], "move");
+    uint32_t btn = right ? BTN_RIGHT : BTN_LEFT;
     int tox = drag ? atoi(argv[4]) : 0;
     int toy = drag ? (argc > 5 ? atoi(argv[5]) : py) : 0;
-    int clicks = (!drag && argc > 3) ? atoi(argv[3]) : 2;
+    int clicks = 2;
+    if (moveonly)          clicks = 0;
+    else if (right)        clicks = argc > 4 ? atoi(argv[4]) : 1;
+    else if (drag)         clicks = 0;
+    else if (argc > 3)     clicks = atoi(argv[3]);
     if (drag) { NEG_CHECK(tox, "drag target X"); NEG_CHECK(toy, "drag target Y"); }
 
     const char *sock = getenv("WAYLAND_DISPLAY");
@@ -189,11 +201,11 @@ int main(int argc, char **argv)
     }
 
     for (int i = 0; i < clicks; i++) {
-        zwlr_virtual_pointer_v1_button(ptr, now_ms(), BTN_LEFT,
+        zwlr_virtual_pointer_v1_button(ptr, now_ms(), btn,
                                        WL_POINTER_BUTTON_STATE_PRESSED);
         zwlr_virtual_pointer_v1_frame(ptr);
         wl_display_flush(dpy);
-        zwlr_virtual_pointer_v1_button(ptr, now_ms(), BTN_LEFT,
+        zwlr_virtual_pointer_v1_button(ptr, now_ms(), btn,
                                        WL_POINTER_BUTTON_STATE_RELEASED);
         zwlr_virtual_pointer_v1_frame(ptr);
         wl_display_roundtrip(dpy);

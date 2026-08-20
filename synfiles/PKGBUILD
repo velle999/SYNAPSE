@@ -46,7 +46,18 @@ pkgver=0.1.0
 # 50: Refresh on the FILE menu as well as the empty-space one. A pane full of
 #   files has no empty space to right-click, so the only menu reachable was the
 #   one without it — and F5 is no answer to somebody whose hand is on the mouse.
-pkgrel=53
+# 54: the right-click menu's six "Open with …" rows are one row and a submenu.
+#   For an ordinary PNG they were most of the menu's height, carried its
+#   longest and most-elided labels ("Open with GNU Image Manipulati…") and
+#   pushed Properties and Compress off the bottom of a short window. The row is
+#   added only when there ARE applications behind it — an arrow onto an empty
+#   panel is the failure the old flat-list comment warned about. ⚠ The flyout
+#   is a SIBLING of ctxMenu, not a child: ctxFlick clips, so a child would be
+#   sliced off at the menu's own right edge; and it flips to the LEFT of the
+#   menu when there is no room, which a right-click near the window edge makes
+#   the ordinary case. Hover opens it, no timers; the click handler RETURNS on
+#   the submenu row or the menu would close under the flyout it just opened.
+pkgrel=54
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

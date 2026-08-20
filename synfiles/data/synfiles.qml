@@ -5744,7 +5744,26 @@ FloatingWindow {
             property bool open: false
             property var row: null
 
+            // ── The "Open with" submenu ─────────────────────────────────
+            //
+            // One flyout, driven by whichever row is currently pointing at it:
+            // `subItems` is that row's list and `subY` its position, so there
+            // is one panel rather than one per row and nothing to keep in step
+            // when the menu is rebuilt.
+            //
+            // ⚠ IT IS A SIBLING OF THE FLICKABLE, NOT A CHILD OF THE ROW. A
+            // child would be clipped by the parent menu's `clip: true` — the
+            // flyout would be cut off at the menu's right edge and look like a
+            // 4px sliver — and it would scroll away with the list, which is the
+            // same reason VScroll below sits outside it.
+            property var  subItems: []
+            property real subY: 0
+            property bool subOpen: false
+            function closeSub() { ctxMenu.subOpen = false; ctxMenu.subItems = [] }
+
             visible: ctxMenu.open
+            onOpenChanged: if (!ctxMenu.open) ctxMenu.closeSub()
+            onRowChanged: ctxMenu.closeSub()
             width: 210
             // Clamped as a BINDING, not assigned once on open. The action
             // list arrives asynchronously, so the menu grows AFTER it is
@@ -5855,19 +5874,37 @@ FloatingWindow {
                             items.push({ label: "Move to Trash" + many,
                                          act: "trash", on: n > 0, hint: "Del" })
                         }
-                        // Borrowed entries, appended flat rather than in a
-                        // submenu: a submenu that is empty half the time is
-                        // worse than four extra rows that are visibly about
-                        // this file.
+                        // Borrowed entries. The applications go in a SUBMENU
+                        // and the service menus stay flat, and the difference
+                        // is how many there are: an ordinary PNG offers six
+                        // applications and two services here.
+                        //
+                        // This used to be flat too, with a comment saying a
+                        // submenu that is empty half the time is worse than
+                        // four extra rows. That was written when there were
+                        // four. Six "Open with …" rows are most of the menu,
+                        // they push Properties and Compress off the bottom of a
+                        // short window, and their labels are the ones long
+                        // enough to elide — "Open with GNU Image Manipulati…"
+                        // says almost nothing while taking a whole row.
+                        //
+                        // ⚠ THE OLD COMMENT'S POINT STILL STANDS, so the row is
+                        // only added when there IS something behind it: no
+                        // applications, no "Open with" row. A submenu arrow
+                        // that opens onto nothing is the failure it warned of.
                         const opens = root.rowActions.filter(a => a.kind === "open-with")
                         const svcs  = root.rowActions.filter(a => a.kind === "service")
 
                         if (opens.length > 0) {
                             items.push({ label: "-", act: "", on: true })
-                            for (const a of opens.slice(0, 6))
-                                items.push({ label: "Open with " + a.label,
-                                             act: "run", on: true,
-                                             desktop: a.desktop, actionId: "" })
+                            // No slice: the cap existed because six rows were
+                            // already too many to sit in the middle of this
+                            // menu. In a submenu of its own the list is the
+                            // whole content, and it scrolls like the parent.
+                            items.push({ label: "Open with", act: "submenu",
+                                         on: true, sub: opens.map(a => ({
+                                             label: a.label, desktop: a.desktop
+                                         })) })
                         }
                         if (svcs.length > 0) {
                             items.push({ label: "-", act: "", on: true })
@@ -5959,11 +5996,18 @@ FloatingWindow {
                             // The key that does the same thing, where the eye
                             // already looks for it. Properties was reachable by
                             // Alt+Enter long before anyone could have guessed.
+                            //
+                            // A row with a submenu shows an arrow here instead.
+                            // "▸" is drawn as text on purpose: the two glyphs
+                            // are in every font this UI can be set to, and the
+                            // hint column is already right-aligned and already
+                            // drawn, so it costs no layout.
                             Text {
                                 id: ctxHint
                                 anchors { right: parent.right; rightMargin: 10
                                           verticalCenter: parent.verticalCenter }
-                                text: ctxItem.modelData.hint || ""
+                                text: ctxItem.modelData.act === "submenu"
+                                      ? "\u25B8" : (ctxItem.modelData.hint || "")
                                 visible: text !== ""
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(10) }
@@ -5974,7 +6018,30 @@ FloatingWindow {
                                 hoverEnabled: true
                                 enabled: ctxItem.modelData.on
                                 cursorShape: Qt.PointingHandCursor
+                                // Hover is what opens and closes the flyout —
+                                // no timers, no click needed. Entering ANY
+                                // other row closes it, which is what stops the
+                                // submenu hanging over entries it has nothing
+                                // to do with; the pointer's path from this row
+                                // into the flyout goes straight right, never
+                                // through another row, so nothing has to keep
+                                // it alive on the way.
+                                onEntered: {
+                                    if (ctxItem.modelData.act === "submenu") {
+                                        ctxMenu.subItems = ctxItem.modelData.sub
+                                        ctxMenu.subY = ctxItem.mapToItem(ctxMenu, 0, 0).y
+                                        ctxMenu.subOpen = true
+                                    } else {
+                                        ctxMenu.closeSub()
+                                    }
+                                }
                                 onClicked: {
+                                    // A submenu row is a place to point at, not
+                                    // a thing to do. Clicking it must not close
+                                    // the menu out from under the flyout it
+                                    // just opened.
+                                    if (ctxItem.modelData.act === "submenu")
+                                        return
                                     const r = ctxMenu.row
                                     ctxMenu.open = false
                                     switch (ctxItem.modelData.act) {
@@ -6044,6 +6111,115 @@ FloatingWindow {
             // menu is unchanged.
             VScroll {
                 flick: ctxFlick
+                anchors {
+                    top: parent.top; bottom: parent.bottom
+                    right: parent.right; margins: 4
+                }
+            }
+        }
+
+        // ── The "Open with" flyout ──────────────────────────────────────────
+        //
+        // A sibling of ctxMenu rather than a child, for the same reason VScroll
+        // is a sibling of the Flickable: ctxFlick clips, and a flyout inside it
+        // would be sliced off at the menu's own right edge.
+        //
+        // ⚠ z ABOVE ctxMenu (100). Sitting later in the file is not enough when
+        // the sibling sets its own z — the flyout overlaps the menu by 4px so
+        // the pointer cannot fall through the gap between them, and underneath
+        // it that overlap would be the menu drawing over the flyout instead.
+        Rectangle {
+            id: ctxSub
+            visible: ctxMenu.open && ctxMenu.subOpen && ctxMenu.subItems.length > 0
+            width: 210
+            height: Math.min(ctxSubCol.implicitHeight + 8, parent.height - 16)
+            radius: 4
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.35) }
+            z: 101
+
+            // To the right of the parent menu, or to its LEFT when there is no
+            // room — a right-click near the right edge of the window is the
+            // ordinary case, not an edge case, and a flyout clamped to the
+            // screen edge would cover the menu it belongs to.
+            readonly property bool flip:
+                ctxMenu.x + ctxMenu.width - 4 + width > parent.width - 4
+            x: ctxSub.flip ? Math.max(4, ctxMenu.x - width + 4)
+                           : ctxMenu.x + ctxMenu.width - 4
+            // Aligned with the row that opened it, then clamped so a row near
+            // the bottom does not hang the flyout off the window.
+            y: Math.max(4, Math.min(ctxMenu.y + ctxMenu.subY - 4,
+                                    parent.height - height - 4))
+
+            // Leaving the flyout sideways closes it. Not on the parent row's
+            // exit, which fires on the way IN here.
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                onExited: if (!containsMouse) ctxMenu.closeSub()
+            }
+
+            Flickable {
+                id: ctxSubFlick
+                anchors { fill: parent; margins: 4 }
+                contentHeight: ctxSubCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                Column {
+                    id: ctxSubCol
+                    width: parent.width
+
+                    Repeater {
+                        model: ctxMenu.subItems
+                        delegate: Item {
+                            id: ctxSubItem
+                            required property var modelData
+                            width: ctxSubCol.width
+                            height: 26
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 3
+                                color: ctxSubMa.containsMouse ? root.wash(0.18)
+                                                              : "transparent"
+                                Text {
+                                    anchors {
+                                        left: parent.left; leftMargin: 10
+                                        right: parent.right; rightMargin: 10
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    // Still elided — "GNU Image Manipulation
+                                    // Program" is wider than 210px even without
+                                    // "Open with " in front of it. It has ten
+                                    // characters more to work with here, which
+                                    // is the difference between "GNU Image
+                                    // Manipulati…" and something readable.
+                                    elide: Text.ElideRight
+                                    text: ctxSubItem.modelData.label
+                                    color: root.cText
+                                    font { family: root.uiFont
+                                           pixelSize: root.ui(12) }
+                                }
+                                MouseArea {
+                                    id: ctxSubMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        ctxMenu.open = false
+                                        root.runAction(ctxSubItem.modelData.desktop, "")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            VScroll {
+                flick: ctxSubFlick
                 anchors {
                     top: parent.top; bottom: parent.bottom
                     right: parent.right; margins: 4

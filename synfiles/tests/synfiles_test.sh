@@ -2169,17 +2169,53 @@ if [ -f "$QML" ]; then
     #
     # view: and sort: are handled by applyViewAction on their PREFIX, so they
     # are checked against that instead of against a case label.
+    #
+    # `submenu` is the one act that is deliberately NOT in the switch: it names
+    # a row that opens a flyout on hover and does nothing on click, so it
+    # returns before the switch is reached. Checked below on its own terms
+    # rather than waved through here.
     missing=""
     for a in $(grep -oE 'act: *"[a-z0-9:_-]+"' "$QML" |
                sed 's/.*"\(.*\)"/\1/' | sort -u); do
         case "$a" in
             view:*|sort:*)
                 grep -q "act.indexOf(\"${a%%:*}:\")" "$QML" && continue ;;
+            submenu) continue ;;
         esac
         grep -q "case \"$a\":" "$QML" || missing="$missing $a"
     done
     [ -z "$missing" ] && ok "every menu act is handled somewhere" \
                       || bad "menu act(s) that nothing acts on:$missing"
+
+    # ── the Open With submenu ───────────────────────────────────────────────
+    #
+    # Six "Open with …" rows used to sit in the middle of this menu for an
+    # ordinary PNG — most of its height, with the longest and most-elided
+    # labels in it. They are one row and a flyout now.
+    grep -q 'act: "submenu"' "$QML" \
+        && ok "Open with is one row with a submenu" \
+        || bad "synfiles.qml lost the Open With submenu row"
+
+    # ⚠ The row must RETURN before the switch. Without that, clicking the
+    # parent row falls through to `ctxMenu.open = false` and the whole menu
+    # closes under the flyout it just opened — which reads as "Open with does
+    # nothing", the exact failure the act-coverage check above exists for.
+    grep -q 'if (ctxItem.modelData.act === "submenu")' "$QML" \
+        && grep -q 'return$' "$QML" \
+        && ok "clicking the submenu row does not close the menu" \
+        || bad "the submenu row falls through to the act switch"
+
+    # ⚠ And it is only added when there is something behind it. An arrow that
+    # opens onto an empty panel is worse than the flat rows it replaced.
+    grep -q 'if (opens.length > 0)' "$QML" \
+        && ok "no applications means no Open with row" \
+        || bad "the Open With row is added unconditionally"
+
+    # The flyout is a SIBLING of the menu, not a child: ctxFlick clips, so a
+    # child would be sliced off at the menu's own right edge.
+    grep -q 'id: ctxSub' "$QML" \
+        && ok "the flyout exists" \
+        || bad "synfiles.qml has no Open With flyout"
 
     # ── the empty-space menu ────────────────────────────────────────────────
     grep -q 'if (!ctxMenu.row)' "$QML" \

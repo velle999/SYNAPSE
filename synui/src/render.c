@@ -3230,6 +3230,28 @@ static void render_crop_pick(syn_server_t *s)
  * cropper does not either: the drawn image and the image the pointer thinks it
  * is over drifting apart is a click that lands somewhere else.
  */
+/* ── The viewer's three mouse buttons ────────────────────────
+ *
+ * Close, previous and next. They exist because the viewer is a full-screen
+ * panel with no window chrome: everything it can do was on the keyboard, and
+ * a picture opened by double-clicking a file in synfiles could only be
+ * dismissed with Escape.
+ *
+ * Faint by default and brighter under the pointer, because the thing being
+ * looked at is the picture — chrome that competes with it is chrome in the
+ * way. The hover state is what makes them read as buttons at all; without it
+ * they are decorations somebody drew in the corners.
+ */
+#define VIEW_BTN 26          /* close, top right */
+#define VIEW_NAV 44          /* prev / next, centred on the side margins */
+
+static void view_btn_face(cairo_t *cr, double x, double y, double sz, bool hot)
+{
+    set_ink(cr, INK_RULE, hot ? 0.75 : 0.34);
+    cairo_rounded_rect(cr, x, y, sz, sz, 4);
+    cairo_fill(cr);
+}
+
 static void render_crop_view(syn_server_t *s)
 {
     struct wlr_box ob;
@@ -3305,11 +3327,42 @@ static void render_crop_view(syn_server_t *s)
         cairo_move_to(cr, 24, 32);
         syn_show_text(cr, "VIEW");
 
+        /* ── A WAY OUT THAT IS NOT A KEY ─────────────────────
+         *
+         * The viewer is a full-screen panel with no window chrome, so until
+         * this existed the only way out was Escape — which the footer said,
+         * and which nobody reads on a panel that has just filled the screen
+         * with a photograph. A picture you cannot dismiss with the mouse that
+         * opened it reads as stuck.
+         *
+         * Drawn as two lines rather than a glyph, for the reason
+         * panel_close_draw() gives: the UI font is whatever fontpick last
+         * applied, and one without ✕ draws a missing-glyph box — a close
+         * button that looks like a box is worse than no close button. */
+        const int cb = VIEW_BTN;
+        const int cbx = pw - 24 - cb, cby = 32 - cb + 4;
+        s->crop.btn_close = (struct wlr_box){ ob.x + cbx, ob.y + cby, cb, cb };
+        view_btn_face(cr, cbx, cby, cb, s->crop.btn_hover == 1);
+        set_ink(cr, INK_STRONG, s->crop.btn_hover == 1 ? 1.0 : 0.75);
+        cairo_set_line_width(cr, 1.6);
+        {
+            const double m = cb * 0.32;
+            cairo_move_to(cr, cbx + m, cby + m);
+            cairo_line_to(cr, cbx + cb - m, cby + cb - m);
+            cairo_move_to(cr, cbx + cb - m, cby + m);
+            cairo_line_to(cr, cbx + m, cby + cb - m);
+            cairo_stroke(cr);
+        }
+
         /* Size and magnification. The size is in IMAGE pixels — what the file
          * is, not how big it happens to be on this screen — and the percentage
          * is the honest answer to "am I looking at all of it": 100% means one
          * image pixel per screen pixel, which on a large photograph is a long
-         * way in. */
+         * way in.
+         *
+         * Right-aligned to the LEFT of the close button now, not to the panel
+         * edge: the same rule panel_close_draw() states for every other panel,
+         * or the magnification draws underneath the X. */
         char info[160];
         snprintf(info, sizeof(info), "%d \xc3\x97 %d  \xc2\xb7  %d%%",
                  s->crop.img_w, s->crop.img_h, (int)(sc * 100.0 + 0.5));
@@ -3317,7 +3370,7 @@ static void render_crop_view(syn_server_t *s)
         cairo_text_extents_t te;
         syn_text_extents(cr, info, &te);
         set_ink(cr, INK_STRONG, 1.0);
-        cairo_move_to(cr, pw - 24 - te.x_advance, 32);
+        cairo_move_to(cr, cbx - 14 - te.x_advance, 32);
         syn_show_text(cr, info);
 
         /* Where in the folder, when there is a folder to be somewhere in. Drawn
@@ -3341,6 +3394,55 @@ static void render_crop_view(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_DIM, 0.9);
         draw_clipped(cr, name_x, 52, pw - name_x - 24, s->crop.path);
+    }
+
+    /* ── Step through the folder, with the mouse ─────────────
+     *
+     * n / p and the arrow keys already walk it. These are the same walk for
+     * the hand that is already on the mouse — the one that just double-clicked
+     * a thumbnail in a file manager and has no reason to expect a keyboard.
+     *
+     * ⚠ ONLY WHEN THERE IS A FOLDER TO WALK. One image means no neighbours,
+     * and an arrow that does nothing is worse than no arrow. The rects are
+     * ZEROED rather than left alone in that case: crop_click tests them by
+     * value, and a stale rect from the last render would keep answering for a
+     * button that is no longer drawn.
+     *
+     * Vertically centred and inset into the margin crop_fit() leaves, so they
+     * sit beside the picture rather than on it. */
+    if (s->crop.nav_count > 1) {
+        const int nb = VIEW_NAV;
+        const int ny = (ph - nb) / 2;
+        const int lx = 14, rx = pw - 14 - nb;
+
+        s->crop.btn_prev = (struct wlr_box){ ob.x + lx, ob.y + ny, nb, nb };
+        s->crop.btn_next = (struct wlr_box){ ob.x + rx, ob.y + ny, nb, nb };
+
+        for (int side = 0; side < 2; side++) {
+            const int bx = side ? rx : lx;
+            const bool hot = s->crop.btn_hover == (side ? 3 : 2);
+            view_btn_face(cr, bx, ny, nb, hot);
+
+            /* A chevron, drawn — not "‹" or "›", for the same missing-glyph
+             * reason the close button is two lines. */
+            set_ink(cr, INK_STRONG, hot ? 1.0 : 0.7);
+            cairo_set_line_width(cr, 2.0);
+            const double cx = bx + nb / 2.0, cy = ny + nb / 2.0;
+            const double a = nb * 0.16, b = nb * 0.24;
+            if (side) {
+                cairo_move_to(cr, cx - a, cy - b);
+                cairo_line_to(cr, cx + a, cy);
+                cairo_line_to(cr, cx - a, cy + b);
+            } else {
+                cairo_move_to(cr, cx + a, cy - b);
+                cairo_line_to(cr, cx - a, cy);
+                cairo_line_to(cr, cx + a, cy + b);
+            }
+            cairo_stroke(cr);
+        }
+    } else {
+        s->crop.btn_prev = (struct wlr_box){ 0, 0, 0, 0 };
+        s->crop.btn_next = (struct wlr_box){ 0, 0, 0, 0 };
     }
 
     cairo_set_font_size(cr, 12);
@@ -3368,7 +3470,8 @@ static void render_crop_view(syn_server_t *s)
         char keys[220];
         snprintf(keys, sizeof(keys),
             "Scroll zooms \xc2\xb7 + \xe2\x88\x92 zoom \xc2\xb7 0 fit \xc2\xb7 "
-            "1 actual size \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 Esc %s",
+            "1 actual size \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 "
+            "Esc or \xc3\x97 %s",
             s->crop.from_pick ? "back to the list" : "close");
         cairo_move_to(cr, 24, ph - 22);
         syn_show_text(cr, keys);

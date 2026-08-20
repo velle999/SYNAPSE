@@ -1234,6 +1234,7 @@ void crop_view_open(syn_server_t *s, const char *path)
     s->crop.viewing   = 1;
     s->crop.from_pick = from_list;
     s->crop.from_view = 0;
+    s->crop.btn_hover = 0;   /* the pointer has not been over anything yet */
 
     /* The rest of the folder, so Left and Right have somewhere to go. Scanned
      * per open and not per step: the walk is the common case, and re-listing a
@@ -1263,6 +1264,9 @@ static void crop_back_to_view(syn_server_t *s)
 
 void crop_hide(syn_server_t *s)
 {
+    /* Any hover the pointer left behind. Nothing clears it on its own, and a
+     * button still lit when the panel next opens reads as "already pressed". */
+    s->crop.btn_hover = 0;
     s->crop.visible = 0;
     s->crop.dragging = 0;
     s->crop.picking = 0;
@@ -1301,6 +1305,25 @@ void crop_view_toggle(syn_server_t *s)
  * failed step is invisible unless every remaining file fails, which is the one
  * case worth a line of status.
  */
+/* Done looking. Back to the list when that is where this came from, rather
+ * than out to the desktop — the same rule the cropper follows, and for the same
+ * reason: being dropped all the way out after opening the wrong file is the one
+ * flow that would make the picker annoying to use.
+ *
+ * Its own function because the close button in the corner has to mean exactly
+ * what Escape means. Two copies of this rule would be two answers to "done
+ * here", and the one nobody edited would be the wrong one. */
+static void view_escape(syn_server_t *s)
+{
+    if (s->crop.from_pick) {
+        wlr_log(WLR_DEBUG, "synui: view: done -> back to the list");
+        crop_pick_open(s, 0);
+        return;
+    }
+    wlr_log(WLR_DEBUG, "synui: view: done -> closed");
+    crop_hide(s);
+}
+
 static void view_step(syn_server_t *s, int delta)
 {
     if (s->crop.nav_count < 1) return;
@@ -1329,6 +1352,12 @@ static void view_step(syn_server_t *s, int delta)
 
         if (crop_load(s, path)) {
             s->crop.nav_at = at;
+            /* The folder scan is logged; which image is actually up was not,
+             * so "the arrows do nothing" and "the arrows moved to a file that
+             * would not decode" looked identical from outside. DEBUG: this is
+             * once per keypress, not per frame. */
+            wlr_log(WLR_DEBUG, "synui: view: step %+d -> [%d/%d] %s",
+                    delta, at + 1, n, path);
             synui_render_crop(s);
             return;
         }
@@ -1361,12 +1390,7 @@ static int view_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     switch (sym) {
     case XKB_KEY_Escape:
-        /* Back to the list when that is where this came from, rather than out
-         * to the desktop — the same rule the cropper follows, and for the same
-         * reason: being dropped all the way out after opening the wrong file is
-         * the one flow that would make the picker annoying to use. */
-        if (s->crop.from_pick) { crop_pick_open(s, 0); return 1; }
-        crop_hide(s);
+        view_escape(s);
         return 1;
 
     case XKB_KEY_BackSpace:
@@ -1612,12 +1636,54 @@ static int crop_pick_click(syn_server_t *s, double lx, double ly,
  * hooks the desktop-icon drag uses.
  */
 
+/* Is (lx,ly) inside one of the viewer's chrome buttons?
+ *
+ * ⚠ A ZERO-SIZE RECT IS NEVER A HIT. prev/next are zeroed by the renderer
+ * whenever the folder holds one image, and that is the only thing stopping a
+ * rect left over from the previous picture's render from answering for a
+ * button that is no longer on screen. */
+static bool box_hit(const struct wlr_box *b, double lx, double ly)
+{
+    return b->width > 0 && b->height > 0 &&
+           lx >= b->x && lx < b->x + b->width &&
+           ly >= b->y && ly < b->y + b->height;
+}
+
+/* Which chrome button is under the pointer: 0 none, 1 close, 2 prev, 3 next. */
+static int view_btn_at(syn_server_t *s, double lx, double ly)
+{
+    if (!s->crop.viewing) return 0;
+    if (box_hit(&s->crop.btn_close, lx, ly)) return 1;
+    if (box_hit(&s->crop.btn_prev,  lx, ly)) return 2;
+    if (box_hit(&s->crop.btn_next,  lx, ly)) return 3;
+    return 0;
+}
+
 int crop_click(syn_server_t *s, double lx, double ly, uint32_t button,
                uint32_t time_msec)
 {
     if (!s->crop.visible) return 0;
     if (s->crop.picking) return crop_pick_click(s, lx, ly, button, time_msec);
     if (button != BTN_LEFT) return 1;
+
+    /* ⚠ THE CHROME IS TESTED BEFORE THE PAN. A press anywhere in the viewer
+     * starts a drag, so without this the close button would begin panning the
+     * picture and the release would do nothing at all — the button would be
+     * drawn, hoverable and dead. */
+    if (s->crop.viewing) {
+        switch (view_btn_at(s, lx, ly)) {
+        case 1:
+            /* The same exit Escape takes, and it has to be the same one: from
+             * the recent-images list Escape goes BACK to the list rather than
+             * to the desktop, and a close button that always closed outright
+             * would be a second, contradictory meaning for "done here". */
+            view_escape(s);
+            return 1;
+        case 2: view_step(s, -1); return 1;
+        case 3: view_step(s, +1); return 1;
+        default: break;
+        }
+    }
 
     /* In the viewer a press drags the PICTURE — the one gesture a mouse has
      * over an image that is bigger than the screen. It uses the same `dragging`
@@ -1713,11 +1779,22 @@ void crop_drag_end(syn_server_t *s, double lx, double ly)
 
 int crop_motion(syn_server_t *s, double lx, double ly)
 {
-    (void)lx; (void)ly;
+    if (!s->crop.visible) return 0;
+
+    /* The hover highlight, which is what makes the three rects read as buttons
+     * rather than as marks in the corners. Re-rendered only when it CHANGES:
+     * this runs on every pointer motion over a full-screen panel, and
+     * synui_render_crop redraws a whole-output cairo buffer. */
+    int hot = view_btn_at(s, lx, ly);
+    if (hot != s->crop.btn_hover) {
+        s->crop.btn_hover = hot;
+        synui_render_crop(s);
+    }
+
     /* The drag itself is fed by input.c's pointer_motion through
-     * crop_drag_motion(); this only claims the pointer so it never reaches the
+     * crop_drag_motion(); this also claims the pointer so it never reaches the
      * window underneath the full-screen panel. */
-    return s->crop.visible ? 1 : 0;
+    return 1;
 }
 
 int crop_scroll(syn_server_t *s, double lx, double ly, double delta)
