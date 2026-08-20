@@ -17,7 +17,7 @@ set -euo pipefail
 # where `gh auth status` says, correctly, that you are logged in. Nothing about
 # the message names root or HOME, so the obvious reading is that the login has
 # broken, and re-running `gh auth login` fixes it for the user who was never the
-# problem. 0.2.9.1 was retried four times that way.
+# problem. 0.2.9.2 was retried four times that way.
 #
 # Nothing here needs root either. It reads the ISO, writes split parts beside it
 # and uploads them; the build is what needs root, and build.sh gives the output

@@ -17,14 +17,14 @@
 # tail means GRUB starts, reads a grub.cfg full of binary noise, and drops you
 # at a `grub>` prompt — on a machine where the same ISO boots perfectly in
 # qemu, because qemu reads the .iso file and never touches the stick. That is
-# exactly what happened to 0.2.9.1 (2026-08-20) and to 0.1.7 before it
+# exactly what happened to 0.2.9.2 (2026-08-20) and to 0.1.7 before it
 # (2026-07-18). Both times the ISO was blameless and hours went into the ISO.
 #
 # So this script does not finish until `cmp` has read the entire stick back and
 # agreed with the image, byte for byte. It prints VERIFIED GOOD or it fails.
 #
 # Usage: sudo ./write-usb.sh /dev/sdX [VERSION]
-#        sudo ./write-usb.sh /dev/sdX 0.2.9.1
+#        sudo ./write-usb.sh /dev/sdX 0.2.9.2
 #        sudo ./write-usb.sh /dev/sdX /path/to/some.iso
 #
 # With no version it takes the newest SynapseOS-*.iso in archiso/out.
