@@ -1546,6 +1546,30 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
         view_resize(v, area.x, area.y, area.width, area.height);
     }
 
+    /* An EDGE-EXPANDED window has exactly the same problem, on the axes it
+     * expanded. A window grown to the full height by a double-click on its top
+     * border is floating from then on, so every loop here skips it too — and a
+     * bar that auto-hides would leave the same strip of bare desktop above it
+     * that maximized windows used to get (pkgrel 163).
+     *
+     * Only the expanded AXES are re-fitted. The other one is the size the user
+     * chose and is none of this loop's business — rewriting it would turn a
+     * vertical expand into a maximize the first time the bar moved. */
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->mapped || !v->expanded || v->fullscreen || v->minimized ||
+            v->maximized)
+            continue;
+        struct wlr_box area;
+        output_usable_box_of(s, v->output ? v->output : server_focused_output(s),
+                             &area);
+        int nx = v->x, ny = v->y, nw = v->w, nh = v->h;
+        if (v->expanded & SYN_EXPAND_V) { ny = area.y; nh = area.height; }
+        if (v->expanded & SYN_EXPAND_H) { nx = area.x; nw = area.width;  }
+        if (nx == v->x && ny == v->y && nw == v->w && nh == v->h)
+            continue;   /* the compare is what keeps this cheap; see above */
+        view_resize(v, nx, ny, nw, nh);
+    }
+
     /* AI layout is a single-monitor feature: only the focused output gets a
      * suggestion (one in-flight request at a time), the rest tile. */
     syn_output_t *focused = server_focused_output(s);
@@ -2128,7 +2152,13 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
  *    contract that keeps floating actually floating. Set once, at
  *    grab_release_constraints, and only ever cleared deliberately;
  *  - maximized, fullscreen and minimized windows, which are already claimed by
- *    something louder;
+ *    something louder — and an EDGE-EXPANDED one for the same reason: a window
+ *    grown to the full height by a double-click on its border was given that
+ *    size by the user, and gridding it back is exactly the thing this list
+ *    exists to prevent. ⚠ It cannot ride on hand_placed instead: that flag is
+ *    set once, at grab_release_constraints, and a double-click is not a grab;
+ *    borrowing it would also mean an expand permanently opted the window out of
+ *    arrangement, which collapsing it again should undo.
  *  - dialogs — an X11 modal/transient, or an xdg toplevel with a parent. Same
  *    exclusion, for the same reason, as layout_reclaim: gridding a file picker
  *    in beside the window that opened it is not tidiness.
@@ -2141,6 +2171,7 @@ static bool float_arrangeable(syn_view_t *v, syn_output_t *o)
 {
     if (!v->mapped || v->output != o) return false;
     if (v->fullscreen || v->minimized || v->maximized) return false;
+    if (v->expanded) return false;
     if (v->hand_placed) return false;
     if (v->override_redirect) return false;
 

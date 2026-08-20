@@ -462,6 +462,22 @@ typedef enum {
     SYN_SNAP_BOTTOM_RIGHT,
 } syn_snap_zone_t;
 
+/* Edge-expand (deco.c): double-clicking a window BORDER grows it to fill the
+ * usable box along that border's axis and leaves the other axis alone — the
+ * top or bottom edge grows it vertically, the left or right edge horizontally.
+ * A second double-click on the same axis puts it back.
+ *
+ * Two independent bits rather than an enum because the axes really are
+ * independent: a window can be expanded vertically, then horizontally, and
+ * collapsed in either order.
+ *
+ * ⚠ A CORNER NAMES TWO EDGES AND MEANS NEITHER. Within CORNER_GRAB pixels of a
+ * corner, border_edges() returns e.g. TOP|LEFT, and "which axis did you mean"
+ * has no answer there — so the gesture declines and the corner keeps doing
+ * what it has always done, which is resize both axes at once. */
+#define SYN_EXPAND_V 0x1        /* fills the usable box top to bottom */
+#define SYN_EXPAND_H 0x2        /* …and left to right */
+
 /* ── Forward declarations ────────────────────────────────── */
 typedef struct syn_server   syn_server_t;
 typedef struct syn_view     syn_view_t;
@@ -4588,6 +4604,18 @@ struct syn_view {
     struct wlr_box saved_geo;
     int            saved_floating;
 
+    /* deco.c: which AXES a double-click on a border has expanded to fill the
+     * usable box — SYN_EXPAND_V, SYN_EXPAND_H, or both. 0 is an ordinary
+     * window.
+     *
+     * A third tenant of saved_geo above, and it obeys the same rule the two
+     * others do: maximize, snap and edge-expand are mutually exclusive, so
+     * whichever one starts clears the others rather than nesting. What makes
+     * that safe here is that the saved box is whole — both axes of it — so an
+     * axis expanded second and collapsed first still has something true to go
+     * back to. */
+    unsigned       expanded;
+
     /* snap.c: which edge zone this window is currently snapped to, if any.
      * Dragging a snapped window releases it back to saved_geo. */
     syn_snap_zone_t snapped;
@@ -5499,6 +5527,17 @@ struct syn_server {
     syn_view_t       *deco_hover_view;
     uint32_t          tb_last_click_ms;
     syn_view_t       *tb_last_click_view;
+
+    /* input.c: the same, for a press on a window BORDER — a second press on the
+     * same window AND THE SAME EDGE inside the double-click window expands that
+     * axis instead of starting a resize.
+     *
+     * The edge is part of the identity on purpose: top-then-left is two
+     * different gestures that happen to be quick, not one double-click, and
+     * treating it as one would expand an axis the user never pointed at. */
+    uint32_t          bd_last_click_ms;
+    syn_view_t       *bd_last_click_view;
+    uint32_t          bd_last_click_edges;
 
     /* input.c: a titlebar press *arms* a move grab rather than committing to
      * it. Un-maximizing (and un-snapping, and un-tiling) is deferred until the
@@ -6472,6 +6511,11 @@ void snap_release_view(syn_server_t *s, syn_view_t *view, int keep_under_cursor)
 /* ── layout.c ────────────────────────────────────────────── */
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);
 void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs);
+/* Double-click on a border: grow `view` to the usable box along the axis that
+ * `edges` (a WLR_EDGE_* mask from deco_at) names, or collapse it back if that
+ * axis is already expanded. A mask naming two edges is a corner and is ignored;
+ * so is a maximized or fullscreen window, which has no axis left to grow. */
+void view_apply_edge_expand(syn_server_t *s, syn_view_t *view, uint32_t edges);
 void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized);
 /* Scale a sub-native fullscreen X11 client up to fill its output (xwayland.c);
  * no-op for xdg, override-redirect, multi-surface or already-filling clients. */

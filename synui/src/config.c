@@ -45,6 +45,7 @@
  * alt_tab_prev,
  * stack_next/prev, master_shrink/grow,
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
+ * expand_v_toggle, expand_h_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
  * cursor, cursor_reload,
@@ -741,6 +742,18 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+f",         "float_toggle" },
         { "super+shift+f",   "fullscreen_toggle" },
         { "super+m",         "maximize_toggle" },
+        /* The keyboard form of double-clicking a window's top/bottom border
+         * (vertical) or its left/right border (horizontal): fill the usable box
+         * along that axis and leave the other one alone, and press again to put
+         * it back.
+         *
+         * On the ARROWS because the axis is the whole point and no letter says
+         * it — Up for the up/down axis, Left for left/right. Ctrl+Super rather
+         * than Shift+Super next to maximize: super+shift+m is Do Not Disturb
+         * and has been since before this existed. These are the first arrow
+         * binds in the table; nothing else in synui claims one. */
+        { "super+ctrl+up",   "expand_v_toggle" },
+        { "super+ctrl+left", "expand_h_toggle" },
         { "super+shift+d",   "decorations_toggle" },
         { "super+n",         "minimize_toggle" },
         { "super+shift+n",   "minimize_restore" },

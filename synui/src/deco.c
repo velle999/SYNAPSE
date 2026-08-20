@@ -1132,6 +1132,7 @@ void view_deco_destroy(syn_view_t *view)
 
     if (view->server->deco_hover_view    == view) view->server->deco_hover_view    = NULL;
     if (view->server->tb_last_click_view == view) view->server->tb_last_click_view = NULL;
+    if (view->server->bd_last_click_view == view) view->server->bd_last_click_view = NULL;
 }
 
 /* Tear down the whole frame tree: the chrome, the client's surface tree, and
@@ -1350,10 +1351,22 @@ void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized)
     view_set_maximized(view, maximized);   /* client + taskbar state */
 
     if (maximized) {
-        /* Maximize and snap share saved_geo, so they can't both be live: a
-         * maximized window is no longer "the left half", and un-maximizing puts
-         * it back where it was when it was maximized. */
+        /* Maximize, snap and edge-expand share saved_geo, so they can't both be
+         * live: a maximized window is no longer "the left half", and
+         * un-maximizing puts it back where it was when it was maximized.
+         *
+         * ⚠ THAT LAST CLAUSE IS THE DECISION, and it is deliberate. Maximizing
+         * an EDGE-EXPANDED window records the expanded box, so un-maximizing
+         * hands back the tall window rather than the short one it grew from.
+         * The alternative — keeping the pre-expand box so the whole excursion
+         * unwinds at once — reads as a nicer trick and is a worse rule: "restore
+         * to what it was before I maximized" is what every desktop means by
+         * un-maximize, and making one case special is more surprising, not
+         * less. The cost is that the expansion is no longer collapsible
+         * afterwards; the window is simply a window that happens to be full
+         * height, and resizing it is how you make it shorter. */
         view->snapped        = SYN_SNAP_NONE;
+        view->expanded       = 0;
         view->saved_geo      = (struct wlr_box){ view->x, view->y,
                                                  view->w, view->h };
         view->saved_floating = view->floating;
@@ -1389,4 +1402,113 @@ void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized)
      * event (a focus change, which does call this) recomputed them and they
      * visibly snapped square. It calls view_update_decorations itself. */
     anim_apply_alpha(view);
+}
+
+/*
+ * Double-click a border: fill the usable box along that border's axis.
+ *
+ * The gesture people already know from the resize border on every other
+ * desktop — grab the top or bottom edge and it grows vertically, the left or
+ * right edge and it grows horizontally, and the axis you did not touch keeps
+ * the size you gave it. It sits next to the titlebar double-click (maximize)
+ * and behaves the same way: a second one puts the window back.
+ *
+ * WHY THE AXES ARE TWO BITS AND NOT A MODE. Expanding vertically and then
+ * horizontally has to leave a window that can be collapsed in either order,
+ * and each collapse has to restore the axis it owns without disturbing the
+ * other. Both axes of the pre-expand box are recorded on the FIRST expand, so
+ * the second one has nothing to save and nothing to lose.
+ *
+ * ⚠ IT SHARES saved_geo WITH MAXIMIZE AND SNAP. Those two already state the
+ * rule — one slot, mutually exclusive states — and this obeys it: expanding
+ * clears `snapped`, and maximizing clears `expanded`. Nesting them would mean
+ * the inner state's restore box was written by the outer one.
+ *
+ * ⚠ THE COLLAPSE IS USUALLY NOT REACHABLE BY MOUSE, and it is worth knowing
+ * before someone reports it as a bug. Filling the usable box vertically puts
+ * the window's top edge ON the usable edge, and deco_update_grab_ring() hangs
+ * the 8px ring OUTSIDE the frame — so it lands off-screen, or under the bar,
+ * and there is no border left to double-click. The ways back are the keybind
+ * (expand_v_toggle / expand_h_toggle, Super+Ctrl+Up and Super+Ctrl+Left) and
+ * dragging one of the perpendicular borders, which clears the state through
+ * grab_release_constraints like any other hand resize.
+ *
+ * Making the ring sit INSIDE a flush edge would close that, and was left alone
+ * deliberately: it would put an 8px band over the client at every screen edge,
+ * which is the dead zone the ring is already suppressed for maximized windows
+ * to avoid. tests/edge_expand.sh pins the behaviour as it stands.
+ */
+void view_apply_edge_expand(syn_server_t *s, syn_view_t *view, uint32_t edges)
+{
+    if (!view->mapped || view->fullscreen || view->maximized) return;
+
+    /* ⚠ A corner names both axes, which means neither — see SYN_EXPAND_V. */
+    bool vert  = (edges & (WLR_EDGE_TOP  | WLR_EDGE_BOTTOM)) != 0;
+    bool horiz = (edges & (WLR_EDGE_LEFT | WLR_EDGE_RIGHT))  != 0;
+    if (vert == horiz) return;
+
+    unsigned bit = vert ? SYN_EXPAND_V : SYN_EXPAND_H;
+
+    struct wlr_box area;
+    output_usable_box_of(s, view->output ? view->output
+                                         : server_focused_output(s), &area);
+
+    int nx = view->x, ny = view->y, nw = view->w, nh = view->h;
+
+    if (view->expanded & bit) {
+        /* ── collapse this axis ──────────────────────────────────────────
+         *
+         * Back to where the axis was before the FIRST expand. The saved box
+         * can be empty on a window that reached this state without one ever
+         * being filled in; there is nothing true to restore then, so leave the
+         * axis where it is rather than folding the window to nothing. */
+        struct wlr_box g = view->saved_geo;
+        if (g.width > 0 && g.height > 0) {
+            if (vert) { ny = g.y; nh = g.height; }
+            else      { nx = g.x; nw = g.width;  }
+        }
+        view->expanded &= ~bit;
+
+        if (view->expanded) {
+            /* The other axis is still expanded, so the window is still the
+             * layout's to ignore. Nothing to reflow. */
+            view_resize(view, nx, ny, nw, nh);
+            return;
+        }
+
+        /* Last axis: hand the window back to whatever placed it before.
+         *
+         * ⚠ ORDER, and it is the same order un-maximizing uses. layout_apply
+         * FIRST, so a window that was tiled is re-tiled by its layout — and
+         * then resize only what the layout will not place itself. Resizing
+         * first and reflowing after would send the client a configure it is
+         * about to be given again, and the other way round is how a tiled
+         * window ends up sitting on top of its own layout. */
+        view->floating = view->saved_floating;
+        layout_apply(s, view->workspace);
+        if (view->floating ||
+            (view->workspace && view->workspace->layout == LAYOUT_FLOATING))
+            view_resize(view, nx, ny, nw, nh);
+        return;
+    }
+
+    /* ── expand along this axis ──────────────────────────────────────────
+     *
+     * The FIRST expand is the one that records anything. A second axis must
+     * not overwrite the box, or collapsing the first would restore it to the
+     * size the first expand gave it — which is the size it is trying to leave. */
+    if (!view->expanded) {
+        view->snapped        = SYN_SNAP_NONE;
+        view->saved_geo      = (struct wlr_box){ view->x, view->y,
+                                                 view->w, view->h };
+        view->saved_floating = view->floating;
+        view->floating       = 1;   /* out of the tiling flow, as maximize is */
+    }
+    view->expanded |= bit;
+    if (vert) { ny = area.y; nh = area.height; }
+    else      { nx = area.x; nw = area.width;  }
+
+    wlr_scene_node_raise_to_top(view_node(view));
+    view_resize(view, nx, ny, nw, nh);
+    layout_apply(s, view->workspace);   /* reflow what it left behind */
 }

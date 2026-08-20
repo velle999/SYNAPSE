@@ -383,6 +383,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area (also a niri column's width) |
 | `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other five layouts |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
+| `Super`+`Ctrl`+`up` / `Super`+`Ctrl`+`left` | Fill the screen height / width, leaving the other axis alone. Press again to put it back. Same thing as double-clicking the window's top or bottom border (height) or its left or right border (width) |
 | `Super`+`Shift`+`N` | Restore a minimized window |
 | `Super`+`Shift`+`F` | Fullscreen (forces it — for games that only do "borderless") |
 | `Super`+`Shift`+`D` | Show/hide titlebars |

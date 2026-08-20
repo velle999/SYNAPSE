@@ -97,6 +97,25 @@ layer_shell_client_h = custom_target('wlr-layer-shell-unstable-v1-client-protoco
   input   : layer_shell_xml,
   command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
 
+# The CLIENT side of wlr-virtual-pointer, for tests/vpointer_click.c — the only
+# way to send synui a real pointer double-click, which is what the edge-expand
+# gesture is made of. synui itself uses the server half straight out of wlroots
+# (input.c), so only the client header is generated here. XML vendored for the
+# same reason the layer-shell one is; syn-arcade vendors its own copy and says
+# why in its meson.build.
+virtual_pointer_xml = join_paths(meson.project_source_root(),
+  'protocols/wlr-virtual-pointer-unstable-v1.xml')
+
+virtual_pointer_client_h = custom_target('wlr-virtual-pointer-unstable-v1-client-protocol.h',
+  output  : 'wlr-virtual-pointer-unstable-v1-client-protocol.h',
+  input   : virtual_pointer_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+virtual_pointer_c = custom_target('wlr-virtual-pointer-unstable-v1-protocol.c',
+  output  : 'wlr-virtual-pointer-unstable-v1-protocol.c',
+  input   : virtual_pointer_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 # …and linux-dmabuf, for that client's `--linear` mode: the one way to hand the
 # compositor a buffer it imports as GL_TEXTURE_EXTERNAL_OES on purpose.
 linux_dmabuf_client_xml = join_paths(
@@ -1039,6 +1058,14 @@ xdg_shell_client_h = custom_target('xdg-shell-client-protocol.h',
   input   : xdg_shell_xml,
   command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
 
+# The pointer that sends the double-click. Down here rather than beside its
+# custom_targets above because `wayland_client` is not defined until later in
+# this file and meson reads it top to bottom.
+vpointer_click = executable('vpointer_click',
+  ['tests/vpointer_click.c', virtual_pointer_client_h, virtual_pointer_c],
+  dependencies : [wayland_client],
+  build_by_default : false)
+
 stubborn_client = executable('stubborn_client',
   ['tests/stubborn_client.c', xdg_shell_client_h, xdg_shell_c],
   dependencies : [wayland_client],
@@ -1070,6 +1097,18 @@ test('resize_heal', resize_heal,
 # (layout_restore_geometry, layout.c). Reuses the same client: it only has to be
 # a real xdg-shell toplevel with a stable app_id to look up. Four layouts, one
 # window each, so the timeout is the roomier one.
+# `edge_expand`: double-clicking a window border fills the usable box along that
+# border's axis (velle, 2026-08-20). Driven two ways on purpose — the geometry
+# through `synctl dispatch`, where each failure is one readable step, and then
+# the gesture itself through a real pointer (tests/vpointer_click.c), because
+# "the dispatch works" says nothing about whether the border ever sees a press.
+edge_expand = find_program('tests/edge_expand.sh')
+test('edge_expand', edge_expand,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path(), vpointer_click.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe, vpointer_click],
+     timeout : 120)
+
 geom_layout = find_program('tests/geom_layout.sh')
 test('geom_layout', geom_layout,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

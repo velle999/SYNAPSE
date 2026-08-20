@@ -1948,6 +1948,8 @@ static const char *action_desc(const char *action, const char *arg)
         { "float_toggle",      "Float window" },
         { "fullscreen_toggle", "Fullscreen window" },
         { "maximize_toggle",   "Maximize window" },
+        { "expand_v_toggle",   "Fill screen height (or put it back)" },
+        { "expand_h_toggle",   "Fill screen width (or put it back)" },
         { "minimize_toggle",   "Minimize window" },
         { "minimize_restore",  "Restore minimized window" },
         { "decorations_toggle","Titlebars on/off" },

@@ -139,6 +139,16 @@ static void json_view(ipc_buf_t *b, syn_view_t *v)
     bprintf(b, ",\"at\":[%d,%d],\"size\":[%d,%d]", v->x, v->y, v->w, v->h);
     bprintf(b, ",\"floating\":%s",   v->floating   ? "true" : "false");
     bprintf(b, ",\"maximized\":%s",  v->maximized  ? "true" : "false");
+    /* Edge-expand, one flag per axis. Reported for the same reason `stack` and
+     * `enabled` below are: nothing else can answer it. An expanded window is
+     * floating and un-maximized and sits at some box — exactly what an ordinary
+     * hand-resized window looks like from out here — so without these two,
+     * "did the double-click take" and "did the user drag the edge" produce
+     * identical output. tests/edge_expand.sh is the reason they exist. */
+    bprintf(b, ",\"expand_v\":%s",
+            (v->expanded & SYN_EXPAND_V) ? "true" : "false");
+    bprintf(b, ",\"expand_h\":%s",
+            (v->expanded & SYN_EXPAND_H) ? "true" : "false");
     bprintf(b, ",\"fullscreen\":%s", v->fullscreen ? "true" : "false");
     bprintf(b, ",\"minimized\":%s",  v->minimized  ? "true" : "false");
     bprintf(b, ",\"xwayland\":%s",   v->is_xwayland ? "true" : "false");

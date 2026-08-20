@@ -987,6 +987,21 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "maximize_toggle") == 0) {
         if (!s->focused_view) return true;
         view_apply_maximized(s, s->focused_view, !s->focused_view->maximized);
+    } else if (strcmp(action, "expand_v_toggle") == 0) {
+        /* The keyboard half of the border double-click: fill the usable box
+         * vertically, or put the height back. Named for the AXIS rather than
+         * for an edge because there is no cursor here to have been on one —
+         * WLR_EDGE_TOP is simply how view_apply_edge_expand spells "vertical".
+         *
+         * Worth having on its own: every other window action in synui is
+         * reachable from a key, this is the one gesture that would not have
+         * been, and it is also what lets the feature be tested without
+         * synthesising a double-click into a nested compositor. */
+        if (!s->focused_view) return true;
+        view_apply_edge_expand(s, s->focused_view, WLR_EDGE_TOP);
+    } else if (strcmp(action, "expand_h_toggle") == 0) {
+        if (!s->focused_view) return true;
+        view_apply_edge_expand(s, s->focused_view, WLR_EDGE_LEFT);
     } else if (strcmp(action, "decorations_toggle") == 0) {
         /* Global, not per-window: the titlebar is chrome the compositor owes
          * every client it told SERVER_SIDE, so it goes away for all of them at
@@ -2144,6 +2159,17 @@ static void grab_release_constraints(syn_server_t *s, syn_view_t *view,
      * layout_reclaim. */
     view->hand_placed = 1;
 
+    /* And an expanded axis is no longer expanded: the user is about to give
+     * this window a size of their own, so the box remembered from before the
+     * double-click describes a window that no longer exists.
+     *
+     * ⚠ Safe HERE and nowhere earlier. This runs on the first real motion of a
+     * drag, never on a press — which is exactly what lets the second
+     * double-click on a border collapse the axis instead of finding the state
+     * already wiped by its own first press. That is why the border grab is
+     * armed; see the DECO_BORDER case in cursor_button(). */
+    view->expanded = 0;
+
     if (!view->floating) {
         view->floating = 1;
         layout_apply(s, view->workspace);   /* reflow remaining tiled windows */
@@ -2253,6 +2279,31 @@ static void process_cursor_move(syn_server_t *s)
 static void process_cursor_resize(syn_server_t *s)
 {
     syn_view_t *v = s->grabbed_view;
+
+    /* An armed border press is not yet a drag — the mirror of the check in
+     * process_cursor_move, and it is here for the same two reasons: a click
+     * that merely lands on a border must not resize the window, and a
+     * double-click must reach its second press with the window's state intact.
+     *
+     * ⚠ THE GEOBOX HAS TO BE RE-TAKEN. begin_interactive_armed records it at
+     * press time, before grab_release_constraints has run, so for a maximized
+     * or tiled window it describes the box the window is about to leave.
+     * Resizing from that box makes the window jump the moment the drag starts.
+     * grab_x/grab_y need no such fixing: they are the CURSOR's anchor and the
+     * cursor did not move. */
+    if (s->grab_armed) {
+        double px = s->cursor->x - s->grab_press_x;
+        double py = s->cursor->y - s->grab_press_y;
+        if (px * px + py * py < GRAB_DRAG_SLOP * GRAB_DRAG_SLOP)
+            return;
+
+        s->grab_armed = false;
+        grab_release_constraints(s, v, SYNUI_CURSOR_RESIZE);
+        s->grab_x      = s->cursor->x;
+        s->grab_y      = s->cursor->y;
+        s->grab_geobox = (struct wlr_box){ v->x, v->y, v->w, v->h };
+    }
+
     struct wlr_box g = s->grab_geobox;
     double dx = s->cursor->x - s->grab_x;
     double dy = s->cursor->y - s->grab_y;
@@ -3080,9 +3131,37 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                 case DECO_BTN_CLOSE:
                     view_close(dv);
                     break;
-                case DECO_BORDER:
-                    begin_interactive_edges(dv, SYNUI_CURSOR_RESIZE, edges);
+                case DECO_BORDER: {
+                    /* Double-click a border to fill the usable box along that
+                     * border's axis — top or bottom grows it vertically, left
+                     * or right horizontally. The same shape as the titlebar
+                     * double-click directly below, and the same 400 ms.
+                     *
+                     * ⚠ THE EDGE IS PART OF THE IDENTITY. Two quick clicks on
+                     * two different edges are two gestures that happened to be
+                     * close together, not one double-click, and treating them
+                     * as one expands an axis nobody pointed at. */
+                    bool dbl = (s->bd_last_click_view == dv) &&
+                               (s->bd_last_click_edges == edges) &&
+                               (time_msec - s->bd_last_click_ms < 400);
+                    s->bd_last_click_view  = dbl ? NULL : dv;
+                    s->bd_last_click_edges = edges;
+                    s->bd_last_click_ms    = time_msec;
+                    if (dbl)
+                        view_apply_edge_expand(s, dv, edges);
+                    else
+                        /* ARMED, like the titlebar. A press on a border must
+                         * not commit to anything until the pointer has
+                         * travelled: committing at press time un-maximized,
+                         * un-tiled and hand-placed the window on the FIRST
+                         * click of every double-click, so the second one could
+                         * never find an axis still expanded to collapse. It
+                         * also stopped a click that merely brushed the border
+                         * from resizing the window by a pixel. */
+                        begin_interactive_armed(dv, SYNUI_CURSOR_RESIZE,
+                                                edges, true);
                     break;
+                }
                 case DECO_TITLEBAR: {
                     bool dbl = (s->tb_last_click_view == dv) &&
                                (time_msec - s->tb_last_click_ms < 400);

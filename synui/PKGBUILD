@@ -269,7 +269,28 @@ pkgver=0.1.0
 #   DISABLE_MANGOHUD=1 (the manifest's own disable_environment, which beats the
 #   enable) and MANGOHUD=0 for the GL side. An FPS overlay on the background
 #   layer was never wanted. tests/wpengine_mangohud.sh.
-pkgrel=409
+# 410: DOUBLE-CLICK A BORDER TO FILL THAT AXIS (velle's request). The top or
+#   bottom border grows the window to the full usable HEIGHT, the left or right
+#   to the full usable WIDTH, and the axis you did not touch keeps the size you
+#   gave it. A second double-click on the same axis puts it back; the two axes
+#   are independent bits and collapse in either order. ⚠ A CORNER NAMES TWO
+#   EDGES AND MEANS NEITHER, so it still resizes both ways as it always did.
+#   Shares saved_geo with maximize and snap under their existing rule — one
+#   slot, mutually exclusive — so expanding clears `snapped` and maximizing
+#   clears `expanded`. ⚠ THE BORDER PRESS IS NOW ARMED, like the titlebar's:
+#   committing at press time un-maximized and hand-placed the window on the
+#   FIRST click of every double-click, so the second could never find an axis
+#   to collapse; process_cursor_resize gained the slop check and re-takes the
+#   geobox after grab_release_constraints. Also: float_arrangeable() skips an
+#   expanded window (the grid dragged it straight back), layout_apply re-fits
+#   the expanded AXES to the current usable box the way it does maximized
+#   windows, and `synctl clients` reports expand_v/expand_h. Keys:
+#   Super+Ctrl+Up / Super+Ctrl+Left (expand_v_toggle / expand_h_toggle).
+#   ⚠ Collapsing by MOUSE usually is not possible — a filled axis puts the
+#   border on the usable edge, where the grab ring is off-screen or under the
+#   bar; the keybind and a drag of a perpendicular border are the ways back.
+#   tests/edge_expand.sh, driven by a real pointer (tests/vpointer_click.c).
+pkgrel=410
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

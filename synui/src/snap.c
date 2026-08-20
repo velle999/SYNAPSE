@@ -282,6 +282,11 @@ void snap_drag_end(syn_server_t *s, syn_view_t *view)
                                                  view->w, view->h };
         view->saved_floating = view->floating;
     }
+    /* Snap, maximize and edge-expand share saved_geo and cannot both be live —
+     * a window snapped to the left half is not "expanded vertically" any more,
+     * and leaving the bit set would have the next double-click on its top edge
+     * collapse it to a box the snap has already overwritten. */
+    view->expanded = 0;
     view->snapped  = zone;
     view->floating = 1;              /* a snapped window is out of the tiling flow */
 
