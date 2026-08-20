@@ -49,13 +49,28 @@ done
 notes="$(mktemp)"
 trap 'rm -f "$notes"' EXIT
 custom="${notesdir}/${ver}.md"
+# Set when the notes file documents the download ITSELF, in which case the
+# boilerplate below is skipped. A per-release file can spell the instructions out
+# with the real part names and the real checksum instead of the generic form, and
+# 0.2.9.md does — appending the boilerplate on top of that gives the release page
+# two Download sections that disagree about how specific they are.
+have_own_download=0
 if [[ -f $custom ]]; then
     cat "$custom" >> "$notes"
-    printf '\n---\n\n' >> "$notes"
     echo "using release notes: $custom"
+    if grep -qE '^## (Getting the image|Download)' "$custom"; then
+        have_own_download=1
+        echo "  ...which documents the download itself — skipping the boilerplate"
+    else
+        # The rule divides the notes from the boilerplate, so it is printed only
+        # when there is boilerplate to divide them from — otherwise the page ends
+        # on a horizontal line with nothing under it.
+        printf '\n---\n\n' >> "$notes"
+    fi
 else
     echo "no release-notes/${ver}.md — publishing with the download boilerplate only"
 fi
+if (( have_own_download == 0 )); then
 cat >> "$notes" <<EOF
 ## Download
 
@@ -143,6 +158,7 @@ Then reboot and choose the USB stick from your firmware's boot menu (usually
 F12, F11, Esc or Del at power-on). Secure Boot must be off, or SynapseOS enrolled
 — see the wiki's **Secure Boot** page.
 EOF
+fi
 
 gh release create "v$ver" \
     --title "SynapseOS $ver" \
