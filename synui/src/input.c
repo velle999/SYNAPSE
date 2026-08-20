@@ -1040,6 +1040,14 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * from a file manager that already knows the filename. */
         if (arg && *arg) crop_open(s, arg);
         else             crop_toggle(s);
+    } else if (strcmp(action, "view") == 0) {
+        /* The image VIEWER — the same panel and the same decoded image as the
+         * cropper, showing the picture whole (crop.c). What the Image Viewer
+         * menu entry dispatches, and therefore what an image opened from a file
+         * manager reaches, so it takes a path the same way. Without one it
+         * opens the recent-images list, told to come back to the viewer. */
+        if (arg && *arg) crop_view_open(s, arg);
+        else             crop_view_toggle(s);
     } else if (strcmp(action, "equalizer") == 0) {
         eq_toggle(s);
     } else if (strcmp(action, "emoji") == 0) {

@@ -146,7 +146,44 @@ pkgver=0.1.0
 #   ⚠ desktop-file-validate wants an X- prefix on both. Ignore it — OnlyShowIn
 #   is compared literally against XDG_CURRENT_DESKTOP, so X-SynapseOS matches
 #   nothing and the prefix would hide every entry everywhere.
-pkgrel=404
+# 405: AN IMAGE VIEWER — and the cropper in the menus beside it.
+#   SynapseOS had no image viewer at all. Nothing shipped one, so the winner of
+#   image/png came from mimeinfo.cache, which is only "who declared the type",
+#   and the system answer to double-clicking a screenshot was a BROWSER TAB.
+#   The same walkover that made a terminal the answer to "open this folder"
+#   (see synfiles' mimeapps.list), and just as silent, because a browser really
+#   can display a PNG.
+#   The viewer is a FACE OF THE CROPPER and not a new program: crop.c already
+#   decoded PNG and JPEG, already fitted a picture to an output, already kept a
+#   scaled copy so a drag would not resample 24 megapixels a frame, and already
+#   drew a full-screen panel. What it lacked was zoom, pan and the rest of the
+#   folder. So `view` opens the picture whole, c hands the same decoded surface
+#   to the cropper, Escape comes back, and nothing is read or resampled twice.
+#   ⚠ THE ARROWS DO TWO THINGS, and it is not a mode: fitted there is nowhere
+#   to pan, so Left and Right walk the folder; zoomed in they move the picture.
+#   The footer says which. n and p always walk.
+#   ⚠ The folder is sorted NATURALLY — IMG_9 before IMG_10 — because a camera's
+#   own numbering is the one order a viewer must not scramble, and strcmp
+#   reverses it. The recent-images list stays sorted by mtime; it answers a
+#   different question ("the screenshot I just took").
+#   Zoom is a MULTIPLE OF THE FIT (1.0 is the whole picture, on any monitor);
+#   the CEILING is an absolute 8 screen pixels per image pixel, because
+#   "as far in as it goes" should be a fixed apparent size. Past 2:1 the filter
+#   is NEAREST — at that point you are looking AT the pixels.
+#   Menus: Image Viewer and Image Cropper, both OnlyShowIn=synui;SynapseOS;.
+#   The viewer declares image/png and image/jpeg, and synfiles' vendor
+#   mimeapps.list (pkgrel 52) names it as the distribution default.
+#   ⚠ Its Exec is /usr/bin/synui-view-image, NOT a bare synctl: a default
+#   handler is asked to open files in sessions where synui is not running, KIO
+#   skips a not-shown entry but GLib does not, so under GNOME a bare synctl
+#   would be a double-click that did nothing and said nothing. The wrapper
+#   dispatches when there is a synui and hands the file on when there is not —
+#   and guards the recursion, since it is itself what xdg-open would call.
+#   ⚠ config/synui-crop.desktop is config/synui-crop-servicemenu.desktop now.
+#   The installed path is unchanged; the source file was renamed because the
+#   application entry is data/synui-crop.desktop and one name in two directories
+#   is a file you edit the wrong copy of.
+pkgrel=405
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -684,6 +721,14 @@ package() {
     install -Dm755 systemd/synui-open-folder.sh \
         "$pkgdir/usr/bin/synui-open-folder"
 
+    # The image viewer's .desktop Exec. Not the way in from inside synui (that
+    # is `synctl dispatch view`, super+shift+i, or the Image Viewer entry's own
+    # dispatch) — this is the wrapper that keeps the DISTRIBUTION DEFAULT for
+    # image/png and image/jpeg honest in a session where synui is not the
+    # compositor. See the header of systemd/synui-view-image.sh.
+    install -Dm755 systemd/synui-view-image.sh \
+        "$pkgdir/usr/bin/synui-view-image"
+
     # Right-click an .iso in Dolphin -> Mount/Unmount Image, Write to USB Stick.
     # The service menu must be executable or KIO 6 skips it. See
     # config/synui-iso-mount.desktop.
@@ -705,7 +750,7 @@ package() {
     # skips it. No helper script: the action is `synctl dispatch crop %f`, and
     # the cropper is a compositor panel (src/crop.c) because the region has to
     # be selected over a displayed image and nothing else here displays one.
-    install -Dm755 config/synui-crop.desktop \
+    install -Dm755 config/synui-crop-servicemenu.desktop \
         "$pkgdir/usr/share/kio/servicemenus/synui-crop.desktop"
 
     # Right-click a .png/.jpg in Dolphin -> Set as Wallpaper. Executable or

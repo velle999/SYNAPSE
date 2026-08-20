@@ -1,0 +1,59 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Image Viewer
+GenericName=Image Viewer
+Comment=Look at a picture — zoom, pan, and step through the folder
+# %f and not %F: ONE image. The viewer is a single full-screen panel, so a
+# selection of twelve photos handed to it would be twelve dispatches opening
+# the same panel twelve times, each one replacing the last — you would look at
+# the twelfth and wonder where the others went. Stepping through them is what
+# Left and Right are for, and they walk the whole folder anyway.
+#
+# The viewer is a compositor panel, not a program: what runs asks synui to open
+# the same thing super+shift+i does (src/crop.c). That is also why
+# StartupNotify is off — no window ever appears, so a startup spinner would
+# hang until it timed out.
+#
+# ⚠ synui-view-image AND NOT A BARE `synctl dispatch view %f`, because this
+# entry is the DISTRIBUTION DEFAULT for these types (synfiles' mimeapps.list)
+# and a default handler gets asked to open files in sessions where synui is not
+# running. KIO skips a not-shown entry when it picks one; GLib does not, so
+# under GNOME this entry is chosen and RUN, and a bare synctl there is a
+# double-click that does nothing and says nothing. The wrapper dispatches when
+# there is a synui and hands the file to whatever the system does have when
+# there is not. Full reasoning in systemd/synui-view-image.sh.
+Exec=synui-view-image %f
+Icon=viewimage
+Terminal=false
+StartupNotify=false
+Categories=Graphics;Viewer;2DGraphics;
+Keywords=image;picture;photo;view;viewer;png;jpeg;jpg;zoom;
+# ⚠ DECLARED, NOT IMPOSED. Listing the types makes this a candidate — an "Open
+# With ▸ Image Viewer" row, and the vendor default that synfiles' mimeapps.list
+# names — but which candidate actually runs is decided by mimeapps.list, and a
+# user who has already chosen something keeps it.
+#
+# Exactly the two formats crop.c can decode: PNG through cairo and JPEG through
+# imgdec.c, plus the aliases the magic database still emits. Deliberately NOT
+# image/gif or image/webp — a menu entry that opens "Cannot open that image" is
+# worse than no entry. Check any addition with `xdg-mime query filetype FILE`.
+MimeType=image/png;image/jpeg;image/jpg;image/pjpeg;
+# ⛔ SYNUI ONLY — same reasoning as the other synctl entries: under KDE or GNOME
+# nothing is listening on synui's socket and this would be a menu item that did
+# nothing at all. Both desktop names, because the identity is inconsistent
+# (synui-session exports `synui`, the wayland-session file says `SynapseOS`).
+# ⚠ `desktop-file-validate` calls both names "unregistered" and wants an X-
+# prefix. IGNORE IT — the prefix would BREAK this: implementations compare
+# OnlyShowIn literally against the entries in XDG_CURRENT_DESKTOP, so
+# X-SynapseOS does not match SynapseOS and the entry would vanish everywhere.
+OnlyShowIn=synui;SynapseOS;
+Actions=Crop;
+
+# The other face of the same panel, one right-click away on the launcher. It is
+# also `c` once the picture is open, which is how most people will reach it —
+# this row is for the times you already know you are here to crop.
+[Desktop Action Crop]
+Name=Crop Image
+Icon=transform-crop
+Exec=synctl dispatch crop %f

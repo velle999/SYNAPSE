@@ -608,15 +608,25 @@ struct syn_font_family {
     int  mono;
 };
 
-/* ── The image cropper (crop.c) ──────────────────────────────
+/* ── The image viewer and cropper (crop.c) ───────────────────
  *
  * The one panel that takes an argument: it operates on a file rather than
  * configuring something. The selection is held in IMAGE PIXELS — see crop.c
  * for why storing it in screen coordinates loses precision and breaks on a
  * different-sized output.
  *
- * It has TWO faces, `picking` says which: the recent-images list it opens on
- * when it was given no file, and the cropper proper once one is chosen. */
+ * It has THREE faces, and one decoded image between them:
+ *
+ *   picking   the recent-images list, when it was opened with no file
+ *   viewing   the VIEWER — the picture whole, with zoom, pan and the rest of
+ *             the folder to step through
+ *   neither   the cropper proper
+ *
+ * The viewer is not a second program and deliberately not a second copy of the
+ * decode: `c` in the viewer is the cropper on the same surface, and Escape
+ * comes back to it. That is why the viewer lives here rather than in an app of
+ * its own — everything an image viewer needs (the decoders, the fit, the
+ * scaled-copy cache, a full-screen panel) already existed for the cropper. */
 
 /* How many recent images the picker will hold, and how many rows it draws.
  * The cap is on the NEWEST that many, not the first that many found — see
@@ -681,9 +691,58 @@ typedef struct {
      * `sel` is a list index, `scroll` the first drawn row. */
     int picking;
     int from_pick;                 /* opened FROM the list — Backspace goes back */
+    /* Which face Enter on a row opens. The list is shared, the intent is not:
+     * `crop` (super+shift+x, Dolphin) picks a file TO CROP, `view` picks one to
+     * LOOK AT. Without this the one list would have to guess, and guessing
+     * wrong sends a keybind somewhere its name did not say. */
+    int pick_for_crop;
     syn_crop_recent_t recent[CROP_RECENT_MAX];
     int recent_count, recent_sel, recent_scroll;
     syn_hit_t hit;                 /* rows, while picking; blank otherwise */
+
+    /* ── The viewer ──────────────────────────────────────────
+     *
+     * `viewing` is the face; the cropper is this same panel with it clear, on
+     * the same decoded surface. */
+    int viewing;
+    int from_view;                 /* the cropper was entered FROM the viewer —
+                                    * Escape goes back to it, not to the desktop */
+
+    /* Zoom as a MULTIPLE OF THE FITTED SCALE, never an absolute one. 1.0 is
+     * "the whole picture", which is what the viewer opens on and what 0 puts
+     * back — on any monitor, for any image. An absolute scale cannot mean that:
+     * 1.0 would be a 24-megapixel photo shown at a hundredth of itself on one
+     * screen and a thumbnail lost in the middle of another. crop_view_geom()
+     * multiplies it by what crop_fit() returns, so there is still ONE mapping
+     * from image pixels to the screen. */
+    double zoom;
+
+    /* The image point drawn at the CENTRE of the output, in image pixels.
+     *
+     * Centre and not top-left because zoom has to hold a point still: zooming
+     * about the pointer is solving for this, and with a top-left origin the
+     * same gesture is an origin AND a size correction that have to agree.
+     * Clamped by view_center() so the picture can never be panned off the
+     * screen — which also makes the fitted case fall out for free, since a
+     * picture smaller than the viewport clamps to its own middle. */
+    double cx, cy;
+
+    /* Where the pan drag last saw the pointer, in layout coords. The drag
+     * itself reuses `dragging` above — input.c already routes motion here
+     * while it is set, and a second flag would be a second thing to clear. */
+    double pan_lx, pan_ly;
+
+    /* ── The folder, for next/previous ───────────────────────
+     *
+     * The images beside the one being viewed, by BASENAME with the directory
+     * held once: a viewer that cannot go to the next picture is a preview.
+     * Allocated on open and freed on hide — a photo directory is thousands of
+     * names and this panel is opened for a minute at a time, so it is not worth
+     * a fixed array in every syn_server_t. */
+    char   nav_dir[256];
+    char **nav;
+    int    nav_count;
+    int    nav_at;                 /* index of s->crop.path within nav */
 } syn_crop_panel_t;
 
 /* ── The equalizer panel (eq.c; the DSP is synui-eq(1)) ────── */
@@ -8094,15 +8153,33 @@ int  eq_click(syn_server_t *s, double lx, double ly, uint32_t button,
 int  eq_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_eq(syn_server_t *s);
 
-/* ── crop.c (image cropper) ──────────────────────────────────
+/* ── crop.c (the image viewer and cropper) ───────────────────
  *
- * `synctl dispatch crop <path>`, Dolphin's right-click ▸ Crop Image, or the
- * `crop` bind with no argument — which opens the recent-images list instead.
- * Writes a NEW file beside the original and never touches the input. */
+ * THE CROPPER: `synctl dispatch crop <path>`, Dolphin's right-click ▸ Crop
+ * Image, or the `crop` bind (super+shift+x) with no argument — which opens the
+ * recent-images list instead. Writes a NEW file beside the original and never
+ * touches the input.
+ *
+ * THE VIEWER: `synctl dispatch view <path>`, the Image Viewer menu entry (which
+ * also declares the image MIME types, so it is an Open With candidate), or the
+ * `view` bind (super+shift+i) with no argument. Reads and never writes. `c`
+ * there is the cropper on the same decoded image. */
 
 void crop_open(syn_server_t *s, const char *path);   /* NULL/"" → the list */
 void crop_hide(syn_server_t *s);
 void crop_toggle(syn_server_t *s);   /* closes, or opens the recent list */
+
+/* The viewer, same two shapes: a path opens the picture, nothing opens the
+ * list — with Enter on a row going to the VIEWER rather than the cropper. */
+void crop_view_open(syn_server_t *s, const char *path);
+void crop_view_toggle(syn_server_t *s);
+
+/* Where the picture lands while VIEWING: crop_fit() times the zoom, offset by
+ * the pan. The same contract crop_fit() has — the render and the pointer both
+ * ask this and neither computes it — and the reason the wheel can zoom about
+ * the pointer at all, since that is this mapping run backwards. */
+void crop_view_geom(syn_server_t *s, struct wlr_box *ob,
+                    double *scale, double *ox, double *oy);
 
 /* The recent-images list: rebuild it, and read a row for the render. `when` is
  * a relative age ("2h ago"), `dir` the containing directory. All three point at

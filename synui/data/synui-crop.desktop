@@ -1,0 +1,34 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Image Cropper
+GenericName=Image Cropper
+Comment=Drag a rectangle over a picture and save the selection as a new file
+# Bare, with no %f, is deliberate for the MENU entry: launched from a menu
+# there is no file, and the panel opens on its recent-images list — Pictures,
+# Screenshots, Wallpapers and Downloads, newest first. That list is what makes
+# this reachable without a file manager at all (see src/crop.c).
+#
+# It still TAKES a file everywhere it is given one: Dolphin's right-click ▸
+# Crop Image (config/synui-crop-servicemenu.desktop), Open With, `synctl
+# dispatch crop <path>`, and c inside the viewer.
+Exec=synctl dispatch crop
+Icon=transform-crop
+Terminal=false
+StartupNotify=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+Keywords=crop;image;picture;photo;trim;cut;resize;screenshot;
+# ⚠ Listed so this is an "Open With" candidate for an image, NOT so it becomes
+# anybody's default — nothing here ships a mimeapps.list naming it, and the
+# vendor default for these types is the viewer. Same two formats crop.c can
+# decode; see the note in synui-view.desktop.
+MimeType=image/png;image/jpeg;image/jpg;image/pjpeg;
+# ⛔ SYNUI ONLY — see synui-view.desktop for why, and for why the validator's
+# advice about an X- prefix would break it.
+OnlyShowIn=synui;SynapseOS;
+Actions=View;
+
+[Desktop Action View]
+Name=View Image
+Icon=viewimage
+Exec=synctl dispatch view %f

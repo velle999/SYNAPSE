@@ -3126,7 +3126,11 @@ static void render_crop_pick(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "CROP \xe2\x80\x94 RECENT IMAGES");
+    /* Titled by what Enter will do with a row. The list is shared by the viewer
+     * and the cropper (see crop.c), and a picker that does not say which one it
+     * is feeding is a picker you have to press a key to identify. */
+    syn_show_text(cr, s->crop.pick_for_crop ? "CROP \xe2\x80\x94 RECENT IMAGES"
+                                            : "IMAGES \xe2\x80\x94 RECENT");
 
     {
         char count[48];
@@ -3153,8 +3157,8 @@ static void render_crop_pick(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         set_ink(cr, 0.49, 1.0);
         cairo_move_to(cr, pad, top + 46);
-        syn_show_text(cr, "Press r to rescan, or crop a file directly: "
-                          "synctl dispatch crop <path>");
+        syn_show_text(cr, "Press r to rescan, or open a file directly: "
+                          "synctl dispatch view <path>");
     }
 
     for (int r = 0; r < shown && total > 0; r++) {
@@ -3209,10 +3213,167 @@ static void render_crop_pick(syn_server_t *s)
     } else {
         set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, pad, ph - 18);
-        syn_show_text(cr, "Enter crop \xc2\xb7 r rescan \xc2\xb7 Esc close");
+        syn_show_text(cr, s->crop.pick_for_crop
+            ? "Enter crop \xc2\xb7 v view \xc2\xb7 r rescan \xc2\xb7 Esc close"
+            : "Enter view \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 Esc close");
     }
 
     cairo_destroy(cr);
+    set_scene_buffer(&s->crop_ui.text_buf, s->crop_ui.tree, buf);
+}
+
+/* ── The viewer ──────────────────────────────────────────────
+ *
+ * The same full-screen surface as the cropper, drawing the same decoded image
+ * through the same one mapping — crop_view_geom(), which is crop_fit() times
+ * the zoom. Nothing here recomputes where the picture goes, for the reason the
+ * cropper does not either: the drawn image and the image the pointer thinks it
+ * is over drifting apart is a click that lands somewhere else.
+ */
+static void render_crop_view(syn_server_t *s)
+{
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int pw = ob.width, ph = ob.height;
+
+    wlr_scene_node_set_position(&s->crop_ui.tree->node, ob.x, ob.y);
+    wlr_scene_node_set_enabled(&s->crop_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->crop_ui.tree->node);
+
+    /* Opaque, and it has to SAY so — see the note in the cropper below. A
+     * viewer showing the desktop through the margins of a photograph is a
+     * viewer you cannot judge a photograph in. */
+    float bg_color[4];
+    panel_bg_color_solid(s, bg_color, ob.x, ob.y, pw, ph);
+    if (!s->crop_ui.bg)
+        s->crop_ui.bg = wlr_scene_rect_create(s->crop_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->crop_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->crop_ui.bg, bg_color);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    double sc, ox, oy;
+    crop_view_geom(s, &ob, &sc, &ox, &oy);
+    /* crop_view_geom works in layout coords; this buffer's origin is the
+     * output's. */
+    ox -= ob.x;
+    oy -= ob.y;
+
+    /* crop_scaled() hands back a copy built at `sc` when that is a reduction,
+     * and the SOURCE ITSELF at 1:1 or more — it has never scaled anything up,
+     * because the cropper never asked it to. So whatever is left over is
+     * applied here, which is exactly the zoomed-in case. Below 1:1 `extra` is
+     * 1.0 and this is a blit, which is what keeps a pan drag from resampling a
+     * 24-megapixel photograph on every motion event. */
+    cairo_surface_t *shown = crop_scaled(s, sc);
+    if (!shown) { cairo_destroy(cr); wlr_buffer_drop(buf); return; }
+    double extra = (sc >= 0.999) ? sc : 1.0;
+
+    cairo_save(cr);
+    /* Clipped to the output: zoomed in, the picture is LARGER than the screen,
+     * and cairo would otherwise be asked to compose the whole of it. */
+    cairo_rectangle(cr, 0, 0, pw, ph);
+    cairo_clip(cr);
+    cairo_translate(cr, ox, oy);
+    cairo_scale(cr, extra, extra);
+    cairo_set_source_surface(cr, shown, 0, 0);
+    if (extra >= 2.0) {
+        /* NEAREST once one image pixel covers four screen ones. Past that point
+         * zooming is being used to look AT the pixels — a screenshot, a sprite,
+         * whether that edge is one row or two — and smoothing them is the
+         * viewer answering a different question from the one asked. */
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    } else if (extra > 1.0) {
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+    }
+    cairo_paint(cr);
+    cairo_restore(cr);
+
+    /* ── Chrome ──────────────────────────────────────────────
+     *
+     * Deliberately thin: a header line and a footer line, both outside the
+     * fitted picture (crop_fit's margin is what leaves room for them). The
+     * thing being looked at is the picture. */
+    {
+        cairo_set_font_size(cr, 15);
+        set_accent(cr, 1.0);
+        cairo_move_to(cr, 24, 32);
+        syn_show_text(cr, "VIEW");
+
+        /* Size and magnification. The size is in IMAGE pixels — what the file
+         * is, not how big it happens to be on this screen — and the percentage
+         * is the honest answer to "am I looking at all of it": 100% means one
+         * image pixel per screen pixel, which on a large photograph is a long
+         * way in. */
+        char info[160];
+        snprintf(info, sizeof(info), "%d \xc3\x97 %d  \xc2\xb7  %d%%",
+                 s->crop.img_w, s->crop.img_h, (int)(sc * 100.0 + 0.5));
+        cairo_set_font_size(cr, 13);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, info, &te);
+        set_ink(cr, INK_STRONG, 1.0);
+        cairo_move_to(cr, pw - 24 - te.x_advance, 32);
+        syn_show_text(cr, info);
+
+        /* Where in the folder, when there is a folder to be somewhere in. Drawn
+         * beside the word rather than in the corner because it belongs to the
+         * file name, not to the picture's dimensions. */
+        double name_x = 24;
+        if (s->crop.nav_count > 1 && s->crop.nav_at >= 0) {
+            char pos[48];
+            snprintf(pos, sizeof(pos), "%d / %d",
+                     s->crop.nav_at + 1, s->crop.nav_count);
+            cairo_set_font_size(cr, 12);
+            set_ink(cr, INK_DIM, 0.9);
+            cairo_move_to(cr, name_x, 52);
+            syn_show_text(cr, pos);
+
+            syn_text_extents(cr, pos, &te);
+            name_x += te.x_advance + 14;
+        }
+
+        /* The filename, elided — arbitrary text from the filesystem. */
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_DIM, 0.9);
+        draw_clipped(cr, name_x, 52, pw - name_x - 24, s->crop.path);
+    }
+
+    cairo_set_font_size(cr, 12);
+    if (s->crop.status[0]) {
+        set_status(cr, STAT_CRIT, 1.0);
+        cairo_move_to(cr, 24, ph - 22);
+        syn_show_text(cr, s->crop.status);
+    } else {
+        set_ink(cr, INK_DIM, 0.9);
+
+        /* The arrows say different things depending on whether there is
+         * anywhere to pan, and the footer has to say which — that is the whole
+         * point of not making it a mode. Asked the same way view_key() asks:
+         * is the picture bigger than the screen. */
+        bool panning = s->crop.img_w * sc > pw + 0.5 ||
+                       s->crop.img_h * sc > ph + 0.5;
+
+        cairo_move_to(cr, 24, ph - 40);
+        syn_show_text(cr, panning
+            ? "Drag to move \xc2\xb7 arrows pan \xc2\xb7 Shift \xc3\x97 4 \xc2\xb7 "
+              "n / p next and previous"
+            : "\xe2\x86\x90 \xe2\x86\x92 next and previous \xc2\xb7 "
+              "drag or scroll to zoom in");
+
+        char keys[220];
+        snprintf(keys, sizeof(keys),
+            "Scroll zooms \xc2\xb7 + \xe2\x88\x92 zoom \xc2\xb7 0 fit \xc2\xb7 "
+            "1 actual size \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 Esc %s",
+            s->crop.from_pick ? "back to the list" : "close");
+        cairo_move_to(cr, 24, ph - 22);
+        syn_show_text(cr, keys);
+    }
+
     set_scene_buffer(&s->crop_ui.text_buf, s->crop_ui.tree, buf);
 }
 
@@ -3226,15 +3387,18 @@ void synui_render_crop(syn_server_t *s)
 
     if (s->crop.picking) { render_crop_pick(s); return; }
 
-    /* The cropper proper is full-screen and maps the whole output through
-     * crop_fit(), so it has no rows — and must not leave the list's behind, or
-     * a click on the picture would land on a row that is no longer drawn. */
+    /* The viewer and the cropper are both full-screen and map the whole output
+     * through crop_fit(), so neither has rows — and neither must leave the
+     * list's behind, or a click on the picture would land on a row that is no
+     * longer drawn. */
     hit_clear(&s->crop.hit);
 
     if (!s->crop.img) {
         wlr_scene_node_set_enabled(&s->crop_ui.tree->node, false);
         return;
     }
+
+    if (s->crop.viewing) { render_crop_view(s); return; }
 
     struct wlr_box ob;
     get_output_box(s, &ob);

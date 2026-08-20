@@ -773,6 +773,19 @@ static void seed_default_binds(syn_config_t *cfg)
          * existed — crop_open() needs a path and a keybind has none to give, so
          * a bare `crop` used to do nothing but close. */
         { "super+shift+x",   "crop" },
+        /* The image viewer, on the free half of the network panel's key. I for
+         * image; V is the clipboard history and has been since long before
+         * there was anything to view. Like the cropper it opens on the
+         * recent-images list when it is given nothing to show — the list is
+         * told which of the two faces Enter leads to, so the same rows serve
+         * both keys without either one lying about where it goes.
+         *
+         * This is also the action behind the Image Viewer menu entry and
+         * therefore behind opening an image from a file manager: SynapseOS had
+         * no image viewer at all until this, and /usr/share/applications named
+         * a BROWSER as the system answer to "open this PNG" — it was the only
+         * installed thing that had declared the type. */
+        { "super+shift+i",   "view" },
         /* The calculator, on the chord this comment spent a day reserving.
          *
          * SUPER+X WAS FREE. Mission control had it — X for eXposé — until

@@ -29,6 +29,9 @@
 #include <sys/stat.h>
 #include <time.h>		/* futimens, struct timespec */
 
+#include <dirent.h>		/* count_files — the viewer must not add any */
+#include <math.h>		/* fabs — the zoom holds a point to within a pixel */
+
 #include <cairo/cairo.h>
 
 #include "synui.h"
@@ -460,6 +463,280 @@ static void test_active_follows_a_flip(void)
     cairo_surface_destroy(s->crop.img);
 }
 
+/* ── The viewer ──────────────────────────────────────────────
+ *
+ * Three things here can be wrong in ways nobody sees until they are in front of
+ * a photograph:
+ *
+ *   1. THE ZOOM MAPPING. Zooming has to hold still whatever it was pointed at,
+ *      and the picture must never be pannable off the screen. Both are
+ *      arithmetic that reads as "the viewer jumps about" when it drifts.
+ *   2. THE FOLDER ORDER. IMG_9 before IMG_10 — the one order a camera gives
+ *      you and a byte comparison reverses.
+ *   3. THAT IT WRITES NOTHING. The cropper shares this panel and every one of
+ *      its safeguards; the viewer's is simply that no file may appear.
+ */
+
+static void write_png(const char *dir, const char *name, int w, int h)
+{
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s", dir, name);
+
+    cairo_surface_t *img = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    cairo_status_t st = cairo_surface_write_to_png(img, path);
+    CHECK(st == CAIRO_STATUS_SUCCESS, "could not write %s: %s",
+          path, cairo_status_to_string(st));
+    cairo_surface_destroy(img);
+}
+
+/* How many entries a directory holds — the viewer's whole output contract is
+ * that this number does not change. */
+static int count_files(const char *dir)
+{
+    DIR *d = opendir(dir);
+    if (!d) { CHECK(0, "could not open %s", dir); return -1; }
+
+    int n = 0;
+    struct dirent *e;
+    while ((e = readdir(d)))
+        if (e->d_name[0] != '.') n++;
+    closedir(d);
+    return n;
+}
+
+/* The current basename of what the panel has open. */
+static const char *shown(syn_server_t *s)
+{
+    const char *slash = strrchr(s->crop.path, '/');
+    return slash ? slash + 1 : s->crop.path;
+}
+
+static void test_view_zoom_and_pan(void)
+{
+    char dir[400];
+    snprintf(dir, sizeof(dir), "%s/view", scratch);
+    char cmd[900];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", dir);
+    if (system(cmd) != 0) { CHECK(0, "could not build the scratch dir"); return; }
+
+    /* Larger than the screen at 1:1, so there is something to pan. */
+    write_png(dir, "photo.png", 2400, 1600);
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/photo.png", dir);
+
+    static syn_server_t s;
+    memset(&s, 0, sizeof(s));
+    crop_view_open(&s, path);
+
+    CHECK(s.crop.visible && s.crop.viewing, "the viewer should be up");
+    CHECK(s.crop.img_w == 2400 && s.crop.img_h == 1600,
+          "wrong image size: %dx%d", s.crop.img_w, s.crop.img_h);
+
+    /* It opens FITTED: the same geometry the cropper would use, which is what
+     * "zoom 1.0 means the whole picture" is defined to mean. */
+    double fsc, fox, foy, sc, ox, oy;
+    crop_fit(&s, &g_out, &fsc, &fox, &foy);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(sc == fsc, "the viewer should open at the fitted scale (%.4f vs %.4f)",
+          sc, fsc);
+    CHECK(ox == fox && oy == foy, "the fitted picture should be centred");
+
+    /* 1 is one image pixel per screen pixel, whatever the fit was. */
+    crop_key(&s, XKB_KEY_1, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(sc > 0.999 && sc < 1.001, "1 should show actual size, got %.4f", sc);
+
+    /* …and 0 puts the whole picture back. */
+    crop_key(&s, XKB_KEY_0, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(sc == fsc, "0 should fit the picture again, got %.4f", sc);
+
+    /* ⚠ WHILE THE PICTURE STILL FITS AN AXIS, IT STAYS CENTRED ON IT. Fitted,
+     * this 2400x1600 photo is 1440 wide on a 1920 screen, and one notch of zoom
+     * makes it 1800 — still narrower than the screen. There is no pan the clamp
+     * would allow, so the point under the pointer necessarily moves, and a
+     * viewer that held it still would have to leave the picture hanging
+     * off-centre with a wider gap on one side than the other. */
+    double lx = g_out.width / 2.0 + 120, ly = g_out.height / 2.0 - 80;
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    crop_scroll(&s, lx, ly, -1);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(sc > fsc, "scrolling up should zoom in (%.4f vs %.4f)", sc, fsc);
+    CHECK(fabs((ox - g_out.x) - (g_out.width - 2400 * sc) / 2) < 1.0,
+          "a picture narrower than the screen should stay centred on it");
+
+    /* Zoomed past the edges of the screen there IS somewhere to pan, and then
+     * the wheel has to hold still whatever it was pointed at — the difference
+     * between a magnifying glass and a slot machine. 1 puts this photo at
+     * 2400x1600 on a 1920x1080 screen, so both axes overflow. */
+    crop_key(&s, XKB_KEY_1, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    double ix = (lx - ox) / sc, iy = (ly - oy) / sc;
+
+    crop_scroll(&s, lx, ly, -1);          /* one notch further in */
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+
+    double ix2 = (lx - ox) / sc, iy2 = (ly - oy) / sc;
+    CHECK(fabs(ix2 - ix) < 2.0 && fabs(iy2 - iy) < 2.0,
+          "zoom moved the point under the pointer: (%.1f,%.1f) -> (%.1f,%.1f)",
+          ix, iy, ix2, iy2);
+
+    /* Zoomed all the way in, and then some: the ceiling is an ABSOLUTE scale,
+     * so 60 notches on a 2400px picture must still land on VIEW_SCALE_MAX. */
+    for (int i = 0; i < 60; i++) crop_key(&s, XKB_KEY_plus, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(sc <= 8.0 + 1e-6, "zoom went past the ceiling: %.4f", sc);
+
+    /* And out: never further than the fit. */
+    for (int i = 0; i < 60; i++) crop_key(&s, XKB_KEY_minus, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(sc == fsc, "zooming out should stop at the fit, got %.4f", sc);
+
+    /* THE PAN CLAMP. At 1:1 the picture is wider than the screen; panning as
+     * far as the keyboard will go must never bring an edge inside the viewport,
+     * which is what "the photo slid off into the void" looks like. */
+    crop_key(&s, XKB_KEY_1, 0);
+    for (int i = 0; i < 200; i++) crop_key(&s, XKB_KEY_Left, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(ox <= g_out.x + 0.5, "panned past the left edge: ox %.1f", ox);
+    CHECK(ox + 2400 * sc >= g_out.x + g_out.width - 0.5,
+          "the picture came off the right of the screen");
+
+    for (int i = 0; i < 400; i++) crop_key(&s, XKB_KEY_Down, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(oy + 1600 * sc >= g_out.y + g_out.height - 0.5,
+          "the picture came off the bottom of the screen");
+
+    /* Fitted, the arrows are the FOLDER and not a pan — there is nowhere to pan
+     * to. With one image in the directory that is a no-op, and the test for it
+     * is that the geometry is untouched. */
+    crop_key(&s, XKB_KEY_0, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    double before = ox;
+    crop_key(&s, XKB_KEY_Left, 0);
+    crop_view_geom(&s, &g_out, &sc, &ox, &oy);
+    CHECK(ox == before, "fitted, an arrow should not pan the picture");
+
+    crop_hide(&s);
+    CHECK(!s.crop.visible && !s.crop.viewing, "the viewer should have closed");
+    CHECK(s.crop.nav == NULL, "the folder list should be freed on hide");
+}
+
+static void test_view_walks_the_folder(void)
+{
+    char dir[400];
+    snprintf(dir, sizeof(dir), "%s/walk", scratch);
+    char cmd[900];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", dir);
+    if (system(cmd) != 0) { CHECK(0, "could not build the scratch dir"); return; }
+
+    /* Named the way a camera names them. In byte order IMG_10 sorts BEFORE
+     * IMG_9, which is the bug the natural compare exists to prevent. */
+    write_png(dir, "IMG_9.png",  40, 30);
+    write_png(dir, "IMG_10.png", 40, 30);
+    write_png(dir, "IMG_11.png", 40, 30);
+
+    /* Not an image at all, however it is named: the walk must step over it
+     * rather than stopping on it or blanking the picture that was fine. */
+    char broken[512];
+    snprintf(broken, sizeof(broken), "%s/IMG_10b.png", dir);
+    FILE *f = fopen(broken, "w");
+    if (f) { fputs("this is not a PNG", f); fclose(f); }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/IMG_9.png", dir);
+
+    static syn_server_t s;
+    memset(&s, 0, sizeof(s));
+    crop_view_open(&s, path);
+
+    CHECK(s.crop.nav_count == 4, "expected 4 names in the folder, got %d",
+          s.crop.nav_count);
+    CHECK(s.crop.nav_at == 0, "IMG_9 should sort first, got index %d",
+          s.crop.nav_at);
+
+    crop_key(&s, XKB_KEY_n, 0);
+    CHECK(strcmp(shown(&s), "IMG_10.png") == 0,
+          "after IMG_9 comes IMG_10, got %s", shown(&s));
+
+    /* IMG_10b is next in name order and cannot be decoded — stepping on must
+     * land on IMG_11 with the panel still showing a picture. */
+    crop_key(&s, XKB_KEY_n, 0);
+    CHECK(strcmp(shown(&s), "IMG_11.png") == 0,
+          "the undecodable file should be stepped over, got %s", shown(&s));
+    CHECK(s.crop.img != NULL, "the viewer lost its image on a failed step");
+
+    /* Off the end and round to the start. */
+    crop_key(&s, XKB_KEY_n, 0);
+    CHECK(strcmp(shown(&s), "IMG_9.png") == 0,
+          "the walk should wrap to the first image, got %s", shown(&s));
+
+    /* Backwards from the first wraps to the last. */
+    crop_key(&s, XKB_KEY_p, 0);
+    CHECK(strcmp(shown(&s), "IMG_11.png") == 0,
+          "backwards from the first should wrap, got %s", shown(&s));
+
+    crop_hide(&s);
+}
+
+/* The viewer is READ-ONLY, and `c` hands the picture to the cropper without
+ * re-reading it — with the whole image selected, so Enter there is a copy of
+ * exactly what was being looked at. */
+static void test_view_writes_nothing_and_hands_over(void)
+{
+    char dir[400];
+    snprintf(dir, sizeof(dir), "%s/ro", scratch);
+    char cmd[900];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", dir);
+    if (system(cmd) != 0) { CHECK(0, "could not build the scratch dir"); return; }
+
+    write_png(dir, "one.png", 800, 600);
+    write_png(dir, "two.png", 400, 300);
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/one.png", dir);
+
+    int before = count_files(dir);
+
+    static syn_server_t s;
+    memset(&s, 0, sizeof(s));
+    crop_view_open(&s, path);
+
+    crop_key(&s, XKB_KEY_1, 0);
+    crop_key(&s, XKB_KEY_Right, 0);        /* fitted → the next picture */
+    crop_key(&s, XKB_KEY_p, 0);            /* and back */
+    crop_scroll(&s, 900, 500, -1);
+    crop_click(&s, 900, 500, BTN_LEFT, 0);
+    crop_drag_motion(&s, 700, 400);
+    crop_drag_end(&s, 700, 400);
+
+    CHECK(count_files(dir) == before,
+          "the viewer wrote something: %d files, was %d", count_files(dir), before);
+
+    /* Into the cropper, on the same file and with everything selected. */
+    CHECK(strcmp(shown(&s), "one.png") == 0, "expected one.png, got %s", shown(&s));
+    crop_key(&s, XKB_KEY_c, 0);
+    CHECK(!s.crop.viewing, "c should leave the viewer");
+    CHECK(s.crop.from_view, "the cropper should know it came from the viewer");
+    CHECK(strcmp(shown(&s), "one.png") == 0,
+          "the cropper opened a different file: %s", shown(&s));
+
+    int x, y, w, h;
+    crop_selection(&s, &x, &y, &w, &h);
+    CHECK(x == 0 && y == 0 && w == 800 && h == 600,
+          "the cropper should open on the whole picture, got %d,%d %dx%d",
+          x, y, w, h);
+
+    /* …and Escape goes back to the picture rather than out to the desktop. */
+    crop_key(&s, XKB_KEY_Escape, 0);
+    CHECK(s.crop.viewing && s.crop.visible,
+          "Escape from a crop entered with c should return to the viewer");
+
+    CHECK(count_files(dir) == before, "the hand-over wrote a file");
+    crop_hide(&s);
+}
+
 /* ── The recent-images list ──────────────────────────────────
  *
  * Sorted newest first, deduped, and holding the NEWEST n rather than the first
@@ -595,6 +872,9 @@ int main(void)
     test_ctrl_arrows_move();
     test_active_follows_a_flip();
     test_recent_list();
+    test_view_zoom_and_pan();
+    test_view_walks_the_folder();
+    test_view_writes_nothing_and_hands_over();
 
     /* Tidy up whatever landed in the scratch dir. */
     char cmd[400];

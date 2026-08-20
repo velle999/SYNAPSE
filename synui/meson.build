@@ -392,7 +392,16 @@ install_data(['data/synui-calc.desktop',
               'data/synui-aimodel.desktop',
               'data/synui-filters.desktop',
               'data/synui-clipboard.desktop',
-              'data/synui-calendar.desktop'],
+              'data/synui-calendar.desktop',
+              # The image viewer and the cropper — two faces of one panel
+              # (src/crop.c), and two entries because they are two things to
+              # ask for. The viewer also DECLARES the image MIME types, which
+              # is what makes it an Open With candidate and what synfiles'
+              # vendor mimeapps.list points the system default at; before it
+              # there was no image viewer on SynapseOS at all and the system
+              # answer to "open this PNG" was a browser.
+              'data/synui-view.desktop',
+              'data/synui-crop.desktop'],
              install_dir : get_option('prefix') / get_option('datadir') / 'applications')
 
 # Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
@@ -1139,6 +1148,17 @@ test('game_actions', game_actions,
                 meson.current_source_dir() / 'src/config.c',
                 meson.current_source_dir() / 'src/ctlpanel.c',
                 meson.current_source_dir() / 'src/layout.c'],
+     timeout : 30)
+
+# The image viewer's Exec and the association it is half of. Runs the wrapper
+# against fakes on PATH — the recursion guard is the case that cannot be caught
+# any other way, since the failure is a handler that calls xdg-open which calls
+# the handler.
+view_image = find_program('tests/view_image.sh')
+test('view_image', view_image,
+     args    : [meson.current_source_dir() / 'systemd/synui-view-image.sh',
+                meson.current_source_dir() / 'data/synui-view.desktop',
+                meson.current_source_dir() / 'src/crop.c'],
      timeout : 30)
 
 record_args = find_program('tests/record_args.sh')

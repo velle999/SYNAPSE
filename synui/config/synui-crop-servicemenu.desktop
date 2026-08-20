@@ -1,11 +1,22 @@
 # Dolphin (KIO 6) right-click service menu for images: Crop Image.
 #
 # Hands the file to the compositor's own cropper (src/crop.c) via synctl. There
-# is no separate crop application here and there does not need to be: synui
-# already decodes these formats for the wallpaper picker and already draws
-# full-screen panels, and a shell version cannot work — slurp returns SCREEN
-# coordinates and nothing on SynapseOS displays the image to map them back to
-# image pixels. See the header of src/crop.c.
+# is no separate crop PROGRAM here and there does not need to be: synui already
+# decodes these formats for the wallpaper picker and already draws full-screen
+# panels, and a shell version cannot work — slurp returns SCREEN coordinates and
+# nothing on SynapseOS displayed the image to map them back to image pixels
+# until this panel did. See the header of src/crop.c.
+#
+# The menu ENTRIES for the same panel are data/synui-crop.desktop (Image
+# Cropper) and data/synui-view.desktop (Image Viewer), which is also the vendor
+# default for opening an image. This file is only Dolphin's right-click row:
+# KIO reads service menus from a directory of its own, and the two cannot be one
+# file — a service menu is not listed in the application menu and an application
+# entry does not appear in Dolphin's context menu.
+#
+# ⚠ Named -servicemenu in the source tree and installed as synui-crop.desktop:
+# the installed BASENAME is what Dolphin caches and what the ISO's KIO config
+# names, and the two files would otherwise be one name in two directories.
 #
 # %f, not %F: the cropper takes ONE image. A selection of twelve photos would
 # otherwise open twelve full-screen panels stacked on top of each other, and

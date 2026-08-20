@@ -370,6 +370,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`Y` | Cascade this desktop — small overlapping cards dealt into a grid of piles, each card at most a third of the screen wide and half of it tall |
 | `Super`+`Shift`+`G` | Arrange the desktop *without* leaving the layout you are on — puts every window you have dragged back where the layout wants it. On a floating desktop that is the inset grid ("G for grid"); this is the one tidy-up that leaves a floating desktop floating |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
+| `Super`+`Shift`+`I` | View an image — zoom, pan, and step through the folder with the arrows; `c` crops the one you are looking at |
 | `Super`+`Shift`+`X` | Crop an image ("X for cut") — opens on your recent images from Pictures, Wallpapers and Downloads |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch, post-it) |
