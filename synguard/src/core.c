@@ -327,9 +327,18 @@ int synguard_init(synguard_state_t *s)
                "bpf-lsm: unavailable — synguard is detect-only this boot");
     } else {
         /*
-         * Compile the loaded rules down to the kernel maps. Today this is
-         * almost always zero: the shipped policy carries no deny rule, and
-         * lowering only ever considers deny/quarantine.
+         * Compile the loaded rules down to the kernel maps. The shipped
+         * policy lowers TWO — deny-ld-preload and deny-bpf-canary, both at
+         * priority 0 in 50-default-deny.rules, which is what puts them above
+         * 00-base's allow-synguard/allow-synapd; nothing below those can be
+         * proved disjoint from them and lowering refuses. It was zero until
+         * that file existed, and this comment said so.
+         *
+         * The policy's third acting rule, quarantine-exec-from-dev, is NOT
+         * here and cannot be: lowering considers deny and quarantine, but an
+         * LSM hook can only return -EPERM, so a quarantine rule stays on the
+         * userspace path rather than being demoted into a refusal that
+         * destroys the evidence quarantine exists to keep.
          *
          * A lowering or population failure is NOT fatal, but it is loud and
          * names the offending rule. The failure it guards against is an admin

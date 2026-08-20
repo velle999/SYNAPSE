@@ -1,0 +1,200 @@
+# /etc/synguard/rules.d/50-default-deny.rules
+# SynapseOS synguard — the rules that ACT, shipped armed
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# THIS FILE IS LIVE. Unlike 40-enforce.rules.example beside it, this one ends in
+# `.rules`, so synguard loads it and these verdicts are real.
+#
+# Until this existed, SynapseOS shipped 55 rules and not one of them carried
+# `deny` or `quarantine`. The daemon ran with --mode enforce, so acting was
+# permitted; nothing loaded ever asked for it. synguard detected and alerted and
+# never once stopped anything — which is a defensible default and a strange
+# thing to leave permanently, because a security monitor that has never acted
+# has never had its acting path exercised either.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT IS IN HERE, AND WHY IT IS SO SHORT
+#
+# A false positive costs a process TREE. sg_kill_tree() takes the matched
+# process and its descendants, and sg_is_protected() refuses only PID 0/1,
+# kernel threads, synguard, synapd, synnet and synsh. Your desktop, your editor
+# and your browser are not protected. Quarantine is gentler — SIGSTOP, and
+# `kill -CONT` puts it back — but a frozen process tree is still somebody's
+# afternoon.
+#
+# So the bar for a rule in this file is not "is this suspicious". It is:
+#
+#   1. does anything on a working SynapseOS desktop do this, ever? Not
+#      "rarely" — ever. Every rule below is something for which the honest
+#      answer is no.
+#   2. if it fires wrongly anyway, is the cost recoverable?
+#   3. is the damage it stops ONGOING rather than instantaneous? The userspace
+#      path kills after the syscall has already succeeded, so a rule whose
+#      whole value was in preventing the first act buys nothing there.
+#
+# Three rules clear that bar. The ones that do not are listed at the bottom
+# with the reason, because "we considered it and here is what it breaks" is
+# worth more to whoever reads this next than a shorter file.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠ THESE ARE AFTER-THE-FACT KILLS UNLESS YOU ARM THE KERNEL PATH
+#
+# synapse_kmod observes with kprobes; it never returns -EPERM. A deny rule on
+# the userspace path means "it does not get to continue", not "it does not
+# happen". Two of the three rules below LOWER to the BPF LSM, where the syscall
+# itself is refused — but the gate is shut unless synguard runs with
+# --bpf-enforce, which the shipped unit does not pass.
+#
+# To arm it:
+#
+#     sudo systemctl edit synguard
+#     [Service]
+#     ExecStart=
+#     ExecStart=/usr/bin/synguard --foreground --mode enforce \
+#         --rules /etc/synguard/rules.d/ --bpf-enforce
+#
+# The way out if that ever locks you out: add `synapse.bpf_enforce=0` to the
+# kernel command line at the boot menu, and synguard comes up detect-only. The
+# gate also fails open if synguard dies or wedges, and refuses to act for the
+# first 30 seconds after attaching, so you get a login even when a rule is
+# badly wrong.
+#
+#     journalctl -u synguard | grep bpf-lsm     — what is actually armed
+#
+# ⚠ THE PRIORITIES HERE ARE 0 ON PURPOSE, and it is a real trade rather than a
+# tidy number. 00-base.rules opens with allow-synguard and allow-synapd at
+# priority 1, both `comm <name>` with no path, so they match any event on any
+# file. Nothing can be proved disjoint from them, and a deny rule BELOW them
+# cannot lower to the kernel at all. Above them it can — and it then applies to
+# synguard and synapd too. That is fine for a file neither daemon opens, which
+# is exactly what these two protect, and it would be wrong for anything they
+# touch. Pick per rule; do not copy the 0 without asking that question.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── /etc/ld.so.preload ───────────────────────────────────────────────────────
+#
+# The classic userland-rootkit hook: every dynamically linked process started
+# afterwards loads whatever is listed there. No Arch package manages this file
+# and on a clean system it does not exist at all, so there is no legitimate
+# opener to false-positive on — which is what puts it over the bar.
+#
+# ⚠ `event open`, so this refuses READS as well as writes, and that is the
+# point rather than an oversight. The reader is ld.so on every exec, and
+# refusing it is what neuters an already-planted preload: glibc treats a failed
+# open of this file as "no preload" and carries on, so the rule degrades an
+# infected machine to a working one instead of breaking it. On a clean system
+# the file is absent, lookup fails at ENOENT, and lsm/file_open never fires —
+# this rule costs nothing until the day it matters.
+#
+# Lowers to the kernel: an exact path, no wildcard, and priority 0 puts it
+# above the allows. /etc/ld.so.preload is on the kmod's sensitive_paths list,
+# so the userspace path sees it too when the gate is shut.
+rule deny-ld-preload {
+    event    open
+    path     /etc/ld.so.preload
+    verdict  deny
+    priority 0
+}
+
+
+# ── The positive control ─────────────────────────────────────────────────────
+#
+# A rule that never fires is indistinguishable from a rule that is not working,
+# and every other rule in this file is one you hope never fires. This is the
+# one you can trip on demand, so "is enforcement actually on" has an answer
+# that does not require being attacked.
+#
+# ⚠ The file must EXIST or this is unenforceable on BOTH paths while looking
+# perfectly armed: lsm/file_open only fires for an open that reaches a file,
+# and the kprobe path sees the ENOENT attempt but can only kill afterwards, by
+# which time a short-lived opener has exited. synguard.service recreates it in
+# ExecStartPre for exactly this reason — if you move this rule, move that too.
+#
+# Verify, as root:
+#
+#     systemd-run -q --collect cat /var/lib/synguard/bpf-canary
+#
+# Expect "Operation not permitted" — root, refused on a file root owns, which
+# only an LSM can do — and `bpf-lsm: denied=` incrementing in the journal.
+# ⚠ Under systemd-run, NOT in your shell: a deny tears down the opener's
+# process tree and your shell is in it.
+rule deny-bpf-canary {
+    event    open
+    path     /var/lib/synguard/bpf-canary
+    verdict  deny
+    priority 0
+}
+
+
+# ── Execution out of the top of /dev ─────────────────────────────────────────
+#
+# /dev is a devtmpfs of device nodes. A regular executable file sitting there
+# and being run is not something a working system produces; it is a well-worn
+# way to stage a payload somewhere nobody audits. 00-base.rules already
+# escalates this to the AI classifier at priority 35; this acts on it first.
+#
+# QUARANTINE, not deny, and the reason is the whole point of the verdict: if
+# this ever fires you want to look at the process rather than lose it. SIGSTOP
+# on the tree, `kill -CONT <pid>` to release it — recoverable, which rule 2 of
+# the bar above asks for. It also stays on the userspace path by definition; an
+# LSM hook can return -EPERM and nothing else, so a quarantine rule is never
+# silently demoted into a refusal that destroys the evidence you chose
+# quarantine to keep.
+#
+# ⚠ ONE LEVEL, deliberately. `path` is FNM_PATHNAME, so `*` stops at a `/`:
+# this covers /dev/foo and NOT /dev/shm/foo. The /dev/*/* rule that would catch
+# the second is NOT armed here — see below.
+#
+# Below the allows, because unlike the two above this one has no need to be
+# exempt from nothing, and priority 30 keeps it ahead of 00-base's escalate.
+rule quarantine-exec-from-dev {
+    event    exec
+    path     /dev/*
+    verdict  quarantine
+    priority 30
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSIDERED AND DELIBERATELY NOT ARMED
+#
+# All of these are in 40-enforce.rules.example with their own notes. They are
+# repeated here with what specifically breaks on SynapseOS, so nobody has to
+# rediscover it by arming one.
+#
+#   exec from /dev/*/*  — catches /dev/shm, which is a real staging ground and
+#       also a real tmpfs that legitimate software runs things out of. The
+#       one-level rule above is the part with no false positives; this is the
+#       part with some. Arm it if you know your workload.
+#
+#   deny-unexpected-module-load — SynapseOS ships synapse_kmod as a DKMS
+#       module and this desktop runs the NVIDIA driver. Every DKMS rebuild and
+#       every driver update loads modules from programs not on 00-base's
+#       allow-list. This rule would fire on a routine `pacman -Syu`, kill the
+#       tree it fired in, and leave a half-installed kernel module. It is the
+#       single most tempting rule in the example file and the one most certain
+#       to break this distribution.
+#
+#   deny-shell-from-sshd — the reverse-shell signature, and the highest-value
+#       rule in the example. It is not armed because whether it is safe depends
+#       on a thing that varies per user: sshd execs the account's LOGIN SHELL,
+#       and `ssh host <command>` runs `$SHELL -c`. The example's `path
+#       /usr/bin/sh` misses bash and misses synsh — so on most accounts it is a
+#       rule that can never fire, and on an account whose shell IS /usr/bin/sh
+#       it locks that account out of SSH entirely. A rule that is either inert
+#       or a lockout, depending on a setting this file cannot see, does not
+#       belong in a shipped default. Tailor it to the services you run and
+#       watch it in `alert` first.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# TURNING THIS OFF
+#
+# Nothing here needs to be edited to disable it — the file is the unit of
+# choice:
+#
+#     sudo mv /etc/synguard/rules.d/50-default-deny.rules{,.off}
+#     sudo systemctl reload synguard
+#
+# `.off` is not `.rules`, so synguard stops loading it. `journalctl -u synguard`
+# reports the rule count at every load, which is how you confirm it took.

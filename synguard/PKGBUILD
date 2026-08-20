@@ -1,6 +1,28 @@
 pkgname=synguard
 pkgver=0.1.0
-pkgrel=34
+# 35: THE SHIPPED POLICY ACTS NOW. synguard shipped 55 rules and not one of
+#   them carried `deny` or `quarantine`: the daemon ran with --mode enforce, so
+#   acting was permitted, and nothing loaded ever asked for it. It detected and
+#   alerted and had never once stopped anything — which also means its acting
+#   path had never been exercised on a real machine.
+#   50-default-deny.rules arms three, chosen against one bar: does anything on
+#   a working desktop do this, EVER. deny-ld-preload (nothing on Arch manages
+#   that file; refusing the READ is what neuters an already-planted rootkit,
+#   and glibc treats a failed open as "no preload" so it fails safe),
+#   deny-bpf-canary (the positive control — a rule that never fires is
+#   indistinguishable from one that does not work), and
+#   quarantine-exec-from-dev (SIGSTOP, recoverable, evidence kept).
+#   ⚠ NOT armed, with reasons in the file: module loads (DKMS and the NVIDIA
+#   driver trip it on a routine `pacman -Syu`, and synapse_kmod is itself DKMS)
+#   and shell-from-sshd (sshd execs the account's LOGIN shell, so the example's
+#   `path /usr/bin/sh` is either inert or an SSH lockout depending on a setting
+#   the file cannot see).
+#   ⚠ The two denies sit at priority 0 so they lower to the BPF LSM — below
+#   00-base's allow-synguard/allow-synapd nothing can be proved disjoint and
+#   lowering refuses. Verified by lower_test, not asserted. The kernel gate
+#   still needs --bpf-enforce, which the unit does NOT pass: these are
+#   after-the-fact kills until somebody arms it deliberately.
+pkgrel=35
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -79,6 +101,10 @@ package() {
     # Template, not policy. rules_load() only parses *.rules, so the .example
     # suffix keeps this inert while still putting it where an admin will find
     # it — next to the rules it is a template for, not buried in /usr/share.
+    # ⚠ THIS ONE IS LIVE. Every other .rules file here alerts; this is the one
+    # that acts, and its name ends in .rules rather than .example precisely so
+    # synguard loads it. See its header for what is in it and what was left out.
+    install -Dm640 rules/50-default-deny.rules "$pkgdir/etc/synguard/rules.d/50-default-deny.rules"
     install -Dm640 rules/40-enforce.rules.example "$pkgdir/etc/synguard/rules.d/40-enforce.rules.example"
     install -dm750 "$pkgdir/var/lib/synguard"
     install -dm750 "$pkgdir/var/log/synguard"

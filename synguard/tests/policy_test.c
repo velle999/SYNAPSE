@@ -74,6 +74,18 @@ static void load(synguard_state_t *s, const char *dir, sg_mode_t mode,
     s->rules_count = rules_load(s, dir);
 }
 
+/* Is a rule with this NAME loaded?
+ *
+ * A local walk rather than a new entry point in rule_engine.c: the shipped
+ * policy is the only thing that needs to be asked this, and it is asked here.
+ */
+static int has_rule(const synguard_state_t *s, const char *name)
+{
+	for (const sg_rule_t *r = s->rules_head; r; r = r->next)
+		if (!strcmp(r->name, name)) return 1;
+	return 0;
+}
+
 int main(void)
 {
     char tmpl[] = "/tmp/synguard-policy-test-XXXXXX";
@@ -295,15 +307,46 @@ int main(void)
            n[VERDICT_ALERT], n[VERDICT_ESCALATE], n[VERDICT_ALLOW],
            n[VERDICT_LOG], n[VERDICT_DENY], n[VERDICT_QUARANTINE]);
 
-    ok("shipped policy carries NO deny rule",       n[VERDICT_DENY] == 0);
-    ok("shipped policy carries NO quarantine rule", n[VERDICT_QUARANTINE] == 0);
-    ok("shipped policy is detect-only under ENFORCE",
-       rules_enforcement_reachable(&s) == 0);
+    /*
+     * ⚠ THESE NUMBERS ARE THE POLICY. They were 0 and 0 — the shipped rules
+     * alerted and never acted — until 50-default-deny.rules armed three of
+     * them. Pinned exactly rather than as "> 0", because the interesting
+     * failure is not "the policy stopped acting", it is "the policy started
+     * acting on something else": a fourth acting rule appearing here is a
+     * change to what SynapseOS kills on every machine, and it should not be
+     * possible to make it by editing a rules file alone.
+     *
+     * If this fails because you added one, that is the test doing its job.
+     * Decide it deliberately, write down what breaks if it is wrong, then
+     * change these numbers.
+     */
+    ok("shipped policy carries exactly 2 deny rules",       n[VERDICT_DENY] == 2);
+    ok("shipped policy carries exactly 1 quarantine rule", n[VERDICT_QUARANTINE] == 1);
+    ok("shipped policy CAN act under ENFORCE",
+       rules_enforcement_reachable(&s) != 0);
 
-    /* The .example template must stay inert: rules_load() takes only *.rules,
-     * so the template's deny rules must not appear in the census above. */
+    /*
+     * And which ones. A count alone would pass if the ld.so.preload rule were
+     * swapped for a deny on something a desktop touches — the count is the
+     * cheap half of this check and the names are the half that means anything.
+     */
+    ok("…and they are the three we chose",
+       has_rule(&s, "deny-ld-preload") &&
+       has_rule(&s, "deny-bpf-canary") &&
+       has_rule(&s, "quarantine-exec-from-dev"));
+
+    /*
+     * The .example template must STILL stay inert. rules_load() takes only
+     * *.rules, so nothing named only in the template may appear — and the
+     * check has to be by NAME now that the census is no longer zero.
+     * deny-unexpected-module-load is the one that matters: DKMS and the NVIDIA
+     * driver both trip it, so it arriving by accident would break a routine
+     * `pacman -Syu` on every machine.
+     */
     ok("the .rules.example template is NOT loaded",
-       n[VERDICT_DENY] == 0 && n[VERDICT_QUARANTINE] == 0);
+       !has_rule(&s, "deny-unexpected-module-load") &&
+       !has_rule(&s, "deny-shell-from-sshd") &&
+       !has_rule(&s, "quarantine-exec-from-dev-subdir"));
     rules_free(&s);
 
     printf(failures ? "policy: FAILED (%d)\n" : "policy: all passed\n",

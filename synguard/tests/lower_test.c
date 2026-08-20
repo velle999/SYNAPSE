@@ -255,6 +255,14 @@ static void test_lowering(void)
 
 extern int rules_load(synguard_state_t *s, const char *dir);
 
+/* Did a named rule survive lowering into the kernel form? */
+static int lowered_has(const sg_lowered_t *out, int n, const char *name)
+{
+	for (int i = 0; i < n; i++)
+		if (!strcmp(out[i].rule_name, name)) return 1;
+	return 0;
+}
+
 static void test_shipped(void)
 {
 	synguard_state_t s;
@@ -272,12 +280,25 @@ static void test_shipped(void)
 	int n = sg_lower_policy(s.rules_head, out, 64, err, sizeof(err));
 
 	/*
-	 * Zero, and not because lowering failed. A -1 here would also mean "no
-	 * kernel enforcement", but for the opposite reason, and that difference
-	 * is the whole point of the guard.
+	 * ⚠ TWO, and it was ZERO until 50-default-deny.rules armed the policy.
+	 *
+	 * A -1 here would ALSO mean "no kernel enforcement", for the opposite
+	 * reason, and that difference is the whole point of the guard — so this is
+	 * pinned exactly rather than as "> 0". The two are deny-ld-preload and
+	 * deny-bpf-canary, both at priority 0, which is what puts them above
+	 * 00-base's allow-synguard/allow-synapd; below those nothing can be proved
+	 * disjoint and lowering refuses.
+	 *
+	 * quarantine-exec-from-dev is deliberately NOT among them and cannot be:
+	 * an LSM hook returns -EPERM and nothing else, so a quarantine rule stays
+	 * on the userspace path rather than being demoted into a refusal that
+	 * destroys the evidence quarantine exists to keep. If this number ever
+	 * reads 3, that demotion is what happened.
 	 */
-	ok(n == 0, "shipped policy lowers to ZERO enforceable rules (got %d%s%s)",
+	ok(n == 2, "shipped policy lowers exactly its 2 priority-0 denies (got %d%s%s)",
 	   n, n < 0 ? ": " : "", n < 0 ? err : "");
+	ok(n == 2 && !lowered_has(out, n, "quarantine-exec-from-dev"),
+	   "…and the quarantine rule is NOT lowered (a hook cannot freeze a tree)");
 
 	/*
 	 * 40-enforce.rules.example tells admins, with a worked example, that a
@@ -304,7 +325,10 @@ static void test_shipped(void)
 	tail->next = NULL;
 	deny->next = s.rules_head;
 	n = sg_lower_policy(deny, out, 64, err, sizeof(err));
-	ok(n == 1, "the same deny at priority 0 lowers (got %d%s%s)",
+	/* Three: the two the shipped policy already lowers, plus this one. The
+	 * absolute number is the shipped baseline + 1, so it moves whenever
+	 * 50-default-deny.rules does — which is the point of pinning it. */
+	ok(n == 3, "the same deny at priority 0 lowers (got %d%s%s)",
 	   n, n < 0 ? ": " : "", n < 0 ? err : "");
 }
 

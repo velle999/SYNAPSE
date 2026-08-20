@@ -16,14 +16,24 @@
 # on purpose, one rule at a time.
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# WHY THE STOCK POLICY HAS NO DENY RULES
+# ⚠ OUT OF DATE IN ONE RESPECT: THE STOCK POLICY NOW ACTS, A LITTLE.
 #
-# SynapseOS ships 55 rules and not one of them carries `deny` or `quarantine`.
-# The daemon runs with --mode enforce, so acting is *permitted*; nothing loaded
-# ever *asks* for it. synguard as installed detects and alerts. It does not
-# kill. The startup banner says so in as many words.
+# This file used to open by explaining that SynapseOS shipped 55 rules and not
+# one of them carried `deny` or `quarantine` — the daemon ran with --mode
+# enforce, so acting was permitted, and nothing loaded ever asked for it.
 #
-# That is a deliberate default for a desktop distro, for two reasons.
+# 50-default-deny.rules changed that. Three rules act now: two denies on files
+# nothing legitimate opens, and one quarantine on execution out of the top of
+# /dev. Read that file for what was chosen and, more usefully, what was
+# deliberately left out — including two of the rules below.
+#
+# Everything else here still stands, and the reasoning below is exactly why
+# that file has three rules in it and not thirty. A false positive still costs
+# a process tree.
+#
+# WHY THE STOCK POLICY HAS SO FEW OF THEM
+#
+# Two reasons.
 #
 # 1. MOST ENFORCEMENT HERE IS AFTER THE FACT, NOT PREVENTION.
 #
