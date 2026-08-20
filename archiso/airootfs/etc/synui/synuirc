@@ -105,3 +105,22 @@ ai_ctx_decor = on
 # On the live session that means enrolling every boot, since nothing persists;
 # on an installed system it is once. Your password always works regardless.
 lock_fingerprint = on
+
+# ── The live session must NEVER idle-lock ──────────────────
+# The live image autologins root, and root here has a password (it is
+# "synapse", set in airootfs/etc/shadow so an installer that needs sudo works).
+# NOBODY IS TOLD THAT PASSWORD. So when synui's default idle-lock fired after
+# fifteen minutes (power_lock_timeout = 900 in config.c), the person trying the
+# OS out was shown a password prompt for a password they never chose and had no
+# way to guess — a hard lockout of a session that exists to be looked at.
+#
+# 0 = never. This turns off ONLY the idle timer; a deliberate Super+L still
+# locks, and still wants "synapse", but that is a thing someone did on purpose
+# rather than a surprise the desktop sprang on an idle machine. It also stops
+# the pre-suspend lock (power.c only locks before sleep when power_lock > 0), so
+# closing the lid on the live session does not strand it behind the same prompt.
+#
+# ⚠ THE LIVE IMAGE ONLY. This is the ISO's own synuirc; an installed system's is
+# written by syn-install for a user who set their OWN password, and that system
+# SHOULD lock. Nothing here reaches an installed machine.
+power_lock_timeout = 0
