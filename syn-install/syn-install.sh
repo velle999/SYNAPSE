@@ -2337,7 +2337,7 @@ pacstrap /mnt \
     base linux linux-firmware linux-headers kitty foot \
     grub efibootmgr os-prober ntfs-3g \
     $FS_PKGS $SNAP_PKGS \
-    networkmanager openssh sudo \
+    networkmanager wireless-regdb iw openssh sudo \
     seatd ttf-dejavu \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
     rtkit polkit-gnome xorg-xhost \

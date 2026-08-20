@@ -6,6 +6,20 @@ mkinitcpio
 grub
 efibootmgr
 networkmanager
+# The kernel's wireless regulatory database. NOT part of linux-firmware — it is
+# its own package, which is why every boot logged
+#   cfg80211: failed to load regulatory.db
+# and the live medium had no idea which country's channel and TX-power rules it
+# was meant to obey. Cards that self-manage their regulatory domain in firmware
+# (MediaTek's mt7921 among them) shrug this off; Intel, Atheros and Realtek parts
+# fall back to the world-roaming domain, where much of 5 GHz is receive-only and
+# TX power is capped at the most conservative value on earth.
+wireless-regdb
+# iw, because a live image is also a rescue image. Its absence is not cosmetic:
+# with no `iw`, nothing on the medium can answer "what regulatory domain am I in"
+# or "which channels does this radio actually have", which are the first two
+# questions when wireless misbehaves. ~200 KB.
+iw
 openssh
 sudo
 seatd

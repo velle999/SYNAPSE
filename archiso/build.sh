@@ -1353,6 +1353,45 @@ grep -q "^VERSION_ID=\"${ISO_VERSION}\"$" "${SCRIPT_DIR}/airootfs/etc/os-release
     || err "airootfs/etc/os-release VERSION_ID is not ${ISO_VERSION}"
 ok "OS identity stamped ${ISO_VERSION} (os-release, issue, motd)"
 
+# ── Boot menu identity (grub + syslinux) ─────────────────────
+#
+# The same bug as above, one layer earlier, and it survived the 2026-07-16 fix
+# because that fix asked "what does the booted system report about itself" and
+# stopped there. The bootloader menu is what you read BEFORE any of that, and
+# grub.cfg had "SynapseOS 0.1.0" typed into it — so the 0.2.9 image announced
+# 0.1.0 on the very first screen, which is exactly the observation that once got
+# a good USB write thrown away as a bad one.
+#
+# mkarchiso copies grub/ and syslinux/ out of the profile directory the same way
+# it copies airootfs/, so the substitution happens in the tree here, before it
+# runs. Same loose pattern, same idempotence.
+#
+# ⚠ ASCII only in the syslinux files. vesamenu.c32 draws from a fixed VGA
+# codepage, so a UTF-8 dash there is not a dash that renders plainly, it is
+# bytes that render as noise. grub is fine with UTF-8.
+_bootcfgs=(
+    "${SCRIPT_DIR}/grub/grub.cfg"
+    "${SCRIPT_DIR}/grub/loopback.cfg"
+    "${SCRIPT_DIR}/syslinux/archiso_head.cfg"
+    "${SCRIPT_DIR}/syslinux/archiso_sys-linux.cfg"
+    "${SCRIPT_DIR}/syslinux/archiso_pxe-linux.cfg"
+)
+for _f in "${_bootcfgs[@]}"; do
+    [[ -f $_f ]] || err "boot config missing: $_f"
+    sed -i -e "s|SynapseOS ${_v}|SynapseOS ${ISO_VERSION}|g" "$_f"
+done
+
+# Prove it, and prove the negative too: a menu that still says the OLD version
+# is the failure this whole block exists to prevent, and sed exits 0 either way.
+for _f in "${_bootcfgs[@]}"; do
+    grep -q "SynapseOS ${ISO_VERSION}" "$_f" \
+        || err "$(basename "$_f") does not carry version ${ISO_VERSION} after substitution"
+done
+if grep -rn "Arch Linux" "${SCRIPT_DIR}/grub/" "${SCRIPT_DIR}/syslinux/" >/dev/null 2>&1; then
+    err "boot menus still carry Arch branding — see grub/ and syslinux/"
+fi
+ok "Boot menu identity stamped ${ISO_VERSION} (grub, loopback, syslinux, PXE)"
+
 # ── Pin the ISO's synapse-llama backend in packages.x86_64 ────
 #
 # packages.x86_64 names the llama package to install on the ISO. For a CPU ISO

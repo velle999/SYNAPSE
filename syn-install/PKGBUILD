@@ -37,7 +37,7 @@ pkgver=0.1.0
 #     software centres. The list names what it keeps and the comment says what
 #     it dropped and why. ⚠ kde-applications-meta on the KDE path is the same
 #     problem an order of magnitude larger and is deliberately NOT changed here.
-pkgrel=83
+pkgrel=84
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
