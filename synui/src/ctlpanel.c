@@ -422,6 +422,10 @@ static const struct ctl_item ctl_items[] = {
       .key = "effect_lift", .off = CFG(effect_lift), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
       .help = "How far the unlit field glows: 0 keeps it black, up lights the raster" },
+    { CTL_ROW_EFFECT_HUE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor hue", NULL,
+      .key = "effect_hue", .off = CFG(effect_hue), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
+      .help = "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 is the preset" },
 
     /* ── Windows ─────────────────────────────────────────────
      *

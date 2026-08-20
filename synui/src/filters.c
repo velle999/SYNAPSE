@@ -61,6 +61,7 @@ static float *row_field(syn_server_t *s, int row)
     case FILTER_ROW_MONO:      return &s->config.effect_mono;
     case FILTER_ROW_BLOOM:     return &s->config.effect_bloom;
     case FILTER_ROW_LIFT:      return &s->config.effect_lift;
+    case FILTER_ROW_HUE:       return &s->config.effect_hue;
     default:                   return NULL;
     }
 }
@@ -88,6 +89,7 @@ const char *filters_row_label(int row)
     case FILTER_ROW_MONO:      return "Monochrome";
     case FILTER_ROW_BLOOM:     return "Phosphor bloom";
     case FILTER_ROW_LIFT:      return "Phosphor lift";
+    case FILTER_ROW_HUE:       return "Phosphor hue";
     default:                   return "?";
     }
 }
@@ -105,7 +107,16 @@ float filters_row_value(syn_server_t *s, int row, char *buf, size_t n)
         return -1.0f;
     }
     float v = *row_field(s, row);
-    snprintf(buf, n, "%3d%%", (int)(v * 100.0f + 0.5f));
+    /* Hue is the one row whose number is not a strength: it is a rotation of
+     * the phosphor's own colour, centred on the preset, so it reads in degrees
+     * off that. A percentage here would say 45% of nothing. The bar still
+     * fills 0..1, which puts the preset at its middle. */
+    if (row == FILTER_ROW_HUE)
+        snprintf(buf, n, "%+4d\xc2\xb0",
+                 (int)((v - 0.5f) * 2.0f * SYN_PHOSPHOR_HUE_RANGE +
+                       (v < 0.5f ? -0.5f : 0.5f)));
+    else
+        snprintf(buf, n, "%3d%%", (int)(v * 100.0f + 0.5f));
     return v;
 }
 
@@ -151,6 +162,7 @@ void filters_state_save(syn_server_t *s)
     fprintf(f, "mono=%.3f\n",       s->config.effect_mono);
     fprintf(f, "bloom=%.3f\n",      s->config.effect_bloom);
     fprintf(f, "lift=%.3f\n",       s->config.effect_lift);
+    fprintf(f, "hue=%.3f\n",        s->config.effect_hue);
     fclose(f);
 
     s->filters.dirty = 0;
@@ -199,6 +211,7 @@ void filters_state_load_config(syn_config_t *cfg)
         else if (strcmp(key, "mono") == 0)       cfg->effect_mono       = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "bloom") == 0)      cfg->effect_bloom      = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "lift") == 0)       cfg->effect_lift       = clamp01f(strtof(val, NULL));
+        else if (strcmp(key, "hue") == 0)        cfg->effect_hue        = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "phosphor") == 0) {
             if      (strcmp(val, "green") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_GREEN;
             else if (strcmp(val, "amber") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_AMBER;
@@ -279,7 +292,10 @@ static void filters_adjust(syn_server_t *s, int dir)
     s->filters.dirty = 1;
 
     char v[32];
-    snprintf(v, sizeof(v), "%d%%", (int)(next * 100.0f + 0.5f));
+    if (s->filters.selected == FILTER_ROW_HUE)
+        filters_row_value(s, FILTER_ROW_HUE, v, sizeof(v));   /* degrees */
+    else
+        snprintf(v, sizeof(v), "%d%%", (int)(next * 100.0f + 0.5f));
     snprintf(s->filters.status, sizeof(s->filters.status), "%s: %s",
              filters_row_label(s->filters.selected), v);
 
@@ -289,11 +305,12 @@ static void filters_adjust(syn_server_t *s, int dir)
         snprintf(s->filters.status, sizeof(s->filters.status),
                  "%s: %s \xc2\xb7 filters are off (Space on the top row)",
                  filters_row_label(s->filters.selected), v);
-    /* Bloom is the phosphor glow and lift is its transfer curve: with no
-     * monochrome amount there is no phosphor for either to act on, so the
-     * slider moves a number and nothing else. */
+    /* Bloom is the phosphor glow, lift its transfer curve and hue its colour:
+     * with no monochrome amount there is no phosphor for any of them to act on,
+     * so the slider moves a number and nothing else. */
     else if ((s->filters.selected == FILTER_ROW_BLOOM ||
-              s->filters.selected == FILTER_ROW_LIFT) &&
+              s->filters.selected == FILTER_ROW_LIFT  ||
+              s->filters.selected == FILTER_ROW_HUE) &&
              s->config.effect_mono <= 0.0f)
         snprintf(s->filters.status, sizeof(s->filters.status),
                  "%s: %s \xc2\xb7 Monochrome is at 0%%", filters_row_label(s->filters.selected), v);

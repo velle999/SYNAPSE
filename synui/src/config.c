@@ -1117,6 +1117,12 @@ static void config_set_defaults(syn_config_t *cfg)
      * rather than a black rectangle, without tinting a bare desktop. Both
      * ends of this slider have shipped as the only setting; see effects.c. */
     cfg->effect_lift       = 0.40f;
+    /* Not centred, on purpose. 0.5 is the tint table exactly, and velle's
+     * report after 403 is that the fitted amber still reads too yellow — so the
+     * shipped default sits one notch (-6 degrees) toward orange, which is the
+     * one adjustment this row exists to make. It is a knob precisely because it
+     * is taste: put it back at 0.50 for the table's own colour. */
+    cfg->effect_hue        = 0.45f;
 
     {
         static const float norm[4]  = COLOR_BORDER_NORM;
@@ -2004,6 +2010,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->effect_bloom = clamp01(strtof(val, NULL));
     else if (strcmp(key, "effect_lift") == 0)
         cfg->effect_lift = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_hue") == 0)
+        cfg->effect_hue = clamp01(strtof(val, NULL));
     else if (strcmp(key, "xkb_rules") == 0)
         strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
     else if (strcmp(key, "xkb_model") == 0)

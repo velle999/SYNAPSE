@@ -512,6 +512,71 @@ static void fx_phosphor_curve(float lift, float out[2])
     out[1] = 2.4f - 0.8f * lift;   /* gain  */
 }
 
+/*
+ * The Phosphor hue slider, applied to the preset tint before it reaches the
+ * shader as u_tint.
+ *
+ * Every previous round of this argument moved a number in phosphor_tint[] and
+ * asked velle whether it was right yet: 0.70 read mustard, 0.48 read red, 0.70
+ * came back and still reads too yellow. Where amber sits between orange and
+ * yellow is taste and an LCD's, not a datasheet's, so it becomes a knob — the
+ * same conclusion, and for the same reason, as the lift slider next to it.
+ *
+ * Rotation in HSV, saturation and value untouched, so the row turns the COLOUR
+ * and nothing else: a phosphor at half the hue range is still as saturated and
+ * as bright as the preset it came from, and the tint keeps reading directly as
+ * the colour it makes. That matters downstream — the hot core saturates toward
+ * vec3(1.0, 1.0, u_tint.b), so a tint that quietly gained value or lost
+ * saturation here would move the highlight colour too.
+ *
+ * Amber, as the row sweeps it (the table entry is hue 39.5 degrees):
+ *
+ *     0.00   -60   hue 340    #ff1f6b   red, going pink
+ *     0.35   -18   hue  22    #ff6f1f   deep orange
+ *     0.45    -6   hue  34    #ff9c1f   orange amber   <- the default
+ *     0.50     0   hue  40    #ffb21f   the table, P3 #FFB000
+ *     0.65   +18   hue  58    #fff61f   yellow
+ *     1.00   +60   hue 100    #6bff1f   yellow-green
+ *
+ * Grey is left alone by construction: max == min means the hue is undefined and
+ * there is nothing to rotate, which is also why white (s = 0.08) barely moves.
+ */
+static void fx_phosphor_hue(float tint[3], float hue)
+{
+    if (hue < 0.0f) hue = 0.0f;
+    if (hue > 1.0f) hue = 1.0f;
+    float deg = (hue - 0.5f) * 2.0f * SYN_PHOSPHOR_HUE_RANGE;
+    if (deg == 0.0f) return;
+
+    float r = tint[0], g = tint[1], b = tint[2];
+    float mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    float mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    float c = mx - mn;
+    if (c <= 0.0f || mx <= 0.0f) return;   /* grey: no hue to turn */
+
+    float h;
+    if      (mx == r) h = fmodf((g - b) / c, 6.0f);
+    else if (mx == g) h = (b - r) / c + 2.0f;
+    else              h = (r - g) / c + 4.0f;
+    h = h * 60.0f + deg;
+    h = fmodf(h, 360.0f);
+    if (h < 0.0f) h += 360.0f;
+
+    /* Back to RGB at the same chroma and value. */
+    float hp = h / 60.0f;
+    float x = c * (1.0f - fabsf(fmodf(hp, 2.0f) - 1.0f));
+    float rr, gg, bb;
+    if      (hp < 1.0f) { rr = c;    gg = x;    bb = 0.0f; }
+    else if (hp < 2.0f) { rr = x;    gg = c;    bb = 0.0f; }
+    else if (hp < 3.0f) { rr = 0.0f; gg = c;    bb = x;    }
+    else if (hp < 4.0f) { rr = 0.0f; gg = x;    bb = c;    }
+    else if (hp < 5.0f) { rr = x;    gg = 0.0f; bb = c;    }
+    else                { rr = c;    gg = 0.0f; bb = x;    }
+    tint[0] = rr + mn;
+    tint[1] = gg + mn;
+    tint[2] = bb + mn;
+}
+
 static bool fx_compute(syn_server_t *s, struct fx_params *p)
 {
     if (!s->effects || !s->config.effects) return false;
@@ -538,6 +603,7 @@ static bool fx_compute(syn_server_t *s, struct fx_params *p)
     p->tint[0] = phosphor_tint[ph][0];
     p->tint[1] = phosphor_tint[ph][1];
     p->tint[2] = phosphor_tint[ph][2];
+    fx_phosphor_hue(p->tint, s->config.effect_hue);
 
     /* Bloom is the phosphor glow; the shader gates it on mono, so it goes
      * quiet on its own when there is no tint. */

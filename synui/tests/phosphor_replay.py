@@ -78,3 +78,63 @@ for name, t in (("green", GREEN), ("white", WHITE)):
     cur = phosphor(1.0, t, (1.0, 1.0, 1.0))
     new = phosphor(1.0, t, (1.0, 1.0, t[2]))
     print(f"  {name:<5} hot  current {hexs(cur)}   proposed {hexs(new)}")
+
+
+# ── The Phosphor hue row (effects.c, fx_phosphor_hue) ────────
+#
+# Same arithmetic as the C, so the row's shipped default and its ends can be
+# read here rather than argued about. Rotation in HSV with saturation and value
+# held, which is what keeps the hot core (it saturates toward tint.b) honest.
+
+HUE_RANGE = 60.0        # SYN_PHOSPHOR_HUE_RANGE, degrees each way
+HUE_DEFAULT = 0.45      # config.c: one notch orange of the table, velle's call
+
+
+def hue_deg(rgb):
+    r, g, b = rgb
+    mx, mn = max(rgb), min(rgb)
+    c = mx - mn
+    if c <= 0.0:
+        return None
+    if mx == r:
+        h = ((g - b) / c) % 6.0
+    elif mx == g:
+        h = (b - r) / c + 2.0
+    else:
+        h = (r - g) / c + 4.0
+    return h * 60.0
+
+
+def rotate(rgb, hue):
+    """The tint as u_tint gets it, for a Phosphor hue row at `hue` (0..1)."""
+    deg = (hue - 0.5) * 2.0 * HUE_RANGE
+    h0 = hue_deg(rgb)
+    if deg == 0.0 or h0 is None:
+        return rgb
+    mn, c = min(rgb), max(rgb) - min(rgb)
+    h = (h0 + deg) % 360.0
+    hp = h / 60.0
+    x = c * (1.0 - abs(hp % 2.0 - 1.0))
+    seg = [(c, x, 0.0), (x, c, 0.0), (0.0, c, x),
+           (0.0, x, c), (x, 0.0, c), (c, 0.0, x)][int(hp)]
+    return tuple(v + mn for v in seg)
+
+
+print()
+print("Phosphor hue, amber (the table entry is hue %.1f):" % hue_deg(AMBER))
+for hv in (0.00, 0.35, HUE_DEFAULT, 0.50, 0.65, 1.00):
+    t = rotate(AMBER, hv)
+    mark = "   <- default" if hv == HUE_DEFAULT else ""
+    print(f"  {hv:.2f}  {(hv - 0.5) * 2.0 * HUE_RANGE:+5.0f}  "
+          f"hue {hue_deg(t):5.1f}  {hexs(t)}  g {t[1]:.3f}{mark}")
+
+# The default is the whole point of the row: amber that reads orange rather
+# than yellow, without the red the 0.48 fit landed on.
+d = rotate(AMBER, HUE_DEFAULT)
+print(f"  default tint {hexs(d)}  g {d[1]:.3f}   (table g {AMBER[1]:.3f}, "
+      f"the fit that read red g 0.480)")
+
+# Saturation and value are held, or the hot core would move with the hue.
+print("  holds  v %.3f -> %.3f   s %.3f -> %.3f" % (
+    max(AMBER), max(d),
+    (max(AMBER) - min(AMBER)) / max(AMBER), (max(d) - min(d)) / max(d)))

@@ -867,6 +867,15 @@ typedef enum {
     SYN_PHOSPHOR_COUNT,
 } syn_phosphor_t;
 
+/* How far the Phosphor hue row can turn a preset's tint, in degrees either way.
+ * A phosphor is one colour with a name, so the row rotates the PRESET rather
+ * than replacing it: 0.5 is the fitted tint, and 60 degrees each way is enough
+ * to take amber from red-orange to yellow (and green from lime to mint) at the
+ * panel's 20-notch resolution, which is where the eye actually works. A full
+ * circle at that resolution would be 18 degrees a press and useless for the one
+ * thing the row is for. */
+#define SYN_PHOSPHOR_HUE_RANGE 60.0f
+
 /* Panel rows, in display order. FILTER_ROW_ENABLED toggles the master switch;
  * the slider rows each map to one syn_config_t effect_* strength. PHOSPHOR is a
  * discrete tint selector (a word, not a bar), MONO its blend strength. */
@@ -880,6 +889,7 @@ typedef enum {
     FILTER_ROW_MONO,
     FILTER_ROW_BLOOM,
     FILTER_ROW_LIFT,
+    FILTER_ROW_HUE,
     FILTER_ROW_COUNT,
 } syn_filter_row_t;
 
@@ -1576,6 +1586,7 @@ typedef enum {
     CTL_ROW_EFFECT_MONO,
     CTL_ROW_EFFECT_BLOOM,
     CTL_ROW_EFFECT_LIFT,
+    CTL_ROW_EFFECT_HUE,
 
     CTL_ROW_GAME_MODE,
     CTL_ROW_GAME_OUTPUT,
@@ -3263,6 +3274,10 @@ typedef struct {
     float effect_bloom;      /* 0..1 phosphor glow bleed; only bites with mono */
     float effect_lift;       /* 0..1 phosphor transfer curve: 0 crushes the
                               * unlit field to black, 1 lets it glow */
+    float effect_hue;        /* 0..1 phosphor tint hue, as a rotation of the
+                              * preset's own hue: 0.5 leaves it alone, and the
+                              * ends are +/- SYN_PHOSPHOR_HUE_RANGE degrees.
+                              * Down is redder (amber -> orange), up yellower. */
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];

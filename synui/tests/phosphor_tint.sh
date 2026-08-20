@@ -65,6 +65,26 @@ echo "$out" | grep -q 'white hot  current #fffdfa   proposed #fffdeb' \
     && ok "white barely moves, its blue already being 0.92" \
     || bad "white's hot core changed"
 
+# ── The Phosphor hue row ─────────────────────────────────────
+#
+# The row rotates the preset tint in HSV before it reaches the shader, so what
+# is checkable without a GPU is that the rotation still holds saturation and
+# value (the hot core saturates toward tint.b, so a tint that drifted in either
+# would move the highlight too) and that the shipped default is where velle
+# asked for it: orange of the table, not back at the red the 0.48 fit gave.
+
+grep -q 'fx_phosphor_hue(p->tint, s->config.effect_hue)' "$SRC" \
+    && ok "the hue row still reaches the tint" \
+    || bad "fx_phosphor_hue is no longer applied to the tint in fx_compute"
+
+echo "$out" | grep -q 'holds  v 1.000 -> 1.000   s 0.880 -> 0.880' \
+    && ok "rotating the hue holds saturation and value" \
+    || bad "the hue rotation moved saturation or value — the hot core moves with it"
+
+echo "$out" | grep -q 'default tint #ff9c1f  g 0.612' \
+    && ok "the default hue lands on orange amber, not the table's yellow" \
+    || bad "the shipped default hue moved"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
