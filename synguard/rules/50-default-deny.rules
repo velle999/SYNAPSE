@@ -79,13 +79,31 @@
 # and on a clean system it does not exist at all, so there is no legitimate
 # opener to false-positive on — which is what puts it over the bar.
 #
-# ⚠ `event open`, so this refuses READS as well as writes, and that is the
-# point rather than an oversight. The reader is ld.so on every exec, and
-# refusing it is what neuters an already-planted preload: glibc treats a failed
-# open of this file as "no preload" and carries on, so the rule degrades an
-# infected machine to a working one instead of breaking it. On a clean system
-# the file is absent, lookup fails at ENOENT, and lsm/file_open never fires —
-# this rule costs nothing until the day it matters.
+# ⚠ `access write`, AND THIS COST A MACHINE TO LEARN.
+#
+# It shipped without it, on the reasoning that refusing the READ is what
+# neuters an already-planted preload: ld.so opens this file on every exec, and
+# glibc treats a failed open as "no preload", so the rule would degrade an
+# infected machine to a working one. That is true — and only on the KERNEL
+# path, which can refuse an open. The userspace path cannot refuse anything.
+# It can only kill, after the fact, and what it kills is the opener's whole
+# process TREE.
+#
+# So on a machine where /etc/ld.so.preload existed and the BPF gate was not
+# armed — which is every machine, since --bpf-enforce is not in the shipped
+# unit — EVERY EXEC ON THE SYSTEM matched this rule and had its tree torn
+# down. Including the `rm` you would use to delete the file. Including sshd.
+# Observed 2026-08-20: a test that planted the file turned a working laptop
+# into one where no command could complete.
+#
+# A read is what a working system does with this file. A write is what an
+# attack does. `access write` is the only version of this rule that is safe on
+# both paths, and the neutering property has to go with it: it was only ever
+# available to the kernel path, and it is not worth a rule that bricks a box on
+# the other one.
+#
+# On a clean system the file is absent, lookup fails at ENOENT, and nothing
+# fires either way — this rule costs nothing until the day it matters.
 #
 # Lowers to the kernel: an exact path, no wildcard, and priority 0 puts it
 # above the allows. /etc/ld.so.preload is on the kmod's sensitive_paths list,
@@ -93,6 +111,7 @@
 rule deny-ld-preload {
     event    open
     path     /etc/ld.so.preload
+    access   write
     verdict  deny
     priority 0
 }

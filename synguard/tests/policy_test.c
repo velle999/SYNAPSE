@@ -330,6 +330,26 @@ int main(void)
      * swapped for a deny on something a desktop touches — the count is the
      * cheap half of this check and the names are the half that means anything.
      */
+    /*
+     * ⚠ THE ld.so.preload RULE MUST BE WRITE-ONLY, and this check is worth more
+     * than the three below it.
+     *
+     * It shipped matching any open. ld.so opens that file on EVERY exec, and
+     * the userspace path cannot refuse an open — it can only kill the opener's
+     * process tree afterwards. So on a machine where the file existed and the
+     * BPF gate was not armed (which is every machine: --bpf-enforce is not in
+     * the unit), every command on the system had its tree torn down, including
+     * the one you would use to delete the file. A security rule that denies
+     * the machine to its owner.
+     */
+    {
+        const sg_rule_t *p = NULL;
+        for (const sg_rule_t *r = s.rules_head; r; r = r->next)
+            if (!strcmp(r->name, "deny-ld-preload")) { p = r; break; }
+        ok("deny-ld-preload matches WRITES ONLY, never ld.so's per-exec read",
+           p && p->access_mode == ACCESS_WRITE);
+    }
+
     ok("…and they are the three we chose",
        has_rule(&s, "deny-ld-preload") &&
        has_rule(&s, "deny-bpf-canary") &&

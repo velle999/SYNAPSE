@@ -42,7 +42,20 @@ pkgver=0.1.0
 #   the first was being logged — so a caller asking "has this refused
 #   anything" got a line that could not answer and concluded no. Both now, on
 #   SIGUSR1 and beside the on-change REFUSED line.
-pkgrel=37
+# 38: ⛔ URGENT — deny-ld-preload BRICKED A MACHINE, and 35/36/37 all carry it.
+#   The rule matched ANY open of /etc/ld.so.preload. ld.so opens that file on
+#   EVERY exec, and the userspace path cannot refuse an open — it can only kill
+#   the opener's process TREE afterwards. So on any machine where that file
+#   existed and the BPF gate was not armed (every machine: --bpf-enforce is not
+#   in the unit), every command on the system had its tree torn down. Including
+#   the `rm` you would use to delete the file, and sshd. Observed on velle's
+#   laptop: a test that planted the file left a box where nothing could run.
+#   `access write` now. A READ is what a working system does with that file; a
+#   WRITE is what an attack does. The "refusing the read neuters an
+#   already-planted preload" property goes with it — it was only ever available
+#   to the kernel path, and it is not worth a rule that bricks a box on the
+#   other one. policy_test pins the access mode.
+pkgrel=38
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
