@@ -307,6 +307,8 @@ PanelWindow {
                     spacing: 0
 
                     Launcher {
+
+                        barScreen: bar.screen
                         anchors.verticalCenter: parent.verticalCenter
                         // Which monitor's menu a click opens. The bar knows; the
                         // button must not guess.
@@ -314,6 +316,8 @@ PanelWindow {
                     }
 
                     Workspaces {
+
+                        barScreen: bar.screen
                         anchors.verticalCenter: parent.verticalCenter
                         visible: BarConfig.get(bar.outName, "workspaces")
                     }
@@ -321,6 +325,7 @@ PanelWindow {
 
                 // ── Centre: clock ────────────────────────────────
                 Clock {
+                    barScreen: bar.screen
                     anchors.centerIn: parent
                     visible: BarConfig.get(bar.outName, "clock")
                 }
@@ -342,19 +347,26 @@ PanelWindow {
                     // an alert, not a readout, and it is invisible unless
                     // something is actually being captured. No BarConfig key
                     // for the same reason GameMode has none — see Recording.qml.
-                    Recording {}
+                    Recording { barScreen: bar.screen }
 
-                    Tray      { anchors.verticalCenter: parent.verticalCenter
+                    Tray      { barScreen: bar.screen
+                                anchors.verticalCenter: parent.verticalCenter
                                 visible: BarConfig.get(bar.outName, "tray") }
-                    Media     { barVisible: BarConfig.get(bar.outName, "media") }
-                    GameMode  {}
-                    Battery   {}
+                    Media     { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "media") }
+                    GameMode  { barScreen: bar.screen }
+                    Battery   { barScreen: bar.screen }
                     Volume    { id: volume
+                                barScreen: bar.screen
                                 barVisible: BarConfig.get(bar.outName, "volume") }
-                    Cpu       { barVisible: BarConfig.get(bar.outName, "sysinfo") }
-                    Memory    { barVisible: BarConfig.get(bar.outName, "sysinfo") }
-                    Bluetooth { barVisible: BarConfig.get(bar.outName, "netbt") }
-                    Network   { barVisible: BarConfig.get(bar.outName, "netbt") }
+                    Cpu       { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "sysinfo") }
+                    Memory    { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "sysinfo") }
+                    Bluetooth { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "netbt") }
+                    Network   { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "netbt") }
                 }
             }
         }

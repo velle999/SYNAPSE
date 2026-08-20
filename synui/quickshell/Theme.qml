@@ -1030,9 +1030,33 @@ QtObject {
      * .screen off it at every call site is a qmllint warning per site.
      */
     function barPaletteSpan(win, item, x, w) {
-        if (!win || !item) return root.barPalette(win ? win.screen : null)
+        return root.barPaletteSpanOn(null, win, item, x, w)
+    }
+
+    /*
+     * The same lookup, told WHICH SCREEN rather than left to derive it.
+     *
+     * ⚠ THIS EXISTS BECAUSE DERIVING IT LOSES RACES, AND LOSING ONE IS INVISIBLE.
+     * `QsWindow.window` is null until the module has been placed in its bar, and
+     * the old answer for null was root.barPalette(null) — which is not "no
+     * answer", it is the FOLDED, desktop-wide ink. On a single monitor the fold
+     * and the per-output answer agree and nothing shows. On three they do not:
+     * the fold is one ink for every screen, so a module that evaluated early got
+     * the desktop-wide direction and its neighbours, evaluating a frame later,
+     * got their own output's. Both are drawn, side by side, one of them
+     * backwards — which is what "the volume icon does not invert with the rest
+     * of the bar" looked like, on a bar whose modules are otherwise identical
+     * code reading identical properties.
+     *
+     * The bar always knows its screen (`PanelWindow.screen`, from a `required
+     * property`), so passing it down removes the derivation and the race with it.
+     * The win-derived path stays for callers that have no screen to give.
+     */
+    function barPaletteSpanOn(screen, win, item, x, w) {
+        const sc = screen || (win ? win.screen : null)
+        if (!sc || !item) return root.barPalette(sc)
         const p = item.mapToItem(null, 0, 0)
-        return root.barPaletteAt(win.screen, p.x, w > 0 ? w : item.width)
+        return root.barPaletteAt(sc, p.x, w > 0 ? w : item.width)
     }
 
     /* barPaletteAt() and barPalette() differ only in HOW they arrive at the two

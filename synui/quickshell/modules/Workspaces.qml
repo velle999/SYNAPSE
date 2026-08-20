@@ -17,11 +17,16 @@ import ".."
 Item {
     id: root
 
+
+    /* The screen this module's bar is on, handed down by Bar.qml. Not derived
+     * from QsWindow.window: see Theme.barPaletteSpanOn for the race that costs. */
+    property var barScreen: null
     // The palette for the strip this module covers — a clear bar's ink comes off
     // whatever is behind it, which differs per monitor and, where a window sits
     // under the bar, along one monitor too. See Theme.barStrips.
     readonly property var pal:
-        Theme.barPaletteSpan(root.QsWindow.window, root, root.x, root.width)
+        Theme.barPaletteSpanOn(root.barScreen, root.QsWindow.window,
+                               root, root.x, root.width)
 
     // This used to reserve the launcher's width at its left edge, because the
     // compositor drew the "◢ SYNAPSE" button over the bar's top-left corner and

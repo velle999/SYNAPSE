@@ -35,6 +35,10 @@ Rectangle {
     // swallowed and look like the menu was broken.
     property bool acceptsRight: false
 
+    /* The screen this module's bar is on, handed down by Bar.qml. Not derived
+     * from QsWindow.window: see Theme.barPaletteSpanOn for the race that costs. */
+    property var barScreen: null
+
     property string text: ""
     property string icon: ""                 // optional leading glyph
     /*
@@ -50,7 +54,8 @@ Rectangle {
      * read on the other side.
      */
     readonly property var pal:
-        Theme.barPaletteSpan(root.QsWindow.window, root, root.x, root.width)
+        Theme.barPaletteSpanOn(root.barScreen, root.QsWindow.window,
+                               root, root.x, root.width)
 
     property color  iconColor: root.pal.glyph
     property color  textColor: root.pal.fg
