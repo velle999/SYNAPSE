@@ -27,11 +27,25 @@ pkgver=0.1.0
 # 1: first release. The photo darkroom is the face that ships — RAW and stills
 #   in, a 64-setting non-destructive develop stack, masks, and an export. The
 #   video timeline is real and tested (it cuts, grades, fades and encodes) but
-#   is reached from the command line; it has no page in the window yet, which
-#   is why the .desktop claims only Graphics as its main category.
-pkgrel=1
+#   is reached from the command line; it has no page in the window yet.
+# 2: the video side gets its face. The window has two pages now: the darkroom,
+#   and an edit page with a program monitor, draggable clips, a razor, ripple
+#   delete and an inspector — whose Grade section is the SAME develop table the
+#   darkroom draws, on a clip, baked to a .cube. Underneath: clip transforms
+#   (pan, zoom and the Ken Burns move a still needs to earn its place in a
+#   cut), transitions as alpha ramps on the incoming clip, generated title and
+#   colour clips, move/trim/split/delete/ripple, and `timeline frame`, which
+#   composites ONE frame from only the clips under the playhead so a scrub
+#   costs a seek rather than a decode from zero.
+#
+#   Three of those fixed things that were quietly broken: a still contributed a
+#   single frame to an export that expected seconds of them (no -loop, no
+#   error); a caption containing a percent sign failed the whole filter graph
+#   at export time; and the property table wrote a float through a double's
+#   offset, so fade lengths and transition lengths silently would not stick.
+pkgrel=2
 
-pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline"
+pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
@@ -49,7 +63,7 @@ depends+=('ffmpeg')
 
 makedepends=('meson' 'ninja' 'gcc')
 
-optdepends=('quickshell: the darkroom window (synstudio gui)'
+optdepends=('quickshell: the window — darkroom and cutting room (synstudio gui)'
             # dcraw_emu, which is libraw's own tool. ffmpeg reads DNG and a
             # few others, but for most camera raw it fails by producing a
             # THUMBNAIL-sized preview rather than an error — far worse than

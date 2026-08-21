@@ -55,13 +55,35 @@ static void usage(void)
 "  lut --out F.cube              bake the colour half as a 3D LUT\n"
 "       [--from FILE] [--size 33] [--set K=V]...\n"
 "\n"
-"VIDEO\n"
+"VIDEO  (a project file is a text document; nothing is rendered until export)\n"
 "  timeline new PROJ [--size WxH] [--fps F]\n"
-"  timeline track PROJ video|audio [NAME]\n"
-"  timeline clip PROJ TRACK FILE --at T --in A --out B\n"
-"       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
 "  timeline show PROJ            the document, as written\n"
-"  timeline grade PROJ T C KEY=VALUE...   grade one clip\n"
+"  timeline keys                 every clip property, with its range\n"
+"\n"
+" tracks and clips\n"
+"  timeline track PROJ video|audio [NAME]        add a track\n"
+"  timeline track PROJ N [--mute 0|1] [--hide 0|1] [--name NAME]\n"
+"  timeline clip PROJ TRACK FILE [--at T] [--in A] [--out-at B] [--dur S]\n"
+"       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
+"  timeline title PROJ TRACK TEXT [--at T] [--dur S] [--colour R,G,B]\n"
+"  timeline solid PROJ TRACK [--at T] [--dur S] [--colour R,G,B]\n"
+"\n"
+" editing (rearranges intent; never touches a frame)\n"
+"  timeline move  PROJ T C --to SECONDS\n"
+"  timeline trim  PROJ T C [--head S] [--tail S]   + shortens the head,\n"
+"                                                    + lengthens the tail\n"
+"  timeline split PROJ T [C] --at SECONDS          the razor\n"
+"  timeline delete PROJ T C [--ripple]             lift, or close the gap\n"
+"  timeline at    PROJ T --at SECONDS              which clip is under there\n"
+"\n"
+" what a clip looks like\n"
+"  timeline get   PROJ T C [KEY]          everything known about one clip\n"
+"  timeline set   PROJ T C KEY=VALUE...   opacity, speed, fades, motion,\n"
+"                                         transition, title (`timeline keys`)\n"
+"  timeline grade PROJ T C KEY=VALUE...   the develop stack, as a LUT\n"
+"\n"
+" out\n"
+"  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
 "  timeline export PROJ --out OUT [--print]\n"
 "\n"
 "COMMON\n"
@@ -81,6 +103,9 @@ typedef struct {
     int    size, quality, bits, lutsize, print;
     double at, in, outp, speed;
     double fade_in, fade_out;
+    double dur, to, head, tail;
+    int    has_dur, has_to, has_head, has_tail, ripple;
+    const char *colour;
     float  gain, opacity;
     char   set_key[64][64];
     char   set_val[64][256];
@@ -122,6 +147,13 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--opacity")) { const char *v = NEXT(); if (!v) return -1; o->opacity = (float)atof(v); }
         else if (!strcmp(a, "--fade-in")) { const char *v = NEXT(); if (!v) return -1; o->fade_in = atof(v); }
         else if (!strcmp(a, "--fade-out")){ const char *v = NEXT(); if (!v) return -1; o->fade_out = atof(v); }
+        else if (!strcmp(a, "--dur"))     { const char *v = NEXT(); if (!v) return -1; o->dur = atof(v); o->has_dur = 1; }
+        else if (!strcmp(a, "--to"))      { const char *v = NEXT(); if (!v) return -1; o->to = atof(v); o->has_to = 1; }
+        else if (!strcmp(a, "--head"))    { const char *v = NEXT(); if (!v) return -1; o->head = atof(v); o->has_head = 1; }
+        else if (!strcmp(a, "--tail"))    { const char *v = NEXT(); if (!v) return -1; o->tail = atof(v); o->has_tail = 1; }
+        else if (!strcmp(a, "--colour") ||
+                 !strcmp(a, "--color"))   { const char *v = NEXT(); if (!v) return -1; o->colour = v; }
+        else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--print"))   { o->print = 1; }
         else if (!strcmp(a, "--set")) {
             const char *v = NEXT(), *eq;
@@ -480,15 +512,93 @@ static int tl_save(const char *proj, const ss_timeline *t)
     return rename(tmp, proj);
 }
 
-static int cmd_timeline(int argc, char **argv)
+/* Every clip property in one listing, the same shape `keys` uses for the
+ * develop stack: KEY, current, ui-lo, ui-hi, type, group, label, lo, hi and —
+ * for an enum — the choices. The inspector in the window is built from this,
+ * so a property added to the table in timeline.c appears there without the
+ * QML being touched. */
+static int cmd_timeline_keys(void)
+{
+    ss_clip c;
+    ss_clip_info f;
+    int i;
+
+    ss_clip_reset(&c);
+    for (i = 0; ss_clip_describe(i, &f); i++) {
+        char buf[512];
+        ss_clip_get(&c, f.key, buf, sizeof buf);
+        printf("%s\t%s\t%.6g\t%.6g\t%s\t%s\t%s\t%s\n",
+               f.key, buf, f.lo, f.hi,
+               f.type == SS_CT_ENUM ? "enum" : f.type == SS_CT_TEXT ? "text"
+               : f.type == SS_CT_INT ? "int" : "float",
+               f.group, f.label, f.choices ? f.choices : "");
+    }
+    return 0;
+}
+
+/* TRACK and CLIP off the command line, checked once so seven verbs do not
+ * each write the same two range tests differently. */
+static int tl_pick(const ss_timeline *t, const char *ts, const char *cs,
+                   int *tr, int *cl)
+{
+    if (!ts) return die("which track?");
+    *tr = atoi(ts);
+    if (*tr < 0 || *tr >= t->ntracks) return die("no track %d", *tr);
+    if (!cl) return 0;
+    if (!cs) return die("which clip?");
+    *cl = atoi(cs);
+    if (*cl < 0 || *cl >= t->track[*tr].nclips)
+        return die("no clip %d on track %d", *cl, *tr);
+    return 0;
+}
+
+/* --colour R,G,B or R,G,B,A, each 0..1. */
+static int parse_colour(const char *s, float *r, float *g, float *b, float *a)
+{
+    double v[4] = { 0, 0, 0, 1 };
+    int n = sscanf(s, "%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3]);
+    if (n < 3) return -1;
+    *r = (float)v[0]; *g = (float)v[1]; *b = (float)v[2];
+    if (n > 3) *a = (float)v[3];
+    return 0;
+}
+
+/* Run a graph, or print it. One argument per line so a filter graph
+ * containing spaces and semicolons stays readable and copy-pasteable. */
+static int tl_run(char **av, int ac, int print)
+{
+    int i, rc;
+
+    if (print) {
+        for (i = 0; i < ac; i++) printf("%s\n", av[i]);
+        rc = 0;
+    } else {
+        pid_t pid = fork();
+        if (pid == 0) { execvp(av[0], av); _exit(127); }
+        if (pid < 0) rc = die("cannot start ffmpeg");
+        else {
+            int st;
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) ;
+            rc = (WIFEXITED(st) && WEXITSTATUS(st) == 0) ? 0 : die("ffmpeg failed");
+        }
+    }
+    for (i = 0; i < ac; i++) free(av[i]);
+    free(av);
+    return rc;
+}
+
+/* The verbs. Takes the document by pointer so ONE caller owns it and can free
+ * it — there are ninety-odd returns in here and no cleanup label was ever
+ * going to survive the next verb added. */
+static int timeline_verb(int argc, char **argv, ss_timeline *t)
 {
     const char *verb = argc > 2 ? argv[2] : NULL;
     const char *proj = argc > 3 ? argv[3] : NULL;
-    ss_timeline t;
     opts o;
     char **rest;
-    int nrest;
+    int nrest, tr, cl;
 
+    if (verb && !strcmp(verb, "keys")) return cmd_timeline_keys();
     if (!verb || !proj) { usage(); return 1; }
     opts_default(&o);
 
@@ -504,38 +614,60 @@ static int cmd_timeline(int argc, char **argv)
                 fps = atof(argv[++i]);
             }
         }
-        ss_timeline_reset(&t, w, h, fps);
-        if (tl_save(proj, &t) != 0) return die("cannot write %s", proj);
+        ss_timeline_reset(t, w, h, fps);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         return 0;
     }
 
-    if (tl_load(proj, &t) != 0) return die("cannot read %s", proj);
+    if (tl_load(proj, t) != 0) return die("cannot read %s", proj);
 
     if (!strcmp(verb, "show")) {
-        ss_timeline_write(&t, stdout);
-        printf("# duration\t%.4f\n", ss_timeline_duration(&t));
+        ss_timeline_write(t, stdout);
+        printf("# duration\t%.4f\n", ss_timeline_duration(t));
         return 0;
     }
 
+    /* `track PROJ video|audio [NAME]` adds one; `track PROJ N ...` edits the
+     * one that is there. The kind word and an index cannot be confused for
+     * each other, and keeping the add form exactly as it was means no script
+     * that already drives this has to change. */
     if (!strcmp(verb, "track")) {
-        const char *kind = argc > 4 ? argv[4] : "video";
-        const char *name = argc > 5 ? argv[5] : NULL;
-        int n = ss_timeline_add_track(&t, strcmp(kind, "audio") ? SS_TRACK_VIDEO
-                                                                : SS_TRACK_AUDIO, name);
-        if (n < 0) return die("no room for another track");
-        if (tl_save(proj, &t) != 0) return die("cannot write %s", proj);
-        printf("%d\n", n);
+        const char *what = argc > 4 ? argv[4] : "video";
+
+        if (!strcmp(what, "video") || !strcmp(what, "audio")) {
+            const char *name = argc > 5 ? argv[5] : NULL;
+            int n = ss_timeline_add_track(t, strcmp(what, "audio") ? SS_TRACK_VIDEO
+                                                                    : SS_TRACK_AUDIO, name);
+            if (n < 0) return die("no room for another track");
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("%d\n", n);
+            return 0;
+        }
+        if (tl_pick(t, what, NULL, &tr, NULL) != 0) return 1;
+        {
+            int i;
+            for (i = 5; i < argc; i++) {
+                if (!strcmp(argv[i], "--mute") && i + 1 < argc)
+                    t->track[tr].muted = atoi(argv[++i]);
+                else if (!strcmp(argv[i], "--hide") && i + 1 < argc)
+                    t->track[tr].hidden = atoi(argv[++i]);
+                else if (!strcmp(argv[i], "--name") && i + 1 < argc)
+                    snprintf(t->track[tr].name, sizeof t->track[tr].name,
+                             "%s", argv[++i]);
+                else return die("track: unknown option %s", argv[i]);
+            }
+        }
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         return 0;
     }
 
     if (!strcmp(verb, "clip")) {
         ss_clip c;
-        int track;
         ss_probe p;
 
         if (argc < 6) return die("clip wants PROJ TRACK FILE");
-        track = atoi(argv[4]);
-        memset(&c, 0, sizeof c);
+        if (tl_pick(t, argv[4], NULL, &tr, NULL) != 0) return 1;
+        ss_clip_reset(&c);
         snprintf(c.path, sizeof c.path, "%s", argv[5]);
         if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
             return die("bad option");
@@ -544,12 +676,20 @@ static int cmd_timeline(int argc, char **argv)
          * what "add this clip" means before anyone has trimmed it. */
         c.src_in  = o.in;
         c.src_out = o.outp;
-        if (c.src_out < 0) {
-            if (ss_probe_file(c.path, &p) == 0 && p.duration > 0)
-                c.src_out = p.duration;
-            else
-                c.src_out = c.src_in + 5.0;     /* a still: five seconds */
+        if (ss_probe_file(c.path, &p) == 0) {
+            /* Whether this is a photograph is decided ONCE, here, and stored.
+             * The export has to know — a still needs -loop or it contributes a
+             * single frame to a graph expecting seconds of them, and finishes
+             * early with no error at all — and the graph builder has no
+             * business probing files. */
+            c.still = !p.is_video || p.duration <= 0;
+            if (c.src_out < 0)
+                c.src_out = (!c.still && p.duration > 0)
+                            ? p.duration : c.src_in + (o.has_dur ? o.dur : 5.0);
+        } else if (c.src_out < 0) {
+            c.src_out = c.src_in + (o.has_dur ? o.dur : 5.0);
         }
+        if (o.has_dur) c.src_out = c.src_in + o.dur;
         if (c.src_out <= c.src_in) return die("out point is not after the in point");
 
         c.tl_in    = o.at;
@@ -559,91 +699,271 @@ static int cmd_timeline(int argc, char **argv)
         c.fade_in  = o.fade_in;
         c.fade_out = o.fade_out;
 
-        if (ss_timeline_add_clip(&t, track, &c) < 0)
-            return die("no track %d, or no room on it", track);
-        if (tl_save(proj, &t) != 0) return die("cannot write %s", proj);
+        cl = ss_timeline_add_clip(t, tr, &c);
+        if (cl < 0) return die("no track %d, or no room on it", tr);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("%d\n", cl);
+        return 0;
+    }
+
+    /* A caption and a background are clips, not a separate kind of object.
+     * They sit on a video track, take the same fades, transform, transition
+     * and grade, and the only thing that knows they are generated is the one
+     * place that decides what ffmpeg reads. */
+    if (!strcmp(verb, "title") || !strcmp(verb, "solid")) {
+        ss_clip c;
+        int is_title = !strcmp(verb, "title");
+
+        if (argc < 5) return die("%s wants PROJ TRACK%s", verb,
+                                 is_title ? " TEXT" : "");
+        if (tl_pick(t, argv[4], NULL, &tr, NULL) != 0) return 1;
+        if (t->track[tr].type != SS_TRACK_VIDEO)
+            return die("track %d is an audio track", tr);
+
+        ss_clip_reset(&c);
+        c.kind = is_title ? SS_CLIP_TITLE : SS_CLIP_SOLID;
+        if (is_title) {
+            if (argc < 6) return die("title wants the words to put on screen");
+            snprintf(c.text, sizeof c.text, "%s", argv[5]);
+            if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
+                return die("bad option");
+        } else {
+            if (parse_opts(argc, argv, 5, &o, &rest, &nrest) != 0)
+                return die("bad option");
+        }
+        if (o.colour) {
+            float a = is_title ? 1.0f : 1.0f;
+            if (is_title) {
+                if (parse_colour(o.colour, &c.text_r, &c.text_g, &c.text_b, &a) != 0)
+                    return die("--colour wants R,G,B each 0..1");
+            } else {
+                if (parse_colour(o.colour, &c.col_r, &c.col_g, &c.col_b, &a) != 0)
+                    return die("--colour wants R,G,B each 0..1");
+                c.col_a = 1.0f;
+            }
+        } else if (!is_title) {
+            c.col_a = 1.0f;
+        }
+        c.tl_in   = o.at;
+        c.src_in  = 0;
+        c.src_out = o.has_dur ? o.dur : 4.0;
+        if (c.src_out <= 0) return die("--dur has to be more than nothing");
+        c.fade_in  = o.fade_in;
+        c.fade_out = o.fade_out;
+        c.opacity  = o.opacity;
+
+        cl = ss_timeline_add_clip(t, tr, &c);
+        if (cl < 0) return die("cannot add to track %d", tr);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("%d\n", cl);
+        return 0;
+    }
+
+    if (!strcmp(verb, "set")) {
+        int i;
+        if (argc < 7) return die("set wants PROJ TRACK CLIP KEY=VALUE...");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        for (i = 6; i < argc; i++) {
+            char *eq = strchr(argv[i], '=');
+            if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
+            *eq = '\0';
+            switch (ss_clip_set(&t->track[tr].clip[cl], argv[i], eq + 1)) {
+            case 0:  break;
+            case -2: return die("%s: out of range: %s  (try `synstudio timeline keys`)",
+                                argv[i], eq + 1);
+            default: return die("no such clip property: %s  "
+                                "(try `synstudio timeline keys`)", argv[i]);
+            }
+        }
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        return 0;
+    }
+
+    if (!strcmp(verb, "get")) {
+        char buf[512];
+        ss_clip_info f;
+        int i;
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                        argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        if (argc > 6) {
+            if (ss_clip_get(&t->track[tr].clip[cl], argv[6], buf, sizeof buf) != 0)
+                return die("no such clip property: %s", argv[6]);
+            printf("%s\n", buf);
+            return 0;
+        }
+        /* The whole clip, including what the property table does not carry:
+         * a window drawing a timeline needs the position and the length far
+         * more than it needs the opacity. */
+        {
+            const ss_clip *c = &t->track[tr].clip[cl];
+            printf("kind\t%s\n", c->kind == SS_CLIP_TITLE ? "title"
+                                : c->kind == SS_CLIP_SOLID ? "solid" : "media");
+            printf("path\t%s\n", c->path);
+            printf("still\t%d\n", c->still);
+            printf("tl_in\t%.6f\n", c->tl_in);
+            printf("src_in\t%.6f\n", c->src_in);
+            printf("src_out\t%.6f\n", c->src_out);
+            printf("length\t%.6f\n", ss_clip_length(c));
+            printf("graded\t%d\n", c->has_grade);
+            for (i = 0; ss_clip_describe(i, &f); i++) {
+                ss_clip_get(c, f.key, buf, sizeof buf);
+                printf("%s\t%s\n", f.key, buf);
+            }
+        }
+        return 0;
+    }
+
+    if (!strcmp(verb, "move")) {
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                        argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0) return die("bad option");
+        if (!o.has_to) return die("move wants --to SECONDS");
+        if (ss_timeline_move(t, tr, cl, o.to) != 0) return die("cannot move that");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        return 0;
+    }
+
+    if (!strcmp(verb, "trim")) {
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                        argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0) return die("bad option");
+        if (!o.has_head && !o.has_tail)
+            return die("trim wants --head SECONDS or --tail SECONDS "
+                       "(positive shortens the head, lengthens the tail)");
+        if (o.has_head && ss_timeline_trim(t, tr, cl, -1, o.head) != 0)
+            return die("that head trim would leave nothing");
+        if (o.has_tail && ss_timeline_trim(t, tr, cl, 1, o.tail) != 0)
+            return die("that tail trim would leave nothing");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        return 0;
+    }
+
+    if (!strcmp(verb, "split")) {
+        int n;
+        if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0) return die("bad option");
+        if (nrest < 1) return die("split wants PROJ TRACK --at SECONDS");
+        if (tl_pick(t, rest[0], NULL, &tr, NULL) != 0) return 1;
+        /* The clip is found from the razor position rather than named. That
+         * is what a razor IS, and it means the window can pass the playhead
+         * straight through without first working out what it is over. */
+        cl = nrest > 1 ? atoi(rest[1]) : ss_timeline_at(t, tr, o.at);
+        if (cl < 0) return die("nothing on track %d at %.3f", tr, o.at);
+        n = ss_timeline_split(t, tr, cl, o.at);
+        if (n < 0) return die("%.3f is not inside clip %d", o.at, cl);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("%d\n", n);
+        return 0;
+    }
+
+    if (!strcmp(verb, "delete")) {
+        double from, len;
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                        argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0) return die("bad option");
+        from = t->track[tr].clip[cl].tl_in;
+        len  = ss_clip_length(&t->track[tr].clip[cl]);
+        if (ss_timeline_remove(t, tr, cl) != 0) return die("cannot remove that");
+        /* Without --ripple this is a lift: the gap stays. With it, the track
+         * closes up. They are different edits and neither is the safe
+         * default for the other, so the flag says which one was meant. */
+        if (o.ripple) ss_timeline_ripple(t, tr, from, len);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        return 0;
+    }
+
+    /* Which clip is under a time — the window's hit test, answered by the
+     * engine so a click and a render can never disagree about it. */
+    if (!strcmp(verb, "at")) {
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL, NULL, &tr, NULL) != 0) return 1;
+        if (parse_opts(argc, argv, 5, &o, &rest, &nrest) != 0) return die("bad option");
+        printf("%d\n", ss_timeline_at(t, tr, o.at));
         return 0;
     }
 
     if (!strcmp(verb, "grade")) {
-        int tr, cl, i;
+        int i;
         if (argc < 7) return die("grade wants PROJ TRACK CLIP KEY=VALUE...");
-        tr = atoi(argv[4]); cl = atoi(argv[5]);
-        if (tr < 0 || tr >= t.ntracks) return die("no track %d", tr);
-        if (cl < 0 || cl >= t.track[tr].nclips) return die("no clip %d", cl);
-        if (!t.track[tr].clip[cl].has_grade) {
-            ss_develop_reset(&t.track[tr].clip[cl].grade);
-            t.track[tr].clip[cl].has_grade = 1;
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        if (!t->track[tr].clip[cl].has_grade) {
+            ss_develop_reset(&t->track[tr].clip[cl].grade);
+            t->track[tr].clip[cl].has_grade = 1;
         }
         for (i = 6; i < argc; i++) {
             char *eq = strchr(argv[i], '=');
             if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
             *eq = '\0';
-            if (apply_set(&t.track[tr].clip[cl].grade, argv[i], eq + 1) != 0) return 1;
+            if (apply_set(&t->track[tr].clip[cl].grade, argv[i], eq + 1) != 0) return 1;
         }
-        if (tl_save(proj, &t) != 0) return die("cannot write %s", proj);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         return 0;
     }
 
-    if (!strcmp(verb, "export")) {
-        char lutdir[] = "/tmp/synstudio-lut-XXXXXX";
+    /* One composited frame — the program monitor's whole data source. */
+    if (!strcmp(verb, "frame")) {
+        char dir[] = "/tmp/synstudio-tl-XXXXXX";
         char **av;
-        int ac, i, j, rc;
+        int ac, rc;
+
+        if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0) return die("bad option");
+        if (!o.out) return die("frame needs --out");
+        if (!mkdtemp(dir)) return die("cannot make a scratch directory");
+        if (ss_timeline_bake(t, dir) < 0) {
+            rmdir(dir);
+            return die("cannot write the grade LUTs");
+        }
+        ac = ss_timeline_frame(t, o.at, o.out, dir, o.size, &av);
+        if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
+                      return die("cannot build the preview graph"); }
+        rc = tl_run(av, ac, o.print);
+        ss_timeline_unbake(t, dir);
+        rmdir(dir);
+        return rc;
+    }
+
+    if (!strcmp(verb, "export")) {
+        char dir[] = "/tmp/synstudio-lut-XXXXXX";
+        char **av;
+        int ac, rc;
 
         if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
             return die("bad option");
         if (!o.out) return die("export needs --out");
-        if (!mkdtemp(lutdir)) return die("cannot make a scratch directory");
+        if (!mkdtemp(dir)) return die("cannot make a scratch directory");
 
-        /* One .cube per graded clip, written before the graph is built so the
-         * paths it references all exist by the time ffmpeg opens them. */
-        for (i = 0; i < t.ntracks; i++)
-            for (j = 0; j < t.track[i].nclips; j++) {
-                char lp[4200];
-                FILE *fp;
-                if (!t.track[i].clip[j].has_grade) continue;
-                snprintf(lp, sizeof lp, "%s/grade_%d_%d.cube", lutdir, i, j);
-                fp = fopen(lp, "w");
-                if (!fp) { rc = 1; goto cleanup; }
-                ss_lut_write(&t.track[i].clip[j].grade, 33, fp, "synstudio clip grade");
-                fclose(fp);
-            }
-
-        ac = ss_timeline_ffmpeg(&t, o.out, lutdir, &av);
-        if (ac < 0) { rc = die("cannot build the export graph"); goto cleanup; }
-
-        if (o.print) {
-            /* The graph, exactly as it would run. One argument per line so a
-             * filter graph containing spaces and semicolons stays readable
-             * and stays copy-pasteable. */
-            for (i = 0; i < ac; i++) printf("%s\n", av[i]);
-            rc = 0;
-        } else {
-            pid_t pid = fork();
-            if (pid == 0) { execvp(av[0], av); _exit(127); }
-            if (pid < 0) rc = die("cannot start ffmpeg");
-            else {
-                int st;
-                while (waitpid(pid, &st, 0) < 0 && errno == EINTR) ;
-                rc = (WIFEXITED(st) && WEXITSTATUS(st) == 0)
-                     ? 0 : die("ffmpeg failed");
-            }
+        /* The .cube per graded clip and the text file per title, written
+         * before the graph is built so every path it names exists by the
+         * time ffmpeg opens it. */
+        if (ss_timeline_bake(t, dir) < 0) {
+            rmdir(dir);
+            return die("cannot write the grade LUTs");
         }
-        for (i = 0; i < ac; i++) free(av[i]);
-        free(av);
 
-cleanup:
-        for (i = 0; i < t.ntracks; i++)
-            for (j = 0; j < t.track[i].nclips; j++) {
-                char lp[4200];
-                snprintf(lp, sizeof lp, "%s/grade_%d_%d.cube", lutdir, i, j);
-                unlink(lp);
-            }
-        rmdir(lutdir);
+        ac = ss_timeline_ffmpeg(t, o.out, dir, &av);
+        if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
+                      return die("cannot build the export graph"); }
+        rc = tl_run(av, ac, o.print);
+        ss_timeline_unbake(t, dir);
+        rmdir(dir);
         return rc;
     }
 
     return die("unknown timeline verb: %s", verb);
+}
+
+/* A timeline's clips are a grown array, so the document owns heap. Every verb
+ * above returns straight out, which left that array leaked at exit — harmless
+ * in a process about to end, and fatal to any attempt to run this suite under
+ * a leak checker, which is the reason it is worth fixing rather than
+ * annotating away. */
+static int cmd_timeline(int argc, char **argv)
+{
+    ss_timeline t;
+    int rc;
+
+    ss_timeline_reset(&t, 1920, 1080, 25.0);
+    rc = timeline_verb(argc, argv, &t);
+    ss_timeline_free(&t);
+    return rc;
 }
 
 /* --------------------------------------------------------------- browse -- */
@@ -701,8 +1021,24 @@ static int cmd_gui(int argc, char **argv)
     av[n] = NULL;
 
     /* The file to open is handed over in the environment rather than on the
-     * command line: quickshell owns argv and passes nothing through. */
-    if (argc > 2) setenv("SYNSTUDIO_OPEN", argv[2], 1);
+     * command line: quickshell owns argv and passes nothing through.
+     *
+     * A timeline and a photograph both arrive as one path, and the window
+     * opens on a different page for each. Which it is comes from the file's
+     * first line, not from its extension: a project someone saved as .txt is
+     * still a project, and a .syntl that is actually a photograph would open
+     * an editor onto nothing. */
+    if (argc > 2) {
+        FILE *fp = fopen(argv[2], "r");
+        char head[32] = "";
+        int is_proj = 0;
+        if (fp) {
+            if (fgets(head, sizeof head, fp))
+                is_proj = !strncmp(head, "# synstudio timeline", 20);
+            fclose(fp);
+        }
+        setenv(is_proj ? "SYNSTUDIO_PROJECT" : "SYNSTUDIO_OPEN", argv[2], 1);
+    }
 
     execvp(av[0], av);
     return die("cannot start quickshell (is it installed?): %s", strerror(errno));

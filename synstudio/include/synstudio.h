@@ -274,17 +274,94 @@ int ss_browse(const char *dir, ss_row **rows, char abs_out[1024]);
 
 enum { SS_TRACK_VIDEO, SS_TRACK_AUDIO };
 
+/* What a clip IS. A media clip points at a file; a title and a solid are
+ * generated, own no file, and exist because a cut needs a caption and a
+ * background far more often than it needs a fourth colour wheel. They travel
+ * the same track, take the same transform, the same fades and the same
+ * transition, so nothing downstream has to special-case them beyond the one
+ * place that decides what ffmpeg reads. */
+enum { SS_CLIP_MEDIA, SS_CLIP_TITLE, SS_CLIP_SOLID };
+
+/* Where a title sits in the frame. Nine positions, not free coordinates:
+ * lower-third and centred cover almost every caption anyone types, and a
+ * drag-anywhere title is the transform's job, not the title's. */
+enum { SS_TEXT_TL, SS_TEXT_TC, SS_TEXT_TR,
+       SS_TEXT_ML, SS_TEXT_MC, SS_TEXT_MR,
+       SS_TEXT_BL, SS_TEXT_BC, SS_TEXT_BR };
+
+/* Motion. `scale` 1.0 means "fitted to the frame"; position is a fraction of
+ * the frame from centre, so 0,0 is centred at any project size.
+ *
+ * When `animate` is on, the second set of values is where the clip ENDS and
+ * the pair is interpolated across its length — which is the whole of pan and
+ * zoom, including the Ken Burns move that is the only way a still photograph
+ * earns its place in a cut. One mechanism, because a separate "Ken Burns"
+ * feature would be this with fewer options. */
 typedef struct {
-    char   path[1024];
+    float scale;                /* 0.05 .. 10, 1 = fit */
+    float pos_x, pos_y;         /* -1 .. 1, fractions of the frame */
+    float rotate;               /* degrees */
+    int   animate;
+    float scale2, pos_x2, pos_y2, rotate2;
+} ss_xform;
+
+/* A transition belongs to the INCOMING clip, and is expressed as an alpha
+ * ramp over its first `trans_dur` seconds. That is not a simplification: the
+ * compositor already overlays every clip onto what is beneath it, so a clip
+ * whose alpha rises from 0 while the outgoing clip is still playing under it
+ * IS a cross dissolve, with no second code path and no special case in the
+ * export. Overlap the two clips by the transition length and it happens. */
+enum { SS_TRANS_NONE, SS_TRANS_DISSOLVE,
+       SS_TRANS_WIPE_L, SS_TRANS_WIPE_R, SS_TRANS_WIPE_U, SS_TRANS_WIPE_D };
+
+typedef struct {
+    int    kind;                /* SS_CLIP_* */
+    char   path[1024];          /* media only */
+    int    still;               /* a photograph, not a movie: needs -loop 1 */
     double src_in, src_out;     /* seconds into the source */
     double tl_in;               /* seconds on the timeline */
     double speed;               /* 1.0 = normal */
     float  gain_db;             /* audio */
     float  opacity;
     double fade_in, fade_out;   /* seconds */
+
+    ss_xform xf;
+
+    int    trans;               /* SS_TRANS_*, into this clip */
+    double trans_dur;           /* seconds */
+
+    /* title / solid */
+    char   text[512];
+    float  text_size;           /* fraction of frame height, 0 = 0.08 */
+    float  text_r, text_g, text_b;
+    int    text_pos;            /* SS_TEXT_* */
+    float  col_r, col_g, col_b; /* SS_CLIP_SOLID, and a title's backdrop */
+    float  col_a;               /* backdrop opacity behind a title */
+
     int    has_grade;
     ss_develop grade;
 } ss_clip;
+
+void ss_clip_reset(ss_clip *c);
+void ss_xform_reset(ss_xform *x);
+/* Length on the TIMELINE: the source span divided by the speed. */
+double ss_clip_length(const ss_clip *c);
+
+/* Named-field access to a clip, for the same reason ss_develop has it: the
+ * CLI, the timeline file and the GUI inspector then read ONE table, and a new
+ * clip property is one row rather than three lists that drift apart. This is
+ * the video half of what ss_develop_describe does for the photo half, and the
+ * inspector panel is built from it at startup exactly the same way. */
+enum { SS_CT_FLOAT, SS_CT_INT, SS_CT_ENUM, SS_CT_TEXT };
+typedef struct {
+    const char *key, *group, *label;
+    float lo, hi;
+    int   type;
+    const char *choices;    /* "a|b|c" for SS_CT_ENUM, else NULL */
+} ss_clip_info;
+int  ss_clip_describe(int i, ss_clip_info *out);    /* 0 past the end */
+int  ss_clip_set(ss_clip *c, const char *key, const char *val);
+int  ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n);
 
 /* Clips are a GROWN array, not a fixed one. An ss_clip carries a whole
  * ss_develop, which carries four curves, which carry a 1024-entry table each
@@ -314,10 +391,68 @@ int    ss_timeline_add_clip(ss_timeline *t, int track, const ss_clip *c);
 double ss_timeline_duration(const ss_timeline *t);
 int    ss_timeline_write(const ss_timeline *t, FILE *fp);
 int    ss_timeline_read(ss_timeline *t, FILE *fp);
-/* Emit the ffmpeg argv for an export. lutdir holds one .cube per graded clip.
+
+/* ---- editing ----
+ *
+ * An edit is a rearrangement of intent, never of media. All four of these
+ * move numbers around in the document; none of them reads or writes a frame,
+ * which is why a cut costs nothing and why undo is a file copy.
+ *
+ * Clip indices are positions in the track's array and are NOT stable across
+ * a remove or a split — both return the affected index and the caller is
+ * expected to re-read the track rather than hold an index over an edit. */
+
+/* Slide a clip along the timeline. Negative lands are clamped to 0. */
+int ss_timeline_move(ss_timeline *t, int track, int clip, double tl_in);
+/* Drag an edge. `which` <0 for the head, >0 for the tail. Trimming the head
+ * moves the source in point AND the timeline position together, which is what
+ * makes the frame under the cursor stay put — a head trim that only moved one
+ * of them would slide the whole clip's content sideways. */
+int ss_timeline_trim(ss_timeline *t, int track, int clip, int which, double delta);
+/* Cut at a timeline time. Returns the index of the new second half, or -1 if
+ * the time does not fall strictly inside the clip. Both halves keep the grade
+ * and the transform; the second half loses the incoming transition, because a
+ * transition into the middle of a shot is never what a razor meant. */
+int ss_timeline_split(ss_timeline *t, int track, int clip, double at);
+int ss_timeline_remove(ss_timeline *t, int track, int clip);
+/* Close the gap a removed clip left: every later clip on the track slides
+ * back by `len`. This is the ripple that separates a delete from a lift. */
+void ss_timeline_ripple(ss_timeline *t, int track, double from, double len);
+
+/* Which clip is under a timeline time on a track, or -1. Later clips win, so
+ * the answer matches what the compositor draws when two overlap. */
+int ss_timeline_at(const ss_timeline *t, int track, double time);
+
+/* ---- rendering ----
+ *
+ * Emit the ffmpeg argv for an export. lutdir holds one .cube per graded clip.
  * Returns argc; argv entries are strdup'd and owned by the caller. */
 int    ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                           const char *lutdir, char ***argv);
+
+/* One composited frame, for the program monitor.
+ *
+ * NOT the export graph with a seek on the front: that decodes the timeline
+ * from zero and a scrub at minute nine would take minute nine's worth of
+ * work. This builds a graph containing ONLY the clips that are actually on
+ * screen at `time`, each seeked directly to its own source position, so the
+ * cost is the clips under the playhead and nothing else — which is what makes
+ * dragging the playhead feel like dragging a playhead.
+ *
+ * max_edge 0 = the project size. Writes to `out` (.png). */
+int    ss_timeline_frame(const ss_timeline *t, double time, const char *out,
+                         const char *lutdir, int max_edge, char ***argv);
+
+/* The side files a graph refers to — one .cube per graded clip, one text file
+ * per title — written into `dir` under the names both builders above expect.
+ * Returns how many were written, or -1. `unbake` removes exactly those. */
+int    ss_timeline_bake(const ss_timeline *t, const char *dir);
+void   ss_timeline_unbake(const ss_timeline *t, const char *dir);
+
+/* Name to enum for the three things a clip line can say. -1 = not a name. */
+int    ss_trans_value(const char *s);
+int    ss_clip_kind_value(const char *s);
+int    ss_textpos_value(const char *s);
 
 /* ----------------------------------------------------------------- util -- */
 

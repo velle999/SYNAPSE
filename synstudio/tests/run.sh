@@ -17,10 +17,19 @@ BIN=$(readlink -f "$BIN")
 TMP=$(mktemp -d /tmp/synstudio-test-XXXXXX) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-pass=0; fail=0
+# Verdicts go to a FILE, not to shell variables.
+#
+# `seen` is always called on the right of a pipe, and bash runs that in a
+# SUBSHELL — so every pass and every fail it recorded was thrown away when the
+# subshell exited. A failing substring assertion printed its FAIL line and
+# then reported "0 failed", and the suite exited 0. Sixty-odd assertions in
+# this file are `seen`, and none of them could fail the build. An append to a
+# file crosses a subshell boundary; a variable does not.
+RESULTS=$TMP/.results
+: > "$RESULTS"
 
-ok()   { pass=$((pass+1)); }
-bad()  { fail=$((fail+1)); printf '  FAIL  %s\n' "$*"; }
+ok()   { echo "p" >> "$RESULTS"; }
+bad()  { echo "f $*" >> "$RESULTS"; printf '  FAIL  %s\n' "$*"; }
 
 check() {   # check <label> <expected> <actual>
     if [ "$2" = "$3" ]; then ok; else bad "$1: expected [$2] got [$3]"; fi
@@ -35,6 +44,17 @@ seen() {    # seen <label> <needle> <<< haystack on stdin
     cat > "$f"
     if grep -F -- "$needle" "$f" >/dev/null; then ok
     else bad "$label: no [$needle] in output"; head -3 "$f" | sed 's/^/        /'; fi
+}
+
+# Same contract as seen(), but the needle is an extended regex. Used where a
+# plain substring would match somewhere harmless — `format=rgba` appears in
+# almost every clip chain, so asserting it says nothing about whether the
+# generated INPUT was the one that asked for alpha.
+rxseen() {  # rxseen <label> <regex> <<< haystack on stdin
+    local label=$1 rx=$2 f="$TMP/.seen"
+    cat > "$f"
+    if grep -E -- "$rx" "$f" >/dev/null; then ok
+    else bad "$label: nothing matches /$rx/"; head -3 "$f" | sed 's/^/        /'; fi
 }
 
 notseen() {
@@ -52,7 +72,7 @@ near() {    # near <label> <expected> <actual> <tol>
                 if (d <= t) exit 0;
                 printf "  FAIL  %s: expected %s got %s (tol %s)\n", l, e, a, t;
                 exit 1 }'
-    if [ $? -eq 0 ]; then ok; else fail=$((fail+1)); fi
+    if [ $? -eq 0 ]; then ok; else echo "f $1" >> "$RESULTS"; fi
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -284,8 +304,8 @@ if have ffmpeg; then
     mp4=$TMP/clip.mp4
     ffmpeg -v error -y -f lavfi -i testsrc2=size=320x240:rate=25:duration=3 \
            -c:v libx264 -pix_fmt yuv420p "$mp4" 2>/dev/null
-    $BIN timeline clip "$proj" 0 "$mp4" --at 0 --in 0 --out-at 2
-    $BIN timeline clip "$proj" 0 "$mp4" --at 2 --in 0 --out-at 2 --fade-in 0.4
+    $BIN timeline clip "$proj" 0 "$mp4" --at 0 --in 0 --out-at 2 >/dev/null
+    $BIN timeline clip "$proj" 0 "$mp4" --at 2 --in 0 --out-at 2 --fade-in 0.4 >/dev/null
     check "duration is the far edge" "4.0000" \
           "$($BIN timeline show "$proj" | awk -F'\t' '/^# duration/{print $2}')"
 
@@ -320,11 +340,263 @@ if have ffmpeg; then
         p2=$TMP/odd.syntl
         $BIN timeline new "$p2"
         $BIN timeline track "$p2" video >/dev/null
-        $BIN timeline clip "$p2" 0 "$odd" --at 0 --in 0 --out-at 1
+        $BIN timeline clip "$p2" 0 "$odd" --at 0 --in 0 --out-at 1 >/dev/null
         $BIN timeline show "$p2" | seen "an awkward path round-trips" "a we;ird 'name'.mp4"
         $BIN timeline export "$p2" --out "$TMP/odd.mp4" >/dev/null 2>&1
         check "and exports" "yes" "$([ -s "$TMP/odd.mp4" ] && echo yes || echo no)"
     fi
+fi
+
+echo "== the video editor"
+
+# The clip property table, which the inspector panel is built from exactly as
+# the develop panel is built from `keys`.
+check "clip keys are listed" "yes" \
+      "$([ "$($BIN timeline keys | wc -l)" -ge 20 ] && echo yes || echo no)"
+$BIN timeline keys | seen "an enum carries its choices" "none|dissolve|wipeleft"
+
+vp=$TMP/v.syntl
+$BIN timeline new "$vp" --size 640x360 --fps 25
+$BIN timeline track "$vp" video V1 >/dev/null
+$BIN timeline track "$vp" audio A1 >/dev/null
+
+# Track state is editable, not just addable.
+$BIN timeline track "$vp" 1 --mute 1 --name Music
+$BIN timeline show "$vp" | seen "a track can be muted and renamed" "track	audio	Music	1	0"
+
+if have ffmpeg; then
+    vclip=$TMP/v.mp4
+    ffmpeg -v error -y -f lavfi -i testsrc=size=640x360:rate=25:duration=8 \
+           -c:v libx264 -pix_fmt yuv420p "$vclip" 2>/dev/null
+
+    c0=$($BIN timeline clip "$vp" 0 "$vclip" --at 0 --in 0 --out-at 4)
+    check "adding a clip reports its index" "0" "$c0"
+
+    # ---- the property table --------------------------------------------
+    #
+    # fade.in, fade.out, trans.dur and speed are DOUBLE on the struct and the
+    # rest are float. A table that wrote a float through a double's offset set
+    # four bytes of a mantissa and read back zero — no warning, no error, the
+    # value simply did not stick. Every one of them is asserted here because
+    # that failure is invisible from the outside.
+    $BIN timeline set "$vp" 0 0 fade.in=0.75 fade.out=1.5 speed=2 opacity=0.5
+    check "fade.in is a double that sticks"  "0.75" "$($BIN timeline get "$vp" 0 0 fade.in)"
+    check "fade.out is a double that sticks" "1.5"  "$($BIN timeline get "$vp" 0 0 fade.out)"
+    check "speed is a double that sticks"    "2"    "$($BIN timeline get "$vp" 0 0 speed)"
+    check "opacity is a float that sticks"   "0.5"  "$($BIN timeline get "$vp" 0 0 opacity)"
+    $BIN timeline set "$vp" 0 0 speed=1 opacity=1 fade.in=0 fade.out=0
+
+    check "an unknown property is refused" "1" \
+          "$($BIN timeline set "$vp" 0 0 nosuchthing=1 >/dev/null 2>&1; echo $?)"
+    check "an out-of-range property is refused" "1" \
+          "$($BIN timeline set "$vp" 0 0 opacity=9 >/dev/null 2>&1; echo $?)"
+    check "an enum takes its name" "dissolve" \
+          "$($BIN timeline set "$vp" 0 0 trans=dissolve; $BIN timeline get "$vp" 0 0 trans)"
+    check "an enum refuses a name it does not have" "1" \
+          "$($BIN timeline set "$vp" 0 0 trans=starwipe >/dev/null 2>&1; echo $?)"
+    $BIN timeline set "$vp" 0 0 trans=none
+
+    # ---- editing --------------------------------------------------------
+    $BIN timeline move "$vp" 0 0 --to 1.5
+    check "move sets the timeline position" "1.500000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^tl_in/{print $2}')"
+
+    # A head trim moves the source in point AND the position together, so the
+    # frame under the cursor stays put. Asserting only one of the two would
+    # pass for a trim that slid the shot sideways under the cut.
+    $BIN timeline trim "$vp" 0 0 --head 0.5
+    check "a head trim moves the in point"  "0.500000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^src_in/{print $2}')"
+    check "and the position with it"        "2.000000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^tl_in/{print $2}')"
+    check "so the length shortens by exactly that" "3.500000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^length/{print $2}')"
+
+    $BIN timeline trim "$vp" 0 0 --tail 0.5
+    check "a tail trim lengthens the clip" "4.000000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^length/{print $2}')"
+    check "a trim that would leave nothing is refused" "1" \
+          "$($BIN timeline trim "$vp" 0 0 --head 99 >/dev/null 2>&1; echo $?)"
+
+    # The razor. Clip 0 runs 2.0 .. 6.0; cutting at 3.0 leaves 1s and 3s.
+    n=$($BIN timeline split "$vp" 0 --at 3.0)
+    check "split returns the new second half" "1" "$n"
+    check "the first half ends at the razor" "1.000000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^length/{print $2}')"
+    check "the second half starts there" "3.000000" \
+          "$($BIN timeline get "$vp" 0 1 | awk -F'\t' '/^tl_in/{print $2}')"
+    check "and runs to the old out point" "3.000000" \
+          "$($BIN timeline get "$vp" 0 1 | awk -F'\t' '/^length/{print $2}')"
+    # The source is continuous across the cut: no frame is repeated or lost.
+    check "the cut is continuous in the source" "yes" \
+          "$(a=$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^src_out/{print $2}')
+             b=$($BIN timeline get "$vp" 0 1 | awk -F'\t' '/^src_in/{print $2}')
+             [ "$a" = "$b" ] && echo yes || echo no)"
+    check "a razor on the edge is refused" "1" \
+          "$($BIN timeline split "$vp" 0 0 --at 2.0 >/dev/null 2>&1; echo $?)"
+
+    # The hit test the window clicks with.
+    check "at finds the clip under a time" "1" "$($BIN timeline at "$vp" 0 --at 4.0)"
+    check "at finds nothing in a gap"     "-1" "$($BIN timeline at "$vp" 0 --at 0.5)"
+
+    # Lift leaves the gap; ripple closes it. They are different edits.
+    $BIN timeline delete "$vp" 0 0
+    check "a lift leaves the later clip where it was" "3.000000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^tl_in/{print $2}')"
+    # Clip 0 sits at 3.0. Dropping a 2s clip in front of it and deleting THAT
+    # with --ripple has to pull clip 0 back by exactly two seconds.
+    $BIN timeline clip "$vp" 0 "$vclip" --at 0 --in 0 --out-at 2 >/dev/null
+    $BIN timeline delete "$vp" 0 1 --ripple
+    check "a ripple closes the gap behind it" "1.000000" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^tl_in/{print $2}')"
+
+    # ---- titles, solids and stills -------------------------------------
+    tp=$TMP/t.syntl
+    still=$TMP/still.png
+    ffmpeg -v error -y -f lavfi -i "color=c=orange:s=640x360" -frames:v 1 "$still" 2>/dev/null
+    $BIN timeline new "$tp" --size 640x360 --fps 25
+    $BIN timeline track "$tp" video V >/dev/null
+    $BIN timeline clip "$tp" 0 "$still" --at 0 --dur 2 >/dev/null
+    check "a photograph is recorded as a still" "1" \
+          "$($BIN timeline get "$tp" 0 0 | awk -F'\t' '/^still/{print $2}')"
+    check "a movie is not" "0" \
+          "$($BIN timeline get "$vp" 0 0 | awk -F'\t' '/^still/{print $2}')"
+
+    # A caption with a colon, a comma, an apostrophe and a PERCENT SIGN. The
+    # percent is the one that matters: drawtext runs its own %{...} expansion
+    # over a textfile too, so without expansion=none this fails the graph with
+    # "Stray %" at export time, long after the title was typed.
+    $BIN timeline title "$tp" 0 "It's 100% done: yes, really" --at 2 --dur 2 >/dev/null
+    $BIN timeline solid "$tp" 0 --at 4 --dur 1 --colour 0.1,0.2,0.3 >/dev/null
+    $BIN timeline show "$tp" | seen "a caption round-trips whole" "It's 100% done: yes, really"
+
+    tgraph=$($BIN timeline export "$tp" --out "$TMP/t.mp4" --print)
+    echo "$tgraph" | seen "a still is looped" "-loop"
+    echo "$tgraph" | seen "a caption is drawn from a file" "textfile="
+    echo "$tgraph" | seen "and never through % expansion" "expansion=none"
+    # Read as an INPUT, lavfi settles on an opaque format with nothing
+    # downstream to negotiate with, and a title's transparent backdrop lands
+    # as solid black over the shot it was labelling.
+    # On the INPUT line specifically. `format=rgba` also appears in the clip
+    # chains, so a plain substring passes whether or not the thing that
+    # actually needs it — the lavfi input — ever asked.
+    echo "$tgraph" | rxseen "a generated clip is asked for alpha" \
+                            '^color=c=.*,format=rgba$'
+
+    $BIN timeline export "$tp" --out "$TMP/t.mp4" >/dev/null 2>&1
+    check "a timeline of stills and titles exports" "yes" \
+          "$([ -s "$TMP/t.mp4" ] && echo yes || echo no)"
+    if [ -s "$TMP/t.mp4" ]; then
+        # A still with no -loop contributes ONE frame to a graph expecting
+        # seconds of them, and the export finishes early with no error at all.
+        d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$TMP/t.mp4")
+        check "the still holds its full length" "yes" \
+              "$(awk -v d="$d" 'BEGIN{print (d>4.8 && d<5.4)?"yes":"no"}')"
+    fi
+
+    # ---- transitions ----------------------------------------------------
+    $BIN timeline set "$tp" 0 1 trans=dissolve trans.dur=0.5
+    $BIN timeline export "$tp" --out "$TMP/t.mp4" --print \
+        | seen "a dissolve is an alpha ramp" "alpha=1"
+    $BIN timeline set "$tp" 0 1 trans=wipeleft
+    $BIN timeline export "$tp" --out "$TMP/t.mp4" --print \
+        | seen "a wipe is an alpha expression" "geq="
+    $BIN timeline set "$tp" 0 1 trans=none trans.dur=0
+
+    # ---- the program monitor --------------------------------------------
+    fgraph=$($BIN timeline frame "$vp" --at 3.0 --out "$TMP/f.png" --print)
+    # A seeked input hands the graph frames carrying their SOURCE timestamps
+    # while the one-frame base sits at zero, so overlay waits for a secondary
+    # frame at t<=0, never gets one, and emits the black base alone. The
+    # monitor then goes black at every moment a seek was needed.
+    echo "$fgraph" | seen "the monitor rebases a seeked input" "setpts=PTS-STARTPTS"
+    # Only what is on screen. A monitor that fed the whole timeline in would
+    # cost a scrub to minute nine nine minutes of decode.
+    check "the monitor opens only the clips on screen" "1" \
+          "$(echo "$fgraph" | grep -c -- '^-i$')"
+
+    $BIN timeline frame "$vp" --at 3.0 --out "$TMP/f.png" --size 320 >/dev/null 2>&1
+    check "the monitor renders a frame" "yes" \
+          "$([ -s "$TMP/f.png" ] && echo yes || echo no)"
+    if [ -s "$TMP/f.png" ]; then
+        check "at the size it was asked for" "320" \
+              "$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TMP/f.png")"
+    fi
+    # An empty stretch is black, not an error and not a missing file.
+    $BIN timeline frame "$vp" --at 900 --out "$TMP/e.png" >/dev/null 2>&1
+    check "past the end is a black frame, not a failure" "yes" \
+          "$([ -s "$TMP/e.png" ] && echo yes || echo no)"
+
+    # ---- the monitor and the export have to AGREE ------------------------
+    #
+    # This is the one that earns its keep. The monitor evaluates an animated
+    # transform in C; the export hands the same two endpoints to zoompan. They
+    # can drift, and they did: zoompan was given on/(nfr-1) where the C path
+    # uses t/len, so the move arrived one frame early and the two disagreed
+    # about framing for the whole length of it. Nothing about that is visible
+    # from a graph string, so this MEASURES the picture.
+    #
+    # The still is a white box over the central half of the frame. Centre-
+    # cropping at zoom z puts its left edge at x = 320 - 160z, so the first
+    # bright column of the middle row reports the zoom directly.
+    box=$TMP/box.png
+    ffmpeg -v error -y -f lavfi \
+        -i "color=c=black:s=640x360,drawbox=x=160:y=90:w=320:h=180:color=white:t=fill" \
+        -frames:v 1 "$box" 2>/dev/null
+
+    first_bright() {    # first_bright <image> -> column, or -1
+        ffmpeg -v error -i "$1" -vf "crop=640:1:0:180" -f rawvideo -pix_fmt gray - \
+            2>/dev/null | od -An -tu1 -v | tr -s ' ' '\n' \
+            | awk 'NF { n++; if ($1 > 128 && !f) f = n } END { print f ? f-1 : -1 }'
+    }
+
+    if [ -s "$box" ]; then
+        zp=$TMP/z.syntl
+        $BIN timeline new "$zp" --size 640x360 --fps 25
+        $BIN timeline track "$zp" video V >/dev/null
+        $BIN timeline clip "$zp" 0 "$box" --at 0 --dur 4 >/dev/null
+        $BIN timeline set "$zp" 0 0 xform.animate=1 xform.scale=1 xform.scale2=2
+        $BIN timeline export "$zp" --out "$TMP/z.mp4" >/dev/null 2>&1
+
+        # A four-second move drifts by one frame's worth of zoom — 0.01 —
+        # if the two paths disagree about the frame-index convention, which
+        # is under the measurement resolution and passes either way. Over
+        # TEN frames the same one-frame error is 0.056 of zoom, nine pixels,
+        # and impossible to miss. A slow move cannot test this; a fast one
+        # can, and it is the same code path.
+        $BIN timeline new "$zp.fast" --size 640x360 --fps 25
+        $BIN timeline track "$zp.fast" video V >/dev/null
+        $BIN timeline clip "$zp.fast" 0 "$box" --at 0 --dur 0.4 >/dev/null
+        $BIN timeline set "$zp.fast" 0 0 xform.animate=1 xform.scale=1 xform.scale2=2
+        $BIN timeline export "$zp.fast" --out "$TMP/zfast.mp4" >/dev/null 2>&1
+        $BIN timeline frame "$zp.fast" --at 0.2 --out "$TMP/zff.png" >/dev/null 2>&1
+        ffmpeg -v error -y -ss 0.2 -i "$TMP/zfast.mp4" -frames:v 1 "$TMP/zfe.png" 2>/dev/null
+        mz=$(awk -v c="$(first_bright "$TMP/zff.png")" 'BEGIN{printf "%.4f",(320-c)/160}')
+        ez=$(awk -v c="$(first_bright "$TMP/zfe.png")" 'BEGIN{printf "%.4f",(320-c)/160}')
+        near "a fast move is halfway zoomed at its midpoint" "1.5" "$mz" 0.02
+        near "and the export lands on the same frame of it"  "$mz" "$ez" 0.02
+
+        for at in 1.0 3.0; do
+            want=$(awk -v t=$at 'BEGIN { printf "%.4f", 1 + t/4 }')
+            $BIN timeline frame "$zp" --at $at --out "$TMP/zf.png" >/dev/null 2>&1
+            ffmpeg -v error -y -ss $at -i "$TMP/z.mp4" -frames:v 1 "$TMP/ze.png" 2>/dev/null
+            mz=$(awk -v c="$(first_bright "$TMP/zf.png")" 'BEGIN{printf "%.4f",(320-c)/160}')
+            ez=$(awk -v c="$(first_bright "$TMP/ze.png")" 'BEGIN{printf "%.4f",(320-c)/160}')
+            near "the monitor zooms by the stated amount at $at" "$want" "$mz" 0.02
+            near "and the export agrees with it at $at"          "$mz"   "$ez" 0.02
+        done
+    fi
+
+    # ---- the transform survives a round trip ----------------------------
+    $BIN timeline set "$vp" 0 0 xform.scale=1.4 xform.x=-0.25 xform.rotate=12 \
+                                xform.animate=1 xform.scale2=1.8
+    $BIN timeline show "$vp" | seen "a transform is written" "xform	1.40000	-0.25000"
+    check "and reads back" "1.8" "$($BIN timeline get "$vp" 0 0 xform.scale2)"
+    # An identity transform is not written at all, so a timeline of plain cuts
+    # stays as readable as it was before transforms existed.
+    $BIN timeline set "$vp" 0 0 xform.scale=1 xform.x=0 xform.rotate=0 \
+                                xform.animate=0 xform.scale2=1
+    $BIN timeline show "$vp" | notseen "an identity transform is not written" "xform	"
 fi
 
 # ---------------------------------------------------------------- browse --
@@ -389,6 +661,9 @@ $BIN browse / | notseen "the root offers no parent" "	..	"
 
 $BIN browse "$TMP/does-not-exist" >/dev/null 2>&1
 check "a missing directory fails loudly" "1" "$?"
+
+pass=$(grep -c '^p' "$RESULTS")
+fail=$(grep -c '^f' "$RESULTS")
 
 echo
 echo "$pass passed, $fail failed"

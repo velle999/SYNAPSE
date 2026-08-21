@@ -1,10 +1,22 @@
 // synstudio — the SynapseOS photo and video editor.
 //
-// A renderer, and nothing more. This file owns NO pixels and NO develop
-// setting. Every value on screen came out of `synstudio get`, every change
-// goes back through `synstudio set`, and the picture in the middle is a PNG
-// the engine just wrote. The same is true of syn-edit and synfiles, and it is
-// what makes the whole editor testable from tests/run.sh with no display.
+// A renderer, and nothing more. This file owns NO pixels, NO develop setting
+// and NO timeline. Every value on screen came out of `synstudio get` or
+// `synstudio timeline show`, every change goes back through `synstudio set`,
+// `timeline set` or one of the edit verbs, and both pictures in the middle are
+// PNGs the engine just wrote. The same is true of syn-edit and synfiles, and
+// it is what makes the whole editor testable from tests/run.sh with no
+// display.
+//
+// ── Two pages, one engine ──────────────────────────────────────────────────
+//
+// The darkroom develops a photograph; the cutting room cuts a timeline. They
+// are separate pages because a still and a cut are different work with
+// different tools on screen — but the Grade section of the clip inspector is
+// the SAME table of controls the darkroom draws, applied to a clip. A slider
+// moved there bakes an Iridas .cube and ffmpeg's lut3d applies it to every
+// frame, so a still and a frame of video with the same settings come out the
+// same colour by construction rather than by agreement.
 //
 // ── The panel builds ITSELF ────────────────────────────────────────────────
 //
@@ -37,8 +49,10 @@ import Quickshell.Io
 FloatingWindow {
     id: root
 
-    title: (root.file ? root.file.replace(/^.*\//, "") : "no photograph")
-           + (root.dirty ? " •" : "") + " — SYNAPSE Studio"
+    title: (root.mode === "video"
+            ? (root.proj ? root.proj.replace(/^.*\//, "") : "no project")
+            : (root.file ? root.file.replace(/^.*\//, "") : "no photograph"))
+           + (root.dirty && root.mode === "photo" ? " •" : "") + " — SYNAPSE Studio"
     implicitWidth: 1400
     implicitHeight: 880
     minimumSize: Qt.size(900, 560)
@@ -52,7 +66,7 @@ FloatingWindow {
 
     property string file: Quickshell.env("SYNSTUDIO_OPEN") || ""
     property bool   dirty: false
-    property string status: "open a photograph"
+    property string status: Quickshell.env("SYNSTUDIO_PROJECT") ? "" : "open a photograph"
     property int    imgW: 0
     property int    imgH: 0
 
@@ -370,6 +384,9 @@ FloatingWindow {
     // The fallback to $HOME must fire at most once. Retrying on every failure
     // is an infinite respawn loop the moment $HOME itself is unreadable.
     property bool   pickerFellBack: false
+    // Which page asked. The same list of openable files serves the darkroom's
+    // Open and the timeline's Add media; only what happens on click differs.
+    property string pickerFor: "photo"
 
     function openPicker() {
         // Start where the current photograph is, or in Pictures, or at home —
@@ -431,12 +448,407 @@ FloatingWindow {
         }
     }
 
+    // ══ The video page ══════════════════════════════════════════════════════
+    //
+    // The same contract as the darkroom: this file holds no timeline and no
+    // clip property. `timeline show` is the document, `timeline set` and the
+    // edit verbs are the only way it changes, and the picture in the monitor
+    // is a PNG `timeline frame` just wrote. Everything below is a renderer
+    // over those, which is why the whole video editor is testable from
+    // tests/run.sh with no display.
+
+    // Launched on a project file, the window opens on the page that can edit
+    // it. Coming up in the darkroom with a timeline loaded behind a tab
+    // nobody pressed is the same bug as coming up empty.
+    property string mode: Quickshell.env("SYNSTUDIO_PROJECT") ? "video" : "photo"
+    property string proj: Quickshell.env("SYNSTUDIO_PROJECT") || ""
+    property var    tl: ({ w: 1920, h: 1080, fps: 25, tracks: [] })
+    property real   tlDur: 0
+    property real   playhead: 0
+    property int    selTrack: -1
+    property int    selClip: -1
+    property real   pxPerSec: 70
+
+    // Selection and the values on screen are ONE thing. Calling loadClip() at
+    // each place that happens to change the selection leaves the inspector
+    // showing the last clip's numbers whenever a new path appears — after a
+    // split, after a delete renumbers the track, on opening a project. Hang it
+    // off the change instead and there is no such path.
+    onSelClipChanged:  root.loadClip()
+    onSelTrackChanged: root.loadClip()
+
+    readonly property var selClipObj: {
+        if (root.selTrack < 0 || root.selTrack >= root.tl.tracks.length) return null
+        const tr = root.tl.tracks[root.selTrack]
+        if (root.selClip < 0 || root.selClip >= tr.clips.length) return null
+        return tr.clips[root.selClip]
+    }
+
+    // ── The document ────────────────────────────────────────────────────────
+    //
+    // `timeline show` is tab-separated and line-oriented, and a grade is a
+    // block between `grade` and `endgrade` belonging to the clip above it.
+    function parseTimeline(text) {
+        const doc = { w: 1920, h: 1080, fps: 25, tracks: [] }
+        const lines = text.split("\n")
+        let tr = null, cl = null, inGrade = false
+        let dur = 0
+        for (let i = 0; i < lines.length; i++) {
+            const f = lines[i].split("\t")
+            if (inGrade) {
+                if (f[0] === "endgrade") { inGrade = false; continue }
+                if (cl && f.length >= 2) cl.grade[f[0]] = f[1]
+                continue
+            }
+            switch (f[0]) {
+            case "size": doc.w = parseInt(f[1]); doc.h = parseInt(f[2]); break
+            case "fps":  doc.fps = parseFloat(f[1]); break
+            case "track":
+                tr = { type: f[1], name: f[2], muted: f[3] === "1",
+                       hidden: f[4] === "1", clips: [] }
+                doc.tracks.push(tr)
+                cl = null
+                break
+            case "clip":
+                if (!tr) break
+                cl = { tlIn: parseFloat(f[1]), srcIn: parseFloat(f[2]),
+                       srcOut: parseFloat(f[3]), speed: parseFloat(f[4]) || 1,
+                       gain: parseFloat(f[5]), opacity: parseFloat(f[6]),
+                       fadeIn: parseFloat(f[7]), fadeOut: parseFloat(f[8]),
+                       path: f[9] || "", kind: "media", still: false,
+                       text: "", trans: "none", graded: false, grade: ({}) }
+                cl.len = (cl.srcOut - cl.srcIn) / (cl.speed > 0 ? cl.speed : 1)
+                tr.clips.push(cl)
+                if (cl.tlIn + cl.len > dur) dur = cl.tlIn + cl.len
+                break
+            case "kind":  if (cl) { cl.kind = f[1]; cl.still = f[2] === "1" } break
+            case "text":  if (cl) cl.text = f[6] || ""; break
+            case "trans": if (cl) cl.trans = f[1]; break
+            case "grade": if (cl) { cl.graded = true; inGrade = true } break
+            case "# duration": break
+            default: break
+            }
+        }
+        root.tlDur = dur
+        return doc
+    }
+
+    function reloadTimeline() {
+        if (!root.proj) return
+        tlShowProc.command = [root.bin, "timeline", "show", root.proj]
+        tlShowProc.running = true
+    }
+
+    Process {
+        id: tlShowProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.tl = root.parseTimeline(this.text)
+                if (root.selTrack >= root.tl.tracks.length) { root.selTrack = -1; root.selClip = -1 }
+                root.requestFrame()
+            }
+        }
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
+    }
+
+    // ── The program monitor ─────────────────────────────────────────────────
+    //
+    // Same in-flight guard as the darkroom preview, and for the same reason:
+    // `running = true` on a Process that is already running is a SILENT no-op
+    // in quickshell, so a scrub generates far more requests than renders and
+    // the monitor would stop following the playhead halfway through a drag.
+    property bool   frameBusy: false
+    property bool   frameAgain: false
+    property int    frameSerial: 0
+    property string frameUrl: ""
+
+    Timer { id: frameDebounce; interval: 70; onTriggered: root.startFrame() }
+
+    function requestFrame() {
+        if (!root.proj) return
+        frameDebounce.restart()
+    }
+
+    function startFrame() {
+        if (!root.proj) return
+        if (root.frameBusy) { root.frameAgain = true; return }
+        root.frameBusy = true
+        root.frameSerial++
+        frameProc.command = [root.bin, "timeline", "frame", root.proj,
+                             "--at", String(root.playhead),
+                             "--out", root.scratch + "-frame.png",
+                             "--size", String(root.scrubbing ? 720 : 1400)]
+        frameProc.running = true
+    }
+
+    property bool scrubbing: false
+
+    Process {
+        id: frameProc
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.say(this.text.split("\n")[0])
+        }
+        onExited: function (exitCode, exitStatus) {
+            root.frameBusy = false
+            // Qt caches an Image by URL and this path never changes, so the
+            // serial in the query string is the only thing making it reload.
+            root.frameUrl = "file://" + root.scratch + "-frame.png?v=" + root.frameSerial
+            if (root.frameAgain) { root.frameAgain = false; root.startFrame() }
+        }
+    }
+
+    // ── Clip properties, from the engine's table ────────────────────────────
+    //
+    // Exactly what the develop panel does with `keys`: the inspector is built
+    // from `timeline keys`, so a property added to the table in timeline.c
+    // appears here without this file being touched, and cannot disagree with
+    // the engine about a limit or about which transitions exist.
+    property var clipRows: []
+    property var clipGroups: []
+
+    function parseClipKeys(text) {
+        const out = [], seen = [], byGroup = ({})
+        const lines = text.split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            if (!lines[i]) continue
+            const f = lines[i].split("\t")
+            if (f.length < 7) continue
+            const r = { key: f[0], value: f[1], lo: parseFloat(f[2]), hi: parseFloat(f[3]),
+                        type: f[4], group: f[5], label: f[6],
+                        choices: (f[7] || "") ? f[7].split("|") : [] }
+            out.push(r)
+            if (!byGroup[r.group]) { byGroup[r.group] = true; seen.push(r.group) }
+        }
+        root.clipGroups = seen
+        return out
+    }
+
+    Process {
+        id: clipKeysProc
+        command: [root.bin, "timeline", "keys"]
+        stdout: StdioCollector {
+            onStreamFinished: root.clipRows = root.parseClipKeys(this.text)
+        }
+    }
+
+    // What the selected clip currently says, key -> value.
+    property var clipVals: ({})
+
+    function loadClip() {
+        if (root.selTrack < 0 || root.selClip < 0) { root.clipVals = ({}); return }
+        clipGetProc.command = [root.bin, "timeline", "get", root.proj,
+                               String(root.selTrack), String(root.selClip)]
+        clipGetProc.running = true
+    }
+
+    Process {
+        id: clipGetProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const v = ({})
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length >= 2) v[f[0]] = f[1]
+                }
+                root.clipVals = v
+            }
+        }
+    }
+
+    function clipValue(key) {
+        const v = root.clipVals[key]
+        return v === undefined ? "" : v
+    }
+
+    // ── Changing things ─────────────────────────────────────────────────────
+    //
+    // Every one of these is a command and a reload. The engine owns the
+    // document; the window never edits its own copy and hopes they agree.
+    Process {
+        id: tlSetProc
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
+        onExited: function (code, status) {
+            root.reloadTimeline()
+            root.loadClip()
+        }
+    }
+
+    function tlRun(args) {
+        if (tlSetProc.running) return false
+        tlSetProc.command = [root.bin, "timeline"].concat(args)
+        tlSetProc.running = true
+        return true
+    }
+
+    function setClip(key, v) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        // Optimistic, so a slider does not snap back while the engine and the
+        // reload catch up. The reload overwrites this with the truth.
+        const next = ({})
+        for (const k in root.clipVals) next[k] = root.clipVals[k]
+        next[key] = String(v)
+        root.clipVals = next
+        root.tlRun(["set", root.proj, String(root.selTrack), String(root.selClip),
+                    key + "=" + v])
+    }
+
+    function gradeClip(key, v) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["grade", root.proj, String(root.selTrack), String(root.selClip),
+                    key + "=" + v])
+    }
+
+    function gradeValue(key) {
+        const c = root.selClipObj
+        if (!c || !c.graded) return 0
+        const v = c.grade[key]
+        return v === undefined ? 0 : (parseFloat(v) || 0)
+    }
+
+    // ── Starting a project ──────────────────────────────────────────────────
+    //
+    // A project file has to EXIST before any other verb works, so New both
+    // creates it and lays down the tracks every cut needs. Coming up with an
+    // empty track list and no way to add one was the first version's dead end.
+    function newProject(path) {
+        root.proj = path
+        newProjProc.command = [root.bin, "timeline", "new", path,
+                               "--size", "1920x1080", "--fps", "25"]
+        newProjProc.running = true
+    }
+
+    Process {
+        id: newProjProc
+        onExited: function (code, status) {
+            if (code !== 0) { root.say("cannot start a project there"); return }
+            trackProc.command = [root.bin, "timeline", "track", root.proj, "video", "V1"]
+            trackProc.running = true
+        }
+    }
+    Process {
+        id: trackProc
+        onExited: function (code, status) {
+            track2Proc.command = [root.bin, "timeline", "track", root.proj, "audio", "A1"]
+            track2Proc.running = true
+        }
+    }
+    Process {
+        id: track2Proc
+        onExited: function (code, status) {
+            root.selTrack = 0
+            root.say("new project")
+            root.reloadTimeline()
+        }
+    }
+
+    // ── Scrubbing, and the clock ────────────────────────────────────────────
+    function seekTo(t) {
+        root.playhead = Math.max(0, Math.min(root.tlDur > 0 ? root.tlDur : 0, t))
+        root.requestFrame()
+    }
+
+    function timecode(t) {
+        if (!(t >= 0)) t = 0
+        const m = Math.floor(t / 60)
+        const sec = Math.floor(t % 60)
+        const fr = Math.floor((t - Math.floor(t)) * (root.tl.fps || 25))
+        return (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec
+             + "." + (fr < 10 ? "0" : "") + fr
+    }
+
+    function clipRowsIn(group) {
+        const out = []
+        for (let i = 0; i < root.clipRows.length; i++)
+            if (root.clipRows[i].group === group) out.push(root.clipRows[i])
+        return out
+    }
+
+    // The grade panel offers the pointwise half of the develop stack, which is
+    // what a 3D LUT can actually carry. Clarity, sharpening, noise and grain
+    // need a neighbouring pixel, so they are not colour and are NOT in the
+    // cube — the engine says so on the command line and the panel should not
+    // quietly imply otherwise by offering them here.
+    readonly property var gradeGroups: ["Basic", "Colour mixer", "Grading"]
+
+    // ── Dragging a clip ─────────────────────────────────────────────────────
+    //
+    // The drag is DRAWN while the mouse moves and committed once on release.
+    // Issuing a move per mouse move would queue dozens of engine calls behind
+    // each other and the clip would crawl after the hand — and `running = true`
+    // on a busy Process is a silent no-op here, so most of them would simply
+    // vanish and the clip would land somewhere nobody asked for.
+    property int  dragTrack: -1
+    property int  dragClip: -1
+    property string dragKind: ""
+    property real dragFrom: 0
+    property real dragDx: 0
+
+    // Edges are magnetic. Without this, butting two clips together by hand
+    // leaves a gap of a few milliseconds that shows as a black flash on
+    // export and is invisible at any sane zoom.
+    function snap(t, ignoreTrack, ignoreClip) {
+        const tol = 8 / root.pxPerSec
+        let best = t, bestD = tol
+        function tryEdge(e) {
+            const d = Math.abs(e - t)
+            if (d < bestD) { bestD = d; best = e }
+        }
+        tryEdge(0)
+        tryEdge(root.playhead)
+        for (let i = 0; i < root.tl.tracks.length; i++)
+            for (let j = 0; j < root.tl.tracks[i].clips.length; j++) {
+                if (i === ignoreTrack && j === ignoreClip) continue
+                const c = root.tl.tracks[i].clips[j]
+                tryEdge(c.tlIn)
+                tryEdge(c.tlIn + c.len)
+            }
+        return best
+    }
+
+    function commitDrag(clip, track) {
+        const kind = root.dragKind, dx = root.dragDx
+        const cl = root.dragClip
+        root.dragTrack = -1; root.dragClip = -1; root.dragKind = ""; root.dragDx = 0
+        if (!kind || Math.abs(dx) < 2) return
+        const dt = dx / root.pxPerSec
+
+        if (kind === "move") {
+            const to = root.snap(Math.max(0, clip.tlIn + dt), track, cl)
+            root.tlRun(["move", root.proj, String(track), String(cl),
+                        "--to", String(Math.round(to * 1000) / 1000)])
+        } else if (kind === "head") {
+            // + shortens the head. The engine moves the in point and the
+            // position together so the frame under the cursor stays put.
+            root.tlRun(["trim", root.proj, String(track), String(cl),
+                        "--head", String(Math.round(dt * 1000) / 1000)])
+        } else {
+            root.tlRun(["trim", root.proj, String(track), String(cl),
+                        "--tail", String(Math.round(dt * 1000) / 1000)])
+        }
+    }
+
+    Process {
+        id: tlExportProc
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
+        onExited: function (code, status) {
+            root.say(code === 0 ? "exported " + root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"
+                                : "export failed")
+        }
+    }
+
     Component.onCompleted: {
         keysProc.running = true
-        // Launched with no photograph, the window used to come up empty with
-        // every control dead and no indication that Open was the way out. The
-        // picker IS the empty state.
-        if (!root.file) root.openPicker()
+        clipKeysProc.running = true
+        if (root.proj) {
+            root.selTrack = 0
+            root.reloadTimeline()
+        } else if (!root.file) {
+            // Launched with no photograph, the window used to come up empty
+            // with every control dead and no indication that Open was the way
+            // out. The picker IS the empty state.
+            root.openPicker()
+        }
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -460,25 +872,83 @@ FloatingWindow {
                     anchors.leftMargin: 12
                     spacing: 8
 
-                    Btn { label: "Open";  onClicked: root.openPicker() }
-                    Btn { label: "Export"; active: root.file !== ""; onClicked: {
+                    // The two halves of the application. One binary, one
+                    // colour engine, two front pages — a still and a cut are
+                    // different work with different tools on screen, and
+                    // pretending one panel serves both is how an editor ends
+                    // up serving neither.
+                    Tab { label: "Photo"; on: root.mode === "photo"
+                          onClicked: { root.mode = "photo"
+                                       root.say(root.file ? "" : "open a photograph") } }
+                    Tab { label: "Video"; on: root.mode === "video"
+                          onClicked: { root.mode = "video"
+                                       root.say(root.proj ? "" : "New project, then Add media") } }
+
+                    Item { width: 10; height: 1 }
+
+                    Btn { visible: root.mode === "photo"
+                          label: "Open";  onClicked: root.openPicker() }
+                    Btn { visible: root.mode === "photo"
+                          label: "Export"; active: root.file !== ""; onClicked: {
                         exportProc.command = [root.bin, "render", root.file,
                                               "--out", root.file.replace(/\.[^.\/]*$/, "") + "-edited.jpg",
                                               "--quality", "95"]
                         exportProc.running = true
                         root.say("exporting…")
                     } }
-                    Btn { label: "Reset"; active: root.file !== ""; onClicked: {
+                    Btn { visible: root.mode === "photo"
+                          label: "Reset"; active: root.file !== ""; onClicked: {
                         setProc.command = [root.bin, "reset", root.file]
                         setProc.running = true
                         root.dirty = false
                         Qt.callLater(function () { root.loadFile(root.file) })
                     } }
+
+                    Btn { visible: root.mode === "video"; label: "New project"
+                          onClicked: root.newProject(
+                              (Quickshell.env("HOME") || "/tmp") + "/synstudio-project.syntl") }
+                    Btn { visible: root.mode === "video"; label: "Add media"
+                          active: root.proj !== "" && root.selTrack >= 0
+                          onClicked: { root.pickerFor = "clip"; root.openPicker() } }
+                    Btn { visible: root.mode === "video"; label: "Title"
+                          active: root.proj !== "" && root.selTrack >= 0
+                          onClicked: root.tlRun(["title", root.proj, String(root.selTrack),
+                                                 "Title", "--at", String(root.playhead),
+                                                 "--dur", "3"]) }
+                    Btn { visible: root.mode === "video"; label: "Split"
+                          active: root.proj !== "" && root.selTrack >= 0
+                          onClicked: root.tlRun(["split", root.proj, String(root.selTrack),
+                                                 "--at", String(root.playhead)]) }
+                    Btn { visible: root.mode === "video"; label: "Delete"
+                          active: root.selClip >= 0
+                          onClicked: {
+                              root.tlRun(["delete", root.proj, String(root.selTrack),
+                                          String(root.selClip)])
+                              root.selClip = -1
+                          } }
+                    Btn { visible: root.mode === "video"; label: "Ripple delete"
+                          active: root.selClip >= 0
+                          onClicked: {
+                              root.tlRun(["delete", root.proj, String(root.selTrack),
+                                          String(root.selClip), "--ripple"])
+                              root.selClip = -1
+                          } }
+                    Btn { visible: root.mode === "video"; label: "Export"
+                          active: root.proj !== "" && root.tlDur > 0
+                          onClicked: {
+                              tlExportProc.command =
+                                  [root.bin, "timeline", "export", root.proj, "--out",
+                                   root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"]
+                              tlExportProc.running = true
+                              root.say("exporting the cut…")
+                          } }
                 }
 
                 Text {
                     anchors.centerIn: parent
-                    text: root.file ? root.file.replace(/^.*\//, "") : "synstudio"
+                    text: root.mode === "video"
+                          ? (root.proj ? root.proj.replace(/^.*\//, "") : "no project")
+                          : (root.file ? root.file.replace(/^.*\//, "") : "synstudio")
                     color: root.cText
                     font.pixelSize: 14
                 }
@@ -487,13 +957,16 @@ FloatingWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.right: parent.right
                     anchors.rightMargin: 14
-                    text: root.imgW > 0 ? root.imgW + " × " + root.imgH : ""
+                    text: root.mode === "video"
+                          ? (root.tl.w + " × " + root.tl.h + "  ·  " + root.tl.fps + " fps")
+                          : (root.imgW > 0 ? root.imgW + " × " + root.imgH : "")
                     color: root.cDim
                     font.pixelSize: 12
                 }
             }
 
             Row {
+                visible: root.mode === "photo"
                 width: parent.width
                 height: parent.height - 46 - 24
 
@@ -663,6 +1136,617 @@ FloatingWindow {
                 }
             }
 
+            // ── The video page ──────────────────────────────────────────
+            Row {
+                visible: root.mode === "video"
+                width: parent.width
+                height: parent.height - 46 - 24
+
+                Column {
+                    width: parent.width - 340
+                    height: parent.height
+
+                    // ── Program monitor ─────────────────────────────────
+                    //
+                    // Neutral grey around the picture for the same reason the
+                    // darkroom is: a grade is judged against what surrounds
+                    // it, and a themed accent behind the frame pulls every
+                    // decision made in front of it.
+                    Rectangle {
+                        width: parent.width
+                        height: parent.height - 34 - 224
+                        color: root.cViewport
+
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            source: root.frameUrl
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            cache: false
+                            asynchronous: true
+                            visible: root.proj !== "" && root.tlDur > 0
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: root.proj === ""
+                            text: "New project, then Add media"
+                            color: "#9a9a9a"
+                            font.pixelSize: 18
+                        }
+
+                        Rectangle {
+                            anchors.top: parent.top; anchors.right: parent.right
+                            anchors.margins: 10
+                            width: 8; height: 8; radius: 4
+                            color: root.cAccent
+                            opacity: root.frameBusy ? 0.9 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                        }
+                    }
+
+                    // ── Transport ───────────────────────────────────────
+                    Rectangle {
+                        width: parent.width
+                        height: 34
+                        color: root.cPanel
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Btn { label: "⏮"; onClicked: root.seekTo(0) }
+                            Btn { label: "◀"; onClicked:
+                                  root.seekTo(root.playhead - 1 / (root.tl.fps || 25)) }
+                            Btn { label: "▶"; onClicked:
+                                  root.seekTo(root.playhead + 1 / (root.tl.fps || 25)) }
+                            Btn { label: "⏭"; onClicked: root.seekTo(root.tlDur) }
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: 14
+                            text: root.timecode(root.playhead) + "  /  " + root.timecode(root.tlDur)
+                            color: root.cText
+                            font.pixelSize: 12
+                            font.family: "monospace"
+                        }
+
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right
+                            anchors.rightMargin: 12
+                            spacing: 6
+                            Btn { label: "−"; onClicked:
+                                  root.pxPerSec = Math.max(8, root.pxPerSec / 1.5) }
+                            Btn { label: "+"; onClicked:
+                                  root.pxPerSec = Math.min(600, root.pxPerSec * 1.5) }
+                        }
+                    }
+
+                    // ── The timeline ────────────────────────────────────
+                    Rectangle {
+                        width: parent.width
+                        height: 224
+                        color: root.isLight ? Qt.darker(root.cPanel, 1.06)
+                                            : Qt.darker(root.cPanel, 1.5)
+
+                        Row {
+                            anchors.fill: parent
+
+                            // Track headers, pinned. They do not scroll with
+                            // the clips: losing track of which lane is which
+                            // is the fastest way to drop a clip on the wrong
+                            // one, and the lane names are what prevent it.
+                            Column {
+                                width: 92
+                                height: parent.height
+
+                                Rectangle {
+                                    width: parent.width; height: 22
+                                    color: "transparent"
+                                }
+
+                                Repeater {
+                                    model: root.tl.tracks
+
+                                    Rectangle {
+                                        id: hdr
+                                        required property var modelData
+                                        required property int index
+                                        width: 92
+                                        height: 56
+                                        color: root.selTrack === hdr.index ? root.wash(0.22)
+                                                                           : root.wash(0.07)
+                                        border.width: 1
+                                        border.color: root.wash(0.14)
+
+                                        Text {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.top: parent.top
+                                            anchors.topMargin: 7
+                                            text: hdr.modelData.name
+                                            color: root.cText
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                        }
+
+                                        Row {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.bottom: parent.bottom
+                                            anchors.bottomMargin: 7
+                                            spacing: 5
+
+                                            // Mute for audio, hide for video —
+                                            // one flag each, named for what the
+                                            // track actually does.
+                                            Tag {
+                                                label: hdr.modelData.type === "audio" ? "M" : "H"
+                                                on: hdr.modelData.type === "audio"
+                                                    ? hdr.modelData.muted : hdr.modelData.hidden
+                                                onClicked: {
+                                                    const a = hdr.modelData.type === "audio"
+                                                              ? "--mute" : "--hide"
+                                                    const v = (hdr.modelData.type === "audio"
+                                                               ? hdr.modelData.muted
+                                                               : hdr.modelData.hidden) ? "0" : "1"
+                                                    root.tlRun(["track", root.proj,
+                                                                String(hdr.index), a, v])
+                                                }
+                                            }
+                                            Text {
+                                                text: hdr.modelData.type
+                                                color: root.cDim
+                                                font.pixelSize: 9
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: { root.selTrack = hdr.index
+                                                         root.selClip = -1 }
+                                        }
+                                    }
+                                }
+
+                                // Adding a lane is part of editing, not part
+                                // of setting a project up once.
+                                Row {
+                                    spacing: 4
+                                    Item { width: 4; height: 1 }
+                                    Tag { label: "+V"; on: false
+                                          onClicked: root.tlRun(["track", root.proj, "video",
+                                                     "V" + (root.tl.tracks.length + 1)]) }
+                                    Tag { label: "+A"; on: false
+                                          onClicked: root.tlRun(["track", root.proj, "audio",
+                                                     "A" + (root.tl.tracks.length + 1)]) }
+                                }
+                            }
+
+                            Flickable {
+                                width: parent.width - 92
+                                height: parent.height
+                                contentWidth: Math.max(width,
+                                    (root.tlDur + 10) * root.pxPerSec)
+                                contentHeight: height
+                                clip: true
+                                flickableDirection: Flickable.HorizontalFlick
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                Item {
+                                    id: lanes
+                                    width: Math.max(parent.width,
+                                        (root.tlDur + 10) * root.pxPerSec)
+                                    height: parent.height
+
+                                    // Ruler. Clicking it is how the playhead
+                                    // moves, which is the gesture every editor
+                                    // has and the only one people try first.
+                                    Rectangle {
+                                        id: ruler
+                                        width: parent.width
+                                        height: 22
+                                        color: root.wash(0.10)
+
+                                        Repeater {
+                                            model: Math.ceil(lanes.width / root.pxPerSec)
+
+                                            Item {
+                                                id: tick
+                                                required property int index
+                                                x: tick.index * root.pxPerSec
+                                                width: root.pxPerSec
+                                                height: 22
+                                                // Below about a tick every 40
+                                                // pixels the numbers collide
+                                                // into a grey smear, so they
+                                                // thin out instead.
+                                                readonly property int every:
+                                                    root.pxPerSec > 40 ? 1
+                                                    : root.pxPerSec > 16 ? 5 : 10
+                                                Rectangle {
+                                                    width: 1
+                                                    height: tick.index % tick.every === 0 ? 9 : 4
+                                                    color: root.wash(0.5)
+                                                    anchors.bottom: parent.bottom
+                                                }
+                                                Text {
+                                                    visible: tick.index % tick.every === 0
+                                                    x: 3
+                                                    y: 1
+                                                    text: root.timecode(tick.index)
+                                                    color: root.cDim
+                                                    font.pixelSize: 9
+                                                    font.family: "monospace"
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onPressed: function (m) {
+                                                root.scrubbing = true
+                                                root.seekTo(m.x / root.pxPerSec)
+                                            }
+                                            onPositionChanged: function (m) {
+                                                if (pressed) root.seekTo(m.x / root.pxPerSec)
+                                            }
+                                            onReleased: function (m) {
+                                                root.scrubbing = false
+                                                root.requestFrame()
+                                            }
+                                        }
+                                    }
+
+                                    Column {
+                                        y: 22
+                                        width: parent.width
+
+                                        Repeater {
+                                            model: root.tl.tracks
+
+                                            Rectangle {
+                                                id: lane
+                                                required property var modelData
+                                                required property int index
+                                                width: lanes.width
+                                                height: 56
+                                                color: root.selTrack === lane.index
+                                                       ? root.wash(0.05) : "transparent"
+                                                border.width: 1
+                                                border.color: root.wash(0.10)
+
+                                                Repeater {
+                                                    model: lane.modelData.clips
+
+                                                    Rectangle {
+                                                        id: clipRect
+                                                        required property var modelData
+                                                        required property int index
+
+                                                        readonly property bool isSel:
+                                                            root.selTrack === lane.index
+                                                            && root.selClip === clipRect.index
+                                                        // The drag is drawn, not
+                                                        // committed. The engine
+                                                        // hears one command on
+                                                        // release, not one per
+                                                        // mouse move.
+                                                        readonly property real dx:
+                                                            (root.dragTrack === lane.index
+                                                             && root.dragClip === clipRect.index
+                                                             && root.dragKind === "move")
+                                                            ? root.dragDx : 0
+                                                        readonly property real dHead:
+                                                            (root.dragTrack === lane.index
+                                                             && root.dragClip === clipRect.index
+                                                             && root.dragKind === "head")
+                                                            ? root.dragDx : 0
+                                                        readonly property real dTail:
+                                                            (root.dragTrack === lane.index
+                                                             && root.dragClip === clipRect.index
+                                                             && root.dragKind === "tail")
+                                                            ? root.dragDx : 0
+
+                                                        x: clipRect.modelData.tlIn * root.pxPerSec
+                                                           + clipRect.dx + clipRect.dHead
+                                                        y: 4
+                                                        width: Math.max(6,
+                                                            clipRect.modelData.len * root.pxPerSec
+                                                            - clipRect.dHead + clipRect.dTail)
+                                                        height: 48
+                                                        radius: 3
+                                                        color: clipRect.modelData.kind === "title"
+                                                               ? root.wash(0.42)
+                                                               : clipRect.modelData.kind === "solid"
+                                                               ? root.wash(0.30)
+                                                               : lane.modelData.type === "audio"
+                                                               ? Qt.rgba(0.25, 0.55, 0.4, 0.55)
+                                                               : root.wash(0.22)
+                                                        border.width: clipRect.isSel ? 2 : 1
+                                                        border.color: clipRect.isSel
+                                                                      ? root.cAccent : root.wash(0.4)
+
+                                                        Text {
+                                                            anchors.left: parent.left
+                                                            anchors.leftMargin: 6
+                                                            anchors.top: parent.top
+                                                            anchors.topMargin: 5
+                                                            width: parent.width - 12
+                                                            elide: Text.ElideMiddle
+                                                            text: clipRect.modelData.kind === "title"
+                                                                  ? "T  " + clipRect.modelData.text
+                                                                  : clipRect.modelData.kind === "solid"
+                                                                  ? "colour"
+                                                                  : clipRect.modelData.path
+                                                                        .replace(/^.*\//, "")
+                                                            color: root.cText
+                                                            font.pixelSize: 10
+                                                        }
+
+                                                        // A graded clip says so.
+                                                        // Finding out at export
+                                                        // that a shot was never
+                                                        // graded is too late.
+                                                        Text {
+                                                            anchors.right: parent.right
+                                                            anchors.rightMargin: 5
+                                                            anchors.bottom: parent.bottom
+                                                            anchors.bottomMargin: 4
+                                                            visible: clipRect.modelData.graded
+                                                            text: "◕"
+                                                            color: root.cAccent
+                                                            font.pixelSize: 11
+                                                        }
+                                                        Text {
+                                                            anchors.left: parent.left
+                                                            anchors.leftMargin: 6
+                                                            anchors.bottom: parent.bottom
+                                                            anchors.bottomMargin: 4
+                                                            visible: clipRect.modelData.trans !== "none"
+                                                            text: "⇥ " + clipRect.modelData.trans
+                                                            color: root.cAccent
+                                                            font.pixelSize: 9
+                                                        }
+
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            // The edge zones are
+                                                            // where a trim lives
+                                                            // in every editor, so
+                                                            // the cursor says so
+                                                            // before the click.
+                                                            cursorShape:
+                                                                (mouseX < 7 || mouseX > width - 7)
+                                                                ? Qt.SizeHorCursor
+                                                                : Qt.OpenHandCursor
+                                                            hoverEnabled: true
+
+                                                            onPressed: function (m) {
+                                                                root.selTrack = lane.index
+                                                                root.selClip = clipRect.index
+                                                                root.dragTrack = lane.index
+                                                                root.dragClip = clipRect.index
+                                                                root.dragKind =
+                                                                    m.x < 7 ? "head"
+                                                                    : m.x > width - 7 ? "tail"
+                                                                    : "move"
+                                                                root.dragFrom = m.x
+                                                                root.dragDx = 0
+                                                            }
+                                                            onPositionChanged: function (m) {
+                                                                if (!pressed) return
+                                                                root.dragDx = m.x - root.dragFrom
+                                                            }
+                                                            onReleased: function (m) {
+                                                                root.commitDrag(
+                                                                    clipRect.modelData, lane.index)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // The playhead, over everything.
+                                    Rectangle {
+                                        x: root.playhead * root.pxPerSec
+                                        y: 0
+                                        width: 2
+                                        height: lanes.height
+                                        color: "#ff5a5a"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── The clip inspector ──────────────────────────────────
+                Rectangle {
+                    width: 340
+                    height: parent.height
+                    color: root.cPanel
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: root.selClip < 0
+                        width: parent.width - 40
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        text: root.proj === "" ? "No project yet"
+                              : "Pick a clip to grade it"
+                        color: root.cDim
+                        font.pixelSize: 13
+                    }
+
+                    Flickable {
+                        anchors.fill: parent
+                        visible: root.selClip >= 0
+                        contentHeight: inspCol.height
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        Column {
+                            id: inspCol
+                            width: parent.width
+
+                            // What is selected, and where it sits. A panel of
+                            // sliders with no idea which clip they belong to
+                            // is how a grade lands on the wrong shot.
+                            Rectangle {
+                                width: parent.width
+                                height: 46
+                                color: root.wash(0.16)
+                                Text {
+                                    anchors.left: parent.left; anchors.leftMargin: 12
+                                    anchors.top: parent.top; anchors.topMargin: 6
+                                    width: parent.width - 24
+                                    elide: Text.ElideMiddle
+                                    text: root.clipValue("path")
+                                          ? root.clipValue("path").replace(/^.*\//, "")
+                                          : (root.clipValue("kind") || "clip")
+                                    color: root.cText
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                                Text {
+                                    anchors.left: parent.left; anchors.leftMargin: 12
+                                    anchors.bottom: parent.bottom; anchors.bottomMargin: 6
+                                    text: root.timecode(parseFloat(root.clipValue("tl_in")) || 0)
+                                          + "  ·  " +
+                                          root.timecode(parseFloat(root.clipValue("length")) || 0)
+                                          + " long"
+                                    color: root.cDim
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                }
+                            }
+
+                            Repeater {
+                                model: root.clipGroups
+
+                                Column {
+                                    id: cgrp
+                                    required property string modelData
+                                    width: inspCol.width
+                                    // A caption's controls have nothing to say
+                                    // about a video clip, and a panel offering
+                                    // them anyway teaches people to ignore it.
+                                    readonly property bool applies:
+                                        cgrp.modelData === "Title"
+                                        ? root.clipValue("kind") === "title"
+                                        : cgrp.modelData === "Background"
+                                        ? (root.clipValue("kind") === "solid"
+                                           || root.clipValue("kind") === "title")
+                                        : true
+                                    visible: cgrp.applies
+                                    height: cgrp.applies ? implicitHeight : 0
+                                    property bool open: modelData === "Levels"
+                                                        || modelData === "Title"
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 30
+                                        color: root.wash(0.10)
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 12
+                                            text: (cgrp.open ? "▾  " : "▸  ") + cgrp.modelData
+                                            color: root.cText
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: cgrp.open = !cgrp.open
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: cgrp.open ? root.clipRowsIn(cgrp.modelData) : []
+                                        ClipCtl {}
+                                    }
+                                }
+                            }
+
+                            // ── The grade ───────────────────────────────
+                            //
+                            // The SAME table the darkroom draws, on a clip.
+                            // That is the whole architecture made visible: a
+                            // slider moved here bakes a .cube and ffmpeg's
+                            // lut3d applies it to every frame, so the still
+                            // and the clip cannot disagree about colour.
+                            Rectangle {
+                                width: parent.width
+                                height: 34
+                                color: root.wash(0.20)
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 12
+                                    text: "Grade"
+                                    color: root.cText
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 12
+                                    text: root.selClipObj && root.selClipObj.graded
+                                          ? "baked as a LUT" : "not graded"
+                                    color: root.cDim
+                                    font.pixelSize: 10
+                                }
+                            }
+
+                            Repeater {
+                                model: root.gradeGroups
+
+                                Column {
+                                    id: ggrp
+                                    required property string modelData
+                                    width: inspCol.width
+                                    property bool open: modelData === "Basic"
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 28
+                                        color: root.wash(0.07)
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 20
+                                            text: (ggrp.open ? "▾  " : "▸  ") + ggrp.modelData
+                                            color: root.cText
+                                            font.pixelSize: 11
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: ggrp.open = !ggrp.open
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: ggrp.open ? root.rowsIn(ggrp.modelData) : []
+                                        GradeCtl {}
+                                    }
+                                }
+                            }
+
+                            Item { width: 1; height: 20 }
+                        }
+                    }
+                }
+            }
+
             // Status
             Rectangle {
                 width: parent.width
@@ -802,6 +1886,16 @@ FloatingWindow {
                                 if (m.kind === "dir" || m.kind === "up") {
                                     root.pickerFellBack = true
                                     root.browseTo(m.path)
+                                } else if (root.pickerFor === "clip") {
+                                    // The video page borrows the same picker.
+                                    // It lists what the ENGINE can decode, so
+                                    // a row that is drawn is a row that will
+                                    // land on the timeline.
+                                    root.pickerOpen = false
+                                    root.pickerFor = "photo"
+                                    root.tlRun(["clip", root.proj, String(root.selTrack),
+                                                m.path, "--at", String(root.playhead)])
+                                    root.say("added " + m.name)
                                 } else {
                                     root.pickerOpen = false
                                     root.loadFile(m.path)
@@ -906,6 +2000,274 @@ FloatingWindow {
                 // gesture every editor uses and the only quick way back from a
                 // slider somebody dragged by accident.
                 onDoubleClicked: root.change(sl.row.key, 0)
+            }
+        }
+    }
+
+    // A page selector. Not a Btn with a colour swapped: the pressed state has
+    // to read as WHERE YOU ARE rather than as a button that happens to be lit,
+    // so it carries an underline the eye reads as a tab and a Btn does not.
+    component Tab: Item {
+        id: tab
+        property string label: ""
+        property bool on: false
+        signal clicked()
+        width: tt.implicitWidth + 24
+        height: 30
+
+        Text {
+            id: tt
+            anchors.centerIn: parent
+            text: tab.label
+            color: tab.on ? root.cText : root.cDim
+            font.pixelSize: 12
+            font.bold: tab.on
+        }
+        Rectangle {
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width - 10
+            height: 2
+            color: tab.on ? root.cAccent : "transparent"
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: tab.clicked()
+        }
+    }
+
+    // A small on/off stud, for the per-track flags and the lane adders.
+    component Tag: Rectangle {
+        id: tg
+        property string label: ""
+        property bool on: false
+        signal clicked()
+        width: Math.max(18, tgt.implicitWidth + 8)
+        height: 16
+        radius: 3
+        color: tg.on ? root.cAccent : root.wash(0.16)
+        Text {
+            id: tgt
+            anchors.centerIn: parent
+            text: tg.label
+            color: tg.on ? root.cPanel : root.cDim
+            font.pixelSize: 9
+            font.bold: true
+        }
+        MouseArea { anchors.fill: parent; onClicked: tg.clicked() }
+    }
+
+    // ── One clip property ───────────────────────────────────────────────────
+    //
+    // Four shapes, chosen by the type the ENGINE reported: a number is a
+    // slider, an enum is a cycler over the choices the engine listed, and a
+    // caption is a field. Nothing here knows which transitions exist or what
+    // an opacity may be — that all arrived from `timeline keys`.
+    component ClipCtl: Item {
+        id: cc
+        required property var modelData
+        readonly property var row: cc.modelData
+        readonly property string raw: root.clipValue(cc.row.key)
+        readonly property real val: parseFloat(cc.raw) || 0
+        width: inspCol.width
+        height: cc.row.type === "text" ? 52 : 44
+
+        Text {
+            id: cclbl
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 6
+            text: cc.row.label
+            color: root.cText
+            font.pixelSize: 11
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 6
+            visible: cc.row.type !== "text"
+            text: cc.row.type === "enum" ? cc.raw
+                                         : (Math.round(cc.val * 100) / 100)
+            color: root.cAccent
+            font.pixelSize: 11
+        }
+
+        // enum — click to advance. With at most six choices a cycler beats a
+        // popup: it needs no overlay, no focus grab and no dismissal rule.
+        Rectangle {
+            visible: cc.row.type === "enum"
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: cclbl.bottom; anchors.topMargin: 6
+            height: 20
+            radius: 3
+            color: root.wash(0.14)
+            Text {
+                anchors.centerIn: parent
+                text: "◂  " + cc.raw + "  ▸"
+                color: root.cText
+                font.pixelSize: 10
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: function (m) {
+                    const ch = cc.row.choices
+                    if (!ch || ch.length === 0) return
+                    let i = ch.indexOf(cc.raw)
+                    if (i < 0) i = 0
+                    i = (m.x < width / 2) ? (i + ch.length - 1) % ch.length
+                                          : (i + 1) % ch.length
+                    root.setClip(cc.row.key, ch[i])
+                }
+            }
+        }
+
+        // text — committed on Enter or on losing focus, never per keystroke.
+        // A `set` per character would spawn a process per letter typed.
+        Rectangle {
+            visible: cc.row.type === "text"
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: cclbl.bottom; anchors.topMargin: 6
+            height: 24
+            radius: 3
+            color: root.wash(0.14)
+            border.width: 1
+            border.color: cti.activeFocus ? root.cAccent : root.wash(0.2)
+
+            TextInput {
+                id: cti
+                anchors.fill: parent
+                anchors.leftMargin: 7
+                anchors.rightMargin: 7
+                verticalAlignment: TextInput.AlignVCenter
+                color: root.cText
+                font.pixelSize: 11
+                clip: true
+                text: cc.raw
+                onEditingFinished: if (text !== cc.raw) root.setClip(cc.row.key, text)
+            }
+        }
+
+        // number
+        Rectangle {
+            id: cctrack
+            visible: cc.row.type === "float" || cc.row.type === "int"
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: cclbl.bottom; anchors.topMargin: 8
+            height: 4
+            radius: 2
+            color: root.isLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(1, 1, 1, 0.14)
+
+            readonly property real zeroFrac:
+                cc.row.lo < 0 ? (0 - cc.row.lo) / (cc.row.hi - cc.row.lo) : 0
+            readonly property real valFrac:
+                Math.max(0, Math.min(1, (cc.val - cc.row.lo) / (cc.row.hi - cc.row.lo)))
+
+            Rectangle {
+                height: parent.height
+                radius: 2
+                color: root.cAccent
+                x: Math.min(cctrack.zeroFrac, cctrack.valFrac) * cctrack.width
+                width: Math.abs(cctrack.valFrac - cctrack.zeroFrac) * cctrack.width
+            }
+            Rectangle {
+                width: 12; height: 12; radius: 6
+                color: root.cAccent
+                y: -4
+                x: cctrack.valFrac * cctrack.width - 6
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -10
+                function commit(mx) {
+                    const f = Math.max(0, Math.min(1, (mx + 10) / cctrack.width))
+                    let v = cc.row.lo + f * (cc.row.hi - cc.row.lo)
+                    v = cc.row.type === "int" ? Math.round(v)
+                                              : Math.round(v * 1000) / 1000
+                    root.setClip(cc.row.key, v)
+                }
+                onPressed: function (m) { commit(m.x) }
+                onPositionChanged: function (m) { if (pressed) commit(m.x) }
+            }
+        }
+    }
+
+    // ── One grade control ───────────────────────────────────────────────────
+    //
+    // The develop table's own row, applied to a CLIP. Identical maths to the
+    // darkroom slider above it — this one writes through `timeline grade`,
+    // which bakes a .cube the export hands to lut3d.
+    // (The id is `grd`, not `gc`: `gc` is the QML engine's global
+    // garbage-collect function, and an id that masks a global JavaScript
+    // property makes the WHOLE file fail to load — not that component, the
+    // file, with the message pointing at the id and not at the collision.)
+    component GradeCtl: Item {
+        id: grd
+        required property var modelData
+        readonly property var row: grd.modelData
+        readonly property real val: root.gradeValue(grd.row.key)
+        width: inspCol.width
+        height: grd.row.type === "curve" ? 0 : 40
+        visible: grd.row.type !== "curve"
+
+        Text {
+            id: gclbl
+            anchors.left: parent.left; anchors.leftMargin: 20
+            anchors.top: parent.top; anchors.topMargin: 4
+            text: grd.row.label
+            color: root.cText
+            font.pixelSize: 11
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 4
+            text: grd.val === 0 ? "" : (Math.round(grd.val * 100) / 100)
+            color: grd.val === 0 ? root.cDim : root.cAccent
+            font.pixelSize: 11
+        }
+
+        Rectangle {
+            id: gctrack
+            anchors.left: parent.left; anchors.leftMargin: 20
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: gclbl.bottom; anchors.topMargin: 7
+            height: 4
+            radius: 2
+            color: root.isLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(1, 1, 1, 0.14)
+
+            readonly property real zeroFrac:
+                grd.row.lo < 0 ? (0 - grd.row.lo) / (grd.row.hi - grd.row.lo) : 0
+            readonly property real valFrac:
+                Math.max(0, Math.min(1, (grd.val - grd.row.lo) / (grd.row.hi - grd.row.lo)))
+
+            Rectangle {
+                height: parent.height
+                radius: 2
+                color: root.cAccent
+                x: Math.min(gctrack.zeroFrac, gctrack.valFrac) * gctrack.width
+                width: Math.abs(gctrack.valFrac - gctrack.zeroFrac) * gctrack.width
+            }
+            Rectangle {
+                width: 11; height: 11; radius: 6
+                color: root.cAccent
+                y: -4
+                x: gctrack.valFrac * gctrack.width - 5
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -10
+                function commit(mx) {
+                    const f = Math.max(0, Math.min(1, (mx + 10) / gctrack.width))
+                    let v = grd.row.lo + f * (grd.row.hi - grd.row.lo)
+                    v = grd.row.type === "int" ? Math.round(v)
+                                              : Math.round(v * 100) / 100
+                    root.gradeClip(grd.row.key, v)
+                }
+                onPressed: function (m) { commit(m.x) }
+                onPositionChanged: function (m) { if (pressed) commit(m.x) }
+                onDoubleClicked: root.gradeClip(grd.row.key, 0)
             }
         }
     }
