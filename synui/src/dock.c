@@ -719,6 +719,90 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
  * out of the render loop because the dragged icon is drawn by the same code at a
  * different place and a different scale — two copies would be two chances for a
  * lifted icon to stop looking like the one it was lifted from. */
+/*
+ * ── The icon, already the size the dock draws it ────────────────────────────
+ *
+ * icon_lookup() hands back the icon at the size it was decoded from disk, which
+ * for a hicolor PNG is 128x128 and for some apps 512x512. The dock draws it at
+ * 48. Painting it therefore meant cairo resampling the source down to the cell
+ * on EVERY draw, with CAIRO_FILTER_GOOD, once per icon.
+ *
+ * That is affordable when the dock repaints because something changed. It is
+ * not affordable while an icon is being DRAGGED: dock_icon_drag_motion() calls
+ * dock_relayout() for every pixel the icon travels, and dock_relayout() repaints
+ * the dock on EVERY output. So one pixel of drag on a three-monitor desk was
+ * three full dock canvases, each resampling every pinned icon from 128x128.
+ * Reported as dragging a dock icon being laggy, which is exactly what it was.
+ *
+ * So the scaled copy is made once and kept. A drag is then N cheap 1:1 blits.
+ *
+ * ⚠ IT HAS TO BE DROPPED WHEN THE ICONS CHANGE, and the accent retint changes
+ * them without changing anything the dock can see — icon_lookup() returns the
+ * same entry with a different picture inside it. icon_generation() is what says
+ * so. Without this the dock would keep the pre-accent icons until something
+ * else happened to evict them, which on a desktop that retints from the
+ * wallpaper is a visible and very confusing lag.
+ */
+typedef struct {
+    char             app_id[128];
+    cairo_surface_t *surf;          /* DOCK_ICON_SIZE square, or NULL */
+} dock_icon_cache_t;
+
+static dock_icon_cache_t dock_icon_cache[DOCK_MAX_ENTRIES * 2];
+static int      dock_icon_cache_n   = 0;
+static unsigned dock_icon_cache_gen = 0;
+
+static void dock_icon_cache_flush(void)
+{
+    for (int i = 0; i < dock_icon_cache_n; i++)
+        if (dock_icon_cache[i].surf)
+            cairo_surface_destroy(dock_icon_cache[i].surf);
+    dock_icon_cache_n = 0;
+}
+
+/* The icon at exactly DOCK_ICON_SIZE, or NULL if this app has no picture (the
+ * caller draws a monogram instead). */
+static cairo_surface_t *dock_icon_at_cell(const char *app_id)
+{
+    unsigned gen = icon_generation();
+    if (gen != dock_icon_cache_gen) {
+        dock_icon_cache_flush();
+        dock_icon_cache_gen = gen;
+    }
+    for (int i = 0; i < dock_icon_cache_n; i++)
+        if (strcmp(dock_icon_cache[i].app_id, app_id) == 0)
+            return dock_icon_cache[i].surf;
+
+    const syn_icon_entry_t *ic = icon_lookup(app_id);
+    cairo_surface_t *scaled = NULL;
+    if (ic->icon_surface) {
+        double sw = cairo_image_surface_get_width(ic->icon_surface);
+        double sh = cairo_image_surface_get_height(ic->icon_surface);
+        if (sw > 0 && sh > 0) {
+            scaled = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+                                                DOCK_ICON_SIZE, DOCK_ICON_SIZE);
+            cairo_t *sc = cairo_create(scaled);
+            cairo_scale(sc, DOCK_ICON_SIZE / sw, DOCK_ICON_SIZE / sh);
+            cairo_set_source_surface(sc, ic->icon_surface, 0, 0);
+            /* The one place the expensive filter is still paid — once per icon
+             * per generation, instead of once per icon per repaint. */
+            cairo_pattern_set_filter(cairo_get_source(sc), CAIRO_FILTER_GOOD);
+            cairo_paint(sc);
+            cairo_destroy(sc);
+        }
+    }
+    /* A full table is not an error: fall back to painting from the source, which
+     * is what this did everywhere before. */
+    if (dock_icon_cache_n < (int)(sizeof dock_icon_cache / sizeof *dock_icon_cache)) {
+        dock_icon_cache_t *e = &dock_icon_cache[dock_icon_cache_n++];
+        snprintf(e->app_id, sizeof e->app_id, "%s", app_id);
+        e->surf = scaled;
+        return e->surf;
+    }
+    if (scaled) cairo_surface_destroy(scaled);
+    return NULL;
+}
+
 static void dock_draw_icon(cairo_t *cr, const char *app_id,
                            double ix, double iy, int icon, double scale)
 {
@@ -730,19 +814,19 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
         cairo_translate(cr, -cx, -cy);
     }
 
-    const syn_icon_entry_t *ic = icon_lookup(app_id);
-    if (ic->icon_surface) {
-        double sw = cairo_image_surface_get_width(ic->icon_surface);
-        double sh = cairo_image_surface_get_height(ic->icon_surface);
-        if (sw > 0 && sh > 0) {
-            cairo_save(cr);
-            cairo_translate(cr, ix, iy);
-            cairo_scale(cr, icon / sw, icon / sh);
-            cairo_set_source_surface(cr, ic->icon_surface, 0, 0);
-            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
-            cairo_paint(cr);
-            cairo_restore(cr);
-        }
+    cairo_surface_t *cell = dock_icon_at_cell(app_id);
+    if (cell) {
+        cairo_save(cr);
+        cairo_translate(cr, ix, iy);
+        /* 1:1 when the cell size is what the dock asked for, which it is for
+         * every caller here; the scale survives for a caller that ever wants a
+         * different size, and costs nothing when it is 1. */
+        if (icon != DOCK_ICON_SIZE)
+            cairo_scale(cr, (double)icon / DOCK_ICON_SIZE,
+                            (double)icon / DOCK_ICON_SIZE);
+        cairo_set_source_surface(cr, cell, 0, 0);
+        cairo_paint(cr);
+        cairo_restore(cr);
     } else {
         icon_draw_monogram(cr, app_id, ix, iy, icon);
     }

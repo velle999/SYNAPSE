@@ -365,7 +365,7 @@ pkgver=0.1.0
 #   glyph back where it belongs the hue step is all there is. It buys about
 #   0.8 dE per degree.
 
-pkgrel=420
+pkgrel=421
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

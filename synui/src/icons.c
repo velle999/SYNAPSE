@@ -45,6 +45,15 @@
 static syn_icon_entry_t icon_cache[ICON_CACHE_MAX];
 static int icon_cache_count = 0;
 
+/* Bumped whenever any cached icon_surface is replaced — a retint, or a new
+ * entry decoded into the table. Consumers that keep their OWN derived copy of
+ * an icon (the dock keeps one pre-scaled to its cell) compare this and throw
+ * theirs away when it moves, so a theme change cannot leave a stale picture on
+ * screen. Cheaper and far safer than comparing surface POINTERS: cairo is free
+ * to hand a freed surface's address straight back for the next one. */
+static unsigned icon_gen = 1;
+unsigned icon_generation(void) { return icon_gen; }
+
 /* The accent our own icons are currently drawn in. Initialised to SYNAPSE's
  * cyan so an icon resolved before any theme has been pushed looks the same as
  * one resolved after — a dock that themed its icons only after the first theme
@@ -330,6 +339,7 @@ void icon_set_accent(const float rgb[3])
 
     for (int i = 0; i < icon_cache_count; i++)
         icon_tint_from_base(&icon_cache[i]);
+    icon_gen++;
 }
 
 /* ── Public API ──────────────────────────────────────────── */
@@ -376,6 +386,7 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
     syn_icon_entry_t *slot;
     if (icon_cache_count < ICON_CACHE_MAX) {
         slot = &icon_cache[icon_cache_count++];
+        icon_gen++;
     } else {
         wlr_log(WLR_ERROR, "synui: icons: cache full (%d), not caching '%s'",
                 ICON_CACHE_MAX, app_id);
@@ -426,6 +437,7 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *path)
     syn_icon_entry_t *slot;
     if (icon_cache_count < ICON_CACHE_MAX) {
         slot = &icon_cache[icon_cache_count++];
+        icon_gen++;
     } else {
         wlr_log(WLR_ERROR, "synui: icons: cache full (%d), not caching '%s'",
                 ICON_CACHE_MAX, path);

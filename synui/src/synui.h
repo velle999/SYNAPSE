@@ -8351,6 +8351,11 @@ typedef struct {
     cairo_surface_t *icon_base;
 } syn_icon_entry_t;
 
+/* Moves whenever a cached icon_surface is replaced (retint, or a new entry
+ * decoded). A consumer holding a derived copy compares this to know when to
+ * drop it. */
+unsigned icon_generation(void);
+
 /* Look up (and cache) name/exec/icon for an app_id. Always returns a valid
  * pointer with app_id/display_name/exec populated (falling back to the
  * app_id string itself when no .desktop file matches); icon_surface may be

@@ -101,6 +101,11 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
     return &the_icon;
 }
 
+/* The dock keeps its own copy of each icon pre-scaled to the cell and drops it
+ * when this moves. Constant here: the stub icon never changes, and a generation
+ * that never moves is the honest answer for a table that never retints. */
+unsigned icon_generation(void) { return 1; }
+
 /* Views and workspaces: this desktop has none. Every dock entry is either
  * pinned-and-not-running or running-with-no-window, which is all the reorder
  * rule can see anyway — it works off app_ids and the pin list. */
