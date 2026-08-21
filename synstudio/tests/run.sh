@@ -595,9 +595,12 @@ if have ffmpeg; then
     # the real one about exactly the things a preview exists to check.
     pgraph=$($BIN timeline export "$tp" --out "$TMP/p.mp4" --preview --print)
     echo "$pgraph" | seen "a preview trades encode time away" "ultrafast"
-    # Fragmented, so a player can open it while ffmpeg is still writing rather
-    # than waiting for a moov atom that does not exist until the encode ends.
-    echo "$pgraph" | seen "a preview is playable while it is written" "frag_keyframe"
+    # A plain mp4, NOT fragmented. It was fragmented so a player could open it
+    # mid-write; nothing does, because playback waits for the render and the
+    # window renders one in the background before anybody asks. An empty_moov
+    # file can report the wrong duration and stop early, which is the one
+    # thing a preview must never do.
+    echo "$pgraph" | notseen "a preview is a plain mp4" "frag_keyframe"
     # The grade still goes through the LUT: a preview that skipped it would be
     # a preview of a different cut.
     echo "$pgraph" | seen "and it is still the same graph" "overlay=eof_action=pass"
@@ -617,6 +620,89 @@ if have ffmpeg; then
           "$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TMP/hd-p.mp4" 2>/dev/null)"
     check "and the deliverable keeps the project size" "1920" \
           "$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TMP/hd-f.mp4" 2>/dev/null)"
+
+    # ---- a grade that MOVES ---------------------------------------------
+    #
+    # Two keyframes and the grade ramps between them. A 3D LUT is a static
+    # table and ffmpeg cannot fade between two of them, so this renders as a
+    # run of cubes each gated to its own span — which means the interesting
+    # question is not whether the ends are right but whether the BOUNDARIES
+    # are, and no amount of reading the graph answers that.
+    #
+    # A flat grey still, exposure ramped from -1.5 to +1.5 stops. The source
+    # never changes, so every change in the picture is the grade, and the luma
+    # of the exported frames has to climb without ever going backwards.
+    grey=$TMP/grey.png
+    ffmpeg -v error -y -f lavfi -i "color=c=0x808080:s=160x90" \
+           -frames:v 1 "$grey" 2>/dev/null
+    kf=$TMP/kf.syntl
+    $BIN timeline new "$kf" --size 160x90 --fps 25
+    $BIN timeline track "$kf" video V >/dev/null
+    $BIN timeline clip "$kf" 0 "$grey" --at 0 --dur 4 >/dev/null
+    $BIN timeline key "$kf" 0 0 add --at 0 --set exposure=-1.5 >/dev/null
+    $BIN timeline key "$kf" 0 0 add --at 4 --set exposure=1.5  >/dev/null
+
+    check "two keyframes make the grade move" "yes" \
+          "$([ "$($BIN timeline key "$kf" 0 0 list | awk -F'\t' '/^steps/{print $2}')" -gt 1 ] \
+             && echo yes || echo no)"
+    # One cube per step, and each span must be HALF OPEN. `between(t,a,b)` is
+    # inclusive at both ends, so a frame landing exactly on a boundary
+    # satisfies two of them and — because they are chained — gets the grade
+    # applied TWICE. It showed as single frames of roughly double the grade,
+    # once a second, wherever the arithmetic came out exact.
+    $BIN timeline export "$kf" --out "$TMP/kf.mp4" --print \
+        | notseen "gated spans never overlap" ":interp=tetrahedral:enable='between(t,"
+
+    $BIN timeline export "$kf" --out "$TMP/kf.mp4" >/dev/null 2>&1
+    if [ -s "$TMP/kf.mp4" ]; then
+        ffmpeg -v error -i "$TMP/kf.mp4" -vf "scale=1:1,format=gray" \
+               -f rawvideo - 2>/dev/null | od -An -tu1 -v \
+               | tr -s ' ' '\n' | grep -v '^$' > "$TMP/ramp.txt"
+        check "the ramp has a value per frame" "yes" \
+              "$([ "$(wc -l < "$TMP/ramp.txt")" -gt 50 ] && echo yes || echo no)"
+        # Never backwards. THIS is the assertion that caught the overlap.
+        check "and it never goes backwards" "yes" \
+              "$(awk 'NR>1 && $1 < prev-1 {print "no"; exit} {prev=$1} END {print "yes"}' \
+                 "$TMP/ramp.txt" | head -1)"
+        check "and it actually climbs" "yes" \
+              "$(awk 'NR==1{f=$1} END{print ($1 > f+40)?"yes":"no"}' "$TMP/ramp.txt")"
+    fi
+
+    # The MONITOR has to show the moving grade too, and agree with the export
+    # about it. It bakes only the one cube it needs for the instant it is
+    # drawing, so a chain that named all forty-eight referenced forty-seven
+    # files nobody wrote — ffmpeg refuses a graph it cannot open a file for,
+    # the frame failed, and the window went on showing the last one that
+    # worked. A stale picture is the worst possible failure for a monitor,
+    # because nothing about it looks like a failure.
+    for at in 0.2 2.0 3.8; do
+        $BIN timeline frame "$kf" --at $at --out "$TMP/mf.png" >/dev/null 2>&1
+        check "the monitor renders a moving grade at $at" "yes" \
+              "$([ -s "$TMP/mf.png" ] && echo yes || echo no)"
+        ffmpeg -v error -i "$TMP/mf.png" -vf "scale=1:1,format=gray" \
+               -f rawvideo - 2>/dev/null | od -An -tu1 -v | tr -d ' \n' \
+               >> "$TMP/monramp.txt"
+        echo >> "$TMP/monramp.txt"
+    done
+    check "and it climbs with the grade" "yes" \
+          "$(awk 'NR>1 && $1 <= prev {print "no"; exit} {prev=$1} END {print "yes"}' \
+             "$TMP/monramp.txt" | head -1)"
+    # The same instant, through the two different builders. They quantise the
+    # grade identically on purpose, so they have to land on the same value.
+    mid=$(sed -n 2p "$TMP/monramp.txt")
+    exp=$(awk 'NR==51 {print $1}' "$TMP/ramp.txt")
+    near "the monitor and the export agree mid-ramp" "$exp" "$mid" 6
+
+    # A razor through a moving grade splits the keyframes with it, and plants
+    # one at the cut holding the value the grade had reached there — otherwise
+    # the second half inherits keys timed to moments now in the first.
+    $BIN timeline split "$kf" 0 --at 2.0 >/dev/null
+    check "a split leaves keys on the first half"  "yes" \
+          "$([ "$($BIN timeline key "$kf" 0 0 list | grep -c '^key')" -ge 2 ] && echo yes || echo no)"
+    check "and on the second"                      "yes" \
+          "$([ "$($BIN timeline key "$kf" 0 1 list | grep -c '^key')" -ge 2 ] && echo yes || echo no)"
+    check "the second half's keys start at zero" "0.000000" \
+          "$($BIN timeline key "$kf" 0 1 list | awk -F'\t' '/^key/{print $3; exit}')"
 
     # ---- the transform survives a round trip ----------------------------
     $BIN timeline set "$vp" 0 0 xform.scale=1.4 xform.x=-0.25 xform.rotate=12 \

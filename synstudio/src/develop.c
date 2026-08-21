@@ -145,6 +145,62 @@ static const struct { const char *key; float lo, hi; } ui_range[] = {
     { "crop.angle",      -15.0f,    15.0f },
 };
 
+/* Read straight off the SAME table the setters use, so a develop setting
+ * added to fields[] interpolates without anything else being touched. A
+ * hand-written lerp is a second list of every field, and the failure it
+ * produces is a new control that silently refuses to animate. */
+void ss_develop_lerp(const ss_develop *a, const ss_develop *b, float m,
+                     ss_develop *out)
+{
+    int i;
+
+    if (m < 0.0f) m = 0.0f;
+    if (m > 1.0f) m = 1.0f;
+
+    /* Start from the nearer end, so anything the loop below does not touch —
+     * and any field a later version adds before it is taught to interpolate —
+     * is at least a real value from a real keyframe rather than a zero. */
+    *out = (m < 0.5f) ? *a : *b;
+
+    for (i = 0; i < nfields; i++) {
+        const field *f = &fields[i];
+        const char *pa = (const char *)a + f->off;
+        const char *pb = (const char *)b + f->off;
+        char *po = (char *)out + f->off;
+
+        if (f->type == F_FLOAT) {
+            float va = *(const float *)pa, vb = *(const float *)pb;
+            *(float *)po = va + (vb - va) * m;
+        } else if (f->type == F_CURVE) {
+            const ss_curve *ca = (const ss_curve *)pa;
+            const ss_curve *cb = (const ss_curve *)pb;
+            ss_curve *co = (ss_curve *)po;
+            int k;
+
+            if (ca->identity && cb->identity) { *co = *ca; continue; }
+
+            /* Both tables have to exist before they can be mixed. Evaluating
+             * one point is what builds it, and costs nothing if it is built. */
+            ss_curve_eval(ca, 0.5f);
+            ss_curve_eval(cb, 0.5f);
+
+            /* The points are left as the nearer keyframe's. They are not read
+             * again — `built` is what ss_curve_eval looks at — and there is no
+             * honest set of control points for a mixture of two curves with
+             * different numbers of them. */
+            for (k = 0; k < SS_CURVE_LUT; k++) {
+                float la = ca->identity ? (float)k / (SS_CURVE_LUT - 1) : ca->lut[k];
+                float lb = cb->identity ? (float)k / (SS_CURVE_LUT - 1) : cb->lut[k];
+                co->lut[k] = la + (lb - la) * m;
+            }
+            co->built = 1;
+            co->identity = 0;
+        }
+        /* F_INT is deliberately not interpolated: it took the nearer end
+         * above. Half a horizontal flip is not a thing. */
+    }
+}
+
 int ss_develop_describe(int i, ss_develop_info *out)
 {
     size_t u;

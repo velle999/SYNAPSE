@@ -529,6 +529,25 @@ double ss_media_duration(const char *path)
     return d > 0 ? d : 0.0;
 }
 
+int ss_media_has_audio(const char *path)
+{
+    char *argv[] = {
+        "ffprobe", "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=codec_name",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        (char *)path, NULL
+    };
+    char *txt = run_text(argv);
+    int yes;
+
+    if (!txt) return 0;
+    /* Any non-blank answer is a codec name, which is a stream. */
+    yes = strspn(txt, " \t\r\n") != strlen(txt);
+    free(txt);
+    return yes;
+}
+
 /* -------------------------------------------------------------- peaks -- */
 
 /* Fold a stream of s16le mono samples into buckets as it arrives.

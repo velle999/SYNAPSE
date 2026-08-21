@@ -308,6 +308,123 @@ int ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n)
     }
 }
 
+/* ------------------------------------------------------- a moving grade -- */
+
+/* How finely a moving grade is sampled.
+ *
+ * A 3D LUT is a static table and ffmpeg cannot fade between two of them, so an
+ * animated grade is rendered as a run of cubes, each gated to its own span
+ * with the lut3d filter's `enable`. The count is what trades smoothness
+ * against how many cubes get written and loaded: the visible step is the
+ * change ACROSS THE WHOLE CLIP divided by this, so a two-stop exposure ramp
+ * steps by 1/24th of a stop — under a code value, and nothing anyone can see.
+ *
+ * It is deliberately not per-second. A longer clip holding the same grade
+ * move changes more slowly, so a fixed count keeps the step the same size
+ * however long the shot is. */
+#define SS_GRADE_STEPS 48
+
+int ss_clip_grade_steps(const ss_clip *c)
+{
+    if (!c->has_grade) return 0;
+    return c->nkeys >= 2 ? SS_GRADE_STEPS : 1;
+}
+
+/* The grade at a point through the clip, from the keyframes either side. */
+static void grade_at(const ss_clip *c, double tt, ss_develop *out)
+{
+    int i;
+
+    if (c->nkeys == 0) { *out = c->grade; return; }
+    if (c->nkeys == 1) { *out = c->key[0].dev; return; }
+
+    /* Held before the first and after the last. A grade that ramped away to
+     * nothing outside its keyframes would be a surprise nobody asked for. */
+    if (tt <= c->key[0].t)              { *out = c->key[0].dev; return; }
+    if (tt >= c->key[c->nkeys - 1].t)   { *out = c->key[c->nkeys - 1].dev; return; }
+
+    for (i = 0; i + 1 < c->nkeys; i++) {
+        double a = c->key[i].t, b = c->key[i + 1].t;
+        if (tt >= a && tt <= b) {
+            double span = b - a;
+            float m = span > 1e-9 ? (float)((tt - a) / span) : 0.0f;
+            ss_develop_lerp(&c->key[i].dev, &c->key[i + 1].dev, m, out);
+            return;
+        }
+    }
+    *out = c->key[c->nkeys - 1].dev;
+}
+
+int ss_clip_grade_step(const ss_clip *c, int s, ss_develop *out)
+{
+    int n = ss_clip_grade_steps(c);
+    double len;
+
+    if (n <= 0) return 0;
+    if (n == 1) { *out = c->nkeys ? c->key[0].dev : c->grade; return 1; }
+
+    if (s < 0) s = 0;
+    if (s >= n) s = n - 1;
+    len = ss_clip_length(c);
+    /* The CENTRE of the step, not its edge: a step that took its value from
+     * the start of its span would lag the grade by half a step all the way
+     * through, and the whole ramp would arrive late. */
+    grade_at(c, len * ((double)s + 0.5) / (double)n, out);
+    return 1;
+}
+
+int ss_clip_grade_step_at(const ss_clip *c, double tt)
+{
+    int n = ss_clip_grade_steps(c), s;
+    double len = ss_clip_length(c);
+
+    if (n <= 1) return 0;
+    if (len <= 0) return 0;
+    s = (int)(tt / len * (double)n);
+    if (s < 0) s = 0;
+    if (s >= n) s = n - 1;
+    return s;
+}
+
+int ss_clip_key_add(ss_clip *c, double t, const ss_develop *d)
+{
+    int i, at;
+
+    if (t < 0) t = 0;
+
+    /* Same instant means REPLACE. Two keyframes at one time is a grade with
+     * two opinions about the same frame, and the interpolation between them
+     * divides by nothing. */
+    for (i = 0; i < c->nkeys; i++)
+        if (c->key[i].t > t - 1e-6 && c->key[i].t < t + 1e-6) {
+            c->key[i].dev = *d;
+            c->has_grade = 1;
+            return i;
+        }
+
+    if (c->nkeys >= SS_MAX_KEYS) return -1;
+
+    for (at = 0; at < c->nkeys && c->key[at].t < t; at++) ;
+    for (i = c->nkeys; i > at; i--) c->key[i] = c->key[i - 1];
+    c->key[at].t = t;
+    c->key[at].dev = *d;
+    c->nkeys++;
+    c->has_grade = 1;
+    return at;
+}
+
+int ss_clip_key_remove(ss_clip *c, int i)
+{
+    int k;
+    if (i < 0 || i >= c->nkeys) return -1;
+    for (k = i; k + 1 < c->nkeys; k++) c->key[k] = c->key[k + 1];
+    c->nkeys--;
+    /* The last keyframe leaving does not throw the grade away — it becomes
+     * the static grade again, which is what it was before anyone keyed it. */
+    if (c->nkeys == 0) c->has_grade = ss_develop_is_identity(&c->grade) ? 0 : 1;
+    return 0;
+}
+
 /* ---------------------------------------------------------- the document -- */
 
 void ss_timeline_free(ss_timeline *t)
@@ -464,6 +581,24 @@ int ss_timeline_split(ss_timeline *t, int track, int clip, double at)
      * middle of a continuous shot, which is never what a razor meant. */
     b.trans     = SS_TRANS_NONE;
     b.trans_dur = 0;
+    /* Keyframes are cut in two along with the picture, so each half keeps the
+     * part of the move that happened inside it and a new key is planted at
+     * the cut holding the value the grade had reached there. Without this the
+     * second half would inherit every keyframe, including ones timed to
+     * moments now in the first half. */
+    if (c->nkeys >= 2) {
+        ss_develop mid;
+        int k;
+        grade_at(c, off, &mid);
+        a.nkeys = 0; b.nkeys = 0;
+        for (k = 0; k < c->nkeys; k++) {
+            if (c->key[k].t < off) ss_clip_key_add(&a, c->key[k].t, &c->key[k].dev);
+            else ss_clip_key_add(&b, c->key[k].t - off, &c->key[k].dev);
+        }
+        ss_clip_key_add(&a, off, &mid);
+        ss_clip_key_add(&b, 0.0, &mid);
+    }
+
     /* An animated transform is cut in two along with the picture, so the move
      * continues across the cut instead of restarting at each half. */
     if (a.xf.animate) {
@@ -609,12 +744,23 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "text\t%.4f\t%.4f\t%.4f\t%.4f\t%s\t%s\n",
                         c->text_size, c->text_r, c->text_g, c->text_b,
                         textpos_name(c->text_pos), c->text);
-            if (c->has_grade) {
+            if (c->has_grade && c->nkeys == 0) {
                 /* Indented so the reader can tell a grade line belongs to the
                  * clip above it without needing a nesting syntax. */
                 fprintf(fp, "grade\t%d\n", j);
                 ss_develop_write(&c->grade, fp);
                 fprintf(fp, "endgrade\n");
+            }
+            /* Keyframes are written as their own blocks rather than folded
+             * into the grade block, so a file with none is byte for byte what
+             * it was before keyframes existed. */
+            {
+                int k;
+                for (k = 0; k < c->nkeys; k++) {
+                    fprintf(fp, "key\t%d\t%.6f\n", k, c->key[k].t);
+                    ss_develop_write(&c->key[k].dev, fp);
+                    fprintf(fp, "endkey\n");
+                }
             }
         }
     }
@@ -735,6 +881,29 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
                 snprintf(cc->text, sizeof cc->text, "%s", f[5]);
             }
+        } else if (!strncmp(line, "key\t", 4)) {
+            char buf[16384];
+            size_t used = 0;
+            double kt = 0;
+            FILE *ms;
+            { char *f[2]; if (tabsplit(line + 4, f, 2) == 2) kt = atof(f[1]); }
+            while (fgets(line, sizeof line, fp)) {
+                if (!strncmp(line, "endkey", 6)) break;
+                if (used + strlen(line) + 1 >= sizeof buf) break;
+                strcpy(buf + used, line);
+                used += strlen(line);
+            }
+            buf[used] = '\0';
+            if (cc) {
+                ss_develop d;
+                ss_develop_reset(&d);
+                ms = fmemopen(buf, used, "r");
+                if (ms) {
+                    ss_develop_read(&d, ms);
+                    fclose(ms);
+                    ss_clip_key_add(cc, kt, &d);
+                }
+            }
         } else if (!strncmp(line, "grade\t", 6)) {
             /* Read the develop block up to endgrade into a memory stream so
              * ss_develop_read, which takes a FILE*, needs no second parser. */
@@ -762,6 +931,9 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
 }
 
 /* ---------------------------------------------------- the ffmpeg export -- */
+
+static void grade_path(char *out, size_t n, const char *dir,
+                       int track, int idx, int step, int nsteps);
 
 typedef struct { char *s; size_t len, cap; } strbuf;
 
@@ -837,7 +1009,7 @@ static void hexcol(float r, float g, float b, float a, char *out, size_t n)
  * caption needs escaping that differs between the two passes, and getting it
  * wrong fails at parse time with a message about the graph, not the caption.
  * `textfile=` has one level of quoting and holds whatever bytes are in it. */
-int ss_timeline_bake(const ss_timeline *t, const char *dir)
+int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
 {
     int i, j, n = 0;
 
@@ -846,13 +1018,28 @@ int ss_timeline_bake(const ss_timeline *t, const char *dir)
             const ss_clip *c = &t->track[i].clip[j];
             char p[4300];
             FILE *fp;
-            if (c->has_grade) {
-                snprintf(p, sizeof p, "%s/grade_%d_%d.cube", dir, i, j);
-                fp = fopen(p, "w");
-                if (!fp) return -1;
-                ss_lut_write(&c->grade, 33, fp, "synstudio clip grade");
-                fclose(fp);
-                n++;
+            double off = at - c->tl_in, len = ss_clip_length(c);
+            int steps = ss_clip_grade_steps(c), s, s0, s1;
+
+            /* A single frame needs the clips on screen and nothing else. The
+             * monitor used to bake every cube of every clip on every scrub
+             * frame; with a moving grade that is dozens of cubes per frame,
+             * for a picture that uses one. */
+            if (at >= 0 && (off < 0 || off >= len || len <= 0)) continue;
+
+            if (steps > 0) {
+                if (at >= 0) { s0 = ss_clip_grade_step_at(c, off); s1 = s0 + 1; }
+                else         { s0 = 0; s1 = steps; }
+                for (s = s0; s < s1; s++) {
+                    ss_develop d;
+                    ss_clip_grade_step(c, s, &d);
+                    grade_path(p, sizeof p, dir, i, j, s, steps);
+                    fp = fopen(p, "w");
+                    if (!fp) return -1;
+                    ss_lut_write(&d, 33, fp, "synstudio clip grade");
+                    fclose(fp);
+                    n++;
+                }
             }
             if (c->kind == SS_CLIP_TITLE) {
                 snprintf(p, sizeof p, "%s/text_%d_%d.txt", dir, i, j);
@@ -872,6 +1059,11 @@ void ss_timeline_unbake(const ss_timeline *t, const char *dir)
     for (i = 0; i < t->ntracks; i++)
         for (j = 0; j < t->track[i].nclips; j++) {
             char p[4300];
+            int steps = ss_clip_grade_steps(&t->track[i].clip[j]), s;
+            for (s = 0; s < steps; s++) {
+                grade_path(p, sizeof p, dir, i, j, s, steps);
+                remove(p);
+            }
             snprintf(p, sizeof p, "%s/grade_%d_%d.cube", dir, i, j);
             remove(p);
             snprintf(p, sizeof p, "%s/text_%d_%d.txt", dir, i, j);
@@ -937,15 +1129,89 @@ static void chain_spatial(strbuf *fc, const ss_develop *d)
                d->crop.w, d->crop.h, d->crop.x, d->crop.y);
 }
 
+/* ONE place that decides what a cube is called. The baker writes them and
+ * both graph builders reference them, and a name invented twice is a name
+ * that eventually differs by an underscore and fails at export time with a
+ * message about a missing file. */
+static void grade_path(char *out, size_t n, const char *dir,
+                       int track, int idx, int step, int nsteps)
+{
+    if (nsteps <= 1) snprintf(out, n, "%s/grade_%d_%d.cube", dir, track, idx);
+    else snprintf(out, n, "%s/grade_%d_%d_s%d.cube", dir, track, idx, step);
+}
+
+/* `at` is seconds into the clip for a single frame, or negative for the whole
+ * thing. A frame wants ONE cube — the step under it, ungated — because the
+ * baker only wrote that one. Emitting the full run of gated stages here made
+ * the monitor reference forty-seven cubes that were never written, and ffmpeg
+ * refuses a graph it cannot open a file for, so the frame simply failed and
+ * the window went on showing the last one that worked. */
+static void chain_grade_at(strbuf *fc, const ss_clip *c, const char *lutdir,
+                           int track, int idx, double at)
+{
+    char lp[2048], esc[4200];
+    int n = ss_clip_grade_steps(c), s;
+    ss_develop mid;
+
+    if (n <= 0) return;
+
+    if (at >= 0 && n > 1) {
+        s = ss_clip_grade_step_at(c, at);
+        grade_path(lp, sizeof lp, lutdir, track, idx, s, n);
+        esc_filter(lp, esc, sizeof esc);
+        sb_add(fc, ",lut3d=file='%s':interp=tetrahedral", esc);
+        ss_clip_grade_step(c, n / 2, &mid);
+        chain_spatial(fc, &mid);
+        return;
+    }
+
+    if (n == 1) {
+        grade_path(lp, sizeof lp, lutdir, track, idx, 0, 1);
+        esc_filter(lp, esc, sizeof esc);
+        sb_add(fc, ",lut3d=file='%s':interp=tetrahedral", esc);
+    } else {
+        /* One cube per step, each gated to its own span. lut3d passes a frame
+         * through untouched when its `enable` is false, so a frame meets every
+         * filter in the run and is coloured by exactly one of them. */
+        /* HALF-OPEN spans, and this is not tidiness.
+         *
+         * `between(t,a,b)` is inclusive at BOTH ends, so a frame landing
+         * exactly on a boundary satisfies two of them — and because these are
+         * chained, both cubes apply and the grade is composed with itself. A
+         * two-stop ramp showed it as single frames of roughly double the
+         * grade, once a second, exactly where a step boundary fell on a frame
+         * time. Every twelfth frame at 48 steps over four seconds, which is
+         * to say: whenever the arithmetic happens to be exact.
+         *
+         * The first span reaches back before zero and the last runs past the
+         * end, so a frame slightly outside the clip's nominal length from
+         * rounding still gets graded rather than none of them matching. */
+        double len = ss_clip_length(c);
+        for (s = 0; s < n; s++) {
+            double t0 = len * s / n, t1 = len * (s + 1) / n;
+            grade_path(lp, sizeof lp, lutdir, track, idx, s, n);
+            esc_filter(lp, esc, sizeof esc);
+            sb_add(fc, ",lut3d=file='%s':interp=tetrahedral:enable='", esc);
+            if (s == 0)          sb_add(fc, "lt(t,%.6f)", t1);
+            else if (s == n - 1) sb_add(fc, "gte(t,%.6f)", t0);
+            else                 sb_add(fc, "gte(t,%.6f)*lt(t,%.6f)", t0, t1);
+            sb_add(fc, "'");
+        }
+    }
+
+    /* The spatial half is taken from the MIDDLE of the clip and held.
+     * Sharpening, noise reduction and a vignette are ffmpeg filters whose
+     * arguments are numbers, not expressions — there is no honest way to
+     * animate them here, so keyframing them is not offered rather than
+     * silently ignored. Colour is what a grade keyframe is for. */
+    ss_clip_grade_step(c, n / 2, &mid);
+    chain_spatial(fc, &mid);
+}
+
 static void chain_grade(strbuf *fc, const ss_clip *c, const char *lutdir,
                         int track, int idx)
 {
-    char lp[2048], esc[4200];
-    if (!c->has_grade) return;
-    snprintf(lp, sizeof lp, "%s/grade_%d_%d.cube", lutdir, track, idx);
-    esc_filter(lp, esc, sizeof esc);
-    sb_add(fc, ",lut3d=file='%s':interp=tetrahedral", esc);
-    chain_spatial(fc, &c->grade);
+    chain_grade_at(fc, c, lutdir, track, idx, -1.0);
 }
 
 /* A font FILE, not drawtext's `font=Sans`. That option only works in an
@@ -1060,7 +1326,11 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
 
     PUSH(xdup("ffmpeg"));
     PUSH(xdup("-v")); PUSH(xdup("error"));
-    PUSH(xdup("-stats"));
+    /* No progress ticker on a preview. It goes to stderr, and the window
+     * shows a process's stderr in the status line — so a background render
+     * filled it with `frame= 0 fps=0.0 q=0.0 size=`. A deliverable export is
+     * run from a terminal and wants it. */
+    if (!preview) PUSH(xdup("-stats"));
     PUSH(xdup("-y"));
 
     /* One -i per clip. Seeking with -ss BEFORE -i is a keyframe seek and is
@@ -1214,8 +1484,20 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                             c->tl_in, c->tl_in + len, nvid + 1);
                 }
                 nvid++;
-            } else {
-                if (c->kind != SS_CLIP_MEDIA) { input++; continue; }
+            }
+
+            /* A clip's OWN sound, whichever kind of track it sits on.
+             *
+             * This used to hang off the track type, so audio existed only on
+             * an audio track — and a video clip with dialogue on it, which is
+             * most footage anybody shoots, exported and played back SILENT.
+             * The track decides what is composited, not whether the shot has
+             * a sound track.
+             *
+             * `has_audio` is asked before the graph is built rather than
+             * guessed here: naming [N:a] for an input with no audio stream
+             * fails the whole graph, so this cannot be optimistic. */
+            if (c->kind == SS_CLIP_MEDIA && c->has_audio) {
                 sb_add(&fc, ";[%d:a]", input);
                 sb_add(&fc, "aresample=48000");
                 if (c->speed != 1.0)
@@ -1276,12 +1558,17 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     PUSH(xdup("-pix_fmt")); PUSH(xdup("yuv420p"));
     if (naud > 0) { PUSH(xdup("-c:a")); PUSH(xdup("aac"));
                     PUSH(xdup("-b:a")); PUSH(xdup(preview ? "96k" : "192k")); }
-    /* Fragmented, so the file is playable while it is still being written and
-     * a player opening it early does not need a moov atom that will not exist
-     * until the encode finishes. */
-    if (preview) {
-        PUSH(xdup("-movflags")); PUSH(xdup("+frag_keyframe+empty_moov+default_base_moof"));
-    }
+    /* NOT fragmented, deliberately.
+     *
+     * A preview was written as fragmented mp4 so a player could open it while
+     * ffmpeg was still writing. Nothing ever does: playback waits for the
+     * render to finish, and the window renders one in the background after an
+     * edit so it is ready before anybody asks. What the flags bought was
+     * therefore nothing, and what they cost is a container that players
+     * handle inconsistently — an empty_moov file can report the wrong
+     * duration and stop early, which is exactly what a preview must never do.
+     * A plain mp4 gets a real moov written at the end, with the real
+     * duration in it. */
     PUSH(xdup(out));
 
     /* execvp needs the NULL terminator but it is not an argument, so it is
@@ -1373,6 +1660,7 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
              * by the same xform_at and alpha_at the export's filters are
              * generated from. */
             xform_at(&c->xf, off / len, &s, &px, &py, &rot);
+            (void)0;
             a = alpha_at(c, off, len);
             fitted_size(t, s, &fw, &fh);
 
@@ -1388,7 +1676,7 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
             if (rot != 0.0f)
                 sb_add(&fc, ",rotate=%.6f:ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
                             ":c=black@0", (double)rot * M_PI / 180.0);
-            chain_grade(&fc, c, lutdir, i, j);
+            chain_grade_at(&fc, c, lutdir, i, j, off);
             chain_title(&fc, t, c, lutdir, i, j);
             if (a < 1.0)
                 sb_add(&fc, ",colorchannelmixer=aa=%.4f", a);

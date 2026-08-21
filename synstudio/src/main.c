@@ -84,6 +84,10 @@ static void usage(void)
 "  timeline set   PROJ T C KEY=VALUE...   opacity, speed, fades, motion,\n"
 "                                         transition, title (`timeline keys`)\n"
 "  timeline grade PROJ T C KEY=VALUE...   the develop stack, as a LUT\n"
+"  timeline key PROJ T C add --at S [KEY=VALUE...]   pin the grade here\n"
+"  timeline key PROJ T C list|remove N\n"
+"  timeline key PROJ T C set N KEY=VALUE...\n"
+"       two or more keys and the grade MOVES between them\n"
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
@@ -524,6 +528,23 @@ static int tl_save(const char *proj, const ss_timeline *t)
  * for an enum — the choices. The inspector in the window is built from this,
  * so a property added to the table in timeline.c appears there without the
  * QML being touched. */
+/* Ask each media clip whether it has sound, once, before a graph is built.
+ *
+ * This lives in the command layer and not in the graph builder for the same
+ * reason `still` does: timeline.c describes intent and must not go opening
+ * files. It is not stored either — a clip's source can be replaced under it,
+ * and a stale "no audio" is a silent silence. */
+static void tl_fill_audio(ss_timeline *t)
+{
+    int i, j;
+    for (i = 0; i < t->ntracks; i++)
+        for (j = 0; j < t->track[i].nclips; j++) {
+            ss_clip *c = &t->track[i].clip[j];
+            c->has_audio = (c->kind == SS_CLIP_MEDIA && c->path[0])
+                           ? ss_media_has_audio(c->path) : 0;
+        }
+}
+
 static int cmd_timeline_keys(void)
 {
     ss_clip c;
@@ -915,6 +936,76 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         return 0;
     }
 
+    /* Keyframes. A key holds a WHOLE develop stack at one instant in the
+     * clip, so the grade between two of them is the engine interpolating its
+     * own settings rather than the renderer guessing. */
+    if (!strcmp(verb, "key")) {
+        const char *sub = argc > 6 ? argv[6] : NULL;
+        ss_clip *c;
+        int i;
+
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                       argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+        if (!sub) return die("key wants add|list|set|remove");
+
+        if (!strcmp(sub, "list")) {
+            printf("steps\t%d\n", ss_clip_grade_steps(c));
+            for (i = 0; i < c->nkeys; i++)
+                printf("key\t%d\t%.6f\n", i, c->key[i].t);
+            return 0;
+        }
+
+        if (!strcmp(sub, "add")) {
+            ss_develop d;
+            int n;
+            if (parse_opts(argc, argv, 7, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            /* Seeded from whatever the grade already is at that instant, so
+             * dropping a key mid-ramp does not change the picture — it just
+             * pins it. A key that altered the shot the moment it was added
+             * would make keying anything a guessing game. */
+            if (c->nkeys > 0 || c->has_grade) {
+                int s = ss_clip_grade_step_at(c, o.at);
+                if (!ss_clip_grade_step(c, s, &d)) ss_develop_reset(&d);
+            } else {
+                ss_develop_reset(&d);
+            }
+            for (i = 0; i < o.nsets; i++)
+                if (apply_set(&d, o.set_key[i], o.set_val[i]) != 0) return 1;
+            n = ss_clip_key_add(c, o.at, &d);
+            if (n < 0) return die("no room for another keyframe (limit %d)",
+                                  SS_MAX_KEYS);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("%d\n", n);
+            return 0;
+        }
+
+        if (!strcmp(sub, "set")) {
+            int n;
+            if (argc < 9) return die("key set wants PROJ T C set N KEY=VALUE...");
+            n = atoi(argv[7]);
+            if (n < 0 || n >= c->nkeys) return die("no keyframe %d", n);
+            for (i = 8; i < argc; i++) {
+                char *eq = strchr(argv[i], '=');
+                if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
+                *eq = '\0';
+                if (apply_set(&c->key[n].dev, argv[i], eq + 1) != 0) return 1;
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        if (!strcmp(sub, "remove")) {
+            int n = argc > 7 ? atoi(argv[7]) : -1;
+            if (ss_clip_key_remove(c, n) != 0) return die("no keyframe %d", n);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        return die("key: unknown subcommand %s — try add, list, set, remove", sub);
+    }
+
     /* One composited frame — the program monitor's whole data source. */
     if (!strcmp(verb, "frame")) {
         char dir[] = "/tmp/synstudio-tl-XXXXXX";
@@ -924,7 +1015,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0) return die("bad option");
         if (!o.out) return die("frame needs --out");
         if (!mkdtemp(dir)) return die("cannot make a scratch directory");
-        if (ss_timeline_bake(t, dir) < 0) {
+        if (ss_timeline_bake(t, dir, o.at) < 0) {
             rmdir(dir);
             return die("cannot write the grade LUTs");
         }
@@ -950,11 +1041,12 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         /* The .cube per graded clip and the text file per title, written
          * before the graph is built so every path it names exists by the
          * time ffmpeg opens it. */
-        if (ss_timeline_bake(t, dir) < 0) {
+        if (ss_timeline_bake(t, dir, -1.0) < 0) {
             rmdir(dir);
             return die("cannot write the grade LUTs");
         }
 
+        tl_fill_audio(t);
         ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, &av);
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }

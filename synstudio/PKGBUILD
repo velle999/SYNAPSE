@@ -101,7 +101,32 @@ pkgver=0.1.0
 #   what the engine can DECODE and no audio extension was on the list. All
 #   three are fixed: durations come from ss_media_duration, and mp3/wav/flac
 #   and friends are their own row kind.
-pkgrel=5
+# 6: keyframes on the grade, and four playback bugs.
+#
+#   A clip can hold up to eight keyframes, each a whole develop stack pinned
+#   to an instant, and the grade moves between them. A 3D LUT is a static
+#   table and ffmpeg cannot fade between two of them, so an animated grade
+#   renders as a run of cubes each gated to its own span — and the monitor
+#   quantises identically, so a scrub and an export cannot disagree.
+#
+#   The bugs, all found by measuring rather than reading:
+#   - `between(t,a,b)` is inclusive at BOTH ends, so a frame landing exactly
+#     on a step boundary satisfied two gates and got the grade applied TWICE.
+#     One frame a second of roughly double the grade.
+#   - a video clip's own audio was never in the export. Audio was emitted per
+#     TRACK, so footage with dialogue on it played and exported SILENT.
+#   - dragging a clip measured the pointer inside the clip, which moves as it
+#     is dragged, so the movement cancelled itself: stuttering right, and
+#     nothing at all to the left.
+#   - the monitor named every cube of an animated grade while the baker wrote
+#     only the one it needed, so the frame failed and the window kept showing
+#     the previous one. A stale picture is the worst failure a monitor has.
+#
+#   Previews are no longer fragmented mp4 (nothing plays a half-written file,
+#   and empty_moov can report a wrong duration and stop early), and one is
+#   rendered in the background after an edit so a clip is playable as soon as
+#   it is added rather than at the first press of play.
+pkgrel=6
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

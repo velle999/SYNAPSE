@@ -127,6 +127,16 @@ typedef struct {
 void ss_develop_reset(ss_develop *d);
 int  ss_develop_is_identity(const ss_develop *d);
 
+/* A develop stack part way between two others, m in 0..1.
+ *
+ * Numbers interpolate. Curves interpolate through their built tables rather
+ * than their control points, because two curves rarely have the same number
+ * of points and lerping a 3-point curve towards a 7-point one has no
+ * meaning. The handful of switches — crop on, the flips, the quarter turns —
+ * take the NEARER end: there is no half a flip. */
+void ss_develop_lerp(const ss_develop *a, const ss_develop *b, float m,
+                     ss_develop *out);
+
 /* Named-field access, so the CLI, the sidecar parser and the GUI all use one
  * table and adding a control means adding one row in develop.c. */
 int         ss_develop_set(ss_develop *d, const char *key, const char *val);
@@ -245,6 +255,10 @@ int ss_probe_file(const char *path, ss_probe *p);
  * probe how long it is answered "no idea", which made a whole album arrive on
  * the timeline as a five second clip. */
 double ss_media_duration(const char *path);
+/* Whether there is a sound track in there at all. Asked once per clip before
+ * an export, because referencing [N:a] for an input that has no audio stream
+ * fails the WHOLE graph rather than being quietly ignored. */
+int    ss_media_has_audio(const char *path);
 /* max_edge 0 = full resolution. */
 int ss_load(const char *path, ss_image *im, int max_edge);
 /* Frame at a timestamp, for the video pages. */
@@ -342,10 +356,21 @@ typedef struct {
 enum { SS_TRANS_NONE, SS_TRANS_DISSOLVE,
        SS_TRANS_WIPE_L, SS_TRANS_WIPE_R, SS_TRANS_WIPE_U, SS_TRANS_WIPE_D };
 
+/* A graded moment. `t` is seconds into the CLIP, not into the timeline, so a
+ * keyframed grade survives the clip being moved, trimmed at the tail, or
+ * rippled — none of which change what the shot is doing. */
+#define SS_MAX_KEYS 8
+
+typedef struct {
+    double     t;
+    ss_develop dev;
+} ss_gradekey;
+
 typedef struct {
     int    kind;                /* SS_CLIP_* */
     char   path[1024];          /* media only */
     int    still;               /* a photograph, not a movie: needs -loop 1 */
+    int    has_audio;           /* filled in before an export, never stored */
     double src_in, src_out;     /* seconds into the source */
     double tl_in;               /* seconds on the timeline */
     double speed;               /* 1.0 = normal */
@@ -368,9 +393,36 @@ typedef struct {
 
     int    has_grade;
     ss_develop grade;
+
+    /* A grade that changes over the clip. Empty means `grade` above holds for
+     * the whole thing, which is what almost every clip wants and what the
+     * file looked like before keyframes existed. */
+    int    nkeys;
+    ss_gradekey key[SS_MAX_KEYS];
 } ss_clip;
 
 void ss_clip_reset(ss_clip *c);
+
+/* ---- a grade that moves ----
+ *
+ * The renderer SAMPLES a keyframed grade into a fixed number of steps and
+ * holds each one for its span, because a 3D LUT is a static table and ffmpeg
+ * has no way to fade between two of them. Everything that draws a graded
+ * frame goes through these two functions, so the monitor and the export
+ * quantise IDENTICALLY and cannot disagree about what a moment looks like —
+ * the same reason the transform has one xform_at.
+ *
+ * The steps are what you see, on both. A grade ramp is therefore a staircase
+ * by construction; the step is (the change across the clip) / steps, which
+ * for any real grade move is far below a code value. */
+int  ss_clip_grade_steps(const ss_clip *c);          /* 1 when it does not move */
+/* The develop stack for step `s`. Returns 0 if the clip has no grade at all. */
+int  ss_clip_grade_step(const ss_clip *c, int s, ss_develop *out);
+/* Which step covers `tt` seconds into the clip. */
+int  ss_clip_grade_step_at(const ss_clip *c, double tt);
+/* Add, or replace one at the same instant. Returns its index, or -1. */
+int  ss_clip_key_add(ss_clip *c, double t, const ss_develop *d);
+int  ss_clip_key_remove(ss_clip *c, int i);
 void ss_xform_reset(ss_xform *x);
 /* Length on the TIMELINE: the source span divided by the speed. */
 double ss_clip_length(const ss_clip *c);
@@ -478,7 +530,11 @@ int    ss_timeline_frame(const ss_timeline *t, double time, const char *out,
 /* The side files a graph refers to — one .cube per graded clip, one text file
  * per title — written into `dir` under the names both builders above expect.
  * Returns how many were written, or -1. `unbake` removes exactly those. */
-int    ss_timeline_bake(const ss_timeline *t, const char *dir);
+/* `at` < 0 bakes everything an export will reach for. `at` >= 0 bakes only
+ * what is on screen at that moment, and for a moving grade only the one step
+ * under it — the monitor was baking every cube of every clip on every scrub
+ * frame, which with a keyframed grade would be dozens of them per frame. */
+int    ss_timeline_bake(const ss_timeline *t, const char *dir, double at);
 void   ss_timeline_unbake(const ss_timeline *t, const char *dir);
 
 /* Name to enum for the three things a clip line can say. -1 = not a name. */

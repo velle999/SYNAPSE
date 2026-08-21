@@ -527,13 +527,18 @@ FloatingWindow {
     function parseTimeline(text) {
         const doc = { w: 1920, h: 1080, fps: 25, tracks: [] }
         const lines = text.split("\n")
-        let tr = null, cl = null, inGrade = false
+        let tr = null, cl = null, inGrade = false, inKey = false
         let dur = 0
         for (let i = 0; i < lines.length; i++) {
             const f = lines[i].split("\t")
             if (inGrade) {
-                if (f[0] === "endgrade") { inGrade = false; continue }
-                if (cl && f.length >= 2) cl.grade[f[0]] = f[1]
+                if (f[0] === "endgrade" || f[0] === "endkey") {
+                    inGrade = false; inKey = false; continue
+                }
+                if (cl && f.length >= 2) {
+                    if (inKey) cl.keys[cl.keys.length - 1].grade[f[0]] = f[1]
+                    else       cl.grade[f[0]] = f[1]
+                }
                 continue
             }
             switch (f[0]) {
@@ -552,7 +557,7 @@ FloatingWindow {
                        gain: parseFloat(f[5]), opacity: parseFloat(f[6]),
                        fadeIn: parseFloat(f[7]), fadeOut: parseFloat(f[8]),
                        path: f[9] || "", kind: "media", still: false,
-                       text: "", trans: "none", graded: false, grade: ({}) }
+                       text: "", trans: "none", graded: false, grade: ({}), keys: [] }
                 cl.len = (cl.srcOut - cl.srcIn) / (cl.speed > 0 ? cl.speed : 1)
                 tr.clips.push(cl)
                 if (cl.tlIn + cl.len > dur) dur = cl.tlIn + cl.len
@@ -561,6 +566,14 @@ FloatingWindow {
             case "text":  if (cl) cl.text = f[6] || ""; break
             case "trans": if (cl) cl.trans = f[1]; break
             case "grade": if (cl) { cl.graded = true; inGrade = true } break
+            case "key":
+                if (cl) {
+                    cl.graded = true
+                    cl.keys.push({ t: parseFloat(f[2]), grade: ({}) })
+                    inGrade = true
+                    inKey = true
+                }
+                break
             case "# duration": break
             default: break
             }
@@ -832,15 +845,52 @@ FloatingWindow {
 
     function gradeClip(key, v) {
         if (root.selTrack < 0 || root.selClip < 0) return
-        root.tlRun(["grade", root.proj, String(root.selTrack), String(root.selClip),
-                    key + "=" + v])
+        // With keyframes, a slider edits the KEY the panel is pointed at.
+        // Writing to the static grade instead would change nothing anybody
+        // could see — the keys are what the renderer reads — and the slider
+        // would appear to do nothing at all.
+        if (root.selKey >= 0)
+            root.tlRun(["key", root.proj, String(root.selTrack), String(root.selClip),
+                        "set", String(root.selKey), key + "=" + v])
+        else
+            root.tlRun(["grade", root.proj, String(root.selTrack), String(root.selClip),
+                        key + "=" + v])
+    }
+
+    // The keyframe the grade panel is pointed at: the one nearest the
+    // playhead. With no keyframes there is one static grade and this is -1.
+    readonly property int selKey: {
+        const c = root.selClipObj
+        if (!c || !c.keys || c.keys.length === 0) return -1
+        const off = root.playhead - c.tlIn
+        let best = 0, bd = Math.abs(c.keys[0].t - off)
+        for (let i = 1; i < c.keys.length; i++) {
+            const d = Math.abs(c.keys[i].t - off)
+            if (d < bd) { bd = d; best = i }
+        }
+        return best
     }
 
     function gradeValue(key) {
         const c = root.selClipObj
         if (!c || !c.graded) return 0
-        const v = c.grade[key]
+        const src = (root.selKey >= 0) ? c.keys[root.selKey].grade : c.grade
+        const v = src[key]
         return v === undefined ? 0 : (parseFloat(v) || 0)
+    }
+
+    function addKey() {
+        const c = root.selClipObj
+        if (!c || root.selTrack < 0 || root.selClip < 0) return
+        const off = Math.max(0, Math.min(c.len, root.playhead - c.tlIn))
+        root.tlRun(["key", root.proj, String(root.selTrack), String(root.selClip),
+                    "add", "--at", String(Math.round(off * 1000) / 1000)])
+    }
+
+    function removeKey() {
+        if (root.selKey < 0) return
+        root.tlRun(["key", root.proj, String(root.selTrack), String(root.selClip),
+                    "remove", String(root.selKey)])
     }
 
     // ── Starting a project ──────────────────────────────────────────────────
@@ -913,30 +963,70 @@ FloatingWindow {
         }
         if (root.playing) { root.pausePlayback(); return }
         if (root.playRev === root.tlRev && root.playFile) { root.startPlayback(); return }
-        if (root.rendering) return
+        root.startPreviewRender(true)
+    }
+
+    // The revision the render in flight is FOR. Reading tlRev again when it
+    // finishes is wrong: an edit made during the render moves it, and the
+    // finished file then gets filed under a name nothing wrote.
+    property int renderingRev: -1
+    property bool playAfterRender: false
+
+    function startPreviewRender(thenPlay) {
+        if (root.rendering || !root.proj || root.tlDur <= 0) return
+        if (!root.playbackReady) return
         root.rendering = true
-        root.say("rendering a preview to play…")
+        root.playAfterRender = thenPlay
+        root.renderingRev = root.tlRev
+        if (thenPlay) root.say("rendering a preview to play…")
         playRenderProc.command = [root.bin, "timeline", "export", root.proj,
                                   "--out", root.playPath(root.tlRev), "--preview"]
         playRenderProc.running = true
     }
+
+    // Ready before it is asked for.
+    //
+    // Waiting for the play button meant every first press cost a render, and
+    // adding a clip left the editor unable to play the thing that had just
+    // been added. This renders in the background once the edits stop — on a
+    // timer, because otherwise dragging one slider would start a render per
+    // tick and they would queue up behind each other for as long as the hand
+    // kept moving.
+    Timer {
+        id: previewIdle
+        interval: 1200
+        onTriggered: {
+            if (root.playRev !== root.tlRev && !root.playing)
+                root.startPreviewRender(false)
+        }
+    }
+    onTlRevChanged: previewIdle.restart()
 
     Process {
         id: playRenderProc
         stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
         onExited: function (code, status) {
             root.rendering = false
-            if (code !== 0) { root.say("could not render a preview"); return }
+            const rev = root.renderingRev
+            const want = root.playAfterRender
+            root.playAfterRender = false
+            if (code !== 0) {
+                if (want) root.say("could not render a preview")
+                return
+            }
             // The previous one is dropped only once its replacement exists, so
             // a failed render leaves the last watchable preview in place.
-            if (root.playFile && root.playFile !== root.playPath(root.tlRev)) {
+            if (root.playFile && root.playFile !== root.playPath(rev)) {
                 rmProc.command = ["rm", "-f", root.playFile]
                 rmProc.running = true
             }
-            root.playFile = root.playPath(root.tlRev)
-            root.playRev = root.tlRev
-            root.say("")
-            root.startPlayback()
+            root.playFile = root.playPath(rev)
+            root.playRev = rev
+            if (want) { root.say(""); root.startPlayback() }
+            // An edit landed while this was rendering, so it is already out of
+            // date. Go round again rather than leaving a stale preview to be
+            // discovered at the next press of play.
+            else if (rev !== root.tlRev) previewIdle.restart()
         }
     }
     Process { id: rmProc }
@@ -1133,6 +1223,7 @@ FloatingWindow {
         if (root.proj) {
             root.selTrack = 0
             root.reloadTimeline()
+            previewIdle.restart()
         }
         // Launched bare, the window shows the start screen below. It used to
         // open the photo picker immediately, which answers a question nobody
@@ -1471,7 +1562,7 @@ FloatingWindow {
                         // long enough to need saying out loud.
                         Rectangle {
                             anchors.centerIn: parent
-                            visible: root.rendering
+                            visible: root.rendering && root.playAfterRender
                             width: 210; height: 34
                             radius: 4
                             color: Qt.rgba(0, 0, 0, 0.72)
@@ -1846,6 +1937,30 @@ FloatingWindow {
                                                             font.pixelSize: 10
                                                         }
 
+                                                        // Every keyframe, where it
+                                                        // sits. A grade that
+                                                        // moves is invisible
+                                                        // otherwise — you would
+                                                        // have to scrub to find
+                                                        // out it does.
+                                                        Repeater {
+                                                            model: clipRect.modelData.keys
+
+                                                            Text {
+                                                                required property var modelData
+                                                                required property int index
+                                                                x: Math.max(0, Math.min(
+                                                                       clipRect.width - 7,
+                                                                       modelData.t * root.pxPerSec - 3))
+                                                                y: 1
+                                                                text: "◆"
+                                                                font.pixelSize: 9
+                                                                color: (clipRect.isSel
+                                                                        && root.selKey === index)
+                                                                       ? root.cAccent : root.cDim
+                                                            }
+                                                        }
+
                                                         // A graded clip says so.
                                                         // Finding out at export
                                                         // that a shot was never
@@ -1884,6 +1999,31 @@ FloatingWindow {
                                                                 : Qt.OpenHandCursor
                                                             hoverEnabled: true
 
+                                                            // Measured in the LANE,
+                                                            // never in the clip.
+                                                            //
+                                                            // This MouseArea fills
+                                                            // the clip, and the clip
+                                                            // MOVES as it is dragged
+                                                            // — so `m.x` is a
+                                                            // position in a frame
+                                                            // that is itself being
+                                                            // dragged. Push right and
+                                                            // the rectangle follows,
+                                                            // which puts the pointer
+                                                            // back where it started
+                                                            // relative to the
+                                                            // rectangle, so the next
+                                                            // event cancels the
+                                                            // previous one: the clip
+                                                            // stutters to the right
+                                                            // and cannot go left at
+                                                            // all. mapToItem gives
+                                                            // the pointer's position
+                                                            // in the lane, which does
+                                                            // not move, so the
+                                                            // difference is the real
+                                                            // one.
                                                             onPressed: function (m) {
                                                                 root.selTrack = lane.index
                                                                 root.selClip = clipRect.index
@@ -1893,12 +2033,15 @@ FloatingWindow {
                                                                     m.x < 7 ? "head"
                                                                     : m.x > width - 7 ? "tail"
                                                                     : "move"
-                                                                root.dragFrom = m.x
+                                                                root.dragFrom =
+                                                                    clipRect.mapToItem(lane, m.x, 0).x
                                                                 root.dragDx = 0
                                                             }
                                                             onPositionChanged: function (m) {
                                                                 if (!pressed) return
-                                                                root.dragDx = m.x - root.dragFrom
+                                                                root.dragDx =
+                                                                    clipRect.mapToItem(lane, m.x, 0).x
+                                                                    - root.dragFrom
                                                             }
                                                             onReleased: function (m) {
                                                                 root.commitDrag(
@@ -2054,13 +2197,46 @@ FloatingWindow {
                                     font.pixelSize: 12
                                     font.bold: true
                                 }
-                                Text {
+                                Row {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.right: parent.right
-                                    anchors.rightMargin: 12
-                                    text: root.selClipObj && root.selClipObj.graded
-                                          ? "baked as a LUT" : "not graded"
-                                    color: root.cDim
+                                    anchors.rightMargin: 10
+                                    spacing: 6
+
+                                    Tag {
+                                        label: "◆ key"
+                                        on: false
+                                        onClicked: root.addKey()
+                                    }
+                                    Tag {
+                                        label: "✕"
+                                        on: false
+                                        visible: root.selKey >= 0
+                                        onClicked: root.removeKey()
+                                    }
+                                }
+                            }
+
+                            // Which moment the sliders below are editing. With
+                            // keyframes the panel is never editing "the clip"
+                            // — it is editing one instant of it, and not
+                            // saying so is how somebody grades the wrong one.
+                            Rectangle {
+                                width: parent.width
+                                height: 22
+                                color: root.wash(0.10)
+                                visible: root.selClipObj && root.selClipObj.keys
+                                         && root.selClipObj.keys.length > 0
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 20
+                                    text: root.selKey < 0 ? ""
+                                          : "editing key " + (root.selKey + 1) + " of "
+                                            + root.selClipObj.keys.length + "  ·  "
+                                            + root.timecode(root.selClipObj.keys[root.selKey].t)
+                                            + " into the clip"
+                                    color: root.cAccent
                                     font.pixelSize: 10
                                 }
                             }
