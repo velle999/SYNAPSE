@@ -2728,6 +2728,7 @@ static void usage(const char *prog) {
         "                     (alt_tab_style = switcher for the MRU strip)\n"
         "  Super+J/K          Focus next/previous window\n"
         "  Super+Shift+J/K    Move window down/up the stack\n"
+        "  Super+Shift+Arrows Move window (slides if floating, reorders if tiled)\n"
         "  Super+H            Shrink the master column\n"
         "  Super+Shift+L      Grow the master column\n"
         "  Super+F            Toggle floating\n"

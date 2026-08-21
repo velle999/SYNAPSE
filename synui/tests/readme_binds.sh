@@ -64,6 +64,14 @@ key_label() {
         question)  echo '?' ;;
         comma)     echo ',' ;;
         period)    echo '.' ;;
+        # The arrow keys. Without these they fell through to the default and the
+        # table had to write `up` in lower case to satisfy this check, while the
+        # prose two rows below it wrote `Up` — the label is what is printed on
+        # the key, and that is capitalised.
+        left)      echo 'Left' ;;
+        right)     echo 'Right' ;;
+        up)        echo 'Up' ;;
+        down)      echo 'Down' ;;
         [a-z])     echo "${1^^}" ;;
         *)         echo "$1" ;;
     esac

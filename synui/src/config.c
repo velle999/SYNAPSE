@@ -740,6 +740,33 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+k",         "focus_prev" },
         { "super+shift+j",   "stack_next" },
         { "super+shift+k",   "stack_prev" },
+        /* Move the focused window with the arrow keys, meaning whichever of the
+         * two things "move" can mean for the window under the cursor.
+         *
+         * A FLOATING window slides by a fixed step, which is the capability
+         * that was missing outright: nothing but a mouse drag could change a
+         * floating window's position. A TILED one moves through the layout
+         * instead, because a tiled window has no position of its own to slide —
+         * every layout derives its geometry from the order of ws->windows, so
+         * "move" there can only mean "move along that order".
+         *
+         * Which is why Left and Up are the same direction, and Right and Down
+         * are the same direction, on a tiled window: the order is ONE
+         * dimension, and pretending otherwise would mean four different answers
+         * per layout across seven layouts. On master-stack the useful reading
+         * is the vertical one (Up promotes, and far enough up is the master
+         * slot); on niri's horizontal strip it is the sideways one. Both are
+         * the same list operation, so both keys do it rather than one pair
+         * mysteriously doing nothing depending on which layout is up.
+         *
+         * Super+Shift+arrows were free. Super+Ctrl+arrows are the expand
+         * toggles above, and Super+arrows are left alone deliberately — that is
+         * the chord most desktops use for snapping, which synui does with the
+         * pointer, and taking it here would foreclose it. */
+        { "super+shift+left",  "move_left"  },
+        { "super+shift+right", "move_right" },
+        { "super+shift+up",    "move_up"    },
+        { "super+shift+down",  "move_down"  },
         { "super+f",         "float_toggle" },
         { "super+shift+f",   "fullscreen_toggle" },
         { "super+m",         "maximize_toggle" },

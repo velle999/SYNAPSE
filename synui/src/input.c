@@ -688,6 +688,87 @@ void synui_start_menu_open(syn_server_t *s)
     synui_bar_ipc(s, "menu", "toggle");
 }
 
+/* How far one press slides a floating window, and how much of it must stay
+ * inside the usable box. The keep-visible margin is the point: a window driven
+ * off the edge by a held-down arrow key is a window that can only be recovered
+ * from a terminal, and unlike a mouse drag there is no pointer stopping at the
+ * screen edge to make that obvious as it happens. */
+#define WINDOW_MOVE_STEP     40
+#define WINDOW_MOVE_KEEP_VIS 64
+
+/*
+ * Super+Shift+arrow. See the comment on these binds in config.c for why one
+ * chord means two different things.
+ *
+ * dx/dy are -1, 0 or +1.
+ */
+static void window_move_key(syn_server_t *s, syn_view_t *v, int dx, int dy)
+{
+    /* A fullscreen window has no position to move and no place in the flow to
+     * move through, so there is nothing this could do to it that would not be a
+     * surprise. Leave it alone rather than silently dropping it out of
+     * fullscreen. */
+    if (v->fullscreen) return;
+
+    if (!v->floating) {
+        /* One dimension, so both axes fold onto it. Left/Up move earlier in
+         * ws->windows, Right/Down later; every layout re-derives its geometry
+         * from that order. */
+        layout_move_in_stack(s, v, (dx + dy) < 0 ? -1 : 1);
+        return;
+    }
+
+    /*
+     * Everything below is the keyboard's version of what
+     * grab_release_constraints() does for a pointer grab, and it is written out
+     * again rather than called because that function re-centres a restored
+     * window ON THE CURSOR — correct when the hand is holding the titlebar,
+     * badly wrong here, where it would teleport the window to wherever the
+     * pointer happens to be sitting before moving it a single step.
+     */
+    if (v->maximized) view_apply_maximized(s, v, 0);
+    if (v->snapped)   snap_release_view(s, v, 1);
+
+    /* The user has placed this window himself now, exactly as a drag would
+     * mean, so layout_float_arrange must step over it forever after. Without
+     * this the very next reflow on a floating desktop sweeps the window back
+     * into its grid cell and the move looks like it never happened. */
+    v->hand_placed = 1;
+
+    int nx = v->x + dx * WINDOW_MOVE_STEP;
+    int ny = v->y + dy * WINDOW_MOVE_STEP;
+
+    struct wlr_box area;
+    if (v->output) output_usable_box_of(s, v->output, &area);
+    else           server_usable_box(s, &area);
+
+    /* Clamp against the window's own size, so the limit is "this much of it is
+     * still on screen" rather than "its corner is". A window wider than the
+     * output still moves: the low bound is below the high one either way. */
+    int keep_x = (v->w < WINDOW_MOVE_KEEP_VIS) ? v->w : WINDOW_MOVE_KEEP_VIS;
+    int keep_y = (v->h < WINDOW_MOVE_KEEP_VIS) ? v->h : WINDOW_MOVE_KEEP_VIS;
+
+    int min_x = area.x - v->w + keep_x, max_x = area.x + area.width  - keep_x;
+    int min_y = area.y,                 max_y = area.y + area.height - keep_y;
+
+    if (nx < min_x) nx = min_x;
+    if (nx > max_x) nx = max_x;
+    /* The top edge clamps to the usable box itself, not to a sliver: a
+     * titlebar dragged above the bar is a window you cannot grab again. */
+    if (ny < min_y) ny = min_y;
+    if (ny > max_y) ny = max_y;
+
+    view_move(v, nx, ny);
+
+    /* Tell an X11 client where it ended up. view_move only moves the scene
+     * node, and an X client learns its root position from a ConfigureNotify and
+     * nowhere else — leave it stale and the window's own menus open over the
+     * place it was moved from, which is the Steam bug the drag-release path
+     * documents. Idempotent, so re-sending the same box costs nothing. */
+    if (v->is_xwayland && v->mapped)
+        view_resize(v, v->x, v->y, v->w, v->h);
+}
+
 /* Execute a bind action (see config.c for the names and defaults). */
 bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
@@ -974,6 +1055,22 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, 1);
     } else if (strcmp(action, "stack_prev") == 0) {
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, -1);
+    } else if (strcmp(action, "move_left")  == 0 ||
+               strcmp(action, "move_right") == 0 ||
+               strcmp(action, "move_up")    == 0 ||
+               strcmp(action, "move_down")  == 0) {
+        /* Matched exactly, never by prefix: "move_output" lives in this same
+         * chain and a strncmp(action, "move_", 5) here would swallow it. */
+        if (s->focused_view) {
+            int dx = 0, dy = 0;
+            switch (action[5]) {
+            case 'l': dx = -1; break;
+            case 'r': dx =  1; break;
+            case 'u': dy = -1; break;
+            default:  dy =  1; break;
+            }
+            window_move_key(s, s->focused_view, dx, dy);
+        }
     } else if (strcmp(action, "float_toggle") == 0) {
         syn_view_t *v = s->focused_view;
         if (!v) return true;

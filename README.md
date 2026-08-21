@@ -380,10 +380,11 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
 | `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |
+| `Super`+`Shift`+`Left` / `Super`+`Shift`+`Right` / `Super`+`Shift`+`Up` / `Super`+`Shift`+`Down` | Move the focused window. A floating window slides by a step; a tiled one moves through the layout instead, since a tiled window has no position of its own — Left and Up move it earlier in the order, Right and Down later |
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area (also a niri column's width) |
 | `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other five layouts |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
-| `Super`+`Ctrl`+`up` / `Super`+`Ctrl`+`left` | Fill the screen height / width, leaving the other axis alone. Press again to put it back. Same thing as double-clicking the window's top or bottom border (height) or its left or right border (width) |
+| `Super`+`Ctrl`+`Up` / `Super`+`Ctrl`+`Left` | Fill the screen height / width, leaving the other axis alone. Press again to put it back. Same thing as double-clicking the window's top or bottom border (height) or its left or right border (width) |
 | `Super`+`Shift`+`N` | Restore a minimized window |
 | `Super`+`Shift`+`F` | Fullscreen (forces it — for games that only do "borderless") |
 | `Super`+`Shift`+`D` | Show/hide titlebars |
