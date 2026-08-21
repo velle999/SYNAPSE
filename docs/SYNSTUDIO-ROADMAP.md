@@ -24,15 +24,21 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | delivery  | works, thin — six formats, no range, no presets, no queue      |
 | media     | one project at a time — no pool, no proxies, no relink         |
 
-## 1 · Audio
+## 1 · Audio  — **shipped in 0.1.0-10**
 
 - [x] clip gain (`gain`, −60…+24 dB, reaches the export as `volume=NdB`)
 - [x] clip fades in/out (`afade`)
 - [~] fade shapes — linear only; `afade` has twenty curves
-- [ ] track volume and pan — beside the existing mute/hide flags, before `amix`
-- [ ] level meters, per track and master — from the same `peaks` engine
-- [ ] monitoring volume + mute on the transport
-- [ ] normalise a clip — measure `ebur128`, write the gain
+- [x] track volume and pan — `timeline track N --gain --pan`, constant power,
+      built from the source's channel count (an upmix costs a mono clip 3dB)
+- [x] master fader — `timeline master --gain`, then a limiter at 0.99
+- [x] solo — a property of the whole timeline, not of the track holding it
+- [x] mute/hide split — hide is the PICTURE, mute is the SOUND; they were one
+      condition, so muting a video track took its picture away
+- [x] level meters, per track and master, from the same `peaks` engine
+- [x] monitoring volume + mute on the transport
+- [x] normalise a clip — `timeline normalise`, ebur128, engine decides
+- [x] `loudness FILE` — integrated LUFS, true peak, range
 - [ ] loudness on delivery — two-pass `loudnorm`, −23 LUFS / −14 presets
 - [ ] voiceover recording — `devices` + `record`, armed track, punch in at the
       playhead. ⚠ output muted while live or it feeds back; countdown and
@@ -150,8 +156,9 @@ Fairlight-style automation: four features for one piece of work.
 
 ## Build order
 
-1. **Audio you can see and set** — 2–3 days. Track volume/pan, master fader,
-   meters, monitoring volume, normalise, solo.
+1. ~~**Audio you can see and set**~~ — **done, 0.1.0-10.** Track volume/pan,
+   master fader, meters, monitoring volume, normalise, solo — and a mute/hide
+   split that was quietly wrong.
 2. **Voiceover** — 2 days.
 3. **Undo, markers, snapping, multi-select** — 2 days. Undo first.
 4. **Keyframes on everything** — 3 days. Unblocks four other features.
