@@ -630,7 +630,11 @@ int ss_browse(const char *dir, ss_row **rows, char abs_out[1024])
             type = SS_ROW_DIR;
         } else if (S_ISREG(st.st_mode)) {
             const char *e = ext_of(de->d_name);
-            if (is_still(e) || is_raw(de->d_name)) type = SS_ROW_IMAGE;
+            /* A project is listed too. The picker is how anything gets
+             * opened, and a timeline that cannot be reached from it is a
+             * document you can only open by typing its path. */
+            if (!strcasecmp(e, "syntl"))           type = SS_ROW_PROJECT;
+            else if (is_still(e) || is_raw(de->d_name)) type = SS_ROW_IMAGE;
             else if (is_movie(e))                  type = SS_ROW_VIDEO;
             else continue;
         } else {

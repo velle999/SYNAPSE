@@ -256,7 +256,7 @@ int ss_save(const char *path, const ss_image *im, int quality, int bits);
  * Rows are what the window draws: parent first, then directories, then files
  * this engine can actually open. Anything else is not listed, because a row
  * that fails when clicked is worse than an absent one. */
-enum { SS_ROW_UP, SS_ROW_DIR, SS_ROW_IMAGE, SS_ROW_VIDEO };
+enum { SS_ROW_UP, SS_ROW_DIR, SS_ROW_IMAGE, SS_ROW_VIDEO, SS_ROW_PROJECT };
 
 typedef struct {
     int  type;

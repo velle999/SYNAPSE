@@ -630,6 +630,16 @@ if have ffmpeg; then
     $BIN timeline show "$vp" | notseen "an identity transform is not written" "xform	"
 fi
 
+# A project is a document this program opens, so the picker has to be able to
+# find one. It could not: browse listed what the ENGINE can decode, and a
+# timeline is not decoded by anything.
+projdir=$TMP/projbrowse
+mkdir -p "$projdir"
+$BIN timeline new "$projdir/cut.syntl" >/dev/null 2>&1
+: > "$projdir/notes.txt"
+$BIN browse "$projdir" | seen "browse lists a project" "project	cut.syntl"
+$BIN browse "$projdir" | notseen "and still not what it cannot open" "notes.txt"
+
 # ---------------------------------------------------------------- browse --
 #
 # The picker's data source. This exists because the Open button once ran

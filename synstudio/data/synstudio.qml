@@ -49,10 +49,14 @@ import Quickshell.Io
 FloatingWindow {
     id: root
 
-    title: (root.mode === "video"
-            ? (root.proj ? root.proj.replace(/^.*\//, "") : "no project")
-            : (root.file ? root.file.replace(/^.*\//, "") : "no photograph"))
-           + (root.dirty && root.mode === "photo" ? " •" : "") + " — SYNAPSE Studio"
+    // Nothing open yet is not "no photograph" — that names a half of the
+    // program the start screen is deliberately not choosing between.
+    title: (root.atStart ? ""
+            : root.mode === "video"
+            ? (root.proj ? root.proj.replace(/^.*\//, "") : "no project") + " — "
+            : (root.file ? root.file.replace(/^.*\//, "") : "no photograph")
+              + (root.dirty ? " •" : "") + " — ")
+           + "SYNAPSE Studio"
     implicitWidth: 1400
     implicitHeight: 880
     minimumSize: Qt.size(900, 560)
@@ -262,6 +266,11 @@ FloatingWindow {
 
     function requestRender() {
         if (!root.file) return
+        // Same as the monitor's: while a slider is under the hand, a restarting
+        // debounce means the preview does not move until it is let go. The
+        // render is already coalesced against itself, so ask straight away and
+        // let it keep up at whatever rate it can.
+        if (root.dragging) { debounce.stop(); root.startRender(); return }
         debounce.restart()
     }
 
@@ -381,6 +390,21 @@ FloatingWindow {
     property bool   pickerOpen: false
     property string pickerDir: ""
     property var    pickerRows: []
+
+    // A picker opened to find a PROJECT should not offer photographs, and one
+    // opened to add a clip should not offer projects. Same listing from the
+    // engine, filtered by what the page that asked can do with a row —
+    // because a row that is drawn is still a row that will be clicked.
+    readonly property var pickerShown: {
+        const out = []
+        for (let i = 0; i < root.pickerRows.length; i++) {
+            const r = root.pickerRows[i]
+            if (r.kind === "dir" || r.kind === "up") { out.push(r); continue }
+            if (root.pickerFor === "project") { if (r.kind === "project") out.push(r) }
+            else if (r.kind !== "project") out.push(r)
+        }
+        return out
+    }
     // The fallback to $HOME must fire at most once. Retrying on every failure
     // is an infinite respawn loop the moment $HOME itself is unreadable.
     property bool   pickerFellBack: false
@@ -460,6 +484,13 @@ FloatingWindow {
     // Launched on a project file, the window opens on the page that can edit
     // it. Coming up in the darkroom with a timeline loaded behind a tab
     // nobody pressed is the same bug as coming up empty.
+    // The side panels give ground on a narrow window. 340 fixed took more than
+    // half of a 620-wide one, leaving the picture — the thing both pages are
+    // FOR — smaller than the controls describing it. It never grows past 340,
+    // because a slider column wider than that is just a wider slider.
+    readonly property int panelW:
+        Math.round(Math.min(340, Math.max(215, root.width * 0.32)))
+
     property string mode: Quickshell.env("SYNSTUDIO_PROJECT") ? "video" : "photo"
     property string proj: Quickshell.env("SYNSTUDIO_PROJECT") || ""
     property var    tl: ({ w: 1920, h: 1080, fps: 25, tracks: [] })
@@ -566,6 +597,13 @@ FloatingWindow {
 
     function requestFrame() {
         if (!root.proj) return
+        // A debounce that RESTARTS on every mouse move never fires while the
+        // hand is moving — so dragging the playhead rendered nothing at all
+        // until it was released, which is exactly what it looked like. There
+        // is nothing to debounce for during a scrub: the in-flight guard below
+        // already coalesces, so asking on every move costs one render per
+        // render rather than one per event, and the picture follows the hand.
+        if (root.scrubbing) { frameDebounce.stop(); root.startFrame(); return }
         frameDebounce.restart()
     }
 
@@ -577,7 +615,7 @@ FloatingWindow {
         frameProc.command = [root.bin, "timeline", "frame", root.proj,
                              "--at", String(root.playhead),
                              "--out", root.scratch + "-frame.png",
-                             "--size", String(root.scrubbing ? 720 : 1400)]
+                             "--size", String(root.scrubbing ? 540 : 1400)]
         frameProc.running = true
     }
 
@@ -1000,12 +1038,14 @@ FloatingWindow {
         if (root.proj) {
             root.selTrack = 0
             root.reloadTimeline()
-        } else if (!root.file) {
-            // Launched with no photograph, the window used to come up empty
-            // with every control dead and no indication that Open was the way
-            // out. The picker IS the empty state.
-            root.openPicker()
         }
+        // Launched bare, the window shows the start screen below. It used to
+        // open the photo picker immediately, which answers a question nobody
+        // asked: this program edits photographs AND cuts video, and deciding
+        // for someone that they meant the darkroom is the wrong half of it
+        // half the time. An empty window with dead controls was the version
+        // before that, and the picker was the fix for it — the start screen
+        // is the fix that does not pick a side.
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -1018,15 +1058,24 @@ FloatingWindow {
             anchors.fill: parent
 
             // Top strip
+            // A Flow, not a Row. Seven buttons and two tabs do not fit a
+            // narrow window, and a Row simply runs off the edge — Export and
+            // Ripple delete were unreachable rather than merely cramped.
+            // Wrapping costs a second line only when there is no other way to
+            // show them, and every action stays clickable at any width.
             Rectangle {
+                id: topStrip
                 width: parent.width
-                height: 46
+                height: Math.max(46, topBar.height + 12)
                 color: root.cPanel
 
-                Row {
+                Flow {
+                    id: topBar
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.leftMargin: 12
+                    anchors.rightMargin: 12
                     spacing: 8
 
                     // The two halves of the application. One binary, one
@@ -1101,35 +1150,16 @@ FloatingWindow {
                           } }
                 }
 
-                Text {
-                    anchors.centerIn: parent
-                    text: root.mode === "video"
-                          ? (root.proj ? root.proj.replace(/^.*\//, "") : "no project")
-                          : (root.file ? root.file.replace(/^.*\//, "") : "synstudio")
-                    color: root.cText
-                    font.pixelSize: 14
-                }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: parent.right
-                    anchors.rightMargin: 14
-                    text: root.mode === "video"
-                          ? (root.tl.w + " × " + root.tl.h + "  ·  " + root.tl.fps + " fps")
-                          : (root.imgW > 0 ? root.imgW + " × " + root.imgH : "")
-                    color: root.cDim
-                    font.pixelSize: 12
-                }
             }
 
             Row {
                 visible: root.mode === "photo"
                 width: parent.width
-                height: parent.height - 46 - 24
+                height: parent.height - topStrip.height - 24
 
                 // ── The picture ─────────────────────────────────────────────
                 Rectangle {
-                    width: parent.width - 340
+                    width: parent.width - root.panelW
                     height: parent.height
                     color: root.cViewport
 
@@ -1166,7 +1196,7 @@ FloatingWindow {
 
                 // ── The develop panel ───────────────────────────────────────
                 Rectangle {
-                    width: 340
+                    width: root.panelW
                     height: parent.height
                     color: root.cPanel
 
@@ -1293,10 +1323,10 @@ FloatingWindow {
             Row {
                 visible: root.mode === "video"
                 width: parent.width
-                height: parent.height - 46 - 24
+                height: parent.height - topStrip.height - 24
 
                 Column {
-                    width: parent.width - 340
+                    width: parent.width - root.panelW
                     height: parent.height
 
                     // ── Program monitor ─────────────────────────────────
@@ -1373,8 +1403,10 @@ FloatingWindow {
                         width: parent.width
                         height: 34
                         color: root.cPanel
+                        clip: true
 
                         Row {
+                            id: transportRow
                             anchors.centerIn: parent
                             spacing: 6
 
@@ -1397,10 +1429,18 @@ FloatingWindow {
                             Btn { label: "⏭"; onClicked: root.seekTo(root.tlDur) }
                         }
 
+                        // The clock and the zoom sit either side of the
+                        // transport and give way to it, in that order. The
+                        // transport buttons are the one thing on this bar
+                        // that must always be reachable, so they are what the
+                        // others make room for rather than overlap.
                         Text {
+                            id: clockText
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
                             anchors.leftMargin: 14
+                            visible: (parent.width - transportRow.width) / 2
+                                     > implicitWidth + 20
                             text: root.timecode(root.playhead) + "  /  " + root.timecode(root.tlDur)
                             color: root.cText
                             font.pixelSize: 12
@@ -1408,10 +1448,13 @@ FloatingWindow {
                         }
 
                         Row {
+                            id: zoomRow
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.right: parent.right
                             anchors.rightMargin: 12
                             spacing: 6
+                            visible: (parent.width - transportRow.width) / 2
+                                     > clockText.implicitWidth + implicitWidth + 40
                             Btn { label: "−"; onClicked:
                                   root.pxPerSec = Math.max(8, root.pxPerSec / 1.5) }
                             Btn { label: "+"; onClicked:
@@ -1762,7 +1805,7 @@ FloatingWindow {
 
                 // ── The clip inspector ──────────────────────────────────
                 Rectangle {
-                    width: 340
+                    width: root.panelW
                     height: parent.height
                     color: root.cPanel
 
@@ -1945,16 +1988,94 @@ FloatingWindow {
                 width: parent.width
                 height: 24
                 color: root.cPanel
+                // The document's own numbers, at the end of the status bar.
+                // They were in the top strip, where they had to fight the
+                // toolbar for room and lost; nothing else wants this corner,
+                // and the message beside it elides rather than pushing.
+                Text {
+                    id: statusSize
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    text: root.atStart ? ""
+                          : root.mode === "video"
+                          ? (root.tl.w + " × " + root.tl.h + "  ·  " + root.tl.fps + " fps")
+                          : (root.imgW > 0 ? root.imgW + " × " + root.imgH : "")
+                    color: root.cDim
+                    font.pixelSize: 11
+                }
+
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 12
+                    anchors.right: statusSize.left
+                    anchors.rightMargin: 12
                     text: root.status
                     color: root.cDim
                     font.pixelSize: 11
                     elide: Text.ElideRight
-                    width: parent.width - 24
                 }
+            }
+        }
+    }
+
+    // ── The start screen ───────────────────────────────────────────────
+    //
+    // Shown only while nothing at all is open. Three doors, because there are
+    // exactly three ways in, and the one you want is not knowable from here.
+
+    readonly property bool atStart: root.file === "" && root.proj === ""
+                                    && !root.pickerOpen
+
+    Rectangle {
+        anchors.fill: parent
+        visible: root.atStart
+        color: root.cBg
+
+        // Swallows clicks so nothing behind the start screen can be operated
+        // through it.
+        MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 10
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "SYNAPSE Studio"
+                color: root.cText
+                font.pixelSize: 26
+                font.bold: true
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "one colour engine, two ways in"
+                color: root.cDim
+                font.pixelSize: 12
+                bottomPadding: 18
+            }
+
+            Door {
+                title: "Open a photograph"
+                sub: "RAW or a still — develop it in the darkroom"
+                onClicked: { root.mode = "photo"; root.pickerFor = "photo"
+                             root.openPicker() }
+            }
+            Door {
+                title: "New video project"
+                sub: "a timeline to cut, grade and export"
+                onClicked: {
+                    root.mode = "video"
+                    root.newProject((Quickshell.env("HOME") || "/tmp")
+                                    + "/synstudio-project.syntl")
+                }
+            }
+            Door {
+                title: "Open a project"
+                sub: "a .syntl timeline you started earlier"
+                onClicked: { root.mode = "video"; root.pickerFor = "project"
+                             root.openPicker() }
             }
         }
     }
@@ -2028,7 +2149,7 @@ FloatingWindow {
                     width: parent.width
                     height: parent.parent.height - 43
                     clip: true
-                    model: root.pickerRows
+                    model: root.pickerShown
                     // No ScrollBar: that type lives in QtQuick.Controls, and
                     // this window imports none of it. The develop panel above
                     // scrolls the same way, by flicking a plain Flickable.
@@ -2049,10 +2170,11 @@ FloatingWindow {
                             // A glyph rather than an icon theme lookup: this
                             // window loads no icon engine and one missing name
                             // would leave a column of empty boxes.
-                            text: rowItem.modelData.kind === "up"    ? "↑"
-                                : rowItem.modelData.kind === "dir"   ? "▸"
-                                : rowItem.modelData.kind === "video" ? "▶"
-                                :                                      "▣"
+                            text: rowItem.modelData.kind === "up"      ? "↑"
+                                : rowItem.modelData.kind === "dir"     ? "▸"
+                                : rowItem.modelData.kind === "project" ? "⧉"
+                                : rowItem.modelData.kind === "video"   ? "▶"
+                                :                                        "▣"
                             color: rowItem.modelData.kind === "dir"
                                 || rowItem.modelData.kind === "up" ? root.cAccent
                                                                    : root.cDim
@@ -2079,6 +2201,19 @@ FloatingWindow {
                                 if (m.kind === "dir" || m.kind === "up") {
                                     root.pickerFellBack = true
                                     root.browseTo(m.path)
+                                } else if (m.kind === "project") {
+                                    root.pickerOpen = false
+                                    root.pickerFor = "photo"
+                                    root.mode = "video"
+                                    root.proj = m.path
+                                    root.selTrack = 0
+                                    root.selClip = -1
+                                    root.playhead = 0
+                                    // A different document entirely, so the
+                                    // rendered preview belongs to the old one.
+                                    root.tlRev++
+                                    root.reloadTimeline()
+                                    root.say("")
                                 } else if (root.pickerFor === "clip") {
                                     // The video page borrows the same picker.
                                     // It lists what the ENGINE can decode, so
@@ -2240,6 +2375,43 @@ FloatingWindow {
             asynchronous: true
             visible: mon.front === 1
             onStatusChanged: if (status === Image.Ready) mon.front = 1
+        }
+    }
+
+    // One choice on the start screen. Wide and two-line on purpose: these are
+    // the three decisions that set up everything after them, and a row of
+    // small buttons would make them look like the toolbar.
+    component Door: Rectangle {
+        id: door
+        property string title: ""
+        property string sub: ""
+        signal clicked()
+        width: 340
+        height: 56
+        radius: 5
+        color: doorMa.containsMouse ? root.wash(0.24) : root.wash(0.10)
+        border.width: 1
+        border.color: root.wash(0.30)
+
+        Text {
+            anchors.left: parent.left; anchors.leftMargin: 16
+            anchors.top: parent.top; anchors.topMargin: 10
+            text: door.title
+            color: root.cText
+            font.pixelSize: 14
+        }
+        Text {
+            anchors.left: parent.left; anchors.leftMargin: 16
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+            text: door.sub
+            color: root.cDim
+            font.pixelSize: 11
+        }
+        MouseArea {
+            id: doorMa
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: door.clicked()
         }
     }
 

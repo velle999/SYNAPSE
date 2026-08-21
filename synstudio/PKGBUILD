@@ -57,7 +57,29 @@ pkgver=0.1.0
 #   never changes, and a plain Image goes BLANK for the whole time the next
 #   one is decoding — every scrub step, every slider release. Two images now,
 #   swapping only once the new one is Ready, so the last good frame stays up.
-pkgrel=3
+# 4: the window at a size somebody actually uses, and a playhead that renders
+#   while it is dragged.
+#
+#   The top strip anchored a button row to the left, a filename to the CENTRE
+#   and a size readout to the right, with nothing arranging them — so on a
+#   narrow window all three were drawn on top of each other, and the same
+#   collision happened on the transport bar. The toolbar is a Flow now and
+#   wraps rather than running off the edge (Export and Ripple delete were
+#   unreachable, not merely cramped), the filename lives in the title bar
+#   where it already was, the readout moved to the status line, and the side
+#   panels give ground below about 1060 wide instead of taking half the
+#   window from the picture.
+#
+#   Dragging the playhead rendered NOTHING until it was released: the frame
+#   request restarted a debounce on every mouse move, and a debounce that
+#   restarts while the hand is moving never fires. Measured 0 frames over 3.6
+#   seconds of dragging; now 35. The darkroom sliders had the same bug.
+#
+#   It also no longer opens straight into a photo picker. It edits photographs
+#   AND cuts video, and choosing the darkroom for somebody is the wrong half
+#   half the time — there is a start screen with the three ways in, and
+#   `browse` lists .syntl projects so one of them can be opened at all.
+pkgrel=4
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

@@ -980,7 +980,7 @@ static int cmd_timeline(int argc, char **argv)
  * its breadcrumb and its `..` disagree. */
 static int cmd_browse(int argc, char **argv)
 {
-    static const char *names[] = { "up", "dir", "image", "video" };
+    static const char *names[] = { "up", "dir", "image", "video", "project" };
     char abs[1024];
     ss_row *rows = NULL;
     int n, i;
