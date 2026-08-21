@@ -283,10 +283,13 @@ int ss_probe_file(const char *path, ss_probe *p)
     /* A still has a frame rate too (ffprobe reports 25/1 for a JPEG), so the
      * frame rate cannot decide this. Duration and the container can: a
      * single-image format is a still no matter what else it says. */
+    /* Any `<something>_pipe`, not the two that happened to come up first:
+     * ffmpeg names a single-image demuxer that way for every format it has
+     * one for — webp_pipe, tiff_pipe, qoi_pipe, jpegxl_pipe — and each one
+     * that is not on the list is a photograph treated as a movie. */
     p->is_video = (p->duration > 0.05) &&
                   strstr(p->fmt, "image2") == NULL &&
-                  strstr(p->fmt, "png_pipe") == NULL &&
-                  strstr(p->fmt, "jpeg_pipe") == NULL;
+                  strstr(p->fmt, "_pipe") == NULL;
 
     free(txt);
     p->ok = (p->w > 0 && p->h > 0);
@@ -548,6 +551,91 @@ int ss_media_has_audio(const char *path)
     return yes;
 }
 
+/* What a file IS, asked of ffmpeg rather than of its name.
+ *
+ * The extension tables in this file are how a DIRECTORY is listed, and they
+ * have to be: one process per file would make opening a folder of a thousand
+ * photographs cost a thousand of them. A file handed over deliberately — a
+ * drop onto the timeline, a path on the command line — is one file and one
+ * question, and asking is the only way to accept a format nobody thought to
+ * put on a list. That is the difference between "the formats we listed" and
+ * "the formats ffmpeg has".
+ *
+ * Camera raw answers first and without a process: ffprobe on most raw files
+ * finds the embedded thumbnail and reports a picture the size of a postage
+ * stamp, which is a wrong answer rather than a missing one.
+ */
+int ss_media_kind(const char *path)
+{
+    char *argv[] = {
+        "ffprobe", "-v", "error",
+        "-show_entries",
+        "stream=codec_type:stream_disposition=attached_pic:"
+        "format=format_name,duration",
+        "-of", "default=noprint_wrappers=1",
+        (char *)path, NULL
+    };
+    char *txt;
+    const char *p;
+    char fmt[256] = "";
+    double dur = 0;
+    int real_video = 0, have_audio = 0, pending_video = 0;
+
+    if (!path || !*path) return SS_KIND_NONE;
+
+    /* Camera raw answers first and without a process: ffprobe on most raw
+     * files finds the embedded thumbnail and reports a picture the size of a
+     * postage stamp, which is a wrong answer rather than a missing one. */
+    if (is_raw(path)) return SS_KIND_IMAGE;
+
+    txt = run_text(argv);
+    if (!txt) return SS_KIND_NONE;
+
+    for (p = txt; *p; ) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        char line[256];
+
+        if (len >= sizeof line) len = sizeof line - 1;
+        memcpy(line, p, len);
+        line[len] = '\0';
+
+        if (!strncmp(line, "codec_type=", 11)) {
+            /* A video stream whose disposition never arrived is a real one;
+             * only an explicit attached_pic=1 takes that back. */
+            if (pending_video) { real_video++; pending_video = 0; }
+            if (!strcmp(line + 11, "video"))      pending_video = 1;
+            else if (!strcmp(line + 11, "audio")) have_audio = 1;
+        } else if (!strncmp(line, "DISPOSITION:attached_pic=", 25)) {
+            /* Cover art is a VIDEO STREAM. Calling that a movie is how a
+             * whole album ended up on the video track, one still frame long
+             * as far as anything downstream could tell. */
+            if (pending_video && line[25] == '0') real_video++;
+            pending_video = 0;
+        } else if (!strncmp(line, "format_name=", 12)) {
+            snprintf(fmt, sizeof fmt, "%s", line + 12);
+        } else if (!strncmp(line, "duration=", 9)) {
+            dur = atof(line + 9);
+        }
+
+        if (!nl) break;
+        p = nl + 1;
+    }
+    if (pending_video) real_video++;
+    free(txt);
+
+    if (real_video) {
+        /* The same test ss_probe_file uses, so a file cannot be a still to one
+         * half of this program and a movie to the other. */
+        int still = dur <= 0.05
+                    || strstr(fmt, "image2") != NULL
+                    || strstr(fmt, "_pipe") != NULL;
+        return still ? SS_KIND_IMAGE : SS_KIND_VIDEO;
+    }
+    if (have_audio) return SS_KIND_AUDIO;
+    return SS_KIND_NONE;
+}
+
 /* -------------------------------------------------------------- peaks -- */
 
 /* Fold a stream of s16le mono samples into buckets as it arrives.
@@ -680,6 +768,30 @@ int ss_peaks(const char *path, double in, double out, int nbuckets,
     return run_peaks(argv, (size_t)(dur * rate), nbuckets, peak, rms);
 }
 
+/* ------------------------------------------------------------ formats -- */
+
+/* What a developed photograph can be written as.
+ *
+ * ss_save pipes raw pixels into ffmpeg and lets the OUTPUT NAME choose the
+ * muxer, so this table is not a gate on anything — it is the list the window
+ * offers, and it lives here rather than in the QML for the same reason every
+ * other table does: the window must not be able to offer something this
+ * engine cannot write.
+ */
+static const ss_still_format still_formats[] = {
+    { "jpeg", "jpg",  "JPEG — small, 8-bit, lossy" },
+    { "png",  "png",  "PNG — lossless, 8 or 16 bit" },
+    { "tiff", "tif",  "TIFF — lossless, for another editor" },
+    { "webp", "webp", "WebP — small and lossless-capable" },
+    { "bmp",  "bmp",  "BMP — uncompressed, 8-bit" },
+    { NULL, NULL, NULL }
+};
+
+const ss_still_format *ss_still_formats(void)
+{
+    return still_formats;
+}
+
 /* ------------------------------------------------------------- browse -- */
 
 /* Stills this engine can decode. Camera raw is is_raw()'s list and is not
@@ -687,8 +799,10 @@ int ss_peaks(const char *path, double in, double out, int nbuckets,
 static int is_still(const char *e)
 {
     static const char *ok[] = {
-        "jpg","jpeg","jpe","png","tif","tiff","webp","bmp","gif","heic","heif",
-        "avif","jxl","ppm","pgm","pnm","tga","exr","hdr", NULL
+        "jpg","jpeg","jpe","jfif","png","apng","tif","tiff","webp","bmp","dib",
+        "gif","heic","heif","avif","jxl","jp2","j2k","jpf","jpx","ppm","pgm",
+        "pbm","pnm","pam","pfm","tga","targa","exr","hdr","pic","pcx","sgi",
+        "ras","xbm","xpm","xwd","dds","ico","qoi","svg","psd", NULL
     };
     int i;
     for (i = 0; ok[i]; i++) if (!strcasecmp(e, ok[i])) return 1;
@@ -700,8 +814,10 @@ static int is_still(const char *e)
 static int is_audio(const char *e)
 {
     static const char *ok[] = {
-        "mp3","wav","flac","ogg","oga","opus","m4a","aac","wma","aiff","aif",
-        "ape","wv","mka","caf","au", NULL
+        "mp3","mp2","mpa","wav","w64","flac","ogg","oga","opus","spx","m4a",
+        "m4b","aac","adts","ac3","eac3","dts","dtshd","thd","mlp","wma","aiff",
+        "aif","aifc","ape","wv","tta","tak","mka","caf","au","snd","amr","awb",
+        "gsm","ra","mpc","shn","dsf","dff","voc","8svx","xa","alac", NULL
     };
     int i;
     for (i = 0; ok[i]; i++) if (!strcasecmp(e, ok[i])) return 1;
@@ -711,8 +827,12 @@ static int is_audio(const char *e)
 static int is_movie(const char *e)
 {
     static const char *ok[] = {
-        "mp4","m4v","mov","mkv","webm","avi","wmv","flv","mts","m2ts","ts",
-        "mpg","mpeg","vob","ogv","3gp","mxf","dv","braw","r3d", NULL
+        "mp4","m4v","mov","qt","mkv","mk3d","webm","avi","divx","wmv","asf",
+        "flv","f4v","swf","mts","m2ts","m2t","ts","mpg","mpeg","mpe","m1v",
+        "m2v","mpv","vob","evo","ogv","ogm","ogx","3gp","3g2","mxf","dv","dif",
+        "rm","rmvb","nut","y4m","yuv","gxf","roq","nsv","amv","mtv","viv",
+        "braw","r3d","avchd","insv","mjpeg","mjpg","h264","h265","hevc","av1",
+        "ivf","vp8","vp9","webp_anim", NULL
     };
     int i;
     for (i = 0; ok[i]; i++) if (!strcasecmp(e, ok[i])) return 1;

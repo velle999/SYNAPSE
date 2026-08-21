@@ -865,6 +865,90 @@ $BIN browse / | notseen "the root offers no parent" "	..	"
 $BIN browse "$TMP/does-not-exist" >/dev/null 2>&1
 check "a missing directory fails loudly" "1" "$?"
 
+# ------------------------------------------------------------------ kind --
+#
+# `browse` classifies a directory by extension and has to: one process per row
+# would make opening a folder cost hundreds. `kind` is the other half — one
+# file, asked of ffmpeg — and the whole point of it is that the ANSWER DOES
+# NOT COME FROM THE NAME, so every case here is tested with the extension
+# taken away.
+echo "== kind (what a file is, asked of ffmpeg)"
+
+kdir=$TMP/kind
+mkdir -p "$kdir"
+ffmpeg -v error -y -f lavfi -i testsrc=size=64x48:rate=25:duration=1 \
+       -pix_fmt yuv420p "$kdir/clip.mp4" 2>/dev/null
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:duration=1" "$kdir/tone.flac" 2>/dev/null
+ffmpeg -v error -y -f lavfi -i testsrc=size=64x48:duration=1 -frames:v 1 "$kdir/still.png" 2>/dev/null
+printf 'not media\n' > "$kdir/notes.txt"
+cp "$kdir/clip.mp4"  "$kdir/anon_video"
+cp "$kdir/tone.flac" "$kdir/anon_audio"
+cp "$kdir/still.png" "$kdir/anon_image"
+
+check "kind: a movie"          "video"   "$($BIN kind "$kdir/clip.mp4")"
+check "kind: a sound"          "audio"   "$($BIN kind "$kdir/tone.flac")"
+check "kind: a photograph"     "image"   "$($BIN kind "$kdir/still.png")"
+check "kind: a project"        "project" "$($BIN kind "$kdir/none.syntl")"
+
+# The extension is not the answer. These three have none at all.
+check "kind: a movie with no extension" "video" "$($BIN kind "$kdir/anon_video")"
+check "kind: a sound with no extension" "audio" "$($BIN kind "$kdir/anon_audio")"
+check "kind: a still with no extension" "image" "$($BIN kind "$kdir/anon_image")"
+
+# Cover art is a VIDEO STREAM. Reading that as a movie is how an album ends up
+# on the video track — a still frame as far as anything downstream can tell.
+ffmpeg -v error -y -i "$kdir/tone.flac" -i "$kdir/still.png" \
+       -map 0:a -map 1:v -c:a copy -c:v copy -disposition:v:0 attached_pic \
+       "$kdir/withart.mp3" 2>/dev/null
+if [ -s "$kdir/withart.mp3" ]; then
+    check "kind: cover art does not make it a movie" "audio" \
+          "$($BIN kind "$kdir/withart.mp3")"
+fi
+
+check "kind: something it cannot open" "none" "$($BIN kind "$kdir/notes.txt")"
+$BIN kind "$kdir/notes.txt" >/dev/null 2>&1
+check "and says so in its exit status" "1" "$?"
+
+# --------------------------------------------------------------- formats --
+#
+# Both tables are printed for the window to build a picker from, the same way
+# `keys` builds the develop panel. A format the window can offer and the
+# engine cannot write is the failure these are here to prevent.
+echo "== formats (what an export can come out as)"
+
+$BIN formats | seen "stills list PNG" "png"
+$BIN formats | seen "stills list TIFF" "tif"
+$BIN timeline formats | seen "the cut can be mp4" "mp4"
+$BIN timeline formats | seen "and WebM" "webm"
+# ProRes is a .mov, and a table that said otherwise would produce a file no
+# editor reads as ProRes.
+$BIN timeline formats | seen "ProRes writes a .mov" "prores	mov"
+
+fdir=$TMP/fmt
+mkdir -p "$fdir"
+proj=$fdir/cut.syntl
+$BIN timeline new "$proj" --size 64x48 --fps 25 >/dev/null
+$BIN timeline track "$proj" video V1 >/dev/null
+$BIN timeline clip "$proj" 0 "$kdir/clip.mp4" --at 0 >/dev/null
+
+$BIN timeline export "$proj" --out "$fdir/a.webm" --format webm >/dev/null 2>&1
+check "an export in another format succeeds" "0" "$?"
+ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$fdir/a.webm" 2>/dev/null \
+    | seen "and is really VP9" "vp9"
+
+# No --format at all: the extension decides, which is what makes `--out
+# cut.webm` do the obvious thing without saying it twice.
+$BIN timeline export "$proj" --out "$fdir/b.webm" >/dev/null 2>&1
+ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$fdir/b.webm" 2>/dev/null \
+    | seen "the extension alone picks the format" "vp9"
+
+$BIN timeline export "$proj" --out "$fdir/c.mov" --format prores >/dev/null 2>&1
+ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$fdir/c.mov" 2>/dev/null \
+    | seen "ProRes really is ProRes" "prores"
+
+$BIN timeline export "$proj" --out "$fdir/d.mp4" --format nonesuch >/dev/null 2>&1
+check "an unknown format is refused" "1" "$?"
+
 pass=$(grep -c '^p' "$RESULTS")
 fail=$(grep -c '^f' "$RESULTS")
 

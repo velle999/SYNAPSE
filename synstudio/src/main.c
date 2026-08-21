@@ -91,7 +91,8 @@ static void usage(void)
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
-"  timeline export PROJ --out OUT [--print] [--preview]\n"
+"  timeline export PROJ --out OUT [--format F] [--print] [--preview]\n"
+"  timeline formats              what an export can come out as\n"
 "       --preview: small, fast, rough, and playable while still encoding —\n"
 "                  the same graph, so the cut you watch is the cut you ship\n"
 "\n"
@@ -100,7 +101,10 @@ static void usage(void)
 "  --quality 1-100 jpeg quality        --bits 8|16   output depth\n"
 "  --set K=V       an override applied on top of the sidecar, not saved\n"
 "\n"
+"  formats         what a developed photograph can be written as\n"
 "  browse [DIR]    what is in a folder that this engine can open\n"
+"  kind FILE       image|video|audio|project|none — asked of ffmpeg, not of\n"
+"                  the extension (exit 1 = nothing here can be opened)\n"
 "  gui [FILE]      the window\n");
 }
 
@@ -109,6 +113,7 @@ static void usage(void)
 typedef struct {
     const char *out;
     const char *from;
+    const char *format;
     int    size, quality, bits, lutsize, print;
     double at, in, outp, speed;
     double fade_in, fade_out;
@@ -164,6 +169,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
                  !strcmp(a, "--color"))   { const char *v = NEXT(); if (!v) return -1; o->colour = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
+        else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
         else if (!strcmp(a, "--count"))   { const char *v = NEXT(); if (!v) return -1; o->count = atoi(v); }
         else if (!strcmp(a, "--print"))   { o->print = 1; }
         else if (!strcmp(a, "--set")) {
@@ -627,6 +633,15 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
     int nrest, tr, cl;
 
     if (verb && !strcmp(verb, "keys")) return cmd_timeline_keys();
+    /* Like `keys`: a table the window builds a control from, so the picker it
+     * draws and the formats this engine has cannot drift apart. */
+    if (verb && !strcmp(verb, "formats")) {
+        const ss_tl_format *f = ss_timeline_formats();
+        int i;
+        for (i = 0; f[i].name; i++)
+            printf("%s\t%s\t%s\n", f[i].name, f[i].ext, f[i].label);
+        return 0;
+    }
     if (!verb || !proj) { usage(); return 1; }
     opts_default(&o);
 
@@ -1047,7 +1062,13 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         }
 
         tl_fill_audio(t);
-        ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, &av);
+        {
+            const ss_tl_format *f = ss_timeline_format(o.format, o.out);
+            if (!f) { ss_timeline_unbake(t, dir); rmdir(dir);
+                      return die("no such format: %s  (try `timeline formats`)",
+                                 o.format); }
+            ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, f, &av);
+        }
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }
         rc = tl_run(av, ac, o.print);
@@ -1130,6 +1151,32 @@ static int cmd_peaks(const char *path, const opts *o)
 
     free(peak); free(rms);
     return 0;
+}
+
+/* One file, one answer, from ffmpeg rather than from the file's name.
+ *
+ * `browse` classifies a whole directory and has to do it by extension, or
+ * opening a folder would cost a process per row. This is the other half: a
+ * file somebody hands over on purpose — dropped on the timeline, typed on the
+ * command line — gets asked properly, so a format that is on no list of ours
+ * still lands on the right kind of track. A `.syntl` is answered from the
+ * name, because a project is ours and not something ffmpeg has an opinion
+ * about.
+ */
+static int cmd_kind(const char *path)
+{
+    const char *dot = strrchr(path, '.');
+    int k;
+
+    if (dot && !strcasecmp(dot + 1, "syntl")) { puts("project"); return 0; }
+
+    k = ss_media_kind(path);
+    switch (k) {
+    case SS_KIND_IMAGE: puts("image"); return 0;
+    case SS_KIND_VIDEO: puts("video"); return 0;
+    case SS_KIND_AUDIO: puts("audio"); return 0;
+    default:            puts("none");  return 1;
+    }
 }
 
 static int cmd_browse(int argc, char **argv)
@@ -1220,7 +1267,18 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!strcmp(cmd, "keys"))     return cmd_keys();
+    if (!strcmp(cmd, "formats")) {
+        const ss_still_format *f = ss_still_formats();
+        int i;
+        for (i = 0; f[i].name; i++)
+            printf("%s\t%s\t%s\n", f[i].name, f[i].ext, f[i].label);
+        return 0;
+    }
     if (!strcmp(cmd, "browse"))   return cmd_browse(argc, argv);
+    if (!strcmp(cmd, "kind")) {
+        if (argc < 3) return die("kind needs a file");
+        return cmd_kind(argv[2]);
+    }
     if (!strcmp(cmd, "gui"))      return cmd_gui(argc, argv);
     if (!strcmp(cmd, "timeline")) return cmd_timeline(argc, argv);
 

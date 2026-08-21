@@ -166,7 +166,40 @@ pkgver=0.1.0
 #   goes busy, and ffmpeg's own `time=` (written on a CARRIAGE RETURN, which is
 #   why a StdioCollector never showed a word of it) drives a percentage in the
 #   status bar.
-pkgrel=8
+# 9: what a file IS, what it comes out as, and sliders that finally slide.
+#
+#   THE SLIDERS. preventStealing at pkgrel 8 was necessary and not sufficient:
+#   nothing was stealing the drag, something was DESTROYING it. The develop
+#   values lived in the same array the panel was built from, so every tick
+#   rebuilt it — and a Repeater whose JS-array model is reassigned rebuilds its
+#   delegates, taking the MouseArea that holds the mouse grab with them.
+#   Measured: one of ten mouse moves arrived, and the delegate was destroyed on
+#   it. The values moved into a map beside the rows, which nothing is modelled
+#   on. The -10 halo around each track also had its sign backwards, so every
+#   value landed twenty pixels to the right of the pointer.
+#
+#   DROP FILES ON IT. A drop asks the engine what each file is, one file at a
+#   time, rather than guessing from the name — so a sound lands on an audio
+#   track, a picture on a video track, a .syntl opens as a project, and a
+#   photograph dropped on the darkroom opens there.
+#
+#   `kind FILE` is that question: image|video|audio|project|none, from ffmpeg
+#   and not from the extension, so a format nobody thought to list still works.
+#   Cover art is a video stream and used to read as a movie, which is how an
+#   album ended up on the video track. The extension tables that `browse` uses
+#   for whole directories grew a lot at the same time, and any `<x>_pipe`
+#   demuxer now counts as a still — before, only png and jpeg did, so every
+#   other single-image format was treated as a movie.
+#
+#   EXPORT AS. A name and a format, both chosen. `timeline formats` and
+#   `formats` print what the engine can write — mp4, mkv, mov, HEVC, WebM,
+#   ProRes for the cut; JPEG, PNG, TIFF, WebP, BMP for a photograph — and the
+#   window builds its picker from that, the way the develop panel is built from
+#   `keys`, so it can never offer one the engine has no encoder for.
+#   `timeline export --format F`, or inferred from the output's extension.
+#
+#   193 assertions.
+pkgrel=9
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

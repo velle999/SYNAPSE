@@ -259,12 +259,26 @@ double ss_media_duration(const char *path);
  * an export, because referencing [N:a] for an input that has no audio stream
  * fails the WHOLE graph rather than being quietly ignored. */
 int    ss_media_has_audio(const char *path);
+/* What a file is, decided by ffmpeg rather than by its extension. One or two
+ * processes, so it is for a file somebody handed over on purpose — a drop, an
+ * argument — never for every row of a directory listing. */
+enum { SS_KIND_NONE = 0, SS_KIND_IMAGE, SS_KIND_VIDEO, SS_KIND_AUDIO };
+int    ss_media_kind(const char *path);
 /* max_edge 0 = full resolution. */
 int ss_load(const char *path, ss_image *im, int max_edge);
 /* Frame at a timestamp, for the video pages. */
 int ss_load_frame(const char *path, double t, ss_image *im, int max_edge);
 /* quality 1..100 for jpeg; ignored for png/tiff. bits 8 or 16. */
 int ss_save(const char *path, const ss_image *im, int quality, int bits);
+/* ss_save chooses its muxer from the output NAME, so this is the list the
+ * window offers rather than a gate — kept here so the window cannot offer a
+ * format this engine has no way to write. NULL-name terminated. */
+typedef struct {
+    const char *name;
+    const char *ext;
+    const char *label;
+} ss_still_format;
+const ss_still_format *ss_still_formats(void);
 
 /* ------------------------------------------------------------- peaks -- */
 
@@ -511,8 +525,28 @@ int ss_timeline_at(const ss_timeline *t, int track, double time);
  * encoded as fast as x264 can, and quality traded away on purpose. It is what
  * the window plays when you press play — the same graph, so what you watch is
  * what you will ship, only rougher. A deliverable export passes 0. */
+/* One row per deliverable format. `fmt` is the muxer's extension, which is
+ * not always the format's name — ProRes is a .mov. `v1..v4` are the encoder's
+ * own arguments, in pairs, and a NULL ends them early. */
+typedef struct {
+    const char *name;
+    const char *ext;
+    const char *vcodec;
+    const char *acodec;
+    const char *v1, *v2, *v3, *v4;
+    const char *pix;
+    const char *label;
+} ss_tl_format;
+
+/* The table, NULL-name terminated, and the lookup the CLI and the window
+ * share: a name if given, otherwise inferred from the output's extension,
+ * otherwise the first row. NULL means the name was not one of them. */
+const ss_tl_format *ss_timeline_formats(void);
+const ss_tl_format *ss_timeline_format(const char *name, const char *out);
+
 int    ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
-                          const char *lutdir, int preview, char ***argv);
+                          const char *lutdir, int preview,
+                          const ss_tl_format *fmt, char ***argv);
 
 /* One composited frame, for the program monitor.
  *

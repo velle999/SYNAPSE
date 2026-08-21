@@ -179,22 +179,39 @@ FloatingWindow {
         return out
     }
 
-    function valueOf(key) {
-        for (let i = 0; i < root.rows.length; i++)
-            if (root.rows[i].key === key) return parseFloat(root.rows[i].value) || 0
-        return 0
+    // The values live BESIDE the rows, not in them.
+    //
+    // `rows` is what the panel is built from and it must not change while a
+    // hand is on a slider. It used to carry the values too, so every tick of a
+    // drag rebuilt the array — and a Repeater whose JS-array model is
+    // reassigned REBUILDS ITS DELEGATES, which destroys the MouseArea holding
+    // the mouse grab. Measured: of ten mouse moves, the slider received one,
+    // and the delegate was destroyed on it. That is the whole of "the sliders
+    // jump instead of sliding": the drag ended on the first move and the value
+    // was whatever the press had set. preventStealing does not help, because
+    // nothing stole it.
+    //
+    // Reassigning one element of a `var` map does NOT re-evaluate bindings on
+    // it either — a documented quickshell trap in this repo — so `vals` is
+    // rebuilt whole. Rebuilding a map of 64 numbers is free; rebuilding the
+    // panel is not.
+    property var vals: ({})
+
+    function seedVals(rowList) {
+        const out = ({})
+        for (let i = 0; i < rowList.length; i++) out[rowList[i].key] = rowList[i].value
+        return out
     }
 
-    // Reassigning one element of a `var` array does NOT re-evaluate bindings on
-    // it — a documented quickshell trap in this repo. Rebuild the array.
+    function valueOf(key) {
+        return parseFloat(root.vals[key]) || 0
+    }
+
     function setValue(key, v) {
-        const next = root.rows.slice()
-        for (let i = 0; i < next.length; i++)
-            if (next[i].key === key)
-                next[i] = { key: next[i].key, value: String(v), lo: next[i].lo, hi: next[i].hi,
-                            type: next[i].type, group: next[i].group, label: next[i].label,
-                            hardLo: next[i].hardLo, hardHi: next[i].hardHi }
-        root.rows = next
+        const next = ({})
+        for (const k in root.vals) next[k] = root.vals[k]
+        next[key] = String(v)
+        root.vals = next
     }
 
     Process {
@@ -203,6 +220,7 @@ FloatingWindow {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.rows = root.parseKeys(this.text)
+                root.vals = root.seedVals(root.rows)
                 if (root.file) root.loadFile(root.file)
             }
         }
@@ -214,18 +232,14 @@ FloatingWindow {
         stdout: StdioCollector {
             onStreamFinished: {
                 const lines = this.text.split("\n")
-                const next = root.rows.slice()
+                const next = ({})
+                for (const k in root.vals) next[k] = root.vals[k]
                 for (let i = 0; i < lines.length; i++) {
                     const f = lines[i].split("\t")
                     if (f.length < 2) continue
-                    for (let j = 0; j < next.length; j++)
-                        if (next[j].key === f[0])
-                            next[j] = { key: next[j].key, value: f[1], lo: next[j].lo,
-                                        hi: next[j].hi, type: next[j].type, group: next[j].group,
-                                        label: next[j].label, hardLo: next[j].hardLo,
-                                        hardHi: next[j].hardHi }
+                    next[f[0]] = f[1]
                 }
-                root.rows = next
+                root.vals = next
                 root.requestRender()
             }
         }
@@ -473,7 +487,183 @@ FloatingWindow {
     Process { id: exportProc
         stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
         onExited: function (exitCode, exitStatus) {
-            root.say(exitCode === 0 ? "exported" : "export failed")
+            root.exportingStill = false
+            root.say(exitCode === 0 ? "exported " + root.exportOut : "export failed")
+        }
+    }
+
+    // ── Export as ───────────────────────────────────────────────────────────
+    //
+    // Export used to invent the name and the format: a photograph became
+    // `<name>-edited.jpg` and a cut became `<project>.mp4`, with no way to say
+    // otherwise short of renaming the result afterwards. Both are now chosen
+    // before anything is encoded.
+    //
+    // The format lists come from the ENGINE — `formats` and `timeline formats`
+    // — for the same reason the develop panel is built from `keys`: a list
+    // written out here would drift, and the first thing anybody would notice
+    // is a choice that fails at the end of a long encode rather than at the
+    // moment it was offered.
+    property bool   exportOpen: false
+    property string exportName: ""
+    property int    exportFmt: 0
+    property bool   exportingStill: false
+    property var    vidFormats: []
+    property var    stillFormats: []
+
+    readonly property var exportFormats:
+        root.mode === "video" ? root.vidFormats : root.stillFormats
+
+    readonly property string exportSrc: root.mode === "video" ? root.proj : root.file
+    readonly property string exportDir:
+        root.exportSrc.replace(/\/[^\/]*$/, "") || "/"
+    readonly property string exportExt:
+        (root.exportFmt >= 0 && root.exportFmt < root.exportFormats.length)
+        ? root.exportFormats[root.exportFmt].ext : ""
+    readonly property string exportPath:
+        root.exportDir + "/" + root.exportName + "." + root.exportExt
+
+    function parseFormats(text) {
+        const out = []
+        const lines = text.split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            if (!lines[i]) continue
+            const f = lines[i].split("\t")
+            if (f.length < 3) continue
+            out.push({ name: f[0], ext: f[1], label: f[2] })
+        }
+        return out
+    }
+
+    Process {
+        id: vidFmtProc
+        command: [root.bin, "timeline", "formats"]
+        running: true
+        stdout: StdioCollector { onStreamFinished: root.vidFormats = root.parseFormats(this.text) }
+    }
+    Process {
+        id: stillFmtProc
+        command: [root.bin, "formats"]
+        running: true
+        stdout: StdioCollector { onStreamFinished: root.stillFormats = root.parseFormats(this.text) }
+    }
+
+    function openExport() {
+        if (!root.exportSrc) return
+        // The source's own name, without its extension and without the
+        // directory — the one part somebody actually wants to edit.
+        const base = root.exportSrc.replace(/^.*\//, "").replace(/\.[^.]*$/, "")
+        root.exportName = root.mode === "video" ? base : base + "-edited"
+        root.exportFmt = 0
+        root.exportOpen = true
+    }
+
+    function doExport() {
+        if (!root.exportName || root.exportFormats.length === 0) return
+        const fmt = root.exportFormats[root.exportFmt]
+        const out = root.exportPath
+        root.exportOpen = false
+        if (root.mode === "video") {
+            if (root.exportingCut) return
+            root.exportingCut = true
+            root.exportPct = -1
+            root.exportErr = ""
+            root.exportOut = out
+            tlExportProc.command = [root.bin, "timeline", "export", root.proj,
+                                    "--out", out, "--format", fmt.name]
+            tlExportProc.running = true
+            root.say("exporting the cut…")
+        } else {
+            if (root.exportingStill) return
+            root.exportingStill = true
+            root.exportOut = out
+            exportProc.command = [root.bin, "render", root.file,
+                                  "--out", out, "--quality", "95"]
+            exportProc.running = true
+            root.say("exporting…")
+        }
+    }
+
+    // ── Dropping files on the window ────────────────────────────────────────
+    //
+    // What a dropped file IS gets asked of the engine, one file at a time
+    // (`synstudio kind`), rather than guessed from its extension: a drop is a
+    // deliberate gesture on a handful of files, so it can afford the process
+    // that the directory listing cannot, and it accepts formats no list of
+    // ours has ever heard of. A sound goes to an audio track, a picture to a
+    // video track, a `.syntl` opens as a project, and a photograph dropped on
+    // the darkroom opens there.
+    property var dropQueue: []
+    property bool dropBusy: false
+
+    function dropUrls(urls) {
+        const q = []
+        for (let i = 0; i < urls.length; i++) {
+            let u = String(urls[i])
+            if (u.indexOf("file://") !== 0) continue
+            // A path with a space arrives percent-encoded, and handing that
+            // to the engine looks for a file with %20 in its name.
+            q.push(decodeURIComponent(u.substring(7)))
+        }
+        if (q.length === 0) { root.say("nothing droppable there"); return }
+        root.dropQueue = root.dropQueue.concat(q)
+        root.pumpDrop()
+    }
+
+    // The engine takes one edit at a time and `running = true` on a busy
+    // Process is a silent no-op, so a batch of dropped files has to wait its
+    // turn rather than race — otherwise all but the first vanish.
+    Timer {
+        interval: 150; repeat: true
+        running: root.dropQueue.length > 0
+        onTriggered: root.pumpDrop()
+    }
+
+    function pumpDrop() {
+        if (root.dropBusy || root.dropQueue.length === 0) return
+        if (tlSetProc.running || addTrackProc.running) return
+        root.dropBusy = true
+        kindProc.path = root.dropQueue[0]
+        kindProc.command = [root.bin, "kind", kindProc.path]
+        kindProc.running = true
+    }
+
+    Process {
+        id: kindProc
+        property string path: ""
+        property string answer: ""
+        stdout: StdioCollector { onStreamFinished: kindProc.answer = this.text.trim() }
+        onExited: function (code, status) {
+            const path = kindProc.path
+            const kind = kindProc.answer
+            kindProc.answer = ""
+            root.dropQueue = root.dropQueue.slice(1)
+            root.dropBusy = false
+
+            if (kind === "project") {
+                root.mode = "video"
+                root.proj = path
+                root.selTrack = 0
+                root.selClip = -1
+                root.playhead = 0
+                root.tlRev++
+                root.reloadTimeline()
+                root.say("opened " + path.replace(/^.*\//, ""))
+            } else if (kind === "image" && root.mode === "photo") {
+                root.loadFile(path)
+            } else if (kind === "image" || kind === "video" || kind === "audio") {
+                if (!root.proj) {
+                    root.say("start a project first, then drop clips on it")
+                } else {
+                    root.mode = "video"
+                    root.addMedia(path, kind)
+                    root.say("added " + path.replace(/^.*\//, ""))
+                }
+            } else {
+                root.say("nothing this engine can open: "
+                         + path.replace(/^.*\//, ""))
+            }
+            root.pumpDrop()
         }
     }
 
@@ -1305,6 +1495,7 @@ FloatingWindow {
     property bool   exportingCut: false
     property real   exportPct: -1
     property string exportErr: ""
+    property string exportOut: ""
 
     function exportCut() {
         if (root.exportingCut || !root.proj || !(root.tlDur > 0)) return
@@ -1339,9 +1530,11 @@ FloatingWindow {
         onExited: function (code, status) {
             root.exportingCut = false
             root.exportPct = -1
-            root.say(code === 0
-                     ? "exported " + root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"
-                     : (root.exportErr || "export failed"))
+            // The path it actually wrote, not one reconstructed from the
+            // project's name — those agreed only while the name and the
+            // format were both assumed.
+            root.say(code === 0 ? "exported " + root.exportOut
+                                : (root.exportErr || "export failed"))
         }
     }
 
@@ -1409,13 +1602,9 @@ FloatingWindow {
                     Btn { visible: root.mode === "photo"
                           label: "Open";  onClicked: root.openPicker() }
                     Btn { visible: root.mode === "photo"
-                          label: "Export"; active: root.file !== ""; onClicked: {
-                        exportProc.command = [root.bin, "render", root.file,
-                                              "--out", root.file.replace(/\.[^.\/]*$/, "") + "-edited.jpg",
-                                              "--quality", "95"]
-                        exportProc.running = true
-                        root.say("exporting…")
-                    } }
+                          label: root.exportingStill ? "Export…" : "Export"
+                          active: root.file !== "" && !root.exportingStill
+                          onClicked: root.openExport() }
                     Btn { visible: root.mode === "photo"
                           label: "Reset"; active: root.file !== ""; onClicked: {
                         setProc.command = [root.bin, "reset", root.file]
@@ -1458,7 +1647,7 @@ FloatingWindow {
                           label: root.exportingCut ? "Export…" : "Export"
                           active: root.proj !== "" && root.tlDur > 0
                                   && !root.exportingCut
-                          onClicked: root.exportCut() }
+                          onClicked: root.openExport() }
                 }
 
             }
@@ -2509,6 +2698,43 @@ FloatingWindow {
         }
     }
 
+    // ── Dropping files on the window ───────────────────────────────────
+    //
+    // Over everything, and last, so it is the topmost thing a drag can land
+    // on. It handles DRAGS only — a DropArea does not take mouse events — so
+    // nothing underneath loses a click to it.
+
+    DropArea {
+        id: fileDrop
+        anchors.fill: parent
+        onDropped: function (drop) {
+            if (!drop.hasUrls) { drop.accepted = false; return }
+            root.dropUrls(drop.urls)
+            drop.acceptProposedAction()
+        }
+
+        // The window has to SAY it will take them. A drag with no answer from
+        // the target looks exactly like a drag onto something that does not
+        // want it, and the hand goes somewhere else.
+        Rectangle {
+            anchors.fill: parent
+            visible: fileDrop.containsDrag
+            color: Qt.rgba(0, 0, 0, 0.35)
+            border.width: 3
+            border.color: root.cAccent
+
+            Text {
+                anchors.centerIn: parent
+                text: root.mode === "video"
+                      ? (root.proj ? "drop clips onto the timeline"
+                                   : "start a project first")
+                      : "drop a photograph to open it"
+                color: "#f2f4f8"
+                font.pixelSize: 16
+            }
+        }
+    }
+
     // ── The start screen ───────────────────────────────────────────────
     //
     // Shown only while nothing at all is open. Three doors, because there are
@@ -2565,6 +2791,140 @@ FloatingWindow {
                 sub: "a .syntl timeline you started earlier"
                 onClicked: { root.mode = "video"; root.pickerFor = "project"
                              root.openPicker() }
+            }
+        }
+    }
+
+    // ── Export as ──────────────────────────────────────────────────────
+    //
+    // A name and a format, and the full path spelled out underneath so there
+    // is no question where the file is about to land. The formats are the
+    // engine's own list; the extension follows the choice, because a ProRes
+    // file called .mp4 is an mp4 that no editor will read as ProRes.
+
+    Rectangle {
+        anchors.fill: parent
+        visible: root.exportOpen
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: root.exportOpen = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(560, parent.width - 80)
+            height: Math.min(150 + root.exportFormats.length * 34,
+                             parent.height - 80)
+            color: root.cPanel
+            radius: 6
+            border.width: 1
+            border.color: root.wash(0.28)
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 10
+
+                Text {
+                    text: root.mode === "video" ? "Export the cut as"
+                                                : "Export the photograph as"
+                    color: root.cText
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+
+                // The name, without its extension: the extension is the
+                // format's to decide and typing a second one only argues.
+                Rectangle {
+                    width: parent.width
+                    height: 28
+                    radius: 3
+                    color: root.wash(0.10)
+                    border.width: 1
+                    border.color: nameIn.activeFocus ? root.cAccent : root.wash(0.24)
+
+                    TextInput {
+                        id: nameIn
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.cText
+                        font.pixelSize: 12
+                        clip: true
+                        text: root.exportName
+                        onTextChanged: root.exportName = text
+                        onAccepted: root.doExport()
+                    }
+                }
+
+                Repeater {
+                    model: root.exportFormats
+
+                    Rectangle {
+                        id: fmtRow
+                        required property var modelData
+                        required property int index
+                        width: parent.width
+                        height: 30
+                        radius: 3
+                        color: root.exportFmt === fmtRow.index ? root.wash(0.22)
+                               : fmtMa.containsMouse ? root.wash(0.12) : "transparent"
+                        border.width: root.exportFmt === fmtRow.index ? 1 : 0
+                        border.color: root.cAccent
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            width: 62
+                            text: "." + fmtRow.modelData.ext
+                            color: root.exportFmt === fmtRow.index ? root.cAccent
+                                                                   : root.cText
+                            font.pixelSize: 12
+                            font.family: "monospace"
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: 76
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            text: fmtRow.modelData.label
+                            color: root.cDim
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+                        MouseArea {
+                            id: fmtMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: root.exportFmt = fmtRow.index
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: root.exportPath
+                    color: root.cDim
+                    font.pixelSize: 11
+                    elide: Text.ElideLeft
+                }
+
+                Row {
+                    spacing: 8
+                    Btn { label: "Cancel"; onClicked: root.exportOpen = false }
+                    Btn { label: "Export"
+                          active: root.exportName !== ""
+                                  && root.exportFormats.length > 0
+                          onClicked: root.doExport() }
+                }
             }
         }
     }
@@ -2745,7 +3105,7 @@ FloatingWindow {
         height: row.type === "curve" ? 0 : 44
         visible: row.type !== "curve"
 
-        readonly property real val: parseFloat(row.value) || 0
+        readonly property real val: parseFloat(root.vals[sl.row.key]) || 0
 
         Text {
             id: lbl
@@ -2805,7 +3165,7 @@ FloatingWindow {
                 preventStealing: true
 
                 function commit(mx, live) {
-                    const f = Math.max(0, Math.min(1, (mx + 10) / track.width))
+                    const f = Math.max(0, Math.min(1, (mx - 10) / track.width))
                     let v = sl.row.lo + f * (sl.row.hi - sl.row.lo)
                     v = sl.row.type === "int" ? Math.round(v)
                                               : Math.round(v * 100) / 100
@@ -3145,7 +3505,7 @@ FloatingWindow {
                 // The inspector is a Flickable too. See the timeline ruler.
                 preventStealing: true
                 function commit(mx) {
-                    const f = Math.max(0, Math.min(1, (mx + 10) / cctrack.width))
+                    const f = Math.max(0, Math.min(1, (mx - 10) / cctrack.width))
                     let v = cc.row.lo + f * (cc.row.hi - cc.row.lo)
                     v = cc.row.type === "int" ? Math.round(v)
                                               : Math.round(v * 1000) / 1000
@@ -3225,7 +3585,7 @@ FloatingWindow {
                 // The inspector is a Flickable too. See the timeline ruler.
                 preventStealing: true
                 function commit(mx) {
-                    const f = Math.max(0, Math.min(1, (mx + 10) / gctrack.width))
+                    const f = Math.max(0, Math.min(1, (mx - 10) / gctrack.width))
                     let v = grd.row.lo + f * (grd.row.hi - grd.row.lo)
                     v = grd.row.type === "int" ? Math.round(v)
                                               : Math.round(v * 100) / 100

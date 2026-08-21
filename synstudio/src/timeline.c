@@ -1312,8 +1312,66 @@ static void chain_transition(strbuf *fc, const ss_clip *c)
         ac++; \
     } while (0)
 
+/* ------------------------------------------------------------ formats -- */
+
+/* What an export can come out as.
+ *
+ * ONE table, the same discipline as the develop settings and the clip
+ * properties: the CLI takes a name from it, `timeline formats` prints it, and
+ * the window builds its picker from that — so adding a format here is the
+ * whole change, and the window cannot offer one the engine does not have.
+ *
+ * The extension is what a container needs to BE that container; ffmpeg picks
+ * its muxer from the name it is given, so writing ProRes to a file called
+ * .mp4 produces an mp4 that no NLE will read the way it was meant.
+ */
+static const ss_tl_format tl_formats[] = {
+    { "mp4",    "mp4",  "libx264",    "aac",       "-preset", "medium", "-crf", "18",
+      "yuv420p",     "H.264 and AAC — plays on everything" },
+    { "mkv",    "mkv",  "libx264",    "aac",       "-preset", "medium", "-crf", "18",
+      "yuv420p",     "the same encode in Matroska" },
+    { "mov",    "mov",  "libx264",    "aac",       "-preset", "medium", "-crf", "18",
+      "yuv420p",     "the same encode in QuickTime" },
+    { "h265",   "mp4",  "libx265",    "aac",       "-preset", "medium", "-crf", "22",
+      "yuv420p",     "HEVC — half the size, fewer players" },
+    { "webm",   "webm", "libvpx-vp9", "libopus",   "-b:v",    "0",      "-crf", "32",
+      "yuv420p",     "VP9 and Opus, for the web" },
+    { "prores", "mov",  "prores_ks",  "pcm_s16le", "-profile:v", "3",   NULL,   NULL,
+      "yuv422p10le", "ProRes 422 HQ — 10-bit, for grading on" },
+    { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
+};
+
+const ss_tl_format *ss_timeline_formats(void)
+{
+    return tl_formats;
+}
+
+/* A name if one was given, otherwise the output's own extension, otherwise
+ * mp4. Inferring from the extension is what makes `--out cut.webm` do the
+ * obvious thing without anybody having to say it twice. */
+const ss_tl_format *ss_timeline_format(const char *name, const char *out)
+{
+    const char *dot;
+    int i;
+
+    if (name && *name) {
+        for (i = 0; tl_formats[i].name; i++)
+            if (!strcasecmp(name, tl_formats[i].name)) return &tl_formats[i];
+        return NULL;
+    }
+    dot = out ? strrchr(out, '.') : NULL;
+    if (dot) {
+        /* By extension, first match wins — .mov is H.264 unless ProRes was
+         * asked for by name, which is the quieter of the two surprises. */
+        for (i = 0; tl_formats[i].name; i++)
+            if (!strcasecmp(dot + 1, tl_formats[i].ext)) return &tl_formats[i];
+    }
+    return &tl_formats[0];
+}
+
 int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
-                       const char *lutdir, int preview, char ***argv_out)
+                       const char *lutdir, int preview,
+                       const ss_tl_format *fmt, char ***argv_out)
 {
     strbuf fc = {0};
     char **av = NULL;
@@ -1547,17 +1605,35 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     PUSH(xdup(preview && t->w > 960 ? "[pout]" : "[vout]"));
     if (naud > 0) { PUSH(xdup("-map")); PUSH(xdup("[aout]")); }
     PUSH(xdup("-t")); PUSH(xfmt("%.6f", dur > 0 ? dur : 1.0));
-    PUSH(xdup("-c:v")); PUSH(xdup("libx264"));
-    /* A preview is watched once and thrown away, so every setting here is
-     * traded for the time it takes to produce. ultrafast/crf 30 is roughly an
-     * order of magnitude quicker than the deliverable settings and looks it —
-     * which is correct, because the thing being judged at this point is the
-     * CUT, not the encode. */
-    PUSH(xdup("-preset")); PUSH(xdup(preview ? "ultrafast" : "medium"));
-    PUSH(xdup("-crf"));    PUSH(xdup(preview ? "30" : "18"));
-    PUSH(xdup("-pix_fmt")); PUSH(xdup("yuv420p"));
-    if (naud > 0) { PUSH(xdup("-c:a")); PUSH(xdup("aac"));
-                    PUSH(xdup("-b:a")); PUSH(xdup(preview ? "96k" : "192k")); }
+    /* A preview is watched once and thrown away, so every setting there is
+     * traded for the time it takes to produce: ultrafast/crf 30 is roughly an
+     * order of magnitude quicker than the deliverable settings and looks it,
+     * which is correct, because what is being judged at that point is the
+     * CUT and not the encode. A preview is therefore always x264 in an mp4,
+     * whatever the deliverable is going to be — the picture is the same graph
+     * either way, which is the part that has to agree. */
+    if (preview) {
+        PUSH(xdup("-c:v")); PUSH(xdup("libx264"));
+        PUSH(xdup("-preset")); PUSH(xdup("ultrafast"));
+        PUSH(xdup("-crf"));    PUSH(xdup("30"));
+        PUSH(xdup("-pix_fmt")); PUSH(xdup("yuv420p"));
+        if (naud > 0) { PUSH(xdup("-c:a")); PUSH(xdup("aac"));
+                        PUSH(xdup("-b:a")); PUSH(xdup("96k")); }
+    } else {
+        const ss_tl_format *f = fmt ? fmt : ss_timeline_format(NULL, out);
+        PUSH(xdup("-c:v")); PUSH(xdup(f->vcodec));
+        if (f->v1 && f->v2) { PUSH(xdup(f->v1)); PUSH(xdup(f->v2)); }
+        if (f->v3 && f->v4) { PUSH(xdup(f->v3)); PUSH(xdup(f->v4)); }
+        PUSH(xdup("-pix_fmt")); PUSH(xdup(f->pix));
+        if (naud > 0) {
+            PUSH(xdup("-c:a")); PUSH(xdup(f->acodec));
+            /* A bitrate means nothing to a lossless codec and ffmpeg refuses
+             * some of them outright, so it is only said where it applies. */
+            if (strncmp(f->acodec, "pcm_", 4) && strcmp(f->acodec, "flac")) {
+                PUSH(xdup("-b:a")); PUSH(xdup("192k"));
+            }
+        }
+    }
     /* NOT fragmented, deliberately.
      *
      * A preview was written as fragmented mp4 so a player could open it while
