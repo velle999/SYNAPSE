@@ -27,7 +27,10 @@ pkgver=0.1.0
 #   ⚠ QS_APP_ID, the .desktop basename and StartupWMClass are one name, or the
 #   dock's "<app_id>.desktop" lookup finds nothing and the pinned icon is a
 #   themed fallback that does nothing when clicked.
-pkgrel=21
+# 22: the nix profile documents comp_synstudio. syn-install's config_test.sh
+#   checks that vocabulary for drift in BOTH directions — a key the installer
+#   asks about and the example never mentions is a key nobody can discover.
+pkgrel=22
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

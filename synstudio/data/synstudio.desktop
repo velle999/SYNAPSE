@@ -1,0 +1,37 @@
+[Desktop Entry]
+Type=Application
+Name=Studio
+GenericName=Photo and Video Editor
+Comment=Develop photographs and cut video with one colour engine
+# The darkroom is what opens; the file it should open is optional, which is why
+# %f and not %F. This program edits ONE photograph at a time — a second %f
+# would have the desktop launch a second window per file selected, which is not
+# what "open these five" means to anybody.
+Exec=synstudio gui %f
+# Its own mark, not a stock name. The theme's generic entries here are
+# applications-graphics and multimedia-photo-manager, which on Breeze are
+# Gwenview's and digiKam's faces — synfiles shipped a stock name once and was
+# indistinguishable from Dolphin in the dock for it.
+Icon=synstudio
+Terminal=false
+# The window's app_id, so a taskbar mapping windows to launchers finds THIS
+# entry. synstudio sets it on the quickshell process (QS_APP_ID); without both
+# halves the window belongs to "org.quickshell" and wears its icon.
+StartupWMClass=synstudio
+# ONE main category. Listing both Graphics and AudioVideo is accurate — this
+# program does both — but a menu builds a section per main category, so the
+# accurate answer puts synstudio in the menu TWICE, under two names, launching
+# the same window. Graphics is the one that ships a window today; the video
+# side is the timeline, which is still command line only.
+Categories=Graphics;Photography;2DGraphics;RasterGraphics;
+Keywords=photo;photograph;raw;develop;darkroom;edit;editor;video;colour;color;grade;lut;timeline;
+# A CANDIDATE for these types, deliberately not the default. Which application
+# opens a JPEG is decided by mimeapps.list, and the only vendor mimeapps.list
+# on this system belongs to synfiles (two packages cannot own the same file).
+# Declaring the types here is what puts synstudio in "Open with…"; taking the
+# association would be a separate, louder change than shipping an editor.
+#
+# Camera raw is listed by its real types rather than as one blanket entry:
+# shared-mime-info has no parent type covering them, so a raw file that is not
+# named here simply does not offer this program.
+MimeType=image/jpeg;image/png;image/tiff;image/webp;image/x-portable-pixmap;image/avif;image/heif;image/x-canon-cr2;image/x-canon-cr3;image/x-nikon-nef;image/x-sony-arw;image/x-fuji-raf;image/x-olympus-orf;image/x-panasonic-rw2;image/x-pentax-pef;image/x-adobe-dng;video/mp4;video/quicktime;video/x-matroska;video/webm;video/x-msvideo;

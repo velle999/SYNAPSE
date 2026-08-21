@@ -164,6 +164,12 @@ syn-arcade
 # controls it. Without it installed, that whole half of big screen mode is
 # listed and absent — which is how it shipped, working on one machine.
 cliamp
+# The darkroom and edit suite: RAW develop, masks, a non-destructive sidecar,
+# and a video timeline graded through the same colour engine. On the live ISO
+# because "will this machine read my camera's raw files" is a question worth
+# answering before installing — and because a live session someone is testing
+# hardware from is exactly where they will want to look at a photograph.
+synstudio
 # The settings app: displays, region, date and time, network, Bluetooth, power,
 # kernels, default applications, and where configuration lives. It was in
 # build-all.sh's component list, in syn-update's COMPONENTS and in the start

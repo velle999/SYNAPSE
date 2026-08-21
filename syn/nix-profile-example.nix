@@ -121,6 +121,7 @@
 
     arcade   = true;     # syn-arcade: overlay, pads, big screen mode
     cliamp   = true;     # the player big screen mode drives
+    synstudio = true;    # the darkroom: RAW develop, masks, graded video
     arsenal  = true;
     chibi    = true;
     vibe     = true;

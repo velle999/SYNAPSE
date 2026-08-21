@@ -77,7 +77,11 @@ pkgver=0.1.0
 #   `dock_style = auto` written explicitly: already the compiled default, and
 #   this file should be readable as what the machine was given.
 #   Four checks in layout_test, including that a NUMBER never comes back.
-pkgrel=90
+# 91: synstudio is a checkbox. Both surfaces, because they are two rosters:
+#   SEL_COMPONENTS in syn-install.sh and the rows table in the GUI. A name in
+#   one and not the other is a component the text installer offers and the
+#   graphical one silently cannot.
+pkgrel=91
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

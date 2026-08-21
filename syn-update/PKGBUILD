@@ -28,7 +28,10 @@ pkgver=0.1.0
 #   as the violet it was drawn from on every theme — so a near-white arc on it
 #   was never carrying much contrast and washed out entirely on the pale ones.
 
-pkgrel=41
+# 42: synstudio joins COMPONENTS. ⚠ This tool runs COMPONENTS from the
+#   INSTALLED copy, so adopting a COMPONENTS change takes two applies: the
+#   first installs this list, the second acts on it.
+pkgrel=42
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

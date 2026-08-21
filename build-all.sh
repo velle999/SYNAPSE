@@ -33,7 +33,7 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers syn-arcade cliamp)
+       synapse-wallpapers syn-arcade cliamp synstudio)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -429,6 +429,23 @@ build_component syn-edit
 # are never exercised, so a build cannot rumble a pad or rewrite its deadzones
 # on the machine running it.
 build_component syn-arcade
+
+# synstudio — the darkroom and edit suite. meson C plus a quickshell front-end,
+# the same shape again, built from the generic collector's src/, include/,
+# meson.build, data/ and tests/.
+#
+# No ordering constraint: it links libc and libm and nothing else, and reaches
+# ffmpeg, ffprobe and dcraw_emu as subprocesses rather than as libraries, so it
+# depends on no other component in this script.
+#
+# Its check() is entirely headless — no display, no compositor, no GPU — which
+# is possible because the window is only a renderer over the same command line
+# the tests drive. Everything it writes is inside a mktemp -d, and the sidecar
+# tests md5sum the source photograph before and after to prove the engine never
+# writes to an original. The ffmpeg-dependent assertions (decode, export, the
+# LUT-vs-engine PSNR comparison) are guarded by `have ffmpeg` and skip rather
+# than fail on a host without it.
+build_component synstudio
 
 # Vendored, boot-critical where it is installed, and never installed by this
 # script. See build_vendored_pkg.

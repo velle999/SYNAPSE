@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    SYNAPSE Studio.
+
+    ⚠ The <svg> element starts at BYTE 0 and this comment is INSIDE it, not
+    above it. gdk-pixbuf sniffs only the first 256 bytes of a file to decide
+    what it is, so a header comment long enough to push the root tag past that
+    mark makes the icon a blank square in the GNOME grid while rendering
+    perfectly on synui and KDE (Qt parses, GTK sniffs). Five SynapseOS icons
+    shipped that way on 0.2.9.
+
+    The mark is an APERTURE, because that is the one shape a photographer and
+    a colourist both own: six blades around an opening. The blades are the
+    house violet; the opening carries the three additive primaries, which is
+    what the develop stack actually manipulates and what tells this icon apart
+    from every other purple hexagon in the dock.
+
+    Flat, no gradients, six shapes: it is looked at at 22px in a dock, where
+    anything finer turns to mush.
+
+    SynapseOS Project — GPL-2.0-or-later
+    SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+
+  <!-- The barrel. One circle, so nothing can drift out of round. -->
+  <circle cx="24" cy="24" r="20" fill="#a78bfa"/>
+
+  <!-- The opening. Drawn as a hexagon rather than a circle because an iris of
+       six blades cannot make a round hole, and the flats are what read as
+       "aperture" rather than "button" at small sizes. -->
+  <path d="M24 9.5 36.6 16.75 36.6 31.25 24 38.5 11.4 31.25 11.4 16.75z"
+        fill="#1b1030"/>
+
+  <!-- Red, green and blue, as three blades meeting at the centre. Each spans
+       120 degrees — two of the hexagon's six triangles — so the three of them
+       CLOSE. Three 60-degree wedges left the opening dark down one whole side
+       and the mark read as a hexagon with a coloured edge, not as an iris.
+
+       Reduced value, not saturated: full #ff0000 on this violet vibrates, and
+       an icon has to sit still.
+
+       They sit INSIDE the opening with a dark rim left showing, rather than
+       filling it. At 22px — the size this is looked at in a dock — an icon has
+       about three bands of value to spend and no detail at all: violet ring,
+       dark ring, colour centre reads as a lens, while wedges filling the whole
+       hexagon read as a coloured blob. There is no centre dot for the same
+       reason; at 22px it swallowed the colour it was meant to organise. -->
+  <path d="M24 24 24.00 14.00 32.66 19.00 32.66 29.00z" fill="#e05a6a"/>
+  <path d="M24 24 32.66 29.00 24.00 34.00 15.34 29.00z" fill="#5ab97a"/>
+  <path d="M24 24 15.34 29.00 15.34 19.00 24.00 14.00z" fill="#5a8fe0"/>
+
+</svg>

@@ -1,0 +1,90 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# synstudio — the SynapseOS darkroom and edit suite.
+#
+# One colour engine, two faces. The develop stack in src/colour.c is the only
+# place in this program where a pixel's colour is decided, and the video side
+# does not reimplement it: a clip's grade is BAKED to an Iridas .cube and
+# handed to ffmpeg's lut3d filter, so a still and a frame of video with the
+# same settings come out the same. Measured, not asserted — tests/run.sh holds
+# the engine against the LUT at 55.7 dB PSNR, which is about 0.4 of a code
+# value, and 65 nodes measures WORSE than 33, so what is left is quantisation
+# rather than interpolation error.
+#
+# Nothing here links ffmpeg or libraw. Decode, encode and camera raw are all
+# subprocesses with an argv array, never a shell. That is a decision with a
+# scar behind it: a shipped SynapseOS component that linked ffmpeg stopped
+# launching the day ffmpeg bumped a SONAME, on an ordinary system upgrade,
+# with no warning and nothing the application could do about it. A pipe has no
+# ABI, and the cost is one process per file.
+pkgname=synstudio
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+
+# 1: first release. The photo darkroom is the face that ships — RAW and stills
+#   in, a 64-setting non-destructive develop stack, masks, and an export. The
+#   video timeline is real and tested (it cuts, grades, fades and encodes) but
+#   is reached from the command line; it has no page in the window yet, which
+#   is why the .desktop claims only Graphics as its main category.
+pkgrel=1
+
+pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# libc and libm. Everything else is a subprocess, and the ones that are not
+# strictly required are optdepends so that an install without them degrades
+# by feature rather than refusing to start.
+depends=('glibc')
+
+# ffmpeg is NOT optional, unlike in synfiles where it only supplies a
+# resolution row. It is how this program reads and writes every file: without
+# it synstudio can compute colour and can open nothing, which is not a
+# degraded editor, it is a calculator.
+depends+=('ffmpeg')
+
+makedepends=('meson' 'ninja' 'gcc')
+
+optdepends=('quickshell: the darkroom window (synstudio gui)'
+            # dcraw_emu, which is libraw's own tool. ffmpeg reads DNG and a
+            # few others, but for most camera raw it fails by producing a
+            # THUMBNAIL-sized preview rather than an error — far worse than
+            # refusing — so those extensions are routed to libraw instead and
+            # simply do not open without it.
+            'libraw: Canon, Nikon, Sony, Fuji and Olympus camera raw'
+            # For `synstudio timeline export`. Same binary as depends, named
+            # again here only in the comment: the timeline builds one filter
+            # graph and hands it over whole.
+            )
+
+source=("synstudio-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/synstudio-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/synstudio-0.1.0"
+    # The whole suite is headless: no display, no compositor, no GPU. That is
+    # possible because the window is a renderer over this same command line,
+    # so a passing suite is evidence about the application and not merely
+    # about a library underneath it.
+    #
+    # Every path is inside a mktemp -d that the EXIT trap removes, and the
+    # sidecar tests md5sum the original photograph before and after to prove
+    # this program never writes to it. An editor whose tests could modify a
+    # real photograph would be the most dangerous file in this repository.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/synstudio-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

@@ -292,6 +292,13 @@ PACKAGES=(
     # pinned upstream tag and the Go module cache), exactly like nexus-chat,
     # tepris and fetch above.
     cliamp
+    # synstudio — the darkroom and edit suite. Ordering is free: it links libc
+    # and libm and nothing else, reaching ffmpeg, ffprobe and dcraw_emu as
+    # subprocesses rather than as libraries, so no component here depends on it
+    # and it depends on none of them. Its own ffmpeg dependency comes off the
+    # mirror from `extra` like any other upstream one, and needs no network at
+    # build time beyond that.
+    synstudio
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
