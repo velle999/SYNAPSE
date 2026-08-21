@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" color="#ffffff" fill="#ffffff">
 <!-- SynapseOS lockup. Mark is the original vector; the wordmark was traced
-     from synui/data/synapse-logo.png with potrace, so the letterforms are the
-     real ones, not a substituted font. Colour is `currentColor` - set `color`
+     with potrace from the 1254px raster that shipped as the
+     synapse-logo wallpaper up to synui 0.1.0-418, so the letterforms are the
+     real ones, not a substituted font. That path holds a different image now;
+     the raster is in git history, and this file is what replaced it. Colour is `currentColor` - set `color`
      on the <svg> or a parent. Brand purple #a78bfa, ground #0a0a12. -->
   <g transform="translate(30.720,10.880) scale(0.9400)">
   <g transform="translate(512,512)">

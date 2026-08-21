@@ -457,8 +457,6 @@ install_data(['data/synui-calc.desktop',
 # waiting to happen and a meaningless row in the list.
 install_data('data/synapse-logo.png',
              install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
-install_data('data/synapse-logo-electrified.png',
-             install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
 # ⚠ NOT a theme. It is a wallpaper, and on Prism that is the whole of it:
 # `wallpaper_accent = auto` is already ON for Prism, so the desktop takes its
 # accent off whatever picture is up. Picking this one IS the "Hannah Montana

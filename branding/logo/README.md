@@ -4,8 +4,10 @@ Vector masters plus 4096px rasters. The **SVGs are the source of truth**; regene
 any size with `rsvg-convert -w N synapseos-logo-square-transparent.svg -o out.png`.
 
 The dendrite mark is the original vector from `synui/data/logo.svg`. The wordmark was
-traced from `synui/data/synapse-logo.png` with potrace, so the letterforms are the real
-ones rather than a substituted font. The CRT scanlines and red/blue fringing of that PNG
+traced with potrace from the 1254px raster that shipped as the `synapse-logo` wallpaper
+up to synui 0.1.0-418, so the letterforms are the real ones rather than a substituted
+font. That path holds a different image now — a 4K logo-on-black wallpaper built from
+these very masters — so the raster lives in git history rather than at a live path. The CRT scanlines and red/blue fringing of that PNG
 are deliberately **not** reproduced: 1px scanlines moiré or disappear in print, and the
 chromatic fringe reads as a registration error.
 
