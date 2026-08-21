@@ -335,10 +335,24 @@ int cmd_updates(int argc, char **argv)
 	alpm_handle_t *h = sp_alpm_init(false);
 	alpm_list_t *syncdbs = sp_syncdbs(h);
 
-	if (g_out == OUT_TSV)
-		tsv_row(5, "name", "installed_version", "new_version", "repo", "size");
+	/* Held-back packages are LISTED AND MARKED, not filtered out.
+	 *
+	 * Hiding them would be the obvious reading of "ignore", and it is the
+	 * wrong one: an update you are holding back is the single thing you most
+	 * need to be reminded of, because the reason for the hold was almost
+	 * always temporary — a regression to wait out, a rebuild to schedule. A
+	 * list that silently omits them is how a package stays pinned for a year.
+	 *
+	 * They do not count towards the total or the download size either, because
+	 * the upgrade is not going to fetch them. */
+	char **held = NULL;
+	size_t n_held = sp_ignore_list(&held);
 
-	int n = 0;
+	if (g_out == OUT_TSV)
+		tsv_row(6, "name", "installed_version", "new_version", "repo", "size",
+		        "ignored");
+
+	int n = 0, n_ignored = 0;
 	off_t total = 0;
 	for (alpm_list_t *i = alpm_db_get_pkgcache(alpm_get_localdb(h)); i; i = i->next) {
 		alpm_pkg_t *old = i->data;
@@ -346,37 +360,61 @@ int cmd_updates(int argc, char **argv)
 		if (!new)
 			continue;
 
+		const char *name = alpm_pkg_get_name(old);
+		bool ignored = false;
+		for (size_t k = 0; k < n_held && !ignored; k++)
+			ignored = !strcmp(held[k], name);
+
 		off_t size = alpm_pkg_get_size(new);
-		total += size;
-		n++;
+		if (ignored) {
+			n_ignored++;
+		} else {
+			total += size;
+			n++;
+		}
 
 		if (g_out == OUT_TSV) {
 			char *sz = xasprintf("%lld", (long long)size);
-			tsv_row(5, alpm_pkg_get_name(old), alpm_pkg_get_version(old),
-			        alpm_pkg_get_version(new), pkg_repo(new), sz);
+			tsv_row(6, name, alpm_pkg_get_version(old),
+			        alpm_pkg_get_version(new), pkg_repo(new), sz,
+			        ignored ? "1" : "0");
 			free(sz);
+		} else if (ignored) {
+			printf("%s%-30s%s %s%s%s -> %s%s%s %s(held back)%s\n", C_DIM(),
+			       name, C_RESET(), C_DIM(),
+			       alpm_pkg_get_version(old), C_RESET(), C_DIM(),
+			       alpm_pkg_get_version(new), C_RESET(), C_WARN(), C_RESET());
 		} else {
 			printf("%s%-30s%s %s%s%s -> %s%s%s\n", C_BOLD(),
-			       alpm_pkg_get_name(old), C_RESET(), C_DIM(),
+			       name, C_RESET(), C_DIM(),
 			       alpm_pkg_get_version(old), C_RESET(), C_ACCENT(),
 			       alpm_pkg_get_version(new), C_RESET());
 		}
 	}
 
 	if (g_out == OUT_HUMAN) {
-		if (!n) {
+		if (!n && !n_ignored) {
 			printf("%severything is up to date%s\n", C_OK(), C_RESET());
 		} else {
 			char *sz = human_size(total);
 			printf("\n%d package%s to upgrade, %s to download\n", n,
 			       n == 1 ? "" : "s", sz);
 			free(sz);
+			if (n_ignored)
+				printf("%s%d held back — `synpkg ignore` lists them, "
+				       "`synpkg unignore <package>` releases one%s\n",
+				       C_DIM(), n_ignored, C_RESET());
 		}
 	}
 
+	pconf_free_list(held, n_held);
 	sp_alpm_free(h);
 	/* Exit 0 with updates, 100 with none — a cron/bar poller wants to branch
-	 * on this without parsing. Chosen well outside pacman's own exit codes. */
+	 * on this without parsing. Chosen well outside pacman's own exit codes.
+	 *
+	 * A held-back update is NOT something to do, so a machine whose only
+	 * pending changes are held reports 100. The bar would otherwise show a
+	 * permanent badge for updates that will never be taken. */
 	return n ? 0 : 100;
 }
 

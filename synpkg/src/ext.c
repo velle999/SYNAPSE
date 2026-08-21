@@ -82,6 +82,23 @@ static int system_check(void)
 	return st;
 }
 
+/* Does the installed syn-update know the hold verbs? Asked once per process:
+ * the Held back pane calls into this twice and the answer cannot change
+ * underneath a single run. */
+static bool syn_update_has_hold(void)
+{
+	static int cached = -1;
+	if (cached >= 0)
+		return cached != 0;
+
+	char *argv[] = { (char *)"syn-update", (char *)"help", NULL };
+	int st = 0;
+	char *out = run_capture(argv, &st, true);
+	cached = strstr(out, "syn-update ignored") != NULL;
+	free(out);
+	return cached != 0;
+}
+
 int cmd_system(int argc, char **argv)
 {
 	const char *sub = argc > 0 ? argv[0] : "check";
@@ -89,9 +106,59 @@ int cmd_system(int argc, char **argv)
 	if (!strcmp(sub, "check"))
 		return system_check();
 
-	if (!strcmp(sub, "apply") || !strcmp(sub, "status")) {
+	/* The component hold. syn-update owns the state — it lives in that tool's
+	 * manifest, beside `selected` and `declined`, because it is the same kind
+	 * of fact — so these are a passthrough and not a second implementation.
+	 *
+	 * ⚠ NOT pacman's IgnorePkg, which is what `synpkg ignore` writes. A
+	 * SynapseOS component is not upgraded by pacman at all: it is BUILT by
+	 * syn-update and installed with `pacman -U`, which IgnorePkg does not
+	 * gate. An IgnorePkg entry for one would look set and do nothing. */
+	if (!strcmp(sub, "ignored")) {
 		if (!have_cmd("syn-update"))
 			die("syn-update is not installed");
+		/* PROBE, do not assume.
+		 *
+		 * The component hold arrived in syn-update after synpkg learned to ask
+		 * about it, and the two are separate packages: a machine mid-upgrade
+		 * has a new synpkg and an old syn-update for as long as it takes the
+		 * next apply to run. optdepends cannot express "0.1.0-42 or newer", so
+		 * the window probes for the verb, exactly as synfiles does for
+		 * syn-disks' --format.
+		 *
+		 * An old syn-update makes this an EMPTY TABLE and a warning, not an
+		 * error dump in the middle of a pane — but never a silent "nothing is
+		 * held", because we did not ask successfully and cannot claim that. */
+		if (!syn_update_has_hold()) {
+			if (g_out == OUT_TSV)
+				tsv_row(2, "component", "installed");
+			else
+				warn("this syn-update is too old to hold a component back — "
+				     "run `syn-update apply syn-update` first");
+			return 100;
+		}
+		char *av[4];
+		int n = 0;
+		av[n++] = (char *)"syn-update";
+		av[n++] = (char *)"ignored";
+		/* --tsv is syn-update's own flag, so this is a passthrough and not a
+		 * scrape of a human report. `system check` still scrapes, which is why
+		 * a section added to that report can break this window — a new command
+		 * should not inherit the trap. */
+		if (g_out == OUT_TSV)
+			av[n++] = (char *)"--tsv";
+		av[n] = NULL;
+		return run(av, false);
+	}
+
+	if (!strcmp(sub, "apply") || !strcmp(sub, "status") ||
+	    !strcmp(sub, "ignore") || !strcmp(sub, "unignore")) {
+		if (!have_cmd("syn-update"))
+			die("syn-update is not installed");
+		if ((!strcmp(sub, "ignore") || !strcmp(sub, "unignore")) &&
+		    !syn_update_has_hold())
+			die("this syn-update cannot hold a component back yet.\n"
+			    "  Update it first: syn-update apply syn-update");
 
 		/* `apply` is deliberately NOT run through the GUI's stdout: it drives
 		 * build-all.sh, which calls `sudo pacman -U` mid-build, and sudo with
@@ -114,7 +181,8 @@ int cmd_system(int argc, char **argv)
 		return rc;
 	}
 
-	die("system: unknown subcommand '%s' — try check, apply, status", sub);
+	die("system: unknown subcommand '%s' — "
+	    "try check, apply, status, ignore, unignore, ignored", sub);
 }
 
 /* ── Flatpak / Flathub ──────────────────────────────────────────────────────
@@ -504,7 +572,15 @@ static int flatpak_updates(void)
 	char *upd = run_capture(upd_argv, &st, g_out == OUT_TSV);
 
 	if (g_out == OUT_TSV)
-		tsv_row(5, "name", "installed_version", "new_version", "repo", "size");
+		tsv_row(6, "name", "installed_version", "new_version", "repo", "size",
+		        "ignored");
+
+	/* Flatpak's own hold is `flatpak mask`, which flatpak update honours. It is
+	 * NOT IgnorePkg: a flatpak is not a pacman package and pacman.conf has no
+	 * opinion about one. Two mechanisms because there are two package systems;
+	 * one listing, because there is one user asking what is held. */
+	char **masks = NULL;
+	size_t nmask = sp_flatpak_masks(&masks);
 
 	int shown = 0;
 	size_t n = 0;
@@ -529,9 +605,17 @@ static int flatpak_updates(void)
 			}
 		}
 
+		bool masked = false;
+		for (size_t m = 0; m < nmask && !masked; m++)
+			masked = !strcmp(masks[m], f[0]);
+
 		shown++;
 		if (g_out == OUT_TSV)
-			tsv_row(5, f[0], have, "", nf >= 2 ? f[1] : "flatpak", "0");
+			tsv_row(6, f[0], have, "", nf >= 2 ? f[1] : "flatpak", "0",
+			        masked ? "1" : "0");
+		else if (masked)
+			printf("%s%-40s%s %s%s -> update available (held back)%s\n", C_DIM(),
+			       f[0], C_RESET(), C_DIM(), have, C_RESET());
 		else
 			printf("%s%-40s%s %s%s%s -> %supdate available%s\n", C_BOLD(),
 			       f[0], C_RESET(), C_DIM(), have, C_RESET(), C_ACCENT(),
@@ -543,10 +627,142 @@ static int flatpak_updates(void)
 	free(cur_lines);
 	free(cur_ver);
 	free(cur);
+	pconf_free_list(masks, nmask);
 
 	if (g_out == OUT_HUMAN && !shown)
 		printf("%sFlatpak applications are up to date%s\n", C_OK(), C_RESET());
 	return shown ? 0 : 100;
+}
+
+/* ── flatpak's own hold ──────────────────────────────────────────────────────
+ *
+ * `flatpak mask` is flatpak's IgnorePkg: a masked application is skipped by
+ * `flatpak update` and never installed automatically as a dependency. It is
+ * the mechanism flatpak itself honours, which is the same reason the
+ * repository half of this program writes pacman.conf rather than a file of its
+ * own — a hold only synpkg obeyed would be undone by the next `flatpak update`
+ * typed into a terminal.
+ *
+ * ⚠ Masks are PER INSTALLATION. `flatpak mask` with no flag means --system,
+ * and a user-installed application masked system-wide is not masked at all.
+ * Both are read, and a mask is written to whichever installation actually has
+ * the application.
+ */
+
+/* Every masked pattern, system and user. Caller frees with pconf_free_list. */
+size_t sp_flatpak_masks(char ***out)
+{
+	*out = NULL;
+	if (!sp_flatpak_present())
+		return 0;
+
+	char **list = xmalloc(sizeof *list);
+	size_t n = 0, cap = 1;
+
+	static const char *scope[] = { "--system", "--user" };
+	for (int s = 0; s < 2; s++) {
+		char *argv[] = { (char *)"flatpak", (char *)"mask",
+		                 (char *)scope[s], NULL };
+		int st = 0;
+		char *out_txt = run_capture(argv, &st, true);
+		size_t nl = 0;
+		char **lines = split(out_txt, '\n', &nl);
+		for (size_t i = 0; i < nl; i++) {
+			/* flatpak indents each pattern and prints a heading line when
+			 * there is anything to show. Take the indented rows only. */
+			const char *l = lines[i];
+			if (*l != ' ' && *l != '\t')
+				continue;
+			while (*l == ' ' || *l == '\t')
+				l++;
+			if (!*l)
+				continue;
+			if (n == cap)
+				list = xrealloc(list, (cap *= 2) * sizeof *list);
+			list[n++] = xstrdup(l);
+		}
+		free(lines);
+		free(out_txt);
+	}
+	*out = list;
+	return n;
+}
+
+/* Which installation has this application, so the mask lands where it counts.
+ * "" when neither does, which the caller reports rather than guessing. */
+static const char *flatpak_scope_of(const char *ref)
+{
+	static const char *scope[] = { "--system", "--user" };
+	for (int s = 0; s < 2; s++) {
+		char *argv[] = { (char *)"flatpak", (char *)"list", (char *)scope[s],
+		                 (char *)"--app", (char *)"--columns=application", NULL };
+		int st = 0;
+		char *out = run_capture(argv, &st, true);
+		size_t n = 0;
+		char **lines = split(out, '\n', &n);
+		bool found = false;
+		for (size_t i = 0; i < n && !found; i++)
+			found = !strcmp(lines[i], ref);
+		free(lines);
+		free(out);
+		if (found)
+			return scope[s];
+	}
+	return "";
+}
+
+static int flatpak_mask_cmd(int argc, char **argv, bool remove)
+{
+	flatpak_required();
+
+	if (argc < 1) {
+		/* No names: list. `synpkg ignore` shows these too, but somebody who
+		 * asked the flatpak subcommand should get an answer from it. */
+		char **m = NULL;
+		size_t n = sp_flatpak_masks(&m);
+		if (g_out == OUT_TSV) {
+			tsv_row(1, "name");
+			for (size_t i = 0; i < n; i++)
+				tsv_row(1, m[i]);
+		} else if (!n) {
+			printf("%sno Flatpak application is being held back%s\n",
+			       C_OK(), C_RESET());
+		} else {
+			for (size_t i = 0; i < n; i++)
+				printf("  %s%s%s\n", C_BOLD(), m[i], C_RESET());
+		}
+		pconf_free_list(m, n);
+		return n ? 0 : 100;
+	}
+
+	int rc = 0;
+	for (int i = 0; i < argc; i++) {
+		const char *scope = flatpak_scope_of(argv[i]);
+		if (!*scope) {
+			/* Masking something not installed is legal in flatpak — it stops
+			 * the application arriving as a dependency — so this is a warning
+			 * and the mask still goes to --user, which needs no root. */
+			warn("%s is not installed; masking it in the user installation",
+			     argv[i]);
+			scope = "--user";
+		}
+		char *av[6];
+		int k = 0;
+		av[k++] = (char *)"flatpak";
+		av[k++] = (char *)"mask";
+		av[k++] = (char *)scope;
+		if (remove)
+			av[k++] = (char *)"--remove";
+		av[k++] = argv[i];
+		av[k] = NULL;
+		if (run(av, false) != 0) {
+			warn("flatpak could not %s %s", remove ? "unmask" : "mask", argv[i]);
+			rc = 1;
+			continue;
+		}
+		info("%s %s", argv[i], remove ? "released" : "held back");
+	}
+	return rc;
 }
 
 static int flatpak_remotes(void)
@@ -663,6 +879,10 @@ int cmd_flatpak(int argc, char **argv)
 	}
 	if (!strcmp(sub, "updates"))
 		return flatpak_updates();
+	if (!strcmp(sub, "ignore"))
+		return flatpak_mask_cmd(argc - 1, argv + 1, false);
+	if (!strcmp(sub, "unignore"))
+		return flatpak_mask_cmd(argc - 1, argv + 1, true);
 	if (!strcmp(sub, "remotes"))
 		return flatpak_remotes();
 	if (!strcmp(sub, "enable-flathub"))
@@ -1073,6 +1293,20 @@ static void aur_collect_outdated(aur_pkg_t *p, void *vctx)
 	if (!local)
 		return;
 
+	/* A held package is not rebuilt.
+	 *
+	 * ⚠ libalpm does this for the repository pass by itself — IgnorePkg is fed
+	 * into the handle and a sysupgrade honours it. The AUR pass is OUR loop
+	 * over `makepkg -si`, so nothing enforces it here unless this line does,
+	 * and an AUR package the user held back would have been rebuilt and
+	 * reinstalled by the very command they configured to leave it alone.
+	 *
+	 * The same IgnorePkg, deliberately: an AUR package IS a pacman package
+	 * once it is installed, living in the same namespace and the same local
+	 * database, so a second list for it would be a second place to look. */
+	if (sp_ignore_has(p->name))
+		return;
+
 	/* alpm_pkg_vercmp, not strcmp: "0.1.0-203" sorts below "0.1.0-99" as
 	 * text, and that mistake silently declines to offer an update. */
 	if (alpm_pkg_vercmp(p->version, alpm_pkg_get_version(local)) > 0)
@@ -1192,9 +1426,19 @@ static void aur_update_row(aur_pkg_t *p, void *vctx)
 	if (alpm_pkg_vercmp(p->version, alpm_pkg_get_version(local)) <= 0)
 		return;
 
+	/* Listed and MARKED, never filtered out — the same rule the repository
+	 * listing follows, and for the same reason: the hold is what you most need
+	 * reminding of, because the reason for it was almost always temporary. */
+	bool ignored = sp_ignore_has(p->name);
+
 	ctx->n++;
 	if (g_out == OUT_TSV)
-		tsv_row(5, p->name, alpm_pkg_get_version(local), p->version, "aur", "0");
+		tsv_row(6, p->name, alpm_pkg_get_version(local), p->version, "aur", "0",
+		        ignored ? "1" : "0");
+	else if (ignored)
+		printf("%s%-30s%s %s%s -> %s (held back)%s\n", C_DIM(), p->name,
+		       C_RESET(), C_DIM(), alpm_pkg_get_version(local), p->version,
+		       C_RESET());
 	else
 		printf("%s%-30s%s %s%s%s -> %s%s%s\n", C_BOLD(), p->name, C_RESET(),
 		       C_DIM(), alpm_pkg_get_version(local), C_RESET(), C_ACCENT(),
@@ -1231,7 +1475,8 @@ static int aur_updates(void)
 	}
 
 	if (g_out == OUT_TSV)
-		tsv_row(5, "name", "installed_version", "new_version", "repo", "size");
+		tsv_row(6, "name", "installed_version", "new_version", "repo", "size",
+		        "ignored");
 
 	struct aur_update_ctx ctx = { h, 0 };
 	int parsed = aur_each(json, aur_update_row, &ctx);

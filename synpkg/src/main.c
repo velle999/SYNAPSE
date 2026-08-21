@@ -35,7 +35,14 @@ static void usage(FILE *out)
 "                          reboot if the running kernel was replaced\n"
 "  refresh                 sync the package databases only\n"
 "  news [--all]            Arch news since your last upgrade, or the latest 10\n"
-"  updates                 list what a upgrade would change\n"
+"  updates                 list what a upgrade would change, with held-back\n"
+"                          ones marked rather than hidden\n"
+"  ignore [package]...     hold a package back. With names, stop upgrading\n"
+"                          them; with none, list everything held back and\n"
+"                          whether an update is waiting for it. The list is\n"
+"                          pacman.conf's IgnorePkg, so plain `pacman -Syu`\n"
+"                          honours it too\n"
+"  unignore <package>...   let one go again\n"
 "  installed [--explicit]  what is on this machine\n"
 "  orphans [--remove]      dependencies nothing needs any more\n"
 "  status                  database and repository health\n"
@@ -51,9 +58,11 @@ static void usage(FILE *out)
 "                          (status, enable-repo, disable-repo)\n"
 "  aur <search|install|installed|updates>\n"
 "  flatpak <search|install|remove|installed|updates|remotes|enable-flathub>\n"
+"  flatpak ignore|unignore [app]   hold a Flatpak back (flatpak mask)\n"
 "  flatpak categories      browse Flathub by category\n"
 "  flatpak category <name> the applications in one Flathub category\n"
-"  system <check|apply>    SynapseOS's own components, via syn-update\n"
+"  system <check|apply|ignore|unignore|ignored>\n"
+"                          SynapseOS's own components, via syn-update\n"
 "                           apply takes component names: system apply synui\n"
 "  config [key [yes|no]]   what upgrade does by default; no arguments lists\n"
 "\n"
@@ -184,6 +193,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "aur"))       return cmd_aur(rest_argc, rest);
 	if (!strcmp(cmd, "flatpak"))   return cmd_flatpak(rest_argc, rest);
 	if (!strcmp(cmd, "system"))    return cmd_system(rest_argc, rest);
+	if (!strcmp(cmd, "ignore"))    return cmd_ignore(rest_argc, rest);
+	if (!strcmp(cmd, "unignore"))  return cmd_unignore(rest_argc, rest);
 	if (!strcmp(cmd, "config"))    return cmd_config(rest_argc, rest);
 	if (!strcmp(cmd, "tui"))       return cmd_tui(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))       return cmd_gui(rest_argc, rest);

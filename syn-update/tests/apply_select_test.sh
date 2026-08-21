@@ -706,6 +706,139 @@ else
     echo "  skip  quickshell not installed, cannot check the wallpaper accent"
 fi
 
+# ── holding a component back ────────────────────────────────────────────────
+#
+# `held` is a THIRD manifest state beside selected and declined, and the two
+# ways it can go wrong are both silent:
+#
+#   - save_manifest recomputes the whole file from `pacman -Q`, which can only
+#     see installed-or-not. A held component IS installed, so without the guard
+#     it is written back as `selected` and quietly resumes updating.
+#   - scan routes held out of CHANGED. Without the headline guard, a machine
+#     whose only pending change is held reports "everything is already current"
+#     — false, in the direction that hides the hold.
+
+echo "=== holding a component back ==="
+
+hold_tmp=$(mktemp -d); trap 'rm -rf "$tmp" "$hold_tmp"' EXIT
+
+# save_manifest, run against a fixture manifest with a real `pacman -Q` stub.
+# install(1) is left real: MANIFEST points inside a temp directory the test
+# owns, so the writability branch takes the no-sudo path and nothing on the
+# machine running this is touched.
+manifest_after() {   # manifest_after <installed-csv> <prior-manifest-body>
+    local installed=$1 prior=$2
+    printf '%s\n' "$prior" > "$hold_tmp/in.conf"
+    {
+        echo 'say()  { echo "$*"; }'
+        echo 'warn() { echo "warn  $*"; }'
+        echo 'ok()   { echo "ok    $*"; }'
+        echo "MANIFEST=$hold_tmp/out.conf"
+        echo "SRC=$repo"
+        echo "MANIFEST_PRESENT=1"
+        # Only these three exist, so `declined` is reachable in the output.
+        echo 'COMPONENTS=(synui vibe tepris)'
+        echo "pacman() { case \" $installed \" in *\" \$2 \"*) echo \"\$2 1.0-1\";; *) return 1;; esac; }"
+        sed -n '/^declare -A COMP_KNOWN=()/,/^MANIFEST_PRESENT=0/p' "$script"
+        sed -n '/^load_manifest() {/,/^}/p' "$script"
+        sed -n '/^install_manifest() {/,/^}/p' "$script"
+        sed -n '/^save_manifest() {/,/^}/p' "$script"
+        echo "MANIFEST=$hold_tmp/in.conf; load_manifest"
+        echo "MANIFEST=$hold_tmp/out.conf; save_manifest >/dev/null"
+        echo "grep -v '^#' $hold_tmp/out.conf | grep . | tr -d ' '"
+    } > "$hold_tmp/m.sh"
+    bash "$hold_tmp/m.sh" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'
+}
+
+# THE REGRESSION. save_manifest asks pacman what is installed; a held component
+# is installed, so the naive answer is `selected` and the hold evaporates on
+# the first successful apply — the user's answer, silently discarded by the
+# function whose whole job is to remember answers.
+check "a held component survives save_manifest" \
+      "synui=held vibe=selected tepris=declined" \
+      "$(manifest_after "synui vibe" "synui = held
+vibe = selected
+tepris = declined")"
+
+# The other direction: a hold is not sticky against removal. Uninstalled is
+# uninstalled, and `declined` is the state that says so.
+check "a held component that was removed becomes declined" \
+      "synui=declined vibe=selected tepris=declined" \
+      "$(manifest_after "vibe" "synui = held
+vibe = selected
+tepris = declined")"
+
+# manifest_set_state edits ONE line and leaves the rest byte for byte. It is
+# not save_manifest: that recomputes the file and is only correct after a
+# successful build, so using it here would rewrite states this command was
+# never asked about.
+set_state() {   # set_state <name> <state> <prior>
+    printf '%s\n' "$3" > "$hold_tmp/s.conf"
+    {
+        echo 'die() { echo "fail  $*"; exit 1; }'
+        echo "MANIFEST=$hold_tmp/s.conf"
+        sed -n '/^declare -A COMP_KNOWN=()/,/^MANIFEST_PRESENT=0/p' "$script"
+        sed -n '/^load_manifest() {/,/^}/p' "$script"
+        sed -n '/^install_manifest() {/,/^}/p' "$script"
+        sed -n '/^manifest_set_state() {/,/^}/p' "$script"
+        echo "manifest_set_state $1 $2"
+        echo "cat $hold_tmp/s.conf"
+    } > "$hold_tmp/s.sh"
+    bash "$hold_tmp/s.sh" 2>/dev/null
+}
+
+check "setting a state rewrites only that line" \
+      "# a comment
+synui = held
+vibe = selected" \
+      "$(set_state synui held "# a comment
+synui = selected
+vibe = selected")"
+
+# A machine installed before this component existed has no line for it. The
+# hold is still an answer and still has to be recorded.
+check "a component the manifest never named is appended" \
+      "vibe = selected
+synui = held" \
+      "$(set_state synui held "vibe = selected")"
+
+# The headline. HELD is deliberately kept out of CHANGED so nothing downstream
+# has to remember to exclude it — which is exactly why the summary line has to
+# know about it separately.
+report_headline() {   # report_headline <changed-csv> <held-csv>
+    {
+        echo 'C_DIM=""; C_R=""'
+        echo 'say() { echo "$*"; }; info() { echo "info  $*"; }'
+        echo 'ok() { echo "ok    $*"; }; warn() { echo "warn  $*"; }'
+        echo "CHANGED=($1)"; echo "HELD=($2)"
+        echo 'NEW=(); DECLINED=(); BLOCKED=(); SKIPPED=()'
+        echo 'declare -A UNSUPPORTED=(); MANIFEST_PRESENT=1; MANIFEST=/dev/null'
+        sed -n '/^report() {/,/^}/p' "$script"
+        echo 'report'
+    } > "$hold_tmp/r.sh"
+    bash "$hold_tmp/r.sh" 2>&1
+}
+
+case "$(report_headline "" "\"synui 1.0-1 1.0-2\"")" in
+    *"already current"*)
+        bad "the report says everything is current while holding an update back" ;;
+    *"HELD BACK"*)
+        ok "a held update is reported instead of being called current" ;;
+    *)  bad "a held update was neither reported nor explained" ;;
+esac
+
+case "$(report_headline "" "\"synui 1.0-1 1.0-2\"")" in
+    *"1.0-1"*"1.0-2"*)
+        ok "the report names the version it is refusing" ;;
+    *)  bad "the held row does not say what is being held back" ;;
+esac
+
+# Nothing held: the wording must not change for everybody else.
+case "$(report_headline "" "")" in
+    *"already current"*) ok "with nothing held, the summary is unchanged" ;;
+    *)                   bad "the held guard changed the ordinary summary" ;;
+esac
+
 echo ""
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

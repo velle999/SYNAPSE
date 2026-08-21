@@ -224,6 +224,10 @@ int cmd_aur(int argc, char **argv);
  * facts on every machine, so every caller has to ask rather than assume. */
 bool sp_flatpak_present(void);
 bool sp_flathub_enabled(void);
+/* Flatpak's own hold: every masked pattern, system and user installation both.
+ * NOT IgnorePkg — a flatpak is not a pacman package and pacman.conf has no
+ * opinion about one. Caller frees with pconf_free_list(). */
+size_t sp_flatpak_masks(char ***out);
 
 /* ── appstream.c — Flathub's category index ─────────────────────────────────
  * The flatpak CLI can only search by term, so browsing Flathub by category
@@ -258,6 +262,20 @@ char *sp_setting(const char *key);
  * pass of the upgrade. */
 bool  sp_setting_bool(const char *key);
 int   cmd_config(int argc, char **argv);
+
+/* ── ignore.c — holding a package back ──────────────────────────────────────
+ *
+ * The list is pacman.conf's IgnorePkg, not a synpkg file. An ignore only this
+ * program honoured would be a lie on a machine that also has pacman on it, and
+ * synpkg has READ IgnorePkg since the beginning (see alpmctx.c) — this only
+ * adds the ability to write what was already being obeyed. Changing it needs
+ * root, so both commands escalate. */
+/* Everything pacman considers ignored, resolved across every line and every
+ * Include. Caller frees with pconf_free_list(). */
+size_t sp_ignore_list(char ***out);
+bool   sp_ignore_has(const char *name);
+int    cmd_ignore(int argc, char **argv);     /* no args: list */
+int    cmd_unignore(int argc, char **argv);
 
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);

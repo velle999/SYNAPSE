@@ -284,6 +284,7 @@ FloatingWindow {
 
     readonly property var sections: [
         { id: "updates",   label: "Updates",      kind: "list" },
+        { id: "held",      label: "Held back",    kind: "list" },
         { id: "suggested", label: "Suggested",    kind: "list" },
         { id: "repo",      label: "Repositories", kind: "source" },
         { id: "aur",       label: "AUR",          kind: "source" },
@@ -304,6 +305,7 @@ FloatingWindow {
     // obvious if you already know the packaging landscape.
     function sectionHint(id) {
         if (id === "updates")   return "everything with a newer version — repositories, the AUR, Flathub and SynapseOS's own components"
+        if (id === "held")      return "updates you are deliberately not taking. Release one and it comes back on the next check"
         if (id === "suggested") return "the curated SynapseOS software list"
         if (id === "repo")      return "official Arch repositories and SynapseOS's own — signed, binary, managed by pacman"
         if (id === "aur")       return "the Arch User Repository — recipes built from source on this machine"
@@ -390,10 +392,11 @@ FloatingWindow {
     // The canonical row. `source` is the tool that owns it; `repo` is the
     // human label shown on the badge; they are not the same thing (a row from
     // core and a row from blackarch are both `repo`).
-    function makeRow(name, title, installed, version, repo, size, desc, extra, source) {
+    function makeRow(name, title, installed, version, repo, size, desc, extra, source, ignored) {
         return { name: name, title: title || "", installed: installed,
                  version: version || "", repo: repo || "", size: size || 0,
-                 desc: desc || "", extra: extra || "", source: source }
+                 desc: desc || "", extra: extra || "", source: source,
+                 ignored: ignored === true }
     }
 
     function pkgRows(table, tab) {
@@ -407,10 +410,41 @@ FloatingWindow {
         // An empty new_version is not missing data: Flatpak genuinely cannot
         // report one without a round trip per app. Say so rather than showing
         // "1.2.3 →  " with a blank after the arrow.
+        //
+        // A held row is MARKED, never dropped. Filtering it here would make
+        // the one page somebody opens to ask "is anything out of date?" answer
+        // "no" while an update sits deliberately unapplied — which is how a
+        // package stays pinned for a year. The `ignored` column is carried by
+        // all three sources for exactly this.
         return table.map(r => root.makeRow(
             r.name, "", true, r.new_version, r.repo, parseInt(r.size || "0"),
             (r.installed_version || "?") + "  →  " + (r.new_version || "update available"),
-            "update", tab))
+            "update", tab, r.ignored === "1"))
+    }
+
+    // ── Held back ───────────────────────────────────────────────────────────
+    //
+    // `synpkg ignore` is the repositories, the AUR and Flathub in one listing;
+    // `syn-update ignored` is the SynapseOS components, which are held in a
+    // different file and released by a different command. Two steps, one page,
+    // because "what am I holding back" is one question.
+    function heldRows(table) {
+        return table.map(r => root.makeRow(
+            r.name, "", r.installed === "1", r.new_version,
+            r.source === "flatpak" ? "flathub" : r.source, 0,
+            r.new_version
+                ? (r.installed_version || "?") + "  →  " + r.new_version + "   held back"
+                : (r.installed_version ? r.installed_version + "   held back, no update waiting"
+                                       : "held back"),
+            "held",
+            r.source === "flatpak" ? "flathub" : "repo", true))
+    }
+
+    function heldComponentRows(table) {
+        return table.map(r => root.makeRow(
+            r.name, "", true, "", "synapseos", 0,
+            (r.installed || "?") + "   held back",
+            "held", "system", true))
     }
 
     function suggestRows(table) {
@@ -504,6 +538,10 @@ FloatingWindow {
                     root.aboutRows = table
                 } else if (listProc.kind === "updates") {
                     out = root.updateRows(table, listProc.tab)
+                } else if (listProc.kind === "held") {
+                    out = root.heldRows(table)
+                } else if (listProc.kind === "heldcomp") {
+                    out = root.heldComponentRows(table)
                 } else if (listProc.kind === "suggest") {
                     out = root.suggestRows(table)
                 } else if (listProc.kind === "system") {
@@ -639,6 +677,19 @@ FloatingWindow {
     // refuses to run as root, needs a tty for its own prompts, and prints as
     // it goes. A spinner in a window is exactly where someone force-quits a
     // half-finished build.
+    // Hold and release. Separate from act() because they are not transactions:
+    // nothing is downloaded, installed or removed, and routing them through the
+    // ALPM path would take the database lock for a one-line config edit.
+    function hold(row, on) {
+        if (root.busy !== "") return
+        root.busy = row.name
+        root.outcome = ""
+        actProc.errLine = ""
+        root.statusLine = (on ? "holding back " : "releasing ") + row.name + "…"
+        actProc.command = on ? root.holdCommand(row) : root.releaseCommand(row)
+        actProc.running = true
+    }
+
     function act(row, verb) {
         if (root.busy !== "") return
 
@@ -686,8 +737,38 @@ FloatingWindow {
     }
 
     function rowVerb(row) {
+        // A held row offers RELEASE, not Update. Offering "Update" on a row the
+        // user deliberately pinned would be a button that either disobeys the
+        // hold or does nothing, and there is no third possibility worth
+        // shipping. Taking one update without releasing the hold is a real
+        // thing to want, but it is a command (`syn-update apply <name>`), not
+        // the obvious button on a row that says "held back".
+        if (row.ignored) return "Release"
         if (row.extra === "update") return "Update"
         return row.installed ? "Remove" : "Install"
+    }
+
+    // Which command releases this row. Three sources, three mechanisms:
+    // pacman.conf's IgnorePkg, `flatpak mask`, and syn-update's manifest.
+    //
+    // --tsv on every one of them, and not only for tidiness: synpkg's info()
+    // goes to STDERR, and this window reads the first stderr line as the
+    // reason something failed. Without --tsv a perfectly successful hold
+    // reports ":: held back 1 package" as its error. TSV mode suppresses
+    // info(), so silence means success, which is what the handler assumes.
+    //
+    // Components go through `synpkg system`, not straight to syn-update: that
+    // path probes whether the installed syn-update knows the verb at all, and
+    // says what to do about it when it does not.
+    function releaseCommand(row) {
+        if (row.source === "flathub") return [root.bin, "--tsv", "-y", "flatpak", "unignore", row.name]
+        if (row.source === "system")  return [root.bin, "--tsv", "-y", "system", "unignore", row.name]
+        return [root.bin, "--tsv", "-y", "unignore", row.name]
+    }
+    function holdCommand(row) {
+        if (row.source === "flathub") return [root.bin, "--tsv", "-y", "flatpak", "ignore", row.name]
+        if (row.source === "system")  return [root.bin, "--tsv", "-y", "system", "ignore", row.name]
+        return [root.bin, "--tsv", "-y", "ignore", row.name]
     }
 
     // ── Navigation ──────────────────────────────────────────────────────────
@@ -794,6 +875,16 @@ FloatingWindow {
                 // which fetches from git, so it is the slowest step and the
                 // three fast ones should already be on screen.
                 { kind: "system",  tab: "system",  args: ["system", "check"],   note: "checking SynapseOS components…" }
+            ])
+        } else if (section === "held") {
+            // `synpkg ignore` covers the repositories, the AUR and Flathub in
+            // one listing; the components are held in syn-update's manifest
+            // and released by syn-update, so they are a second step. Neither
+            // fetches: `ignored` reads a file, and the pending versions come
+            // from the local database.
+            runChain([
+                { kind: "held",     args: ["ignore"],             note: "reading held packages…" },
+                { kind: "heldcomp", args: ["system", "ignored"],  note: "reading held components…" }
             ])
         } else if (section === "about") {
             runChain([{ kind: "about", args: ["about"] }])
@@ -1489,6 +1580,7 @@ FloatingWindow {
                     horizontalAlignment: Text.AlignHCenter
                     text: {
                         if (root.section === "updates")   return "Everything is up to date."
+                        if (root.section === "held")      return "Nothing is being held back.\nHold an update from the Updates page to stop it arriving."
                         if (root.section === "system")    return "SynapseOS components are current."
                         if (root.section === "suggested") return root.currentGroup === ""
                                                                  ? "Pick a category."
@@ -1658,6 +1750,11 @@ FloatingWindow {
                     height: 52
                     radius: 4
                     color: rowMa.containsMouse ? root.wash(0.07) : "transparent"
+                    // A held row is legible but visibly not part of the work
+                    // ahead. Dimming the whole row rather than adding a badge:
+                    // the badge column is already carrying the repo name, and a
+                    // second one turns every row into a legend.
+                    opacity: pkgRow.modelData.ignored ? 0.62 : 1.0
 
                     MouseArea { id: rowMa; anchors.fill: parent; hoverEnabled: true }
 
@@ -1675,7 +1772,8 @@ FloatingWindow {
                             // When the button is hidden the text takes its
                             // place; anchoring to a hidden item would keep
                             // reserving the 84 px that is the whole problem.
-                            right: actionBtn.visible ? actionBtn.left : parent.right
+                            right: holdBtn.visible ? holdBtn.left
+                                 : actionBtn.visible ? actionBtn.left : parent.right
                             rightMargin: 12
                             verticalCenter: parent.verticalCenter
                         }
@@ -1829,12 +1927,52 @@ FloatingWindow {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (pkgRow.modelData.extra === "update")
+                                if (pkgRow.modelData.ignored)
+                                    root.hold(pkgRow.modelData, false)
+                                else if (pkgRow.modelData.extra === "update")
                                     root.act(pkgRow.modelData, "install")
                                 else
                                     root.act(pkgRow.modelData,
                                              pkgRow.modelData.installed ? "remove" : "install")
                             }
+                        }
+                    }
+
+                    // Hold. Only on a pending update that is not already held,
+                    // because holding back anything else means nothing: a
+                    // package with no update waiting is not being upgraded by
+                    // anybody, and there would be no visible effect to explain.
+                    //
+                    // It sits LEFT of the main button and is deliberately
+                    // quieter — no accent border, dim text. Taking the update
+                    // is the ordinary act; refusing it is the exception, and
+                    // the two should not look like equal offers.
+                    Rectangle {
+                        id: holdBtn
+                        visible: pkgRow.width >= 340
+                                 && pkgRow.modelData.extra === "update"
+                                 && !pkgRow.modelData.ignored
+                        anchors {
+                            right: actionBtn.left; rightMargin: 6
+                            verticalCenter: parent.verticalCenter
+                        }
+                        width: 56; height: 26; radius: 4
+                        color: holdMa.containsMouse ? root.wash(0.14) : "transparent"
+                        border { width: 1; color: root.cDim }
+                        opacity: root.busy === "" || root.busy === pkgRow.modelData.name ? 1 : 0.4
+
+                        Text {
+                            anchors.centerIn: parent
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
+                            text: "Hold"
+                        }
+                        MouseArea {
+                            id: holdMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.hold(pkgRow.modelData, true)
                         }
                     }
                 }

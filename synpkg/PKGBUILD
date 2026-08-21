@@ -12,7 +12,23 @@ pkgname=synpkg
 # pkgver without changing that leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=33
+# 34: HOLDING AN UPDATE BACK. `synpkg ignore <package>` stops a package being
+#   upgraded, `synpkg unignore` releases it, and `synpkg ignore` with no
+#   arguments is the list — with the version each one is refusing, because a
+#   hold whose cost you cannot see is a hold nobody revisits. The GUI gains a
+#   Held back page and a Hold button on every pending update.
+#
+#   The list is pacman.conf's IgnorePkg, NOT a synpkg file. An ignore only this
+#   program honoured would be a lie on a machine that also has pacman: someone
+#   who holds a package back here and then runs `pacman -Syu` must not have it
+#   upgraded by the tool they did not think to configure. synpkg has READ
+#   IgnorePkg since the beginning; this adds the ability to write it.
+#
+#   Flatpak is held with `flatpak mask`, its own mechanism, for the same
+#   reason. SynapseOS components are held by syn-update, which owns that state
+#   — `synpkg system ignored` passes through, and PROBES first, because an
+#   older syn-update does not have the verb.
+pkgrel=34
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

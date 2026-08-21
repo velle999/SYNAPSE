@@ -182,6 +182,23 @@ load_manifest() {
     return 0
 }
 
+# Put a staged manifest in place, escalating only when that is actually needed.
+#
+# ⚠ The test is the FILE, not the uid. The same mistake in synpkg's ignore.c
+# escalated a run that had been pointed at a fixture, and pkexec — which strips
+# the environment — wrote the system file instead. Here the failure is milder
+# (sudo with no terminal simply refuses) but it makes both writers untestable
+# and makes SYN_UPDATE_MANIFEST a setting that only half works.
+install_manifest() {   # install_manifest <staged-file>
+    local dir; dir=$(dirname "$MANIFEST")
+    if [ -w "$MANIFEST" ] || { [ ! -e "$MANIFEST" ] && [ -w "$dir" ]; }; then
+        install -Dm644 "$1" "$MANIFEST"
+    else
+        # -D so /etc/synapseos is created on a system that has never had it.
+        sudo install -Dm644 "$1" "$MANIFEST"
+    fi
+}
+
 # Rewrite the manifest from what is on the disk NOW.
 #
 # Called from a successful `apply` and nowhere else. `check` is read-only and
@@ -204,6 +221,11 @@ save_manifest() {
         say "# SynapseOS components this machine has been offered."
         say "#"
         say "# selected = installed here.  declined = offered and not taken."
+        say "# held     = installed here, and NOT to be updated."
+        say "#"
+        say "# A held component is reported by every check, with its pending"
+        say "# version, so a hold is visible rather than silent. Release one"
+        say "# with: syn-update unignore <component>"
         say "#"
         say "# syn-update will not ADD a component named here: an unticked box at"
         say "# install time, or a later \`pacman -R\`, is an answer and it is kept."
@@ -216,16 +238,26 @@ save_manifest() {
             [ -f "$SRC/$c/PKGBUILD" ] || continue
             inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
             if [ -n "$inst" ]; then
-                printf '%s = selected\n' "$c"
+                # held is a THIRD state and it has to survive this rewrite.
+                # This function recomputes from `pacman -Q`, which can only see
+                # installed-or-not — so a held component, being installed,
+                # would be written back as plain `selected` and quietly resume
+                # updating on the next run. The hold is the user's answer, the
+                # same as a decline, and it is kept the same way.
+                if [ "${COMP_KNOWN[$c]:-}" = held ]; then
+                    printf '%s = held\n' "$c"
+                else
+                    printf '%s = selected\n' "$c"
+                fi
             else
                 printf '%s = declined\n' "$c"
             fi
         done
     } > "$tmp"
 
-    # -D so /etc/synapseos is created on a system that has never had it. sudo
-    # is already held open by sudo_keepalive_start() at this point in an apply.
-    if sudo install -Dm644 "$tmp" "$MANIFEST"; then
+    # sudo, where it is needed, is already held open by sudo_keepalive_start()
+    # at this point in an apply.
+    if install_manifest "$tmp"; then
         [ "$MANIFEST_PRESENT" = 1 ] || ok "recorded your component selection in $MANIFEST"
     else
         warn "could not write $MANIFEST — the next update will assume the same
@@ -666,6 +698,19 @@ CHANGED=()
 NEW=()
 SKIPPED=()
 BLOCKED=()
+# Installed, out of date, and deliberately not being updated — `held` in the
+# manifest, put there by `syn-update ignore`.
+#
+# Kept OUT of CHANGED rather than filtered later, so nothing downstream has to
+# remember to exclude it: apply builds CHANGED, and a held component is
+# therefore never built by accident. Naming one on the command line is the
+# documented override, because an explicit request is a newer answer than a
+# stored one.
+#
+# It is REPORTED in full, with the version it is refusing, for the same reason
+# DECLINED is: the reason for a hold is almost always temporary, and a list
+# that omits what it is holding is how a component stays pinned for a year.
+HELD=()
 # Components in the tree that this machine has been OFFERED and does not have.
 # Reported in full, built only when named on the command line. See MANIFEST.
 DECLINED=()
@@ -674,6 +719,13 @@ DECLINED=()
 # means "everything that changed", which is what apply has always done and
 # stays the default.
 SELECT=()
+# Was this component named on the command line?
+in_select() {
+    local c
+    for c in "${SELECT[@]}"; do [ "$c" = "$1" ] && return 0; done
+    return 1
+}
+
 # What this run actually handed to build-all.sh. The local-repo refresh below
 # publishes from THIS, not from CHANGED+NEW: with a named subset those are no
 # longer the same set, and copying a package that was built but never installed
@@ -708,7 +760,7 @@ buildable_names() {
 }
 
 scan() {
-    CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=(); DECLINED=()
+    CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=(); DECLINED=(); HELD=()
 
     # Read before the loop, not per component: the file is one stat and the
     # loop asks about it twenty-five times.
@@ -758,7 +810,15 @@ scan() {
         # vercmp, not string compare: 0.1.0-203 vs 0.1.0-99 sorts the wrong way
         # as text, and that mistake silently declines to ship an update.
         if [ "$(vercmp "$avail" "$inst")" -gt 0 ]; then
-            CHANGED+=("$c $inst $avail")
+            # Named on the command line beats the stored hold: `syn-update
+            # apply synui` on a held synui is an explicit, newer answer, and
+            # refusing it would leave no way to take one update without first
+            # releasing the hold permanently.
+            if [ "${COMP_KNOWN[$c]:-}" = held ] && ! in_select "$c"; then
+                HELD+=("$c $inst $avail")
+            else
+                CHANGED+=("$c $inst $avail")
+            fi
         fi
     done
 
@@ -786,10 +846,16 @@ show_commits() {
 
 report() {
     say ""
-    if [ ${#CHANGED[@]} -eq 0 ] && [ ${#NEW[@]} -eq 0 ]; then
+    # ⚠ "current" must not be said over a held component that is out of date.
+    # HELD is deliberately not in CHANGED, so without this the headline for a
+    # machine holding one back reads "everything is already current" — which is
+    # false, and false in the direction that hides the hold.
+    if [ ${#CHANGED[@]} -eq 0 ] && [ ${#NEW[@]} -eq 0 ] && [ ${#HELD[@]} -eq 0 ]; then
         ok "everything build-all.sh can update is already current"
-    elif [ ${#CHANGED[@]} -eq 0 ]; then
+    elif [ ${#CHANGED[@]} -eq 0 ] && [ ${#HELD[@]} -eq 0 ]; then
         ok "every installed component is current"
+    elif [ ${#CHANGED[@]} -eq 0 ]; then
+        ok "every component this machine is updating is current"
     fi
 
     if [ ${#CHANGED[@]} -gt 0 ]; then
@@ -847,6 +913,32 @@ report() {
             say "  ${C_DIM}(no $MANIFEST yet, so anything missing is read as not wanted;${C_R}"
             say "  ${C_DIM} the next apply writes it and new components resume arriving.)${C_R}"
         fi
+    fi
+
+    # Held back on purpose. Above BLOCKED because this one is an answer, not a
+    # fault — and it carries the pending version, which is the whole point: a
+    # hold you cannot see the cost of is a hold you will never revisit.
+    if [ ${#HELD[@]} -gt 0 ]; then
+        say ""
+        info "${#HELD[@]} component(s) HELD BACK — an update is waiting and will not be taken"
+        # ⚠ NO " -> " ON THESE ROWS, and that is load-bearing rather than a
+        # layout choice. synpkg's `system check --tsv` turns this report into a
+        # table by scraping every indented line that CONTAINS " -> " — that is
+        # how it finds the CHANGED rows, and CHANGED was the only section that
+        # had an arrow. A held row in the same shape is read as a pending
+        # update, so the Updates tab would offer an Update button on the one
+        # component the user deliberately pinned.
+        printf '  %-16s %-14s %s\n' COMPONENT INSTALLED STATE
+        local hh
+        for hh in "${HELD[@]}"; do
+            # shellcheck disable=SC2086
+            set -- $hh
+            printf '  %-16s %-14s held, %s available\n' "$1" "$2" "$3"
+        done
+        # shellcheck disable=SC2086
+        set -- ${HELD[0]}
+        say "  ${C_DIM}Release it with: ${C_R}syn-update unignore $1${C_R}"
+        say "  ${C_DIM}Or take this one update without releasing the hold: ${C_R}syn-update apply $1${C_R}"
     fi
 
     # A bug in OUR tree, not in this machine. Loud, and named as ours: the
@@ -1260,6 +1352,140 @@ prune_superseded() {
     return 0
 }
 
+# ── holding a component back ─────────────────────────────────────────────
+#
+# The state lives in the manifest, beside `selected` and `declined`, because it
+# is the same KIND of fact: an answer this machine has given about a component,
+# which every later run has to read back rather than re-derive. A separate file
+# would be a second place to look and a second place to forget.
+#
+# ⚠ This is NOT pacman's IgnorePkg, and it deliberately does not touch it.
+# synpkg holds back REPOSITORY packages that way, because pacman honours it and
+# an ignore only one tool obeyed would be a lie. A SynapseOS component is not
+# upgraded by pacman at all — it is BUILT here and installed with `pacman -U` —
+# so IgnorePkg would not stop it, and writing one would produce a hold that
+# looks set and does nothing.
+
+# Rewrite one component's line in the manifest, leaving every other line as it
+# was. Not save_manifest(): that recomputes the whole file from `pacman -Q` and
+# is only correct after a successful build.
+manifest_set_state() {
+    local name=$1 state=$2 tmp found=0 line n
+    load_manifest
+
+    tmp=$(mktemp) || die "cannot write $MANIFEST (mktemp failed)"
+
+    if [ -r "$MANIFEST" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            n=${line%%#*}
+            case $n in *=*) ;; *) printf '%s\n' "$line" >> "$tmp"; continue ;; esac
+            n=${n%%=*}; n=${n//[[:space:]]/}
+            if [ "$n" = "$name" ]; then
+                printf '%s = %s\n' "$name" "$state" >> "$tmp"
+                found=1
+            else
+                printf '%s\n' "$line" >> "$tmp"
+            fi
+        done < "$MANIFEST"
+    fi
+    # A component the manifest has never named — a machine installed before the
+    # manifest existed, or one that predates this component. Appending is
+    # right: the hold is an answer, and an answer about something not yet
+    # recorded still has to be recorded.
+    [ "$found" = 1 ] || printf '%s = %s\n' "$name" "$state" >> "$tmp"
+
+    if install_manifest "$tmp"; then
+        rm -f "$tmp"
+        return 0
+    fi
+    rm -f "$tmp"
+    die "could not write $MANIFEST"
+}
+
+cmd_ignore() {
+    [ ${#SELECT[@]} -gt 0 ] ||
+        die "ignore: name a component. \`syn-update ignored\` lists what is held."
+    need_not_root
+    local c
+    for c in "${SELECT[@]}"; do
+        load_manifest
+        if [ "${COMP_KNOWN[$c]:-}" = held ]; then
+            info "$c is already held back"
+            continue
+        fi
+        # Holding something not installed is meaningless: it is not being
+        # updated either way, and `declined` already says so. Refusing beats
+        # writing a state that reads as a decision nobody made.
+        if ! pacman -Q "$c" >/dev/null 2>&1; then
+            warn "$c is not installed here, so there is no update to hold back"
+            continue
+        fi
+        manifest_set_state "$c" held
+        ok "$c is held back — syn-update will report its updates and not take them"
+    done
+    return 0
+}
+
+cmd_unignore() {
+    [ ${#SELECT[@]} -gt 0 ] ||
+        die "unignore: name a component. \`syn-update ignored\` lists what is held."
+    need_not_root
+    local c
+    for c in "${SELECT[@]}"; do
+        load_manifest
+        if [ "${COMP_KNOWN[$c]:-}" != held ]; then
+            info "$c was not being held back"
+            continue
+        fi
+        manifest_set_state "$c" selected
+        ok "$c released — the next apply will update it"
+    done
+    return 0
+}
+
+cmd_ignored() {
+    load_manifest
+    local c held=() inst
+    for c in "${COMPONENTS[@]}"; do
+        [ "${COMP_KNOWN[$c]:-}" = held ] && held+=("$c")
+    done
+
+    # Machine-readable, for synpkg's Held back pane.
+    #
+    # A FLAG, not a scrape. synpkg already turns `syn-update check` into a
+    # table by pattern-matching its human output, and that coupling is exactly
+    # why adding a section to the report above could break the Updates tab —
+    # a new command should not inherit the same trap.
+    if [ "$TSV" = 1 ]; then
+        printf 'component\tinstalled\n'
+        for c in "${held[@]}"; do
+            inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+            printf '%s\t%s\n' "$c" "$inst"
+        done
+        [ ${#held[@]} -gt 0 ]
+        return $?
+    fi
+
+    if [ ${#held[@]} -eq 0 ]; then
+        ok "no component is being held back"
+        say "  ${C_DIM}hold one with: ${C_R}syn-update ignore <component>${C_R}"
+        return 0
+    fi
+
+    # The installed version, and nothing about what is available: this command
+    # is read-only and must not fetch. `syn-update check` is where a pending
+    # version comes from, and it reports every one of these with it.
+    info "${#held[@]} component(s) held back"
+    printf '  %-16s %s\n' COMPONENT INSTALLED
+    for c in "${held[@]}"; do
+        inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+        printf '  %-16s %s\n' "$c" "${inst:-not installed}"
+    done
+    say "  ${C_DIM}Release one with: ${C_R}syn-update unignore <component>${C_R}"
+    say "  ${C_DIM}\`syn-update check\` shows which of them have an update waiting.${C_R}"
+    return 0
+}
+
 cmd_status() {
     need_tools
     [ -d "$SRC/.git" ] || die "no source tree yet — run: syn-update check"
@@ -1316,6 +1542,13 @@ Usage:
                             another that is also out of date and was not named.
                             Naming a component you do not have INSTALLS it, and
                             that answer is remembered.
+  syn-update ignore <name>… Hold a component back: every check keeps reporting
+                            its update, and no apply takes it. Naming it on an
+                            apply still builds that one update, without
+                            releasing the hold.
+  syn-update unignore <name>…
+                            Let one go again.
+  syn-update ignored        What is being held back
   syn-update status         Show the source revision and installed versions
   syn-update help           This help
 
@@ -1367,17 +1600,24 @@ HELP
 
 FORCE=0
 CMD=""
+# Machine-readable output. Only `ignored` honours it today; every other command
+# here is a report a person reads, and claiming a flag applies where it does
+# not is worse than not having it.
+TSV=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --force)        FORCE=1 ;;
+        --tsv)          TSV=1 ;;
         --ref)          shift; REPO_REF="${1:-main}" ;;
         -h|--help|help) usage; exit 0 ;;
-        check|apply|status) CMD="$1" ;;
-        # Bare words after `apply` are component names. Validated below rather
-        # than here, because COMPONENTS describes the revision that would RUN
-        # and setup_src has not fetched yet at this point.
-        *)  [ "$CMD" = apply ] ||
-                die "unknown argument: $1 (try: syn-update help)"
+        check|apply|status|ignore|unignore|ignored) CMD="$1" ;;
+        # Bare words after `apply`, `ignore` or `unignore` are component names.
+        # Validated below rather than here, because COMPONENTS describes the
+        # revision that would RUN and setup_src has not fetched yet.
+        *)  case "$CMD" in
+                apply|ignore|unignore) ;;
+                *) die "unknown argument: $1 (try: syn-update help)" ;;
+            esac
             SELECT+=("$1") ;;
     esac
     shift
@@ -1401,7 +1641,10 @@ for _s in "${SELECT[@]}"; do
 done
 
 case "${CMD:-check}" in
-    check)  cmd_check ;;
-    apply)  cmd_apply ;;
-    status) cmd_status ;;
+    check)    cmd_check ;;
+    apply)    cmd_apply ;;
+    status)   cmd_status ;;
+    ignore)   cmd_ignore ;;
+    unignore) cmd_unignore ;;
+    ignored)  cmd_ignored ;;
 esac

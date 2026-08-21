@@ -31,7 +31,19 @@ pkgver=0.1.0
 # 42: synstudio joins COMPONENTS. ⚠ This tool runs COMPONENTS from the
 #   INSTALLED copy, so adopting a COMPONENTS change takes two applies: the
 #   first installs this list, the second acts on it.
-pkgrel=42
+# 43: HOLDING A COMPONENT BACK. `syn-update ignore <component>` stops it being
+#   rebuilt, `unignore` releases it, `ignored` lists what is held, and every
+#   check keeps reporting the version it is refusing rather than going quiet.
+#   `syn-update apply <component>` still takes that one update without
+#   releasing the hold, because an explicit request is a newer answer than a
+#   stored one.
+#
+#   `held` is a THIRD manifest state beside selected and declined, because it
+#   is the same kind of fact: an answer this machine has given. ⚠ It is NOT
+#   pacman's IgnorePkg — a component is BUILT here and installed with
+#   `pacman -U`, which IgnorePkg does not gate, so an entry there would look
+#   set and do nothing.
+pkgrel=43
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -59,8 +59,11 @@ n=$("$SYNPKG" --tsv installed --explicit | tsv_cols)
 n=$("$SYNPKG" --tsv suggest | tsv_cols)
 [ "$n" = 6 ] && ok "suggest --tsv has 6 columns" || bad "suggest --tsv has 6 columns (got $n)"
 
+# SIX now, not five: the `ignored` column. All three update sources carry it,
+# because the GUI concatenates repositories, the AUR and Flathub into one
+# Updates pane and a row from one of them must not be a column short.
 n=$("$SYNPKG" --tsv updates | tsv_cols)
-[ "$n" = 5 ] && ok "updates --tsv has 5 columns" || bad "updates --tsv has 5 columns (got $n)"
+[ "$n" = 6 ] && ok "updates --tsv has 6 columns" || bad "updates --tsv has 6 columns (got $n)"
 
 # Every data row must carry the same field count as its header. This is what
 # catches a description containing a literal tab — the exact bug the field
@@ -354,11 +357,13 @@ n=$(fp --tsv flatpak list | tsv_cols)
 [ "$n" = 7 ] && ok "flatpak list --tsv has 7 columns" \
              || bad "flatpak list --tsv has 7 columns (got $n)"
 
-# Updates must share the 5-column shape pacman and the AUR emit, because the
-# GUI concatenates all three into one Updates pane.
+# Updates must share the shape pacman and the AUR emit, because the GUI
+# concatenates all three into one Updates pane. Six columns since the hold: a
+# source that came up a column short would shift `ignored` onto whatever the
+# GUI read last.
 n=$(fp --tsv flatpak updates | tsv_cols)
-[ "$n" = 5 ] && ok "flatpak updates --tsv has 5 columns" \
-             || bad "flatpak updates --tsv has 5 columns (got $n)"
+[ "$n" = 6 ] && ok "flatpak updates --tsv has 6 columns" \
+             || bad "flatpak updates --tsv has 6 columns (got $n)"
 
 fp --tsv flatpak updates | grep -q '^org.mozilla.firefox	142.0	'
 check "flatpak updates pairs the app with its installed version" $?
@@ -1180,6 +1185,146 @@ n=$(SYNPKG_MODULES_DIR="$KDIR2" SYNPKG_BOOT_DIR="$BDIR" SYNPKG_MACHINE_ID="$MID"
 	"$SYNPKG" --tsv status | tsv_cols)
 [ "$n" = 4 ] && ok "status --tsv still has 4 columns with boot rows" \
              || bad "status --tsv still has 4 columns with boot rows (got $n)"
+
+# ── ignore: holding a package back ──────────────────────────────────────────
+#
+# ⚠ THIS BLOCK WRITES A pacman.conf, AND IT MUST NEVER BE THE REAL ONE.
+#
+# It once was. The first version of ignore.c decided whether to escalate by
+# asking `geteuid() == 0`; pointed at a fixture and run unprivileged it went
+# through pkexec, and pkexec STRIPS THE ENVIRONMENT — so the root child lost
+# SYNPKG_PACMAN_CONF, fell back to the default, and edited /etc/pacman.conf on
+# the machine running the test, reporting success. The command now asks whether
+# the TARGET FILE is writable, which makes a fixture in a temp directory need
+# no escalation at all, and refuses outright in the one case where escalating
+# would change which file gets written.
+#
+# The assertion right below is the guard for that: if anything here ever
+# escalates again, the real IgnorePkg changes and this catches it.
+
+echo "== ignore"
+
+IGN=$(mktemp -d) || exit 1
+trap 'rm -rf "$IGN"' EXIT
+
+# What pacman thinks is ignored on THIS machine, before and after. Nothing in
+# this block may move it.
+real_ignore_before=$(pacman-conf IgnorePkg 2>/dev/null | sort | tr '\n' ' ')
+
+mkdir -p "$IGN/bin"
+# pacman-conf must answer from the SAME fixture the writer edits. Shimming it
+# on PATH is the only way: pacman-conf has no environment variable for its
+# config, so pointing only the writer at a fixture would have the two halves
+# describing different files — which is precisely the bug this hides.
+cat > "$IGN/bin/pacman-conf" <<'SHIM'
+#!/bin/bash
+exec /usr/bin/pacman-conf --config "$SYNPKG_PACMAN_CONF" "$@"
+SHIM
+chmod +x "$IGN/bin/pacman-conf"
+
+# A real pacman.conf, so DBPath and the repositories are the machine's own and
+# the listing can resolve versions. Only the IgnorePkg lines are ours.
+sed '/^#synpkg-ignore/,+1d' /etc/pacman.conf > "$IGN/pacman.conf"
+cp "$IGN/pacman.conf" "$IGN/pristine.conf"
+
+ign() { SYNPKG_PACMAN_CONF="$IGN/pacman.conf" PATH="$IGN/bin:$PATH" "$SYNPKG" "$@"; }
+
+ign ignore >/dev/null 2>&1
+[ $? = 100 ] && ok "with nothing held, ignore exits 100" \
+             || bad "with nothing held, ignore exits 100"
+
+ign ignore bash coreutils >/dev/null 2>&1
+[ "$(ign --tsv ignore | tail -n +2 | cut -f1 | sort | tr '\n' ' ')" = "bash coreutils " ] \
+	|| [ "$(ign --tsv ignore | tail -n +2 | cut -f1 | sort | tr '\n' ' ')" = "bash coreutils" ] \
+	&& ok "two packages are held and both are listed" \
+	|| bad "two packages are held and both are listed"
+
+# The point of the whole design: pacman itself has to agree, or the hold is a
+# lie the moment somebody runs `pacman -Syu`.
+[ "$(SYNPKG_PACMAN_CONF="$IGN/pacman.conf" PATH="$IGN/bin:$PATH" pacman-conf IgnorePkg | sort | tr '\n' ' ')" \
+  = "bash coreutils " ] \
+	&& ok "pacman-conf agrees — the hold is not synpkg-only" \
+	|| bad "pacman-conf agrees — the hold is not synpkg-only"
+
+# ⚠ pacman.conf HAS NO TRAILING COMMENTS: `IgnorePkg = foo # note` makes `#`
+# and `note` into package names. The marker must therefore be a line of its
+# own, and this is what proves it stayed one.
+[ "$(SYNPKG_PACMAN_CONF="$IGN/pacman.conf" PATH="$IGN/bin:$PATH" pacman-conf IgnorePkg | grep -c '#')" = 0 ] \
+	&& ok "no comment text leaked onto the directive as a package name" \
+	|| bad "no comment text leaked onto the directive as a package name"
+
+ign unignore bash >/dev/null 2>&1
+[ "$(ign --tsv ignore | tail -n +2 | cut -f1 | tr '\n' ' ')" = "coreutils " ] \
+	&& ok "releasing one leaves the other held" \
+	|| bad "releasing one leaves the other held"
+
+# A round trip must restore the file byte for byte, or repeated use of a
+# perfectly ordinary command slowly rewrites the machine's pacman.conf.
+ign unignore coreutils >/dev/null 2>&1
+cmp -s "$IGN/pristine.conf" "$IGN/pacman.conf" \
+	&& ok "add then remove leaves pacman.conf byte for byte as it was" \
+	|| bad "add then remove leaves pacman.conf byte for byte as it was"
+
+# Idempotent across cycles: the marker block must not accumulate blank lines.
+ign ignore bash >/dev/null 2>&1
+cp "$IGN/pacman.conf" "$IGN/once.conf"
+ign unignore bash >/dev/null 2>&1
+ign ignore bash >/dev/null 2>&1
+cmp -s "$IGN/once.conf" "$IGN/pacman.conf" \
+	&& ok "a second hold/release cycle produces the same file" \
+	|| bad "a second hold/release cycle produces the same file"
+ign unignore bash >/dev/null 2>&1
+
+# An ignore synpkg did not write is REPORTED, never silently edited or silently
+# ignored. The failure this guards is `unignore` printing success and changing
+# nothing, leaving the package still pinned at the next upgrade.
+printf '[options]\nIgnorePkg = linux\nArchitecture = auto\n[core]\nServer = https://x.invalid/\n' \
+	> "$IGN/hand.conf"
+out=$(SYNPKG_PACMAN_CONF="$IGN/hand.conf" PATH="$IGN/bin:$PATH" "$SYNPKG" unignore linux 2>&1)
+rc=$?
+case "$out" in
+	*"synpkg did not write"*) ok "a hand-written ignore is reported, not touched" ;;
+	*) bad "a hand-written ignore is reported, not touched" ;;
+esac
+[ "$rc" != 0 ] && ok "and that is a failure, not a silent success" \
+               || bad "and that is a failure, not a silent success"
+grep -q '^IgnorePkg = linux$' "$IGN/hand.conf" \
+	&& ok "the hand-written line is left exactly as it was" \
+	|| bad "the hand-written line is left exactly as it was"
+
+# An IgnorePkg under a repository header is not an error pacman reports — it is
+# a directive in the wrong scope, silently doing nothing.
+printf '[core]\nServer = https://x.invalid/\n' > "$IGN/noopt.conf"
+SYNPKG_PACMAN_CONF="$IGN/noopt.conf" PATH="$IGN/bin:$PATH" "$SYNPKG" ignore foo >/dev/null 2>&1
+[ $? != 0 ] && ok "a pacman.conf with no [options] is refused, not guessed at" \
+            || bad "a pacman.conf with no [options] is refused, not guessed at"
+
+# THE GUARD. Nothing above may have touched the machine's own pacman.conf.
+real_ignore_after=$(pacman-conf IgnorePkg 2>/dev/null | sort | tr '\n' ' ')
+[ "$real_ignore_before" = "$real_ignore_after" ] \
+	&& ok "the real /etc/pacman.conf IgnorePkg is unchanged by this suite" \
+	|| bad "THE SUITE EDITED /etc/pacman.conf — was [$real_ignore_before] now [$real_ignore_after]"
+
+# updates marks held rows rather than hiding them: a hold you cannot see is a
+# hold nobody revisits. Shape only — whether anything is upgradable differs
+# between velle's box, the ISO chroot and a fresh install.
+[ "$("$SYNPKG" --tsv updates | head -1 | awk -F'\t' '{print NF}')" = 6 ] \
+	&& ok "updates --tsv carries the ignored column" \
+	|| bad "updates --tsv carries the ignored column"
+[ "$("$SYNPKG" --tsv updates | head -1 | cut -f6)" = ignored ] \
+	&& ok "and it is the last one, named ignored" \
+	|| bad "and it is the last one, named ignored"
+
+# THE REGRESSION, and it was live: the AUR row emitter was widened to six and
+# its HEADER left at five. The GUI reads the header to name the columns, so
+# every AUR update row had `ignored` land one column past where anything was
+# looking — a ragged table that neither source reports as an error. Check the
+# header of ALL THREE against each other rather than against the number 6, so
+# this keeps holding if the shape changes again.
+u=$("$SYNPKG" --tsv updates | head -1)
+a=$("$SYNPKG" --tsv aur updates 2>/dev/null | head -1)
+[ "$u" = "$a" ] && ok "the AUR updates header matches the repository one" \
+                || bad "the AUR updates header matches the repository one"
 
 echo
 echo "  $pass passed, $fail failed"
