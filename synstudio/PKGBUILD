@@ -43,7 +43,21 @@ pkgver=0.1.0
 #   error); a caption containing a percent sign failed the whole filter graph
 #   at export time; and the property table wrote a float through a double's
 #   offset, so fade lengths and transition lengths silently would not stick.
-pkgrel=2
+# 3: it plays.
+#   Compositing twenty-five frames a second from a process per frame is not
+#   something this architecture can do, so playback is the EXPORT, played:
+#   `timeline export --preview` runs the SAME graph at 960 wide with the
+#   encoder set to ultrafast, cached against a revision counter and
+#   invalidated by any edit. What you watch is what you will ship, only
+#   rougher — rather than a second, cheaper renderer that disagrees with the
+#   real one about exactly the things a preview exists to check. The file is
+#   fragmented mp4 so a player can open it while ffmpeg is still writing.
+#
+#   Also: the monitor no longer blinks. Both pages show a PNG at a path that
+#   never changes, and a plain Image goes BLANK for the whole time the next
+#   one is decoding — every scrub step, every slider release. Two images now,
+#   swapping only once the new one is Ready, so the last good frame stays up.
+pkgrel=3
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
@@ -63,7 +77,15 @@ depends+=('ffmpeg')
 
 makedepends=('meson' 'ninja' 'gcc')
 
+# qt6-multimedia is optional and MEANS it: playback lives in its own QML file
+# behind a Loader, so without the module the play button says why and
+# everything else — the darkroom, the timeline, the monitor, the export —
+# still works. That indirection is the whole reason it can be an optdepend.
+# An `import QtMultimedia` in the main file would fail the WHOLE file, turning
+# a missing optional module into a window that does not open at all, and
+# quickshell does not pull qt6-multimedia in.
 optdepends=('quickshell: the window — darkroom and cutting room (synstudio gui)'
+            'qt6-multimedia: playing the timeline back (the ▶ button)'
             # dcraw_emu, which is libraw's own tool. ffmpeg reads DNG and a
             # few others, but for most camera raw it fails by producing a
             # THUMBNAIL-sized preview rather than an error — far worse than

@@ -676,6 +676,10 @@ FloatingWindow {
 
     function tlRun(args) {
         if (tlSetProc.running) return false
+        // The rendered preview is now a picture of a timeline that no longer
+        // exists. Bumping here rather than in the exit handler means a play
+        // pressed DURING an edit still re-renders.
+        root.tlRev++
         tlSetProc.command = [root.bin, "timeline"].concat(args)
         tlSetProc.running = true
         return true
@@ -742,10 +746,163 @@ FloatingWindow {
         }
     }
 
+    // ── Playing it ──────────────────────────────────────────────────────────
+    //
+    // One frame costs an ffmpeg process and about a tenth of a second, so
+    // compositing live at twenty-five of them a second is not something this
+    // architecture can do, and pretending otherwise would mean a second
+    // renderer that disagrees with the first one about colour.
+    //
+    // So playback is the EXPORT, played. `timeline export --preview` runs the
+    // same graph at 960 wide with the encoder set to ultrafast, which means
+    // what you watch is what you will ship — the same grades, transitions,
+    // transforms and audio — only rougher. It is cached against a revision
+    // counter, so pressing play again after watching costs nothing, and any
+    // edit invalidates it.
+    //
+    // The file is fragmented mp4 on purpose: a player can open it while
+    // ffmpeg is still writing, instead of waiting for a moov atom that does
+    // not exist until the encode ends.
+
+    property int  tlRev: 0              // bumped by every edit
+    property int  playRev: -1           // the revision the preview was built from
+    property bool playing: false
+    property bool rendering: false
+    property string playFile: ""
+
+    function playPath(rev) { return root.scratch + "-play-" + rev + ".mp4" }
+
+    function togglePlay() {
+        if (!root.proj || root.tlDur <= 0) return
+        if (!root.playbackReady) {
+            root.say("playback needs qt6-multimedia installed")
+            return
+        }
+        if (root.playing) { root.pausePlayback(); return }
+        if (root.playRev === root.tlRev && root.playFile) { root.startPlayback(); return }
+        if (root.rendering) return
+        root.rendering = true
+        root.say("rendering a preview to play…")
+        playRenderProc.command = [root.bin, "timeline", "export", root.proj,
+                                  "--out", root.playPath(root.tlRev), "--preview"]
+        playRenderProc.running = true
+    }
+
+    Process {
+        id: playRenderProc
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
+        onExited: function (code, status) {
+            root.rendering = false
+            if (code !== 0) { root.say("could not render a preview"); return }
+            // The previous one is dropped only once its replacement exists, so
+            // a failed render leaves the last watchable preview in place.
+            if (root.playFile && root.playFile !== root.playPath(root.tlRev)) {
+                rmProc.command = ["rm", "-f", root.playFile]
+                rmProc.running = true
+            }
+            root.playFile = root.playPath(root.tlRev)
+            root.playRev = root.tlRev
+            root.say("")
+            root.startPlayback()
+        }
+    }
+    Process { id: rmProc }
+
+    // A seek issued in the same breath as a source change is DISCARDED —
+    // there is no media loaded yet to seek in, so playback silently starts at
+    // zero and the first position update drags the playhead back to the top of
+    // the timeline. Pressing play after scrubbing anywhere then looks like the
+    // playhead being thrown away. Hold the seek until the media reports itself
+    // loaded, and ignore position updates until it has landed.
+    property real pendingSeek: -1
+
+    // `seekArmed` is not belt and braces. Assigning a new source while a
+    // previous one is still loaded emits LoadedMedia for the OUTGOING media
+    // before the new file starts loading — so a seek honoured on the first
+    // Loaded lands on the file being replaced, clears itself, and the new one
+    // then starts at zero with nothing pending. Observed exactly that, and
+    // only on the SECOND play, which is what made it look like re-rendering
+    // was to blame.
+    //
+    // A load cycle always passes through LoadingMedia, so requiring one since
+    // the seek was armed tells the real transition from the echo.
+    property bool seekArmed: false
+
+    function startPlayback() {
+        if (!root.playbackReady) { root.say("playback needs qt6-multimedia"); return }
+        const pl = playbackLoader.item
+        const url = "file://" + root.playFile
+        if (pl.source !== url) {
+            root.pendingSeek = root.playhead
+            root.seekArmed = false
+            pl.source = url
+        } else {
+            pl.seek(root.playhead * 1000)
+        }
+        root.playing = true
+        pl.play()
+    }
+
+    function pausePlayback() {
+        if (!root.playbackReady) { root.playing = false; return }
+        const pl = playbackLoader.item
+        pl.pause()
+        root.playing = false
+        root.pendingSeek = -1
+        root.seekArmed = false
+        // Back to the frame-accurate monitor, at full resolution and at
+        // exactly where the picture stopped — the preview is 960 wide and
+        // rough, and it is not what anyone should be grading against.
+        root.playhead = pl.position / 1000
+        root.requestFrame()
+    }
+
+    // The player itself lives in synstudio-playback.qml, behind a Loader,
+    // because it is the only thing here that needs QtMultimedia and a missing
+    // import fails the whole FILE rather than the feature. See that file.
+    readonly property bool playbackReady: playbackLoader.status === Loader.Ready
+                                          && playbackLoader.item !== null
+
+    Connections {
+        target: playbackLoader.item
+        enabled: root.playbackReady
+
+        function onPositionMoved(ms) {
+            if (root.playing && root.pendingSeek < 0) root.playhead = ms / 1000
+        }
+        function onStatusMoved(status) {
+            const pl = playbackLoader.item
+            if (status === pl.statusLoading) { root.seekArmed = true; return }
+            if (root.pendingSeek >= 0 && root.seekArmed
+                && (status === pl.statusLoaded || status === pl.statusBuffered)) {
+                pl.seek(root.pendingSeek * 1000)
+                root.pendingSeek = -1
+                root.seekArmed = false
+            }
+        }
+        function onStateMoved(state) {
+            if (state === playbackLoader.item.stateStopped && root.playing) {
+                root.playing = false
+                root.requestFrame()
+            }
+        }
+        function onFailed(text) {
+            root.playing = false
+            root.say("cannot play the preview: " + text)
+        }
+    }
+
     // ── Scrubbing, and the clock ────────────────────────────────────────────
     function seekTo(t) {
         root.playhead = Math.max(0, Math.min(root.tlDur > 0 ? root.tlDur : 0, t))
-        root.requestFrame()
+        // Scrubbing during playback moves the PLAYER. Moving only the playhead
+        // would have it snap straight back on the next position update, which
+        // reads as the ruler refusing to be dragged.
+        if (root.playing && root.playbackReady) {
+            if (root.pendingSeek >= 0) root.pendingSeek = root.playhead
+            else playbackLoader.item.seek(root.playhead * 1000)
+        }
+        else              root.requestFrame()
     }
 
     function timecode(t) {
@@ -976,15 +1133,11 @@ FloatingWindow {
                     height: parent.height
                     color: root.cViewport
 
-                    Image {
+                    Monitor {
                         id: preview
                         anchors.fill: parent
                         anchors.margins: 18
                         source: root.previewUrl
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        cache: false
-                        asynchronous: true
                         visible: root.previewUrl !== ""
                     }
 
@@ -1157,15 +1310,28 @@ FloatingWindow {
                         height: parent.height - 34 - 224
                         color: root.cViewport
 
-                        Image {
+                        Monitor {
                             anchors.fill: parent
                             anchors.margins: 14
                             source: root.frameUrl
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            cache: false
-                            asynchronous: true
                             visible: root.proj !== "" && root.tlDur > 0
+                                     && !root.playing
+                        }
+
+                        // Playback draws here instead of the still monitor.
+                        // Same rectangle, same margins, so the picture does
+                        // not move when play is pressed.
+                        //
+                        // Qt.resolvedUrl, so this finds its sibling both in
+                        // the source tree and in SYNSTUDIO_DATADIR without
+                        // anybody having to tell it which one it is in.
+                        Loader {
+                            id: playbackLoader
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            visible: root.playing
+                            asynchronous: false
+                            source: Qt.resolvedUrl("synstudio-playback.qml")
                         }
 
                         Text {
@@ -1174,6 +1340,22 @@ FloatingWindow {
                             text: "New project, then Add media"
                             color: "#9a9a9a"
                             font.pixelSize: 18
+                        }
+
+                        // Rendering a preview is the one wait in this window
+                        // long enough to need saying out loud.
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: root.rendering
+                            width: 210; height: 34
+                            radius: 4
+                            color: Qt.rgba(0, 0, 0, 0.72)
+                            Text {
+                                anchors.centerIn: parent
+                                text: "rendering a preview…"
+                                color: "#e6e9ef"
+                                font.pixelSize: 12
+                            }
                         }
 
                         Rectangle {
@@ -1197,10 +1379,21 @@ FloatingWindow {
                             spacing: 6
 
                             Btn { label: "⏮"; onClicked: root.seekTo(0) }
-                            Btn { label: "◀"; onClicked:
-                                  root.seekTo(root.playhead - 1 / (root.tl.fps || 25)) }
-                            Btn { label: "▶"; onClicked:
-                                  root.seekTo(root.playhead + 1 / (root.tl.fps || 25)) }
+                            // Named, not glyphed. A ◀ next to a ▶ reads as
+                            // rewind and play, and this pair is neither —
+                            // they are single frames.
+                            Btn { label: "−1"; active: !root.playing
+                                  onClicked: root.seekTo(
+                                      root.playhead - 1 / (root.tl.fps || 25)) }
+                            Btn {
+                                label: root.rendering ? "…" : root.playing ? "⏸" : "▶"
+                                active: root.proj !== "" && root.tlDur > 0
+                                        && !root.rendering && root.playbackReady
+                                onClicked: root.togglePlay()
+                            }
+                            Btn { label: "+1"; active: !root.playing
+                                  onClicked: root.seekTo(
+                                      root.playhead + 1 / (root.tl.fps || 25)) }
                             Btn { label: "⏭"; onClicked: root.seekTo(root.tlDur) }
                         }
 
@@ -2001,6 +2194,52 @@ FloatingWindow {
                 // slider somebody dragged by accident.
                 onDoubleClicked: root.change(sl.row.key, 0)
             }
+        }
+    }
+
+    // ── A picture that does not blink ───────────────────────────────────────
+    //
+    // Both pages show a PNG the engine just wrote, at a path that never
+    // changes, so the URL carries a serial to defeat Qt's cache. A plain Image
+    // then goes BLANK for the whole time the new file is decoding — which is
+    // every scrub step and every slider release, and reads as the viewport
+    // flashing black between frames.
+    //
+    // Two images, one showing and one loading. The new frame is decoded into
+    // whichever is hidden and they swap only once it is Ready, so the last
+    // good frame stays on screen until there is a better one. A load that
+    // FAILS never swaps, which is also right: the previous frame is a better
+    // answer than a blank rectangle.
+    component Monitor: Item {
+        id: mon
+        property string source: ""
+        property int    front: 0
+
+        onSourceChanged: {
+            if (!mon.source) return
+            if (mon.front === 0) imgB.source = mon.source
+            else                 imgA.source = mon.source
+        }
+
+        Image {
+            id: imgA
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            cache: false
+            asynchronous: true
+            visible: mon.front === 0
+            onStatusChanged: if (status === Image.Ready) mon.front = 0
+        }
+        Image {
+            id: imgB
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            cache: false
+            asynchronous: true
+            visible: mon.front === 1
+            onStatusChanged: if (status === Image.Ready) mon.front = 1
         }
     }
 

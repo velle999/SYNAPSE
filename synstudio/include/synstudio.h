@@ -427,8 +427,12 @@ int ss_timeline_at(const ss_timeline *t, int track, double time);
  *
  * Emit the ffmpeg argv for an export. lutdir holds one .cube per graded clip.
  * Returns argc; argv entries are strdup'd and owned by the caller. */
+/* `preview` asks for a PLAYABLE render rather than a deliverable one: smaller,
+ * encoded as fast as x264 can, and quality traded away on purpose. It is what
+ * the window plays when you press play — the same graph, so what you watch is
+ * what you will ship, only rougher. A deliverable export passes 0. */
 int    ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
-                          const char *lutdir, char ***argv);
+                          const char *lutdir, int preview, char ***argv);
 
 /* One composited frame, for the program monitor.
  *

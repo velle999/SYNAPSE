@@ -84,7 +84,9 @@ static void usage(void)
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
-"  timeline export PROJ --out OUT [--print]\n"
+"  timeline export PROJ --out OUT [--print] [--preview]\n"
+"       --preview: small, fast, rough, and playable while still encoding —\n"
+"                  the same graph, so the cut you watch is the cut you ship\n"
 "\n"
 "COMMON\n"
 "  --size N        longest edge for a render or a preview (0 = full)\n"
@@ -104,7 +106,7 @@ typedef struct {
     double at, in, outp, speed;
     double fade_in, fade_out;
     double dur, to, head, tail;
-    int    has_dur, has_to, has_head, has_tail, ripple;
+    int    has_dur, has_to, has_head, has_tail, ripple, preview;
     const char *colour;
     float  gain, opacity;
     char   set_key[64][64];
@@ -154,6 +156,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--colour") ||
                  !strcmp(a, "--color"))   { const char *v = NEXT(); if (!v) return -1; o->colour = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
+        else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--print"))   { o->print = 1; }
         else if (!strcmp(a, "--set")) {
             const char *v = NEXT(), *eq;
@@ -938,7 +941,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             return die("cannot write the grade LUTs");
         }
 
-        ac = ss_timeline_ffmpeg(t, o.out, dir, &av);
+        ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, &av);
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }
         rc = tl_run(av, ac, o.print);

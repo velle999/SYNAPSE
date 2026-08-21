@@ -587,6 +587,37 @@ if have ffmpeg; then
         done
     fi
 
+    # ---- the preview render, which is what the window PLAYS --------------
+    #
+    # Compositing twenty-five frames a second live is not something a process
+    # per frame can do, so playback is the EXPORT, played. That only holds up
+    # if it is the SAME graph — a second, cheaper renderer would disagree with
+    # the real one about exactly the things a preview exists to check.
+    pgraph=$($BIN timeline export "$tp" --out "$TMP/p.mp4" --preview --print)
+    echo "$pgraph" | seen "a preview trades encode time away" "ultrafast"
+    # Fragmented, so a player can open it while ffmpeg is still writing rather
+    # than waiting for a moov atom that does not exist until the encode ends.
+    echo "$pgraph" | seen "a preview is playable while it is written" "frag_keyframe"
+    # The grade still goes through the LUT: a preview that skipped it would be
+    # a preview of a different cut.
+    echo "$pgraph" | seen "and it is still the same graph" "overlay=eof_action=pass"
+
+    $BIN timeline export "$tp" --out "$TMP/p.mp4" --preview >/dev/null 2>&1
+    check "a preview renders" "yes" "$([ -s "$TMP/p.mp4" ] && echo yes || echo no)"
+
+    # A deliverable export is NOT downscaled. The preview is capped at 960 on
+    # the long edge; a project already smaller than that is left alone.
+    hd=$TMP/hd.syntl
+    $BIN timeline new "$hd" --size 1920x1080 --fps 25
+    $BIN timeline track "$hd" video V >/dev/null
+    $BIN timeline clip "$hd" 0 "$still" --at 0 --dur 1 >/dev/null
+    $BIN timeline export "$hd" --out "$TMP/hd-p.mp4" --preview >/dev/null 2>&1
+    $BIN timeline export "$hd" --out "$TMP/hd-f.mp4" >/dev/null 2>&1
+    check "a preview is capped at 960 wide" "960" \
+          "$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TMP/hd-p.mp4" 2>/dev/null)"
+    check "and the deliverable keeps the project size" "1920" \
+          "$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TMP/hd-f.mp4" 2>/dev/null)"
+
     # ---- the transform survives a round trip ----------------------------
     $BIN timeline set "$vp" 0 0 xform.scale=1.4 xform.x=-0.25 xform.rotate=12 \
                                 xform.animate=1 xform.scale2=1.8

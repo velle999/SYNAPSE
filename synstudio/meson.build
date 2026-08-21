@@ -39,7 +39,13 @@ executable('synstudio', sources,
   dependencies: [m_dep],
   install: true)
 
+# Both, and in the same directory: synstudio.qml finds the playback component
+# with Qt.resolvedUrl, which resolves against its OWN location. Installing one
+# without the other leaves a Loader pointing at nothing, which costs the play
+# button and says so rather than failing the window.
 install_data('data/synstudio.qml', install_dir: get_option('datadir') / 'synstudio')
+install_data('data/synstudio-playback.qml',
+             install_dir: get_option('datadir') / 'synstudio')
 install_data('data/synstudio.desktop',
              install_dir: get_option('datadir') / 'applications')
 

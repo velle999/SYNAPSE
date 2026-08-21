@@ -1047,7 +1047,7 @@ static void chain_transition(strbuf *fc, const ss_clip *c)
     } while (0)
 
 int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
-                       const char *lutdir, char ***argv_out)
+                       const char *lutdir, int preview, char ***argv_out)
 {
     strbuf fc = {0};
     char **av = NULL;
@@ -1236,9 +1236,19 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     }
 
     /* The overlay chain names its output bgN; rename the last one so the map
-     * below does not have to know how many clips there were. */
+     * below does not have to know how many clips there were.
+     *
+     * A preview is scaled here rather than by building the whole graph at a
+     * smaller size: every clip has already been composited at project scale,
+     * so the framing, the transforms and the transitions are the ones the real
+     * export produces and only the last step is cheaper. Scaling earlier would
+     * make the preview a different cut, subtly, in exactly the places worth
+     * checking. `-2` keeps the aspect and lands on an even height, which
+     * yuv420p requires. */
     if (nvid > 0) sb_add(&fc, ";[bg%d]null[vout]", nvid);
     else          sb_add(&fc, ";[base]null[vout]");
+    if (preview && t->w > 960)
+        sb_add(&fc, ";[vout]scale=960:-2:flags=fast_bilinear[pout]");
 
     if (naud > 0) {
         int k;
@@ -1251,15 +1261,27 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
 
     PUSH(xdup("-filter_complex"));
     PUSH(xdup(fc.s ? fc.s : ""));
-    PUSH(xdup("-map")); PUSH(xdup("[vout]"));
+    PUSH(xdup("-map"));
+    PUSH(xdup(preview && t->w > 960 ? "[pout]" : "[vout]"));
     if (naud > 0) { PUSH(xdup("-map")); PUSH(xdup("[aout]")); }
     PUSH(xdup("-t")); PUSH(xfmt("%.6f", dur > 0 ? dur : 1.0));
     PUSH(xdup("-c:v")); PUSH(xdup("libx264"));
-    PUSH(xdup("-preset")); PUSH(xdup("medium"));
-    PUSH(xdup("-crf")); PUSH(xdup("18"));
+    /* A preview is watched once and thrown away, so every setting here is
+     * traded for the time it takes to produce. ultrafast/crf 30 is roughly an
+     * order of magnitude quicker than the deliverable settings and looks it —
+     * which is correct, because the thing being judged at this point is the
+     * CUT, not the encode. */
+    PUSH(xdup("-preset")); PUSH(xdup(preview ? "ultrafast" : "medium"));
+    PUSH(xdup("-crf"));    PUSH(xdup(preview ? "30" : "18"));
     PUSH(xdup("-pix_fmt")); PUSH(xdup("yuv420p"));
     if (naud > 0) { PUSH(xdup("-c:a")); PUSH(xdup("aac"));
-                    PUSH(xdup("-b:a")); PUSH(xdup("192k")); }
+                    PUSH(xdup("-b:a")); PUSH(xdup(preview ? "96k" : "192k")); }
+    /* Fragmented, so the file is playable while it is still being written and
+     * a player opening it early does not need a moov atom that will not exist
+     * until the encode finishes. */
+    if (preview) {
+        PUSH(xdup("-movflags")); PUSH(xdup("+frag_keyframe+empty_moov+default_base_moof"));
+    }
     PUSH(xdup(out));
 
     /* execvp needs the NULL terminator but it is not an argument, so it is
