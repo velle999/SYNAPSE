@@ -2766,17 +2766,60 @@ static const struct wl_pointer_listener ptr_listener = {
 	.axis_discrete = ptr_axis_discrete,
 };
 
+/* ⚠ CAPABILITIES GO AWAY AS WELL AS ARRIVE. This used to only ever ADD, and a
+ * seat loses its keyboard on every session disable — which is to say on every
+ * SUSPEND, when seatd hands the devices back and wlroots empties the keyboard
+ * list. wlroots makes the client's wl_keyboard INERT at that moment, but the
+ * proxy stays non-NULL, so the `!w->kbd` guard below was false when the
+ * capability returned on resume and the keyboard was never re-bound. The window
+ * then took no keystrokes AGAIN FOR THE REST OF ITS LIFE, with no error, no log
+ * and a still-working pointer — hit 2026-08-21 across a 06:21→11:38 suspend.
+ *
+ * The pointer half looked healthy only by luck: synui sets
+ * WL_SEAT_CAPABILITY_POINTER unconditionally (a capability-less seat kills
+ * clients that call get_pointer), so that bit never drops here. Nothing about
+ * this side was safer, and a compositor that does drop it would lose the mouse
+ * the same permanent way. Both halves release.
+ *
+ * Releasing is also what makes the re-bind work at all: the proxy must be NULL
+ * for the capability to be taken up a second time. */
 static void seat_caps(void *data, struct wl_seat *seat, uint32_t caps)
 {
 	win_t *w = data;
 	if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !w->kbd) {
 		w->kbd = wl_seat_get_keyboard(seat);
 		wl_keyboard_add_listener(w->kbd, &kbd_listener, w);
+	} else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && w->kbd) {
+		/* A repeat in flight is being timed for a key on a keyboard that no
+		 * longer exists, and its release can never arrive — the same orphan
+		 * kbd_leave() exists to prevent, reached by the other door. */
+		repeat_stop(w);
+		if (wl_proxy_get_version((struct wl_proxy *)w->kbd) >=
+		    WL_KEYBOARD_RELEASE_SINCE_VERSION)
+			wl_keyboard_release(w->kbd);
+		else
+			wl_keyboard_destroy(w->kbd);
+		w->kbd = NULL;
 	}
 	if ((caps & WL_SEAT_CAPABILITY_POINTER) && !w->ptr) {
 		w->ptr  = wl_seat_get_pointer(seat);
 		w->held = ST_BTN_NONE;
 		wl_pointer_add_listener(w->ptr, &ptr_listener, w);
+	} else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && w->ptr) {
+		/* shape_dev is derived FROM w->ptr and dies with it. Dropping it here
+		 * is what lets set_cursor_shape() build a new one against the new
+		 * pointer; leaving it set would wedge that `!w->shape_dev` guard. */
+		if (w->shape_dev) {
+			wp_cursor_shape_device_v1_destroy(w->shape_dev);
+			w->shape_dev = NULL;
+		}
+		w->held = ST_BTN_NONE;
+		if (wl_proxy_get_version((struct wl_proxy *)w->ptr) >=
+		    WL_POINTER_RELEASE_SINCE_VERSION)
+			wl_pointer_release(w->ptr);
+		else
+			wl_pointer_destroy(w->ptr);
+		w->ptr = NULL;
 	}
 }
 static void seat_name(void *d, struct wl_seat *s, const char *n)
