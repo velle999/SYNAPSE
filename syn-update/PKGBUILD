@@ -23,7 +23,12 @@ pkgver=0.1.0
 #   there. It now prints the revision the tree landed on. Only when it actually
 #   moved: a paragraph on every no-op run is the noise that stops people
 #   reading the output.
-pkgrel=40
+# 41: the sweep and its arrowhead are the house ink, not a near-white. The disc
+#   under them follows the theme accent and only its HUE moves — it is as light
+#   as the violet it was drawn from on every theme — so a near-white arc on it
+#   was never carrying much contrast and washed out entirely on the pale ones.
+
+pkgrel=41
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

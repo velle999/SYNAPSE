@@ -39,8 +39,15 @@
 
        Inset well clear of the shield's edge on both sides. The draft before
        this one ran the bars to the full inner width, and at the point of the
-       shield the bottom bar's corners poked through the taper. -->
-  <rect x="13" y="14" width="22" height="4" rx="2" fill="#f1ecff"/>
-  <rect x="13" y="22" width="22" height="4" rx="2" fill="#f1ecff"/>
-  <rect x="13" y="30" width="13" height="4" rx="2" fill="#f1ecff"/>
+       shield the bottom bar's corners poked through the taper.
+
+       Drawn in the house ink, not the house near-white. The plate under them
+       follows the theme accent (synui's iconhue.c) and only its HUE moves —
+       it stays as light as the violet it was drawn from on every theme — so a
+       near-white mark on it was never carrying much contrast and had none left
+       on the pale accents. Ink is the same distance from the plate whatever
+       colour the plate is, and it is what the other house icons already use. -->
+  <rect x="13" y="14" width="22" height="4" rx="2" fill="#1b1030"/>
+  <rect x="13" y="22" width="22" height="4" rx="2" fill="#1b1030"/>
+  <rect x="13" y="30" width="13" height="4" rx="2" fill="#1b1030"/>
 </svg>

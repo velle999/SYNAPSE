@@ -345,7 +345,27 @@ pkgver=0.1.0
 #   Also ships data/synapse-hannah-montana.png into /usr/share/backgrounds,
 #   which the Super+W picker already scans. NOT a theme: wallpaper_accent=auto
 #   is already ON for Prism, so picking it IS the theme.
-pkgrel=415
+# 416: the icons went highlighter on a green accent. 415 rotated the house
+#   violet onto the accent keeping the pixel's HSL saturation and lightness, and
+#   HSL's L is a channel average rather than a brightness: green carries five
+#   times the luminance of blue at the same L. #a78bfa held at L 0.76 came out
+#   30 points of CIE L* ABOVE the violet it replaced on the wallpaper's
+#   yellow-green, 27 above on SYNAPSE's cyan and 21 on Nord's frost — and
+#   within 8 on every purple, pink and blue, which is why nine themes looked
+#   right and the green one shipped a highlighter.
+#   iconhue.c rotates in OKLab now, where L IS perceived lightness, so every
+#   accent lands at the lightness the icon was drawn at. Chroma is scaled by the
+#   accent's own over the brand violet's: Nord's frost blue is a deliberately
+#   quiet colour and an icon keeping the violet's chroma on it is a poster
+#   pinned to a muted desktop.
+#   ⚠ COLLIDE — how far the teal detail steps aside when the accent walks into
+#   it — is measured in OKLab now and is 45 deg, not 30. It was never buying
+#   the 37 dE of separation 415 credited it with: most of that gap was the
+#   glyph beside it being 27 L* brighter than it was ever drawn, and with the
+#   glyph back where it belongs the hue step is all there is. It buys about
+#   0.8 dE per degree.
+
+pkgrel=416
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -28,7 +28,15 @@
   <!-- The active pane, and the one you are not in. Two SOLID sheets with the
        folder showing between them, rather than one filled and one outlined:
        an outline is a 2px ring that closes up into a dark blob by 16px, where
-       two blocks of different value still read as two. -->
-  <rect x="8.5" y="18.5" width="12" height="18" rx="1.8" fill="#f6f3ff"/>
+       two blocks of different value still read as two.
+
+       Both are DARKER than the folder, and the active one is the house ink.
+       The folder follows the theme accent (synui's iconhue.c) and only its HUE
+       moves — it stays as light as the violet it was drawn from on every theme
+       — so the near-white this pane used to be was never carrying much
+       contrast against it and had none left on the pale accents. The pair
+       still reads as two: 17 points of L* between ink and the mid shade, with
+       the lighter folder behind both of them. -->
+  <rect x="8.5" y="18.5" width="12" height="18" rx="1.8" fill="#1b1030"/>
   <rect x="27.5" y="18.5" width="12" height="18" rx="1.8" fill="#41307a"/>
 </svg>

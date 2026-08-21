@@ -57,7 +57,13 @@ pkgver=0.1.0
 #   menu when there is no room, which a right-click near the window edge makes
 #   the ordinary case. Hover opens it, no timers; the click handler RETURNS on
 #   the submenu row or the menu would close under the flyout it just opened.
-pkgrel=54
+# 55: the active pane is the house ink, not a near-white. The folder under it
+#   follows the theme accent and only its HUE moves — it is as light as the
+#   violet it was drawn from on every theme — so a near-white sheet on it was
+#   never carrying much contrast and had none left on the pale accents. It also
+#   puts this icon in the same ink as syn-settings, syn-arcade and syn-disks.
+
+pkgrel=55
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

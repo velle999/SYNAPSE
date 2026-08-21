@@ -22,6 +22,12 @@
  *      surface, and it shows as fringing on every antialiased edge.
  *   6. Drifting on repeat application, which is the whole reason icons.c keeps
  *      a pristine base instead of re-tinting what it drew last time.
+ *   7. Landing on the accent's hue at the icon's own HSL lightness, which is
+ *      not the icon's own BRIGHTNESS: green carries five times the luminance of
+ *      blue at the same L, so the violet came out 30 points of CIE L* brighter
+ *      on a yellow-green accent than it was drawn. That is what 415 shipped,
+ *      every assertion below it passed, and the icons were highlighters on one
+ *      theme and correct on nine.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -51,6 +57,8 @@ static const float ACC_SYNAPSE[3] = { 0.00f, 0.85f, 0.75f };   /* teal!      */
 static const float ACC_GRUVBOX[3] = { 0.996f, 0.502f, 0.098f };
 static const float ACC_DRACULA[3] = { 1.000f, 0.475f, 0.776f };
 static const float ACC_PRISM[3]   = { 0.000f, 0.839f, 0.898f }; /* teal too  */
+static const float ACC_NORD[3]    = { 0.533f, 0.753f, 0.816f }; /* frost      */
+static const float ACC_OLIVE[3]   = { 0.671f, 0.722f, 0.396f }; /* #ABB865    */
 static const float ACC_GREY[3]    = { 0.55f, 0.55f, 0.55f };
 
 /* A canvas in the format iconhue reads: native-endian ARGB32, premultiplied,
@@ -145,32 +153,65 @@ static double hue_gap(double a, double b)
     return d;
 }
 
+/* CIELAB for a packed sRGB colour. Deliberately NOT the OKLab the transform
+ * itself works in: a test that measures a thing in the same space the code
+ * computed it in can only ever confirm the arithmetic. CIELAB is the older,
+ * independent answer to "how far apart do these two look", and L* is the
+ * independent answer to "how bright is this" — which is the whole question the
+ * recolour turns on. */
+static void lab_of(unsigned c, double out[3])
+{
+    double v[3];
+    for (int k = 0; k < 3; k++) {
+        double s = ((c >> (16 - 8 * k)) & 0xff) / 255.0;
+        v[k] = (s <= 0.04045) ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4);
+    }
+    double X = (0.4124 * v[0] + 0.3576 * v[1] + 0.1805 * v[2]) / 0.95047;
+    double Y = (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]);
+    double Z = (0.0193 * v[0] + 0.1192 * v[1] + 0.9505 * v[2]) / 1.08883;
+    double f[3], t[3] = { X, Y, Z };
+    for (int k = 0; k < 3; k++)
+        f[k] = (t[k] > 216.0 / 24389.0) ? cbrt(t[k])
+                                        : (841.0 / 108.0) * t[k] + 4.0 / 29.0;
+    out[0] = 116.0 * f[1] - 16.0;
+    out[1] = 500.0 * (f[0] - f[1]);
+    out[2] = 200.0 * (f[1] - f[2]);
+}
+
+static double lightness(unsigned c)
+{
+    double lab[3];
+    lab_of(c, lab);
+    return lab[0];
+}
+
 /* CIE76 between two packed sRGB colours — the only honest way to say "these
  * two are still telling apart", which is the whole claim about the teal. */
 static double delta_e(unsigned x, unsigned y)
 {
-    double lab[2][3];
-    unsigned c[2] = { x, y };
-    for (int i = 0; i < 2; i++) {
-        double v[3];
-        for (int k = 0; k < 3; k++) {
-            double s = ((c[i] >> (16 - 8 * k)) & 0xff) / 255.0;
-            v[k] = (s <= 0.04045) ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4);
-        }
-        double X = (0.4124 * v[0] + 0.3576 * v[1] + 0.1805 * v[2]) / 0.95047;
-        double Y = (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]);
-        double Z = (0.0193 * v[0] + 0.1192 * v[1] + 0.9505 * v[2]) / 1.08883;
-        double f[3], t[3] = { X, Y, Z };
-        for (int k = 0; k < 3; k++)
-            f[k] = (t[k] > 216.0 / 24389.0) ? cbrt(t[k])
-                                            : (841.0 / 108.0) * t[k] + 4.0 / 29.0;
-        lab[i][0] = 116.0 * f[1] - 16.0;
-        lab[i][1] = 500.0 * (f[0] - f[1]);
-        lab[i][2] = 200.0 * (f[1] - f[2]);
-    }
+    double a[3], b[3];
+    lab_of(x, a);
+    lab_of(y, b);
     double d = 0;
-    for (int k = 0; k < 3; k++) d += pow(lab[0][k] - lab[1][k], 2);
+    for (int k = 0; k < 3; k++) d += pow(a[k] - b[k], 2);
     return sqrt(d);
+}
+
+/* OKLab hue in degrees, for the one constant that is measured there. */
+static double ok_hue(unsigned c)
+{
+    double v[3];
+    for (int k = 0; k < 3; k++) {
+        double s = ((c >> (16 - 8 * k)) & 0xff) / 255.0;
+        v[k] = (s <= 0.04045) ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4);
+    }
+    double l = cbrt(0.4122214708 * v[0] + 0.5363325363 * v[1] + 0.0514459929 * v[2]);
+    double m = cbrt(0.2119034982 * v[0] + 0.6806995451 * v[1] + 0.1073969566 * v[2]);
+    double s = cbrt(0.0883024619 * v[0] + 0.2817188376 * v[1] + 0.6299787005 * v[2]);
+    double a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    double b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    double h = atan2(b, a) * 180.0 / M_PI;
+    return (h < 0) ? h + 360.0 : h;
 }
 
 /* ── 1. the gate turns away everything that is not ours ──── */
@@ -248,6 +289,63 @@ static void test_lightness_structure_survives(void)
     free(px);
 }
 
+static void test_perceived_lightness_survives(void)
+{
+    /* The one that would have caught what 415 shipped. HSL's L is a channel
+     * average, not a brightness: hold #a78bfa's L = 0.76 and rotate the hue to
+     * the wallpaper's yellow-green and you get #E9FA8B, which is 30 points of
+     * CIE L* above the violet it replaced — a highlighter where an icon was.
+     * Cyan came out 27 points up and Nord's frost 21, while every purple, pink
+     * and blue landed within 8, which is exactly why this looked fine on most
+     * themes and shipped wrong on a green one.
+     *
+     * So the assertion is not "the lightness channel was copied" — the old code
+     * copied it faithfully. It is that the result LOOKS as bright as what it
+     * replaced, on hues nowhere near each other. */
+    const struct { const char *name; const float *acc; } themes[] = {
+        { "olive",   ACC_OLIVE   },   /* the wallpaper accent that caught it */
+        { "cyan",    ACC_SYNAPSE },
+        { "frost",   ACC_NORD    },
+        { "orange",  ACC_GRUVBOX },
+        { "pink",    ACC_DRACULA },
+    };
+
+    for (unsigned i = 0; i < sizeof(themes) / sizeof(themes[0]); i++) {
+        unsigned char *px = house_icon();
+        syn_iconhue_apply(px, W, H, W * 4, themes[i].acc);
+
+        /* The plate and the darker shade it is drawn over. */
+        double dl_glyph = fabs(lightness(straight(px, 5, 16)) - lightness(BRAND));
+        double dl_shade = fabs(lightness(straight(px, 12, 12)) - lightness(SHADE));
+        assert(dl_glyph <= 5.0);
+        assert(dl_shade <= 5.0);
+        free(px);
+    }
+}
+
+static void test_the_icons_are_as_quiet_as_their_theme(void)
+{
+    /* The other half of following a theme. The violet is a vivid colour and
+     * Nord's frost blue is a deliberately quiet one; an icon that keeps the
+     * violet's chroma on a quiet theme is a poster pinned to a muted desktop,
+     * which is the same complaint as the wrong lightness wearing another hat.
+     * Gruvbox's orange is the control: it is at least as vivid as the violet,
+     * so nothing there should be pulled down. */
+    unsigned char *quiet = house_icon(), *vivid = house_icon();
+    syn_iconhue_apply(quiet, W, H, W * 4, ACC_NORD);
+    syn_iconhue_apply(vivid, W, H, W * 4, ACC_GRUVBOX);
+
+    double drawn[3], q[3], v[3];
+    lab_of(BRAND, drawn);
+    lab_of(straight(quiet, 5, 16), q);
+    lab_of(straight(vivid, 5, 16), v);
+
+    double c_drawn = hypot(drawn[1], drawn[2]);
+    assert(hypot(q[1], q[2]) < c_drawn * 0.75);
+    assert(hypot(v[1], v[2]) > c_drawn * 0.90);
+    free(quiet); free(vivid);
+}
+
 /* ── 3. neutrals are left where they are ─────────────────── */
 
 static void test_neutrals_are_not_tinted(void)
@@ -301,8 +399,8 @@ static void test_teal_gives_way_to_a_teal_accent(void)
 {
     /* SYNAPSE is the DEFAULT theme and its accent is teal. Left as drawn, the
      * knob/LED lands 19.5 dE from the glyph it sits on and disappears. */
-    const float *accents[2] = { ACC_SYNAPSE, ACC_PRISM };
-    for (int i = 0; i < 2; i++) {
+    const float *accents[3] = { ACC_SYNAPSE, ACC_PRISM, ACC_NORD };
+    for (int i = 0; i < 3; i++) {
         unsigned char *px = house_icon();
         syn_iconhue_apply(px, W, H, W * 4, accents[i]);
 
@@ -317,11 +415,19 @@ static void test_teal_gives_way_to_a_teal_accent(void)
 static void test_the_detail_moves_no_further_than_it_must(void)
 {
     /* It gives way, it does not run: a detail that swung to the far side of the
-     * wheel would stop reading as the same mark from theme to theme. */
-    unsigned char *px = house_icon();
-    syn_iconhue_apply(px, W, H, W * 4, ACC_SYNAPSE);
-    assert(hue_gap(hue_of(straight(px, 20, 20)), hue_of(TEAL)) < 45.0);
-    free(px);
+     * wheel would stop reading as the same mark from theme to theme. Measured
+     * in OKLab, because that is where the step is decided and how big it is —
+     * COLLIDE, 45 deg — and an HSL reading of the same move is not a bound on
+     * anything: the two circles do not run at the same rate, and 45 deg of
+     * OKLab through the cyans comes out as 69 deg of HSL without the detail
+     * having gone one step further than it was told to. */
+    const float *accents[3] = { ACC_SYNAPSE, ACC_PRISM, ACC_NORD };
+    for (int i = 0; i < 3; i++) {
+        unsigned char *px = house_icon();
+        syn_iconhue_apply(px, W, H, W * 4, accents[i]);
+        assert(hue_gap(ok_hue(straight(px, 20, 20)), ok_hue(TEAL)) <= 46.0);
+        free(px);
+    }
 }
 
 /* ── 5. the premultiply survives the round trip ──────────── */
@@ -416,6 +522,8 @@ int main(void)
     test_gate_survives_bad_input();
     test_brand_takes_the_accent_hue();
     test_lightness_structure_survives();
+    test_perceived_lightness_survives();
+    test_the_icons_are_as_quiet_as_their_theme();
     test_neutrals_are_not_tinted();
     test_a_foreign_hue_is_left_alone();
     test_teal_is_untouched_when_it_can_be();

@@ -43,10 +43,18 @@
        arrowhead lands. A nearly closed ring reads as a plain circle the moment
        the arrowhead is down to a pixel or two. -->
   <path d="M33.1 18.75A10.5 10.5 0 1 1 24 13.5"
-        fill="none" stroke="#f1ecff" stroke-width="4.4" stroke-linecap="round"/>
+        fill="none" stroke="#1b1030" stroke-width="4.4" stroke-linecap="round"/>
 
   <!-- The arrowhead, at the end of the sweep and pointing the way the arc is
        travelling. A triangle rather than two strokes: at this size two strokes
-       land on different pixel boundaries and one of them vanishes. -->
-  <path d="M23 8.2 31.5 13.6 23 19z" fill="#f1ecff"/>
+       land on different pixel boundaries and one of them vanishes.
+
+       Arc and arrowhead are the house ink, not the house near-white. The disc
+       under them follows the theme accent (synui's iconhue.c) and only its HUE
+       moves — it stays as light as the violet it was drawn from on every theme
+       — so a near-white sweep on it was never carrying much contrast and had
+       none left on the pale accents. Ink is the same distance from the disc
+       whatever colour the disc is, and it is what the other house icons
+       already use. -->
+  <path d="M23 8.2 31.5 13.6 23 19z" fill="#1b1030"/>
 </svg>

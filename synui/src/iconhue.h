@@ -56,9 +56,16 @@ bool syn_iconhue_wants(const char *icon_name, const unsigned char *data,
  * itself on every theme switch. icons.c keeps the untouched decode alongside
  * the drawn surface for exactly this reason.
  *
- * Only the hue moves. Saturation and lightness are kept exactly, which is what
- * makes the result read as the same icon rather than a differently-coloured
- * blob — the internal light/dark structure the icon was drawn with survives.
+ * What moves is the hue, and the recolour happens in OKLab so that "the same
+ * icon in another colour" is what actually comes out. Each pixel keeps the
+ * PERCEIVED lightness it was drawn at — not its HSL lightness, which is a
+ * channel average and lets a green land 30 points of CIE L* above the violet it
+ * replaced — so the icon's internal light/dark structure survives the move on
+ * every accent instead of on the ones that happen to sit near the violet's
+ * luminance. Chroma moves with the theme: it is scaled by the accent's own
+ * chroma over the brand violet's, so a quiet theme gets quiet icons and a vivid
+ * one gets vivid ones, which is the difference between an icon that follows the
+ * accent and one that merely wears its hue.
  */
 void syn_iconhue_apply(unsigned char *data, int w, int h, int stride,
                        const float accent_rgb[3]);

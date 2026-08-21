@@ -42,16 +42,23 @@
            1-4-4z"
         fill="#a78bfa"/>
 
-  <!-- The lid seam. Darker, not lighter: the arrow is the light shape, and two
-       light shapes touching would merge into one at small sizes. A full band
-       rather than a 1px line, which vanishes at 22px and takes "this is a
-       package" with it. -->
+  <!-- The lid seam. A shade of the plate rather than a value of its own, so
+       that the arrow is the only mark on the box and the seam is a fold in it.
+       A full band rather than a 1px line, which vanishes at 22px and takes
+       "this is a package" with it. -->
   <path d="M6 17a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v4.5H6z" fill="#7c5cd6"/>
 
   <!-- The arrow, plunging in. Shaft and head are separate shapes so the head
        can be wider than the shaft without a join that renders as a notch.
        It crosses the seam on purpose: that overlap is what makes the two
-       read as one object rather than an arrow parked on a square. -->
-  <rect x="21.5" y="18" width="5" height="11" rx="1" fill="#f1ecff"/>
-  <path d="M16.5 27h15L24 36.5z" fill="#f1ecff"/>
+       read as one object rather than an arrow parked on a square.
+
+       Drawn in the house ink, not the house near-white. The box under it
+       follows the theme accent (synui's iconhue.c) and only its HUE moves —
+       it stays as light as the violet it was drawn from on every theme — so a
+       near-white arrow on it was never carrying much contrast and had none
+       left on the pale accents. Ink is the same distance from the box whatever
+       colour the box is, and it is what the other house icons already use. -->
+  <rect x="21.5" y="18" width="5" height="11" rx="1" fill="#1b1030"/>
+  <path d="M16.5 27h15L24 36.5z" fill="#1b1030"/>
 </svg>
