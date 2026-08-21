@@ -27,7 +27,7 @@ pkgver=0.1.0
 #   ⚠ QS_APP_ID, the .desktop basename and StartupWMClass are one name, or the
 #   dock's "<app_id>.desktop" lookup finds nothing and the pinned icon is a
 #   themed fallback that does nothing when clicked.
-pkgrel=19
+pkgrel=20
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -57,8 +57,8 @@ for list in "${SEL_ALL_LISTS[@]}"; do
         check "$key has 7 fields" 7 "$n"
         check "$key: std is 0 or 1" yes "$([ "$std" = 0 ] || [ "$std" = 1 ] && echo yes || echo no)"
         check "$key: full is 0 or 1" yes "$([ "$full" = 0 ] || [ "$full" = 1 ] && echo yes || echo no)"
-        check "$key: group is core, app or sw" yes \
-              "$(case "$group" in core|app|sw) echo yes ;; *) echo no ;; esac)"
+        check "$key: group is core, app, sw or flat" yes \
+              "$(case "$group" in core|app|sw|flat) echo yes ;; *) echo no ;; esac)"
         check "$key: names at least one package" yes "$([ -n "$pkgs" ] && echo yes || echo no)"
         # The widths the two-column page is built on. printf truncates rather
         # than wrapping, so an over-long one is not a broken layout — it is a

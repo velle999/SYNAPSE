@@ -1014,6 +1014,12 @@ config_report_unused() {
 #   group        core  the spine a Minimal install still gets
 #                app   ours, but an application — Minimal clears these
 #                sw    not ours at all; from core/extra/multilib
+#                flat  a FLATPAK from flathub, not a pacman package at all.
+#                      `packages` is the app ID. Separate from sw because it is
+#                      a different installer with a different failure mode, and
+#                      because a pacman transaction must never be handed an app
+#                      ID — `pacman -S org.localsend.localsend_app` is not a
+#                      slow failure, it is a confusing one.
 #   packages     what pacman is actually asked for; more than one is allowed
 #                and they travel together (synguard + its module; the
 #                wallpaper renderer + the wallpapers it plays)
@@ -1071,6 +1077,7 @@ SEL_SW_WEB=(
     "sw_keepassxc|0|1|sw|keepassxc|KeePassXC|password vault"
     "sw_qbittorrent|0|0|sw|qbittorrent|qBittorrent|torrents"
     "sw_syncthing|0|0|sw|syncthing|Syncthing|file sync"
+    "sw_localsend|1|1|flat|org.localsend.localsend_app|LocalSend|send to phone"
 )
 SEL_SW_MEDIA=(
     "sw_vlc|0|1|sw|vlc|VLC|plays anything"
@@ -1112,6 +1119,7 @@ SEL_SW_GAMES=(
     "sw_dolphinemu|0|0|sw|dolphin-emu|Dolphin|GameCube/Wii"
     "sw_ppsspp|0|0|sw|ppsspp|PPSSPP|PSP"
     "sw_scummvm|0|0|sw|scummvm|ScummVM|point-and-click"
+    "sw_pinball|1|1|flat|com.github.k4zmu2a.spacecadetpinball|Pinball|3D Space Cadet"
     "sw_dosbox|0|0|sw|dosbox|DOSBox|DOS games"
     "sw_mame|0|0|sw|mame|MAME|arcade"
     "sw_protontricks|0|0|sw|protontricks|Protontricks|per-game fixes"
@@ -2704,6 +2712,7 @@ while :; do
     SEL_CORE="$(sel_packages core)"
     SEL_APPS="$(sel_packages app)"
     SEL_SOFTWARE="$(sel_packages sw)"
+    SEL_FLATPAKS="$(sel_packages flat)"
 
     # Read the selection back before touching the disk. A picker whose result you
     # only discover afterwards is worse than no picker.
@@ -3613,6 +3622,49 @@ if [ -n "${SEL_SOFTWARE:-}" ]; then
         *" syncthing "*) arch-chroot /mnt systemctl --global enable syncthing.service 2>/dev/null || true ;;
     esac
     success "Software installed"
+fi
+
+# ── Flatpak apps ──────────────────────────────────────────
+#
+# A second installer, for the things that are not in any Arch repo. Kept
+# entirely separate from the pacman transaction above rather than folded into
+# it: these are app IDs, not package names, and handing one to pacman produces a
+# baffling error rather than a useful one.
+#
+# Runs AFTER the pacman software step so a failure here — flathub unreachable,
+# a runtime that will not download — cannot cost the packages that were fine.
+if [ -n "${SEL_FLATPAKS:-}" ]; then
+    step "Installing Flatpak apps"
+    echo "  $(echo $SEL_FLATPAKS | wc -w) app(s) from flathub:"
+    echo "    $SEL_FLATPAKS"
+    echo ""
+    # flatpak itself is not in the base system and is not a `sw` row — nothing
+    # would have pulled it in, and a flatpak app with no flatpak is nothing.
+    if ! arch-chroot /mnt pacman -S --noconfirm --needed flatpak 2>&1; then
+        warn "flatpak could not be installed — skipping the Flatpak apps.
+  Nothing else is affected."
+    else
+        # --if-not-exists so re-running the installer over a half-finished
+        # target is not an error. System-wide, not --user: there is no user
+        # session in a chroot to install into.
+        arch-chroot /mnt flatpak remote-add --if-not-exists \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>&1 \
+            || warn "Could not add the flathub remote"
+
+        fp_failed=""
+        for app in $SEL_FLATPAKS; do
+            echo "  $app"
+            # One at a time and never fatal. The first app pulls the freedesktop
+            # runtime with it, so a slow link makes this the longest step in the
+            # install — and an app that fails here leaves a working system that
+            # is merely missing one program.
+            arch-chroot /mnt flatpak install -y --noninteractive flathub "$app" 2>&1 \
+                || fp_failed="$fp_failed $app"
+        done
+        [ -n "$fp_failed" ] && warn "Not installed:$fp_failed
+  Install later with 'flatpak install flathub <app-id>'."
+        success "Flatpak apps installed"
+    fi
 fi
 
 # ── Configure system ──────────────────────────────────────
