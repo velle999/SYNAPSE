@@ -45,6 +45,12 @@ Item {
     signal stateMoved(int state)
     signal failed(string text)
 
+    // Monitoring level, which is NOT the mix: it is how loud this room is,
+    // and it must never reach the exported file. Kept here with the player it
+    // belongs to rather than anywhere near the timeline's own faders.
+    property alias volume: ao.volume
+    property alias muted:  ao.muted
+
     function play()  { mp.play() }
     function pause() { mp.pause() }
     // Assignment rather than a setter: `position` is documented read-only and
@@ -56,7 +62,7 @@ Item {
     MediaPlayer {
         id: mp
         videoOutput: vo
-        audioOutput: AudioOutput { id: ao }
+        audioOutput: AudioOutput { id: ao; volume: 1.0 }
         onPositionChanged: pb.positionMoved(mp.position)
         onMediaStatusChanged: pb.statusMoved(mp.mediaStatus)
         onPlaybackStateChanged: pb.stateMoved(mp.playbackState)

@@ -259,6 +259,11 @@ double ss_media_duration(const char *path);
  * an export, because referencing [N:a] for an input that has no audio stream
  * fails the WHOLE graph rather than being quietly ignored. */
 int    ss_media_has_audio(const char *path);
+/* How many channels that sound track has, or 0. A pan has to know: panning a
+ * MONO source means naming c0 twice, and routing it through a stereo upmix
+ * instead costs 3dB that a centred clip does not pay — so the same fader
+ * position would be quieter for having been panned. */
+int    ss_media_channels(const char *path);
 /* What a file is, decided by ffmpeg rather than by its extension. One or two
  * processes, so it is for a file somebody handed over on purpose — a drop, an
  * argument — never for every row of a directory listing. */
@@ -385,6 +390,7 @@ typedef struct {
     char   path[1024];          /* media only */
     int    still;               /* a photograph, not a movie: needs -loop 1 */
     int    has_audio;           /* filled in before an export, never stored */
+    int    achannels;           /* likewise: 1 = mono, and a pan must know */
     double src_in, src_out;     /* seconds into the source */
     double tl_in;               /* seconds on the timeline */
     double speed;               /* 1.0 = normal */
@@ -464,7 +470,12 @@ int  ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n);
  * no diagnostic. It was exactly that, first run. */
 typedef struct {
     int    type;
-    int    muted, hidden;
+    /* `hidden` is about the PICTURE and `muted` is about the SOUND. They used
+     * to be one condition — either dropped the whole track — so muting a video
+     * track took its picture away and hiding one took the dialogue with it. */
+    int    muted, hidden, solo;
+    float  gain_db;             /* the track fader, -60..+24 */
+    float  pan;                 /* -1 hard left .. +1 hard right */
     char   name[64];
     int    nclips, cap;
     ss_clip *clip;
@@ -474,9 +485,28 @@ typedef struct {
     char   name[256];
     int    w, h;
     double fps;
+    float  master_db;           /* one fader after the mix */
     int    ntracks;
     ss_track track[SS_MAX_TRACKS];
 } ss_timeline;
+
+/* What a track contributes once mute, hide and solo have had their say.
+ * Solo is a property of the WHOLE timeline: one soloed track mutes every other
+ * one, which is the only behaviour anybody expects from the word. */
+int ss_track_shows(const ss_timeline *t, int track);
+int ss_track_sounds(const ss_timeline *t, int track);
+
+/* Integrated loudness and true peak, both in the units everyone quotes:
+ * LUFS and dBTP. Measured with ffmpeg's ebur128, which is the same meter the
+ * broadcast standards are written against. Returns 0, or -1 if nothing there
+ * has a sound track. `in`/`out` bound the measurement; pass 0 and -1 for all
+ * of it. */
+typedef struct {
+    double lufs;                /* integrated, LUFS */
+    double peak_db;             /* true peak, dBTP */
+    double range;               /* loudness range, LU */
+} ss_loudness;
+int ss_media_loudness(const char *path, double in, double out, ss_loudness *l);
 
 void   ss_timeline_reset(ss_timeline *t, int w, int h, double fps);
 void   ss_timeline_free(ss_timeline *t);

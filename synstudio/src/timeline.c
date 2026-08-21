@@ -717,12 +717,18 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
     fprintf(fp, "name\t%s\n", t->name);
     fprintf(fp, "size\t%d\t%d\n", t->w, t->h);
     fprintf(fp, "fps\t%.6g\n", t->fps);
+    if (t->master_db != 0.0f) fprintf(fp, "master\t%.3f\n", t->master_db);
 
     for (i = 0; i < t->ntracks; i++) {
         const ss_track *tr = &t->track[i];
         fprintf(fp, "track\t%s\t%s\t%d\t%d\n",
                 tr->type == SS_TRACK_VIDEO ? "video" : "audio",
                 tr->name, tr->muted, tr->hidden);
+        /* The fader, on its own optional line, so a timeline that nobody has
+         * mixed reads exactly as it did before there was a mixer. */
+        if (tr->gain_db != 0.0f || tr->pan != 0.0f || tr->solo)
+            fprintf(fp, "mix\t%.3f\t%.4f\t%d\n",
+                    tr->gain_db, tr->pan, tr->solo);
         for (j = 0; j < tr->nclips; j++) {
             const ss_clip *c = &tr->clip[j];
             fprintf(fp, "clip\t%.6f\t%.6f\t%.6f\t%.6f\t%.4f\t%.4f\t%.6f\t%.6f\t%s\n",
@@ -813,6 +819,8 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             sscanf(line + 5, "%d %d", &t->w, &t->h);
         } else if (!strncmp(line, "fps\t", 4)) {
             t->fps = atof(line + 4);
+        } else if (!strncmp(line, "master\t", 7)) {
+            t->master_db = (float)atof(line + 7);
         } else if (!strncmp(line, "track\t", 6)) {
             char kind[16] = "video", nm[64] = "";
             int muted = 0, hidden = 0;
@@ -824,6 +832,13 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 t->track[cur_track].hidden = hidden;
             }
             cur_clip = -1;
+        } else if (!strncmp(line, "mix\t", 4) && cur_track >= 0) {
+            float g = 0.0f, pan = 0.0f;
+            int solo = 0;
+            sscanf(line + 4, "%f %f %d", &g, &pan, &solo);
+            t->track[cur_track].gain_db = g;
+            t->track[cur_track].pan = pan;
+            t->track[cur_track].solo = solo;
         } else if (!strncmp(line, "clip\t", 5)) {
             ss_clip c;
             char *f[9];
@@ -1312,6 +1327,39 @@ static void chain_transition(strbuf *fc, const ss_clip *c)
         ac++; \
     } while (0)
 
+/* ---------------------------------------------------------------- mix -- */
+
+int ss_track_shows(const ss_timeline *t, int i)
+{
+    if (!t || i < 0 || i >= t->ntracks) return 0;
+    return !t->track[i].hidden;
+}
+
+int ss_track_sounds(const ss_timeline *t, int i)
+{
+    int k;
+
+    if (!t || i < 0 || i >= t->ntracks) return 0;
+    if (t->track[i].muted) return 0;
+    /* Solo is a property of the whole timeline, not of the track holding the
+     * flag: one soloed track silences every other one. */
+    for (k = 0; k < t->ntracks; k++)
+        if (t->track[k].solo) return t->track[i].solo;
+    return 1;
+}
+
+/* Constant power, so a sound panned to the middle is not louder than the same
+ * sound hard left. A linear law is 3dB up in the centre and every mix made
+ * with one drifts quieter as things are panned out. */
+static void pan_law(float pan, double *l, double *r)
+{
+    double a = ((double)pan + 1.0) * 3.14159265358979 / 4.0;
+    if (pan < -1.0f) pan = -1.0f;
+    if (pan >  1.0f) pan =  1.0f;
+    *l = cos(a);
+    *r = sin(a);
+}
+
 /* ------------------------------------------------------------ formats -- */
 
 /* What an export can come out as.
@@ -1396,7 +1444,13 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
      * the accurate-seek cost is paid by the trim in the graph instead. */
     for (i = 0; i < t->ntracks; i++) {
         const ss_track *tr = &t->track[i];
-        if (tr->hidden || tr->muted) continue;
+        /* Only a track that contributes NEITHER is dropped outright. The two
+         * flags used to be one condition, so muting a video track took its
+         * picture with it and hiding one took the dialogue.
+         *
+         * ⚠ This predicate must stay identical to the one on the graph loop
+         * below: the two walk in lockstep and `input` is the -i index. */
+        if (!ss_track_shows(t, i) && !ss_track_sounds(t, i)) continue;
         for (j = 0; j < tr->nclips; j++) {
             const ss_clip *c = &tr->clip[j];
             double srclen = c->src_out - c->src_in;
@@ -1442,13 +1496,13 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     input = 0;
     for (i = 0; i < t->ntracks; i++) {
         const ss_track *tr = &t->track[i];
-        if (tr->hidden || tr->muted) continue;
+        if (!ss_track_shows(t, i) && !ss_track_sounds(t, i)) continue;
         for (j = 0; j < tr->nclips; j++) {
             const ss_clip *c = &tr->clip[j];
             double len = ss_clip_length(c);
             if (len <= 0) continue;
 
-            if (tr->type == SS_TRACK_VIDEO) {
+            if (tr->type == SS_TRACK_VIDEO && ss_track_shows(t, i)) {
                 float s0, px0, py0, r0, s1, px1, py1, r1;
                 int fw, fh;
 
@@ -1555,13 +1609,31 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
              * `has_audio` is asked before the graph is built rather than
              * guessed here: naming [N:a] for an input with no audio stream
              * fails the whole graph, so this cannot be optimistic. */
-            if (c->kind == SS_CLIP_MEDIA && c->has_audio) {
+            if (c->kind == SS_CLIP_MEDIA && c->has_audio && ss_track_sounds(t, i)) {
+                /* Decibels ADD, so the clip's gain and the track's fader are
+                 * one volume filter and not two. */
+                float g = c->gain_db + tr->gain_db;
                 sb_add(&fc, ";[%d:a]", input);
                 sb_add(&fc, "aresample=48000");
                 if (c->speed != 1.0)
                     sb_add(&fc, ",atempo=%.6f", c->speed);
-                if (c->gain_db != 0.0f)
-                    sb_add(&fc, ",volume=%.3fdB", c->gain_db);
+                if (g != 0.0f)
+                    sb_add(&fc, ",volume=%.3fdB", g);
+                if (tr->pan != 0.0f) {
+                    double l, r;
+                    pan_law(tr->pan, &l, &r);
+                    /* Built from the SOURCE's channel count, not through an
+                     * upmix. `aformat=channel_layouts=stereo` on a mono clip
+                     * spreads it at -3dB a side, so the same fader position
+                     * came out quieter for having been panned at all — and
+                     * hard left measured 3dB under centre, which is the one
+                     * thing a pan must never do. A mono source names c0
+                     * twice; anything else keeps its own two channels. */
+                    if (c->achannels < 2)
+                        sb_add(&fc, ",pan=stereo|c0=%.4f*c0|c1=%.4f*c0", l, r);
+                    else
+                        sb_add(&fc, ",pan=stereo|c0=%.4f*c0|c1=%.4f*c1", l, r);
+                }
                 if (c->fade_in > 0.0)
                     sb_add(&fc, ",afade=t=in:st=0:d=%.4f", c->fade_in);
                 if (c->fade_out > 0.0)
@@ -1596,7 +1668,13 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
         for (k = 0; k < naud; k++) sb_add(&fc, "[a%d]", k);
         /* normalize=0: amix otherwise divides every input by the number of
          * inputs, so adding a quiet music bed would duck the dialogue. */
-        sb_add(&fc, "amix=inputs=%d:normalize=0:dropout_transition=0[aout]", naud);
+        sb_add(&fc, "amix=inputs=%d:normalize=0:dropout_transition=0", naud);
+        if (t->master_db != 0.0f)
+            sb_add(&fc, ",volume=%.3fdB", t->master_db);
+        /* alimiter, not a clip: summing tracks with normalize=0 CAN go past
+         * full scale, and what that sounds like is a crackle nobody can trace
+         * back to the fader that caused it. 0.99 leaves a hair of headroom. */
+        sb_add(&fc, ",alimiter=limit=0.99:level=disabled[aout]");
     }
 
     PUSH(xdup("-filter_complex"));

@@ -865,6 +865,149 @@ $BIN browse / | notseen "the root offers no parent" "	..	"
 $BIN browse "$TMP/does-not-exist" >/dev/null 2>&1
 check "a missing directory fails loudly" "1" "$?"
 
+# ------------------------------------------------------------------- mix --
+#
+# The mixer is measured, never read. Every assertion here exports a real file
+# and puts a meter on it, because a fader that is written to the document and
+# dropped on the way to the graph looks exactly like a fader that works.
+#
+# ProRes, so the audio is pcm and the measurement is of the MIX rather than of
+# what AAC did to it — a low-level sine comes back up to 3dB hot through a
+# lossy encoder, which is not a bug and would make every number here noise.
+echo "== the mixer (levels, measured)"
+
+mdir=$TMP/mix
+mkdir -p "$mdir"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=4000:duration=4" -af volume=-12dB \
+       "$mdir/tone.wav" 2>/dev/null
+ffmpeg -v error -y -f lavfi -i "sine=frequency=120:duration=4" -af volume=-12dB \
+       "$mdir/low.wav" 2>/dev/null
+ffmpeg -v error -y -f lavfi -i color=c=white:s=64x48:d=4:r=25 \
+       -f lavfi -i "sine=frequency=440:duration=4" -shortest -pix_fmt yuv420p \
+       -c:a aac "$mdir/whitetone.mp4" 2>/dev/null
+
+# Integrated loudness of an exported file, to one decimal.
+lufs() { $BIN loudness "$1" | awk -F'\t' '$1=="lufs"{print $2}'; }
+# Peak of one frequency band, which is how a tone is found in a mix.
+band() {    # band <file> <lo> <hi>
+    ffmpeg -v info -nostats -i "$1" \
+        -af "highpass=f=$2:poles=2,highpass=f=$2:poles=2,lowpass=f=$3:poles=2,lowpass=f=$3:poles=2,volumedetect" \
+        -f null - 2>&1 | grep -o 'max_volume: [^ ]*' | head -1 | awk '{print $2}'
+}
+
+mp=$mdir/m.syntl
+$BIN timeline new "$mp" --size 64x48 --fps 25 >/dev/null
+$BIN timeline track "$mp" audio A1 >/dev/null
+$BIN timeline clip "$mp" 0 "$mdir/tone.wav" --at 0 >/dev/null
+
+$BIN timeline export "$mp" --out "$mdir/g0.mov" --format prores >/dev/null 2>&1
+base=$(lufs "$mdir/g0.mov")
+$BIN timeline track "$mp" 0 --gain -6
+$BIN timeline export "$mp" --out "$mdir/g6.mov" --format prores >/dev/null 2>&1
+down=$(lufs "$mdir/g6.mov")
+# dB, so the difference is exact rather than approximate. Six is six.
+check "the track fader moves the export by exactly its dB" "6.0" \
+      "$(awk -v a="$base" -v b="$down" 'BEGIN{printf "%.1f", a-b}')"
+
+$BIN timeline track "$mp" 0 --gain 0
+$BIN timeline master "$mp" --gain -6 >/dev/null
+$BIN timeline export "$mp" --out "$mdir/mm.mov" --format prores >/dev/null 2>&1
+check "and so does the master" "6.0" \
+      "$(awk -v a="$base" -v b="$(lufs "$mdir/mm.mov")" 'BEGIN{printf "%.1f", a-b}')"
+$BIN timeline master "$mp" --gain 0 >/dev/null
+
+# A pan must not cost level. Routing a MONO clip through a stereo upmix takes
+# 3dB off it, so hard left measured quieter than centre — the one thing a pan
+# can never do.
+$BIN timeline track "$mp" 0 --pan -1
+$BIN timeline export "$mp" --out "$mdir/pl.mov" --format prores >/dev/null 2>&1
+lpk=$(ffmpeg -v info -nostats -i "$mdir/pl.mov" -af "pan=mono|c0=c0,volumedetect" \
+      -f null - 2>&1 | grep -o 'max_volume: [^ ]*' | head -1 | awk '{print $2}')
+rpk=$(ffmpeg -v info -nostats -i "$mdir/pl.mov" -af "pan=mono|c0=c1,volumedetect" \
+      -f null - 2>&1 | grep -o 'max_volume: [^ ]*' | head -1 | awk '{print $2}')
+check "hard left keeps its level" "1" \
+      "$(awk -v v="$lpk" 'BEGIN{print (v > -31.0) ? 1 : 0}')"
+check "and the right channel is empty" "1" \
+      "$(awk -v v="$rpk" 'BEGIN{print (v < -60.0) ? 1 : 0}')"
+$BIN timeline track "$mp" 0 --pan 0
+
+# Solo is a property of the TIMELINE: one soloed track silences the others.
+sp=$mdir/s.syntl
+$BIN timeline new "$sp" --size 64x48 --fps 25 >/dev/null
+$BIN timeline track "$sp" audio A1 >/dev/null
+$BIN timeline track "$sp" audio A2 >/dev/null
+$BIN timeline clip "$sp" 0 "$mdir/low.wav"  --at 0 >/dev/null
+$BIN timeline clip "$sp" 1 "$mdir/tone.wav" --at 0 >/dev/null
+$BIN timeline export "$sp" --out "$mdir/both.mov" --format prores >/dev/null 2>&1
+check "both tracks are in the mix" "1" \
+      "$(awk -v a="$(band "$mdir/both.mov" 90 160)" -v b="$(band "$mdir/both.mov" 3000 6000)" \
+             'BEGIN{print (a > -50 && b > -50) ? 1 : 0}')"
+$BIN timeline track "$sp" 0 --solo 1
+$BIN timeline export "$sp" --out "$mdir/solo.mov" --format prores >/dev/null 2>&1
+check "solo keeps the soloed track" "1" \
+      "$(awk -v a="$(band "$mdir/solo.mov" 90 160)" 'BEGIN{print (a > -50) ? 1 : 0}')"
+check "and silences the other one" "1" \
+      "$(awk -v b="$(band "$mdir/solo.mov" 3000 6000)" 'BEGIN{print (b < -50) ? 1 : 0}')"
+
+# hide is about the PICTURE and mute is about the SOUND. They used to be one
+# condition, so muting a video track took its picture away with it.
+hp=$mdir/h.syntl
+$BIN timeline new "$hp" --size 64x48 --fps 25 >/dev/null
+$BIN timeline track "$hp" video V1 >/dev/null
+$BIN timeline clip "$hp" 0 "$mdir/whitetone.mp4" --at 0 >/dev/null
+white() {   # mean luma of a frame one second in: 255 white, 0 black
+    ffmpeg -v error -y -ss 1 -i "$1" -frames:v 1 -f rawvideo -pix_fmt gray - 2>/dev/null \
+        | od -An -tu1 -v | awk '{for(i=1;i<=NF;i++){s+=$i;n++}} END{printf "%d", (n?s/n:0)+0.5}'
+}
+loud() { ffmpeg -v info -nostats -i "$1" -af volumedetect -f null - 2>&1 \
+         | grep -o 'max_volume: [^ ]*' | head -1 | awk '{print $2}'; }
+
+$BIN timeline export "$hp" --out "$mdir/plain.mov" --format prores >/dev/null 2>&1
+check "a plain video track shows its picture" "1" \
+      "$(awk -v v="$(white "$mdir/plain.mov")" 'BEGIN{print (v > 200) ? 1 : 0}')"
+
+$BIN timeline track "$hp" 0 --mute 1
+$BIN timeline export "$hp" --out "$mdir/muted.mov" --format prores >/dev/null 2>&1
+check "muting a VIDEO track leaves the picture" "1" \
+      "$(awk -v v="$(white "$mdir/muted.mov")" 'BEGIN{print (v > 200) ? 1 : 0}')"
+check "and takes only the sound" "" "$(loud "$mdir/muted.mov")"
+
+$BIN timeline track "$hp" 0 --mute 0 --hide 1
+$BIN timeline export "$hp" --out "$mdir/hidden.mov" --format prores >/dev/null 2>&1
+check "hiding it leaves the sound" "1" \
+      "$(awk -v v="$(loud "$mdir/hidden.mov")" 'BEGIN{print (v > -40) ? 1 : 0}')"
+check "and takes only the picture" "1" \
+      "$(awk -v v="$(white "$mdir/hidden.mov")" 'BEGIN{print (v < 20) ? 1 : 0}')"
+
+# ------------------------------------------------------------- loudness --
+echo "== loudness and normalise"
+
+$BIN loudness "$mdir/tone.wav" | seen "loudness reports LUFS" "lufs"
+$BIN loudness "$mdir/tone.wav" | seen "and a true peak" "peak"
+printf 'not audio\n' > "$mdir/notes.txt"
+$BIN loudness "$mdir/notes.txt" >/dev/null 2>&1
+check "and refuses something with no sound in it" "1" "$?"
+
+# The engine measures AND decides: a window that read a number and did the
+# subtraction itself would be a second place where "how loud should this be"
+# is answered.
+np=$mdir/n.syntl
+$BIN timeline new "$np" --size 64x48 --fps 25 >/dev/null
+$BIN timeline track "$np" audio A1 >/dev/null
+$BIN timeline clip "$np" 0 "$mdir/tone.wav" --at 0 >/dev/null
+$BIN timeline normalise "$np" 0 0 --target -20 | seen "normalise says what it measured" "measured"
+$BIN timeline export "$np" --out "$mdir/norm.mov" --format prores >/dev/null 2>&1
+# ebur128 over four seconds of tone lands within a few tenths of the target.
+check "and the export really is on target" "1" \
+      "$(awk -v v="$(lufs "$mdir/norm.mov")" 'BEGIN{d=v+20; if(d<0)d=-d; print (d < 1.0) ? 1 : 0}')"
+
+# The mixer survives a round trip through the document, and a timeline nobody
+# has touched still writes no mix line at all.
+$BIN timeline track "$mp" 0 --gain -4.5 --pan 0.25 --solo 1
+$BIN timeline show "$mp" | seen "the mix line records the fader" "mix	-4.500	0.2500	1"
+$BIN timeline track "$mp" 0 --gain 0 --pan 0 --solo 0
+$BIN timeline show "$mp" | notseen "and vanishes when it is all default" "mix	"
+
 # ------------------------------------------------------------------ kind --
 #
 # `browse` classifies a directory by extension and has to: one process per row

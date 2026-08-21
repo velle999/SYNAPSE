@@ -66,6 +66,9 @@ static void usage(void)
 " tracks and clips\n"
 "  timeline track PROJ video|audio [NAME]        add a track\n"
 "  timeline track PROJ N [--mute 0|1] [--hide 0|1] [--name NAME]\n"
+"       [--gain dB] [--pan -1..1] [--solo 0|1]      the track's fader\n"
+"  timeline master PROJ [--gain dB]              one fader after the mix\n"
+"  timeline normalise PROJ T C [--target LUFS]   measure, then set the gain\n"
 "  timeline clip PROJ TRACK FILE [--at T] [--in A] [--out-at B] [--dur S]\n"
 "       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
 "  timeline title PROJ TRACK TEXT [--at T] [--dur S] [--colour R,G,B]\n"
@@ -101,6 +104,8 @@ static void usage(void)
 "  --quality 1-100 jpeg quality        --bits 8|16   output depth\n"
 "  --set K=V       an override applied on top of the sidecar, not saved\n"
 "\n"
+"  loudness FILE [--in A] [--length S]\n"
+"                  integrated LUFS, true peak and range, from ebur128\n"
 "  formats         what a developed photograph can be written as\n"
 "  browse [DIR]    what is in a folder that this engine can open\n"
 "  kind FILE       image|video|audio|project|none — asked of ffmpeg, not of\n"
@@ -546,8 +551,9 @@ static void tl_fill_audio(ss_timeline *t)
     for (i = 0; i < t->ntracks; i++)
         for (j = 0; j < t->track[i].nclips; j++) {
             ss_clip *c = &t->track[i].clip[j];
-            c->has_audio = (c->kind == SS_CLIP_MEDIA && c->path[0])
-                           ? ss_media_has_audio(c->path) : 0;
+            c->achannels = (c->kind == SS_CLIP_MEDIA && c->path[0])
+                           ? ss_media_channels(c->path) : 0;
+            c->has_audio = c->achannels > 0;
         }
 }
 
@@ -697,10 +703,75 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                 else if (!strcmp(argv[i], "--name") && i + 1 < argc)
                     snprintf(t->track[tr].name, sizeof t->track[tr].name,
                              "%s", argv[++i]);
+                else if (!strcmp(argv[i], "--gain") && i + 1 < argc)
+                    t->track[tr].gain_db = ss_clampf((float)atof(argv[++i]),
+                                                     -60.0f, 24.0f);
+                else if (!strcmp(argv[i], "--pan") && i + 1 < argc)
+                    t->track[tr].pan = ss_clampf((float)atof(argv[++i]),
+                                                 -1.0f, 1.0f);
+                else if (!strcmp(argv[i], "--solo") && i + 1 < argc)
+                    t->track[tr].solo = atoi(argv[++i]) ? 1 : 0;
                 else return die("track: unknown option %s", argv[i]);
             }
         }
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        return 0;
+    }
+
+    /* One fader after the mix, and the meter that says whether it is needed.
+     *
+     * `master` with no option PRINTS rather than refusing: the window needs to
+     * read the value it is about to draw a fader for, and a verb that can only
+     * be written is a verb the window has to keep its own copy of. */
+    if (!strcmp(verb, "master")) {
+        int i;
+        for (i = 4; i < argc; i++) {
+            if (!strcmp(argv[i], "--gain") && i + 1 < argc)
+                t->master_db = ss_clampf((float)atof(argv[++i]), -60.0f, 24.0f);
+            else return die("master: unknown option %s", argv[i]);
+        }
+        if (argc > 4 && tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("gain\t%.3f\n", t->master_db);
+        return 0;
+    }
+
+    /* Measure a clip, then write the gain that lands it on target.
+     *
+     * The engine measures and the engine decides: a window that read a number
+     * and did the subtraction itself would be a second place where "how loud
+     * should this be" is answered. -14 LUFS is where streaming lands; -23 is
+     * EBU R128 for broadcast. */
+    if (!strcmp(verb, "normalise") || !strcmp(verb, "normalize")) {
+        double target = -14.0;
+        ss_loudness l;
+        ss_clip *c;
+        double in, out;
+        int i;
+
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                    argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        for (i = 6; i < argc; i++) {
+            if (!strcmp(argv[i], "--target") && i + 1 < argc)
+                target = atof(argv[++i]);
+            else return die("normalise: unknown option %s", argv[i]);
+        }
+        c = &t->track[tr].clip[cl];
+        if (c->kind != SS_CLIP_MEDIA || !c->path[0])
+            return die("nothing to measure on a generated clip");
+
+        in = c->src_in;
+        out = c->src_out - c->src_in;
+        if (ss_media_loudness(c->path, in, out, &l) != 0)
+            return die("no sound to measure in %s", c->path);
+        if (l.lufs <= -70.0)
+            return die("that clip is silence; there is no gain that fixes it");
+
+        /* The clip's OWN gain is what is being set, so the measurement — which
+         * was taken off the file, before any gain — is the whole answer. */
+        c->gain_db = ss_clampf((float)(target - l.lufs), -60.0f, 24.0f);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("measured\t%.2f\ntarget\t%.2f\ngain\t%.3f\npeak\t%.2f\n",
+               l.lufs, target, c->gain_db, l.peak_db);
         return 0;
     }
 
@@ -1267,6 +1338,22 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!strcmp(cmd, "keys"))     return cmd_keys();
+    if (!strcmp(cmd, "loudness")) {
+        ss_loudness l;
+        double in = 0, out = 0;
+        int i;
+        if (argc < 3) return die("loudness needs a file");
+        for (i = 3; i < argc; i++) {
+            if (!strcmp(argv[i], "--in") && i + 1 < argc) in = atof(argv[++i]);
+            else if (!strcmp(argv[i], "--length") && i + 1 < argc) out = atof(argv[++i]);
+            else return die("loudness: unknown option %s", argv[i]);
+        }
+        if (ss_media_loudness(argv[2], in, out, &l) != 0)
+            return die("no sound to measure in %s", argv[2]);
+        printf("lufs\t%.2f\npeak\t%.2f\nrange\t%.2f\n",
+               l.lufs, l.peak_db, l.range);
+        return 0;
+    }
     if (!strcmp(cmd, "formats")) {
         const ss_still_format *f = ss_still_formats();
         int i;

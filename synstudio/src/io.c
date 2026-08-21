@@ -134,8 +134,12 @@ static int run_wait(char *const argv[])
     return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
 }
 
-/* Same as run_capture but grows its own buffer — used for ffprobe's text. */
-static char *run_text(char *const argv[])
+/* Same as run_capture but grows its own buffer — used for ffprobe's text.
+ *
+ * `want_stderr` because some of ffmpeg's answers are only written there:
+ * ebur128 prints its whole summary — integrated loudness, range, true peak —
+ * to stderr, so a meter that reads stdout reads nothing at all. */
+static char *run_text_fd(char *const argv[], int want_stderr)
 {
     size_t cap = 8192, len = 0;
     char *buf = malloc(cap);
@@ -150,8 +154,13 @@ static char *run_text(char *const argv[])
     if (pid == 0) {
         int null = open("/dev/null", O_RDWR);
         close(fd[0]);
-        if (null >= 0) { dup2(null, STDIN_FILENO); dup2(null, STDERR_FILENO); close(null); }
+        if (null >= 0) {
+            dup2(null, STDIN_FILENO);
+            if (!want_stderr) dup2(null, STDERR_FILENO);
+            close(null);
+        }
         dup2(fd[1], STDOUT_FILENO);
+        if (want_stderr) dup2(fd[1], STDERR_FILENO);
         close(fd[1]);
         execvp(argv[0], argv);
         _exit(127);
@@ -179,6 +188,11 @@ static char *run_text(char *const argv[])
 
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) { free(buf); return NULL; }
     return buf;
+}
+
+static char *run_text(char *const argv[])
+{
+    return run_text_fd(argv, 0);
 }
 
 /* ---------------------------------------------------------------- probe -- */
@@ -532,23 +546,27 @@ double ss_media_duration(const char *path)
     return d > 0 ? d : 0.0;
 }
 
-int ss_media_has_audio(const char *path)
+int ss_media_channels(const char *path)
 {
     char *argv[] = {
         "ffprobe", "-v", "error",
         "-select_streams", "a:0",
-        "-show_entries", "stream=codec_name",
+        "-show_entries", "stream=channels",
         "-of", "default=noprint_wrappers=1:nokey=1",
         (char *)path, NULL
     };
     char *txt = run_text(argv);
-    int yes;
+    int n;
 
     if (!txt) return 0;
-    /* Any non-blank answer is a codec name, which is a stream. */
-    yes = strspn(txt, " \t\r\n") != strlen(txt);
+    n = atoi(txt);
     free(txt);
-    return yes;
+    return n > 0 ? n : 0;
+}
+
+int ss_media_has_audio(const char *path)
+{
+    return ss_media_channels(path) > 0;
 }
 
 /* What a file IS, asked of ffmpeg rather than of its name.
@@ -766,6 +784,75 @@ int ss_peaks(const char *path, double in, double out, int nbuckets,
     argv[n] = NULL;
 
     return run_peaks(argv, (size_t)(dur * rate), nbuckets, peak, rms);
+}
+
+/* Integrated loudness, loudness range and true peak.
+ *
+ * ebur128 is the meter the broadcast standards are written against, so this
+ * is not "a number we computed" — it is the number a delivery spec means. It
+ * has to DECODE the whole span to answer, which is why it is asked for a clip
+ * on demand and never for a directory.
+ *
+ * The summary arrives on stderr, in a block that looks like:
+ *
+ *     [Parsed_ebur128_0 @ ...] Summary:
+ *       Integrated loudness:
+ *         I:         -18.4 LUFS
+ *         Threshold: -28.6 LUFS
+ *       Loudness range:
+ *         LRA:         5.3 LU
+ *       True peak:
+ *         Peak:       -1.2 dBFS
+ *
+ * Parsed by finding "Summary:" first, so the per-frame lines above it — which
+ * carry an `I:` of their own — cannot be mistaken for the answer.
+ */
+int ss_media_loudness(const char *path, double in, double out, ss_loudness *l)
+{
+    char ss[32], to[32];
+    char *argv[16];
+    char *txt;
+    const char *sum, *p;
+    int n = 0;
+
+    if (!l) return -1;
+    memset(l, 0, sizeof *l);
+    if (!path || !*path) return -1;
+    if (!ss_media_has_audio(path)) return -1;
+
+    snprintf(ss, sizeof ss, "%.6f", in > 0 ? in : 0.0);
+    snprintf(to, sizeof to, "%.6f", out > 0 ? out : 0.0);
+
+    argv[n++] = "ffmpeg";
+    argv[n++] = "-v"; argv[n++] = "info";
+    argv[n++] = "-nostats";
+    if (in > 0) { argv[n++] = "-ss"; argv[n++] = ss; }
+    argv[n++] = "-i"; argv[n++] = (char *)path;
+    if (out > 0) { argv[n++] = "-t"; argv[n++] = to; }
+    argv[n++] = "-af"; argv[n++] = "ebur128=peak=true";
+    argv[n++] = "-f"; argv[n++] = "null";
+    argv[n++] = "-";
+    argv[n] = NULL;
+
+    txt = run_text_fd(argv, 1);
+    if (!txt) return -1;
+
+    sum = strstr(txt, "Summary:");
+    if (!sum) { free(txt); return -1; }
+
+    p = strstr(sum, "I:");
+    if (p) l->lufs = atof(p + 2);
+    p = strstr(sum, "LRA:");
+    if (p) l->range = atof(p + 4);
+    p = strstr(sum, "Peak:");
+    if (p) l->peak_db = atof(p + 5);
+
+    free(txt);
+    /* Digital silence answers -inf, which ebur128 prints as a very large
+     * negative number. Nothing downstream wants to do arithmetic on that. */
+    if (l->lufs < -100.0) l->lufs = -100.0;
+    if (l->peak_db < -100.0) l->peak_db = -100.0;
+    return 0;
 }
 
 /* ------------------------------------------------------------ formats -- */

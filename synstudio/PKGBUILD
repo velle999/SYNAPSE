@@ -199,7 +199,45 @@ pkgver=0.1.0
 #   `timeline export --format F`, or inferred from the output's extension.
 #
 #   193 assertions.
-pkgrel=9
+# 10: a mixer, and audio you can see.
+#
+#   Per-clip gain and fades were already in the document and in the export.
+#   What was missing was every way to SEE a level and every way to set one that
+#   was not a single clip: track faders and pan, a master, solo, meters,
+#   monitoring volume, and normalise.
+#
+#   All of it measured rather than read. A track fader moves the exported file
+#   by exactly its dB — six is six, on ProRes, because a low-level sine comes
+#   back 3dB hot through AAC and would make every number in the suite noise.
+#
+#   `mute` and `hide` used to be ONE condition, so muting a video track took
+#   its picture away and hiding one took the dialogue with it. They are now
+#   what their names say: hide is the picture, mute is the sound, and the four
+#   combinations are each asserted against a real export — mean luma of a frame
+#   for the picture, a meter for the sound.
+#
+#   Panning a MONO clip through `aformat=channel_layouts=stereo` costs 3dB, so
+#   hard left measured quieter than centre — the one thing a pan can never do.
+#   The pan is built from the source's own channel count instead, and constant
+#   power, so a sound in the middle is not louder than the same sound at the
+#   side.
+#
+#   Solo is a property of the whole timeline rather than of the track holding
+#   the flag; the mix is limited at 0.99 after the master, because summing
+#   tracks with normalize=0 can pass full scale and what that sounds like is a
+#   crackle nobody can trace back to the fader that caused it.
+#
+#   `loudness FILE` and `timeline normalise` are ebur128 — the meter the
+#   broadcast standards are written against. The engine measures AND decides,
+#   so "how loud should this be" is answered in one place.
+#
+#   The meters read the ENVELOPE at the playhead, not the sound card: nothing
+#   in the window can see what the player is pushing, so they are computed from
+#   the same per-clip peaks that draw the waveforms with the clip gain, the
+#   track fader and the master applied exactly as the graph applies them.
+#
+#   212 assertions.
+pkgrel=10
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

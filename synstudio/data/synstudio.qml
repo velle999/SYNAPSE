@@ -508,6 +508,18 @@ FloatingWindow {
     property string exportName: ""
     property int    exportFmt: 0
     property bool   exportingStill: false
+
+    // Monitoring level for the preview player. Not persisted and not in the
+    // document: it is a property of this room, not of the cut.
+    property real  monVolume: 1.0
+    property bool  monMuted: false
+    onMonVolumeChanged: root.pushMonitor()
+    onMonMutedChanged: root.pushMonitor()
+    function pushMonitor() {
+        if (!root.playbackReady) return
+        playbackLoader.item.volume = root.monVolume
+        playbackLoader.item.muted = root.monMuted
+    }
     property var    vidFormats: []
     property var    stillFormats: []
 
@@ -715,7 +727,7 @@ FloatingWindow {
     // `timeline show` is tab-separated and line-oriented, and a grade is a
     // block between `grade` and `endgrade` belonging to the clip above it.
     function parseTimeline(text) {
-        const doc = { w: 1920, h: 1080, fps: 25, tracks: [] }
+        const doc = { w: 1920, h: 1080, fps: 25, master: 0, tracks: [] }
         const lines = text.split("\n")
         let tr = null, cl = null, inGrade = false, inKey = false
         let dur = 0
@@ -736,10 +748,21 @@ FloatingWindow {
             case "fps":  doc.fps = parseFloat(f[1]); break
             case "track":
                 tr = { type: f[1], name: f[2], muted: f[3] === "1",
-                       hidden: f[4] === "1", clips: [] }
+                       hidden: f[4] === "1",
+                       gain: 0, pan: 0, solo: false, clips: [] }
                 doc.tracks.push(tr)
                 cl = null
                 break
+            // Only written when it differs from a flat fader, so its absence
+            // is what an unmixed track looks like.
+            case "mix":
+                if (tr) {
+                    tr.gain = parseFloat(f[1]) || 0
+                    tr.pan = parseFloat(f[2]) || 0
+                    tr.solo = f[3] === "1"
+                }
+                break
+            case "master": doc.master = parseFloat(f[1]) || 0; break
             case "clip":
                 if (!tr) break
                 cl = { tlIn: parseFloat(f[1]), srcIn: parseFloat(f[2]),
@@ -1083,6 +1106,148 @@ FloatingWindow {
                     "remove", String(root.selKey)])
     }
 
+    // ── The mixer ───────────────────────────────────────────────────────────
+    //
+    // A fader, a pan, mute, solo and a meter per audio track, plus one master.
+    // The engine owns all of it — `timeline track --gain/--pan/--solo` and
+    // `timeline master --gain` — and this holds nothing but the value under
+    // the hand while it is moving.
+    //
+    // ⚠ Optimistic and COMMITTED ON RELEASE, not per tick, for two reasons
+    // that have both bitten this file: `running = true` on a busy Process is a
+    // silent no-op, so most ticks would be dropped; and an edit reloads the
+    // timeline, which rebuilds `tl.tracks`, which rebuilds the Repeater the
+    // strips are delegates of — destroying the MouseArea holding the drag on
+    // its first move. See the develop panel.
+    property bool mixerOpen: false
+    property var  mixLive: ({})          // "<track>.<key>" while a hand is on it
+
+    function mixOf(i, key) {
+        const k = i + "." + key
+        if (root.mixLive[k] !== undefined) return root.mixLive[k]
+        const t = root.tl.tracks
+        if (i < 0 || i >= t.length) return 0
+        return key === "gain" ? t[i].gain : t[i].pan
+    }
+
+    function mixLiveSet(i, key, v) {
+        const next = ({})
+        for (const k in root.mixLive) next[k] = root.mixLive[k]
+        next[i + "." + key] = v
+        root.mixLive = next
+    }
+
+    function mixCommit(i, key, v) {
+        root.mixLive = ({})
+        root.tlRun(["track", root.proj, String(i),
+                    key === "gain" ? "--gain" : "--pan",
+                    String(Math.round(v * 100) / 100)])
+    }
+
+    property real masterLive: NaN
+    readonly property real masterDb:
+        isNaN(root.masterLive) ? (root.tl.master || 0) : root.masterLive
+
+    function masterCommit(v) {
+        root.masterLive = NaN
+        masterProc.command = [root.bin, "timeline", "master", root.proj,
+                              "--gain", String(Math.round(v * 100) / 100)]
+        masterProc.running = true
+    }
+    Process {
+        id: masterProc
+        onExited: root.reloadTimeline()
+    }
+
+    // ── What the meters show ────────────────────────────────────────────────
+    //
+    // The ENVELOPE at the playhead, not the sound card's output. Nothing here
+    // can see what the player is actually pushing — it is a separate process
+    // holding a file we handed it — so the meter is computed from the same
+    // per-clip peaks that draw the waveforms, with the clip's gain, the
+    // track's fader and the master applied exactly as the export graph applies
+    // them. It agrees with the file that comes out, which is the number that
+    // matters, and it moves with the playhead whether that is a scrub or a
+    // play.
+    function trackLevel(i) {
+        const t = root.tl.tracks
+        if (i < 0 || i >= t.length) return 0
+        if (t[i].muted || !root.soloOk(i)) return 0
+        let lin = 0
+        for (let j = 0; j < t[i].clips.length; j++) {
+            const c = t[i].clips[j]
+            if (c.kind !== "media" || !c.path) continue
+            const off = root.playhead - c.tlIn
+            if (off < 0 || off > c.len) continue
+            const d = root.wave[root.waveKey(c)]
+            if (!d || d.length === 0) continue
+            const k = Math.min(d.length - 1,
+                               Math.max(0, Math.floor(off / c.len * d.length)))
+            // dB add; the meter multiplies, so the gains become one factor.
+            lin += d[k] * Math.pow(10, (c.gain + t[i].gain) / 20)
+        }
+        return lin
+    }
+
+    function soloOk(i) {
+        const t = root.tl.tracks
+        for (let k = 0; k < t.length; k++) if (t[k].solo) return t[i].solo
+        return true
+    }
+
+    readonly property real masterLevel: {
+        let lin = 0
+        for (let i = 0; i < root.tl.tracks.length; i++) lin += root.trackLevel(i)
+        return lin * Math.pow(10, root.masterDb / 20)
+    }
+
+    // 0..1 across -48..0 dB, the same scale the waveforms are drawn on, so a
+    // tall waveform and a high meter mean the same thing.
+    function meterFrac(lin) {
+        if (!(lin > 0.0001)) return 0
+        const db = 20 * Math.log(lin) / Math.LN10
+        return Math.max(0, Math.min(1, (db + 48) / 48))
+    }
+
+    // ── Normalise ───────────────────────────────────────────────────────────
+    //
+    // The engine measures AND decides. Reading a number here and doing the
+    // subtraction would put "how loud should this be" in two places.
+    property bool normalising: false
+
+    function normaliseClip() {
+        if (root.normalising || root.selTrack < 0 || root.selClip < 0) return
+        root.normalising = true
+        root.say("measuring…")
+        normProc.command = [root.bin, "timeline", "normalise", root.proj,
+                            String(root.selTrack), String(root.selClip),
+                            "--target", "-14"]
+        normProc.running = true
+    }
+
+    Process {
+        id: normProc
+        stdout: StdioCollector { onStreamFinished: normProc.answer = this.text }
+        stderr: StdioCollector { onStreamFinished: if (this.text) normProc.err = this.text.split("\n")[0] }
+        property string answer: ""
+        property string err: ""
+        onExited: function (code, status) {
+            root.normalising = false
+            if (code !== 0) { root.say(normProc.err || "nothing to measure there"); return }
+            let was = "", now = ""
+            const lines = normProc.answer.split("\n")
+            for (let i = 0; i < lines.length; i++) {
+                const f = lines[i].split("\t")
+                if (f[0] === "measured") was = f[1]
+                else if (f[0] === "gain") now = f[1]
+            }
+            normProc.answer = ""
+            root.say("measured " + was + " LUFS · gain " + now + " dB")
+            root.tlRev++
+            root.reloadTimeline()
+        }
+    }
+
     // ── Adding media, onto a track that can hold it ─────────────────────────
     //
     // The destination is chosen by what the FILE is, not by whatever track
@@ -1356,6 +1521,9 @@ FloatingWindow {
     // import fails the whole FILE rather than the feature. See that file.
     readonly property bool playbackReady: playbackLoader.status === Loader.Ready
                                           && playbackLoader.item !== null
+    // The player arrives after these are set, so it has to be told once when
+    // it does — otherwise the first play ignores a muted monitor.
+    onPlaybackReadyChanged: root.pushMonitor()
 
     Connections {
         target: playbackLoader.item
@@ -1643,6 +1811,14 @@ FloatingWindow {
                                           String(root.selClip), "--ripple"])
                               root.selClip = -1
                           } }
+                    Btn { visible: root.mode === "video"; label: "Mixer"
+                          on: root.mixerOpen
+                          active: root.proj !== ""
+                          onClicked: root.mixerOpen = !root.mixerOpen }
+                    Btn { visible: root.mode === "video"
+                          label: root.normalising ? "…" : "Normalise"
+                          active: root.selClip >= 0 && !root.normalising
+                          onClicked: root.normaliseClip() }
                     Btn { visible: root.mode === "video"
                           label: root.exportingCut ? "Export…" : "Export"
                           active: root.proj !== "" && root.tlDur > 0
@@ -1927,6 +2103,66 @@ FloatingWindow {
                                   onClicked: root.seekTo(
                                       root.playhead + 1 / (root.tl.fps || 25)) }
                             Btn { label: "⏭"; onClicked: root.seekTo(root.tlDur) }
+                        }
+
+                        // Monitoring, on the far side of the transport from
+                        // the clock. It is how loud the room is and it reaches
+                        // no file — which is worth saying, because a fader on
+                        // a transport bar is otherwise indistinguishable from
+                        // a fader on a mixer.
+                        Row {
+                            id: monRow
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: zoomRow.left
+                            anchors.rightMargin: 14
+                            spacing: 6
+                            visible: root.playbackReady
+                                     && (parent.width - transportRow.width) / 2
+                                        > clockText.implicitWidth + zoomRow.width + 110
+
+                            // Named, not glyphed. A speaker emoji renders as
+                            // a box in the fixed UI font on a fresh install,
+                            // and a control nobody can read is worse than a
+                            // wider one.
+                            Btn {
+                                label: root.monMuted ? "Muted" : "Vol"
+                                on: root.monMuted
+                                onClicked: root.monMuted = !root.monMuted
+                            }
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 62
+                                height: 4
+                                radius: 2
+                                color: root.wash(0.20)
+
+                                Rectangle {
+                                    width: parent.width * (root.monMuted ? 0 : root.monVolume)
+                                    height: parent.height
+                                    radius: 2
+                                    color: root.cAccent
+                                }
+                                Rectangle {
+                                    x: parent.width * (root.monMuted ? 0 : root.monVolume) - 4
+                                    y: -3
+                                    width: 8; height: 10; radius: 2
+                                    color: root.cAccent
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -9
+                                    preventStealing: true
+                                    function set(mx) {
+                                        root.monVolume = Math.max(0, Math.min(1,
+                                            (mx - 9) / parent.width))
+                                        root.monMuted = false
+                                    }
+                                    onPressed: function (m) { set(m.x) }
+                                    onPositionChanged: function (m) { if (pressed) set(m.x) }
+                                }
+                            }
                         }
 
                         // The clock and the zoom sit either side of the
@@ -2454,9 +2690,79 @@ FloatingWindow {
                     height: parent.height
                     color: root.cPanel
 
+                    // ── The mixer ───────────────────────────────────────
+                    //
+                    // In the panel rather than in a window of its own: it is
+                    // the same width a channel strip wants, and a mixer you
+                    // have to go and find is a mixer nobody balances.
+                    Item {
+                        anchors.fill: parent
+                        visible: root.mixerOpen
+
+                        Text {
+                            id: mixTitle
+                            anchors.top: parent.top
+                            anchors.topMargin: 12
+                            anchors.left: parent.left
+                            anchors.leftMargin: 14
+                            text: "Mixer"
+                            color: root.cText
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+                        Text {
+                            anchors.verticalCenter: mixTitle.verticalCenter
+                            anchors.left: mixTitle.right
+                            anchors.leftMargin: 10
+                            text: "levels at the playhead"
+                            color: root.cDim
+                            font.pixelSize: 10
+                        }
+
+                        Flickable {
+                            anchors.top: mixTitle.bottom
+                            anchors.topMargin: 10
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 0
+                            contentWidth: strips.width
+                            contentHeight: height
+                            clip: true
+                            flickableDirection: Flickable.HorizontalFlick
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            Row {
+                                id: strips
+                                height: parent.height
+                                spacing: 0
+
+                                Repeater {
+                                    model: root.tl.tracks
+
+                                    Strip {
+                                        required property var modelData
+                                        required property int index
+                                        trackIndex: index
+                                        label: modelData.name
+                                        isAudio: modelData.type === "audio"
+                                        height: strips.height
+                                    }
+                                }
+
+                                Strip {
+                                    trackIndex: -1
+                                    label: "Master"
+                                    isAudio: true
+                                    height: strips.height
+                                }
+                            }
+                        }
+                    }
+
                     Text {
                         anchors.centerIn: parent
-                        visible: root.selClip < 0
+                        visible: root.selClip < 0 && !root.mixerOpen
                         width: parent.width - 40
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
@@ -2468,7 +2774,7 @@ FloatingWindow {
 
                     Flickable {
                         anchors.fill: parent
-                        visible: root.selClip >= 0
+                        visible: root.selClip >= 0 && !root.mixerOpen
                         contentHeight: inspCol.height
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
@@ -3234,6 +3540,239 @@ FloatingWindow {
         }
     }
 
+    // ── A channel strip ─────────────────────────────────────────────────────
+    //
+    // One per track, plus a master at the end (trackIndex -1). A video track
+    // gets a strip too: its clips carry dialogue more often than not, and a
+    // fader you cannot reach because the picture is on the same track is the
+    // reason the sound on most first cuts is wrong.
+    component Strip: Rectangle {
+        id: st
+        property int trackIndex: -1
+        property string label: ""
+        property bool isAudio: true
+        readonly property bool isMaster: st.trackIndex < 0
+        readonly property var trk:
+            (!st.isMaster && st.trackIndex < root.tl.tracks.length)
+            ? root.tl.tracks[st.trackIndex] : null
+
+        readonly property real gainDb:
+            st.isMaster ? root.masterDb : root.mixOf(st.trackIndex, "gain")
+        readonly property real panVal:
+            st.isMaster ? 0 : root.mixOf(st.trackIndex, "pan")
+        readonly property real level:
+            st.isMaster ? root.masterLevel
+                        : (st.trackIndex >= 0 ? root.trackLevel(st.trackIndex) : 0)
+
+        width: 74
+        color: st.isMaster ? root.wash(0.10) : "transparent"
+        border.width: 1
+        border.color: root.wash(0.10)
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 6
+
+            Text {
+                width: parent.width
+                text: st.label
+                color: st.isMaster ? root.cAccent : root.cText
+                font.pixelSize: 11
+                font.bold: true
+                elide: Text.ElideRight
+            }
+
+            // The number, because a fader without one is a guess. Blank at
+            // unity, the same way an untouched develop slider reads blank.
+            Text {
+                width: parent.width
+                text: Math.abs(st.gainDb) < 0.05 ? "0.0 dB"
+                      : (st.gainDb > 0 ? "+" : "") + st.gainDb.toFixed(1) + " dB"
+                color: Math.abs(st.gainDb) < 0.05 ? root.cDim : root.cAccent
+                font.pixelSize: 10
+                font.family: "monospace"
+            }
+
+            // Fader and meter side by side, which is the only arrangement that
+            // lets one hand set a level while the eye reads it.
+            Item {
+                width: parent.width
+                height: st.height - 148
+
+                // Meter
+                Rectangle {
+                    id: meter
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 9
+                    radius: 2
+                    color: root.wash(0.14)
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: parent.height * root.meterFrac(st.level)
+                        radius: 2
+                        // Green until it is loud, amber approaching full
+                        // scale, red at it — the one place in this window
+                        // where colour means a number and not a theme.
+                        color: st.level >= 1.0 ? "#e0463c"
+                               : st.level >= 0.7 ? "#d8a13a" : "#3fa06e"
+                    }
+
+                    // Where full scale is, so "loud" has a line rather than a
+                    // feeling.
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        y: parent.height * (1 - root.meterFrac(1.0))
+                        height: 1
+                        color: root.wash(0.45)
+                    }
+                }
+
+                // Fader
+                Rectangle {
+                    id: fader
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.rightMargin: 6
+                    width: 4
+                    radius: 2
+                    x: 14
+                    color: root.wash(0.18)
+
+                    // -60..+24 dB, with 0 where a fader's 0 always is: not in
+                    // the middle, but where unity falls on that range.
+                    readonly property real frac:
+                        Math.max(0, Math.min(1, (st.gainDb + 60) / 84))
+
+                    Rectangle {
+                        width: 22
+                        height: 12
+                        radius: 2
+                        color: root.cAccent
+                        x: -9
+                        y: (1 - fader.frac) * (fader.height - 12)
+                    }
+                    // Unity, drawn once and not moving.
+                    Rectangle {
+                        x: -6; width: 16; height: 1
+                        y: (1 - (60 / 84)) * (fader.height - 12) + 6
+                        color: root.wash(0.4)
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -12
+                        // The strip lives in a Flickable and the panel is one
+                        // too; without this the fader hands the drag over on
+                        // the first move. See the timeline ruler.
+                        preventStealing: true
+
+                        function toDb(my) {
+                            const f = 1 - Math.max(0, Math.min(1,
+                                          (my - 12) / (fader.height - 12)))
+                            return Math.round((f * 84 - 60) * 10) / 10
+                        }
+                        onPressed: function (m) {
+                            if (st.isMaster) root.masterLive = toDb(m.y)
+                            else root.mixLiveSet(st.trackIndex, "gain", toDb(m.y))
+                        }
+                        onPositionChanged: function (m) {
+                            if (!pressed) return
+                            if (st.isMaster) root.masterLive = toDb(m.y)
+                            else root.mixLiveSet(st.trackIndex, "gain", toDb(m.y))
+                        }
+                        // ONE command, on release. A `set` per tick would be
+                        // dropped by a busy Process and would reload the
+                        // timeline under the hand that is still dragging.
+                        onReleased: function (m) {
+                            if (st.isMaster) root.masterCommit(toDb(m.y))
+                            else root.mixCommit(st.trackIndex, "gain", toDb(m.y))
+                        }
+                        onDoubleClicked: {
+                            if (st.isMaster) root.masterCommit(0)
+                            else root.mixCommit(st.trackIndex, "gain", 0)
+                        }
+                    }
+                }
+            }
+
+            Text {
+                visible: !st.isMaster
+                width: parent.width
+                text: Math.abs(st.panVal) < 0.005 ? "pan C"
+                      : "pan " + (st.panVal < 0 ? "L" : "R")
+                           + Math.round(Math.abs(st.panVal) * 100)
+                color: Math.abs(st.panVal) < 0.005 ? root.cDim : root.cAccent
+                font.pixelSize: 9
+                font.family: "monospace"
+            }
+
+            // Pan, as a bar rather than a knob: a knob is a circle you have to
+            // learn to drag and a bar says left and right by pointing.
+            Rectangle {
+                visible: !st.isMaster
+                width: parent.width
+                height: 5
+                radius: 2
+                color: root.wash(0.14)
+
+                Rectangle {
+                    x: st.panVal >= 0 ? parent.width / 2
+                                      : parent.width / 2 * (1 + st.panVal)
+                    width: Math.max(2, Math.abs(st.panVal) * parent.width / 2)
+                    height: parent.height
+                    radius: 2
+                    color: root.cAccent
+                }
+                Rectangle {
+                    x: parent.width / 2
+                    width: 1; height: parent.height
+                    color: root.wash(0.45)
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -8
+                    preventStealing: true
+                    function toPan(mx) {
+                        const f = (mx - 8) / parent.width
+                        return Math.round(Math.max(-1, Math.min(1, f * 2 - 1)) * 100) / 100
+                    }
+                    onPressed: function (m) { root.mixLiveSet(st.trackIndex, "pan", toPan(m.x)) }
+                    onPositionChanged: function (m) {
+                        if (pressed) root.mixLiveSet(st.trackIndex, "pan", toPan(m.x))
+                    }
+                    onReleased: function (m) { root.mixCommit(st.trackIndex, "pan", toPan(m.x)) }
+                    onDoubleClicked: root.mixCommit(st.trackIndex, "pan", 0)
+                }
+            }
+
+            Row {
+                visible: !st.isMaster
+                spacing: 4
+                Tag {
+                    label: "M"
+                    on: st.trk ? st.trk.muted : false
+                    onClicked: root.tlRun(["track", root.proj, String(st.trackIndex),
+                                           "--mute", st.trk && st.trk.muted ? "0" : "1"])
+                }
+                Tag {
+                    label: "S"
+                    on: st.trk ? st.trk.solo : false
+                    onClicked: root.tlRun(["track", root.proj, String(st.trackIndex),
+                                           "--solo", st.trk && st.trk.solo ? "0" : "1"])
+                }
+            }
+        }
+    }
+
     // ── A waveform ──────────────────────────────────────────────────────────
     //
     // Drawn per PIXEL COLUMN, taking the loudest bucket that falls in each
@@ -3604,14 +4143,19 @@ FloatingWindow {
         // NOT `enabled`: that name already belongs to QQuickItem and shadowing
         // it makes the base property and this one fight over the same reads.
         property bool active: true
+        // For a button that TOGGLES something rather than doing it once. A
+        // panel you opened should be able to say so from its own button.
+        property bool on: false
         signal clicked()
         width: t.implicitWidth + 22
         height: 26
         radius: 4
         color: !btn.active ? "transparent"
+               : btn.on ? root.wash(0.34)
                : ma.containsMouse ? root.wash(0.26) : root.wash(0.12)
         border.width: 1
-        border.color: btn.active ? root.wash(0.35) : root.wash(0.12)
+        border.color: btn.on ? root.cAccent
+                      : btn.active ? root.wash(0.35) : root.wash(0.12)
 
         Text {
             id: t
