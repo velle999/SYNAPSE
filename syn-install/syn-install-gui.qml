@@ -60,10 +60,37 @@ FloatingWindow {
     // a Custom install that nobody touched would write "no" to all of them.
     Component.onCompleted: root.applyPresetPicks(root.aPreset)
 
-    // Deselecting the compositor while SynapseUI is the chosen desktop leaves
-    // two answers that contradict each other. Move the desktop rather than let
-    // the script refuse the pair twenty minutes into an install.
-    onPicksChanged: if (aDesktop === "synui" && !pickOn("comp_synui")) aDesktop = "tty"
+    // Set the moment anything on the desktop page is clicked, and never unset.
+    // Until then aDesktop is a DEFAULT rather than an answer, and the handler
+    // below is free to keep moving it; afterwards it is the user's and only the
+    // contradiction is worth overriding.
+    property bool aDesktopChosen: false
+
+    /*
+     * Keep the desktop and the compositor checkbox agreeing.
+     *
+     * Deselecting the compositor while SynapseUI is the chosen desktop leaves
+     * two answers that contradict each other, and the script refuses the pair
+     * by name — better here than twenty minutes into an install.
+     *
+     * ⚠ THIS USED TO BE ONE-WAY, and one-way is a trapdoor. It moved synui→tty
+     * when comp_synui went off and had nothing to say when it came back on, so
+     * unticking the compositor and immediately re-ticking it left the desktop
+     * on "None (headless)" — with the SynapseUI row enabled and unchecked, as
+     * though headless were the default. Nothing said it had moved.
+     *
+     * So: while the user has not touched the page, the desktop simply FOLLOWS
+     * what is available, which lands on synui in every preset because
+     * comp_synui is std/full/min alike. Once they have chosen, only the
+     * contradiction overrides them.
+     */
+    onPicksChanged: {
+        if (!aDesktopChosen) {
+            aDesktop = pickOn("comp_synui") ? "synui" : "tty"
+            return
+        }
+        if (aDesktop === "synui" && !pickOn("comp_synui")) aDesktop = "tty"
+    }
 
     readonly property string bin: Quickshell.env("SYN_INSTALL_BIN") || "syn-install"
     // Where the profile is written. /run is a tmpfs, which is the point: it
@@ -476,6 +503,52 @@ FloatingWindow {
             }), 4)
         }
     }
+    /*
+     * ── Connectivity ────────────────────────────────────────────────────────
+     *
+     * syn-install downloads the base system, so an offline install cannot
+     * start. The script has always known that and checks before it touches a
+     * disk — but this window did not, and it writes `wifi_picker=no` into the
+     * profile (it cannot draw nmtui), which turns the script's patient retry
+     * loop into an immediate die(). So being offline meant filling in every
+     * page, pressing Install, and watching the window disappear with all of it.
+     *
+     * The same test the script uses, so the two cannot disagree about what
+     * "online" means.
+     */
+    property bool netOk: false
+    property bool netChecked: false     // false until the first probe returns
+    property bool netProbing: false
+
+    function netProbe() {
+        // ⚠ Assigning running=true to a Process that is ALREADY running is a
+        // silent no-op in quickshell, so a Retry pressed while the previous
+        // ping is still in flight would do nothing at all and read as a dead
+        // button. Refuse instead, and let the in-flight probe report.
+        if (netProc.running) return
+        root.netProbing = true
+        netProc.running = true
+    }
+
+    Process {
+        id: netProc
+        command: ["sh", "-c",
+                  "ping -c1 -W3 8.8.8.8 >/dev/null 2>&1 || ping -c1 -W3 1.1.1.1 >/dev/null 2>&1"]
+        running: true
+        onExited: (code) => {
+            root.netOk = (code === 0)
+            root.netChecked = true
+            root.netProbing = false
+        }
+    }
+
+    // Hand the user at the machine somewhere to actually fix it. synui owns the
+    // network panel on the live session (the same one Super+I opens), so this
+    // is the picker the comment in buildConfig() says this window cannot draw —
+    // it just belongs to the compositor rather than to us.
+    Process { id: netPanel; command: ["synctl", "dispatch", "network"] }
+    function netOpenSettings() { if (!netPanel.running) netPanel.running = true }
+
     Process {
         command: [root.bin, "--list-timezones"]
         running: true
@@ -544,6 +617,17 @@ FloatingWindow {
     // Each page reports why Next is unavailable rather than greying the button
     // out silently. A disabled control with no reason is a bug report.
     function pageProblem(n) {
+        // Page 0, before a single question is answered. syn-install cannot run
+        // offline at all, so saying so on the FIRST page is the whole point:
+        // the alternative is what this used to do — let the form be filled in
+        // and fail at the end, which throws the answers away with the window.
+        //
+        // Only once the probe has actually returned. Blocking Next on a probe
+        // that has not finished yet would read as the button being broken on a
+        // machine that is perfectly online.
+        if (n === 0 && netChecked && !netOk)
+            return "No connection. SynapseOS downloads the base system while it installs, "
+                 + "so this needs a working network before it can start."
         if (n === 1) {
             if (!aDisk) return "Choose a disk to install to."
             if (aEncrypt && aLuks.length < 8)
@@ -946,6 +1030,9 @@ FloatingWindow {
         // NOT `enabled`: that is QQuickItem's own property, and shadowing it
         // means the base class's and this one's disagree about the same word.
         property bool canPress: true
+        // Disabled controls stay OUT of the chain — tabbing onto something that
+        // cannot be pressed just costs a press to get past.
+        activeFocusOnTab: btn.canPress
         signal clicked()
         implicitWidth: label.implicitWidth + 34
         implicitHeight: 34
@@ -964,6 +1051,53 @@ FloatingWindow {
             color: !btn.canPress ? root.cDim
                  : btn.primary ? (root.isLight ? "#ffffff" : "#0b0f14") : root.cText
         }
+        // The focus ring. A separate rectangle rather than a change to the border
+        // below, so it reads the same on a primary button (which has no border) as
+        // on one that does, and cannot be confused with the "checked" border.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -3
+            visible: btn.activeFocus
+            radius: parent.radius + 3
+            color: "transparent"
+            border.width: 2
+            border.color: root.cAccent
+        }
+        /*
+         * Keyboard. Tab and Shift+Tab walk the controls (Qt builds that chain out of
+         * activeFocusOnTab above); the arrows continue along the same chain, so a
+         * whole install can be done without touching the mouse.
+         *
+         * The arrows move focus rather than changing the value, which is the opposite
+         * of what a radio group does elsewhere — deliberately. These pages mix single
+         * choices, checkboxes and buttons in one column, so "the next thing" is the
+         * only meaning that holds for every control on them, and a Left that silently
+         * changed an answer while the user was only looking around would be a much
+         * worse surprise than one that just moves.
+         *
+         * ⚠ Text fields are NOT given this. Left and Right there move the caret, and
+         * stealing them would make the username box impossible to edit.
+         */
+        Keys.onPressed: (e) => {
+            switch (e.key) {
+            case Qt.Key_Space:
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+                if (btn.canPress) btn.clicked()
+                e.accepted = true
+                return
+            case Qt.Key_Right:
+            case Qt.Key_Down:
+                nextItemInFocusChain(true).forceActiveFocus(Qt.TabFocusReason)
+                e.accepted = true
+                return
+            case Qt.Key_Left:
+            case Qt.Key_Up:
+                nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
+                e.accepted = true
+                return
+            }
+        }
         MouseArea {
             id: ma
             anchors.fill: parent
@@ -980,6 +1114,7 @@ FloatingWindow {
         property bool checked: false
         // See Btn: `enabled` belongs to QQuickItem.
         property bool selectable: true
+        activeFocusOnTab: ch.selectable
         signal picked()
         implicitHeight: 44
         radius: 6
@@ -1016,6 +1151,53 @@ FloatingWindow {
                 }
             }
         }
+        // The focus ring. A separate rectangle rather than a change to the border
+        // below, so it reads the same on a primary button (which has no border) as
+        // on one that does, and cannot be confused with the "checked" border.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -3
+            visible: ch.activeFocus
+            radius: parent.radius + 3
+            color: "transparent"
+            border.width: 2
+            border.color: root.cAccent
+        }
+        /*
+         * Keyboard. Tab and Shift+Tab walk the controls (Qt builds that chain out of
+         * activeFocusOnTab above); the arrows continue along the same chain, so a
+         * whole install can be done without touching the mouse.
+         *
+         * The arrows move focus rather than changing the value, which is the opposite
+         * of what a radio group does elsewhere — deliberately. These pages mix single
+         * choices, checkboxes and buttons in one column, so "the next thing" is the
+         * only meaning that holds for every control on them, and a Left that silently
+         * changed an answer while the user was only looking around would be a much
+         * worse surprise than one that just moves.
+         *
+         * ⚠ Text fields are NOT given this. Left and Right there move the caret, and
+         * stealing them would make the username box impossible to edit.
+         */
+        Keys.onPressed: (e) => {
+            switch (e.key) {
+            case Qt.Key_Space:
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+                if (ch.selectable) ch.picked()
+                e.accepted = true
+                return
+            case Qt.Key_Right:
+            case Qt.Key_Down:
+                nextItemInFocusChain(true).forceActiveFocus(Qt.TabFocusReason)
+                e.accepted = true
+                return
+            case Qt.Key_Left:
+            case Qt.Key_Up:
+                nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
+                e.accepted = true
+                return
+            }
+        }
         MouseArea {
             id: cma
             anchors.fill: parent
@@ -1033,6 +1215,7 @@ FloatingWindow {
         property string text: ""
         property bool checked: false
         signal toggled()
+        activeFocusOnTab: true
         implicitWidth: ckRow.implicitWidth + 6
         implicitHeight: 26
         color: ckma.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
@@ -1065,6 +1248,53 @@ FloatingWindow {
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
+        // The focus ring. A separate rectangle rather than a change to the border
+        // below, so it reads the same on a primary button (which has no border) as
+        // on one that does, and cannot be confused with the "checked" border.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -3
+            visible: ck.activeFocus
+            radius: parent.radius + 3
+            color: "transparent"
+            border.width: 2
+            border.color: root.cAccent
+        }
+        /*
+         * Keyboard. Tab and Shift+Tab walk the controls (Qt builds that chain out of
+         * activeFocusOnTab above); the arrows continue along the same chain, so a
+         * whole install can be done without touching the mouse.
+         *
+         * The arrows move focus rather than changing the value, which is the opposite
+         * of what a radio group does elsewhere — deliberately. These pages mix single
+         * choices, checkboxes and buttons in one column, so "the next thing" is the
+         * only meaning that holds for every control on them, and a Left that silently
+         * changed an answer while the user was only looking around would be a much
+         * worse surprise than one that just moves.
+         *
+         * ⚠ Text fields are NOT given this. Left and Right there move the caret, and
+         * stealing them would make the username box impossible to edit.
+         */
+        Keys.onPressed: (e) => {
+            switch (e.key) {
+            case Qt.Key_Space:
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+                if (true) ck.toggled()
+                e.accepted = true
+                return
+            case Qt.Key_Right:
+            case Qt.Key_Down:
+                nextItemInFocusChain(true).forceActiveFocus(Qt.TabFocusReason)
+                e.accepted = true
+                return
+            case Qt.Key_Left:
+            case Qt.Key_Up:
+                nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
+                e.accepted = true
+                return
+            }
+        }
         MouseArea {
             id: ckma
             anchors.fill: parent
@@ -1087,6 +1317,36 @@ FloatingWindow {
         width: 300
         Text { text: selr.label; color: root.cDim; font.pixelSize: 12 }
         Rectangle {
+            id: selBox
+            // The pickers behind this (locale, timezone, keymap) were otherwise
+            // unreachable without a mouse: the Column is not focusable and the
+            // click lives on the MouseArea below.
+            activeFocusOnTab: true
+            Keys.onPressed: (e) => {
+                switch (e.key) {
+                case Qt.Key_Space:
+                case Qt.Key_Return:
+                case Qt.Key_Enter:
+                    selr.opened(); e.accepted = true; return
+                case Qt.Key_Right:
+                case Qt.Key_Down:
+                    nextItemInFocusChain(true).forceActiveFocus(Qt.TabFocusReason)
+                    e.accepted = true; return
+                case Qt.Key_Left:
+                case Qt.Key_Up:
+                    nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
+                    e.accepted = true; return
+                }
+            }
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: -3
+                visible: selBox.activeFocus
+                radius: parent.radius + 3
+                color: "transparent"
+                border.width: 2
+                border.color: root.cAccent
+            }
             width: parent.width
             height: 32
             radius: 5
@@ -1154,6 +1414,12 @@ FloatingWindow {
             border.color: input.activeFocus ? root.cAccent : root.cLine
             TextInput {
                 id: input
+                // TextInput does NOT take tab focus by default, so without this
+                // the username, password and hostname boxes were the three
+                // things Tab could not reach — the ones a keyboard user most
+                // needs. Left/Right stay the caret's here; the arrow-to-move
+                // handling deliberately lives only on the non-text controls.
+                activeFocusOnTab: true
                 anchors.fill: parent
                 anchors.margins: 8
                 verticalAlignment: TextInput.AlignVCenter
@@ -1297,6 +1563,51 @@ FloatingWindow {
                 anchors.margins: 24
                 spacing: 16
                 visible: root.page === 0
+                // Offline, said on the first page and nowhere near the end.
+                // Shown only once the probe has answered, so a machine that is
+                // online never sees it flash on the way past.
+                Rectangle {
+                    width: parent.width
+                    visible: root.netChecked && !root.netOk
+                    height: netCol.implicitHeight + 24
+                    radius: 8
+                    color: Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.10)
+                    border.width: 1
+                    border.color: Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.55)
+                    Column {
+                        id: netCol
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 8
+                        Text {
+                            text: "No network connection"
+                            color: root.cWarn
+                            font.pixelSize: 15
+                            font.bold: true
+                        }
+                        Text {
+                            width: netCol.width
+                            wrapMode: Text.Wrap
+                            color: root.cText
+                            font.pixelSize: 13
+                            text: "The base system is downloaded while it installs, so this "
+                                + "cannot start offline. Plug in a cable or join a network, "
+                                + "then press Re-check — the answers on these pages are kept."
+                        }
+                        Row {
+                            spacing: 8
+                            Btn {
+                                text: root.netProbing ? "Checking…" : "Re-check"
+                                canPress: !root.netProbing
+                                onClicked: root.netProbe()
+                            }
+                            Btn {
+                                text: "Wi-Fi settings"
+                                onClicked: root.netOpenSettings()
+                            }
+                        }
+                    }
+                }
                 Head {
                     title: "Install SynapseOS" + (root.release ? " " + root.release : "")
                     blurb: "This asks for a disk, an account and a few preferences, then hands "
@@ -1805,22 +2116,22 @@ FloatingWindow {
                             enabled: root.pickOn("comp_synui")
                             opacity: root.pickOn("comp_synui") ? 1.0 : 0.45
                             checked: root.aDesktop === "synui"
-                            onPicked: if (root.pickOn("comp_synui")) root.aDesktop = "synui"
+                            onPicked: if (root.pickOn("comp_synui")) { root.aDesktop = "synui"; root.aDesktopChosen = true }
                         }
                         Choice {
                             width: 150; text: "KDE Plasma"
                             checked: root.aDesktop === "kde"
-                            onPicked: root.aDesktop = "kde"
+                            onPicked: { root.aDesktop = "kde";   root.aDesktopChosen = true }
                         }
                         Choice {
                             width: 130; text: "GNOME"
                             checked: root.aDesktop === "gnome"
-                            onPicked: root.aDesktop = "gnome"
+                            onPicked: { root.aDesktop = "gnome"; root.aDesktopChosen = true }
                         }
                         Choice {
                             width: 130; text: "None"; subtext: "headless"
                             checked: root.aDesktop === "tty"
-                            onPicked: root.aDesktop = "tty"
+                            onPicked: { root.aDesktop = "tty";   root.aDesktopChosen = true }
                         }
                     }
                 }
@@ -2090,6 +2401,11 @@ FloatingWindow {
                     text: "Install"
                     primary: true
                     visible: root.page === 5
+                    // Re-checked here as well as on page 0: the link can drop
+                    // while the form is being filled in, and this is the last
+                    // moment before the script is handed answers it will refuse
+                    // — with wifi_picker=no, it dies rather than retrying.
+                    canPress: root.netOk
                     onClicked: root.startInstall()
                 }
                 Btn {
