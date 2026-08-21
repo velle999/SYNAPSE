@@ -58,6 +58,7 @@ const char *const syn_theme_names[SYN_THEME_COUNT] = {
     [SYN_THEME_AQUA]       = "aqua",
     [SYN_THEME_PLATINUM]   = "platinum",
     [SYN_THEME_PRISM]      = "prism",
+    [SYN_THEME_PRISM_LIGHT] = "prism-light",
 };
 
 /* What the panel shows a human. */
@@ -78,6 +79,7 @@ const char *theme_name(syn_theme_t t)
     case SYN_THEME_AQUA:       return "Mac OS X 10.0 (Aqua)";
     case SYN_THEME_PLATINUM:   return "Mac OS 8.1 (Platinum)";
     case SYN_THEME_PRISM:      return "SYNAPSE Prism";
+    case SYN_THEME_PRISM_LIGHT: return "SYNAPSE Prism Light";
     default:                   return "?";
     }
 }
@@ -478,7 +480,12 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
      * bright wallpaper — a pale glass over a white beach is a panel with no
      * edges. syn_contrast_fix() then has room to work in, because the corrector
      * is a no-op on a dark surface and would otherwise be dragging every
-     * measured accent around on the theme a fresh install ships with. */
+     * measured accent around on the theme a fresh install ships with.
+     *
+     * That is an argument about what a DEFAULT should be, not a claim that a
+     * light Prism cannot work — see SYN_THEME_PRISM_LIGHT below, which is this
+     * entry with the surface inverted and the correctors running the other
+     * way. This one stays what a fresh install boots into. */
     [SYN_THEME_PRISM] = {
         /* A hairline, like Tahoe's, but dark: the frame is the edge of a piece
          * of glass, not a border drawn round a window. */
@@ -507,6 +514,59 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .glyph_r = 0, .glyph_g = 214, .glyph_b = 229,
         .base_r = 25, .base_g = 28, .base_b = 35,           /* #191C23 */
         .text_r = 230, .text_g = 234, .text_b = 241,        /* #E6EAF1 */
+    },
+    /* SYNAPSE PRISM LIGHT — Prism in daylight.
+     *
+     * The same theme with the surface inverted, and deliberately nothing else:
+     * CHROME_LIQUID, the same 0.90/0.84 glass, the same accent off the
+     * wallpaper. Everything gated on "is this Prism" (theme_is_glass,
+     * theme_bar_alpha, wp_accent_on in synui.h) names this one too, because a
+     * light Prism that was not glass and did not follow the picture would be a
+     * different theme wearing the name.
+     *
+     * ⚠ AND IT IS A TRADE, NOT A FREE VARIANT. Prism's own entry above says why
+     * the dark surface is the safe one: glass over an arbitrary photograph is a
+     * contrast problem, and a pale panel over a white beach is a panel with no
+     * edges. What makes the light one workable is that the correctors run the
+     * OTHER WAY on a pale surface and actually do something — syn_contrast_fix()
+     * darkens (it is a no-op on dark), palette.c's UI_V_MIN_ON_LIGHT gives a
+     * measured accent room to be darkened into, and glass_legibility is there
+     * for the wallpapers where neither is enough. So the shipped surface is
+     * near-white rather than white: #EEF1F6 keeps a little headroom above the
+     * chrome and below the ink.
+     *
+     * ⚠ THE FALLBACK ACCENT IS NOT THE HOUSE CYAN. #00D6E5 measures 1.7:1 on
+     * this surface — the same hex that is the whole look on dark Prism is an
+     * accent that is not there on light Prism. Same hue (186°), four stops
+     * down, exactly the move Platinum's panel_accent documents. */
+    [SYN_THEME_PRISM_LIGHT] = {
+        /* A hairline again, and light: the edge of a piece of glass, not a
+         * border. It is the only colour here that is allowed to be low
+         * contrast — a 1.5:1 rim is what a frame drawn IN the surface looks
+         * like, and raising it turns the theme back into bordered windows. */
+        .border_norm  = { 0.765f, 0.788f, 0.839f, 1.0f },  /* #C3C9D6 */
+        .border_focus = { 0.000f, 0.447f, 0.494f, 1.0f },  /* #00727E — the fallback accent */
+        .border_ai    = { 0.357f, 0.271f, 0.839f, 1.0f },  /* #5B45D6 */
+        .border_warn  = { 0.776f, 0.176f, 0.227f, 1.0f },  /* #C62D3A */
+        /* The glass. Near-neutral and only faintly blue, for the reason the
+         * dark one is: a tint with a hue of its own fights whatever the
+         * wallpaper supplies. */
+        .tb_norm       = { 0.886f, 0.902f, 0.933f, 1.0f },  /* #E2E6EE */
+        .tb_focus      = { 0.957f, 0.965f, 0.980f, 1.0f },  /* #F4F6FA */
+        .tb_grad_norm  = { 0.847f, 0.867f, 0.906f, 1.0f },  /* #D8DDE7 */
+        .tb_grad_focus = { 0.918f, 0.933f, 0.961f, 1.0f },  /* #EAEEF5 */
+        .face          = { 0.933f, 0.945f, 0.965f, 1.0f },  /* #EEF1F6 */
+        .chrome = SYN_CHROME_LIQUID,
+        /* 4.6:1 and 15.6:1 on the captions they land on — the same pair of
+         * jobs dark Prism's #8B92A0 (4.7:1) and #E6EAF1 (12.1:1) do. */
+        .tb_text       = { 0.369f, 0.400f, 0.459f, 1.0f },  /* #5E6675 secondary */
+        .tb_text_focus = { 0.102f, 0.114f, 0.141f, 1.0f },  /* #1A1D24 */
+        .active_opacity = 0.90f, .inactive_opacity = 0.84f,
+        .panel_accent  = { 0.000f, 0.447f, 0.494f, 1.0f },  /* the fallback again */
+        .scheme = "light", .accent_r = 0, .accent_g = 114, .accent_b = 126,
+        .glyph_r = 0, .glyph_g = 114, .glyph_b = 126,
+        .base_r = 238, .base_g = 241, .base_b = 246,        /* #EEF1F6 */
+        .text_r = 26, .text_g = 29, .text_b = 36,           /* #1A1D24 */
     },
 };
 
@@ -1153,9 +1213,9 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
 /*
  * SYNAPSE Prism's accent, from the wallpaper.
  *
- * This is the whole difference between Prism and every other preset: the twelve
- * others carry their accent in theme_presets[], and Prism carries a FALLBACK
- * there and takes the real one off whatever is on the desktop.
+ * This is the whole difference between the two Prisms and every other preset:
+ * the thirteen others carry their accent in theme_presets[], and Prism carries a
+ * FALLBACK there and takes the real one off whatever is on the desktop.
  *
  * ── Why only the accents move ─────────────────────────────────────────────
  *

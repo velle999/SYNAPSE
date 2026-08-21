@@ -6166,6 +6166,13 @@ static const char *thememgr_blurb(syn_theme_t t)
     case SYN_THEME_MACOS26:    return "Liquid glass \xc2\xb7 rounded, translucent \xc2\xb7 apps light";
     case SYN_THEME_AQUA:       return "Pinstripes + traffic lights \xc2\xb7 apps light grey";
     case SYN_THEME_PLATINUM:   return "Racing stripes, square boxes \xc2\xb7 apps grey";
+    /* The two that had none. A blank line under a name is not a neutral
+     * default here: every other row says what the pick DOES to the apps,
+     * and the two rows at the bottom of the list — the house theme and its
+     * light twin — were the two where that question actually has two
+     * answers. */
+    case SYN_THEME_PRISM:      return "House glass \xc2\xb7 accent off the wallpaper \xc2\xb7 apps dark";
+    case SYN_THEME_PRISM_LIGHT: return "The same glass in daylight \xc2\xb7 apps + Files light";
     default:                   return "";
     }
 }

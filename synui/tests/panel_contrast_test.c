@@ -80,6 +80,17 @@ static const struct {
                     { 0.208f, 0.424f, 0.737f }, 1 },
     { "platinum",   { 0.867f, 0.867f, 0.867f }, { 0.000f, 0.000f, 0.000f },
                     { 0.239f, 0.239f, 0.561f }, 1 },
+    /* The two Prisms, and the pair is the point: ONE theme with one surface
+     * inverted, so it exercises both claims at once with everything else held
+     * still. Prism's accents are FALLBACKS (the real one is measured off the
+     * wallpaper by palette.c, which corrects against panel_bg itself) — but the
+     * fallback is what a greyscale wallpaper gets and it has to be readable on
+     * its own theme, which is exactly what the light one could not be with the
+     * house cyan: #00D6E5 measures 1.7:1 on #EEF1F6. */
+    { "prism",      { 0.098f, 0.110f, 0.137f }, { 0.902f, 0.918f, 0.945f },
+                    { 0.000f, 0.839f, 0.898f }, 0 },
+    { "prism-light",{ 0.933f, 0.945f, 0.965f }, { 0.102f, 0.114f, 0.141f },
+                    { 0.000f, 0.447f, 0.494f }, 1 },
 };
 
 /* render.c's stat_dark[] — the status colours a panel draws with. */

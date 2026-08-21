@@ -180,7 +180,8 @@
  *                                Off is the wallpaper alone, which is what
  *                                every release before this one did)
  *   wallpaper_accent = auto|off|on
- *                               (default auto = Prism and nothing else. Whether
+ *                               (default auto = the two Prisms and nothing
+ *                                else. Whether
  *                                the accent is MEASURED off the wallpaper
  *                                (palette.c) instead of taken from the theme)
  *
@@ -1485,7 +1486,7 @@ const syn_config_t *synui_config_defaults(void)
  * machine that had ever touched the opacity row, which is every machine that
  * has one.
  *
- * Unset is a no-op, so the twelve themes that are not Prism keep exactly the
+ * Unset is a no-op, so the thirteen themes that are not a Prism keep exactly the
  * opacities they were tuned with, and so does a synuirc written before this
  * key existed.
  *

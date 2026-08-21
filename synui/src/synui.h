@@ -1472,6 +1472,22 @@ typedef enum {
      * palette rather than the theme: it is what a greyscale wallpaper gets, and
      * what shows before the first wallpaper has been measured. */
     SYN_THEME_PRISM,
+    /* …and the same theme in daylight.
+     *
+     * Prism's own entry argues for a DARK surface, and that argument is about
+     * what survives an arbitrary photograph — it is not an argument that a
+     * light desktop is wrong, and asking for one is the most common thing
+     * anybody asks of a house theme. The two are one theme with one surface
+     * inverted: same chrome (CHROME_LIQUID), same opacities, same wallpaper
+     * accent, and `scheme = "light"` so synfiles, Dolphin, GTK and Firefox come
+     * up light with it instead of staying dark under a pale desktop.
+     *
+     * Everything gated on "is this Prism" is gated on BOTH — glass, the clear
+     * bar, and AUTO for the wallpaper accent. Grep for SYN_THEME_PRISM_LIGHT
+     * before adding a fourteenth: the gates are three inline functions below,
+     * and a theme that is in two of them and not the third is the half-applied
+     * look those functions exist to stop. */
+    SYN_THEME_PRISM_LIGHT,
     SYN_THEME_COUNT,
 } syn_theme_t;
 
@@ -2822,19 +2838,21 @@ typedef enum {
  * of out of the theme — and the same three positions, in the same order, for
  * the same reason.
  *
- * ⚠ AUTO IS PRISM AND ONLY PRISM, which is what this used to be with no way to
- * say otherwise: the substitution was `if (theme != PRISM) return`, so the one
- * theme built around it had it and no other theme could. Prism IS "the colour
- * comes off the picture" — its preset accent is documented as a fallback for a
- * greyscale wallpaper — so that stays the default, and every other preset is a
- * designer's dozen colours whose accent means something where it sits.
+ * ⚠ AUTO IS PRISM AND ONLY PRISM — both of it, light and dark — which is what
+ * this used to be with no way to say otherwise: the substitution was `if (theme
+ * != PRISM) return`, so the one theme built around it had it and no other theme
+ * could. Prism IS "the colour comes off the picture" — its preset accent is
+ * documented as a fallback for a greyscale wallpaper, and the light variant is
+ * the same theme with the surface inverted, so both stay the default. Every
+ * other preset is a designer's dozen colours whose accent means something where
+ * it sits.
  *
  * ⚠ AND `auto` HERE IS NOT THE `auto` scene_ink REFUSED TO HAVE. That one would
  * have resolved off a setting the user had moved for another purpose; this
  * resolves off the THEME, which is the thing being described.
  */
 typedef enum {
-    SYN_WP_ACCENT_AUTO = 0,   /* on for Prism, off for the twelve presets */
+    SYN_WP_ACCENT_AUTO = 0,   /* on for both Prisms, off for the thirteen others */
     SYN_WP_ACCENT_OFF,
     SYN_WP_ACCENT_ON,
 } syn_wp_accent_t;
@@ -3867,7 +3885,8 @@ static inline int chrome_is_mac(const syn_config_t *cfg)
 static inline float theme_bar_alpha(const syn_config_t *cfg)
 {
     return (cfg->theme == SYN_THEME_MACOS26 ||
-            cfg->theme == SYN_THEME_PRISM) ? 0.0f : -1.0f;
+            cfg->theme == SYN_THEME_PRISM ||
+            cfg->theme == SYN_THEME_PRISM_LIGHT) ? 0.0f : -1.0f;
 }
 
 /*
@@ -4103,12 +4122,13 @@ static inline float syn_glass_dock_alpha(const syn_config_t *cfg)
  * Does this theme's chrome do GLASS — frosted translucent surfaces over a
  * backdrop blur, rather than a tinted slab?
  *
- * One theme, for now, and that is the point of asking it as a question rather
- * than testing the enum at each site: macOS 26 is the preset built on the
- * compositor's own glass (see its entry in theme.c, and CHROME_LIQUID), and the
- * next one that is will be added here and nowhere else. It is the same shape as
- * square_chrome — a derived fact about the PRESET, spelt once — and it travels
- * to the bar and the widgets the same way, as a line in theme.state.
+ * Three presets now — macOS 26 and the two Prisms — and that is the point of
+ * asking it as a question rather than testing the enum at each site: they are
+ * the presets built on the compositor's own glass (see their entries in
+ * theme.c, and CHROME_LIQUID), and the next one that is gets added here and
+ * nowhere else. It is the same shape as square_chrome — a derived fact about
+ * the PRESET, spelt once — and it travels to the bar and the widgets the same
+ * way, as a line in theme.state.
  *
  * Deliberately NOT "is the scheme light": XP and Win95 are light and neither has
  * ever been glass, and Tahoe would still be glass in a dark variant.
@@ -4116,7 +4136,8 @@ static inline float syn_glass_dock_alpha(const syn_config_t *cfg)
 static inline bool theme_is_glass(const syn_config_t *cfg)
 {
     return cfg->theme == SYN_THEME_MACOS26 ||
-           cfg->theme == SYN_THEME_PRISM;
+           cfg->theme == SYN_THEME_PRISM ||
+           cfg->theme == SYN_THEME_PRISM_LIGHT;
 }
 
 /* The level a glass theme uses when nobody has set glass_level.
@@ -4358,7 +4379,8 @@ static inline bool wp_accent_on(const syn_config_t *cfg)
     switch (cfg->wallpaper_accent) {
     case SYN_WP_ACCENT_ON:  return true;
     case SYN_WP_ACCENT_OFF: return false;
-    default:                return cfg->theme == SYN_THEME_PRISM;
+    default:                return cfg->theme == SYN_THEME_PRISM ||
+                                   cfg->theme == SYN_THEME_PRISM_LIGHT;
     }
 }
 

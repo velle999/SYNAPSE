@@ -322,7 +322,7 @@ static const struct ctl_item ctl_items[] = {
      * 1200px window makes a dense panel row unreadable.
      *
      * `vauto` is what "nobody has chosen" looks like on the row, and it is the
-     * compiled default — so the twelve themes that are not Prism keep the
+     * compiled default — so the thirteen themes that are not a Prism keep the
      * opacities they were tuned with, and turning this on is an explicit act
      * whose result the two rows below then show. */
     { CTL_ROW_GLASS_LEVEL,  CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glass",            NULL,
@@ -381,7 +381,8 @@ static const struct ctl_item ctl_items[] = {
       .key = "wallpaper_accent", .off = CFG(wallpaper_accent), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_wp_accent), .apply = CTL_APPLY_WPACCENT,
       .help = "Take the accent off the wallpaper instead of the theme. "
-              "Auto is Prism, which is built on it, and nothing else" },
+              "Auto is Prism (light or dark), which is built on it, and "
+              "nothing else" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,

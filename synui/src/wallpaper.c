@@ -552,8 +552,9 @@ static void palette_export(syn_server_t *s)
                "# change.\n"
                "#\n"
                "# `use` is whether this desktop draws with it, which is a\n"
-               "# SETTING (wallpaper_accent = auto|off|on; auto is Prism, which\n"
-               "# is the theme built on it) and not a property of the picture.\n"
+               "# SETTING (wallpaper_accent = auto|off|on; auto is Prism,\n"
+               "# light or dark, the theme built on it) and not a property of\n"
+               "# the picture.\n"
                "# `ok` is the picture's own answer and stands either way.\n");
     fprintf(f, "use=%s\n", use ? "yes" : "no");
     /* `ok=no` is published rather than the file being deleted or left stale:
