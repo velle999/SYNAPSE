@@ -152,7 +152,7 @@
     keepassxc   = false;
     qbittorrent = false;
     syncthing   = false;
-    localsend   = true;    # flatpak from flathub, not a pacman package
+    localsend   = false;   # flatpak from flathub, not a pacman package
     # Audio and video
     vlc       = false;
     mpv       = false;
@@ -187,7 +187,7 @@
     dolphinemu   = false;
     ppsspp       = false;
     scummvm      = false;
-    pinball      = true;   # Space Cadet; flatpak, fetches its own game data
+    pinball      = false;  # Space Cadet; flatpak, fetches its own game data
     dosbox       = false;
     mame         = false;
     protontricks = false;

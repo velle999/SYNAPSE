@@ -1077,7 +1077,7 @@ SEL_SW_WEB=(
     "sw_keepassxc|0|1|sw|keepassxc|KeePassXC|password vault"
     "sw_qbittorrent|0|0|sw|qbittorrent|qBittorrent|torrents"
     "sw_syncthing|0|0|sw|syncthing|Syncthing|file sync"
-    "sw_localsend|1|1|flat|org.localsend.localsend_app|LocalSend|send to phone"
+    "sw_localsend|0|1|flat|org.localsend.localsend_app|LocalSend|send to phone"
 )
 SEL_SW_MEDIA=(
     "sw_vlc|0|1|sw|vlc|VLC|plays anything"
@@ -1119,7 +1119,7 @@ SEL_SW_GAMES=(
     "sw_dolphinemu|0|0|sw|dolphin-emu|Dolphin|GameCube/Wii"
     "sw_ppsspp|0|0|sw|ppsspp|PPSSPP|PSP"
     "sw_scummvm|0|0|sw|scummvm|ScummVM|point-and-click"
-    "sw_pinball|1|1|flat|com.github.k4zmu2a.spacecadetpinball|Pinball|3D Space Cadet"
+    "sw_pinball|0|1|flat|com.github.k4zmu2a.spacecadetpinball|Pinball|3D Space Cadet"
     "sw_dosbox|0|0|sw|dosbox|DOSBox|DOS games"
     "sw_mame|0|0|sw|mame|MAME|arcade"
     "sw_protontricks|0|0|sw|protontricks|Protontricks|per-game fixes"

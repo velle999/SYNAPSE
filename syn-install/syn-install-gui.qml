@@ -296,7 +296,7 @@ FloatingWindow {
             { key: "sw_qbittorrent", std: 0, full: 0, min: 0, label: "qBittorrent" },
             { key: "sw_syncthing",   std: 0, full: 0, min: 0, label: "Syncthing — file sync" },
             // Flatpak, not pacman — see the `flat` group in syn-install.sh.
-            { key: "sw_localsend",   std: 1, full: 1, min: 0, label: "LocalSend — send to phone (Flatpak)" }
+            { key: "sw_localsend",   std: 0, full: 1, min: 0, label: "LocalSend — send to phone (Flatpak)" }
           ] },
         { title: "Audio and video", note: "",
           rows: [
@@ -340,7 +340,7 @@ FloatingWindow {
             { key: "sw_dolphinemu",   std: 0, full: 0, min: 0, label: "Dolphin — GameCube/Wii" },
             { key: "sw_ppsspp",       std: 0, full: 0, min: 0, label: "PPSSPP — PSP" },
             { key: "sw_scummvm",      std: 0, full: 0, min: 0, label: "ScummVM" },
-            { key: "sw_pinball",      std: 1, full: 1, min: 0, label: "Space Cadet Pinball (Flatpak)" },
+            { key: "sw_pinball",      std: 0, full: 1, min: 0, label: "Space Cadet Pinball (Flatpak)" },
             { key: "sw_dosbox",       std: 0, full: 0, min: 0, label: "DOSBox" },
             { key: "sw_mame",         std: 0, full: 0, min: 0, label: "MAME" },
             { key: "sw_protontricks", std: 0, full: 0, min: 0, label: "Protontricks" },
