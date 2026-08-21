@@ -28,7 +28,17 @@ pkgver=0.1.0
 #   reason. SynapseOS components are held by syn-update, which owns that state
 #   — `synpkg system ignored` passes through, and PROBES first, because an
 #   older syn-update does not have the verb.
-pkgrel=34
+#
+# 35: the empty answers carry their header too. `aur updates --tsv` returned
+#   early with NO header at all when the AUR was unreachable or when no
+#   foreign packages are installed, and `flatpak updates --tsv` announced the
+#   OLD five-column header when flatpak is not installed — the two paths where
+#   the header is the only thing emitted, and so the two where getting it
+#   wrong stays invisible. The first one aborted a build: the suite asserts
+#   the update headers match each other, and it failed in check() on a laptop
+#   that was simply offline. Both cases are now forced in the suite (a stub
+#   curl that fails; an empty PATH) rather than waited for.
+pkgrel=35
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

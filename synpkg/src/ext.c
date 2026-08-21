@@ -542,9 +542,15 @@ static int flatpak_search(const char *term)
 static int flatpak_updates(void)
 {
 	if (!sp_flatpak_present()) {
+		/* SIX, and the sixth is `ignored`. This header was left at five when
+		 * the row emitters were widened, so on any machine without flatpak
+		 * installed — a fresh install, most of all — the listing announced
+		 * five columns while every other updates source announced six. The
+		 * empty case is exactly where a header is the ONLY thing emitted, so
+		 * getting it wrong here is invisible until something reads it. */
 		if (g_out == OUT_TSV)
-			tsv_row(5, "name", "installed_version", "new_version", "repo",
-			        "size");
+			tsv_row(6, "name", "installed_version", "new_version", "repo",
+			        "size", "ignored");
 		return 100;
 	}
 
@@ -1447,6 +1453,24 @@ static void aur_update_row(aur_pkg_t *p, void *vctx)
 
 static int aur_updates(void)
 {
+	/* The header goes out FIRST, ahead of every early return.
+	 *
+	 * Two of those returns are ordinary answers rather than errors — no
+	 * foreign packages are installed, and the AUR could not be reached — and
+	 * both used to emit a --tsv listing with NO header line at all. Something
+	 * reading the header to name the columns gets nothing, which is the same
+	 * ragged table the five-versus-six column bug produced, wearing a
+	 * different hat. An empty table WITH a header is the right answer to
+	 * "nothing to report"; no output at all is not an answer.
+	 *
+	 * It also takes this command's test out of the hands of the network. The
+	 * suite asserts the three update headers match each other, and that has no
+	 * business failing because a laptop was offline — which is exactly how it
+	 * failed, in check(), on the thinkpad, aborting the whole build. */
+	if (g_out == OUT_TSV)
+		tsv_row(6, "name", "installed_version", "new_version", "repo", "size",
+		        "ignored");
+
 	alpm_handle_t *h = sp_alpm_init(false);
 	size_t nf = 0;
 	char **foreign = foreign_packages(h, &nf);
@@ -1473,10 +1497,6 @@ static int aur_updates(void)
 		warn("could not reach the AUR");
 		return 1;
 	}
-
-	if (g_out == OUT_TSV)
-		tsv_row(6, "name", "installed_version", "new_version", "repo", "size",
-		        "ignored");
 
 	struct aur_update_ctx ctx = { h, 0 };
 	int parsed = aur_each(json, aur_update_row, &ctx);

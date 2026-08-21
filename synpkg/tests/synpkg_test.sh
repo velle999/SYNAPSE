@@ -1323,8 +1323,47 @@ real_ignore_after=$(pacman-conf IgnorePkg 2>/dev/null | sort | tr '\n' ' ')
 # this keeps holding if the shape changes again.
 u=$("$SYNPKG" --tsv updates | head -1)
 a=$("$SYNPKG" --tsv aur updates 2>/dev/null | head -1)
+f=$("$SYNPKG" --tsv flatpak updates 2>/dev/null | head -1)
 [ "$u" = "$a" ] && ok "the AUR updates header matches the repository one" \
                 || bad "the AUR updates header matches the repository one"
+# THREE, as the note above says. This one was missing, and it was hiding a live
+# bug of exactly the shape the note describes — see the flatpak-absent case
+# below.
+[ "$u" = "$f" ] && ok "the Flatpak updates header matches the repository one" \
+                || bad "the Flatpak updates header matches the repository one (got [$f])"
+
+# ── and the headers must survive the EMPTY answers ─────────────────────────
+#
+# The check above only proves the header is right on a machine where both
+# sources have something to say. Both of them have early returns for the
+# ordinary "nothing to report" cases, and those are the paths where the header
+# is the ONLY thing emitted — so getting it wrong there is invisible until
+# something reads it.
+#
+# This is not hypothetical and it is not cosmetic: `aur updates` returned
+# early with NO header when the AUR was unreachable, so the assertion above
+# failed on a laptop that happened to be offline, in check(), and aborted the
+# whole build. A test that depends on the network is a test that fails for
+# reasons that have nothing to do with the code.
+#
+# Both cases are forced here rather than waited for. A stub curl that fails is
+# an unreachable AUR on any machine; an empty PATH is a machine with no
+# flatpak installed, which is every fresh install.
+cat > "$STUB/curl" <<'CURLEOF'
+#!/bin/sh
+exit 7
+CURLEOF
+chmod +x "$STUB/curl"
+
+ao=$(PATH="$STUB:$PATH" "$SYNPKG" --tsv aur updates 2>/dev/null | head -1)
+[ "$ao" = "$u" ] \
+    && ok "the AUR header survives an unreachable AUR" \
+    || bad "the AUR header survives an unreachable AUR (got [$ao])"
+
+fo=$(PATH="" "$SYNPKG" --tsv flatpak updates 2>/dev/null | head -1)
+[ "$fo" = "$u" ] \
+    && ok "the Flatpak header survives flatpak not being installed" \
+    || bad "the Flatpak header survives flatpak not being installed (got [$fo])"
 
 echo
 echo "  $pass passed, $fail failed"
