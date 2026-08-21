@@ -1195,7 +1195,7 @@ void st_delete_chars(st_grid_t *g, int n)
  */
 static st_row_t *rows_resize(st_grid_t *g, st_row_t *old,
                              uint16_t oldrows, uint16_t oldcols,
-                             uint16_t cols, uint16_t rows)
+                             uint16_t cols, uint16_t rows, bool keep_history)
 {
 	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
 	int keep  = oldrows < rows ? oldrows : rows;
@@ -1218,6 +1218,43 @@ static st_row_t *rows_resize(st_grid_t *g, st_row_t *old,
 		} else {
 			ns[y] = make_row(g, cols);
 		}
+	}
+	/*
+	 * ⚠ THE ROWS SHRINKING DROPS OFF THE TOP ARE HISTORY, NOT RUBBISH.
+	 *
+	 * They used to be freed here, and freeing them is destroying the user's
+	 * text: a window dragged narrow and wide again came back with the top of
+	 * the screen permanently gone, and not in the scrollback either, so there
+	 * was no way to get it back. Reported as text sliding off the screen
+	 * during a resize until it was gone — which is exactly what it is, because
+	 * a drag delivers a continuous stream of sizes and every step of it ate
+	 * another band of rows. One drag that dips to a short window (a real one
+	 * measured 56 rows down to 1) destroys the whole screen.
+	 *
+	 * push_scrollback trims the row, hands the full-width buffer back to the
+	 * pool and NULLs the pointer, so the free below stays correct for the rows
+	 * that are not pushed. It also handles limit == 0 by freeing, so a grid
+	 * with no scrollback behaves exactly as it did.
+	 *
+	 * ⚠ ONLY THE PRIMARY SCREEN. The alternate screen is vim's or less's, and
+	 * a full-screen program's canvas has never belonged in the shell's
+	 * history — no terminal puts it there. The caller decides, because
+	 * st_grid_alt_screen() is a pointer swap: `g->screen` is whichever screen
+	 * is on show, so which POINTER holds the primary depends on g->on_alt.
+	 *
+	 * Trailing blanks are dropped rather than pushed. Shrinking a screen that
+	 * is mostly empty — a fresh terminal with three lines on it — would
+	 * otherwise push fifty blank rows, and the person scrolling back to find
+	 * their text would have to walk through all of them. Blank rows BETWEEN
+	 * content are kept: those are the output's own spacing.
+	 */
+	int pushed_upto = -1;
+	if (keep_history) {
+		for (int y = 0; y < first; y++)
+			if (row_used(&old[y]) > 0)
+				pushed_upto = y;
+		for (int y = 0; y <= pushed_upto; y++)
+			push_scrollback(g, &old[y]);
 	}
 	for (int y = 0; y < first; y++)
 		free(old[y].cells);
@@ -1261,7 +1298,10 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	int keep  = oldrows < rows ? oldrows : rows;
 	int first = oldrows - keep;     /* rows dropped off the top; 0 when growing */
 
-	g->screen = rows_resize(g, g->screen, oldrows, oldcols, cols, rows);
+	/* Whichever pointer currently holds the PRIMARY screen is the one whose
+	 * dropped rows are history. See rows_resize. */
+	g->screen = rows_resize(g, g->screen, oldrows, oldcols, cols, rows,
+	                        !g->on_alt);
 
 	/* ⚠ AND THE SCREEN THAT IS NOT ON SHOW. st_grid_alt_screen() is a POINTER
 	 * SWAP — `alt` always holds whichever screen is not current — so after this
@@ -1281,7 +1321,8 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	 * somebody is coming back to, and it should be the size of the window they
 	 * come back into. */
 	if (g->alt)
-		g->alt = rows_resize(g, g->alt, oldrows, oldcols, cols, rows);
+		g->alt = rows_resize(g, g->alt, oldrows, oldcols, cols, rows,
+		                     g->on_alt);
 
 	g->cols = cols;
 	g->rows = rows;

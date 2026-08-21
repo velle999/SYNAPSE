@@ -787,6 +787,41 @@ back=$(printf 'PRIMARY-A\r\nPRIMARY-B\r\n\033[?1049hALT\033[?1049l' \
     && ok "leaving the alternate screen after a resize restores the primary" \
     || bad "leaving the alternate screen after a resize restores the primary"
 
+# ⚠ AND THE ROWS A SHRINK DROPS OFF THE TOP ARE THE USER'S TEXT.
+#
+# rows_resize() freed them. Nothing above caught it, because every assertion in
+# this section reads the SCREEN and the loss is only visible in the history:
+# "shrinking keeps the BOTTOM" passed against a build that was destroying the
+# top. Dragging a window narrow and wide again came back with the top of the
+# screen gone and no way to reach it, and a drag delivers a continuous stream
+# of sizes — one that dipped to a short window (56 rows down to 1, measured on
+# a real drag) ate the whole screen. Reported as the text sliding off during a
+# resize until it was gone, which is exactly what it was.
+sb_shrink=$(printf 'LINE1\r\nLINE2\r\nLINE3' \
+    | "$ST" --cols=10 --rows=3 --scrollback-too dump - --resize=10x1 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "shrinking pushes the rows it drops into the scrollback" \
+    "LINE1
+LINE2
+LINE3" "$sb_shrink"
+
+# ⚠ ...but NOT the alternate screen's. That canvas is vim's or less's, and no
+# terminal puts it in the shell's history. The stashed PRIMARY still has to be
+# kept, so this cannot be done by simply not pushing while on_alt.
+sb_alt=$(printf 'SHELL1\r\nSHELL2\r\n\033[?1049hVIMLINE1\r\nVIMLINE2' \
+    | "$ST" --cols=12 --rows=4 --scrollback-too dump - --resize=12x1 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "a shrink on the alternate screen keeps the shell's history, not vim's" \
+    "SHELL1
+SHELL2" "$sb_alt"
+
+# A mostly-empty screen must not push its emptiness: hunting for three lines
+# through fifty blank ones is its own bug.
+sb_blank=$(printf 'ONLY\r\n' \
+    | "$ST" --cols=10 --rows=8 --scrollback-too dump - --resize=10x1 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF' | wc -l)
+expect "trailing blank rows are dropped rather than pushed" "1" "$sb_blank"
+
 printf 'PRIMARY-A\r\nPRIMARY-B\r\n\033[?1049hALT\033[?1049l' \
     | "$ST" --cols=10 --rows=3 dump - --resize=20x6 >/dev/null 2>&1
 check "...and does not abort on the way out" $?
