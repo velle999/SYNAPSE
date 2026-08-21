@@ -126,7 +126,26 @@ pkgver=0.1.0
 #   and empty_moov can report a wrong duration and stop early), and one is
 #   rendered in the background after an edit so a clip is playable as soon as
 #   it is added rather than at the first press of play.
-pkgrel=6
+# 7: play starts where the playhead is, and a sound lands on a sound track.
+#
+#   `pl.source !== url` compared a `url` property — which QML hands to
+#   JavaScript as an OBJECT — against a string, so it was ALWAYS true, and the
+#   two print identically. Every press of play therefore took the change-the-
+#   source path and armed a seek for a load that never came, because assigning
+#   a url the value it already holds notifies nothing. Playback carried on
+#   from wherever it had been paused and the playhead froze where it had been
+#   scrubbed to. Rendering the preview in the background at pkgrel 6 is what
+#   exposed it: before that every press rendered a file under a new name, so
+#   the source really did change.
+#
+#   Add media chose the SELECTED track, so a music file dropped onto V1 —
+#   which is what the selection usually is. It was legal in the document and
+#   exported correctly, and on screen it read as the audio having vanished,
+#   because the only sign of it was a waveform inside a video clip's bar. The
+#   destination now comes from what the file IS: a sound goes to an audio
+#   track, a picture to a video track, one is laid down if the project has
+#   none, and Add media no longer needs a track selected first.
+pkgrel=7
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

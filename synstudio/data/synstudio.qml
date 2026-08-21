@@ -893,6 +893,72 @@ FloatingWindow {
                     "remove", String(root.selKey)])
     }
 
+    // ── Adding media, onto a track that can hold it ─────────────────────────
+    //
+    // The destination is chosen by what the FILE is, not by whatever track
+    // happens to be selected. Dropping a music bed on V1 — which is what the
+    // selection usually is — put a clip with no picture on a video track,
+    // where the only sign of it is a waveform drawn inside a video clip's
+    // bar. The document allows it and the export honours it, so nothing
+    // failed; it just read as the audio having gone missing.
+    //
+    // A picture goes to a video track, a sound to an audio track: the
+    // selected one when it is already of the right type, so adding several
+    // clips to a chosen track still works, otherwise the first one that fits.
+    function trackFor(kind) {
+        const want = kind === "audio" ? "audio" : "video"
+        const t = root.tl.tracks
+        if (root.selTrack >= 0 && root.selTrack < t.length
+            && t[root.selTrack].type === want) return root.selTrack
+        for (let i = 0; i < t.length; i++) if (t[i].type === want) return i
+        return -1
+    }
+
+    function addMedia(path, kind) {
+        const t = root.trackFor(kind)
+        if (t >= 0) {
+            root.selTrack = t
+            root.tlRun(["clip", root.proj, String(t), path,
+                        "--at", String(root.playhead)])
+            return
+        }
+        // No track of that type yet — an audio-only project, or one whose
+        // audio track was deleted. Lay one down and add to it, rather than
+        // refusing a file the picker was willing to draw.
+        const want = kind === "audio" ? "audio" : "video"
+        let n = 0
+        for (let i = 0; i < root.tl.tracks.length; i++)
+            if (root.tl.tracks[i].type === want) n++
+        addTrackProc.pendingPath = path
+        addTrackProc.command = [root.bin, "timeline", "track", root.proj, want,
+                                (want === "audio" ? "A" : "V") + String(n + 1)]
+        addTrackProc.running = true
+    }
+
+    Process {
+        id: addTrackProc
+        property string pendingPath: ""
+        property int newTrack: -1
+        // `timeline track` prints the index it made, which is the only way to
+        // know where the clip has to go without reloading the document first.
+        stdout: StdioCollector {
+            onStreamFinished: addTrackProc.newTrack = parseInt(this.text.trim())
+        }
+        onExited: function (code, status) {
+            const t = addTrackProc.newTrack
+            const path = addTrackProc.pendingPath
+            addTrackProc.pendingPath = ""
+            addTrackProc.newTrack = -1
+            if (code !== 0 || !(t >= 0) || !path) {
+                root.say("cannot add a track for that")
+                return
+            }
+            root.selTrack = t
+            root.tlRun(["clip", root.proj, String(t), path,
+                        "--at", String(root.playhead)])
+        }
+    }
+
     // ── Starting a project ──────────────────────────────────────────────────
     //
     // A project file has to EXIST before any other verb works, so New both
@@ -1055,7 +1121,22 @@ FloatingWindow {
         if (!root.playbackReady) { root.say("playback needs qt6-multimedia"); return }
         const pl = playbackLoader.item
         const url = "file://" + root.playFile
-        if (pl.source !== url) {
+        // String(), because a `url` property read from QML is an OBJECT and
+        // not a string: `pl.source !== url` is ALWAYS true, and printing the
+        // two beside each other shows the same characters, so nothing about
+        // the comparison looks wrong.
+        //
+        // Every play press therefore took the new-source path and armed a
+        // seek for a load that never came — assigning a url the value it
+        // already holds notifies nothing, so no LoadingMedia ever armed it.
+        // The seek stayed pending forever, playback carried on from wherever
+        // it had been paused, and the playhead froze where it had been
+        // scrubbed to, because position updates are ignored while a seek is
+        // pending. Rendering the preview in the BACKGROUND is what made it
+        // reachable: before that every press rendered a file with a new name,
+        // so the source really did change and the pending seek really did
+        // land.
+        if (String(pl.source) !== url) {
             root.pendingSeek = root.playhead
             root.seekArmed = false
             pl.source = url
@@ -1299,8 +1380,9 @@ FloatingWindow {
                     Btn { visible: root.mode === "video"; label: "New project"
                           onClicked: root.newProject(
                               (Quickshell.env("HOME") || "/tmp") + "/synstudio-project.syntl") }
+                    // No selected track needed: the file picks its own track.
                     Btn { visible: root.mode === "video"; label: "Add media"
-                          active: root.proj !== "" && root.selTrack >= 0
+                          active: root.proj !== ""
                           onClicked: { root.pickerFor = "clip"; root.openPicker() } }
                     Btn { visible: root.mode === "video"; label: "Title"
                           active: root.proj !== "" && root.selTrack >= 0
@@ -2517,11 +2599,13 @@ FloatingWindow {
                                     // The video page borrows the same picker.
                                     // It lists what the ENGINE can decode, so
                                     // a row that is drawn is a row that will
-                                    // land on the timeline.
+                                    // land on the timeline — and the row
+                                    // already says whether it found a picture
+                                    // or a sound, which is what decides the
+                                    // track it lands on.
                                     root.pickerOpen = false
                                     root.pickerFor = "photo"
-                                    root.tlRun(["clip", root.proj, String(root.selTrack),
-                                                m.path, "--at", String(root.playhead)])
+                                    root.addMedia(m.path, m.kind)
                                     root.say("added " + m.name)
                                 } else {
                                     root.pickerOpen = false
