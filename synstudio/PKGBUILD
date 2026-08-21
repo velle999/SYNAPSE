@@ -145,7 +145,28 @@ pkgver=0.1.0
 #   destination now comes from what the file IS: a sound goes to an audio
 #   track, a picture to a video track, one is laid down if the project has
 #   none, and Add media no longer needs a track selected first.
-pkgrel=7
+# 8: things that would not drag, tracks that could not be seen, and an export
+#    that said nothing.
+#
+#   Every draggable control in this window sits inside a Flickable, and a
+#   Flickable takes the grab once a drag passes the threshold — measured at 2
+#   moves out of 10 reaching the MouseArea, 10 out of 10 with preventStealing.
+#   It only steals when the content can actually scroll that way, which is why
+#   the playhead dragged fine MAXIMIZED and fought back in a smaller window,
+#   and why it read as "hard" rather than dead. The ruler, clip moves and
+#   trims, and all three kinds of slider now hold their own drags.
+#
+#   Tracks past the bottom of the timeline strip were simply not there: added,
+#   in the document, exported, invisible. The lanes scroll vertically now, the
+#   headers ride the same contentY so a name never drifts off its lane, and the
+#   ruler stays put by riding it the other way.
+#
+#   Export gave no sign of life — and a second press could not help, because
+#   `running = true` on a Process already running is a silent no-op. The button
+#   goes busy, and ffmpeg's own `time=` (written on a CARRIAGE RETURN, which is
+#   why a StdioCollector never showed a word of it) drives a percentage in the
+#   status bar.
+pkgrel=8
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

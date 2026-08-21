@@ -1289,12 +1289,59 @@ FloatingWindow {
         }
     }
 
+    // ── Exporting the cut ───────────────────────────────────────────────────
+    //
+    // A minute of timeline takes long enough that a window which says nothing
+    // reads as a window that ignored the click — and pressing again could not
+    // help, because `running = true` on a Process that is ALREADY running is a
+    // silent no-op in quickshell. So the second press really did do nothing,
+    // and so did the third. The button goes busy and stays busy until the
+    // encode ends.
+    //
+    // The progress is ffmpeg's own, and it writes `time=00:00:07.89` to stderr
+    // on a CARRIAGE RETURN — which is exactly what a StdioCollector cannot
+    // show, because it fires once, at the end of the stream. Splitting on "\r"
+    // is what turns it into something to watch.
+    property bool   exportingCut: false
+    property real   exportPct: -1
+    property string exportErr: ""
+
+    function exportCut() {
+        if (root.exportingCut || !root.proj || !(root.tlDur > 0)) return
+        root.exportingCut = true
+        root.exportPct = -1
+        root.exportErr = ""
+        tlExportProc.command = [root.bin, "timeline", "export", root.proj, "--out",
+                                root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"]
+        tlExportProc.running = true
+        root.say("exporting the cut…")
+    }
+
     Process {
         id: tlExportProc
-        stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
+        stderr: SplitParser {
+            splitMarker: "\r"
+            onRead: function (line) {
+                const m = /time=(\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(line)
+                if (!m) {
+                    // Not progress, so it is the thing worth quoting if this
+                    // ends badly. ffmpeg's last word is the one that says why.
+                    const t = line.trim()
+                    if (t) root.exportErr = t.split("\n").pop()
+                    return
+                }
+                if (!(root.tlDur > 0)) return
+                const at = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3])
+                root.exportPct = Math.max(0, Math.min(100, at / root.tlDur * 100))
+                root.say("exporting the cut… " + Math.round(root.exportPct) + "%")
+            }
+        }
         onExited: function (code, status) {
-            root.say(code === 0 ? "exported " + root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"
-                                : "export failed")
+            root.exportingCut = false
+            root.exportPct = -1
+            root.say(code === 0
+                     ? "exported " + root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"
+                     : (root.exportErr || "export failed"))
         }
     }
 
@@ -1407,15 +1454,11 @@ FloatingWindow {
                                           String(root.selClip), "--ripple"])
                               root.selClip = -1
                           } }
-                    Btn { visible: root.mode === "video"; label: "Export"
+                    Btn { visible: root.mode === "video"
+                          label: root.exportingCut ? "Export…" : "Export"
                           active: root.proj !== "" && root.tlDur > 0
-                          onClicked: {
-                              tlExportProc.command =
-                                  [root.bin, "timeline", "export", root.proj, "--out",
-                                   root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"]
-                              tlExportProc.running = true
-                              root.say("exporting the cut…")
-                          } }
+                                  && !root.exportingCut
+                          onClicked: root.exportCut() }
                 }
 
             }
@@ -1740,10 +1783,17 @@ FloatingWindow {
                         Row {
                             anchors.fill: parent
 
-                            // Track headers, pinned. They do not scroll with
-                            // the clips: losing track of which lane is which
-                            // is the fastest way to drop a clip on the wrong
-                            // one, and the lane names are what prevent it.
+                            // Track headers, pinned SIDEWAYS. They do not scroll
+                            // with the clips: losing track of which lane is
+                            // which is the fastest way to drop a clip on the
+                            // wrong one, and the lane names are what prevent it.
+                            //
+                            // Vertically they must scroll in lockstep, or the
+                            // name beside a lane stops being that lane's name,
+                            // which is the same failure by another route. They
+                            // ride the lane Flickable's contentY rather than
+                            // being a second Flickable, because two of them
+                            // agree only until somebody flicks one.
                             Column {
                                 width: 92
                                 height: parent.height
@@ -1753,99 +1803,118 @@ FloatingWindow {
                                     color: "transparent"
                                 }
 
-                                Repeater {
-                                    model: root.tl.tracks
+                                Item {
+                                    width: 92
+                                    height: parent.height - 22
+                                    clip: true
 
-                                    Rectangle {
-                                        id: hdr
-                                        required property var modelData
-                                        required property int index
+                                    Column {
                                         width: 92
-                                        height: 56
-                                        color: root.selTrack === hdr.index ? root.wash(0.22)
-                                                                           : root.wash(0.07)
-                                        border.width: 1
-                                        border.color: root.wash(0.14)
+                                        y: -laneFlick.contentY
 
-                                        Text {
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 8
-                                            anchors.top: parent.top
-                                            anchors.topMargin: 7
-                                            text: hdr.modelData.name
-                                            color: root.cText
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                        }
+                                        Repeater {
+                                            model: root.tl.tracks
 
-                                        Row {
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 8
-                                            anchors.bottom: parent.bottom
-                                            anchors.bottomMargin: 7
-                                            spacing: 5
+                                            Rectangle {
+                                                id: hdr
+                                                required property var modelData
+                                                required property int index
+                                                width: 92
+                                                height: 56
+                                                color: root.selTrack === hdr.index ? root.wash(0.22)
+                                                                                   : root.wash(0.07)
+                                                border.width: 1
+                                                border.color: root.wash(0.14)
 
-                                            // Mute for audio, hide for video —
-                                            // one flag each, named for what the
-                                            // track actually does.
-                                            Tag {
-                                                label: hdr.modelData.type === "audio" ? "M" : "H"
-                                                on: hdr.modelData.type === "audio"
-                                                    ? hdr.modelData.muted : hdr.modelData.hidden
-                                                onClicked: {
-                                                    const a = hdr.modelData.type === "audio"
-                                                              ? "--mute" : "--hide"
-                                                    const v = (hdr.modelData.type === "audio"
-                                                               ? hdr.modelData.muted
-                                                               : hdr.modelData.hidden) ? "0" : "1"
-                                                    root.tlRun(["track", root.proj,
-                                                                String(hdr.index), a, v])
+                                                Text {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 8
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: 7
+                                                    text: hdr.modelData.name
+                                                    color: root.cText
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                }
+
+                                                Row {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 8
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.bottomMargin: 7
+                                                    spacing: 5
+
+                                                    // Mute for audio, hide for video —
+                                                    // one flag each, named for what the
+                                                    // track actually does.
+                                                    Tag {
+                                                        label: hdr.modelData.type === "audio" ? "M" : "H"
+                                                        on: hdr.modelData.type === "audio"
+                                                            ? hdr.modelData.muted : hdr.modelData.hidden
+                                                        onClicked: {
+                                                            const a = hdr.modelData.type === "audio"
+                                                                      ? "--mute" : "--hide"
+                                                            const v = (hdr.modelData.type === "audio"
+                                                                       ? hdr.modelData.muted
+                                                                       : hdr.modelData.hidden) ? "0" : "1"
+                                                            root.tlRun(["track", root.proj,
+                                                                        String(hdr.index), a, v])
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: hdr.modelData.type
+                                                        color: root.cDim
+                                                        font.pixelSize: 9
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    onClicked: { root.selTrack = hdr.index
+                                                                 root.selClip = -1 }
                                                 }
                                             }
-                                            Text {
-                                                text: hdr.modelData.type
-                                                color: root.cDim
-                                                font.pixelSize: 9
-                                            }
                                         }
 
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: { root.selTrack = hdr.index
-                                                         root.selClip = -1 }
+                                        // Adding a lane is part of editing, not part
+                                        // of setting a project up once.
+                                        Row {
+                                            spacing: 4
+                                            Item { width: 4; height: 1 }
+                                            Tag { label: "+V"; on: false
+                                                  onClicked: root.tlRun(["track", root.proj, "video",
+                                                             "V" + (root.tl.tracks.length + 1)]) }
+                                            Tag { label: "+A"; on: false
+                                                  onClicked: root.tlRun(["track", root.proj, "audio",
+                                                             "A" + (root.tl.tracks.length + 1)]) }
                                         }
                                     }
-                                }
-
-                                // Adding a lane is part of editing, not part
-                                // of setting a project up once.
-                                Row {
-                                    spacing: 4
-                                    Item { width: 4; height: 1 }
-                                    Tag { label: "+V"; on: false
-                                          onClicked: root.tlRun(["track", root.proj, "video",
-                                                     "V" + (root.tl.tracks.length + 1)]) }
-                                    Tag { label: "+A"; on: false
-                                          onClicked: root.tlRun(["track", root.proj, "audio",
-                                                     "A" + (root.tl.tracks.length + 1)]) }
                                 }
                             }
 
                             Flickable {
+                                id: laneFlick
                                 width: parent.width - 92
                                 height: parent.height
                                 contentWidth: Math.max(width,
                                     (root.tlDur + 10) * root.pxPerSec)
-                                contentHeight: height
+                                // Tracks past the bottom of the strip used to
+                                // be simply absent: added, in the document,
+                                // exported, and invisible. The lanes scroll
+                                // now, and the ruler stays where it is by
+                                // riding contentY — a time axis that scrolls
+                                // out of view is a ruler with nothing to rule.
+                                contentHeight: Math.max(height,
+                                    22 + root.tl.tracks.length * 56 + 8)
                                 clip: true
-                                flickableDirection: Flickable.HorizontalFlick
+                                flickableDirection: Flickable.HorizontalAndVerticalFlick
                                 boundsBehavior: Flickable.StopAtBounds
 
                                 Item {
                                     id: lanes
                                     width: Math.max(parent.width,
                                         (root.tlDur + 10) * root.pxPerSec)
-                                    height: parent.height
+                                    height: laneFlick.contentHeight
 
                                     // Ruler. Clicking it is how the playhead
                                     // moves, which is the gesture every editor
@@ -1854,6 +1923,10 @@ FloatingWindow {
                                         id: ruler
                                         width: parent.width
                                         height: 22
+                                        // Pinned to the top of the viewport,
+                                        // not to the top of the content.
+                                        y: laneFlick.contentY
+                                        z: 2
                                         color: root.wash(0.10)
 
                                         Repeater {
@@ -1892,6 +1965,33 @@ FloatingWindow {
 
                                         MouseArea {
                                             anchors.fill: parent
+                                            // A Flickable STEALS the drag.
+                                            //
+                                            // Every draggable thing in this
+                                            // window sits inside one — the
+                                            // timeline flicks, both panels
+                                            // flick — and once the drag passes
+                                            // the threshold the Flickable takes
+                                            // the grab and pans instead. The
+                                            // press still lands, so the
+                                            // playhead jumps once and then
+                                            // refuses to follow the hand.
+                                            //
+                                            // Measured at 2 moves out of 10
+                                            // reaching the MouseArea without
+                                            // this, and 10 out of 10 with it.
+                                            //
+                                            // It only steals when the content
+                                            // can actually move that way, and
+                                            // that is why it read as "hard"
+                                            // rather than dead, and why it was
+                                            // fine MAXIMIZED: a timeline that
+                                            // fits the window has nothing to
+                                            // scroll, and a drag towards a
+                                            // bound it is already at is left
+                                            // alone. Same gesture, same code,
+                                            // decided by the window size.
+                                            preventStealing: true
                                             onPressed: function (m) {
                                                 root.scrubbing = true
                                                 root.seekTo(m.x / root.pxPerSec)
@@ -2081,6 +2181,12 @@ FloatingWindow {
                                                                 : Qt.OpenHandCursor
                                                             hoverEnabled: true
 
+                                                            // Or the timeline
+                                                            // pans instead of
+                                                            // the clip moving.
+                                                            // See the ruler.
+                                                            preventStealing: true
+
                                                             // Measured in the LANE,
                                                             // never in the clip.
                                                             //
@@ -2136,10 +2242,13 @@ FloatingWindow {
                                         }
                                     }
 
-                                    // The playhead, over everything.
+                                    // The playhead, over everything — the ruler
+                                    // included, which is where the eye looks
+                                    // for it, so it outranks the ruler's z.
                                     Rectangle {
                                         x: root.playhead * root.pxPerSec
                                         y: 0
+                                        z: 3
                                         width: 2
                                         height: lanes.height
                                         color: "#ff5a5a"
@@ -2690,6 +2799,10 @@ FloatingWindow {
                 anchors.fill: parent
                 anchors.margins: -10
                 hoverEnabled: false
+                // The develop panel is a Flickable, and a slider drag is never
+                // perfectly horizontal, so it was handing the gesture over to
+                // the scroll after ten pixels. See the timeline ruler.
+                preventStealing: true
 
                 function commit(mx, live) {
                     const f = Math.max(0, Math.min(1, (mx + 10) / track.width))
@@ -3029,6 +3142,8 @@ FloatingWindow {
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -10
+                // The inspector is a Flickable too. See the timeline ruler.
+                preventStealing: true
                 function commit(mx) {
                     const f = Math.max(0, Math.min(1, (mx + 10) / cctrack.width))
                     let v = cc.row.lo + f * (cc.row.hi - cc.row.lo)
@@ -3107,6 +3222,8 @@ FloatingWindow {
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -10
+                // The inspector is a Flickable too. See the timeline ruler.
+                preventStealing: true
                 function commit(mx) {
                     const f = Math.max(0, Math.min(1, (mx + 10) / gctrack.width))
                     let v = grd.row.lo + f * (grd.row.hi - grd.row.lo)
