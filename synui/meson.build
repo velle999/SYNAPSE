@@ -286,6 +286,7 @@ synui_exe = executable('synui',
     'src/eq.c',
     'src/crop.c',
     'src/icons.c',
+    'src/iconhue.c',
     'src/dock.c',
     'src/launcher.c',
     'src/record.c',
@@ -925,6 +926,17 @@ palette_test = executable('palette_test',
   dependencies : [cc.find_library('m', required : false)],
   build_by_default : false)
 test('palette', palette_test)
+
+# The recolour that makes our own app icons follow the theme. Pure — pixels in,
+# pixels out — so it links iconhue.c and nothing else, and like palette_test its
+# images are built in the test rather than shipped as fixtures nobody can read
+# the intent of.
+iconhue_test = executable('iconhue_test',
+  ['tests/iconhue_test.c', 'src/iconhue.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('iconhue', iconhue_test)
 
 # The panel pointer contract, on a real panel. There is no way to synthesise a
 # click into a headless synui — no virtual-pointer protocol, no input devices on

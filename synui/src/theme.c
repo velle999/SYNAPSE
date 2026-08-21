@@ -940,6 +940,12 @@ void transparency_set_enabled(syn_server_t *s, int on)
 static void theme_push_panel_colors(const syn_config_t *cfg)
 {
     render_set_panel_accent(cfg->panel_accent);
+    /* SynapseOS's own app icons are drawn in one violet family, which reads as
+     * a house style on SYNAPSE and as an oversight on Gruvbox. They follow the
+     * panel accent — the colour our own surfaces are already drawn in — so the
+     * dock stops being the one part of the bar that ignored the theme. Third
+     * party icons are untouched; see iconhue.c for what "ours" means. */
+    icon_set_accent(cfg->panel_accent);
     render_set_panel_surface(cfg->panel_bg, cfg->panel_ink);
     /* Glass is a property of the theme too, so it travels with the colours:
      * switching to Prism has to reach the panels in the same push that recolours
@@ -1203,6 +1209,7 @@ void theme_refresh_wallpaper_accent(syn_server_t *s)
         else
             theme_load_colors(&s->config, s->config.theme);
         theme_push_panel_colors(&s->config);
+        dock_relayout(s);
         theme_repaint(s);
         return;
     }
@@ -1219,6 +1226,15 @@ void theme_refresh_wallpaper_accent(syn_server_t *s)
     s->config.border_color_focus[3] = 1.0f;
 
     theme_push_panel_colors(&s->config);
+    /* The dock's buffer is CACHED — dock_render_output() paints the icons into
+     * it once and a whole-output damage does not refill it. theme_apply() has
+     * always rebuilt it afterwards, but this path is reached from a WALLPAPER
+     * change too (wallpaper.c), and that one never did: the dock kept the
+     * previous accent's outline until some unrelated thing relaid it out. That
+     * was a hairline nobody filed. It is not one now — the app icons are
+     * tinted from this accent, so a stale buffer is a dock full of the old
+     * colour on exactly the theme whose whole point is to follow the picture. */
+    dock_relayout(s);
     theme_repaint(s);
 }
 

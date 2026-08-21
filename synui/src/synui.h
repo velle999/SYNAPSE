@@ -8320,6 +8320,13 @@ typedef struct {
     char icon_hint[128];      /* .desktop Icon= value; internal to icons.c's
                                 * resolution, not meaningful to callers */
     cairo_surface_t *icon_surface;   /* decoded PNG; NULL = draw a monogram */
+    /* The untouched decode, kept ONLY for icons we recolour to the theme
+     * (iconhue.c). icon_surface is then a tinted copy of this and this is what
+     * every re-tint starts from — painting a new accent over the last one walks
+     * the icon a little further from itself on every theme switch. NULL means
+     * the icon is drawn exactly as it was decoded, which is every icon that is
+     * not ours. Never the same pointer as icon_surface. */
+    cairo_surface_t *icon_base;
 } syn_icon_entry_t;
 
 /* Look up (and cache) name/exec/icon for an app_id. Always returns a valid
@@ -8419,6 +8426,12 @@ void icon_provide_name(const char *app_id, const char *icon_name);
  * file (SVG icon themes, or nothing on disk at all: both out of scope). */
 void icon_draw_monogram(cairo_t *cr, const char *app_id,
                         double x, double y, double size);
+/* The accent SynapseOS's own app icons follow. Pushed by theme.c on every
+ * theme change (and by Prism whenever the wallpaper accent moves), it re-tints
+ * every already-cached icon of ours in place, so a theme switch does not have
+ * to invalidate the cache or wait for a re-decode. A no-op for every icon that
+ * is not one of ours — see syn_iconhue_wants(). */
+void icon_set_accent(const float rgb[3]);
 
 /* ── dock.c ──────────────────────────────────────────────── */
 void dock_init(syn_server_t *s);                  /* load config; entries start empty */

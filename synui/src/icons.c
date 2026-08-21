@@ -33,6 +33,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "iconhue.h"
 
 #define ICON_CACHE_MAX 64
 
@@ -43,6 +44,12 @@
 
 static syn_icon_entry_t icon_cache[ICON_CACHE_MAX];
 static int icon_cache_count = 0;
+
+/* The accent our own icons are currently drawn in. Initialised to SYNAPSE's
+ * cyan so an icon resolved before any theme has been pushed looks the same as
+ * one resolved after — a dock that themed its icons only after the first theme
+ * switch would be a worse bug than not theming them at all. */
+static float g_icon_accent[3] = { 0.00f, 0.85f, 0.75f };
 
 /* ── PNG decode (mirrors wallpaper.c's decode_png; not shared — see the
  * rationale in the implementation plan: both are 5-line cairo wrappers, and
@@ -251,6 +258,80 @@ static cairo_surface_t *find_and_decode_icon(const char *name)
     return decode_png(path);
 }
 
+/* ── Theme tinting (iconhue.c) ───────────────────────────── */
+
+/* Paint e->icon_surface from e->icon_base at the current accent. Cheap enough
+ * to run on every theme switch: the icons are 128x128 and there are a dozen. */
+static void icon_tint_from_base(syn_icon_entry_t *e)
+{
+    if (!e->icon_base || !e->icon_surface) return;
+
+    int w = cairo_image_surface_get_width(e->icon_base);
+    int h = cairo_image_surface_get_height(e->icon_base);
+    int src_stride = cairo_image_surface_get_stride(e->icon_base);
+    int dst_stride = cairo_image_surface_get_stride(e->icon_surface);
+
+    cairo_surface_flush(e->icon_base);
+    cairo_surface_flush(e->icon_surface);
+    const unsigned char *src = cairo_image_surface_get_data(e->icon_base);
+    unsigned char *dst = cairo_image_surface_get_data(e->icon_surface);
+    if (!src || !dst) return;
+
+    /* Start from the pristine decode every time — see icon_base's note. */
+    for (int y = 0; y < h; y++)
+        memcpy(dst + (size_t)y * dst_stride, src + (size_t)y * src_stride,
+               (size_t)w * 4);
+
+    syn_iconhue_apply(dst, w, h, dst_stride, g_icon_accent);
+    cairo_surface_mark_dirty(e->icon_surface);
+}
+
+/* If this icon is one of ours, split it into a pristine base plus a tinted
+ * surface to draw. Anything else — every third-party app — is left exactly as
+ * decoded, with icon_base NULL. */
+static void icon_theme_adopt(syn_icon_entry_t *e, const char *icon_name)
+{
+    if (!e->icon_surface || e->icon_base) return;
+    if (cairo_image_surface_get_format(e->icon_surface) != CAIRO_FORMAT_ARGB32)
+        return;
+
+    int w = cairo_image_surface_get_width(e->icon_surface);
+    int h = cairo_image_surface_get_height(e->icon_surface);
+    int stride = cairo_image_surface_get_stride(e->icon_surface);
+    cairo_surface_flush(e->icon_surface);
+
+    if (!syn_iconhue_wants(icon_name, cairo_image_surface_get_data(e->icon_surface),
+                           w, h, stride))
+        return;
+
+    cairo_surface_t *tinted =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    if (cairo_surface_status(tinted) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(tinted);
+        return;   /* not fatal: the icon simply stays the colour it was drawn */
+    }
+
+    /* The decode becomes the base; the fresh surface becomes what is drawn. */
+    e->icon_base = e->icon_surface;
+    e->icon_surface = tinted;
+    icon_tint_from_base(e);
+}
+
+void icon_set_accent(const float rgb[3])
+{
+    if (!rgb) return;
+    if (rgb[0] == g_icon_accent[0] && rgb[1] == g_icon_accent[1] &&
+        rgb[2] == g_icon_accent[2])
+        return;                      /* same colour: nothing to repaint */
+
+    g_icon_accent[0] = rgb[0];
+    g_icon_accent[1] = rgb[1];
+    g_icon_accent[2] = rgb[2];
+
+    for (int i = 0; i < icon_cache_count; i++)
+        icon_tint_from_base(&icon_cache[i]);
+}
+
 /* ── Public API ──────────────────────────────────────────── */
 
 const syn_icon_entry_t *icon_lookup(const char *app_id)
@@ -280,6 +361,13 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
         /* Icon= pointed nowhere useful (SVG-only theme, etc) — try the bare
          * app_id too, since it's occasionally also the icon name. */
         e.icon_surface = find_and_decode_icon(app_id);
+
+    /* Either name can be the one that identifies it as ours: Icon= is what
+     * resolved the file, but an app whose .desktop names a generic icon is
+     * still ours by app_id. adopt() is guarded, so the second call is a no-op
+     * once the first has taken. */
+    if (e.icon_hint[0]) icon_theme_adopt(&e, e.icon_hint);
+    icon_theme_adopt(&e, app_id);
 
     /* Realistic pinned+running counts never approach ICON_CACHE_MAX; on the
      * rare overflow, fall back to a static scratch slot (last-lookup-wins,
@@ -328,8 +416,11 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *path)
             e.display_name[n - 8] = '\0';
     }
 
-    if (e.icon_hint[0])
+    if (e.icon_hint[0]) {
         e.icon_surface = find_and_decode_icon(e.icon_hint);
+        /* Keyed by path here, so Icon= is the only name that means anything. */
+        icon_theme_adopt(&e, e.icon_hint);
+    }
 
     static syn_icon_entry_t overflow_scratch;
     syn_icon_entry_t *slot;
@@ -359,8 +450,10 @@ void icon_provide_name(const char *app_id, const char *icon_name)
     if (e->icon_surface) return;
 
     e->icon_surface = find_and_decode_icon(icon_name);
-    if (e->icon_surface)
+    if (e->icon_surface) {
         snprintf(e->icon_hint, sizeof(e->icon_hint), "%s", icon_name);
+        icon_theme_adopt(e, icon_name);
+    }
 }
 
 void icon_draw_monogram(cairo_t *cr, const char *app_id,
