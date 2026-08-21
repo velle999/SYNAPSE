@@ -685,6 +685,31 @@ PanelWindow {
                     return
                 case Qt.Key_Down:  keys.step(1);  e.accepted = true; return
                 case Qt.Key_Up:    keys.step(-1); e.accepted = true; return
+                case Qt.Key_Right: {
+                    // Descend, and ONLY descend. Right is not Enter: on a leaf
+                    // row activate() launches the thing and closes the menu,
+                    // which is far too much to hang off an arrow key pressed
+                    // while looking for the next level. On anything that is not
+                    // a submenu this does nothing on purpose.
+                    const r = rowModel.rows[list.selected]
+                    if (r && r.kind === "page") MenuState.page = r.page
+                    e.accepted = true
+                    return
+                }
+                case Qt.Key_Left:
+                    // Come back up, unwinding in Escape's order — search first,
+                    // then the page — because that order is already what this
+                    // menu teaches and two keys that disagree about what "back"
+                    // means is worse than one extra press.
+                    //
+                    // ⚠ It stops there rather than closing. Escape is the key
+                    // that closes; a Left at the root that dismissed the whole
+                    // menu would make overshooting while walking back up cost
+                    // the menu itself.
+                    if (MenuState.search !== "")      MenuState.search = ""
+                    else if (MenuState.page !== "")   MenuState.page = ""
+                    e.accepted = true
+                    return
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
                     panel.activate(rowModel.rows[list.selected])
