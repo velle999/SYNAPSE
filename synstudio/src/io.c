@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -511,6 +512,155 @@ int ss_save(const char *path, const ss_image *im, int quality, int bits)
     return rc;
 }
 
+double ss_media_duration(const char *path)
+{
+    char *argv[] = {
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1",
+        (char *)path, NULL
+    };
+    char *txt = run_text(argv);
+    double d;
+
+    if (!txt) return 0.0;
+    d = kv_dbl(txt, "duration=");
+    free(txt);
+    return d > 0 ? d : 0.0;
+}
+
+/* -------------------------------------------------------------- peaks -- */
+
+/* Fold a stream of s16le mono samples into buckets as it arrives.
+ *
+ * Streaming, not buffered, and that is the whole point: an envelope needs the
+ * LOUDEST sample in each bucket, so the samples have to be seen at a rate
+ * that still contains the signal — and at a rate that contains the signal, an
+ * hour of audio is hundreds of megabytes. Reducing on the way past costs one
+ * chunk of memory regardless of length.
+ *
+ * The first attempt did the obvious cheap thing instead: it asked ffmpeg to
+ * resample down to about sixteen samples per bucket and took peaks of that.
+ * Resampling LOW-PASSES. At 200Hz a 440Hz tone is not quieter, it is GONE —
+ * the test file read as digital silence. Anything above half the chosen rate
+ * simply is not in the data any more, which for music means the waveform
+ * shows the bass line and nothing else. */
+static int run_peaks(char *const argv[], size_t expect, int nbuckets,
+                     float *peak, float *rms)
+{
+    int fd[2], status;
+    pid_t pid;
+    unsigned char chunk[16384];
+    double *sum;
+    size_t *cnt;
+    size_t idx = 0;
+    int carry = -1;              /* an odd byte left over from the last read */
+    int b;
+
+    sum = calloc((size_t)nbuckets, sizeof *sum);
+    cnt = calloc((size_t)nbuckets, sizeof *cnt);
+    if (!sum || !cnt) { free(sum); free(cnt); return -1; }
+    for (b = 0; b < nbuckets; b++) peak[b] = 0.0f;
+
+    if (pipe(fd) != 0) { free(sum); free(cnt); return -1; }
+    pid = fork();
+    if (pid < 0) { close(fd[0]); close(fd[1]); free(sum); free(cnt); return -1; }
+    if (pid == 0) {
+        int null = open("/dev/null", O_RDWR);
+        close(fd[0]);
+        if (null >= 0) { dup2(null, STDIN_FILENO); dup2(null, STDERR_FILENO); close(null); }
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[1]);
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+    close(fd[1]);
+
+    for (;;) {
+        ssize_t n = read(fd[0], chunk, sizeof chunk);
+        ssize_t i = 0;
+        if (n < 0) { if (errno == EINTR) continue; break; }
+        if (n == 0) break;
+
+        /* A sample is two bytes and a read can split one. Carrying the odd
+         * byte is not pedantry: losing it would shift every following sample
+         * by one byte and turn the rest of the waveform into noise. */
+        if (carry >= 0 && n > 0) {
+            int v = (int)(short)(carry | (chunk[0] << 8));
+            double a = (double)v / 32768.0, m = a < 0 ? -a : a;
+            size_t bi = expect ? idx * (size_t)nbuckets / expect : 0;
+            if (bi >= (size_t)nbuckets) bi = (size_t)nbuckets - 1;
+            if (m > peak[bi]) peak[bi] = (float)m;
+            sum[bi] += a * a;
+            cnt[bi]++;
+            idx++;
+            carry = -1;
+            i = 1;
+        }
+        for (; i + 1 < n; i += 2) {
+            int v = (int)(short)(chunk[i] | (chunk[i + 1] << 8));
+            double a = (double)v / 32768.0, m = a < 0 ? -a : a;
+            size_t bi = expect ? idx * (size_t)nbuckets / expect : 0;
+            if (bi >= (size_t)nbuckets) bi = (size_t)nbuckets - 1;
+            if (m > peak[bi]) peak[bi] = (float)m;
+            sum[bi] += a * a;
+            cnt[bi]++;
+            idx++;
+        }
+        if (i < n) carry = chunk[i];
+    }
+    close(fd[0]);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) ;
+
+    for (b = 0; b < nbuckets; b++) {
+        rms[b] = cnt[b] ? (float)sqrt(sum[b] / (double)cnt[b]) : 0.0f;
+        if (rms[b] > 1.0f) rms[b] = 1.0f;
+        if (peak[b] > 1.0f) peak[b] = 1.0f;
+    }
+    free(sum);
+    free(cnt);
+
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return -1;
+    return idx > 0 ? 0 : -1;
+}
+
+int ss_peaks(const char *path, double in, double out, int nbuckets,
+             float *peak, float *rms)
+{
+    double dur = out - in;
+    char ss[32], t[32];
+    char *argv[28];
+    int n = 0;
+    /* Fixed, and high enough to still contain the signal. 8kHz keeps
+     * everything below 4kHz, which is where the energy that shapes a waveform
+     * lives; the reduction to buckets happens here rather than in the
+     * resampler, so the loudest sample survives it. */
+    const int rate = 8000;
+
+    if (!path || !*path || nbuckets <= 0 || dur <= 0) return -1;
+
+    snprintf(ss, sizeof ss, "%.6f", in);
+    snprintf(t,  sizeof t,  "%.6f", dur);
+
+    argv[n++] = "ffmpeg";
+    argv[n++] = "-v"; argv[n++] = "error";
+    argv[n++] = "-nostdin";
+    if (in > 0.0) { argv[n++] = "-ss"; argv[n++] = ss; }
+    argv[n++] = "-i"; argv[n++] = (char *)path;
+    argv[n++] = "-t"; argv[n++] = t;
+    /* No video, no subtitles, no data. Without these a clip whose first
+     * stream is video makes ffmpeg try to put a picture in an s16le container
+     * and fail the whole call instead of ignoring it. */
+    argv[n++] = "-vn"; argv[n++] = "-sn"; argv[n++] = "-dn";
+    argv[n++] = "-ac"; argv[n++] = "1";
+    argv[n++] = "-ar"; argv[n++] = "8000";
+    argv[n++] = "-f"; argv[n++] = "s16le";
+    argv[n++] = "-";
+    argv[n] = NULL;
+
+    return run_peaks(argv, (size_t)(dur * rate), nbuckets, peak, rms);
+}
+
 /* ------------------------------------------------------------- browse -- */
 
 /* Stills this engine can decode. Camera raw is is_raw()'s list and is not
@@ -520,6 +670,19 @@ static int is_still(const char *e)
     static const char *ok[] = {
         "jpg","jpeg","jpe","png","tif","tiff","webp","bmp","gif","heic","heif",
         "avif","jxl","ppm","pgm","pnm","tga","exr","hdr", NULL
+    };
+    int i;
+    for (i = 0; ok[i]; i++) if (!strcasecmp(e, ok[i])) return 1;
+    return 0;
+}
+
+/* Audio this engine can put on a track. Not a subset of the movie list: a
+ * timeline needs a music bed and a voiceover, and neither has a picture. */
+static int is_audio(const char *e)
+{
+    static const char *ok[] = {
+        "mp3","wav","flac","ogg","oga","opus","m4a","aac","wma","aiff","aif",
+        "ape","wv","mka","caf","au", NULL
     };
     int i;
     for (i = 0; ok[i]; i++) if (!strcasecmp(e, ok[i])) return 1;
@@ -636,6 +799,7 @@ int ss_browse(const char *dir, ss_row **rows, char abs_out[1024])
             if (!strcasecmp(e, "syntl"))           type = SS_ROW_PROJECT;
             else if (is_still(e) || is_raw(de->d_name)) type = SS_ROW_IMAGE;
             else if (is_movie(e))                  type = SS_ROW_VIDEO;
+            else if (is_audio(e))                  type = SS_ROW_AUDIO;
             else continue;
         } else {
             continue;

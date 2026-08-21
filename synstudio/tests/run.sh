@@ -630,6 +630,82 @@ if have ffmpeg; then
     $BIN timeline show "$vp" | notseen "an identity transform is not written" "xform	"
 fi
 
+echo "== the audio envelope (waveforms)"
+
+if have ffmpeg; then
+    # Silent for the first half, a full-scale tone for the second. That shape
+    # is the whole test: it catches a bucket mapping that is reversed,
+    # off-by-one, or scrambled, none of which a single loud file would show.
+    wav=$TMP/half.wav
+    ffmpeg -v error -y -f lavfi -i "sine=frequency=1000:duration=2:sample_rate=44100" \
+           -af "volume=enable='lt(t,1)':volume=0" "$wav" 2>/dev/null
+
+    if [ -s "$wav" ]; then
+        $BIN peaks "$wav" --count 10 > "$TMP/pk.tsv" 2>/dev/null
+        check "peaks emits one row per bucket" "10" "$(wc -l < "$TMP/pk.tsv")"
+        check "each row is peak and RMS" "2" \
+              "$(head -1 "$TMP/pk.tsv" | awk -F'\t' '{print NF}')"
+
+        # First half silent, second half loud. Asserting the SHAPE rather than
+        # the numbers keeps this true across encoders.
+        # Compared against EACH OTHER, not against an absolute level. ffmpeg's
+        # sine source is about -18 dBFS rather than full scale, so a threshold
+        # written down here is a threshold that fails on the next ffmpeg.
+        early=$(awk -F'\t' 'NR<=4 {if ($1>m) m=$1} END {printf "%.6f", m}' "$TMP/pk.tsv")
+        late=$(awk -F'\t' 'NR>=7 {if ($1>m) m=$1} END {printf "%.6f", m}' "$TMP/pk.tsv")
+        check "the silent half reads silent" "yes" \
+              "$(awk -v e="$early" 'BEGIN{print (e<0.01)?"yes":"no"}')"
+        check "and the loud half is far above it" "yes" \
+              "$(awk -v e="$early" -v l="$late" \
+                     'BEGIN{print (l>0.02 && l>e*10)?"yes":"no"}')"
+
+        # A sine's crest factor is sqrt(2), so peak/RMS is 3.01 dB. Getting
+        # this right means the RMS is an RMS and not a second peak, and that
+        # the samples were read as SIGNED little-endian shorts — a byte-order
+        # or sign mistake shows up here and almost nowhere else.
+        ratio=$(awk -F'\t' '$2>0.01 {print $1/$2; exit}' "$TMP/pk.tsv")
+        near "a sine's peak is sqrt(2) times its RMS" "1.414" "${ratio:-0}" 0.1
+
+        # And the level itself, against ffmpeg's OWN measurement rather than
+        # against a number written down here.
+        want=$(ffmpeg -hide_banner -i "$wav" -af volumedetect -f null - 2>&1 \
+               | awk '/max_volume/ {print $(NF-1)}')
+        got=$(awk -F'\t' 'BEGIN{m=0} {if ($1>m) m=$1} END {print 20*log(m)/log(10)}' "$TMP/pk.tsv")
+        near "and the peak level matches ffmpeg's own" "${want:-0}" "$got" 0.6
+    fi
+
+    # No audio is an ANSWER, not a failure: 100, and nothing on stdout. A
+    # photograph on a timeline goes through this for its waveform.
+    silent=$TMP/silent.mp4
+    ffmpeg -v error -y -f lavfi -i "testsrc=size=64x64:rate=5:duration=1" \
+           -c:v libx264 -pix_fmt yuv420p "$silent" 2>/dev/null
+    check "a video with no audio answers 100" "100" \
+          "$($BIN peaks "$silent" --count 4 >/dev/null 2>&1; echo $?)"
+    check "and says nothing on stdout" "0" \
+          "$($BIN peaks "$silent" --count 4 2>/dev/null | wc -c)"
+    check "a photograph answers 100 too" "100" \
+          "$($BIN peaks "$TMP/still.png" --count 4 >/dev/null 2>&1; echo $?)"
+
+    # An audio-only file. ss_probe_file is about the PICTURE and fails
+    # outright without a video stream, so everything that asked IT how long a
+    # file is got no answer for a music bed: peaks reported "no audio" for a
+    # file that is nothing but audio, and a whole album added to a track
+    # arrived as a five second clip.
+    bed=$TMP/bed.flac
+    ffmpeg -v error -y -f lavfi -i "sine=frequency=200:duration=7" "$bed" 2>/dev/null
+    if [ -s "$bed" ]; then
+        check "peaks reads an audio-only file" "0" \
+              "$($BIN peaks "$bed" --count 4 >/dev/null 2>&1; echo $?)"
+        near "and knows how long it is" "7" "$(ss_dur=$($BIN peaks "$bed" --count 1 >/dev/null 2>&1; echo)
+                                              $BIN timeline new "$TMP/bed.syntl" >/dev/null
+                                              $BIN timeline track "$TMP/bed.syntl" audio A >/dev/null
+                                              $BIN timeline clip "$TMP/bed.syntl" 0 "$bed" >/dev/null
+                                              $BIN timeline get "$TMP/bed.syntl" 0 0 \
+                                                | awk -F'\t' '/^length/{print $2}')" 0.2
+        $BIN browse "$TMP" | seen "and the picker can find it" "audio	bed.flac"
+    fi
+fi
+
 # A project is a document this program opens, so the picker has to be able to
 # find one. It could not: browse listed what the ENGINE can decode, and a
 # timeline is not decoded by anything.

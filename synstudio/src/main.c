@@ -49,6 +49,9 @@ static void usage(void)
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
 "  render FILE --out OUT         apply the sidecar and write a new file\n"
 "  histogram FILE                256 bins per channel, tab separated\n"
+"  peaks FILE [--in A] [--out-at B] [--count N]\n"
+"                                the audio envelope: peak and RMS per bucket\n"
+"                                (exit 100 = the file has no audio)\n"
 "  pixel R G B [--set K=V]...    one colour through the stack (0..1 encoded)\n"
 "\n"
 "LOOKS\n"
@@ -106,7 +109,7 @@ typedef struct {
     double at, in, outp, speed;
     double fade_in, fade_out;
     double dur, to, head, tail;
-    int    has_dur, has_to, has_head, has_tail, ripple, preview;
+    int    has_dur, has_to, has_head, has_tail, ripple, preview, count;
     const char *colour;
     float  gain, opacity;
     char   set_key[64][64];
@@ -157,6 +160,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
                  !strcmp(a, "--color"))   { const char *v = NEXT(); if (!v) return -1; o->colour = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
+        else if (!strcmp(a, "--count"))   { const char *v = NEXT(); if (!v) return -1; o->count = atoi(v); }
         else if (!strcmp(a, "--print"))   { o->print = 1; }
         else if (!strcmp(a, "--set")) {
             const char *v = NEXT(), *eq;
@@ -679,6 +683,16 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
          * what "add this clip" means before anyone has trimmed it. */
         c.src_in  = o.in;
         c.src_out = o.outp;
+        {
+            /* Asked before the picture probe, because a file with no video
+             * stream fails that probe entirely and used to land here as a
+             * five second clip no matter how long it actually was. */
+            double md = ss_media_duration(c.path);
+            if (md > 0 && c.src_out < 0 && !o.has_dur) {
+                c.src_out = c.src_in + md;
+                c.still = 0;
+            }
+        }
         if (ss_probe_file(c.path, &p) == 0) {
             /* Whether this is a photograph is decided ONCE, here, and stored.
              * The export has to know — a still needs -loop or it contributes a
@@ -978,9 +992,58 @@ static int cmd_timeline(int argc, char **argv)
  * The first line is the directory that was actually listed, as `.` — a window
  * that asked for `~/Pictures/../Pictures` needs to be told where it landed, or
  * its breadcrumb and its `..` disagree. */
+/* The waveform's data. One line per bucket: peak, then RMS, both 0..1.
+ *
+ * Tab separated and one record per line like everything else here, so a
+ * waveform can be eyeballed in a terminal — which is also how the test checks
+ * that silence reads as silence and a tone does not. */
+static int cmd_peaks(const char *path, const opts *o)
+{
+    int n = o->count > 0 ? o->count : 400;
+    float *peak, *rms;
+    double in = o->in, out = o->outp;
+    ss_probe p;
+    int i, rc;
+
+    if (n > 20000) return die("--count is capped at 20000");
+
+    if (out < 0) {
+        /* No duration means nothing to have audio IN. A photograph reaching
+         * here is the ordinary case, not a mistake worth a message — it gets
+         * the same "no audio" answer as a silent movie. */
+        /* ss_media_duration, not the picture probe: a music bed has no video
+         * stream and ss_probe_file fails on it outright. */
+        out = ss_media_duration(path);
+        if (out <= 0) {
+            if (ss_probe_file(path, &p) != 0 || p.duration <= 0) return 100;
+            out = p.duration;
+        }
+    }
+    if (out <= in) return die("out point is not after the in point");
+
+    peak = calloc((size_t)n, sizeof *peak);
+    rms  = calloc((size_t)n, sizeof *rms);
+    if (!peak || !rms) { free(peak); free(rms); return die("out of memory"); }
+
+    rc = ss_peaks(path, in, out, n, peak, rms);
+    if (rc != 0) {
+        free(peak); free(rms);
+        /* Not a failure message: a photograph has no audio and that is the
+         * answer, not an error. The exit status says so for a script. */
+        return 100;
+    }
+
+    for (i = 0; i < n; i++)
+        printf("%.5f\t%.5f\n", (double)peak[i], (double)rms[i]);
+
+    free(peak); free(rms);
+    return 0;
+}
+
 static int cmd_browse(int argc, char **argv)
 {
-    static const char *names[] = { "up", "dir", "image", "video", "project" };
+    static const char *names[] = { "up", "dir", "image", "video", "audio",
+                                   "project" };
     char abs[1024];
     ss_row *rows = NULL;
     int n, i;
@@ -1089,6 +1152,7 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "mask"))   return cmd_mask(argv[2], argc, argv, 3);
 
     if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0) return die("bad option");
+    if (!strcmp(cmd, "peaks"))     return cmd_peaks(argv[2], &o);
     if (!strcmp(cmd, "render"))    return cmd_render(argv[2], &o);
     if (!strcmp(cmd, "histogram")) return cmd_histogram(argv[2], &o);
 

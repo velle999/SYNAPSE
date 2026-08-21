@@ -401,6 +401,11 @@ FloatingWindow {
             const r = root.pickerRows[i]
             if (r.kind === "dir" || r.kind === "up") { out.push(r); continue }
             if (root.pickerFor === "project") { if (r.kind === "project") out.push(r) }
+            // The darkroom develops pictures. A sound file has none, so Open
+            // must not offer one — it would load nothing and say nothing.
+            else if (root.pickerFor === "photo") {
+                if (r.kind === "image" || r.kind === "video") out.push(r)
+            }
             else if (r.kind !== "project") out.push(r)
         }
         return out
@@ -577,6 +582,7 @@ FloatingWindow {
                 root.tl = root.parseTimeline(this.text)
                 if (root.selTrack >= root.tl.tracks.length) { root.selTrack = -1; root.selClip = -1 }
                 root.requestFrame()
+                root.ensureWaves()
             }
         }
         stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
@@ -632,6 +638,95 @@ FloatingWindow {
             // serial in the query string is the only thing making it reload.
             root.frameUrl = "file://" + root.scratch + "-frame.png?v=" + root.frameSerial
             if (root.frameAgain) { root.frameAgain = false; root.startFrame() }
+        }
+    }
+
+    // ── Waveforms ───────────────────────────────────────────────────────────
+    //
+    // One `synstudio peaks` per clip, cached against the clip's own source
+    // range so the buckets map straight onto the rectangle being drawn — no
+    // duration lookup and no arithmetic that can disagree with the picture.
+    // A trim changes the range and costs one re-read, which is the right
+    // trade: trims are deliberate and a decode at 8kHz mono is fast.
+    //
+    // Requests go through a QUEUE, one at a time. A timeline of twenty clips
+    // asking at once would be twenty ffmpeg processes racing each other for
+    // the same disk, and `running = true` on a busy Process is a silent no-op
+    // here, so most of them would simply never happen.
+    property var  wave: ({})
+    property var  waveQueue: []
+    property bool waveBusy: false
+
+    function waveKey(c) {
+        return c.path + "|" + c.srcIn.toFixed(3) + "|" + c.srcOut.toFixed(3)
+    }
+
+    function ensureWaves() {
+        const q = []
+        for (let i = 0; i < root.tl.tracks.length; i++)
+            for (let j = 0; j < root.tl.tracks[i].clips.length; j++) {
+                const c = root.tl.tracks[i].clips[j]
+                // A photograph and a generated clip have no audio to read, and
+                // asking costs a process to be told so.
+                if (c.kind !== "media" || c.still || !c.path) continue
+                const k = root.waveKey(c)
+                if (root.wave[k] !== undefined) continue
+                if (q.indexOf(k) < 0) q.push(k + "\u0000" + c.path
+                                             + "\u0000" + c.srcIn
+                                             + "\u0000" + c.srcOut)
+            }
+        if (q.length === 0) return
+        root.waveQueue = root.waveQueue.concat(q)
+        root.pumpWaves()
+    }
+
+    function pumpWaves() {
+        if (root.waveBusy || root.waveQueue.length === 0) return
+        const job = root.waveQueue[0].split("\u0000")
+        root.waveBusy = true
+        peaksProc.jobKey = job[0]
+        peaksProc.command = [root.bin, "peaks", job[1],
+                             "--in", job[2], "--out-at", job[3],
+                             "--count", "600"]
+        peaksProc.running = true
+    }
+
+    Process {
+        id: peaksProc
+        property string jobKey: ""
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n")
+                const out = []
+                for (let i = 0; i < lines.length; i++) {
+                    if (!lines[i]) continue
+                    const f = lines[i].split("\t")
+                    if (f.length < 2) continue
+                    out.push(parseFloat(f[0]))
+                }
+                peaksProc.parsed = out
+            }
+        }
+        property var parsed: []
+
+        onExited: function (code, status) {
+            // Rebuilt, not mutated: assigning into an existing `var` object
+            // does not re-evaluate anything bound to it — a documented trap in
+            // this repo, and here it would mean the waveform arrives and never
+            // appears.
+            const next = ({})
+            for (const k in root.wave) next[k] = root.wave[k]
+            // An empty array is a real answer: exit 100 means the file has no
+            // audio, and recording that stops it being asked again every time
+            // the timeline reloads.
+            next[peaksProc.jobKey] = (code === 0) ? peaksProc.parsed : []
+            root.wave = next
+
+            peaksProc.parsed = []
+            root.waveQueue = root.waveQueue.slice(1)
+            root.waveBusy = false
+            root.pumpWaves()
         }
     }
 
@@ -1707,6 +1802,33 @@ FloatingWindow {
                                                         border.color: clipRect.isSel
                                                                       ? root.cAccent : root.wash(0.4)
 
+                                                        // Under the label, over
+                                                        // the plate. An audio
+                                                        // lane gives it the
+                                                        // whole clip; a video
+                                                        // lane gives it a strip
+                                                        // along the bottom,
+                                                        // because there the
+                                                        // picture's name is
+                                                        // what identifies it
+                                                        // and the sound is what
+                                                        // you line it up by.
+                                                        Waveform {
+                                                            anchors.left: parent.left
+                                                            anchors.right: parent.right
+                                                            anchors.leftMargin: 1
+                                                            anchors.rightMargin: 1
+                                                            anchors.bottom: parent.bottom
+                                                            anchors.bottomMargin: 2
+                                                            height: lane.modelData.type === "audio"
+                                                                    ? parent.height - 18
+                                                                    : Math.round(parent.height * 0.42)
+                                                            peaks: root.wave[root.waveKey(clipRect.modelData)]
+                                                            ink: lane.modelData.type === "audio"
+                                                                 ? Qt.rgba(0.06, 0.24, 0.16, 1)
+                                                                 : root.cInk
+                                                        }
+
                                                         Text {
                                                             anchors.left: parent.left
                                                             anchors.leftMargin: 6
@@ -2174,6 +2296,7 @@ FloatingWindow {
                                 : rowItem.modelData.kind === "dir"     ? "▸"
                                 : rowItem.modelData.kind === "project" ? "⧉"
                                 : rowItem.modelData.kind === "video"   ? "▶"
+                                : rowItem.modelData.kind === "audio"   ? "♪"
                                 :                                        "▣"
                             color: rowItem.modelData.kind === "dir"
                                 || rowItem.modelData.kind === "up" ? root.cAccent
@@ -2375,6 +2498,61 @@ FloatingWindow {
             asynchronous: true
             visible: mon.front === 1
             onStatusChanged: if (status === Image.Ready) mon.front = 1
+        }
+    }
+
+    // ── A waveform ──────────────────────────────────────────────────────────
+    //
+    // Drawn per PIXEL COLUMN, taking the loudest bucket that falls in each
+    // one. Sampling one bucket per column instead would alias badly zoomed
+    // out — a transient landing between two sampled buckets simply vanishes,
+    // and the waveform quietly stops being a picture of the audio.
+    component Waveform: Canvas {
+        id: wf
+        property var  peaks: null
+        property color ink: "#000000"
+
+        onPeaksChanged: requestPaint()
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        onInkChanged: requestPaint()
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.reset()
+            const d = wf.peaks
+            if (!d || d.length === 0 || width < 2 || height < 3) return
+
+            const w = Math.floor(width), h = height, mid = h / 2
+            ctx.fillStyle = wf.ink
+            ctx.globalAlpha = 0.75
+
+            for (let x = 0; x < w; x++) {
+                const i0 = Math.floor(x * d.length / w)
+                const i1 = Math.max(i0 + 1, Math.floor((x + 1) * d.length / w))
+                let m = 0
+                for (let i = i0; i < i1 && i < d.length; i++)
+                    if (d[i] > m) m = d[i]
+                // Drawn on a dB scale, not linearly.
+                //
+                // Ordinary recorded audio peaks around -18 dBFS, which
+                // LINEARLY is twelve percent of the height — a sliver you
+                // cannot read a cut from, on material that is not remotely
+                // quiet. Mapping -48..0 dB onto the height puts normal
+                // programme material at about two thirds and still leaves
+                // headroom to see something actually loud. It is what every
+                // editor does and what the eye expects.
+                let n = 0
+                if (m > 0.0001) {
+                    n = (20 * Math.log(m) / Math.LN10 + 48) / 48
+                    if (n < 0) n = 0
+                    if (n > 1) n = 1
+                }
+                // A floor of half a pixel, so a quiet passage still reads as a
+                // line of audio rather than as a gap where the clip has none.
+                const half = Math.max(0.5, n * (mid - 1))
+                ctx.fillRect(x, mid - half, 1, half * 2)
+            }
         }
     }
 

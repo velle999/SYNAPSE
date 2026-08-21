@@ -237,12 +237,39 @@ typedef struct {
 } ss_probe;
 
 int ss_probe_file(const char *path, ss_probe *p);
+/* How long anything ffprobe can open runs, in seconds, or 0.
+ *
+ * ss_probe_file is about the PICTURE — it fails outright without a video
+ * stream, because for a darkroom a file with no image in it is not a file. A
+ * music bed on an audio track is exactly that file, and asking the picture
+ * probe how long it is answered "no idea", which made a whole album arrive on
+ * the timeline as a five second clip. */
+double ss_media_duration(const char *path);
 /* max_edge 0 = full resolution. */
 int ss_load(const char *path, ss_image *im, int max_edge);
 /* Frame at a timestamp, for the video pages. */
 int ss_load_frame(const char *path, double t, ss_image *im, int max_edge);
 /* quality 1..100 for jpeg; ignored for png/tiff. bits 8 or 16. */
 int ss_save(const char *path, const ss_image *im, int quality, int bits);
+
+/* ------------------------------------------------------------- peaks -- */
+
+/* An audio envelope, for drawing a waveform on a clip.
+ *
+ * `peak` is the loudest sample in each bucket and `rms` its average power,
+ * both 0..1; a waveform drawn from peak alone is a solid block on anything
+ * compressed, and one drawn from RMS alone hides the transients you are
+ * looking for when you line a cut up to a beat. Real editors draw both, so
+ * both are returned and the caller decides.
+ *
+ * Returns 0, or -1 if the file has no audio at all — which is not an error
+ * worth a message, it is the answer for a photograph.
+ *
+ * The DECODE IS BOUNDED BY THE BUCKET COUNT, not by the length of the clip:
+ * the sample rate is chosen so a two-hour source costs the same as a two
+ * second one. A waveform is an envelope and nothing about it needs 48kHz. */
+int ss_peaks(const char *path, double in, double out, int nbuckets,
+             float *peak, float *rms);
 
 /* ------------------------------------------------------------- browse -- */
 
@@ -256,7 +283,8 @@ int ss_save(const char *path, const ss_image *im, int quality, int bits);
  * Rows are what the window draws: parent first, then directories, then files
  * this engine can actually open. Anything else is not listed, because a row
  * that fails when clicked is worse than an absent one. */
-enum { SS_ROW_UP, SS_ROW_DIR, SS_ROW_IMAGE, SS_ROW_VIDEO, SS_ROW_PROJECT };
+enum { SS_ROW_UP, SS_ROW_DIR, SS_ROW_IMAGE, SS_ROW_VIDEO, SS_ROW_AUDIO,
+       SS_ROW_PROJECT };
 
 typedef struct {
     int  type;

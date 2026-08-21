@@ -79,7 +79,29 @@ pkgver=0.1.0
 #   AND cuts video, and choosing the darkroom for somebody is the wrong half
 #   half the time — there is a start screen with the three ways in, and
 #   `browse` lists .syntl projects so one of them can be opened at all.
-pkgrel=4
+# 5: waveforms on the clips, and audio as a first-class source.
+#
+#   `synstudio peaks` reads an envelope — peak and RMS per bucket — and the
+#   timeline draws it on every clip that has sound. Verified against ffmpeg's
+#   OWN volumedetect rather than a number written down here, and a sine's
+#   peak/RMS ratio is checked against sqrt(2), which is what catches a byte
+#   order or sign mistake in reading s16le.
+#
+#   The first attempt asked ffmpeg to resample down to a few samples per
+#   bucket. Resampling LOW-PASSES: at 200Hz a 440Hz tone is not quieter, it is
+#   GONE, and the test file read as digital silence. The envelope is reduced
+#   by streaming the decode past a bucket accumulator instead, so it stays at
+#   a rate that still contains the signal and costs one chunk of memory
+#   regardless of how long the clip is.
+#
+#   Audio-only files worked nowhere, because ss_probe_file is about the
+#   PICTURE and fails outright without a video stream. A music bed reported
+#   "no audio" to peaks, arrived on a track as a five second clip whatever its
+#   real length, and could not be found in the picker at all — browse listed
+#   what the engine can DECODE and no audio extension was on the list. All
+#   three are fixed: durations come from ss_media_duration, and mp3/wav/flac
+#   and friends are their own row kind.
+pkgrel=5
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
