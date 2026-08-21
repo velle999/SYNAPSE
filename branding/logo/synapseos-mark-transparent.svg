@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" color="#a78bfa" fill="#a78bfa">
+<!-- SynapseOS lockup. Mark is the original vector; the wordmark was traced
+     from synui/data/synapse-logo.png with potrace, so the letterforms are the
+     real ones, not a substituted font. Colour is `currentColor` - set `color`
+     on the <svg> or a parent. Brand purple #a78bfa, ground #0a0a12. -->
+  <g transform="translate(512,512)">
+    <polygon points="0,-464 400,272 -400,272" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+    <circle cx="0" cy="-48" r="36" fill="currentColor"/>
+    <line x1="0" y1="-48" x2="0" y2="-416" stroke="currentColor" stroke-width="8"/>
+    <line x1="0" y1="-48" x2="288" y2="192" stroke="currentColor" stroke-width="8"/>
+    <line x1="0" y1="-48" x2="-288" y2="192" stroke="currentColor" stroke-width="8"/>
+    <line x1="0" y1="-48" x2="176" y2="200" stroke="currentColor" stroke-width="4.4"/>
+    <line x1="0" y1="-48" x2="-176" y2="200" stroke="currentColor" stroke-width="4.4"/>
+    <circle cx="0" cy="-416" r="17.6" fill="currentColor"/>
+    <circle cx="288" cy="192" r="17.6" fill="currentColor"/>
+    <circle cx="-288" cy="192" r="17.6" fill="currentColor"/>
+    <circle cx="176" cy="200" r="12.8" fill="currentColor"/>
+    <circle cx="-176" cy="200" r="12.8" fill="currentColor"/>
+  </g>
+</svg>
