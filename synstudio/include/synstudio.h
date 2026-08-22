@@ -390,6 +390,60 @@ typedef struct {
     ss_develop dev;
 } ss_gradekey;
 
+/* ---- other people's effects ----
+ *
+ * A recipe is a text manifest naming an ffmpeg filter chain and the knobs on
+ * it, so an effect is a FILE somebody can write in an editor and mail to you.
+ * See fx.c for the format and for why every one of them is checked against a
+ * whitelist before it is loaded.
+ *
+ * A clip carries a STACK of them, applied in order, after the grade. */
+#define SS_MAX_FX         8
+#define SS_MAX_FX_PARAMS 10
+
+typedef struct {
+    char   key[24], label[48];
+    double def, lo, hi;
+} ss_fx_param;
+
+typedef struct {
+    char name[32], label[48], group[32], about[160];
+    int  nparam;
+    ss_fx_param param[SS_MAX_FX_PARAMS];
+    int  alpha;                 /* the chain can produce transparency */
+    char filter[2048];
+    char path[512];
+} ss_fx;
+
+/* The catalogue: what is installed, then the user's own, then anything named
+ * in SYNSTUDIO_EFFECTS. A later one of the same name REPLACES an earlier. */
+int          ss_fx_load(void);
+int          ss_fx_count(void);
+const ss_fx *ss_fx_at(int i);
+const ss_fx *ss_fx_find(const char *name);
+/* One file, parsed and checked. 0, or -1 with the reason in `err`. */
+int          ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn);
+/* The chain with its parameters substituted, its labels made unique to `uid`,
+ * and [$in]/[$out] replaced by the labels it is being spliced between. */
+int          ss_fx_expand(const ss_fx *fx, const double *vals, int nvals,
+                          int uid, const char *inlab, const char *outlab,
+                          char *out, size_t n);
+
+/* One effect ON a clip: which recipe, and where its knobs are set. The values
+ * are positional against the recipe's own parameter list; the DOCUMENT stores
+ * them by name, so a recipe that gains a parameter does not shift the meaning
+ * of a project saved before it. */
+typedef struct {
+    char   name[32];
+    int    on;
+    double val[SS_MAX_FX_PARAMS];
+    /* The parameters exactly as the document had them, kept ONLY while the
+     * recipe is not installed. Dropping an effect this machine cannot render
+     * would delete it from the project the next time it was saved — somebody
+     * opening a colleague's cut would quietly throw their work away. */
+    char   raw[256];
+} ss_clip_fx;
+
 /* ---- a property that moves ----
  *
  * A grade key holds a whole develop stack because colour has to be baked to a
@@ -456,6 +510,9 @@ typedef struct {
      * single number instead of a dozen. Kept sorted by property, then time. */
     int    npkeys;
     ss_propkey pkey[SS_MAX_PKEYS];
+
+    int    nfx;
+    ss_clip_fx fx[SS_MAX_FX];
 } ss_clip;
 
 void ss_clip_reset(ss_clip *c);
@@ -503,6 +560,14 @@ int    ss_clip_prop_key(const ss_clip *c, const char *key, int i, ss_propkey *ou
 int    ss_clip_prop_moves(const ss_clip *c, const char *key);  /* 2+ keys */
 int    ss_clip_animated(const ss_clip *c);                     /* any at all */
 void   ss_clip_prop_range(const ss_clip *c, const char *key, double *lo, double *hi);
+
+/* The effect stack on a clip. `add` seeds every knob from the recipe's own
+ * defaults, so an effect that has just landed does what its author meant. */
+int    ss_clip_fx_add(ss_clip *c, const char *name, int at);
+int    ss_clip_fx_remove(ss_clip *c, int i);
+int    ss_clip_fx_move(ss_clip *c, int i, int to);
+int    ss_clip_fx_set(ss_clip *c, int i, const char *key, double v);
+int    ss_clip_fx_get(const ss_clip *c, int i, const char *key, double *v);
 int    ss_ease_value(const char *name);        /* -1 if unknown */
 const char *ss_ease_name(int ease);
 void ss_xform_reset(ss_xform *x);

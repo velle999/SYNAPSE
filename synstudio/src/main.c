@@ -106,6 +106,8 @@ static void usage(void)
 "       out of the outgoing clip's handles if it has them, by rippling\n"
 "       what follows if it does not\n"
 "  timeline transitions          every transition, with its name\n"
+"  timeline fx PROJ T C add NAME [KEY=VALUE...]      an effect on a clip\n"
+"  timeline fx PROJ T C list|remove N|move N TO|set N KEY=VALUE...\n"
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
@@ -124,6 +126,12 @@ static void usage(void)
 "                  a take, with a live meter; stops on a signal\n"
 "  loudness FILE [--in A] [--length S]\n"
 "                  integrated LUFS, true peak and range, from ebur128\n"
+"  fx list         every effect installed, with its group\n"
+"  fx params      every parameter of every effect, with its range\n"
+"  fx show NAME    an effect\'s parameters, with their ranges\n"
+"  fx check NAME|FILE.synfx\n"
+"                  render one frame through it — what an effect has to\n"
+"                  survive before it is worth putting on a clip\n"
 "  formats         what a developed photograph can be written as\n"
 "  browse [DIR]    what is in a folder that this engine can open\n"
 "  kind FILE       image|video|audio|project|none — asked of ffmpeg, not of\n"
@@ -580,6 +588,34 @@ static int tl_save(const char *proj, const ss_timeline *t)
  * for an enum — the choices. The inspector in the window is built from this,
  * so a property added to the table in timeline.c appears there without the
  * QML being touched. */
+/* An effect a project names but this machine has not got.
+ *
+ * The graph builder SKIPS it rather than failing, because a render that stops
+ * dead is worse than one missing a glow. But skipping quietly would mean a
+ * project made on somebody else's machine comes out different with nothing
+ * said, so it is said here — once per name, before anything starts. */
+static void warn_missing_fx(const ss_timeline *t)
+{
+    char seen[SS_MAX_FX * 16][32];
+    int nseen = 0, i, j, k, q;
+
+    for (i = 0; i < t->ntracks; i++)
+        for (j = 0; j < t->track[i].nclips; j++) {
+            const ss_clip *c = &t->track[i].clip[j];
+            for (k = 0; k < c->nfx; k++) {
+                if (ss_fx_find(c->fx[k].name)) continue;
+                for (q = 0; q < nseen; q++)
+                    if (!strcmp(seen[q], c->fx[k].name)) break;
+                if (q < nseen || nseen >= (int)(sizeof seen / sizeof seen[0]))
+                    continue;
+                snprintf(seen[nseen++], sizeof seen[0], "%s", c->fx[k].name);
+                fprintf(stderr, "synstudio: no effect called %s is installed — "
+                                "clips using it render without it\n",
+                        c->fx[k].name);
+            }
+        }
+}
+
 /* Ask each media clip whether it has sound, once, before a graph is built.
  *
  * This lives in the command layer and not in the graph builder for the same
@@ -682,6 +718,121 @@ static int tl_run(char **av, int ac, int print)
     for (i = 0; i < ac; i++) free(av[i]);
     free(av);
     return rc;
+}
+
+/* Rendering ONE frame through an effect is the check that matters.
+ *
+ * A recipe can name only allowed filters, interpolate only declared
+ * parameters and still be nonsense — a misspelled option, a label that goes
+ * nowhere, a blend mode that does not exist — and ffmpeg does not find out
+ * until it builds the graph. So an effect is rendered when it ARRIVES: when it
+ * is checked by hand, and again when it first lands on a clip. The alternative
+ * is finding out at the end of an export. */
+static int fx_render_check(const ss_fx *f)
+{
+    char frag[4096], graph[4400];
+    char **av;
+    int i, ac = 0, bad = 0;
+
+    if (ss_fx_expand(f, NULL, 0, 1, "fxin", "fxout", frag, sizeof frag) != 0)
+        return die("%s: the chain will not expand", f->name);
+    snprintf(graph, sizeof graph,
+             "color=c=0x808080:s=64x64:d=0.04,format=rgba[fxin];%s;"
+             "[fxout]null[o]", frag);
+
+    av = calloc(24, sizeof *av);
+    if (!av) return die("out of memory");
+    av[ac++] = strdup("ffmpeg");
+    av[ac++] = strdup("-v"); av[ac++] = strdup("error");
+    av[ac++] = strdup("-nostdin");
+    av[ac++] = strdup("-filter_complex"); av[ac++] = strdup(graph);
+    av[ac++] = strdup("-map"); av[ac++] = strdup("[o]");
+    av[ac++] = strdup("-frames:v"); av[ac++] = strdup("1");
+    av[ac++] = strdup("-f"); av[ac++] = strdup("null");
+    av[ac++] = strdup("-");
+    av[ac] = NULL;
+    for (i = 0; i < ac; i++) if (!av[i]) bad = 1;
+    if (bad) {
+        for (i = 0; i < ac; i++) free(av[i]);
+        free(av);
+        return die("out of memory");
+    }
+    /* tl_run owns the array and frees it, however it goes. */
+    return tl_run(av, ac, 0);
+}
+
+/* ---- the effect catalogue ----
+ *
+ * `list` and `show` are tables, the same discipline as `formats` and the two
+ * `keys`: the window builds its picker and its sliders from them, so it cannot
+ * offer an effect the engine has not got or a knob the recipe does not have.
+ */
+static int cmd_fx(int argc, char **argv)
+{
+    const char *sub = argc > 2 ? argv[2] : "list";
+    int i;
+
+    if (!strcmp(sub, "list")) {
+        for (i = 0; i < ss_fx_count(); i++) {
+            const ss_fx *f = ss_fx_at(i);
+            printf("%s\t%s\t%s\t%d\t%d\t%s\n",
+                   f->name, f->label, f->group, f->nparam, f->alpha, f->about);
+        }
+        return 0;
+    }
+
+    /* Every parameter of every effect, in ONE call. The window needs the
+     * ranges to draw a slider with and would otherwise be asking `show` once
+     * per effect — twenty-odd processes to open a panel. */
+    if (!strcmp(sub, "params")) {
+        int k;
+        for (i = 0; i < ss_fx_count(); i++) {
+            const ss_fx *f = ss_fx_at(i);
+            for (k = 0; k < f->nparam; k++)
+                printf("%s\t%s\t%g\t%g\t%g\t%s\n", f->name,
+                       f->param[k].key, f->param[k].def, f->param[k].lo,
+                       f->param[k].hi, f->param[k].label);
+        }
+        return 0;
+    }
+
+    if (!strcmp(sub, "show")) {
+        const ss_fx *f = argc > 3 ? ss_fx_find(argv[3]) : NULL;
+        if (!f) return die("no such effect: %s  (try `synstudio fx list`)",
+                           argc > 3 ? argv[3] : "");
+        printf("name\t%s\n", f->name);
+        printf("label\t%s\n", f->label);
+        printf("group\t%s\n", f->group);
+        printf("about\t%s\n", f->about);
+        printf("alpha\t%d\n", f->alpha);
+        printf("from\t%s\n", f->path);
+        for (i = 0; i < f->nparam; i++)
+            printf("param\t%s\t%g\t%g\t%g\t%s\n", f->param[i].key,
+                   f->param[i].def, f->param[i].lo, f->param[i].hi,
+                   f->param[i].label);
+        return 0;
+    }
+
+    if (!strcmp(sub, "check")) {
+        ss_fx one;
+        const ss_fx *f = NULL;
+        char err[160] = "";
+
+        if (argc < 4) return die("check wants an effect or a .synfx file");
+        if (strstr(argv[3], ".synfx")) {
+            if (ss_fx_read(argv[3], &one, err, sizeof err) != 0)
+                return die("%s: %s", argv[3], err);
+            f = &one;
+        } else {
+            f = ss_fx_find(argv[3]);
+            if (!f) return die("no such effect: %s", argv[3]);
+        }
+        if (fx_render_check(f) != 0) return 1;
+        printf("ok\t%s\t%d\n", f->name, f->nparam);
+        return 0;
+    }
+
+    return die("fx: unknown subcommand %s — try list, params, show, check", sub);
 }
 
 /* The verbs. Takes the document by pointer so ONE caller owns it and can free
@@ -1217,6 +1368,101 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         return die("key: unknown subcommand %s — try add, list, set, remove", sub);
     }
 
+    /* The effect stack on one clip.
+     *
+     * Order matters and is the reason this is a list: a blur under a glow and
+     * a glow under a blur are different pictures, and `move` is how you say
+     * which one you meant. */
+    if (!strcmp(verb, "fx")) {
+        const char *sub = argc > 6 ? argv[6] : NULL;
+        ss_clip *c;
+        int i, n;
+
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                       argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+        if (!sub) return die("fx wants add|list|set|remove|move");
+
+        if (!strcmp(sub, "list")) {
+            for (i = 0; i < c->nfx; i++) {
+                const ss_fx *r = ss_fx_find(c->fx[i].name);
+                int q;
+                /* An effect whose recipe is not installed says so rather than
+                 * being quietly left out of the list — it is still IN the
+                 * document, and it will come back the moment the file it
+                 * needs is put back. */
+                printf("%d\t%s\t%s\t%d", i, c->fx[i].name,
+                       r ? r->label : "(missing)", c->fx[i].on);
+                for (q = 0; r && q < r->nparam; q++)
+                    printf("\t%s=%g", r->param[q].key, c->fx[i].val[q]);
+                printf("\n");
+            }
+            return 0;
+        }
+
+        if (!strcmp(sub, "add")) {
+            const char *name = argc > 7 ? argv[7] : NULL;
+            if (!name) return die("fx add wants an effect  "
+                                  "(try `synstudio fx list`)");
+            if (!ss_fx_find(name))
+                return die("no such effect: %s  (try `synstudio fx list`)",
+                           name);
+            /* Rendered through before it is allowed onto the clip. An effect
+             * that cannot build a graph is one an export would die on, and
+             * finding that out here costs one frame of a 64x64 grey. */
+            if (fx_render_check(ss_fx_find(name)) != 0) return 1;
+            n = ss_clip_fx_add(c, name, -1);
+            if (n == -2) return die("a clip carries at most %d effects",
+                                    SS_MAX_FX);
+            if (n < 0) return die("cannot add %s", name);
+            for (i = 8; i < argc; i++) {
+                char *eq = strchr(argv[i], '=');
+                if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
+                *eq = '\0';
+                if (ss_clip_fx_set(c, n, argv[i], atof(eq + 1)) != 0)
+                    return die("%s has no %s  (try `synstudio fx show %s`)",
+                               name, argv[i], name);
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("%d\n", n);
+            return 0;
+        }
+
+        if (!strcmp(sub, "set")) {
+            if (argc < 9) return die("fx set wants PROJ T C set N KEY=VALUE...");
+            n = atoi(argv[7]);
+            if (n < 0 || n >= c->nfx) return die("no effect %d on this clip", n);
+            for (i = 8; i < argc; i++) {
+                char *eq = strchr(argv[i], '=');
+                if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
+                *eq = '\0';
+                if (ss_clip_fx_set(c, n, argv[i], atof(eq + 1)) != 0)
+                    return die("%s has no %s", c->fx[n].name, argv[i]);
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        if (!strcmp(sub, "remove")) {
+            n = argc > 7 ? atoi(argv[7]) : -1;
+            if (ss_clip_fx_remove(c, n) != 0)
+                return die("no effect %d on this clip", n);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        if (!strcmp(sub, "move")) {
+            if (argc < 9) return die("fx move wants an effect and where to");
+            if (ss_clip_fx_move(c, atoi(argv[7]), atoi(argv[8])) != 0)
+                return die("cannot move %s to %s", argv[7], argv[8]);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        return die("fx: unknown subcommand %s — try add, list, set, remove, "
+                   "move", sub);
+    }
+
     /* A transition on the cut under the playhead, in one command.
      *
      * The kind and the length are properties like any other and `set` writes
@@ -1439,6 +1685,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
             return die("bad option");
         if (!o.out) return die("export needs --out");
+        warn_missing_fx(t);
         if (!mkdtemp(dir)) return die("cannot make a scratch directory");
 
         /* The .cube per graded clip and the text file per title, written
@@ -1740,6 +1987,7 @@ int main(int argc, char **argv)
         if (argc < 3) return die("kind needs a file");
         return cmd_kind(argv[2]);
     }
+    if (!strcmp(cmd, "fx"))       return cmd_fx(argc, argv);
     if (!strcmp(cmd, "gui"))      return cmd_gui(argc, argv);
     if (!strcmp(cmd, "timeline")) return cmd_timeline(argc, argv);
 

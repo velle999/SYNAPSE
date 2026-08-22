@@ -1,0 +1,11 @@
+# synstudio effect
+name    bloom
+label   Bloom
+group   Light
+about   Only what is already bright blooms — the highlights are cut out first
+param   amount     0.6  0  1    Amount
+param   radius     20   1  80   Radius
+param   threshold  0.7  0  1    Threshold
+filter  [$in]split[b0][b1];
+filter  [b1]lutyuv=y='if(gt(val,$threshold*255),val,16)',gblur=sigma=$radius[b2];
+filter  [b0][b2]blend=all_mode=screen:all_opacity=$amount[$out]

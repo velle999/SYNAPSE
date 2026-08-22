@@ -1,0 +1,6 @@
+# synstudio effect
+name    flip
+label   Flip horizontally
+group   Geometry
+about   Left becomes right
+filter  [$in]hflip[$out]

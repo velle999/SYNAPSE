@@ -1,0 +1,10 @@
+# synstudio effect
+name    bluescreen
+label   Blue screen
+group   Key
+about   The same, for a blue backing
+alpha   1
+param   similarity  0.2   0.01  1  Similarity
+param   blend       0.05  0     1  Blend
+filter  [$in]format=rgba,chromakey=color=0x0047bb:similarity=$similarity:
+filter  blend=$blend[$out]

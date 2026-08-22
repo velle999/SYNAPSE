@@ -1,0 +1,6 @@
+# synstudio effect
+name    flop
+label   Flip vertically
+group   Geometry
+about   Top becomes bottom
+filter  [$in]vflip[$out]

@@ -1,0 +1,7 @@
+# synstudio effect
+name    posterise
+label   Posterise
+group   Texture
+about   Fewer levels of brightness, so gradients become bands on purpose
+param   step  32  2  128  Step
+filter  [$in]lutyuv=y='trunc(val/$step)*$step'[$out]

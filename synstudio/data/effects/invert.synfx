@@ -1,0 +1,6 @@
+# synstudio effect
+name    invert
+label   Invert
+group   Colour
+about   A negative
+filter  [$in]negate[$out]

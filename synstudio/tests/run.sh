@@ -14,6 +14,22 @@ BIN=${1:-./build/synstudio}
 [ -x "$BIN" ] || { echo "no binary at $BIN" >&2; exit 1; }
 BIN=$(readlink -f "$BIN")
 
+# The effects are DATA, and an uninstalled build has not got them where the
+# binary looks. Point it at the source tree — the same variable a third party
+# would use to load a bundle of their own.
+#
+# Relative to THIS SCRIPT and not to the binary: a sanitiser build lives in
+# /tmp, and a path worked out from there finds nothing and takes seventeen
+# assertions down with it, all of them reading as broken effects.
+if [ -z "${SYNSTUDIO_EFFECTS:-}" ]; then
+    for d in "$(dirname "$0")/../data/effects" "$(dirname "$BIN")/../data/effects"; do
+        [ -d "$d" ] || continue
+        SYNSTUDIO_EFFECTS=$(cd "$d" && pwd)
+        export SYNSTUDIO_EFFECTS
+        break
+    done
+fi
+
 TMP=$(mktemp -d /tmp/synstudio-test-XXXXXX) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
@@ -55,6 +71,19 @@ rxseen() {  # rxseen <label> <regex> <<< haystack on stdin
     cat > "$f"
     if grep -E -- "$rx" "$f" >/dev/null; then ok
     else bad "$label: nothing matches /$rx/"; head -3 "$f" | sed 's/^/        /'; fi
+}
+
+# Two pixels the same to within a code value or two. Not bit for bit: the
+# monitor and the export reach the same picture through graphs that round in
+# different places — a moving edge, a blur, a blend — and anything larger than
+# a couple of values is a different picture rather than a different rounding.
+samepx() {  # samepx <label> <a> <b>
+    if awk -v a="$2" -v b="$3" 'BEGIN {
+            split(a, x, ","); split(b, y, ",");
+            for (i = 1; i <= 3; i++) { d = x[i] - y[i]; if (d < 0) d = -d;
+                                       if (d > 3) exit 1 }
+            exit 0 }'; then ok
+    else bad "$1: [$2] and [$3] are different pictures"; fi
 }
 
 notseen() {
@@ -1172,6 +1201,193 @@ if [ -s "$vclip" ]; then
           "$(awk -v b="$rbefore" \
                  -v a="$($BIN timeline show "$rp" | awk -F'\t' '/^# duration/ { print $2 }')" \
                  'BEGIN { print (b - a > 0.9 && b - a < 1.1) ? "yes" : "no" }')"
+fi
+
+echo "== effects (a recipe is a FILE somebody else can write)"
+
+# The whole point of the format: an effect is a text manifest naming an ffmpeg
+# filter chain, so a third party ships one with no compiler and nothing to
+# rebuild when ffmpeg bumps a SONAME. Which means the engine is running a
+# string somebody else wrote, and most of this section is about that.
+
+check "the shipped effects load" "yes" \
+      "$([ "$($BIN fx list | wc -l)" -ge 24 ] && echo yes || echo no)"
+$BIN fx list | seen "each with a group to file it under" "glow	Glow	Light"
+$BIN fx show glow | seen "and parameters with ranges and defaults" \
+    "param	radius	16	1	80"
+check "an effect nobody has is not an effect" "1" \
+      "$($BIN fx show nosuchthing >/dev/null 2>&1; echo $?)"
+
+# ---- every shipped recipe RENDERS ------------------------------------
+#
+# The parser can accept a recipe that only names allowed filters, interpolates
+# only declared parameters — and is still nonsense, because a misspelled
+# option or a label going nowhere is not found until ffmpeg builds the graph.
+# One frame of 64x64 grey through each is the answer.
+broken=0
+for e in $($BIN fx list | cut -f1); do
+    $BIN fx check "$e" >/dev/null 2>&1 || { broken=$((broken + 1)); echo "        $e"; }
+done
+check "every one of them builds a graph ffmpeg accepts" "0" "$broken"
+
+# ---- what a recipe may NOT do ----------------------------------------
+#
+# A filter string can do anything ffmpeg can, INCLUDING READ FILES. That is
+# the whole risk of shipping effects as text, and these are the four walls
+# around it. Each of these files parses; none of them is allowed to load.
+mkdir -p "$TMP/badfx"
+cat > "$TMP/badfx/reader.synfx" <<'FX'
+name    reader
+filter  [$in]movie=/etc/passwd[m];[$in][m]blend=all_mode=screen[$out]
+FX
+cat > "$TMP/badfx/filearg.synfx" <<'FX'
+name    filearg
+filter  [$in]lut3d=file=/tmp/whatever.cube[$out]
+FX
+cat > "$TMP/badfx/undeclared.synfx" <<'FX'
+name    undeclared
+filter  [$in]gblur=sigma=$radius[$out]
+FX
+cat > "$TMP/badfx/noports.synfx" <<'FX'
+name    noports
+filter  gblur=sigma=4
+FX
+cat > "$TMP/badfx/multiframe.synfx" <<'FX'
+name    multiframe
+filter  [$in]tmix=frames=5[$out]
+FX
+# Nothing to do with files: `crop` is refused because it changes the GEOMETRY
+# out from under the transform that owns it, and the monitor and the export
+# would then disagree about where the picture is.
+cat > "$TMP/badfx/geometry.synfx" <<'FX'
+name    geometry
+filter  [$in]crop=10:10:0:0[$out]
+FX
+
+$BIN fx check "$TMP/badfx/reader.synfx" 2>&1 \
+    | seen "a filter that reads a file is not allowed" "may not name a file"
+$BIN fx check "$TMP/badfx/filearg.synfx" 2>&1 \
+    | seen "nor is an argument that names one" "may not name a file"
+$BIN fx check "$TMP/badfx/undeclared.synfx" 2>&1 \
+    | seen "a parameter nobody declared is refused" "is not a parameter"
+$BIN fx check "$TMP/badfx/noports.synfx" 2>&1 \
+    | seen "a chain with no way in or out is refused" "must take"
+$BIN fx check "$TMP/badfx/multiframe.synfx" 2>&1 \
+    | seen "and a filter needing a WINDOW of frames is refused" \
+      "not an allowed filter"
+$BIN fx check "$TMP/badfx/geometry.synfx" 2>&1 \
+    | seen "so is one that changes the size of the frame" \
+      "not an allowed filter"
+
+# None of them reached the catalogue either — the check is at LOAD, not at use.
+oldfx=${SYNSTUDIO_EFFECTS:-}
+SYNSTUDIO_EFFECTS="$TMP/badfx" $BIN fx list > "$TMP/badlist.txt" 2>/dev/null
+check "and none of them is in the catalogue" "0" \
+      "$(grep -cE '^(reader|filearg|undeclared|noports|multiframe|geometry)	' \
+              "$TMP/badlist.txt")"
+
+# ---- a good one, from outside ---------------------------------------
+cat > "$TMP/badfx/mine.synfx" <<'FX'
+name    mine
+label   Mine
+group   Local
+param   amount  0.5  0  1  Amount
+filter  [$in]hue=s=$amount[$out]
+FX
+SYNSTUDIO_EFFECTS="$TMP/badfx" $BIN fx check mine \
+    | seen "an effect dropped in a folder is an effect" "ok	mine"
+
+if have ffmpeg && [ -s "$box" ]; then
+    fp=$TMP/fx.syntl
+    $BIN timeline new "$fp" --size 160x90 --fps 25
+    $BIN timeline track "$fp" video V >/dev/null
+    $BIN timeline clip "$fp" 0 "$box" --at 0 --dur 1 >/dev/null
+
+    # ---- the stack ---------------------------------------------------
+    check "adding an effect reports where it landed" "0" \
+          "$($BIN timeline fx "$fp" 0 0 add blur radius=4)"
+    check "and the next one goes after it" "1" \
+          "$($BIN timeline fx "$fp" 0 0 add glow)"
+    $BIN timeline fx "$fp" 0 0 list | seen "a knob set on the way in sticks" \
+        "blur	Blur	1	radius=4"
+    $BIN timeline fx "$fp" 0 0 list | seen "and the rest come from the recipe" \
+        "glow	Glow	1	amount=0.5	radius=16"
+
+    # Order is the reason this is a list and not a set.
+    $BIN timeline fx "$fp" 0 0 move 1 0
+    check "move puts one before the other" "glow" \
+          "$($BIN timeline fx "$fp" 0 0 list | head -1 | cut -f2)"
+    $BIN timeline export "$fp" --out /dev/null --print \
+        | rxseen "and the graph applies them in that order" \
+          'blend=all_mode=screen.*gblur=sigma=4'
+    $BIN timeline fx "$fp" 0 0 move 0 1
+
+    # ---- a value out of a document cannot become a filter -------------
+    #
+    # Every parameter is a NUMBER, clamped to the recipe's own range and
+    # printed by the engine — never carried through from the document as
+    # text. This is what stops a project file smuggling an argument into
+    # somebody else's filter chain.
+    $BIN timeline fx "$fp" 0 0 set 0 "radius=4:crop=10:10:0:0"
+    $BIN timeline export "$fp" --out /dev/null --print \
+        | notseen "a parameter cannot smuggle in a filter" "crop=10"
+    $BIN timeline fx "$fp" 0 0 set 0 radius=9999
+    check "and it is clamped to the range the recipe declared" "radius=60" \
+          "$($BIN timeline fx "$fp" 0 0 list | head -1 | cut -f5)"
+    $BIN timeline fx "$fp" 0 0 set 0 radius=4
+
+    # And a value that never went through the setter at all — somebody's hand
+    # in the project file — is clamped when it is READ, so the number that
+    # reaches the filter is always one the recipe allows.
+    sed 's/radius=4/radius=99999/' "$fp" > "$fp.hand"
+    $BIN timeline export "$fp.hand" --out /dev/null --print \
+        | seen "a hand-edited value is clamped on the way in" "gblur=sigma=60"
+
+    # ---- the document ------------------------------------------------
+    $BIN timeline show "$fp" | seen "the stack is written by NAME" \
+        "fx	blur	1	radius=4"
+    check "and reads back" "2" "$($BIN timeline fx "$fp" 0 0 list | wc -l)"
+
+    # An effect this machine has not got must survive being loaded and
+    # SAVED — dropping it would delete somebody else's work from their
+    # project the first time it was opened on the wrong machine.
+    kp=$TMP/keep.syntl
+    sed 's/^fx\tglow/fx\tnotinstalled/' "$fp" > "$kp"
+    $BIN timeline fx "$kp" 0 0 list | seen "an uninstalled effect says so" \
+        "notinstalled	(missing)"
+    $BIN timeline set "$kp" 0 0 opacity=0.9
+    $BIN timeline show "$kp" | seen "and is written back exactly as it came" \
+        "fx	notinstalled	1	amount=0.5	radius=16"
+    $BIN timeline export "$kp" --out /dev/null --print 2>&1 \
+        | seen "the export says what it is missing" "no effect called notinstalled"
+
+    # ---- the monitor and the export are the same picture --------------
+    $BIN timeline export "$fp" --out "$TMP/fx.mp4" >/dev/null 2>&1
+    check "a clip with effects still exports" "yes" \
+          "$([ -s "$TMP/fx.mp4" ] && echo yes || echo no)"
+    $BIN timeline frame "$fp" --at 0.5 --out "$TMP/fxm.png" >/dev/null 2>&1
+    ffmpeg -v error -y -i "$TMP/fx.mp4" -vf "select=eq(n\,12)" \
+           -fps_mode passthrough -frames:v 1 -update 1 "$TMP/fxe.png" 2>/dev/null
+    samepx "and the monitor is the same picture" \
+           "$(pixel_at "$TMP/fxm.png" 160 40 45)" \
+           "$(pixel_at "$TMP/fxe.png" 160 40 45)"
+
+    # ---- an effect that would die at export time never lands ----------
+    cat > "$TMP/badfx/lies.synfx" <<'FX'
+name    lies
+filter  [$in]blend=all_mode=thereisnosuchmode[$out]
+FX
+    SYNSTUDIO_EFFECTS="$TMP/badfx" \
+        $BIN timeline fx "$fp" 0 0 add lies >/dev/null 2>&1
+    check "an effect ffmpeg will not build is refused when it lands" "1" "$?"
+    check "and it is not on the clip" "2" \
+          "$($BIN timeline fx "$fp" 0 0 list | wc -l)"
+
+    # ---- a key needs the chain to carry alpha -------------------------
+    $BIN timeline fx "$fp" 0 0 add greenscreen >/dev/null
+    $BIN timeline export "$fp" --out /dev/null --print \
+        | rxseen "an effect that makes transparency gets an rgba chain" \
+          'format=rgba,scale|format=rgba,'
 fi
 
 echo "== the audio envelope (waveforms)"

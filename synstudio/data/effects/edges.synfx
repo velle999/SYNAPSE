@@ -1,0 +1,8 @@
+# synstudio effect
+name    edges
+label   Edge detect
+group   Texture
+about   Where the picture changes, drawn over where it does not
+param   low   0.1  0  1  Low threshold
+param   high  0.4  0  1  High threshold
+filter  [$in]edgedetect=low=$low:high=$high:mode=colormix[$out]

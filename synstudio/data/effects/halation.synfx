@@ -1,0 +1,13 @@
+# synstudio effect
+name    halation
+label   Halation
+group   Light
+about   The red bleed film gets around a highlight, from light scattering back
+about   off the base — bright areas only, blurred, tinted warm, screened back
+param   amount     0.5  0  1   Amount
+param   radius     24   1  90  Radius
+param   threshold  0.75 0  1   Threshold
+filter  [$in]split[h0][h1];
+filter  [h1]lutyuv=y='if(gt(val,$threshold*255),val,16)',gblur=sigma=$radius,
+filter  colorchannelmixer=rr=1:gg=0.45:bb=0.22[h2];
+filter  [h0][h2]blend=all_mode=screen:all_opacity=$amount[$out]

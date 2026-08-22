@@ -1,0 +1,8 @@
+# synstudio effect
+name    duotone
+label   Duotone
+group   Colour
+about   Everything pushed to one hue, the way a poster is printed in two inks
+param   hue         210  0  360  Hue
+param   saturation  0.6  0  1    Saturation
+filter  [$in]colorize=hue=$hue:saturation=$saturation:lightness=0[$out]

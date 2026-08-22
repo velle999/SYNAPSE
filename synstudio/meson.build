@@ -32,6 +32,7 @@ sources = files(
   'src/lut.c',
   'src/io.c',
   'src/timeline.c',
+  'src/fx.c',
 )
 
 executable('synstudio', sources,
@@ -46,6 +47,16 @@ executable('synstudio', sources,
 install_data('data/synstudio.qml', install_dir: get_option('datadir') / 'synstudio')
 install_data('data/synstudio-playback.qml',
              install_dir: get_option('datadir') / 'synstudio')
+# The effects. A recipe is DATA — a text manifest naming a filter chain — so
+# these install like the QML does, and a third party's own go in
+# ~/.config/synstudio/effects, which is read after these and wins on a name.
+#
+# install_subdir rather than a list: an effect is added by writing a file, and
+# a build that needed editing as well would be a build that quietly shipped
+# twenty-six of the twenty-seven.
+install_subdir('data/effects',
+               install_dir: get_option('datadir') / 'synstudio')
+
 install_data('data/synstudio.desktop',
              install_dir: get_option('datadir') / 'applications')
 

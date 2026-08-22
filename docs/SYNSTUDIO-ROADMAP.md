@@ -20,7 +20,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
 | cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
 | audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
-| effects   | sixty transitions; no filter effects yet                      |
+| effects   | sixty transitions, twenty-seven effects, and a format for more |
 | delivery  | works, thin — six formats, no range, no presets, no queue      |
 | media     | one project at a time — no pool, no proxies, no relink         |
 
@@ -62,23 +62,47 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
       the missing half
 - [ ] look files — a develop stack is already tab-separated text; name it
       `.synlook`, give it a browser, and a look becomes shareable
-- [ ] **effect recipes** — a text manifest naming a filter chain and its
-      parameters, so a third party ships an effect with no compiler:
+- [x] **effect recipes** — **shipped in 0.1.0-15.** A text manifest naming a
+      filter chain and its parameters, so a third party ships an effect with
+      no compiler:
 
       name    Halation
       param   strength  0.4   0  1   float  Strength
       param   radius    12    1  64  float  Radius
       filter  [$in]split[a][b];[b]lumakey=0.6,gblur=sigma=$radius,...[$out]
 
-      Validated by rendering ONE frame through it on arrival, so a broken
-      effect fails when it lands rather than at the end of an export.
-      ⚠ a filter string can do anything ffmpeg can, including read files —
-      needs a filter whitelist and no interpolation of anything undeclared.
-- [ ] title templates — the same manifest with `drawtext` behind it
-- [ ] two dozen built-in effects, all filters that exist today: blur, glow,
-      bloom, halation, pixelate, chroma/luma key, lens distortion, chromatic
-      aberration, mirror, edge detect, posterise, deband, deflicker, film
-      damage, light rays, scanlines/CRT, glitch
+      Validated by rendering ONE frame through it on arrival — when it is
+      checked, and again when it first lands on a clip — so a broken effect
+      fails then rather than at the end of an export.
+
+      ⚠ A filter string can do anything ffmpeg can, INCLUDING READ FILES.
+      Four walls: a whitelist of filter names, a refusal of any argument that
+      names a file, nothing interpolated that was not declared, and every
+      parameter a NUMBER clamped to the recipe's own range and printed by the
+      engine. The whitelist is also what keeps the monitor honest — everything
+      on it is one frame in, one frame out, same size, same answer every time,
+      so nothing needing a WINDOW of frames (tmix, deflicker), changing the
+      GEOMETRY (crop, scale, rotate) or RANDOM (noise) can be in a recipe.
+
+      Installed to `$datadir/synstudio/effects`, a user's own to
+      `~/.config/synstudio/effects` (which wins on a name), and a bundle
+      anywhere via `SYNSTUDIO_EFFECTS`. `fx list|params|show|check`,
+      `timeline fx add|list|set|remove|move`.
+- [ ] title templates — the same manifest with `drawtext` behind it. Not the
+      effect whitelist: drawtext reads a font and a textfile, so a title
+      recipe needs its own rules about what a caption may contain
+- [ ] keyframed effect parameters — the keys are in place for clip properties,
+      but an effect's knobs are a dynamic table and most of the filters behind
+      them take a fixed value, not an expression
+- [x] **twenty-seven built-in effects**, all of them recipes like anybody
+      else's: blur, sharpen, soft focus, glow, bloom, halation, pixelate,
+      posterise, invert, desaturate, sepia, duotone, colour temperature,
+      thermal, vignette, chromatic aberration, lens distortion, edge detect,
+      deband, scanlines, glitch, flip, flop, green screen, blue screen, luma
+      key, despill
+- [no] film damage and grain as effects — both want randomness, and a random
+       filter renders a different frame in the monitor than in the export.
+       Grain is a develop setting, where it is deterministic
 - [no] an OpenFX host — third-party compiled plug-ins in-process is the
        opposite of the rule that survived an ffmpeg SONAME bump
 - [no] DCTL — needs a realtime GPU pipeline that does not exist here
@@ -192,7 +216,9 @@ Fairlight-style automation: four features for one piece of work.
 5. ~~**xfade transitions + audio crossfades**~~ — **done, 0.1.0-14.** Sixty
    kinds, dip to colour, the sound crossing with the picture, and one command
    that makes the overlap as well as the transition.
-6. **The effect recipe format** — 3–4 days, plus two dozen effects in it.
+6. ~~**The effect recipe format**~~ — **done, 0.1.0-15.** A recipe is a text
+   file naming a filter chain, checked against a whitelist and rendered
+   through before it is trusted; twenty-seven of them ship.
 7. **LUT and look import** — 1–2 days.
 8. **Titles worth using**, then `.srt` — 2 days.
 9. **Retime and stabilisation** — 2 days.

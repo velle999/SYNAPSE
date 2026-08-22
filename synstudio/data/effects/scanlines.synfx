@@ -1,0 +1,9 @@
+# synstudio effect
+name    scanlines
+label   Scanlines
+group   Screen
+about   Every other line darkened, the way a tube drew a picture
+param   depth  0.4  0  1  Depth
+filter  [$in]format=gbrap,geq=r='r(X,Y)*(1-$depth*mod(Y\,2))':
+filter  g='g(X,Y)*(1-$depth*mod(Y\,2))':b='b(X,Y)*(1-$depth*mod(Y\,2))':
+filter  a='alpha(X,Y)'[$out]

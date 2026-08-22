@@ -777,10 +777,23 @@ FloatingWindow {
                        fadeIn: parseFloat(f[7]), fadeOut: parseFloat(f[8]),
                        path: f[9] || "", kind: "media", still: false,
                        text: "", trans: "none", graded: false, grade: ({}), keys: [],
-                       anim: ({}), animAll: [] }
+                       anim: ({}), animAll: [], fx: [] }
                 cl.len = (cl.srcOut - cl.srcIn) / (cl.speed > 0 ? cl.speed : 1)
                 tr.clips.push(cl)
                 if (cl.tlIn + cl.len > dur) dur = cl.tlIn + cl.len
+                break
+            // One line per effect, in the order they apply, with the knobs
+            // by name. An effect this machine has not got still appears —
+            // it is in the document and it is not this window's to drop.
+            case "fx":
+                if (cl) {
+                    const p = ({})
+                    for (let q = 3; q < f.length; q++) {
+                        const eq = f[q].indexOf("=")
+                        if (eq > 0) p[f[q].slice(0, eq)] = parseFloat(f[q].slice(eq + 1))
+                    }
+                    cl.fx.push({ name: f[1], on: f[2] === "1", param: p })
+                }
                 break
             // One line per parameter key: a property, a time, a value and how
             // it leaves. Unlike a grade key there is no block to enter.
@@ -1023,6 +1036,73 @@ FloatingWindow {
         if (key === "trans" && root.transLabels[choice])
             return root.transLabels[choice]
         return choice
+    }
+
+    // ── Effects ─────────────────────────────────────────────────────────────
+    //
+    // The catalogue and every parameter in it, in two calls at startup. An
+    // effect is a FILE — a recipe naming a filter chain — so this list is
+    // whatever is installed plus whatever the user has dropped in their own
+    // folder, and this window has no idea what any of them do.
+    property var fxList: []
+    property var fxParams: ({})     // name -> [{key, def, lo, hi, label}]
+    property bool fxPicking: false
+
+    function fxLabel(name) {
+        for (let i = 0; i < root.fxList.length; i++)
+            if (root.fxList[i].name === name) return root.fxList[i].label
+        return name + " (missing)"
+    }
+
+    function fxParamsOf(name) { return root.fxParams[name] || [] }
+
+    // What the clip's effect stack is, straight out of the document — no
+    // extra process, because `timeline show` already carries it.
+    function clipFx() {
+        const c = root.selClipObj
+        return (c && c.fx) ? c.fx : []
+    }
+
+    function fxRun(args) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["fx", root.proj, String(root.selTrack),
+                    String(root.selClip)].concat(args))
+    }
+
+    Process {
+        id: fxListProc
+        command: [root.bin, "fx", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 3) continue
+                    out.push({ name: f[0], label: f[1], group: f[2],
+                               alpha: f[4] === "1", about: f[5] || "" })
+                }
+                root.fxList = out
+            }
+        }
+    }
+
+    Process {
+        id: fxParamProc
+        command: [root.bin, "fx", "params"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = ({}), lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 6) continue
+                    if (!m[f[0]]) m[f[0]] = []
+                    m[f[0]].push({ key: f[1], def: parseFloat(f[2]),
+                                   lo: parseFloat(f[3]), hi: parseFloat(f[4]),
+                                   label: f[5] })
+                }
+                root.fxParams = m
+            }
+        }
     }
 
     Process {
@@ -2174,6 +2254,8 @@ FloatingWindow {
         keysProc.running = true
         clipKeysProc.running = true
         transListProc.running = true
+        fxListProc.running = true
+        fxParamProc.running = true
         if (root.proj) {
             root.selTrack = 0
             root.reloadTimeline()
@@ -3723,6 +3805,140 @@ FloatingWindow {
                                 }
                             }
 
+                            // ── Effects ─────────────────────────────────
+                            //
+                            // A stack, in the order it applies, after the
+                            // grade. Every row in it — the list, the knobs,
+                            // the ranges — comes from the engine's catalogue,
+                            // so an effect somebody wrote this morning and
+                            // dropped in a folder appears here with its own
+                            // sliders and this file never learns its name.
+                            Rectangle {
+                                width: parent.width
+                                height: 34
+                                color: root.wash(0.20)
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 12
+                                    text: "Effects"
+                                    color: root.cText
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                                Tag {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 10
+                                    label: root.fxPicking ? "✕" : "+ Add"
+                                    on: root.fxPicking
+                                    onClicked: root.fxPicking = !root.fxPicking
+                                }
+                            }
+
+                            // The catalogue, when it is being picked from.
+                            Rectangle {
+                                width: parent.width
+                                height: root.fxPicking ? 170 : 0
+                                visible: root.fxPicking
+                                color: root.wash(0.10)
+                                clip: true
+
+                                ListView {
+                                    id: fxpick
+                                    anchors.fill: parent
+                                    anchors.margins: 6
+                                    model: root.fxList
+                                    clip: true
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        width: fxpick.width
+                                        height: 20
+                                        color: "transparent"
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 6
+                                            width: parent.width - 12
+                                            elide: Text.ElideRight
+                                            text: parent.modelData.label + "   ·   "
+                                                  + parent.modelData.group
+                                            color: root.cText
+                                            font.pixelSize: 10
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                root.fxRun(["add", parent.modelData.name])
+                                                root.fxPicking = false
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: root.clipFx()
+
+                                Column {
+                                    id: fxrow
+                                    required property var modelData
+                                    required property int index
+                                    width: inspCol.width
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 26
+                                        color: root.wash(0.14)
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 16
+                                            width: parent.width - 130
+                                            elide: Text.ElideRight
+                                            text: (fxrow.index + 1) + ". "
+                                                  + root.fxLabel(fxrow.modelData.name)
+                                            color: fxrow.modelData.on ? root.cText : root.cDim
+                                            font.pixelSize: 11
+                                        }
+                                        Row {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 10
+                                            spacing: 4
+                                            // Order is the reason the stack is
+                                            // a list: a blur under a glow and a
+                                            // glow under a blur are different
+                                            // pictures.
+                                            Tag { label: "▲"; on: false
+                                                  onClicked: root.fxRun(
+                                                      ["move", String(fxrow.index),
+                                                       String(Math.max(0, fxrow.index - 1))]) }
+                                            Tag { label: "▼"; on: false
+                                                  onClicked: root.fxRun(
+                                                      ["move", String(fxrow.index),
+                                                       String(fxrow.index + 1)]) }
+                                            Tag { label: fxrow.modelData.on ? "on" : "off"
+                                                  on: fxrow.modelData.on
+                                                  onClicked: root.fxRun(
+                                                      ["set", String(fxrow.index),
+                                                       "on=" + (fxrow.modelData.on ? 0 : 1)]) }
+                                            Tag { label: "✕"; on: false
+                                                  onClicked: root.fxRun(
+                                                      ["remove", String(fxrow.index)]) }
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: root.fxParamsOf(fxrow.modelData.name)
+                                        FxCtl {
+                                            fxIndex: fxrow.index
+                                            values: fxrow.modelData.param
+                                        }
+                                    }
+                                }
+                            }
+
                             // ── The grade ───────────────────────────────
                             //
                             // The SAME table the darkroom draws, on a clip.
@@ -5005,6 +5221,85 @@ FloatingWindow {
                 }
                 onPressed: function (m) { commit(m.x) }
                 onPositionChanged: function (m) { if (pressed) commit(m.x) }
+            }
+        }
+    }
+
+    // ── One effect parameter ────────────────────────────────────────────────
+    //
+    // The same slider as everywhere else, over a row that came out of a text
+    // file the engine parsed. The range is the recipe author's; the value
+    // written back is a NUMBER, which is what stops a project file smuggling a
+    // filter argument into somebody else's chain.
+    component FxCtl: Item {
+        id: fxc
+        required property var modelData
+        property int fxIndex: 0
+        property var values: ({})
+        readonly property var row: fxc.modelData
+        readonly property real val: {
+            const v = fxc.values[fxc.row.key]
+            return v === undefined ? fxc.row.def : v
+        }
+        width: inspCol.width
+        height: 34
+
+        Text {
+            id: fxlbl
+            anchors.left: parent.left; anchors.leftMargin: 26
+            anchors.top: parent.top; anchors.topMargin: 2
+            text: fxc.row.label
+            color: root.cText
+            font.pixelSize: 10
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 2
+            text: Math.round(fxc.val * 1000) / 1000
+            color: root.cAccent
+            font.pixelSize: 10
+        }
+        Rectangle {
+            id: fxtrack
+            anchors.left: parent.left; anchors.leftMargin: 26
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: fxlbl.bottom; anchors.topMargin: 6
+            height: 4
+            radius: 2
+            color: root.isLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(1, 1, 1, 0.14)
+
+            readonly property real frac:
+                Math.max(0, Math.min(1, (fxc.val - fxc.row.lo)
+                                        / (fxc.row.hi - fxc.row.lo)))
+            Rectangle {
+                height: parent.height; radius: 2
+                color: root.cAccent
+                width: fxtrack.frac * fxtrack.width
+            }
+            Rectangle {
+                width: 11; height: 11; radius: 6
+                color: root.cAccent
+                y: -4
+                x: fxtrack.frac * fxtrack.width - 5
+            }
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -10
+                preventStealing: true
+                // On RELEASE. A `set` per tick would spawn a process per pixel
+                // of travel and reload the document under the hand that is
+                // dragging, which destroys the drag — the same rule the
+                // mixer's faders follow.
+                property real pending: fxc.val
+                function pick(mx) {
+                    const f = Math.max(0, Math.min(1, (mx - 10) / fxtrack.width))
+                    pending = Math.round((fxc.row.lo
+                              + f * (fxc.row.hi - fxc.row.lo)) * 1000) / 1000
+                }
+                onPressed: function (m) { pick(m.x) }
+                onPositionChanged: function (m) { if (pressed) pick(m.x) }
+                onReleased: root.fxRun(["set", String(fxc.fxIndex),
+                                        fxc.row.key + "=" + pending])
             }
         }
     }

@@ -1,0 +1,8 @@
+# synstudio effect
+name    despill
+label   Despill
+group   Key
+about   Takes the green a key leaves around the edges of hair back out again
+param   mix     0.5  0  1  Mix
+param   expand  0    0  1  Expand
+filter  [$in]despill=type=green:mix=$mix:expand=$expand[$out]

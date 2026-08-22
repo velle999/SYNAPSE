@@ -1,0 +1,8 @@
+# synstudio effect
+name    temperature
+label   Colour temperature
+group   Colour
+about   Warmer or cooler, in kelvin, mixed in by amount
+param   kelvin  6500  1000  40000  Kelvin
+param   mix     1.0   0     1      Amount
+filter  [$in]colortemperature=temperature=$kelvin:mix=$mix[$out]

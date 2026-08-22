@@ -1,0 +1,9 @@
+# synstudio effect
+name    glow
+label   Glow
+group   Light
+about   The whole picture blurred and screened back over itself
+param   amount  0.5  0  1   Amount
+param   radius  16   1  80  Radius
+filter  [$in]split[g0][g1];[g1]gblur=sigma=$radius[g2];
+filter  [g0][g2]blend=all_mode=screen:all_opacity=$amount[$out]

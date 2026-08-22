@@ -1,0 +1,12 @@
+# synstudio effect
+name    lumakey
+label   Luma key
+group   Key
+about   Makes the dark part of the picture transparent — for titles shot on
+about   black, and for anything you want to screen in rather than lay over
+alpha   1
+param   threshold  0.1  0  1  Threshold
+param   tolerance  0.1  0  1  Tolerance
+param   softness   0.0  0  1  Softness
+filter  [$in]format=rgba,lumakey=threshold=$threshold:tolerance=$tolerance:
+filter  softness=$softness[$out]

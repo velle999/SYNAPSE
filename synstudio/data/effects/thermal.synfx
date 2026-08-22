@@ -1,0 +1,6 @@
+# synstudio effect
+name    thermal
+label   Thermal
+group   Colour
+about   Brightness mapped to a false-colour ramp, like a heat camera
+filter  [$in]pseudocolor=p=turbo[$out]

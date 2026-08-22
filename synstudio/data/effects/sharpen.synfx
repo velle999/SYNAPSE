@@ -1,0 +1,7 @@
+# synstudio effect
+name    sharpen
+label   Sharpen
+group   Blur
+about   Unsharp mask — the opposite of the blur above, and the same filter family
+param   amount  1.0  0  4  Amount
+filter  [$in]unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=$amount[$out]

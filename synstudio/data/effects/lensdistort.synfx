@@ -1,0 +1,8 @@
+# synstudio effect
+name    lensdistort
+label   Lens distortion
+group   Lens
+about   Barrel or pincushion. Negative k1 bulges, positive pinches
+param   k1  -0.2  -1  1  Distortion
+param   k2  0     -1  1  Second order
+filter  [$in]lenscorrection=k1=$k1:k2=$k2[$out]

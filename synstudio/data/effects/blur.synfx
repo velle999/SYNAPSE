@@ -1,0 +1,7 @@
+# synstudio effect
+name    blur
+label   Blur
+group   Blur
+about   A plain gaussian blur, the whole frame
+param   radius  6  0  60  Radius
+filter  [$in]gblur=sigma=$radius[$out]

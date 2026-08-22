@@ -1,0 +1,7 @@
+# synstudio effect
+name    vignette
+label   Vignette
+group   Lens
+about   The corners fall off, the way a lens does wide open
+param   angle  0.9  0.1  1.5  Angle
+filter  [$in]vignette=angle=$angle[$out]

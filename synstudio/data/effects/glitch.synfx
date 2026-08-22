@@ -1,0 +1,11 @@
+# synstudio effect
+name    glitch
+label   Glitch
+group   Screen
+about   Horizontal slices shoved sideways. Deterministic — the same frame
+about   glitches the same way every time, so a scrub and a render agree
+param   amount  8   0  60  Shift
+param   scale   0.3 0.01 2 Frequency
+filter  [$in]format=gbrap,geq=r='r(X+$amount*sin(Y*$scale),Y)':
+filter  g='g(X+$amount*sin(Y*$scale),Y)':b='b(X+$amount*sin(Y*$scale),Y)':
+filter  a='alpha(X,Y)'[$out]

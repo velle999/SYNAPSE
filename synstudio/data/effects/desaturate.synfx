@@ -1,0 +1,7 @@
+# synstudio effect
+name    desaturate
+label   Desaturate
+group   Colour
+about   Toward black and white, or past it into oversaturation
+param   saturation  0  0  3  Saturation
+filter  [$in]hue=s=$saturation[$out]

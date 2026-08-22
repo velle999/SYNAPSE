@@ -1,0 +1,7 @@
+# synstudio effect
+name    aberration
+label   Chromatic aberration
+group   Lens
+about   Red and blue pulled apart sideways, the way a cheap lens does it
+param   shift  3  0  40  Shift
+filter  [$in]rgbashift=rh=$shift:bh=-$shift[$out]

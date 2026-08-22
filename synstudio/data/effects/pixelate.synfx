@@ -1,0 +1,7 @@
+# synstudio effect
+name    pixelate
+label   Pixelate
+group   Texture
+about   Blocks. The one everybody asks for and nobody can name a filter for
+param   size  16  2  128  Block size
+filter  [$in]pixelize=w=$size:h=$size[$out]

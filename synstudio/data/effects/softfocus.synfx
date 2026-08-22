@@ -1,0 +1,9 @@
+# synstudio effect
+name    softfocus
+label   Soft focus
+group   Blur
+about   A blurred copy laid back over the sharp one — glamour, not defocus
+param   amount  0.5  0  1   Amount
+param   radius  12   1  60  Radius
+filter  [$in]split[s0][s1];[s1]gblur=sigma=$radius[s2];
+filter  [s0][s2]blend=all_mode=softlight:all_opacity=$amount[$out]

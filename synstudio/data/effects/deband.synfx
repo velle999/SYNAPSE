@@ -1,0 +1,8 @@
+# synstudio effect
+name    deband
+label   Deband
+group   Texture
+about   Breaks up the banding a heavily graded sky gets, without softening it
+param   thr    0.02  0.00003  0.5  Threshold
+param   range  16    1        64   Range
+filter  [$in]deband=1thr=$thr:2thr=$thr:3thr=$thr:4thr=$thr:range=$range[$out]

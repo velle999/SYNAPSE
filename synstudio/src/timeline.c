@@ -703,6 +703,125 @@ int ss_clip_prop_remove(ss_clip *c, const char *key, int idx)
     return hit ? 0 : -1;
 }
 
+/* ------------------------------------------------------- the fx stack -- */
+
+/* Effects on a clip, applied in order after the grade.
+ *
+ * Order is the whole reason this is a list and not a set: a blur under a glow
+ * and a glow under a blur are different pictures. `move` is how you say which.
+ */
+int ss_clip_fx_add(ss_clip *c, const char *name, int at)
+{
+    const ss_fx *r = ss_fx_find(name);
+    ss_clip_fx n;
+    int i;
+
+    if (!r) return -1;
+    if (c->nfx >= SS_MAX_FX) return -2;
+    memset(&n, 0, sizeof n);
+    snprintf(n.name, sizeof n.name, "%s", r->name);
+    n.on = 1;
+    /* Seeded from the recipe's own defaults, so an effect that has just been
+     * added does what its author meant it to do rather than nothing. */
+    for (i = 0; i < r->nparam; i++) n.val[i] = r->param[i].def;
+
+    if (at < 0 || at > c->nfx) at = c->nfx;
+    memmove(&c->fx[at + 1], &c->fx[at],
+            sizeof c->fx[0] * (size_t)(c->nfx - at));
+    c->fx[at] = n;
+    c->nfx++;
+    return at;
+}
+
+int ss_clip_fx_remove(ss_clip *c, int i)
+{
+    if (i < 0 || i >= c->nfx) return -1;
+    memmove(&c->fx[i], &c->fx[i + 1],
+            sizeof c->fx[0] * (size_t)(c->nfx - i - 1));
+    c->nfx--;
+    return 0;
+}
+
+int ss_clip_fx_move(ss_clip *c, int i, int to)
+{
+    ss_clip_fx t;
+    if (i < 0 || i >= c->nfx || to < 0 || to >= c->nfx) return -1;
+    t = c->fx[i];
+    if (to > i) memmove(&c->fx[i], &c->fx[i + 1],
+                        sizeof c->fx[0] * (size_t)(to - i));
+    else        memmove(&c->fx[to + 1], &c->fx[to],
+                        sizeof c->fx[0] * (size_t)(i - to));
+    c->fx[to] = t;
+    return 0;
+}
+
+int ss_clip_fx_set(ss_clip *c, int i, const char *key, double v)
+{
+    const ss_fx *r;
+    int k;
+
+    if (i < 0 || i >= c->nfx) return -1;
+    if (!strcmp(key, "on")) { c->fx[i].on = v != 0; return 0; }
+    r = ss_fx_find(c->fx[i].name);
+    if (!r) return -1;
+    for (k = 0; k < r->nparam; k++)
+        if (!strcmp(r->param[k].key, key)) {
+            if (v < r->param[k].lo) v = r->param[k].lo;
+            if (v > r->param[k].hi) v = r->param[k].hi;
+            c->fx[i].val[k] = v;
+            return 0;
+        }
+    return -1;
+}
+
+int ss_clip_fx_get(const ss_clip *c, int i, const char *key, double *v)
+{
+    const ss_fx *r;
+    int k;
+
+    if (i < 0 || i >= c->nfx) return -1;
+    if (!strcmp(key, "on")) { *v = c->fx[i].on; return 0; }
+    r = ss_fx_find(c->fx[i].name);
+    if (!r) return -1;
+    for (k = 0; k < r->nparam; k++)
+        if (!strcmp(r->param[k].key, key)) { *v = c->fx[i].val[k]; return 0; }
+    return -1;
+}
+
+/* An effect whose recipe is not installed, kept whole so that saving the
+ * project does not throw it away. It renders as nothing and lists as missing;
+ * put the .synfx back and it comes straight to life. */
+static int fx_add_unknown(ss_clip *c, const char *name, int on, const char *raw)
+{
+    if (c->nfx >= SS_MAX_FX) return -1;
+    memset(&c->fx[c->nfx], 0, sizeof c->fx[0]);
+    /* The precision, not a bare %s: the name comes off a line up to four
+     * kilobytes long and at -O3 gcc can see that going into thirty-two bytes.
+     * Saying the bound out loud both silences it and records that losing the
+     * tail of a pathological name is the right answer to one. */
+    snprintf(c->fx[c->nfx].name, sizeof c->fx[0].name, "%.*s",
+             (int)(sizeof c->fx[0].name - 1), name);
+    snprintf(c->fx[c->nfx].raw, sizeof c->fx[0].raw, "%.*s",
+             (int)(sizeof c->fx[0].raw - 1), raw ? raw : "");
+    c->fx[c->nfx].on = on;
+    return c->nfx++;
+}
+
+/* Whether any effect on this clip can make a pixel transparent — a key, a
+ * despill, anything the recipe declared `alpha 1` for. The chain has to be
+ * rgba before one of those runs or the alpha it produces has nowhere to go. */
+static int fx_needs_alpha(const ss_clip *c)
+{
+    int i;
+    for (i = 0; i < c->nfx; i++) {
+        const ss_fx *r;
+        if (!c->fx[i].on) continue;
+        r = ss_fx_find(c->fx[i].name);
+        if (r && r->alpha) return 1;
+    }
+    return 0;
+}
+
 /* ------------------------------------------------------- a moving grade -- */
 
 /* How finely a moving grade is sampled.
@@ -1162,6 +1281,27 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "text\t%.4f\t%.4f\t%.4f\t%.4f\t%s\t%s\n",
                         c->text_size, c->text_r, c->text_g, c->text_b,
                         textpos_name(c->text_pos), c->text);
+            /* The effect stack. One line each, in the order they apply,
+             * with the knobs written by NAME — a recipe that gains a
+             * parameter must not shift the meaning of a project saved before
+             * it had one. */
+            {
+                int k, q;
+                for (k = 0; k < c->nfx; k++) {
+                    const ss_fx *r = ss_fx_find(c->fx[k].name);
+                    fprintf(fp, "fx\t%s\t%d", c->fx[k].name, c->fx[k].on);
+                    if (!r) {
+                        /* Not installed here: written back exactly as it was
+                         * read, so the machine that HAS it still gets it. */
+                        if (*c->fx[k].raw) fprintf(fp, "\t%s", c->fx[k].raw);
+                    } else {
+                        for (q = 0; q < r->nparam; q++)
+                            fprintf(fp, "\t%s=%g", r->param[q].key,
+                                    c->fx[k].val[q]);
+                    }
+                    fprintf(fp, "\n");
+                }
+            }
             /* Parameter keys, one line each: a name, a time, a value and
              * how it leaves. Flat rather than nested because unlike a grade
              * key there is nothing to nest — the whole key IS the line. */
@@ -1330,6 +1470,35 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 cc->text_b = (float)atof(f[3]);
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
                 snprintf(cc->text, sizeof cc->text, "%s", f[5]);
+            }
+        } else if (!strncmp(line, "fx\t", 3) && cc) {
+            char raw[256] = "", *f[2 + SS_MAX_FX_PARAMS];
+            int nf, q, at;
+            /* The parameter text is kept before tabsplit gets at it, because
+             * tabsplit writes NULs over the tabs it finds and an effect this
+             * machine cannot render has to be written back exactly. */
+            {
+                char *p = strchr(line + 3, '\t');
+                if (p) p = strchr(p + 1, '\t');
+                if (p) snprintf(raw, sizeof raw, "%s", p + 1);
+            }
+            nf = tabsplit(line + 3, f, 2 + SS_MAX_FX_PARAMS);
+            if (nf >= 2 && ss_fx_find(f[0])) {
+                at = ss_clip_fx_add(cc, f[0], -1);
+                if (at >= 0) {
+                    cc->fx[at].on = atoi(f[1]) != 0;
+                    for (q = 2; q < nf; q++) {
+                        char *eq = strchr(f[q], '=');
+                        if (!eq) continue;
+                        *eq = '\0';
+                        /* A knob the recipe no longer has is DROPPED rather
+                         * than refused: an effect rewritten since the project
+                         * was saved still loads, with whatever it kept. */
+                        ss_clip_fx_set(cc, at, f[q], atof(eq + 1));
+                    }
+                }
+            } else if (nf >= 2) {
+                fx_add_unknown(cc, f[0], atoi(f[1]) != 0, raw);
             }
         } else if (!strncmp(line, "anim\t", 5) && cc) {
             char *f[4];
@@ -1607,7 +1776,7 @@ static int needs_alpha(const ss_clip *c)
 {
     return c->opacity < 1.0f ||
            c->xf.rotate != 0.0f || c->xf.rotate2 != 0.0f ||
-           c->kind == SS_CLIP_TITLE;
+           c->kind == SS_CLIP_TITLE || fx_needs_alpha(c);
 }
 
 /* Round to an even size: a yuv420 intermediate with an odd dimension makes
@@ -1879,6 +2048,55 @@ static void chain_title(strbuf *fc, const ss_timeline *t, const ss_clip *c,
            (int)(c->text_size * t->h + 0.5f), x, y,
            (int)(c->text_size * t->h * 0.045f + 1.5f),
            (int)(c->text_size * t->h * 0.25f));
+}
+
+/* The effect stack, spliced into a clip's chain.
+ *
+ * Each effect breaks OUT of the comma-chain into a fragment of its own,
+ * because a recipe can branch — a glow splits the picture, blurs one half and
+ * screens it back over the other — and a branch cannot live inside a chain.
+ * The chain so far ends in a label, the fragment runs between that label and
+ * the next, and the chain picks up again from there.
+ *
+ * `id` makes every label in every instance unique. Two clips wearing the same
+ * effect are the same recipe twice in one graph, and two `[a]`s is a graph
+ * ffmpeg refuses to parse.
+ *
+ * An effect naming a recipe that is not installed is SKIPPED here rather than
+ * failing the render — the command layer says so before it starts, which is
+ * where a person can do something about it. */
+static void chain_fx(strbuf *fc, const ss_clip *c, int id)
+{
+    char in[40], out[40], buf[4096];
+    int i, n = 0, any = 0;
+
+    for (i = 0; i < c->nfx; i++) {
+        const ss_fx *r = c->fx[i].on ? ss_fx_find(c->fx[i].name) : NULL;
+        if (r) any = 1;
+    }
+    if (!any) return;
+
+    /* The chain so far is closed into a label; each effect runs from the
+     * previous label to the next, so nothing has to be bridged; and the last
+     * one comes back into a `null`, which is a filter and can therefore have
+     * `,whatever` appended to it. A bare label cannot: `[x],setpts=...` is a
+     * graph ffmpeg refuses, and `[a][b]` between two effects reads as one
+     * filter taking two inputs. */
+    sb_add(fc, "[fx%d_0]", id);
+    for (i = 0; i < c->nfx; i++) {
+        const ss_fx *r;
+        if (!c->fx[i].on) continue;
+        r = ss_fx_find(c->fx[i].name);
+        if (!r) continue;
+        snprintf(in,  sizeof in,  "fx%d_%d", id, n);
+        snprintf(out, sizeof out, "fx%d_%d", id, n + 1);
+        if (ss_fx_expand(r, c->fx[i].val, SS_MAX_FX_PARAMS, id * 64 + n,
+                         in, out, buf, sizeof buf) != 0)
+            continue;
+        sb_add(fc, ";%s", buf);
+        n++;
+    }
+    sb_add(fc, ";[fx%d_%d]null", id, n);
 }
 
 /* ---- one side of a transition, as a project-sized layer ----
@@ -2608,6 +2826,12 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 }
 
                 chain_grade(&fc, c, lutdir, i, j);
+                /* Colour first, then effects, then the caption. A title is
+                 * something written ON the shot and blurring it with the shot
+                 * is nobody's intention; the grade comes first because every
+                 * effect here is looking at a picture that has been graded,
+                 * which is the order a darkroom works in too. */
+                chain_fx(&fc, c, nvid);
                 chain_title(&fc, t, c, lutdir, i, j);
 
                 if (c->fade_in > 0.0)
@@ -3068,6 +3292,7 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
                 sb_add(&fc, ",rotate=%.6f:ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
                             ":c=black@0", (double)rot * M_PI / 180.0);
             chain_grade_at(&fc, c, lutdir, i, j, off);
+            chain_fx(&fc, c, nvid);
             chain_title(&fc, t, c, lutdir, i, j);
             if (a < 1.0)
                 sb_add(&fc, ",colorchannelmixer=aa=%.4f", a);

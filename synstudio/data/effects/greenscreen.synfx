@@ -1,0 +1,11 @@
+# synstudio effect
+name    greenscreen
+label   Green screen
+group   Key
+about   Pulls green out of the picture and leaves it transparent, so whatever
+about   is on the track below shows through
+alpha   1
+param   similarity  0.2   0.01  1  Similarity
+param   blend       0.05  0     1  Blend
+filter  [$in]format=rgba,chromakey=color=0x00b140:similarity=$similarity:
+filter  blend=$blend[$out]

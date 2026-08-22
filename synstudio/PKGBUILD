@@ -387,7 +387,57 @@ pkgver=0.1.0
 #   first and the kind second silently gave a transition of zero.
 #
 #   308 assertions, still clean under ASan+UBSan+LSan.
-pkgrel=14
+# 15: effects — and a format so they can be somebody else's.
+#
+#   Resolve takes third-party work three ways: OpenFX (compiled C++), DCTL
+#   (GPU shader source) and LUTs (data). Only the third fits a program that
+#   never links anything, and this is a fourth that fits it just as well: an
+#   effect is a TEXT MANIFEST naming an ffmpeg filter chain and the knobs on
+#   it. Somebody writes one in an editor, drops it in a folder, and it works —
+#   no compiler, no ABI, nothing to rebuild when ffmpeg bumps a SONAME.
+#
+#       name    halation
+#       param   strength  0.4  0  1   Strength
+#       filter  [$in]split[a][b];[b]lumakey=0.6,gblur=sigma=$radius...[$out]
+#
+#   Twenty-seven ship: blur, sharpen, soft focus, glow, bloom, halation,
+#   pixelate, posterise, invert, desaturate, sepia, duotone, temperature,
+#   thermal, vignette, aberration, lens distortion, edges, deband, scanlines,
+#   glitch, flip, flop, green screen, blue screen, luma key and despill. A
+#   clip carries a STACK of them, in order, after the grade —
+#   `timeline fx add|list|set|remove|move`, and an Effects panel in the window
+#   built entirely from `fx list` and `fx params`, so an effect written this
+#   morning appears with its own sliders and the QML never learns its name.
+#
+#   ⚠ A FILTER STRING CAN DO ANYTHING FFMPEG CAN, INCLUDING READ FILES. That
+#   is the whole risk of shipping effects as text, and there are four walls
+#   around it: a WHITELIST of filter names, a refusal of any argument that
+#   names a file, nothing interpolated that was not declared as a parameter,
+#   and every parameter a NUMBER — clamped to the recipe's own range and
+#   printed by the engine, never carried through from the document as text. A
+#   recipe that fails any of them is not loaded, so it cannot be picked.
+#
+#   The whitelist is also what keeps the MONITOR honest: everything on it is
+#   one frame in, one frame out, same size, same answer every time. A filter
+#   needing a WINDOW of frames (tmix, deflicker) would render differently on a
+#   one-frame monitor than in an export; one changing the GEOMETRY (crop,
+#   scale, rotate) would move the picture out from under the transform that
+#   owns it; a RANDOM one would disagree with itself. None of them can be in a
+#   recipe — which is why film grain stays a develop setting.
+#
+#   And it is RENDERED THROUGH before it is trusted: `fx check` puts one frame
+#   of 64x64 grey through the chain, and so does `timeline fx add`, because a
+#   recipe can name only allowed filters and still be nonsense — a misspelled
+#   option, a label going nowhere — and ffmpeg does not find out until it
+#   builds the graph.
+#
+#   ⚠ An effect this machine has not got is KEPT, whole, and written back
+#   exactly as it was read. Dropping it would delete a colleague's work from
+#   their project the first time it was opened on the wrong machine. It lists
+#   as missing, renders as nothing, and the export says so once by name.
+#
+#   340 assertions, still clean under ASan+UBSan+LSan.
+pkgrel=15
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
