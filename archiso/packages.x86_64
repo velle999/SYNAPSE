@@ -122,12 +122,12 @@ kitty
 # nothing here changes that. Two terminals on the image is a few hundred KB and
 # means the one that needs a GPU is not the only way to get a prompt.
 syntty
-# Application launcher on Super+Space. rofi 2.0.0 merged lbonn's Wayland port
+# Application launcher on Super+=. rofi 2.0.0 merged lbonn's Wayland port
 # into mainline, so this is the plain `rofi` package (it Provides/Replaces
 # rofi-wayland) talking layer-shell to synui — no XWayland, no AUR, no fork.
 #
 # It does NOT replace the cmdbar, which is native and carries the synsh intents
-# and output capture; that moved to Super+= (see seed_default_binds in
+# and output capture; that has Super+Space (see seed_default_binds in
 # synui/src/config.c). rofi is the plain "launch an app" key.
 #
 # Two Wayland-backend limitations upstream documents in the 2.0.0 notes: it

@@ -686,11 +686,14 @@ Super+Space opened the AI command bar, which meant the one key every other
 desktop reserves for "start a program" was the one key here that did something
 else. The launcher moved onto it and the command bar moved off.
 
-> **Superseded in 0.1.0-425.** rofi is still the launcher and still a
-> `spawn_toggle`; its key is `Super`+`,` now, and `Super`+`Space` is the command
-> bar again — this is SynapseOS and the command bar is what it is for. Only the
-> chords below moved; everything else in this phase stands. The niri column
-> moves went with it, from `Super`+`,`/`.` to `Super`+`[`/`]`.
+> **Superseded in 0.1.0-425, settled in 0.1.0-426.** rofi is still the launcher
+> and still a `spawn_toggle`; `Super`+`Space` is the command bar again — this is
+> SynapseOS and the command bar is what it is for — and the launcher has
+> `Super`+`=`, next to `Super`+`Backspace` (ai_ask), which is where the command
+> bar used to sit. 425 put the launcher on `Super`+`,` instead and pushed the
+> niri column moves off niri's own keys onto `Super`+`[`/`]` to make room; 426
+> put the column moves back on `Super`+`,`/`.` and left the launcher one key,
+> not two. Only the chords moved; everything else in this phase stands.
 
 - [x] **`super+space` → `spawn rofi -show drun`.** rofi 2.0.0 merged lbonn's
       Wayland port into mainline, so the plain `rofi` package (it

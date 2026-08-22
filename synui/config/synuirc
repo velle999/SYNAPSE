@@ -599,22 +599,21 @@ record_edit = off
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
 # menu = the SYNAPSE OS welcome menu (default super+escape).
-# cmdbar = the AI command bar. Default super+equal, which sits next to
-# super+backspace (ai_ask) so the two AI popups are physical neighbours. It was
-# super+space until rofi took that key as the application launcher.
+# cmdbar = the AI command bar. Default super+space — the command bar is what
+# this desktop is for and it gets the biggest key on the keyboard.
+# The launcher itself is not an action, it is a spawn: `super+equal spawn
+# rofi -show drun`, which sits next to super+backspace (ai_ask). Rebind it to
+# any launcher you like, or to `cmdbar` to have the command bar on both.
 #   Note the spelling: the combo is split on '+', so the key after the last '+'
 #   must be an XKB keysym NAME. `=` is `equal`. `bind = super+= cmdbar` does not
 #   work — it parses as an empty key and is dropped with a "bad key" log line.
-# The launcher itself is not an action, it is a spawn: `super+space spawn rofi
-# -show drun`. Rebind it to any launcher you like, or to `cmdbar` to put the
-# command bar back where it was.
 #
 # spawn_toggle <cmd> = spawn it, and if the key comes back while it is still
 #   running, close it instead of opening a second one. `spawn` deliberately does
 #   not do this — the second press of the terminal bind is meant to give you a
 #   second terminal — but a launcher is the other case, and rofi on a bare
 #   `spawn` stacked a second rofi behind the first:
-#       bind = super+space spawn_toggle rofi -show drun
+#       bind = super+equal spawn_toggle rofi -show drun
 #       tap_action = spawn_toggle rofi -show drun
 #   The child gets its own process group, so the close reaches whatever the
 #   command actually ran. It is a SIGTERM, so a launcher that ignores one
@@ -626,8 +625,8 @@ record_edit = off
 #   it put back whatever the shortcuts palette had just rebound. Two owners of
 #   one chord, and the setting won. Swap them yourself instead — a `bind =` on a
 #   combo that already has one replaces it, so this is the whole swap:
-#       bind = super+space cmdbar
-#       bind = super+equal spawn_toggle rofi -show drun
+#       bind = super+space spawn_toggle rofi -show drun
+#       bind = super+equal cmdbar
 #   or move either one live with F2 in the Super+/ palette (Control panel ▸
 #   Shortcuts), which is now the only thing that owns those keys.
 #

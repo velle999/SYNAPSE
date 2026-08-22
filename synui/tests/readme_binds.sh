@@ -64,8 +64,6 @@ key_label() {
         question)  echo '?' ;;
         comma)     echo ',' ;;
         period)    echo '.' ;;
-        bracketleft)  echo '[' ;;
-        bracketright) echo ']' ;;
         # The arrow keys. Without these they fell through to the default and the
         # table had to write `up` in lower case to satisfy this check, while the
         # prose two rows below it wrote `Up` — the label is what is printed on

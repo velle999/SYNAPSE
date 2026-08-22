@@ -2690,7 +2690,7 @@ static void usage(const char *prog) {
         "                     own key)\n"
         "  Super+Enter        Open terminal\n"
         "  Super+Space        Open AI command bar\n"
-        "  Super+,            Application launcher (rofi)\n"
+        "  Super+=            Application launcher (rofi)\n"
         "                     (swap the two, or move either: F2 in the Super+/\n"
         "                      palette, or `bind =` lines in synuirc)\n"
         "  Super+Backspace    Ask the AI about the focused window\n"

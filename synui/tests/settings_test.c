@@ -464,40 +464,64 @@ static void test_launcher_pair_is_just_binds(void)
 {
     syn_config_t c;
 
-    /* Shipped: the launcher on Space, the command bar on '='. */
+    /* Shipped: the command bar on Space, the launcher on '='. (It was the
+     * other way round until 0.1.0-425 — which is why this block asserts the
+     * ARRANGEMENT and not just that both keys are bound to something.) */
     write_synuirc("");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
+    assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
 
     /* The dead key moves nothing. Not merely unparsed — if a swap ever comes
      * back, THIS is the assertion that fails. */
-    write_synuirc("super_space = cmdbar\n");
+    write_synuirc("super_space = launcher\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
+
+    /* The supported way to swap them: two binds, and nothing re-seats them. */
+    write_synuirc("bind = super+space spawn_toggle rofi -show drun\n"
+                  "bind = super+equal cmdbar\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
     assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
     assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
 
-    /* The supported way to swap them: two binds, and nothing re-seats them. */
-    write_synuirc("bind = super+space cmdbar\n"
-                  "bind = super+equal spawn_toggle rofi -show drun\n");
-    memset(&c, 0, sizeof(c));
-    synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
-
     /* Same swap with the dead key ALSO asking for the other arrangement: the
      * binds win, because there is no longer anything to lose to. */
-    write_synuirc("bind = super+space cmdbar\n"
-                  "bind = super+equal spawn_toggle rofi -show drun\n"
-                  "super_space = launcher\n");
+    write_synuirc("bind = super+space spawn_toggle rofi -show drun\n"
+                  "bind = super+equal cmdbar\n"
+                  "super_space = cmdbar\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
 
     printf("  launcher pair is binds ... ok\n");
+}
+
+/*
+ * The niri column moves keep niri's OWN keys. 0.1.0-425 gave Super+, to the
+ * launcher and pushed these two onto the brackets; 426 put them back. Nothing
+ * caught the move, because readme_binds only checks that the README agrees with
+ * whatever config.c says — it agreed, about the wrong keys. This is the check
+ * that has an opinion about WHICH keys: anyone arriving from niri already has
+ * `,` and `.` in their hands, so a bind that wants one of them has to take it
+ * from this assertion first.
+ */
+static void test_niri_column_keys_are_niris(void)
+{
+    syn_config_t c;
+
+    write_synuirc("");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(holds(bind_of(&c, XKB_KEY_comma),  "column_consume", ""));
+    assert(holds(bind_of(&c, XKB_KEY_period), "column_expel",   ""));
+
+    printf("  niri column keys ......... ok\n");
 }
 
 /*
@@ -550,6 +574,7 @@ int main(void)
     test_state_clear();
     test_round_trip();
     test_launcher_pair_is_just_binds();
+    test_niri_column_keys_are_niris();
     test_obsolete_key_leaves_settings_state();
 
     rig_cleanup();

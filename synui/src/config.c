@@ -650,7 +650,7 @@ static int parse_hex_color(const char *val, float out[4])
     return 1;
 }
 
-/* The two actions the Super+Space / Super+, pair ships on, spelled ONCE.
+/* The two actions the Super+Space / Super+= pair ships on, spelled ONCE.
  * There used to be a swap (and a control-panel row) that moved them between the
  * two keys; it was a second declaration of a keybinding and it fought the
  * rebind helper, so the shortcuts palette is now the only owner of both chords.
@@ -665,14 +665,19 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+return",    "term" },
         /* The AI command bar. It had this key, lost it to rofi for a while, and
          * has it back: the command bar is the thing this desktop is FOR, and
-         * the biggest key on the keyboard is where it belongs. Super+= is free
-         * again as a result and is bound to nothing.
+         * the biggest key on the keyboard is where it belongs.
          *
          * A toggle, unlike rofi below. */
         { "super+space",     SYN_BIND_CMDBAR },
-        /* rofi, on the key beside the space bar rather than on it. It reads the
-         * same .desktop roots the bar menu already curates, and it is the plain
-         * "start a program" key with nothing clever behind it.
+        /* rofi. It reads the same .desktop roots the bar menu already curates,
+         * and it is the plain "start a program" key with nothing clever behind
+         * it. Super+= puts it next to Super+Backspace (ai_ask) — on a US layout
+         * `=` is the key immediately left of Backspace.
+         *
+         * It does NOT get Super+, . That was tried and it cost the niri column
+         * moves the keys niri itself uses, for a launcher that already has a
+         * key: one action, one chord, and the punctuation next to the space bar
+         * belongs to the layout.
          *
          * spawn_toggle, so the key that opens it also puts it away — every
          * other panel bind here toggles, and this one not toggling was the odd
@@ -681,7 +686,7 @@ static void seed_default_binds(syn_config_t *cfg)
          * and only Escape closed it. Now the second press closes it, and the
          * lifetime synui has to manage to do that is one pid (see spawn_toggle
          * in input.c), not rofi's window. */
-        { "super+comma",     SYN_BIND_LAUNCHER },
+        { "super+equal",     SYN_BIND_LAUNCHER },
         { "super+a",         "overlay" },
         { "super+d",         "displays" },
         { "super+escape",    "menu" },
@@ -728,24 +733,19 @@ static void seed_default_binds(syn_config_t *cfg)
         { "alt+shift+tab",   "alt_tab_prev" },
         { "super+h",         "master_shrink" },
         { "super+shift+l",   "master_grow" },
-        /* niri (scrollable tiling) column moves. They sat on niri's own keys,
-         * Super+, and Super+. , until the launcher took the comma — so they are
-         * on the brackets now, which are the other adjacent pair and read as
-         * what they do: `[` pulls the focused window into the column on its
-         * left, `]` pushes it back out into a column of its own.
-         *
-         * UNSHIFTED on purpose. Super+Shift+, is the obvious alternative and is
-         * a trap: xkb hands the compositor the SHIFTED keysym, so that bind has
-         * to be spelled `super+shift+less` and stops meaning anything on a
-         * layout where Shift+comma is not `<`. Same trap Super+? has, and one
-         * of it in the table is enough.
+        /* niri (scrollable tiling) column moves, on the keys niri itself uses.
+         * Comma pulls the focused window into the column on its left, period
+         * pushes it back out into a column of its own. They were moved to the
+         * brackets once to give the launcher the comma and are back: these are
+         * the keys anyone arriving from niri already has in their hands, and
+         * the launcher has a key of its own.
          *
          * Both are no-ops on the other four layouts, which have no columns to
          * move a window between — the width keys above are shared instead,
          * because "wider/narrower" means the same thing on a master slot and on
          * a niri column. */
-        { "super+bracketleft",  "column_consume" },
-        { "super+bracketright", "column_expel" },
+        { "super+comma",     "column_consume" },
+        { "super+period",    "column_expel" },
         { "super+l",         "lock" },
         { "super+j",         "focus_next" },
         { "super+k",         "focus_prev" },
@@ -2394,7 +2394,7 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     else if (strcmp(key, "bar_start_cmd") == 0)
         snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "%s", val);
     /* OBSOLETE, and kept only to SAY SO. `super_space = launcher|cmdbar` used to
-     * swap the two actions across Super+Space and the launcher's key; it re-applied at the
+     * swap the two actions across Super+Space and Super+=; it re-applied at the
      * end of every config load, which put back any rebind the shortcuts palette
      * had made — so it is gone and the palette owns both chords. An unknown key
      * is silently ignored here, and silence is exactly wrong for a key that used
@@ -2404,7 +2404,7 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
      * the file without it, and only a hand-written synuirc line gets the log. */
     else if (strcmp(key, "super_space") == 0) {
         wlr_log(WLR_INFO, "synui: super_space is obsolete and ignored — rebind "
-                "Super+Space / Super+, in the shortcuts palette (Super+/, F2) "
+                "Super+Space / Super+= in the shortcuts palette (Super+/, F2) "
                 "or with `bind =` / `unbind =` lines");
     }
     /* Which modifier, tapped alone, opens the start menu. `none` is a value and

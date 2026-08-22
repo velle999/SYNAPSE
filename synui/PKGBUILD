@@ -395,7 +395,7 @@ pkgver=0.1.0
 #   target, because a tab that is not drawn is a category the mouse cannot get
 #   to at all.
 
-pkgrel=425
+pkgrel=426
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -462,11 +462,11 @@ license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-# rofi: the Super+Space application launcher. A hard depend for the same reason
-#   syntty is one — it backs a DEFAULT bind, so without it the most-pressed key on
-#   the desktop silently does nothing. rofi 2.0.0 merged lbonn's Wayland port
-#   into mainline (it Provides/Replaces rofi-wayland), so this is layer-shell,
-#   not XWayland. The AI command bar it displaced moved to Super+=.
+# rofi: the Super+= application launcher. A hard depend for the same reason
+#   syntty is one — it backs a DEFAULT bind, so without it one of the most-pressed
+#   keys on the desktop silently does nothing. rofi 2.0.0 merged lbonn's Wayland
+#   port into mainline (it Provides/Replaces rofi-wayland), so this is
+#   layer-shell, not XWayland. The AI command bar has Super+Space.
          # syntty is the default terminal (0.1.0-359) and the one every fresh
          # synuirc names, so it is the terminal this depends on. kitty was the
          # default between 215 and 358 and is an optdepend now: it stayed a

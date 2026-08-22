@@ -57,7 +57,7 @@ WidgetFrame {
     // action, so these can never drift from what the keyboard does.
     readonly property var entries: [
         { name: "terminal",     sub: "syntty",            exec: ["syntty"] },
-        // rofi, the same launcher Super+Space runs. Spawned rather than
+        // rofi, the same launcher Super+= runs. Spawned rather than
         // dispatched precisely because of the rule above: dispatch is for
         // things synui DRAWS, and rofi is an external program. This row used
         // to run `synctl dispatch menu`, which opens synui's own menu panel —

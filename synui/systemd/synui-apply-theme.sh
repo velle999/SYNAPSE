@@ -845,7 +845,7 @@ if command -v syntty >/dev/null 2>&1; then
     fi
 fi
 
-# ── rofi (the Super+Space application launcher) ──────────────────────────────
+# ── rofi (the Super+= application launcher) ─────────────────────────────────
 # The one themed surface here that needs NO live-reload signal: rofi is spawned
 # fresh on every keypress, so it reads this file each time it opens. No SIGUSR2,
 # no D-Bus nudge, no "lands on the next restart" caveat like Firefox's.
