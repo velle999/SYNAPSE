@@ -245,6 +245,122 @@ static void test_list_unaffected_by_cols(void)
           "one pixel past the row's width is not that row");
 }
 
+/* ── Loose rects ─────────────────────────────────────────────
+ *
+ * The welcome menu's corner checkbox and the emoji picker's category tabs. Two
+ * things are worth pinning: that the index answered is the ORDER they were
+ * added in (the emoji picker reads it straight back as a category number, so an
+ * off-by-one there filters to the wrong block), and that hit_set_panel() blanks
+ * them — a panel that stops drawing a tab must stop answering for it, and that
+ * happens by nobody doing anything.
+ */
+static void test_spots(void)
+{
+    syn_hit_t g;
+    hit_set_panel(&g, 100, 50, 400, 300);
+
+    /* Three tabs of different widths in a row, as the emoji strip draws them:
+     * panel-local x 18, 70 and 140, all on the same 22px band. */
+    CHECK(hit_add_spot(&g, 18,  38, 46, 22) == 0, "the first spot should be 0");
+    CHECK(hit_add_spot(&g, 70,  38, 62, 22) == 1, "the second spot should be 1");
+    CHECK(hit_add_spot(&g, 140, 38, 40, 22) == 2, "the third spot should be 2");
+
+    CHECK(hit_spot_at(&g, 100 + 20, 50 + 40) == 0, "inside the first tab");
+    CHECK(hit_spot_at(&g, 100 + 100, 50 + 48) == 1, "inside the second tab");
+    CHECK(hit_spot_at(&g, 100 + 175, 50 + 59) == 2, "inside the third tab");
+
+    /* The gutter between two tabs belongs to neither. */
+    CHECK(hit_spot_at(&g, 100 + 66, 50 + 45) == -1,
+          "the gap between two tabs is not a tab");
+    /* Above and below the band. */
+    CHECK(hit_spot_at(&g, 100 + 20, 50 + 37) == -1, "one pixel above the strip");
+    CHECK(hit_spot_at(&g, 100 + 20, 50 + 60) == -1, "one pixel below the strip");
+    /* Half-open on the right, like every other rect in this file. */
+    CHECK(hit_spot_at(&g, 100 + 63, 50 + 45) == 0, "the last pixel of a tab");
+    CHECK(hit_spot_at(&g, 100 + 64, 50 + 45) == -1, "one past a tab is not it");
+
+    /* A zero-width label records nothing rather than a rect that answers for a
+     * strip of nothing — and it must not consume an index either, or every tab
+     * after it would answer with the wrong category. */
+    syn_hit_t z;
+    hit_set_panel(&z, 0, 0, 200, 200);
+    CHECK(hit_add_spot(&z, 10, 10, 0, 20) == -1, "an empty rect is not a spot");
+    CHECK(hit_add_spot(&z, 10, 10, 30, 20) == 0,
+          "a dropped rect must not take an index with it");
+
+    /* Re-recording the panel blanks them. */
+    hit_set_panel(&g, 100, 50, 400, 300);
+    CHECK(g.spots == 0, "hit_set_panel should blank the spot list");
+    CHECK(hit_spot_at(&g, 100 + 20, 50 + 40) == -1,
+          "a re-rendered panel must not answer from last frame's tabs");
+
+    /* And so does hit_clear() — the hidden path. */
+    hit_add_spot(&g, 18, 38, 46, 22);
+    hit_clear(&g);
+    CHECK(hit_spot_at(&g, 100 + 20, 50 + 40) == -1,
+          "a hidden panel's spots must not be clickable");
+
+    /* The overflow is a dropped rect, not a smashed struct. */
+    syn_hit_t f;
+    hit_set_panel(&f, 0, 0, 500, 500);
+    for (int i = 0; i < SYN_HIT_SPOTS; i++)
+        CHECK(hit_add_spot(&f, 0, i * 4, 10, 4) == i, "spot %d", i);
+    CHECK(hit_add_spot(&f, 0, 400, 10, 4) == -1,
+          "one spot past the ceiling should be refused");
+    CHECK(f.spots == SYN_HIT_SPOTS, "a refused spot must not grow the list");
+}
+
+/* The welcome menu (Super+Escape), with render.c's own numbers: rows on a 28px
+ * pitch whose hit band starts 20px above the first text baseline, and the
+ * "Don't show again" checkbox as a loose rect in the bottom-right corner.
+ *
+ * Pinned because the menu is the one panel whose rows are ACTIONS — a click
+ * landing one row high does not select the wrong thing, it launches the wrong
+ * thing. */
+static void test_welcome_rows(void)
+{
+    const int px = 710, py = 178, pw = 500, ph = 724;
+    const int top = 128, row_h = 28, rows = 18;
+    syn_hit_t g;
+
+    hit_set_panel(&g, px, py, pw, ph);
+    hit_set_rows(&g, 30, top - 20, pw - 60, row_h, rows);
+
+    /* Row 0's band is [top-20, top+8) in panel-local y: the text baseline sits
+     * 20px down it, which is what makes the row you click the row you read. */
+    CHECK(hit_row_at(&g, px + 250, py + top - 21) == -1, "above row 0");
+    CHECK(hit_row_at(&g, px + 250, py + top - 20) == 0,  "the top of row 0");
+    CHECK(hit_row_at(&g, px + 250, py + top) == 0,       "row 0's baseline");
+    CHECK(hit_row_at(&g, px + 250, py + top + 7) == 0,   "the last pixel of row 0");
+    CHECK(hit_row_at(&g, px + 250, py + top + 8) == 1,   "the top of row 1");
+
+    /* The last row, and the footer below it, where the hints are drawn. */
+    CHECK(hit_row_at(&g, px + 250, py + top - 20 + (rows - 1) * row_h + 4)
+          == rows - 1, "the last row");
+    CHECK(hit_row_at(&g, px + 250, py + top - 20 + rows * row_h) == -1,
+          "the footer is not a row");
+    /* Still inside the panel, though — which is what stops a click on the
+     * footer hints from closing the menu. */
+    CHECK(hit_in_panel(&g, px + 250, py + ph - 8),
+          "the footer is still the panel");
+
+    /* The checkbox: right-aligned to 30px off the right edge, on the version's
+     * line. Its rect is a spot, so it answers even though it is nowhere near a
+     * row band. */
+    const int cb_w = 130, cb_h = 22;
+    const int cb_x = pw - 30 - cb_w, cb_y = ph - 16 - cb_h + 5;
+    hit_add_spot(&g, cb_x - 6, cb_y, cb_w + 12, cb_h);
+
+    CHECK(hit_spot_at(&g, px + cb_x + 4, py + cb_y + 11) == 0,
+          "the checkbox should take a click on its box");
+    CHECK(hit_spot_at(&g, px + cb_x + cb_w - 4, py + cb_y + 11) == 0,
+          "and on the far end of its label");
+    CHECK(hit_row_at(&g, px + cb_x + 4, py + cb_y + 11) == -1,
+          "the checkbox must not also read as a row");
+    CHECK(hit_spot_at(&g, px + 60, py + cb_y + 11) == -1,
+          "the version string is not the checkbox");
+}
+
 int main(void)
 {
     test_cleared();
@@ -254,6 +370,8 @@ int main(void)
     test_calendar_band();
     test_grid();
     test_list_unaffected_by_cols();
+    test_spots();
+    test_welcome_rows();
 
     if (failures) {
         fprintf(stderr, "hit_test: %d failure(s)\n", failures);

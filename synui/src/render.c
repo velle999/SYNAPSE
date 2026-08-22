@@ -619,7 +619,11 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Cat Mode",         "Super+Shift+C", "cat"       },
     { "Lock Screen",      "Super+L",       "lock"      },
     { "AI Backend",       "GPU/CPU/off",   "ai_backend"},
-    { "Show At Startup",  "[x]",           "welcome_startup" },
+    /* "Show At Startup" was a row here. It is the corner checkbox now — see
+     * the footer in synui_render_welcome(): it is the one thing on this panel
+     * that is not something you OPEN, and a list of doors reads better with the
+     * one preference taken out of it and put where a preference goes. The
+     * action it fires (welcome_startup) is unchanged. */
     { "Quit synui",       "Super+Shift+Q", "quit"      },
 };
 const int synui_welcome_menu_len =
@@ -667,6 +671,13 @@ void synui_render_welcome(syn_server_t *s)
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
+
+    /* The pointer's copy of where all that landed (hit.c). Rows only: the
+     * corner checkbox is a loose rect and is added further down, where its
+     * width is known — it is measured from its own label. */
+    hit_set_panel(&s->welcome_ui.hit, px, py, pw, ph);
+    hit_set_rows(&s->welcome_ui.hit, 30, WELCOME_TOP - 20, pw - 60,
+                 WELCOME_ROW_H, synui_welcome_menu_len);
 
     /* Background rect */
     float color[4];
@@ -739,13 +750,10 @@ void synui_render_welcome(syn_server_t *s)
         syn_show_text(cr, synui_welcome_menu[i].label);
 
         /* The AI Backend row shows the live synapd backend instead of a fixed
-         * keybind — it has no default bind, it toggles in place on Enter. So
-         * does Show At Startup, whose hint is its own checkbox. */
+         * keybind — it has no default bind, it toggles in place on Enter. */
         const char *hint = synui_welcome_menu[i].hint;
         if (strcmp(synui_welcome_menu[i].action, "ai_backend") == 0)
             hint = synui_ai_backend_label();
-        else if (strcmp(synui_welcome_menu[i].action, "welcome_startup") == 0)
-            hint = s->config.welcome_at_startup ? "[x]" : "[ ]";
 
         cairo_set_source_rgba(cr, sel ? 0.0 : 0.45, sel ? 0.85 : 0.45,
                               sel ? 0.75 : 0.55, sel ? 1.0 : 1.0);
@@ -759,7 +767,7 @@ void synui_render_welcome(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 44, y + 16);
-    syn_show_text(cr, "Up/Down + Enter select");
+    syn_show_text(cr, "Click or Up/Down + Enter select");
     cairo_move_to(cr, 44, y + 34);
     syn_show_text(cr, "Super+1-9 workspaces \xc2\xb7 Super+Tab cycle layout");
     cairo_move_to(cr, 44, y + 52);
@@ -771,19 +779,84 @@ void synui_render_welcome(syn_server_t *s)
     cairo_move_to(cr, 190, ph - 16);
     syn_show_text(cr, SYNUI_VERSION);
 
+    /*
+     * "Don't show again", bottom-right.
+     *
+     * Phrased as the opt-OUT, so the box you tick is the thing you came here to
+     * do; the config field it writes is the opposite sense (welcome_at_startup),
+     * and this is the only place that inverts it.
+     *
+     * The box is STROKED rather than a typed "[x]", for panel_close_draw()'s
+     * reason further down this file: a "☑" is at the mercy of whatever family
+     * fontpick last applied, and a checkbox that draws as a missing-glyph box
+     * is worse than no checkbox. Two cairo lines are the same two lines in
+     * every theme at every UI font.
+     *
+     * Focusable from the keyboard too — it is the item after the last row (see
+     * welcome_menu_key), so removing it from the list cost nothing.
+     */
+    {
+        const char *cb_label = "Don't show again";
+        const int   CB_BOX   = 13;
+        const int   CB_H     = 22;
+        const int   checked  = !s->config.welcome_at_startup;
+        const int   sel      = (s->welcome_ui.selected == synui_welcome_menu_len);
+
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, cb_label, &te);
+
+        int cb_w = CB_BOX + 8 + (int)te.x_advance;
+        int cb_x = pw - 30 - cb_w;
+        int cb_y = ph - 16 - CB_H + 5;      /* on the version's baseline */
+
+        /* The clickable rect, generous by a few pixels on every side of the
+         * drawing — a 13px box is a small target and the label is part of it. */
+        hit_add_spot(&s->welcome_ui.hit, cb_x - 6, cb_y, cb_w + 12, CB_H);
+
+        if (sel) {
+            set_accent(cr, 0.18);
+            cairo_rectangle(cr, cb_x - 6, cb_y, cb_w + 12, CB_H);
+            cairo_fill(cr);
+        }
+
+        double bx = cb_x, by = cb_y + (CB_H - CB_BOX) / 2.0;
+        cairo_set_line_width(cr, 1.5);
+        if (sel || checked) set_accent(cr, 1.0);
+        else                set_ink(cr, INK_MUTED, 1.0);
+        cairo_rectangle(cr, bx + 0.75, by + 0.75, CB_BOX - 1.5, CB_BOX - 1.5);
+        cairo_stroke(cr);
+
+        if (checked) {
+            cairo_set_line_width(cr, 2);
+            cairo_move_to(cr, bx + 3,          by + CB_BOX / 2.0);
+            cairo_line_to(cr, bx + CB_BOX / 2.4, by + CB_BOX - 4);
+            cairo_line_to(cr, bx + CB_BOX - 2.5, by + 3);
+            cairo_stroke(cr);
+        }
+
+        if (sel)           set_ink(cr, INK_STRONG, 1.0);
+        else if (checked)  set_ink(cr, INK_MUTED, 1.0);
+        else               set_ink(cr, INK_DIM, 0.9);
+        cairo_move_to(cr, cb_x + CB_BOX + 8, cb_y + CB_H - 7);
+        syn_show_text(cr, cb_label);
+    }
+
     cairo_destroy(cr);
     set_scene_buffer(&s->welcome_ui.text_buf, s->welcome_ui.tree, buf);
 
     wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->welcome_ui.tree->node);
-    s->welcome_ui.shown = 1;
+    s->welcome_ui.visible = 1;
 }
 
 void synui_welcome_hide(syn_server_t *s)
 {
-    if (!s->welcome_ui.shown) return;
+    if (!s->welcome_ui.visible) return;
     wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
-    s->welcome_ui.shown = 0;
+    s->welcome_ui.visible = 0;
+    /* Or a closed menu goes on eating clicks — the contract in synui.h. */
+    hit_clear(&s->welcome_ui.hit);
 }
 
 /* Resolve ~/.config/synui/welcome.state; false if $HOME is unset. */
@@ -2390,7 +2463,18 @@ void synui_render_emoji(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    const int cell = 42, top = 88, pad = 16;
+    const int cell = 42, pad = 16;
+    /* The category strip. TWO lines, because nine labels do not fit across a
+     * 536px panel on one — the loop used to draw as many as fitted and drop the
+     * rest, which cost Symbols and Dingbats. That was survivable while Tab was
+     * the only way to change category; now that a tab is a CLICK TARGET, a tab
+     * that is not drawn is a category the mouse cannot reach at all. Both lines
+     * are reserved whether or not the second is used: the widths come from the
+     * UI font at draw time, and there is no measuring the strip before the
+     * buffer that would have to be sized from the answer. */
+    const int TAB_TOP = 38, TAB_LH = 20, TAB_LINES = 2;
+    const int top = TAB_TOP + TAB_LINES * TAB_LH + 26;   /* first grid row */
+    const int rule_y = TAB_TOP + TAB_LINES * TAB_LH + 6; /* the separator */
     int total = emoji_total(s);
 
     int pw = pad * 2 + EMOJI_COLS * cell;
@@ -2404,6 +2488,9 @@ void synui_render_emoji(syn_server_t *s)
     hit_set_panel(&s->emoji.hit, px, py, pw, ph);
     hit_set_grid(&s->emoji.hit, pad, top, cell, cell, EMOJI_COLS, EMOJI_ROWS);
     hit_set_first(&s->emoji.hit, s->emoji.scroll * EMOJI_COLS);
+    /* The tab strip's rects are added by the draw loop below, where each label's
+     * width is measured; these two are its band, shared with that loop so the
+     * drawn row and the clickable row cannot disagree. */
 
     float bg_color[4];
     panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
@@ -2455,24 +2542,43 @@ void synui_render_emoji(syn_server_t *s)
 
     /* Category tabs. Drawn as a single line of names with the active one
      * accented rather than as boxes — there are nine of them and boxes would
-     * take a third of the panel to say what a colour says. */
+     * take a third of the panel to say what a colour says.
+     *
+     * Each one records a loose hit rect (hit.c) in the SAME loop that draws it,
+     * so a tab dropped for want of room is a tab that cannot be clicked either
+     * — which is the whole point of the render function owning the geometry.
+     * The rect index is the category number, because they are added in order
+     * from c = 0 and the loop only ever stops at the end. */
     {
         double tx = pad + 2;
+        int line = 0;
         cairo_set_font_size(cr, 11);
         for (int c = 0; c < emoji_cat_total(); c++) {
             const char *lab = emoji_cat_label(c);
             cairo_text_extents_t te;
             syn_text_extents(cr, lab, &te);
-            if (tx + te.x_advance > pw - pad) break;   /* out of room; drop the rest */
 
-            if (c == s->emoji.cat) set_accent(cr, 1.0);
-            else                   set_ink(cr, INK_DIM, 0.85);
-            cairo_move_to(cr, tx, 52);
+            if (tx + te.x_advance > pw - pad) {         /* out of room on this line */
+                if (++line >= TAB_LINES) break;         /* …and out of lines */
+                tx = pad + 2;
+            }
+
+            double ty = 52 + line * TAB_LH;             /* this line's baseline */
+
+            /* Taller than the text and a little wider: an 11px label is a small
+             * target, and the gap between two tabs belongs to neither. */
+            hit_add_spot(&s->emoji.hit, (int)tx - 5, TAB_TOP + line * TAB_LH,
+                         (int)te.x_advance + 10, TAB_LH);
+
+            if (c == s->emoji.cat)            set_accent(cr, 1.0);
+            else if (c == s->emoji.cat_hover) set_ink(cr, INK_STRONG, 1.0);
+            else                              set_ink(cr, INK_DIM, 0.85);
+            cairo_move_to(cr, tx, ty);
             syn_show_text(cr, lab);
 
             if (c == s->emoji.cat) {
                 set_accent(cr, 0.8);
-                cairo_rectangle(cr, tx, 56, te.x_advance, 1.5);
+                cairo_rectangle(cr, tx, ty + 4, te.x_advance, 1.5);
                 cairo_fill(cr);
             }
             tx += te.x_advance + 14;
@@ -2481,8 +2587,8 @@ void synui_render_emoji(syn_server_t *s)
 
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
-    cairo_move_to(cr, pad, 68);
-    cairo_line_to(cr, pw - pad, 68);
+    cairo_move_to(cr, pad, rule_y);
+    cairo_line_to(cr, pw - pad, rule_y);
     cairo_stroke(cr);
 
     if (total == 0) {
@@ -2552,7 +2658,7 @@ void synui_render_emoji(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, pad + 2, ph - 14);
     syn_show_text(cr,
-        "Type to search \xc2\xb7 Tab category \xc2\xb7 Enter insert \xc2\xb7 Esc clear/close");
+        "Type to search \xc2\xb7 Click or Tab category \xc2\xb7 Enter insert \xc2\xb7 Esc clear/close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->emoji_ui.text_buf, s->emoji_ui.tree, buf);
@@ -9012,7 +9118,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 
     /* Render welcome screen (uses fallback 1920x1080 until output connects).
-     * Opted out of via the menu's own "Show At Startup" row: leave the tree
+     * Opted out of via the menu's own "Don't show again" checkbox: leave the tree
      * empty and disabled — synui_render_welcome builds its nodes lazily, so
      * the first Super+Escape still brings up a complete menu. */
     if (s->config.welcome_at_startup)

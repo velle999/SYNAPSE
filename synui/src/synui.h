@@ -205,6 +205,11 @@ typedef enum {
  * All coordinates are LAYOUT coords — the same space s->cursor->x/y are in —
  * so a hit test is a comparison and never a transform.
  */
+/* Ceiling on the loose rects below. Nine emoji category tabs is the most any
+ * panel asks for today; a spot past this is dropped rather than overflowing,
+ * which costs a click and never memory. */
+#define SYN_HIT_SPOTS 16
+
 typedef struct {
     int x, y, w, h;      /* panel rect; w == 0 means "not on screen" */
     int row_x, row_y;    /* top-left of row 0's hit box */
@@ -232,6 +237,16 @@ typedef struct {
     /* The header strip a windowed panel is dragged by. Zero width when the
      * panel is not in window mode. Cleared by hit_set_panel() like the rest. */
     int drag_x, drag_y, drag_w, drag_h;
+    /* Loose clickable rects that are neither rows nor either of the two
+     * buttons above: the welcome menu's "Don't show again" checkbox, the emoji
+     * picker's category tabs. They are a list because the tabs are a variable
+     * number of variable-WIDTH labels — a grid cannot describe them, and the
+     * alternative was each panel keeping private x/y/w/h fields again, which is
+     * the drift this file exists to stop. Written in draw order, so the index
+     * hit_spot_at() answers with is the panel's own index for the thing drawn
+     * there. Cleared by hit_set_panel() like the close and drag rects. */
+    struct { int x, y, w, h; } spot[SYN_HIT_SPOTS];
+    int spots;
 } syn_hit_t;
 
 /* Record the panel rect. Call once px/py/pw/ph are known. */
@@ -272,6 +287,12 @@ int  hit_col_at(const syn_hit_t *g, double lx, double ly);
  * so a panel with a scrolling list never has to add it back on itself and get it
  * wrong on the one path that forgot. -1 for a miss, as ever. */
 int  hit_index_at(const syn_hit_t *g, double lx, double ly);
+/* Record one loose clickable rect, in PANEL-LOCAL coords like hit_set_rows().
+ * Follows hit_set_panel(), which clears the list. Returns the index it was
+ * given, or -1 if the panel has already recorded SYN_HIT_SPOTS of them. */
+int  hit_add_spot(syn_hit_t *g, int lx, int ly, int w, int h);
+/* Which spot is under (lx,ly), in the order they were added, or -1 for none. */
+int  hit_spot_at(const syn_hit_t *g, double lx, double ly);
 
 /* ── How a panel is dismissed ────────────────────────────────
  *
@@ -863,6 +884,13 @@ typedef struct {
      * the generated table being regenerated against a newer Unicode. */
     char recent[EMOJI_RECENT_MAX][16];
     int  recent_count;
+
+    /* Category tab under the pointer, or -1. Drawn brighter than the rest so
+     * the tab row says it is clickable before you click it — nine words in a
+     * line otherwise look like a caption. Hover only: it never changes `cat`,
+     * because switching category rebuilds the whole view and doing that by
+     * brushing past a tab would throw away the search you had typed. */
+    int  cat_hover;
 
     syn_hit_t hit;
 } syn_emoji_panel_t;
@@ -3492,10 +3520,11 @@ typedef struct {
     int   cat_start;
     int   cat_breed;   /* cat_breed_t — which coat the desktop cat wears */
 
-    /* Show the welcome menu on login. The menu's own "Show At Startup" row
-     * toggles this and writes welcome.state, which then overrides the synuirc
-     * line (delete it to hand control back). Super+Escape opens the menu
-     * either way, so turning this off never strands it. Default 1. */
+    /* Show the welcome menu on login. The menu's own "Don't show again"
+     * checkbox (bottom-right) toggles this and writes welcome.state, which then
+     * overrides the synuirc line (delete it to hand control back). Super+Escape
+     * opens the menu either way, so turning this off never strands it.
+     * Default 1. */
     int   welcome_at_startup;
 
     /* Do Not Disturb: no toast is drawn and nothing chimes while this is on.
@@ -5632,8 +5661,14 @@ struct syn_server {
         struct wlr_scene_rect   *bg;
         struct wlr_scene_rect   *accent;
         struct wlr_scene_buffer *text_buf;
-        int shown;
-        int selected;   /* highlighted synui_welcome_menu entry */
+        /* Named `visible` like every other panel's flag, because the pointer
+         * roster (SYN_PANEL_LIST in input.c) reads them all by that one name. */
+        int visible;
+        /* Highlighted item: a synui_welcome_menu index, or synui_welcome_menu_len
+         * for the "Don't show again" checkbox in the bottom-right corner, which
+         * is a focusable item and not a row of the list. */
+        int selected;
+        syn_hit_t hit;
     } welcome_ui;
 
     struct {
@@ -6760,8 +6795,16 @@ void syn_config_ensure_dir(void);
 void synui_ui_init(syn_server_t *s);
 void synui_render_welcome(syn_server_t *s);
 void synui_welcome_hide(syn_server_t *s);
-/* welcome.state — persists the menu's "Show At Startup" row across restarts.
- * Loaded from config.c (after synuirc), saved when the row is toggled. */
+/* The pointer, per the panel contract above: hover selects, a left click does
+ * what Enter does on that item, a click off the panel closes it, and the wheel
+ * moves the selection (the menu never scrolls — every row is always drawn).
+ * Defined in input.c, beside the menu's keyboard half. */
+int  welcome_motion(syn_server_t *s, double lx, double ly);
+int  welcome_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                   uint32_t time_msec);
+int  welcome_scroll(syn_server_t *s, double lx, double ly, double delta);
+/* welcome.state — persists the menu's "Don't show again" checkbox across
+ * restarts. Loaded from config.c (after synuirc), saved when it is toggled. */
 void welcome_state_load(syn_config_t *cfg);
 void welcome_state_save(syn_config_t *cfg);
 void synui_render_cmdbar(syn_server_t *s);

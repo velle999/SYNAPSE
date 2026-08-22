@@ -473,9 +473,10 @@ numlock      = on
 
 # ── Welcome menu (Super+Escape) ────────────────────────────
 # Whether the menu greets you on login. Super+Escape opens it either way, so
-# turning this off never strands it. The menu's own "Show At Startup" row
-# toggles this and writes ~/.config/synui/welcome.state, which from then on
-# overrides this line — delete that file to hand control back here.
+# turning this off never strands it. The menu's own "Don't show again" checkbox
+# (bottom-right) toggles this and writes ~/.config/synui/welcome.state, which
+# from then on overrides this line — delete that file to hand control back here.
+# Note the sense: the checkbox is ticked when this is off.
 welcome_at_startup = on
 
 # ── Lock screen (Super+L) ──────────────────────────────────

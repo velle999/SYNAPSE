@@ -358,6 +358,135 @@ static void test_modifiers_pass_through(void)
           "a bare letter must go to the search box");
 }
 
+/* ── The pointer ─────────────────────────────────────────────
+ *
+ * The grid took the mouse when it was written; the CATEGORY STRIP did not, so
+ * the nine tabs across the top were the one part of this panel you could see,
+ * could read, and could not click. That is what is pinned here.
+ *
+ * synui_render_emoji() is stubbed, so the geometry it normally writes is
+ * written here instead, with render.c's own numbers — the contract's division
+ * of labour (render.c writes, the panel reads), exactly as panel_pointer_test
+ * does it for the power panel.
+ */
+#define E_PX   400
+#define E_PY   200
+#define E_PAD   16
+#define E_TOP   88
+#define E_CELL  42
+#define E_TAB_TOP 38
+#define E_TAB_H   22
+#define E_PW   (E_PAD * 2 + EMOJI_COLS * E_CELL)
+#define E_PH   (E_TOP + EMOJI_ROWS * E_CELL + 54)
+
+/* Lay the tabs out the way the draw loop does: left to right from pad+2, each
+ * one as wide as its label. The real widths come from cairo; a fixed 60px
+ * pitch is the same SHAPE and is what keeps this test out of the font stack. */
+#define E_TAB_W  50
+#define E_TAB_PITCH 64
+
+static void emoji_geom(syn_server_t *s)
+{
+    hit_set_panel(&s->emoji.hit, E_PX, E_PY, E_PW, E_PH);
+    hit_set_grid(&s->emoji.hit, E_PAD, E_TOP, E_CELL, E_CELL,
+                 EMOJI_COLS, EMOJI_ROWS);
+    hit_set_first(&s->emoji.hit, s->emoji.scroll * EMOJI_COLS);
+    for (int c = 0; c < emoji_cat_total(); c++)
+        hit_add_spot(&s->emoji.hit, E_PAD + 2 + c * E_TAB_PITCH, E_TAB_TOP,
+                     E_TAB_W, E_TAB_H);
+}
+
+/* A point inside tab `c`, in layout coords. */
+static double tab_x(int c) { return E_PX + E_PAD + 2 + c * E_TAB_PITCH + 10; }
+static double tab_y(void)  { return E_PY + E_TAB_TOP + E_TAB_H / 2.0; }
+
+/* A point inside grid cell (row, col). */
+static double cell_x(int col) { return E_PX + E_PAD + col * E_CELL + E_CELL / 2.0; }
+static double cell_y(int row) { return E_PY + E_TOP + row * E_CELL + E_CELL / 2.0; }
+
+static void test_tab_pointer(void)
+{
+    syn_server_t *s = fresh();
+    emoji_show(s);
+    emoji_geom(s);
+
+    const int target = EMOJI_CAT_FIRST_BLOCK + 1;   /* a block, not All/Recents */
+    CHECK(s->emoji.cat != target, "the fixture should not already be on the target tab");
+
+    /* Hover highlights and NOTHING else. Switching category on hover would
+     * rebuild the view — and throw away a typed search — every time the pointer
+     * crossed the strip on its way to the grid. */
+    int before = s->emoji.cat;
+    CHECK(emoji_motion(s, tab_x(target), tab_y()) == 1,
+          "the strip is inside the panel, so motion belongs to the picker");
+    CHECK(s->emoji.cat == before, "hovering a tab must not switch to it");
+    CHECK(s->emoji.cat_hover == target, "hovering a tab should highlight it");
+
+    /* Off the strip clears the highlight rather than leaving the last tab lit. */
+    emoji_motion(s, cell_x(0), cell_y(0));
+    CHECK(s->emoji.cat_hover == -1, "leaving the strip should clear the highlight");
+
+    /* The click is the whole point. */
+    s->emoji.selected = 5;
+    CHECK(emoji_click(s, tab_x(target), tab_y(), BTN_LEFT, 0) == 1,
+          "a click on a tab belongs to the picker");
+    CHECK(s->emoji.cat == target, "a click on a tab should switch to it");
+    CHECK(s->emoji.selected == 0,
+          "switching category should put the selection back at the start");
+    CHECK(emoji_total(s) > 0 && emoji_total(s) < syn_emoji_count,
+          "the view should now be one block, not the whole table");
+
+    /* Clicking the tab you are already on is a no-op you cannot tell from a
+     * rebuild — what matters is that it does not close the panel. */
+    emoji_geom(s);
+    emoji_click(s, tab_x(target), tab_y(), BTN_LEFT, 0);
+    CHECK(s->emoji.visible, "clicking the active tab must not close the picker");
+    CHECK(s->emoji.cat == target, "…and must not move off it either");
+
+    /* A click on the strip is never a click on a cell: the bands do not
+     * overlap, and an emoji inserted by aiming at a tab would close the panel
+     * and type a character nobody asked for. */
+    spawn_count = 0;
+    emoji_geom(s);
+    emoji_click(s, tab_x(0), tab_y(), BTN_LEFT, 0);
+    CHECK(spawn_count == 0, "a click on a tab must not insert anything");
+    CHECK(s->emoji.visible, "…and must not close the picker");
+}
+
+/* The grid's own pointer, which the tabs now share a panel with — pinned here
+ * so a change to the strip that swallowed the grid's clicks would be caught. */
+static void test_grid_pointer(void)
+{
+    syn_server_t *s = fresh();
+    /* The picker opens on Recents once anything has been inserted (the tests
+     * above leave a recents file in the scratch home), and Recents is a short
+     * row — so click through to All, which is the full grid this exercises.
+     * Doubles as the check that the tab strip is how you get there. */
+    emoji_show(s);
+    emoji_geom(s);
+    emoji_click(s, tab_x(EMOJI_CAT_ALL), tab_y(), BTN_LEFT, 0);
+    CHECK(s->emoji.cat == EMOJI_CAT_ALL, "the All tab should switch to All");
+    emoji_geom(s);
+
+    emoji_motion(s, cell_x(3), cell_y(1));
+    CHECK(s->emoji.selected == EMOJI_COLS + 3,
+          "hover should select the cell under the pointer (got %d)",
+          s->emoji.selected);
+
+    spawn_count = 0;
+    emoji_click(s, cell_x(3), cell_y(1), BTN_LEFT, 0);
+    CHECK(spawn_count == 2, "a click on a cell should copy and type it (got %d)",
+          spawn_count);
+    CHECK(!s->emoji.visible, "inserting closes the picker");
+
+    /* And a click off the panel closes it, which is every panel's contract. */
+    emoji_show(s);
+    emoji_geom(s);
+    CHECK(emoji_click(s, E_PX - 40, E_PY - 40, BTN_LEFT, 0) == 1,
+          "a click off the panel is still the picker's to swallow");
+    CHECK(!s->emoji.visible, "a click off the panel closes it");
+}
+
 int main(void)
 {
     char tmpl[] = "/tmp/synui-emoji-test-XXXXXX";
@@ -373,6 +502,8 @@ int main(void)
     test_search_from_recents();
     test_categories();
     test_modifiers_pass_through();
+    test_tab_pointer();
+    test_grid_pointer();
 
     char p[320];
     snprintf(p, sizeof(p), "%s/emoji.recent", scratch);

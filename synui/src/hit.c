@@ -43,6 +43,10 @@ void hit_set_panel(syn_hit_t *g, int x, int y, int w, int h)
      * — stops answering for it on the next render without saying so. */
     g->close_x = g->close_y = g->close_w = g->close_h = 0;
     g->drag_x  = g->drag_y  = g->drag_w  = g->drag_h  = 0;
+    /* And the loose rects, for the same reason: a panel that stops drawing its
+     * checkbox or drops a tab off the end of the row stops answering for it on
+     * the next render without a clear anywhere. */
+    g->spots = 0;
 }
 
 void hit_set_rows(syn_hit_t *g, int lx, int ly, int w, int h, int n)
@@ -108,6 +112,37 @@ void hit_set_drag(syn_hit_t *g, int lx, int ly, int w, int h)
     g->drag_y = g->y + ly;
     g->drag_w = w < 0 ? 0 : w;
     g->drag_h = h < 0 ? 0 : h;
+}
+
+/* ── Loose rects ─────────────────────────────────────────────
+ *
+ * A checkbox in a corner, a row of category tabs: things a panel draws that are
+ * neither a row of its list nor one of the two standard buttons. Recorded in
+ * DRAW order, so the index that comes back is the one the panel was drawing
+ * when it added the rect — the emoji picker adds one per category and reads the
+ * answer straight back as a category number.
+ */
+int hit_add_spot(syn_hit_t *g, int lx, int ly, int w, int h)
+{
+    if (g->spots >= SYN_HIT_SPOTS) return -1;
+    if (w <= 0 || h <= 0) return -1;
+
+    int i = g->spots++;
+    g->spot[i].x = g->x + lx;
+    g->spot[i].y = g->y + ly;
+    g->spot[i].w = w;
+    g->spot[i].h = h;
+    return i;
+}
+
+int hit_spot_at(const syn_hit_t *g, double lx, double ly)
+{
+    for (int i = 0; i < g->spots; i++) {
+        if (lx >= g->spot[i].x && lx < g->spot[i].x + g->spot[i].w &&
+            ly >= g->spot[i].y && ly < g->spot[i].y + g->spot[i].h)
+            return i;
+    }
+    return -1;
 }
 
 int hit_in_drag(const syn_hit_t *g, double lx, double ly)

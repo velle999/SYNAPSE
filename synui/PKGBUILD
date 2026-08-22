@@ -364,8 +364,38 @@ pkgver=0.1.0
 #   glyph beside it being 27 L* brighter than it was ever drawn, and with the
 #   glyph back where it belongs the hue step is all there is. It buys about
 #   0.8 dE per degree.
+# 422: the welcome menu (Super+Escape) takes the mouse, and its one preference
+#   moved out of the list of doors. "Show At Startup" was the second-to-last row
+#   of a menu whose every other row OPENS something — so it read as one more
+#   thing to launch, and it was the only row where Enter meant "tick" rather
+#   than "go". It is a stroked checkbox in the bottom-right corner now, labelled
+#   "Don't show again" — the opt-OUT, because ticking a box you came here to
+#   tick is the thing you are actually doing. ⚠ The sense is INVERTED against
+#   the config field (welcome_at_startup) and render.c is the only place that
+#   flips it. Still focusable from the keyboard as the item after the last row,
+#   so nothing that worked stopped working, and Space ticks it there.
+#   The pointer is the standard contract (synui.h): hover selects, a left click
+#   does the row's Enter, a click off the panel closes it, the wheel moves the
+#   selection. welcome_ui.shown is welcome_ui.visible now — SYN_PANEL_LIST reads
+#   every panel's flag by that one name and adding a nineteenth spelling to the
+#   roster is how the roster stops being one.
+#   ⚠ hit.c grew SPOTS: loose clickable rects, in draw order, for the things
+#   that are neither rows nor the close/drag buttons. The alternative was the
+#   two panels below keeping private x/y/w/h again, which is the drift that file
+#   exists to stop. hit_set_panel() blanks them, so a panel that stops drawing
+#   one stops answering for it with nobody doing anything.
+#   The emoji picker's CATEGORY STRIP takes the mouse too — nine tabs you could
+#   read and could not click, because only the grid had ever been wired up.
+#   Hover highlights, a click switches; hover deliberately does NOT switch, as
+#   rebuilding the view on the way past would throw away a typed search. Tab,
+#   Shift+Tab and a click all go through one emoji_set_cat().
+#   ⚠ The strip is TWO LINES now. It drew as many tabs as fitted across 536px
+#   and dropped the rest, which cost Symbols and Dingbats — survivable while Tab
+#   was the only way to reach them, and not survivable once a tab is a click
+#   target, because a tab that is not drawn is a category the mouse cannot get
+#   to at all.
 
-pkgrel=421
+pkgrel=422
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

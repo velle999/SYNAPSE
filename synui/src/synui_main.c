@@ -788,7 +788,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
 
     /* Re-home the compositor UI onto a surviving output. */
     if (!server->shutting_down && !wl_list_empty(&server->outputs)) {
-        if (server->welcome_ui.shown)
+        if (server->welcome_ui.visible)
             synui_render_welcome(server);
         if (server->overlay.visible)
             synui_render_overlay(server);
@@ -940,7 +940,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
     deskicons_layout(server);
     synui_render_deskicons(server);
     layout_apply(server, server_active_workspace(server));
-    if (server->welcome_ui.shown)
+    if (server->welcome_ui.visible)
         synui_render_welcome(server);
     if (server->overlay.visible)
         synui_render_overlay(server);

@@ -251,6 +251,7 @@ void emoji_show(syn_server_t *s)
     s->emoji.search_len = 0;
     s->emoji.selected  = 0;
     s->emoji.scroll    = 0;
+    s->emoji.cat_hover = -1;
     emoji_rebuild(s);
 
     s->emoji.visible = 1;
@@ -260,6 +261,7 @@ void emoji_show(syn_server_t *s)
 void emoji_hide(syn_server_t *s)
 {
     s->emoji.visible = 0;
+    s->emoji.cat_hover = -1;
     synui_render_emoji(s);
     ctlpanel_child_closed(s, "emoji");
 }
@@ -325,9 +327,34 @@ static void emoji_insert(syn_server_t *s, const char *ch)
  * The panel pointer contract in synui.h. A grid, so this is the one panel that
  * uses hit_set_grid()/hit_col_at(); everything else about it matches curpick. */
 
+/* Switch to category `c` and rebuild the view. The one path: Tab, Shift+Tab and
+ * a click on a tab all land here, so a category can never be changed by one of
+ * them in a way the others do not do. Keeps the search text — a category is a
+ * narrowing of what you already typed, and clearing it would undo the typing
+ * that got you this far. */
+static void emoji_set_cat(syn_server_t *s, int c)
+{
+    int n = emoji_cat_total();
+    if (n <= 0) return;
+    s->emoji.cat      = ((c % n) + n) % n;
+    s->emoji.selected = 0;
+    emoji_rebuild(s);
+    synui_render_emoji(s);
+}
+
 int emoji_motion(syn_server_t *s, double lx, double ly)
 {
     if (!s->emoji.visible) return 0;
+
+    /* The category strip first: it sits above the grid, so a hit there is never
+     * a cell, and only the hover highlight moves — see cat_hover in synui.h for
+     * why pointing at a tab must not switch to it. */
+    int tab = hit_spot_at(&s->emoji.hit, lx, ly);
+    if (tab != s->emoji.cat_hover) {
+        s->emoji.cat_hover = tab;
+        synui_render_emoji(s);
+    }
+    if (tab >= 0) return 1;
 
     /* Hover DOES move the selection here, unlike the pickers whose selection
      * applies something — moving it costs a repaint and nothing else, and on a
@@ -352,6 +379,13 @@ int emoji_click(syn_server_t *s, double lx, double ly, uint32_t button,
         return 1;
     }
     if (button != BTN_LEFT) return 1;
+
+    /* A category tab. Above the grid and tested first, exactly as in _motion. */
+    int tab = hit_spot_at(&s->emoji.hit, lx, ly);
+    if (tab >= 0) {
+        emoji_set_cat(s, tab);
+        return 1;
+    }
 
     int i = hit_index_at(&s->emoji.hit, lx, ly);
     if (i < 0 || i >= emoji_total(s)) return 1;   /* chrome */
@@ -441,17 +475,11 @@ int emoji_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return 1;
 
     case XKB_KEY_Tab:
-        e->cat = (e->cat + 1) % emoji_cat_total();
-        e->selected = 0;
-        emoji_rebuild(s);
-        synui_render_emoji(s);
+        emoji_set_cat(s, e->cat + 1);
         return 1;
 
     case XKB_KEY_ISO_Left_Tab:   /* Shift+Tab */
-        e->cat = (e->cat + emoji_cat_total() - 1) % emoji_cat_total();
-        e->selected = 0;
-        emoji_rebuild(s);
-        synui_render_emoji(s);
+        emoji_set_cat(s, e->cat - 1);
         return 1;
 
     case XKB_KEY_Left:

@@ -1320,15 +1320,17 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             wlr_output_schedule_frame(o->wlr_output);
         }
     } else if (strcmp(action, "welcome_startup") == 0) {
-        /* The menu's own "Show At Startup" checkbox. Toggles in place and
-         * re-renders so the box visibly ticks — unlike the rows that launch
-         * something, there is nothing else to show for it. Persisted, so the
-         * choice survives the restart it is about. */
+        /* The menu's own "Don't show again" checkbox, bottom-right. Toggles in
+         * place and re-renders so the box visibly ticks — unlike the rows that
+         * launch something, there is nothing else to show for it. Persisted, so
+         * the choice survives the restart it is about. Note the sense: the
+         * checkbox is the opt-OUT and this field is the opt-IN, and render.c is
+         * the only place that inverts it. */
         s->config.welcome_at_startup = !s->config.welcome_at_startup;
         welcome_state_save(&s->config);
         synui_render_welcome(s);
     } else if (strcmp(action, "menu") == 0) {
-        if (s->welcome_ui.shown) synui_welcome_hide(s);
+        if (s->welcome_ui.visible) synui_welcome_hide(s);
         else                     synui_render_welcome(s);
     } else if (strcmp(action, "control") == 0) {
         /* Bare (Super+C) toggles the front door; with a category name it opens
@@ -1533,12 +1535,39 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     return true;
 }
 
-/* Welcome-menu navigation: only unmodified Up/Down/j/k, Enter and Escape are
- * intercepted while the menu is shown; everything else falls through to the
- * bind table and the focused client. */
+/* ── The welcome menu (Super+Escape) ─────────────────────────
+ *
+ * The menu is drawn by synui_render_welcome() in render.c; both halves of its
+ * input live here, beside each other, because they say the same thing twice —
+ * a click on an item does what Enter does on it.
+ *
+ * There are synui_welcome_menu_len + 1 focusable items: the rows, then the
+ * "Don't show again" checkbox in the bottom-right corner, which is item
+ * WELCOME_CHECK. It used to be the last row of the list; it is still reachable
+ * by keyboard for that reason, and the arithmetic below is the only place that
+ * knows it sits one past the end.
+ */
+#define WELCOME_CHECK   (synui_welcome_menu_len)
+#define WELCOME_ITEMS   (synui_welcome_menu_len + 1)
+
+/* Do item `i`: the row's bind action, or toggle the checkbox. Both spellings of
+ * "activate" (Enter and a left click) come through here. */
+static void welcome_activate(syn_server_t *s, int i)
+{
+    if (i < 0 || i > WELCOME_CHECK) return;
+
+    if (i == WELCOME_CHECK)
+        synui_binding_execute(s, "welcome_startup", "");
+    else
+        synui_binding_execute(s, synui_welcome_menu[i].action, "");
+}
+
+/* Welcome-menu navigation: only unmodified Up/Down/j/k, Enter, Space and
+ * Escape are intercepted while the menu is shown; everything else falls through
+ * to the bind table and the focused client. */
 static bool welcome_menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
-    if (!s->welcome_ui.shown) return false;
+    if (!s->welcome_ui.visible) return false;
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
                 WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
         return false;
@@ -1547,26 +1576,94 @@ static bool welcome_menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_Up:
     case XKB_KEY_k:
         s->welcome_ui.selected =
-            (s->welcome_ui.selected + synui_welcome_menu_len - 1)
-            % synui_welcome_menu_len;
+            (s->welcome_ui.selected + WELCOME_ITEMS - 1) % WELCOME_ITEMS;
         synui_render_welcome(s);
         return true;
     case XKB_KEY_Down:
     case XKB_KEY_j:
         s->welcome_ui.selected =
-            (s->welcome_ui.selected + 1) % synui_welcome_menu_len;
+            (s->welcome_ui.selected + 1) % WELCOME_ITEMS;
         synui_render_welcome(s);
         return true;
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
-        synui_binding_execute(s, synui_welcome_menu[s->welcome_ui.selected].action,
-                        "");
+        welcome_activate(s, s->welcome_ui.selected);
         return true;
+    /* Space ticks the checkbox, which is what Space does to a checkbox
+     * everywhere else. Only there: on a row it would be a second Enter, and
+     * launching a terminal by brushing the space bar is not wanted. */
+    case XKB_KEY_space:
+        if (s->welcome_ui.selected == WELCOME_CHECK) {
+            welcome_activate(s, WELCOME_CHECK);
+            return true;
+        }
+        return false;
     case XKB_KEY_Escape:
         synui_welcome_hide(s);
         return true;
     }
     return false;
+}
+
+/* ── …and its pointer (the contract in synui.h) ──────────────
+ *
+ * The list never scrolls — every row is drawn, always — so there is no first-row
+ * offset here and hit_row_at() answers in menu indices directly.
+ */
+
+/* Which item is under the cursor, or -1. The checkbox is a loose rect rather
+ * than a row, so this is two questions and not one. */
+static int welcome_item_at(syn_server_t *s, double lx, double ly)
+{
+    if (hit_spot_at(&s->welcome_ui.hit, lx, ly) == 0) return WELCOME_CHECK;
+    return hit_row_at(&s->welcome_ui.hit, lx, ly);
+}
+
+int welcome_motion(syn_server_t *s, double lx, double ly)
+{
+    if (!s->welcome_ui.visible) return 0;
+
+    int i = welcome_item_at(s, lx, ly);
+    if (i < 0 || i == s->welcome_ui.selected) return 1;
+    s->welcome_ui.selected = i;
+    synui_render_welcome(s);
+    return 1;
+}
+
+int welcome_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;
+    if (!s->welcome_ui.visible) return 0;
+
+    if (!hit_in_panel(&s->welcome_ui.hit, lx, ly)) {
+        synui_welcome_hide(s);
+        return 1;
+    }
+    if (button != BTN_LEFT) return 1;
+
+    int i = welcome_item_at(s, lx, ly);
+    if (i < 0) return 1;                       /* the header, the footer hints */
+
+    /* Move the selection first: several of these actions hide the menu, and one
+     * of them (the checkbox) re-renders it — either way the selection must
+     * already be where the click was. */
+    s->welcome_ui.selected = i;
+    welcome_activate(s, i);
+    return 1;
+}
+
+int welcome_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->welcome_ui.visible) return 0;
+    if (delta == 0) return 1;
+
+    int next = s->welcome_ui.selected + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= WELCOME_ITEMS) return 1;
+    s->welcome_ui.selected = next;
+    synui_render_welcome(s);
+    return 1;
 }
 
 /* The digit a keypad key stands for, or NoSymbol if it isn't one.
@@ -2705,7 +2802,8 @@ void pointer_rebase(syn_server_t *s)
     X(keys,     keys)     \
     X(overview, overview) \
     X(theme,    thememgr) \
-    X(clipboard, clipboard)
+    X(clipboard, clipboard) \
+    X(welcome,  welcome_ui)
 
 /* Is any of them open? Asked where there is nothing to hand the event to but it
  * still must not reach the window underneath — a horizontal wheel, and the

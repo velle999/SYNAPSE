@@ -117,8 +117,9 @@
  *   cat = on|off                (default off; Super+Shift+C toggles at runtime)
  *
  * Welcome menu (render.c) — Super+Escape opens it regardless; this is only
- * whether it greets you on login. The menu's "Show At Startup" row toggles it
- * live and writes welcome.state, which then overrides this line:
+ * whether it greets you on login. The menu's "Don't show again" checkbox
+ * toggles it live (inverted — ticked means off) and writes welcome.state, which
+ * then overrides this line:
  *   welcome_at_startup = on|off (default on)
  *   notif_dnd = on|off (default off) — Do Not Disturb: no toast, no chime.
  *     Critical urgency still gets through. Super+Shift+N toggles it and writes
