@@ -99,6 +99,17 @@ custom="${notesdir}/${ver}.md"
 # two Download sections that disagree about how specific they are.
 have_own_download=0
 if [[ -f $custom ]]; then
+    # A notes file that spells the download out itself carries the real checksum,
+    # and the way that is written is by pasting it in after the build. v0.2.9.2
+    # went out with the literal PASTE-THE-SHA256-HERE-AFTER-BUILDING on the
+    # release page, where the one instruction that exists to prove the download
+    # is intact had nothing to compare against. Nothing complained, because a
+    # placeholder is only wrong to a reader. So it is a gate, not a habit: the
+    # marker is the word PASTE in capitals, which no prose here uses.
+    if grep -nE 'PASTE[-_ ]?[A-Z]' "$custom" >&2; then
+        echo "publish-release: release-notes/${ver}.md still holds the placeholder above — fill it in" >&2
+        exit 1
+    fi
     cat "$custom" >> "$notes"
     echo "using release notes: $custom"
     if grep -qE '^## (Getting the image|Download)' "$custom"; then
