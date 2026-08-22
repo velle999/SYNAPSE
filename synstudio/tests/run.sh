@@ -118,7 +118,11 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 echo "== basics"
 check "version"     "0.1.0"  "$($BIN version)"
-check "key count"   "66"     "$($BIN keys | wc -l)"
+# 67 since 0.1.0-31 added `log`, the input transform. The number is asserted
+# rather than left loose because the develop table drives the CLI, the sidecar
+# and both GUI panels — a setting that appears or vanishes without anyone
+# meaning it to should stop the build.
+check "key count"   "67"     "$($BIN keys | wc -l)"
 $BIN help | seen "help mentions the sidecar" "sidecar"
 
 echo "== the setting table"
@@ -2181,6 +2185,69 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ----------------------------------------------------- log input curves --
+#
+# What the FILE's code values mean. A camera shooting log records scene light
+# through a curve of its own, and an image loader — which assumes sRGB,
+# because that is what image loaders do — decodes that curve as a display
+# encoding. The picture comes out flat and washed and no amount of contrast
+# puts it right, because the numbers were never sRGB.
+#
+# ⚠ ASSERTED AGAINST THE PUBLISHED ANCHORS, in floating point, through the
+# binary. A transform whose constants are subtly wrong makes a PLAUSIBLE
+# picture, which is the worst kind of wrong — and an 8-bit render cannot tell
+# the difference, because this pipeline's own round trip loses a code either
+# way (an identity render of 150 comes back 149).
+
+lin_at() {  # lin_at <curve> <code>
+    $BIN logcurve "$1" --value "$2" | awk -F'\t' '/^linear/{print $2}'
+}
+close() {   # close <label> <got> <want> <tol>
+    check "$1" "yes" \
+          "$(awk -v g="$2" -v w="$3" -v t="$4" \
+                 'BEGIN{d=g-w; if(d<0)d=-d; print (d<=t)?"yes":"no"}')"
+}
+
+$BIN logcurve | seen "the curves are listed" "slog3"
+$BIN logcurve nonesuch --value 0.5 2>&1 | seen "an unknown curve is refused" "none, slog3 or vlog"
+
+# Sony S-Log3: 18% grey at 420/1023, 90% white at 598/1023, black at 95/1023.
+close "S-Log3 puts 18% grey where Sony says"  "$(lin_at slog3 0.410557)" 0.18 0.001
+close "and 90% white where Sony says"         "$(lin_at slog3 0.584555)" 0.90 0.005
+close "and black at its own black"            "$(lin_at slog3 0.092864)" 0.00 0.001
+
+# Panasonic V-Log: 18% grey at 0.423, black at 0.125.
+close "V-Log puts 18% grey where Panasonic says" "$(lin_at vlog 0.423)" 0.18 0.001
+close "and black at its own black"               "$(lin_at vlog 0.125)" 0.00 0.001
+# ⚠ 0.588, NOT 0.599. The spec's table lists 0.599 beside 90% and it is easy
+# to read as the 90% anchor; solving the curve for 0.90 gives 0.588167, and
+# 0.599 is 100% reflectance. This assertion is here because the first version
+# of the comment in colour.c said 90% and this test is what caught it.
+close "and 90% white at 0.588, not 0.599"        "$(lin_at vlog 0.588167)" 0.90 0.002
+close "which is where 100% actually is"          "$(lin_at vlog 0.599)"    1.00 0.005
+
+close "none passes a value straight through"     "$(lin_at none 0.37)"     0.37 0.000001
+
+# And it is plumbed into the develop stack, not just reachable as a number.
+if have ffmpeg; then
+    mklog() { python3 -c "import sys; sys.stdout.buffer.write(bytes([$1,$1,$1])*256)" \
+              | ffmpeg -v error -y -f rawvideo -pix_fmt rgb24 -s 16x16 -i - "$2" 2>/dev/null; }
+    codeof() { ffmpeg -v error -y -i "$1" -vf format=rgb24 -f rawvideo - 2>/dev/null \
+               | od -An -tu1 -N1 | tr -d ' '; }
+    mklog 105 "$TMP/log18.png"
+    rm -f "$TMP/log18.png.synstudio"
+    $BIN render "$TMP/log18.png" --out "$TMP/log18o.png" --set log=1 >/dev/null 2>&1
+    got=$(codeof "$TMP/log18o.png")
+    # 18% linear is sRGB code 118. ±3 because the fixture is 8-bit (the true
+    # anchor is code 104.7) and the pipeline's own round trip loses one.
+    close "a log grey develops to mid grey" "$got" 118 3
+    # The discriminating half: WITHOUT the transform the same file is much
+    # darker, because it is being read as a display encoding.
+    $BIN render "$TMP/log18.png" --out "$TMP/log18n.png" >/dev/null 2>&1
+    check "and is nothing like that untransformed" "yes" \
+          "$(awk -v a="$(codeof "$TMP/log18n.png")" 'BEGIN{print (a<112)?"yes":"no"}')"
+fi
+
 # --------------------------------------------------- track automation ----
 #
 # A fader ridden against the picture. ⚠ Its keys are in TIMELINE seconds,

@@ -960,7 +960,38 @@ pkgver=0.1.0
 #   against the same bed with no automation.
 #
 #   574 assertions, clean under ASan+UBSan+LSan.
-pkgrel=30
+#
+# 31 LOG INPUT TRANSFORMS — what the file's numbers MEAN.
+#
+#   A camera shooting log records scene light through a curve of its own, and
+#   an image loader decodes it as sRGB because that is what image loaders do.
+#   The picture comes out flat and washed and no amount of contrast puts it
+#   right, because the numbers were never sRGB in the first place.
+#
+#   `log = none|slog3|vlog`, applied FIRST — before white balance, before
+#   anything else reads a pixel. It UNDOES the loader's sRGB decode and
+#   applies the camera's curve instead, landing in the linear scene light the
+#   rest of the stack expects. Undoing rather than skipping: the decode has
+#   already happened by the time a develop stack sees a pixel, and re-plumbing
+#   every loader to ask a develop setting would put this decision in a dozen
+#   places instead of one.
+#
+#   ⚠ ONLY CURVES WITH A CHECKABLE ANCHOR. Each maps 18% grey to a code value
+#   the manufacturer publishes, and `synstudio logcurve` exposes the transform
+#   so the suite can assert it IN FLOATING POINT. An 8-bit render cannot tell
+#   a subtly wrong constant from a right one — this pipeline's own round trip
+#   loses a code either way (an identity render of 150 comes back 149) — and a
+#   transform whose constants are slightly off makes a PLAUSIBLE picture,
+#   which is the worst kind of wrong.
+#
+#   ⚠ AND THE TEST CAUGHT THE DOCUMENTATION, NOT THE CODE. V-Log's 0.599 is
+#   100% reflectance, not 90%: solving the curve for 0.90 gives 0.588167. The
+#   spec's table lists 0.599 beside 90% and it is easy to read as the anchor.
+#   The formula was right and the comment above it was wrong, which is the
+#   version of this mistake that survives review.
+#
+#   586 assertions, clean under ASan+UBSan+LSan.
+pkgrel=31
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

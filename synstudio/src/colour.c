@@ -228,6 +228,26 @@ void ss_pixel_pointwise(const ss_develop *d, float in[3], float out[3])
 
     rgb[0] = in[0]; rgb[1] = in[1]; rgb[2] = in[2];
 
+    /* --- what the numbers MEAN ----------------------------------------- */
+
+    /* ⚠ FIRST, before white balance and before anything else reads them.
+     *
+     * The loader decoded this file as sRGB, because that is what an image
+     * loader does. If the camera was shooting log, those code values were
+     * never an sRGB encoding — so the sRGB decode is undone here and the
+     * camera's own curve applied instead, landing in the linear scene light
+     * the rest of this function expects.
+     *
+     * Undoing rather than skipping: the decode has already happened by the
+     * time a develop stack sees a pixel, and re-plumbing every loader to ask
+     * a develop setting what to do would put this decision in a dozen places
+     * instead of one. */
+    if (d->log_in != SS_LOG_NONE) {
+        rgb[0] = ss_log_to_linear(d->log_in, ss_linear_to_srgb(rgb[0]));
+        rgb[1] = ss_log_to_linear(d->log_in, ss_linear_to_srgb(rgb[1]));
+        rgb[2] = ss_log_to_linear(d->log_in, ss_linear_to_srgb(rgb[2]));
+    }
+
     /* --- linear domain ------------------------------------------------- */
 
     wb_multipliers(d, m);
@@ -405,5 +425,62 @@ void ss_apply_pointwise(ss_image *im, const ss_develop *d)
         in[0] = p[0]; in[1] = p[1]; in[2] = p[2];
         ss_pixel_pointwise(d, in, out);
         p[0] = out[0]; p[1] = out[1]; p[2] = out[2];
+    }
+}
+
+/* -------------------------------------------------------- log decoding -- */
+
+/* Published camera curves, and only ones whose formula carries a checkable
+ * anchor: each maps 18% grey and 90% white to code values the manufacturer
+ * states, and tests/run.sh asserts exactly those. A transform whose constants
+ * are subtly wrong makes a plausible picture, which is far worse than one
+ * that is obviously broken.
+ */
+
+static const char *log_names[] = { "none", "slog3", "vlog" };
+
+int ss_log_value(const char *s)
+{
+    int i;
+    if (!s) return -1;
+    for (i = 0; i < 3; i++) if (!strcmp(s, log_names[i])) return i;
+    return -1;
+}
+
+const char *ss_log_name(int v)
+{
+    return (v >= 0 && v < 3) ? log_names[v] : log_names[0];
+}
+
+float ss_log_to_linear(int mode, float code)
+{
+    double x = code;
+
+    switch (mode) {
+    case SS_LOG_SLOG3:
+        /* Sony S-Log3. Anchors: 18% grey at 420/1023, 90% white at 598/1023.
+         * The break is at 171.2102946929/1023, below which the curve is the
+         * straight segment Sony specifies rather than the logarithm. */
+        if (x >= 171.2102946929 / 1023.0)
+            return (float)((pow(10.0, ((x * 1023.0 - 420.0) / 261.5)) *
+                            (0.18 + 0.01)) - 0.01);
+        return (float)((x * 1023.0 - 95.0) * 0.01125000 /
+                       (171.2102946929 - 95.0));
+
+    case SS_LOG_VLOG:
+        /* Panasonic V-Log. b, c and d are Panasonic's own constants.
+         *
+         * ⚠ Anchors: 18% grey at 0.423, and 0.599 is 100% reflectance — NOT
+         * 90%, which the spec's own table makes easy to misread. Solving the
+         * curve for 0.90 gives 0.588. The first version of this comment said
+         * 90% and the anchor test caught it: the CODE was right and the claim
+         * about it was wrong, which is the version of this mistake that
+         * survives review. 90% white is 0.588167. */
+        if (x < 0.181)
+            return (float)((x - 0.125) / 5.6);
+        return (float)(pow(10.0, ((x - 0.598206) / 0.241514)) - 0.00873);
+
+    default:
+        return code;
     }
 }

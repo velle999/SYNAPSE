@@ -50,6 +50,8 @@ static void usage(void)
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
 "  render FILE --out OUT         apply the sidecar and write a new file\n"
 "  histogram FILE                256 bins per channel, tab separated\n"
+"  logcurve [none|slog3|vlog] [--value CODE]   what a camera's own curve\n"
+"                                means: a code value in, scene light out\n"
 "  match FILE --ref REFERENCE    make this shot look like that one:\n"
 "                                brightness, contrast and white balance,\n"
 "                                FITTED through the engine rather than solved\n"
@@ -3165,6 +3167,32 @@ int main(int argc, char **argv)
         if (argc > 3 && !strcmp(argv[2], "show")) return cmd_lut_show(argv[3]);
         if (parse_opts(argc, argv, 2, &o, &rest, &nrest) != 0) return die("bad option");
         return cmd_lut(&o);
+    }
+
+    /* What a camera's own curve does to one code value.
+     *
+     * A diagnostic, and the thing the suite asserts against: the anchors these
+     * transforms are DEFINED by — 18% grey and 90% white — are numbers the
+     * manufacturers publish, so the curve can be held against them exactly
+     * rather than eyeballed through an 8-bit render whose own round trip
+     * loses a code either way. */
+    if (!strcmp(cmd, "logcurve")) {
+        int m;
+        double v;
+        if (argc < 3) {
+            printf("log\tnone\ta pass-through\n");
+            printf("log\tslog3\tSony S-Log3 — 18%% grey 420/1023, 90%% white 598/1023\n");
+            printf("log\tvlog\tPanasonic V-Log — 18%% grey 0.423, 90%% white 0.588\n");
+            return 0;
+        }
+        m = ss_log_value(argv[2]);
+        if (m < 0) return die("log is none, slog3 or vlog");
+        if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (!o.has_value) return die("logcurve wants --value CODE (0..1)");
+        v = ss_log_to_linear(m, (float)o.value);
+        printf("code\t%.6f\nlinear\t%.6f\n", o.value, v);
+        return 0;
     }
 
     if (argc < 3) return die("%s needs a file", cmd);

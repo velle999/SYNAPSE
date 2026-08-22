@@ -43,6 +43,9 @@ typedef struct {
     { k, t, offsetof(ss_develop, m), lo, hi, grp, lbl }
 
 static const field fields[] = {
+    /* First, because everything below it is reading numbers this decides the
+     * meaning of. */
+    D("log",              F_INT,   log_in,           0.0f,       2.0f, "Basic", "Log input"),
     D("temp",             F_FLOAT, temp_k,           0.0f,   50000.0f, "Basic", "Temperature"),
     D("tint",             F_FLOAT, tint,          -150.0f,     150.0f, "Basic", "Tint"),
 

@@ -75,7 +75,38 @@ typedef struct {
 
 /* Every field is 0 = no effect, so a zeroed struct is the null grade. That is
  * relied on by ss_develop_is_identity and by the .cube baker. */
+/* ---- input transform ----
+ *
+ * What the FILE's code values mean. A camera shooting log records scene light
+ * through a curve of its own, and a file loader that assumes sRGB — which
+ * every image loader does — decodes that curve as if it were a display
+ * encoding. The picture comes out flat and washed and no amount of contrast
+ * puts it right, because the numbers were never sRGB in the first place.
+ *
+ * `none` is every ordinary photograph and every ordinary video file. The
+ * others UNDO the sRGB decode the loader applied and apply the camera's own
+ * curve instead, landing in the same linear scene light the rest of the stack
+ * expects.
+ *
+ * ⚠ Only curves whose published formula carries a checkable ANCHOR are here.
+ * Each maps 18% grey to a code value the manufacturer states, and the test
+ * asserts exactly that — a transform whose constants are subtly wrong makes a
+ * plausible picture, which is the worst kind of wrong.
+ *
+ *   S-Log3   18% grey 420/1023, 90% white 598/1023
+ *   V-Log    18% grey 0.423,    90% white 0.588  (0.599 is 100%, not 90% —
+ *            the spec's table is easy to misread, and the anchor test is what
+ *            caught it) */
+enum { SS_LOG_NONE, SS_LOG_SLOG3, SS_LOG_VLOG };
+int         ss_log_value(const char *s);
+const char *ss_log_name(int v);
+/* One channel, camera code value (0..1) to linear scene light. */
+float       ss_log_to_linear(int mode, float code);
+
 typedef struct {
+    /* What the file's numbers MEAN, before anything else reads them. */
+    int   log_in;           /* SS_LOG_* */
+
     /* white balance. temp_k 0 means "as shot" — no conversion at all. */
     float temp_k;           /* 2000..50000 */
     float tint;             /* -150..150, green .. magenta */

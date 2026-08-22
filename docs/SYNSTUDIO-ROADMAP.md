@@ -332,11 +332,21 @@ Fairlight-style automation: four features for one piece of work.
       into a few cells at the centre of a vectorscope and every hue around
       them divides down to nothing. Referenced to the mean of the OCCUPIED
       cells through a curve that saturates, which is scale-invariant
-- [~] colour management — the INPUT half shipped with the LUT reader in
-      0.1.0-17: a `.cube` on the way in is a develop setting that composes
-      into the baked cube. What is missing is the named transforms (a log
-      curve in, a Rec.709 display out) rather than the machinery to apply
-      them
+- [x] **colour management, the input half** — **shipped in 0.1.0-31.** A
+      `.cube` on the way in has been a develop setting since 0.1.0-17; named
+      LOG transforms join it now: `log = none|slog3|vlog`, applied FIRST,
+      before white balance and before anything else reads the numbers. The
+      loader decoded the file as sRGB because that is what loaders do, so the
+      transform undoes that and applies the camera's own curve instead.
+      ⚠ Only curves whose published formula carries a checkable ANCHOR are
+      here, and the suite asserts each one in floating point through
+      `synstudio logcurve` — an 8-bit render cannot tell a subtly wrong
+      constant from a right one, and this pipeline's own round trip loses a
+      code either way. ⚠ V-Log's 0.599 is 100% reflectance, NOT 90% (that is
+      0.588); the spec's table is easy to misread and the anchor test is what
+      caught it
+- [ ] the OUTPUT transform — a Rec.709 display curve distinct from sRGB, and
+      the colour tags to say so on a delivery
 - [x] **shot match** — **shipped in 0.1.0-25.** `synstudio match FILE --ref
       REF` for two photographs, `timeline match PROJ T C REFT REFC` for two
       clips. FITTED, not solved: every control has a transfer function of its
