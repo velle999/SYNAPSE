@@ -908,7 +908,36 @@ pkgver=0.1.0
 #   warning-free.
 #
 #   551 assertions, clean under ASan+UBSan+LSan.
-pkgrel=28
+#
+# 29 LINKED AUDIO AND VIDEO.
+#
+#   Routing separated the picture from the sound — a video clip's dialogue
+#   plays on whatever track it sits on — which is exactly what makes a link
+#   necessary: without one, moving a shot leaves its sound where it was.
+#
+#   A GROUP ID, not a pointer to a partner. A link is not necessarily a pair
+#   (a shot, its dialogue and its room tone is three), a pointer would not
+#   survive being written to a text file, and an index would not survive the
+#   clip beside it being deleted.
+#
+#   Move, trim and delete apply to the group IN THE ENGINE and not in the CLI,
+#   so a drag in the window and a `timeline move` from a script behave the
+#   same way.
+#
+#   ⚠ A MOVE CARRIES THE DELTA, NOT THE DESTINATION. Moving every linked clip
+#   TO the same instant would stack a shot's dialogue on top of it instead of
+#   keeping the offset it was cut with.
+#
+#   ⚠ AND A TRIM AGREES ONE DELTA ACROSS THE GROUP FIRST. A head trim CLAMPS
+#   to what each clip's source allows, so two linked clips with different in
+#   points, asked for more than either has, clamp to DIFFERENT amounts and
+#   come out of sync by the difference — silently. The test builds that case
+#   on purpose (a second of handle against two tenths) where an unclamped
+#   group drifts 0.8s. A member can still refuse outright, and then none of
+#   them move.
+#
+#   564 assertions, clean under ASan+UBSan+LSan.
+pkgrel=29
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

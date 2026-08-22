@@ -103,6 +103,9 @@ static void usage(void)
 "\n"
 " editing (rearranges intent; never touches a frame)\n"
 "  timeline move  PROJ T C --to SECONDS\n"
+"  timeline link  PROJ T C T C [T C ...]   a shot and its sound move,\n"
+"                                          trim and delete together\n"
+"  timeline unlink PROJ T C                that one leaves the group\n"
 "  timeline trim  PROJ T C [--head S] [--tail S]   + shortens the head,\n"
 "                                                    + lengthens the tail\n"
 "  timeline split PROJ T [C] --at SECONDS          the razor\n"
@@ -1679,6 +1682,40 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (cl < 0) return die("cannot add to track %d", tr);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
+        return 0;
+    }
+
+    /* Linked audio and video.
+     *
+     * Routing separated the picture from the sound — a video clip's dialogue
+     * plays whatever track it sits on — which is exactly what makes a link
+     * necessary: without one, moving a shot leaves its sound where it was.
+     *
+     * The link lives in the ENGINE's move, trim and delete rather than here,
+     * so a drag in the window and a `timeline move` from a script behave the
+     * same way. */
+    if (!strcmp(verb, "link")) {
+        int tk[16], cl[16], n = 0, i, g;
+        if (argc < 8) return die("link wants PROJ T C T C [T C ...]");
+        for (i = 4; i + 1 < argc && n < 16; i += 2) {
+            if (tl_pick(t, argv[i], argv[i + 1], &tk[n], &cl[n]) != 0) return 1;
+            n++;
+        }
+        if (n < 2) return die("a link needs at least two clips");
+        g = ss_timeline_link(t, tk, cl, n);
+        if (g < 0) return die("cannot link those");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("linked\t%d\ngroup\t%d\n", n, g);
+        return 0;
+    }
+
+    if (!strcmp(verb, "unlink")) {
+        int cl;
+        if (argc < 6) return die("unlink wants PROJ TRACK CLIP");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        if (ss_timeline_unlink(t, tr, cl) != 0) return die("no such clip");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("unlinked\t%d\t%d\n", tr, cl);
         return 0;
     }
 

@@ -2181,6 +2181,88 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# --------------------------------------------- linked audio and video ----
+#
+# Routing separated the picture from the sound — a video clip's dialogue plays
+# on whatever track it sits on — which is what makes a link necessary: without
+# one, moving a shot leaves its sound where it was.
+#
+# The link lives in the ENGINE's move, trim and delete rather than in the CLI,
+# so a drag in the window and a `timeline move` from a script behave the same.
+
+# A real shot on a video track and its sound on an audio one, which is the
+# situation the feature exists for — `timeline solid` is video-only, so this
+# needs an actual file.
+if have ffmpeg; then
+lp2=$TMP/link.sstl
+lkclip=$TMP/link.mp4
+ffmpeg -v error -y -f lavfi -i "testsrc2=s=160x90:d=4:r=25" \
+       -f lavfi -i "sine=f=300:d=4" -shortest \
+       -c:v libx264 -pix_fmt yuv420p -c:a aac "$lkclip" 2>/dev/null
+$BIN timeline new "$lp2" --size 320x180 --fps 25 >/dev/null
+$BIN timeline track "$lp2" video V >/dev/null
+$BIN timeline track "$lp2" audio A >/dev/null
+$BIN timeline clip "$lp2" 0 "$lkclip" --at 2.0 --dur 3 >/dev/null
+# Half a second late ON PURPOSE: it is what proves the move below carries an
+# offset rather than stacking both clips at the destination.
+$BIN timeline clip "$lp2" 1 "$lkclip" --at 2.5 --dur 3 >/dev/null
+
+$BIN timeline link "$lp2" 0 0 1 0 | seen "two clips link" "linked	2"
+check "and the link is in the document" "2" "$(grep -c '^link	' "$lp2")"
+
+$BIN timeline move "$lp2" 0 0 --to 6 >/dev/null
+check "moving one moves the other" "6.500000" \
+      "$($BIN timeline get "$lp2" 1 0 | awk -F'\t' '/^tl_in/{print $2}')"
+# ⚠ THE ASSERTION THAT MATTERS. The group moves by the DELTA, not to the
+# destination — moving every linked clip TO the same instant would stack a
+# shot's dialogue on top of it instead of keeping the offset it was cut with.
+# The sound started half a second late and has to still be half a second late.
+check "and keeps the offset it was cut with" "6.000000" \
+      "$($BIN timeline get "$lp2" 0 0 | awk -F'\t' '/^tl_in/{print $2}')"
+
+$BIN timeline trim "$lp2" 0 0 --head 0.5 >/dev/null
+check "a trim trims both"           "2.500000" \
+      "$($BIN timeline get "$lp2" 1 0 | awk -F'\t' '/^length/{print $2}')"
+check "and moves both edges with it" "7.000000" \
+      "$($BIN timeline get "$lp2" 1 0 | awk -F'\t' '/^tl_in/{print $2}')"
+
+# ⚠ THE DESYNC THIS EXISTS TO STOP. A head trim CLAMPS to what each clip's
+# source allows — so two linked clips with different in points, asked for more
+# than either has, clamp to DIFFERENT amounts and come out of sync by the
+# difference, silently. The group agrees ONE delta first: the most restrictive
+# of what each member would have taken.
+#
+# Built with the room deliberately unequal — the picture has a second of
+# handle, the sound has two tenths — so an unclamped group drifts by 0.8s.
+dzp=$TMP/desync.sstl
+$BIN timeline new "$dzp" --size 320x180 --fps 25 >/dev/null
+$BIN timeline track "$dzp" video V >/dev/null
+$BIN timeline track "$dzp" audio A >/dev/null
+$BIN timeline clip "$dzp" 0 "$lkclip" --at 3 --in 1.0 --out-at 3.0 >/dev/null
+$BIN timeline clip "$dzp" 1 "$lkclip" --at 3 --in 0.2 --out-at 2.2 >/dev/null
+$BIN timeline link "$dzp" 0 0 1 0 >/dev/null
+$BIN timeline trim "$dzp" 0 0 --head -99 >/dev/null 2>&1
+vt=$($BIN timeline get "$dzp" 0 0 | awk -F'\t' '/^tl_in/{print $2}')
+at=$($BIN timeline get "$dzp" 1 0 | awk -F'\t' '/^tl_in/{print $2}')
+check "an over-long trim keeps the group together" "yes" \
+      "$(awk -v a="$vt" -v b="$at" 'BEGIN{d=a-b; if(d<0)d=-d; print (d<0.001)?"yes":"no"}')"
+# And it took the SMALLER allowance, not the larger: 0.2, not 1.0.
+check "clamped to the most restrictive member" "2.800000" "$vt"
+
+# ---- unlink ---------------------------------------------------------------
+$BIN timeline clip "$lp2" 1 "$lkclip" --at 20 --dur 1 >/dev/null
+$BIN timeline link "$lp2" 0 0 1 0 1 1 | seen "a third clip joins the group" "linked	3"
+$BIN timeline unlink "$lp2" 1 1 | seen "and one can leave it" "unlinked"
+$BIN timeline move "$lp2" 0 0 --to 0 >/dev/null
+check "the one that left does not move" "20.000000" \
+      "$($BIN timeline get "$lp2" 1 1 | awk -F'\t' '/^tl_in/{print $2}')"
+check "and the two that stayed did"     "0.500000" \
+      "$($BIN timeline get "$lp2" 1 0 | awk -F'\t' '/^tl_in/{print $2}')"
+
+$BIN timeline delete "$lp2" 0 0 >/dev/null
+check "a delete takes the whole group" "1" "$($BIN timeline show "$lp2" | grep -c '^clip')"
+fi
+
 # ------------------------------------------------------------ versions ---
 #
 # Undo is already the auto-save half: every save records the state it left, so

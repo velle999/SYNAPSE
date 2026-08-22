@@ -774,6 +774,19 @@ typedef struct {
     float  deess;               /* deesser, 0..100 */
     int    fade_shape;          /* SS_AFADE_*, both fades of this clip */
 
+    /* ---- linked audio and video ----
+     *
+     * A non-zero group id ties this clip to every other carrying the same
+     * one. Moving, trimming or deleting any of them does the same to all —
+     * which is what a shot and its sound ARE, once routing has put them on
+     * separate tracks.
+     *
+     * A group id rather than a pointer to a partner: a link is not
+     * necessarily a pair (a shot, its dialogue and its room tone is three), a
+     * pointer would not survive being written to a text file, and an index
+     * would not survive the clip beside it being deleted. */
+    int    link;
+
     int    has_grade;
     ss_develop grade;
 
@@ -1139,6 +1152,20 @@ int    ss_clipboard_path(char *out, size_t n);
 
 /* Slide a clip along the timeline. Negative lands are clamped to 0. */
 int ss_timeline_move(ss_timeline *t, int track, int clip, double tl_in);
+
+/* ---- links ----
+ *
+ * `ss_timeline_link` puts every named clip in one group, taking the group of
+ * whichever already has one so that linking a third clip to a linked pair
+ * joins the pair rather than splitting it. Returns the group id.
+ *
+ * The edit operations apply to the whole group THEMSELVES: this is not a
+ * convenience the CLI layers on top, because then a move from the window and
+ * a move from the command line would behave differently. */
+int ss_timeline_link(ss_timeline *t, const int *track, const int *clip, int n);
+int ss_timeline_unlink(ss_timeline *t, int track, int clip);
+/* How many clips share this one's group, itself included. 1 = not linked. */
+int ss_timeline_linked(const ss_timeline *t, int track, int clip);
 /* Drag an edge. `which` <0 for the head, >0 for the tail. Trimming the head
  * moves the source in point AND the timeline position together, which is what
  * makes the frame under the cursor stay put — a head trim that only moved one

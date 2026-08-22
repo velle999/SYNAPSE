@@ -263,8 +263,18 @@ Fairlight-style automation: four features for one piece of work.
 - [x] multi-select — shift-click; deletes run highest index first
 - [ ] J K L, and keys at all — the window binds none
 - [ ] source monitor + three-point editing
-- [ ] linked audio and video (routing now separates them, which makes the link
-      necessary)
+- [x] **linked audio and video** — shipped in 0.1.0-29. A link is a GROUP id,
+      not a pointer to a partner: a link is not necessarily a pair (a shot,
+      its dialogue and its room tone is three), a pointer would not survive
+      being written to a text file, and an index would not survive the clip
+      beside it being deleted. Move, trim and delete apply to the group in the
+      ENGINE rather than in the CLI, so a drag in the window and a `timeline
+      move` from a script behave the same. ⚠ A move carries the DELTA, not the
+      destination — moving every linked clip to the same instant would stack a
+      shot's dialogue on top of it. ⚠ And a trim agrees ONE delta across the
+      group first: a head trim clamps to what each clip's source allows, so
+      two linked clips with different in points would otherwise clamp by
+      different amounts and drift out of sync silently
 - [x] **speed ramps, reverse, freeze frame** — **shipped in 0.1.0-19.** A ramp
       is keys on `speed`, and it does move the timebase rather than a number
       inside it: the clip's LENGTH becomes the integral of 1/speed over the

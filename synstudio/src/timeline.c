@@ -1375,17 +1375,124 @@ int ss_timeline_at(const ss_timeline *t, int track, double time)
     return hit;
 }
 
-int ss_timeline_move(ss_timeline *t, int track, int clip, double tl_in)
+/* ------------------------------------------------------------- linking -- */
+
+static int link_max(const ss_timeline *t)
+{
+    int i, j, m = 0;
+    for (i = 0; i < t->ntracks; i++)
+        for (j = 0; j < t->track[i].nclips; j++)
+            if (t->track[i].clip[j].link > m) m = t->track[i].clip[j].link;
+    return m;
+}
+
+int ss_timeline_link(ss_timeline *t, const int *track, const int *clip, int n)
+{
+    int i, g = 0;
+
+    if (!t || !track || !clip || n < 2) return -1;
+    /* Join an existing group rather than starting a new one, so linking a
+     * third clip to a linked pair does not quietly split the pair in two. */
+    for (i = 0; i < n; i++) {
+        const ss_clip *c = clip_ptr(t, track[i], clip[i]);
+        if (!c) return -1;
+        if (c->link && !g) g = c->link;
+    }
+    if (!g) g = link_max(t) + 1;
+    for (i = 0; i < n; i++) {
+        ss_clip *c = clip_ptr(t, track[i], clip[i]);
+        if (c) c->link = g;
+    }
+    return g;
+}
+
+int ss_timeline_unlink(ss_timeline *t, int track, int clip)
 {
     ss_clip *c = clip_ptr(t, track, clip);
     if (!c) return -1;
-    c->tl_in = tl_in < 0 ? 0 : tl_in;
+    /* Only this one leaves. The others stay linked to each other, which is
+     * what unlinking one shot from a group of three has to mean. */
+    c->link = 0;
     return 0;
 }
 
-int ss_timeline_trim(ss_timeline *t, int track, int clip, int which, double delta)
+int ss_timeline_linked(const ss_timeline *t, int track, int clip)
+{
+    const ss_clip *c = clip_ptr((ss_timeline *)t, track, clip);
+    int i, j, n = 0;
+    if (!c) return 0;
+    if (!c->link) return 1;
+    for (i = 0; i < t->ntracks; i++)
+        for (j = 0; j < t->track[i].nclips; j++)
+            if (t->track[i].clip[j].link == c->link) n++;
+    return n;
+}
+
+/* Run `fn` over every clip in this one's group, itself included. The group is
+ * collected BEFORE anything is applied: an operation that changes a clip's
+ * position while the walk is in progress would otherwise decide membership
+ * from a half-moved timeline. */
+static void link_each(ss_timeline *t, int track, int clip,
+                      void (*fn)(ss_clip *, void *), void *user)
 {
     ss_clip *c = clip_ptr(t, track, clip);
+    int g, i, j;
+
+    if (!c) return;
+    g = c->link;
+    if (!g) { fn(c, user); return; }
+    for (i = 0; i < t->ntracks; i++)
+        for (j = 0; j < t->track[i].nclips; j++)
+            if (t->track[i].clip[j].link == g)
+                fn(&t->track[i].clip[j], user);
+}
+
+static void link_shift(ss_clip *c, void *user)
+{
+    double d = *(double *)user;
+    c->tl_in += d;
+    if (c->tl_in < 0) c->tl_in = 0;
+}
+
+int ss_timeline_move(ss_timeline *t, int track, int clip, double tl_in)
+{
+    ss_clip *c = clip_ptr(t, track, clip);
+    double want, delta;
+
+    if (!c) return -1;
+    want = tl_in < 0 ? 0 : tl_in;
+    /* ⚠ The group moves by the DELTA, not to the destination. Moving every
+     * linked clip TO the same instant would stack a shot's dialogue on top of
+     * it instead of keeping the offset they were cut with. */
+    delta = want - c->tl_in;
+    if (c->link) link_each(t, track, clip, link_shift, &delta);
+    else         c->tl_in = want;
+    return 0;
+}
+
+/* One clip's trim, without the link walk. `ss_timeline_trim` is the entry
+ * point and applies this to every clip in the group. */
+/* What `delta` becomes for THIS clip once its own limits are applied — the
+ * same clamping trim_one does, extracted so a link group can agree on one
+ * number before any of it is committed.
+ *
+ * ⚠ Clamping per clip is what makes a group dangerous. Two linked clips with
+ * different in points asked for a head trim of -99 clamp to DIFFERENT amounts
+ * and come out of sync by the difference, silently. The group takes the most
+ * restrictive answer and every member moves by that. */
+static double trim_clamp(const ss_clip *c, int which, double delta)
+{
+    double sp = c->speed > 0 ? c->speed : 1.0, d = delta;
+
+    if (which < 0) {
+        if (c->src_in + d * sp < 0) d = -c->src_in / sp;
+        if (c->tl_in + d < 0) d = -c->tl_in;
+    }
+    return d;
+}
+
+static int trim_one(ss_clip *c, int which, double delta)
+{
     double sp;
     if (!c) return -1;
     sp = c->speed > 0 ? c->speed : 1.0;
@@ -1409,6 +1516,51 @@ int ss_timeline_trim(ss_timeline *t, int track, int clip, int which, double delt
         double no = c->src_out + delta * sp;
         if (no <= c->src_in) return -1;
         c->src_out = no;
+    }
+    return 0;
+}
+
+int ss_timeline_trim(ss_timeline *t, int track, int clip, int which, double delta)
+{
+    ss_clip *c = clip_ptr(t, track, clip);
+    int i, j, g;
+
+    if (!c) return -1;
+    g = c->link;
+    if (!g) return trim_one(c, which, delta);
+
+    /* ⚠ EVERY clip in the group or NONE of them. A head trim is refused when
+     * it would run past a clip's source, and a group where one member refuses
+     * and the others do not is a shot whose sound has just slipped out of
+     * sync with it — silently, and by exactly the amount that was refused.
+     * So the group is tried on copies first and only committed if all of them
+     * can take it. */
+    {
+        ss_clip *members[SS_MAX_TRACKS * 8];
+        ss_clip probe;
+        double d = delta;
+        int n = 0;
+        for (i = 0; i < t->ntracks; i++)
+            for (j = 0; j < t->track[i].nclips; j++)
+                if (t->track[i].clip[j].link == g &&
+                    n < (int)(sizeof members / sizeof members[0]))
+                    members[n++] = &t->track[i].clip[j];
+
+        /* One delta for the whole group: the most restrictive of what each
+         * member would have clamped to. Smallest magnitude wins, and the sign
+         * is the caller's. */
+        for (i = 0; i < n; i++) {
+            double dm = trim_clamp(members[i], which, d);
+            if (fabs(dm) < fabs(d)) d = dm;
+        }
+        /* And then all of them or none: a member can still REFUSE outright —
+         * a trim that would leave it with no frames at all — and a group where
+         * one refuses and the rest move is the desync this exists to stop. */
+        for (i = 0; i < n; i++) {
+            probe = *members[i];
+            if (trim_one(&probe, which, d) != 0) return -1;
+        }
+        for (i = 0; i < n; i++) trim_one(members[i], which, d);
     }
     return 0;
 }
@@ -1510,7 +1662,27 @@ int ss_timeline_split(ss_timeline *t, int track, int clip, double at)
 int ss_timeline_remove(ss_timeline *t, int track, int clip)
 {
     ss_track *tr;
-    if (!clip_ptr(t, track, clip)) return -1;
+    ss_clip *c = clip_ptr(t, track, clip);
+    int g;
+
+    if (!c) return -1;
+    g = c->link;
+    if (g) {
+        /* The whole group goes. ⚠ Highest index first, on each track, for the
+         * same reason a multi-select delete does: removing a clip shifts every
+         * index above it down, so deleting upward deletes the wrong clips
+         * from the second one on. */
+        int i, j;
+        for (i = 0; i < t->ntracks; i++)
+            for (j = t->track[i].nclips - 1; j >= 0; j--)
+                if (t->track[i].clip[j].link == g) {
+                    ss_track *k = &t->track[i];
+                    memmove(&k->clip[j], &k->clip[j + 1],
+                            sizeof(ss_clip) * (size_t)(k->nclips - j - 1));
+                    k->nclips--;
+                }
+        return 0;
+    }
     tr = &t->track[track];
     memmove(&tr->clip[clip], &tr->clip[clip + 1],
             sizeof(ss_clip) * (size_t)(tr->nclips - clip - 1));
@@ -1628,6 +1800,11 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "trans\t%s\t%.6f\t%.4f\t%.4f\t%.4f\n",
                         ss_trans_name(c->trans), c->trans_dur,
                         c->trans_r, c->trans_g, c->trans_b);
+            /* A link group, when there is one. A number on its own line
+             * rather than a field on the clip record, because the record is
+             * positional and a project written before links existed has one
+             * column fewer. */
+            if (c->link) fprintf(fp, "link\t%d\n", c->link);
             /* The sound chain, named fields, written only when something is
              * on. A clip with no processing keeps the record it always had. */
             if (c->nr_audio > 0 || c->gate > 0 || c->comp > 0 ||
@@ -1888,6 +2065,8 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
                 unesc_text(f[5], cc->text, sizeof cc->text);
             }
+        } else if (!strncmp(line, "link\t", 5) && cc) {
+            cc->link = atoi(line + 5);
         } else if (!strncmp(line, "sound\t", 6) && cc) {
             char *f[20];
             int nf = tabsplit(line + 6, f, 20), q;
