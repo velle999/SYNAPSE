@@ -20,6 +20,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
@@ -68,7 +69,7 @@ static void usage(void)
 "       [--from FILE] [--size 33] [--set K=V]...\n"
 "\n"
 "VIDEO  (a project file is a text document; nothing is rendered until export)\n"
-"  timeline new PROJ [--size WxH] [--fps F]\n"
+"  timeline new PROJ [--size WxH] [--fps F] [--unique|--no-clobber]\n"
 "  timeline show PROJ            the document, as written\n"
 "  timeline undo PROJ            step back; redo steps forward again\n"
 "  timeline redo PROJ\n"
@@ -116,7 +117,9 @@ static void usage(void)
 "                                                    + lengthens the tail\n"
 "  timeline split PROJ T [C] --at SECONDS          the razor\n"
 "  timeline delete PROJ T C [--ripple]             lift, or close the gap\n"
+"  timeline saveas PROJ --out PATH [--force]       the cut, under a name\n"
 "  timeline copy   PROJ T C                        onto the clipboard\n"
+"  timeline clipboard              what is on it, without pasting to find out\n"
 "  timeline paste  PROJ T [--at S]                 as a new clip\n"
 "  timeline paste  PROJ T C --grade                its GRADE onto that clip\n"
 "  timeline paste  PROJ T --grade --all            onto every clip there\n"
@@ -205,8 +208,15 @@ typedef struct {
     double fade_in, fade_out;
     double dur, to, head, tail;
     int    has_dur, has_to, has_head, has_tail, ripple, preview, count;
+    /* ⚠ has_at, because 0 is a REAL instant. Every other verb reading --at
+     * wants a position and the start of the timeline is a position; the two
+     * that asked `o.at > 0` to mean "was it given" therefore could not be
+     * told to paste at the head of the cut, and silently pasted the clip back
+     * where it was copied from instead. */
+    int    has_at;
     const char *colour;
     const char *ease;
+    int    force;               /* --force: write over a file already there */
     int    off;                 /* --off: turn a thing off, keep its work */
     int    grade;               /* --grade: the develop stack and nothing else */
     int    all;                 /* --all: every clip on the track */
@@ -256,7 +266,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--quality")) { const char *v = NEXT(); if (!v) return -1; o->quality = atoi(v); }
         else if (!strcmp(a, "--bits"))    { const char *v = NEXT(); if (!v) return -1; o->bits = atoi(v); }
         else if (!strcmp(a, "--lut-size")){ const char *v = NEXT(); if (!v) return -1; o->lutsize = atoi(v); }
-        else if (!strcmp(a, "--at"))      { const char *v = NEXT(); if (!v) return -1; o->at = atof(v); }
+        else if (!strcmp(a, "--at"))      { const char *v = NEXT(); if (!v) return -1; o->at = atof(v); o->has_at = 1; }
         else if (!strcmp(a, "--in"))      { const char *v = NEXT(); if (!v) return -1; o->in = atof(v); }
         else if (!strcmp(a, "--out-at"))  { const char *v = NEXT(); if (!v) return -1; o->outp = atof(v); }
         else if (!strcmp(a, "--speed"))   { const char *v = NEXT(); if (!v) return -1; o->speed = atof(v); }
@@ -275,6 +285,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--style"))   { const char *v = NEXT(); if (!v) return -1; o->style = v; }
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
+        else if (!strcmp(a, "--force"))   { o->force = 1; }
         else if (!strcmp(a, "--off"))     { o->off = 1; }
         else if (!strcmp(a, "--grade"))   { o->grade = 1; }
         else if (!strcmp(a, "--all"))     { o->all = 1; }
@@ -950,6 +961,93 @@ static int tl_save(const char *proj, const ss_timeline *t)
     return 0;
 }
 
+/* Does a path exist?
+ *
+ * Asked before anything is written under a name somebody TYPED. Every verb in
+ * this file writes the project the instant it runs, so a cut is never unsaved
+ * — but that same habit is what makes `new` on a name already in use, or a
+ * Save as onto an existing project, a thing you find out about afterwards.
+ * The one answer an editor must never give to "save this as Holiday" is to
+ * throw away the Holiday that was already there. */
+static int path_exists(const char *p)
+{
+    struct stat st;
+    return p && *p && stat(p, &st) == 0;
+}
+
+static int copy_bytes(const char *from, const char *to)
+{
+    FILE *a, *b;
+    char buf[65536];
+    size_t n;
+    int rc = 0;
+
+    a = fopen(from, "rb");
+    if (!a) return -1;
+    b = fopen(to, "wb");
+    if (!b) { fclose(a); return -1; }
+    while ((n = fread(buf, 1, sizeof buf, a)) > 0)
+        if (fwrite(buf, 1, n, b) != n) { rc = -1; break; }
+    if (ferror(a)) rc = -1;
+    fclose(a);
+    if (fclose(b) != 0) rc = -1;
+    if (rc != 0) unlink(to);
+    return rc;
+}
+
+/* ⚠ The stabiliser's measurements live in `<project>.stab`, keyed to the
+ * project's NAME — so a project written under a new one would look for them
+ * in a directory nothing has written, find nothing, and render every
+ * stabilised clip UNSTEADY. Not an error and not a message: the shake would
+ * simply be back, in a copy of a cut that was steady a moment ago. So a save
+ * under a new name carries them across. */
+static void copy_stabdir(const char *from_proj, const char *to_proj)
+{
+    char from[1100], to[1100], a[1400], b[1400];
+    DIR *d;
+    struct dirent *e;
+
+    ss_timeline_stabdir(from_proj, from, sizeof from);
+    ss_timeline_stabdir(to_proj, to, sizeof to);
+    d = opendir(from);
+    if (!d) return;                 /* nothing stabilised: nothing to carry */
+    if (mkdir(to, 0755) != 0 && errno != EEXIST) { closedir(d); return; }
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.') continue;
+        snprintf(a, sizeof a, "%.900s/%.120s", from, e->d_name);
+        snprintf(b, sizeof b, "%.900s/%.120s", to, e->d_name);
+        copy_bytes(a, b);
+    }
+    closedir(d);
+}
+
+/* `Untitled.syntl` taken → `Untitled-2.syntl`, and the EXTENSION is kept: a
+ * project called Untitled-2 is still a .syntl, and a window that opens what
+ * this prints would not find one named otherwise. */
+static void free_name(const char *want, char *out, size_t n)
+{
+    const char *dot, *slash;
+    char stem[1024], ext[64];
+    int i;
+
+    snprintf(out, n, "%s", want ? want : "");
+    if (!path_exists(out)) return;
+
+    slash = strrchr(out, '/');
+    dot   = strrchr(slash ? slash : out, '.');
+    if (dot) {
+        snprintf(stem, sizeof stem, "%.*s", (int)(dot - out), out);
+        snprintf(ext, sizeof ext, "%s", dot);
+    } else {
+        snprintf(stem, sizeof stem, "%s", out);
+        ext[0] = '\0';
+    }
+    for (i = 2; i < 1000; i++) {
+        snprintf(out, n, "%.900s-%d%.40s", stem, i, ext);
+        if (!path_exists(out)) return;
+    }
+}
+
 /* Every clip property in one listing, the same shape `keys` uses for the
  * develop stack: KEY, current, ui-lo, ui-hi, type, group, label, lo, hi and —
  * for an enum — the choices. The inspector in the window is built from this,
@@ -1247,23 +1345,79 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             printf("%s\t%s\t%s\n", f[i].name, f[i].ext, f[i].label);
         return 0;
     }
+    /* What is ON the clipboard, without pasting it to find out.
+     *
+     * ⚠ Asked of the ENGINE, and no project needed. The clipboard is a file
+     * under ~/.config and it outlives the window, the project it was filled
+     * from and the session — which is most of what a clipboard is for. A
+     * window that remembered its own last copy instead would offer Paste
+     * after being restarted with nothing on it, and refuse Paste with a clip
+     * sitting right there from the other project still open next door.
+     *
+     * `empty` and exit 0: nothing copied yet is an ANSWER, not a failure. */
+    if (verb && !strcmp(verb, "clipboard")) {
+        ss_clip src;
+        char buf[1024];
+        if (ss_clip_copy_in(&src) != 0) { puts("empty"); return 0; }
+        printf("kind\t%s\n", src.kind == SS_CLIP_TITLE ? "title"
+                            : src.kind == SS_CLIP_SOLID ? "solid" : "media");
+        printf("path\t%s\n", src.path);
+        /* The caption goes through ss_clip_get, which ESCAPES it — a title
+         * with a line break in it would otherwise end this record halfway
+         * through, and the window reads these lines. `path` is printed raw
+         * because `timeline get` prints it raw, and one of these two readers
+         * having its own rules is how a parser starts to drift. */
+        if (ss_clip_get(&src, "text", buf, sizeof buf) == 0)
+            printf("text\t%s\n", buf);
+        printf("length\t%.6f\n", ss_clip_length(&src));
+        printf("graded\t%d\n", src.has_grade);
+        printf("keys\t%d\n", src.nkeys);
+        printf("fx\t%d\n", src.nfx);
+        return 0;
+    }
     if (!verb || !proj) { usage(); return 1; }
     opts_default(&o);
 
     if (!strcmp(verb, "new")) {
         int w = 1920, h = 1080;
         double fps = 25.0;
-        int i;
+        int i, uniq = 0, noclob = 0;
+        char picked[1024];
+
         for (i = 4; i < argc; i++) {
             if (!strcmp(argv[i], "--size") && i + 1 < argc) {
                 if (sscanf(argv[++i], "%dx%d", &w, &h) != 2)
                     return die("--size wants WxH, e.g. 1920x1080");
             } else if (!strcmp(argv[i], "--fps") && i + 1 < argc) {
                 fps = atof(argv[++i]);
+            } else if (!strcmp(argv[i], "--unique")) {
+                uniq = 1;
+            } else if (!strcmp(argv[i], "--no-clobber")) {
+                noclob = 1;
             }
+        }
+        /* ⚠ Plain `new` still writes over whatever is there. That is what
+         * every script and every test in this tree already asks it for, and
+         * changing it under them would be a silent regression of its own.
+         * The two ways NOT to lose a project are asked for by name:
+         *
+         *   --unique      take the next free name and PRINT the one used
+         *   --no-clobber  refuse an existing file, exit 3
+         *
+         * Exit 3 is an ANSWER, not a failure — the window turns it into a
+         * Replace button rather than an error, the way `peaks` exit 100 means
+         * "no audio". */
+        if (uniq) {
+            free_name(proj, picked, sizeof picked);
+            proj = picked;
+        } else if (noclob && path_exists(proj)) {
+            fprintf(stderr, "synstudio: %s is there already\n", proj);
+            return 3;
         }
         ss_timeline_reset(t, w, h, fps);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        /* The name is only news when the engine chose it. */
+        if (uniq) puts(proj);
         return 0;
     }
 
@@ -1272,6 +1426,39 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
     if (!strcmp(verb, "show")) {
         ss_timeline_write(t, stdout);
         printf("# duration\t%.4f\n", ss_timeline_duration(t));
+        return 0;
+    }
+
+    /* ── Save as ────────────────────────────────────────────────────────────
+     *
+     * `timeline saveas PROJ --out PATH [--force]`, and it PRINTS the path it
+     * wrote, so the window can go on editing the copy without having to
+     * assume it landed where it asked.
+     *
+     * There is no `save`, and there is nothing to sync: every mutating verb
+     * ends in tl_save, so the file on disk is the cut as it stands after each
+     * edit. What was missing was never persistence — it was a NAME. Without
+     * this, every project the window started lived at one fixed path, so a
+     * second one quietly took the first one's place.
+     *
+     * ⛔ Refuses an existing file with exit 3 unless --force, the same answer
+     * `new --no-clobber` gives, so one branch in the window covers both. */
+    if (!strcmp(verb, "saveas")) {
+        if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
+            return die("saveas: bad options");
+        if (!o.out || !*o.out) return die("saveas wants --out PATH");
+        if (!strcmp(o.out, proj)) { puts(proj); return 0; }   /* already there */
+        if (path_exists(o.out) && !o.force) {
+            fprintf(stderr, "synstudio: %s is there already\n", o.out);
+            return 3;
+        }
+        if (tl_save(o.out, t) != 0) return die("cannot write %s", o.out);
+        copy_stabdir(proj, o.out);
+        /* ⚠ The copy starts its OWN undo history, seeded by that write with
+         * the document as it stands. Carrying the old one over would offer an
+         * undo that walks this file back through edits made to a DIFFERENT
+         * project, which is the one thing worse than no history at all. */
+        puts(o.out);
         return 0;
     }
 
@@ -1954,7 +2141,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (t->track[tr].type == SS_TRACK_VIDEO && src.kind != SS_CLIP_MEDIA) {
             /* fine: a title or a solid belongs on a video track */
         }
-        if (o.at > 0 || o.has_dur) src.tl_in = o.at;
+        if (o.has_at || o.has_dur) src.tl_in = o.at;
         cl = ss_timeline_add_clip(t, tr, &src);
         if (cl < 0) return die("cannot add the clip");
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
@@ -1973,7 +2160,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         src = t->track[tr].clip[cl];
         /* Straight after itself unless told otherwise, which is what
          * duplicating a clip is for. */
-        src.tl_in = o.at > 0 ? o.at
+        src.tl_in = o.has_at ? o.at
                              : t->track[tr].clip[cl].tl_in
                                + ss_clip_length(&t->track[tr].clip[cl]);
         nc = ss_timeline_add_clip(t, tr, &src);

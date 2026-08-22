@@ -18,7 +18,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | area      | state                                                        |
 |-----------|--------------------------------------------------------------|
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
-| cutting   | undo, markers, snapping, keys, copy/paste and a clipboard     |
+| cutting   | undo, markers, snapping, keys, copy/paste, and Save as        |
 | retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
 | audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
@@ -26,7 +26,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | titles    | a face, a plate, more than one line, five styles, .srt both ways |
 | delivery  | range, presets, burn-in, sequences and a queue                 |
 | scopes    | histogram, waveform, parade and vectorscope — all measured here |
-| media     | one project at a time — no pool, no proxies, no relink         |
+| media     | one project, named and saved as — no pool, no proxies, no relink |
 
 ## 1 · Audio  — **shipped in 0.1.0-10**
 
@@ -264,6 +264,21 @@ Fairlight-style automation: four features for one piece of work.
       a scene actually looks like. ⚠ A pasted grade clears the target's grade
       KEYS — they hold whole develop stacks, so leaving them would leave the
       clip driven by the grade it had while claiming to wear the new one
+- [x] **a project has a NAME** — shipped in 0.1.0-34. `timeline saveas PROJ
+      --out PATH [--force]`, and a New project that asks. Nothing here is
+      about persistence: every verb ends in a write, so the cut on disk is
+      always current and there is no Save to press. What was missing was that
+      both doors into a new project wrote the same fixed path, so a second
+      project silently took the first one's place. ⚠ Neither writes over a
+      file on the first press — exit 3 means "that name is taken", which the
+      window turns into a Replace button; `new --unique` takes the next free
+      name and prints it. ⚠ And the copy carries `<project>.stab`, or every
+      stabilised clip renders unsteady in it with no error and no message
+- [x] **copy and paste in the WINDOW** — the verbs shipped at 0.1.0-27 with no
+      door into them. Paste lands at the playhead, and is offered only when
+      `timeline clipboard` says there is something on it: the clipboard is a
+      file that outlives the window, so what is on it is not something this
+      window can remember for itself
 - [x] markers on the timeline — `timeline mark|unmark`, on the ruler, click to
       go there. ⚠ still nothing on a CLIP
 - [x] snapping to cuts, markers and the playhead, on moves, trims and scrubs
@@ -417,8 +432,10 @@ Fairlight-style automation: four features for one piece of work.
 
 **The build order is finished.** What is left in the sections above is a
 short list of named gaps rather than a plan: the named colour transforms, a
-watermark image, copy/paste, J-K-L and a source monitor, track automation, a
-curve editor over time, smooth cut, and auto-save.
+watermark image, J-K-L and a source monitor, track automation, a curve editor
+over time, and smooth cut. Auto-save was never a gap and is not a feature
+here: every verb writes, so the file on disk is the cut as it stands — what
+that was missing, until 0.1.0-34, was a way to give it a name.
 
 ## Not doing
 

@@ -515,6 +515,142 @@ FloatingWindow {
     property int    exportFmt: 0
     property bool   exportingStill: false
 
+    // ── Naming a project ────────────────────────────────────────────────────
+    //
+    // There is no Save button and there would be nothing for one to do: every
+    // verb this window runs ends in a write, so the .syntl on disk is the cut
+    // as it stands after each edit, and closing the window has never lost a
+    // frame of it. What was actually missing was a NAME. The window started
+    // every project at ONE fixed path, so the second project quietly took the
+    // first one's place, and there was no way to say "this one is Holiday" or
+    // "keep a copy of it here".
+    //
+    // So: Save as, and a New project that asks for a name. One sheet for
+    // both. Neither writes over a file already there on the first press — the
+    // engine answers exit 3 for "that name is taken", which is an ANSWER, and
+    // the sheet turns it into a Replace button rather than an error.
+    property bool   saveOpen: false
+    property string saveWhat: "as"       // "as" — a copy under a name; "new" — start one
+    property string saveName: ""
+    property string saveDir: ""
+    property bool   saveReplace: false   // taken, and the user has been told
+    property bool   saveBusy: false
+    readonly property string savePath: root.saveDir + "/" + root.saveName + ".syntl"
+
+    function openSaveAs() {
+        if (!root.proj) return
+        root.saveWhat = "as"
+        root.saveDir  = root.proj.replace(/\/[^\/]*$/, "")
+                        || (Quickshell.env("HOME") || "/tmp")
+        root.saveName = root.proj.replace(/^.*\//, "").replace(/\.[^.]*$/, "")
+        root.saveReplace = false
+        root.saveOpen = true
+    }
+
+    function openNewProject() {
+        root.saveWhat = "new"
+        // Beside the project already open, because that is where this one's
+        // footage almost certainly is.
+        root.saveDir  = root.proj ? root.proj.replace(/\/[^\/]*$/, "")
+                                  : (Quickshell.env("HOME") || "/tmp")
+        root.saveName = "project"
+        root.saveReplace = false
+        root.saveOpen = true
+    }
+
+    function doSave() {
+        if (!root.saveName || root.saveBusy) return
+        root.saveBusy = true
+        root.mode = "video"
+        if (root.saveWhat === "new") {
+            root.newProject(root.savePath, !root.saveReplace)
+        } else {
+            saveAsProc.command = [root.bin, "timeline", "saveas", root.proj,
+                                  "--out", root.savePath]
+                                 .concat(root.saveReplace ? ["--force"] : [])
+            saveAsProc.running = true
+        }
+    }
+
+    Process {
+        id: saveAsProc
+        property string got: ""
+        stdout: StdioCollector { onStreamFinished: saveAsProc.got = this.text.trim() }
+        onExited: function (code, status) {
+            const out = saveAsProc.got
+            saveAsProc.got = ""
+            root.saveBusy = false
+            if (code === 3) {
+                root.saveReplace = true
+                root.say("a project called that is there already — Replace writes over it")
+                return
+            }
+            if (code !== 0 || !out) { root.say("cannot save it there"); return }
+            root.saveOpen = false
+            root.saveReplace = false
+            // From here on THIS is the project being edited. A Save as that
+            // leaves you editing the old file has made a copy, not a save.
+            root.proj = out
+            root.selClip = -1
+            root.tlRev++
+            root.reloadTimeline()
+            root.say("saved as " + out.replace(/^.*\//, ""))
+        }
+    }
+
+    // ── What is on the clipboard ────────────────────────────────────────────
+    //
+    // The clipboard is a FILE under ~/.config, so it outlives this window, the
+    // project it was filled from and the session. A window that remembered its
+    // own last copy instead would offer Paste after being restarted with
+    // nothing on it, and refuse Paste with a clip sitting right there from the
+    // project open next door. So it asks the engine — `timeline clipboard`,
+    // which needs no project because the question is not about a cut.
+    property string cbKind: ""
+    property real   cbLen: 0
+
+    // ⚠ running = true on a process already running is a silent no-op, and the
+    // answer that mattered would be the one never asked for.
+    function readClipboard() {
+        cbProc.running = false
+        cbProc.running = true
+    }
+
+    Process {
+        id: cbProc
+        command: [root.bin, "timeline", "clipboard"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n")
+                let kind = "", len = 0
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f[0] === "kind")   kind = f[1]
+                    if (f[0] === "length") len = parseFloat(f[1])
+                }
+                root.cbKind = kind
+                root.cbLen = len
+            }
+        }
+    }
+
+    function copyClip() {
+        if (root.selClip < 0) return
+        // ⚠ The clipboard is re-read when the copy has RUN, not here: edits
+        // QUEUE, so at this point the file on disk is still whatever was
+        // copied last — which is how Paste comes to offer the clip before the
+        // one somebody just picked. tlSetProc's exit does it.
+        root.tlRun(["copy", root.proj, String(root.selTrack), String(root.selClip)])
+    }
+
+    function pasteClip() {
+        if (!root.proj || root.selTrack < 0 || root.cbKind === "") return
+        // At the PLAYHEAD, which is where a paste is looking. --at 0 is a
+        // position like any other, and the engine tells the two apart now.
+        root.tlRun(["paste", root.proj, String(root.selTrack),
+                    "--at", String(root.playhead)])
+    }
+
     // Monitoring level for the preview player. Not persisted and not in the
     // document: it is a property of this room, not of the cut.
     property real  monVolume: 1.0
@@ -614,6 +750,11 @@ FloatingWindow {
     property var dropQueue: []
     property bool dropBusy: false
 
+    // One attempt at starting a project for a dropped file, so a drop that
+    // cannot be taken says so once instead of asking the engine for a new
+    // project on every pump.
+    property bool autoProjTried: false
+
     function dropUrls(urls) {
         const q = []
         for (let i = 0; i < urls.length; i++) {
@@ -671,9 +812,24 @@ FloatingWindow {
                 root.loadFile(path)
             } else if (kind === "image" || kind === "video" || kind === "audio") {
                 if (!root.proj) {
-                    root.say("start a project first, then drop clips on it")
+                    // "start a project first" is an instruction to go and do
+                    // the thing the drop already asked for. Start one, put the
+                    // file back at the head of the queue, and let the project
+                    // coming up pump it — which is why this returns rather
+                    // than falling through to the pump below.
+                    if (root.autoProjTried) {
+                        root.say("cannot start a project for that")
+                    } else {
+                        root.autoProjTried = true
+                        root.mode = "video"
+                        root.dropQueue = [path].concat(root.dropQueue)
+                        root.newProjectUnique((Quickshell.env("HOME") || "/tmp")
+                                              + "/synstudio-project.syntl")
+                        return
+                    }
                 } else {
                     root.mode = "video"
+                    root.autoProjTried = false
                     root.addMedia(path, kind)
                     root.say("added " + path.replace(/^.*\//, ""))
                 }
@@ -1367,8 +1523,12 @@ FloatingWindow {
     // document; the window never edits its own copy and hopes they agree.
     Process {
         id: tlSetProc
+        // Which verb this run was, so the exit can tell a copy from every
+        // other edit without parsing the command back.
+        property bool wasCopy: false
         stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
         onExited: function (code, status) {
+            if (tlSetProc.wasCopy) root.readClipboard()
             if (root.tlQueue.length > 0) { root.pumpEdits(); return }
             root.reloadTimeline()
             root.loadClip()
@@ -1399,6 +1559,7 @@ FloatingWindow {
         if (tlSetProc.running || root.tlQueue.length === 0) return
         const args = root.tlQueue[0]
         root.tlQueue = root.tlQueue.slice(1)
+        tlSetProc.wasCopy = args[0] === "copy"
         tlSetProc.command = [root.bin, "timeline"].concat(args)
         tlSetProc.running = true
     }
@@ -2015,17 +2176,56 @@ FloatingWindow {
     // A project file has to EXIST before any other verb works, so New both
     // creates it and lays down the tracks every cut needs. Coming up with an
     // empty track list and no way to add one was the first version's dead end.
-    function newProject(path) {
-        root.proj = path
+    function newProject(path, noClobber) {
+        newProjProc.unique  = false
+        newProjProc.pending = path
         newProjProc.command = [root.bin, "timeline", "new", path,
                                "--size", "1920x1080", "--fps", "25"]
+                              .concat(noClobber ? ["--no-clobber"] : [])
+        newProjProc.running = true
+    }
+
+    // Never asks, and never writes over anything: the engine takes the next
+    // free name and PRINTS the one it used. This is what the start screen's
+    // door wants, and what a photograph dropped on the Video tab with nothing
+    // open wants — being stopped to name a file is not what either gesture
+    // asked for, and both used to land on the same fixed path.
+    function newProjectUnique(path) {
+        newProjProc.unique  = true
+        newProjProc.pending = ""
+        newProjProc.command = [root.bin, "timeline", "new", path,
+                               "--size", "1920x1080", "--fps", "25", "--unique"]
         newProjProc.running = true
     }
 
     Process {
         id: newProjProc
+        property bool   unique: false
+        property string pending: ""
+        property string got: ""
+        stdout: StdioCollector { onStreamFinished: newProjProc.got = this.text.trim() }
         onExited: function (code, status) {
-            if (code !== 0) { root.say("cannot start a project there"); return }
+            // ⚠ The path is only KNOWN here. With --unique the engine chose
+            // it, so setting root.proj before the run — which is what this
+            // did — pointed the whole window at a file that was never written.
+            const chosen = newProjProc.unique ? newProjProc.got
+                                              : newProjProc.pending
+            newProjProc.got = ""
+            root.saveBusy = false
+            if (code === 3) {
+                root.saveReplace = true
+                root.say("a project called that is there already — Replace writes over it")
+                return
+            }
+            if (code !== 0 || !chosen) {
+                root.say("cannot start a project there")
+                return
+            }
+            root.saveOpen = false
+            root.saveReplace = false
+            root.proj = chosen
+            root.selClip = -1
+            root.playhead = 0
             trackProc.command = [root.bin, "timeline", "track", root.proj, "video", "V1"]
             trackProc.running = true
         }
@@ -2041,8 +2241,11 @@ FloatingWindow {
         id: track2Proc
         onExited: function (code, status) {
             root.selTrack = 0
-            root.say("new project")
+            root.say("new project — " + root.proj.replace(/^.*\//, ""))
             root.reloadTimeline()
+            // A file dropped on the Video tab with nothing open is waiting on
+            // this: it put itself back on the queue and started the project.
+            root.pumpDrop()
         }
     }
 
@@ -2426,6 +2629,7 @@ FloatingWindow {
     }
 
     Component.onCompleted: {
+        cbProc.running = true
         keysProc.running = true
         clipKeysProc.running = true
         transListProc.running = true
@@ -2501,13 +2705,10 @@ FloatingWindow {
                             // size of its label is a target you have to aim at.
                             anchors.margins: -6
                             onDropped: function (drop) {
+                                // No project open is not a refusal any more:
+                                // the drop starts one. Dropping the
+                                // photograph on the tab IS the ask.
                                 root.mode = "video"
-                                if (!root.proj) {
-                                    root.say("start a project first, "
-                                             + "then drop the photograph on it")
-                                    drop.accepted = false
-                                    return
-                                }
                                 if (drop.source && drop.source.filePath)
                                     root.dropUrls(["file://"
                                                    + encodeURI(drop.source.filePath)])
@@ -2535,8 +2736,13 @@ FloatingWindow {
                     } }
 
                     Btn { visible: root.mode === "video"; label: "New project"
-                          onClicked: root.newProject(
-                              (Quickshell.env("HOME") || "/tmp") + "/synstudio-project.syntl") }
+                          onClicked: root.openNewProject() }
+                    // Every edit is already on disk; this is what gives the
+                    // file its NAME, and takes a copy at a point worth coming
+                    // back to.
+                    Btn { visible: root.mode === "video"; label: "Save as"
+                          active: root.proj !== ""
+                          onClicked: root.openSaveAs() }
                     // No selected track needed: the file picks its own track.
                     Btn { visible: root.mode === "video"; label: "Add media"
                           active: root.proj !== ""
@@ -2569,6 +2775,19 @@ FloatingWindow {
                     Btn { visible: root.mode === "video"; label: "Ripple delete"
                           active: root.selClip >= 0
                           onClicked: root.deleteSelection(true) }
+                    Btn { visible: root.mode === "video"; label: "Copy"
+                          active: root.selClip >= 0
+                          onClicked: root.copyClip() }
+                    // ⚠ Inactive with nothing on it, rather than pressed to
+                    // find out: the clipboard is a file that outlives the
+                    // window, so "is there anything to paste" is a question
+                    // only the engine can answer.
+                    Btn { visible: root.mode === "video"
+                          label: root.cbKind === "" ? "Paste"
+                                 : "Paste " + root.cbKind
+                          active: root.proj !== "" && root.selTrack >= 0
+                                  && root.cbKind !== ""
+                          onClicked: root.pasteClip() }
                     Btn { visible: root.mode === "video"; label: "Undo"
                           active: root.undoDepth > 0
                           onClicked: root.undoEdit() }
@@ -4451,8 +4670,11 @@ FloatingWindow {
             Text {
                 anchors.centerIn: parent
                 text: root.mode === "video"
+                      // ⚠ Not "start a project first" any more: the drop
+                      // starts one. A target that names a precondition it no
+                      // longer has reads as a refusal.
                       ? (root.proj ? "drop clips onto the timeline"
-                                   : "start a project first")
+                                   : "drop clips to start a project")
                       : "drop a photograph to open it"
                 color: "#f2f4f8"
                 font.pixelSize: 16
@@ -4507,8 +4729,10 @@ FloatingWindow {
                 sub: "a timeline to cut, grade and export"
                 onClicked: {
                     root.mode = "video"
-                    root.newProject((Quickshell.env("HOME") || "/tmp")
-                                    + "/synstudio-project.syntl")
+                    // The next free name, never the last project's. Save as
+                    // is where a project gets the name it deserves.
+                    root.newProjectUnique((Quickshell.env("HOME") || "/tmp")
+                                          + "/synstudio-project.syntl")
                 }
             }
             Door {
@@ -4656,6 +4880,127 @@ FloatingWindow {
                           active: root.exportName !== ""
                                   && root.exportFormats.length > 0
                           onClicked: root.doExport() }
+                }
+            }
+        }
+    }
+
+    // ── A name for the project ─────────────────────────────────────────
+    //
+    // The same sheet does New project and Save as, because they ask the same
+    // question and have the same answer to give when the name is taken. The
+    // path is spelled out underneath for the reason the export sheet spells
+    // its own out: a file lands somewhere, and finding out where afterwards
+    // is not a feature.
+
+    Rectangle {
+        anchors.fill: parent
+        visible: root.saveOpen
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: root.saveOpen = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(520, parent.width - 80)
+            height: Math.min(saveCol.implicitHeight + 28, parent.height - 80)
+            color: root.cPanel
+            radius: 6
+            border.width: 1
+            border.color: root.wash(0.28)
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+            Column {
+                id: saveCol
+                x: 14
+                y: 14
+                width: parent.width - 28
+                spacing: 10
+
+                Text {
+                    text: root.saveWhat === "new" ? "New project"
+                                                  : "Save the cut as"
+                    color: root.cText
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: root.saveWhat === "new"
+                          ? "A name for it. Everything you do to it is written as you do it."
+                          : "Every edit is already on disk. This gives the cut a name of its own, and leaves a copy behind under the old one."
+                    color: root.cDim
+                    font.pixelSize: 11
+                }
+
+                // The name, without the extension: a .syntl is what this
+                // program writes and typing a second one only argues.
+                Rectangle {
+                    width: parent.width
+                    height: 28
+                    radius: 3
+                    color: root.wash(0.10)
+                    border.width: 1
+                    border.color: saveIn.activeFocus ? root.cAccent : root.wash(0.24)
+
+                    TextInput {
+                        id: saveIn
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.cText
+                        font.pixelSize: 12
+                        clip: true
+                        text: root.saveName
+                        // A typed name is a DIFFERENT name, so the Replace the
+                        // last one earned does not carry over to it — that is
+                        // how a second press writes over a file nobody warned
+                        // about.
+                        onTextChanged: {
+                            if (text !== root.saveName) root.saveReplace = false
+                            root.saveName = text
+                        }
+                        onAccepted: root.doSave()
+                        // The field is the whole dialog: opening it with the
+                        // cursor somewhere else is a dialog you have to click
+                        // into before you can answer it.
+                        focus: root.saveOpen
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: root.savePath
+                    color: root.cDim
+                    font.pixelSize: 11
+                    elide: Text.ElideLeft
+                }
+
+                Text {
+                    width: parent.width
+                    visible: root.saveReplace
+                    wrapMode: Text.WordWrap
+                    text: "A project of that name is there already. Replace writes over it."
+                    color: root.cBad
+                    font.pixelSize: 11
+                }
+
+                Row {
+                    spacing: 8
+                    Btn { label: "Cancel"; onClicked: { root.saveOpen = false
+                                                        root.saveReplace = false } }
+                    Btn { label: root.saveReplace ? "Replace"
+                                                  : root.saveWhat === "new" ? "Create" : "Save"
+                          active: root.saveName !== "" && !root.saveBusy
+                          onClicked: root.doSave() }
                 }
             }
         }

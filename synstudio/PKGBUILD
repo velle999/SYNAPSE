@@ -1056,7 +1056,54 @@ pkgver=0.1.0
 #   said yes to an empty picker.
 #
 #   600 assertions, clean under ASan+UBSan+LSan.
-pkgrel=33
+#
+# 34 A PROJECT CAN BE GIVEN A NAME — AND A DROPPED FILE STARTS ONE.
+#
+#   There was no way to save a project, and there did not need to be one:
+#   every verb in the engine ends in a write, so the .syntl on disk is the cut
+#   as it stands after each edit and closing the window has never lost a
+#   frame. What was missing was a NAME. Both doors into a new
+#   project — the start screen and the toolbar — wrote the same fixed path,
+#   `~/synstudio-project.syntl`, so starting a second project SILENTLY
+#   DESTROYED the first, and there was no way to say "this one is Holiday".
+#
+#   `timeline saveas PROJ --out PATH [--force]` writes the document somewhere
+#   else and prints where; the window then edits the copy, because a Save as
+#   that leaves you editing the old file has made a copy, not a save. New
+#   project and Save as are one sheet with a name field in it.
+#
+#   ⚠ NEITHER WRITES OVER A FILE ON THE FIRST PRESS. `new --no-clobber` and
+#   `saveas` answer exit 3 for "that name is taken", which is an ANSWER — the
+#   sheet turns it into a Replace button rather than an error, the way `peaks`
+#   answers 100 for "no audio". Plain `new` still clobbers: every script and
+#   most of the suite already asks it for exactly that, and changing it
+#   underneath them would be a silent regression of its own. `new --unique`
+#   takes the next free name and PRINTS it — that is what the start screen
+#   uses now, so a new project can never land on another one.
+#
+#   ⚠ AND A SAVE UNDER A NEW NAME CARRIES THE STABILISER'S WORK. Those
+#   measurements live in `<project>.stab`, keyed to the project's NAME, so the
+#   copy would look right, open right, and render every stabilised clip
+#   UNSTEADY. No error and no message: the shake would simply be back.
+#
+#   Dropping a photograph on the Video tab with nothing open used to say
+#   "start a project first" — an instruction to go and do the thing the drop
+#   had already asked for. It starts one and takes the drop.
+#
+#   And copy/paste, which were engine verbs with no door into them from the
+#   window: Copy and Paste in the cutting room, pasting at the PLAYHEAD.
+#   `timeline clipboard` says what is on it without pasting to find out, so
+#   Paste is inactive with nothing there rather than pressed to discover it —
+#   the clipboard is a file that outlives the window, so that is a question
+#   only the engine can answer. ⚠ Re-read when the copy has RUN, not when it
+#   is queued: edits queue, and asking early reports the PREVIOUS copy.
+#
+#   ⚠ `--at 0` is a POSITION. `o.at > 0` cannot tell "not given" from "the
+#   head of the cut", so a paste at 0 put the clip back where it was copied
+#   from — at the one place somebody pasting at 0 is looking.
+#
+#   622 assertions, clean under ASan+UBSan+LSan.
+pkgrel=34
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

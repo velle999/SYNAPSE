@@ -2524,6 +2524,30 @@ check "and its own levels"  "1" \
 $BIN timeline paste "$cbp" 0 --grade --all | seen "or onto every clip on a track" "graded	4"
 check "and all four are graded" "4" "$(grep -c '^grade	' "$cbp")"
 
+# ---- what is ON it, without pasting to find out -------------------------
+#
+# The clipboard outlives the window and the project it was filled from, so a
+# window that offers Paste has to be able to ASK rather than remember. ⚠ No
+# project is named: this is a question about the clipboard, not about a cut.
+cb=$($BIN timeline clipboard)
+echo "$cb" | seen "the clipboard says what it holds" "kind	solid"
+echo "$cb" | seen "and how long it is"               "length	2.000000"
+echo "$cb" | seen "and that it carries a grade"      "graded	1"
+# ⚠ An EMPTY clipboard is an answer, not a failure — a window that treated it
+# as one would show an error on a fresh session for having copied nothing yet.
+( SYNSTUDIO_CLIPBOARD=$TMP/nothing-copied $BIN timeline clipboard
+  echo "exit $?" ) | seen "an empty clipboard answers 'empty'" "empty"
+( SYNSTUDIO_CLIPBOARD=$TMP/nothing-copied $BIN timeline clipboard >/dev/null
+  echo "exit $?" ) | seen "and exits 0 saying it"    "exit 0"
+
+# ---- --at 0 is a POSITION -----------------------------------------------
+#
+# ⚠ `o.at > 0` cannot tell "not given" from "the head of the cut", so paste
+# --at 0 used to put the clip back where it was copied from. The head of the
+# timeline is exactly where somebody pasting at 0 is looking.
+$BIN timeline paste "$cbp" 0 --at 0 >/dev/null
+check "a paste at 0 lands at 0" "0.000000"       "$($BIN timeline get "$cbp" 0 0 | awk -F'\t' '/^tl_in/{print $2}')"
+
 # ---- duplicate -----------------------------------------------------------
 $BIN timeline duplicate "$cbp" 0 1 | seen "a clip duplicates" "duplicated"
 # Straight after itself, which is what duplicating is for: clip 1 runs 2..4,
@@ -3432,6 +3456,60 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+# ------------------------------------------------------ naming a project --
+#
+# Nothing here is about persistence: every verb in the engine ends in a write,
+# so the .syntl on disk is the cut as it stands after each edit and there is
+# no Save to press. What these assert is that a project can be given a NAME
+# without the one it is replacing being thrown away — which is what the window
+# had no way to do, so every project it started lived at one fixed path and
+# the second one took the first one's place.
+
+nm=$TMP/name
+mkdir -p "$nm"
+$BIN timeline new "$nm/one.syntl" --size 640x360 --fps 25 >/dev/null
+$BIN timeline track "$nm/one.syntl" video V >/dev/null
+$BIN timeline solid "$nm/one.syntl" 0 --at 0 --dur 2 --colour 0.9,0.2,0.1 >/dev/null
+
+# ⚠ Plain `new` still writes over what is there. Every script and most of this
+# suite already asks it for exactly that, and changing it underneath them
+# would be a silent regression of its own — so the two ways NOT to lose a
+# project are asked for BY NAME.
+$BIN timeline new "$nm/one.syntl" --no-clobber >/dev/null 2>&1
+check "new --no-clobber refuses a name in use" "3" "$?"
+check "and leaves the project it refused alone" "1"       "$(grep -c '^clip' "$nm/one.syntl")"
+
+check "new --unique takes the next free name" "$nm/one-2.syntl"       "$($BIN timeline new "$nm/one.syntl" --unique)"
+# ⚠ The EXTENSION is kept. A project called one-2 with no .syntl is one the
+# browser does not list and the window cannot open.
+check "and the one after that"                "$nm/one-3.syntl" \
+      "$($BIN timeline new "$nm/one.syntl" --unique)"
+
+# ---- save as ------------------------------------------------------------
+check "saveas prints where it wrote"  "$nm/two.syntl" \
+      "$($BIN timeline saveas "$nm/one.syntl" --out "$nm/two.syntl")"
+check "and the copy is the same cut"  "" \
+      "$(diff <($BIN timeline show "$nm/one.syntl") \
+              <($BIN timeline show "$nm/two.syntl"))"
+$BIN timeline saveas "$nm/one.syntl" --out "$nm/two.syntl" >/dev/null 2>&1
+check "saveas refuses an existing file" "3" "$?"
+$BIN timeline saveas "$nm/one.syntl" --out "$nm/two.syntl" --force >/dev/null 2>&1
+check "and --force is how you say so"   "0" "$?"
+# Saving a project onto itself is a no-op, not a collision: a window that
+# offered Replace for the name already on screen would be asking whether to
+# destroy the file it is editing.
+check "saving onto itself is not a collision" "0" \
+      "$($BIN timeline saveas "$nm/one.syntl" --out "$nm/one.syntl" >/dev/null 2>&1; echo $?)"
+
+# ⚠ The stabiliser's measurements are keyed to the project's NAME. Without
+# this the copy looks right, opens right, and renders every stabilised clip
+# UNSTEADY — no error, no message, the shake is simply back.
+mkdir -p "$nm/one.syntl.stab"
+echo trf > "$nm/one.syntl.stab/stab_0_0.trf"
+$BIN timeline saveas "$nm/one.syntl" --out "$nm/three.syntl" >/dev/null
+check "a save under a new name carries the stabiliser's work" "trf" \
+      "$(cat "$nm/three.syntl.stab/stab_0_0.trf" 2>/dev/null)"
+
 #
 # ⚠ AND IT REPORTS A QML ERROR, NOT A SLOW MACHINE.
 #
@@ -3454,6 +3532,24 @@ qml=$(dirname "$0")/../data/synstudio.qml
 # deleting the call leaves a picker that opens, is empty, and says nothing.
 if [ -f "$qml" ]; then
     seen "the window asks the engine for the families" '"fonts"' < "$qml"
+    # The window's half of naming a project. Both of these are the specific
+    # way this dies: without the Save as call there is a button that opens a
+    # sheet nothing acts on, and without --unique the start screen is back to
+    # writing every new project over the last one.
+    seen "the window can save the cut under a name" '"saveas"' < "$qml"
+    seen "and never starts one over another"        '"--unique"' < "$qml"
+    # ⚠ And a drop with nothing open STARTS a project rather than refusing.
+    # "start a project first" was an instruction to go and do the thing the
+    # drop had already asked for.
+    seen "a dropped file starts a project of its own" 'root.newProjectUnique(' < "$qml"
+    seen "and the drop target says so"  'drop clips to start a project' < "$qml"
+    # Copy and paste were engine verbs with no door into them from the window.
+    # ⚠ The clipboard READ is the half that dies quietly: without it Paste is
+    # either always offered — and errors on a session that has copied nothing
+    # — or offered from a memory of this window's own copies, which is not
+    # what a clipboard on disk means.
+    seen "the window can copy a clip"        '"copy", root.proj' < "$qml"
+    seen "and asks what it can paste"        '"clipboard"' < "$qml"
     # ⚠ And never carries a list of its own. A hardcoded family is a name that
     # is right on the machine it was written on and a blank title everywhere
     # else — the same bargain every other list in this window strikes with the
