@@ -666,8 +666,27 @@ pkgver=0.1.0
 #
 #   So the FAILURE condition is an ERROR line, the pass condition is a loaded
 #   configuration, and a shell that never started says so and asserts nothing.
-#   The timeout is 60s because a build machine is a loaded machine.
-pkgrel=20
+#
+# 21 AND THE FIX FOR THAT MADE THE SUITE TAKE 96 SECONDS.
+#
+#   ⚠ A shell that loads SUCCESSFULLY runs forever, so `timeout N quickshell`
+#   always costs the full N. Raising it from 25 to 60 seconds to help a slow
+#   machine therefore added 35 seconds of pure waiting to every build on every
+#   machine — and the suite renders real video, so it was already the longest
+#   thing in the package. 96 seconds here is minutes on a laptop, and meson
+#   kills a test at its timeout and FAILS THE BUILD.
+#
+#   Polled instead: watch the log, stop the moment either answer appears. 96
+#   seconds back down to 38. And meson's own timeout goes to 900, because this
+#   suite renders a slow-motion export and a stabiliser analysis and 300 was
+#   set when it was 344 assertions.
+#
+#   ⚠ Also hardened the bold-face assertion, which was environmental in the
+#   same way: it asserted that fc-match answers with a path containing "Bold",
+#   and a machine with no bold face installed would have failed the BUILD for
+#   having different fonts. It compares the bold answer to the regular one and
+#   skips when they are the same.
+pkgrel=21
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

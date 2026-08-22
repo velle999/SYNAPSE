@@ -35,6 +35,7 @@ sources = files(
   'src/timeline.c',
   'src/fx.c',
   'src/font.c',
+  'src/scope.c',
   'src/subs.c',
 )
 
@@ -84,4 +85,9 @@ install_data('data/synstudio.svg',
 test('engine', find_program('tests/run.sh'),
      args: [meson.current_build_dir() / 'synstudio'],
      workdir: meson.current_source_dir(),
-     timeout: 300)
+     # ⚠ The suite renders real video with real ffmpeg — a slow-motion export,
+     # a stabiliser analysis, a dozen frames measured against each other — and
+     # a build machine is a loaded machine. 300 seconds was enough when this
+     # was 344 assertions and is not at 445; a test killed by meson fails the
+     # BUILD, and on the machine least able to afford it.
+     timeout: 900)
