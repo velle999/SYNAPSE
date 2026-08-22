@@ -1022,7 +1022,41 @@ pkgver=0.1.0
 #   anybody can see.
 #
 #   593 assertions, clean under ASan+UBSan+LSan.
-pkgrel=32
+#
+# 33 A FONT PICKER, INSTEAD OF A FIELD TO TYPE INTO.
+#
+#   `text.font` is a TEXT row in the clip table, so lettering a title in
+#   anything but the default meant TYPING a family name — no list, no spelling
+#   to check against, and no way to find out what the machine had. `synstudio
+#   fonts` has existed the whole time to answer exactly that and nothing ever
+#   called it. A typo did not fail: fc-match resolves it to something else and
+#   the title comes out lettered in a face nobody chose, which reads as
+#   deliberate.
+#
+#   The Title group's Font row now carries a ▾ with the family COUNT on it,
+#   and opens a filtered list read once from the engine at startup. Each row
+#   is DRAWN IN ITS OWN FACE — a list of family names all set in the same font
+#   tells you their spelling and nothing else, and what one looks like is the
+#   whole question. The field stays, so a family this machine has not got can
+#   still be typed for a render happening elsewhere, and its border goes red
+#   when the name is not one fontconfig knows.
+#
+#   ⚠ OPENED BY A BUTTON, NOT BY FOCUS. Focus is the obvious trigger and it
+#   does not work: clicking a row takes focus off the field, which closes the
+#   list out from under the click, and the row never fires.
+#
+#   ⚠ AND THE FILTER IS ITS OWN FIELD. Filtering with the value field would
+#   commit what was typed — type "jet" to narrow, click JetBrains Mono, and
+#   the field loses focus FIRST, so the title is lettered in a family called
+#   "jet" for as long as the click takes to land. Two fields, no race.
+#
+#   Proven by an offscreen probe on a copy of the window, not by the file
+#   loading: 255 families reached the window, the list delegates instantiated,
+#   and they rendered in 24 distinct faces. "Configuration Loaded" would have
+#   said yes to an empty picker.
+#
+#   600 assertions, clean under ASan+UBSan+LSan.
+pkgrel=33
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

@@ -1062,6 +1062,45 @@ FloatingWindow {
                     String(root.selClip), name])
     }
 
+    // ── The families a title can be lettered in ─────────────────────────────
+    //
+    // `text.font` is a plain text field in the clip table, which meant the
+    // only way to letter a title in anything but the default was to TYPE a
+    // family name — with no list, no spelling to check against, and no way to
+    // find out what the machine has. `synstudio fonts` has existed the whole
+    // time to answer exactly that and nothing called it.
+    //
+    // Read once. It is an fc-list over every installed face and it does not
+    // change while the window is open; asking again per keystroke would be a
+    // process per letter typed in the filter.
+    property var fontList: []
+
+    // Whether the family in force is one this machine actually has. A name
+    // that is not resolves through fc-match to something else entirely at
+    // render time, so a title lettered in a typo looks deliberate and wrong
+    // rather than broken — the one failure a free text field could not report.
+    function fontInstalled(name) {
+        if (!name) return true            // empty = the default face, always fine
+        // Before the list has arrived nothing is known, and a field that
+        // flashes an error for the first half-second of every session is a
+        // field people learn to ignore.
+        if (root.fontList.length === 0) return true
+        return root.fontList.indexOf(name) >= 0
+    }
+
+    Process {
+        id: fontListProc
+        command: [root.bin, "fonts"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++)
+                    if (lines[i]) out.push(lines[i])
+                root.fontList = out
+            }
+        }
+    }
+
     Process {
         id: styleListProc
         command: [root.bin, "timeline", "styles"]
@@ -2391,6 +2430,7 @@ FloatingWindow {
         clipKeysProc.running = true
         transListProc.running = true
         styleListProc.running = true
+        fontListProc.running = true
         fxListProc.running = true
         fxParamProc.running = true
         lookListProc.running = true
@@ -5533,6 +5573,9 @@ FloatingWindow {
         readonly property bool onKey: root.animKeyAt(cc.row.key) >= 0
         readonly property bool longEnum:
             cc.row.type === "enum" && cc.row.choices.length > 10
+        // The font row is a text row with a LIST — see the picker below.
+        readonly property bool isFont: cc.row.key === "text.font"
+        property bool fontOpen: false
         // A colour to dip THROUGH is only a colour if the transition dips.
         readonly property bool applies:
             (cc.row.key === "trans.r" || cc.row.key === "trans.g"
@@ -5542,6 +5585,7 @@ FloatingWindow {
         width: inspCol.width
         height: !cc.applies ? 0
                 : cc.longEnum ? 150
+                : (cc.isFont && cc.fontOpen) ? 214
                 : cc.row.type === "text" ? 52 : 44
 
         Text {
@@ -5669,15 +5713,24 @@ FloatingWindow {
         // text — committed on Enter or on losing focus, never per keystroke.
         // A `set` per character would spawn a process per letter typed.
         Rectangle {
+            id: ccfield
             visible: cc.row.type === "text"
             anchors.left: parent.left; anchors.leftMargin: 12
-            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.right: parent.right
+            // The font row keeps a strip on the right for the ▾ that opens
+            // the family list.
+            anchors.rightMargin: cc.isFont ? 58 : 12
             anchors.top: cclbl.bottom; anchors.topMargin: 6
             height: 24
             radius: 3
             color: root.wash(0.14)
             border.width: 1
-            border.color: cti.activeFocus ? root.cAccent : root.wash(0.2)
+            // A family this machine has not got is not an error — the render
+            // still happens, in whatever fc-match lands on — but it is never
+            // what was meant, and a plain field had no way to say so.
+            border.color: cti.activeFocus ? root.cAccent
+                        : (cc.isFont && !root.fontInstalled(cc.raw)) ? root.cBad
+                        : root.wash(0.2)
 
             TextInput {
                 id: cti
@@ -5690,6 +5743,134 @@ FloatingWindow {
                 clip: true
                 text: cc.raw
                 onEditingFinished: if (text !== cc.raw) root.setClip(cc.row.key, text)
+            }
+        }
+
+        // ── The family list ─────────────────────────────────────────────────
+        //
+        // Opened by a button and not by FOCUS, deliberately. Focus is the
+        // obvious trigger and it does not work: clicking a row in the list
+        // takes focus off the field, which closes the list out from under the
+        // click, and the row never fires. A button owns its own state and
+        // needs no focus grab at all.
+        Rectangle {
+            visible: cc.isFont
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.verticalCenter: ccfield.verticalCenter
+            width: 42
+            height: 24
+            radius: 3
+            color: cc.fontOpen ? root.cAccent : root.wash(0.14)
+            Text {
+                anchors.centerIn: parent
+                // The COUNT, not just an arrow: "there are 255 of these" is
+                // the fact the field never conveyed, and it is also how a
+                // machine with no fontconfig says so — it reads 0.
+                text: (cc.fontOpen ? "▴ " : "▾ ") + root.fontList.length
+                color: cc.fontOpen ? root.cPanel : root.cDim
+                font.pixelSize: 9
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: cc.fontOpen = !cc.fontOpen
+            }
+        }
+
+        Rectangle {
+            id: ccfonts
+            visible: cc.isFont && cc.fontOpen
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: ccfield.bottom; anchors.topMargin: 6
+            height: visible ? 130 : 0
+            radius: 3
+            color: root.wash(0.14)
+            clip: true
+
+            // The filter is its OWN field, not the value field above.
+            //
+            // Filtering with the value field would commit whatever was typed:
+            // type "jet" to narrow the list, click JetBrains Mono, and the
+            // field loses focus first — so the title is lettered in a family
+            // called "jet" for as long as it takes the click to land. Two
+            // fields, and that race does not exist.
+            Rectangle {
+                id: ccfilter
+                anchors.top: parent.top; anchors.topMargin: 4
+                anchors.left: parent.left; anchors.leftMargin: 4
+                anchors.right: parent.right; anchors.rightMargin: 4
+                height: 20
+                radius: 3
+                color: root.wash(0.10)
+                TextInput {
+                    id: ccfi
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: root.cText
+                    font.pixelSize: 10
+                    clip: true
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left; anchors.leftMargin: 6
+                    visible: ccfi.text === ""
+                    text: root.fontList.length > 0
+                          ? "type to narrow the list"
+                          : "no font list here — fontconfig is not installed"
+                    color: root.cDim
+                    font.pixelSize: 10
+                }
+            }
+
+            ListView {
+                id: ccfl
+                anchors.top: ccfilter.bottom; anchors.topMargin: 4
+                anchors.left: parent.left; anchors.leftMargin: 4
+                anchors.right: parent.right; anchors.rightMargin: 4
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 4
+                clip: true
+                model: {
+                    const q = ccfi.text.toLowerCase()
+                    if (!q) return root.fontList
+                    const out = []
+                    for (let i = 0; i < root.fontList.length; i++)
+                        if (root.fontList[i].toLowerCase().indexOf(q) >= 0)
+                            out.push(root.fontList[i])
+                    return out
+                }
+                delegate: Rectangle {
+                    required property string modelData
+                    width: ccfl.width
+                    height: 18
+                    color: modelData === cc.raw ? root.wash(0.24)
+                         : ccflArea.containsMouse ? root.wash(0.18)
+                         : "transparent"
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left; anchors.leftMargin: 6
+                        width: parent.width - 12
+                        elide: Text.ElideRight
+                        text: parent.modelData
+                        // Each row DRAWN IN ITS OWN FACE. A list of family
+                        // names all set in the same font tells you their
+                        // spelling and nothing else, and the whole question
+                        // here is what one looks like.
+                        font.family: parent.modelData
+                        font.pixelSize: 11
+                        color: parent.modelData === cc.raw ? root.cAccent : root.cText
+                    }
+                    MouseArea {
+                        id: ccflArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            root.setClip(cc.row.key, parent.modelData)
+                            cc.fontOpen = false
+                        }
+                    }
+                }
             }
         }
 

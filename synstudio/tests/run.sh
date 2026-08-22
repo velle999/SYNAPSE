@@ -3314,6 +3314,36 @@ if have fc-match; then
     fi
     $BIN fonts have "Definitely Not A Font 91" \
         | seen "a font this machine has not got says so" "no"
+
+    # ---- the list the window's font picker is built from ----------------
+    #
+    # `text.font` is a TEXT row in the clip table, so for a long time the only
+    # way to letter a title in anything was to TYPE a family name — no list,
+    # no spelling to check against, and no way to find out what the machine
+    # had. This verb existed the whole time and nothing called it.
+    #
+    # ⚠ Asserted as a SHAPE, never as a count or a name. Which families are
+    # installed is a property of the machine, and a suite that expects to find
+    # Inter fails the build on a box that has not got it.
+    $BIN fonts > "$TMP/fonts.txt"
+    check "the family list has families in it" "yes" \
+          "$([ "$(grep -c . "$TMP/fonts.txt")" -ge 2 ] && echo yes || echo no)"
+    # One per line and canonical: fc-list reports a family once per style and
+    # repeats its localised aliases comma-separated, and a picker showing four
+    # spellings of one face is worse than no picker.
+    check "…one per line, no alias lists"      "0" \
+          "$(grep -c ',' "$TMP/fonts.txt")"
+    check "…and no duplicates"                 "0" \
+          "$(sort "$TMP/fonts.txt" | uniq -d | grep -c .)"
+    # Every name it lists has to be a name it can then RESOLVE. A picker whose
+    # rows do not round-trip through `fonts have` offers choices that letter a
+    # title in something else.
+    f1=$(head -1 "$TMP/fonts.txt")
+    $BIN fonts have "$f1" | seen "a family it lists, it also has" "yes"
+    # And the pattern form, which is what a filter field is for.
+    check "a pattern narrows the list"         "yes" \
+          "$([ "$($BIN fonts "$f1" | grep -c .)" -le "$(grep -c . "$TMP/fonts.txt")" ] \
+             && echo yes || echo no)"
 fi
 
 # ---- the credit roll ----------------------------------------------------
@@ -3417,6 +3447,19 @@ fi
 # nothing — the same bargain the `have quickshell` guard above it strikes,
 # one step further in.
 qml=$(dirname "$0")/../data/synstudio.qml
+
+# The window's own half of the font picker. Grep assertions on a QML file are
+# weak on their own, which is why the offscreen load below exists — but these
+# two catch the specific way this feature dies: the list is a PROCESS CALL, so
+# deleting the call leaves a picker that opens, is empty, and says nothing.
+if [ -f "$qml" ]; then
+    seen "the window asks the engine for the families" '"fonts"' < "$qml"
+    # ⚠ And never carries a list of its own. A hardcoded family is a name that
+    # is right on the machine it was written on and a blank title everywhere
+    # else — the same bargain every other list in this window strikes with the
+    # engine's tables.
+    notseen "and never ships a family list of its own" 'DejaVu Sans' < "$qml"
+fi
 if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
     rc=0
     # ⚠ POLLED, not waited out. A shell that loads SUCCESSFULLY runs forever,
