@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -70,6 +71,9 @@ static void usage(void)
 "  timeline undo PROJ            step back; redo steps forward again\n"
 "  timeline redo PROJ\n"
 "  timeline history PROJ         how many steps there are either way\n"
+"  timeline version PROJ save NAME|list|restore NAME\n"
+"       a document you decided to KEEP. Undo is the auto-save half and it\n"
+"       is a ring; a version is a name and nothing expires it\n"
 "  timeline mark PROJ --at T [--text S] [--colour 0-5]   a note at an instant\n"
 "  timeline unmark PROJ N\n"
 "  timeline keys                 every clip property, with its range\n"
@@ -148,6 +152,7 @@ static void usage(void)
 "  timeline export PROJ --out OUT [--format F] [--print] [--preview]\n"
 "       [--preset P]   deliver at that size and frame rate\n"
 "       [--burn timecode|name|both]   over the picture, for a review copy\n"
+"       [--watermark F.png]           a logo over the delivered frame\n"
 "       --format png|exr with `--out dir/f_%04d.png` writes a SEQUENCE\n"
 "       [--subs FILE]  ship a .srt as a STREAM a player can switch off,\n"
 "                      instead of the burnt-in kind `subs import` makes\n"
@@ -198,6 +203,7 @@ typedef struct {
     int    all;                 /* --all: every clip on the track */
     const char *burn;           /* what to write over the delivered picture */
     const char *preset;         /* a delivery size and frame rate, by name */
+    const char *mark;           /* a watermark PNG, over the delivered frame */
     /* ⚠ NOT --to: that is already a timeline instant, a double, and giving
      * one flag two types is how a typo becomes a silent zero. */
     const char *ref;            /* the shot to match, a file or T,C */
@@ -265,6 +271,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--all"))     { o->all = 1; }
         else if (!strcmp(a, "--burn"))    { const char *v = NEXT(); if (!v) return -1; o->burn = v; }
         else if (!strcmp(a, "--preset"))  { const char *v = NEXT(); if (!v) return -1; o->preset = v; }
+        else if (!strcmp(a, "--watermark")) { const char *v = NEXT(); if (!v) return -1; o->mark = v; }
         else if (!strcmp(a, "--ref"))     { const char *v = NEXT(); if (!v) return -1; o->ref = v; }
         else if (!strcmp(a, "--duck"))    { const char *v = NEXT(); if (!v) return -1; o->duck = v; }
         else if (!strcmp(a, "--duck-amount")) { const char *v = NEXT(); if (!v) return -1; o->duck_amt = atof(v); o->has_duck_amt = 1; }
@@ -1675,6 +1682,70 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         return 0;
     }
 
+    /* Versions.
+     *
+     * Undo is already the auto-save half of this — every save records the
+     * state it left, so nothing is lost between them — but undo is a ring of
+     * a hundred states and the oldest falls off the end. A version is a
+     * document somebody DECIDED to keep, with a name they chose, that nothing
+     * expires and no edit disturbs.
+     *
+     * ⚠ Restoring goes through the ordinary save path, so a restore is itself
+     * undoable. A restore that could not be undone would be the one operation
+     * in this program capable of losing work. */
+    if (!strcmp(verb, "version")) {
+        const char *act = argc > 4 ? argv[4] : "list";
+        static ss_version v[SS_MAX_VERSIONS];
+        char path[4400];
+        int n, k;
+
+        if (!strcmp(act, "save")) {
+            char when[32];
+            time_t now = time(NULL);
+            struct tm tmv;
+            const char *name = argc > 5 ? argv[5] : NULL;
+            if (!name) return die("version save wants a NAME");
+            localtime_r(&now, &tmv);
+            strftime(when, sizeof when, "%Y-%m-%d %H:%M", &tmv);
+            n = ss_version_save(proj, name, when);
+            if (n == -2) return die("a version name is letters, digits, dash, "
+                                    "dot and underscore — it becomes a file");
+            if (n != 0) return die("cannot write the version");
+            printf("saved\t%s\n%s\n", name, when);
+            return 0;
+        }
+        if (!strcmp(act, "restore")) {
+            const char *name = argc > 5 ? argv[5] : NULL;
+            ss_timeline was;
+            FILE *fp;
+            if (!name) return die("version restore wants a NAME");
+            if (ss_version_path(proj, name, path, sizeof path) != 0)
+                return die("no version called %s", name);
+            fp = fopen(path, "r");
+            if (!fp) return die("no version called %s", name);
+            ss_timeline_reset(&was, 1920, 1080, 25.0);
+            ss_timeline_read(&was, fp);
+            fclose(fp);
+            ss_timeline_stabdir(proj, was.stabdir, sizeof was.stabdir);
+            /* Through tl_save, which is what makes it undoable. */
+            if (tl_save(proj, &was) != 0) {
+                ss_timeline_free(&was);
+                return die("cannot write %s", proj);
+            }
+            printf("restored\t%s\n", name);
+            ss_timeline_free(&was);
+            return 0;
+        }
+        if (!strcmp(act, "list")) {
+            n = ss_version_list(proj, v, SS_MAX_VERSIONS);
+            printf("versions\t%d\n", n);
+            for (k = 0; k < n; k++)
+                printf("version\t%s\t%s\n", v[k].name, v[k].when);
+            return 0;
+        }
+        return die("version takes save, list or restore, not %s", act);
+    }
+
     /* Copy, paste, duplicate.
      *
      * The clipboard is a one-clip DOCUMENT, so what travels is everything the
@@ -2530,6 +2601,14 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
          * there, or a preview that was never going to carry one, is five
          * minutes of render either way — and finding out at the end is how a
          * person loses an evening. */
+        if (o.mark) {
+            FILE *mf = fopen(o.mark, "r");
+            if (!mf) return die("cannot read %s", o.mark);
+            fclose(mf);
+            if (o.preview)
+                fprintf(stderr, "a preview carries no watermark — "
+                                "--watermark is ignored here\n");
+        }
         if (o.subs) {
             FILE *sf = fopen(o.subs, "r");
             if (!sf) return die("cannot read %s", o.subs);
@@ -2582,7 +2661,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                            "with `timeline subs`, or deliver as mkv", f->name);
             }
             ac = ss_timeline_ffmpeg(rt, o.out, dir, o.preview, f, o.subs,
-                                    burn, &av);
+                                    burn, o.mark, &av);
         }
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }

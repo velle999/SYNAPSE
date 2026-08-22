@@ -881,7 +881,34 @@ pkgver=0.1.0
 #   clip being DRIVEN by the grade it had while claiming to wear the new one.
 #
 #   537 assertions, clean under ASan+UBSan+LSan.
-pkgrel=27
+#
+# 28 VERSIONS AND A WATERMARK.
+#
+#   Undo was already the auto-save half — every save records the state it left
+#   — but it is a RING of a hundred states and the oldest falls off the end. A
+#   version is a document somebody decided to KEEP, named, in
+#   `<project>.versions/`, that nothing expires and no edit disturbs.
+#
+#   ⚠ A RESTORE GOES THROUGH THE ORDINARY SAVE PATH, so it is itself undoable.
+#   A restore that could not be undone would be the one operation in this
+#   program capable of losing work.
+#
+#   ⚠ A version NAME BECOMES A FILE. A slash or a leading dot is refused
+#   rather than sanitised: quietly turning `a/b` into `a_b` means a later
+#   `restore a/b` cannot find what it just saved.
+#
+#   The watermark is a PICTURE, so unlike the burn-in it cannot be a filter on
+#   the end of the chain — it is another input, and it goes in LAST for the
+#   same reason the subtitle input does: every label in the graph names an
+#   input by NUMBER. Sized as a fraction of the frame, so one file marks a
+#   1080 delivery and a 4K one identically.
+#
+#   ⚠ A clean build showed a truncation warning the incremental one had
+#   cached away. Configure a fresh build directory before believing a tree is
+#   warning-free.
+#
+#   551 assertions, clean under ASan+UBSan+LSan.
+pkgrel=28
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

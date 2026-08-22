@@ -34,6 +34,7 @@
  */
 #include "synstudio.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -3080,6 +3081,107 @@ int ss_timeline_unmark(ss_timeline *t, int i)
 
 /* ------------------------------------------------------------- history -- */
 
+/* ------------------------------------------------------------- versions -- */
+
+/* ⚠ A NAME, not a path. A version is named by a person and the name becomes a
+ * file, so a `/` or a `..` in it would write outside the project's own
+ * directory. Refused rather than sanitised: quietly turning "a/b" into "a_b"
+ * means a later `restore a/b` cannot find what it just saved. */
+static int version_name_ok(const char *name)
+{
+    size_t i;
+    if (!name || !*name || strlen(name) > 63) return 0;
+    if (name[0] == '.') return 0;
+    for (i = 0; name[i]; i++) {
+        char c = name[i];
+        int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                 (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+        if (!ok) return 0;
+    }
+    return 1;
+}
+
+int ss_version_path(const char *proj, const char *name, char *out, size_t n)
+{
+    if (!out || !version_name_ok(name)) return -1;
+    snprintf(out, n, "%s.versions/%s", proj, name);
+    return 0;
+}
+
+int ss_version_save(const char *proj, const char *name, const char *when)
+{
+    char dir[4300], path[4400], meta[4500];
+    FILE *in, *fp;
+    char buf[8192];
+    size_t got;
+
+    if (!version_name_ok(name)) return -2;
+    snprintf(dir, sizeof dir, "%s.versions", proj);
+    if (mkdir(dir, 0755) != 0 && errno != EEXIST) return -1;
+    if (ss_version_path(proj, name, path, sizeof path) != 0) return -1;
+
+    /* A byte copy of the document as it is on disk, not a re-serialisation of
+     * what happens to be in memory. A version has to be the thing that was
+     * there, including anything a newer build would have rewritten. */
+    in = fopen(proj, "rb");
+    if (!in) return -1;
+    fp = fopen(path, "wb");
+    if (!fp) { fclose(in); return -1; }
+    while ((got = fread(buf, 1, sizeof buf, in)) > 0)
+        if (fwrite(buf, 1, got, fp) != got) { fclose(in); fclose(fp); return -1; }
+    fclose(in);
+    if (fclose(fp) != 0) return -1;
+
+    /* When, as the caller reports it. Not re-derived from the file's mtime:
+     * a copy takes the time of the copy, and what a person wants to see is
+     * when they decided to keep it. */
+    snprintf(meta, sizeof meta, "%s.when", path);
+    fp = fopen(meta, "w");
+    if (fp) { fprintf(fp, "%s\n", when ? when : ""); fclose(fp); }
+    return 0;
+}
+
+int ss_version_list(const char *proj, ss_version *out, int max)
+{
+    char dir[4300];
+    DIR *d;
+    struct dirent *e;
+    int n = 0;
+
+    snprintf(dir, sizeof dir, "%s.versions", proj);
+    d = opendir(dir);
+    if (!d) return 0;                   /* no directory is no versions */
+    while ((e = readdir(d)) != NULL && n < max) {
+        char meta[4500];
+        FILE *fp;
+        size_t len = strlen(e->d_name);
+        if (e->d_name[0] == '.') continue;
+        if (len > 5 && !strcmp(e->d_name + len - 5, ".when")) continue;
+        /* ⚠ Skipped rather than truncated. ss_version_save refuses a name
+         * longer than 63 bytes, so anything longer in here was not written by
+         * this program — and listing it under a shortened name would offer a
+         * version that `restore` then cannot find. */
+        if (len >= sizeof out[n].name) continue;
+        memcpy(out[n].name, e->d_name, len + 1);
+        out[n].when[0] = '\0';
+        /* The VALIDATED copy, not the raw dirent: it is already known to fit
+         * in 64 bytes, which is both the correct thing to use and what lets
+         * the compiler see that this path cannot be truncated. */
+        snprintf(meta, sizeof meta, "%s/%s.when", dir, out[n].name);
+        if ((fp = fopen(meta, "r")) != NULL) {
+            if (fgets(out[n].when, sizeof out[n].when, fp)) {
+                size_t w = strlen(out[n].when);
+                while (w && (out[n].when[w-1] == '\n' || out[n].when[w-1] == '\r'))
+                    out[n].when[--w] = '\0';
+            }
+            fclose(fp);
+        }
+        n++;
+    }
+    closedir(d);
+    return n;
+}
+
 /* `<project>.undo/NNNN`, one whole document per state, and a `head` file
  * naming which of them is the one on disk.
  *
@@ -3391,7 +3493,7 @@ const ss_tl_format *ss_timeline_format(const char *name, const char *out)
 int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                        const char *lutdir, int preview,
                        const ss_tl_format *fmt, const char *subs,
-                       int burn, char ***argv_out)
+                       int burn, const char *mark, char ***argv_out)
 {
     strbuf fc = {0};
     char **av = NULL;
@@ -3923,6 +4025,23 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
         vlabel = "[rout]";
     }
 
+    /* Over the delivered picture, after the range and the burn-in, because a
+     * watermark is the last thing that happens to a frame before it is
+     * encoded — and because a range that trimmed it away afterwards would be
+     * a watermark on nothing.
+     *
+     * Sized as a FRACTION of the frame (12% of the width) so the same file
+     * marks a 1080 delivery and a 4K one identically, and inset by the same
+     * fraction of the height so it sits where it looks placed rather than
+     * where the pixels happened to land. */
+    if (mark && *mark && !preview) {
+        int mi = input + ((subs && *subs) ? 1 : 0);
+        sb_add(&fc, ";[%d:v]format=rgba,scale=iw*%.4f/iw*%d:-1[wm]",
+               mi, 0.12, t->w);
+        sb_add(&fc, ";%s[wm]overlay=W-w-H*0.04:H-h-H*0.04[wout]", vlabel);
+        vlabel = "[wout]";
+    }
+
     if (preview && t->w > 960)
         sb_add(&fc, ";%sscale=960:-2:flags=fast_bilinear[pout]", vlabel);
 
@@ -4056,6 +4175,18 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
      * switched on would only be there to go stale. */
     if (subs && *subs && !preview) {
         PUSH(xdup("-i")); PUSH(xdup(subs));
+    }
+    /* A watermark is a PICTURE, so unlike the burn-in it cannot be a filter
+     * on the end of the chain — it is another input, and it goes in last for
+     * the same reason the subtitles do: every label in the graph above names
+     * an input by NUMBER, and a file inserted anywhere else renumbers the
+     * clips and hands the timeline the wrong pictures.
+     *
+     * ⚠ AFTER the subtitle input, not before. Both are appended, so their
+     * order here is the order of their indices, and the subtitle map below
+     * names `input` — which has to still be the subtitle's. */
+    if (mark && *mark && !preview) {
+        PUSH(xdup("-i")); PUSH(xdup(mark));
     }
 
     PUSH(xdup("-filter_complex"));

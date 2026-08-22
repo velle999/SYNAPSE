@@ -2181,6 +2181,72 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ------------------------------------------------------------ versions ---
+#
+# Undo is already the auto-save half: every save records the state it left, so
+# nothing is lost between saves. What undo does NOT do is keep anything for
+# long — it is a ring of a hundred states and the oldest falls off the end. A
+# version is a document somebody decided to KEEP, with a name they chose, that
+# nothing expires and no edit disturbs.
+
+vp=$TMP/versions.sstl
+$BIN timeline new "$vp" --size 320x180 --fps 25 >/dev/null
+$BIN timeline track "$vp" video V >/dev/null
+$BIN timeline solid "$vp" 0 --at 0 --dur 1 --colour 1,0,0 >/dev/null
+$BIN timeline solid "$vp" 0 --at 1 --dur 1 --colour 0,1,0 >/dev/null
+
+check "a project has no versions to begin with" "0" \
+      "$($BIN timeline version "$vp" list | awk -F'\t' '/^versions/{print $2}')"
+$BIN timeline version "$vp" save two-clips | seen "one can be kept" "saved	two-clips"
+check "and it is listed"  "1" \
+      "$($BIN timeline version "$vp" list | awk -F'\t' '/^versions/{print $2}')"
+$BIN timeline version "$vp" list | seen "with the moment it was kept" "version	two-clips	20"
+
+# ⚠ A name becomes a FILE. A slash or a leading dot would write outside the
+# project's own directory, and sanitising it quietly would mean a later
+# `restore` cannot find what it just saved — so it is refused instead.
+$BIN timeline version "$vp" save "bad/name" 2>&1 | seen "a name with a slash is refused" "becomes a file"
+$BIN timeline version "$vp" save ".hidden"  2>&1 | seen "and so is a leading dot"       "becomes a file"
+
+$BIN timeline delete "$vp" 0 1 >/dev/null
+check "the project can then be changed" "1" "$($BIN timeline show "$vp" | grep -c '^clip')"
+$BIN timeline version "$vp" restore two-clips | seen "and the version restored" "restored"
+check "which brings the clips back" "2" "$($BIN timeline show "$vp" | grep -c '^clip')"
+
+# ⚠ THE ASSERTION THAT MATTERS. A restore goes through the ordinary save path,
+# so it is itself undoable — a restore that could not be undone would be the
+# one operation in this program able to lose work.
+$BIN timeline undo "$vp" >/dev/null
+check "and a restore is itself undoable" "1" "$($BIN timeline show "$vp" | grep -c '^clip')"
+
+# ---------------------------------------------------------- watermark ----
+#
+# A PICTURE, so unlike the burn-in it cannot be a filter on the end of the
+# chain — it is another input, and it goes in LAST for the same reason the
+# subtitles do: every label in the graph names an input by number.
+if have ffmpeg; then
+    wmk=$TMP/logo.png
+    ffmpeg -v error -y -f lavfi -i "color=c=yellow@0.85:s=200x60,format=rgba" \
+           -frames:v 1 "$wmk" 2>/dev/null
+    # ⚠ Its own project. `$dp` belongs to the delivery section further down
+    # this file, and reaching forward for a variable that does not exist yet
+    # is how a test ends up asserting against an empty string.
+    wmp=$TMP/watermark.sstl
+    $BIN timeline new "$wmp" --size 640x360 --fps 25 >/dev/null
+    $BIN timeline track "$wmp" video V >/dev/null
+    $BIN timeline solid "$wmp" 0 --at 0 --dur 2 --colour 0.8,0.1,0.1 >/dev/null
+    wg=$($BIN timeline export "$wmp" --out "$TMP/wm.mp4" --watermark "$wmk" --print)
+    echo "$wg" | seen "a watermark is overlaid"        "overlay=W-w-H*0.04"
+    # Sized as a FRACTION of the frame, so one file marks a 1080 delivery and
+    # a 4K one identically.
+    echo "$wg" | seen "and scaled to the frame, not to pixels" "scale=iw*0.1200"
+    $BIN timeline export "$wmp" --out "$TMP/wm.mp4" --watermark "$TMP/nope.png" 2>&1 \
+        | seen "a missing watermark is caught before the render" "cannot read"
+    $BIN timeline export "$wmp" --out "$TMP/wm.mp4" --watermark "$wmk" >/dev/null 2>&1
+    check "and the delivery renders with it" "yes" \
+          "$([ -s "$TMP/wm.mp4" ] && echo yes || echo no)"
+fi
+
 # ------------------------------------------------ copy, paste, duplicate --
 #
 # The clipboard is a one-clip DOCUMENT, written and read by the same two

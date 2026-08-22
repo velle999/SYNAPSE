@@ -1034,6 +1034,29 @@ int ss_history_undo(const char *proj);   /* 0 done, 1 nothing to undo, -1 error 
 int ss_history_redo(const char *proj);
 int ss_history_depth(const char *proj, int *undo, int *redo);
 
+/* ---- versions ----
+ *
+ * Undo already keeps whole documents on disk, which is the auto-save half of
+ * this: nothing is ever lost between saves because every save records the
+ * state it left. What undo does NOT do is keep anything for long — it is a
+ * ring of a hundred states and the oldest falls off the end.
+ *
+ * A version is a document somebody decided to keep, with a name they chose,
+ * in `<project>.versions/`. Nothing expires it and no edit disturbs it.
+ * Restoring one goes through the normal save path, so it is itself undoable —
+ * a restore that could not be undone would be the one operation in this
+ * program able to lose work. */
+#define SS_MAX_VERSIONS 256
+
+typedef struct {
+    char name[64];
+    char when[32];              /* as recorded, not as re-derived */
+} ss_version;
+
+int ss_version_save(const char *proj, const char *name, const char *when);
+int ss_version_list(const char *proj, ss_version *out, int max);
+int ss_version_path(const char *proj, const char *name, char *out, size_t n);
+
 /* What a track contributes once mute, hide and solo have had their say.
  * Solo is a property of the WHOLE timeline: one soloed track mutes every other
  * one, which is the only behaviour anybody expects from the word. */
@@ -1176,7 +1199,7 @@ const ss_tl_format *ss_timeline_format(const char *name, const char *out);
 int    ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                           const char *lutdir, int preview,
                           const ss_tl_format *fmt, const char *subs,
-                          int burn, char ***argv);
+                          int burn, const char *mark, char ***argv);
 
 /* ---- title styles ----
  *

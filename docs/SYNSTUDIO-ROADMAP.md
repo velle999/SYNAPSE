@@ -286,7 +286,17 @@ Fairlight-style automation: four features for one piece of work.
       why the transform goes in before anything scales the picture. Measured:
       frame-to-frame difference 7.08 before, 4.13 after. `--off` keeps the
       analysis, which took as long as a render to make
-- [ ] auto-save and versions
+- [x] **auto-save and versions** — shipped in 0.1.0-28. Undo was already the
+      auto-save half: every save records the state it left, so nothing is lost
+      between saves. What it does not do is keep anything for long — it is a
+      ring of a hundred states. A VERSION is a document somebody decided to
+      keep, with a name they chose, in `<project>.versions/`, that nothing
+      expires and no edit disturbs. ⚠ A restore goes through the ordinary save
+      path, so it is itself undoable: a restore that could not be undone would
+      be the one operation in this program able to lose work. ⚠ And a name
+      becomes a FILE, so a slash or a leading dot is refused rather than
+      sanitised — quietly rewriting it means a later `restore` cannot find
+      what it just saved
 
 ## 7 · Scopes, colour management, delivery
 
@@ -343,8 +353,11 @@ Fairlight-style automation: four features for one piece of work.
       commands, so a job somebody typed and a job the window queued are the
       same object and there is no second code path that renders things. ⚠ The
       queue is kept after a run — a job that failed is a job to look at
-- [ ] a watermark image — the burn-in draws text; an overlaid PNG is a second
-      input and a different graph
+- [x] **a watermark image** — `--watermark F.png`, over the delivered frame
+      after the range and the burn-in. A picture, so unlike the burn-in it
+      cannot be a filter on the end of the chain: it is another input, and it
+      goes in LAST for the same reason the subtitles do. Sized as a fraction
+      of the frame, so one file marks a 1080 delivery and a 4K one identically
 
 ## Build order
 
