@@ -267,7 +267,42 @@ pkgver=0.1.0
 #   source stand in for a device rather than producing an hour in six seconds.
 #
 #   225 assertions.
-pkgrel=11
+# 12: undo, markers, snapping, more than one clip — and a dialog that fits.
+#
+#   UNDO is a stack of whole DOCUMENTS in `<project>.undo/`, not of inverse
+#   operations: a .syntl is a few kilobytes of text and every verb is a
+#   separate process that loads, changes and saves, so there is no session to
+#   keep a stack in — and an inverse per verb would be twenty more things that
+#   can be wrong in one direction only. On disk, so it survives the window
+#   closing and an edit made from the command line in between. `timeline undo|
+#   redo|history`.
+#
+#   MARKERS, `timeline mark|unmark`: a note pinned to an instant, on the ruler,
+#   click to go there and right-click to remove. Nothing renders differently
+#   for one, which is the point — it is the only way to put something where a
+#   problem is without changing the cut to say so.
+#
+#   SNAPPING now covers trims and the playhead, not just clip moves, and takes
+#   markers as targets. Eight PIXELS rather than frames, so the tolerance
+#   shrinks as the zoom grows; a Snap button turns it off for the one edit that
+#   has to land between two things.
+#
+#   MORE THAN ONE CLIP: shift-click adds to the selection, and Delete says how
+#   many it is about to take. Deletes are ordered HIGHEST INDEX FIRST, because
+#   removing clip 2 renumbers everything above it. Edits also QUEUE now instead
+#   of being dropped when the engine is busy — `running = true` on a busy
+#   Process is a silent no-op, so asking for six deletes used to do one.
+#
+#   Also: the Export dialog computed its height from a row count plus a guess
+#   at the chrome, and the twenty pixels it was short were the Cancel and
+#   Export buttons. It is sized from its content now.
+#
+#   And a photograph can be dragged from the darkroom onto the Video tab to
+#   land in the cut — the two pages are never on screen together, so the tab is
+#   the only target there is.
+#
+#   240 assertions.
+pkgrel=12
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

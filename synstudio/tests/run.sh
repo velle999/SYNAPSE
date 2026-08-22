@@ -979,6 +979,75 @@ check "hiding it leaves the sound" "1" \
 check "and takes only the picture" "1" \
       "$(awk -v v="$(white "$mdir/hidden.mov")" 'BEGIN{print (v < 20) ? 1 : 0}')"
 
+# ----------------------------------------------------------------- undo --
+#
+# Whole documents in `<project>.undo/`, not inverse operations: a .syntl is a
+# few kilobytes of text, every verb is a separate process that loads-changes-
+# saves, and there is no session to keep a stack in. On disk, so it survives
+# the window being closed and an edit made from the command line in between.
+echo "== undo (whole documents, on disk)"
+
+udir=$TMP/undo
+mkdir -p "$udir"
+ffmpeg -v error -y -f lavfi -i testsrc=size=64x48:rate=25:duration=1 \
+       -pix_fmt yuv420p "$udir/clip.mp4" 2>/dev/null
+up=$udir/u.syntl
+$BIN timeline new "$up" --size 64x48 --fps 25 >/dev/null
+$BIN timeline track "$up" video V1 >/dev/null
+$BIN timeline clip "$up" 0 "$udir/clip.mp4" --at 0 >/dev/null
+$BIN timeline clip "$up" 0 "$udir/clip.mp4" --at 5 >/dev/null
+
+clips() { grep -c '^clip' "$1"; }
+check "two clips to start" "2" "$(clips "$up")"
+$BIN timeline history "$up" | seen "and three steps to walk back" "undo	3"
+
+$BIN timeline undo "$up" >/dev/null
+check "undo takes the last edit off" "1" "$(clips "$up")"
+$BIN timeline undo "$up" >/dev/null
+check "and the one before it" "0" "$(clips "$up")"
+$BIN timeline redo "$up" >/dev/null
+check "redo puts one back" "1" "$(clips "$up")"
+
+# An edit after an undo is a new future; the old one is not reachable and must
+# not pretend to be.
+$BIN timeline clip "$up" 0 "$udir/clip.mp4" --at 9 >/dev/null
+$BIN timeline history "$up" | seen "an edit after an undo drops the redo" "redo	0"
+
+# The floor. Undo past the beginning is not an error, it is nothing to do —
+# and it must leave the document alone rather than emptying it.
+i=0
+while [ $i -lt 20 ]; do $BIN timeline undo "$up" >/dev/null 2>&1; i=$((i+1)); done
+$BIN timeline undo "$up" >/dev/null 2>&1
+check "undo past the start does nothing" "1" "$?"
+check "and the document is still a document" "1" \
+      "$(grep -c '^# synstudio timeline' "$up")"
+
+# History belongs to the PROJECT, not to a session: a second invocation of the
+# program picks up where the first left off, which is the whole reason it is a
+# directory and not a variable.
+check "the history is on disk beside the project" "1" \
+      "$([ -f "$up.undo/head" ] && echo 1 || echo 0)"
+
+# --------------------------------------------------------------- markers --
+echo "== markers"
+
+mkp=$udir/m.syntl
+$BIN timeline new "$mkp" --size 64x48 >/dev/null
+$BIN timeline mark "$mkp" --at 4.5 --text "fix the audio here" --colour 1 >/dev/null
+$BIN timeline mark "$mkp" --at 1.0 --text "start" --colour 3 >/dev/null
+$BIN timeline show "$mkp" | seen "a marker keeps its note" "fix the audio here"
+# Sorted by time, because "the next marker" should be the next one in the
+# array rather than a search.
+check "and they are kept in time order" "1.000000" \
+      "$($BIN timeline show "$mkp" | awk -F'\t' '$1=="marker"{print $2; exit}')"
+$BIN timeline unmark "$mkp" 0 >/dev/null
+$BIN timeline show "$mkp" | notseen "unmark takes the right one" "start"
+$BIN timeline show "$mkp" | seen "and leaves the other" "fix the audio here"
+$BIN timeline undo "$mkp" >/dev/null
+$BIN timeline show "$mkp" | seen "and undo brings it back" "start"
+$BIN timeline unmark "$mkp" 9 >/dev/null 2>&1
+check "unmark refuses a marker that is not there" "1" "$?"
+
 # --------------------------------------------------------------- record --
 #
 # A microphone is not required and must never be: `--format lavfi` records a

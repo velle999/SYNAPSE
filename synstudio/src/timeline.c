@@ -34,11 +34,15 @@
  */
 #include "synstudio.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 /* ------------------------------------------------------------- the clip -- */
 
@@ -718,6 +722,12 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
     fprintf(fp, "size\t%d\t%d\n", t->w, t->h);
     fprintf(fp, "fps\t%.6g\n", t->fps);
     if (t->master_db != 0.0f) fprintf(fp, "master\t%.3f\n", t->master_db);
+    /* Before the tracks, because a marker belongs to the timeline and not to
+     * anything on it — and because a reader that meets one after a `track`
+     * line would have to know it is not a clip property. */
+    for (i = 0; i < t->nmarkers; i++)
+        fprintf(fp, "marker\t%.6f\t%d\t%s\n",
+                t->marker[i].t, t->marker[i].colour, t->marker[i].text);
 
     for (i = 0; i < t->ntracks; i++) {
         const ss_track *tr = &t->track[i];
@@ -821,6 +831,15 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             t->fps = atof(line + 4);
         } else if (!strncmp(line, "master\t", 7)) {
             t->master_db = (float)atof(line + 7);
+        } else if (!strncmp(line, "marker\t", 7)) {
+            char *f[3];
+            /* ONCE. tabsplit writes NULs over the tabs it finds, so a second
+             * call on the same buffer sees one field and the note silently
+             * becomes an empty string — which reads as a marker somebody
+             * placed without typing anything. */
+            int nf = tabsplit(line + 7, f, 3);
+            if (nf >= 2)
+                ss_timeline_mark(t, atof(f[0]), atoi(f[1]), nf >= 3 ? f[2] : "");
         } else if (!strncmp(line, "track\t", 6)) {
             char kind[16] = "video", nm[64] = "";
             int muted = 0, hidden = 0;
@@ -1326,6 +1345,206 @@ static void chain_transition(strbuf *fc, const ss_clip *c)
         if (!av[ac]) goto fail; \
         ac++; \
     } while (0)
+
+/* ------------------------------------------------------------- markers -- */
+
+/* Kept in time order, so the window draws them in the order it walks them and
+ * "the next marker" is the next one in the array rather than a search. */
+int ss_timeline_mark(ss_timeline *t, double at, int colour, const char *text)
+{
+    int i, j;
+
+    if (!t || t->nmarkers >= SS_MAX_MARKERS) return -1;
+    if (at < 0) at = 0;
+    if (colour < 0) colour = 0;
+    if (colour > 5) colour = 5;
+
+    for (i = 0; i < t->nmarkers; i++) if (t->marker[i].t > at) break;
+    for (j = t->nmarkers; j > i; j--) t->marker[j] = t->marker[j - 1];
+
+    memset(&t->marker[i], 0, sizeof t->marker[i]);
+    t->marker[i].t = at;
+    t->marker[i].colour = colour;
+    if (text) snprintf(t->marker[i].text, sizeof t->marker[i].text, "%s", text);
+    t->nmarkers++;
+    return i;
+}
+
+int ss_timeline_unmark(ss_timeline *t, int i)
+{
+    int j;
+    if (!t || i < 0 || i >= t->nmarkers) return -1;
+    for (j = i; j < t->nmarkers - 1; j++) t->marker[j] = t->marker[j + 1];
+    t->nmarkers--;
+    return 0;
+}
+
+/* ------------------------------------------------------------- history -- */
+
+/* `<project>.undo/NNNN`, one whole document per state, and a `head` file
+ * naming which of them is the one on disk.
+ *
+ * Whole documents rather than inverse operations: a .syntl is a few kilobytes
+ * of text, every verb is a separate process that loads-changes-saves, and
+ * there is no session to hold a stack in. An inverse per verb would be twenty
+ * more things that can be wrong in one direction only.
+ */
+#define HIST_MAX 100
+
+static void hist_dir(const char *proj, char *out, size_t n)
+{
+    snprintf(out, n, "%s.undo", proj);
+}
+
+static void hist_file(const char *proj, int i, char *out, size_t n)
+{
+    snprintf(out, n, "%s.undo/%04d", proj, i);
+}
+
+/* pos, first, last. Absent or unreadable means no history at all, which is the
+ * ordinary state of a project nobody has edited yet. */
+static int hist_read(const char *proj, int *pos, int *first, int *last)
+{
+    char path[4400];
+    FILE *fp;
+    int a = 0, b = 0, c = 0;
+
+    *pos = *first = *last = 0;
+    snprintf(path, sizeof path, "%s.undo/head", proj);
+    fp = fopen(path, "r");
+    if (!fp) return -1;
+    if (fscanf(fp, "%d %d %d", &a, &b, &c) != 3) { fclose(fp); return -1; }
+    fclose(fp);
+    *pos = a; *first = b; *last = c;
+    return 0;
+}
+
+static int hist_write_head(const char *proj, int pos, int first, int last)
+{
+    char path[4400], tmp[4500];
+    FILE *fp;
+
+    snprintf(path, sizeof path, "%s.undo/head", proj);
+    snprintf(tmp, sizeof tmp, "%s.tmp", path);
+    fp = fopen(tmp, "w");
+    if (!fp) return -1;
+    fprintf(fp, "%d %d %d\n", pos, first, last);
+    if (fclose(fp) != 0) { unlink(tmp); return -1; }
+    return rename(tmp, path);
+}
+
+static int file_copy(const char *from, const char *to)
+{
+    FILE *a = fopen(from, "rb"), *b;
+    char buf[8192];
+    size_t n;
+    int rc = 0;
+
+    if (!a) return -1;
+    b = fopen(to, "wb");
+    if (!b) { fclose(a); return -1; }
+    while ((n = fread(buf, 1, sizeof buf, a)) > 0)
+        if (fwrite(buf, 1, n, b) != n) { rc = -1; break; }
+    if (ferror(a)) rc = -1;
+    fclose(a);
+    if (fclose(b) != 0) rc = -1;
+    if (rc != 0) unlink(to);
+    return rc;
+}
+
+static int hist_snapshot(const char *proj, int index)
+{
+    char dst[4400];
+    hist_file(proj, index, dst, sizeof dst);
+    return file_copy(proj, dst);
+}
+
+int ss_history_seed(const char *proj)
+{
+    char dir[4300], path[4400];
+    int pos, first, last;
+    FILE *probe;
+
+    if (!proj || !*proj) return -1;
+    if (!hist_read(proj, &pos, &first, &last)) return 0;   /* already going */
+
+    probe = fopen(proj, "r");
+    if (!probe) return 0;      /* nothing on disk yet: `new` will seed it */
+    fclose(probe);
+
+    hist_dir(proj, dir, sizeof dir);
+    if (mkdir(dir, 0755) != 0 && errno != EEXIST) return -1;
+    (void)path;
+    if (hist_snapshot(proj, 1) != 0) return -1;
+    return hist_write_head(proj, 1, 1, 1);
+}
+
+int ss_history_push(const char *proj)
+{
+    char dir[4300], dead[4400];
+    int pos, first, last, i;
+
+    if (!proj || !*proj) return -1;
+    hist_dir(proj, dir, sizeof dir);
+    if (mkdir(dir, 0755) != 0 && errno != EEXIST) return -1;
+
+    if (hist_read(proj, &pos, &first, &last) != 0) {
+        /* A project with no history yet — `new` lands here. */
+        if (hist_snapshot(proj, 1) != 0) return -1;
+        return hist_write_head(proj, 1, 1, 1);
+    }
+
+    /* Everything after the current position is a future that just stopped
+     * being reachable. Redo past an edit is not a thing any editor offers. */
+    for (i = pos + 1; i <= last; i++) {
+        hist_file(proj, i, dead, sizeof dead);
+        unlink(dead);
+    }
+    last = pos;
+
+    if (hist_snapshot(proj, pos + 1) != 0) return -1;
+    pos++; last = pos;
+
+    /* A hundred states of a few kilobytes each. The floor moves rather than
+     * everything being renamed down, so a long session costs one unlink. */
+    while (last - first + 1 > HIST_MAX) {
+        hist_file(proj, first, dead, sizeof dead);
+        unlink(dead);
+        first++;
+    }
+    return hist_write_head(proj, pos, first, last);
+}
+
+static int hist_go(const char *proj, int delta)
+{
+    char src[4400];
+    int pos, first, last;
+
+    if (hist_read(proj, &pos, &first, &last) != 0) return 1;
+    if (delta < 0 && pos <= first) return 1;
+    if (delta > 0 && pos >= last) return 1;
+
+    pos += delta;
+    hist_file(proj, pos, src, sizeof src);
+    /* Onto the project itself: the state IS the document, so there is nothing
+     * to replay and nothing that can half-apply. */
+    if (file_copy(src, proj) != 0) return -1;
+    return hist_write_head(proj, pos, first, last) == 0 ? 0 : -1;
+}
+
+int ss_history_undo(const char *proj) { return hist_go(proj, -1); }
+int ss_history_redo(const char *proj) { return hist_go(proj, +1); }
+
+int ss_history_depth(const char *proj, int *undo, int *redo)
+{
+    int pos, first, last;
+    if (undo) *undo = 0;
+    if (redo) *redo = 0;
+    if (hist_read(proj, &pos, &first, &last) != 0) return -1;
+    if (undo) *undo = pos - first;
+    if (redo) *redo = last - pos;
+    return 0;
+}
 
 /* ---------------------------------------------------------------- mix -- */
 

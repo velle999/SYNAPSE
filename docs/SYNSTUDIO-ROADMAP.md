@@ -123,12 +123,13 @@ Fairlight-style automation: four features for one piece of work.
 ## 6 · Retime and the rest of the cutting room
 
 - [~] speed — constant, 0.1×…10×
-- [ ] **undo and redo** — the document is small text and every edit goes
-      through one function. The most conspicuous absence in the program
+- [x] **undo and redo** — whole documents in `<project>.undo/`, on disk, so it
+      survives the window closing. `timeline undo|redo|history`
 - [ ] copy/paste/duplicate clips, and paste a grade to many clips
-- [ ] markers, on the timeline and on clips
-- [ ] snapping to cuts, markers and the playhead
-- [ ] multi-select
+- [x] markers on the timeline — `timeline mark|unmark`, on the ruler, click to
+      go there. ⚠ still nothing on a CLIP
+- [x] snapping to cuts, markers and the playhead, on moves, trims and scrubs
+- [x] multi-select — shift-click; deletes run highest index first
 - [ ] J K L, and keys at all — the window binds none
 - [ ] source monitor + three-point editing
 - [ ] linked audio and video (routing now separates them, which makes the link
@@ -161,7 +162,7 @@ Fairlight-style automation: four features for one piece of work.
    master fader, meters, monitoring volume, normalise, solo — and a mute/hide
    split that was quietly wrong.
 2. ~~**Voiceover**~~ — **done, 0.1.0-11.**
-3. **Undo, markers, snapping, multi-select** — 2 days. Undo first.
+3. ~~**Undo, markers, snapping, multi-select**~~ — **done, 0.1.0-12.**
 4. **Keyframes on everything** — 3 days. Unblocks four other features.
 5. **xfade transitions + audio crossfades** — 1 day. The cheapest large win.
 6. **The effect recipe format** — 3–4 days, plus two dozen effects in it.

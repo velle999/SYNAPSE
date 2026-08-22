@@ -61,6 +61,11 @@ static void usage(void)
 "VIDEO  (a project file is a text document; nothing is rendered until export)\n"
 "  timeline new PROJ [--size WxH] [--fps F]\n"
 "  timeline show PROJ            the document, as written\n"
+"  timeline undo PROJ            step back; redo steps forward again\n"
+"  timeline redo PROJ\n"
+"  timeline history PROJ         how many steps there are either way\n"
+"  timeline mark PROJ --at T [--text S] [--colour 0-5]   a note at an instant\n"
+"  timeline unmark PROJ N\n"
 "  timeline keys                 every clip property, with its range\n"
 "\n"
 " tracks and clips\n"
@@ -522,11 +527,19 @@ static int tl_load(const char *proj, ss_timeline *t)
     return 0;
 }
 
+/* Every mutating verb in this file ends here, which is what makes undo one
+ * change rather than twenty: the document as it was is recorded before the
+ * write, and the document as it becomes is recorded after it. Nothing else has
+ * to know history exists. */
 static int tl_save(const char *proj, const ss_timeline *t)
 {
     char tmp[4200];
     FILE *fp;
     int rc;
+
+    /* Before the write, and only ever once per project: the state undo has to
+     * come back to is the one nobody has changed yet. */
+    ss_history_seed(proj);
 
     snprintf(tmp, sizeof tmp, "%s.tmp", proj);
     fp = fopen(tmp, "w");
@@ -534,7 +547,13 @@ static int tl_save(const char *proj, const ss_timeline *t)
     rc = ss_timeline_write(t, fp);
     if (fclose(fp) != 0) rc = -1;
     if (rc != 0) { unlink(tmp); return -1; }
-    return rename(tmp, proj);
+    if (rename(tmp, proj) != 0) return -1;
+
+    /* A failed snapshot is not a failed edit. The document is written and
+     * correct; what is lost is one step of undo, and refusing the edit over
+     * that would be the worse trade. */
+    ss_history_push(proj);
+    return 0;
 }
 
 /* Every clip property in one listing, the same shape `keys` uses for the
@@ -775,6 +794,57 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("measured\t%.2f\ntarget\t%.2f\ngain\t%.3f\npeak\t%.2f\n",
                l.lufs, target, c->gain_db, l.peak_db);
+        return 0;
+    }
+
+    /* Undo and redo move the FILE, so they do not go through tl_save — a
+     * history move that recorded itself would bury the thing it moved to. */
+    if (!strcmp(verb, "undo") || !strcmp(verb, "redo")) {
+        int rc = !strcmp(verb, "undo") ? ss_history_undo(proj)
+                                       : ss_history_redo(proj);
+        int u = 0, r = 0;
+        if (rc < 0) return die("cannot %s: the history is unreadable", verb);
+        ss_history_depth(proj, &u, &r);
+        printf("%s\tundo\t%d\tredo\t%d\n",
+               rc == 0 ? "moved" : "nothing", u, r);
+        return rc == 0 ? 0 : 1;
+    }
+
+    if (!strcmp(verb, "history")) {
+        int u = 0, r = 0;
+        ss_history_depth(proj, &u, &r);
+        printf("undo\t%d\nredo\t%d\n", u, r);
+        return 0;
+    }
+
+    /* A note pinned to an instant. Nothing renders differently for one, which
+     * is exactly the point: it is the only way to put something where a
+     * problem is without changing the cut to say so. */
+    if (!strcmp(verb, "mark")) {
+        double at = -1;
+        int colour = 0, i, n;
+        const char *text = "";
+
+        for (i = 4; i < argc; i++) {
+            if (!strcmp(argv[i], "--at") && i + 1 < argc) at = atof(argv[++i]);
+            else if (!strcmp(argv[i], "--text") && i + 1 < argc) text = argv[++i];
+            else if (!strcmp(argv[i], "--colour") && i + 1 < argc) colour = atoi(argv[++i]);
+            else if (!strcmp(argv[i], "--color") && i + 1 < argc) colour = atoi(argv[++i]);
+            else return die("mark: unknown option %s", argv[i]);
+        }
+        if (at < 0) return die("mark needs --at SECONDS");
+        n = ss_timeline_mark(t, at, colour, text);
+        if (n < 0) return die("no room for another marker");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("%d\n", n);
+        return 0;
+    }
+
+    if (!strcmp(verb, "unmark")) {
+        int n = argc > 4 ? atoi(argv[4]) : -1;
+        if (argc < 5) return die("unmark needs a marker number");
+        if (ss_timeline_unmark(t, n) != 0) return die("no marker %d", n);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         return 0;
     }
 

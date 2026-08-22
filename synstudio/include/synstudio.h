@@ -481,6 +481,17 @@ typedef struct {
     ss_clip *clip;
 } ss_track;
 
+/* A note pinned to an instant. Not an edit — nothing renders differently for
+ * one — which is exactly why they are the spine of any review: they are the
+ * only thing in the document you can put where a problem is without changing
+ * the cut to say so. */
+#define SS_MAX_MARKERS 128
+typedef struct {
+    double t;
+    int    colour;              /* 0..5, an index the window names */
+    char   text[160];
+} ss_marker;
+
 typedef struct {
     char   name[256];
     int    w, h;
@@ -488,7 +499,29 @@ typedef struct {
     float  master_db;           /* one fader after the mix */
     int    ntracks;
     ss_track track[SS_MAX_TRACKS];
+    int    nmarkers;
+    ss_marker marker[SS_MAX_MARKERS];
 } ss_timeline;
+
+int ss_timeline_mark(ss_timeline *t, double at, int colour, const char *text);
+int ss_timeline_unmark(ss_timeline *t, int i);
+
+/* ── History ─────────────────────────────────────────────────────────────────
+ *
+ * Undo is a stack of whole DOCUMENTS in `<project>.undo/`, not a stack of
+ * inverse operations. A .syntl is a few kilobytes of text and every verb here
+ * is a separate process that loads, changes and saves — there is no session to
+ * hold a stack in, and an inverse for each of twenty verbs is twenty more
+ * things that can be wrong in one direction only.
+ *
+ * On disk rather than in memory, so it survives the window being closed, the
+ * program crashing, and an edit made from the command line in between.
+ */
+int ss_history_seed(const char *proj);   /* record the file as it is now */
+int ss_history_push(const char *proj);   /* record the file as it has become */
+int ss_history_undo(const char *proj);   /* 0 done, 1 nothing to undo, -1 error */
+int ss_history_redo(const char *proj);
+int ss_history_depth(const char *proj, int *undo, int *redo);
 
 /* What a track contributes once mute, hide and solo have had their say.
  * Solo is a property of the WHOLE timeline: one soloed track mutes every other

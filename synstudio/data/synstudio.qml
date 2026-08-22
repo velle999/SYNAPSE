@@ -727,7 +727,8 @@ FloatingWindow {
     // `timeline show` is tab-separated and line-oriented, and a grade is a
     // block between `grade` and `endgrade` belonging to the clip above it.
     function parseTimeline(text) {
-        const doc = { w: 1920, h: 1080, fps: 25, master: 0, tracks: [] }
+        const doc = { w: 1920, h: 1080, fps: 25, master: 0,
+                      markers: [], tracks: [] }
         const lines = text.split("\n")
         let tr = null, cl = null, inGrade = false, inKey = false
         let dur = 0
@@ -763,6 +764,11 @@ FloatingWindow {
                 }
                 break
             case "master": doc.master = parseFloat(f[1]) || 0; break
+            case "marker":
+                doc.markers.push({ t: parseFloat(f[1]) || 0,
+                                   colour: parseInt(f[2]) || 0,
+                                   text: f[3] || "" })
+                break
             case "clip":
                 if (!tr) break
                 cl = { tlIn: parseFloat(f[1]), srcIn: parseFloat(f[2]),
@@ -797,6 +803,10 @@ FloatingWindow {
 
     function reloadTimeline() {
         if (!root.proj) return
+        // The history belongs to the project, so opening one has to ask how
+        // deep it is. Without this the Undo button is dead until the first
+        // edit of the session — on a project with fifty steps behind it.
+        root.readHistory()
         tlShowProc.command = [root.bin, "timeline", "show", root.proj]
         tlShowProc.running = true
     }
@@ -1028,20 +1038,165 @@ FloatingWindow {
         id: tlSetProc
         stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
         onExited: function (code, status) {
+            if (root.tlQueue.length > 0) { root.pumpEdits(); return }
             root.reloadTimeline()
             root.loadClip()
+            root.readHistory()
         }
     }
 
+    // Edits QUEUE rather than being dropped.
+    //
+    // `running = true` on a busy Process is a silent no-op in quickshell, so
+    // the old shape — refuse if busy — meant that asking for two things in one
+    // gesture did one of them. Deleting six selected clips did one. The queue
+    // is also what makes the order matter: several deletes on one track have
+    // to happen back to front, and that is only true if they all happen.
+    property var tlQueue: []
+
     function tlRun(args) {
-        if (tlSetProc.running) return false
         // The rendered preview is now a picture of a timeline that no longer
         // exists. Bumping here rather than in the exit handler means a play
         // pressed DURING an edit still re-renders.
         root.tlRev++
+        root.tlQueue = root.tlQueue.concat([args])
+        root.pumpEdits()
+        return true
+    }
+
+    function pumpEdits() {
+        if (tlSetProc.running || root.tlQueue.length === 0) return
+        const args = root.tlQueue[0]
+        root.tlQueue = root.tlQueue.slice(1)
         tlSetProc.command = [root.bin, "timeline"].concat(args)
         tlSetProc.running = true
-        return true
+    }
+
+    // ── More than one clip ──────────────────────────────────────────────────
+    //
+    // `selTrack`/`selClip` stay the PRIMARY selection — the inspector is bound
+    // to them and a panel of sliders showing six clips at once means nothing.
+    // `selMore` is everything else that a move or a delete should also carry,
+    // as "<track>.<clip>" strings so membership is a lookup rather than a
+    // search through objects that are rebuilt on every reload.
+    property var selMore: []
+
+    // NOT `selKey` — that name is already the KEYFRAME the grade panel is
+    // pointed at, and the collision fails at call time with a TypeError rather
+    // than at load, so the file opens and one gesture is quietly broken.
+    function selId(tr, cl) { return tr + "." + cl }
+
+    function isSelected(tr, cl) {
+        if (root.selTrack === tr && root.selClip === cl) return true
+        return root.selMore.indexOf(root.selId(tr, cl)) >= 0
+    }
+
+    function toggleSelect(tr, cl) {
+        if (root.selClip < 0) { root.selTrack = tr; root.selClip = cl; return }
+        if (root.selTrack === tr && root.selClip === cl) return
+        const k = root.selId(tr, cl)
+        const i = root.selMore.indexOf(k)
+        const next = root.selMore.slice()
+        if (i >= 0) next.splice(i, 1)
+        else next.push(k)
+        root.selMore = next
+    }
+
+    // Primary first, then the rest — and within a track, HIGHEST CLIP INDEX
+    // first. Deleting clip 2 renumbers everything above it, so a low-to-high
+    // delete removes the wrong clips from the third one onwards.
+    function selectionDescending() {
+        const all = []
+        if (root.selClip >= 0) all.push({ t: root.selTrack, c: root.selClip })
+        for (let i = 0; i < root.selMore.length; i++) {
+            const p = root.selMore[i].split(".")
+            all.push({ t: parseInt(p[0]), c: parseInt(p[1]) })
+        }
+        all.sort(function (a, b) { return a.t !== b.t ? a.t - b.t : b.c - a.c })
+        return all
+    }
+
+    function deleteSelection(ripple) {
+        const all = root.selectionDescending()
+        if (all.length === 0) return
+        for (let i = 0; i < all.length; i++) {
+            const a = ["delete", root.proj, String(all[i].t), String(all[i].c)]
+            if (ripple) a.push("--ripple")
+            root.tlRun(a)
+        }
+        root.selClip = -1
+        root.selMore = []
+    }
+
+    // ── Snapping ────────────────────────────────────────────────────────────
+    //
+    // Every cut, every marker, the playhead and zero. Within a few PIXELS, not
+    // a few frames: the tolerance has to shrink as you zoom in, or a tight
+    // trim at high zoom keeps jumping to the thing next to it.
+    property bool snapping: true
+
+    // ── Markers ─────────────────────────────────────────────────────────────
+    function addMarker() {
+        if (!root.proj) return
+        root.tlRun(["mark", root.proj, "--at",
+                    String(Math.round(root.playhead * 1000) / 1000),
+                    "--colour", "1"])
+        root.say("marker at " + root.timecode(root.playhead))
+    }
+
+    function dropMarker(i) {
+        if (!root.proj) return
+        root.tlRun(["unmark", root.proj, String(i)])
+    }
+
+    // ── Undo ────────────────────────────────────────────────────────────────
+    //
+    // The engine keeps whole documents in `<project>.undo/`, so this is a
+    // button and a number rather than a stack the window has to maintain — and
+    // it survives the window being closed, which a session stack does not.
+    property int undoDepth: 0
+    property int redoDepth: 0
+
+    function readHistory() {
+        if (!root.proj) { root.undoDepth = 0; root.redoDepth = 0; return }
+        tlHistProc.command = [root.bin, "timeline", "history", root.proj]
+        tlHistProc.running = true
+    }
+
+    // NOT `histProc` — that name is the darkroom's HISTOGRAM, and a duplicate
+    // id fails the whole file to load with one line of complaint.
+    Process {
+        id: tlHistProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f[0] === "undo") root.undoDepth = parseInt(f[1]) || 0
+                    else if (f[0] === "redo") root.redoDepth = parseInt(f[1]) || 0
+                }
+            }
+        }
+    }
+
+    function undoEdit() {
+        if (root.undoDepth <= 0) return
+        root.tlRev++
+        root.selClip = -1
+        root.selMore = []
+        root.tlQueue = root.tlQueue.concat([["undo", root.proj]])
+        root.pumpEdits()
+        root.say("undone")
+    }
+
+    function redoEdit() {
+        if (root.redoDepth <= 0) return
+        root.tlRev++
+        root.selClip = -1
+        root.selMore = []
+        root.tlQueue = root.tlQueue.concat([["redo", root.proj]])
+        root.pumpEdits()
+        root.say("redone")
     }
 
     function setClip(key, v) {
@@ -1724,6 +1879,7 @@ FloatingWindow {
 
     // ── Scrubbing, and the clock ────────────────────────────────────────────
     function seekTo(t) {
+        if (root.scrubbing) t = root.snap(t, -1, -1, true)
         root.playhead = Math.max(0, Math.min(root.tlDur > 0 ? root.tlDur : 0, t))
         // Scrubbing during playback moves the PLAYER. Moving only the playhead
         // would have it snap straight back on the next position update, which
@@ -1774,7 +1930,13 @@ FloatingWindow {
     // Edges are magnetic. Without this, butting two clips together by hand
     // leaves a gap of a few milliseconds that shows as a black flash on
     // export and is invisible at any sane zoom.
-    function snap(t, ignoreTrack, ignoreClip) {
+    // Eight PIXELS, not eight frames: the tolerance has to shrink as the zoom
+    // grows, or a tight trim at high zoom keeps leaping to the cut beside it.
+    //
+    // `ignorePlayhead` because a PLAYHEAD drag must not snap to the playhead,
+    // which is a fixed point of that gesture and would pin it where it is.
+    function snap(t, ignoreTrack, ignoreClip, ignorePlayhead) {
+        if (!root.snapping) return t
         const tol = 8 / root.pxPerSec
         let best = t, bestD = tol
         function tryEdge(e) {
@@ -1782,7 +1944,7 @@ FloatingWindow {
             if (d < bestD) { bestD = d; best = e }
         }
         tryEdge(0)
-        tryEdge(root.playhead)
+        if (!ignorePlayhead) tryEdge(root.playhead)
         for (let i = 0; i < root.tl.tracks.length; i++)
             for (let j = 0; j < root.tl.tracks[i].clips.length; j++) {
                 if (i === ignoreTrack && j === ignoreClip) continue
@@ -1790,6 +1952,10 @@ FloatingWindow {
                 tryEdge(c.tlIn)
                 tryEdge(c.tlIn + c.len)
             }
+        // A marker is a place somebody chose. It is the one snap target that
+        // is there BECAUSE it is worth landing on.
+        const mk = root.tl.markers || []
+        for (let m = 0; m < mk.length; m++) tryEdge(mk[m].t)
         return best
     }
 
@@ -1807,11 +1973,18 @@ FloatingWindow {
         } else if (kind === "head") {
             // + shortens the head. The engine moves the in point and the
             // position together so the frame under the cursor stays put.
+            //
+            // Snapped on the EDGE being dragged rather than on the delta: an
+            // edge pulled to meet the next cut is the whole reason snapping
+            // exists, and a delta has nothing to land on.
+            const edge = root.snap(clip.tlIn + dt, track, cl)
             root.tlRun(["trim", root.proj, String(track), String(cl),
-                        "--head", String(Math.round(dt * 1000) / 1000)])
+                        "--head", String(Math.round((edge - clip.tlIn) * 1000) / 1000)])
         } else {
+            const edge = root.snap(clip.tlIn + clip.len + dt, track, cl)
             root.tlRun(["trim", root.proj, String(track), String(cl),
-                        "--tail", String(Math.round(dt * 1000) / 1000)])
+                        "--tail", String(Math.round(
+                            (edge - clip.tlIn - clip.len) * 1000) / 1000)])
         }
     }
 
@@ -1929,9 +2102,36 @@ FloatingWindow {
                     Tab { label: "Photo"; on: root.mode === "photo"
                           onClicked: { root.mode = "photo"
                                        root.say(root.file ? "" : "open a photograph") } }
-                    Tab { label: "Video"; on: root.mode === "video"
-                          onClicked: { root.mode = "video"
-                                       root.say(root.proj ? "" : "New project, then Add media") } }
+                    Tab {
+                        id: videoTab
+                        label: "Video"
+                        on: root.mode === "video" || videoTabDrop.containsDrag
+                        onClicked: { root.mode = "video"
+                                     root.say(root.proj ? "" : "New project, then Add media") }
+
+                        DropArea {
+                            id: videoTabDrop
+                            anchors.fill: parent
+                            // A little wider than the word: a drop target the
+                            // size of its label is a target you have to aim at.
+                            anchors.margins: -6
+                            onDropped: function (drop) {
+                                root.mode = "video"
+                                if (!root.proj) {
+                                    root.say("start a project first, "
+                                             + "then drop the photograph on it")
+                                    drop.accepted = false
+                                    return
+                                }
+                                if (drop.source && drop.source.filePath)
+                                    root.dropUrls(["file://"
+                                                   + encodeURI(drop.source.filePath)])
+                                else if (drop.hasUrls) root.dropUrls(drop.urls)
+                                else if (drop.hasText) root.dropUrls([drop.text])
+                                drop.acceptProposedAction()
+                            }
+                        }
+                    }
 
                     Item { width: 10; height: 1 }
 
@@ -1965,20 +2165,26 @@ FloatingWindow {
                           active: root.proj !== "" && root.selTrack >= 0
                           onClicked: root.tlRun(["split", root.proj, String(root.selTrack),
                                                  "--at", String(root.playhead)]) }
-                    Btn { visible: root.mode === "video"; label: "Delete"
+                    Btn { visible: root.mode === "video"
+                          label: root.selMore.length > 0
+                                 ? "Delete " + (root.selMore.length + 1) : "Delete"
                           active: root.selClip >= 0
-                          onClicked: {
-                              root.tlRun(["delete", root.proj, String(root.selTrack),
-                                          String(root.selClip)])
-                              root.selClip = -1
-                          } }
+                          onClicked: root.deleteSelection(false) }
                     Btn { visible: root.mode === "video"; label: "Ripple delete"
                           active: root.selClip >= 0
-                          onClicked: {
-                              root.tlRun(["delete", root.proj, String(root.selTrack),
-                                          String(root.selClip), "--ripple"])
-                              root.selClip = -1
-                          } }
+                          onClicked: root.deleteSelection(true) }
+                    Btn { visible: root.mode === "video"; label: "Undo"
+                          active: root.undoDepth > 0
+                          onClicked: root.undoEdit() }
+                    Btn { visible: root.mode === "video"; label: "Redo"
+                          active: root.redoDepth > 0
+                          onClicked: root.redoEdit() }
+                    Btn { visible: root.mode === "video"; label: "Mark"
+                          active: root.proj !== ""
+                          onClicked: root.addMarker() }
+                    Btn { visible: root.mode === "video"; label: "Snap"
+                          on: root.snapping
+                          onClicked: root.snapping = !root.snapping }
                     Btn { visible: root.mode === "video"; label: "Mixer"
                           on: root.mixerOpen
                           active: root.proj !== ""
@@ -2022,6 +2228,52 @@ FloatingWindow {
                         anchors.margins: 18
                         source: root.previewUrl
                         visible: root.previewUrl !== ""
+                    }
+
+                    // Drag the photograph onto the Video tab to put it in the
+                    // cut.
+                    //
+                    // The two pages are never on screen together, so there is
+                    // nowhere on the timeline to drop it — the TAB is the
+                    // target, which is also where the hand is already going.
+                    // It carries a text/uri-list, the same thing a file
+                    // manager sends, so the window's own drop handler takes it
+                    // without knowing where it came from.
+                    Item {
+                        id: photoDrag
+                        anchors.fill: parent
+                        visible: root.mode === "photo" && root.file !== ""
+
+                        Item {
+                            id: photoDragProxy
+                            width: 1; height: 1
+                            // Internal, which is the DEFAULT and the only kind
+                            // a DropArea in this same window can see. An
+                            // Automatic drag goes out through the compositor
+                            // and comes back to nothing — the tab would light
+                            // up and the drop would do nothing at all.
+                            Drag.active: photoDragMa.drag.active
+                            Drag.supportedActions: Qt.CopyAction
+                            // An internal drag carries the SOURCE, not mime
+                            // data, so the file travels as a property on it.
+                            property string filePath: root.file
+                        }
+
+                        MouseArea {
+                            id: photoDragMa
+                            anchors.fill: parent
+                            // The drag has to start before the develop panel's
+                            // Flickable decides the gesture was a scroll.
+                            preventStealing: true
+                            drag.target: photoDragProxy
+                            drag.threshold: 12
+                            cursorShape: drag.active ? Qt.ClosedHandCursor
+                                                     : Qt.ArrowCursor
+                            onPressed: {
+                                photoDragProxy.x = 0
+                                photoDragProxy.y = 0
+                            }
+                        }
                     }
 
                     Text {
@@ -2565,6 +2817,76 @@ FloatingWindow {
                                             }
                                         }
 
+                                        // Markers, over the ruler's ticks.
+                                        // Left-click goes there, right-click
+                                        // takes it away — the note is drawn
+                                        // beside the flag rather than in a
+                                        // tooltip, because a note nobody can
+                                        // read without hovering is a note
+                                        // nobody reads.
+                                        Repeater {
+                                            model: root.tl.markers || []
+
+                                            Item {
+                                                id: mk
+                                                required property var modelData
+                                                required property int index
+                                                x: mk.modelData.t * root.pxPerSec
+                                                y: 0
+                                                width: 1
+                                                height: 22
+                                                z: 4
+
+                                                readonly property color ink:
+                                                    ["#e0a13a", "#e0463c", "#3fa06e",
+                                                     "#4a86d8", "#a86ad8", "#d86aa8"]
+                                                    [Math.max(0, Math.min(5, mk.modelData.colour))]
+
+                                                Rectangle {
+                                                    width: 2; height: 22
+                                                    color: mk.ink
+                                                }
+                                                Rectangle {
+                                                    x: 1; y: 1
+                                                    width: 7; height: 7
+                                                    color: mk.ink
+                                                }
+                                                // On a plate. Without one the
+                                                // note and the ruler's own
+                                                // timecodes are drawn on top
+                                                // of each other and neither is
+                                                // readable.
+                                                Rectangle {
+                                                    x: 9
+                                                    y: 3
+                                                    width: mkText.implicitWidth + 6
+                                                    height: 12
+                                                    radius: 2
+                                                    color: root.cPanel
+                                                    visible: mk.modelData.text !== ""
+                                                }
+                                                Text {
+                                                    id: mkText
+                                                    x: 12; y: 4
+                                                    text: mk.modelData.text
+                                                    color: mk.ink
+                                                    font.pixelSize: 9
+                                                    visible: mk.modelData.text !== ""
+                                                }
+                                                MouseArea {
+                                                    x: -4; y: 0
+                                                    width: 14; height: 22
+                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                    onClicked: function (m) {
+                                                        if (m.button === Qt.RightButton)
+                                                            root.dropMarker(mk.index)
+                                                        else
+                                                            root.seekTo(mk.modelData.t)
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         MouseArea {
                                             anchors.fill: parent
                                             // A Flickable STEALS the drag.
@@ -2635,6 +2957,9 @@ FloatingWindow {
                                                         required property int index
 
                                                         readonly property bool isSel:
+                                                            root.isSelected(lane.index,
+                                                                            clipRect.index)
+                                                        readonly property bool isPrimary:
                                                             root.selTrack === lane.index
                                                             && root.selClip === clipRect.index
                                                         // The drag is drawn, not
@@ -2674,8 +2999,15 @@ FloatingWindow {
                                                                ? Qt.rgba(0.25, 0.55, 0.4, 0.55)
                                                                : root.wash(0.22)
                                                         border.width: clipRect.isSel ? 2 : 1
-                                                        border.color: clipRect.isSel
-                                                                      ? root.cAccent : root.wash(0.4)
+                                                        // The primary is the
+                                                        // one the inspector is
+                                                        // showing, and it has
+                                                        // to be tellable from
+                                                        // the rest of a
+                                                        // selection.
+                                                        border.color: clipRect.isPrimary ? root.cAccent
+                                                                      : clipRect.isSel ? root.wash(0.75)
+                                                                      : root.wash(0.4)
 
                                                         // Under the label, over
                                                         // the plate. An audio
@@ -2815,6 +3147,16 @@ FloatingWindow {
                                                             // difference is the real
                                                             // one.
                                                             onPressed: function (m) {
+                                                                // Shift adds to
+                                                                // the selection
+                                                                // rather than
+                                                                // replacing it.
+                                                                if (m.modifiers & Qt.ShiftModifier) {
+                                                                    root.toggleSelect(lane.index,
+                                                                                      clipRect.index)
+                                                                    return
+                                                                }
+                                                                root.selMore = []
                                                                 root.selTrack = lane.index
                                                                 root.selClip = clipRect.index
                                                                 root.dragTrack = lane.index
@@ -3461,10 +3803,15 @@ FloatingWindow {
         }
 
         Rectangle {
+            id: exportSheet
             anchors.centerIn: parent
             width: Math.min(560, parent.width - 80)
-            height: Math.min(150 + root.exportFormats.length * 34,
-                             parent.height - 80)
+            // Sized from what is IN it. A height computed from a row count
+            // plus a guess at the chrome was twenty pixels short, and what it
+            // cut off was the Cancel and Export buttons — the two things the
+            // dialog exists for. A fixed dialog height can never survive a
+            // list that grows.
+            height: Math.min(exportCol.implicitHeight + 28, parent.height - 80)
             color: root.cPanel
             radius: 6
             border.width: 1
@@ -3473,8 +3820,10 @@ FloatingWindow {
             MouseArea { anchors.fill: parent; hoverEnabled: true }
 
             Column {
-                anchors.fill: parent
-                anchors.margins: 14
+                id: exportCol
+                x: 14
+                y: 14
+                width: parent.width - 28
                 spacing: 10
 
                 Text {
