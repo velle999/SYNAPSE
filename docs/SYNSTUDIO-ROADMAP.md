@@ -22,6 +22,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
+| titles    | a face, a plate, more than one line, five styles, .srt both ways |
 | delivery  | works, thin — six formats, no range, no presets, no queue      |
 | media     | one project at a time — no pool, no proxies, no relink         |
 
@@ -176,18 +177,42 @@ Fairlight-style automation: four features for one piece of work.
       blend: it needs frames that were never shot, which is a different piece
       of work from everything above
 
-## 5 · Titles
+## 5 · Titles — **shipped in 0.1.0-18**
 
 - [x] text, size, colour, nine placements (`drawtext`)
-- [ ] font family and weight, from `fc-list`
-- [ ] outline, shadow, plate — `borderw`, `shadowx/y`, `box`; white text stops
-      disappearing on a bright shot
-- [ ] multi-line, line spacing, letter spacing
+- [x] **font family and weight** — resolved through `fc-match` to a FILE, and
+      the file checked. `font=Sans` needs an ffmpeg built against fontconfig
+      and fails the whole graph where it is not — at export time, after the
+      edit. `synstudio fonts` lists what this machine has; `fonts have NAME`
+      answers for one. ⚠ fc-match always answers, substituting silently, so
+      "did it run" is not "was it found"; a weight with no family named
+      resolves through `sans-serif` rather than dropping the tick
+- [x] **outline, shadow, plate** — `borderw`, `shadowx/y`, `box`, each a
+      fraction of the FONT SIZE so a title styled at 1080 is the same title
+      delivered at 4K. Zero means off, and emits nothing: the old code had a
+      one-pixel floor baked into the arithmetic
+- [x] **multi-line and line spacing** — `\n` in a caption is a line break, in
+      the project file, in `set`, in `get` and at the shell. `text_align`
+      centres the lines inside the block where this ffmpeg has it, and is
+      probed for rather than assumed
+- [no] letter spacing — drawtext has no tracking option at any version, and a
+       second text renderer to gain one is the trade this program does not
+       make
 - [~] animate on and off — a title's position and opacity move now; its size
       and colour cannot, because drawtext takes no expression for either
-- [ ] lower thirds and credit rolls as presets over the above
-- [ ] **subtitles** — import `.srt`, edit as a track, burn in or ship as a
-      stream
+- [x] **lower thirds and credit rolls as presets** — five styles (plain,
+      lower third, subtitle, heading, credit roll) that SET the fields above
+      and then get out of the way, so every one is still a slider afterwards.
+      A roll is the one title that MOVES, so it is generated twice: an
+      expression in the export, a number in the monitor, which holds one frame
+      at t=0 and would otherwise draw every roll at its start
+- [x] **subtitles** — `.srt` in and back out, and a cue is a TITLE CLIP. Not a
+      fourth clip kind and not a track type of its own, so an imported caption
+      takes the font, plate, placement, fades, transform and grade a typed one
+      takes and is edited by the commands that already exist — which makes
+      burning in free, because that is what a title does. Shipping them soft
+      instead is `timeline export --subs FILE`: mov_text, srt or WebVTT by
+      container, with the input added LAST so no clip is renumbered
 
 ## 6 · Retime and the rest of the cutting room
 
@@ -245,7 +270,9 @@ Fairlight-style automation: four features for one piece of work.
 7. ~~**LUT and look import**~~ — **done, 0.1.0-17.** A .cube reads in as a
    develop setting and composes into the baked cube for free; a look is the
    develop stack as a file. Twelve looks ship, no LUTs do.
-8. **Titles worth using**, then `.srt` — 2 days.
+8. ~~**Titles worth using**, then `.srt`~~ — **done, 0.1.0-18.** A caption
+   with a face, a plate, more than one line and five styles; subtitles in and
+   out, burnt in or shipped as a stream.
 9. **Retime and stabilisation** — 2 days.
 10. **Scopes and delivery** — 2–3 days.
 

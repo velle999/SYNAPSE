@@ -449,6 +449,42 @@ enum { SS_TEXT_TL, SS_TEXT_TC, SS_TEXT_TR,
        SS_TEXT_ML, SS_TEXT_MC, SS_TEXT_MR,
        SS_TEXT_BL, SS_TEXT_BC, SS_TEXT_BR };
 
+/* The weights a family is asked for by name. Not a numeric 100..900: what
+ * reaches drawtext is a FILE, and a family ships the faces it ships — asking
+ * fontconfig for `weight=bold` and taking what it answers is the difference
+ * between a caption in the wrong face and a graph that will not parse. */
+enum { SS_FW_REGULAR, SS_FW_BOLD, SS_FW_LIGHT, SS_FW_ITALIC, SS_FW_BOLDITALIC };
+
+int         ss_textweight_value(const char *s);   /* -1 if it is not one */
+const char *ss_textweight_name(int v);
+
+/* ---- fonts ----
+ *
+ * A family NAME is what a person picks; a font FILE is what drawtext takes,
+ * because `font=` only works in an ffmpeg built against fontconfig and fails
+ * at export time when it is not. So the name is resolved here, once, through
+ * fc-match — and when fontconfig is not installed at all this falls back to
+ * the same shipped faces the program has always used, rather than handing
+ * ffmpeg a path that does not exist.
+ *
+ * The returned pointer is to a static cache and stays valid; it is never
+ * NULL, so a caption always renders in SOMETHING. */
+/* Spawn argv and read its stdout as text. fork+execvp, never a shell. */
+int         ss_capture(char *const argv[], char *out, size_t n);
+/* Whether this machine's ffmpeg knows `option` on `filter`. An unknown option
+ * fails the whole graph to parse rather than degrading, so anything recent is
+ * asked for before it is used. Cached; one fork per process. */
+int         ss_ffmpeg_filter_has(const char *filter, const char *option);
+
+const char *ss_font_file(const char *family, int weight);
+/* The families this machine can draw with, sorted, one per line into `out`.
+ * Returns how many there are, or 0 where fontconfig is missing. */
+int         ss_font_families(char *out, size_t n);
+/* Whether a family can actually be resolved. A project made elsewhere can
+ * name a face this machine has not got, which renders in the default rather
+ * than failing — the same rule a missing LUT and a missing effect follow. */
+int         ss_font_have(const char *family);
+
 /* Motion. `scale` 1.0 means "fitted to the frame"; position is a fraction of
  * the frame from centre, so 0,0 is centred at any project size.
  *
@@ -587,12 +623,24 @@ typedef struct {
     float  trans_r, trans_g, trans_b;   /* what `dip` dips through */
 
     /* title / solid */
-    char   text[512];
+    char   text[512];           /* \n is a line break; the file escapes it */
     float  text_size;           /* fraction of frame height, 0 = 0.08 */
     float  text_r, text_g, text_b;
     int    text_pos;            /* SS_TEXT_* */
     float  col_r, col_g, col_b; /* SS_CLIP_SOLID, and a title's backdrop */
     float  col_a;               /* backdrop opacity behind a title */
+
+    /* How the caption is DRAWN. Every one of these is a fraction of the font
+     * size rather than a pixel count, so a title styled on a 1080 timeline
+     * looks the same when the project is delivered at 4K — the same reason
+     * text_size is a fraction of the frame height. */
+    char   text_font[64];       /* family name; empty = the default face */
+    int    text_weight;         /* SS_FW_* */
+    float  text_border;         /* outline; < 0 means the old default */
+    float  text_shadow;         /* drop shadow offset; 0 = none */
+    float  text_box;            /* plate opacity behind the words; 0 = none */
+    float  text_line;           /* line spacing; < 0 means the old default */
+    float  text_roll;           /* credit roll, screen heights a second */
 
     int    has_grade;
     ss_develop grade;
@@ -853,6 +901,13 @@ typedef struct {
     const char *acodec;
     const char *v1, *v2, *v3, *v4;
     const char *pix;
+    /* The subtitle codec this container takes. A soft subtitle stream is not
+     * a picture, so it is the one thing about a delivery that the filter
+     * graph knows nothing about — and every container spells it differently
+     * (mp4 wants mov_text, Matroska wants srt, WebM wants WebVTT). NULL is a
+     * container that cannot carry one, and `--subs` on that format is an
+     * error said before the encode starts rather than after it. */
+    const char *scodec;
     const char *label;
 } ss_tl_format;
 
@@ -862,9 +917,48 @@ typedef struct {
 const ss_tl_format *ss_timeline_formats(void);
 const ss_tl_format *ss_timeline_format(const char *name, const char *out);
 
+/* `subs` is a .srt shipped as a soft stream rather than burnt in — NULL for
+ * none, and ignored on a preview. It is an argument and not a project field
+ * because it is a property of the DELIVERY: the same cut ships with captions
+ * to one place and without them to another. */
 int    ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                           const char *lutdir, int preview,
-                          const ss_tl_format *fmt, char ***argv);
+                          const ss_tl_format *fmt, const char *subs,
+                          char ***argv);
+
+/* ---- title styles ----
+ *
+ * A lower third is not a feature, it is a handful of the fields above set
+ * together: a size, a corner, a plate and a weight. So a style SETS those
+ * fields on a clip and then gets out of the way — every one of them is still
+ * a slider afterwards, which is the same bargain a look strikes with a grade.
+ *
+ * Built in rather than a file format, because unlike a look or an effect
+ * there is nothing here a third party could not say in four `timeline set`
+ * commands, and a catalogue on disk would be a format to maintain for no
+ * reach it did not already have. */
+typedef struct {
+    const char *name;
+    const char *label;
+} ss_title_style;
+
+const ss_title_style *ss_title_styles(void);        /* NULL-name terminated */
+int  ss_title_style_apply(ss_clip *c, const char *name);   /* 0 ok, -1 no */
+
+/* ---- subtitles ----
+ *
+ * A cue is a title clip. Not a fourth clip kind and not a track type of its
+ * own: an imported caption then takes the same font, plate, placement, fades
+ * and transform as one that was typed, and it is editable with the commands
+ * that already exist. Burning in is therefore free — it is what a title
+ * already does — and shipping a soft stream is a delivery option instead.
+ *
+ * Times are what the file says. A cue whose end is before its start, or that
+ * overlaps the one before it, is kept as written: a subtitle file is somebody
+ * else's output and quietly repairing it hides the mistake in it. */
+int  ss_subs_import(ss_timeline *t, const char *file, int track,
+                    char *err, size_t errn);        /* cues added, or -1 */
+int  ss_subs_export(const ss_timeline *t, int track, const char *file);
 
 /* One composited frame, for the program monitor.
  *

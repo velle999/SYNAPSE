@@ -2173,6 +2173,208 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ----------------------------------------------------------- titles ------
+#
+# A title stopped being "some words in the middle" in 0.1.0-18: it has a face,
+# a weight, an outline, a shadow, a plate, line spacing and — for the end of
+# the film — a climb. Everything here is a fraction of the FONT SIZE rather
+# than a pixel count, so a title styled on a 1080 timeline is the same title
+# when the project is delivered at 4K.
+
+ttp=$TMP/titles.sstl
+$BIN timeline new "$ttp" --size 1920x1080 --fps 25 >/dev/null
+$BIN timeline track "$ttp" video BG >/dev/null
+$BIN timeline track "$ttp" video TITLES >/dev/null
+$BIN timeline solid "$ttp" 0 --at 0 --dur 12 --colour 0.1,0.1,0.12 >/dev/null
+
+check "five styles ship" "5" "$($BIN timeline styles | grep -c .)"
+
+$BIN timeline title "$ttp" 1 'Sarah Okonkwo\nDirector of Photography' \
+     --at 1 --dur 4 --style lower-third >/dev/null
+check "a style sets the weight"    "bold"        "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.weight/{print $2}')"
+check "a style sets the placement" "bottomleft"  "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.pos/{print $2}')"
+check "a style sets the plate"     "0.55"        "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.box/{print $2}')"
+# A lower third leans on the plate instead of an outline, so this is a style
+# turning something OFF — which is the half a preset usually gets wrong.
+check "and turns the outline off"  "0"           "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.border/{print $2}')"
+$BIN timeline title "$ttp" 1 "x" --at 6 --dur 1 --style nonesuch 2>&1 \
+    | seen "an unknown style is refused" "no style called"
+
+# ---- a caption with a LINE BREAK in it ---------------------------------
+#
+# The project file is tab-separated with one record per line, so a real
+# newline inside a caption would end the record halfway through and the rest
+# of the clip would read as a fresh one. It travels as \n and comes back as a
+# newline, and the same two bytes are what a shell can type.
+$BIN timeline get "$ttp" 1 0 | seen "a caption comes back escaped" 'Okonkwo\nDirector'
+check "and never as a bare newline" "1" \
+      "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text\t/{n++} END{print n+0}')"
+$BIN timeline show "$ttp" | rxseen "the record stays one line" '^text	.*Okonkwo\\nDirector'
+# The escape survives a save and a reload, which is the assertion that would
+# have caught it being written raw and read back as two clips.
+check "it survives a round trip" "1" \
+      "$($BIN timeline show "$ttp" | grep -c 'Okonkwo\\nDirector')"
+
+# ---- what reaches drawtext ---------------------------------------------
+tstyle=$($BIN timeline export "$ttp" --out "$TMP/titles.mp4" --print)
+echo "$tstyle" | seen "the plate reaches the graph"  "box=1:boxcolor="
+echo "$tstyle" | seen "the shadow reaches the graph" "shadowx="
+# A style that says no outline has to emit NO outline, not a thin one: the
+# old code had a one-pixel floor baked into the arithmetic.
+# ⚠ `:borderw=` and not `borderw=`: the plate's own `boxborderw=` contains
+# the shorter string, so the loose needle passes on the graph that proves the
+# bug — it was there, on the plate, the whole time.
+echo "$tstyle" | notseen "and an outline that was turned off does not" ":borderw="
+# The line break has to reach the PICTURE, not just the file. Two identical
+# titles, one of them broken across two lines: the two-line frame carries more
+# lit pixels than the one-line frame, and nothing else about them differs.
+#
+# Measured rather than eyeballed, and measured on the frame the monitor draws
+# — which is the same graph the export uses.
+if have ffmpeg; then
+    lp=$TMP/lines.sstl
+    $BIN timeline new "$lp" --size 640x360 --fps 25 >/dev/null
+    $BIN timeline track "$lp" video V >/dev/null
+    $BIN timeline solid "$lp" 0 --at 0 --dur 2 --colour 0,0,0 >/dev/null
+    $BIN timeline track "$lp" video T >/dev/null
+    $BIN timeline title "$lp" 1 'ALPHA BRAVO' --at 0 --dur 2 \
+         --style heading >/dev/null
+    $BIN timeline frame "$lp" --at 1 --out "$TMP/one.png" >/dev/null 2>&1
+    $BIN timeline set "$lp" 1 0 'text=ALPHA\nBRAVO' >/dev/null
+    $BIN timeline frame "$lp" --at 1 --out "$TMP/two.png" >/dev/null 2>&1
+    # ⚠ NOT the whole frame's average: the same words drawn on two lines carry
+    # very nearly the same amount of ink as on one (17.0603 against 17.061 —
+    # the first version of this test could not tell them apart). What changes
+    # is WHERE the ink is, so the measurement is a band the one-line caption
+    # cannot reach: a centred block grows UPWARD, and the top of the frame is
+    # background exactly until the caption has a second line.
+    #
+    # It also fails on the failure that matters most — an escape that never
+    # became a newline draws the two characters on ONE line, which leaves this
+    # band as empty as the single-line version.
+    topavg() { ffmpeg -v error -i "$1" \
+               -vf "crop=iw:ih*0.4:0:0,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-" \
+               -f null - 2>&1 | awk -F'=' '/YAVG/{print $2}' | tail -1; }
+    y1=$(topavg "$TMP/one.png"); y2=$(topavg "$TMP/two.png")
+    check "a line break reaches the picture" "yes" \
+          "$(awk -v a="${y1:-0}" -v b="${y2:-0}" 'BEGIN{print (b>a+1)?"yes":"no"}')"
+fi
+
+# ---- a project written BEFORE any of this existed -----------------------
+#
+# No `style` line at all. It has to read back as the title it was rendered as
+# — the old outline and the old line spacing — which is why those numbers are
+# the DEFAULTS and not a sentinel.
+old=$TMP/old.sstl
+grep -v '^style' "$ttp" > "$old"
+check "an old project keeps its outline"      "0.045" \
+      "$($BIN timeline get "$old" 1 0 | awk -F'\t' '/^text.border/{print $2}')"
+check "an old project keeps its line spacing" "0.25" \
+      "$($BIN timeline get "$old" 1 0 | awk -F'\t' '/^text.line/{print $2}')"
+
+# ---- a font is a FILE, resolved from a family --------------------------
+#
+# `font=Sans` only works in an ffmpeg built against fontconfig and fails the
+# graph when it is not, so a family is resolved to a path here and drawtext is
+# only ever handed one that opens.
+echo "$tstyle" | seen "drawtext is given a font FILE" "fontfile='/"
+if have fc-match; then
+    # Bold with no family named still has to mean something: the generic sans
+    # in bold, and not the regular face with the tick quietly ignored.
+    reg=$($BIN timeline export "$ttp" --out "$TMP/t2.mp4" --print \
+          | tr ' ' '\n' | grep -o "fontfile='[^']*'" | head -1)
+    check "a weight with no family still resolves" "yes" \
+          "$(case "$reg" in *Bold*|*bold*) echo yes;; *) echo no;; esac)"
+    $BIN fonts have "Definitely Not A Font 91" \
+        | seen "a font this machine has not got says so" "no"
+fi
+
+# ---- the credit roll ----------------------------------------------------
+#
+# The one title property that MOVES, and therefore the one that has to be
+# generated twice: an expression in the export, where a clip's own `t` is
+# running, and a NUMBER in the monitor, which holds a single frame at t=0 and
+# would otherwise draw every roll at its starting position while the export
+# scrolled it.
+rp=$TMP/roll.sstl
+$BIN timeline new "$rp" --size 1280x720 --fps 25 >/dev/null
+$BIN timeline track "$rp" video BG >/dev/null
+$BIN timeline track "$rp" video ROLL >/dev/null
+$BIN timeline solid "$rp" 0 --at 0 --dur 12 --colour 0,0,0 >/dev/null
+$BIN timeline title "$rp" 1 'Directed by\nAmara Osei' --at 0 --dur 12 \
+     --style credit-roll >/dev/null
+$BIN timeline export "$rp" --out "$TMP/roll.mp4" --print \
+    | rxseen "the export scrolls with t" 'y=\(h-\(t\*h\*0\.100000\)\)'
+$BIN timeline frame "$rp" --at 4 --out "$TMP/roll.png" --size 320 >/dev/null 2>&1
+check "the monitor draws a moving title where it IS" "yes" \
+      "$([ -s "$TMP/roll.png" ] && echo yes || echo no)"
+
+# ------------------------------------------------------------ subtitles --
+#
+# A cue is a title clip. Not a fourth clip kind and not a track type of its
+# own — which is what makes an imported caption editable with the commands
+# that already exist, and burning it in free.
+
+srt=$TMP/d.srt
+printf '1\r\n00:00:01,000 --> 00:00:03,500\r\n<i>Are you</i> coming?\r\n\r\n' > "$srt"
+# A full stop instead of a comma, which half the tools in the world write.
+printf '2\r\n00:00:04.000 --> 00:00:06,250\r\nNot until it stops raining.\r\nIt has been raining for a week.\r\n\r\n' >> "$srt"
+# A cue NUMBER out of sequence, because the numbers are not what separates one
+# cue from the next and files in the wild get them wrong.
+printf '17\r\n00:00:07,000 --> 00:00:09,000\r\nThen we wait.\r\n\r\n' >> "$srt"
+
+sp=$TMP/subs.sstl
+$BIN timeline new "$sp" --size 1920x1080 --fps 25 >/dev/null
+$BIN timeline track "$sp" video BG >/dev/null
+$BIN timeline track "$sp" video SUBS >/dev/null
+$BIN timeline solid "$sp" 0 --at 0 --dur 10 --colour 0.1,0.1,0.12 >/dev/null
+$BIN timeline subs "$sp" 1 import "$srt" | seen "three cues import" "cues	3"
+
+check "a cue lands at its own time"   "4.000000" \
+      "$($BIN timeline get "$sp" 1 1 | awk -F'\t' '/^tl_in/{print $2}')"
+check "and lasts exactly as long"     "2.250000" \
+      "$($BIN timeline get "$sp" 1 1 | awk -F'\t' '/^length/{print $2}')"
+$BIN timeline get "$sp" 1 0 | seen "markup is dropped, words are kept" "Are you coming?"
+$BIN timeline get "$sp" 1 1 | seen "a two-line cue stays two lines" 'raining.\nIt has'
+check "an imported cue is styled to be read" "0.5" \
+      "$($BIN timeline get "$sp" 1 1 | awk -F'\t' '/^text.box/{print $2}')"
+
+# Back out again, and the file that comes out has to be the file that went in.
+$BIN timeline subs "$sp" 1 export "$TMP/back.srt" | seen "and they write back out" "cues	3"
+check "the times survive the round trip" "00:00:04,000 --> 00:00:06,250" \
+      "$(sed -n '6p' "$TMP/back.srt")"
+check "and so do the line breaks" "It has been raining for a week." \
+      "$(sed -n '8p' "$TMP/back.srt")"
+
+# ---- shipping them as a STREAM instead ---------------------------------
+#
+# A soft stream never touches the picture, so it never touches the filter
+# graph. Its input goes in LAST: every label in the graph names an input by
+# number, and a file inserted anywhere else would renumber the clips and hand
+# the timeline the wrong pictures.
+sg=$($BIN timeline export "$sp" --out "$TMP/soft.mp4" --subs "$srt" --print)
+echo "$sg" | seen "a soft stream is mapped"      ":s:0"
+echo "$sg" | seen "in the codec the mp4 takes"   "mov_text"
+$BIN timeline export "$sp" --out "$TMP/soft.mkv" --subs "$srt" --print \
+    | seen "and the one Matroska takes"          "srt"
+$BIN timeline export "$sp" --out "$TMP/soft.webm" --subs "$srt" --print \
+    | seen "and the one WebM takes"              "webvtt"
+# The clip inputs must keep the numbers they had. The subtitle is the LAST
+# input, so its index is the number of clip inputs — two here, one solid and
+# one per cue is three more, so the check is that the map names an index at
+# least as high as any clip label in the graph.
+echo "$sg" | rxseen "the subtitle input is the last one" '^[0-9]+:s:0$'
+
+$BIN timeline export "$sp" --out "$TMP/soft.mp4" --subs "$TMP/nope.srt" 2>&1 \
+    | seen "a missing subtitle file is caught BEFORE the render" "cannot read"
+
+if have ffprobe; then
+    $BIN timeline export "$sp" --out "$TMP/soft.mp4" --subs "$srt" >/dev/null 2>&1
+    check "the delivered file really carries one" "subtitle" \
+          "$(ffprobe -v error -select_streams s -show_entries stream=codec_type \
+                     -of csv=p=0 "$TMP/soft.mp4" | head -1)"
+fi
+
 qml=$(dirname "$0")/../data/synstudio.qml
 if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
     QT_QPA_PLATFORM=offscreen timeout 25 quickshell -p "$qml" \

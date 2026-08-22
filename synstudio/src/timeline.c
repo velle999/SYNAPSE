@@ -61,6 +61,12 @@ void ss_clip_reset(ss_clip *c)
     c->text_size = 0.08f;
     c->text_r = c->text_g = c->text_b = 1.0f;
     c->text_pos = SS_TEXT_BC;
+    /* The outline and the line spacing that titles were drawn with before
+     * either was a setting. They are the DEFAULTS rather than a sentinel, so
+     * a project saved before this existed reads back as itself: no style line
+     * means these numbers, which is what it was rendered with. */
+    c->text_border = 0.045f;
+    c->text_line   = 0.25f;
     ss_xform_reset(&c->xf);
 }
 
@@ -290,6 +296,39 @@ int ss_trans_value(const char *s)
  * double's offset writes four bytes of a mantissa and reads back a zero — no
  * warning, no error, the value simply does not stick. That is exactly what
  * `trans.dur` and both fades did until this type existed. */
+/* A caption crossing a tab-separated line.
+ *
+ * Only two bytes need to travel differently: a newline, which would end the
+ * record, and the backslash that says so. Everything else — colons, percent
+ * signs, apostrophes, quotes — is stored literally, because the file format
+ * is columns and not a shell, and the escaping drawtext needs happens far
+ * later and to a copy in a file of its own. */
+static void esc_text(const char *in, char *out, size_t n)
+{
+    size_t o = 0;
+    for (; *in && o + 3 < n; in++) {
+        if (*in == '\\')      { out[o++] = '\\'; out[o++] = '\\'; }
+        else if (*in == '\n') { out[o++] = '\\'; out[o++] = 'n'; }
+        else if (*in == '\t') { out[o++] = '\\'; out[o++] = 't'; }
+        else                  out[o++] = *in;
+    }
+    out[o] = '\0';
+}
+
+static void unesc_text(const char *in, char *out, size_t n)
+{
+    size_t o = 0;
+    for (; *in && o + 1 < n; in++) {
+        if (*in == '\\' && in[1]) {
+            in++;
+            out[o++] = *in == 'n' ? '\n' : *in == 't' ? '\t' : *in;
+        } else {
+            out[o++] = *in;
+        }
+    }
+    out[o] = '\0';
+}
+
 enum { CO_FLOAT, CO_DOUBLE, CO_INT, CO_ENUM, CO_TEXT };
 
 typedef struct {
@@ -305,13 +344,19 @@ typedef struct {
      * no button. A row is animatable when ffmpeg has a way to vary it per
      * frame; the ones that are missing are missing because it does not. */
     int         anim;
+    /* The member's OWN size. CO_TEXT used to snprintf with `sizeof c->text`
+     * whatever field it was writing, which was correct while `text` was the
+     * only one of them and a 64-byte overflow the moment a second arrived. */
+    size_t      len;
 } cfield;
 
 #define C(k, t, m, lo, hi, grp, lbl, ch, an) \
-    { k, t, offsetof(ss_clip, m), lo, hi, grp, lbl, ch, an }
+    { k, t, offsetof(ss_clip, m), lo, hi, grp, lbl, ch, an, \
+      sizeof(((ss_clip *)0)->m) }
 
 #define POS_CHOICES   "topleft|topcentre|topright|left|centre|right|" \
                       "bottomleft|bottomcentre|bottomright"
+#define WEIGHT_CHOICES "regular|bold|light|italic|bolditalic"
 
 static const cfield cfields[] = {
     C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, "Levels", "Opacity", NULL, 1),
@@ -342,6 +387,13 @@ static const cfield cfields[] = {
     C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, "Title", "Green", NULL, 0),
     C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, "Title", "Blue", NULL, 0),
     C("text.pos",     CO_ENUM,  text_pos,     0.0f,    8.0f, "Title", "Placement", POS_CHOICES, 0),
+    C("text.font",    CO_TEXT,  text_font,    0.0f,    0.0f, "Title", "Font", NULL, 0),
+    C("text.weight",  CO_ENUM,  text_weight,  0.0f,    4.0f, "Title", "Weight", WEIGHT_CHOICES, 0),
+    C("text.border",  CO_FLOAT, text_border,  0.0f,    0.4f, "Title", "Outline", NULL, 0),
+    C("text.shadow",  CO_FLOAT, text_shadow,  0.0f,    0.4f, "Title", "Shadow", NULL, 0),
+    C("text.box",     CO_FLOAT, text_box,     0.0f,    1.0f, "Title", "Plate", NULL, 0),
+    C("text.line",    CO_FLOAT, text_line,    0.0f,    3.0f, "Title", "Line spacing", NULL, 0),
+    C("text.roll",    CO_FLOAT, text_roll,    0.0f,    2.0f, "Title", "Credit roll", NULL, 0),
 
     C("colour.r",     CO_FLOAT, col_r,        0.0f,    1.0f, "Background", "Red", NULL, 0),
     C("colour.g",     CO_FLOAT, col_g,        0.0f,    1.0f, "Background", "Green", NULL, 0),
@@ -349,6 +401,79 @@ static const cfield cfields[] = {
     C("colour.a",     CO_FLOAT, col_a,        0.0f,    1.0f, "Background", "Opacity", NULL, 0),
 };
 #undef C
+
+/* ---- title styles ----
+ *
+ * Four sets of the fields above, applied together. A lower third is not a
+ * feature: it is a size, a corner, a plate and a weight, and once a style has
+ * set them every one is still a slider — the same bargain a look strikes with
+ * a grade, and the reason there is no separate lower-third object to keep in
+ * step with the title it is made of.
+ *
+ * Placement and plate travel with the style; the CAPTION and the colour never
+ * do. A style says how a title is drawn, not what it says.
+ */
+static const ss_title_style tstyles[] = {
+    { "plain",       "white with an outline, wherever it is put" },
+    { "lower-third", "bottom left, bold, on a plate — a name over a shot" },
+    { "subtitle",    "small, bottom centre, on a plate — a line of dialogue" },
+    { "heading",     "large and centred, for a card between scenes" },
+    { "credit-roll", "centred and climbing, for the end of it" },
+    { NULL, NULL }
+};
+
+const ss_title_style *ss_title_styles(void) { return tstyles; }
+
+int ss_title_style_apply(ss_clip *c, const char *name)
+{
+    if (!c || !name) return -1;
+
+    if (!strcmp(name, "plain")) {
+        c->text_size = 0.08f; c->text_pos = SS_TEXT_BC;
+        c->text_weight = SS_FW_REGULAR;
+        c->text_border = 0.045f; c->text_shadow = 0.0f; c->text_box = 0.0f;
+        c->text_line = 0.25f; c->text_roll = 0.0f;
+        return 0;
+    }
+    if (!strcmp(name, "lower-third")) {
+        c->text_size = 0.055f; c->text_pos = SS_TEXT_BL;
+        c->text_weight = SS_FW_BOLD;
+        /* A plate instead of a heavy outline: a name sits still on screen
+         * long enough to be read, and an outline that wide over a moving
+         * shot shimmers. */
+        c->text_border = 0.0f; c->text_shadow = 0.03f; c->text_box = 0.55f;
+        c->text_line = 0.2f; c->text_roll = 0.0f;
+        return 0;
+    }
+    if (!strcmp(name, "subtitle")) {
+        c->text_size = 0.05f; c->text_pos = SS_TEXT_BC;
+        c->text_weight = SS_FW_REGULAR;
+        /* Both, and deliberately: a subtitle lands on a picture nobody has
+         * graded yet, so the plate carries the dark shots and the outline
+         * carries the frames where the plate is not enough. */
+        c->text_border = 0.03f; c->text_shadow = 0.0f; c->text_box = 0.5f;
+        c->text_line = 0.2f; c->text_roll = 0.0f;
+        return 0;
+    }
+    if (!strcmp(name, "heading")) {
+        c->text_size = 0.12f; c->text_pos = SS_TEXT_MC;
+        c->text_weight = SS_FW_BOLD;
+        c->text_border = 0.04f; c->text_shadow = 0.0f; c->text_box = 0.0f;
+        c->text_line = 0.3f; c->text_roll = 0.0f;
+        return 0;
+    }
+    if (!strcmp(name, "credit-roll")) {
+        c->text_size = 0.05f; c->text_pos = SS_TEXT_MC;
+        c->text_weight = SS_FW_REGULAR;
+        c->text_border = 0.0f; c->text_shadow = 0.0f; c->text_box = 0.0f;
+        c->text_line = 0.6f;
+        /* Slow enough to read: a screen height every ten seconds, which for
+         * a 1080 project is about a hundred pixels a second. */
+        c->text_roll = 0.1f;
+        return 0;
+    }
+    return -1;
+}
 
 static const int ncfields = (int)(sizeof cfields / sizeof cfields[0]);
 
@@ -434,7 +559,12 @@ int ss_clip_set(ss_clip *c, const char *key, const char *val)
 
     switch (f->type) {
     case CO_TEXT:
-        snprintf((char *)p, sizeof c->text, "%s", val);
+        /* \n is a line break here too, and not only in the file. A caption is
+         * typed at a shell or into a one-line field, neither of which can
+         * carry a real newline, so the two bytes that mean one in the project
+         * file mean one on the way in as well — otherwise a title could be
+         * SAVED multi-line and never SET that way. */
+        unesc_text(val, (char *)p, f->len);
         return 0;
     case CO_ENUM: {
         int v = enum_value(f, val);
@@ -472,7 +602,11 @@ int ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n)
     p = (const char *)c + f->off;
 
     switch (f->type) {
-    case CO_TEXT: snprintf(out, n, "%s", (const char *)p); return 0;
+    /* ESCAPED on the way out, for the same reason it is escaped in the file:
+     * this printing is one record per line and a caption with a line break in
+     * it would end the record halfway through — and the window reads these
+     * lines. What comes back out is exactly what `set` takes in. */
+    case CO_TEXT: esc_text((const char *)p, out, n); return 0;
     case CO_ENUM: { char b[32]; enum_name(f, *(const int *)p, b, sizeof b);
                     snprintf(out, n, "%s", b); return 0; }
     case CO_INT:    snprintf(out, n, "%d", *(const int *)p); return 0;
@@ -1277,10 +1411,33 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
             if (c->kind == SS_CLIP_SOLID || c->col_a > 0.0f)
                 fprintf(fp, "solid\t%.4f\t%.4f\t%.4f\t%.4f\n",
                         c->col_r, c->col_g, c->col_b, c->col_a);
-            if (c->kind == SS_CLIP_TITLE)
+            if (c->kind == SS_CLIP_TITLE) {
+                char cap[1100];
+                /* The caption is LAST on the line so it may contain anything
+                 * — except the two bytes this format is made of. A line break
+                 * inside a caption would end the record halfway through, so
+                 * it travels as \n and comes back as a newline. */
+                esc_text(c->text, cap, sizeof cap);
                 fprintf(fp, "text\t%.4f\t%.4f\t%.4f\t%.4f\t%s\t%s\n",
                         c->text_size, c->text_r, c->text_g, c->text_b,
-                        textpos_name(c->text_pos), c->text);
+                        textpos_name(c->text_pos), cap);
+                /* How it is DRAWN, on a line of its own with named fields.
+                 * Named because a title gained seven properties in one
+                 * release and will gain more: a reader that finds a key it
+                 * does not know ignores it, and one that finds none of them
+                 * is reading a project made before any of this existed and
+                 * gets the defaults it was rendered with. Written only when
+                 * something is not the default, so a plain caption's record
+                 * is the line it always was. */
+                if (*c->text_font || c->text_weight ||
+                    c->text_border != 0.045f || c->text_shadow > 0 ||
+                    c->text_box > 0 || c->text_line != 0.25f || c->text_roll > 0)
+                    fprintf(fp, "style\tfont=%s\tweight=%s\tborder=%.4f"
+                                "\tshadow=%.4f\tbox=%.4f\tline=%.4f\troll=%.4f\n",
+                            c->text_font, ss_textweight_name(c->text_weight),
+                            c->text_border, c->text_shadow, c->text_box,
+                            c->text_line, c->text_roll);
+            }
             /* The effect stack. One line each, in the order they apply,
              * with the knobs written by NAME — a recipe that gains a
              * parameter must not shift the meaning of a project saved before
@@ -1469,7 +1626,30 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 cc->text_g = (float)atof(f[2]);
                 cc->text_b = (float)atof(f[3]);
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
-                snprintf(cc->text, sizeof cc->text, "%s", f[5]);
+                unesc_text(f[5], cc->text, sizeof cc->text);
+            }
+        } else if (!strncmp(line, "style\t", 6) && cc) {
+            /* Named fields, each optional. An unknown key is skipped rather
+             * than failing the line: this file is going to gain title
+             * properties, and a project written by a newer build has to stay
+             * readable by an older one. */
+            char *f[16];
+            int nf = tabsplit(line + 6, f, 16), q;
+            for (q = 0; q < nf; q++) {
+                char *eq = strchr(f[q], '=');
+                const char *v;
+                if (!eq) continue;
+                *eq = '\0';
+                v = eq + 1;
+                if      (!strcmp(f[q], "font"))   snprintf(cc->text_font,
+                                                           sizeof cc->text_font, "%s", v);
+                else if (!strcmp(f[q], "weight")) { int w = ss_textweight_value(v);
+                                                    if (w >= 0) cc->text_weight = w; }
+                else if (!strcmp(f[q], "border")) cc->text_border = (float)atof(v);
+                else if (!strcmp(f[q], "shadow")) cc->text_shadow = (float)atof(v);
+                else if (!strcmp(f[q], "box"))    cc->text_box    = (float)atof(v);
+                else if (!strcmp(f[q], "line"))   cc->text_line   = (float)atof(v);
+                else if (!strcmp(f[q], "roll"))   cc->text_roll   = (float)atof(v);
             }
         } else if (!strncmp(line, "fx\t", 3) && cc) {
             char raw[256] = "", *f[2 + SS_MAX_FX_PARAMS];
@@ -1891,6 +2071,26 @@ static void text_xy(int pos, char *x, size_t xn, char *y, size_t yn)
     snprintf(y, yn, "%s", ys[pos / 3]);
 }
 
+/* A credit roll is the vertical placement replaced by a ramp: the block
+ * starts one frame height below the bottom edge and climbs at `roll` screen
+ * heights a second, so a roll long enough to read is a small number and the
+ * length of the clip decides how much of it is seen.
+ *
+ * `at` is why this is not simply an expression. In the export the caption is
+ * drawn into a stream whose `t` is clip seconds, so `t` is the ramp; in the
+ * monitor it is drawn into a graph holding ONE frame at t=0, and an
+ * expression there would put every roll back at its starting position while
+ * the export scrolled it. So the monitor is handed the same ramp evaluated as
+ * a NUMBER at the instant it is showing — the same bargain chain_grade_at
+ * strikes, and the reason a scrub and a render agree about a moving title. */
+static void text_roll_y(const ss_clip *c, double at, char *y, size_t yn)
+{
+    if (at >= 0)
+        snprintf(y, yn, "(h-(h*%.6f))", at * (double)c->text_roll);
+    else
+        snprintf(y, yn, "(h-(t*h*%.6f))", (double)c->text_roll);
+}
+
 /* The grade's spatial half, which a 3D LUT cannot carry because every one of
  * these needs a neighbouring pixel. Shared by both graph builders so a scrub
  * and an export sharpen by the same amount. */
@@ -1998,56 +2198,86 @@ static void chain_grade(strbuf *fc, const ss_clip *c, const char *lutdir,
     chain_grade_at(fc, c, lutdir, track, idx, -1.0);
 }
 
-/* A font FILE, not drawtext's `font=Sans`. That option only works in an
- * ffmpeg built against fontconfig, and when it is missing the failure is a
- * graph that will not parse — at export time, after the edit. A path either
- * exists or it does not, and this checks. */
-static const char *title_font(void)
-{
-    static const char *cand[] = {
-        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/TTF/LiberationSans-Regular.ttf",
-        NULL
-    };
-    static const char *found;
-    int i;
-    if (found) return found;
-    for (i = 0; cand[i]; i++) {
-        FILE *fp = fopen(cand[i], "rb");
-        if (fp) { fclose(fp); found = cand[i]; return found; }
-    }
-    found = cand[0];            /* say which one is missing, rather than nothing */
-    return found;
-}
-
 /* A title's caption, drawn over whatever the clip already is. The border is
  * not decoration: white text lands on a white sky often enough that a caption
  * without one is unreadable on the take you most wanted to label. */
-static void chain_title(strbuf *fc, const ss_timeline *t, const ss_clip *c,
-                        const char *dir, int track, int idx)
+static void chain_title_at(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                           const char *dir, int track, int idx, double at)
 {
-    char tp[2048], esc[4200], fesc[1024], x[64], y[64], col[32];
+    char tp[2048], esc[4200], fesc[1024], x[64], y[96], col[32], plate[32];
+    int size, bw;
     if (c->kind != SS_CLIP_TITLE) return;
     snprintf(tp, sizeof tp, "%s/text_%d_%d.txt", dir, track, idx);
     esc_filter(tp, esc, sizeof esc);
-    esc_filter(title_font(), fesc, sizeof fesc);
+    /* A family NAME resolved to a FILE, once, before the graph is built. The
+     * family may be one this machine has not got — a project travels — and
+     * what comes back then is the default face rather than a path that does
+     * not open, the same way a missing LUT renders as no LUT. */
+    esc_filter(ss_font_file(c->text_font, c->text_weight), fesc, sizeof fesc);
+
+    size = (int)(c->text_size * t->h + 0.5f);
+    if (size < 1) size = 1;
+
     text_xy(c->text_pos, x, sizeof x, y, sizeof y);
+    if (c->text_roll > 0.0f) text_roll_y(c, at, y, sizeof y);
     hexcol(c->text_r, c->text_g, c->text_b, 1.0f, col, sizeof col);
+
     /* expansion=none. `textfile=` gets the caption past the filtergraph's
      * quoting, but drawtext STILL runs its own %%{...} expansion over whatever
      * it read, so a caption containing a percent sign fails the graph with
      * "Stray %%" — at export time, long after the title was typed. Nothing
      * here wants a strftime, and a caption is literal text by definition. */
     sb_add(fc, ",drawtext=fontfile='%s':textfile='%s':expansion=none"
-               ":fontcolor=%s:fontsize=%d"
-               ":x=%s:y=%s:borderw=%d:bordercolor=0x000000@0.65:line_spacing=%d",
-           fesc, esc, col,
-           (int)(c->text_size * t->h + 0.5f), x, y,
-           (int)(c->text_size * t->h * 0.045f + 1.5f),
-           (int)(c->text_size * t->h * 0.25f));
+               ":fontcolor=%s:fontsize=%d:x=%s:y=%s:line_spacing=%d",
+           fesc, esc, col, size, x, y,
+           (int)(size * (c->text_line > 0 ? c->text_line : 0.0f)));
+
+    /* Which edge the LINES line up on inside the block, which only matters
+     * once a caption has more than one of them. drawtext lays a multi-line
+     * caption out left-aligned and then places the BLOCK, so a centred
+     * two-line title is a centred block of left-aligned text — right for a
+     * lower third, wrong for a credit roll.
+     *
+     * ⚠ Asked for, not assumed: text_align reached drawtext in 2024, and an
+     * option this machine's ffmpeg does not know fails the whole graph rather
+     * than being ignored. Where it is missing the layout is what it always
+     * was, which is the correct thing to lose. */
+    if (strchr(c->text, '\n') && ss_ffmpeg_filter_has("drawtext", "text_align")) {
+        int colmn = (c->text_pos >= 0 && c->text_pos <= 8) ? c->text_pos % 3 : 1;
+        sb_add(fc, ":text_align=%s", colmn == 0 ? "L" : colmn == 1 ? "C" : "R");
+    }
+
+    /* The plate goes on FIRST in the option list but drawtext paints it
+     * under the words either way. Its colour is the clip's background colour,
+     * which is the one a title already has — a caption on a plate is the
+     * same object as a caption over a solid, just smaller. */
+    if (c->text_box > 0.0f) {
+        hexcol(c->col_r, c->col_g, c->col_b, c->text_box, plate, sizeof plate);
+        sb_add(fc, ":box=1:boxcolor=%s:boxborderw=%d",
+               plate, (int)(size * 0.35f + 0.5f));
+    }
+    /* Shadow before border, because a border drawn over a shadow is what
+     * every other titler does and the other order reads as a smear. */
+    if (c->text_shadow > 0.0f) {
+        int off = (int)(size * c->text_shadow + 0.5f);
+        if (off < 1) off = 1;
+        sb_add(fc, ":shadowx=%d:shadowy=%d:shadowcolor=0x000000@0.75", off, off);
+    }
+    /* The outline is not decoration: white text lands on a white sky often
+     * enough that a caption without one is unreadable on the take you most
+     * wanted to label. It is a setting now, and zero means somebody chose
+     * that — so nothing is emitted rather than a one-pixel minimum. */
+    bw = c->text_border > 0.0f ? (int)(size * c->text_border + 1.5f) : 0;
+    if (bw > 0)
+        sb_add(fc, ":borderw=%d:bordercolor=0x000000@0.65", bw);
+}
+
+/* The export, where a title's own `t` is clip seconds and a roll can be an
+ * expression. */
+static void chain_title(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                        const char *dir, int track, int idx)
+{
+    chain_title_at(fc, t, c, dir, track, idx, -1.0);
 }
 
 /* The effect stack, spliced into a clip's chain.
@@ -2549,18 +2779,18 @@ static void pan_law(float pan, double *l, double *r)
  */
 static const ss_tl_format tl_formats[] = {
     { "mp4",    "mp4",  "libx264",    "aac",       "-preset", "medium", "-crf", "18",
-      "yuv420p",     "H.264 and AAC — plays on everything" },
+      "yuv420p",     "mov_text", "H.264 and AAC — plays on everything" },
     { "mkv",    "mkv",  "libx264",    "aac",       "-preset", "medium", "-crf", "18",
-      "yuv420p",     "the same encode in Matroska" },
+      "yuv420p",     "srt",      "the same encode in Matroska" },
     { "mov",    "mov",  "libx264",    "aac",       "-preset", "medium", "-crf", "18",
-      "yuv420p",     "the same encode in QuickTime" },
+      "yuv420p",     "mov_text", "the same encode in QuickTime" },
     { "h265",   "mp4",  "libx265",    "aac",       "-preset", "medium", "-crf", "22",
-      "yuv420p",     "HEVC — half the size, fewer players" },
+      "yuv420p",     "mov_text", "HEVC — half the size, fewer players" },
     { "webm",   "webm", "libvpx-vp9", "libopus",   "-b:v",    "0",      "-crf", "32",
-      "yuv420p",     "VP9 and Opus, for the web" },
+      "yuv420p",     "webvtt",   "VP9 and Opus, for the web" },
     { "prores", "mov",  "prores_ks",  "pcm_s16le", "-profile:v", "3",   NULL,   NULL,
-      "yuv422p10le", "ProRes 422 HQ — 10-bit, for grading on" },
-    { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
+      "yuv422p10le", "mov_text", "ProRes 422 HQ — 10-bit, for grading on" },
+    { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 };
 
 const ss_tl_format *ss_timeline_formats(void)
@@ -2593,7 +2823,8 @@ const ss_tl_format *ss_timeline_format(const char *name, const char *out)
 
 int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                        const char *lutdir, int preview,
-                       const ss_tl_format *fmt, char ***argv_out)
+                       const ss_tl_format *fmt, const char *subs,
+                       char ***argv_out)
 {
     strbuf fc = {0};
     char **av = NULL;
@@ -3020,11 +3251,29 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
         sb_add(&fc, ",alimiter=limit=0.99:level=disabled[aout]");
     }
 
+    /* A soft subtitle stream is an INPUT, and it goes in last on purpose.
+     * Every label in the graph above names an input by NUMBER, so a file
+     * inserted anywhere else would renumber the clips and hand the whole
+     * timeline the wrong pictures. Appended here it takes the next index and
+     * nothing already written has to change.
+     *
+     * Not offered on a preview: a preview is the CUT being judged, it is
+     * always x264 in an mp4 whatever the deliverable is, and a stream nobody
+     * switched on would only be there to go stale. */
+    if (subs && *subs && !preview) {
+        PUSH(xdup("-i")); PUSH(xdup(subs));
+    }
+
     PUSH(xdup("-filter_complex"));
     PUSH(xdup(fc.s ? fc.s : ""));
     PUSH(xdup("-map"));
     PUSH(xdup(preview && t->w > 960 ? "[pout]" : "[vout]"));
     if (naud > 0) { PUSH(xdup("-map")); PUSH(xdup("[aout]")); }
+    if (subs && *subs && !preview) {
+        const ss_tl_format *sf = fmt ? fmt : ss_timeline_format(NULL, out);
+        PUSH(xdup("-map")); PUSH(xfmt("%d:s:0", input));
+        PUSH(xdup("-c:s")); PUSH(xdup(sf->scodec ? sf->scodec : "mov_text"));
+    }
     PUSH(xdup("-t")); PUSH(xfmt("%.6f", dur > 0 ? dur : 1.0));
     /* A preview is watched once and thrown away, so every setting there is
      * traded for the time it takes to produce: ultrafast/crf 30 is roughly an
@@ -3293,7 +3542,10 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
                             ":c=black@0", (double)rot * M_PI / 180.0);
             chain_grade_at(&fc, c, lutdir, i, j, off);
             chain_fx(&fc, c, nvid);
-            chain_title(&fc, t, c, lutdir, i, j);
+            /* `off` and not -1: the monitor holds one frame, so a title that
+             * MOVES has to be drawn where it is at this instant rather than
+             * where its expression starts. */
+            chain_title_at(&fc, t, c, lutdir, i, j, off);
             if (a < 1.0)
                 sb_add(&fc, ",colorchannelmixer=aa=%.4f", a);
             /* Split when this clip's picture is wanted twice: once where it

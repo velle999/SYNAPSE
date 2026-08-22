@@ -34,6 +34,8 @@ sources = files(
   'src/io.c',
   'src/timeline.c',
   'src/fx.c',
+  'src/font.c',
+  'src/subs.c',
 )
 
 executable('synstudio', sources,

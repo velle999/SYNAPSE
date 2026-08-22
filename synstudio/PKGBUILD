@@ -532,7 +532,70 @@ pkgver=0.1.0
 #   379 assertions, clean under ASan+UBSan+LSan, and the suite now loads the
 #   QML offscreen: a duplicate id or a bad property fails the WHOLE FILE, and
 #   this repo has lost a window to exactly that twice.
-pkgrel=17
+#
+# 18 TITLES WORTH USING, AND SUBTITLES — roadmap item 8 of 10.
+#
+#   A caption had words, a size, a colour and one of nine placements. It now
+#   has a FACE: a family and a weight resolved through fc-match, an outline, a
+#   drop shadow, a plate, line spacing, more than one line, and — for the end
+#   of the film — a climb. Every one of them is a fraction of the FONT SIZE
+#   rather than a pixel count, so a title styled on a 1080 timeline is the
+#   same title delivered at 4K, which is the rule text_size already followed.
+#
+#   ⚠ A FAMILY IS RESOLVED TO A FILE, HERE, ONCE. drawtext's `font=Sans` needs
+#   an ffmpeg built against fontconfig and fails the whole GRAPH when it is
+#   not — at export time, after the edit — so fc-match answers with a path and
+#   the path is checked before ffmpeg is handed it. ⚠ fc-match ALWAYS answers:
+#   asked for a family this machine has not got it substitutes one and exits
+#   0, so `did it run` is not `was it found`, and the checkbox question is
+#   asked a different way (compare the family it settled ON). ⚠ A weight with
+#   no family named still has to mean something — `sans-serif:weight=bold`,
+#   not the default face with the tick quietly dropped.
+#
+#   ⚠ A LINE BREAK IS TWO BYTES EVERYWHERE. The project file is one record per
+#   line, so a real newline in a caption would end the record halfway through
+#   and the rest would read as a fresh clip; it travels as \n, and `set` and
+#   `get` speak the same escape so the window can show and edit it in a
+#   one-line field. ⚠ ss_clip_get used to print the caption RAW, which is the
+#   same bug on the way out. ⚠ CO_TEXT wrote with `sizeof c->text` whatever
+#   field it was handed — correct while `text` was the only one of them, and a
+#   64-byte overflow the moment `text.font` arrived; the table carries each
+#   member's own size now.
+#
+#   Five styles set those fields together — plain, lower third, subtitle,
+#   heading, credit roll — and then get out of the way: every field is still a
+#   slider afterwards, the bargain a look strikes with a grade. Built in
+#   rather than a file format, because there is nothing in one a third party
+#   could not say in four `timeline set` commands.
+#
+#   ⚠ THE ROLL IS THE ONE TITLE THAT MOVES, so it is generated twice: an
+#   expression in the export, where a clip's `t` is running, and a NUMBER in
+#   the monitor, which holds ONE frame at t=0 and would otherwise draw every
+#   roll at its starting position while the export scrolled it. Same bargain
+#   chain_grade_at strikes, same reason.
+#
+#   SUBTITLES: a cue is a TITLE CLIP. Not a fourth clip kind and not a track
+#   type of its own — so an imported caption takes the font, the plate, the
+#   placement, the fades, the transform and the grade that a typed one takes,
+#   is edited by the commands that already exist, and burning it in is free
+#   because that is what a title does. `.srt` in and back out, CRLF and the
+#   full-stop separator both, markup dropped and words kept, cue numbers
+#   ignored because they are not what separates one cue from the next.
+#   Shipping them SOFT instead is `timeline export --subs FILE`: mov_text,
+#   srt or WebVTT by container, and ⚠ the input goes in LAST, because every
+#   label in the graph names an input by NUMBER and a file inserted anywhere
+#   else renumbers the clips and hands the timeline the wrong pictures.
+#
+#   ⚠ text_align is ASKED FOR, not assumed. It reached drawtext in 2024 and an
+#   option this ffmpeg does not know fails the graph to parse rather than
+#   being ignored, so it is probed once and the layout without it is what it
+#   always was.
+#
+#   416 assertions, clean under ASan+UBSan+LSan. ⚠ The test that proves a line
+#   break reached the PICTURE cannot measure the frame's average: the same
+#   words on two lines carry the same ink (17.0603 against 17.061). It
+#   measures a band the one-line caption cannot reach.
+pkgrel=18
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

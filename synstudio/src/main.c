@@ -77,7 +77,12 @@ static void usage(void)
 "  timeline clip PROJ TRACK FILE [--at T] [--in A] [--out-at B] [--dur S]\n"
 "       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
 "  timeline title PROJ TRACK TEXT [--at T] [--dur S] [--colour R,G,B]\n"
+"       [--style S]      \\n in TEXT is a line break; `timeline styles`\n"
+"                        lists the styles\n"
 "  timeline solid PROJ TRACK [--at T] [--dur S] [--colour R,G,B]\n"
+"  timeline styles               plain, lower third, subtitle, heading, roll\n"
+"  timeline subs PROJ TRACK import FILE     a .srt in, one title per cue\n"
+"  timeline subs PROJ TRACK export FILE     the titles on a track back out\n"
 "\n"
 " editing (rearranges intent; never touches a frame)\n"
 "  timeline move  PROJ T C --to SECONDS\n"
@@ -112,6 +117,8 @@ static void usage(void)
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
 "  timeline export PROJ --out OUT [--format F] [--print] [--preview]\n"
+"       [--subs FILE]  ship a .srt as a STREAM a player can switch off,\n"
+"                      instead of the burnt-in kind `subs import` makes\n"
 "  timeline formats              what an export can come out as\n"
 "       --preview: small, fast, rough, and playable while still encoding —\n"
 "                  the same graph, so the cut you watch is the cut you ship\n"
@@ -121,6 +128,8 @@ static void usage(void)
 "  --quality 1-100 jpeg quality        --bits 8|16   output depth\n"
 "  --set K=V       an override applied on top of the sidecar, not saved\n"
 "\n"
+"  fonts [PATTERN]              the families a title can be lettered in\n"
+"  fonts have FAMILY            whether this machine has that one\n"
 "  devices         what can capture, for a voiceover\n"
 "  record --out F [--device D] [--limit S] [--channels 1|2]\n"
 "                  a take, with a live meter; stops on a signal\n"
@@ -152,6 +161,8 @@ typedef struct {
     int    has_dur, has_to, has_head, has_tail, ripple, preview, count;
     const char *colour;
     const char *ease;
+    const char *style;          /* a title style, applied on creation */
+    const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
     int    has_value;
     float  gain, opacity;
@@ -203,6 +214,8 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
                  !strcmp(a, "--color"))   { const char *v = NEXT(); if (!v) return -1; o->colour = v; }
         else if (!strcmp(a, "--value"))   { const char *v = NEXT(); if (!v) return -1; o->value = atof(v); o->has_value = 1; }
         else if (!strcmp(a, "--ease"))    { const char *v = NEXT(); if (!v) return -1; o->ease = v; }
+        else if (!strcmp(a, "--style"))   { const char *v = NEXT(); if (!v) return -1; o->style = v; }
+        else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
@@ -578,7 +591,7 @@ static int cmd_lut_show(const char *ref)
         return die("no LUT named %s  (try `synstudio luts`)", ref);
     if (ss_lut_read(path, &l, err, sizeof err) != 0) return die("%s", err);
     {
-        char name[128];
+        char name[1024];        /* what `path` can hold: the basename of one */
         size_t len;
         slash = strrchr(path, '/');
         snprintf(name, sizeof name, "%s", slash ? slash + 1 : path);
@@ -1058,6 +1071,13 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             printf("%d\t%s\t%s\n", i, ss_trans_name(i), ss_trans_label(i));
         return 0;
     }
+    if (verb && !strcmp(verb, "styles")) {
+        const ss_title_style *st = ss_title_styles();
+        int i;
+        for (i = 0; st[i].name; i++)
+            printf("%s\t%s\n", st[i].name, st[i].label);
+        return 0;
+    }
     if (verb && !strcmp(verb, "formats")) {
         const ss_tl_format *f = ss_timeline_formats();
         int i;
@@ -1316,9 +1336,15 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         c.kind = is_title ? SS_CLIP_TITLE : SS_CLIP_SOLID;
         if (is_title) {
             if (argc < 6) return die("title wants the words to put on screen");
-            snprintf(c.text, sizeof c.text, "%s", argv[5]);
+            /* A caption typed at a shell cannot contain a real newline, so
+             * \n in the argument is one. The same two bytes the project file
+             * uses, so what is typed and what is stored agree. */
+            ss_clip_set(&c, "text", argv[5]);
             if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
                 return die("bad option");
+            if (o.style && ss_title_style_apply(&c, o.style) != 0)
+                return die("no style called %s — `timeline styles` lists them",
+                           o.style);
         } else {
             if (parse_opts(argc, argv, 5, &o, &rest, &nrest) != 0)
                 return die("bad option");
@@ -1349,6 +1375,41 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
         return 0;
+    }
+
+    /* Subtitles in and out. A cue is a title clip, so `import` is the only
+     * thing here that is new — after it, every command that edits a title
+     * edits a caption, and burning them in is what an export already does. */
+    if (!strcmp(verb, "subs")) {
+        const char *act;
+        char err[256];
+        int n;
+
+        if (argc < 7)
+            return die("subs wants PROJ TRACK import|export FILE");
+        if (tl_pick(t, argv[4], NULL, &tr, NULL) != 0) return 1;
+        act = argv[5];
+
+        if (!strcmp(act, "import")) {
+            n = ss_subs_import(t, argv[6], tr, err, sizeof err);
+            if (n < 0) return die("%s", err);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("cues\t%d\n", n);
+            printf("track\t%d\n", tr);
+            /* Said out loud because it is the thing a person is about to
+             * wonder: these are ordinary titles now, and the style is
+             * something to change if the picture underneath wants it. */
+            printf("style\tsubtitle\n");
+            return 0;
+        }
+        if (!strcmp(act, "export")) {
+            n = ss_subs_export(t, tr, argv[6]);
+            if (n < 0) return die("cannot write %s", argv[6]);
+            printf("cues\t%d\n", n);
+            printf("out\t%s\n", argv[6]);
+            return 0;
+        }
+        return die("subs takes import or export, not %s", act);
     }
 
     if (!strcmp(verb, "set")) {
@@ -1901,6 +1962,18 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
             return die("bad option");
         if (!o.out) return die("export needs --out");
+        /* Said BEFORE the encode, not after it. A subtitle file that is not
+         * there, or a preview that was never going to carry one, is five
+         * minutes of render either way — and finding out at the end is how a
+         * person loses an evening. */
+        if (o.subs) {
+            FILE *sf = fopen(o.subs, "r");
+            if (!sf) return die("cannot read %s", o.subs);
+            fclose(sf);
+            if (o.preview)
+                fprintf(stderr, "a preview carries no subtitle stream — "
+                                "--subs is ignored here\n");
+        }
         warn_missing_fx(t);
         if (!mkdtemp(dir)) return die("cannot make a scratch directory");
 
@@ -1918,7 +1991,12 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             if (!f) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("no such format: %s  (try `timeline formats`)",
                                  o.format); }
-            ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, f, &av);
+            if (o.subs && !o.preview && !f->scodec) {
+                ss_timeline_unbake(t, dir); rmdir(dir);
+                return die("%s cannot carry a subtitle stream — burn them in "
+                           "with `timeline subs`, or deliver as mkv", f->name);
+            }
+            ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, f, o.subs, &av);
         }
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }
@@ -2149,6 +2227,25 @@ static int cmd_gui(int argc, char **argv)
 
 /* ----------------------------------------------------------------- main -- */
 
+/* Case-insensitive substring. Not strcasestr: that is a GNU extension and
+ * this file compiles with -std=gnu11 today and something stricter tomorrow. */
+static const char *strcasestr_(const char *hay, const char *needle)
+{
+    size_t n = strlen(needle);
+    if (!n) return hay;
+    for (; *hay; hay++) {
+        size_t i;
+        for (i = 0; i < n; i++) {
+            int a = hay[i], b = needle[i];
+            if (a >= 'A' && a <= 'Z') a += 32;
+            if (b >= 'A' && b <= 'Z') b += 32;
+            if (!hay[i] || a != b) break;
+        }
+        if (i == n) return hay;
+    }
+    return NULL;
+}
+
 int main(int argc, char **argv)
 {
     const char *cmd = argc > 1 ? argv[1] : NULL;
@@ -2165,6 +2262,49 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!strcmp(cmd, "keys"))     return cmd_keys();
+
+    /* What this machine can letter a title with.
+     *
+     * A LIST and not a promise: a project names a family, and a family the
+     * machine playing it back has not got renders in the default face rather
+     * than failing — so this is what to pick FROM here, not what a title is
+     * guaranteed to look like everywhere. `have` answers the other question,
+     * for one name, which is the one a checkbox needs. */
+    if (!strcmp(cmd, "fonts")) {
+        static char buf[262144];
+        int n;
+        if (argc > 3 && !strcmp(argv[2], "have")) {
+            printf("%s\t%s\n", argv[3], ss_font_have(argv[3]) ? "yes" : "no");
+            printf("file\t%s\n", ss_font_file(argv[3], SS_FW_REGULAR));
+            return 0;
+        }
+        n = ss_font_families(buf, sizeof buf);
+        if (n <= 0) {
+            /* Not an error. fontconfig is how the list is GOT, not how a
+             * caption is drawn — without it titles still render, in the face
+             * that ships, which is what the default face has always been. */
+            fprintf(stderr, "no font list here (fontconfig is not installed) — "
+                            "titles use the default face\n");
+            printf("file\t%s\n", ss_font_file("", SS_FW_REGULAR));
+            return 0;
+        }
+        if (argc > 2) {
+            /* A pattern, because a desktop has nine hundred families and
+             * nobody scrolls that. Substring, case-insensitive. */
+            char *p2 = buf;
+            while (*p2) {
+                char *e = strchr(p2, '\n');
+                if (e) *e = '\0';
+                if (strcasestr_(p2, argv[2])) puts(p2);
+                if (!e) break;
+                p2 = e + 1;
+            }
+            return 0;
+        }
+        fputs(buf, stdout);
+        return 0;
+    }
+
     if (!strcmp(cmd, "devices")) {
         ss_device *d = NULL;
         int n = ss_devices(&d), i;

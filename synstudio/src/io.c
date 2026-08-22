@@ -75,6 +75,75 @@ static ssize_t run_capture(char *const argv[], unsigned char *buf, size_t want)
     return (ssize_t)got;
 }
 
+/* The one spawn-and-read-text path, for callers outside this file.
+ *
+ * Every subprocess in this program is fork+execvp with an argv ARRAY and no
+ * shell anywhere, and a second implementation of that in another file is a
+ * second place for a family name out of a project file to become a command
+ * line. `out` is always NUL-terminated, even on failure. */
+int ss_capture(char *const argv[], char *out, size_t n)
+{
+    ssize_t got;
+    if (!out || n == 0) return -1;
+    out[0] = '\0';
+    got = run_capture(argv, (unsigned char *)out, n - 1);
+    if (got < 0) return -1;
+    out[got] = '\0';
+    return (int)got;
+}
+
+/* Does this machine's ffmpeg know that option on that filter?
+ *
+ * Asked rather than assumed, and asked ONCE. A filter option ffmpeg does not
+ * recognise does not degrade — it fails the WHOLE graph to parse, at export
+ * time, with a message about the filter and not about the feature somebody
+ * turned on in the inspector. text_align arrived in drawtext in 2024, and
+ * this program is expected to run on whatever ffmpeg the machine has.
+ *
+ * Cached because the answer cannot change while the process lives, and the
+ * cost is a fork.
+ */
+int ss_ffmpeg_filter_has(const char *filter, const char *option)
+{
+    static char lastf[64];
+    static char lasto[64];
+    static int  lastv = -1;
+    char help[262144], arg[128];
+    char *av[6];
+    const char *p2;
+    size_t olen;
+
+    if (!filter || !option) return 0;
+    if (lastv >= 0 && !strcmp(lastf, filter) && !strcmp(lasto, option))
+        return lastv;
+
+    snprintf(arg, sizeof arg, "filter=%s", filter);
+    av[0] = (char *)"ffmpeg";
+    av[1] = (char *)"-hide_banner";
+    av[2] = (char *)"-h";
+    av[3] = arg;
+    av[4] = NULL;
+
+    lastv = 0;
+    snprintf(lastf, sizeof lastf, "%s", filter);
+    snprintf(lasto, sizeof lasto, "%s", option);
+    if (ss_capture(av, help, sizeof help) < 0) return 0;
+
+    /* The option name at the start of its own (indented) line, so `align`
+     * does not answer for `text_align` and `text` does not answer for
+     * `textfile`. */
+    olen = strlen(option);
+    for (p2 = help; (p2 = strstr(p2, option)) != NULL; p2 += olen) {
+        const char *b = p2;
+        while (b > help && (b[-1] == ' ' || b[-1] == '\t')) b--;
+        if (b != help && b[-1] != '\n') continue;
+        if (p2[olen] != ' ' && p2[olen] != '\t') continue;
+        lastv = 1;
+        break;
+    }
+    return lastv;
+}
+
 /* Run argv, writing data to its stdin. */
 static int run_feed(char *const argv[], const unsigned char *data, size_t len)
 {
