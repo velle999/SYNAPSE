@@ -1,25 +1,28 @@
-# CodeQL, built rather than guessed.
+# CodeQL, built rather than guessed — and seven queries that never finish.
 #
-# This replaces GitHub's DEFAULT setup, which was cancelled at the six-hour
-# job ceiling on every single push to main. It was not slow at extraction: it
-# got through 54 of its 61 C/C++ queries in about a hundred seconds and then
-# one of the remaining five ran until GitHub killed the job. The five that
-# never finished were all range analysis —
+# GitHub's DEFAULT setup was cancelled at the six-hour job ceiling on every
+# push to main. It was never slow at extraction: it got through 54 of its 61
+# C/C++ queries in about a hundred seconds, then the rest ran until the job
+# was killed.
 #
-#     Critical/OverflowStatic
-#     Security/CWE-120/VeryLikelyOverrunWrite
-#     Security/CWE-190/ArithmeticUncontrolled
-#     Security/CWE-190/ComparisonWithWiderType
-#     Security/CWE-191/UnsignedDifferenceExpressionComparedZero
+# The obvious suspect was the database. Default setup extracts C/C++ with
+# `--build-mode: none`, which reads source files without ever running a
+# compiler, so types, macros and include paths are guesses — and the queries
+# that hung were all range analysis, the family least able to work on guesses.
 #
-# — and they blow up for a reason that is fixable here: default setup extracts
-# C/C++ with `--build-mode: none`, which builds a database by reading source
-# files without ever running a compiler. Types, macros and include paths are
-# guesses in such a database, and range analysis is exactly the family of
-# queries that cannot do its job on guesses.
+# ⚠ THAT WAS THE WRONG SUSPECT, and this file records the measurement rather
+# than the theory. Building the code and tracing the compiler produced a much
+# better database and the same seven queries still did not finish — 30 minutes
+# on a traced database against a slowest-healthy-query time of 25.9 SECONDS.
+# So they are excluded by id in .github/codeql-config.yml, with the evidence,
+# and the build below stays because a traced database is worth having on its
+# own merits and because it is what proved the extraction was innocent.
 #
-# So this one COMPILES the code and lets CodeQL trace the compiler. That is
-# both more accurate and, for these queries, dramatically faster.
+# The seven: cpp/uncontrolled-arithmetic, cpp/comparison-with-wider-type,
+# cpp/static-buffer-overflow, cpp/signed-overflow-check,
+# cpp/overflowing-snprintf, cpp/unsigned-difference-expression-compared-zero,
+# cpp/very-likely-overrunning-write.
+#
 name: codeql
 
 on:
@@ -40,11 +43,11 @@ jobs:
   analyze:
     name: analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    # ⚠ Not optional. The failure this file exists to fix cost six hours of
-    # runner time per push and reported nothing at the end of it. Thirty
-    # minutes is far more than a healthy run needs (the whole c-cpp analysis
-    # above finished its queries in under two), so if this ever trips it is
-    # a regression to look at and not a limit to raise.
+    # ⚠ Not optional, and it has already earned its place: it is what turned
+    # a six-hour cancellation into a thirty-minute one with a log worth
+    # reading, which is how the seven queries above were identified. A healthy
+    # run finishes every query in under a minute, so if this ever trips again
+    # it is a regression to look at and not a limit to raise.
     timeout-minutes: 30
     permissions:
       security-events: write
@@ -78,6 +81,12 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          # Seven C/C++ queries that do not terminate on this codebase —
+          # measured twice, on a buildless database and on a traced one, and
+          # the reasoning is in the file. The traced build below is still the
+          # right thing to do: it is a more accurate database, and it is what
+          # PROVED extraction quality was not the cause.
+          config-file: .github/codeql-config.yml
 
       # What can be built on a stock runner, which is more of this repo than
       # it looks: five components declare no external dependency at all and

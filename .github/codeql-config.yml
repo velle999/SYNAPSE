@@ -1,0 +1,36 @@
+# Seven C/C++ queries that do not terminate on this codebase.
+#
+# This is not a guess and it is not a preference. Two full runs measured it:
+#
+#   default setup, buildless database   54 of 61 queries done in ~100s,
+#                                       then 6h until GitHub killed the job
+#   advanced setup, TRACED database     54 of 61 queries done, then 30m
+#                                       until the workflow timeout killed it
+#
+# The traced database was worth building for its own sake — it is a far more
+# accurate one — but it did not make these seven finish, so the low-quality
+# extraction was never the cause. The slowest query that DOES finish takes
+# 25.9 seconds; these seven ran for more than twenty-five MINUTES without
+# completing. That is a query performance problem in CodeQL on this code, not
+# a finding waiting to be reported.
+#
+# ⚠ What is being given up is real: these are the integer-overflow and
+# buffer-overrun checks, which for a C codebase are among the ones most worth
+# having. The other 54 still run — including double-free, use-after-free,
+# TOCTOU, uncontrolled format string and the tainted-path queries — and the
+# repo carries its own overflow discipline in tools/check-toctou.sh, the
+# sanitiser builds in build.yml, and ASan+UBSan on every component suite.
+#
+# Worth retrying whenever the CodeQL version in the runner image moves: delete
+# a line, push, and see whether it finishes. That is a cheap experiment now
+# that the timeout is thirty minutes instead of six hours.
+query-filters:
+  - exclude:
+      id:
+        - cpp/uncontrolled-arithmetic
+        - cpp/comparison-with-wider-type
+        - cpp/static-buffer-overflow
+        - cpp/signed-overflow-check
+        - cpp/overflowing-snprintf
+        - cpp/unsigned-difference-expression-compared-zero
+        - cpp/very-likely-overrunning-write
