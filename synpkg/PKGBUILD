@@ -38,7 +38,25 @@ pkgver=0.1.0
 #   the update headers match each other, and it failed in check() on a laptop
 #   that was simply offline. Both cases are now forced in the suite (a stub
 #   curl that fails; an empty PATH) rather than waited for.
-pkgrel=36
+# 36: "Enable Flathub" and "Enable BlackArch" could be hovered but not clicked.
+#
+# 37: AND THEN ENABLE FLATHUB FAILED ON THE MACHINES IT IS FOR. Pressing it
+#   opened a terminal that printed `flatpak is not installed — synpkg install
+#   flatpak` and exited 1. Every other flatpak subcommand ASKS flatpak
+#   something and is right to refuse without it; enable-flathub asks for the
+#   FEATURE, and a machine that has never had flatpak is exactly the machine
+#   somebody presses that button on. It installs flatpak now — saying so
+#   first, because "Enable Flathub" quietly pulling in a package would be the
+#   wrong kind of silent — and then adds the remote and fetches the appstream
+#   index as before.
+#
+#   Asserted with a PATH holding one directory, containing one stub pkexec
+#   that prints what it was handed: flatpak is genuinely absent and the
+#   escalation is visible without granting one. ⚠ that stub needs #!/bin/bash
+#   and not `#!/usr/bin/env bash` — env has no PATH to find bash on, and a
+#   stub that cannot start looks exactly like an escalation that never
+#   happened.
+pkgrel=37
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -805,14 +805,42 @@ static int flatpak_remotes(void)
  * — `synpkg flatpak enable-flathub` has to work over SSH too. */
 static int flatpak_enable_flathub(void)
 {
-	flatpak_required();
-
-	if (sp_flathub_enabled()) {
+	/* ⚠ NOT flatpak_required(), and that is the whole point of this verb.
+	 *
+	 * Every other flatpak subcommand here asks flatpak a question, so a
+	 * machine without it has nothing to answer and dying is right. This one
+	 * asks for the FEATURE — and a machine that has never had flatpak is
+	 * exactly the machine somebody presses "Enable Flathub" on. Requiring it
+	 * first made the button open a terminal, print "flatpak is not installed"
+	 * and exit 1: a button that reported its own precondition and did nothing
+	 * about it, on the only machines where it had anything to do. */
+	if (sp_flatpak_present() && sp_flathub_enabled()) {
 		info("Flathub is already enabled");
 		return 0;
 	}
 	if (!is_root())
 		return escalate("flatpak", 1, (char *[]){ (char *)"enable-flathub" });
+
+	if (!sp_flatpak_present()) {
+		/* Installing a package is what this program is FOR, and the user
+		 * asking for Flathub has asked for the thing that reads it. Said out
+		 * loud, because "Enable Flathub" not mentioning a package install
+		 * would be the wrong kind of quiet. */
+		info("flatpak is not installed — installing it first");
+		char *pkg[] = { (char *)"flatpak" };
+		int rc = cmd_install(1, pkg);
+		if (rc != 0) {
+			warn("could not install flatpak");
+			return rc;
+		}
+		/* have_cmd re-reads PATH every time, so this really is asking the
+		 * disk again and not a cached answer from before the transaction. */
+		if (!sp_flatpak_present()) {
+			warn("flatpak installed but is not on PATH — open a new "
+			     "terminal and run: synpkg flatpak enable-flathub");
+			return 1;
+		}
+	}
 
 	/* The .flatpakrepo carries Flathub's GPG key, which is why the URL is
 	 * the repo file and not the bare repository: adding the latter would

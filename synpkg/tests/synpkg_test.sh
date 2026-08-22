@@ -329,6 +329,40 @@ chmod +x "$STUB/flatpak"
 
 fp() { PATH="$STUB:$PATH" "$SYNPKG" "$@"; }
 
+# ── enabling Flathub on a machine that has never had flatpak ────────────────
+#
+# THE BUG THIS EXISTS FOR (synpkg 0.1.0-36). "Enable Flathub" in the GUI opens
+# a terminal, and on a machine without flatpak the terminal printed
+# `flatpak is not installed — synpkg install flatpak` and exited 1 — on
+# exactly the machines the button is there for. Every other flatpak subcommand
+# ASKS flatpak something and is right to refuse without it; this one asks for
+# the feature, so it installs flatpak and carries on.
+#
+# PATH holds one directory containing nothing but a pkexec that prints what it
+# was asked to run. flatpak is therefore genuinely absent, and the escalation
+# is observable without granting one.
+#
+# ⚠ through a FILE, not `| grep -q`: this suite runs under `set -o pipefail`,
+# where a grep that exits on its match can SIGPIPE the producer and return 141
+# — a failure reported for a passing assertion.
+NOFP=$(mktemp -d)
+# ⚠ #!/bin/bash, not `#!/usr/bin/env bash`: PATH here is the stub directory and
+# NOTHING ELSE, so env has no bash to find and the stub fails to start — which
+# looks exactly like the escalation never happening.
+cat > "$NOFP/pkexec" <<'STUBEOF'
+#!/bin/bash
+printf 'pkexec:'; printf ' %s' "$@"; printf '\n'
+STUBEOF
+chmod +x "$NOFP/pkexec"
+
+PATH="$NOFP" "$SYNPKG" flatpak enable-flathub > "$NOFP/out" 2>&1
+grep -F 'flatpak is not installed' "$NOFP/out" > /dev/null
+[ $? -ne 0 ] && ok "enable-flathub does not refuse the machine it is for" \
+             || bad "enable-flathub still refuses a machine without flatpak"
+grep -F 'enable-flathub' "$NOFP/out" > /dev/null
+check "enable-flathub escalates rather than reporting its precondition" $?
+rm -rf "$NOFP"
+
 n=$(fp --tsv flatpak search firefox | tsv_cols)
 [ "$n" = 7 ] && ok "flatpak search --tsv has 7 columns" \
              || bad "flatpak search --tsv has 7 columns (got $n)"
