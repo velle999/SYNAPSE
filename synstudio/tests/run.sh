@@ -3183,6 +3183,35 @@ check "and turns the outline off"  "0"           "$($BIN timeline get "$ttp" 1 0
 $BIN timeline title "$ttp" 1 "x" --at 6 --dur 1 --style nonesuch 2>&1 \
     | seen "an unknown style is refused" "no style called"
 
+# ---- restyling a title that already exists -----------------------------
+#
+# `--style` at creation was the only way in, so a title made by the window's
+# Title button, or one of the hundred a subtitle import makes, could never
+# reach a style at all. The verb takes a clip that is already there.
+#
+# The assertion is on a field the CURRENT style turned OFF: reading back a
+# heading's size proves the style arrived, but reading back the plate a lower
+# third had set proves the new one REPLACED it rather than landing on top.
+$BIN timeline style "$ttp" 1 0 heading > "$TMP/restyle.txt"
+seen "the restyle says which one" "heading" < "$TMP/restyle.txt"
+check "a restyle sets the size"       "0.12"   "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.size/{print $2}')"
+check "and clears the plate it had"   "0"      "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.box/{print $2}')"
+# The caption is not part of a style — it says how a title is drawn, not what
+# it says — so the words have to survive it.
+check "and never touches the caption" "1" \
+      "$($BIN timeline get "$ttp" 1 0 | grep -c 'Okonkwo')"
+# Undo covers it like any other edit, which is only true because it goes
+# through the same save.
+$BIN timeline undo "$ttp" >/dev/null
+check "and undo puts the style back"  "0.55"   "$($BIN timeline get "$ttp" 1 0 | awk -F'\t' '/^text.box/{print $2}')"
+
+$BIN timeline style "$ttp" 1 0 nonesuch 2>&1 \
+    | seen "restyling to a name that is not there is refused" "no style called"
+# A style is only text fields, so on a background it would report success and
+# change nothing anybody can see. Track 0 clip 0 is the solid laid down above.
+$BIN timeline style "$ttp" 0 0 heading 2>&1 \
+    | seen "and a background cannot be styled" "not a title"
+
 # ---- a caption with a LINE BREAK in it ---------------------------------
 #
 # The project file is tab-separated with one record per line, so a real

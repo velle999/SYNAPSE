@@ -1044,6 +1044,39 @@ FloatingWindow {
         return choice
     }
 
+    // ── Title styles ────────────────────────────────────────────────────────
+    //
+    // A style is a starting point, not a property: it SETS a handful of the
+    // Title rows below it and every one of them is still a control afterwards,
+    // exactly as a look does to a grade. So it is a list to pick FROM and not
+    // a value to read back — nothing on the clip records which one was used,
+    // and a picker claiming to show the style in force would be inventing it.
+    //
+    // The list comes from the engine, so a style added in timeline.c appears
+    // here and this file never learns what a lower third is.
+    property var titleStyles: []
+
+    function applyTitleStyle(name) {
+        if (root.selTrack < 0 || root.selClip < 0) { root.say("pick a title first"); return }
+        root.tlRun(["style", root.proj, String(root.selTrack),
+                    String(root.selClip), name])
+    }
+
+    Process {
+        id: styleListProc
+        command: [root.bin, "timeline", "styles"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length >= 2) out.push({ name: f[0], label: f[1] })
+                }
+                root.titleStyles = out
+            }
+        }
+    }
+
     // ── Effects ─────────────────────────────────────────────────────────────
     //
     // The catalogue and every parameter in it, in two calls at startup. An
@@ -2357,6 +2390,7 @@ FloatingWindow {
         keysProc.running = true
         clipKeysProc.running = true
         transListProc.running = true
+        styleListProc.running = true
         fxListProc.running = true
         fxParamProc.running = true
         lookListProc.running = true
@@ -3963,6 +3997,49 @@ FloatingWindow {
                                         MouseArea {
                                             anchors.fill: parent
                                             onClicked: cgrp.open = !cgrp.open
+                                        }
+                                    }
+
+                                    // The styles, above the controls they
+                                    // move, because that is the order the
+                                    // work happens in — pick how the title
+                                    // is drawn, then adjust it. Same shape
+                                    // as the darkroom's Looks list for the
+                                    // same reason: it is a stamp with every
+                                    // slider left live underneath.
+                                    Repeater {
+                                        model: (cgrp.open && cgrp.modelData === "Title")
+                                               ? root.titleStyles : []
+                                        Rectangle {
+                                            id: styleRow
+                                            required property var modelData
+                                            width: inspCol.width
+                                            height: 26
+                                            color: styleArea.containsMouse ? root.wash(0.16)
+                                                                           : "transparent"
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 20
+                                                anchors.right: parent.right
+                                                anchors.rightMargin: 12
+                                                // The name, then what it is
+                                                // for: "lower-third" alone
+                                                // means nothing to somebody
+                                                // who has not made one.
+                                                text: styleRow.modelData.name
+                                                      + "  —  " + styleRow.modelData.label
+                                                elide: Text.ElideRight
+                                                color: root.cText
+                                                font.pixelSize: 11
+                                            }
+                                            MouseArea {
+                                                id: styleArea
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onClicked: root.applyTitleStyle(
+                                                    styleRow.modelData.name)
+                                            }
                                         }
                                     }
 

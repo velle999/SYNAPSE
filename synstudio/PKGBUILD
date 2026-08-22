@@ -991,7 +991,38 @@ pkgver=0.1.0
 #   version of this mistake that survives review.
 #
 #   586 assertions, clean under ASan+UBSan+LSan.
-pkgrel=31
+#
+# 32 A TITLE STYLE YOU CAN ACTUALLY REACH.
+#
+#   Five title styles shipped at pkgrel 18 and the only door into them was
+#   `--style` on `timeline title` — at CREATION, from a shell. Every title
+#   that arrived any other way could never use one: the window's Title button
+#   passes no style, a subtitle import makes a hundred of them and then says
+#   "the style is something to change if the picture underneath wants it",
+#   and there was nothing to change it with. A feature with no way in.
+#
+#   `timeline style PROJ TRACK CLIP NAME` restyles a title that is already
+#   there, and the cutting room's Title group lists the styles above the
+#   controls they move — the same shape, and the same place, as the
+#   darkroom's Looks list.
+#
+#   ⚠ A VERB, NOT A ROW IN THE CLIP TABLE. Everything else in the inspector
+#   is a property, and a `style` property is the obvious way to do this. It
+#   is also wrong twice over. A style is a STARTING POINT — it sets seven
+#   fields and every one of them is still a control afterwards, exactly as a
+#   look does to a grade, so there is nothing to read back and a picker
+#   claiming to show the style in force would be inventing it. And
+#   `ss_clip_set` is shared with the project READER: a property whose set
+#   applied a preset would restyle the title, over numbers someone had since
+#   tuned by hand, every time the file was opened. That is the same bug
+#   `ss_develop_set` had when a `crop.*` key quietly enabled cropping.
+#
+#   Refused on a clip that is not a title, because a style is only ever text
+#   fields — on a background it would report success and change nothing
+#   anybody can see.
+#
+#   593 assertions, clean under ASan+UBSan+LSan.
+pkgrel=32
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

@@ -100,6 +100,7 @@ static void usage(void)
 "                        lists the styles\n"
 "  timeline solid PROJ TRACK [--at T] [--dur S] [--colour R,G,B]\n"
 "  timeline styles               plain, lower third, subtitle, heading, roll\n"
+"  timeline style PROJ TRACK CLIP NAME    restyle a title already there\n"
 "  timeline stabilise PROJ T C [--dur SMOOTH] [--size ZOOM%] [--value 1-10]\n"
 "       watch the shot and write the analysis beside the project; --off\n"
 "       turns it off and KEEPS the measurement\n"
@@ -1687,6 +1688,43 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (cl < 0) return die("cannot add to track %d", tr);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
+        return 0;
+    }
+
+    /* Restyling a title that already exists.
+     *
+     * `--style` at creation was the only way to reach the styles, which left
+     * every title that arrived some other way — the window's Title button, a
+     * subtitle import, a project written before the styles existed — unable to
+     * use them at all. The import even says "the style is something to change
+     * if the picture underneath wants it", and there was nothing to change it
+     * with.
+     *
+     * It is a verb rather than a row in the clip table on purpose. A style
+     * SETS the seven fields it names and every one of them is still a slider
+     * afterwards, so it is a starting point and not a mode — the same bargain
+     * a look strikes with a grade. And `ss_clip_set` has to have no effect
+     * beyond the field it is handed, because the project READER shares it: a
+     * `style` property would restyle a title, over the numbers someone had
+     * since tuned, every time the file was opened.
+     */
+    if (!strcmp(verb, "style")) {
+        ss_clip *c;
+
+        if (argc < 7)
+            return die("style wants PROJ TRACK CLIP NAME — "
+                       "`timeline styles` lists them");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+        /* A style is only ever text fields, so on anything else it would be a
+         * command that reports success and changes nothing on screen. */
+        if (c->kind != SS_CLIP_TITLE)
+            return die("clip %d on track %d is not a title", cl, tr);
+        if (ss_title_style_apply(c, argv[6]) != 0)
+            return die("no style called %s — `timeline styles` lists them",
+                       argv[6]);
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("style\t%s\n", argv[6]);
         return 0;
     }
 
