@@ -647,7 +647,27 @@ pkgver=0.1.0
 #   446 assertions, clean under ASan+UBSan+LSan. Two of them asserted that
 #   `speed` could NOT be keyed; they were right until this release and now
 #   name a property that still cannot.
-pkgrel=19
+#
+# 20 THE QML TEST FAILED THE BUILD ON A SLOWER MACHINE.
+#
+#   ⚠ A test whose PASS condition is "this finished starting in 25 seconds"
+#   is a test that fails on whatever is slower than the machine it was written
+#   on. It did: a ThinkPad running syn-update could not build synstudio at all
+#   because quickshell had not reached "Configuration Loaded" inside the
+#   timeout — while compiling this same package. No QML error was reported;
+#   there was nothing wrong with the window.
+#
+#   ⚠ AND THE ASSERTION THAT WAS SUPPOSED TO CATCH A BROKEN WINDOW COULD NEVER
+#   HAVE FIRED. It looked for `Error:`. quickshell prints `ERROR: Failed to
+#   load configuration` and then the reason — so the needle matched neither
+#   the marker nor the message, and a shell that failed to load would have
+#   passed both halves. Found by breaking a QML file ON PURPOSE and reading
+#   what the tool actually says, which is the only way to know.
+#
+#   So the FAILURE condition is an ERROR line, the pass condition is a loaded
+#   configuration, and a shell that never started says so and asserts nothing.
+#   The timeout is 60s because a build machine is a loaded machine.
+pkgrel=20
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

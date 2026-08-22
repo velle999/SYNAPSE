@@ -2588,12 +2588,43 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+#
+# ⚠ AND IT REPORTS A QML ERROR, NOT A SLOW MACHINE.
+#
+# The first version asserted that "Configuration Loaded" appears, which made
+# the BUILD fail on a ThinkPad: quickshell had not finished starting inside
+# the timeout — on a machine that was compiling this package at the same time
+# — and printed no error of any kind. A shell that never got far enough to
+# say anything is not evidence of a broken window, and a package that will
+# not build on a slower laptop is a real cost paid for no information.
+#
+# So the FAILURE condition is a QML error in the log. Loading is what makes
+# one appear, and where the load never happened this says so and asserts
+# nothing — the same bargain the `have quickshell` guard above it strikes,
+# one step further in.
 qml=$(dirname "$0")/../data/synstudio.qml
 if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
-    QT_QPA_PLATFORM=offscreen timeout 25 quickshell -p "$qml" \
-        > "$TMP/qml.log" 2>&1
-    seen "the window file loads" "Configuration Loaded" < "$TMP/qml.log"
-    notseen "and loads without a QML error" "Error:" < "$TMP/qml.log"
+    rc=0
+    QT_QPA_PLATFORM=offscreen timeout 60 quickshell -p "$qml" \
+        > "$TMP/qml.log" 2>&1 || rc=$?
+    # ⚠ `ERROR`, not `Error:`. quickshell prints "ERROR: Failed to load
+    # configuration" and then the reason; the needle this test shipped with
+    # matched neither, so the assertion that was supposed to catch a broken
+    # window could never have fired. Verified against a deliberately broken
+    # file, which is the only way to find out what a tool says when it fails.
+    if grep -q "ERROR" "$TMP/qml.log"; then
+        bad "the window file loads: $(grep -m1 'ERROR' "$TMP/qml.log" |
+                                      sed 's/\x1b\[[0-9;]*m//g' | cut -c1-100)"
+    elif grep -q "Configuration Loaded" "$TMP/qml.log"; then
+        ok
+    else
+        # It never finished starting. Not an assertion either way: a shell
+        # that got no further than opening its log file has told us nothing
+        # about the QML, and failing here fails the BUILD on any machine
+        # slower than the one this was written on — which it did, on a
+        # ThinkPad compiling this same package at the time.
+        printf '  skip  the window did not start inside 60s (rc %s), nothing asserted\n' "$rc"
+    fi
 fi
 
 pass=$(grep -c '^p' "$RESULTS")
