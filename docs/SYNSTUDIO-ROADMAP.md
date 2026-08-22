@@ -20,7 +20,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
 | cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
 | audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
-| effects   | not started — the grade is the only effect                    |
+| effects   | sixty transitions; no filter effects yet                      |
 | delivery  | works, thin — six formats, no range, no presets, no queue      |
 | media     | one project at a time — no pool, no proxies, no relink         |
 
@@ -106,16 +106,28 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
 Doing this one unblocked speed ramps, animated titles, animated effects and
 Fairlight-style automation: four features for one piece of work.
 
-## 4 · Transitions
+## 4 · Transitions — **shipped in 0.1.0-14**
 
-- [x] dissolve + four wipes, as an alpha ramp on the incoming clip
-- [ ] `xfade` — fifty more in one filter: slides, circles, radial, pixelize,
-      distance, squeeze, zoom, wind
-- [ ] dip to colour (the solid clip already exists as a source)
-- [ ] audio crossfade paired with the video transition — today the picture
-      dissolves and the sound cuts
-- [ ] a default transition applied to the cut under the playhead with one key
-- [ ] smooth cut — `minterpolate` across a jump cut
+- [x] **sixty kinds**, all of them `xfade`: dissolve, hard and soft wipes,
+      slides, covers, reveals, slices, wind, diagonals, corners, circles,
+      curtains, radial, pixelize, distance, blur, squeeze, zoom, and the fades
+      through black, white and grey. ONE table in `timeline.c`; `timeline
+      transitions` prints it and the window builds its picker from that
+- [x] the transition is a LAYER now, not an alpha ramp on the incoming clip.
+      The ramp bought every transition for free but it could only ever be a
+      dissolve — the wipes were a `geq` in the export and a plain uniform fade
+      in the monitor, which is not the same picture
+- [x] dip to colour — two dissolves THROUGH a colour, per clip
+- [x] audio crossfade paired with the video transition — `qsin` both ways, so
+      the power holds across the overlap instead of dipping 3dB in the middle
+      of it. Two clips overlapping used to ADD
+- [x] a default transition on the cut under the playhead in one command —
+      `timeline transition`, which makes the OVERLAP too: out of the outgoing
+      clip's handles when it has them, by rippling what follows when it does
+      not
+- [ ] smooth cut — `minterpolate` across a jump cut. Not an xfade and not a
+      blend: it needs frames that were never shot, which is a different piece
+      of work from everything above
 
 ## 5 · Titles
 
@@ -177,7 +189,9 @@ Fairlight-style automation: four features for one piece of work.
 4. ~~**Keyframes on everything**~~ — **done, 0.1.0-13.** Any clip property at
    t, five eases — and an animated pan that had been exporting MIRRORED for as
    long as transforms have existed.
-5. **xfade transitions + audio crossfades** — 1 day. The cheapest large win.
+5. ~~**xfade transitions + audio crossfades**~~ — **done, 0.1.0-14.** Sixty
+   kinds, dip to colour, the sound crossing with the picture, and one command
+   that makes the overlap as well as the transition.
 6. **The effect recipe format** — 3–4 days, plus two dozen effects in it.
 7. **LUT and look import** — 1–2 days.
 8. **Titles worth using**, then `.srt` — 2 days.

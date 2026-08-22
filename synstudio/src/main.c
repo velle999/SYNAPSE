@@ -101,6 +101,11 @@ static void usage(void)
 "       a key on ONE property — opacity, gain, a scale, a position, an\n"
 "       angle. `timeline keys` marks which ones take them; ease is\n"
 "       linear, in, out, inout or hold\n"
+"  timeline transition PROJ T [C] [--at S] [--kind K] [--dur D]\n"
+"       a transition on the cut under the playhead, overlap and all —\n"
+"       out of the outgoing clip's handles if it has them, by rippling\n"
+"       what follows if it does not\n"
+"  timeline transitions          every transition, with its name\n"
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
@@ -193,6 +198,10 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
+        /* The same slot: an export names a container and a transition names a
+         * kind, and no verb takes both. A separate field would be a second
+         * thing to forget to parse. */
+        else if (!strcmp(a, "--kind") && i + 1 < argc)   { o->format = argv[++i]; }
         else if (!strcmp(a, "--count"))   { const char *v = NEXT(); if (!v) return -1; o->count = atoi(v); }
         else if (!strcmp(a, "--print"))   { o->print = 1; }
         else if (!strcmp(a, "--set")) {
@@ -689,6 +698,15 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
     if (verb && !strcmp(verb, "keys")) return cmd_timeline_keys();
     /* Like `keys`: a table the window builds a control from, so the picker it
      * draws and the formats this engine has cannot drift apart. */
+    /* The transition catalogue, the same shape as `formats`: a table the
+     * window builds its picker from, so it cannot offer one the renderer does
+     * not have. */
+    if (verb && !strcmp(verb, "transitions")) {
+        int i;
+        for (i = 0; i < ss_trans_count(); i++)
+            printf("%d\t%s\t%s\n", i, ss_trans_name(i), ss_trans_label(i));
+        return 0;
+    }
     if (verb && !strcmp(verb, "formats")) {
         const ss_tl_format *f = ss_timeline_formats();
         int i;
@@ -1197,6 +1215,103 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         }
 
         return die("key: unknown subcommand %s — try add, list, set, remove", sub);
+    }
+
+    /* A transition on the cut under the playhead, in one command.
+     *
+     * The kind and the length are properties like any other and `set` writes
+     * them — but a transition also needs the two clips to OVERLAP, and that is
+     * an edit, not a property. Doing it by hand is three commands and an
+     * arithmetic mistake waiting to happen, which is why nobody would.
+     *
+     * Handles first: if the outgoing clip has unused source left, its tail is
+     * extended and nothing else on the timeline moves. That is what an editor
+     * expects, and it is only possible when the shot was trimmed. Otherwise
+     * the incoming clip and everything after it RIPPLE back, which shortens
+     * the programme by the length of the transition — the price of a
+     * transition you have no handles for, and it says which it did. */
+    if (!strcmp(verb, "transition")) {
+        ss_track *k;
+        ss_clip *c, *a = NULL;
+        int ai = -1, i, kind = SS_TRANS_DISSOLVE;
+        double dur = 1.0, need, over;
+        const char *how = "overlap";
+        const char *cliparg = (argc > 5 && argv[5][0] != '-') ? argv[5] : NULL;
+
+        if (parse_opts(argc, argv, cliparg ? 6 : 5, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (o.format && (kind = ss_trans_value(o.format)) < 0)
+            return die("no such transition: %s  (try `synstudio timeline "
+                       "transitions`)", o.format);
+        if (o.has_dur) dur = o.dur;
+        if (dur <= 0) return die("a transition needs a length");
+
+        /* With no clip named, the cut is the one under the playhead — the
+         * clip whose start is nearest to it. Asking tl_pick for a clip it was
+         * not given would print its own complaint before this one got a
+         * chance to do the right thing. */
+        if (cliparg) {
+            if (tl_pick(t, argc > 4 ? argv[4] : NULL, cliparg, &tr, &cl) != 0)
+                return 1;
+        } else {
+            if (tl_pick(t, argc > 4 ? argv[4] : NULL, NULL, &tr, NULL) != 0)
+                return 1;
+            cl = -1;
+        }
+        k = &t->track[tr];
+        if (cl < 0) {
+            double best = -1;
+            for (i = 0; i < k->nclips; i++) {
+                double d = k->clip[i].tl_in - o.at;
+                if (d < 0) d = -d;
+                if (best < 0 || d < best) { best = d; cl = i; }
+            }
+            if (cl < 0) return die("no clips on track %d", tr);
+        }
+        c = &k->clip[cl];
+
+        /* The clip this one comes out of: the one ending nearest to where it
+         * starts, without starting after it. A gap is allowed and is closed
+         * along with everything else. */
+        for (i = 0; i < k->nclips; i++) {
+            double e = k->clip[i].tl_in + ss_clip_length(&k->clip[i]);
+            if (i == cl || ss_clip_length(&k->clip[i]) <= 0) continue;
+            if (k->clip[i].tl_in > c->tl_in - 1e-9) continue;
+            if (ai < 0 || e > k->clip[ai].tl_in + ss_clip_length(&k->clip[ai]))
+                ai = i;
+        }
+        if (ai >= 0) a = &k->clip[ai];
+
+        over = a ? a->tl_in + ss_clip_length(a) - c->tl_in : 0.0;
+        if (dur > ss_clip_length(c)) dur = ss_clip_length(c);
+        need = dur - over;
+
+        if (a && need > 1e-6) {
+            /* A handle is source the clip is not using. Asked of the file
+             * rather than assumed: a clip that reaches the end of its source
+             * has none, and pulling its out point past that is a freeze frame
+             * nobody asked for. */
+            double srclen = a->still ? 0.0 : ss_media_duration(a->path);
+            double sp = a->speed > 0 ? a->speed : 1.0;
+            double handle = a->still ? need : (srclen - a->src_out) / sp;
+            if (handle >= need - 1e-6) {
+                a->src_out += need * sp;
+                how = "handles";
+            } else {
+                for (i = 0; i < k->nclips; i++)
+                    if (k->clip[i].tl_in > c->tl_in - 1e-9)
+                        k->clip[i].tl_in -= need;
+                how = "ripple";
+            }
+        } else if (!a) {
+            how = "no partner";
+        }
+
+        c->trans = kind;
+        c->trans_dur = dur;
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("%d\t%s\t%.6f\t%s\n", cl, ss_trans_name(kind), dur, how);
+        return 0;
     }
 
     /* Parameter keys: everything about a clip that is NOT colour.

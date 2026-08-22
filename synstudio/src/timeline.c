@@ -124,9 +124,16 @@ static int xform_is_identity(const ss_xform *x)
            x->pos_y == 0.0f && x->rotate == 0.0f;
 }
 
-/* How much of a clip is showing at time `tt` seconds into it: the fades and
- * the incoming transition, multiplied together with the clip opacity. The
- * export expresses these as filters; the frame compositor needs the number. */
+/* How much of a clip is showing at time `tt` seconds into it: the fades
+ * multiplied with the clip opacity. The export expresses these as filters; the
+ * frame compositor needs the number.
+ *
+ * The TRANSITION is not in here any more. It used to be a term — a clip whose
+ * alpha rose while the one under it still played IS a cross dissolve — and
+ * that bought every transition for free, but it can only ever be a dissolve.
+ * A wipe was a geq on the export side and this same uniform ramp on the
+ * monitor's, so the two showed different pictures. Transitions are xfade now,
+ * on both sides, and they are a layer rather than an alpha. */
 static double alpha_at(const ss_clip *c, double tt, double len)
 {
     double a = ss_clip_prop_at(c, "opacity", tt);
@@ -134,9 +141,132 @@ static double alpha_at(const ss_clip *c, double tt, double len)
     if (c->fade_in > 0 && tt < c->fade_in)  a *= tt / c->fade_in;
     if (c->fade_out > 0 && tt > len - c->fade_out)
         a *= (len - tt) / c->fade_out;
-    if (c->trans != SS_TRANS_NONE && c->trans_dur > 0 && tt < c->trans_dur)
-        a *= tt / c->trans_dur;
     return a < 0 ? 0 : (a > 1 ? 1 : a);
+}
+
+/* ------------------------------------------------------- the transitions -- */
+
+/* One filter, sixty looks. `xfade` takes two streams and a name and does the
+ * whole catalogue — wipes, slides, circles, slices, blurs — so a transition
+ * here is a row in a table rather than a shader.
+ *
+ * ⚠ DIRECTION. Ours names where the incoming picture comes FROM; xfade's
+ * names which way the boundary TRAVELS. They are exact opposites, and
+ * uniformly so: measured at half progress across every directional family
+ * (wipe, slide, cover, reveal, slice, wind, diagonal, corner), xfade's
+ * `*left` always puts the incoming picture on the RIGHT. So every mapping in
+ * here is MIRRORED — left↔right, up↔down, tl↔br, tr↔bl — and a row that is
+ * not mirrored is a bug you will only see by rendering it.
+ *
+ * The first six rows keep the numbers they had before xfade existed, because
+ * `trans` is an enum a document can carry as an integer. The four original
+ * wipes were a soft-edged geq and map to xfade's `smooth*`, which is the
+ * soft-edged one — a project made before this still looks like itself.
+ *
+ * `dip` is the one that is not an xfade at all: a cut at the halfway point
+ * under a colour whose alpha rises and falls, which is what a dip through
+ * black has always been. */
+#define TRANS_LIST(X) \
+    X("dissolve",    "fade",        "Dissolve") \
+    X("wipeleft",    "smoothright", "Wipe from the left") \
+    X("wiperight",   "smoothleft",  "Wipe from the right") \
+    X("wipeup",      "smoothdown",  "Wipe from the top") \
+    X("wipedown",    "smoothup",    "Wipe from the bottom") \
+    X("dip",         NULL,          "Dip to a colour") \
+    X("hardleft",    "wiperight",   "Hard wipe from the left") \
+    X("hardright",   "wipeleft",    "Hard wipe from the right") \
+    X("hardup",      "wipedown",    "Hard wipe from the top") \
+    X("harddown",    "wipeup",      "Hard wipe from the bottom") \
+    X("slideleft",   "slideright",  "Slide in from the left") \
+    X("slideright",  "slideleft",   "Slide in from the right") \
+    X("slideup",     "slidedown",   "Slide in from the top") \
+    X("slidedown",   "slideup",     "Slide in from the bottom") \
+    X("coverleft",   "coverright",  "Cover from the left") \
+    X("coverright",  "coverleft",   "Cover from the right") \
+    X("coverup",     "coverdown",   "Cover from the top") \
+    X("coverdown",   "coverup",     "Cover from the bottom") \
+    X("revealleft",  "revealright", "Reveal from the left") \
+    X("revealright", "revealleft",  "Reveal from the right") \
+    X("revealup",    "revealdown",  "Reveal from the top") \
+    X("revealdown",  "revealup",    "Reveal from the bottom") \
+    X("sliceleft",   "hrslice",     "Slices in from the left") \
+    X("sliceright",  "hlslice",     "Slices in from the right") \
+    X("sliceup",     "vdslice",     "Slices in from the top") \
+    X("slicedown",   "vuslice",     "Slices in from the bottom") \
+    X("windleft",    "hrwind",      "Blown in from the left") \
+    X("windright",   "hlwind",      "Blown in from the right") \
+    X("windup",      "vdwind",      "Blown in from the top") \
+    X("winddown",    "vuwind",      "Blown in from the bottom") \
+    X("diagtl",      "diagbr",      "Diagonal from the top left") \
+    X("diagtr",      "diagbl",      "Diagonal from the top right") \
+    X("diagbl",      "diagtr",      "Diagonal from the bottom left") \
+    X("diagbr",      "diagtl",      "Diagonal from the bottom right") \
+    X("cornertl",    "wipebr",      "Corner wipe from the top left") \
+    X("cornertr",    "wipebl",      "Corner wipe from the top right") \
+    X("cornerbl",    "wipetr",      "Corner wipe from the bottom left") \
+    X("cornerbr",    "wipetl",      "Corner wipe from the bottom right") \
+    X("circleopen",  "circleopen",  "Circle opens") \
+    X("circleclose", "circleclose", "Circle closes") \
+    X("circlecrop",  "circlecrop",  "Circle crop") \
+    X("rectcrop",    "rectcrop",    "Rectangle crop") \
+    X("radial",      "radial",      "Radial sweep") \
+    X("vertopen",    "vertopen",    "Vertical curtain opens") \
+    X("vertclose",   "vertclose",   "Vertical curtain closes") \
+    X("horzopen",    "horzopen",    "Horizontal curtain opens") \
+    X("horzclose",   "horzclose",   "Horizontal curtain closes") \
+    X("noise",       "dissolve",    "Noise dissolve") \
+    X("pixelize",    "pixelize",    "Pixelate through") \
+    X("distance",    "distance",    "Distance") \
+    X("blur",        "hblur",       "Blur through") \
+    X("fadeblack",   "fadeblack",   "Fade through black") \
+    X("fadewhite",   "fadewhite",   "Fade through white") \
+    X("fadegrays",   "fadegrays",   "Fade through grey") \
+    X("fadefast",    "fadefast",    "Fade, fast out") \
+    X("fadeslow",    "fadeslow",    "Fade, slow out") \
+    X("squeezeh",    "squeezeh",    "Squeeze horizontally") \
+    X("squeezev",    "squeezev",    "Squeeze vertically") \
+    X("zoomin",      "zoomin",      "Zoom in")
+
+#define TRANS_ROW(n, x, l) { n, x, l },
+#define TRANS_BAR(n, x, l) "|" n
+#define TRANS_ONE(n, x, l) + 1
+
+/* Built from the ONE list, so the string a picker is drawn from and the table
+ * the renderer reads cannot say different things. */
+#define TRANS_CHOICES "none" TRANS_LIST(TRANS_BAR)
+#define TRANS_COUNT   (1 TRANS_LIST(TRANS_ONE))
+
+static const struct {
+    const char *name, *xfade, *label;
+} transes[] = {
+    { "none", NULL, "None" },
+    TRANS_LIST(TRANS_ROW)
+};
+
+int ss_trans_count(void) { return TRANS_COUNT; }
+
+const char *ss_trans_name(int v)
+{
+    return (v > 0 && v < TRANS_COUNT) ? transes[v].name : "none";
+}
+
+const char *ss_trans_label(int v)
+{
+    return (v >= 0 && v < TRANS_COUNT) ? transes[v].label : "None";
+}
+
+const char *ss_trans_xfade(int v)
+{
+    return (v > 0 && v < TRANS_COUNT) ? transes[v].xfade : NULL;
+}
+
+int ss_trans_value(const char *s)
+{
+    int i;
+    if (!s) return -1;
+    for (i = 0; i < TRANS_COUNT; i++)
+        if (!strcmp(s, transes[i].name)) return i;
+    return -1;
 }
 
 /* --------------------------------------------------- the clip properties -- */
@@ -180,7 +310,6 @@ typedef struct {
 #define C(k, t, m, lo, hi, grp, lbl, ch, an) \
     { k, t, offsetof(ss_clip, m), lo, hi, grp, lbl, ch, an }
 
-#define TRANS_CHOICES "none|dissolve|wipeleft|wiperight|wipeup|wipedown"
 #define POS_CHOICES   "topleft|topcentre|topright|left|centre|right|" \
                       "bottomleft|bottomcentre|bottomright"
 
@@ -191,8 +320,11 @@ static const cfield cfields[] = {
     C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, "Levels", "Fade in (s)", NULL, 0),
     C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, "Levels", "Fade out (s)", NULL, 0),
 
-    C("trans",        CO_ENUM,  trans,        0.0f,    5.0f, "Transition", "Kind", TRANS_CHOICES, 0),
+    C("trans",        CO_ENUM,  trans,        0.0f, TRANS_COUNT - 1.0f, "Transition", "Kind", TRANS_CHOICES, 0),
     C("trans.dur",    CO_DOUBLE,trans_dur,    0.0f,   10.0f, "Transition", "Length (s)", NULL, 0),
+    C("trans.r",      CO_FLOAT, trans_r,      0.0f,    1.0f, "Transition", "Dip red", NULL, 0),
+    C("trans.g",      CO_FLOAT, trans_g,      0.0f,    1.0f, "Transition", "Dip green", NULL, 0),
+    C("trans.b",      CO_FLOAT, trans_b,      0.0f,    1.0f, "Transition", "Dip blue", NULL, 0),
 
     C("xform.scale",  CO_FLOAT, xf.scale,     0.05f,  10.0f, "Motion", "Scale", NULL, 1),
     C("xform.x",      CO_FLOAT, xf.pos_x,    -1.0f,    1.0f, "Motion", "Position X", NULL, 1),
@@ -936,30 +1068,6 @@ void ss_timeline_ripple(ss_timeline *t, int track, double from, double len)
 
 /* -------------------------------------------------------- serialisation -- */
 
-static const char *trans_name(int v)
-{
-    switch (v) {
-    case SS_TRANS_DISSOLVE: return "dissolve";
-    case SS_TRANS_WIPE_L:   return "wipeleft";
-    case SS_TRANS_WIPE_R:   return "wiperight";
-    case SS_TRANS_WIPE_U:   return "wipeup";
-    case SS_TRANS_WIPE_D:   return "wipedown";
-    default:                return "none";
-    }
-}
-
-int ss_trans_value(const char *s)
-{
-    if (!s) return -1;
-    if (!strcmp(s, "none"))      return SS_TRANS_NONE;
-    if (!strcmp(s, "dissolve"))  return SS_TRANS_DISSOLVE;
-    if (!strcmp(s, "wipeleft"))  return SS_TRANS_WIPE_L;
-    if (!strcmp(s, "wiperight")) return SS_TRANS_WIPE_R;
-    if (!strcmp(s, "wipeup"))    return SS_TRANS_WIPE_U;
-    if (!strcmp(s, "wipedown"))  return SS_TRANS_WIPE_D;
-    return -1;
-}
-
 static const char *kind_name(int v)
 {
     return v == SS_CLIP_TITLE ? "title" : v == SS_CLIP_SOLID ? "solid" : "media";
@@ -1035,8 +1143,18 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                         c->xf.scale, c->xf.pos_x, c->xf.pos_y, c->xf.rotate,
                         c->xf.animate,
                         c->xf.scale2, c->xf.pos_x2, c->xf.pos_y2, c->xf.rotate2);
-            if (c->trans != SS_TRANS_NONE)
-                fprintf(fp, "trans\t%s\t%.6f\n", trans_name(c->trans), c->trans_dur);
+            /* Written for a LENGTH with no kind as well, because setting the
+             * two in either order has to work: a length saved under `none`
+             * used to vanish with the line it would have ridden on, so
+             * choosing the length first and the kind second silently gave a
+             * transition of zero. */
+            if (c->trans != SS_TRANS_NONE || c->trans_dur > 0)
+                /* The dip colour rides on the same line rather than a line of
+                 * its own, and a reader that finds only two fields is reading
+                 * a file written before there was a colour to dip through. */
+                fprintf(fp, "trans\t%s\t%.6f\t%.4f\t%.4f\t%.4f\n",
+                        ss_trans_name(c->trans), c->trans_dur,
+                        c->trans_r, c->trans_g, c->trans_b);
             if (c->kind == SS_CLIP_SOLID || c->col_a > 0.0f)
                 fprintf(fp, "solid\t%.4f\t%.4f\t%.4f\t%.4f\n",
                         c->col_r, c->col_g, c->col_b, c->col_a);
@@ -1185,12 +1303,16 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 cc->xf.rotate2 = (float)atof(f[8]);
             }
         } else if (!strncmp(line, "trans\t", 6) && cc) {
-            char *f[2];
-            int v;
-            if (tabsplit(line + 6, f, 2) == 2 &&
-                (v = ss_trans_value(f[0])) >= 0) {
+            char *f[5];
+            int v, n = tabsplit(line + 6, f, 5);
+            if (n >= 2 && (v = ss_trans_value(f[0])) >= 0) {
                 cc->trans = v;
                 cc->trans_dur = atof(f[1]);
+                if (n >= 5) {
+                    cc->trans_r = (float)atof(f[2]);
+                    cc->trans_g = (float)atof(f[3]);
+                    cc->trans_b = (float)atof(f[4]);
+                }
             }
         } else if (!strncmp(line, "solid\t", 6) && cc) {
             char *f[4];
@@ -1478,11 +1600,12 @@ void ss_timeline_unbake(const ss_timeline *t, const char *dir)
 /* Does this clip's chain need an alpha channel? Asked rather than assumed
  * because an RGBA pipeline is a third more memory per frame all the way down
  * the graph, and most cuts are opaque. A fade to BLACK does not need one —
- * only a transform that can leave the frame, a partial opacity, and a
- * transition, which is a fade to whatever is underneath. */
+ * only a transform that can leave the frame, a partial opacity, and a title.
+ * A transition does not either, any more: it composites onto a transparent
+ * layer of its own. */
 static int needs_alpha(const ss_clip *c)
 {
-    return c->opacity < 1.0f || c->trans != SS_TRANS_NONE ||
+    return c->opacity < 1.0f ||
            c->xf.rotate != 0.0f || c->xf.rotate2 != 0.0f ||
            c->kind == SS_CLIP_TITLE;
 }
@@ -1569,16 +1692,23 @@ static void chain_alpha(strbuf *b, const ss_clip *c, int id)
  * animated pan therefore came out of the export mirrored, and no test caught
  * it because the one that measures the picture only measured the zoom. */
 static void chain_pos(strbuf *b, const ss_clip *c, const char *key,
-                      double tl_in, double len, float a, float bb)
+                      const char *tv, double len, float a, float bb)
 {
-    char tv[64];
-    snprintf(tv, sizeof tv, "(t)-%.6f", tl_in);
     if (prop_expr(b, c, key, tv)) return;
     if (c->xf.animate && len > 0)
-        sb_add(b, "%.5f+(%.5f)*clip(((t)-%.6f)/%.6f,0,1)",
-               (double)a, (double)(bb - a), tl_in, len);
+        sb_add(b, "%.5f+(%.5f)*clip((%s)/%.6f,0,1)",
+               (double)a, (double)(bb - a), tv, len);
     else
         sb_add(b, "%.5f", (double)a);
+}
+
+/* The seconds-into-the-clip expression for a stream whose own clock starts
+ * `shift` seconds into it. The main overlay reads timeline time, so its shift
+ * is minus the clip's position; a transition segment starts partway through
+ * the outgoing clip, so its shift is positive. */
+static void clip_tv(char *out, size_t n, double shift)
+{
+    snprintf(out, n, "(t)%+.6f", shift);
 }
 
 /* The nine title positions as drawtext x/y expressions. `w`/`h` are the frame
@@ -1751,33 +1881,189 @@ static void chain_title(strbuf *fc, const ss_timeline *t, const ss_clip *c,
            (int)(c->text_size * t->h * 0.25f));
 }
 
-/* The transition, as an alpha ramp over the head of the clip. `dur` is its
- * length; `T` is drawtext-style stream time, which at this point in the chain
- * is still zero-based within the clip because the setpts that offsets it onto
- * the timeline comes afterwards. Order matters and is not incidental. */
-static void chain_transition(strbuf *fc, const ss_clip *c)
+/* ---- one side of a transition, as a project-sized layer ----
+ *
+ * xfade takes two streams and they must be the same size. A clip chain is not
+ * that size: it is FITTED — 1280 wide for a scale of 0.67 — and the overlay
+ * that composites it is what applies the position. So a transition has to
+ * build the frame the overlay would have built, on transparent, and hand that
+ * to xfade. Transparent and not black, because a transition on an upper track
+ * has to let the tracks under it through.
+ *
+ * `shift` is how far into the clip this side begins: zero for the incoming
+ * clip, and the distance from the outgoing clip's start to the cut for the
+ * other. Everything timed in clip seconds — a position, a keyed move — is
+ * shifted with it, so a clip transitioning in the middle of a pan keeps
+ * panning while it does. */
+static void chain_trans_side(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                             int src, double shift, double dur, int id,
+                             const char *side)
 {
-    const double f = 0.12;      /* soft edge, as a fraction of the frame */
-    const char *num = NULL;
-    if (c->trans == SS_TRANS_NONE || c->trans_dur <= 0) return;
+    double len = ss_clip_length(c);
+    float s0, px0, py0, r0, s1, px1, py1, r1;
+    char tv[64];
 
-    if (c->trans == SS_TRANS_DISSOLVE) {
-        sb_add(fc, ",format=rgba,fade=t=in:st=0:d=%.4f:alpha=1", c->trans_dur);
+    xform_at(c, 0.0, len, &s0, &px0, &py0, &r0);
+    xform_at(c, len, len, &s1, &px1, &py1, &r1);
+    clip_tv(tv, sizeof tv, shift);
+
+    sb_add(fc, ";color=c=black@0:s=%dx%d:r=%.6g:d=%.6f,format=rgba[%sb%d]",
+           t->w, t->h, t->fps, dur, side, id);
+    sb_add(fc, ";[s%d]trim=start=%.6f:end=%.6f,setpts=PTS-STARTPTS[%sc%d]",
+           src, shift, shift + dur, side, id);
+    sb_add(fc, ";[%sb%d][%sc%d]overlay=eof_action=pass:x='(W-w)/2+(",
+           side, id, side, id);
+    chain_pos(fc, c, "xform.x", tv, len, px0, px1);
+    sb_add(fc, ")*W':y='(H-h)/2+(");
+    chain_pos(fc, c, "xform.y", tv, len, py0, py1);
+    sb_add(fc, ")*H'[%s%d]", side, id);
+}
+
+/* An empty side. A transition at the head of a track has nothing to come
+ * from, which is not an error — it is a shot arriving over the tracks below. */
+static void chain_trans_empty(strbuf *fc, const ss_timeline *t, double dur,
+                              int id, const char *side)
+{
+    sb_add(fc, ";color=c=black@0:s=%dx%d:r=%.6g:d=%.6f,format=rgba[%s%d]",
+           t->w, t->h, t->fps, dur, side, id);
+}
+
+/* The two sides joined. Every kind but one is xfade doing the whole job; `dip`
+ * is a cut at the halfway point under a colour that rises and falls, which is
+ * what dipping through black has always been and what no xfade transition
+ * does for an arbitrary colour. */
+static void chain_trans_join(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                             double dur, int id)
+{
+    const char *xf = ss_trans_xfade(c->trans);
+    char col[32];
+
+    if (c->trans == SS_TRANS_DIP || !xf) {
+        /* Two dissolves through a colour, rather than a colour laid over a cut
+         * with a fade on it. `fade` steps by FRAME INDEX while the monitor
+         * would work its alpha out from the time — close, and measurably not
+         * the same, which is the kind of drift between the two builders this
+         * program does not allow. Two xfades are the same filter on both
+         * sides at the same progress.
+         *
+         * The second half's incoming picture is TRIMMED before it goes in:
+         * xfade plays its second input from that input's own beginning, so
+         * without the trim the shot would come out of the dip half a
+         * transition behind where it should be. */
+        hexcol(c->trans_r, c->trans_g, c->trans_b, 1.0f, col, sizeof col);
+        sb_add(fc, ";color=c=%s:s=%dx%d:r=%.6g:d=%.6f,format=rgba[xc%d]",
+               col, t->w, t->h, t->fps, dur, id);
+        sb_add(fc, ";[xa%d][xc%d]xfade=transition=fade:duration=%.6f:offset=0"
+                   "[xh%d]", id, id, dur / 2.0, id);
+        sb_add(fc, ";[xb%d]trim=start=%.6f,setpts=PTS-STARTPTS[xbt%d]",
+               id, dur / 2.0, id);
+        sb_add(fc, ";[xh%d][xbt%d]xfade=transition=fade:duration=%.6f"
+                   ":offset=%.6f[xj%d]", id, id, dur / 2.0, dur / 2.0, id);
         return;
     }
-    switch (c->trans) {
-    case SS_TRANS_WIPE_L: num = "(X/W)";       break;
-    case SS_TRANS_WIPE_R: num = "(1-X/W)";     break;
-    case SS_TRANS_WIPE_U: num = "(Y/H)";       break;
-    case SS_TRANS_WIPE_D: num = "(1-Y/H)";     break;
-    default: return;
+    sb_add(fc, ";[xa%d][xb%d]xfade=transition=%s:duration=%.6f:offset=0[xj%d]",
+           id, id, xf, dur, id);
+}
+
+/* The stage of the background chain an overlay reads. Its own name, because
+ * the chain now grows by more than one layer per clip — a transition is a
+ * layer too — and `bg` where `bg<n>` was meant leaves every intermediate
+ * stage unconnected and ffmpeg refuses the whole graph. */
+static const char *prevlab(char *buf, size_t n, int layer)
+{
+    snprintf(buf, n, "bg%d", layer);
+    return buf;
+}
+
+/* ------------------------------------------------- where a transition is -- */
+
+/* A transition belongs to the INCOMING clip and needs a clip to come FROM.
+ *
+ * The partner is the clip on the same track that is still playing where this
+ * one starts — the latest such, if several overlap. There may be none, and
+ * that is not an error: a transition at the head of a track plays against
+ * nothing, which for a slide is the shot sliding in over whatever the lower
+ * tracks are showing.
+ *
+ * The length is clamped to what is actually there: never longer than the
+ * incoming clip, and never longer than the outgoing one has left. A transition
+ * that outlives its partner would be blending against a stream that has ended,
+ * which ffmpeg answers by holding the last frame — a freeze in the middle of a
+ * dissolve, and nothing in the graph says so.
+ *
+ * Both graph builders call this. If a scrub and an export ever disagree about
+ * WHEN a transition happens, it is because one of them did not. */
+static int trans_span(const ss_timeline *t, int tr, int j,
+                      double *t0, double *dur, int *partner)
+{
+    const ss_track *k = &t->track[tr];
+    const ss_clip *c = &k->clip[j];
+    double len = ss_clip_length(c), d = c->trans_dur;
+    int i, best = -1;
+
+    if (c->trans == SS_TRANS_NONE || d <= 0 || len <= 0) return 0;
+    if (d > len) d = len;
+
+    for (i = 0; i < k->nclips; i++) {
+        const ss_clip *o = &k->clip[i];
+        double ol = ss_clip_length(o);
+        if (i == j || ol <= 0) continue;
+        if (o->tl_in <= c->tl_in + 1e-9 && o->tl_in + ol > c->tl_in + 1e-9) {
+            if (best < 0 || o->tl_in > k->clip[best].tl_in) best = i;
+        }
     }
-    /* geq wants a planar RGB layout with alpha before it will hand out r/g/b/a
-     * at all; naming the format is cheaper than discovering that the graph
-     * negotiated its way to a plane the expression cannot see. */
-    sb_add(fc, ",format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)'"
-               ":a='255*clip((min(T/%.4f,1)*%.4f-%s)/%.4f,0,1)'",
-           c->trans_dur, 1.0 + f, num, f);
+    if (best >= 0) {
+        const ss_clip *a = &k->clip[best];
+        double avail = a->tl_in + ss_clip_length(a) - c->tl_in;
+        if (d > avail) d = avail;
+    }
+    if (d <= 0) return 0;
+    *t0 = c->tl_in;
+    *dur = d;
+    *partner = best;
+    return 1;
+}
+
+/* The other end of the same relationship: clip `j` is what some clip on its
+ * track transitions FROM, starting `st` seconds into it and lasting `dur`.
+ *
+ * The export needs the first fact before it builds j's chain, because a
+ * partner's picture is wanted TWICE — once where it plays and once inside the
+ * transition — and a stream can only be read once without a split. It needs
+ * the second for the SOUND: a transition that dissolves the picture and cuts
+ * the sound is half a transition, and two clips overlapping with no fades
+ * between them do not cross, they ADD. */
+static int trans_out(const ss_timeline *t, int tr, int j,
+                     double *st, double *dur)
+{
+    double t0, d;
+    int i, p;
+    for (i = 0; i < t->track[tr].nclips; i++)
+        if (trans_span(t, tr, i, &t0, &d, &p) && p == j) {
+            *st = t0 - t->track[tr].clip[j].tl_in;
+            *dur = d;
+            return 1;
+        }
+    return 0;
+}
+
+static int is_trans_partner(const ss_timeline *t, int tr, int j)
+{
+    double st, d;
+    return trans_out(t, tr, j, &st, &d);
+}
+
+/* The clip whose transition covers `time`, if this clip is the one coming in.
+ * The monitor's question, and the answer has to be the export's. */
+static int trans_at(const ss_timeline *t, int tr, int j, double time,
+                    double *p, double *dur, int *partner)
+{
+    double t0, d;
+    if (!trans_span(t, tr, j, &t0, &d, partner)) return 0;
+    if (time < t0 || time >= t0 + d) return 0;
+    *p = d > 0 ? (time - t0) / d : 1.0;
+    *dur = d;
+    return 1;
 }
 
 /* ---------------------------------------------------------- the inputs -- */
@@ -2094,11 +2380,35 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     strbuf fc = {0};
     char **av = NULL;
     int ac = 0, cap = 64;
-    int i, j, input = 0, nvid = 0, naud = 0;
+    int i, j, input = 0, nvid = 0, naud = 0, nlayer = 0, nclip = 0;
+    int voffs[SS_MAX_TRACKS], *vlab = NULL;
     double dur = ss_timeline_duration(t);
 
     av = malloc(sizeof(char *) * cap);
     if (!av) return -1;
+
+    /* Which label each clip's picture will carry, worked out in a pass of its
+     * own. A transition names its PARTNER's stream, and the partner is not
+     * necessarily earlier in the array than the clip transitioning from it —
+     * `move` changes when a clip plays without changing where it is stored.
+     * Filter graph labels resolve globally rather than in order, so naming one
+     * before it is defined is fine; not knowing its number is not. */
+    for (i = 0; i < t->ntracks; i++) {
+        voffs[i] = nclip;
+        nclip += t->track[i].nclips;
+    }
+    vlab = malloc(sizeof(int) * (size_t)(nclip > 0 ? nclip : 1));
+    if (!vlab) { free(av); return -1; }
+    for (i = 0; i < nclip; i++) vlab[i] = -1;
+    for (i = 0; i < t->ntracks; i++) {
+        if (!ss_track_shows(t, i) && !ss_track_sounds(t, i)) continue;
+        for (j = 0; j < t->track[i].nclips; j++) {
+            if (ss_clip_length(&t->track[i].clip[j]) <= 0) continue;
+            if (t->track[i].type == SS_TRACK_VIDEO && ss_track_shows(t, i))
+                vlab[voffs[i] + j] = nvid++;
+        }
+    }
+    nvid = 0;
 
     PUSH(xdup("ffmpeg"));
     PUSH(xdup("-v")); PUSH(xdup("error"));
@@ -2175,6 +2485,9 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
             if (tr->type == SS_TRACK_VIDEO && ss_track_shows(t, i)) {
                 float s0, px0, py0, r0, s1, px1, py1, r1;
                 int fw, fh;
+                double t0 = 0, tdur = 0;
+                int tpart = -1, splitme;
+                char tvm[64], prev[32];
                 int moves  = xform_moves(c);
                 int rotkey = ss_clip_prop_nkeys(c, "xform.rotate") > 0;
                 int opkey  = ss_clip_prop_nkeys(c, "opacity") > 0;
@@ -2188,6 +2501,13 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                  * both moving and turning exported without the turn while the
                  * monitor showed it. */
                 rotmoves = rotkey || (c->xf.animate && r0 != r1);
+
+                /* This clip's own number, decided in the pass above so that a
+                 * transition can name a stream it has not reached yet. */
+                nvid = vlab[voffs[i] + j];
+                if (!trans_span(t, i, j, &t0, &tdur, &tpart)) tdur = 0;
+                splitme = tdur > 0 || is_trans_partner(t, i, j);
+                clip_tv(tvm, sizeof tvm, -c->tl_in);
 
                 sb_add(&fc, ";[%d:v]", input);
                 if (needs_alpha(c) || opkey) sb_add(&fc, "format=rgba,");
@@ -2295,14 +2615,23 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 if (c->fade_out > 0.0)
                     sb_add(&fc, ",fade=t=out:st=%.4f:d=%.4f",
                            len - c->fade_out, c->fade_out);
-                chain_transition(&fc, c);
                 if (opkey)
                     chain_alpha(&fc, c, nvid);
                 else if (c->opacity < 1.0f)
                     sb_add(&fc, ",format=rgba,colorchannelmixer=aa=%.4f",
                            c->opacity);
 
-                sb_add(&fc, ",setpts=PTS-STARTPTS+%.6f/TB[v%d]", c->tl_in, nvid);
+                /* A picture wanted TWICE needs a split: once where the clip
+                 * plays, once inside a transition. A stream can only be read
+                 * once, and naming it twice fails the whole graph. */
+                if (splitme) {
+                    sb_add(&fc, ",split[m%d][s%d]", nvid, nvid);
+                    sb_add(&fc, ";[m%d]setpts=PTS-STARTPTS+%.6f/TB[v%d]",
+                           nvid, c->tl_in, nvid);
+                } else {
+                    sb_add(&fc, ",setpts=PTS-STARTPTS+%.6f/TB[v%d]",
+                           c->tl_in, nvid);
+                }
 
                 /* Composite. `enable` is what keeps a clip off the output
                  * outside its own span — without it the last frame of every
@@ -2311,20 +2640,49 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                  * The chain is base -> bg1 -> bg2 -> ..., each overlay taking
                  * the PREVIOUS stage by name. Naming the input "bg" instead
                  * of "bg<n>" leaves every intermediate stage unconnected and
-                 * ffmpeg refuses the whole graph. */
-                {
-                    char prev[32];
-                    if (nvid == 0) snprintf(prev, sizeof prev, "base");
-                    else           snprintf(prev, sizeof prev, "bg%d", nvid);
-                    sb_add(&fc, ";[%s][v%d]overlay=eof_action=pass:x='(W-w)/2+(",
-                           prev, nvid);
-                    chain_pos(&fc, c, "xform.x", c->tl_in, len, px0, px1);
-                    sb_add(&fc, ")*W':y='(H-h)/2+(");
-                    chain_pos(&fc, c, "xform.y", c->tl_in, len, py0, py1);
-                    sb_add(&fc, ")*H':enable='between(t,%.6f,%.6f)'[bg%d]",
-                           c->tl_in, c->tl_in + len, nvid + 1);
+                 * ffmpeg refuses the whole graph.
+                 *
+                 * A transition is its own layer, laid down BEFORE the clip it
+                 * belongs to and gated to the overlap. At progress zero it is
+                 * the outgoing clip exactly, so it covers what is under it
+                 * with what was already there and the join is seamless; the
+                 * incoming clip's own layer then starts where it ends. */
+                if (tdur > 0) {
+                    if (tpart >= 0 && vlab[voffs[i] + tpart] >= 0) {
+                        const ss_clip *a = &tr->clip[tpart];
+                        chain_trans_side(&fc, t, a, vlab[voffs[i] + tpart],
+                                         t0 - a->tl_in, tdur, nvid, "xa");
+                    } else {
+                        chain_trans_empty(&fc, t, tdur, nvid, "xa");
+                    }
+                    chain_trans_side(&fc, t, c, nvid, 0.0, tdur, nvid, "xb");
+                    chain_trans_join(&fc, t, c, tdur, nvid);
+                    sb_add(&fc, ";[xj%d]setpts=PTS-STARTPTS+%.6f/TB[xt%d]",
+                           nvid, t0, nvid);
+                    /* Half open, like every other gate here: a frame that
+                     * satisfies both this and the clip's own layer is drawn
+                     * twice, and the second one is not what the transition
+                     * had arrived at. */
+                    sb_add(&fc, ";[%s][xt%d]overlay=eof_action=pass"
+                                ":enable='gte(t,%.6f)*lt(t,%.6f)'[bg%d]",
+                           nlayer == 0 ? "base" : prevlab(prev, sizeof prev, nlayer),
+                           nvid, t0, t0 + tdur, nlayer + 1);
+                    nlayer++;
                 }
-                nvid++;
+                {
+                    sb_add(&fc, ";[%s][v%d]overlay=eof_action=pass:x='(W-w)/2+(",
+                           nlayer == 0 ? "base" : prevlab(prev, sizeof prev, nlayer),
+                           nvid);
+                    chain_pos(&fc, c, "xform.x", tvm, len, px0, px1);
+                    sb_add(&fc, ")*W':y='(H-h)/2+(");
+                    chain_pos(&fc, c, "xform.y", tvm, len, py0, py1);
+                    /* The clip's own layer starts where the transition ends,
+                     * so the two never both draw it. */
+                    sb_add(&fc, ")*H':enable='between(t,%.6f,%.6f)'[bg%d]",
+                           c->tl_in + tdur, c->tl_in + len, nlayer + 1);
+                    nlayer++;
+                }
+
             }
 
             /* A clip's OWN sound, whichever kind of track it sits on.
@@ -2379,6 +2737,27 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 if (c->fade_out > 0.0)
                     sb_add(&fc, ",afade=t=out:st=%.4f:d=%.4f",
                            len - c->fade_out, c->fade_out);
+                /* And the sound follows the picture across a transition.
+                 *
+                 * `qsin` on both sides, not a straight line: two linear fades
+                 * sum to a dip of about three decibels in the middle, which is
+                 * audible on anything continuous — room tone, music — as a
+                 * hole exactly where the cut is. A quarter sine and its mirror
+                 * hold the POWER constant, which is what a crossfade is for.
+                 *
+                 * There is no acrossfade here and there could not be: that
+                 * filter joins two streams end to end, and these two are
+                 * already laid out in time and mixed with everything else. Two
+                 * fades over the overlap ARE the crossfade. */
+                {
+                    double xt0, xdur, xst;
+                    int xp;
+                    if (trans_span(t, i, j, &xt0, &xdur, &xp))
+                        sb_add(&fc, ",afade=t=in:st=0:d=%.4f:curve=qsin", xdur);
+                    if (trans_out(t, i, j, &xst, &xdur))
+                        sb_add(&fc, ",afade=t=out:st=%.4f:d=%.4f:curve=qsin",
+                               xst, xdur);
+                }
                 sb_add(&fc, ",adelay=%d:all=1[a%d]",
                        (int)(c->tl_in * 1000.0 + 0.5), naud);
                 naud++;
@@ -2397,8 +2776,8 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
      * make the preview a different cut, subtly, in exactly the places worth
      * checking. `-2` keeps the aspect and lands on an even height, which
      * yuv420p requires. */
-    if (nvid > 0) sb_add(&fc, ";[bg%d]null[vout]", nvid);
-    else          sb_add(&fc, ";[base]null[vout]");
+    if (nlayer > 0) sb_add(&fc, ";[bg%d]null[vout]", nlayer);
+    else            sb_add(&fc, ";[base]null[vout]");
     if (preview && t->w > 960)
         sb_add(&fc, ";[vout]scale=960:-2:flags=fast_bilinear[pout]");
 
@@ -2476,14 +2855,107 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     av[ac] = NULL;
 
     free(fc.s);
+    free(vlab);
     *argv_out = av;
     return ac;
 
 fail:
     free(fc.s);
+    free(vlab);
     for (i = 0; i < ac; i++) free(av[i]);
     free(av);
     return -1;
+}
+
+/* ---- a transition, for the monitor ----
+ *
+ * The export hands xfade two moving streams; the monitor has ONE frame of each
+ * and a progress number, and it has to land on exactly the picture the export
+ * will write at that instant. So it hands xfade the same filter under the same
+ * name, and buys the progress with a second frame.
+ *
+ * xfade takes its progress from a frame's timestamp against the FIRST frame it
+ * saw, so a single frame is progress zero whatever PTS it carries — which is
+ * why this loops each side once and stamps the copy at p×duration. Two frames
+ * is the entire cost, for any transition and any length.
+ *
+ * `src` is the label the side's picture arrives on, because a partner's stream
+ * has been split and the incoming clip's has not. */
+static void chain_frame_side(strbuf *fc, const ss_timeline *t, const char *src,
+                             double px, double py, int id, const char *side)
+{
+    sb_add(fc, ";color=c=black@0:s=%dx%d:d=0.04,format=rgba[%sb%d]",
+           t->w, t->h, side, id);
+    sb_add(fc, ";[%sb%d][%s]overlay=eof_action=pass:x='(W-w)/2+(%.5f)*W'"
+               ":y='(H-h)/2+(%.5f)*H'[%s%d]",
+           side, id, src, px, py, side, id);
+}
+
+/* The same picture twice, the second stamped `at` seconds in.
+ *
+ * xfade takes its progress from a frame's timestamp against the FIRST frame it
+ * saw, so one frame is always progress zero whatever PTS it carries. Two are
+ * enough to ask for any moment of any transition, and two is the whole cost —
+ * the monitor never renders the frames in between. */
+static void loop_at(strbuf *fc, const char *lab, int id, double at,
+                    const char *out)
+{
+    sb_add(fc, ";[%s%d]loop=loop=1:size=1:start=0,setpts=N*%.6f/TB[%s%d]",
+           lab, id, at, out, id);
+}
+
+static void chain_frame_join(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                             double p, double dur, int id)
+{
+    const char *xf = ss_trans_xfade(c->trans);
+    char col[40];
+
+    if (c->trans == SS_TRANS_DIP || !xf) {
+        /* The export's two dissolves through a colour, run at one instant.
+         * BOTH of them, even though only one is ever moving: the second half's
+         * outgoing side is what the first xfade handed on, and going around it
+         * would leave the monitor one rounding away from the export — the sort
+         * of difference that is invisible until it is the thing being argued
+         * about. */
+        double half = dur / 2.0, at = p * dur;
+        hexcol(c->trans_r, c->trans_g, c->trans_b, 1.0f, col, sizeof col);
+        sb_add(fc, ";color=c=%s:s=%dx%d:d=0.04,format=rgba[xc%d]",
+               col, t->w, t->h, id);
+        loop_at(fc, "xa", id, at, "xal");
+        loop_at(fc, "xc", id, at, "xcl");
+        loop_at(fc, "xb", id, at, "xbl");
+        sb_add(fc, ";[xal%d][xcl%d]xfade=transition=fade:duration=%.6f"
+                   ":offset=0[xh%d]", id, id, half, id);
+        sb_add(fc, ";[xh%d][xbl%d]xfade=transition=fade:duration=%.6f"
+                   ":offset=%.6f,select=eq(n\\,1),setpts=PTS-STARTPTS[xj%d]",
+               id, id, half, half, id);
+        return;
+    }
+    /* At the very start there is nothing to blend, and two frames one
+     * timestamp apart is not a duration xfade can divide by. `enable` picks a
+     * side and consumes both, which it has to: a filter_complex label nothing
+     * reads is a graph ffmpeg refuses. */
+    if (p < 1e-6 || dur <= 0) {
+        sb_add(fc, ";[xa%d][xb%d]overlay=eof_action=pass:enable='0'[xj%d]",
+               id, id, id);
+        return;
+    }
+    loop_at(fc, "xa", id, p * dur, "xal");
+    loop_at(fc, "xb", id, p * dur, "xbl");
+    sb_add(fc, ";[xal%d][xbl%d]xfade=transition=%s:duration=%.6f:offset=0"
+               ",select=eq(n\\,1),setpts=PTS-STARTPTS[xj%d]",
+           id, id, xf, dur, id);
+}
+
+/* Whether some clip on this track is transitioning FROM clip j at `time` —
+ * which is what decides that j's picture is needed twice. */
+static int trans_partner_at(const ss_timeline *t, int tr, int j, double time)
+{
+    double p, d;
+    int i, pt;
+    for (i = 0; i < t->track[tr].nclips; i++)
+        if (trans_at(t, tr, i, time, &p, &d, &pt) && pt == j) return 1;
+    return 0;
 }
 
 /* ------------------------------------------------------ the one frame -- */
@@ -2494,10 +2966,33 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
     strbuf fc = {0};
     char **av = NULL;
     int ac = 0, cap = 64;
-    int i, j, input = 0, nvid = 0;
+    int i, j, input = 0, nvid = 0, nlayer = 0, nclip = 0;
+    int voffs[SS_MAX_TRACKS], *mlab = NULL;
 
     av = malloc(sizeof(char *) * cap);
     if (!av) return -1;
+
+    /* The same label pass the export does, for the same reason: a transition
+     * names its partner's picture, and the partner may sit anywhere in the
+     * array. Here the number is also the INPUT index, because the monitor
+     * opens one input per clip on screen. */
+    for (i = 0; i < t->ntracks; i++) {
+        voffs[i] = nclip;
+        nclip += t->track[i].nclips;
+    }
+    mlab = malloc(sizeof(int) * (size_t)(nclip > 0 ? nclip : 1));
+    if (!mlab) { free(av); return -1; }
+    for (i = 0; i < nclip; i++) mlab[i] = -1;
+    for (i = 0; i < t->ntracks; i++) {
+        if (t->track[i].type != SS_TRACK_VIDEO || t->track[i].hidden) continue;
+        for (j = 0; j < t->track[i].nclips; j++) {
+            const ss_clip *c = &t->track[i].clip[j];
+            double l = ss_clip_length(c), o = time - c->tl_in;
+            if (l <= 0 || o < 0 || o >= l) continue;
+            mlab[voffs[i] + j] = nvid++;
+        }
+    }
+    nvid = 0;
 
     PUSH(xdup("ffmpeg"));
     PUSH(xdup("-v")); PUSH(xdup("error"));
@@ -2543,18 +3038,20 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
             const ss_clip *c = &tr->clip[j];
             double len = ss_clip_length(c), off = time - c->tl_in;
             float s, px, py, rot;
-            double a;
-            int fw, fh;
-            char prev[32];
+            double a, tp = 0, tdur = 0;
+            int fw, fh, tpart = -1, intrans, ispart;
+            char prev[32], src[32];
 
             if (len <= 0 || off < 0 || off >= len) continue;
 
-            /* A single frame has nothing to animate, so the transform, the
-             * fades and the transition are all just numbers here — evaluated
-             * by the same xform_at and alpha_at the export's filters are
-             * generated from. */
+            nvid = mlab[voffs[i] + j];
+            intrans = trans_at(t, i, j, time, &tp, &tdur, &tpart);
+            ispart  = trans_partner_at(t, i, j, time);
+
+            /* A single frame has nothing to animate, so the transform and the
+             * fades are just numbers here — evaluated by the same xform_at and
+             * alpha_at the export's filters are generated from. */
             xform_at(c, off, len, &s, &px, &py, &rot);
-            (void)0;
             a = alpha_at(c, off, len);
             fitted_size(t, s, &fw, &fh);
 
@@ -2574,20 +3071,45 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
             chain_title(&fc, t, c, lutdir, i, j);
             if (a < 1.0)
                 sb_add(&fc, ",colorchannelmixer=aa=%.4f", a);
-            sb_add(&fc, "[v%d]", nvid);
+            /* Split when this clip's picture is wanted twice: once where it
+             * plays, once as the outgoing side of the transition above it. */
+            if (ispart) sb_add(&fc, ",split[v%d][s%d]", nvid, nvid);
+            else        sb_add(&fc, "[v%d]", nvid);
 
-            if (nvid == 0) snprintf(prev, sizeof prev, "base");
-            else           snprintf(prev, sizeof prev, "bg%d", nvid);
-            sb_add(&fc, ";[%s][v%d]overlay=x='(W-w)/2+(%.5f)*W'"
-                        ":y='(H-h)/2+(%.5f)*H'[bg%d]",
-                   prev, nvid, (double)px, (double)py, nvid + 1);
-            nvid++;
+            if (intrans) {
+                /* The incoming clip of a transition does not draw itself — the
+                 * transition layer is what it looks like right now, and at
+                 * progress zero that is the OUTGOING clip exactly. */
+                if (tpart >= 0 && mlab[voffs[i] + tpart] >= 0) {
+                    const ss_clip *pc = &tr->clip[tpart];
+                    double plen = ss_clip_length(pc), poff = time - pc->tl_in;
+                    float ps, ppx, ppy, prot;
+                    xform_at(pc, poff, plen, &ps, &ppx, &ppy, &prot);
+                    snprintf(src, sizeof src, "s%d", mlab[voffs[i] + tpart]);
+                    chain_frame_side(&fc, t, src, ppx, ppy, nvid, "xa");
+                } else {
+                    chain_trans_empty(&fc, t, 0.04, nvid, "xa");
+                }
+                snprintf(src, sizeof src, "v%d", nvid);
+                chain_frame_side(&fc, t, src, px, py, nvid, "xb");
+                chain_frame_join(&fc, t, c, tp, tdur, nvid);
+                sb_add(&fc, ";[%s][xj%d]overlay[bg%d]",
+                       nlayer == 0 ? "base" : prevlab(prev, sizeof prev, nlayer),
+                       nvid, nlayer + 1);
+                nlayer++;
+            } else {
+                sb_add(&fc, ";[%s][v%d]overlay=x='(W-w)/2+(%.5f)*W'"
+                            ":y='(H-h)/2+(%.5f)*H'[bg%d]",
+                       nlayer == 0 ? "base" : prevlab(prev, sizeof prev, nlayer),
+                       nvid, (double)px, (double)py, nlayer + 1);
+                nlayer++;
+            }
             input++;
         }
     }
 
-    if (nvid > 0) sb_add(&fc, ";[bg%d]null[vout]", nvid);
-    else          sb_add(&fc, ";[base]null[vout]");
+    if (nlayer > 0) sb_add(&fc, ";[bg%d]null[vout]", nlayer);
+    else            sb_add(&fc, ";[base]null[vout]");
     if (max_edge > 0)
         sb_add(&fc, ";[vout]scale=w=%d:h=%d:force_original_aspect_ratio=decrease"
                     ":flags=area[sout]", max_edge, max_edge);
@@ -2607,11 +3129,13 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
     av[ac] = NULL;
 
     free(fc.s);
+    free(mlab);
     *argv_out = av;
     return ac;
 
 fail:
     free(fc.s);
+    free(mlab);
     for (i = 0; i < ac; i++) free(av[i]);
     free(av);
     return -1;

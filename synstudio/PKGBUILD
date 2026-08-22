@@ -341,7 +341,53 @@ pkgver=0.1.0
 #   none costs nothing.
 #
 #   282 assertions, still clean under ASan+UBSan+LSan.
-pkgrel=13
+# 14: sixty transitions, a dip through a colour, and the sound crossing with
+#     the picture.
+#
+#   Every transition is ffmpeg's `xfade` now — one filter, sixty looks: hard
+#   and soft wipes, slides, covers, reveals, slices, wind, diagonals, corners,
+#   circles, curtains, radial, pixelize, distance, blur, squeeze, zoom, and the
+#   fades through black, white and grey. ONE table in timeline.c;
+#   `timeline transitions` prints it and the window builds its picker from
+#   that, so a list can never offer one the renderer does not have.
+#
+#   ⚠ DIRECTION. Ours names where the incoming picture comes FROM; xfade's
+#   names which way the boundary TRAVELS. Measured at half progress across
+#   every directional family, they are exact opposites — so every mapping in
+#   the table is MIRRORED, and the four original wipes keep both their
+#   direction and their soft edge by mapping to xfade's `smooth*`.
+#
+#   A transition is a LAYER now rather than an alpha ramp on the incoming
+#   clip. The ramp bought every transition for free and could only ever be a
+#   dissolve: the wipes were a geq in the export and a plain uniform fade in
+#   the monitor, so a scrub and a render showed DIFFERENT PICTURES of the same
+#   moment. Both build the same xfade now — the monitor buys its progress with
+#   a second frame, because xfade takes its progress from a frame's timestamp
+#   against the first one it saw, and one frame is always progress zero.
+#
+#   DIP TO A COLOUR is the one kind that is not an xfade of the two clips: it
+#   is two dissolves THROUGH a colour. Both halves are xfades all the same —
+#   `fade` steps by frame index while an alpha worked out from the time is a
+#   few code values away from it, near enough to look right and not near
+#   enough to be the same picture.
+#
+#   ⚠ THE SOUND. Two clips overlapping used to ADD, so a dissolve got LOUDER
+#   for its length. The two ends now cross with `qsin` curves, which hold the
+#   power constant; two linear fades dip about 3dB in the middle, audible on
+#   anything continuous as a hole exactly where the cut is.
+#
+#   `timeline transition PROJ T [C] [--at S] [--kind K] [--dur D]` does the
+#   whole thing in one command, including the OVERLAP, which is an edit and
+#   not a property: out of the outgoing clip's handles when it has them —
+#   nothing else on the timeline moves — and by rippling what follows when it
+#   does not. It says which it did.
+#
+#   Also: a transition length set while the kind was still `none` used to
+#   vanish with the line it would have been written on, so choosing the length
+#   first and the kind second silently gave a transition of zero.
+#
+#   308 assertions, still clean under ASan+UBSan+LSan.
+pkgrel=14
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

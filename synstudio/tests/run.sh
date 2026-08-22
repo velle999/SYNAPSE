@@ -495,12 +495,18 @@ if have ffmpeg; then
     fi
 
     # ---- transitions ----------------------------------------------------
+    #
+    # Every one of them is xfade, and a transition is a LAYER: the two clips
+    # are composited into project-sized frames of their own, joined, and laid
+    # over the background for exactly the overlap.
     $BIN timeline set "$tp" 0 1 trans=dissolve trans.dur=0.5
     $BIN timeline export "$tp" --out "$TMP/t.mp4" --print \
-        | seen "a dissolve is an alpha ramp" "alpha=1"
+        | seen "a dissolve is an xfade" "xfade=transition=fade"
     $BIN timeline set "$tp" 0 1 trans=wipeleft
     $BIN timeline export "$tp" --out "$TMP/t.mp4" --print \
-        | seen "a wipe is an alpha expression" "geq="
+        | seen "and a wipe is the soft-edged one" "xfade=transition=smoothright"
+    $BIN timeline export "$tp" --out "$TMP/t.mp4" --print \
+        | seen "the outgoing clip's picture is split, not decoded twice" "split[m"
     $BIN timeline set "$tp" 0 1 trans=none trans.dur=0
 
     # ---- the program monitor --------------------------------------------
@@ -946,6 +952,226 @@ if [ -s "$box" ]; then
           "$($BIN timeline anim "$sp" 0 1 at xform.x --at 2)"
     check "the first half ends at the cut, not at the end" "0.000000" \
           "$($BIN timeline anim "$sp" 0 0 at xform.x --at 2)"
+fi
+
+echo "== transitions (one filter, sixty looks)"
+
+# Every transition is ffmpeg's xfade now, on BOTH sides of the program: the
+# export hands it two streams, and the monitor hands it two frames — the same
+# picture twice, the second stamped where the playhead is — so a scrub and a
+# render cannot disagree about what a wipe looks like halfway through. They
+# used to: the wipes were a geq on the export side and a plain uniform fade on
+# the monitor's, which is not the same picture at all.
+
+check "the catalogue is a table, like the formats" "yes" \
+      "$([ "$($BIN timeline transitions | wc -l)" -ge 50 ] && echo yes || echo no)"
+$BIN timeline transitions | seen "with a name and something to call it" \
+    "dissolve	Dissolve"
+$BIN timeline transitions | seen "the ones that came before xfade are still here" \
+    "wipeleft"
+
+# A length saved while the kind is still `none` used to vanish with the line
+# it would have been written on, so setting the length first and the kind
+# second gave a transition of zero — which reads as the kind not working.
+lp=$TMP/tlen.syntl
+$BIN timeline new "$lp" --size 160x90 --fps 25
+$BIN timeline track "$lp" video V >/dev/null
+$BIN timeline solid "$lp" 0 --at 0 --dur 2 >/dev/null
+$BIN timeline set "$lp" 0 0 trans.dur=1.5
+check "a length outlives having no kind yet" "1.5" \
+      "$($BIN timeline get "$lp" 0 0 trans.dur)"
+
+# ⚠ Every name has to be one THIS ffmpeg knows. A typo, or a mirror that names
+# a transition which does not exist, fails the graph at export time — long
+# after it was picked from a list that looked fine.
+xhave=$TMP/xfade.txt
+ffmpeg -hide_banner -h filter=xfade 2>&1 \
+    | sed -n '/transition /,/duration /p' \
+    | awk 'NF > 1 && $1 != "transition" && $1 != "duration" { print $1 }' \
+    | sort > "$xhave"
+check "ffmpeg has an xfade catalogue to map onto" "yes" \
+      "$([ "$(wc -l < "$xhave")" -ge 40 ] && echo yes || echo no)"
+
+xp=$TMP/xf.syntl
+$BIN timeline new "$xp" --size 160x90 --fps 25
+$BIN timeline track "$xp" video V >/dev/null
+$BIN timeline solid "$xp" 0 --at 0 --dur 2 --colour 1,0,0 >/dev/null
+$BIN timeline solid "$xp" 0 --at 1 --dur 2 --colour 0,0,1 >/dev/null
+$BIN timeline set "$xp" 0 1 trans.dur=1
+
+missing=0
+for k in $($BIN timeline transitions | cut -f2); do
+    [ "$k" = none ] && continue
+    [ "$k" = dip ] && continue
+    $BIN timeline set "$xp" 0 1 trans=$k
+    x=$($BIN timeline export "$xp" --out /dev/null --print 2>/dev/null \
+        | grep -o 'xfade=transition=[a-z]*' | head -1 | cut -d= -f3)
+    grep -qx "$x" "$xhave" || { missing=$((missing + 1)); echo "        $k -> [$x]"; }
+done
+check "every kind names an xfade this ffmpeg has" "0" "$missing"
+
+# ---- the direction rule ------------------------------------------------
+#
+# Ours says where the incoming picture comes FROM; xfade's says which way the
+# boundary TRAVELS. They are opposites, so every directional row in the table
+# is MIRRORED — and a row that is not is a bug you can only see by rendering
+# it. Half way through a transition from red to blue, the blue has to be on
+# the side the name says it came from.
+pixel_at() {    # pixel_at <image> <w> <x> <y> -> "r,g,b"
+    ffmpeg -v error -i "$1" -vf "crop=1:1:$3:$4" -f rawvideo -pix_fmt rgb24 - \
+        2>/dev/null | od -An -tu1 -v | tr -s ' ' ',' | sed 's/^,//;s/,$//'
+}
+bluer() {       # bluer <image> <x> <y> -> yes if that pixel is the incoming clip
+    p=$(pixel_at "$1" 160 "$2" "$3")
+    b=${p##*,}; r=${p%%,*}
+    [ "$b" -gt "$r" ] && echo yes || echo no
+}
+
+for pair in "wipeleft 20 80:right" "wiperight 140 80:left" \
+            "slideleft 20 80:right" "slidedown 80 70:up"; do
+    k=${pair%% *}; rest=${pair#* }
+    x=${rest%% *}; rest=${rest#* }
+    y=${rest%%:*}
+    $BIN timeline set "$xp" 0 1 trans=$k
+    $BIN timeline frame "$xp" --at 1.5 --out "$TMP/dir.png" >/dev/null 2>&1
+    check "$k brings the shot in from the $k's own side" "yes" \
+          "$(bluer "$TMP/dir.png" $x $y)"
+done
+
+# ---- the monitor and the export are the same picture -------------------
+exp_frame() {   # exp_frame <mp4> <n> <out.png>
+    ffmpeg -v error -y -i "$1" -vf "select=eq(n\,$2)" -fps_mode passthrough \
+           -frames:v 1 -update 1 "$3" 2>/dev/null
+}
+for k in dissolve slideleft circleopen; do
+    $BIN timeline set "$xp" 0 1 trans=$k
+    $BIN timeline export "$xp" --out "$TMP/xf.mp4" >/dev/null 2>&1
+    same=0; n=0
+    for f in 27 31 37 44; do
+        at=$(awk -v f=$f 'BEGIN { printf "%.6f", f/25 }')
+        $BIN timeline frame "$xp" --at $at --out "$TMP/xm.png" >/dev/null 2>&1
+        exp_frame "$TMP/xf.mp4" $f "$TMP/xe.png"
+        m=$(pixel_at "$TMP/xm.png" 160 40 45)
+        e=$(pixel_at "$TMP/xe.png" 160 40 45)
+        n=$((n + 1))
+        # Within a code value or two, not bit for bit: a geometric transition
+        # puts a moving EDGE somewhere, and a pixel that lands on it is
+        # resampled by two paths that round differently. Anything larger than
+        # that is a different picture, not a different rounding.
+        awk -v a="$m" -v b="$e" 'BEGIN {
+            split(a, x, ","); split(b, y, ",");
+            for (i = 1; i <= 3; i++) { d = x[i] - y[i]; if (d < 0) d = -d;
+                                       if (d > 3) exit 1 }
+            exit 0 }' && same=$((same + 1))
+    done
+    check "the monitor is the export, frame for frame ($k)" "$n" "$same"
+done
+
+# ---- dip to a colour ---------------------------------------------------
+#
+# The one kind that is not an xfade of the two clips: two dissolves THROUGH a
+# colour. Both halves are xfades all the same, on both sides, because `fade`
+# steps by frame index and an alpha worked out from the time is a few code
+# values away from it — near enough to look right and not near enough to be
+# the same picture.
+$BIN timeline set "$xp" 0 1 trans=dip trans.r=1 trans.g=1 trans.b=1
+$BIN timeline export "$xp" --out "$TMP/dip.mp4" >/dev/null 2>&1
+# 1.52 and not 1.5: the frames either side of the middle are what the export
+# actually writes, and the monitor stamps its own frame on the same grid — so
+# asking for an instant BETWEEN two frames gets the earlier one, which is the
+# picture that will be on screen there. That is the right answer and not a
+# rounding error.
+$BIN timeline frame "$xp" --at 1.52 --out "$TMP/dipm.png" >/dev/null 2>&1
+exp_frame "$TMP/dip.mp4" 38 "$TMP/dipe.png"
+check "the middle of a dip IS the colour" "255,255,255" \
+      "$(pixel_at "$TMP/dipm.png" 160 80 45)"
+check "and the export dips through the same one" "255,255,255" \
+      "$(pixel_at "$TMP/dipe.png" 160 80 45)"
+$BIN timeline frame "$xp" --at 1.25 --out "$TMP/dipq.png" >/dev/null 2>&1
+exp_frame "$TMP/dip.mp4" 31 "$TMP/dipqe.png"
+check "and they are the same picture on the way in" \
+      "$(pixel_at "$TMP/dipq.png" 160 80 45)" \
+      "$(pixel_at "$TMP/dipqe.png" 160 80 45)"
+
+# ---- a transition with nothing to come from ----------------------------
+np=$TMP/nopart.syntl
+$BIN timeline new "$np" --size 160x90 --fps 25
+$BIN timeline track "$np" video V >/dev/null
+$BIN timeline solid "$np" 0 --at 0 --dur 2 --colour 0,0,1 >/dev/null
+$BIN timeline set "$np" 0 0 trans=slideleft trans.dur=1
+$BIN timeline export "$np" --out "$TMP/nopart.mp4" >/dev/null 2>&1
+check "a transition at the head of a track still renders" "yes" \
+      "$([ -s "$TMP/nopart.mp4" ] && echo yes || echo no)"
+
+# ---- the sound crosses with the picture --------------------------------
+#
+# Two clips overlapping used to ADD, because nothing faded either of them:
+# the picture dissolved and the sound got LOUDER for the length of it. Two
+# qsin fades hold the power constant across the overlap, which is what a
+# crossfade is. Measured as ProRes/pcm — a tone comes back three decibels hot
+# through AAC, which is the same size as the thing being measured.
+t1=$TMP/tone1.wav; t2=$TMP/tone2.wav
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:duration=3:sample_rate=48000" \
+       -c:a pcm_s16le "$t1" 2>/dev/null
+ffmpeg -v error -y -f lavfi -i "sine=frequency=700:duration=3:sample_rate=48000" \
+       -c:a pcm_s16le "$t2" 2>/dev/null
+if [ -s "$t1" ] && [ -s "$t2" ]; then
+    ap=$TMP/axf.syntl
+    $BIN timeline new "$ap" --size 160x90 --fps 25
+    $BIN timeline track "$ap" audio A >/dev/null
+    $BIN timeline clip "$ap" 0 "$t1" --at 0 >/dev/null
+    $BIN timeline clip "$ap" 0 "$t2" --at 2 >/dev/null
+    mean_of() {
+        ffmpeg -v info -ss "$2" -t "$3" -i "$1" -af volumedetect -f null - \
+            2>&1 | awk -F': ' '/mean_volume/ { print $2 + 0; exit }'
+    }
+    $BIN timeline export "$ap" --out "$TMP/axf1.mov" --format prores >/dev/null 2>&1
+    plain=$(mean_of "$TMP/axf1.mov" 2.2 0.5)
+    alone=$(mean_of "$TMP/axf1.mov" 0.5 0.5)
+    $BIN timeline set "$ap" 0 1 trans=dissolve trans.dur=1
+    $BIN timeline export "$ap" --out "$TMP/axf2.mov" --format prores >/dev/null 2>&1
+    crossed=$(mean_of "$TMP/axf2.mov" 2.2 0.5)
+    check "two clips overlapping with no transition ADD" "yes" \
+          "$(awk -v a="$alone" -v p="$plain" \
+                 'BEGIN { print (p - a > 1.5) ? "yes" : "no" }')"
+    near "and a transition crosses them instead" "$alone" "$crossed" 1.5
+fi
+
+# ---- the cut under the playhead, in one command ------------------------
+#
+# A transition is not only a property: the two clips have to OVERLAP, which is
+# an edit. Out of the outgoing clip's handles when it has them — nothing else
+# on the timeline moves — and by rippling what follows when it does not.
+if [ -s "$vclip" ]; then
+    hp=$TMP/hand.syntl
+    $BIN timeline new "$hp" --size 160x90 --fps 25
+    $BIN timeline track "$hp" video V >/dev/null
+    $BIN timeline clip "$hp" 0 "$vclip" --at 0 --dur 2 >/dev/null
+    $BIN timeline clip "$hp" 0 "$vclip" --at 2 --dur 2 >/dev/null
+    before=$($BIN timeline show "$hp" | awk -F'\t' '/^# duration/ { print $2 }')
+    out=$($BIN timeline transition "$hp" 0 --at 2 --kind slideleft --dur 1)
+    check "a trimmed clip pays for the transition out of its handles" "handles" \
+          "$(echo "$out" | cut -f4)"
+    check "and nothing else moves" "$before" \
+          "$($BIN timeline show "$hp" | awk -F'\t' '/^# duration/ { print $2 }')"
+    check "the transition landed on the incoming clip" "slideleft" \
+          "$($BIN timeline get "$hp" 0 1 trans)"
+    $BIN timeline transition "$hp" 0 --at 2 --kind nosuchwipe >/dev/null 2>&1
+    check "and a kind the renderer does not have is refused" "1" "$?"
+
+    rp=$TMP/ripple.syntl
+    $BIN timeline new "$rp" --size 160x90 --fps 25
+    $BIN timeline track "$rp" video V >/dev/null
+    $BIN timeline clip "$rp" 0 "$vclip" --at 0 >/dev/null
+    $BIN timeline clip "$rp" 0 "$vclip" --at 8 >/dev/null
+    rbefore=$($BIN timeline show "$rp" | awk -F'\t' '/^# duration/ { print $2 }')
+    rout=$($BIN timeline transition "$rp" 0 --at 8 --dur 1)
+    check "a clip with no handles ripples instead" "ripple" \
+          "$(echo "$rout" | cut -f4)"
+    check "and the programme is a transition shorter" "yes" \
+          "$(awk -v b="$rbefore" \
+                 -v a="$($BIN timeline show "$rp" | awk -F'\t' '/^# duration/ { print $2 }')" \
+                 'BEGIN { print (b - a > 0.9 && b - a < 1.1) ? "yes" : "no" }')"
 fi
 
 echo "== the audio envelope (waveforms)"

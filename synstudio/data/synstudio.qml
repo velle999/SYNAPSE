@@ -1011,6 +1011,35 @@ FloatingWindow {
         return out
     }
 
+    // The transition catalogue: name -> what to call it. The picker is built
+    // from the clip table like every other enum, but sixty rows of `smoothright`
+    // is a list nobody can read, and the labels live in the engine beside the
+    // names for the same reason the choices do.
+    property var transLabels: ({})
+    property string defaultTrans: "dissolve"
+    property real   defaultTransDur: 1.0
+
+    function enumLabel(key, choice) {
+        if (key === "trans" && root.transLabels[choice])
+            return root.transLabels[choice]
+        return choice
+    }
+
+    Process {
+        id: transListProc
+        command: [root.bin, "timeline", "transitions"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = ({}), lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length >= 3) m[f[1]] = f[2]
+                }
+                root.transLabels = m
+            }
+        }
+    }
+
     Process {
         id: clipKeysProc
         command: [root.bin, "timeline", "keys"]
@@ -2144,6 +2173,7 @@ FloatingWindow {
     Component.onCompleted: {
         keysProc.running = true
         clipKeysProc.running = true
+        transListProc.running = true
         if (root.proj) {
             root.selTrack = 0
             root.reloadTimeline()
@@ -2259,6 +2289,17 @@ FloatingWindow {
                           active: root.proj !== "" && root.selTrack >= 0
                           onClicked: root.tlRun(["split", root.proj, String(root.selTrack),
                                                  "--at", String(root.playhead)]) }
+                    // The cut under the playhead, with the overlap it needs.
+                    // Setting the kind is a property and would leave the two
+                    // clips butted together with nothing to dissolve THROUGH,
+                    // which reads as the transition not working.
+                    Btn { visible: root.mode === "video"; label: "Transition"
+                          active: root.proj !== "" && root.selTrack >= 0
+                          onClicked: root.tlRun(["transition", root.proj,
+                                                 String(root.selTrack),
+                                                 "--at", String(root.playhead),
+                                                 "--kind", root.defaultTrans,
+                                                 "--dur", String(root.defaultTransDur)]) }
                     Btn { visible: root.mode === "video"
                           label: root.selMore.length > 0
                                  ? "Delete " + (root.selMore.length + 1) : "Delete"
@@ -3169,6 +3210,26 @@ FloatingWindow {
                                                                         && root.selKey === index)
                                                                        ? root.cAccent : root.cDim
                                                             }
+                                                        }
+
+                                                        // A transition into
+                                                        // this clip, at its
+                                                        // head where it
+                                                        // happens. Otherwise
+                                                        // the only way to
+                                                        // find out a cut is
+                                                        // not a cut is to
+                                                        // open the inspector
+                                                        // on every clip.
+                                                        Text {
+                                                            visible: clipRect.modelData.trans
+                                                                     !== "none"
+                                                            x: 2
+                                                            anchors.bottom: parent.bottom
+                                                            anchors.bottomMargin: 1
+                                                            text: "◨"
+                                                            font.pixelSize: 9
+                                                            color: root.cAccent
                                                         }
 
                                                         // The same for a
@@ -4738,8 +4799,18 @@ FloatingWindow {
         readonly property real val: parseFloat(cc.raw) || 0
         readonly property int nkeys: root.clipAnimKeys(cc.row.key).length
         readonly property bool onKey: root.animKeyAt(cc.row.key) >= 0
+        readonly property bool longEnum:
+            cc.row.type === "enum" && cc.row.choices.length > 10
+        // A colour to dip THROUGH is only a colour if the transition dips.
+        readonly property bool applies:
+            (cc.row.key === "trans.r" || cc.row.key === "trans.g"
+             || cc.row.key === "trans.b") ? root.clipValue("trans") === "dip"
+                                          : true
+        visible: cc.applies
         width: inspCol.width
-        height: cc.row.type === "text" ? 52 : 44
+        height: !cc.applies ? 0
+                : cc.longEnum ? 150
+                : cc.row.type === "text" ? 52 : 44
 
         Text {
             id: cclbl
@@ -4782,10 +4853,14 @@ FloatingWindow {
             }
         }
 
-        // enum — click to advance. With at most six choices a cycler beats a
-        // popup: it needs no overlay, no focus grab and no dismissal rule.
+        // enum — click to advance. With at most a handful of choices a cycler
+        // beats a popup: it needs no overlay, no focus grab and no dismissal
+        // rule. Past that it stops being a control at all — sixty transitions
+        // is sixty clicks to reach the last one — so a long enum gets a list
+        // instead. The threshold is on the CHOICES, not on the key, so the
+        // table still decides and nothing here knows what a transition is.
         Rectangle {
-            visible: cc.row.type === "enum"
+            visible: cc.row.type === "enum" && !cc.longEnum
             anchors.left: parent.left; anchors.leftMargin: 12
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: cclbl.bottom; anchors.topMargin: 6
@@ -4794,7 +4869,7 @@ FloatingWindow {
             color: root.wash(0.14)
             Text {
                 anchors.centerIn: parent
-                text: "◂  " + cc.raw + "  ▸"
+                text: "◂  " + root.enumLabel(cc.row.key, cc.raw) + "  ▸"
                 color: root.cText
                 font.pixelSize: 10
             }
@@ -4808,6 +4883,53 @@ FloatingWindow {
                     i = (m.x < width / 2) ? (i + ch.length - 1) % ch.length
                                           : (i + 1) % ch.length
                     root.setClip(cc.row.key, ch[i])
+                }
+            }
+        }
+
+        // The long form: every choice, scrolled, with the one in force marked.
+        Rectangle {
+            visible: cc.longEnum
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: cclbl.bottom; anchors.topMargin: 6
+            height: cc.longEnum ? 128 : 0
+            radius: 3
+            color: root.wash(0.14)
+            clip: true
+
+            ListView {
+                id: cclist
+                anchors.fill: parent
+                anchors.margins: 3
+                model: cc.row.choices
+                clip: true
+                // The list opens on the choice in force rather than at the
+                // top: with sixty rows, a picker that always starts at the
+                // beginning is one that never shows you what you picked.
+                Component.onCompleted: {
+                    const i = cc.row.choices.indexOf(cc.raw)
+                    if (i >= 0) cclist.positionViewAtIndex(i, ListView.Center)
+                }
+                delegate: Rectangle {
+                    required property string modelData
+                    width: cclist.width
+                    height: 18
+                    color: modelData === cc.raw ? root.wash(0.24) : "transparent"
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 6
+                        width: parent.width - 12
+                        elide: Text.ElideRight
+                        text: root.enumLabel(cc.row.key, parent.modelData)
+                        color: parent.modelData === cc.raw ? root.cAccent : root.cText
+                        font.pixelSize: 10
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.setClip(cc.row.key, parent.modelData)
+                    }
                 }
             }
         }

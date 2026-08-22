@@ -372,8 +372,13 @@ typedef struct {
  * whose alpha rises from 0 while the outgoing clip is still playing under it
  * IS a cross dissolve, with no second code path and no special case in the
  * export. Overlap the two clips by the transition length and it happens. */
+/* The first six keep their numbers because a document can carry `trans` as an
+ * integer; everything past them is a row in the table in timeline.c, which is
+ * ffmpeg's xfade catalogue with its directions mirrored — ours says where the
+ * incoming picture comes FROM. */
 enum { SS_TRANS_NONE, SS_TRANS_DISSOLVE,
-       SS_TRANS_WIPE_L, SS_TRANS_WIPE_R, SS_TRANS_WIPE_U, SS_TRANS_WIPE_D };
+       SS_TRANS_WIPE_L, SS_TRANS_WIPE_R, SS_TRANS_WIPE_U, SS_TRANS_WIPE_D,
+       SS_TRANS_DIP };
 
 /* A graded moment. `t` is seconds into the CLIP, not into the timeline, so a
  * keyframed grade survives the clip being moved, trimmed at the tail, or
@@ -426,6 +431,7 @@ typedef struct {
 
     int    trans;               /* SS_TRANS_*, into this clip */
     double trans_dur;           /* seconds */
+    float  trans_r, trans_g, trans_b;   /* what `dip` dips through */
 
     /* title / solid */
     char   text[512];
@@ -720,7 +726,13 @@ int    ss_timeline_bake(const ss_timeline *t, const char *dir, double at);
 void   ss_timeline_unbake(const ss_timeline *t, const char *dir);
 
 /* Name to enum for the three things a clip line can say. -1 = not a name. */
-int    ss_trans_value(const char *s);
+int         ss_trans_value(const char *s);
+int         ss_trans_count(void);
+const char *ss_trans_name(int v);
+const char *ss_trans_label(int v);
+/* The xfade name this kind renders as, or NULL for the two that are not one:
+ * `none`, and `dip`, which is a cut under a colour. */
+const char *ss_trans_xfade(int v);
 int    ss_clip_kind_value(const char *s);
 int    ss_textpos_value(const char *s);
 
