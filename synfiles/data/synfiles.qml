@@ -1366,6 +1366,25 @@ FloatingWindow {
         // the next line and not in a release handler a system grab never
         // delivers.
         dragGhost.Drag.active = true
+
+        // ⚠ …ON QT 6.11.1 AND EARLIER. Qt 6.11.2 (2026-08-20) stopped starting
+        // the drag from setActive(): the assignment above returns immediately,
+        // no wl_data_source is ever offered, and the only symptom is that
+        // nothing drags — no warning, no error, and beginDrag() then re-fires
+        // on every motion event, because `dragging` is cleared again a line
+        // later. Every drag out of this window died that day: a row onto a
+        // folder, a pane onto the other pane, synfiles onto mpv.
+        //
+        // startDrag() is the documented way to start one and it works on both
+        // — but only while the drag is ACTIVE, which is exactly what tells the
+        // two Qts apart and why the state is the guard rather than a version
+        // test. On 6.11.2 the assignment leaves `Drag.active` true with the
+        // button still down, and this call is what does the work. On 6.11.1 the
+        // assignment blocked for the whole drag, so the drop has already
+        // happened, `Drag.active` has gone false again, and calling startDrag()
+        // here would earn a "drag must be active" warning for nothing.
+        if (dragGhost.Drag.active) dragGhost.Drag.startDrag()
+
         root.endDrag()
     }
 

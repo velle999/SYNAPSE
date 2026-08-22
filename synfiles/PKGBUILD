@@ -63,7 +63,7 @@ pkgver=0.1.0
 #   never carrying much contrast and had none left on the pale accents. It also
 #   puts this icon in the same ink as syn-settings, syn-arcade and syn-disks.
 
-pkgrel=55
+pkgrel=56
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
