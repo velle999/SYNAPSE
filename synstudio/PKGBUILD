@@ -709,7 +709,32 @@ pkgver=0.1.0
 #
 #   Verified both ways on the desktop: without the guard MangoHud loads into
 #   quickshell, with it the layer is absent and the window still loads.
-pkgrel=22
+#
+# 23 SCOPES — roadmap item 10 of 10, first half.
+#
+#   ⚠ AND AN UNBREAKING. pkgrel 21 staged meson.build for a timeout change and
+#   swept in a line naming `src/scope.c`, which was not committed — so 21 and
+#   22 could not CONFIGURE on any machine but this one, where the file exists
+#   untracked. `git add <file>` takes the whole file, not the hunk you meant.
+#
+#   A waveform, an RGB parade and a vectorscope, computed HERE rather than by
+#   an ffmpeg filter — the same bargain the histogram strikes. A scope is read
+#   to decide whether a shot is legal and whether two shots match, and an
+#   answer from a different renderer than the picture is an answer about
+#   something else. `synstudio scope FILE` measures a photograph through its
+#   own develop stack; `timeline scope PROJ --at T` composites the frame first,
+#   so it describes the picture that will be delivered.
+#
+#   Measured in the DISPLAY encoding, like the histogram: a waveform in linear
+#   light puts middle grey at 18% and nobody reads one there.
+#
+#   ⚠ NOT normalised by the busiest cell. The first version was, and a
+#   vectorscope of colour bars came out almost black — the greys pile into a
+#   few cells at the centre, that peak is enormous, and every hue around it
+#   divides down to nothing. Referenced to the mean of the OCCUPIED cells
+#   through a curve that saturates instead, which is scale-invariant: the same
+#   picture reads the same at any scope size and any resolution.
+pkgrel=23
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

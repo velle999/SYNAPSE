@@ -234,6 +234,22 @@ typedef struct { unsigned r[256], g[256], b[256], l[256]; unsigned clip_lo, clip
     ss_histogram;
 void ss_histogram_of(const ss_image *im, ss_histogram *h);
 
+/* ---- scopes ----
+ *
+ * A waveform, an RGB parade and a vectorscope, rendered into an image of
+ * their own. Computed here rather than by an ffmpeg filter for the reason the
+ * histogram is: a scope is read to decide whether a shot is legal and whether
+ * two shots match, and an answer produced by a different renderer than the
+ * picture is an answer about something else.
+ *
+ * Measured in the DISPLAY encoding — a waveform in linear light puts middle
+ * grey at 18% and nobody reads one there. */
+enum { SS_SCOPE_WAVEFORM, SS_SCOPE_PARADE, SS_SCOPE_VECTOR };
+int         ss_scope_value(const char *s);      /* -1 if it is not one */
+const char *ss_scope_name(int v);
+int         ss_scope_render(const ss_image *in, int kind, int w, int h,
+                            ss_image *out);
+
 /* ------------------------------------------------------------------ lut -- */
 
 /* Bake the pointwise half of a develop stack into an Iridas/Adobe .cube 3D
@@ -868,7 +884,44 @@ typedef struct {
      * would be wrong the moment the project moved. Empty means nobody has
      * opened this from a file, which is what a new document looks like. */
     char   stabdir[1024];
+
+    /* The RENDER RANGE: in and out on the timeline, as a delivery decision
+     * rather than an edit. `range_out <= range_in` means the whole thing,
+     * which is what every project starts as and what most stay. It is in the
+     * document because it is a property of the cut a person set while looking
+     * at it, not something to retype on the command line each render. */
+    double range_in, range_out;
 } ss_timeline;
+
+/* What actually gets rendered: the range if there is one, else 0..duration. */
+void ss_timeline_range(const ss_timeline *t, double *in, double *out);
+
+/* ---- delivery presets ----
+ *
+ * A row is a SIZE, a frame rate and a name — "YouTube 1080p" — not a second
+ * encoder. The format table already decides how a picture is compressed; a
+ * preset decides how big it is and how often, which is the half a person
+ * actually chooses by naming a destination.
+ *
+ * Applied by rendering the whole composite at that size: every clip, the
+ * base, the titles and the transitions are all built from the project's own
+ * dimensions, so changing those changes all of them together and nothing has
+ * to be scaled afterwards. */
+typedef struct {
+    const char *name;
+    int    w, h;
+    double fps;                 /* 0 = keep the project's */
+    const char *label;
+} ss_tl_preset;
+
+const ss_tl_preset *ss_timeline_presets(void);          /* NULL-name terminated */
+const ss_tl_preset *ss_timeline_preset(const char *name);
+
+/* Burn-in: what gets written over the delivered picture. Bit flags, because
+ * a timecode and a filename are usually both wanted and are one drawtext
+ * each. */
+enum { SS_BURN_TIMECODE = 1, SS_BURN_NAME = 2 };
+int ss_burn_value(const char *s);        /* "timecode", "name", "both", "off" */
 
 /* `<project>.stab`, the one place that spelling is decided. */
 void ss_timeline_stabdir(const char *proj, char *out, size_t n);
@@ -1019,7 +1072,7 @@ const ss_tl_format *ss_timeline_format(const char *name, const char *out);
 int    ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                           const char *lutdir, int preview,
                           const ss_tl_format *fmt, const char *subs,
-                          char ***argv);
+                          int burn, char ***argv);
 
 /* ---- title styles ----
  *

@@ -1470,6 +1470,10 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
     fprintf(fp, "size\t%d\t%d\n", t->w, t->h);
     fprintf(fp, "fps\t%.6g\n", t->fps);
     if (t->master_db != 0.0f) fprintf(fp, "master\t%.3f\n", t->master_db);
+    /* The render range, when there is one. Absent means the whole timeline,
+     * which is what a project without one has always meant. */
+    if (t->range_out > t->range_in)
+        fprintf(fp, "range\t%.6f\t%.6f\n", t->range_in, t->range_out);
     /* Before the tracks, because a marker belongs to the timeline and not to
      * anything on it — and because a reader that meets one after a `track`
      * line would have to know it is not a clip property. */
@@ -1511,7 +1515,8 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "trans\t%s\t%.6f\t%.4f\t%.4f\t%.4f\n",
                         ss_trans_name(c->trans), c->trans_dur,
                         c->trans_r, c->trans_g, c->trans_b);
-            /* Retime and the stabiliser, named fields on one line, written
+            /* (the clip's own lines follow)
+             * Retime and the stabiliser, named fields on one line, written
              * only when something is not the default — the same shape the
              * title's style line uses and for the same reason: a clip is
              * going to gain more of these. */
@@ -1653,6 +1658,12 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             t->fps = atof(line + 4);
         } else if (!strncmp(line, "master\t", 7)) {
             t->master_db = (float)atof(line + 7);
+        } else if (!strncmp(line, "range\t", 6)) {
+            char *f[2];
+            if (tabsplit(line + 6, f, 2) == 2) {
+                t->range_in  = atof(f[0]);
+                t->range_out = atof(f[1]);
+            }
         } else if (!strncmp(line, "marker\t", 7)) {
             char *f[3];
             /* ONCE. tabsplit writes NULs over the tabs it finds, so a second
@@ -3028,6 +3039,51 @@ static const ss_tl_format tl_formats[] = {
     { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 };
 
+/* Sizes people deliver to, named for where they are going rather than for
+ * their pixel count — which is how anybody actually picks one. */
+static const ss_tl_preset tl_presets[] = {
+    { "youtube-1080p", 1920, 1080, 0,  "1920x1080, the project's frame rate" },
+    { "youtube-4k",    3840, 2160, 0,  "3840x2160" },
+    { "youtube-720p",  1280,  720, 0,  "1280x720" },
+    { "instagram",     1080, 1350, 30, "1080x1350 at 30 — the 4:5 feed post" },
+    { "reel",          1080, 1920, 30, "1080x1920 at 30 — vertical, full screen" },
+    { "square",        1080, 1080, 30, "1080x1080" },
+    { "proxy",          960,  540, 0,  "960x540, for cutting on a slow machine" },
+    { NULL, 0, 0, 0, NULL }
+};
+
+const ss_tl_preset *ss_timeline_presets(void) { return tl_presets; }
+
+const ss_tl_preset *ss_timeline_preset(const char *name)
+{
+    int i;
+    if (!name) return NULL;
+    for (i = 0; tl_presets[i].name; i++)
+        if (!strcmp(tl_presets[i].name, name)) return &tl_presets[i];
+    return NULL;
+}
+
+void ss_timeline_range(const ss_timeline *t, double *in, double *out)
+{
+    double dur = ss_timeline_duration(t);
+    double a = t->range_in, b = t->range_out;
+    if (!(b > a)) { a = 0; b = dur; }        /* no range = the whole thing */
+    if (a < 0) a = 0;
+    if (b > dur) b = dur;
+    if (!(b > a)) { a = 0; b = dur > 0 ? dur : 1.0; }
+    if (in)  *in  = a;
+    if (out) *out = b;
+}
+
+int ss_burn_value(const char *s)
+{
+    if (!s || !strcmp(s, "off") || !strcmp(s, "none")) return 0;
+    if (!strcmp(s, "timecode")) return SS_BURN_TIMECODE;
+    if (!strcmp(s, "name"))     return SS_BURN_NAME;
+    if (!strcmp(s, "both"))     return SS_BURN_TIMECODE | SS_BURN_NAME;
+    return -1;
+}
+
 const ss_tl_format *ss_timeline_formats(void)
 {
     return tl_formats;
@@ -3059,7 +3115,7 @@ const ss_tl_format *ss_timeline_format(const char *name, const char *out)
 int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                        const char *lutdir, int preview,
                        const ss_tl_format *fmt, const char *subs,
-                       char ***argv_out)
+                       int burn, char ***argv_out)
 {
     strbuf fc = {0};
     char **av = NULL;

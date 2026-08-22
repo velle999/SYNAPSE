@@ -49,6 +49,9 @@ static void usage(void)
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
 "  render FILE --out OUT         apply the sidecar and write a new file\n"
 "  histogram FILE                256 bins per channel, tab separated\n"
+"  scope FILE --out F.png [--kind waveform|parade|vector] [--size N]\n"
+"                                the picture, measured — computed here and\n"
+"                                not by a filter, so it cannot disagree\n"
 "  peaks FILE [--in A] [--out-at B] [--count N]\n"
 "                                the audio envelope: peak and RMS per bucket\n"
 "                                (exit 100 = the file has no audio)\n"
@@ -122,6 +125,9 @@ static void usage(void)
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
+"  timeline scope PROJ --at T --out F.png [--kind waveform|parade|vector]\n"
+"       the same frame, MEASURED — composited first, so it describes the\n"
+"       picture that will be delivered\n"
 "  timeline export PROJ --out OUT [--format F] [--print] [--preview]\n"
 "       [--subs FILE]  ship a .srt as a STREAM a player can switch off,\n"
 "                      instead of the burnt-in kind `subs import` makes\n"
@@ -168,6 +174,7 @@ typedef struct {
     const char *colour;
     const char *ease;
     int    off;                 /* --off: turn a thing off, keep its work */
+    const char *burn;           /* what to write over the delivered picture */
     const char *style;          /* a title style, applied on creation */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
@@ -225,6 +232,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--off"))     { o->off = 1; }
+        else if (!strcmp(a, "--burn"))    { const char *v = NEXT(); if (!v) return -1; o->burn = v; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
         /* The same slot: an export names a container and a transition names a
@@ -475,6 +483,42 @@ static int cmd_render(const char *path, const opts *o)
     rc = ss_save(o->out, &im, o->quality, o->bits);
     printf("out\t%s\nwidth\t%d\nheight\t%d\n", o->out, im.w, im.h);
     ss_image_free(&im);
+    return rc == 0 ? 0 : die("cannot write %s", o->out);
+}
+
+/* A scope of a photograph, through the same develop stack the picture goes
+ * through. `load_edited` is shared with render and histogram for exactly this
+ * reason: three ways of looking at one frame, one way of making it. */
+static int cmd_scope(const char *path, const opts *o)
+{
+    ss_image im, sc;
+    ss_edit e;
+    int rc, kind = SS_SCOPE_WAVEFORM, sw, sh;
+
+    if (!o->out) return die("scope needs --out");
+    if (o->format) {
+        kind = ss_scope_value(o->format);
+        if (kind < 0) return die("scope --kind takes waveform, parade or vector");
+    }
+    rc = load_edited(path, o, &im, &e);
+    if (rc) return rc;
+
+    sw = o->size > 0 ? o->size : 512;
+    if (sw < 64) sw = 64;
+    if (sw > 4096) sw = 4096;
+    /* A vectorscope is square because it is a POLAR plot — a wide one would
+     * stretch the hue wheel into an ellipse and every angle read off it would
+     * be wrong. The other two are wide because their x axis is the frame. */
+    sh = kind == SS_SCOPE_VECTOR ? sw : sw / 2;
+
+    rc = ss_scope_render(&im, kind, sw, sh, &sc);
+    ss_image_free(&im);
+    if (rc != 0) return die("cannot build the scope");
+
+    rc = ss_save(o->out, &sc, o->quality, 8);
+    printf("out\t%s\nkind\t%s\nwidth\t%d\nheight\t%d\n",
+           o->out, ss_scope_name(kind), sc.w, sc.h);
+    ss_image_free(&sc);
     return rc == 0 ? 0 : die("cannot write %s", o->out);
 }
 
@@ -2015,14 +2059,69 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         return rc;
     }
 
+    /* A scope of the CUT, not of a file: the frame is composited first and
+     * then measured, so what the waveform describes is the picture that will
+     * be delivered — grade, effects, titles, transitions and all. */
+    if (!strcmp(verb, "scope")) {
+        char dir[] = "/tmp/synstudio-tl-XXXXXX";
+        char fr[4200], **av;
+        int ac, rc, kind = SS_SCOPE_WAVEFORM, sw, sh;
+        ss_image im, sc;
+
+        if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0) return die("bad option");
+        if (!o.out) return die("scope needs --out");
+        if (o.format) {
+            kind = ss_scope_value(o.format);
+            if (kind < 0) return die("scope --kind takes waveform, parade or vector");
+        }
+        if (!mkdtemp(dir)) return die("cannot make a scratch directory");
+        snprintf(fr, sizeof fr, "%s/frame.png", dir);
+        if (ss_timeline_bake(t, dir, o.at) < 0) {
+            rmdir(dir); return die("cannot write the grade LUTs");
+        }
+        /* Measured at a WORKING size rather than the project's: a scope of a
+         * 4K frame counts eight million pixels to draw half a million, and
+         * the shape of a waveform does not change for having been sampled. */
+        ac = ss_timeline_frame(t, o.at, fr, dir, o.size > 0 ? o.size : 960, &av);
+        if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
+                      return die("cannot build the preview graph"); }
+        rc = tl_run(av, ac, 0);
+        ss_timeline_unbake(t, dir);
+        if (rc != 0) { remove(fr); rmdir(dir); return die("cannot render the frame"); }
+
+        if (ss_load(fr, &im, 0) != 0) {
+            remove(fr); rmdir(dir);
+            return die("cannot read the frame back");
+        }
+        remove(fr);
+        rmdir(dir);
+
+        sw = 512;
+        sh = kind == SS_SCOPE_VECTOR ? sw : sw / 2;
+        rc = ss_scope_render(&im, kind, sw, sh, &sc);
+        ss_image_free(&im);
+        if (rc != 0) return die("cannot build the scope");
+        rc = ss_save(o.out, &sc, 95, 8);
+        printf("out\t%s\nkind\t%s\nat\t%.3f\n", o.out, ss_scope_name(kind), o.at);
+        ss_image_free(&sc);
+        return rc == 0 ? 0 : die("cannot write %s", o.out);
+    }
+
     if (!strcmp(verb, "export")) {
         char dir[] = "/tmp/synstudio-lut-XXXXXX";
         char **av;
         int ac, rc;
 
+        int burn = 0;
+
         if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
             return die("bad option");
         if (!o.out) return die("export needs --out");
+        if (o.burn) {
+            burn = ss_burn_value(o.burn);
+            if (burn < 0)
+                return die("--burn takes timecode, name, both or off");
+        }
         /* Said BEFORE the encode, not after it. A subtitle file that is not
          * there, or a preview that was never going to carry one, is five
          * minutes of render either way — and finding out at the end is how a
@@ -2057,7 +2156,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                 return die("%s cannot carry a subtitle stream — burn them in "
                            "with `timeline subs`, or deliver as mkv", f->name);
             }
-            ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, f, o.subs, &av);
+            ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, f, o.subs, burn, &av);
         }
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }
@@ -2473,6 +2572,12 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "peaks"))     return cmd_peaks(argv[2], &o);
     if (!strcmp(cmd, "render"))    return cmd_render(argv[2], &o);
     if (!strcmp(cmd, "histogram")) return cmd_histogram(argv[2], &o);
+    if (!strcmp(cmd, "scope")) {
+        if (argc < 3) return die("scope wants a file");
+        if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        return cmd_scope(argv[2], &o);
+    }
 
     return die("unknown command: %s  (try `synstudio help`)", cmd);
 }
