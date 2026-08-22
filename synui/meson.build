@@ -1210,6 +1210,16 @@ test('readme_binds', readme_binds,
 # reached from the menu at all — and it drifts SILENTLY, because an arg that
 # matches no category makes ctlpanel_show_cat fall back to the plain front door
 # instead of failing. Source-only: no compositor, no QML engine, runs anywhere.
+# Walking back out of a category with the arrows kept dropping the highlight
+# at the top of the menu, because the rebuild that follows a page change reset
+# the selection to row 0 unconditionally. A text check, and deliberately so:
+# the start menu is a quickshell panel that talks to the RUNNING compositor,
+# and loading it to press arrow keys at it would drive the live session.
+menu_back = find_program('tests/menu_back.sh')
+test('menu_back', menu_back,
+     args    : [meson.current_source_dir() / 'quickshell/StartMenu.qml'],
+     timeout : 30)
+
 menu_cats = find_program('tests/menu_cats.sh')
 test('menu_cats', menu_cats,
      args    : [meson.current_source_dir() / 'src/ctlpanel.c',

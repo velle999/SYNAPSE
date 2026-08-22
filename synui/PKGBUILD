@@ -394,8 +394,37 @@ pkgver=0.1.0
 #   was the only way to reach them, and not survivable once a tab is a click
 #   target, because a tab that is not drawn is a category the mouse cannot get
 #   to at all.
+#
+# 427 THE START MENU LOST YOUR PLACE EVERY TIME YOU LOOKED IN A CATEGORY.
+#
+#   Right into a category, Left back out, and the highlight was at the TOP of
+#   the menu — not on the category you had just been in. Which is the one
+#   moment you most want it kept, because walking a menu with the arrows is
+#   exactly looking into things and stepping back out.
+#
+#   The rebuild that follows a page change reset the selection to row 0
+#   unconditionally, and that reset is CORRECT for every other reason the rows
+#   change: a stale index into a shorter list selects nothing and Enter then
+#   does nothing, which reads as the menu ignoring you. So the fix is not to
+#   stop resetting; it is to record the page being left and let the rebuild
+#   put the selection back on the row that leads into it.
+#
+#   ⚠ MATCHED BY PAGE ID, NOT BY A REMEMBERED INDEX. The root list is not the
+#   same list it was — a search, a renamed category or a menu that gained a
+#   row all move things — so a fix that stored `selected` and put it back
+#   would work in testing and land on the wrong row in use.
+#
+#   ⚠ ALL THREE BACK PATHS, not just the arrow. Left, Escape and the on-screen
+#   Back row are the same journey by three inputs, and a mouse that lost your
+#   place while an arrow key kept it is the harder pair to explain.
+#
+#   tests/menu_back.sh guards the shape the bug was: a path that clears the
+#   page without recording it, and a rebuild that resets before it looks. A
+#   TEXT check on purpose — the start menu is a quickshell panel that talks to
+#   the running compositor, and loading it to press arrow keys at it would
+#   drive the live session.
 
-pkgrel=426
+pkgrel=427
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

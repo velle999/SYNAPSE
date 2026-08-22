@@ -618,6 +618,11 @@ PanelWindow {
             case "header":
                 return
             case "back":
+                // The on-screen Back row lands where Left and Escape land.
+                // It is the same journey by a different input, and a mouse
+                // that lost your place while an arrow key kept it would be
+                // the harder pair to explain.
+                list.returningTo = MenuState.page
                 MenuState.page = ""
                 return
             case "page":
@@ -678,8 +683,15 @@ PanelWindow {
                     // leave the page, then close. Closing outright from inside a
                     // category would mean the only way back to the root is to
                     // reopen and start again.
+                    // Escape lands where Left lands. The two keys already
+                    // unwind in the same order, and one of them keeping your
+                    // place while the other threw it away would be the more
+                    // confusing pair.
                     if (MenuState.search !== "")      MenuState.search = ""
-                    else if (MenuState.page !== "")   MenuState.page = ""
+                    else if (MenuState.page !== "") {
+                        list.returningTo = MenuState.page
+                        MenuState.page = ""
+                    }
                     else                              MenuState.close()
                     e.accepted = true
                     return
@@ -707,7 +719,10 @@ PanelWindow {
                     // menu would make overshooting while walking back up cost
                     // the menu itself.
                     if (MenuState.search !== "")      MenuState.search = ""
-                    else if (MenuState.page !== "")   MenuState.page = ""
+                    else if (MenuState.page !== "") {
+                        list.returningTo = MenuState.page
+                        MenuState.page = ""
+                    }
                     e.accepted = true
                     return
                 case Qt.Key_Return:
@@ -733,9 +748,34 @@ PanelWindow {
         // Put the selection back on the first selectable row whenever the list
         // changes under it. A stale index into a shorter list selects nothing,
         // and Enter then does nothing — which reads as the menu ignoring you.
+        //
+        // ⚠ EXCEPT WHEN COMING BACK UP. Walking into a category and pressing
+        // Left rebuilt the root list and dropped the selection at the top, so
+        // browsing with the arrows lost your place every time you looked into
+        // a category and stepped back out — the one moment you most want it
+        // kept. `returningTo` names the page just left, and the row that
+        // leads back into it is found BY PAGE ID rather than by remembering
+        // an index: the root list is not the same list it was, and an index
+        // into it means something different once a search or a rebuild has
+        // moved things around.
         Connections {
             target: rowModel
             function onRowsChanged() {
+                if (list.returningTo !== "") {
+                    const want = list.returningTo
+                    list.returningTo = ""
+                    for (let i = 0; i < rowModel.rows.length; i++) {
+                        const r = rowModel.rows[i]
+                        if (r && r.kind === "page" && r.page === want) {
+                            list.selected = i
+                            list.positionViewAtIndex(i, ListView.Contain)
+                            return
+                        }
+                    }
+                    // The category is gone — renamed, filtered out, or the
+                    // menu rebuilt underneath. Fall through to the top rather
+                    // than leaving the selection pointing at nothing.
+                }
                 list.selected = 0
                 if (!keys.selectable(0)) keys.step(1)
                 list.positionViewAtBeginning()
@@ -781,6 +821,10 @@ PanelWindow {
             model: rowModel.rows
 
             property int selected: 0
+            // The page a Left or an Escape has just stepped out of, so the
+            // rebuild below can put the selection back on the row that leads
+            // into it. Empty at every other moment.
+            property string returningTo: ""
 
             delegate: Item {
                 id: rowItem
