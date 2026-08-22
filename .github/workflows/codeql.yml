@@ -1,0 +1,111 @@
+# CodeQL, built rather than guessed.
+#
+# This replaces GitHub's DEFAULT setup, which was cancelled at the six-hour
+# job ceiling on every single push to main. It was not slow at extraction: it
+# got through 54 of its 61 C/C++ queries in about a hundred seconds and then
+# one of the remaining five ran until GitHub killed the job. The five that
+# never finished were all range analysis —
+#
+#     Critical/OverflowStatic
+#     Security/CWE-120/VeryLikelyOverrunWrite
+#     Security/CWE-190/ArithmeticUncontrolled
+#     Security/CWE-190/ComparisonWithWiderType
+#     Security/CWE-191/UnsignedDifferenceExpressionComparedZero
+#
+# — and they blow up for a reason that is fixable here: default setup extracts
+# C/C++ with `--build-mode: none`, which builds a database by reading source
+# files without ever running a compiler. Types, macros and include paths are
+# guesses in such a database, and range analysis is exactly the family of
+# queries that cannot do its job on guesses.
+#
+# So this one COMPILES the code and lets CodeQL trace the compiler. That is
+# both more accurate and, for these queries, dramatically faster.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, which is what default setup was doing. A scheduled run catches
+    # a new query finding an old bug — the alerts that matter most here have
+    # all been in code that had not changed.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # ⚠ Not optional. The failure this file exists to fix cost six hours of
+    # runner time per push and reported nothing at the end of it. Thirty
+    # minutes is far more than a healthy run needs (the whole c-cpp analysis
+    # above finished its queries in under two), so if this ever trips it is
+    # a regression to look at and not a limit to raise.
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: c-cpp
+            build-mode: manual
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only for the language that is actually compiled. The other two are
+      # read directly and were never the problem — both finished in under a
+      # minute under default setup.
+      - name: Install the C toolchain
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends meson ninja-build
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # What can be built on a stock runner, which is more of this repo than
+      # it looks: five components declare no external dependency at all and
+      # link nothing but libc and libm — about forty thousand lines of C, and
+      # the part of the tree that changes most often.
+      #
+      # Deliberately NOT here: synui (wlroots 0.20 + scenefx), synpkg
+      # (libalpm), syntty (freetype, fontconfig, wayland), syn-arcade (SDL3),
+      # synapd (llama.cpp), and synapse_kmod (kernel headers). Every one of
+      # those needs the Arch container that build.yml already stands up, and
+      # bringing that container in here is a second problem to solve — worth
+      # doing once this is proven green, not in the same change.
+      #
+      # ⚠ A component that fails to build is a component silently MISSING from
+      # the database, and the analysis would still pass. `set -e` plus the
+      # explicit binary test is what turns that into a red build instead.
+      - name: Build the C that needs no external libraries
+        if: matrix.language == 'c-cpp'
+        run: |
+          set -e
+          for c in synstudio synfiles syn-settings syn-edit syn-disks; do
+            echo "::group::build $c"
+            meson setup "$c/_codeql" "$c" --buildtype=debug
+            meson compile -C "$c/_codeql"
+            echo "::endgroup::"
+          done
+          echo "built: synstudio synfiles syn-settings syn-edit syn-disks"
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
