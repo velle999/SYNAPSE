@@ -78,6 +78,91 @@ void ss_clip_reset(ss_clip *c)
     ss_xform_reset(&c->xf);
 }
 
+/* ------------------------------------------------------------ clipboard -- */
+
+int ss_clipboard_path(char *out, size_t n)
+{
+    const char *home = getenv("HOME");
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    const char *env = getenv("SYNSTUDIO_CLIPBOARD");
+
+    if (!out || n == 0) return -1;
+    if (env && *env) { snprintf(out, n, "%s", env); return 0; }
+    if (xdg && *xdg) { snprintf(out, n, "%s/synstudio/clipboard", xdg); return 0; }
+    if (home && *home) { snprintf(out, n, "%s/.config/synstudio/clipboard", home); return 0; }
+    return -1;
+}
+
+static int clip_mkdir_p(const char *dir)
+{
+    char buf[1024], *p;
+    snprintf(buf, sizeof buf, "%s", dir);
+    for (p = buf + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = '\0';
+        if (mkdir(buf, 0755) != 0 && errno != EEXIST) return -1;
+        *p = '/';
+    }
+    return (mkdir(buf, 0755) != 0 && errno != EEXIST) ? -1 : 0;
+}
+
+int ss_clip_copy_out(const ss_clip *c, int w, int h, double fps)
+{
+    char path[1024], dir[1024], *slash;
+    ss_timeline tmp;
+    FILE *fp;
+    int rc;
+
+    if (!c || ss_clipboard_path(path, sizeof path) != 0) return -1;
+    snprintf(dir, sizeof dir, "%s", path);
+    if ((slash = strrchr(dir, '/')) != NULL) {
+        *slash = '\0';
+        if (clip_mkdir_p(dir) != 0) return -1;
+    }
+
+    /* A one-track, one-clip document. The project's size and rate go with it
+     * because a clip's own numbers are fractions of them — a title sized 0.08
+     * of the frame height means nothing without knowing the frame. */
+    ss_timeline_reset(&tmp, w, h, fps);
+    if (ss_timeline_add_track(&tmp, SS_TRACK_VIDEO, "clipboard") < 0) {
+        ss_timeline_free(&tmp);
+        return -1;
+    }
+    if (ss_timeline_add_clip(&tmp, 0, c) < 0) {
+        ss_timeline_free(&tmp);
+        return -1;
+    }
+
+    fp = fopen(path, "w");
+    if (!fp) { ss_timeline_free(&tmp); return -1; }
+    rc = ss_timeline_write(&tmp, fp);
+    if (fclose(fp) != 0) rc = -1;
+    ss_timeline_free(&tmp);
+    return rc;
+}
+
+int ss_clip_copy_in(ss_clip *out)
+{
+    char path[1024];
+    ss_timeline tmp;
+    FILE *fp;
+
+    if (!out || ss_clipboard_path(path, sizeof path) != 0) return -1;
+    fp = fopen(path, "r");
+    if (!fp) return -1;
+    ss_timeline_reset(&tmp, 1920, 1080, 25.0);
+    ss_timeline_read(&tmp, fp);
+    fclose(fp);
+
+    if (tmp.ntracks < 1 || tmp.track[0].nclips < 1) {
+        ss_timeline_free(&tmp);
+        return -1;
+    }
+    *out = tmp.track[0].clip[0];
+    ss_timeline_free(&tmp);
+    return 0;
+}
+
 void ss_timeline_stabdir(const char *proj, char *out, size_t n)
 {
     if (!out || n == 0) return;

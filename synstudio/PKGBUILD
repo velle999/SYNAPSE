@@ -862,7 +862,26 @@ pkgver=0.1.0
 #   `loudness FILE` measures what came out — -14.00 against a -14 target.
 #
 #   523 assertions, clean under ASan+UBSan+LSan.
-pkgrel=26
+#
+# 27 COPY, PASTE, DUPLICATE — and a grade onto a whole scene.
+#
+#   ⚠ THE CLIPBOARD IS A ONE-CLIP DOCUMENT, written and read by the same two
+#   functions the project file uses. Not a struct dumped to disk: an ss_clip
+#   carries four curve tables and a develop stack, its layout changes whenever
+#   a control is added, and a binary clipboard would then be a file that
+#   silently means something different after an update. The text format
+#   already has to survive that — it is what every project file is — so the
+#   clipboard gets it for free, including the grade, the parameter keys, the
+#   effect stack, the sound chain and the retime.
+#
+#   `paste --grade` is the half that saves an afternoon: ONLY the develop
+#   stack, leaving the target's timing, framing and sound alone, and with
+#   `--all` onto every clip on the track. ⚠ It clears the target's grade KEYS,
+#   because a key holds a whole develop stack — leaving them would leave the
+#   clip being DRIVEN by the grade it had while claiming to wear the new one.
+#
+#   537 assertions, clean under ASan+UBSan+LSan.
+pkgrel=27
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

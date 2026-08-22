@@ -103,6 +103,11 @@ static void usage(void)
 "                                                    + lengthens the tail\n"
 "  timeline split PROJ T [C] --at SECONDS          the razor\n"
 "  timeline delete PROJ T C [--ripple]             lift, or close the gap\n"
+"  timeline copy   PROJ T C                        onto the clipboard\n"
+"  timeline paste  PROJ T [--at S]                 as a new clip\n"
+"  timeline paste  PROJ T C --grade                its GRADE onto that clip\n"
+"  timeline paste  PROJ T --grade --all            onto every clip there\n"
+"  timeline duplicate PROJ T C [--at S]            straight after itself\n"
 "  timeline at    PROJ T --at SECONDS              which clip is under there\n"
 "\n"
 " what a clip looks like\n"
@@ -189,6 +194,8 @@ typedef struct {
     const char *colour;
     const char *ease;
     int    off;                 /* --off: turn a thing off, keep its work */
+    int    grade;               /* --grade: the develop stack and nothing else */
+    int    all;                 /* --all: every clip on the track */
     const char *burn;           /* what to write over the delivered picture */
     const char *preset;         /* a delivery size and frame rate, by name */
     /* ⚠ NOT --to: that is already a timeline instant, a double, and giving
@@ -254,6 +261,8 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--off"))     { o->off = 1; }
+        else if (!strcmp(a, "--grade"))   { o->grade = 1; }
+        else if (!strcmp(a, "--all"))     { o->all = 1; }
         else if (!strcmp(a, "--burn"))    { const char *v = NEXT(); if (!v) return -1; o->burn = v; }
         else if (!strcmp(a, "--preset"))  { const char *v = NEXT(); if (!v) return -1; o->preset = v; }
         else if (!strcmp(a, "--ref"))     { const char *v = NEXT(); if (!v) return -1; o->ref = v; }
@@ -1663,6 +1672,102 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (cl < 0) return die("cannot add to track %d", tr);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
+        return 0;
+    }
+
+    /* Copy, paste, duplicate.
+     *
+     * The clipboard is a one-clip DOCUMENT, so what travels is everything the
+     * project file knows about a clip — the grade, the parameter keys, the
+     * effect stack, the sound chain and the retime — rather than the handful
+     * of fields a bespoke copy would have remembered to carry.
+     *
+     * `paste --grade` is the other half of the same idea, and the one that
+     * saves an afternoon: it takes ONLY the develop stack off the clipboard
+     * and leaves the target's own timing, framing and sound alone. With
+     * `--all` it does that to every clip on the track, which is what grading
+     * a scene actually looks like. */
+    if (!strcmp(verb, "copy")) {
+        int cl;
+        if (argc < 6) return die("copy wants PROJ TRACK CLIP");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        if (ss_clip_copy_out(&t->track[tr].clip[cl], t->w, t->h, t->fps) != 0)
+            return die("cannot write the clipboard");
+        printf("copied\t%d\t%d\n", tr, cl);
+        return 0;
+    }
+
+    if (!strcmp(verb, "paste")) {
+        ss_clip src;
+        int cl = -1;
+
+        if (argc < 5) return die("paste wants PROJ TRACK [CLIP]");
+        if (tl_pick(t, argv[4], NULL, &tr, NULL) != 0) return 1;
+        if (parse_opts(argc, argv, 5, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (ss_clip_copy_in(&src) != 0)
+            return die("nothing has been copied yet");
+
+        if (o.grade) {
+            /* Onto EXISTING clips: the grade only. */
+            int i, n = 0;
+            if (!src.has_grade)
+                return die("the copied clip has no grade on it");
+            if (o.all) {
+                for (i = 0; i < t->track[tr].nclips; i++) {
+                    t->track[tr].clip[i].grade = src.grade;
+                    t->track[tr].clip[i].has_grade = 1;
+                    /* ⚠ A pasted grade replaces a MOVING one. Keys hold whole
+                     * develop stacks, so leaving them would leave the clip
+                     * being driven by the grade it had while claiming to wear
+                     * the one just pasted. */
+                    t->track[tr].clip[i].nkeys = 0;
+                    n++;
+                }
+            } else {
+                if (argc < 6) return die("paste --grade wants a CLIP, or --all");
+                if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+                t->track[tr].clip[cl].grade = src.grade;
+                t->track[tr].clip[cl].has_grade = 1;
+                t->track[tr].clip[cl].nkeys = 0;
+                n = 1;
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("graded\t%d\n", n);
+            return 0;
+        }
+
+        /* A whole clip, as a new one. */
+        if (t->track[tr].type == SS_TRACK_VIDEO && src.kind != SS_CLIP_MEDIA) {
+            /* fine: a title or a solid belongs on a video track */
+        }
+        if (o.at > 0 || o.has_dur) src.tl_in = o.at;
+        cl = ss_timeline_add_clip(t, tr, &src);
+        if (cl < 0) return die("cannot add the clip");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("pasted\t%d\t%d\n", tr, cl);
+        printf("at\t%.6f\n", src.tl_in);
+        return 0;
+    }
+
+    if (!strcmp(verb, "duplicate")) {
+        ss_clip src;
+        int cl, nc;
+        if (argc < 6) return die("duplicate wants PROJ TRACK CLIP");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        src = t->track[tr].clip[cl];
+        /* Straight after itself unless told otherwise, which is what
+         * duplicating a clip is for. */
+        src.tl_in = o.at > 0 ? o.at
+                             : t->track[tr].clip[cl].tl_in
+                               + ss_clip_length(&t->track[tr].clip[cl]);
+        nc = ss_timeline_add_clip(t, tr, &src);
+        if (nc < 0) return die("cannot add the clip");
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("duplicated\t%d\t%d\n", tr, nc);
+        printf("at\t%.6f\n", src.tl_in);
         return 0;
     }
 

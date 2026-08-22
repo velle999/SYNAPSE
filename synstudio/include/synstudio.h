@@ -1088,6 +1088,22 @@ double ss_timeline_duration(const ss_timeline *t);
 int    ss_timeline_write(const ss_timeline *t, FILE *fp);
 int    ss_timeline_read(ss_timeline *t, FILE *fp);
 
+/* ---- the clipboard ----
+ *
+ * A copied clip is stored as a ONE-CLIP DOCUMENT, written and read by the
+ * two functions above. Not a struct dumped to disk: an ss_clip carries four
+ * curve tables and a develop stack, its layout changes whenever a control is
+ * added, and a binary clipboard would then be a file that silently means
+ * something different after an update. The text format already has to survive
+ * that — it is what every project file is — so the clipboard gets it for free,
+ * including the grade, the keys, the effects, the sound chain and the retime.
+ *
+ * It lives in the config directory rather than beside a project, because
+ * copying between two projects is most of what a clipboard is for. */
+int    ss_clip_copy_out(const ss_clip *c, int w, int h, double fps);
+int    ss_clip_copy_in(ss_clip *out);       /* 0 ok, -1 nothing to paste */
+int    ss_clipboard_path(char *out, size_t n);
+
 /* ---- editing ----
  *
  * An edit is a rearrangement of intent, never of media. All four of these

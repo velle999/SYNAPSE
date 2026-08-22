@@ -18,7 +18,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | area      | state                                                        |
 |-----------|--------------------------------------------------------------|
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
-| cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
+| cutting   | undo, markers, snapping, keys, copy/paste and a clipboard     |
 | retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
 | audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
@@ -247,7 +247,16 @@ Fairlight-style automation: four features for one piece of work.
       render. Halvings multiply; it chains them now
 - [x] **undo and redo** — whole documents in `<project>.undo/`, on disk, so it
       survives the window closing. `timeline undo|redo|history`
-- [ ] copy/paste/duplicate clips, and paste a grade to many clips
+- [x] **copy/paste/duplicate clips, and paste a grade to many clips** —
+      shipped in 0.1.0-27. The clipboard is a one-clip DOCUMENT, written and
+      read by the same two functions the project file uses, so everything the
+      format knows about a clip travels: the grade, the parameter keys, the
+      effect stack, the sound chain and the retime. `paste --grade` takes only
+      the develop stack and leaves the target's timing, framing and sound
+      alone; `--all` does that to every clip on a track, which is what grading
+      a scene actually looks like. ⚠ A pasted grade clears the target's grade
+      KEYS — they hold whole develop stacks, so leaving them would leave the
+      clip driven by the grade it had while claiming to wear the new one
 - [x] markers on the timeline — `timeline mark|unmark`, on the ruler, click to
       go there. ⚠ still nothing on a CLIP
 - [x] snapping to cuts, markers and the playhead, on moves, trims and scrubs

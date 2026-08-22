@@ -2181,6 +2181,69 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ------------------------------------------------ copy, paste, duplicate --
+#
+# The clipboard is a one-clip DOCUMENT, written and read by the same two
+# functions the project file uses. Not a struct dumped to disk: an ss_clip
+# carries four curve tables and a develop stack and its layout changes
+# whenever a control is added, so a binary clipboard would be a file that
+# silently means something different after an update.
+#
+# What that buys is the assertion below — everything the project format knows
+# about a clip travels, rather than the handful of fields a bespoke copy would
+# have remembered to carry.
+
+cbp=$TMP/copy.sstl
+export SYNSTUDIO_CLIPBOARD=$TMP/clipboard
+rm -f "$SYNSTUDIO_CLIPBOARD"
+$BIN timeline new "$cbp" --size 640x360 --fps 25 >/dev/null
+$BIN timeline track "$cbp" video V >/dev/null
+$BIN timeline solid "$cbp" 0 --at 0 --dur 2 --colour 0.9,0.2,0.1 >/dev/null
+$BIN timeline solid "$cbp" 0 --at 2 --dur 2 --colour 0.1,0.2,0.9 >/dev/null
+$BIN timeline solid "$cbp" 0 --at 4 --dur 2 --colour 0.1,0.9,0.2 >/dev/null
+$BIN timeline grade "$cbp" 0 0 exposure=1.5 contrast=30 >/dev/null
+$BIN timeline set   "$cbp" 0 0 nr=25 comp=40 opacity=0.5 >/dev/null
+
+$BIN timeline paste "$cbp" 0 2>&1 | seen "pasting with nothing copied is refused" "nothing has been copied"
+$BIN timeline copy "$cbp" 0 0 | seen "a clip copies" "copied	0	0"
+$BIN timeline paste "$cbp" 0 --at 6 | seen "and pastes as a new one" "pasted	0	3"
+
+# ⚠ EVERYTHING travels, not just the obvious fields. The sound chain and the
+# develop stack are the two that a hand-written copy would most likely drop,
+# because neither is a member of the clip a casual reader would think to look
+# for.
+check "the sound chain travels with it" "25" \
+      "$($BIN timeline get "$cbp" 0 3 | awk -F'\t' '/^nr\t/{print $2}')"
+check "and the levels"                  "0.5" \
+      "$($BIN timeline get "$cbp" 0 3 | awk -F'\t' '/^opacity/{print $2}')"
+$BIN timeline show "$cbp" | seen "and the grade" "exposure	1.5"
+
+# ---- a grade onto clips that already exist -------------------------------
+#
+# The half that saves an afternoon: take ONLY the develop stack off the
+# clipboard and leave the target's timing, framing and sound alone.
+$BIN timeline paste "$cbp" 0 1 --grade | seen "a grade pastes onto one clip" "graded	1"
+check "and the target keeps its own timing" "2.000000" \
+      "$($BIN timeline get "$cbp" 0 1 | awk -F'\t' '/^tl_in/{print $2}')"
+# ⚠ The discriminating half: a GRADE paste must not drag the rest of the
+# clipboard clip with it. The copied clip has nr=25 and opacity 0.5; this one
+# must still have neither.
+check "and its own sound"   "0" \
+      "$($BIN timeline get "$cbp" 0 1 | awk -F'\t' '/^nr\t/{print $2}')"
+check "and its own levels"  "1" \
+      "$($BIN timeline get "$cbp" 0 1 | awk -F'\t' '/^opacity/{print $2}')"
+
+$BIN timeline paste "$cbp" 0 --grade --all | seen "or onto every clip on a track" "graded	4"
+check "and all four are graded" "4" "$(grep -c '^grade	' "$cbp")"
+
+# ---- duplicate -----------------------------------------------------------
+$BIN timeline duplicate "$cbp" 0 1 | seen "a clip duplicates" "duplicated"
+# Straight after itself, which is what duplicating is for: clip 1 runs 2..4,
+# so its copy starts at 4.
+check "straight after itself by default" "4.000000" \
+      "$($BIN timeline duplicate "$cbp" 0 1 | awk -F'\t' '/^at/{print $2}')"
+unset SYNSTUDIO_CLIPBOARD
+
 # ----------------------------------------------------- the sound chain ---
 #
 # Clean it, shape it, control it — noise reduction, gate, EQ, compressor,
