@@ -2181,6 +2181,113 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ------------------------------------------------- over-range highlights --
+#
+# ⚠ A WHITE PIXEL RENDERED BLACK, and five points of contrast were enough.
+#
+# apply_contrast is the cubic -4v^3+6v^2-2v, which is a contrast curve on
+# [0,1] and a cliff outside it. Anything that lifts a highlight past white
+# leaves an encoded value above 1 in the float pipeline; at 5.55 the cubic
+# returns MINUS 510, `gain = nv/v` comes out negative, and every channel of
+# that pixel is multiplied by a negative number. The tone-region block
+# directly above it had always clamped its input. This one did not.
+
+if have ffmpeg; then
+    wp=$TMP/white.png
+    ffmpeg -v error -y -f lavfi -i "color=c=0x808080:s=32x32" -frames:v 1 "$wp" 2>/dev/null
+    rgbof() {   # rgbof <png> -> "R G B" of the first pixel
+        ffmpeg -v error -y -i "$1" -vf format=rgb24 -f rawvideo - 2>/dev/null \
+            | od -An -tu1 -N3 | tr -s ' ' ' ' | sed 's/^ //;s/ $//'
+    }
+    $BIN render "$wp" --out "$TMP/w0.png" --set exposure=8 >/dev/null 2>&1
+    check "a blown highlight is white" "255 255 255" "$(rgbof "$TMP/w0.png")"
+    # The regression itself.
+    $BIN render "$wp" --out "$TMP/w5.png" --set exposure=8 --set contrast=5 >/dev/null 2>&1
+    check "and STAYS white when contrast is added" "255 255 255" "$(rgbof "$TMP/w5.png")"
+    $BIN render "$wp" --out "$TMP/w40.png" --set exposure=8 --set contrast=40 >/dev/null 2>&1
+    check "at any amount of it" "255 255 255" "$(rgbof "$TMP/w40.png")"
+    # ⚠ And the fix is a NO-OP in range: sc(0) and sc(1) are both zero, so
+    # nothing at or beyond either end moves, and mid grey is still the pivot.
+    $BIN render "$wp" --out "$TMP/wm.png" --set contrast=40 >/dev/null 2>&1
+    check "mid grey is still the pivot" "127 127 127" "$(rgbof "$TMP/wm.png")"
+    rm -f "$wp.synstudio"
+fi
+
+# --------------------------------------------------------- shot match ----
+#
+# Fitted, not solved. Every control has a transfer function of its own, and
+# solving one in closed form means writing a second model of what colour.c
+# does — which drifts the first time colour.c is improved. So each control is
+# set, rendered THROUGH THE REAL ENGINE, measured and bisected.
+
+if have ffmpeg; then
+    mA=$TMP/shotA.png
+    mB=$TMP/shotB.png
+    ffmpeg -v error -y -f lavfi \
+        -i "gradients=s=320x180:c0=0x2a3550:c1=0xd8c9a8:x0=0:y0=0:x1=320:y1=180" \
+        -frames:v 1 "$mA" 2>/dev/null
+    # The same shot, a little darker, cooler and flatter — which is what two
+    # cameras on one scene actually look like.
+    ffmpeg -v error -y -i "$mA" \
+        -vf "eq=brightness=-0.06:contrast=0.85,colorchannelmixer=rr=0.93:bb=1.10" \
+        "$mB" 2>/dev/null
+    rm -f "$mA.synstudio" "$mB.synstudio"
+
+    $BIN match "$mB" --ref "$mA" > "$TMP/match.out" 2>&1
+    seen "a match reports what it fitted" "exposure" < "$TMP/match.out"
+    # It has to LAND, not just run. The report prints what was wanted beside
+    # what was got, so the assertion is on the distance and not on a promise.
+    check "and lands the brightness" "yes" \
+          "$(awk -F'\t' '/^luma/{d=$2-$3; if(d<0)d=-d; print (d<0.01)?"yes":"no"}' "$TMP/match.out")"
+    check "and the contrast" "yes" \
+          "$(awk -F'\t' '/^spread/{d=$2-$3; if(d<0)d=-d; print (d<0.01)?"yes":"no"}' "$TMP/match.out")"
+    # ⚠ The temperature is KELVIN, 2000..12000 — not a -100..100 slider. The
+    # first version of the fit hardcoded the wrong range, every `set` was
+    # refused as out of range, and the fit silently left the control alone and
+    # made tint do all the colour work until it pinned at its limit.
+    check "the temperature it set is a real one" "yes" \
+          "$(awk -F'\t' '/^temp/{print ($2>=2000 && $2<=12000)?"yes":"no"}' "$TMP/match.out")"
+
+    # And the PICTURE is closer, which is the only claim that matters.
+    $BIN render "$mB" --out "$TMP/mB_after.png" >/dev/null 2>&1
+    $BIN render "$mA" --out "$TMP/mA_dev.png" >/dev/null 2>&1
+    mpsnr() { ffmpeg -v error -i "$1" -i "$2" -lavfi psnr=stats_file=- -f null - 2>&1 \
+              | awk -F'psnr_avg:' '/psnr_avg/{split($2,a," "); v=(a[1]=="inf")?999:a[1]+0; print v}' \
+              | tail -1; }
+    before=$(mpsnr "$mB" "$TMP/mA_dev.png")
+    after=$(mpsnr "$TMP/mB_after.png" "$TMP/mA_dev.png")
+    check "and the shot is measurably closer to the reference" "yes" \
+          "$(awk -v a="${before:-0}" -v b="${after:-0}" 'BEGIN{print (b>a+4)?"yes":"no"}')"
+
+    $BIN match "$mB" 2>&1 | seen "a match needs a reference" "needs --ref"
+    rm -f "$mA.synstudio" "$mB.synstudio"
+
+    # ---- clip to clip ----------------------------------------------------
+    ffmpeg -v error -y -loop 1 -i "$mA" -t 1 -r 25 -c:v libx264 -pix_fmt yuv420p \
+           "$TMP/vA.mp4" 2>/dev/null
+    ffmpeg -v error -y -loop 1 -i "$mB" -t 1 -r 25 -c:v libx264 -pix_fmt yuv420p \
+           "$TMP/vB.mp4" 2>/dev/null
+    mp=$TMP/match.sstl
+    $BIN timeline new "$mp" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$mp" video V >/dev/null
+    $BIN timeline clip "$mp" 0 "$TMP/vA.mp4" --at 0 --dur 1 >/dev/null
+    $BIN timeline clip "$mp" 0 "$TMP/vB.mp4" --at 1 --dur 1 >/dev/null
+    $BIN timeline match "$mp" 0 1 0 0 > "$TMP/tmatch.out" 2>&1
+    check "a clip matches another clip" "yes" \
+          "$(awk -F'\t' '/^luma/{d=$2-$3; if(d<0)d=-d; print (d<0.01)?"yes":"no"}' "$TMP/tmatch.out")"
+    # ⚠ `^grade<TAB>` and not `^grade`: the develop stack writes grade.shadow.hue
+    # and five more keys that all start with the same six letters, so the loose
+    # pattern counts six and would have passed on a document with no clip
+    # grade in it at all.
+    check "and the grade is written into the document" "1" \
+          "$(grep -c '^grade	' "$mp")"
+    $BIN timeline match "$mp" 0 1 0 1 2>&1 \
+        | seen "a clip cannot match itself" "already matches itself"
+    $BIN timeline solid "$mp" 0 --at 2 --dur 1 >/dev/null
+    $BIN timeline match "$mp" 0 2 0 0 2>&1 \
+        | seen "and a title has no shot in it" "have to be footage"
+fi
+
 # -------------------------------------------------------------- scopes ---
 #
 # Computed HERE and not by an ffmpeg filter, for the reason the histogram is:

@@ -776,7 +776,59 @@ pkgver=0.1.0
 #   the fix for THAT, `$2 ~ /inf/`, matched the `psnr_g:inf` sitting further
 #   along a line whose average was 4.86, so two completely different pictures
 #   read as identical. Test the FIRST TOKEN.
-pkgrel=24
+#
+# 25 SHOT MATCH — and ⭐ A WHITE PIXEL THAT RENDERED BLACK.
+#
+#   ⭐ THE BUG FIRST, because it was here long before the matcher found it.
+#   apply_contrast is the cubic -4v^3+6v^2-2v, which is a contrast curve on
+#   [0,1] and a cliff outside it. Anything that lifts a highlight past white
+#   leaves an encoded value above 1 in the float pipeline; at 5.55 that cubic
+#   returns MINUS 510, so `gain = nv / v` comes out NEGATIVE and every channel
+#   of the pixel is multiplied by a negative number:
+#
+#       exposure=8 contrast=0  ->  255 255 255
+#       exposure=8 contrast=5  ->    0   0   0
+#
+#   Five points of contrast turned white into black. The tone-region block
+#   immediately above it had always clamped its input; this one never did. The
+#   fix applies the curve to the clamped value and keeps the excess, which is
+#   a NO-OP everywhere inside the display range — sc(0) and sc(1) are both
+#   zero — and leaves an over-range highlight over-range, which is what it is.
+#
+#   SHOT MATCH is fitted, not solved. Every control has a transfer function of
+#   its own, and solving one in closed form means writing a second model of
+#   what colour.c does — a model that drifts the first time colour.c is
+#   improved. So each control is set, rendered THROUGH THE REAL ENGINE,
+#   measured and bisected: correct by construction, and it never needs to know
+#   what `contrast` means. Brightness, contrast and white balance; not a
+#   three-way grade, because there are no per-channel lift/gamma/gain controls
+#   here. 22.5 dB apart before, 33.1 dB after, on a realistic pair.
+#
+#   ⚠ THE AXES ARE CHOSEN TO MATCH THE CONTROLS. Warm against cool is red over
+#   blue, which is what a temperature does; green against magenta is green
+#   over the other two, which is what a tint does. Measuring R/G and B/G
+#   instead gives two numbers that BOTH controls move, and the descent chases
+#   its own tail — the first version did, and pinned tint at its limit.
+#
+#   ⚠ RANGES COME FROM THE TABLE, and it is the UI range. `temp` is KELVIN
+#   (2000..12000), not a -100..100 slider — hardcoding that made every `set`
+#   fail as out of range, silently, so the fit left the control alone. And the
+#   ACCEPT range is 0..50000, where 0 means "as shot": bisecting THAT walks
+#   out of the sensible part of the control.
+#
+#   ⚠ ss_develop_describe returns ZERO on success and -1 past the end, while
+#   ss_clip_describe returns 1 on success and 0 past the end. A plain truth
+#   test on the first stopped the lookup loop at row zero, every range missed,
+#   and the matcher reported a perfectly successful match that had changed
+#   nothing at all.
+#
+#   ⚠ And the statistics CLAMP, the way the histogram clamps. What is matched
+#   is a DISPLAYED picture and a value above white is white; unclamped, a shot
+#   pushed eight stops reported a mean of 5.0 rather than 1.0, so the fit
+#   believed brightness climbs forever and pinned exposure at MINUS eight.
+#
+#   497 assertions, clean under ASan+UBSan+LSan.
+pkgrel=25
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

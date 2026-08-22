@@ -35,6 +35,7 @@ sources = files(
   'src/timeline.c',
   'src/fx.c',
   'src/font.c',
+  'src/match.c',
   'src/scope.c',
   'src/subs.c',
 )

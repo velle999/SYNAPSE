@@ -49,6 +49,9 @@ static void usage(void)
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
 "  render FILE --out OUT         apply the sidecar and write a new file\n"
 "  histogram FILE                256 bins per channel, tab separated\n"
+"  match FILE --ref REFERENCE    make this shot look like that one:\n"
+"                                brightness, contrast and white balance,\n"
+"                                FITTED through the engine rather than solved\n"
 "  scope FILE --out F.png [--kind waveform|parade|vector] [--size N]\n"
 "                                the picture, measured — computed here and\n"
 "                                not by a filter, so it cannot disagree\n"
@@ -106,6 +109,7 @@ static void usage(void)
 "       at S, `retime=blend|flow` invents the frames a slowdown needs.\n"
 "       KEYS on `speed` are a RAMP, and theirs are SOURCE seconds\n"
 "  timeline grade PROJ T C KEY=VALUE...   the develop stack, as a LUT\n"
+"  timeline match PROJ T C REFT REFC      make this shot look like that one\n"
 "  timeline key PROJ T C add --at S [KEY=VALUE...]   pin the grade here\n"
 "  timeline key PROJ T C list|remove N\n"
 "  timeline key PROJ T C set N KEY=VALUE...\n"
@@ -183,6 +187,9 @@ typedef struct {
     int    off;                 /* --off: turn a thing off, keep its work */
     const char *burn;           /* what to write over the delivered picture */
     const char *preset;         /* a delivery size and frame rate, by name */
+    /* ⚠ NOT --to: that is already a timeline instant, a double, and giving
+     * one flag two types is how a typo becomes a silent zero. */
+    const char *ref;            /* the shot to match, a file or T,C */
     const char *style;          /* a title style, applied on creation */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
@@ -242,6 +249,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--off"))     { o->off = 1; }
         else if (!strcmp(a, "--burn"))    { const char *v = NEXT(); if (!v) return -1; o->burn = v; }
         else if (!strcmp(a, "--preset"))  { const char *v = NEXT(); if (!v) return -1; o->preset = v; }
+        else if (!strcmp(a, "--ref"))     { const char *v = NEXT(); if (!v) return -1; o->ref = v; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
         /* The same slot: an export names a container and a transition names a
@@ -529,6 +537,54 @@ static int cmd_scope(const char *path, const opts *o)
            o->out, ss_scope_name(kind), sc.w, sc.h);
     ss_image_free(&sc);
     return rc == 0 ? 0 : die("cannot write %s", o->out);
+}
+
+/* Match one photograph to another. The reference is developed through ITS
+ * sidecar first — what is being matched is the picture somebody has already
+ * graded, not the raw file underneath it. */
+static int cmd_match(const char *path, const opts *o)
+{
+    ss_image tgt, ref;
+    ss_edit te, re;
+    ss_match_report rep;
+    char side[4200];
+    int rc;
+
+    if (!o->ref) return die("match needs --ref REFERENCE");
+
+    /* Small on purpose. A fit is dozens of renders, and the numbers it is
+     * fitting are averages over the whole frame — which do not change for
+     * having been measured at 400 pixels instead of 4000. */
+    { opts so = *o; so.size = 400;
+      rc = load_edited(o->ref, &so, &ref, &re); }
+    if (rc) return rc;
+
+    ss_sidecar_path(path, side, sizeof side);
+    if (ss_edit_load(&te, side) != 0) { ss_image_free(&ref);
+                                        return die("cannot read %s", side); }
+    if (ss_load(path, &tgt, 400) != 0) { ss_image_free(&ref);
+                                         return die("cannot decode %s", path); }
+
+    if (ss_shot_match(&ref, &tgt, &te.dev, &rep) != 0) {
+        ss_image_free(&ref); ss_image_free(&tgt);
+        return die("cannot match");
+    }
+    ss_image_free(&ref);
+    ss_image_free(&tgt);
+
+    if (ss_edit_save(&te, side) != 0) return die("cannot write %s", side);
+
+    {
+        char v[64];
+        printf("matched\t%s\nto\t%s\n", path, o->ref);
+        ss_develop_get(&te.dev, "exposure", v, sizeof v); printf("exposure\t%s\n", v);
+        ss_develop_get(&te.dev, "contrast", v, sizeof v); printf("contrast\t%s\n", v);
+        ss_develop_get(&te.dev, "temp", v, sizeof v);     printf("temp\t%s\n", v);
+        ss_develop_get(&te.dev, "tint", v, sizeof v);     printf("tint\t%s\n", v);
+        printf("luma\t%.4f\t%.4f\n", rep.want_luma, rep.got_luma);
+        printf("spread\t%.4f\t%.4f\n", rep.want_spread, rep.got_spread);
+    }
+    return 0;
 }
 
 static int cmd_histogram(const char *path, const opts *o)
@@ -1560,6 +1616,71 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (cl < 0) return die("cannot add to track %d", tr);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
+        return 0;
+    }
+
+    /* Match one clip to another.
+     *
+     * The reference is measured WITH its grade on and the target WITHOUT:
+     * what is being matched is the picture somebody has already made, and
+     * what is being fitted is the stack that will make this shot look like
+     * it. Both are read at the middle of the clip — the frame that
+     * represents it, rather than a first frame that might still be a fade. */
+    if (!strcmp(verb, "match")) {
+        ss_clip *c;
+        const ss_clip *rc2;
+        ss_image tgt, ref;
+        ss_match_report rep;
+        int cl, rtr, rcl;
+        double tt, rt;
+
+        if (argc < 8) return die("match wants PROJ TRACK CLIP REFTRACK REFCLIP");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        if (tl_pick(t, argv[6], argv[7], &rtr, &rcl) != 0) return 1;
+        c   = &t->track[tr].clip[cl];
+        rc2 = &t->track[rtr].clip[rcl];
+        if (tr == rtr && cl == rcl) return die("a clip already matches itself");
+        if (c->kind != SS_CLIP_MEDIA || rc2->kind != SS_CLIP_MEDIA)
+            return die("both have to be footage — a title has no shot in it");
+
+        tt = ss_clip_source_at(c,   ss_clip_length(c)   / 2.0, t->fps);
+        rt = ss_clip_source_at(rc2, ss_clip_length(rc2) / 2.0, t->fps);
+
+        /* 400 pixels. A fit is dozens of renders and the numbers it fits are
+         * averages over the whole frame, which do not change for having been
+         * measured at 400 instead of 4000. */
+        if (ss_load_frame(rc2->path, rt, &ref, 400) != 0)
+            return die("cannot read %s", rc2->path);
+        if (rc2->has_grade) {
+            ss_edit re;
+            memset(&re, 0, sizeof re);
+            re.dev = rc2->grade;
+            ss_edit_apply(&ref, &re);
+        }
+        if (ss_load_frame(c->path, tt, &tgt, 400) != 0) {
+            ss_image_free(&ref);
+            return die("cannot read %s", c->path);
+        }
+
+        if (ss_shot_match(&ref, &tgt, &c->grade, &rep) != 0) {
+            ss_image_free(&ref); ss_image_free(&tgt);
+            return die("cannot match");
+        }
+        ss_image_free(&ref);
+        ss_image_free(&tgt);
+        c->has_grade = 1;
+
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        {
+            char v[64];
+            printf("matched\t%d\t%d\tto\t%d\t%d\n", tr, cl, rtr, rcl);
+            ss_develop_get(&c->grade, "exposure", v, sizeof v); printf("exposure\t%s\n", v);
+            ss_develop_get(&c->grade, "contrast", v, sizeof v); printf("contrast\t%s\n", v);
+            ss_develop_get(&c->grade, "temp", v, sizeof v);     printf("temp\t%s\n", v);
+            ss_develop_get(&c->grade, "tint", v, sizeof v);     printf("tint\t%s\n", v);
+            printf("luma\t%.4f\t%.4f\n", rep.want_luma, rep.got_luma);
+            printf("spread\t%.4f\t%.4f\n", rep.want_spread, rep.got_spread);
+        }
         return 0;
     }
 
@@ -2724,6 +2845,12 @@ int main(int argc, char **argv)
     if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0) return die("bad option");
     if (!strcmp(cmd, "peaks"))     return cmd_peaks(argv[2], &o);
     if (!strcmp(cmd, "render"))    return cmd_render(argv[2], &o);
+    if (!strcmp(cmd, "match")) {
+        if (argc < 3) return die("match wants a file and --to REFERENCE");
+        if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        return cmd_match(argv[2], &o);
+    }
     if (!strcmp(cmd, "histogram")) return cmd_histogram(argv[2], &o);
     if (!strcmp(cmd, "scope")) {
         if (argc < 3) return die("scope wants a file");

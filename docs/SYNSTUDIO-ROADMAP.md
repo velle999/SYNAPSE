@@ -278,7 +278,17 @@ Fairlight-style automation: four features for one piece of work.
       into the baked cube. What is missing is the named transforms (a log
       curve in, a Rec.709 display out) rather than the machinery to apply
       them
-- [ ] shot match
+- [x] **shot match** — **shipped in 0.1.0-25.** `synstudio match FILE --ref
+      REF` for two photographs, `timeline match PROJ T C REFT REFC` for two
+      clips. FITTED, not solved: every control has a transfer function of its
+      own, and solving one in closed form means writing a second model of what
+      `colour.c` does — which drifts the first time colour.c is improved. Each
+      control is set, rendered THROUGH THE REAL ENGINE, measured and bisected,
+      so it never needs to know what `contrast` means. Brightness, contrast
+      and white balance; not a three-way grade, because there are no
+      per-channel lift/gamma/gain controls here and inventing them to have
+      something to solve for would be the tail wagging the dog. Measured on a
+      realistic pair: 22.5 dB apart before, 33.1 dB after
 - [x] **render range** — `timeline range`, in the document because it is set
       while looking at the cut. Trimmed at the END of the graph rather than by
       seeking the inputs: a range is a WINDOW onto the finished picture, not a
@@ -334,9 +344,9 @@ Fairlight-style automation: four features for one piece of work.
    range, seven presets, burn-in, image sequences and a queue.
 
 **The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan: shot match, the named colour
-transforms, a watermark image, copy/paste, J-K-L and a source monitor, track
-automation, a curve editor over time, smooth cut, and auto-save.
+short list of named gaps rather than a plan: the named colour transforms, a
+watermark image, copy/paste, J-K-L and a source monitor, track automation, a
+curve editor over time, smooth cut, and auto-save.
 
 ## Not doing
 

@@ -250,6 +250,32 @@ const char *ss_scope_name(int v);
 int         ss_scope_render(const ss_image *in, int kind, int w, int h,
                             ss_image *out);
 
+/* ---- shot match ----
+ *
+ * Make one shot look like another, by FITTING the controls rather than
+ * solving them. Every control has a transfer function of its own — exposure
+ * is stops, contrast is a curve around a pivot, temperature is a chromatic
+ * adaptation — and solving any of them in closed form means writing a second
+ * model of what colour.c does, which drifts the first time colour.c is
+ * improved. So each one is set, rendered through the REAL engine, measured
+ * and bisected: correct by construction, and it never needs to know what
+ * `contrast` means.
+ *
+ * Matches brightness, contrast and white balance. Not a three-way grade —
+ * there are no per-channel lift/gamma/gain controls here, and inventing them
+ * to have something to solve for would be the tail wagging the dog.
+ *
+ * `d` is read as the starting stack and written with the fitted one. */
+typedef struct {
+    double want_luma, got_luma;
+    double want_spread, got_spread;
+    double want_rb, got_rb;     /* warm against cool */
+    double want_gm, got_gm;     /* green against magenta */
+} ss_match_report;
+
+int ss_shot_match(const ss_image *ref, const ss_image *tgt, ss_develop *d,
+                  ss_match_report *rep);
+
 /* ------------------------------------------------------------------ lut -- */
 
 /* Bake the pointwise half of a develop stack into an Iridas/Adobe .cube 3D

@@ -254,8 +254,30 @@ void ss_pixel_pointwise(const ss_develop *d, float in[3], float out[3])
         nv += 0.25f * (d->highlights / 100.0f) * w_gauss(cv, 0.75f);
         nv += 0.25f * (d->whites     / 100.0f) * w_whites(cv);
     }
-    if (d->contrast != 0.0f)
-        nv = apply_contrast(nv, ss_clampf(d->contrast, -100.0f, 100.0f) / 100.0f);
+    if (d->contrast != 0.0f) {
+        /* ⚠ On the CLAMPED value, with whatever is above white PRESERVED —
+         * the same guard the tone regions above already use, and for a worse
+         * reason.
+         *
+         * apply_contrast is a cubic that is only a contrast curve on [0,1].
+         * Past white it is a cubic with a negative leading term: at an
+         * encoded luma of 5.55 — an ordinary blown highlight once anything has
+         * lifted it — it returns MINUS 510, so `gain = nv / v` comes out
+         * negative and every channel of that pixel is multiplied by a
+         * negative number. A WHITE pixel rendered BLACK, and it took as
+         * little as five points of contrast to do it:
+         *
+         *     exposure=8 contrast=0  ->  255 255 255
+         *     exposure=8 contrast=5  ->    0   0   0
+         *
+         * Applying the curve to the clamped value and keeping the excess is a
+         * no-op everywhere inside the display range (sc(1) and sc(0) are both
+         * zero, so nothing at or beyond either end moves at all) and leaves an
+         * over-range highlight over-range, which is what it is. */
+        float s2 = ss_clampf(d->contrast, -100.0f, 100.0f) / 100.0f;
+        float cv = ss_clampf(nv, 0.0f, 1.0f);
+        nv += apply_contrast(cv, s2) - cv;
+    }
 
     if (nv != v) {
         /* Below this the picture is black and the ratio is meaningless noise;
