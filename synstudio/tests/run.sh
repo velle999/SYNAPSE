@@ -1910,6 +1910,47 @@ ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$fdir/c.mov" 2>/de
 $BIN timeline export "$proj" --out "$fdir/d.mp4" --format nonesuch >/dev/null 2>&1
 check "an unknown format is refused" "1" "$?"
 
+echo "== what the window is launched with"
+
+# THE BUG THIS EXISTS FOR (synstudio 0.1.0-15). The session exports MANGOHUD=1
+# so games get the overlay, and MangoHud's Vulkan manifest declares
+#
+#     "enable_environment": { "MANGOHUD": "1" }
+#
+# which loads its layer into EVERY Vulkan client. Building a QML MediaPlayer
+# builds a QMediaPlayer, whose ffmpeg backend asks libavutil for a Vulkan
+# hardware device on construction — so opening the editor on an AMD laptop
+# SEGFAULTED quickshell in MangoHud's vkCreateDevice hook before a frame was
+# drawn. NVIDIA picks a different hwdevice, never calls it, and never sees it.
+#
+# `gui` execs quickshell, so what is asserted here is the ENVIRONMENT it is
+# handed: a stub named quickshell, first on PATH, that prints what it got.
+# ⚠ the stub needs an explicit interpreter — PATH inside a spawned stub is
+# whatever the caller had, and a stub that assumed one has cost this repo a
+# passing test over a broken fix before.
+gdir=$TMP/gui
+mkdir -p "$gdir/bin"
+cat > "$gdir/bin/quickshell" <<'STUB'
+#!/bin/bash
+env
+STUB
+chmod +x "$gdir/bin/quickshell"
+
+genv=$(PATH="$gdir/bin:$PATH" $BIN gui 2>/dev/null)
+printf '%s\n' "$genv" | seen "the launcher disables MangoHud" "DISABLE_MANGOHUD=1"
+printf '%s\n' "$genv" | seen "and turns the enable off with it" "MANGOHUD=0"
+# The one that made it crash. DISABLE_MANGOHUD beats the enable in the
+# manifest, but leaving MANGOHUD=1 set as well is the state that was shipped,
+# so assert the launcher really overwrote it rather than adding beside it.
+#
+# ⚠ ANCHORED, and that is the whole point of writing it as a regex: the
+# substring "MANGOHUD=1" is inside "DISABLE_MANGOHUD=1", so a plain notseen
+# here fails on the very environment that proves the fix works.
+check "MANGOHUD=1 does not survive the launcher" "0" \
+      "$(printf '%s\n' "$genv" | grep -c '^MANGOHUD=1$')"
+# And it still says which program the window belongs to.
+printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID=synstudio"
+
 pass=$(grep -c '^p' "$RESULTS")
 fail=$(grep -c '^f' "$RESULTS")
 

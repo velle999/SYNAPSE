@@ -437,7 +437,47 @@ pkgver=0.1.0
 #   as missing, renders as nothing, and the export says so once by name.
 #
 #   340 assertions, still clean under ASan+UBSan+LSan.
-pkgrel=15
+#
+# 16 THE WINDOW WOULD NOT OPEN ON AN AMD LAPTOP.
+#
+#   quickshell SEGFAULTED before it drew a frame, with its own crash dialog
+#   and a dump. The stack is not this program's code at all:
+#
+#       #2  libMangoHud.so
+#       #5  vkCreateDevice              (libvulkan)
+#       #8  av_hwdevice_ctx_create      (libavutil)
+#       #9+ libffmpegmediaplugin.so
+#       #15 QMediaPlayer::QMediaPlayer
+#
+#   The session exports MANGOHUD=1 so a game gets the overlay without a
+#   wrapper, and MangoHud's Vulkan manifest declares
+#   "enable_environment": { "MANGOHUD": "1" } — one variable that loads its
+#   layer into EVERY Vulkan client. This window became one WITHOUT ASKING TO
+#   BE: constructing a QML MediaPlayer constructs a QMediaPlayer, and its
+#   ffmpeg backend asks libavutil for a Vulkan hardware device on
+#   construction, before it has been given anything to play.
+#
+#   ⚠ NVIDIA NEVER SEES IT. A different hardware device is chosen there,
+#   vkCreateDevice is never called, and the hook is never entered — so the
+#   machine this is developed on opens the editor happily while every AMD
+#   laptop gets a crash dialog. Same shape, same laptop and same fix as the
+#   wallpaper engine's MangoHud crash at synui 409.
+#
+#   ⚠ And keeping `import QtMultimedia` out of the main QML file did NOT
+#   contain it. That protects the window from a MISSING import — a failed
+#   import fails the whole FILE — but this is a segfault inside the process,
+#   which takes the window with it however it was reached.
+#
+#   `gui` now sets DISABLE_MANGOHUD=1 (the manifest's own disable_environment,
+#   which beats the enable) and MANGOHUD=0 with it, before exec'ing
+#   quickshell. Asserted by running `gui` with a stub named quickshell first
+#   on PATH that prints the environment it was handed. ⚠ the negative
+#   assertion has to be ANCHORED: "MANGOHUD=1" is a substring of
+#   "DISABLE_MANGOHUD=1", so the obvious grep fails on the very environment
+#   that proves the fix.
+#
+#   344 assertions.
+pkgrel=16
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

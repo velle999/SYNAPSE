@@ -1864,6 +1864,44 @@ static int cmd_gui(int argc, char **argv)
      * launcher. */
     setenv("QS_APP_ID", "synstudio", 1);
 
+    /* ⚠ DISABLE_MANGOHUD=1, AND IT IS NOT COSMETIC — IT IS WHY THE WINDOW
+     * OPENS AT ALL ON AMD.
+     *
+     * The session exports MANGOHUD=1 so a game gets the overlay without a
+     * per-game wrapper, and MangoHud's Vulkan manifest declares
+     * "enable_environment": { "MANGOHUD": "1" } — so that one variable loads
+     * VK_LAYER_MANGOHUD_overlay into EVERY Vulkan client in the session. This
+     * window is one, and not by choice: constructing a QML MediaPlayer builds
+     * a QMediaPlayer, whose ffmpeg backend asks libavutil for a Vulkan
+     * hardware device before it has been given a file to play.
+     *
+     * On an AMD Renoir laptop that segfaults quickshell before a frame is
+     * drawn, inside MangoHud's own vkCreateDevice hook:
+     *
+     *     #2  libMangoHud.so
+     *     #5  vkCreateDevice
+     *     #8  av_hwdevice_ctx_create      (libavutil)
+     *     #9+ libffmpegmediaplugin.so
+     *     #15 QMediaPlayer::QMediaPlayer
+     *
+     * ⚠ NVIDIA NEVER SEES IT — a different hwdevice is chosen there,
+     * vkCreateDevice is never called and the hook is never entered. So the
+     * development desktop opens the editor happily while every AMD laptop
+     * gets a crash dialog, which is the same shape as the wallpaper engine's
+     * MangoHud crash and was diagnosed from its notes.
+     *
+     * ⚠ And the Loader does NOT contain this. Keeping `import QtMultimedia`
+     * out of the main file protects the window from a MISSING import; this is
+     * a segfault inside the process, which takes the window with it however it
+     * was reached.
+     *
+     * DISABLE_MANGOHUD is the manifest's own disable_environment and beats the
+     * enable, so it is the knob to use rather than unsetting MANGOHUD and
+     * hoping. MANGOHUD=0 goes with it for the OpenGL side. An FPS counter over
+     * a colour grade would have been wrong anyway. */
+    setenv("DISABLE_MANGOHUD", "1", 1);
+    setenv("MANGOHUD", "0", 1);
+
     av[n++] = "quickshell";
     av[n++] = "-p";
     av[n++] = qml;
