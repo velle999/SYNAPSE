@@ -1134,6 +1134,30 @@ SEL_SW_GAMES=(
 # Every list, so the walkers below need no second copy of the set.
 SEL_ALL_LISTS=(SEL_COMPONENTS SEL_SW_WEB SEL_SW_MEDIA SEL_SW_OFFICE SEL_SW_DEV SEL_SW_GAMES)
 
+# ── The typefaces ─────────────────────────────────────────
+#
+# NOT a checkbox, and not on any page above. Everything on those pages is a
+# program somebody either wants or does not; this is the contents of a menu
+# that is otherwise empty.
+#
+# synui's font picker (fontpick.c) and synstudio's title font list are both
+# just fontconfig — they show what is installed and nothing else. A stock
+# SynapseOS install carries noto-fonts, ttf-dejavu and terminus-font, so
+# "choose the font the desktop is drawn in" offered a choice between DejaVu
+# and a console face, and lettering a title meant typing a family name into a
+# field and hoping. A picker with nothing in it is not a setting.
+#
+# So these ship with every install. Sans, serif and mono, all OFL or Apache,
+# ~88MB on disk — the ISO is deliberately not grown by them, since a live
+# session is not where anybody sets their desktop font.
+#
+# ⚠ ITS OWN TRANSACTION, and NOT folded into the language pack below. The
+# language pack is load-bearing — without it a non-Latin locale renders every
+# glyph as a box — and one renamed typeface in a shared transaction would take
+# noto-fonts down with it. That is the samsung-m2020 shape, and it costs far
+# more here than a missing typeface does.
+TYPEFACE_PKGS="inter-font cantarell-fonts ttf-opensans ttf-lato ttf-roboto adobe-source-sans-fonts adobe-source-serif-fonts otf-libertinus ttf-liberation ttf-carlito ttf-caladea ttf-jetbrains-mono ttf-fira-code ttf-hack ttf-roboto-mono"
+
 declare -A PICKED=()     # key -> 0|1, the answer for every row above
 
 # sel_reset <full|standard|minimal>
@@ -3889,6 +3913,20 @@ FONT_PKGS="noto-fonts"
 echo "  Installing fonts ($FONT_PKGS)..."
 arch-chroot /mnt pacman -S --noconfirm --needed $FONT_PKGS 2>&1 | tail -2 \
     || warn "Font install failed — $LOCALE may render as boxes"
+
+# The typefaces, in a SECOND transaction — see TYPEFACE_PKGS above for why it
+# is not the same one. Retried one at a time on failure and never fatal: a
+# renamed font package costs a face in a menu, and the install carries on.
+echo "  Installing typefaces ($(echo $TYPEFACE_PKGS | wc -w) families)..."
+if ! arch-chroot /mnt pacman -S --noconfirm --needed $TYPEFACE_PKGS 2>&1 | tail -2; then
+    tf_failed=""
+    for p in $TYPEFACE_PKGS; do
+        arch-chroot /mnt pacman -S --noconfirm --needed "$p" >/dev/null 2>&1 \
+            || tf_failed="$tf_failed $p"
+    done
+    [ -n "$tf_failed" ] && warn "Typefaces not installed:$tf_failed
+  Only the font menus are affected. Install them later with 'synpkg install <name>'."
+fi
 
 # ── Timezone ──────────────────────────────────────────────
 #

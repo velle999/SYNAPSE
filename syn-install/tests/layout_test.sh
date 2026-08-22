@@ -867,6 +867,38 @@ check "the installer makes grub.cfg readable" "yes" \
 check "unless a GRUB password is configured in it" "yes" \
     "$(in_code 'password(_pbkdf2)? ')"
 
+echo "=== typefaces ==="
+
+# TYPEFACE_PKGS lives ABOVE the source-only seam, so it is a real variable here
+# rather than something scraped back out of the file.
+#
+# The point of it is that synui's font picker and synstudio's title font list
+# are both plain fontconfig queries: they show what is installed, so a stock
+# install offered a choice between DejaVu and a console face. Anything that
+# empties this variable empties both menus and nothing fails.
+check "a typeface set ships"        "yes" \
+    "$([ -n "${TYPEFACE_PKGS:-}" ] && echo yes || echo no)"
+check "and it is a real shelf, not one face" "yes" \
+    "$([ "$(echo $TYPEFACE_PKGS | wc -w)" -ge 10 ] && echo yes || echo no)"
+# Sans is not enough. A serif for a title card and a mono for a terminal are
+# the two a picker is most obviously missing, and each is one name here.
+check "…with a serif in it"         "yes" \
+    "$(case " $TYPEFACE_PKGS " in *" adobe-source-serif-fonts "*) echo yes;; *) echo no;; esac)"
+check "…and a monospace"            "yes" \
+    "$(case " $TYPEFACE_PKGS " in *" ttf-jetbrains-mono "*) echo yes;; *) echo no;; esac)"
+
+# ⚠ SEPARATE TRANSACTIONS. The language pack is load-bearing — without it a
+# non-Latin locale draws every glyph as a box — and one renamed typeface in a
+# shared transaction takes noto-fonts down with it. That is the samsung-m2020
+# shape, and it is invisible until the day a font package is renamed upstream.
+check "the language pack is its own pacman call" "no" \
+    "$(grep -qF 'FONT_PKGS $TYPEFACE_PKGS' <<<"$codetext" && echo yes || echo no)"
+check "and a failed typeface is retried alone"   "yes" \
+    "$(in_code 'for p in $TYPEFACE_PKGS; do')"
+# Never fatal. A face missing from a menu must not cost a finished install.
+check "…and never dies on one"                   "no" \
+    "$(grep -qF 'die "Typeface' <<<"$codetext" && echo yes || echo no)"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"

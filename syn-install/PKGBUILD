@@ -81,7 +81,25 @@ pkgver=0.1.0
 #   SEL_COMPONENTS in syn-install.sh and the rows table in the GUI. A name in
 #   one and not the other is a component the text installer offers and the
 #   graphical one silently cannot.
-pkgrel=91
+# 92: fifteen open-source typefaces ship with every install. synui's font
+#   picker and synstudio's title font list are both plain fontconfig queries —
+#   they show what is installed and nothing else — and a stock SynapseOS
+#   carried noto-fonts, ttf-dejavu and terminus-font, so "choose the font the
+#   desktop is drawn in" offered DejaVu or a console face. A picker with
+#   nothing in it is not a setting. Sans, serif and mono, all OFL or Apache,
+#   ~88MB on disk. NOT a checkbox: everything on those pages is a program
+#   somebody wants or does not, and this is the contents of a menu.
+#   ⚠ ITS OWN pacman transaction, NOT folded in with the language pack. That
+#   one is load-bearing — without it a non-Latin locale draws every glyph as a
+#   box — and one renamed typeface in a shared transaction takes noto-fonts
+#   down with it, which is the samsung-m2020 shape. Retried per package,
+#   never fatal. TYPEFACE_PKGS sits ABOVE the source-only seam so the test
+#   reads the variable rather than scraping the file; seven checks in
+#   layout_test, including that the two transactions stay apart.
+#   ⚠ The ISO is deliberately NOT grown by them — a live session is not where
+#   anybody sets their desktop font, and that file already argues the case
+#   against putting 130MB of fonts on every image.
+pkgrel=92
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
