@@ -132,7 +132,14 @@ void notif_dnd_toggle(syn_server_t *s)        { (void)s; }
 void record_audio_toggle(syn_server_t *s)     { (void)s; }
 void record_edit_toggle(syn_server_t *s)      { (void)s; }
 void sound_state_refresh(syn_server_t *s)     { (void)s; }
-void transparency_set_enabled(syn_server_t *s, int on)  { (void)s; (void)on; }
+/* theme.c is not linked; the real one sets this field and then re-pushes alpha
+ * to every surface. The field is the half the table cares about — and the half
+ * test_solid_leaves_nothing_clear() asserts on — so the stub does that much and
+ * counts the calls, rather than swallowing them and letting a row that never
+ * reached this look like a row that did. */
+static int transparency_calls;
+void transparency_set_enabled(syn_server_t *s, int on)
+{ transparency_calls++; if (s) s->config.transparency = on; }
 void transparency_set_opacity(syn_server_t *s, float o) { (void)s; (void)o; }
 const char *layout_label(syn_layout_t l)      { (void)l; return "stack"; }
 const char *theme_name(syn_theme_t t)         { (void)t; return "synapse"; }
@@ -905,6 +912,80 @@ static void test_bind_move(void)
     printf("  bind move ................ ok\n");
 }
 
+/*
+ * ── "Make it all solid" has to leave NOTHING see-through ─────────────────────
+ *
+ * The row exists because switching the effects off was three controls, and the
+ * third — Sync all glass, which releases the pins — is invisible until it
+ * bites. A pinned bar or dock stops following the master, so setting Glass to
+ * Off left those two exactly as clear as they were, on a desktop whose one
+ * glass control now reads "Off". That is the failure this asserts against, and
+ * it is the reason synui_effects_solid() clears the pins outright instead of
+ * leaning on the sync row, which only releases them when it actually changes.
+ */
+static void test_solid_leaves_nothing_clear(void)
+{
+    /* A desktop with the lot on, and two rows taken off the master by hand —
+     * the state anyone who has ever nudged the dock is in. */
+    g_s.config.glass_level = 55;
+    g_s.config.glass_sync  = 1;
+    transparency_set_enabled(&g_s, 1);
+
+    assert(select_row(CTL_ROW_BAR_OPACITY));
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    assert(select_row(CTL_ROW_DOCK_OPACITY));
+    ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+    assert(g_s.config.glass_pins & SYN_GLASS_PIN_BAR);
+    assert(g_s.config.glass_pins & SYN_GLASS_PIN_DOCK);
+
+    synui_effects_solid(&g_s);
+
+    assert(!g_s.config.transparency);
+    assert(g_s.config.glass_level == 0);      /* the row's own "Off" rung */
+    assert(g_s.config.glass_sync);            /* …and something listening to it */
+
+    /* THE ONE THAT MATTERS. Not "the pins were cleared" — that is how, not
+     * what. What is that every surface somebody could have pinned is opaque,
+     * which is the promise the row's label makes.
+     *
+     * ⚠ Glass at Off is NOT enough for these two on its own: the bar curve is
+     * 0.95 - 0.95t, so the bottom of the slider is 0.95 and both strips keep 5%
+     * of the wallpaper showing through. The action says them outright, and this
+     * is the assertion that catches it if that is ever dropped as redundant. */
+    assert(g_s.config.bar_opacity  >= 1.0f);
+    assert(g_s.config.dock_opacity >= 1.0f);
+    assert(g_s.config.active_opacity >= 1.0f);
+    assert(g_s.config.foot_alpha     >= 1.0f);
+
+    /* And it survives a login. A solid desktop that comes back clear is the
+     * same class of bug as one that never went solid. */
+    syn_server_t fresh;
+    memset(&fresh, 0, sizeof(fresh));
+    synui_config_load(&fresh.config);
+    assert(fresh.config.glass_level == 0);
+    assert(fresh.config.bar_opacity  >= 1.0f);
+    assert(fresh.config.dock_opacity >= 1.0f);
+
+    /* Idempotent: pressing it on a desktop that is already solid is a no-op,
+     * not a second pass that finds something new to change. */
+    int calls = transparency_calls;
+    synui_effects_solid(&g_s);
+    assert(g_s.config.glass_level == 0);
+    assert(!g_s.config.transparency);
+    assert(transparency_calls == calls);   /* it did not re-run the helper */
+
+    /* Put the rig back for whatever runs next. */
+    assert(select_row(CTL_ROW_BAR_OPACITY));
+    ctlpanel_key(&g_s, XKB_KEY_Delete, 0);
+    assert(select_row(CTL_ROW_DOCK_OPACITY));
+    ctlpanel_key(&g_s, XKB_KEY_Delete, 0);
+    assert(select_row(CTL_ROW_GLASS_LEVEL));
+    ctlpanel_key(&g_s, XKB_KEY_Delete, 0);
+    g_s.config.glass_level = SYN_GLASS_UNSET;
+
+    printf("  make it all solid ........ ok\n");
+}
+
 int main(void)
 {
     /* Unbuffered: every failure here prints WHICH row and why, immediately
@@ -922,6 +1003,7 @@ int main(void)
     test_every_enum_option_round_trips();
     test_auto_rung();
     test_glass_pin_tracks_default();
+    test_solid_leaves_nothing_clear();
     test_search();
     test_apply_hooks();
     test_bind_combo_round_trip();

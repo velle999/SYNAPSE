@@ -1681,6 +1681,7 @@ typedef enum {
     CTL_ROW_FOOT_ALPHA,
     CTL_ROW_GLASS_LEVEL,
     CTL_ROW_GLASS_SYNC,        /* do the per-surface rows follow the slider  */
+    CTL_ROW_SOLID,             /* one press: glass off, windows opaque       */
     CTL_ROW_GLASS_LEGIBILITY,  /* may a surface overrule its own alpha       */
     CTL_ROW_SCENE_INK,         /* does it read the windows or the wallpaper  */
     CTL_ROW_WP_ACCENT,         /* accent off the wallpaper, or out of the theme */
@@ -7533,6 +7534,16 @@ void sound_udev_finish(syn_server_t *s);
 void ctlpanel_show(syn_server_t *s);
 void ctlpanel_hide(syn_server_t *s);
 void ctlpanel_toggle(syn_server_t *s);
+/*
+ * Turn off everything you can see through: glass to Off, window translucency
+ * off, and every glass pin released so a surface that had stopped following the
+ * master cannot stay clear on its own.
+ *
+ * The bind action `solid`, Appearance ▸ Make it all solid, and
+ * `synctl dispatch solid` are all this. One-way by design — the individual rows
+ * put any of it back, and remembering four numbers across a logout to offer an
+ * "undo" would be a switch that half-works. */
+void synui_effects_solid(syn_server_t *s);
 /* Open onto a named category ("display", "appearance", … — the sidebar names,
  * case-insensitively). The `control` bind action's argument, and how the start
  * menu's Settings submenu reaches the same tree instead of listing its own copy

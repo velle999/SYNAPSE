@@ -484,7 +484,31 @@ pkgver=0.1.0
 #   the rofi fallback chain ends there — a live image gets one washed-out mark
 #   rather than a rasi pointing at a file that does not exist.
 
-pkgrel=429
+# 430: one press that turns off everything you can see through. Appearance ▸
+#   Make it all solid, the `solid` bind action, `synctl dispatch solid`.
+#   Switching the effects off by hand was three controls and the third is
+#   invisible until it bites: Transparency, then Glass to Off, then Sync all
+#   glass ON again to release the pins — because a row you have ever nudged
+#   stops following the master, so a pinned bar or dock stayed exactly as clear
+#   as it was on a desktop whose one glass control now read "Off".
+#   ⚠ AND GLASS AT OFF DOES NOT MAKE THE BAR OR DOCK OPAQUE. syn_glass_bar_alpha
+#   is `0.95 - 0.95t`, so the bottom of the slider hands both strips 0.95: the
+#   curve was fitted to the bar's historical default at the clear end and
+#   carried the last 5% all the way down. The action therefore says bar_opacity
+#   and dock_opacity outright, which pins them at 1.00 — an opinion, recorded,
+#   surviving a login, and handed back to the slider by Delete on the row.
+#   ⚠ It is ONE-WAY. Restoring would mean remembering four numbers somewhere
+#   that outlives a logout, and a switch that half-remembers is worse than one
+#   that does not pretend to.
+#   ctl_adjust's tail is now ctl_commit(), so setting a row outright travels the
+#   identical path a keypress does — pin, release, apply and persist included. A
+#   second writer that set the field and called ctl_apply would leave a pinned
+#   row glassy or a settings.state that disagrees with the screen, silently.
+#   tests/ctlpanel_table_test.c asserts what the label PROMISES — that the two
+#   surfaces somebody pinned come out opaque — not that the pins were cleared,
+#   which is only how.
+
+pkgrel=430
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

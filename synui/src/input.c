@@ -1230,6 +1230,12 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         game_toggle(s);
     } else if (strcmp(action, "cat") == 0) {
         cat_toggle(s);
+    } else if (strcmp(action, "solid") == 0) {
+        /* The one-press way out of every see-through surface — the control
+         * panel's "Make it all solid" row is this action, so a key and the row
+         * cannot come to mean different things. Idempotent: pressing it on a
+         * desktop that is already solid changes nothing and says so. */
+        synui_effects_solid(s);
     } else if (strcmp(action, "lock") == 0) {
         /* The native lock (lock.c). Idempotent, so the idle timer, the power
          * panel's Lock row, the menu's Lock Screen and logind's before-sleep

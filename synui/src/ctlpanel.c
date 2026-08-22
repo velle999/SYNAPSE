@@ -348,6 +348,14 @@ static const struct ctl_item ctl_items[] = {
     /* The one guard on the whole scheme, and the one row that says so out loud:
      * a surface measures the wallpaper under it and raises its own alpha until
      * its text clears AA. Off is "I said clear, I meant clear". */
+    /* The way out, one press, sitting under the rows it undoes. Somebody who
+     * does not want any of this had to find three controls — Transparency,
+     * Glass, and Sync all glass to release pins they never knew they set — and
+     * the third is invisible until a pinned dock stays glassy after the master
+     * says Off. See synui_effects_solid(). One-way on purpose; the rows above
+     * put any of it back. */
+    { CTL_ROW_SOLID,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, "Make it all solid", "solid",
+      .help = "Glass off and windows opaque, in one press. The rows above put it back" },
     { CTL_ROW_GLASS_LEGIBILITY, CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Legibility correction", NULL,
       .key = "glass_legibility", .off = CFG(glass_legibility), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_GLASS,
@@ -1327,6 +1335,8 @@ int ctlpanel_row_is_default(syn_server_t *s, int row)
 }
 
 /* Left/Right on a table-driven row. Returns 1 if the value actually moved. */
+static int ctl_commit(syn_server_t *s, const struct ctl_item *it, float v);
+
 static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
 {
     float v = ctl_get(&s->config, it);
@@ -1371,6 +1381,21 @@ static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
         return 0;
     }
 
+    return ctl_commit(s, it, v);
+}
+
+/*
+ * Put a row at an exact value, and do everything that follows from it.
+ *
+ * Split out of ctl_adjust so that something which sets a row outright — the
+ * "Make it all solid" action below — travels the identical path a keypress
+ * does. The pinning, the release and the persist are not decoration: a second
+ * writer that set the field and called ctl_apply would leave a pinned row still
+ * glassy, or a settings.state that disagrees with the screen, and it would do
+ * it silently. There is one way to change a row.
+ */
+static int ctl_commit(syn_server_t *s, const struct ctl_item *it, float v)
+{
     float before = ctl_get(&s->config, it);
     ctl_put(s, it, v);
     if (ctl_get(&s->config, it) == before) return 0;   /* already at the end */
@@ -1432,6 +1457,77 @@ static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
     ctl_apply(s, it->apply);
     ctl_persist(s, it);
     return 1;
+}
+
+/*
+ * ── One press, and nothing is see-through ────────────────────────────────────
+ *
+ * The glass and the window translucency are the two things somebody who does
+ * not want any of this has to switch off, and they were four rows apart with a
+ * pin mechanism in between. Turning them off by hand meant Transparency, then
+ * Glass to Off, and then — only if you knew pins existed — Sync all glass on
+ * again to release whichever rows you had ever nudged, because a pinned bar
+ * keeps its own alpha and stays glassy while the master says Off. Three
+ * controls, one of them invisible until it bites.
+ *
+ * So this is the escape hatch: Appearance ▸ Make it all solid, `synctl dispatch
+ * solid`, or a bind on `solid`.
+ *
+ * ⚠ IT IS ONE-WAY, deliberately. Restoring would mean remembering what the four
+ * numbers were, somewhere that survives a logout, and a switch that half-
+ * remembers is worse than one that does not pretend to: the rows above put any
+ * of it back, and Delete on a row restores the shipped default. What this owes
+ * the user is that it leaves NOTHING see-through — a leftover glassy dock after
+ * pressing it is the whole failure — so it clears the pins outright rather than
+ * relying on the sync toggle to do it, which it only does when the toggle
+ * actually changes.
+ */
+void synui_effects_solid(syn_server_t *s)
+{
+    if (!s) return;
+
+    /* Windows first: it is the one the user can see change immediately, and the
+     * helper both re-pushes alpha to every surface and persists on its own. */
+    if (s->config.transparency)
+        transparency_set_enabled(s, false);
+
+    /* ⚠ UNCONDITIONAL, and before the rows. A pin means "this surface stopped
+     * following the master", so a bar or dock pinned at 0.55 would sit there
+     * looking exactly like the thing that was just switched off. The sync row
+     * below releases pins too, but only on a change — and it is already on for
+     * most people, so relying on that leaves the common case broken. */
+    ctl_glass_pins_set(s, 0);
+
+    /* Then the master, then the level. The other order sets a level nothing is
+     * listening to yet. */
+    const struct ctl_item *sync  = ctl_item(CTL_ROW_GLASS_SYNC);
+    const struct ctl_item *level = ctl_item(CTL_ROW_GLASS_LEVEL);
+    if (sync)  ctl_commit(s, sync, 1.0f);
+    if (level) ctl_commit(s, level, 0.0f);   /* 0 is the row's own "Off" rung */
+
+    /*
+     * ⚠ AND THE BAR AND DOCK STILL NEED SAYING OUTRIGHT — Glass at Off does not
+     * make them opaque. syn_glass_bar_alpha() is `0.95 - 0.95t`, so the bottom
+     * of the slider hands both strips 0.95 rather than 1.00: the curve was
+     * fitted to the bar's historical default at the clear end, and it carried
+     * the last 5% all the way down with it. Small, and exactly the sort of
+     * small that has somebody turning every switch off and still seeing the
+     * wallpaper through their dock.
+     *
+     * Set as rows, so each one pins itself. That is the honest record: solid is
+     * an opinion this desktop now holds about those two surfaces, it shows as
+     * modified, it survives a login, and Delete on either row hands it back to
+     * the slider. Leaving them unpinned would mean the next nudge of Glass
+     * silently made them see-through again.
+     */
+    const struct ctl_item *bar  = ctl_item(CTL_ROW_BAR_OPACITY);
+    const struct ctl_item *dock = ctl_item(CTL_ROW_DOCK_OPACITY);
+    if (bar)  ctl_commit(s, bar,  1.0f);
+    if (dock) ctl_commit(s, dock, 1.0f);
+
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             "glass off \xc2\xb7 bar and dock solid \xc2\xb7 windows opaque");
+    ctlpanel_repaint(s);
 }
 
 /*
