@@ -686,7 +686,30 @@ pkgver=0.1.0
 #   and a machine with no bold face installed would have failed the BUILD for
 #   having different fonts. It compares the bold answer to the regular one and
 #   skips when they are the same.
-pkgrel=21
+#
+# 22 THE QML TEST CRASHED QUICKSHELL ON AN AMD LAPTOP.
+#
+#   The real reason the ThinkPad could not build this package, and it was
+#   never the timeout: `ERROR: Quickshell has crashed under pid ...`.
+#
+#   ⚠ THE TEST RAN QUICKSHELL DIRECTLY, SO IT BYPASSED THE LAUNCHER — and the
+#   launcher is what sets DISABLE_MANGOHUD=1. The session exports MANGOHUD=1,
+#   which loads MangoHud's Vulkan layer into every Vulkan client; a QML
+#   MediaPlayer constructs a QMediaPlayer, whose ffmpeg backend calls
+#   av_hwdevice_ctx_create on construction; on AMD that segfaults inside
+#   MangoHud's own vkCreateDevice hook and takes the shell with it. NVIDIA
+#   never reproduces it, so it passed on the development desktop every time.
+#
+#   That is EXACTLY the bug pkgrel 16 fixed, re-run by a test written after
+#   it. A test that loads the QML file directly has to supply the environment
+#   the launcher would, or it is not testing the window — it is reproducing a
+#   fixed crash on whichever machines still have the hardware for it. There is
+#   a separate test asserting the launcher sets the variable; this one now
+#   sets it too.
+#
+#   Verified both ways on the desktop: without the guard MangoHud loads into
+#   quickshell, with it the layer is absent and the window still loads.
+pkgrel=22
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

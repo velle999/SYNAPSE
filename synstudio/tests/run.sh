@@ -2627,7 +2627,25 @@ if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
     # time on. Watching the log costs nothing and stops the moment the answer
     # is known: about eight seconds on a desktop.
     : > "$TMP/qml.log"
-    QT_QPA_PLATFORM=offscreen quickshell -p "$qml" > "$TMP/qml.log" 2>&1 &
+    # ⚠ DISABLE_MANGOHUD=1 AND MANGOHUD=0, exactly as the launcher sets them,
+    # and NOT because this test cares about an FPS counter.
+    #
+    # The session exports MANGOHUD=1, which loads MangoHud's Vulkan layer into
+    # every Vulkan client — and a QML MediaPlayer constructs a QMediaPlayer,
+    # whose ffmpeg backend calls av_hwdevice_ctx_create on construction. On
+    # AMD that segfaults inside MangoHud's own vkCreateDevice hook and takes
+    # quickshell with it. NVIDIA never reproduces it, which is why this test
+    # passed on the development desktop and CRASHED on velle's ThinkPad,
+    # failing the build there and nowhere else.
+    #
+    # That is the exact bug `synstudio gui` exists to prevent, and there is a
+    # separate test above asserting the launcher sets these. This one loads
+    # quickshell DIRECTLY to test the QML FILE, so it has to supply the same
+    # environment the launcher would — otherwise it is not testing the window,
+    # it is re-running a fixed bug on whichever machines still reproduce it.
+    # See [[reference_mangohud_layer_crashes_vulkan_clients]].
+    DISABLE_MANGOHUD=1 MANGOHUD=0 QT_QPA_PLATFORM=offscreen \
+        quickshell -p "$qml" > "$TMP/qml.log" 2>&1 &
     qpid=$!
     for _ in $(seq 1 120); do
         grep -qE "Configuration Loaded|ERROR" "$TMP/qml.log" 2>/dev/null && break
