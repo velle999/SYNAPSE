@@ -437,8 +437,16 @@ void taskmgr_show(syn_server_t *s)
     wl_event_source_timer_update(t->timer, TASKMGR_POLL_MS);
 }
 
+/* Defined with the rest of the menu, below; taskmgr_hide needs it above. */
+static void taskmgr_menu_close(syn_taskmgr_t *t);
+
 void taskmgr_hide(syn_server_t *s)
 {
+    /* A menu left open would be up again the next time the panel is, over a
+     * table that has been resampled since — pointing at whatever now sits in
+     * that row. */
+    taskmgr_menu_close(&s->taskmgr);
+
     s->taskmgr.visible = 0;
     s->taskmgr.confirm = TM_CONFIRM_NONE;
     wl_event_source_timer_update(s->taskmgr.timer, 0);
@@ -567,6 +575,20 @@ int taskmgr_motion(syn_server_t *s, double lx, double ly)
     if (!t->visible) return 0;
     if (t->confirm != TM_CONFIRM_NONE) return 1;
 
+    /* ⚠ While the menu is up the pointer highlights ITS items and the table
+     * stops tracking. Letting the hover keep moving the row selection would
+     * change what the menu acts on while it is open — the pointer travels
+     * across rows on its way to "Force quit", and the process named when it
+     * arrived would not be the one it was opened on. */
+    if (t->menu_open) {
+        int item = hit_spot_at(&t->hit, lx, ly);
+        if (item >= 0 && item < TM_MENU_ITEMS && item != t->menu_sel) {
+            t->menu_sel = item;
+            synui_render_taskmgr(s);
+        }
+        return 1;
+    }
+
     int i = hit_index_at(&t->hit, lx, ly);
     if (i < 0 || i >= t->n || i == t->selected) return 1;
     t->selected = i;
@@ -575,12 +597,97 @@ int taskmgr_motion(syn_server_t *s, double lx, double ly)
     return 1;
 }
 
+/* The right-click menu.
+ *
+ * Its clickable rects are hit SPOTS, registered by the renderer that draws
+ * them — the mechanism hit.c grew for exactly this and for exactly this
+ * reason: a panel keeping private x/y/w/h for a thing it also draws is how a
+ * drawn item and a clickable item drift apart. The click path here asks
+ * hit_spot_at() and never computes a rectangle of its own.
+ */
+const char *taskmgr_menu_label(int i)
+{
+    /* "End task" before "Force quit", and never the other way round: the
+     * gentler one is the one a mouse lands on first, and a menu that offered
+     * SIGKILL at the top would make the destructive choice the easy one. */
+    switch (i) {
+    case 0:  return "End task";
+    case 1:  return "Force quit";
+    default: return "";
+    }
+}
+
+static void taskmgr_menu_close(syn_taskmgr_t *t)
+{
+    t->menu_open = 0;
+    t->menu_sel  = 0;
+}
+
+/* Act on the chosen item. Both arm the ordinary confirmation rather than
+ * signalling: ONE path to a signal, so the menu inherits the refusals (init,
+ * ourselves) and the pinned name that path already carries. */
+static void taskmgr_menu_choose(syn_server_t *s, int item)
+{
+    syn_taskmgr_t *t = &s->taskmgr;
+    taskmgr_menu_close(t);
+    taskmgr_ask_kill(s, item == 1 ? TM_CONFIRM_KILL : TM_CONFIRM_TERM);
+}
+
 int taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
                   uint32_t time_msec)
 {
-    (void)button; (void)time_msec;
+    (void)time_msec;
     syn_taskmgr_t *t = &s->taskmgr;
     if (!t->visible) return 0;
+
+    /* ---- the right-click menu ----
+     *
+     * Answered BEFORE anything else, because while it is up it is the whole of
+     * the panel as far as the pointer is concerned — a click that fell through
+     * to the table underneath would move the selection out from under the menu
+     * that is naming it. */
+    if (t->menu_open) {
+        int item = hit_spot_at(&t->hit, lx, ly);
+        if (item >= 0 && item < TM_MENU_ITEMS) {
+            taskmgr_menu_choose(s, item);
+        } else {
+            /* Anywhere else dismisses it and does nothing more. A menu that
+             * closed AND passed the click on would end a task on the way out
+             * of a menu somebody was only leaving. */
+            taskmgr_menu_close(t);
+        }
+        synui_render_taskmgr(s);
+        return 1;
+    }
+
+    /* A right-click over a row selects it and opens the menu there. It never
+     * opens over the header, the confirmation line or empty table: a menu
+     * offering to end a task needs a task to end. */
+    if (button == BTN_RIGHT) {
+        int row;
+        if (t->confirm != TM_CONFIRM_NONE) return 1;   /* answer that first */
+        if (!hit_in_panel(&t->hit, lx, ly)) return panel_is_windowed(s, SYN_PDRAG_TASKMGR) ? 0 : 1;
+        row = hit_row_at(&t->hit, lx, ly);
+        if (row < 0 || row >= t->n) return 1;
+
+        t->selected = row;
+        t->sel_pid  = t->procs[row].pid;
+        taskmgr_scroll_to_selection(t);
+
+        /* Where it opens, in PANEL-LOCAL pixels — the same coordinates
+         * hit_set_rows and every cairo draw in render.c already use, so the
+         * renderer needs no origin arithmetic of its own. Clamping to the
+         * panel is the renderer's job for the same reason: it is the half
+         * that knows how big the menu it is about to draw actually is. */
+        t->menu_x = (int)(lx - t->hit.x);
+        t->menu_y = (int)(ly - t->hit.y);
+        t->menu_open = 1;
+        t->menu_sel  = 0;
+        if (panel_is_windowed(s, SYN_PDRAG_TASKMGR) && !t->win.kbd)
+            panel_take_kbd(s, SYN_PDRAG_TASKMGR);
+        synui_render_taskmgr(s);
+        return 1;
+    }
 
     /* Both ways out of the panel, answered together: they agree about a pending
      * kill and differ only in whether they close. */
@@ -660,6 +767,36 @@ int taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
      * Shift+X is this panel's SIGKILL, and no global bind uses a bare Shift. */
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
         return 0;
+
+    /* While the right-click menu is up it answers the keyboard too, for the
+     * same reason it answers the pointer: it is the thing in front. A j that
+     * fell through to the table would move the selection out from under the
+     * menu naming it.
+     *
+     * Above the confirmation check because the two are never up together —
+     * choosing an item CLOSES the menu and arms the confirmation, so the
+     * confirmation's y/n reaches the block below on the very next key. */
+    if (t->menu_open) {
+        switch (sym) {
+        case XKB_KEY_j: case XKB_KEY_Down:
+            t->menu_sel = (t->menu_sel + 1) % TM_MENU_ITEMS;
+            break;
+        case XKB_KEY_k: case XKB_KEY_Up:
+            t->menu_sel = (t->menu_sel + TM_MENU_ITEMS - 1) % TM_MENU_ITEMS;
+            break;
+        case XKB_KEY_Return:
+        case XKB_KEY_KP_Enter:
+            taskmgr_menu_choose(s, t->menu_sel);
+            break;
+        default:
+            /* Anything else closes it. A menu of two destructive items is not
+             * the place to guess at what an unrecognised key meant. */
+            taskmgr_menu_close(t);
+            break;
+        }
+        synui_render_taskmgr(s);
+        return 1;
+    }
 
     /* While a kill is pending the panel answers only y/n: any other key would
      * be ambiguous about whether it meant "yes". */

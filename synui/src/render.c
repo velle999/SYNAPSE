@@ -7563,8 +7563,55 @@ void synui_render_taskmgr(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
-    syn_show_text(cr, "j/k move \xc2\xb7 c/m/g/p sort \xc2\xb7 u mine \xc2\xb7 "
-                        "x term \xc2\xb7 X kill \xc2\xb7 r refresh \xc2\xb7 Esc close");
+    syn_show_text(cr, "j/k move \xc2\xb7 right-click a row \xc2\xb7 c/m/g/p sort "
+                        "\xc2\xb7 u mine \xc2\xb7 x term \xc2\xb7 X kill \xc2\xb7 Esc close");
+
+    /* ---- the right-click menu ----
+     *
+     * LAST, so it draws over the table it was opened on top of; and its
+     * clickable rects are hit SPOTS added here, beside the drawing, because a
+     * panel keeping private geometry for a thing it also draws is how a drawn
+     * item and a clickable item drift apart.
+     *
+     * The clamp lives here for the same reason: this is the half that knows
+     * how big the menu actually is. taskmgr.c records where the pointer was
+     * and nothing more. */
+    if (t->menu_open) {
+        int mw = TM_MENU_W;
+        int mh = TM_MENU_ITEMS * TM_MENU_ITEM_H + 8;
+        int mx, my, i;
+
+        hit_place_popup(t->menu_x, t->menu_y, mw, mh, pw, ph, &mx, &my);
+
+        /* A plate of its own rather than the panel's wash: the menu sits over
+         * rows of text and has to be readable against whichever ones it
+         * happens to land on. */
+        cairo_set_source_rgba(cr, 0.09, 0.09, 0.13, 0.98);
+        cairo_rectangle(cr, mx, my, mw, mh);
+        cairo_fill(cr);
+        set_accent(cr, 0.55);
+        cairo_set_line_width(cr, 1.0);
+        cairo_rectangle(cr, mx + 0.5, my + 0.5, mw - 1, mh - 1);
+        cairo_stroke(cr);
+
+        for (i = 0; i < TM_MENU_ITEMS; i++) {
+            int iy = my + 4 + i * TM_MENU_ITEM_H;
+            if (i == t->menu_sel) {
+                set_accent(cr, 0.22);
+                cairo_rectangle(cr, mx + 3, iy, mw - 6, TM_MENU_ITEM_H);
+                cairo_fill(cr);
+            }
+            cairo_set_font_size(cr, 13);
+            /* Force quit is the destructive one and says so in the colour the
+             * confirmation bar already uses for exactly that. */
+            if (i == 1) cairo_set_source_rgba(cr, 0.95, 0.55, 0.55, 1.0);
+            else        set_ink(cr, INK_TEXT, 0.95);
+            cairo_move_to(cr, mx + 14, iy + 18);
+            syn_show_text(cr, taskmgr_menu_label(i));
+
+            hit_add_spot(&t->hit, mx + 3, iy, mw - 6, TM_MENU_ITEM_H);
+        }
+    }
 
     cairo_destroy(cr);
     set_scene_buffer(&s->taskmgr_ui.text_buf, s->taskmgr_ui.tree, buf);

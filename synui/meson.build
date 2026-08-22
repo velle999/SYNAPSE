@@ -1215,6 +1215,16 @@ test('readme_binds', readme_binds,
 # the selection to row 0 unconditionally. A text check, and deliberately so:
 # the start menu is a quickshell panel that talks to the RUNNING compositor,
 # and loading it to press arrow keys at it would drive the live session.
+# The task manager can end a process, and the right-click menu is a second way
+# to reach that. What this guards is that it is a second way to reach the SAME
+# path — not a second place that calls kill(), which would look identical in
+# use and have none of the confirmation, the pid-1 refusal or the pinned name.
+taskmgr_menu = find_program('tests/taskmgr_menu.sh')
+test('taskmgr_menu', taskmgr_menu,
+     args    : [meson.current_source_dir() / 'src/taskmgr.c',
+                meson.current_source_dir() / 'src/render.c'],
+     timeout : 30)
+
 menu_back = find_program('tests/menu_back.sh')
 test('menu_back', menu_back,
      args    : [meson.current_source_dir() / 'quickshell/StartMenu.qml'],

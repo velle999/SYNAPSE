@@ -293,6 +293,12 @@ int  hit_index_at(const syn_hit_t *g, double lx, double ly);
 int  hit_add_spot(syn_hit_t *g, int lx, int ly, int w, int h);
 /* Which spot is under (lx,ly), in the order they were added, or -1 for none. */
 int  hit_spot_at(const syn_hit_t *g, double lx, double ly);
+/* Where a popup of w x h lands inside a panel of panel_w x panel_h when it was
+ * asked for at (want_x, want_y). Panel-local, like the rest of this file. The
+ * task manager's right-click menu is the first caller and will not be the
+ * last, which is why the sum lives here and not in the panel that needed it. */
+void hit_place_popup(int want_x, int want_y, int w, int h,
+                     int panel_w, int panel_h, int *x, int *y);
 
 /* ── How a panel is dismissed ────────────────────────────────
  *
@@ -2463,6 +2469,13 @@ typedef struct {
 #define TASKMGR_MAX_PROCS 512  /* sampled; the table shows the top rows */
 #define TASKMGR_ROWS      14   /* rows visible at once */
 
+/* The right-click menu. Its size is shared because render.c draws it and
+ * taskmgr.c clamps it to the panel, and a menu drawn one size and clamped as
+ * another is a menu whose last item hangs off the bottom edge. */
+#define TM_MENU_ITEMS      2
+#define TM_MENU_W        176
+#define TM_MENU_ITEM_H    26
+
 typedef enum {
     TM_SORT_CPU = 0,
     TM_SORT_MEM,
@@ -2497,6 +2510,22 @@ typedef struct {
     syn_tm_sort_t    sort;
     int              own_only;     /* 'u': hide other users' processes */
     char             status[96];
+
+    /* ---- the right-click menu ----
+     *
+     * Opened over a row, and it acts on the SELECTION rather than on a pid of
+     * its own: right-clicking selects the row first, and sel_pid then keeps
+     * the selection on that process across the re-sorts a CPU-ordered table
+     * does every second. A menu carrying its own pid would be a second answer
+     * to "which process" and the two would disagree exactly when the table is
+     * busiest — which is when somebody is most likely reaching for kill.
+     *
+     * Choosing an item arms the ordinary confirmation below rather than
+     * signalling: one path to a signal, and the menu inherits every refusal
+     * and every pinned name that path already has. */
+    int              menu_open;
+    int              menu_sel;     /* 0 = end task, 1 = force quit */
+    int              menu_x, menu_y;   /* panel-local, where it was opened */
 
     syn_tm_confirm_t confirm;
     pid_t            confirm_pid;  /* pinned when the confirmation is armed, so
@@ -7056,6 +7085,11 @@ void taskmgr_toggle(syn_server_t *s);
 int  taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* …and the pointer, per the panel pointer contract at the top of this file. */
 int  taskmgr_motion(syn_server_t *s, double lx, double ly);
+/* What each menu item is called. ONE list: render.c draws these and nothing
+ * else names them, so a third item cannot appear in the drawing without
+ * appearing in the count above. */
+const char *taskmgr_menu_label(int i);
+
 int  taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
                  uint32_t time_msec);
 int  taskmgr_scroll(syn_server_t *s, double lx, double ly, double delta);

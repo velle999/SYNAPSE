@@ -380,6 +380,43 @@ static void test_welcome_rows(void)
           "and it is inside the panel, so a press on it is not a click-off");
 }
 
+/* Where a popup lands inside a panel — the task manager's right-click menu is
+ * the first, and the case that matters is the one nobody reproduces twice by
+ * hand: opened on the LAST visible row, where it would hang off the bottom.
+ *
+ * The task manager's real numbers: a 660-wide panel, a 176-wide menu of two
+ * 26px items plus 8 of padding, so 60 tall.
+ */
+static void test_place_popup(void)
+{
+    const int pw = 660, ph = 520;      /* about the task manager's own size */
+    const int mw = 176, mh = 2 * 26 + 8;
+    int x, y;
+
+    /* Somewhere in the middle: it opens exactly where it was asked to. */
+    hit_place_popup(200, 200, mw, mh, pw, ph, &x, &y);
+    CHECK(x == 200 && y == 200, "a popup with room opens where the pointer was");
+
+    /* THE CASE. Right-click on the last visible row, near the right edge: it
+     * has to come back inside on both axes, and its far edge must land within
+     * the panel rather than four pixels past it. */
+    hit_place_popup(pw - 20, ph - 20, mw, mh, pw, ph, &x, &y);
+    CHECK(x + mw <= pw - 4, "a popup at the right edge is pulled back inside");
+    CHECK(y + mh <= ph - 4, "a popup at the bottom edge is pulled back inside");
+
+    /* Off the top-left: pinned to the padding, never to a negative. */
+    hit_place_popup(-50, -50, mw, mh, pw, ph, &x, &y);
+    CHECK(x == 4 && y == 4, "a popup asked for off the top-left pins inside");
+
+    /* ⚠ A popup TALLER than the panel pins to the top rather than to a
+     * negative y — the floor is applied after the ceiling for exactly this.
+     * A negative origin would draw it off the top of the panel entirely, so
+     * the menu would be invisible and its click targets would be nowhere. */
+    hit_place_popup(10, 10, mw, ph + 200, pw, ph, &x, &y);
+    CHECK(y == 4, "a popup taller than the panel pins to the top edge");
+    CHECK(x == 10, "and its x is left alone when x had room");
+}
+
 int main(void)
 {
     test_cleared();
@@ -391,6 +428,7 @@ int main(void)
     test_list_unaffected_by_cols();
     test_spots();
     test_welcome_rows();
+    test_place_popup();
 
     if (failures) {
         fprintf(stderr, "hit_test: %d failure(s)\n", failures);

@@ -208,3 +208,33 @@ int hit_index_at(const syn_hit_t *g, double lx, double ly)
      * (top_row * cols) and this arithmetic stays the same for both shapes. */
     return g->first + row * cols + col;
 }
+
+/* Where a popup lands inside a panel.
+ *
+ * The task manager's right-click menu is the first of these, and it will not
+ * be the last: any panel that grows a context menu needs the same sum, and a
+ * second copy of it is the drift this file exists to stop.
+ *
+ * Pulled back INSIDE rather than flipped above the pointer. A panel is wider
+ * and taller than the little menus that open in it, so there is always room
+ * to slide; and a menu that jumped upward would put its last item — which is
+ * the destructive one, by the convention that puts the gentle choice first —
+ * under a cursor that was aiming at a row.
+ *
+ * All coordinates are PANEL-LOCAL, like everything else here.
+ */
+void hit_place_popup(int want_x, int want_y, int w, int h,
+                     int panel_w, int panel_h, int *x, int *y)
+{
+    int px = want_x, py = want_y;
+    const int pad = 4;
+
+    if (px + w > panel_w - pad) px = panel_w - pad - w;
+    if (py + h > panel_h - pad) py = panel_h - pad - h;
+    /* The floor comes last so a popup taller than the panel it is in pins to
+     * the top edge rather than to a negative one. */
+    if (px < pad) px = pad;
+    if (py < pad) py = pad;
+    if (x) *x = px;
+    if (y) *y = py;
+}

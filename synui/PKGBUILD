@@ -424,7 +424,47 @@ pkgver=0.1.0
 #   the running compositor, and loading it to press arrow keys at it would
 #   drive the live session.
 
-pkgrel=427
+# 428 RIGHT-CLICK IN THE TASK MANAGER: END TASK, FORCE QUIT.
+#
+#   The panel could already send SIGTERM and SIGKILL — x and X, behind a
+#   confirmation that names the pid it pinned and refuses init and synui
+#   itself. What it could not do was be reached with the mouse:
+#   taskmgr_click() opened with `(void)button;`, so a right-click was a
+#   left-click and the two most useful things in the panel were keys or
+#   nothing.
+#
+#   ⚠ ONE PATH TO A SIGNAL. Both items ARM the existing confirmation rather
+#   than signalling, so the menu inherits every refusal and the pinned name
+#   that path already carries. An item that called kill() itself would look
+#   identical in use and have none of it — no confirmation, no pid-1 refusal,
+#   and SIGKILL one click from a table that re-sorts every second.
+#   tests/taskmgr_menu.sh counts the kill() calls in the file for exactly that
+#   reason (and strips string literals first, or the wlr_log that reports the
+#   call counts as a second one).
+#
+#   ⚠ IT ACTS ON THE SELECTION, not on a pid of its own. Right-clicking selects
+#   the row first and sel_pid then keeps the selection on that process across
+#   the re-sorts a CPU-ordered table does every second. A menu carrying its own
+#   pid would be a second answer to "which process", and the two would disagree
+#   exactly when the table is busiest — which is when somebody is most likely
+#   reaching for kill.
+#
+#   ⚠ AND THE HOVER STOPS TRACKING while it is open. The pointer crosses rows
+#   on its way to "Force quit", and a hover that kept moving the selection
+#   would leave the menu naming a different process than the one it opened on.
+#
+#   "End task" is first and "Force quit" second, in the red the confirmation
+#   bar already uses: the gentle choice is the one a mouse reaches without
+#   travelling.
+#
+#   The clickable rects are hit SPOTS registered beside the drawing, and the
+#   placement moved into hit.c as hit_place_popup() — the first of these will
+#   not be the last, and a panel keeping private geometry for a thing it also
+#   draws is the drift that file exists to stop. tests/hit_test.c covers the
+#   case nobody reproduces twice by hand: opened on the LAST visible row, where
+#   it would otherwise hang off the bottom edge.
+
+pkgrel=428
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
