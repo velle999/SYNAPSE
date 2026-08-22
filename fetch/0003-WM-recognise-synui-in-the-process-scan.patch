@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sat, 22 Aug 2026 14:05:00 -0500
+Subject: [PATCH 3/3] WM: recognise synui in the process scan
+
+`gather_wm` looks for a known compositor in /proc first and falls back to
+mapping XDG_CURRENT_DESKTOP when it finds none. That fallback is the wrong
+answer for any compositor whose session exports a DESKTOP name that is not
+the compositor's name: it reports the desktop instead of the window manager.
+
+On SynapseOS the session exports XDG_CURRENT_DESKTOP=SynapseOS while the
+compositor binary is `synui`, so the WM row read "SynapseOS (Wayland)" —
+naming the operating system in the field reserved for the window manager.
+fastfetch, which detects the process, has always said `synui` there.
+
+One more entry in the same list dwl, sway, river and labwc are already in.
+Nothing about this is specific to one distribution: it is the same shape as
+every other row, and any compositor added to that array gets the same
+correction.
+---
+ fetch.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fetch.c b/fetch.c
+index 1111111..2222222 100644
+--- a/fetch.c
++++ b/fetch.c
+@@ -1921,7 +1921,7 @@
+   if (!wm[0]) {
+     static const char *known_wms[] = {"dwl",   "sway",    "river", "labwc",
+                                       "weston", "i3",      "bspwm", "openbox",
+-                                      "awesome", "dwm",    NULL};
++                                      "awesome", "dwm",    "synui", NULL};
+     DIR *proc = opendir("/proc");
+     if (proc) {
+       struct dirent *ent;
+-- 
+2.51.2

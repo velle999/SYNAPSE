@@ -21,6 +21,16 @@
 #   0001  Host reads the BOARD when the DMI product name is a vendor
 #         placeholder, so a self-built desktop says "ROG STRIX B550-F GAMING
 #         WIFI II" instead of "System Product Name".
+#   0003  WM recognises `synui` in the /proc scan. gather_wm looks for a known
+#         compositor there first and falls back to mapping XDG_CURRENT_DESKTOP
+#         when it finds none — and that fallback is wrong for any compositor
+#         whose session exports a DESKTOP name that is not the compositor's
+#         name. Here the session says SynapseOS and the binary is synui, so
+#         the WM row named the OPERATING SYSTEM in the field reserved for the
+#         window manager. One more entry in the list dwl, sway, river and
+#         labwc are already in; fastfetch, which detects the process, has
+#         always said synui.
+#
 #   0002  Theme and Cursor ask the COMPOSITOR rather than GTK's settings.ini,
 #         which on a session whose compositor is not a desktop environment is
 #         either absent or a generic light/dark stand-in; and a new Wallpaper
@@ -40,7 +50,7 @@
 # quietly falling back to main.)
 pkgname=fetch
 pkgver=2.2.1
-pkgrel=1
+pkgrel=2
 pkgdesc="Animated 3D system info — spins the SynapseOS mark as a lit relief"
 arch=('x86_64')
 url="https://github.com/areofyl/fetch"
@@ -57,8 +67,10 @@ _commit=d0a1f3a33071b139a43b8577381cad1534f27d0f
 
 source=("git+$url.git#commit=$_commit"
         "0001-Host-fall-back-to-the-board-when-DMI-holds-a-placeho.patch"
-        "0002-Read-the-desktop-s-own-theme-cursor-and-wallpaper.patch")
+        "0002-Read-the-desktop-s-own-theme-cursor-and-wallpaper.patch"
+        "0003-WM-recognise-synui-in-the-process-scan.patch")
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP')
 
