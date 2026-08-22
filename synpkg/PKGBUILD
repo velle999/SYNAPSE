@@ -38,7 +38,7 @@ pkgver=0.1.0
 #   the update headers match each other, and it failed in check() on a laptop
 #   that was simply offline. Both cases are now forced in the suite (a stub
 #   curl that fails; an empty PATH) rather than waited for.
-pkgrel=35
+pkgrel=36
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

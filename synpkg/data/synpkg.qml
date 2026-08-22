@@ -1738,7 +1738,17 @@ FloatingWindow {
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
                 anchors.bottomMargin: 10
-                visible: root.section !== "about"
+                // ⚠ AND ONLY WHEN IT HAS ROWS. This ListView is declared after
+                // the empty-state block above and covers exactly the same area,
+                // so it is the topmost item there — and a Flickable takes the
+                // PRESS across its whole rect whether or not it drew anything.
+                // Hover fell through (the list is not hoverEnabled, so the
+                // buttons still lit up under the cursor) and the click did not,
+                // which made "Enable Flathub" and "Enable BlackArch" look dead:
+                // the one state those buttons exist for is the state with no
+                // rows in it. Exactly the complement of the empty state's own
+                // condition, so the two can never both take the pointer.
+                visible: root.section !== "about" && root.shownRows.length > 0
                 clip: true
                 model: root.shownRows
                 spacing: 2
