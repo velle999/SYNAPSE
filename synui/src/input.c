@@ -1541,6 +1541,10 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
  * input live here, beside each other, because they say the same thing twice —
  * a click on an item does what Enter does on it.
  *
+ * The menu closes on Escape, on a click outside it, and on the corner X that
+ * synui_render_welcome() draws — the X is pointer-only and is not one of the
+ * focusable items below, since Escape is already the keyboard's way out.
+ *
  * There are synui_welcome_menu_len + 1 focusable items: the rows, then the
  * "Don't show again" checkbox in the bottom-right corner, which is item
  * WELCOME_CHECK. It used to be the last row of the list; it is still reachable
@@ -1641,6 +1645,14 @@ int welcome_click(syn_server_t *s, double lx, double ly, uint32_t button,
         return 1;
     }
     if (button != BTN_LEFT) return 1;
+
+    /* The corner X — before the rows, because it sits in the header where
+     * hit_row_at() answers -1 anyway, and after the click-off test so a press
+     * on it is still swallowed rather than reaching what is underneath. */
+    if (hit_in_close(&s->welcome_ui.hit, lx, ly)) {
+        synui_welcome_hide(s);
+        return 1;
+    }
 
     int i = welcome_item_at(s, lx, ly);
     if (i < 0) return 1;                       /* the header, the footer hints */

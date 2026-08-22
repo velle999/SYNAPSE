@@ -319,8 +319,8 @@ static void test_spots(void)
  * thing. */
 static void test_welcome_rows(void)
 {
-    const int px = 710, py = 178, pw = 500, ph = 724;
-    const int top = 128, row_h = 28, rows = 18;
+    const int px = 710, py = 178, pw = 500, ph = 752;
+    const int top = 128, row_h = 28, rows = 19;
     syn_hit_t g;
 
     hit_set_panel(&g, px, py, pw, ph);
@@ -359,6 +359,25 @@ static void test_welcome_rows(void)
           "the checkbox must not also read as a row");
     CHECK(hit_spot_at(&g, px + 60, py + cb_y + 11) == -1,
           "the version string is not the checkbox");
+
+    /* The corner X, 20px inset 10px off the top-right. Pinned for the same
+     * reason as the rows: it is the only way out of this menu that does not
+     * require knowing about Escape, and a rect that has drifted off the drawing
+     * is a button that silently does nothing. */
+    const int x_sz = 20, x_inset = 10;
+    const int x_x = pw - x_inset - x_sz, x_y = x_inset;
+    hit_set_close(&g, x_x, x_y, x_sz, x_sz);
+
+    CHECK(hit_in_close(&g, px + x_x + 10, py + x_y + 10),
+          "the middle of the close button");
+    CHECK(!hit_in_close(&g, px + x_x - 2, py + x_y + 10),
+          "just left of the close button is the header");
+    CHECK(!hit_in_close(&g, px + x_x + 10, py + top),
+          "the first row is not the close button");
+    CHECK(hit_row_at(&g, px + x_x + 10, py + x_y + 10) == -1,
+          "the close button must not also read as a row");
+    CHECK(hit_in_panel(&g, px + x_x + 10, py + x_y + 10),
+          "and it is inside the panel, so a press on it is not a click-off");
 }
 
 int main(void)
