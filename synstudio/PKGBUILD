@@ -302,7 +302,46 @@ pkgver=0.1.0
 #   the only target there is.
 #
 #   240 assertions.
-pkgrel=12
+# 13: a key on anything that is not colour — and an animated pan that was
+#     coming out MIRRORED.
+#
+#   A grade key carries a whole develop stack because colour has to be baked to
+#   a cube, which is why an animated grade costs forty-eight files on disk.
+#   Everything else about a clip is ONE NUMBER, and ffmpeg takes an expression
+#   for nearly all of them — so a PARAMETER KEY is a property name, a time and
+#   a value, and an animated zoom is a string. `timeline anim PROJ T C
+#   add|list|set|remove|clear|at`, with five eases: linear, in, out, inout and
+#   hold. Which properties can be keyed is a column in the clip property table,
+#   so `timeline keys` says, and the inspector's diamond appears on exactly
+#   those rows.
+#
+#   ss_clip_prop_at is the only place a keyed property becomes a number — the
+#   monitor calls it, the export generates its filter expressions from the same
+#   key list, and zoompan, rotate and volume each take one. OPACITY is the
+#   exception, because nothing in ffmpeg multiplies alpha by an expression: it
+#   is sendcmd stepping a named colorchannelmixer, with the steps placed where
+#   the value crosses a CODE VALUE and the evaluator rounding down the same way,
+#   so the monitor is EQUAL to the export rather than close to it.
+#
+#   ⚠ And the bug that fell out of measuring it. The export positioned an
+#   animated clip by sliding zoompan's CROP WINDOW — and a window sliding right
+#   shows what is to the right of it, so the picture went LEFT while the
+#   monitor, which has no zoompan, moved it RIGHT. Every animated pan has been
+#   exporting MIRRORED since transforms existed. The test that measures the
+#   picture only ever measured the zoom, which is symmetric. Position is the
+#   overlay's job in both paths now, and zoompan does the zoom and nothing else.
+#
+#   ⚠ zoompan only ever zooms IN, so a scale under 1 — the picture smaller than
+#   the frame — used to clamp to 1 in the export while the monitor obeyed it.
+#   The zoom canvas is padded out for the dip now.
+#
+#   `timeline get --at S` reports what a clip looks like S seconds into itself,
+#   which is what an inspector parked on a moving clip has to show; the window
+#   follows the playhead only when the selected clip has keys, so a clip with
+#   none costs nothing.
+#
+#   282 assertions, still clean under ASan+UBSan+LSan.
+pkgrel=13
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

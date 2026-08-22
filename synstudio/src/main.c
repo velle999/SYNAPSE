@@ -96,6 +96,11 @@ static void usage(void)
 "  timeline key PROJ T C list|remove N\n"
 "  timeline key PROJ T C set N KEY=VALUE...\n"
 "       two or more keys and the grade MOVES between them\n"
+"  timeline anim PROJ T C add PROP --at S [--value V] [--ease E]\n"
+"  timeline anim PROJ T C list|clear [PROP]   remove PROP N   at PROP --at S\n"
+"       a key on ONE property — opacity, gain, a scale, a position, an\n"
+"       angle. `timeline keys` marks which ones take them; ease is\n"
+"       linear, in, out, inout or hold\n"
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
@@ -133,6 +138,9 @@ typedef struct {
     double dur, to, head, tail;
     int    has_dur, has_to, has_head, has_tail, ripple, preview, count;
     const char *colour;
+    const char *ease;
+    double value;
+    int    has_value;
     float  gain, opacity;
     char   set_key[64][64];
     char   set_val[64][256];
@@ -180,6 +188,8 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--tail"))    { const char *v = NEXT(); if (!v) return -1; o->tail = atof(v); o->has_tail = 1; }
         else if (!strcmp(a, "--colour") ||
                  !strcmp(a, "--color"))   { const char *v = NEXT(); if (!v) return -1; o->colour = v; }
+        else if (!strcmp(a, "--value"))   { const char *v = NEXT(); if (!v) return -1; o->value = atof(v); o->has_value = 1; }
+        else if (!strcmp(a, "--ease"))    { const char *v = NEXT(); if (!v) return -1; o->ease = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
@@ -589,13 +599,29 @@ static int cmd_timeline_keys(void)
     for (i = 0; ss_clip_describe(i, &f); i++) {
         char buf[512];
         ss_clip_get(&c, f.key, buf, sizeof buf);
-        printf("%s\t%s\t%.6g\t%.6g\t%s\t%s\t%s\t%s\n",
+        /* The last column says whether the property can be keyed. It is
+         * appended rather than inserted so a reader that already knows the
+         * first eight columns keeps working. */
+        printf("%s\t%s\t%.6g\t%.6g\t%s\t%s\t%s\t%s\t%d\n",
                f.key, buf, f.lo, f.hi,
                f.type == SS_CT_ENUM ? "enum" : f.type == SS_CT_TEXT ? "text"
                : f.type == SS_CT_INT ? "int" : "float",
-               f.group, f.label, f.choices ? f.choices : "");
+               f.group, f.label, f.choices ? f.choices : "", f.animatable);
     }
     return 0;
+}
+
+/* A clip property, at an instant. The same call as ss_clip_get for anything
+ * that is not keyed — which is nearly everything — and the evaluator for
+ * anything that is, so no caller has to ask which kind it is holding. */
+static int clip_get_at(const ss_clip *c, const char *key, double at,
+                       char *out, size_t n)
+{
+    if (ss_clip_prop_animatable(key) && ss_clip_prop_nkeys(c, key) > 0) {
+        snprintf(out, n, "%.6g", ss_clip_prop_at(c, key, at));
+        return 0;
+    }
+    return ss_clip_get(c, key, out, n);
 }
 
 /* TRACK and CLIP off the command line, checked once so seven verbs do not
@@ -980,11 +1006,19 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         char buf[512];
         ss_clip_info f;
         int i;
+        const char *one = (argc > 6 && argv[6][0] != '-') ? argv[6] : NULL;
         if (tl_pick(t, argc > 4 ? argv[4] : NULL,
                         argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
-        if (argc > 6) {
-            if (ss_clip_get(&t->track[tr].clip[cl], argv[6], buf, sizeof buf) != 0)
-                return die("no such clip property: %s", argv[6]);
+        /* `--at S` asks what the clip looks like S seconds INTO ITSELF, which
+         * for a keyed property is not what the static field says. The window
+         * reads this: an inspector parked on a moving clip has to show the
+         * value at the playhead, and the engine is the only thing that knows
+         * how to work that out. */
+        if (parse_opts(argc, argv, one ? 7 : 6, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (one) {
+            if (clip_get_at(&t->track[tr].clip[cl], one, o.at, buf, sizeof buf) != 0)
+                return die("no such clip property: %s", one);
             printf("%s\n", buf);
             return 0;
         }
@@ -1003,7 +1037,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             printf("length\t%.6f\n", ss_clip_length(c));
             printf("graded\t%d\n", c->has_grade);
             for (i = 0; ss_clip_describe(i, &f); i++) {
-                ss_clip_get(c, f.key, buf, sizeof buf);
+                clip_get_at(c, f.key, o.at, buf, sizeof buf);
                 printf("%s\t%s\n", f.key, buf);
             }
         }
@@ -1163,6 +1197,101 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         }
 
         return die("key: unknown subcommand %s — try add, list, set, remove", sub);
+    }
+
+    /* Parameter keys: everything about a clip that is NOT colour.
+     *
+     * A grade key pins a whole develop stack because colour has to be baked;
+     * this pins one number, and the export hands ffmpeg an expression instead
+     * of forty-eight files. Which properties can be keyed is a column in the
+     * clip property table, so `timeline keys` already says. */
+    if (!strcmp(verb, "anim")) {
+        const char *sub = argc > 6 ? argv[6] : NULL;
+        const char *key = argc > 7 ? argv[7] : NULL;
+        ss_clip *c;
+        int i;
+
+        if (tl_pick(t, argc > 4 ? argv[4] : NULL,
+                       argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+        if (!sub) return die("anim wants add|list|set|remove|clear|at");
+
+        if (!strcmp(sub, "list")) {
+            ss_clip_info f;
+            for (i = 0; ss_clip_describe(i, &f); i++) {
+                int n, k;
+                if (key && strcmp(key, f.key)) continue;
+                n = ss_clip_prop_nkeys(c, f.key);
+                for (k = 0; k < n; k++) {
+                    ss_propkey pk;
+                    ss_clip_prop_key(c, f.key, k, &pk);
+                    printf("%s\t%d\t%.6f\t%.6f\t%s\n",
+                           f.key, k, pk.t, pk.v, ss_ease_name(pk.ease));
+                }
+            }
+            return 0;
+        }
+
+        if (!strcmp(sub, "at")) {
+            char buf[512];
+            if (!key) return die("anim at wants a property");
+            if (ss_clip_get(c, key, buf, sizeof buf) != 0)
+                return die("no such clip property: %s", key);
+            if (parse_opts(argc, argv, 8, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            printf("%.6f\n", ss_clip_prop_at(c, key, o.at));
+            return 0;
+        }
+
+        if (!strcmp(sub, "add") || !strcmp(sub, "set")) {
+            int ease = SS_EASE_LINEAR, n;
+            double v;
+            if (!key) return die("anim %s wants a property "
+                                 "(try `synstudio timeline keys`)", sub);
+            if (!ss_clip_prop_animatable(key))
+                return die("%s cannot be keyed — `timeline keys` marks the "
+                           "ones that can", key);
+            if (parse_opts(argc, argv, 8, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            if (o.ease && (ease = ss_ease_value(o.ease)) < 0)
+                return die("no such ease: %s — linear, in, out, inout, hold",
+                           o.ease);
+            /* Seeded from whatever the property already is at that instant,
+             * for the same reason a grade key is: dropping a key must pin the
+             * value, never change it. */
+            v = o.has_value ? o.value : ss_clip_prop_at(c, key, o.at);
+            n = ss_clip_prop_add(c, key, o.at, v, ease);
+            if (n < 0) return die("no room for another key on this clip "
+                                  "(limit %d)", SS_MAX_PKEYS);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("%d\n", n);
+            return 0;
+        }
+
+        if (!strcmp(sub, "remove")) {
+            int n = argc > 8 ? atoi(argv[8]) : -1;
+            if (!key) return die("anim remove wants a property");
+            if (argc <= 8) return die("anim remove wants a key index "
+                                      "(or use `clear`)");
+            if (ss_clip_prop_remove(c, key, n) != 0)
+                return die("%s has no key %d", key, n);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        if (!strcmp(sub, "clear")) {
+            if (key) {
+                if (ss_clip_prop_remove(c, key, -1) != 0)
+                    return die("%s has no keys", key);
+            } else {
+                c->npkeys = 0;
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+
+        return die("anim: unknown subcommand %s — try add, list, set, remove, "
+                   "clear, at", sub);
     }
 
     /* One composited frame — the program monitor's whole data source. */

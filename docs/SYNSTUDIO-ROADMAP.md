@@ -18,8 +18,8 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | area      | state                                                        |
 |-----------|--------------------------------------------------------------|
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
-| cutting   | usable, not trustworthy — no undo, no markers, no copy/paste  |
-| audio     | the largest gap — no fader, no meter, no track level, no record |
+| cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
+| audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
 | effects   | not started — the grade is the only effect                    |
 | delivery  | works, thin — six formats, no range, no presets, no queue      |
 | media     | one project at a time — no pool, no proxies, no relink         |
@@ -83,18 +83,27 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
        opposite of the rule that survived an ffmpeg SONAME bump
 - [no] DCTL — needs a realtime GPU pipeline that does not exist here
 
-## 3 · Keyframes
+## 3 · Keyframes  — **shipped in 0.1.0-13**
 
 - [x] the grade — eight per clip, interpolated through the setters' own table,
       quantised to 48 baked cubes so a scrub and an export agree
 - [~] eight is a ceiling (a fixed array; the 147MB stack object is why)
-- [ ] **any clip property at t**, not just the develop stack — non-colour
-      parameters need no cubes, ffmpeg takes an expression
-- [ ] easing per key; every interpolation is linear today
+- [x] **any clip property at t** — `timeline anim`, 64 keys a clip across all
+      properties. Opacity, gain, scale, position and angle today; WHICH ones
+      can be keyed is a column in the clip property table, so the inspector's
+      diamond and the renderer cannot disagree about it. No cubes are involved:
+      zoompan, rotate and volume each take an expression, and opacity — the one
+      of them ffmpeg will not take an expression for — is sendcmd stepping a
+      colorchannelmixer at code-value boundaries, which the evaluator rounds to
+      as well so the monitor is equal to the export and not merely close
+- [x] easing per key — linear, in, out, inout, hold. Polynomials, because the
+      export has to evaluate the same shape in ffmpeg's expression language
 - [ ] a curve editor — the darkroom's curve widget, over time instead of tone
 - [ ] track automation (keyframes on a track's volume)
+- [ ] keys on a title's size and colour — drawtext takes no expression for
+      either, so they need the sendcmd path opacity uses
 
-Doing this one unblocks speed ramps, animated titles, animated effects and
+Doing this one unblocked speed ramps, animated titles, animated effects and
 Fairlight-style automation: four features for one piece of work.
 
 ## 4 · Transitions
@@ -115,7 +124,8 @@ Fairlight-style automation: four features for one piece of work.
 - [ ] outline, shadow, plate — `borderw`, `shadowx/y`, `box`; white text stops
       disappearing on a bright shot
 - [ ] multi-line, line spacing, letter spacing
-- [ ] animate on and off (needs general keyframes)
+- [~] animate on and off — a title's position and opacity move now; its size
+      and colour cannot, because drawtext takes no expression for either
 - [ ] lower thirds and credit rolls as presets over the above
 - [ ] **subtitles** — import `.srt`, edit as a track, burn in or ship as a
       stream
@@ -134,7 +144,8 @@ Fairlight-style automation: four features for one piece of work.
 - [ ] source monitor + three-point editing
 - [ ] linked audio and video (routing now separates them, which makes the link
       necessary)
-- [ ] speed ramps, reverse, freeze frame
+- [ ] speed ramps, reverse, freeze frame — the keys exist now, but a ramp is
+      a keyed SPEED, which moves the timebase rather than a number inside it
 - [ ] optical flow / frame blending — `minterpolate`
 - [ ] stabilisation — two-pass `vidstab`, which fits the subprocess model
 - [ ] auto-save and versions
@@ -163,7 +174,9 @@ Fairlight-style automation: four features for one piece of work.
    split that was quietly wrong.
 2. ~~**Voiceover**~~ — **done, 0.1.0-11.**
 3. ~~**Undo, markers, snapping, multi-select**~~ — **done, 0.1.0-12.**
-4. **Keyframes on everything** — 3 days. Unblocks four other features.
+4. ~~**Keyframes on everything**~~ — **done, 0.1.0-13.** Any clip property at
+   t, five eases — and an animated pan that had been exporting MIRRORED for as
+   long as transforms have existed.
 5. **xfade transitions + audio crossfades** — 1 day. The cheapest large win.
 6. **The effect recipe format** — 3–4 days, plus two dozen effects in it.
 7. **LUT and look import** — 1–2 days.

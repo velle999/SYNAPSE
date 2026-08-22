@@ -776,10 +776,24 @@ FloatingWindow {
                        gain: parseFloat(f[5]), opacity: parseFloat(f[6]),
                        fadeIn: parseFloat(f[7]), fadeOut: parseFloat(f[8]),
                        path: f[9] || "", kind: "media", still: false,
-                       text: "", trans: "none", graded: false, grade: ({}), keys: [] }
+                       text: "", trans: "none", graded: false, grade: ({}), keys: [],
+                       anim: ({}), animAll: [] }
                 cl.len = (cl.srcOut - cl.srcIn) / (cl.speed > 0 ? cl.speed : 1)
                 tr.clips.push(cl)
                 if (cl.tlIn + cl.len > dur) dur = cl.tlIn + cl.len
+                break
+            // One line per parameter key: a property, a time, a value and how
+            // it leaves. Unlike a grade key there is no block to enter.
+            case "anim":
+                if (cl) {
+                    if (!cl.anim[f[1]]) cl.anim[f[1]] = []
+                    cl.anim[f[1]].push({ t: parseFloat(f[2]) || 0,
+                                         v: parseFloat(f[3]) || 0,
+                                         ease: f[4] || "linear" })
+                    // Flat as well as grouped: the clip bar draws every key
+                    // it has, and a Repeater cannot walk a map.
+                    cl.animAll.push({ key: f[1], t: parseFloat(f[2]) || 0 })
+                }
                 break
             case "kind":  if (cl) { cl.kind = f[1]; cl.still = f[2] === "1" } break
             case "text":  if (cl) cl.text = f[6] || ""; break
@@ -984,7 +998,12 @@ FloatingWindow {
             if (f.length < 7) continue
             const r = { key: f[0], value: f[1], lo: parseFloat(f[2]), hi: parseFloat(f[3]),
                         type: f[4], group: f[5], label: f[6],
-                        choices: (f[7] || "") ? f[7].split("|") : [] }
+                        choices: (f[7] || "") ? f[7].split("|") : [],
+                        // The last column is whether the renderer can animate
+                        // it. The diamond appears on exactly those rows: a
+                        // button offering to key something the export would
+                        // then ignore is worse than no button at all.
+                        anim: f[8] === "1" }
             out.push(r)
             if (!byGroup[r.group]) { byGroup[r.group] = true; seen.push(r.group) }
         }
@@ -1003,12 +1022,45 @@ FloatingWindow {
     // What the selected clip currently says, key -> value.
     property var clipVals: ({})
 
+    // Which keys a property carries on the selected clip, [] for most of them.
+    function clipAnimKeys(key) {
+        const c = root.selClipObj
+        if (!c || !c.anim) return []
+        return c.anim[key] || []
+    }
+
+    // Whether ANY property on the selected clip is keyed. What it decides is
+    // whether the inspector has to follow the playhead at all: a clip with no
+    // keys reads the same at every instant, and asking the engine again on
+    // every scrub step would be a process per frame for nothing.
+    readonly property bool clipHasAnim: {
+        const c = root.selClipObj
+        if (!c || !c.anim) return false
+        for (const k in c.anim) if (c.anim[k].length > 0) return true
+        return false
+    }
+
+    // Where the playhead is INSIDE the selected clip, which is what a key is
+    // timed against.
+    readonly property real clipOffset: {
+        const c = root.selClipObj
+        if (!c) return 0
+        return Math.max(0, Math.min(c.len, root.playhead - c.tlIn))
+    }
+
     function loadClip() {
         if (root.selTrack < 0 || root.selClip < 0) { root.clipVals = ({}); return }
+        // --at, so a moving property reports what it is AT THE PLAYHEAD. The
+        // static field is not what the renderer reads once a property is
+        // keyed, and a panel showing it would be describing a clip nobody is
+        // looking at.
         clipGetProc.command = [root.bin, "timeline", "get", root.proj,
-                               String(root.selTrack), String(root.selClip)]
+                               String(root.selTrack), String(root.selClip),
+                               "--at", String(Math.round(root.clipOffset * 1000) / 1000)]
         clipGetProc.running = true
     }
+
+    onClipOffsetChanged: if (root.clipHasAnim) root.loadClip()
 
     Process {
         id: clipGetProc
@@ -1201,6 +1253,14 @@ FloatingWindow {
 
     function setClip(key, v) {
         if (root.selTrack < 0 || root.selClip < 0) return
+        // A keyed property is driven by its keys; writing the static field
+        // would change nothing anybody could see and the slider would appear
+        // dead. Move the key under the playhead instead — the same rule the
+        // grade sliders follow.
+        if (root.clipAnimKeys(key).length > 0) {
+            root.animKey(key, v)
+            return
+        }
         // Optimistic, so a slider does not snap back while the engine and the
         // reload catch up. The reload overwrites this with the truth.
         const next = ({})
@@ -1259,6 +1319,40 @@ FloatingWindow {
         if (root.selKey < 0) return
         root.tlRun(["key", root.proj, String(root.selTrack), String(root.selClip),
                     "remove", String(root.selKey)])
+    }
+
+    // ── Parameter keys ──────────────────────────────────────────────────────
+    //
+    // A key on ONE number, at the playhead. `add` replaces a key already at
+    // that instant, so writing a value while parked on one edits it rather
+    // than stacking a second key nothing will ever read.
+    function animKey(key, v) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        const arg = ["anim", root.proj, String(root.selTrack), String(root.selClip),
+                     "add", key, "--at",
+                     String(Math.round(root.clipOffset * 1000) / 1000)]
+        if (v !== undefined) { arg.push("--value"); arg.push(String(v)) }
+        root.tlRun(arg)
+    }
+
+    // The index of the key sitting AT the playhead, or -1. Eight milliseconds
+    // of tolerance: a key is placed from a playhead that has been rounded to
+    // milliseconds, and an exact float compare would never find it again.
+    function animKeyAt(key) {
+        const ks = root.clipAnimKeys(key)
+        for (let i = 0; i < ks.length; i++)
+            if (Math.abs(ks[i].t - root.clipOffset) < 0.008) return i
+        return -1
+    }
+
+    function animToggle(key) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        const i = root.animKeyAt(key)
+        if (i >= 0)
+            root.tlRun(["anim", root.proj, String(root.selTrack),
+                        String(root.selClip), "remove", key, String(i)])
+        else
+            root.animKey(key, undefined)
     }
 
     // ── The mixer ───────────────────────────────────────────────────────────
@@ -3077,6 +3171,28 @@ FloatingWindow {
                                                             }
                                                         }
 
+                                                        // The same for a
+                                                        // property that
+                                                        // moves. Drawn a row
+                                                        // lower and hollow,
+                                                        // so a grade key and
+                                                        // a scale key are not
+                                                        // the same mark.
+                                                        Repeater {
+                                                            model: clipRect.modelData.animAll
+
+                                                            Text {
+                                                                required property var modelData
+                                                                x: Math.max(0, Math.min(
+                                                                       clipRect.width - 7,
+                                                                       modelData.t * root.pxPerSec - 3))
+                                                                y: 11
+                                                                text: "◇"
+                                                                font.pixelSize: 8
+                                                                color: root.cDim
+                                                            }
+                                                        }
+
                                                         // A graded clip says so.
                                                         // Finding out at export
                                                         // that a shot was never
@@ -4620,6 +4736,8 @@ FloatingWindow {
         readonly property var row: cc.modelData
         readonly property string raw: root.clipValue(cc.row.key)
         readonly property real val: parseFloat(cc.raw) || 0
+        readonly property int nkeys: root.clipAnimKeys(cc.row.key).length
+        readonly property bool onKey: root.animKeyAt(cc.row.key) >= 0
         width: inspCol.width
         height: cc.row.type === "text" ? 52 : 44
 
@@ -4631,14 +4749,37 @@ FloatingWindow {
             color: root.cText
             font.pixelSize: 11
         }
-        Text {
+        Row {
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: parent.top; anchors.topMargin: 6
-            visible: cc.row.type !== "text"
-            text: cc.row.type === "enum" ? cc.raw
-                                         : (Math.round(cc.val * 100) / 100)
-            color: root.cAccent
-            font.pixelSize: 11
+            spacing: 8
+
+            Text {
+                visible: cc.row.type !== "text"
+                text: cc.row.type === "enum" ? cc.raw
+                                             : (Math.round(cc.val * 100) / 100)
+                color: root.cAccent
+                font.pixelSize: 11
+            }
+
+            // The diamond, on the rows the renderer can actually animate.
+            //
+            // Hollow means the property is a plain number; filled means the
+            // playhead is parked ON a key, which is also when clicking it
+            // takes the key away again. In between the two — keyed, but
+            // between keys — it is hollow and lit, because the value under
+            // the slider belongs to the moment and not to the clip.
+            Text {
+                visible: cc.row.anim && root.selClipObj !== null
+                text: cc.onKey ? "◆" : "◇"
+                color: cc.nkeys > 0 ? root.cAccent : root.cDim
+                font.pixelSize: 11
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -5
+                    onClicked: root.animToggle(cc.row.key)
+                }
+            }
         }
 
         // enum — click to advance. With at most six choices a cycler beats a

@@ -716,6 +716,238 @@ if have ffmpeg; then
     $BIN timeline show "$vp" | notseen "an identity transform is not written" "xform	"
 fi
 
+echo "== keyframes on everything that is not colour"
+
+# A grade key carries a whole develop stack because colour has to be baked to
+# a cube. Everything else about a clip is one number, and ffmpeg takes an
+# expression for it — so these keys cost a string, not forty-eight files.
+#
+# The thing under test is always the same: the monitor evaluates the keys in
+# C, the export turns the SAME keys into a filter expression, and the two must
+# land on the same pixel. A graph string cannot show that, so this measures
+# the picture.
+
+$BIN timeline keys | rxseen "the table says which properties can be keyed" \
+    '^opacity(	[^	]*){7}	1$'
+$BIN timeline keys | rxseen "and which cannot" '^speed(	[^	]*){7}	0$'
+
+ap=$TMP/anim.syntl
+$BIN timeline new "$ap" --size 640x360 --fps 25
+$BIN timeline track "$ap" video V >/dev/null
+if [ -s "$box" ]; then
+    $BIN timeline clip "$ap" 0 "$box" --at 0 --dur 2 >/dev/null
+
+    # ---- the evaluator ---------------------------------------------------
+    $BIN timeline set "$ap" 0 0 xform.x=0.5
+    check "a key with no value pins what is already there" "0.500000" \
+          "$($BIN timeline anim "$ap" 0 0 add xform.x --at 0 >/dev/null;
+             $BIN timeline anim "$ap" 0 0 at xform.x --at 0)"
+    $BIN timeline anim "$ap" 0 0 add xform.x --at 0 --value -0.4 >/dev/null
+    check "a second key at the same instant replaces it, never stacks" "1" \
+          "$($BIN timeline anim "$ap" 0 0 list xform.x | wc -l)"
+    $BIN timeline anim "$ap" 0 0 add xform.x --at 2 --value 0.4 >/dev/null
+
+    check "before the first key it HOLDS"  "-0.400000" \
+          "$($BIN timeline anim "$ap" 0 0 at xform.x --at -1)"
+    check "between two keys it moves"      "0.000000" \
+          "$($BIN timeline anim "$ap" 0 0 at xform.x --at 1)"
+    check "after the last key it HOLDS"    "0.400000" \
+          "$($BIN timeline anim "$ap" 0 0 at xform.x --at 9)"
+
+    # Every ease has to be a shape ffmpeg's expression language can also
+    # evaluate, which is why they are all polynomials. Measured at the
+    # midpoint, where they differ most from each other.
+    for pair in "in 0.5:-0.200000" "out 0.5:0.200000" "inout 0.5:0.000000" \
+                "hold 0.5:-0.400000"; do
+        e=${pair%% *}; want=${pair#*:}
+        $BIN timeline anim "$ap" 0 0 add xform.x --at 0 --value -0.4 --ease $e >/dev/null
+        check "ease $e is itself at the midpoint" "$want" \
+              "$($BIN timeline anim "$ap" 0 0 at xform.x --at 1)"
+    done
+    $BIN timeline anim "$ap" 0 0 add xform.x --at 0 --value -0.4 --ease linear >/dev/null
+
+    # The inspector's whole data source: `get --at` is how a panel parked on
+    # a moving clip knows what to show. Without it the sliders would report
+    # the static field, which once a property is keyed is not what the
+    # renderer reads and not what is on screen.
+    check "get --at reports the value at that instant" "-0.4" \
+          "$($BIN timeline get "$ap" 0 0 xform.x --at 0)"
+    check "and interpolates between the keys" "-0.2" \
+          "$($BIN timeline get "$ap" 0 0 xform.x --at 0.5)"
+    check "a property with no keys ignores --at" "1" \
+          "$($BIN timeline get "$ap" 0 0 speed --at 0.5)"
+
+    # ---- the document ----------------------------------------------------
+    $BIN timeline show "$ap" | seen "a key is one line of the document" \
+        "anim	xform.x	0.000000	-0.400000	linear"
+    check "and survives the round trip" "2" \
+          "$($BIN timeline anim "$ap" 0 0 list xform.x | wc -l)"
+    $BIN timeline anim "$ap" 0 0 add opacity --at 0 --value 0.25 >/dev/null
+    check "properties do not see each other's keys" "1" \
+          "$($BIN timeline anim "$ap" 0 0 list opacity | wc -l)"
+    $BIN timeline anim "$ap" 0 0 clear opacity >/dev/null
+    check "clear takes one property" "2" \
+          "$($BIN timeline anim "$ap" 0 0 list | wc -l)"
+
+    $BIN timeline anim "$ap" 0 0 add speed --at 0 --value 2 >/dev/null 2>&1
+    check "a property the renderer cannot animate is refused" "1" "$?"
+
+    # ---- the picture: a pan ----------------------------------------------
+    #
+    # This one found a bug that had been shipping since transforms existed.
+    # The export used to position an animated clip by sliding zoompan's CROP
+    # WINDOW, and a window sliding right shows what is to the right of it — so
+    # the picture went LEFT while the monitor, which has no zoompan, moved it
+    # RIGHT. An animated pan came out MIRRORED, and the test that measured the
+    # picture only ever measured the zoom.
+    #
+    # Frame-exact, not a seek: the value belongs to the frame's own timestamp,
+    # and asking for a second lands on whichever frame is nearest, which at a
+    # fast pan is half the movement.
+    exp_frame() {   # exp_frame <mp4> <n> <out.png>
+        ffmpeg -v error -y -i "$1" -vf "select=eq(n\,$2)" -fps_mode passthrough \
+               -frames:v 1 -update 1 "$3" 2>/dev/null
+    }
+    $BIN timeline export "$ap" --out "$TMP/anim.mp4" >/dev/null 2>&1
+    for n in 0 25 49; do
+        at=$(awk -v n=$n 'BEGIN { printf "%.6f", n/25 }')
+        $BIN timeline frame "$ap" --at $at --out "$TMP/am.png" >/dev/null 2>&1
+        exp_frame "$TMP/anim.mp4" $n "$TMP/ae.png"
+        mc=$(first_bright "$TMP/am.png"); ec=$(first_bright "$TMP/ae.png")
+        near "the export pans where the monitor pans, frame $n" "$mc" "$ec" 2
+    done
+    # ...and in the right DIRECTION, which is the half a mirrored pan gets
+    # right by accident when only the distance is checked.
+    $BIN timeline frame "$ap" --at 0 --out "$TMP/a0.png" >/dev/null 2>&1
+    exp_frame "$TMP/anim.mp4" 49 "$TMP/a1.png"
+    check "a pan to the right ends right of where it started" "yes" \
+          "$([ "$(first_bright "$TMP/a1.png")" -gt "$(first_bright "$TMP/a0.png")" ] \
+             && echo yes || echo no)"
+
+    # ---- the picture: a zoom that dips BELOW 1 ---------------------------
+    #
+    # zoompan only ever zooms in, so a scale under 1 — the picture smaller
+    # than the frame — is impossible to ask it for directly. It is padding
+    # that makes it possible, and without the padding the export silently
+    # clamps to 1 while the monitor obeys, which is a disagreement no graph
+    # string shows.
+    zd=$TMP/zdip.syntl
+    $BIN timeline new "$zd" --size 640x360 --fps 25
+    $BIN timeline track "$zd" video V >/dev/null
+    $BIN timeline clip "$zd" 0 "$box" --at 0 --dur 2 >/dev/null
+    $BIN timeline anim "$zd" 0 0 add xform.scale --at 0 --value 1 >/dev/null
+    $BIN timeline anim "$zd" 0 0 add xform.scale --at 2 --value 0.5 >/dev/null
+    $BIN timeline export "$zd" --out "$TMP/zdip.mp4" >/dev/null 2>&1
+    $BIN timeline frame "$zd" --at 1.96 --out "$TMP/zdm.png" >/dev/null 2>&1
+    exp_frame "$TMP/zdip.mp4" 49 "$TMP/zde.png"
+    zdm=$(first_bright "$TMP/zdm.png"); zde=$(first_bright "$TMP/zde.png")
+    near "the monitor shrinks past the frame" "241" "$zdm" 4
+    near "and the export shrinks with it"     "$zdm" "$zde" 4
+
+    # ---- the picture: an angle that changes while the framing moves ------
+    #
+    # The animated branch of the export had NO rotate filter in it at all, so
+    # a clip that was both moving and turning exported without the turn while
+    # the monitor showed it. A rotated box is wider than an upright one, which
+    # is what this measures.
+    rt=$TMP/rot.syntl
+    $BIN timeline new "$rt" --size 640x360 --fps 25
+    $BIN timeline track "$rt" video V >/dev/null
+    $BIN timeline clip "$rt" 0 "$box" --at 0 --dur 2 >/dev/null
+    $BIN timeline set "$rt" 0 0 xform.animate=1 xform.scale=1 xform.scale2=1.4 \
+                               xform.rotate=0 xform.rotate2=45
+    $BIN timeline export "$rt" --out "$TMP/rot.mp4" >/dev/null 2>&1
+    $BIN timeline frame "$rt" --at 1.96 --out "$TMP/rm.png" >/dev/null 2>&1
+    exp_frame "$TMP/rot.mp4" 49 "$TMP/re.png"
+    rm_=$(first_bright "$TMP/rm.png"); re_=$(first_bright "$TMP/re.png")
+    check "the monitor turns the shot" "yes" \
+          "$([ "$rm_" -lt 200 ] && echo yes || echo no)"
+    near "and so does the export"       "$rm_" "$re_" 3
+
+    # ---- the picture: opacity, which is the one that is NOT an expression -
+    #
+    # No ffmpeg filter multiplies alpha by an expression, so a keyed opacity
+    # is sendcmd stepping a colorchannelmixer. The steps are placed where the
+    # value crosses a code value and ss_clip_prop_at rounds down the same way,
+    # which is what makes the monitor EQUAL to the export here rather than
+    # close to it.
+    op=$TMP/op.syntl
+    $BIN timeline new "$op" --size 640x360 --fps 25
+    $BIN timeline track "$op" video V >/dev/null
+    $BIN timeline clip "$op" 0 "$box" --at 0 --dur 2 >/dev/null
+    $BIN timeline anim "$op" 0 0 add opacity --at 0 --value 0 >/dev/null
+    $BIN timeline anim "$op" 0 0 add opacity --at 2 --value 1 >/dev/null
+    $BIN timeline export "$op" --out "$TMP/op.mp4" >/dev/null 2>&1
+    centre() {  # centre <image> -> the value of the pixel at the middle
+        ffmpeg -v error -i "$1" -vf "crop=1:1:320:180" -f rawvideo -pix_fmt gray - \
+            2>/dev/null | od -An -tu1 -v | tr -d ' \n'
+    }
+    prev=-1
+    for n in 0 12 25 37 49; do
+        at=$(awk -v n=$n 'BEGIN { printf "%.6f", n/25 }')
+        $BIN timeline frame "$op" --at $at --out "$TMP/om.png" >/dev/null 2>&1
+        exp_frame "$TMP/op.mp4" $n "$TMP/oe.png"
+        om=$(centre "$TMP/om.png"); oe=$(centre "$TMP/oe.png")
+        near "a keyed opacity matches the monitor at frame $n" "$om" "$oe" 2
+        # A gate that is inclusive at both ends applies twice on the frame
+        # that satisfies two of them, and the ramp goes BACKWARDS for one
+        # frame a second. Never seen in a graph string; obvious here.
+        check "and never goes backwards at frame $n" "yes" \
+              "$([ "$oe" -ge "$prev" ] && echo yes || echo no)"
+        prev=$oe
+    done
+
+    # ---- a keyed fader, measured ------------------------------------------
+    #
+    # volume takes an expression once it is told to evaluate one per frame, so
+    # this needs no steps at all. Measured as ProRes/pcm: a low-level tone
+    # comes back three decibels hot through AAC, which swamps a fader
+    # assertion.
+    tone=$TMP/atone.wav
+    ffmpeg -v error -y -f lavfi -i "sine=frequency=440:duration=4:sample_rate=48000" \
+           -c:a pcm_s16le "$tone" 2>/dev/null
+    if [ -s "$tone" ]; then
+        gp=$TMP/gain.syntl
+        $BIN timeline new "$gp" --size 320x180 --fps 25
+        $BIN timeline track "$gp" audio A >/dev/null
+        $BIN timeline clip "$gp" 0 "$tone" --at 0 >/dev/null
+        $BIN timeline anim "$gp" 0 0 add gain --at 0 --value -20 >/dev/null
+        $BIN timeline anim "$gp" 0 0 add gain --at 4 --value 0 >/dev/null
+        $BIN timeline export "$gp" --out "$TMP/gain.mov" --format prores \
+            >/dev/null 2>&1
+        mean_at() {  # mean_at <file> <start> <length> -> mean dBFS
+            ffmpeg -v info -ss "$2" -t "$3" -i "$1" -af volumedetect -f null - \
+                2>&1 | awk -F': ' '/mean_volume/ { print $2 + 0; exit }'
+        }
+        base=$(mean_at "$tone" 0 1)
+        a=$(mean_at "$TMP/gain.mov" 0 1)
+        b=$(mean_at "$TMP/gain.mov" 3 1)
+        # The first second averages -17.5 dB of gain, the last -2.5.
+        near "a keyed fader starts where it was told to"  \
+             "$(awk -v b="$base" 'BEGIN { printf "%.2f", b - 17.5 }')" "$a" 1.0
+        near "and arrives where it was told to"           \
+             "$(awk -v b="$base" 'BEGIN { printf "%.2f", b - 2.5 }')"  "$b" 1.0
+    fi
+
+    # ---- the razor cuts a move in two ------------------------------------
+    #
+    # Keys are timed into the CLIP, so a split has to plant one at the cut in
+    # both halves or the second half restarts the move from the beginning.
+    sp=$TMP/asplit.syntl
+    $BIN timeline new "$sp" --size 640x360 --fps 25
+    $BIN timeline track "$sp" video V >/dev/null
+    $BIN timeline clip "$sp" 0 "$box" --at 0 --dur 4 >/dev/null
+    $BIN timeline anim "$sp" 0 0 add xform.x --at 0 --value -0.4 >/dev/null
+    $BIN timeline anim "$sp" 0 0 add xform.x --at 4 --value 0.4 >/dev/null
+    $BIN timeline split "$sp" 0 --at 2 >/dev/null
+    check "the second half starts where the first left off" "0.000000" \
+          "$($BIN timeline anim "$sp" 0 1 at xform.x --at 0)"
+    check "and still finishes the move" "0.400000" \
+          "$($BIN timeline anim "$sp" 0 1 at xform.x --at 2)"
+    check "the first half ends at the cut, not at the end" "0.000000" \
+          "$($BIN timeline anim "$sp" 0 0 at xform.x --at 2)"
+fi
+
 echo "== the audio envelope (waveforms)"
 
 if have ffmpeg; then

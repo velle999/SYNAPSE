@@ -385,6 +385,30 @@ typedef struct {
     ss_develop dev;
 } ss_gradekey;
 
+/* ---- a property that moves ----
+ *
+ * A grade key holds a whole develop stack because colour has to be baked to a
+ * cube; everything ELSE about a clip is one number, and ffmpeg will take an
+ * expression for most of them. So a parameter key is a NAME from the clip
+ * property table, a time and a value — and an animated scale is a string
+ * handed to zoompan rather than forty-eight files on disk.
+ *
+ * `t` is seconds into the CLIP, the same as a grade key and for the same
+ * reason: moving, trimming or rippling the clip must not change what the shot
+ * is doing.
+ *
+ * `ease` describes how the value LEAVES this key toward the next one, so the
+ * last key's ease is never read, and a `hold` key is how you get a step. */
+enum { SS_EASE_LINEAR, SS_EASE_IN, SS_EASE_OUT, SS_EASE_INOUT, SS_EASE_HOLD };
+
+#define SS_MAX_PKEYS 64
+
+typedef struct {
+    char   key[24];             /* a clip property key: "opacity", "xform.x" */
+    double t, v;
+    int    ease;
+} ss_propkey;
+
 typedef struct {
     int    kind;                /* SS_CLIP_* */
     char   path[1024];          /* media only */
@@ -419,6 +443,13 @@ typedef struct {
      * file looked like before keyframes existed. */
     int    nkeys;
     ss_gradekey key[SS_MAX_KEYS];
+
+    /* Parameter keys, all properties in ONE list rather than a list per
+     * property: a clip with a keyed opacity and nothing else then costs one
+     * entry, and the count that matters — how much a clip can carry — is a
+     * single number instead of a dozen. Kept sorted by property, then time. */
+    int    npkeys;
+    ss_propkey pkey[SS_MAX_PKEYS];
 } ss_clip;
 
 void ss_clip_reset(ss_clip *c);
@@ -443,6 +474,31 @@ int  ss_clip_grade_step_at(const ss_clip *c, double tt);
 /* Add, or replace one at the same instant. Returns its index, or -1. */
 int  ss_clip_key_add(ss_clip *c, double t, const ss_develop *d);
 int  ss_clip_key_remove(ss_clip *c, int i);
+
+/* ---- and the same idea for everything that is not colour ----
+ *
+ * ss_clip_prop_at is the ONE place a keyed property becomes a number, the way
+ * xform_at is the one place a transform does. The monitor calls it; the export
+ * generates its filter expressions from the same key list, so a scrub and a
+ * render cannot disagree about a move. Where a property must be quantised for
+ * the export to express it at all — opacity, which no ffmpeg filter will take
+ * an expression for — the quantisation happens IN HERE, so what the monitor
+ * shows is what the export writes and not merely close to it. */
+int    ss_clip_prop_animatable(const char *key);
+double ss_clip_prop_at(const ss_clip *c, const char *key, double tt);
+/* -1 if the property cannot be keyed or the clip is full; else the index of
+ * the key within that property. A key at an instant that already has one
+ * replaces it. */
+int    ss_clip_prop_add(ss_clip *c, const char *key, double t, double v, int ease);
+/* i < 0 removes every key of that property. 0 on success. */
+int    ss_clip_prop_remove(ss_clip *c, const char *key, int i);
+int    ss_clip_prop_nkeys(const ss_clip *c, const char *key);
+int    ss_clip_prop_key(const ss_clip *c, const char *key, int i, ss_propkey *out);
+int    ss_clip_prop_moves(const ss_clip *c, const char *key);  /* 2+ keys */
+int    ss_clip_animated(const ss_clip *c);                     /* any at all */
+void   ss_clip_prop_range(const ss_clip *c, const char *key, double *lo, double *hi);
+int    ss_ease_value(const char *name);        /* -1 if unknown */
+const char *ss_ease_name(int ease);
 void ss_xform_reset(ss_xform *x);
 /* Length on the TIMELINE: the source span divided by the speed. */
 double ss_clip_length(const ss_clip *c);
@@ -458,6 +514,7 @@ typedef struct {
     float lo, hi;
     int   type;
     const char *choices;    /* "a|b|c" for SS_CT_ENUM, else NULL */
+    int   animatable;       /* can carry parameter keys */
 } ss_clip_info;
 int  ss_clip_describe(int i, ss_clip_info *out);    /* 0 past the end */
 int  ss_clip_set(ss_clip *c, const char *key, const char *val);

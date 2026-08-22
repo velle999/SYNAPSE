@@ -70,24 +70,52 @@ double ss_clip_length(const ss_clip *c)
     return l > 0 ? l : 0;
 }
 
-/* The transform at a point through the clip, p in 0..1. ONE definition, read
- * by the frame compositor (which evaluates it in C, because a still frame has
- * nothing to animate) and by the export (which hands the two endpoints to
- * zoompan). If a scrub and an export ever disagree about framing, this is the
- * function that is wrong, and it is the only one. */
-static void xform_at(const ss_xform *x, double p,
+/* One of the four numbers a transform is made of, `tt` seconds into the clip.
+ *
+ * Keys WIN over the two-point ramp. `animate` came first and is a ramp from
+ * one framing to another with nothing in between; parameter keys are the
+ * general case, and a property that has any is being driven by them. Both
+ * cannot apply at once, and a clip that has neither is simply its own
+ * numbers. */
+static float xf_one(const ss_clip *c, const char *key, double tt,
+                    float a, float b, double p)
+{
+    if (ss_clip_prop_nkeys(c, key) > 0)
+        return (float)ss_clip_prop_at(c, key, tt);
+    return a + (b - a) * (float)(c->xf.animate ? p : 0.0);
+}
+
+/* The transform `tt` seconds into a clip `len` long. ONE definition, read by
+ * the frame compositor (which evaluates it in C, because a still frame has
+ * nothing to animate) and by the export (which hands the endpoints to
+ * zoompan, or the whole key list to it as an expression). If a scrub and an
+ * export ever disagree about framing, this is the function that is wrong, and
+ * it is the only one. */
+static void xform_at(const ss_clip *c, double tt, double len,
                      float *scale, float *px, float *py, float *rot)
 {
-    float a;
+    const ss_xform *x = &c->xf;
+    double p = len > 0 ? tt / len : 0.0;
+
     if (p < 0) p = 0;
     if (p > 1) p = 1;
-    a = x->animate ? (float)p : 0.0f;
-    *scale = x->scale  + (x->scale2  - x->scale ) * a;
-    *px    = x->pos_x  + (x->pos_x2  - x->pos_x ) * a;
-    *py    = x->pos_y  + (x->pos_y2  - x->pos_y ) * a;
-    *rot   = x->rotate + (x->rotate2 - x->rotate) * a;
+    *scale = xf_one(c, "xform.scale",  tt, x->scale,  x->scale2,  p);
+    *px    = xf_one(c, "xform.x",      tt, x->pos_x,  x->pos_x2,  p);
+    *py    = xf_one(c, "xform.y",      tt, x->pos_y,  x->pos_y2,  p);
+    *rot   = xf_one(c, "xform.rotate", tt, x->rotate, x->rotate2, p);
     if (*scale < 0.05f) *scale = 0.05f;
     if (*scale > 10.0f) *scale = 10.0f;
+}
+
+/* Whether the framing MOVES: either the old two-point ramp, or a key list on
+ * any of the three properties zoompan is responsible for. The export picks
+ * its whole video chain on this, so it has one name. */
+static int xform_moves(const ss_clip *c)
+{
+    return c->xf.animate ||
+           ss_clip_prop_moves(c, "xform.scale") ||
+           ss_clip_prop_moves(c, "xform.x") ||
+           ss_clip_prop_moves(c, "xform.y");
 }
 
 static int xform_is_identity(const ss_xform *x)
@@ -101,7 +129,8 @@ static int xform_is_identity(const ss_xform *x)
  * export expresses these as filters; the frame compositor needs the number. */
 static double alpha_at(const ss_clip *c, double tt, double len)
 {
-    double a = c->opacity > 0 ? c->opacity : 1.0;
+    double a = ss_clip_prop_at(c, "opacity", tt);
+    if (a <= 0 && ss_clip_prop_nkeys(c, "opacity") == 0) a = 1.0;
     if (c->fade_in > 0 && tt < c->fade_in)  a *= tt / c->fade_in;
     if (c->fade_out > 0 && tt > len - c->fade_out)
         a *= (len - tt) / c->fade_out;
@@ -139,46 +168,53 @@ typedef struct {
     size_t      off;
     float       lo, hi;
     const char *group, *label, *choices;
+    /* Whether this property can carry parameter keys. It lives in the table
+     * with everything else about the property, so the inspector's diamond
+     * appears on exactly the rows the export knows how to animate — a button
+     * offering to key something the renderer would then ignore is worse than
+     * no button. A row is animatable when ffmpeg has a way to vary it per
+     * frame; the ones that are missing are missing because it does not. */
+    int         anim;
 } cfield;
 
-#define C(k, t, m, lo, hi, grp, lbl, ch) \
-    { k, t, offsetof(ss_clip, m), lo, hi, grp, lbl, ch }
+#define C(k, t, m, lo, hi, grp, lbl, ch, an) \
+    { k, t, offsetof(ss_clip, m), lo, hi, grp, lbl, ch, an }
 
 #define TRANS_CHOICES "none|dissolve|wipeleft|wiperight|wipeup|wipedown"
 #define POS_CHOICES   "topleft|topcentre|topright|left|centre|right|" \
                       "bottomleft|bottomcentre|bottomright"
 
 static const cfield cfields[] = {
-    C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, "Levels", "Opacity", NULL),
-    C("gain",         CO_FLOAT, gain_db,    -60.0f,   24.0f, "Levels", "Gain (dB)", NULL),
-    C("speed",        CO_DOUBLE,speed,        0.1f,   10.0f, "Levels", "Speed", NULL),
-    C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, "Levels", "Fade in (s)", NULL),
-    C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, "Levels", "Fade out (s)", NULL),
+    C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, "Levels", "Opacity", NULL, 1),
+    C("gain",         CO_FLOAT, gain_db,    -60.0f,   24.0f, "Levels", "Gain (dB)", NULL, 1),
+    C("speed",        CO_DOUBLE,speed,        0.1f,   10.0f, "Levels", "Speed", NULL, 0),
+    C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, "Levels", "Fade in (s)", NULL, 0),
+    C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, "Levels", "Fade out (s)", NULL, 0),
 
-    C("trans",        CO_ENUM,  trans,        0.0f,    5.0f, "Transition", "Kind", TRANS_CHOICES),
-    C("trans.dur",    CO_DOUBLE,trans_dur,    0.0f,   10.0f, "Transition", "Length (s)", NULL),
+    C("trans",        CO_ENUM,  trans,        0.0f,    5.0f, "Transition", "Kind", TRANS_CHOICES, 0),
+    C("trans.dur",    CO_DOUBLE,trans_dur,    0.0f,   10.0f, "Transition", "Length (s)", NULL, 0),
 
-    C("xform.scale",  CO_FLOAT, xf.scale,     0.05f,  10.0f, "Motion", "Scale", NULL),
-    C("xform.x",      CO_FLOAT, xf.pos_x,    -1.0f,    1.0f, "Motion", "Position X", NULL),
-    C("xform.y",      CO_FLOAT, xf.pos_y,    -1.0f,    1.0f, "Motion", "Position Y", NULL),
-    C("xform.rotate", CO_FLOAT, xf.rotate, -180.0f,  180.0f, "Motion", "Rotation", NULL),
-    C("xform.animate",CO_INT,   xf.animate,   0.0f,    1.0f, "Motion", "Animate to", NULL),
-    C("xform.scale2", CO_FLOAT, xf.scale2,    0.05f,  10.0f, "Motion", "End scale", NULL),
-    C("xform.x2",     CO_FLOAT, xf.pos_x2,   -1.0f,    1.0f, "Motion", "End X", NULL),
-    C("xform.y2",     CO_FLOAT, xf.pos_y2,   -1.0f,    1.0f, "Motion", "End Y", NULL),
-    C("xform.rotate2",CO_FLOAT, xf.rotate2,-180.0f,  180.0f, "Motion", "End rotation", NULL),
+    C("xform.scale",  CO_FLOAT, xf.scale,     0.05f,  10.0f, "Motion", "Scale", NULL, 1),
+    C("xform.x",      CO_FLOAT, xf.pos_x,    -1.0f,    1.0f, "Motion", "Position X", NULL, 1),
+    C("xform.y",      CO_FLOAT, xf.pos_y,    -1.0f,    1.0f, "Motion", "Position Y", NULL, 1),
+    C("xform.rotate", CO_FLOAT, xf.rotate, -180.0f,  180.0f, "Motion", "Rotation", NULL, 1),
+    C("xform.animate",CO_INT,   xf.animate,   0.0f,    1.0f, "Motion", "Animate to", NULL, 0),
+    C("xform.scale2", CO_FLOAT, xf.scale2,    0.05f,  10.0f, "Motion", "End scale", NULL, 0),
+    C("xform.x2",     CO_FLOAT, xf.pos_x2,   -1.0f,    1.0f, "Motion", "End X", NULL, 0),
+    C("xform.y2",     CO_FLOAT, xf.pos_y2,   -1.0f,    1.0f, "Motion", "End Y", NULL, 0),
+    C("xform.rotate2",CO_FLOAT, xf.rotate2,-180.0f,  180.0f, "Motion", "End rotation", NULL, 0),
 
-    C("text",         CO_TEXT,  text,         0.0f,    0.0f, "Title", "Caption", NULL),
-    C("text.size",    CO_FLOAT, text_size,    0.01f,   0.5f, "Title", "Size", NULL),
-    C("text.r",       CO_FLOAT, text_r,       0.0f,    1.0f, "Title", "Red", NULL),
-    C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, "Title", "Green", NULL),
-    C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, "Title", "Blue", NULL),
-    C("text.pos",     CO_ENUM,  text_pos,     0.0f,    8.0f, "Title", "Placement", POS_CHOICES),
+    C("text",         CO_TEXT,  text,         0.0f,    0.0f, "Title", "Caption", NULL, 0),
+    C("text.size",    CO_FLOAT, text_size,    0.01f,   0.5f, "Title", "Size", NULL, 0),
+    C("text.r",       CO_FLOAT, text_r,       0.0f,    1.0f, "Title", "Red", NULL, 0),
+    C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, "Title", "Green", NULL, 0),
+    C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, "Title", "Blue", NULL, 0),
+    C("text.pos",     CO_ENUM,  text_pos,     0.0f,    8.0f, "Title", "Placement", POS_CHOICES, 0),
 
-    C("colour.r",     CO_FLOAT, col_r,        0.0f,    1.0f, "Background", "Red", NULL),
-    C("colour.g",     CO_FLOAT, col_g,        0.0f,    1.0f, "Background", "Green", NULL),
-    C("colour.b",     CO_FLOAT, col_b,        0.0f,    1.0f, "Background", "Blue", NULL),
-    C("colour.a",     CO_FLOAT, col_a,        0.0f,    1.0f, "Background", "Opacity", NULL),
+    C("colour.r",     CO_FLOAT, col_r,        0.0f,    1.0f, "Background", "Red", NULL, 0),
+    C("colour.g",     CO_FLOAT, col_g,        0.0f,    1.0f, "Background", "Green", NULL, 0),
+    C("colour.b",     CO_FLOAT, col_b,        0.0f,    1.0f, "Background", "Blue", NULL, 0),
+    C("colour.a",     CO_FLOAT, col_a,        0.0f,    1.0f, "Background", "Opacity", NULL, 0),
 };
 #undef C
 
@@ -193,6 +229,7 @@ int ss_clip_describe(int i, ss_clip_info *out)
     out->lo      = cfields[i].lo;
     out->hi      = cfields[i].hi;
     out->choices = cfields[i].choices;
+    out->animatable = cfields[i].anim;
     /* CO_DOUBLE and CO_FLOAT are the same thing to a caller — a number with
      * a range. The distinction is about where the bytes land, and nothing
      * outside this file has any business knowing it. */
@@ -310,6 +347,228 @@ int ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n)
     case CO_DOUBLE: snprintf(out, n, "%.6g", *(const double *)p); return 0;
     default:        snprintf(out, n, "%.6g", (double)*(const float *)p); return 0;
     }
+}
+
+/* ------------------------------------------------ a property that moves -- */
+
+/* Colour has to be baked to a cube, which is why a grade key carries a whole
+ * develop stack and why an animated grade costs forty-eight files. Everything
+ * else about a clip is ONE NUMBER, and ffmpeg will take an expression for
+ * nearly all of them — so a parameter key is a name, a time and a value, and
+ * an animated zoom is a string.
+ *
+ * ss_clip_prop_at is to a keyed property what xform_at is to a transform: the
+ * only place it becomes a number. The monitor calls it; the export builds its
+ * expressions from the same list. */
+
+static const char *ease_names[] = { "linear", "in", "out", "inout", "hold" };
+static const int   nease = (int)(sizeof ease_names / sizeof ease_names[0]);
+
+int ss_ease_value(const char *name)
+{
+    int i;
+    if (!name) return -1;
+    for (i = 0; i < nease; i++) if (!strcmp(name, ease_names[i])) return i;
+    return -1;
+}
+
+const char *ss_ease_name(int e)
+{
+    return (e >= 0 && e < nease) ? ease_names[e] : "linear";
+}
+
+int ss_clip_prop_animatable(const char *key)
+{
+    const cfield *f = cfind(key);
+    return f && f->anim;
+}
+
+/* The value a clip with no keys has. */
+static double prop_static(const ss_clip *c, const cfield *f)
+{
+    const void *p = (const char *)c + f->off;
+    switch (f->type) {
+    case CO_INT: case CO_ENUM: return (double)*(const int *)p;
+    case CO_DOUBLE:            return *(const double *)p;
+    default:                   return (double)*(const float *)p;
+    }
+}
+
+/* How finely the EXPORT can express this property, and therefore how finely
+ * the monitor is allowed to show it.
+ *
+ * Almost everything here reaches ffmpeg as an expression — zoompan takes one
+ * for the zoom and the crop window, rotate takes one for the angle, volume
+ * takes one per frame — and an expression is exact. Opacity is the exception:
+ * no filter multiplies alpha by an expression, so it is driven by sendcmd,
+ * which sets a value at an instant and holds it until the next. Quantising to
+ * one code value makes that a staircase nobody can see, and rounding the SAME
+ * way here is what makes the monitor equal to the export rather than close to
+ * it. Zero means no quantisation: the export can say it exactly. */
+static double prop_quant(const char *key)
+{
+    return !strcmp(key, "opacity") ? 1.0 / 255.0 : 0.0;
+}
+
+/* u is 0..1 through a segment. Every one of these has to be expressible in
+ * ffmpeg's expression language as well, which is why they are polynomials. */
+static double ease_apply(int ease, double u)
+{
+    if (u < 0) u = 0;
+    if (u > 1) u = 1;
+    switch (ease) {
+    case SS_EASE_HOLD:  return 0.0;
+    case SS_EASE_IN:    return u * u;
+    case SS_EASE_OUT:   return u * (2.0 - u);
+    case SS_EASE_INOUT: return u < 0.5 ? 2.0 * u * u
+                                       : 1.0 - 2.0 * (1.0 - u) * (1.0 - u);
+    default:            return u;
+    }
+}
+
+int ss_clip_prop_nkeys(const ss_clip *c, const char *key)
+{
+    int i, n = 0;
+    for (i = 0; i < c->npkeys; i++)
+        if (!strcmp(c->pkey[i].key, key)) n++;
+    return n;
+}
+
+int ss_clip_prop_key(const ss_clip *c, const char *key, int i, ss_propkey *out)
+{
+    int j, n = 0;
+    for (j = 0; j < c->npkeys; j++) {
+        if (strcmp(c->pkey[j].key, key)) continue;
+        if (n++ == i) { *out = c->pkey[j]; return 1; }
+    }
+    return 0;
+}
+
+int ss_clip_prop_moves(const ss_clip *c, const char *key)
+{
+    return ss_clip_prop_nkeys(c, key) >= 2;
+}
+
+int ss_clip_animated(const ss_clip *c)
+{
+    return c->npkeys > 0;
+}
+
+double ss_clip_prop_at(const ss_clip *c, const char *key, double tt)
+{
+    const cfield *f = cfind(key);
+    const ss_propkey *a = NULL, *b = NULL;
+    double v, q;
+    int i;
+
+    if (!f) return 0.0;
+    /* The list is sorted, so the LAST key at or before tt is the one the
+     * value is coming from and the first one after it is where it is going. */
+    for (i = 0; i < c->npkeys; i++) {
+        const ss_propkey *k = &c->pkey[i];
+        if (strcmp(k->key, key)) continue;
+        if (k->t <= tt)   a = k;
+        else if (!b)      b = k;
+    }
+    if (!a && !b) return prop_static(c, f);
+    if (!a)                             v = b->v;   /* before the first key */
+    else if (!b || b->t <= a->t)        v = a->v;   /* after the last */
+    else v = a->v + (b->v - a->v) *
+             ease_apply(a->ease, (tt - a->t) / (b->t - a->t));
+
+    if (v < f->lo) v = f->lo;
+    if (v > f->hi) v = f->hi;
+    q = prop_quant(key);
+    if (q > 0.0) v = floor(v / q) * q;
+    return v;
+}
+
+void ss_clip_prop_range(const ss_clip *c, const char *key, double *lo, double *hi)
+{
+    const cfield *f = cfind(key);
+    int i, seen = 0;
+    double a = 0, b = 0;
+
+    if (!f) { *lo = *hi = 0; return; }
+    for (i = 0; i < c->npkeys; i++) {
+        const ss_propkey *k = &c->pkey[i];
+        if (strcmp(k->key, key)) continue;
+        if (!seen) { a = b = k->v; seen = 1; }
+        if (k->v < a) a = k->v;
+        if (k->v > b) b = k->v;
+    }
+    if (!seen) a = b = prop_static(c, f);
+    if (a < f->lo) a = f->lo;
+    if (b > f->hi) b = f->hi;
+    *lo = a; *hi = b;
+}
+
+int ss_clip_prop_add(ss_clip *c, const char *key, double t, double v, int ease)
+{
+    const cfield *f = cfind(key);
+    int i, at, n = 0;
+
+    if (!f || !f->anim) return -1;
+    if (ease < 0 || ease >= nease) ease = SS_EASE_LINEAR;
+    if (t < 0) t = 0;
+    if (v < f->lo) v = f->lo;
+    if (v > f->hi) v = f->hi;
+
+    /* A key at an instant that already has one REPLACES it. Otherwise moving
+     * a slider with the playhead parked would grow the list a key at a time
+     * and the second of two keys at the same moment would never be read. */
+    for (i = 0; i < c->npkeys; i++) {
+        if (strcmp(c->pkey[i].key, key)) continue;
+        if (fabs(c->pkey[i].t - t) < 1e-6) {
+            c->pkey[i].v = v;
+            c->pkey[i].ease = ease;
+            return n;
+        }
+        n++;
+    }
+    if (c->npkeys >= SS_MAX_PKEYS) return -1;
+
+    /* Sorted by property, then by time, so every reader can stop looking. */
+    for (at = 0; at < c->npkeys; at++) {
+        int cmp = strcmp(c->pkey[at].key, key);
+        if (cmp > 0) break;
+        if (cmp == 0 && c->pkey[at].t > t) break;
+    }
+    memmove(&c->pkey[at + 1], &c->pkey[at],
+            sizeof c->pkey[0] * (size_t)(c->npkeys - at));
+    memset(&c->pkey[at], 0, sizeof c->pkey[at]);
+    snprintf(c->pkey[at].key, sizeof c->pkey[at].key, "%s", key);
+    c->pkey[at].t = t;
+    c->pkey[at].v = v;
+    c->pkey[at].ease = ease;
+    c->npkeys++;
+
+    for (i = 0, n = 0; i < c->npkeys; i++) {
+        if (strcmp(c->pkey[i].key, key)) continue;
+        if (i == at) return n;
+        n++;
+    }
+    return -1;
+}
+
+int ss_clip_prop_remove(ss_clip *c, const char *key, int idx)
+{
+    int i, n = 0, hit = 0;
+
+    for (i = 0; i < c->npkeys; ) {
+        if (strcmp(c->pkey[i].key, key)) { i++; continue; }
+        if (idx < 0 || n == idx) {
+            memmove(&c->pkey[i], &c->pkey[i + 1],
+                    sizeof c->pkey[0] * (size_t)(c->npkeys - i - 1));
+            c->npkeys--;
+            hit = 1;
+            if (idx >= 0) return 0;
+            continue;
+        }
+        n++;
+        i++;
+    }
+    return hit ? 0 : -1;
 }
 
 /* ------------------------------------------------------- a moving grade -- */
@@ -603,11 +862,36 @@ int ss_timeline_split(ss_timeline *t, int track, int clip, double at)
         ss_clip_key_add(&b, 0.0, &mid);
     }
 
+    /* Parameter keys are cut the same way, and for the same reason: each half
+     * keeps the keys that fall inside it, and both get one planted at the cut
+     * holding the value the property had reached there — so razoring a move
+     * in two leaves two halves of the same move rather than two copies of it
+     * starting over. */
+    if (c->npkeys > 0) {
+        ss_propkey src[SS_MAX_PKEYS];
+        int k, n = c->npkeys;
+        memcpy(src, c->pkey, sizeof src[0] * (size_t)n);
+        a.npkeys = 0; b.npkeys = 0;
+        for (k = 0; k < n; k++) {
+            /* The value AT the cut, read before either half exists. */
+            if (k == 0 || strcmp(src[k].key, src[k - 1].key)) {
+                double v = ss_clip_prop_at(c, src[k].key, off);
+                ss_clip_prop_add(&a, src[k].key, off, v, SS_EASE_LINEAR);
+                ss_clip_prop_add(&b, src[k].key, 0.0, v, src[k].ease);
+            }
+            if (src[k].t < off)
+                ss_clip_prop_add(&a, src[k].key, src[k].t, src[k].v, src[k].ease);
+            else
+                ss_clip_prop_add(&b, src[k].key, src[k].t - off, src[k].v,
+                                 src[k].ease);
+        }
+    }
+
     /* An animated transform is cut in two along with the picture, so the move
      * continues across the cut instead of restarting at each half. */
     if (a.xf.animate) {
         float s, px, py, r;
-        xform_at(&c->xf, off / len, &s, &px, &py, &r);
+        xform_at(c, off, len, &s, &px, &py, &r);
         a.xf.scale2 = s;  a.xf.pos_x2 = px; a.xf.pos_y2 = py; a.xf.rotate2 = r;
         b.xf.scale  = s;  b.xf.pos_x  = px; b.xf.pos_y  = py; b.xf.rotate  = r;
     }
@@ -760,6 +1044,16 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "text\t%.4f\t%.4f\t%.4f\t%.4f\t%s\t%s\n",
                         c->text_size, c->text_r, c->text_g, c->text_b,
                         textpos_name(c->text_pos), c->text);
+            /* Parameter keys, one line each: a name, a time, a value and
+             * how it leaves. Flat rather than nested because unlike a grade
+             * key there is nothing to nest — the whole key IS the line. */
+            {
+                int k;
+                for (k = 0; k < c->npkeys; k++)
+                    fprintf(fp, "anim\t%s\t%.6f\t%.6f\t%s\n",
+                            c->pkey[k].key, c->pkey[k].t, c->pkey[k].v,
+                            ss_ease_name(c->pkey[k].ease));
+            }
             if (c->has_grade && c->nkeys == 0) {
                 /* Indented so the reader can tell a grade line belongs to the
                  * clip above it without needing a nesting syntax. */
@@ -915,6 +1209,11 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
                 snprintf(cc->text, sizeof cc->text, "%s", f[5]);
             }
+        } else if (!strncmp(line, "anim\t", 5) && cc) {
+            char *f[4];
+            if (tabsplit(line + 5, f, 4) == 4)
+                ss_clip_prop_add(cc, f[0], atof(f[1]), atof(f[2]),
+                                 ss_ease_value(f[3]));
         } else if (!strncmp(line, "key\t", 4)) {
             char buf[16384];
             size_t used = 0;
@@ -992,6 +1291,75 @@ static int sb_add(strbuf *b, const char *fmt, ...)
             b->s = ns; b->cap = want;
         }
     }
+}
+
+/* ---- the same curve, as something ffmpeg will evaluate ----
+ *
+ * `tv` is an expression giving seconds into the CLIP in whatever filter this
+ * is going into: `on/25` inside zoompan, `t-3.5` in an overlay reading
+ * timeline time, plain `t` in a chain that has been zeroed. The shape is a
+ * nest of ifs, one per segment, and it MUST be the same arithmetic
+ * ss_clip_prop_at does or the render and the monitor part company.
+ *
+ * Half-open comparisons, never `between`: a frame landing exactly on a
+ * boundary that satisfies two segments is the bug that made an animated grade
+ * apply twice for one frame a second. */
+static void seg_expr(strbuf *b, const char *tv, const ss_propkey *a,
+                     const ss_propkey *n)
+{
+    double d = n->t - a->t, dv = n->v - a->v;
+
+    if (a->ease == SS_EASE_HOLD || d <= 0 || dv == 0.0) {
+        sb_add(b, "%.6f", a->v);
+        return;
+    }
+    switch (a->ease) {
+    case SS_EASE_IN:
+        sb_add(b, "(%.6f+(%.6f)*pow(((%s)-%.6f)/%.6f,2))",
+               a->v, dv, tv, a->t, d);
+        break;
+    case SS_EASE_OUT:
+        sb_add(b, "(%.6f+(%.6f)*(((%s)-%.6f)/%.6f)*(2-((%s)-%.6f)/%.6f))",
+               a->v, dv, tv, a->t, d, tv, a->t, d);
+        break;
+    case SS_EASE_INOUT:
+        sb_add(b, "(%.6f+(%.6f)*if(lt(((%s)-%.6f)/%.6f,0.5),"
+                  "2*(((%s)-%.6f)/%.6f)*(((%s)-%.6f)/%.6f),"
+                  "1-2*(1-((%s)-%.6f)/%.6f)*(1-((%s)-%.6f)/%.6f)))",
+               a->v, dv, tv, a->t, d, tv, a->t, d, tv, a->t, d,
+               tv, a->t, d, tv, a->t, d);
+        break;
+    default:
+        sb_add(b, "(%.6f+(%.6f)*((%s)-%.6f)/%.6f)", a->v, dv, tv, a->t, d);
+        break;
+    }
+}
+
+/* Returns 0 and writes nothing if the property is not keyed. */
+static int prop_expr(strbuf *b, const ss_clip *c, const char *key, const char *tv)
+{
+    ss_propkey k[SS_MAX_PKEYS];
+    int n = ss_clip_prop_nkeys(c, key), i;
+
+    if (n <= 0) return 0;
+    for (i = 0; i < n; i++) ss_clip_prop_key(c, key, i, &k[i]);
+    if (n == 1) { sb_add(b, "%.6f", k[0].v); return 1; }
+
+    /* if(lt(t,t0), v0,                       — before the first key it HOLDS
+     *   if(lt(t,t1), <segment 0>,            — which is what prop_at does;
+     *     if(lt(t,t2), <segment 1>, ... vn)))  without this line the first
+     * segment's formula would extrapolate backwards and the export would
+     * arrive at the clip already moving. */
+    sb_add(b, "if(lt((%s),%.6f),%.6f,", tv, k[0].t, k[0].v);
+    for (i = 0; i + 1 < n; i++) {
+        sb_add(b, "if(lt((%s),%.6f),", tv, k[i + 1].t);
+        seg_expr(b, tv, &k[i], &k[i + 1]);
+        sb_add(b, ",");
+    }
+    sb_add(b, "%.6f", k[n - 1].v);
+    for (i = 0; i + 1 < n; i++) sb_add(b, ")");
+    sb_add(b, ")");
+    return 1;
 }
 
 /* ffmpeg's filter argument syntax gives \ : ' and , their own meanings, so a
@@ -1128,6 +1496,89 @@ static void fitted_size(const ss_timeline *t, float scale, int *w, int *h)
     if (b < 2) b = 2;
     *w = a & ~1;
     *h = b & ~1;
+}
+
+/* ---- a keyed opacity, which is the one that cannot be an expression ----
+ *
+ * Nothing in ffmpeg multiplies alpha by an expression. What every filter DOES
+ * take is a command at an instant, so a keyed opacity is sendcmd driving one
+ * named colorchannelmixer: a value is set and held until the next one. The
+ * steps are placed where the value crosses a CODE VALUE, so the staircase is
+ * below what eight bits can show, and ss_clip_prop_at rounds down the same way
+ * so the monitor is equal to this and not merely close to it.
+ *
+ * The budget is what keeps a long fade from writing ten thousand commands into
+ * the graph string; a fade that hits it gets a coarser staircase rather than a
+ * truncated one. */
+#define ALPHA_CMD_BUDGET 600
+
+static void chain_alpha(strbuf *b, const ss_clip *c, int id)
+{
+    int n = ss_clip_prop_nkeys(c, "opacity"), i, k, total = 0;
+    ss_propkey pk[SS_MAX_PKEYS];
+    double last = -1.0, scale = 1.0;
+    int first = 1;
+
+    if (n <= 0) return;
+    for (i = 0; i < n; i++) ss_clip_prop_key(c, "opacity", i, &pk[i]);
+    if (n == 1) {
+        sb_add(b, ",format=rgba,colorchannelmixer=aa=%.6f",
+               ss_clip_prop_at(c, "opacity", pk[0].t));
+        return;
+    }
+    for (i = 0; i + 1 < n; i++) {
+        double d = fabs(pk[i + 1].v - pk[i].v) * 255.0;
+        total += (int)(d < 1 ? 1 : d) + 1;
+    }
+    if (total > ALPHA_CMD_BUDGET) scale = (double)ALPHA_CMD_BUDGET / total;
+
+    sb_add(b, ",format=rgba,sendcmd=c='");
+    for (i = 0; i + 1 < n; i++) {
+        double t0 = pk[i].t, t1 = pk[i + 1].t;
+        double d = fabs(pk[i + 1].v - pk[i].v) * 255.0 * scale;
+        int steps = (int)(d < 1 ? 1 : d);
+        if (t1 <= t0) continue;
+        for (k = 0; k < steps; k++) {
+            double tt = t0 + (t1 - t0) * k / steps;
+            double v = ss_clip_prop_at(c, "opacity", tt);
+            if (!first && fabs(v - last) < 1e-9) continue;
+            /* The separator is escaped because a bare ; ends the filter chain
+             * it is sitting in, and the graph then refuses to parse with a
+             * message about the label that follows. */
+            if (!first) sb_add(b, "\\;");
+            sb_add(b, "%.6f colorchannelmixer@op%d aa %.6f", tt, id, v);
+            first = 0;
+            last = v;
+        }
+    }
+    if (first) sb_add(b, "%.6f colorchannelmixer@op%d aa %.6f",
+                      pk[0].t, id, ss_clip_prop_at(c, "opacity", pk[0].t));
+    /* The starting value is the filter's own, not a command: a command at the
+     * very first frame can land after that frame has already gone through. */
+    sb_add(b, "',colorchannelmixer@op%d=aa=%.6f", id,
+           ss_clip_prop_at(c, "opacity", pk[0].t));
+}
+
+/* One of the two position offsets, as an overlay x/y expression in TIMELINE
+ * time — which is what the overlay sees, the clip starting at tl_in.
+ *
+ * Position is the overlay's job in every case now. It used to be zoompan's
+ * whenever the transform was animated, and zoompan positions by moving its
+ * CROP WINDOW: sliding the window right shows what is to the right, so the
+ * picture goes LEFT. The monitor, which has no zoompan, moved it right. An
+ * animated pan therefore came out of the export mirrored, and no test caught
+ * it because the one that measures the picture only measured the zoom. */
+static void chain_pos(strbuf *b, const ss_clip *c, const char *key,
+                      double tl_in, double len, float a, float bb)
+{
+    char tv[64];
+    snprintf(tv, sizeof tv, "(t)-%.6f", tl_in);
+    if (prop_expr(b, c, key, tv)) return;
+    if (c->xf.animate && len > 0)
+        sb_add(b, "%.5f+(%.5f)*clip(((t)-%.6f)/%.6f,0,1)",
+               (double)a, (double)(bb - a), tl_in, len);
+    else
+        sb_add(b, "%.5f", (double)a);
 }
 
 /* The nine title positions as drawtext x/y expressions. `w`/`h` are the frame
@@ -1724,43 +2175,89 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
             if (tr->type == SS_TRACK_VIDEO && ss_track_shows(t, i)) {
                 float s0, px0, py0, r0, s1, px1, py1, r1;
                 int fw, fh;
+                int moves  = xform_moves(c);
+                int rotkey = ss_clip_prop_nkeys(c, "xform.rotate") > 0;
+                int opkey  = ss_clip_prop_nkeys(c, "opacity") > 0;
+                int rotmoves;
 
-                xform_at(&c->xf, 0.0, &s0, &px0, &py0, &r0);
-                xform_at(&c->xf, 1.0, &s1, &px1, &py1, &r1);
+                xform_at(c, 0.0, len, &s0, &px0, &py0, &r0);
+                xform_at(c, len, len, &s1, &px1, &py1, &r1);
+                /* An angle that changes needs the expression either way. The
+                 * old two-point ramp used to be dropped ENTIRELY here — the
+                 * animated branch had no rotate at all — so a clip that was
+                 * both moving and turning exported without the turn while the
+                 * monitor showed it. */
+                rotmoves = rotkey || (c->xf.animate && r0 != r1);
 
                 sb_add(&fc, ";[%d:v]", input);
-                if (needs_alpha(c)) sb_add(&fc, "format=rgba,");
+                if (needs_alpha(c) || opkey) sb_add(&fc, "format=rgba,");
 
-                if (c->xf.animate) {
-                    /* An animated framing cannot be a scale, whose output size
-                     * is fixed for the life of the filter. zoompan is the one
-                     * filter that re-frames per output frame; it only ever
+                if (moves) {
+                    /* A framing that MOVES cannot be a scale, whose output
+                     * size is fixed for the life of the filter. zoompan is the
+                     * one filter that re-frames per output frame; it only ever
                      * zooms IN, so the source is fitted generously first and
                      * the move happens inside that. `on` counts output frames,
                      * which is what makes this work over a video clip and not
-                     * just a still. */
-                    double zs = s0 < 1.0f ? 1.0 : s0, ze = s1 < 1.0f ? 1.0 : s1;
-                    double nfr = len * t->fps;
-                    if (nfr < 2) nfr = 2;
-                    fitted_size(t, (float)(zs > ze ? zs : ze), &fw, &fh);
+                     * just a still.
+                     *
+                     * zoompan does the ZOOM and nothing else. The position is
+                     * the overlay's, below — see chain_pos for what happened
+                     * when it was not.
+                     *
+                     * The canvas: the source is fitted at the LARGEST scale
+                     * the move reaches, for resolution, and then padded out to
+                     * K frames wide. What ends up on screen is the source at
+                     * magnification z, so z must never go below 1 — which is
+                     * the whole reason for the padding, because a scale that
+                     * dips BELOW 1 (the picture smaller than the frame) is
+                     * then a zoom of 1 into a canvas that is bigger than the
+                     * frame rather than an impossible z of 0.6. With no dip,
+                     * K is the fit and this is arithmetically what it was
+                     * before parameter keys existed. */
+                    double zlo, zhi, K, F;
+                    int cw, ch;
+                    char tv[64];
+
+                    ss_clip_prop_range(c, "xform.scale", &zlo, &zhi);
+                    if (!ss_clip_prop_nkeys(c, "xform.scale")) {
+                        zlo = s0 < s1 ? s0 : s1;
+                        zhi = s0 < s1 ? s1 : s0;
+                    }
+                    if (zlo < 0.05) zlo = 0.05;
+                    if (zhi < zlo)  zhi = zlo;
+                    F = zhi;
+                    K = zhi / (zlo < 1.0 ? zlo : 1.0);
+                    if (K > 8.0) K = 8.0;
+                    if (K < 1.0) K = 1.0;
+                    fitted_size(t, (float)F, &fw, &fh);
+                    fitted_size(t, (float)K, &cw, &ch);
                     sb_add(&fc, "scale=%d:%d:force_original_aspect_ratio=decrease"
                                 ",pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black",
-                           fw, fh, fw, fh);
-                    /* Divided by nfr, NOT nfr-1. `on` is a frame index, so
-                     * on/nfr is the frame's TIME as a fraction of the clip —
-                     * which is exactly the `p` the monitor hands xform_at.
-                     * Dividing by nfr-1 instead makes the move arrive one
-                     * frame early, and the monitor and the export then
-                     * disagree about framing by a frame's worth of zoom for
-                     * the whole length of the move. Measured: 23 dB. */
-                    sb_add(&fc, ",zoompan=z='%.5f+(%.5f)*on/%.4f'"
-                                ":x='iw/2-(iw/zoom/2)+iw*(%.5f+(%.5f)*on/%.4f)'"
-                                ":y='ih/2-(ih/zoom/2)+ih*(%.5f+(%.5f)*on/%.4f)'"
+                           fw, fh, cw, ch);
+                    /* `on` is a frame index and zoompan runs BEFORE the speed
+                     * setpts, so on/(fps*speed) is the frame's time in seconds
+                     * into the clip — the very number the monitor hands
+                     * xform_at. Dividing by one frame less makes the move
+                     * arrive a frame early, and the monitor and the export
+                     * then disagree about framing for the whole length of the
+                     * move. Measured: 23 dB. */
+                    snprintf(tv, sizeof tv, "on/%.6g",
+                             t->fps * (c->speed > 0 ? c->speed : 1.0));
+                    sb_add(&fc, ",zoompan=z='max((%.6f)*(", K / F);
+                    if (!prop_expr(&fc, c, "xform.scale", tv))
+                        sb_add(&fc, "%.5f+(%.5f)*clip((%s)/%.6f,0,1)",
+                               (double)s0, (double)(s1 - s0), tv, len);
+                    sb_add(&fc, "),1)'"
+                                ":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
                                 ":d=1:s=%dx%d:fps=%.6g",
-                           zs, ze - zs, nfr,
-                           (double)px0, (double)(px1 - px0), nfr,
-                           (double)py0, (double)(py1 - py0), nfr,
                            t->w, t->h, t->fps);
+                    /* A still framing rotates up in the branch below; a moving
+                     * one rotates AFTER the zoom, on the project frame, so the
+                     * angle is the last thing applied either way. */
+                    if (!rotmoves && r0 != 0.0f)
+                        sb_add(&fc, ",rotate=%.6f:ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
+                                    ":c=black@0", (double)r0 * M_PI / 180.0);
                 } else {
                     /* Scale into the project frame, letterboxing rather than
                      * distorting: a clip shot in a different aspect is a
@@ -1771,13 +2268,24 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                     fitted_size(t, s0, &fw, &fh);
                     sb_add(&fc, "scale=%d:%d:force_original_aspect_ratio=decrease",
                            fw, fh);
-                    if (r0 != 0.0f)
+                    if (!rotmoves && r0 != 0.0f)
                         sb_add(&fc, ",rotate=%.6f:ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
                                     ":c=black@0", (double)r0 * M_PI / 180.0);
                 }
                 sb_add(&fc, ",fps=%.6g", t->fps);
                 if (c->speed != 1.0)
                     sb_add(&fc, ",setpts=%.6f*PTS", 1.0 / c->speed);
+                /* Everything from here on is timed in CLIP seconds: the speed
+                 * setpts is behind us, so `t` is what the grade's gates, the
+                 * fades and the keys all mean by it. */
+                if (rotmoves) {
+                    sb_add(&fc, ",rotate=a='(");
+                    if (!prop_expr(&fc, c, "xform.rotate", "t"))
+                        sb_add(&fc, "%.6f+(%.6f)*clip(t/%.6f,0,1)",
+                               (double)r0, (double)(r1 - r0), len > 0 ? len : 1.0);
+                    sb_add(&fc, ")*PI/180':ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
+                                ":c=black@0");
+                }
 
                 chain_grade(&fc, c, lutdir, i, j);
                 chain_title(&fc, t, c, lutdir, i, j);
@@ -1788,7 +2296,9 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                     sb_add(&fc, ",fade=t=out:st=%.4f:d=%.4f",
                            len - c->fade_out, c->fade_out);
                 chain_transition(&fc, c);
-                if (c->opacity < 1.0f)
+                if (opkey)
+                    chain_alpha(&fc, c, nvid);
+                else if (c->opacity < 1.0f)
                     sb_add(&fc, ",format=rgba,colorchannelmixer=aa=%.4f",
                            c->opacity);
 
@@ -1806,13 +2316,13 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                     char prev[32];
                     if (nvid == 0) snprintf(prev, sizeof prev, "base");
                     else           snprintf(prev, sizeof prev, "bg%d", nvid);
-                    sb_add(&fc, ";[%s][v%d]overlay=eof_action=pass"
-                                ":x='(W-w)/2+(%.5f)*W':y='(H-h)/2+(%.5f)*H'"
-                                ":enable='between(t,%.6f,%.6f)'[bg%d]",
-                            prev, nvid,
-                            c->xf.animate ? 0.0 : (double)px0,
-                            c->xf.animate ? 0.0 : (double)py0,
-                            c->tl_in, c->tl_in + len, nvid + 1);
+                    sb_add(&fc, ";[%s][v%d]overlay=eof_action=pass:x='(W-w)/2+(",
+                           prev, nvid);
+                    chain_pos(&fc, c, "xform.x", c->tl_in, len, px0, px1);
+                    sb_add(&fc, ")*W':y='(H-h)/2+(");
+                    chain_pos(&fc, c, "xform.y", c->tl_in, len, py0, py1);
+                    sb_add(&fc, ")*H':enable='between(t,%.6f,%.6f)'[bg%d]",
+                           c->tl_in, c->tl_in + len, nvid + 1);
                 }
                 nvid++;
             }
@@ -1836,7 +2346,18 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 sb_add(&fc, "aresample=48000");
                 if (c->speed != 1.0)
                     sb_add(&fc, ",atempo=%.6f", c->speed);
-                if (g != 0.0f)
+                if (ss_clip_prop_nkeys(c, "gain") > 0) {
+                    /* A keyed fader needs no steps and no cubes: volume takes
+                     * an expression, once told to evaluate it per frame rather
+                     * than once. The track's fader still ADDS in decibels, so
+                     * it is a term inside the expression and not a second
+                     * filter. asetpts first, because the expression is timed
+                     * from zero and a seeked input is not. */
+                    sb_add(&fc, ",asetpts=PTS-STARTPTS,volume=eval=frame:volume='"
+                                "pow(10,((");
+                    prop_expr(&fc, c, "gain", "t");
+                    sb_add(&fc, ")+%.4f)/20)'", (double)tr->gain_db);
+                } else if (g != 0.0f)
                     sb_add(&fc, ",volume=%.3fdB", g);
                 if (tr->pan != 0.0f) {
                     double l, r;
@@ -2032,7 +2553,7 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
              * fades and the transition are all just numbers here — evaluated
              * by the same xform_at and alpha_at the export's filters are
              * generated from. */
-            xform_at(&c->xf, off / len, &s, &px, &py, &rot);
+            xform_at(c, off, len, &s, &px, &py, &rot);
             (void)0;
             a = alpha_at(c, off, len);
             fitted_size(t, s, &fw, &fh);
