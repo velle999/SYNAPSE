@@ -150,7 +150,6 @@ cat > /home/syn/.config/fastfetch/config.jsonc << 'EOF'
     { "type": "shell",  "key": "Shell" },
     { "type": "display","key": "Resolution" },
     { "type": "wm",     "key": "WM" },
-    { "type": "de",     "key": "DE" },
     { "type": "cpu",    "key": "CPU" },
     { "type": "gpu",    "key": "GPU" },
     { "type": "memory", "key": "Memory" },
