@@ -1,0 +1,10 @@
+# synstudio look
+label	High Key
+about	Everything up into the top half of the histogram, contrast taken back out so it stays airy.
+exposure	0.35
+highlights	20
+shadows	34
+blacks	22
+contrast	-12
+clarity	-10
+saturation	-8

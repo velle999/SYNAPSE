@@ -1,0 +1,11 @@
+# synstudio look
+label	Monochrome, Red Filter
+about	The band luminances move BEFORE the desaturation, which is what a red filter on the lens did: dark skies, bright skin.
+hsl.red.lum	32
+hsl.orange.lum	22
+hsl.yellow.lum	14
+hsl.aqua.lum	-28
+hsl.blue.lum	-34
+saturation	-100
+contrast	22
+blacks	-12

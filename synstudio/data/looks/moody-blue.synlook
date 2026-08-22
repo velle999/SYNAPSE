@@ -1,0 +1,13 @@
+# synstudio look
+label	Moody Blue
+about	Cool light, closed-down highlights, a vignette to hold the middle.
+temp	5400
+tint	-8
+exposure	-0.2
+contrast	18
+highlights	-26
+shadows	-10
+grade.shadow.hue	215
+grade.shadow.sat	26
+saturation	-12
+vignette	22

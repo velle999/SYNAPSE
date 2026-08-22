@@ -70,6 +70,9 @@ typedef struct {
     float angle;            /* straighten, degrees, applied before the cut */
 } ss_crop;
 
+/* How long a LUT reference may be: a catalogue name, or a path to a .cube. */
+#define SS_LUT_REF 192
+
 /* Every field is 0 = no effect, so a zeroed struct is the null grade. That is
  * relied on by ss_develop_is_identity and by the .cube baker. */
 typedef struct {
@@ -118,6 +121,14 @@ typedef struct {
     float grain;            /* 0..100 */
     float grain_size;       /* 0..100 */
 
+    /* An imported look: a .cube 3D LUT by name or by path, and how much of
+     * it to take. Held as a REFERENCE and not as a table — a 33-node cube is
+     * 431KB and this struct is copied into every keyframe and every mask.
+     * Empty means no look, which is why a zeroed struct is still the null
+     * grade. See look.c. */
+    char  lut[SS_LUT_REF];
+    float lut_amount;       /* 0..100 */
+
     /* geometry */
     ss_crop crop;
     int   flip_h, flip_v;
@@ -143,7 +154,7 @@ int         ss_develop_set(ss_develop *d, const char *key, const char *val);
 int         ss_develop_get(const ss_develop *d, const char *key, char *out, size_t n);
 const char *ss_develop_key(int i);          /* NULL past the end */
 
-enum { SS_T_FLOAT, SS_T_INT, SS_T_CURVE };
+enum { SS_T_FLOAT, SS_T_INT, SS_T_CURVE, SS_T_STR };
 typedef struct {
     const char *key, *group, *label;
     float lo, hi;               /* what the engine will ACCEPT */
@@ -229,6 +240,90 @@ void ss_histogram_of(const ss_image *im, ss_histogram *h);
  * LUT. This is the bridge to video: ffmpeg's lut3d filter then applies the
  * exact same grade to every frame of a clip. */
 int ss_lut_write(const ss_develop *d, int size, FILE *fp, const char *title);
+
+/* ----------------------------------------------------------- looks in -- */
+
+/* The other direction: somebody ELSE's .cube, read and applied.
+ *
+ * It goes on at the END of the pointwise chain, in the display encoding,
+ * because that is the domain a .cube is defined in and the one every tool
+ * that writes one assumes. Which means the LUT BRIDGE COMPOSES: baking a
+ * graded clip walks the same ss_pixel_pointwise, so an imported look comes
+ * out inside the baked cube and the export needs no second lut3d and no new
+ * code path at all. A still and a frame still agree by construction.
+ *
+ * A LUT that this machine has not got is KEPT in the document and renders as
+ * nothing, the way a missing effect is — dropping the reference would delete
+ * somebody's grade from their own project the first time a colleague opened
+ * it. */
+#define SS_LUT_MAX_3D  129      /* nodes per axis */
+#define SS_LUT_MAX_1D 16384
+
+typedef struct {
+    int    dims;                /* 1 or 3 */
+    int    size;                /* nodes per axis */
+    float  dmin[3], dmax[3];    /* DOMAIN_MIN / DOMAIN_MAX */
+    char   title[64];
+    float *tab;                 /* dims==3 ? size^3*3 : size*3, R fastest */
+} ss_lut3d;
+
+int  ss_lut_read(const char *path, ss_lut3d *out, char *err, size_t errn);
+void ss_lut_free(ss_lut3d *l);
+/* Display-encoded in, display-encoded out. Input outside the domain is
+ * clamped to it — a LUT has nothing to say about where it does not reach. */
+void ss_lut_eval(const ss_lut3d *l, const float in[3], float out[3]);
+
+/* The catalogue, found the way effects are: what is installed, then the
+ * user's own, then anything in SYNSTUDIO_LUTS. A name wins over an earlier
+ * one of the same name. */
+typedef struct {
+    char name[64];
+    char path[1024];
+    int  dims, size;
+} ss_lut_entry;
+
+int                 ss_lut_count(void);
+const ss_lut_entry *ss_lut_at(int i);
+/* A reference is a catalogue NAME, or a path if it has a '/' in it (~ is
+ * expanded). NULL when nothing answers to it. */
+const ss_lut_entry *ss_lut_lookup(const char *ref);
+/* Where a reference POINTS, without opening it. Kept apart from the lookup
+ * above because the lookup answers NULL for a file that exists and is broken,
+ * which turns "row 4096 of 4913, the download stopped" into "no LUT of that
+ * name" — the one message that sends somebody looking in the wrong place. */
+int                 ss_lut_resolve(const char *ref, char *out, size_t n);
+/* Loaded once and held, because the pixel loop asks per pixel. NULL for a
+ * reference nothing answers to, and the first miss says so on stderr — once
+ * per reference, not once per pixel. */
+const ss_lut3d     *ss_lut_cached(const char *ref);
+
+/* ------------------------------------------------------------- looks -- */
+
+/* A look is a develop stack in a file: the same tab-separated text the
+ * sidecar holds, named `.synlook`, carrying only the fields it means to
+ * change. Applying one SETS those fields and leaves the rest alone, so a look
+ * lands on top of the exposure and white balance a photograph already needed
+ * rather than throwing them away.
+ *
+ * Geometry is never in a look. A crop belongs to one photograph; a look is
+ * meant to travel. */
+typedef struct {
+    char name[64], label[64], about[160], path[1024];
+} ss_look;
+
+int             ss_look_count(void);
+const ss_look  *ss_look_at(int i);
+const ss_look  *ss_look_find(const char *name);
+/* Apply the look's fields onto `d`. Returns the number of lines it could not
+ * understand (a look written by a newer synstudio still applies, minus what
+ * this build has never heard of), or -1 if the file cannot be read. */
+int             ss_look_apply(const ss_look *lk, ss_develop *d);
+/* Write every field of `d` that is not at its default and not geometry.
+ * `path` gets the file it wrote. */
+int             ss_look_save(const char *name, const char *label,
+                             const ss_develop *d, char *path, size_t n);
+/* Where a look of the user's own goes. */
+int             ss_look_dir(char *out, size_t n);
 
 /* ------------------------------------------------------------------- io -- */
 
@@ -316,8 +411,12 @@ int ss_peaks(const char *path, double in, double out, int nbuckets,
  * Rows are what the window draws: parent first, then directories, then files
  * this engine can actually open. Anything else is not listed, because a row
  * that fails when clicked is worse than an absent one. */
+/* SS_ROW_LOOK is a .cube or a .synlook. Listed for the same reason a project
+ * is: neither is something the ENGINE can decode, so a picker that only
+ * offered what it can decode left a LUT reachable by typing its path and no
+ * other way. */
 enum { SS_ROW_UP, SS_ROW_DIR, SS_ROW_IMAGE, SS_ROW_VIDEO, SS_ROW_AUDIO,
-       SS_ROW_PROJECT };
+       SS_ROW_PROJECT, SS_ROW_LOOK };
 
 typedef struct {
     int  type;

@@ -21,6 +21,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
 | audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
+| looks     | .cube in and out, twelve looks, and a format for those too   |
 | delivery  | works, thin — six formats, no range, no presets, no queue      |
 | media     | one project at a time — no pool, no proxies, no relink         |
 
@@ -58,10 +59,32 @@ Resolve accepts other people's work three ways: OpenFX (compiled C++), DCTL
 program that never links anything** — and it is already the currency here,
 because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
 
-- [~] `.cube` — the engine writes and reads it; importing one as a clip look is
-      the missing half
-- [ ] look files — a develop stack is already tab-separated text; name it
-      `.synlook`, give it a browser, and a look becomes shareable
+- [x] **`.cube`, both ways** — **shipped in 0.1.0-17.** `lut` is a develop
+      SETTING now (a catalogue name or a path) with a `lut.amount` beside it,
+      so a LUT rides the sidecar, the clip grade, undo and the keyframes like
+      everything else. 3D and 1D, DOMAIN honoured, the row count checked —
+      a truncated download parses row by row and only the count catches it.
+
+      It applies at the END of the pointwise chain, in the display encoding,
+      which is what makes the LUT BRIDGE COMPOSE: `ss_lut_write` bakes by
+      walking that same chain, so an imported look comes out INSIDE the baked
+      cube. The export needs no second `lut3d`, no new graph and no new way
+      for a still and a frame to disagree. Measured at 55.15 dB against the
+      still renderer — the same as the pure grade's 55.7, so composing two
+      lattices costs nothing above the quantisation that was already there.
+
+      ⚠ A LUT this machine has not got is KEPT and renders as nothing, the way
+      a missing effect is. ⚠ And no `.cube` ships with SynapseOS: a LUT is
+      somebody's licensed work far more often than a slider position is.
+- [x] **look files** — **shipped in 0.1.0-17.** `.synlook` is the develop
+      stack as tab-separated text, carrying only the fields it moves. Applying
+      one SETS those fields and leaves the rest, so a look lands on top of the
+      exposure and white balance a photograph needed rather than throwing them
+      away — and every slider it moved is still a slider. Geometry is never in
+      one: a crop belongs to one photograph, a look is meant to travel.
+      `look list|show|save|apply|remove`, `timeline grade --look`, twelve
+      shipped, a browser in both panels, and a user's own in
+      `~/.config/synstudio/looks` winning on a name
 - [x] **effect recipes** — **shipped in 0.1.0-15.** A text manifest naming a
       filter chain and its parameters, so a third party ships an effect with
       no compiler:
@@ -219,7 +242,9 @@ Fairlight-style automation: four features for one piece of work.
 6. ~~**The effect recipe format**~~ — **done, 0.1.0-15.** A recipe is a text
    file naming a filter chain, checked against a whitelist and rendered
    through before it is trusted; twenty-seven of them ship.
-7. **LUT and look import** — 1–2 days.
+7. ~~**LUT and look import**~~ — **done, 0.1.0-17.** A .cube reads in as a
+   develop setting and composes into the baked cube for free; a look is the
+   develop stack as a file. Twelve looks ship, no LUTs do.
 8. **Titles worth using**, then `.srt` — 2 days.
 9. **Retime and stabilisation** — 2 days.
 10. **Scopes and delivery** — 2–3 days.

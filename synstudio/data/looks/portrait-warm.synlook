@@ -1,0 +1,14 @@
+# synstudio look
+label	Portrait Warmth
+about	Skin held warm and soft: the orange band lifted, the highlights tinted, contrast off the face.
+temp	7200
+contrast	10
+highlights	-18
+shadows	14
+clarity	-8
+vibrance	18
+saturation	-4
+hsl.orange.sat	10
+hsl.orange.lum	8
+grade.hilite.hue	38
+grade.hilite.sat	12

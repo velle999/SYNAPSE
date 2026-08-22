@@ -1,0 +1,7 @@
+# synstudio look
+label	Cross Process
+about	The channel curves pulled apart the way the wrong chemistry did it: red up, blue crushed at both ends.
+curve.red	0,0.04 0.5,0.56 1,1
+curve.blue	0,0.11 0.5,0.44 1,0.9
+contrast	20
+saturation	18

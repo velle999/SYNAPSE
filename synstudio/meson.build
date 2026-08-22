@@ -30,6 +30,7 @@ sources = files(
   'src/develop.c',
   'src/doc.c',
   'src/lut.c',
+  'src/look.c',
   'src/io.c',
   'src/timeline.c',
   'src/fx.c',
@@ -55,6 +56,18 @@ install_data('data/synstudio-playback.qml',
 # a build that needed editing as well would be a build that quietly shipped
 # twenty-six of the twenty-seven.
 install_subdir('data/effects',
+               install_dir: get_option('datadir') / 'synstudio')
+
+# The looks, for the same reason and read the same way: a .synlook is the
+# develop stack as text, and one of the user's own in
+# ~/.config/synstudio/looks wins on a name.
+#
+# No .cube ships beside them, deliberately. A LUT is somebody's licensed work
+# far more often than a slider position is, and a distribution that shipped a
+# folder of them would be redistributing colour it does not own. The reader,
+# the catalogue and ~/.config/synstudio/luts are all here; the tables are the
+# user's to bring.
+install_subdir('data/looks',
                install_dir: get_option('datadir') / 'synstudio')
 
 install_data('data/synstudio.desktop',

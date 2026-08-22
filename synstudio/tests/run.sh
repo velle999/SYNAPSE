@@ -30,6 +30,16 @@ if [ -z "${SYNSTUDIO_EFFECTS:-}" ]; then
     done
 fi
 
+# The looks are data in the same way, and found the same way.
+if [ -z "${SYNSTUDIO_LOOKS:-}" ]; then
+    for d in "$(dirname "$0")/../data/looks" "$(dirname "$BIN")/../data/looks"; do
+        [ -d "$d" ] || continue
+        SYNSTUDIO_LOOKS=$(cd "$d" && pwd)
+        export SYNSTUDIO_LOOKS
+        break
+    done
+fi
+
 TMP=$(mktemp -d /tmp/synstudio-test-XXXXXX) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
@@ -108,7 +118,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 echo "== basics"
 check "version"     "0.1.0"  "$($BIN version)"
-check "key count"   "64"     "$($BIN keys | wc -l)"
+check "key count"   "66"     "$($BIN keys | wc -l)"
 $BIN help | seen "help mentions the sidecar" "sidecar"
 
 echo "== the setting table"
@@ -1910,6 +1920,206 @@ ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$fdir/c.mov" 2>/de
 $BIN timeline export "$proj" --out "$fdir/d.mp4" --format nonesuch >/dev/null 2>&1
 check "an unknown format is refused" "1" "$?"
 
+echo "== reading somebody else's .cube"
+
+ldir=$TMP/luts
+mkdir -p "$ldir"
+
+# A 2-node cube that halves everything. Two nodes is the smallest lattice
+# there is, so every value in the picture is INTERPOLATED — which is what
+# makes it a test of the interpolator rather than of a table lookup.
+{
+    echo 'TITLE "half"'
+    echo 'LUT_3D_SIZE 2'
+    echo 'DOMAIN_MIN 0.0 0.0 0.0'
+    echo 'DOMAIN_MAX 1.0 1.0 1.0'
+    for b in 0.0 0.5; do for g in 0.0 0.5; do for r in 0.0 0.5; do
+        echo "$r $g $b"
+    done; done; done
+} > "$ldir/half.cube"
+
+set -- $($BIN pixel 0.5 0.5 0.5 --set lut="$ldir/half.cube")
+near "a .cube applies" 0.25 "$1"
+
+# ⚠ THE ORDERING TEST, and the only one that catches it. .cube rows vary RED
+# FASTEST; a reader that walked them the other way loads every file without
+# complaint and swaps red and blue in the picture. A grey ramp cannot see it
+# and neither can a gamma — it takes a cube that MOVES a channel somewhere
+# else. This one maps (r,g,b) to (b,g,r).
+{
+    echo 'LUT_3D_SIZE 2'
+    for b in 0 1; do for g in 0 1; do for r in 0 1; do
+        echo "$b $g $r"
+    done; done; done
+} > "$ldir/swap.cube"
+set -- $($BIN pixel 0.8 0.2 0.4 --set lut="$ldir/swap.cube")
+near "red really does vary fastest (R)" 0.4 "$1"
+near "and the swap lands on blue"       0.8 "$3"
+
+# Strength is a mix toward the LUT, so 0 is the picture and 100 is the table.
+set -- $($BIN pixel 0.5 0.5 0.5 --set lut="$ldir/half.cube" --set lut.amount=50)
+near "strength mixes" 0.375 "$1"
+set -- $($BIN pixel 0.5 0.5 0.5 --set lut="$ldir/half.cube" --set lut.amount=0)
+near "strength 0 is the picture untouched" 0.5 "$1"
+
+# Naming a LUT and nothing else has to APPLY it. Zero is the null value for
+# every field in this struct — which would make a LUT set on its own render as
+# nothing and read as a failed import — so the command layer fills the
+# strength in, the way it switches cropping on for a crop rectangle.
+$BIN keys | rxseen "the strength defaults to nothing in the table" '^lut.amount	0	'
+set -- $($BIN pixel 0.5 0.5 0.5 --set lut="$ldir/half.cube")
+near "but naming a LUT alone applies all of it" 0.25 "$1"
+
+# A DOMAIN other than [0,1] is part of the format, and ignoring it applies the
+# table to the wrong inputs. This one is defined over the top half only, so
+# everything below 0.5 clamps to its first entry: black.
+{
+    echo 'LUT_3D_SIZE 2'
+    echo 'DOMAIN_MIN 0.5 0.5 0.5'
+    echo 'DOMAIN_MAX 1.0 1.0 1.0'
+    for b in 0.0 1.0; do for g in 0.0 1.0; do for r in 0.0 1.0; do
+        echo "$r $g $b"
+    done; done; done
+} > "$ldir/dom.cube"
+set -- $($BIN pixel 0.25 0.25 0.25 --set lut="$ldir/dom.cube")
+near "below the domain clamps to its floor" 0.0 "$1"
+set -- $($BIN pixel 0.75 0.75 0.75 --set lut="$ldir/dom.cube")
+near "and the middle of the domain is the middle of the table" 0.5 "$1"
+
+# A 1D cube is three curves, and plenty of transfer functions ship as one.
+{
+    echo 'LUT_1D_SIZE 3'
+    echo '0.0 0.0 0.0'
+    echo '0.25 0.25 0.25'
+    echo '1.0 1.0 1.0'
+} > "$ldir/one.cube"
+set -- $($BIN pixel 0.5 0.5 0.5 --set lut="$ldir/one.cube")
+near "a 1D cube reads as three curves" 0.25 "$1"
+$BIN lut show "$ldir/one.cube" | seen "and says it is one-dimensional" "dims	1"
+
+# ⚠ A TRUNCATED LUT IS THE FAILURE THAT MATTERS. A download that stopped half
+# way parses perfectly row by row; only the COUNT catches it, and without that
+# check the missing rows read as black and the top of every picture dies.
+head -12 "$ldir/half.cube" > "$ldir/cut.cube"
+sed -i '$d' "$ldir/cut.cube"
+check "a truncated cube is refused" "1" \
+      "$($BIN lut show "$ldir/cut.cube" >/dev/null 2>&1; echo $?)"
+$BIN lut show "$ldir/cut.cube" 2>&1 >/dev/null | seen "and says how many rows it wanted" "expected"
+
+printf 'LUT_3D_SIZE 2\nNONSENSE 4\n' > "$ldir/bad.cube"
+check "an unknown keyword is refused" "1" \
+      "$($BIN lut show "$ldir/bad.cube" >/dev/null 2>&1; echo $?)"
+printf 'LUT_3D_SIZE 900\n' > "$ldir/huge.cube"
+check "an absurd size is refused" "1" \
+      "$($BIN lut show "$ldir/huge.cube" >/dev/null 2>&1; echo $?)"
+
+# The catalogue: a bare NAME is what travels between machines, a path is what
+# a file dropped in from anywhere is.
+SYNSTUDIO_LUTS="$ldir" $BIN luts | seen "the catalogue finds a name" "half"
+set -- $(SYNSTUDIO_LUTS="$ldir" $BIN pixel 0.5 0.5 0.5 --set lut=half)
+near "and a name applies the same as a path" 0.25 "$1"
+
+# ⚠ A LUT THIS MACHINE HAS NOT GOT IS KEPT, not dropped. Somebody opening a
+# colleague's photograph must not save their look away.
+lp=$TMP/keep.png
+cp "${img:-/dev/null}" "$lp" 2>/dev/null || ffmpeg -v error -y -f lavfi \
+    -i "testsrc2=size=32x24" -frames:v 1 "$lp" 2>/dev/null
+if [ -s "$lp" ]; then
+    $BIN set "$lp" lut=nosuchlut >/dev/null 2>&1
+    $BIN get "$lp" lut | seen "a missing LUT survives a load and a save" "nosuchlut"
+    set -- $($BIN pixel 0.5 0.5 0.5 --set lut=nosuchlut 2>/dev/null)
+    near "and renders as nothing rather than as black" 0.5 "$1"
+    $BIN pixel 0.5 0.5 0.5 --set lut=nosuchlut 2>&1 >/dev/null \
+        | seen "and says so by name" "nosuchlut"
+    $BIN reset "$lp"
+fi
+
+# THE ARCHITECTURAL CLAIM, for an IMPORTED look this time: it goes on at the
+# end of the pointwise chain, and the .cube baker walks that same chain — so
+# an imported LUT comes out INSIDE the baked cube, and video needs no second
+# lut3d to get it. If this ever diverges, a look would land on a photograph
+# and not on the clip beside it.
+if [ -f "$img" ] && have ffmpeg; then
+    $BIN set "$img" contrast=25 vibrance=40 lut="$ldir/half.cube" lut.amount=80
+    $BIN render "$img" --out "$TMP/lengine.png" --bits 8 >/dev/null
+    $BIN lut --from "$img" --out "$TMP/lg.cube"
+    ffmpeg -v error -y -i "$img" -vf "lut3d=file=$TMP/lg.cube:interp=tetrahedral" \
+           "$TMP/lvia.png" 2>/dev/null
+    if [ -s "$TMP/lvia.png" ]; then
+        psnr=$(ffmpeg -v error -i "$TMP/lengine.png" -i "$TMP/lvia.png" \
+               -lavfi psnr=stats_file=- -f null - 2>&1 \
+               | awk -F'psnr_avg:' '/psnr_avg/{print $2+0}' | tail -1)
+        check "an imported LUT survives the bake (>45dB)" "yes" \
+              "$(awk -v p="${psnr:-0}" 'BEGIN{print (p>45)?"yes":"no"}')"
+    fi
+    # And a clip carrying one bakes at all — the cube is what the export hands
+    # to lut3d, so a clip with ONLY a LUT must still produce one.
+    $BIN reset "$img"
+fi
+
+echo "== looks (.synlook: the sliders, not the table)"
+
+check "the shipped looks are there" "12" "$($BIN look list | wc -l)"
+$BIN look list | seen "including one everybody recognises" "Teal and Orange"
+$BIN look show noir | seen "a look says what it sets" "set	saturation	-100"
+
+lkdir=$TMP/looks
+mkdir -p "$lkdir"
+lkimg=$TMP/look.png
+ffmpeg -v error -y -f lavfi -i "testsrc2=size=32x24" -frames:v 1 "$lkimg" 2>/dev/null
+
+if [ -s "$lkimg" ]; then
+    # ⚠ A LOOK LANDS ON TOP, it does not replace. The exposure and white
+    # balance a photograph needed are corrections; the look is a decision. A
+    # look that reset them would undo the work it was put on top of.
+    $BIN set "$lkimg" exposure=0.5 >/dev/null
+    $BIN look apply teal-orange --to "$lkimg" >/dev/null
+    $BIN get "$lkimg" exposure | seen "a look leaves the correction under it" "0.5"
+    $BIN get "$lkimg" grade.shadow.hue | seen "and sets what it names" "195"
+
+    # ⚠ AND IT NEVER CARRIES GEOMETRY. A crop belongs to one photograph; a
+    # look is meant to travel. Written as a group check in the engine, so a
+    # geometry control added later is excluded by being in the right group.
+    $BIN set "$lkimg" crop.x=0.1 >/dev/null
+    # ⚠ the look is NOT called "cropped": the file carries its own name on a
+    # label line, so a needle of "crop" matches the label and reports the bug
+    # it was written to catch. The same shape as grepping for MANGOHUD=1
+    # inside DISABLE_MANGOHUD=1.
+    SYNSTUDIO_LOOKS="$lkdir" $BIN look save geo --from "$lkimg" >/dev/null
+    notseen "a saved look carries no crop" "crop" < "$lkdir/geo.synlook"
+    $BIN reset "$lkimg"
+
+    # Only what MOVED. A look that wrote all sixty-six fields would carry a
+    # default contrast onto every photograph it touched.
+    $BIN set "$lkimg" contrast=40 saturation=-20 >/dev/null
+    SYNSTUDIO_LOOKS="$lkdir" $BIN look save two --from "$lkimg" \
+        | seen "a saved look holds only what moved" "fields	2"
+    $BIN reset "$lkimg"
+
+    # A look of your own WINS over a shipped one of the same name, which is
+    # how one gets fixed without waiting for anybody.
+    printf 'label\tMine\ncontrast\t7\n' > "$lkdir/noir.synlook"
+    SYNSTUDIO_LOOKS="$lkdir" $BIN look show noir | seen "your own copy wins on a name" "Mine"
+    $BIN look show noir | seen "and the shipped one is still there without it" "Noir"
+fi
+
+# A look on a CLIP is the same look, through the same table.
+if [ -n "${kdir:-}" ] && [ -f "$kdir/clip.mp4" ]; then
+    lproj=$TMP/look.syntl
+    $BIN timeline new "$lproj" --size 64x48 --fps 25 >/dev/null
+    $BIN timeline track "$lproj" video V1 >/dev/null
+    $BIN timeline clip "$lproj" 0 "$kdir/clip.mp4" --at 0 >/dev/null
+    $BIN timeline grade "$lproj" 0 0 --look noir >/dev/null
+    grep -F 'saturation	-100' "$lproj" > /dev/null
+    check "a look lands on a clip too" "0" "$?"
+    check "an unknown look on a clip is refused" "1" \
+          "$($BIN timeline grade "$lproj" 0 0 --look nosuchlook >/dev/null 2>&1; echo $?)"
+fi
+
+# ⚠ and the picker has to LIST a .cube, or a LUT is reachable by typing a path
+# and no other way — the same hole a project had before `browse` listed one.
+$BIN browse "$ldir" | seen "the picker lists a .cube" "look	half.cube"
+
 echo "== what the window is launched with"
 
 # THE BUG THIS EXISTS FOR (synstudio 0.1.0-15). The session exports MANGOHUD=1
@@ -1950,6 +2160,26 @@ check "MANGOHUD=1 does not survive the launcher" "0" \
       "$(printf '%s\n' "$genv" | grep -c '^MANGOHUD=1$')"
 # And it still says which program the window belongs to.
 printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID=synstudio"
+
+# And that the window FILE still loads at all.
+#
+# ⚠ A failed QML import, a duplicate id or a function whose name collides with
+# an existing property fails the WHOLE FILE, not the line — this repo has lost
+# an entire window to `id: gc` (the engine's own garbage collector) and to a
+# `function selKey()` beside a `property int selKey`, and the second of those
+# opened normally and broke one gesture at call time. Loading it offscreen
+# costs a couple of seconds and catches the whole class.
+#
+# Skipped rather than failed where quickshell or a runtime dir is missing: a
+# build chroot has neither, and a test that only passes on a desktop is a test
+# that gets turned off.
+qml=$(dirname "$0")/../data/synstudio.qml
+if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
+    QT_QPA_PLATFORM=offscreen timeout 25 quickshell -p "$qml" \
+        > "$TMP/qml.log" 2>&1
+    seen "the window file loads" "Configuration Loaded" < "$TMP/qml.log"
+    notseen "and loads without a QML error" "Error:" < "$TMP/qml.log"
+fi
 
 pass=$(grep -c '^p' "$RESULTS")
 fail=$(grep -c '^f' "$RESULTS")

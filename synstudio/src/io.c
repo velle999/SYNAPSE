@@ -1254,6 +1254,8 @@ int ss_browse(const char *dir, ss_row **rows, char abs_out[1024])
              * opened, and a timeline that cannot be reached from it is a
              * document you can only open by typing its path. */
             if (!strcasecmp(e, "syntl"))           type = SS_ROW_PROJECT;
+            else if (!strcasecmp(e, "cube") || !strcasecmp(e, "synlook"))
+                                                   type = SS_ROW_LOOK;
             else if (is_still(e) || is_raw(de->d_name)) type = SS_ROW_IMAGE;
             else if (is_movie(e))                  type = SS_ROW_VIDEO;
             else if (is_audio(e))                  type = SS_ROW_AUDIO;

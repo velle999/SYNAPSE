@@ -477,7 +477,62 @@ pkgver=0.1.0
 #   that proves the fix.
 #
 #   344 assertions.
-pkgrel=16
+#
+# 17 SOMEBODY ELSE'S COLOUR, COMING IN — roadmap item 7 of 10.
+#
+#   `lut` is a develop SETTING now: a catalogue name or a path to a .cube,
+#   with `lut.amount` beside it. Being a setting is most of the feature — it
+#   rides the sidecar, the clip grade, undo, the keyframes and the GUI panels
+#   because all of those are built from the one table in develop.c.
+#
+#   ⭐ AND THE LUT BRIDGE COMPOSES. An imported look is applied at the END of
+#   the pointwise chain, in the display encoding, which is the domain a .cube
+#   is defined in. ss_lut_write bakes a clip's grade by WALKING THAT SAME
+#   CHAIN — so an imported look comes out inside the baked cube. The export
+#   needs no second lut3d, no new graph builder and no new way for a still and
+#   a frame to disagree. Measured at 55.15 dB against the still renderer,
+#   against 55.7 for the pure grade: composing two lattices costs nothing
+#   above the quantisation that was there already.
+#
+#   3D and 1D, DOMAIN_MIN/MAX honoured, the row count checked. ⚠ A TRUNCATED
+#   LUT IS THE ONE THAT MATTERS: a download that stopped parses perfectly row
+#   by row, and only counting them catches it — without that the missing rows
+#   read as black and the top of every picture dies. ⚠ DOMAIN_MIN and
+#   DOMAIN_MAX share every character through the M, so telling them apart on
+#   s[7] silently sends the floor into the ceiling; it is s[8]. ⚠ Rows vary
+#   RED FASTEST, and the only test that catches the other order is a cube that
+#   MOVES a channel — a ramp or a gamma cannot see it.
+#
+#   ⚠ A LUT this machine has not got is KEPT and renders as nothing, exactly
+#   as a missing effect is, and says so once by name rather than once per
+#   pixel. ⚠ And NO .cube SHIPS: a LUT is somebody's licensed work far more
+#   often than a slider position is. The reader, the catalogue and
+#   ~/.config/synstudio/luts are all here; the tables are the user's to bring.
+#
+#   And a LOOK is the other half: `.synlook`, the develop stack as
+#   tab-separated text, carrying only the fields it moves. Applying one SETS
+#   those fields and leaves the rest — so it lands on top of the exposure and
+#   white balance a photograph needed rather than throwing them away, and
+#   every slider it moved is still a slider afterwards. Geometry is never in
+#   one, decided by asking the table which GROUP a key is in so a control
+#   added later is excluded by being put in the right place. Twelve ship;
+#   ~/.config/synstudio/looks wins on a name.
+#
+#   `look list|show|save|apply|remove`, `luts`, `lut show`, and
+#   `timeline grade --look`. `browse` lists a .cube now — without that a LUT
+#   was reachable by typing a path and no other way, which is the hole a
+#   project had before the picker listed one.
+#
+#   ⚠ A string row in a slider panel is not a slider: the Loader that draws
+#   the LUT name has to HIDE the track under it, or the handle sits at zero
+#   beneath the name and is draggable through the gap. And the window's grade
+#   panel offers only the pointwise groups — LUT is on that list by the same
+#   test as the rest, because it bakes into the cube.
+#
+#   379 assertions, clean under ASan+UBSan+LSan, and the suite now loads the
+#   QML offscreen: a duplicate id or a bad property fails the WHOLE FILE, and
+#   this repo has lost a window to exactly that twice.
+pkgrel=17
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

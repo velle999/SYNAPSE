@@ -1,0 +1,11 @@
+# synstudio look
+label	Faded Film
+about	A lifted black and a rolled-off white, from the curve rather than the blacks slider, so the shadows keep their colour.
+curve.rgb	0,0.085 0.25,0.3 0.75,0.79 1,0.95
+contrast	-8
+saturation	-18
+grade.shadow.hue	205
+grade.shadow.sat	16
+grade.hilite.hue	42
+grade.hilite.sat	10
+grain	18

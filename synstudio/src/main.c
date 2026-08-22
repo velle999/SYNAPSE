@@ -242,6 +242,14 @@ static int apply_set(ss_develop *d, const char *key, const char *val)
          * see the note at the top of develop.c. */
         if (!strncmp(key, "crop.", 5) && strcmp(key, "crop.angle"))
             d->crop.on = 1;
+        /* And naming a LUT without saying how much of it means all of it.
+         * Zero is the null value for every field in the struct, which is what
+         * makes a zeroed develop stack the null grade — but it also means a
+         * LUT set and nothing else would render as nothing, and look like the
+         * import had failed. Same reasoning, same place: the reader must not
+         * do this, so the command layer does. */
+        if (!strcmp(key, "lut") && *val && d->lut_amount == 0.0f)
+            d->lut_amount = 100.0f;
         return 0;
     case -1: return die("no such setting: %s  (try `synstudio keys`)", key);
     case -2: return die("%s: not a number: %s", key, val);
@@ -290,7 +298,8 @@ static int cmd_keys(void)
         ss_develop_get(&d, f.key, buf, sizeof buf);
         printf("%s\t%s\t%.6g\t%.6g\t%s\t%s\t%s\t%.6g\t%.6g\n",
                f.key, buf, f.ui_lo, f.ui_hi,
-               f.type == SS_T_CURVE ? "curve" : f.type == SS_T_INT ? "int" : "float",
+               f.type == SS_T_CURVE ? "curve" : f.type == SS_T_INT ? "int"
+                                                : f.type == SS_T_STR ? "str" : "float",
                f.group, f.label, f.lo, f.hi);
     }
     return 0;
@@ -535,6 +544,197 @@ static int cmd_lut(const opts *o)
         fprintf(stderr, "synstudio: note: clarity/texture/dehaze/sharpen/noise/"
                         "vignette/grain are not colour and are NOT in the LUT\n");
     return 0;
+}
+
+/* ---- LUTs and looks, coming IN ----
+ *
+ * The `lut` verb bakes one out; these read one in. A LUT is a SETTING, so
+ * putting one on a photograph or a clip is `set lut=NAME` and `timeline grade
+ * … lut=NAME` and needs no verb of its own — what needs a verb is finding out
+ * what is installed, which is the question a picker asks.
+ */
+static int cmd_luts(void)
+{
+    int i;
+    for (i = 0; i < ss_lut_count(); i++) {
+        const ss_lut_entry *e = ss_lut_at(i);
+        printf("%s\t%dD\t%d\t%s\n", e->name, e->dims, e->size, e->path);
+    }
+    return 0;
+}
+
+static int cmd_lut_show(const char *ref)
+{
+    char path[1024];
+    ss_lut3d l;
+    char err[256] = "";
+    const char *slash;
+
+    /* Resolved WITHOUT being read, so that a file which is present and broken
+     * says why it is broken. Asking the catalogue instead answers "no LUT of
+     * that name" for a truncated download, and sends the wrong person looking
+     * in the wrong place. */
+    if (ss_lut_resolve(ref, path, sizeof path) != 0)
+        return die("no LUT named %s  (try `synstudio luts`)", ref);
+    if (ss_lut_read(path, &l, err, sizeof err) != 0) return die("%s", err);
+    {
+        char name[128];
+        size_t len;
+        slash = strrchr(path, '/');
+        snprintf(name, sizeof name, "%s", slash ? slash + 1 : path);
+        len = strlen(name);
+        if (len > 5 && !strcasecmp(name + len - 5, ".cube")) name[len - 5] = '\0';
+        printf("name\t%s\n", name);
+    }
+    printf("from\t%s\n", path);
+    printf("title\t%s\n", l.title);
+    printf("dims\t%d\n", l.dims);
+    printf("size\t%d\n", l.size);
+    printf("domain\t%g %g %g\t%g %g %g\n",
+           (double)l.dmin[0], (double)l.dmin[1], (double)l.dmin[2],
+           (double)l.dmax[0], (double)l.dmax[1], (double)l.dmax[2]);
+    printf("nodes\t%ld\n",
+           l.dims == 3 ? (long)l.size * l.size * l.size : (long)l.size);
+    ss_lut_free(&l);
+    return 0;
+}
+
+static int cmd_look(int argc, char **argv)
+{
+    const char *sub = argc > 2 ? argv[2] : "list";
+    int i;
+
+    if (!strcmp(sub, "list")) {
+        for (i = 0; i < ss_look_count(); i++) {
+            const ss_look *k = ss_look_at(i);
+            printf("%s\t%s\t%s\t%s\n", k->name, k->label, k->about, k->path);
+        }
+        return 0;
+    }
+
+    if (!strcmp(sub, "show")) {
+        const ss_look *k = argc > 3 ? ss_look_find(argv[3]) : NULL;
+        ss_develop d;
+        ss_develop_info f;
+        ss_develop def;
+
+        if (!k) return die("no such look: %s  (try `synstudio look list`)",
+                          argc > 3 ? argv[3] : "");
+        ss_develop_reset(&d);
+        ss_develop_reset(&def);
+        if (ss_look_apply(k, &d) < 0) return die("cannot read %s", k->path);
+        printf("name\t%s\n", k->name);
+        printf("label\t%s\n", k->label);
+        printf("about\t%s\n", k->about);
+        printf("from\t%s\n", k->path);
+        /* What it SETS, which is the only part of a develop stack a look
+         * carries — printed by asking the table, so it is the same list the
+         * apply walks and cannot drift from it. */
+        for (i = 0; ss_develop_describe(i, &f) == 0; i++) {
+            char have[512], was[512];
+            if (ss_develop_get(&d, f.key, have, sizeof have) != 0) continue;
+            if (ss_develop_get(&def, f.key, was, sizeof was) != 0) continue;
+            if (!strcmp(have, was)) continue;
+            printf("set\t%s\t%s\n", f.key, have);
+        }
+        return 0;
+    }
+
+    /* `look save NAME --from IMG` takes the develop stack off a photograph
+     * that already looks right, which is how a look actually gets made. */
+    if (!strcmp(sub, "save")) {
+        const char *name = argc > 3 ? argv[3] : NULL;
+        const char *label = NULL, *from = NULL;
+        ss_develop d;
+        char path[1200];
+        int n;
+
+        if (!name) return die("look save needs a name");
+        ss_develop_reset(&d);
+        for (i = 4; i < argc; i++) {
+            if (!strcmp(argv[i], "--from") && i + 1 < argc) from = argv[++i];
+            else if (!strcmp(argv[i], "--label") && i + 1 < argc) label = argv[++i];
+            else if (strchr(argv[i], '=')) {
+                char *eq = strchr(argv[i], '=');
+                *eq = '\0';
+                if (apply_set(&d, argv[i], eq + 1) != 0) return 1;
+            } else return die("look save: unknown option %s", argv[i]);
+        }
+        if (from) {
+            char side[4200];
+            ss_edit e;
+            ss_develop had = d;
+            ss_develop_info f;
+            ss_sidecar_path(from, side, sizeof side);
+            if (ss_edit_load(&e, side) != 0) return die("cannot read %s", side);
+            d = e.dev;
+            /* Anything named on the command line as well WINS over the
+             * photograph, so `--from shot.jpg contrast=0` saves the look
+             * without the contrast that shot happened to need. */
+            for (i = 0; ss_develop_describe(i, &f) == 0; i++) {
+                char v[512], def_[512];
+                ss_develop dflt;
+                ss_develop_reset(&dflt);
+                if (ss_develop_get(&had, f.key, v, sizeof v) != 0) continue;
+                if (ss_develop_get(&dflt, f.key, def_, sizeof def_) != 0) continue;
+                if (strcmp(v, def_)) ss_develop_set(&d, f.key, v);
+            }
+        }
+        n = ss_look_save(name, label, &d, path, sizeof path);
+        if (n < 0) return die("cannot save a look called %s", name);
+        printf("out\t%s\n", path);
+        printf("fields\t%d\n", n);
+        return 0;
+    }
+
+    if (!strcmp(sub, "apply")) {
+        const ss_look *k = argc > 3 ? ss_look_find(argv[3]) : NULL;
+        const char *to = NULL;
+        char side[4200];
+        ss_edit e;
+        int bad;
+
+        if (!k) return die("no such look: %s  (try `synstudio look list`)",
+                          argc > 3 ? argv[3] : "");
+        for (i = 4; i < argc; i++) {
+            if (!strcmp(argv[i], "--to") && i + 1 < argc) to = argv[++i];
+            else return die("look apply: unknown option %s", argv[i]);
+        }
+        if (!to) return die("look apply needs --to FILE");
+
+        ss_sidecar_path(to, side, sizeof side);
+        if (ss_edit_load(&e, side) != 0) return die("cannot read %s", side);
+        bad = ss_look_apply(k, &e.dev);
+        if (bad < 0) return die("cannot read %s", k->path);
+        if (ss_edit_save(&e, side) != 0) return die("cannot write %s", side);
+        /* A look written by a newer synstudio still lands, minus whatever
+         * this build has never heard of — but it says so, because a look that
+         * arrived 80%% applied and silent is a look somebody will spend an
+         * afternoon trying to match. */
+        if (bad) fprintf(stderr, "synstudio: %d setting%s in %s this build does "
+                                 "not know\n", bad, bad == 1 ? "" : "s", k->name);
+        printf("out\t%s\n", side);
+        return 0;
+    }
+
+    if (!strcmp(sub, "remove")) {
+        const ss_look *k = argc > 3 ? ss_look_find(argv[3]) : NULL;
+        char dir[1024], own[1200];
+        if (!k) return die("no such look: %s", argc > 3 ? argv[3] : "");
+        /* Only a look of your OWN can be removed. Deleting an installed one
+         * would come back on the next update and take the user's copy of the
+         * name with it. */
+        if (ss_look_dir(dir, sizeof dir) != 0) return die("no place for looks");
+        snprintf(own, sizeof own, "%s/%s.synlook", dir, k->name);
+        if (strcmp(own, k->path))
+            return die("%s is installed, not yours: %s", k->name, k->path);
+        if (unlink(own) != 0) return die("cannot remove %s: %s", own, strerror(errno));
+        printf("removed\t%s\n", own);
+        return 0;
+    }
+
+    return die("look: unknown subcommand %s — try list, show, save, apply, remove",
+               sub);
 }
 
 /* ---------------------------------------------------------------- video -- */
@@ -1282,14 +1482,30 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
 
     if (!strcmp(verb, "grade")) {
         int i;
-        if (argc < 7) return die("grade wants PROJ TRACK CLIP KEY=VALUE...");
+        if (argc < 7) return die("grade wants PROJ TRACK CLIP KEY=VALUE... or --look NAME");
         if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
         if (!t->track[tr].clip[cl].has_grade) {
             ss_develop_reset(&t->track[tr].clip[cl].grade);
             t->track[tr].clip[cl].has_grade = 1;
         }
         for (i = 6; i < argc; i++) {
-            char *eq = strchr(argv[i], '=');
+            char *eq;
+            /* A look on a clip is the same look as on a photograph, and it
+             * lands the same way: it SETS the fields it names and leaves the
+             * grade already on the shot alone. */
+            if (!strcmp(argv[i], "--look") && i + 1 < argc) {
+                const ss_look *k = ss_look_find(argv[++i]);
+                int bad;
+                if (!k) return die("no such look: %s  (try `synstudio look list`)",
+                                   argv[i]);
+                bad = ss_look_apply(k, &t->track[tr].clip[cl].grade);
+                if (bad < 0) return die("cannot read %s", k->path);
+                if (bad) fprintf(stderr, "synstudio: %d setting%s in %s this "
+                                         "build does not know\n",
+                                 bad, bad == 1 ? "" : "s", k->name);
+                continue;
+            }
+            eq = strchr(argv[i], '=');
             if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
             *eq = '\0';
             if (apply_set(&t->track[tr].clip[cl].grade, argv[i], eq + 1) != 0) return 1;
@@ -1826,7 +2042,7 @@ static void rec_print(double t, double db, void *user)
 static int cmd_browse(int argc, char **argv)
 {
     static const char *names[] = { "up", "dir", "image", "video", "audio",
-                                   "project" };
+                                   "project", "look" };
     char abs[1024];
     ss_row *rows = NULL;
     int n, i;
@@ -2026,6 +2242,8 @@ int main(int argc, char **argv)
         return cmd_kind(argv[2]);
     }
     if (!strcmp(cmd, "fx"))       return cmd_fx(argc, argv);
+    if (!strcmp(cmd, "luts"))     return cmd_luts();
+    if (!strcmp(cmd, "look"))     return cmd_look(argc, argv);
     if (!strcmp(cmd, "gui"))      return cmd_gui(argc, argv);
     if (!strcmp(cmd, "timeline")) return cmd_timeline(argc, argv);
 
@@ -2036,6 +2254,8 @@ int main(int argc, char **argv)
         return cmd_pixel(argc, argv, 2, &o);
     }
     if (!strcmp(cmd, "lut")) {
+        /* `lut show X` reads one; everything else about `lut` writes one. */
+        if (argc > 3 && !strcmp(argv[2], "show")) return cmd_lut_show(argv[3]);
         if (parse_opts(argc, argv, 2, &o, &rest, &nrest) != 0) return die("bad option");
         return cmd_lut(&o);
     }

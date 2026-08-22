@@ -1,0 +1,9 @@
+# synstudio look
+label	Punch
+about	More of everything, in the order that keeps skin: vibrance before saturation, blacks before contrast.
+contrast	28
+blacks	-14
+whites	10
+clarity	16
+vibrance	26
+saturation	5

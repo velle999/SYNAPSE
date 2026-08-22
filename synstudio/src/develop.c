@@ -28,7 +28,7 @@
 #include <string.h>
 #include <math.h>
 
-enum { F_FLOAT, F_INT, F_CURVE };
+enum { F_FLOAT, F_INT, F_CURVE, F_STR };
 
 typedef struct {
     const char *key;
@@ -102,6 +102,9 @@ static const field fields[] = {
     D("vignette.feather", F_FLOAT, vignette_feather, 0.0f,     100.0f, "Effects", "Vignette feather"),
     D("grain",            F_FLOAT, grain,            0.0f,     100.0f, "Effects", "Grain"),
     D("grain.size",       F_FLOAT, grain_size,       0.0f,     100.0f, "Effects", "Grain size"),
+
+    D("lut",              F_STR,   lut,              0.0f,       0.0f, "LUT", "LUT"),
+    D("lut.amount",       F_FLOAT, lut_amount,       0.0f,     100.0f, "LUT", "LUT strength"),
 
     D("crop",             F_INT,   crop.on,          0.0f,       1.0f, "Geometry", "Crop"),
     D("crop.x",           F_FLOAT, crop.x,           0.0f,       1.0f, "Geometry", "Crop left"),
@@ -196,8 +199,10 @@ void ss_develop_lerp(const ss_develop *a, const ss_develop *b, float m,
             co->built = 1;
             co->identity = 0;
         }
-        /* F_INT is deliberately not interpolated: it took the nearer end
-         * above. Half a horizontal flip is not a thing. */
+        /* F_INT and F_STR are deliberately not interpolated: they took the
+         * nearer end above. Half a horizontal flip is not a thing, and there
+         * is no colour half way between two LUTs that are not both loaded —
+         * a keyed grade ramps `lut.amount`, which is a number and does. */
     }
 }
 
@@ -212,6 +217,7 @@ int ss_develop_describe(int i, ss_develop_info *out)
     out->lo    = fields[i].lo;
     out->hi    = fields[i].hi;
     out->type  = fields[i].type == F_CURVE ? SS_T_CURVE
+               : fields[i].type == F_STR   ? SS_T_STR
                : fields[i].type == F_INT   ? SS_T_INT : SS_T_FLOAT;
 
     out->ui_lo = fields[i].lo;
@@ -265,6 +271,9 @@ int ss_develop_is_identity(const ss_develop *d)
             break;
         case F_CURVE:
             if (!((const ss_curve *)(base + f->off))->identity) return 0;
+            break;
+        case F_STR:
+            if (*(const char *)(base + f->off)) return 0;
             break;
         }
     }
@@ -331,6 +340,19 @@ int ss_develop_set(ss_develop *d, const char *key, const char *val)
         if (f->type == F_CURVE)
             return parse_curve((ss_curve *)(base + f->off), val);
 
+        if (f->type == F_STR) {
+            /* A LUT reference is written into a TAB-SEPARATED line, so a tab
+             * or a newline in one would produce a sidecar that reads back as
+             * a different setting. Refuse it here, at the one door, rather
+             * than defending the writer forever. */
+            const char *c;
+            if (strlen(val) >= SS_LUT_REF) return -3;
+            for (c = val; *c; c++)
+                if ((unsigned char)*c < 0x20) return -2;
+            snprintf((char *)(base + f->off), SS_LUT_REF, "%s", val);
+            return 0;
+        }
+
         {
             char *end;
             float v = strtof(val, &end);
@@ -356,6 +378,7 @@ int ss_develop_get(const ss_develop *d, const char *key, char *out, size_t n)
         switch (f->type) {
         case F_CURVE: print_curve((const ss_curve *)(base + f->off), out, n); return 0;
         case F_INT:   snprintf(out, n, "%d", *(const int *)(base + f->off)); return 0;
+        case F_STR:   snprintf(out, n, "%s", (const char *)(base + f->off)); return 0;
         default:      snprintf(out, n, "%.6g", *(const float *)(base + f->off)); return 0;
         }
     }

@@ -1,0 +1,12 @@
+# synstudio look
+label	Teal and Orange
+about	The blockbuster split: shadows to teal, highlights to skin, balanced toward the highlight.
+grade.shadow.hue	195
+grade.shadow.sat	28
+grade.hilite.hue	32
+grade.hilite.sat	22
+grade.balance	10
+contrast	15
+vibrance	12
+hsl.orange.sat	10
+hsl.aqua.sat	8

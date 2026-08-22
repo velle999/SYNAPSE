@@ -342,6 +342,27 @@ void ss_pixel_pointwise(const ss_develop *d, float in[3], float out[3])
         hsl_to_rgb(h, ss_clampf(sat, 0.0f, 1.0f), l, rgb);
     }
 
+    /* An imported look, LAST and in this domain.
+     *
+     * A .cube is a table of display-encoded colours; applying it anywhere but
+     * here would be applying it to numbers it was never measured against. It
+     * being last is also what makes the LUT BRIDGE COMPOSE — ss_lut_write
+     * bakes a clip's grade by walking this function, so an imported look
+     * falls out inside the baked cube and the video path needs no second
+     * lut3d and cannot drift from the still.
+     *
+     * A reference this machine cannot resolve returns NULL and the grade is
+     * unchanged: a look somebody else had is KEPT in the document and renders
+     * as nothing, rather than being quietly deleted from their project. */
+    if (d->lut[0] && d->lut_amount > 0.0f) {
+        const ss_lut3d *L = ss_lut_cached(d->lut);
+        if (L) {
+            float lo[3], mix = ss_clampf(d->lut_amount / 100.0f, 0.0f, 1.0f);
+            ss_lut_eval(L, rgb, lo);
+            for (i = 0; i < 3; i++) rgb[i] += (lo[i] - rgb[i]) * mix;
+        }
+    }
+
     /* --- back to linear ------------------------------------------------ */
 
     out[0] = ss_srgb_to_linear(rgb[0]);

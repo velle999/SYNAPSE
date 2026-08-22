@@ -1,0 +1,8 @@
+# synstudio look
+label	Monochrome
+about	Straight black and white, with the contrast a colour picture did not need.
+saturation	-100
+contrast	20
+clarity	12
+blacks	-10
+whites	8

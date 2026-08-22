@@ -415,12 +415,18 @@ FloatingWindow {
             const r = root.pickerRows[i]
             if (r.kind === "dir" || r.kind === "up") { out.push(r); continue }
             if (root.pickerFor === "project") { if (r.kind === "project") out.push(r) }
+            // A .cube is not a picture and not a clip, so it appears in this
+            // one mode and nowhere else. It is listed at all for the reason a
+            // project is: the engine cannot DECODE either, and a picker that
+            // only offered what it can decode left both openable by typing a
+            // path and no other way.
+            else if (root.pickerFor === "lut") { if (r.kind === "look") out.push(r) }
             // The darkroom develops pictures. A sound file has none, so Open
             // must not offer one — it would load nothing and say nothing.
             else if (root.pickerFor === "photo") {
                 if (r.kind === "image" || r.kind === "video") out.push(r)
             }
-            else if (r.kind !== "project") out.push(r)
+            else if (r.kind !== "project" && r.kind !== "look") out.push(r)
         }
         return out
     }
@@ -1067,6 +1073,98 @@ FloatingWindow {
         if (root.selTrack < 0 || root.selClip < 0) return
         root.tlRun(["fx", root.proj, String(root.selTrack),
                     String(root.selClip)].concat(args))
+    }
+
+    // ── Looks and LUTs ──────────────────────────────────────────────────────
+    //
+    // Two different things and the window keeps them apart, because they
+    // behave differently under the hand: a LOOK moves the sliders, so it can
+    // be adjusted after it lands; a LUT is a table, so it can only be mixed
+    // in and out. Both come from the engine's own catalogues, so a .synlook
+    // dropped in this morning appears without the QML learning its name.
+    property var lookList: []
+    property var lutList: []
+    property bool lutMenuOpen: false
+    // Which page asked for a LUT. The chooser and the file picker are shared
+    // between the darkroom and the cutting room, and a LUT picked from the
+    // clip inspector that landed on the open photograph instead would be the
+    // kind of wrong that is only noticed later.
+    property string lutTarget: "photo"
+
+    function setLut(ref) {
+        if (root.lutTarget === "clip") root.gradeClip("lut", ref)
+        else                           root.change("lut", ref)
+    }
+    // The clip's LUT is a NAME, and gradeValue parses everything as a number
+    // — which reads every reference as 0 and shows every clip as having none.
+    function gradeRaw(key) {
+        const c = root.selClipObj
+        if (!c || !c.graded) return ""
+        const src = (root.selKey >= 0) ? c.keys[root.selKey].grade : c.grade
+        const v = src[key]
+        return v === undefined ? "" : String(v)
+    }
+
+    // A look lands on whatever page asked for it: the darkroom writes the
+    // sidecar, the cutting room writes the clip's grade. Same look, same
+    // engine call shape, one line apart.
+    function applyLook(name) {
+        if (root.mode === "video") {
+            if (root.selTrack < 0 || root.selClip < 0) { root.say("pick a clip first"); return }
+            root.tlRun(["grade", root.proj, String(root.selTrack),
+                        String(root.selClip), "--look", name])
+        } else {
+            if (!root.file) { root.say("open a photograph first"); return }
+            lookApplyProc.command = [root.bin, "look", "apply", name, "--to", root.file]
+            lookApplyProc.running = true
+        }
+    }
+
+    Process {
+        id: lookApplyProc
+        onExited: function (code) {
+            // The engine has just rewritten the sidecar, so every slider in
+            // the panel is now stale. Re-reading it through the SAME `get`
+            // the Open path uses is what makes a look ADJUSTABLE rather than
+            // a one-way stamp — the panel comes back showing where the look
+            // put each control, and the hand carries on from there.
+            if (!root.file) return
+            getProc.command = [root.bin, "get", root.file]
+            getProc.running = true
+            root.dirty = true
+        }
+    }
+
+    Process {
+        id: lookListProc
+        command: [root.bin, "look", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 2) continue
+                    out.push({ name: f[0], label: f[1], about: f[2] || "" })
+                }
+                root.lookList = out
+            }
+        }
+    }
+
+    Process {
+        id: lutListProc
+        command: [root.bin, "luts"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 3) continue
+                    out.push({ name: f[0], dims: f[1], size: f[2], path: f[3] || "" })
+                }
+                root.lutList = out
+            }
+        }
     }
 
     Process {
@@ -2115,7 +2213,12 @@ FloatingWindow {
     // need a neighbouring pixel, so they are not colour and are NOT in the
     // cube — the engine says so on the command line and the panel should not
     // quietly imply otherwise by offering them here.
-    readonly property var gradeGroups: ["Basic", "Colour mixer", "Grading"]
+    //
+    // LUT is on the list by the same test and not as an exception: an
+    // imported look is applied at the end of the pointwise chain, so it bakes
+    // into the clip's cube along with everything above it. Last, because that
+    // is where it lands.
+    readonly property var gradeGroups: ["Basic", "Colour mixer", "Grading", "LUT"]
 
     // ── Dragging a clip ─────────────────────────────────────────────────────
     //
@@ -2256,6 +2359,8 @@ FloatingWindow {
         transListProc.running = true
         fxListProc.running = true
         fxParamProc.running = true
+        lookListProc.running = true
+        lutListProc.running = true
         if (root.proj) {
             root.selTrack = 0
             root.reloadTimeline()
@@ -2593,6 +2698,69 @@ FloatingWindow {
                             Column {
                                 id: panelCol
                                 width: parent.width
+
+                                // ── Looks ───────────────────────────────
+                                //
+                                // Above the controls, because that is the
+                                // order the work happens in: pick a starting
+                                // point, then adjust it. A look SETS the
+                                // fields it names and leaves the rest, so the
+                                // exposure and white balance a photograph
+                                // needed are still there underneath — and
+                                // every slider it moved is still a slider.
+                                Column {
+                                    id: lookGrp
+                                    width: panelCol.width
+                                    property bool open: false
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 30
+                                        color: root.wash(0.10)
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 12
+                                            text: (lookGrp.open ? "▾  " : "▸  ") + "Looks"
+                                            color: root.cText
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: lookGrp.open = !lookGrp.open
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: lookGrp.open ? root.lookList : []
+                                        Rectangle {
+                                            id: lookRow
+                                            required property var modelData
+                                            width: panelCol.width
+                                            height: 28
+                                            color: lookArea.containsMouse ? root.wash(0.16)
+                                                                          : "transparent"
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 20
+                                                anchors.right: parent.right
+                                                anchors.rightMargin: 12
+                                                text: lookRow.modelData.label
+                                                elide: Text.ElideRight
+                                                color: root.cText
+                                                font.pixelSize: 11
+                                            }
+                                            MouseArea {
+                                                id: lookArea
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onClicked: root.applyLook(lookRow.modelData.name)
+                                            }
+                                        }
+                                    }
+                                }
 
                                 Repeater {
                                     model: root.groups
@@ -4003,6 +4171,64 @@ FloatingWindow {
                                 }
                             }
 
+                            // The same looks, on a clip. `timeline grade
+                            // --look` takes one exactly as the sidecar does,
+                            // so a look made on a photograph lands on the
+                            // footage beside it — which is the whole reason
+                            // the two pages share a develop stack.
+                            Column {
+                                id: glookGrp
+                                width: inspCol.width
+                                property bool open: false
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 28
+                                    color: root.wash(0.07)
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 20
+                                        text: (glookGrp.open ? "▾  " : "▸  ") + "Looks"
+                                        color: root.cText
+                                        font.pixelSize: 11
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: glookGrp.open = !glookGrp.open
+                                    }
+                                }
+
+                                Repeater {
+                                    model: glookGrp.open ? root.lookList : []
+                                    Rectangle {
+                                        id: glookRow
+                                        required property var modelData
+                                        width: inspCol.width
+                                        height: 26
+                                        color: glookArea.containsMouse ? root.wash(0.16)
+                                                                       : "transparent"
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 28
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 12
+                                            text: glookRow.modelData.label
+                                            elide: Text.ElideRight
+                                            color: root.cText
+                                            font.pixelSize: 11
+                                        }
+                                        MouseArea {
+                                            id: glookArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: root.applyLook(glookRow.modelData.name)
+                                        }
+                                    }
+                                }
+                            }
+
                             Repeater {
                                 model: root.gradeGroups
 
@@ -4318,6 +4544,124 @@ FloatingWindow {
         }
     }
 
+    // ── Which LUT ──────────────────────────────────────────────────────
+    //
+    // The installed catalogue, and a way to any file. Both, because the
+    // catalogue is what TRAVELS — a project naming `kodak2383` opens on a
+    // machine where that file lives somewhere else — while a pack somebody
+    // downloaded this afternoon is a folder of .cube files and nothing more.
+    // SynapseOS ships no LUTs of its own, so on most machines this list is
+    // empty until somebody puts one in ~/.config/synstudio/luts, and the row
+    // that opens the picker has to be there for the list to be worth opening.
+    Rectangle {
+        anchors.fill: parent
+        visible: root.lutMenuOpen
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.lutMenuOpen = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(460, parent.width - 80)
+            height: Math.min(420, parent.height - 80)
+            color: root.cPanel
+            radius: 6
+            border.width: 1
+            border.color: root.wash(0.28)
+
+            MouseArea { anchors.fill: parent }
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 8
+
+                Text {
+                    text: "LUT"
+                    color: root.cText
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+                Text {
+                    width: parent.width
+                    text: root.lutList.length > 0
+                          ? "Installed, or choose a .cube from anywhere."
+                          : "Nothing installed yet — put .cube files in "
+                            + "~/.config/synstudio/luts, or choose one."
+                    wrapMode: Text.WordWrap
+                    color: root.cDim
+                    font.pixelSize: 11
+                }
+
+                Flickable {
+                    width: parent.width
+                    height: parent.height - 96
+                    contentHeight: lutCol.height
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Column {
+                        id: lutCol
+                        width: parent.width
+
+                        Repeater {
+                            model: root.lutList
+                            Rectangle {
+                                id: lutRow
+                                required property var modelData
+                                width: lutCol.width
+                                height: 30
+                                color: lutArea.containsMouse ? root.wash(0.16) : "transparent"
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left; anchors.leftMargin: 8
+                                    text: lutRow.modelData.name
+                                    color: root.cText
+                                    font.pixelSize: 12
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right; anchors.rightMargin: 8
+                                    text: lutRow.modelData.dims + " · " + lutRow.modelData.size
+                                    color: root.cDim
+                                    font.pixelSize: 10
+                                }
+                                MouseArea {
+                                    id: lutArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        // The NAME, not the path: that is the
+                                        // half of this that survives the
+                                        // project being opened elsewhere.
+                                        root.setLut(lutRow.modelData.name)
+                                        root.lutMenuOpen = false
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 8
+                    Btn {
+                        label: "Choose a file…"
+                        onClicked: {
+                            root.lutMenuOpen = false
+                            root.pickerFor = "lut"
+                            root.openPicker()
+                        }
+                    }
+                    Btn { label: "Close"; onClicked: root.lutMenuOpen = false }
+                }
+            }
+        }
+    }
+
     // ── The open dialog ────────────────────────────────────────────────
 
     Rectangle {
@@ -4453,6 +4797,15 @@ FloatingWindow {
                                     root.tlRev++
                                     root.reloadTimeline()
                                     root.say("")
+                                } else if (m.kind === "look") {
+                                    // A path, because this one came from
+                                    // somewhere the catalogue does not reach.
+                                    // ⚠ pickerFor goes back to "photo": left
+                                    // on "lut", the next Open would list
+                                    // nothing but .cube files.
+                                    root.pickerOpen = false
+                                    root.pickerFor = "photo"
+                                    root.setLut(m.path)
                                 } else if (root.pickerFor === "clip") {
                                     // The video page borrows the same picker.
                                     // It lists what the ENGINE can decode, so
@@ -4491,13 +4844,97 @@ FloatingWindow {
         required property var modelData
         readonly property var row: sl.modelData
         width: panelCol.width
-        height: row.type === "curve" ? 0 : 44
+        // A curve row is text and a LUT row is a NAME; neither is a number
+        // with a range, and drawing a track for one puts a handle at zero for
+        // a control that has no zero. The LUT row draws itself, below.
+        height: row.type === "curve" ? 0 : row.type === "str" ? 46 : 44
         visible: row.type !== "curve"
 
         readonly property real val: parseFloat(root.vals[sl.row.key]) || 0
 
+        // ── the LUT row ─────────────────────────────────────────────────
+        //
+        // Everything the engine can be given is here: the installed
+        // catalogue, a file from anywhere, and a way back to none. A
+        // catalogue NAME is what travels between machines and a path is what
+        // a file dropped in from somewhere else is, so both are offered and
+        // the name is preferred where there is one.
+        Loader {
+            active: sl.row.type === "str"
+            anchors.fill: parent
+            sourceComponent: Item {
+                readonly property string cur: root.vals[sl.row.key] || ""
+                // The tail of a path, or the catalogue name as it stands.
+                readonly property string shown:
+                    cur === "" ? "None" : cur.replace(/^.*\//, "").replace(/\.cube$/i, "")
+
+                Text {
+                    id: lutLbl
+                    anchors.left: parent.left; anchors.leftMargin: 12
+                    anchors.top: parent.top; anchors.topMargin: 6
+                    text: sl.row.label
+                    color: root.cText
+                    font.pixelSize: 11
+                }
+                Rectangle {
+                    anchors.left: parent.left; anchors.leftMargin: 12
+                    anchors.right: clearBtn.left; anchors.rightMargin: 6
+                    anchors.top: lutLbl.bottom; anchors.topMargin: 4
+                    height: 22
+                    radius: 3
+                    color: root.wash(0.14)
+                    border.width: 1
+                    border.color: root.wash(0.22)
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left; anchors.leftMargin: 8
+                        anchors.right: parent.right; anchors.rightMargin: 8
+                        text: parent.parent.shown
+                        elide: Text.ElideMiddle
+                        color: parent.parent.cur === "" ? root.cDim : root.cAccent
+                        font.pixelSize: 11
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            root.lutTarget = "photo"
+                            root.lutMenuOpen = !root.lutMenuOpen
+                        }
+                    }
+                }
+                Rectangle {
+                    id: clearBtn
+                    anchors.right: parent.right; anchors.rightMargin: 12
+                    anchors.top: lutLbl.bottom; anchors.topMargin: 4
+                    width: 22; height: 22
+                    radius: 3
+                    visible: parent.cur !== ""
+                    color: root.wash(0.14)
+                    border.width: 1
+                    border.color: root.wash(0.22)
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\u00d7"
+                        color: root.cText
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.change(sl.row.key, "")
+                    }
+
+                }
+            }
+        }
+
+        // ⚠ every one of these is hidden for a string row. A Loader drawn
+        // OVER a live slider is not a replacement for it: the track, the
+        // handle and the readout all still paint, and the handle sits at zero
+        // under the name of the LUT — which reads as a control at its default
+        // and is also draggable through the gap.
         Text {
             id: lbl
+            visible: sl.row.type !== "str"
             anchors.left: parent.left; anchors.leftMargin: 12
             anchors.top: parent.top; anchors.topMargin: 6
             text: sl.row.label
@@ -4505,6 +4942,7 @@ FloatingWindow {
             font.pixelSize: 11
         }
         Text {
+            visible: sl.row.type !== "str"
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: parent.top; anchors.topMargin: 6
             // A control at its default reads as blank rather than as "0", so
@@ -4516,6 +4954,7 @@ FloatingWindow {
 
         Rectangle {
             id: track
+            visible: sl.row.type !== "str"
             anchors.left: parent.left; anchors.leftMargin: 12
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: lbl.bottom; anchors.topMargin: 8
@@ -5319,11 +5758,83 @@ FloatingWindow {
         readonly property var row: grd.modelData
         readonly property real val: root.gradeValue(grd.row.key)
         width: inspCol.width
-        height: grd.row.type === "curve" ? 0 : 40
+        height: grd.row.type === "curve" ? 0 : grd.row.type === "str" ? 46 : 40
         visible: grd.row.type !== "curve"
+
+        // The clip's LUT row. The same control as the darkroom's, against the
+        // clip's grade instead of the sidecar — and it has to exist here too,
+        // because the grade on a clip is the SAME develop table and a table
+        // row the inspector could not draw would be a setting reachable only
+        // from the command line.
+        Loader {
+            active: grd.row.type === "str"
+            anchors.fill: parent
+            sourceComponent: Item {
+                readonly property string cur: root.gradeRaw(grd.row.key)
+                readonly property string shown:
+                    cur === "" ? "None" : cur.replace(/^.*\//, "").replace(/\.cube$/i, "")
+
+                Text {
+                    id: gcLutLbl
+                    anchors.left: parent.left; anchors.leftMargin: 20
+                    anchors.top: parent.top; anchors.topMargin: 4
+                    text: grd.row.label
+                    color: root.cText
+                    font.pixelSize: 11
+                }
+                Rectangle {
+                    anchors.left: parent.left; anchors.leftMargin: 20
+                    anchors.right: gcClear.left; anchors.rightMargin: 6
+                    anchors.top: gcLutLbl.bottom; anchors.topMargin: 4
+                    height: 22
+                    radius: 3
+                    color: root.wash(0.14)
+                    border.width: 1
+                    border.color: root.wash(0.22)
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left; anchors.leftMargin: 8
+                        anchors.right: parent.right; anchors.rightMargin: 8
+                        text: parent.parent.shown
+                        elide: Text.ElideMiddle
+                        color: parent.parent.cur === "" ? root.cDim : root.cAccent
+                        font.pixelSize: 11
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            root.lutTarget = "clip"
+                            root.lutMenuOpen = !root.lutMenuOpen
+                        }
+                    }
+                }
+                Rectangle {
+                    id: gcClear
+                    anchors.right: parent.right; anchors.rightMargin: 12
+                    anchors.top: gcLutLbl.bottom; anchors.topMargin: 4
+                    width: 22; height: 22
+                    radius: 3
+                    visible: parent.cur !== ""
+                    color: root.wash(0.14)
+                    border.width: 1
+                    border.color: root.wash(0.22)
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\u00d7"
+                        color: root.cText
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.gradeClip(grd.row.key, "")
+                    }
+                }
+            }
+        }
 
         Text {
             id: gclbl
+            visible: grd.row.type !== "str"
             anchors.left: parent.left; anchors.leftMargin: 20
             anchors.top: parent.top; anchors.topMargin: 4
             text: grd.row.label
@@ -5331,6 +5842,7 @@ FloatingWindow {
             font.pixelSize: 11
         }
         Text {
+            visible: grd.row.type !== "str"
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: parent.top; anchors.topMargin: 4
             text: grd.val === 0 ? "" : (Math.round(grd.val * 100) / 100)
@@ -5340,6 +5852,7 @@ FloatingWindow {
 
         Rectangle {
             id: gctrack
+            visible: grd.row.type !== "str"
             anchors.left: parent.left; anchors.leftMargin: 20
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: gclbl.bottom; anchors.topMargin: 7

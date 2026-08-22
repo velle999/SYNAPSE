@@ -1,0 +1,10 @@
+# synstudio look
+label	Noir
+about	Hard monochrome, heavy vignette, grain that admits it is a picture.
+saturation	-100
+contrast	45
+blacks	-32
+whites	16
+clarity	20
+vignette	42
+grain	26

@@ -1,0 +1,11 @@
+# synstudio look
+label	Sunset Glow
+about	Warm light with a cool shadow under it, which is what late sun actually looks like.
+temp	8200
+tint	10
+grade.hilite.hue	25
+grade.hilite.sat	26
+grade.shadow.hue	280
+grade.shadow.sat	12
+vibrance	20
+contrast	10
