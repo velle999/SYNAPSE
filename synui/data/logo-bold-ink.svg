@@ -1,0 +1,39 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- INK VARIANT — deeper violet #5b21b6, for PALE surfaces.
+       #a78bfa is a light violet drawn for dark grounds; on a light theme's panel
+       it measures about 2.4:1, which is not a legible mark, it is a smudge. This
+       is the same geometry in the ink colourway branding/logo/README.md defines
+       for light stock: about 8:1 on the same surface. The containment triangle's
+       opacity is lifted 0.4 -> 0.65 with it, because a hairline that was already
+       faint on black disappears entirely once the ground is bright.
+       Keep the geometry in step with logo.svg / logo-bold.svg — only the colour
+       and that one opacity differ. -->
+  <!-- Bold, transparent variant of the SynapseOS dendrite mark, for the start
+       button's logo mode: the launcher renders it at ~20px, where logo.svg's
+       thin strokes (8/4.4) and faint containment triangle all but vanish. This
+       drops the triangle, thickens the branches (18/14) and fattens the nodes
+       so the emblem still reads at bar size. Background rect removed so it
+       composites onto the bar. Keep the geometry in step with data/logo.svg. -->
+  <g transform="translate(512,512)" stroke-linecap="round">
+    <!-- central node -->
+    <circle cx="0" cy="-48" r="52" fill="#5b21b6"/>
+
+    <!-- three primary branches -->
+    <line x1="0" y1="-48" x2="0" y2="-416" stroke="#5b21b6" stroke-width="18"/>
+    <line x1="0" y1="-48" x2="288" y2="192" stroke="#5b21b6" stroke-width="18"/>
+    <line x1="0" y1="-48" x2="-288" y2="192" stroke="#5b21b6" stroke-width="18"/>
+
+    <!-- two inner branches, straight, angled away from the primaries -->
+    <line x1="0" y1="-48" x2="176" y2="200" stroke="#5b21b6" stroke-width="14"/>
+    <line x1="0" y1="-48" x2="-176" y2="200" stroke="#5b21b6" stroke-width="14"/>
+
+    <!-- primary terminal nodes -->
+    <circle cx="0" cy="-416" r="30" fill="#5b21b6"/>
+    <circle cx="288" cy="192" r="30" fill="#5b21b6"/>
+    <circle cx="-288" cy="192" r="30" fill="#5b21b6"/>
+
+    <!-- inner branch terminal nodes -->
+    <circle cx="176" cy="200" r="24" fill="#5b21b6"/>
+    <circle cx="-176" cy="200" r="24" fill="#5b21b6"/>
+  </g>
+</svg>

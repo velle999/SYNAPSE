@@ -365,6 +365,8 @@ install_data('data/wallpaper.png',    install_dir : synui_datadir)
 install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
 install_data('data/logo.svg',         install_dir : synui_datadir)
 install_data('data/logo-bold.svg',    install_dir : synui_datadir)
+install_data('data/logo-ink.svg',     install_dir : synui_datadir)
+install_data('data/logo-bold-ink.svg', install_dir : synui_datadir)
 
 # syn-calc — the calculator's parser with a main() around it.
 #

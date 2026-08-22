@@ -464,7 +464,27 @@ pkgver=0.1.0
 #   case nobody reproduces twice by hand: opened on the LAST visible row, where
 #   it would otherwise hang off the bottom edge.
 
-pkgrel=428
+# 429: the dendrite mark is two colourways now, and the surface picks. #a78bfa
+#   is drawn for dark grounds — about 7.2:1 on a dark panel and about 2.4:1 on a
+#   pale one, where it stops being a logo and becomes a smudge. The ink cut
+#   (#5b21b6, containment triangle lifted 0.4 -> 0.65) is the reverse, about
+#   8:1 pale and 2.2:1 dark. A single hardcoded file is therefore washed out on
+#   half the themes we ship whichever one it is, and it was the purple half: on
+#   prism-light the start button's emblem sat beside a caret and a wordmark that
+#   both followed the theme, and the welcome panel's header emblem beside a
+#   title that did.
+#   ⚠ THE CHOICE IS THE SURFACE'S, NOT A SETTING. Each caller asks the thing it
+#   already measures — render.c the same g_panel_bg and SURFACE_PALE the ink
+#   ladder uses, Launcher.qml the strip's own `inkOnDark` (so a CLEAR bar
+#   follows what is behind that span, not the scheme), synui-apply-theme.sh the
+#   ink_for() it already runs on menu_base for rofi. No second threshold, and
+#   nothing new to keep in step.
+#   data/logo-ink.svg and data/logo-bold-ink.svg ship alongside the originals.
+#   ⚠ The ISO's /usr/share/synapseos/logo.svg is still the purple cut alone, so
+#   the rofi fallback chain ends there — a live image gets one washed-out mark
+#   rather than a rasi pointing at a file that does not exist.
+
+pkgrel=429
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

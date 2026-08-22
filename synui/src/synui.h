@@ -2916,10 +2916,13 @@ typedef enum {
 
 /* The start-menu launcher (launcher.c) synui draws in the top-left of every
  * output — the "◢ SYNAPSE" button that used to be a waybar module. Text is the
- * old look; logo swaps it for the dendrite emblem (SYNUI_DATADIR/logo.svg). */
+ * old look; logo swaps it for the dendrite emblem. The bar draws it now
+ * (quickshell/modules/Launcher.qml), from logo-bold*.svg rather than logo*.svg
+ * because the thin cut vanishes at 23px — and it picks the COLOURWAY off the
+ * strip it sits on, the same field the caret next to it reads. */
 typedef enum {
     SYN_LAUNCHER_TEXT = 0,   /* "◢ SYNAPSE" */
-    SYN_LAUNCHER_LOGO,       /* logo.svg emblem */
+    SYN_LAUNCHER_LOGO,       /* dendrite emblem, bold cut, ink or purple */
 } syn_launcher_style_t;
 
 /* Which QML tree synui-bar starts (systemd/synui-bar.sh reads the resolved

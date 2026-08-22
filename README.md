@@ -10,7 +10,18 @@
      badges below but not by <pre>, which is why the art sat left of everything
      under it. An <img> is inline, so it centres, and it does not scroll
      sideways on a phone. -->
-<img src="synui/data/logo.svg" alt="SynapseOS" width="170">
+<!-- Two cuts of the same mark, because GitHub renders this page on either
+     ground and the brand purple only works on one of them. #a78bfa is drawn for
+     dark: it measures about 7:1 on GitHub's #0d1117 and about 2.7:1 on white,
+     where it stops being a logo and becomes a smudge. The ink cut (#5b21b6)
+     is the reverse — about 9:1 on white, 2.1:1 on dark. branding/logo/README.md
+     is the whole table. The <source> is the DARK case; the <img> is the
+     fallback every other renderer takes, so it carries ink, which is also the
+     right answer for anything that pastes this into a document. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="synui/data/logo.svg">
+  <img src="synui/data/logo-ink.svg" alt="SynapseOS" width="170">
+</picture>
 
 # SynapseOS
 

@@ -794,10 +794,27 @@ void synui_render_welcome(syn_server_t *s)
     /* SynapseOS dendrite emblem, top-left of the header (transparent SVG
      * rendered straight into the panel's cairo context via librsvg, the same
      * path icons.c uses for app icons). Best-effort: a missing/broken asset
-     * just leaves the header text as before. */
+     * just leaves the header text as before.
+     *
+     * ⚠ WHICH COLOURWAY IS NOT A PREFERENCE, IT IS THE SURFACE'S ANSWER. The
+     * mark ships in two: #a78bfa, drawn for dark grounds, and #5b21b6 (ink),
+     * drawn for pale ones. Against a light theme's panel the purple measures
+     * about 2.4:1 and the ink about 8:1 — and on a dark panel they trade places,
+     * 7.2:1 against 2.2:1. So a single hardcoded file is washed out on half the
+     * themes we ship, whichever one it is; this panel was the purple half, and
+     * on prism-light the emblem beside the title was a smudge while every glyph
+     * around it followed the theme.
+     *
+     * SURFACE_PALE is the same threshold the ink ladder uses (contrast.h), off
+     * the same g_panel_bg the rest of this function measures — not a second
+     * opinion about what "light" means. */
     {
-        RsvgHandle *lh =
-            rsvg_handle_new_from_file(SYNUI_DATADIR "/logo.svg", NULL);
+        const char *logo =
+            syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2])
+                > SURFACE_PALE
+              ? SYNUI_DATADIR "/logo-ink.svg"
+              : SYNUI_DATADIR "/logo.svg";
+        RsvgHandle *lh = rsvg_handle_new_from_file(logo, NULL);
         if (lh) {
             RsvgRectangle vp = { .x = 26, .y = 18, .width = 64, .height = 64 };
             rsvg_handle_render_document(lh, cr, &vp, NULL);

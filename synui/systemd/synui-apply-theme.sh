@@ -865,10 +865,27 @@ if command -v rofi >/dev/null 2>&1; then
     rtheme="$rdir/synui.rasi"
     rconf="$rdir/config.rasi"
     # Resolved here rather than inlined in the heredoc so the fallback is
-    # visible: the packaged path first, then the ISO's copy. Both are the same
-    # drawing; only synui's is the transparent variant, which is the one that
-    # belongs on a coloured surface.
-    SYNUI_LOGO=/usr/share/synui/logo.svg
+    # visible: the packaged path first, then the ISO's copy. All of them are the
+    # same drawing; synui's are the transparent cuts, which are the ones that
+    # belong on a coloured surface.
+    #
+    # ⚠ WHICH CUT OF THE MARK IS THE SURFACE'S ANSWER, not a preference. #a78bfa
+    # is drawn for dark grounds and measures about 2.4:1 on a light theme's menu
+    # — a smudge beside text the same block is careful to make legible. The ink
+    # cut (#5b21b6) is about 8:1 there and the two swap places on a dark menu.
+    # ink_for() has already decided which direction this surface reads, so ask
+    # it about menu_base rather than inventing a second threshold here: black
+    # ink means the menu is pale, which is exactly when the ink logo belongs.
+    IFS=, read -r lbr lbg lbb <<<"$menu_base"
+    case "$(ink_for "$lbr" "$lbg" "$lbb")" in
+        0,0,0) _logo_cut=logo-ink ;;
+        *)     _logo_cut=logo ;;
+    esac
+    SYNUI_LOGO=/usr/share/synui/$_logo_cut.svg
+    # The ISO's copy is the purple cut only, so a box without synui's data dir
+    # falls back to it whatever the menu looks like — one washed-out mark on a
+    # live image beats a rasi pointing at a file that is not there.
+    [ -r "$SYNUI_LOGO" ] || SYNUI_LOGO=/usr/share/synui/logo.svg
     [ -r "$SYNUI_LOGO" ] || SYNUI_LOGO=/usr/share/synapseos/logo.svg
     if mkdir -p "$rdir" 2>/dev/null; then
         IFS=, read -r rbr rbg rbb <<<"$menu_base"

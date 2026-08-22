@@ -83,10 +83,24 @@ Rectangle {
         // faint triangle all but vanish into the bar. sourceSize is what makes
         // Qt rasterise the SVG at the drawn size instead of scaling a default
         // 128px render down to 23 and going soft.
+        //
+        // ⚠ THE COLOURWAY FOLLOWS THE STRIP, because the caret beside it always
+        // did and the emblem did not. `pal.glyph` flips with the theme and, on a
+        // clear bar, with whatever is behind this span — so on a light theme the
+        // caret went dark, the wordmark went dark, and the emblem stayed the
+        // #a78bfa drawn for black. That measures about 2.4:1 on a pale strip;
+        // the ink cut is about 8:1 there, and the two swap places on a dark one
+        // (7.2:1 against 2.2:1). One hardcoded file is therefore washed out on
+        // half the themes we ship whichever cut it is, so it is picked here.
+        //
+        // `inkOnDark` rather than Theme.isLight: a clear bar's direction comes
+        // from the backdrop under THIS span, not from the scheme, and the caret
+        // is already reading that same field through pal.glyph.
         Image {
             visible: root.logo
             anchors.verticalCenter: parent.verticalCenter
-            source: "file:///usr/share/synui/logo-bold.svg"
+            source: root.pal.inkOnDark ? "file:///usr/share/synui/logo-bold.svg"
+                                       : "file:///usr/share/synui/logo-bold-ink.svg"
             sourceSize.width:  23        // LAUNCHER_LOGO_SZ
             sourceSize.height: 23
             width: 23
