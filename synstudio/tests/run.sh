@@ -774,7 +774,11 @@ echo "== keyframes on everything that is not colour"
 
 $BIN timeline keys | rxseen "the table says which properties can be keyed" \
     '^opacity(	[^	]*){7}	1$'
-$BIN timeline keys | rxseen "and which cannot" '^speed(	[^	]*){7}	0$'
+# ⚠ `speed` used to be the example of a property that CANNOT be keyed. It can
+# since 0.1.0-19 — a keyed speed is a ramp — so the example moved to one that
+# still cannot: a fade's length is a number the graph bakes into a filter
+# argument, not something it evaluates per frame.
+$BIN timeline keys | rxseen "and which cannot" '^fade\.in(	[^	]*){7}	0$'
 
 ap=$TMP/anim.syntl
 $BIN timeline new "$ap" --size 640x360 --fps 25
@@ -834,8 +838,12 @@ if [ -s "$box" ]; then
     check "clear takes one property" "2" \
           "$($BIN timeline anim "$ap" 0 0 list | wc -l)"
 
-    $BIN timeline anim "$ap" 0 0 add speed --at 0 --value 2 >/dev/null 2>&1
+    $BIN timeline anim "$ap" 0 0 add fade.in --at 0 --value 2 >/dev/null 2>&1
     check "a property the renderer cannot animate is refused" "1" "$?"
+    # And one it CAN, which is what makes the refusal above mean something.
+    $BIN timeline anim "$ap" 0 0 add speed --at 0 --value 2 >/dev/null 2>&1
+    check "and a speed ramp is accepted" "0" "$?"
+    $BIN timeline anim "$ap" 0 0 clear speed >/dev/null 2>&1
 
     # ---- the picture: a pan ----------------------------------------------
     #
@@ -2173,6 +2181,211 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ------------------------------------------------------------- retime ----
+#
+# Speed stopped being one number in 0.1.0-19. A clip can run backwards, hold
+# one frame, or ramp — and a ramp moves the TIMEBASE rather than a number
+# inside it, so the clip's length, the frame the monitor seeks to, the setpts
+# expression and the tempo the sound runs at all have to come from the same
+# arithmetic. They come from ss_clip_retime, which samples the curve once.
+
+if have ffmpeg && have ffprobe; then
+    rtc=$TMP/rt.mp4
+    ffmpeg -v error -y -f lavfi -i "testsrc2=s=320x180:d=4:r=25" \
+           -f lavfi -i "sine=f=440:d=4" -shortest \
+           -c:v libx264 -pix_fmt yuv420p -c:a aac "$rtc" 2>/dev/null
+
+    mkrt() {   # mkrt <project>
+        rm -f "$1"
+        $BIN timeline new "$1" --size 320x180 --fps 25 >/dev/null
+        $BIN timeline track "$1" video V >/dev/null
+        $BIN timeline clip "$1" 0 "$rtc" --at 0 --dur 4 >/dev/null
+    }
+    psnr2() {  # psnr2 <a> <b>
+        ffmpeg -v error -i "$1" -i "$2" -lavfi psnr=stats_file=- -f null - 2>&1 \
+            | awk -F'psnr_avg:' '/psnr_avg/{print $2+0}' | tail -1
+    }
+    nthframe() {  # nthframe <file> <n> <out.png>
+        ffmpeg -v error -y -i "$1" -vf "select=eq(n\,$2)" \
+               -fps_mode passthrough -frames:v 1 "$3"
+    }
+
+    # ---- the one that failed the whole export ---------------------------
+    #
+    # ⚠ atempo's range is 0.5..100 and the speed property's is 0.1..10, so
+    # EVERY clip slower than half speed with a sound track on it died at the
+    # end of the render: "Value 0.200000 for parameter 'tempo' out of range".
+    # Halvings multiply, so a chain of them reaches any slowdown.
+    slow=$TMP/slow.sstl
+    mkrt "$slow"
+    $BIN timeline set "$slow" 0 0 speed=0.2 >/dev/null
+    $BIN timeline export "$slow" --out "$TMP/slow.mp4" --print \
+        | seen "a fifth-speed clip chains atempo" "atempo=0.5"
+    $BIN timeline export "$slow" --out "$TMP/slow.mp4" >/dev/null 2>&1
+    check "and a fifth-speed clip EXPORTS" "yes" \
+          "$([ -s "$TMP/slow.mp4" ] && echo yes || echo no)"
+    d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$TMP/slow.mp4")
+    check "five times as long as the source" "yes" \
+          "$(awk -v d="${d:-0}" 'BEGIN{print (d>19.5 && d<20.5)?"yes":"no"}')"
+
+    # ---- backwards -------------------------------------------------------
+    rev=$TMP/rev.sstl
+    mkrt "$rev"
+    $BIN timeline set "$rev" 0 0 reverse=1 >/dev/null
+    rg=$($BIN timeline export "$rev" --out "$TMP/rev.mp4" --print)
+    echo "$rg" | seen "the picture runs backwards" "[0:v]reverse,"
+    echo "$rg" | seen "and so does the sound"      "areverse"
+    $BIN timeline export "$rev" --out "$TMP/rev.mp4" >/dev/null 2>&1
+    nthframe "$rtc" 99 "$TMP/src_last.png"
+    nthframe "$rtc" 0  "$TMP/src_first.png"
+    nthframe "$TMP/rev.mp4" 0 "$TMP/rev_first.png"
+    # The DISCRIMINATING pair: it has to match the source's last frame AND not
+    # its first. A reverse that silently did nothing would pass the second
+    # assertion on its own.
+    check "it starts on the source's LAST frame" "yes" \
+          "$(awk -v p="$(psnr2 "$TMP/src_last.png" "$TMP/rev_first.png")" \
+                 'BEGIN{print (p>30)?"yes":"no"}')"
+    check "and not on its first"                "yes" \
+          "$(awk -v p="$(psnr2 "$TMP/src_first.png" "$TMP/rev_first.png")" \
+                 'BEGIN{print (p<25)?"yes":"no"}')"
+
+    # ---- a held frame ----------------------------------------------------
+    frz=$TMP/frz.sstl
+    mkrt "$frz"
+    $BIN timeline set "$frz" 0 0 freeze=1.5 >/dev/null
+    $BIN timeline export "$frz" --out "$TMP/frz.mp4" --print \
+        | seen "a freeze holds one frame" "loop=loop="
+    $BIN timeline export "$frz" --out "$TMP/frz.mp4" >/dev/null 2>&1
+    nthframe "$TMP/frz.mp4" 10 "$TMP/frz_a.png"
+    nthframe "$TMP/frz.mp4" 80 "$TMP/frz_b.png"
+    check "and every frame of it is the same one" "yes" \
+          "$(awk -v p="$(psnr2 "$TMP/frz_a.png" "$TMP/frz_b.png")" \
+                 'BEGIN{print (p>40)?"yes":"no"}')"
+    # ⚠ It has to be the frame ASKED FOR. The export opens the source at the
+    # clip's in point for everything else, and a freeze that inherited that
+    # held the wrong picture — convincingly, which is why this is measured
+    # against the source rather than looked at.
+    nthframe "$rtc" 38 "$TMP/src38.png"
+    nthframe "$rtc" 0  "$TMP/src00.png"
+    check "the frame it holds is the one asked for" "yes" \
+          "$(awk -v p="$(psnr2 "$TMP/src38.png" "$TMP/frz_a.png")" \
+                 'BEGIN{print (p>30)?"yes":"no"}')"
+    check "and not the clip's in point"             "yes" \
+          "$(awk -v p="$(psnr2 "$TMP/src00.png" "$TMP/frz_a.png")" \
+                 'BEGIN{print (p<25)?"yes":"no"}')"
+
+    # ---- a ramp ----------------------------------------------------------
+    #
+    # Keys on `speed`, and the only keyed property whose axis is SOURCE
+    # seconds: a ramp says "at this point in the shot", and the output length
+    # is then the integral of 1/speed over the source rather than an equation
+    # to be solved. A linear 1x -> 2x over four source seconds is 4*ln(2).
+    ramp=$TMP/ramp.sstl
+    mkrt "$ramp"
+    $BIN timeline anim "$ramp" 0 0 add speed --at 0 --value 1 >/dev/null
+    $BIN timeline anim "$ramp" 0 0 add speed --at 4 --value 2 >/dev/null
+    rl=$($BIN timeline get "$ramp" 0 0 | awk -F'\t' '/^length/{print $2}')
+    check "a ramp's length is the integral of 1/speed" "yes" \
+          "$(awk -v l="${rl:-0}" 'BEGIN{w=4*log(2); print (l>w-0.01 && l<w+0.01)?"yes":"no"}')"
+    rgz=$($BIN timeline export "$ramp" --out "$TMP/ramp.mp4" --print)
+    echo "$rgz" | seen "and the export is a piecewise setpts" "setpts='if(lt(T,"
+    # The sound follows it through ONE atempo stepped by sendcmd — and the
+    # commands are timed on the SOURCE axis, because asendcmd sits before the
+    # atempo and the frames it is timing have not been stretched yet.
+    echo "$rgz" | seen "the sound follows the ramp"          "asendcmd"
+    $BIN timeline export "$ramp" --out "$TMP/ramp.mp4" >/dev/null 2>&1
+    va=$(ffprobe -v error -select_streams v -show_entries stream=duration -of csv=p=0 "$TMP/ramp.mp4")
+    aa=$(ffprobe -v error -select_streams a -show_entries stream=duration -of csv=p=0 "$TMP/ramp.mp4")
+    check "and comes out the same length as the picture" "yes" \
+          "$(awk -v v="${va:-0}" -v a="${aa:-9}" \
+                 'BEGIN{d=v-a; if(d<0)d=-d; print (d<0.1)?"yes":"no"}')"
+
+    # A ramp that leaves atempo's range cannot be pitched by one filter and a
+    # chain of them cannot be commanded as a unit, so it says so and drops the
+    # sound rather than shipping a graph that fails or a sync that drifts.
+    ramp2=$TMP/ramp2.sstl
+    mkrt "$ramp2"
+    $BIN timeline anim "$ramp2" 0 0 add speed --at 0 --value 1 >/dev/null
+    $BIN timeline anim "$ramp2" 0 0 add speed --at 4 --value 0.25 >/dev/null
+    $BIN timeline export "$ramp2" --out "$TMP/ramp2.mp4" --print 2>&1 >/dev/null \
+        | seen "a ramp out of atempo's range says so" "sound is dropped"
+
+    # ---- the frames that were never shot ---------------------------------
+    for m in blend flow; do
+        $BIN timeline set "$slow" 0 0 "retime=$m" >/dev/null
+        $BIN timeline export "$slow" --out "$TMP/x.mp4" --print \
+            | seen "retime=$m interpolates" "minterpolate=fps=25:mi_mode="
+    done
+    # ⚠ Only where the timebase actually moved. At 1x every output frame IS an
+    # input frame, and minterpolate would spend minutes rebuilding what it was
+    # handed.
+    $BIN timeline set "$slow" 0 0 speed=1 retime=flow >/dev/null
+    $BIN timeline export "$slow" --out "$TMP/x.mp4" --print \
+        | notseen "and does nothing at 1x" "minterpolate"
+
+    # ---- the monitor and the export agree about a retimed clip -----------
+    #
+    # This is the assertion that caught both of the bugs above. A one-frame
+    # disagreement measures around 19 dB here and the same frame through two
+    # encoders measures around 39, so the two are not close to each other.
+    for pj in rev frz ramp; do
+        $BIN timeline frame "$TMP/$pj.sstl" --at 1.0 --out "$TMP/mon_$pj.png" \
+             >/dev/null 2>&1
+        nthframe "$TMP/$pj.mp4" 25 "$TMP/exp_$pj.png"
+        check "the monitor draws what the export writes ($pj)" "yes" \
+              "$(awk -v p="$(psnr2 "$TMP/mon_$pj.png" "$TMP/exp_$pj.png")" \
+                     'BEGIN{print (p>30)?"yes":"no"}')"
+    done
+fi
+
+# -------------------------------------------------------- stabiliser -----
+#
+# Two passes, and the first is not part of any graph: vidstabdetect watches
+# the clip and writes a .trf beside the project, and only then can
+# vidstabtransform be put in a graph that reads it.
+
+if have ffmpeg && have ffprobe && \
+   ffmpeg -hide_banner -filters 2>/dev/null > "$TMP/.filters" && \
+   grep -q vidstabdetect "$TMP/.filters"; then
+    shaky=$TMP/shaky.mp4
+    ffmpeg -v error -y -f lavfi -i "testsrc2=s=320x180:d=3:r=25" \
+           -vf "crop=280:160:20+10*sin(t*9):20+8*cos(t*11)" \
+           -c:v libx264 -pix_fmt yuv420p "$shaky" 2>/dev/null
+
+    stp=$TMP/stab.sstl
+    rm -rf "$stp" "$stp.stab"
+    $BIN timeline new "$stp" --size 280x160 --fps 25 >/dev/null
+    $BIN timeline track "$stp" video V >/dev/null
+    $BIN timeline clip "$stp" 0 "$shaky" --at 0 --dur 3 >/dev/null
+
+    $BIN timeline stabilise "$stp" 0 0 --dur 15 --size 3 2>/dev/null \
+        | seen "the analysis runs" "stab	on"
+    check "and leaves a .trf beside the project" "yes" \
+          "$([ -s "$stp.stab/stab_0_0.trf" ] && echo yes || echo no)"
+    $BIN timeline export "$stp" --out "$TMP/stab.mp4" --print \
+        | seen "the graph reads it" "vidstabtransform=input="
+
+    # It has to actually hold the picture still. Frame-to-frame difference is
+    # what shake IS, so it is what gets measured — 7.08 before, 4.13 after.
+    $BIN timeline export "$stp" --out "$TMP/stab.mp4" >/dev/null 2>&1
+    shakeof() {
+        ffmpeg -v error -i "$1" \
+            -vf "tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-" \
+            -f null - 2>&1 | awk -F'=' '/YAVG/{s+=$2; n++} END{if(n)printf "%.4f", s/n; else print 0}'
+    }
+    check "and the shot is measurably steadier" "yes" \
+          "$(awk -v a="$(shakeof "$shaky")" -v b="$(shakeof "$TMP/stab.mp4")" \
+                 'BEGIN{print (a>0 && b < a*0.8)?"yes":"no"}')"
+
+    # ⚠ --off keeps the measurement. It took as long as a render to make, and
+    # turning the effect off is not the same as throwing it away.
+    $BIN timeline stabilise "$stp" 0 0 --off | seen "it can be turned off" "stab	off"
+    check "without losing the analysis" "yes" \
+          "$([ -s "$stp.stab/stab_0_0.trf" ] && echo yes || echo no)"
+    $BIN timeline export "$stp" --out "$TMP/stab.mp4" --print \
+        | notseen "and the graph stops reading it" "vidstabtransform"
+fi
+
 # ----------------------------------------------------------- titles ------
 #
 # A title stopped being "some words in the middle" in 0.1.0-18: it has a face,

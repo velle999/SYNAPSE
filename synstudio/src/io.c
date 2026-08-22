@@ -92,6 +92,69 @@ int ss_capture(char *const argv[], char *out, size_t n)
     return (int)got;
 }
 
+/* Pass one of two: measure how a shot moves, and write it down.
+ *
+ * This is NOT part of the export graph and cannot be. vidstabtransform reads
+ * a file of per-frame transforms that vidstabdetect had to produce by
+ * watching the whole clip first, so the analysis is a command somebody runs
+ * once and the result is a sidecar that outlives it. Re-running it is how you
+ * change the analysis; deleting the file is how you turn it off.
+ *
+ * ⚠ Measured at the SOURCE's own size, because the numbers it writes are
+ * pixels — which is why the transform has to run before anything scales the
+ * picture in the graph too.
+ */
+int ss_stabilise(const char *path, double in, double out, const char *trf,
+                 int shakiness)
+{
+    char *av[20], sbuf[64], ibuf[64], tbuf[64], vf[2200];
+    int n = 0, status;
+    pid_t pid;
+
+    if (!path || !trf) return -1;
+    if (shakiness < 1)  shakiness = 1;
+    if (shakiness > 10) shakiness = 10;
+
+    snprintf(ibuf, sizeof ibuf, "%.6f", in > 0 ? in : 0);
+    snprintf(tbuf, sizeof tbuf, "%.6f", out > in ? out - in : 0);
+    snprintf(sbuf, sizeof sbuf, "%d", shakiness);
+    /* `result=` takes a path. It is not a filtergraph read from user text —
+     * this is an argv array — but the colon and the backslash still separate
+     * a filter's own options, so a path containing one would silently become
+     * a different option. The caller builds this path; it is checked anyway. */
+    if (strchr(trf, ':') || strchr(trf, '\\') || strchr(trf, '\'')) return -1;
+    snprintf(vf, sizeof vf, "vidstabdetect=result=%s:shakiness=%s:accuracy=15",
+             trf, sbuf);
+
+    av[n++] = (char *)"ffmpeg";
+    av[n++] = (char *)"-v";      av[n++] = (char *)"error";
+    av[n++] = (char *)"-nostdin";
+    av[n++] = (char *)"-y";
+    if (in > 0) { av[n++] = (char *)"-ss"; av[n++] = ibuf; }
+    if (out > in) { av[n++] = (char *)"-t"; av[n++] = tbuf; }
+    av[n++] = (char *)"-i";      av[n++] = (char *)path;
+    av[n++] = (char *)"-vf";     av[n++] = vf;
+    av[n++] = (char *)"-f";      av[n++] = (char *)"null";
+    av[n++] = (char *)"-";
+    av[n] = NULL;
+
+    pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) { execvp(av[0], av); _exit(127); }
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) ;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return -1;
+
+    /* An ffmpeg without libvidstab exits non-zero above, so reaching here
+     * with no file is the case where the filter ran and found nothing to
+     * write — which is still a failure to the caller. */
+    {
+        FILE *fp = fopen(trf, "rb");
+        if (!fp) return -1;
+        fclose(fp);
+    }
+    return 0;
+}
+
 /* Does this machine's ffmpeg know that option on that filter?
  *
  * Asked rather than assumed, and asked ONCE. A filter option ffmpeg does not

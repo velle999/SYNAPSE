@@ -455,6 +455,18 @@ enum { SS_TEXT_TL, SS_TEXT_TC, SS_TEXT_TR,
  * between a caption in the wrong face and a graph that will not parse. */
 enum { SS_FW_REGULAR, SS_FW_BOLD, SS_FW_LIGHT, SS_FW_ITALIC, SS_FW_BOLDITALIC };
 
+/* How a retimed clip makes the frames that were never shot.
+ *
+ * `nearest` repeats and drops whole frames, which is what every cut has done
+ * here until now and what a 2x speed-up wants. `blend` mixes the two frames
+ * either side. `flow` asks minterpolate to estimate the motion between them
+ * and build the frame in between, which is the only one that makes slow
+ * motion look shot rather than stuttered — and the only one that costs
+ * minutes rather than seconds, and can smear at a cut. */
+enum { SS_RETIME_NEAREST, SS_RETIME_BLEND, SS_RETIME_FLOW };
+int         ss_retime_value(const char *s);
+const char *ss_retime_name(int v);
+
 int         ss_textweight_value(const char *s);   /* -1 if it is not one */
 const char *ss_textweight_name(int v);
 
@@ -471,6 +483,12 @@ const char *ss_textweight_name(int v);
  * NULL, so a caption always renders in SOMETHING. */
 /* Spawn argv and read its stdout as text. fork+execvp, never a shell. */
 int         ss_capture(char *const argv[], char *out, size_t n);
+/* Pass one of two for the stabiliser: watch the clip's source range and
+ * write the per-frame transforms to `trf`. Not part of any graph — the graph
+ * READS the file this leaves behind. `shakiness` is 1..10. */
+int         ss_stabilise(const char *path, double in, double out,
+                         const char *trf, int shakiness);
+
 /* Whether this machine's ffmpeg knows `option` on `filter`. An unknown option
  * fails the whole graph to parse rather than degrading, so anything recent is
  * asked for before it is used. Cached; one fork per process. */
@@ -642,6 +660,34 @@ typedef struct {
     float  text_line;           /* line spacing; < 0 means the old default */
     float  text_roll;           /* credit roll, screen heights a second */
 
+    /* ---- retime ----
+     *
+     * `speed` above is the constant case and stays the whole story for almost
+     * every clip. These are the rest of it.
+     *
+     * A RAMP is keys on the `speed` property, and it is the one keyed
+     * property whose axis is SOURCE seconds rather than output seconds —
+     * because a ramp says "at this point in the shot, run this fast", and
+     * because the output length is then the integral of 1/speed over the
+     * source span rather than an equation to be solved. Everything that needs
+     * either direction goes through ss_clip_retime, so the timeline, the
+     * monitor and the export cannot disagree about when a frame plays.
+     */
+    int    reverse;             /* play the source backwards */
+    double freeze;              /* hold ONE source frame; < 0 = off */
+    int    retime;              /* SS_RETIME_*, how invented frames are made */
+
+    /* ---- stabilisation ----
+     *
+     * Two passes, and the first one is not part of the export: vidstabdetect
+     * reads the source and writes a .trf beside the project, and only then
+     * can vidstabtransform be put in a graph. So `stab` means "there is an
+     * analysis on disk for this clip", and it is set by the command that ran
+     * it rather than by anybody typing it. */
+    int    stab;                /* an analysis exists and is wanted */
+    float  stab_smooth;         /* frames of smoothing, vidstabtransform */
+    float  stab_zoom;           /* per cent, to hide the moving borders */
+
     int    has_grade;
     ss_develop grade;
 
@@ -721,6 +767,45 @@ void ss_xform_reset(ss_xform *x);
 /* Length on the TIMELINE: the source span divided by the speed. */
 double ss_clip_length(const ss_clip *c);
 
+/* ---- the timebase, in ONE place ----
+ *
+ * A clip with a constant speed maps output time to source time by
+ * multiplying. A clip with a speed RAMP does not, and every part of this
+ * program needs the answer: the timeline to know how long the clip is, the
+ * monitor to know which source frame to seek to, the export to write a setpts
+ * expression, and the audio to know what tempo to run at.
+ *
+ * So it is sampled ONCE, here, into a table, and everything reads that table.
+ * The alternative — an analytic integral in the length function and a
+ * separate expression generator in the graph — is two implementations of the
+ * same curve that agree until somebody changes an easing.
+ *
+ * `nseg` segments of constant speed, each covering a span of the SOURCE and a
+ * span of the OUTPUT. Returns the number written, which is 1 for the
+ * overwhelming majority of clips: a clip whose speed does not move is one
+ * segment and costs nothing.
+ */
+#define SS_MAX_RETIME_SEG 64
+
+typedef struct {
+    double src0, src1;          /* seconds into the source, from src_in */
+    double out0, out1;          /* seconds into the clip, from its start */
+    double speed;               /* what runs during this segment */
+} ss_retime_seg;
+
+int    ss_clip_retime(const ss_clip *c, ss_retime_seg *seg, int max);
+/* Which second of the SOURCE is playing `tt` seconds into the clip. Handles
+ * the ramp, the constant speed and the reverse, so nothing outside has to.
+ *
+ * `fps` is needed for exactly one of those: reversing maps output frame k to
+ * input frame N-1-k, so the source instant is one FRAME back from the mirror
+ * of the output time. Without it the monitor shows the frame next door to the
+ * one the export writes — which on anything with detail in it is visibly a
+ * different picture, and on a slow pan is not, which is worse. */
+double ss_clip_source_at(const ss_clip *c, double tt, double fps);
+/* Whether this clip's speed moves at all. */
+int    ss_clip_has_ramp(const ss_clip *c);
+
 /* Named-field access to a clip, for the same reason ss_develop has it: the
  * CLI, the timeline file and the GUI inspector then read ONE table, and a new
  * clip property is one row rather than three lists that drift apart. This is
@@ -776,7 +861,17 @@ typedef struct {
     ss_track track[SS_MAX_TRACKS];
     int    nmarkers;
     ss_marker marker[SS_MAX_MARKERS];
+    /* Where this document's stabiliser analyses live: `<project>.stab`, set
+     * when the project is opened and never written into the file. A .trf is
+     * MEASURED DATA about a source, not a decision — it is regenerated by
+     * asking again, it can be megabytes, and a path recorded in the document
+     * would be wrong the moment the project moved. Empty means nobody has
+     * opened this from a file, which is what a new document looks like. */
+    char   stabdir[1024];
 } ss_timeline;
+
+/* `<project>.stab`, the one place that spelling is decided. */
+void ss_timeline_stabdir(const char *proj, char *out, size_t n);
 
 int ss_timeline_mark(ss_timeline *t, double at, int colour, const char *text);
 int ss_timeline_unmark(ss_timeline *t, int i);

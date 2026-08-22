@@ -595,7 +595,59 @@ pkgver=0.1.0
 #   break reached the PICTURE cannot measure the frame's average: the same
 #   words on two lines carry the same ink (17.0603 against 17.061). It
 #   measures a band the one-line caption cannot reach.
-pkgrel=18
+#
+# 19 RETIME AND THE STABILISER — roadmap item 9 of 10.
+#
+#   ⭐ AND A BUG THAT FAILED EVERY SLOW-MOTION EXPORT. atempo's range starts at
+#   0.5 and the speed property's at 0.1, so any clip under half speed WITH A
+#   SOUND TRACK ON IT died at the end of the render — "Value 0.200000 for
+#   parameter 'tempo' out of range", after the encode had been running for
+#   minutes. Halvings multiply, so a chain of them reaches any slowdown: 0.2
+#   is 0.5 x 0.5 x 0.8.
+#
+#   A clip can run backwards, hold one frame, or RAMP. A ramp is keys on
+#   `speed`, and it moves the TIMEBASE rather than a number inside it: the
+#   clip's length becomes the integral of 1/speed over the source. So the
+#   curve is sampled ONCE into constant-speed segments, and the length, the
+#   frame the monitor seeks to, the export's piecewise setpts and the tempo
+#   the sound runs at all read that one table. ⚠ A ramp's keys are in SOURCE
+#   seconds, the only keyed property that is — a ramp says "at this point in
+#   the shot", and on the output axis the length is an equation to solve
+#   rather than an integral to take.
+#
+#   ⚠ THE MONITOR-EQUALS-EXPORT TEST CAUGHT TWO OF THESE. A freeze inherited
+#   the input seek every other clip uses, so it held the clip's IN POINT
+#   rather than the instant asked for — convincingly, which is why it needed
+#   measuring against the source and not looking at. And a reverse was one
+#   frame out: `reverse` hands out frame N-1 first, whose instant is one frame
+#   before the end of the span, so mirroring the TIME alone lands next door.
+#   A one-frame miss measures 19 dB here; the same frame through two encoders
+#   measures 39.
+#
+#   ⚠ A ramp outside 0.5-2x drops that clip's sound and says so by name. One
+#   atempo can be driven by sendcmd; a CHAIN of them cannot be commanded as a
+#   unit, and the alternatives are a graph that fails or a sound that drifts
+#   out of sync with its own picture. ⚠ And the commands are timed on the
+#   SOURCE axis: asendcmd sits BEFORE atempo, so the frames it is timing have
+#   not been stretched yet — on the output axis the sound came out 2.579s
+#   against the picture's 2.760s.
+#
+#   Optical flow and frame blending are `retime=flow|blend`, minterpolate
+#   either way, and only where the timebase actually moved: at 1x every output
+#   frame IS an input frame.
+#
+#   THE STABILISER is two passes and the first cannot be part of a graph.
+#   `timeline stabilise` runs vidstabdetect over the clip's source range and
+#   writes a .trf into `<project>.stab`; the graph reads it. ⚠ At the SOURCE's
+#   own size, because what it writes is PIXELS — which is why the transform
+#   goes in before anything scales the picture. ⚠ `--off` keeps the analysis:
+#   it took as long as a render to make. Measured steadier — frame-to-frame
+#   difference 7.08 before, 4.13 after.
+#
+#   446 assertions, clean under ASan+UBSan+LSan. Two of them asserted that
+#   `speed` could NOT be keyed; they were right until this release and now
+#   name a property that still cannot.
+pkgrel=19
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

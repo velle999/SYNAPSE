@@ -81,6 +81,9 @@ static void usage(void)
 "                        lists the styles\n"
 "  timeline solid PROJ TRACK [--at T] [--dur S] [--colour R,G,B]\n"
 "  timeline styles               plain, lower third, subtitle, heading, roll\n"
+"  timeline stabilise PROJ T C [--dur SMOOTH] [--size ZOOM%] [--value 1-10]\n"
+"       watch the shot and write the analysis beside the project; --off\n"
+"       turns it off and KEEPS the measurement\n"
 "  timeline subs PROJ TRACK import FILE     a .srt in, one title per cue\n"
 "  timeline subs PROJ TRACK export FILE     the titles on a track back out\n"
 "\n"
@@ -96,6 +99,9 @@ static void usage(void)
 "  timeline get   PROJ T C [KEY]          everything known about one clip\n"
 "  timeline set   PROJ T C KEY=VALUE...   opacity, speed, fades, motion,\n"
 "                                         transition, title (`timeline keys`)\n"
+"       retime: `reverse=1` plays it backwards, `freeze=S` holds the frame\n"
+"       at S, `retime=blend|flow` invents the frames a slowdown needs.\n"
+"       KEYS on `speed` are a RAMP, and theirs are SOURCE seconds\n"
 "  timeline grade PROJ T C KEY=VALUE...   the develop stack, as a LUT\n"
 "  timeline key PROJ T C add --at S [KEY=VALUE...]   pin the grade here\n"
 "  timeline key PROJ T C list|remove N\n"
@@ -161,6 +167,7 @@ typedef struct {
     int    has_dur, has_to, has_head, has_tail, ripple, preview, count;
     const char *colour;
     const char *ease;
+    int    off;                 /* --off: turn a thing off, keep its work */
     const char *style;          /* a title style, applied on creation */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
@@ -217,6 +224,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--style"))   { const char *v = NEXT(); if (!v) return -1; o->style = v; }
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
+        else if (!strcmp(a, "--off"))     { o->off = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
         /* The same slot: an export names a container and a transition names a
@@ -764,6 +772,9 @@ static int tl_load(const char *proj, ss_timeline *t)
     if (!fp) return -1;
     ss_timeline_read(t, fp);
     fclose(fp);
+    /* The document knows where its own sidecars are, so nothing downstream
+     * has to be handed a second path beside the project. */
+    ss_timeline_stabdir(proj, t->stabdir, sizeof t->stabdir);
     return 0;
 }
 
@@ -1374,6 +1385,56 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (cl < 0) return die("cannot add to track %d", tr);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
+        return 0;
+    }
+
+    /* Pass one of the stabiliser, run once and left on disk.
+     *
+     * A verb rather than a property because it is WORK: it watches the whole
+     * clip. The property it sets — `stab` — only says that the analysis is
+     * there and wanted, and `--off` puts it back without throwing the
+     * measurement away, so turning it on again costs nothing. */
+    if (!strcmp(verb, "stabilise") || !strcmp(verb, "stabilize")) {
+        char trf[2048];
+        ss_clip *c;
+        int cl;
+
+        if (argc < 6) return die("%s wants PROJ TRACK CLIP", verb);
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+        if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (c->kind != SS_CLIP_MEDIA)
+            return die("a %s has nothing to stabilise",
+                       c->kind == SS_CLIP_TITLE ? "title" : "colour");
+
+        if (o.off) {
+            c->stab = 0;
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("stab\toff\n");
+            return 0;
+        }
+
+        if (mkdir(t->stabdir, 0777) != 0 && errno != EEXIST)
+            return die("cannot make %s", t->stabdir);
+        snprintf(trf, sizeof trf, "%s/stab_%d_%d.trf", t->stabdir, tr, cl);
+
+        /* Said before it starts, because it is the one command here that
+         * takes as long as a render and gives no sign until it is done. */
+        fprintf(stderr, "watching %.1f seconds of %s\n",
+                c->src_out - c->src_in, c->path);
+        if (ss_stabilise(c->path, c->src_in, c->src_out, trf,
+                         o.has_value ? (int)o.value : 5) != 0)
+            return die("cannot analyse %s  (is this ffmpeg built with "
+                       "libvidstab?)", c->path);
+
+        c->stab = 1;
+        if (o.has_dur) c->stab_smooth = (float)o.dur;
+        if (o.size > 0) c->stab_zoom = (float)o.size;
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("stab\ton\n");
+        printf("analysis\t%s\n", trf);
+        printf("smoothing\t%.0f\n", (double)c->stab_smooth);
         return 0;
     }
 

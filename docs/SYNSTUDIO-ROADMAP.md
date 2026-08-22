@@ -19,6 +19,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 |-----------|--------------------------------------------------------------|
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
 | cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
+| retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
 | audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
@@ -216,7 +217,10 @@ Fairlight-style automation: four features for one piece of work.
 
 ## 6 · Retime and the rest of the cutting room
 
-- [~] speed — constant, 0.1×…10×
+- [x] **speed** — constant 0.1×…10×, and ⚠ the slow half of that range
+      FAILED EVERY EXPORT it was used on: atempo's own range starts at 0.5, so
+      a clip under half speed with a sound track on it died at the end of the
+      render. Halvings multiply; it chains them now
 - [x] **undo and redo** — whole documents in `<project>.undo/`, on disk, so it
       survives the window closing. `timeline undo|redo|history`
 - [ ] copy/paste/duplicate clips, and paste a grade to many clips
@@ -228,10 +232,27 @@ Fairlight-style automation: four features for one piece of work.
 - [ ] source monitor + three-point editing
 - [ ] linked audio and video (routing now separates them, which makes the link
       necessary)
-- [ ] speed ramps, reverse, freeze frame — the keys exist now, but a ramp is
-      a keyed SPEED, which moves the timebase rather than a number inside it
-- [ ] optical flow / frame blending — `minterpolate`
-- [ ] stabilisation — two-pass `vidstab`, which fits the subprocess model
+- [x] **speed ramps, reverse, freeze frame** — **shipped in 0.1.0-19.** A ramp
+      is keys on `speed`, and it does move the timebase rather than a number
+      inside it: the clip's LENGTH becomes the integral of 1/speed over the
+      source. So the curve is sampled once, into a table of constant-speed
+      segments, and the length, the frame the monitor seeks to, the export's
+      piecewise `setpts` and the tempo the sound runs at are all read from
+      that one table. ⚠ Its keys are in SOURCE seconds — the only keyed
+      property that is — because a ramp says "at this point in the shot", and
+      the alternative is an equation to solve rather than an integral to take.
+      ⚠ A ramp outside 0.5–2× drops the clip's sound and says so: one atempo
+      can be commanded, a chain of them cannot, and the alternative is a graph
+      that fails or a sync that drifts
+- [x] **optical flow / frame blending** — `minterpolate`, as `retime=blend` or
+      `retime=flow`, and only where the timebase actually moved
+- [x] **stabilisation** — two-pass `vidstab`. The first pass is not part of
+      any graph and could not be: `timeline stabilise` watches the clip and
+      writes a `.trf` beside the project, and the graph reads it. ⚠ It runs at
+      the SOURCE's own size, because the numbers in it are pixels — which is
+      why the transform goes in before anything scales the picture. Measured:
+      frame-to-frame difference 7.08 before, 4.13 after. `--off` keeps the
+      analysis, which took as long as a render to make
 - [ ] auto-save and versions
 
 ## 7 · Scopes, colour management, delivery
@@ -273,7 +294,9 @@ Fairlight-style automation: four features for one piece of work.
 8. ~~**Titles worth using**, then `.srt`~~ — **done, 0.1.0-18.** A caption
    with a face, a plate, more than one line and five styles; subtitles in and
    out, burnt in or shipped as a stream.
-9. **Retime and stabilisation** — 2 days.
+9. ~~**Retime and stabilisation**~~ — **done, 0.1.0-19.** Ramps, reverse,
+   freeze, optical flow and a two-pass stabiliser — and a slow-motion export
+   that had been failing outright for every clip under half speed.
 10. **Scopes and delivery** — 2–3 days.
 
 ## Not doing

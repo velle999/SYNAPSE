@@ -67,13 +67,105 @@ void ss_clip_reset(ss_clip *c)
      * means these numbers, which is what it was rendered with. */
     c->text_border = 0.045f;
     c->text_line   = 0.25f;
+    /* Off, and off is not zero: zero is a legitimate instant to freeze on. */
+    c->freeze      = -1.0;
+    c->stab_smooth = 10.0f;
+    c->stab_zoom   = 0.0f;
     ss_xform_reset(&c->xf);
+}
+
+void ss_timeline_stabdir(const char *proj, char *out, size_t n)
+{
+    if (!out || n == 0) return;
+    snprintf(out, n, "%s.stab", proj ? proj : "");
+}
+
+int ss_clip_has_ramp(const ss_clip *c)
+{
+    return c && ss_clip_prop_nkeys(c, "speed") >= 2;
+}
+
+/* The timebase, sampled once.
+ *
+ * A ramp is a staircase here, the way a moving grade is 48 cubes and a moving
+ * opacity is a run of sendcmd steps. That is not a shortcut: the EXPORT can
+ * only be handed a piecewise setpts expression and a run of atempo commands,
+ * so a smooth curve would be an answer the renderer cannot say. Sampling it
+ * in one place is what keeps the length, the seek, the expression and the
+ * tempo talking about the same staircase.
+ *
+ * The speed of a segment is read at its MIDPOINT rather than its start, which
+ * halves the error against the curve for the same number of steps.
+ */
+int ss_clip_retime(const ss_clip *c, ss_retime_seg *seg, int max)
+{
+    double srclen, out = 0;
+    int i, n;
+
+    if (!c || !seg || max < 1) return 0;
+    srclen = c->src_out - c->src_in;
+    if (srclen < 0) srclen = 0;
+
+    if (!ss_clip_has_ramp(c)) {
+        double sp = c->speed > 0 ? c->speed : 1.0;
+        seg[0].src0 = 0; seg[0].src1 = srclen;
+        seg[0].out0 = 0; seg[0].out1 = srclen / sp;
+        seg[0].speed = sp;
+        return 1;
+    }
+
+    n = SS_MAX_RETIME_SEG < max ? SS_MAX_RETIME_SEG : max;
+    for (i = 0; i < n; i++) {
+        double s0 = srclen * i / n, s1 = srclen * (i + 1) / n;
+        double sp = ss_clip_prop_at(c, "speed", (s0 + s1) / 2.0);
+        if (sp <= 0.0) sp = 0.1;      /* the table's own floor; never a stop */
+        seg[i].src0 = s0; seg[i].src1 = s1;
+        seg[i].out0 = out;
+        out += (s1 - s0) / sp;
+        seg[i].out1 = out;
+        seg[i].speed = sp;
+    }
+    return n;
 }
 
 double ss_clip_length(const ss_clip *c)
 {
-    double l = (c->src_out - c->src_in) / (c->speed > 0 ? c->speed : 1.0);
+    ss_retime_seg seg[SS_MAX_RETIME_SEG];
+    int n = ss_clip_retime(c, seg, SS_MAX_RETIME_SEG);
+    double l = n > 0 ? seg[n - 1].out1 : 0;
     return l > 0 ? l : 0;
+}
+
+double ss_clip_source_at(const ss_clip *c, double tt, double fps)
+{
+    ss_retime_seg seg[SS_MAX_RETIME_SEG];
+    int n = ss_clip_retime(c, seg, SS_MAX_RETIME_SEG), i;
+    double src = 0, srclen;
+
+    if (n <= 0) return c ? c->src_in : 0;
+    if (tt < 0) tt = 0;
+    for (i = 0; i < n; i++) {
+        if (tt < seg[i].out1 || i == n - 1) {
+            src = seg[i].src0 + (tt - seg[i].out0) * seg[i].speed;
+            break;
+        }
+    }
+    srclen = c->src_out - c->src_in;
+    if (src < 0) src = 0;
+    if (src > srclen) src = srclen;
+    /* Backwards is a mirror of the SOURCE span, applied after the ramp: a
+     * clip that is both ramped and reversed slows down at the same point in
+     * the shot either way round, which is what a person means by both.
+     *
+     * Minus one frame, and that is not a rounding fudge: the `reverse` filter
+     * hands out frame N-1 first, whose own instant is one frame before the
+     * end of the span. Mirroring the TIME alone lands on the frame after it. */
+    if (c->reverse) {
+        double fr = fps > 0 ? 1.0 / fps : 0.0;
+        src = srclen - src - fr;
+        if (src < 0) src = 0;
+    }
+    return c->src_in + src;
 }
 
 /* One of the four numbers a transform is made of, `tt` seconds into the clip.
@@ -357,11 +449,22 @@ typedef struct {
 #define POS_CHOICES   "topleft|topcentre|topright|left|centre|right|" \
                       "bottomleft|bottomcentre|bottomright"
 #define WEIGHT_CHOICES "regular|bold|light|italic|bolditalic"
+#define RETIME_CHOICES "nearest|blend|flow"
 
 static const cfield cfields[] = {
     C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, "Levels", "Opacity", NULL, 1),
     C("gain",         CO_FLOAT, gain_db,    -60.0f,   24.0f, "Levels", "Gain (dB)", NULL, 1),
-    C("speed",        CO_DOUBLE,speed,        0.1f,   10.0f, "Levels", "Speed", NULL, 0),
+    /* Keyed speed is a RAMP, and its keys are in SOURCE seconds — the one
+     * property whose axis is not output time, because a ramp says "at this
+     * point in the shot" and because the output length is then an integral
+     * rather than an equation. ss_clip_retime is where that is decided. */
+    C("speed",        CO_DOUBLE,speed,        0.1f,   10.0f, "Levels", "Speed", NULL, 1),
+    C("reverse",      CO_INT,   reverse,      0.0f,    1.0f, "Levels", "Backwards", NULL, 0),
+    C("freeze",       CO_DOUBLE,freeze,      -1.0f, 86400.0f, "Levels", "Freeze at (s)", NULL, 0),
+    C("retime",       CO_ENUM,  retime,       0.0f,    2.0f, "Levels", "Retime", RETIME_CHOICES, 0),
+    C("stab",         CO_INT,   stab,         0.0f,    1.0f, "Stabiliser", "On", NULL, 0),
+    C("stab.smooth",  CO_FLOAT, stab_smooth,  1.0f,  100.0f, "Stabiliser", "Smoothing", NULL, 0),
+    C("stab.zoom",    CO_FLOAT, stab_zoom,    0.0f,   20.0f, "Stabiliser", "Zoom %", NULL, 0),
     C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, "Levels", "Fade in (s)", NULL, 0),
     C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, "Levels", "Fade out (s)", NULL, 0),
 
@@ -1408,6 +1511,16 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "trans\t%s\t%.6f\t%.4f\t%.4f\t%.4f\n",
                         ss_trans_name(c->trans), c->trans_dur,
                         c->trans_r, c->trans_g, c->trans_b);
+            /* Retime and the stabiliser, named fields on one line, written
+             * only when something is not the default — the same shape the
+             * title's style line uses and for the same reason: a clip is
+             * going to gain more of these. */
+            if (c->reverse || c->freeze >= 0 || c->retime ||
+                c->stab || c->stab_zoom > 0)
+                fprintf(fp, "retime\treverse=%d\tfreeze=%.6f\tmode=%s"
+                            "\tstab=%d\tsmooth=%.3f\tzoom=%.3f\n",
+                        c->reverse, c->freeze, ss_retime_name(c->retime),
+                        c->stab, c->stab_smooth, c->stab_zoom);
             if (c->kind == SS_CLIP_SOLID || c->col_a > 0.0f)
                 fprintf(fp, "solid\t%.4f\t%.4f\t%.4f\t%.4f\n",
                         c->col_r, c->col_g, c->col_b, c->col_a);
@@ -1627,6 +1740,23 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 cc->text_b = (float)atof(f[3]);
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
                 unesc_text(f[5], cc->text, sizeof cc->text);
+            }
+        } else if (!strncmp(line, "retime\t", 7) && cc) {
+            char *f[16];
+            int nf = tabsplit(line + 7, f, 16), q;
+            for (q = 0; q < nf; q++) {
+                char *eq = strchr(f[q], '=');
+                const char *v;
+                if (!eq) continue;
+                *eq = '\0';
+                v = eq + 1;
+                if      (!strcmp(f[q], "reverse")) cc->reverse = atoi(v);
+                else if (!strcmp(f[q], "freeze"))  cc->freeze  = atof(v);
+                else if (!strcmp(f[q], "mode"))  { int m = ss_retime_value(v);
+                                                   if (m >= 0) cc->retime = m; }
+                else if (!strcmp(f[q], "stab"))    cc->stab    = atoi(v);
+                else if (!strcmp(f[q], "smooth"))  cc->stab_smooth = (float)atof(v);
+                else if (!strcmp(f[q], "zoom"))    cc->stab_zoom   = (float)atof(v);
             }
         } else if (!strncmp(line, "style\t", 6) && cc) {
             /* Named fields, each optional. An unknown key is skipped rather
@@ -2280,6 +2410,111 @@ static void chain_title(strbuf *fc, const ss_timeline *t, const ss_clip *c,
     chain_title_at(fc, t, c, dir, track, idx, -1.0);
 }
 
+/* A tempo that atempo will actually accept.
+ *
+ * ⚠ atempo's range is 0.5 to 100 and the SPEED property's range is 0.1 to 10,
+ * so every clip slower than half speed with a sound track on it failed the
+ * WHOLE export — "Value 0.200000 for parameter 'tempo' out of range", at the
+ * end of the render, on a graph that had been building for minutes. Two
+ * halvings multiply, so a chain of them reaches any slowdown: 0.2 is
+ * 0.5 x 0.5 x 0.8.
+ *
+ * The other end needs nothing: 10x is inside atempo's range on its own. */
+static void chain_atempo(strbuf *fc, double tempo)
+{
+    int guard = 0;
+    if (tempo <= 0) return;
+    while (tempo < 0.5 && guard++ < 8) {
+        sb_add(fc, ",atempo=0.5");
+        tempo /= 0.5;
+    }
+    if (tempo < 0.5) tempo = 0.5;       /* 0.5^8 is far below the range floor */
+    if (tempo > 100.0) tempo = 100.0;
+    if (tempo != 1.0) sb_add(fc, ",atempo=%.6f", tempo);
+}
+
+/* A speed RAMP as a setpts expression.
+ *
+ * `T` here is seconds into the source segment, because the input was seeked
+ * with -ss and its timestamps start at zero — which is the same axis
+ * ss_clip_retime samples on. Each segment contributes one branch: inside it
+ * the output time is where the segment started plus however far into it we
+ * are, divided by the speed that segment runs at.
+ *
+ * Nested rather than summed because ffmpeg's expression language has no
+ * piecewise construct other than if(), and generated from the SAME table the
+ * length and the seek come from, so the three cannot disagree. */
+static void chain_ramp_setpts(strbuf *fc, const ss_retime_seg *seg, int n)
+{
+    int i;
+    sb_add(fc, ",setpts='");
+    for (i = 0; i < n - 1; i++)
+        sb_add(fc, "if(lt(T,%.6f),%.6f+(T-%.6f)/%.6f,",
+               seg[i].src1, seg[i].out0, seg[i].src0, seg[i].speed);
+    sb_add(fc, "%.6f+(T-%.6f)/%.6f", seg[n - 1].out0, seg[n - 1].src0,
+           seg[n - 1].speed);
+    for (i = 0; i < n - 1; i++) sb_add(fc, ")");
+    sb_add(fc, "/TB'");
+}
+
+/* Whether a ramp's speeds all sit inside atempo's own range.
+ *
+ * A ramp drives ONE atempo with sendcmd, and a chain of them cannot be
+ * commanded as a unit — so a ramp that leaves 0.5..2 is one this program
+ * cannot pitch the sound for. It says so and drops that clip's audio rather
+ * than exporting a graph that fails, or one that desyncs. */
+static int ramp_audio_possible(const ss_retime_seg *seg, int n)
+{
+    int i;
+    for (i = 0; i < n; i++)
+        if (seg[i].speed < 0.5 || seg[i].speed > 2.0) return 0;
+    return 1;
+}
+
+/* Stabilise, reverse, freeze — the three things that happen to the SOURCE
+ * frames, before anything is scaled or framed.
+ *
+ * ⚠ Order and position both matter. vidstabtransform's numbers are pixels of
+ * the video that was ANALYSED, so it has to run at the source's own size —
+ * after a scale it would move the picture by the wrong amount. And a reverse
+ * has to be behind the transform ramp and the zoompan, or the move would run
+ * backwards too, which is not what anybody means by playing a shot
+ * backwards.
+ *
+ * ⚠ `reverse` buffers the whole segment in memory. That is affordable for the
+ * seconds-long clip a reverse is usually wanted on and is not affordable for
+ * a four-minute one; there is no streaming way to do it.
+ */
+static void chain_source_ops(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                             int track, int idx)
+{
+    if (c->kind != SS_CLIP_MEDIA) return;
+
+    if (c->stab && *t->stabdir) {
+        char trf[2048], esc[4200];
+        snprintf(trf, sizeof trf, "%s/stab_%d_%d.trf", t->stabdir, track, idx);
+        esc_filter(trf, esc, sizeof esc);
+        sb_add(fc, "vidstabtransform=input='%s':smoothing=%d:zoom=%.3f"
+                   ":optzoom=0:crop=black,", esc,
+               (int)(c->stab_smooth + 0.5f), (double)c->stab_zoom);
+    }
+
+    if (c->freeze >= 0.0) {
+        /* ONE frame, held. The input was seeked to the instant, so the frame
+         * wanted is the first one out of it; `loop` then repeats it and
+         * setpts gives the copies timestamps of their own, because a looped
+         * frame arrives carrying the timestamp of the original and a run of
+         * identical ones is a stream every muxer drops back to one frame. */
+        double len = ss_clip_length(c);
+        int frames = (int)(len * t->fps + 1.5);
+        if (frames < 1) frames = 1;
+        sb_add(fc, "select='eq(n\\,0)',fps=%.6g,loop=loop=%d:size=1:start=0"
+                   ",setpts=N/%.6g/TB,", t->fps, frames, t->fps);
+    } else if (c->reverse) {
+        sb_add(fc, "reverse,");
+    }
+}
+
 /* The effect stack, spliced into a clip's chain.
  *
  * Each effect breaks OUT of the comma-chain into a fragment of its own,
@@ -2908,6 +3143,18 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 PUSH(xdup("-loop")); PUSH(xdup("1"));
                 PUSH(xdup("-t")); PUSH(xfmt("%.6f", srclen));
                 PUSH(xdup("-i")); PUSH(xdup(c->path));
+            } else if (c->freeze >= 0.0) {
+                /* A freeze opens the source AT THE INSTANT, not at the clip's
+                 * in point. The graph holds the first frame it is given, so
+                 * seeking anywhere else freezes the wrong picture — and it
+                 * freezes it convincingly, which is why this was worth a
+                 * measurement rather than a look. Half a second is read
+                 * because a keyframe seek can land just before the instant
+                 * asked for, and one frame of slack is cheaper than an
+                 * accurate seek through the whole file. */
+                PUSH(xdup("-ss")); PUSH(xfmt("%.6f", c->src_in + c->freeze));
+                PUSH(xdup("-t")); PUSH(xdup("0.5"));
+                PUSH(xdup("-i")); PUSH(xdup(c->path));
             } else {
                 if (c->src_in > 0.0) { PUSH(xdup("-ss")); PUSH(xfmt("%.6f", c->src_in)); }
                 PUSH(xdup("-t")); PUSH(xfmt("%.6f", srclen));
@@ -2960,6 +3207,10 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
 
                 sb_add(&fc, ";[%d:v]", input);
                 if (needs_alpha(c) || opkey) sb_add(&fc, "format=rgba,");
+                /* Stabilise, reverse or freeze FIRST: all three are about the
+                 * source frames, and two of them would be wrong once the
+                 * picture has been scaled or re-framed. */
+                chain_source_ops(&fc, t, c, i, j);
 
                 if (moves) {
                     /* A framing that MOVES cannot be a scale, whose output
@@ -3042,8 +3293,31 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                                     ":c=black@0", (double)r0 * M_PI / 180.0);
                 }
                 sb_add(&fc, ",fps=%.6g", t->fps);
-                if (c->speed != 1.0)
-                    sb_add(&fc, ",setpts=%.6f*PTS", 1.0 / c->speed);
+                {
+                    ss_retime_seg rseg[SS_MAX_RETIME_SEG];
+                    int rn = ss_clip_retime(c, rseg, SS_MAX_RETIME_SEG);
+                    if (c->freeze >= 0.0) {
+                        /* A held frame has no timebase to stretch. */
+                    } else if (rn > 1) {
+                        chain_ramp_setpts(&fc, rseg, rn);
+                    } else if (c->speed != 1.0) {
+                        sb_add(&fc, ",setpts=%.6f*PTS", 1.0 / c->speed);
+                    }
+                    /* The frames that were never shot. Only worth asking for
+                     * where the timebase actually moved: at 1x every output
+                     * frame is an input frame, and minterpolate would spend
+                     * minutes rebuilding what it was already given. */
+                    if (c->retime != SS_RETIME_NEAREST && c->freeze < 0.0 &&
+                        (rn > 1 || c->speed != 1.0)) {
+                        if (c->retime == SS_RETIME_BLEND)
+                            sb_add(&fc, ",minterpolate=fps=%.6g:mi_mode=blend",
+                                   t->fps);
+                        else
+                            sb_add(&fc, ",minterpolate=fps=%.6g:mi_mode=mci"
+                                        ":mc_mode=aobmc:me_mode=bidir:vsbmc=1",
+                                   t->fps);
+                    }
+                }
                 /* Everything from here on is timed in CLIP seconds: the speed
                  * setpts is behind us, so `t` is what the grade's gates, the
                  * fades and the keys all mean by it. */
@@ -3157,8 +3431,44 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 float g = c->gain_db + tr->gain_db;
                 sb_add(&fc, ";[%d:a]", input);
                 sb_add(&fc, "aresample=48000");
-                if (c->speed != 1.0)
-                    sb_add(&fc, ",atempo=%.6f", c->speed);
+                if (c->reverse) sb_add(&fc, ",areverse");
+                {
+                    ss_retime_seg rseg[SS_MAX_RETIME_SEG];
+                    int rn = ss_clip_retime(c, rseg, SS_MAX_RETIME_SEG), q;
+                    if (c->freeze >= 0.0) {
+                        /* A frozen frame is a picture, not a moment: there is
+                         * no stretch of sound that corresponds to it. */
+                    } else if (rn > 1 && ramp_audio_possible(rseg, rn)) {
+                        /* ONE atempo, stepped by sendcmd at the segment
+                         * boundaries.
+                         *
+                         * ⚠ In SOURCE seconds, not output seconds. asendcmd
+                         * sits BEFORE atempo, so the frames it is timing have
+                         * not been stretched yet — scheduling on the output
+                         * axis makes every command land early and the sound
+                         * comes out short: 2.579s against the picture's
+                         * 2.760s on a 1x-to-2x ramp, which is a drift no
+                         * amount of listening localises. */
+                        sb_add(&fc, ",asetpts=PTS-STARTPTS,asendcmd=c='");
+                        for (q = 0; q < rn; q++)
+                            sb_add(&fc, "%s%.6f atempo@r%d tempo %.6f",
+                                   q ? "\\;" : "", rseg[q].src0, nvid,
+                                   rseg[q].speed);
+                        sb_add(&fc, "',atempo@r%d=%.6f", nvid, rseg[0].speed);
+                    } else if (rn > 1) {
+                        /* A ramp that leaves atempo's range cannot be pitched
+                         * as one filter, and a chain of them cannot be
+                         * commanded as a unit. Said once, by name, rather
+                         * than shipping a graph that fails or a sound that
+                         * drifts out of sync with its own picture. */
+                        fprintf(stderr, "synstudio: track %d clip %d ramps "
+                                        "outside 0.5-2x; its sound is dropped\n",
+                                i, j);
+                        sb_add(&fc, ",volume=0");
+                    } else if (c->speed != 1.0) {
+                        chain_atempo(&fc, c->speed);
+                    }
+                }
                 if (ss_clip_prop_nkeys(c, "gain") > 0) {
                     /* A keyed fader needs no steps and no cubes: volume takes
                      * an expression, once told to evaluate it per frame rather
@@ -3492,7 +3802,11 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
                 PUSH(xfmt("color=c=%s:s=%dx%d:d=0.04,format=rgba",
                           col, t->w, t->h));
             } else {
-                double srct = c->src_in + off * (c->speed > 0 ? c->speed : 1.0);
+                /* Where the ramp, the reverse and the freeze are ALL
+                 * resolved for the monitor: one function, the same one the
+                 * length and the export expression come from. */
+                double srct = c->freeze >= 0.0 ? c->src_in + c->freeze
+                                               : ss_clip_source_at(c, off, t->fps);
                 if (!c->still && srct > 0.0) {
                     PUSH(xdup("-ss")); PUSH(xfmt("%.6f", srct));
                 }
@@ -3540,6 +3854,18 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
             if (rot != 0.0f)
                 sb_add(&fc, ",rotate=%.6f:ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
                             ":c=black@0", (double)rot * M_PI / 180.0);
+            /* The monitor seeks straight to the frame, so a reverse and a
+             * ramp are already accounted for by ss_clip_source_at — but a
+             * stabilised clip still has to be transformed, or the picture
+             * being judged is not the picture that will be delivered. */
+            if (c->stab && *t->stabdir) {
+                char trf[2048], esc2[4200];
+                snprintf(trf, sizeof trf, "%s/stab_%d_%d.trf", t->stabdir, i, j);
+                esc_filter(trf, esc2, sizeof esc2);
+                sb_add(&fc, ",vidstabtransform=input='%s':smoothing=%d"
+                            ":zoom=%.3f:optzoom=0:crop=black", esc2,
+                       (int)(c->stab_smooth + 0.5f), (double)c->stab_zoom);
+            }
             chain_grade_at(&fc, c, lutdir, i, j, off);
             chain_fx(&fc, c, nvid);
             /* `off` and not -1: the monitor holds one frame, so a title that

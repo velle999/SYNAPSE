@@ -265,3 +265,21 @@ int ss_font_families(char *out, size_t n)
     out[o] = '\0';
     return count;
 }
+
+/* How a retimed clip makes the frames that were never shot. Lives beside the
+ * weight names for the same reason: a name a person types, an integer the
+ * file stores, and one table that turns each into the other. */
+static const char *retime_names[] = { "nearest", "blend", "flow" };
+
+int ss_retime_value(const char *s)
+{
+    int i;
+    if (!s) return -1;
+    for (i = 0; i < 3; i++) if (!strcmp(s, retime_names[i])) return i;
+    return -1;
+}
+
+const char *ss_retime_name(int v)
+{
+    return (v >= 0 && v < 3) ? retime_names[v] : retime_names[0];
+}
