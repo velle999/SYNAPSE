@@ -57,10 +57,21 @@ jobs:
           [ "$fail" -eq 0 ] && echo "ok: no checkout-path symlinks"
           exit $fail
 
+      # ⚠ EVERY component with a meson.build, not the five that CI compiles.
+      #
+      # This check exists for one failure and it just happened for real: a
+      # commit staged `meson.build` for an unrelated change and swept in a
+      # line naming `src/scope.c`, which was NOT committed. The tree then
+      # could not configure on any machine except the one that had the file
+      # untracked — two releases shipped that way. synstudio was not in this
+      # list, so the guard that was written for exactly this walked past it.
+      #
+      # It costs nothing to widen: no toolchain, just git, and it answers for
+      # components CI has no hope of compiling.
       - name: Every meson source is tracked
         run: |
           fail=0
-          for c in synapd synsh synguard synnet synui; do
+          for c in $(ls -d */meson.build | cut -d/ -f1); do
             for f in $(grep -oE "src/[A-Za-z0-9_]+\.c" "$c/meson.build" | sort -u); do
               if ! git ls-files --error-unmatch "$c/$f" >/dev/null 2>&1; then
                 echo "::error::$c/meson.build references untracked source $f"; fail=1
@@ -140,6 +151,7 @@ jobs:
             wlroots0.20 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
             linux-headers \
             wayland-utils foot kitty grim ttf-dejavu \
+            ffmpeg fontconfig \
             mesa libglvnd \
             xorg-xwayland
         # xorg-xwayland: without it smoke test 13 (an X11 toplevel re-mapped 6
@@ -214,6 +226,10 @@ jobs:
           su builder -c 'cd scenefx0.5 && makepkg -f --noconfirm --nodeps --skipinteg'
           pacman -U --noconfirm scenefx0.5/scenefx0.5-0.5-*-x86_64.pkg.tar.zst
 
+      # ffmpeg and fontconfig are synstudio's, and they are runtime deps
+      # rather than build ones: the program links neither (a pipe has no ABI),
+      # but its suite renders real video and resolves real font families, and
+      # without them two thirds of it would SKIP while still printing a pass.
       - name: Build userspace components
         run: |
           set -e
@@ -225,6 +241,40 @@ jobs:
             echo "::endgroup::"
           done
           echo "all userspace components built"
+
+      # synstudio: the darkroom and edit suite. Its own component, built and
+      # tested separately because it needs no wayland, no GPU and no daemon —
+      # just a compiler and an ffmpeg on PATH — and because its suite is the
+      # largest in the repo by a wide margin.
+      #
+      # ⚠ Until now it had never run anywhere but a developer machine. Five
+      # hundred assertions covering the LUT bridge, the retime timebase, the
+      # sound chain and the delivery path, and CI had no idea whether any of
+      # it worked.
+      - name: Build and test synstudio
+        run: |
+          set -e
+          meson setup synstudio/_ci synstudio --buildtype=release
+          meson compile -C synstudio/_ci
+          test -x synstudio/_ci/synstudio
+          bash synstudio/tests/run.sh synstudio/_ci/synstudio
+
+      # And again under the sanitisers. Worth the second run on this one in
+      # particular: it is the component that changed most in the last week,
+      # every frame it measures goes through hand-written float buffers, and
+      # the suite drives real ffmpeg subprocesses whose output it parses.
+      #
+      # UBSAN_OPTIONS matches meson's own injected default rather than
+      # weakening it — see the note on the daemon sanitizer step above.
+      - name: synstudio suite (ASan + UBSan)
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_stacktrace=1:print_summary=1
+        run: |
+          set -e
+          meson setup synstudio/_asan synstudio \
+            -Dbuildtype=debug -Db_sanitize=address,undefined
+          meson compile -C synstudio/_asan
+          bash synstudio/tests/run.sh synstudio/_asan/synstudio
 
       # The installer's filesystem/bootloader decision table. syn-install cannot
       # be tested as a whole in CI — it partitions disks — but the table is a set
