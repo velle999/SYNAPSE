@@ -521,6 +521,17 @@ enum { SS_FW_REGULAR, SS_FW_BOLD, SS_FW_LIGHT, SS_FW_ITALIC, SS_FW_BOLDITALIC };
  * motion look shot rather than stuttered — and the only one that costs
  * minutes rather than seconds, and can smear at a cut. */
 enum { SS_RETIME_NEAREST, SS_RETIME_BLEND, SS_RETIME_FLOW };
+
+/* The shape a fade takes. ffmpeg's own names, not invented ones: afade has
+ * twenty-odd curves and these are the six anybody reaches for. `linear` is
+ * afade's `tri`, and `qsin` is the equal-power one a crossfade wants — two
+ * linear fades sum to a 3dB dip in the middle, which is audible on anything
+ * continuous as a hole exactly where the cut is. */
+enum { SS_AFADE_LINEAR, SS_AFADE_QSIN, SS_AFADE_HSIN,
+       SS_AFADE_ESIN, SS_AFADE_LOG, SS_AFADE_EXP };
+int         ss_afade_value(const char *s);
+const char *ss_afade_name(int v);
+const char *ss_afade_curve(int v);       /* what afade itself calls it */
 int         ss_retime_value(const char *s);
 const char *ss_retime_name(int v);
 
@@ -745,6 +756,24 @@ typedef struct {
     float  stab_smooth;         /* frames of smoothing, vidstabtransform */
     float  stab_zoom;           /* per cent, to hide the moving borders */
 
+    /* ---- the sound of one clip ----
+     *
+     * Everything here is one ffmpeg filter with one knob on it, in the order
+     * a dialogue chain is actually built: clean it, shape it, control it. A
+     * compressor with eleven parameters is a compressor nobody sets; the
+     * amounts below drive the parameters that matter and leave the rest at
+     * values that are right for speech, which is what this is for.
+     *
+     * Zero means the filter is not in the graph at all — not that it is in
+     * the graph doing nothing. */
+    float  nr_audio;            /* afftdn, 0..100 */
+    float  gate;                /* agate, 0..100 */
+    float  eq_db[6];            /* 60, 200, 600, 2k, 6k, 12k — each ±18 dB */
+    float  comp;                /* acompressor amount, 0..100 */
+    float  comp_thresh;         /* dB, -60..0 */
+    float  deess;               /* deesser, 0..100 */
+    int    fade_shape;          /* SS_AFADE_*, both fades of this clip */
+
     int    has_grade;
     ss_develop grade;
 
@@ -894,6 +923,17 @@ typedef struct {
     float  gain_db;             /* the track fader, -60..+24 */
     float  pan;                 /* -1 hard left .. +1 hard right */
     char   name[64];
+    /* ---- ducking ----
+     *
+     * `duck_from` names the track whose sound pushes this one down — the
+     * dialogue that a music bed gets out of the way of. -1 is off, which is
+     * every track until somebody says otherwise.
+     *
+     * A track and not a clip, because that is what ducking IS: a relationship
+     * between two layers of a mix, not a property of one shot. */
+    int    duck_from;
+    float  duck;                /* how far down, 0..100 */
+
     int    nclips, cap;
     ss_clip *clip;
 } ss_track;
@@ -932,6 +972,13 @@ typedef struct {
      * document because it is a property of the cut a person set while looking
      * at it, not something to retype on the command line each render. */
     double range_in, range_out;
+
+    /* The loudness a DELIVERY is normalised to, in LUFS — 0 for none, which
+     * is what every project starts as. A number here is a statement about the
+     * file that leaves: -23 is EBU R128 broadcast, -14 is what the streaming
+     * services normalise to anyway. It lives in the document because it is a
+     * property of the deliverable, not of one render. */
+    float  lufs;
 } ss_timeline;
 
 /* What actually gets rendered: the range if there is one, else 0..duration. */

@@ -20,7 +20,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
 | cutting   | usable — undo, markers, snapping, keys; no copy/paste yet     |
 | retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
-| audio     | mixed, metered, recordable; no EQ, dynamics or noise reduction |
+| audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
 | titles    | a face, a plate, more than one line, five styles, .srt both ways |
@@ -32,7 +32,8 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 
 - [x] clip gain (`gain`, −60…+24 dB, reaches the export as `volume=NdB`)
 - [x] clip fades in/out (`afade`)
-- [~] fade shapes — linear only; `afade` has twenty curves
+- [x] **fade shapes** — six of afade's curves, by name. `linear` is afade's
+      own `tri`, and `qsin` is the equal-power one a crossfade wants
 - [x] track volume and pan — `timeline track N --gain --pan`, constant power,
       built from the source's channel count (an upmix costs a mono clip 3dB)
 - [x] master fader — `timeline master --gain`, then a limiter at 0.99
@@ -43,17 +44,39 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 - [x] monitoring volume + mute on the transport
 - [x] normalise a clip — `timeline normalise`, ebur128, engine decides
 - [x] `loudness FILE` — integrated LUFS, true peak, range
-- [ ] loudness on delivery — two-pass `loudnorm`, −23 LUFS / −14 presets
+- [x] **loudness on delivery** — `timeline loudness --value -23|-14`, after
+      the mix, the master fader and the limiter, because a broadcast target is
+      a statement about the FILE. ⚠ SINGLE-pass `loudnorm`, deliberately:
+      two-pass measures the whole programme and then encodes it, which is
+      rendering the timeline twice. `loudness FILE` measures what actually
+      came out, so the answer is checkable rather than promised — measured at
+      -14.00 against a -14 target
 - [x] voiceover recording — `devices` + `record`, punch in at the playhead,
       countdown, monitoring muted while live, a hard `--limit`, the take beside
       the project. ⚠ `ametadata=print` needs `direct=1` or the meter arrives
       all at once when it is already too late
-- [ ] clip EQ — `anequalizer`, six bands, as rows in the clip table
-- [ ] dynamics — `acompressor`, `alimiter`, `agate`, `deesser`
-- [ ] noise reduction — `afftdn`; `arnndn` needs a model, so it is also the
-      first importable effect
-- [ ] ducking — `sidechaincompress` keyed off a nominated dialogue track
-- [ ] solo (the inverse of the mute flag that already exists)
+- [x] **clip EQ** — six bands (60, 200, 600, 2k, 6k, 12k), one row each. ⚠ A
+      chain of `equalizer` biquads rather than one `anequalizer`: that filter
+      is PER CHANNEL, so a stereo clip needs every band written twice and a
+      mono one written once — a shape that gets out of step with the source
+      the first time somebody swaps a take. Only the bands that were set
+      appear in the graph
+- [x] **dynamics** — `agate`, `acompressor`, `deesser`, one knob each driving
+      the parameters that matter; `alimiter` was already the master bus. The
+      ORDER is the design: clean it, shape it, control it. A gate after a
+      compressor gates a signal whose quiet parts have already been lifted
+- [x] **noise reduction** — `afftdn`, first in the chain, because everything
+      downstream is deciding what to do about a signal and the noise is not
+      part of it
+- [ ] `arnndn` — needs a model file, so it is also the first importable effect
+- [x] **ducking** — `timeline track N --duck K`, `sidechaincompress` keyed off
+      the nominated track. A TRACK and not a clip, because that is what ducking
+      is: a relationship between two layers of a mix. ⚠ The key track's clips
+      have already been spent on the main mix, so each is SPLIT rather than
+      read twice — naming a stream twice fails the whole graph. Measured:
+      identical to un-ducked where the key is silent, 2.6 dB down where it is
+      not
+
 
 ## 2 · Effects, and other people's effects
 

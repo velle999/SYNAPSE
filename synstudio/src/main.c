@@ -78,7 +78,11 @@ static void usage(void)
 "  timeline track PROJ video|audio [NAME]        add a track\n"
 "  timeline track PROJ N [--mute 0|1] [--hide 0|1] [--name NAME]\n"
 "       [--gain dB] [--pan -1..1] [--solo 0|1]      the track's fader\n"
+"       [--duck N|off] [--duck-amount 0-100]   this track gets out of the\n"
+"       way of track N — a music bed under dialogue\n"
 "  timeline master PROJ [--gain dB]              one fader after the mix\n"
+"  timeline loudness PROJ [--value LUFS] [--off]  what a DELIVERY is\n"
+"       normalised to: -23 is broadcast, -14 is what streaming does anyway\n"
 "  timeline normalise PROJ T C [--target LUFS]   measure, then set the gain\n"
 "  timeline clip PROJ TRACK FILE [--at T] [--in A] [--out-at B] [--dur S]\n"
 "       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
@@ -190,6 +194,9 @@ typedef struct {
     /* ⚠ NOT --to: that is already a timeline instant, a double, and giving
      * one flag two types is how a typo becomes a silent zero. */
     const char *ref;            /* the shot to match, a file or T,C */
+    const char *duck;           /* the track whose sound pushes this one down */
+    double duck_amt;
+    int    has_duck_amt;
     const char *style;          /* a title style, applied on creation */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
@@ -250,6 +257,8 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--burn"))    { const char *v = NEXT(); if (!v) return -1; o->burn = v; }
         else if (!strcmp(a, "--preset"))  { const char *v = NEXT(); if (!v) return -1; o->preset = v; }
         else if (!strcmp(a, "--ref"))     { const char *v = NEXT(); if (!v) return -1; o->ref = v; }
+        else if (!strcmp(a, "--duck"))    { const char *v = NEXT(); if (!v) return -1; o->duck = v; }
+        else if (!strcmp(a, "--duck-amount")) { const char *v = NEXT(); if (!v) return -1; o->duck_amt = atof(v); o->has_duck_amt = 1; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
         /* The same slot: an export names a container and a transition names a
@@ -1276,6 +1285,24 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                                                  -1.0f, 1.0f);
                 else if (!strcmp(argv[i], "--solo") && i + 1 < argc)
                     t->track[tr].solo = atoi(argv[++i]) ? 1 : 0;
+                /* `--duck off` and `--duck N`: a music bed gets out of the
+                 * way of the track carrying the dialogue. */
+                else if (!strcmp(argv[i], "--duck") && i + 1 < argc) {
+                    const char *v = argv[++i];
+                    if (!strcmp(v, "off") || !strcmp(v, "none"))
+                        t->track[tr].duck_from = -1;
+                    else {
+                        int k = atoi(v);
+                        if (k < 0 || k >= t->ntracks)
+                            return die("no track %s to duck from", v);
+                        if (k == tr)
+                            return die("a track cannot duck itself");
+                        t->track[tr].duck_from = k;
+                        if (t->track[tr].duck <= 0.0f) t->track[tr].duck = 60.0f;
+                    }
+                }
+                else if (!strcmp(argv[i], "--duck-amount") && i + 1 < argc)
+                    t->track[tr].duck = (float)atof(argv[++i]);
                 else return die("track: unknown option %s", argv[i]);
             }
         }
@@ -1399,6 +1426,26 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         ss_timeline_range(t, &a, &b);
         printf("in\t%.3f\nout\t%.3f\nlength\t%.3f\nwhole\t%s\n",
                a, b, b - a, t->range_out > t->range_in ? "no" : "yes");
+        return 0;
+    }
+
+    /* The loudness a delivery is normalised to. A verb rather than an export
+     * flag because it is a property of the deliverable — the same cut ships
+     * to broadcast at -23 and to a streaming service at -14, and that is a
+     * decision somebody makes once about the programme. */
+    if (!strcmp(verb, "loudness")) {
+        if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (o.off) t->lufs = 0.0f;
+        else if (o.has_value) {
+            if (o.value > -5.0 || o.value < -40.0)
+                return die("a delivery target is between -40 and -5 LUFS "
+                           "(broadcast is -23, streaming -14)");
+            t->lufs = (float)o.value;
+        }
+        if (argc > 4 && tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        if (t->lufs < 0.0f) printf("target\t%.2f\n", (double)t->lufs);
+        else                printf("target\tnone\n");
         return 0;
     }
 

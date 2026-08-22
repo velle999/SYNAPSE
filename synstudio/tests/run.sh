@@ -2181,6 +2181,139 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# ----------------------------------------------------- the sound chain ---
+#
+# Clean it, shape it, control it — noise reduction, gate, EQ, compressor,
+# de-esser, in that order. It is not a matter of taste: each stage decides
+# what the next one gets to work on. A gate AFTER a compressor gates a signal
+# whose quiet parts have already been lifted, and a de-esser BEFORE an EQ
+# chases sibilance the EQ is about to move.
+
+sp2=$TMP/sound.sstl
+$BIN timeline new "$sp2" --size 320x180 --fps 25 >/dev/null
+$BIN timeline track "$sp2" video V >/dev/null
+if have ffmpeg; then
+    sclip=$TMP/sound.mp4
+    ffmpeg -v error -y -f lavfi -i "testsrc2=s=320x180:d=4:r=25" \
+           -f lavfi -i "sine=f=440:d=4" -shortest \
+           -c:v libx264 -pix_fmt yuv420p -c:a aac "$sclip" 2>/dev/null
+    $BIN timeline clip "$sp2" 0 "$sclip" --at 0 --dur 4 >/dev/null
+
+    # Nothing on: the chain has to be ABSENT, not present and neutral. A
+    # filter set to do nothing still costs a pass over every sample, and
+    # afftdn in particular is not cheap.
+    q=$($BIN timeline export "$sp2" --out "$TMP/s.mp4" --print)
+    echo "$q" | notseen "an untouched clip has no denoiser" "afftdn"
+    echo "$q" | notseen "no compressor"                     "acompressor"
+    echo "$q" | notseen "and no EQ"                         "equalizer="
+
+    $BIN timeline set "$sp2" 0 0 nr=30 gate=20 eq.200=-4 eq.2k=3 comp=60 \
+         comp.thresh=-20 deess=40 >/dev/null
+    q=$($BIN timeline export "$sp2" --out "$TMP/s.mp4" --print)
+    echo "$q" | seen "noise reduction reaches the graph" "afftdn=nr="
+    echo "$q" | seen "the gate"                          "agate=threshold="
+    echo "$q" | seen "the compressor"                    "acompressor=threshold="
+    echo "$q" | seen "the de-esser"                      "deesser=i="
+    # ⚠ Two bands were set and four were not, so exactly two biquads belong in
+    # the chain. A six-band EQ that always emits six filters is six passes over
+    # the samples to do nothing four times.
+    check "and one biquad per band that was set" "2" \
+          "$(echo "$q" | grep -o 'equalizer=f=' | grep -c .)"
+    echo "$q" | seen "at the frequency it was set at" "equalizer=f=200:"
+
+    # The ORDER, which is the whole design. Measured as positions in the one
+    # string, so a reshuffle that still contains every filter fails here.
+    ac=$(echo "$q" | tr ';' '\n' | grep "0:a" | head -1)
+    check "the chain is built in the right order" "yes" \
+          "$(awk -v s="$ac" 'BEGIN{
+                n=index(s,"afftdn"); g=index(s,"agate"); e=index(s,"equalizer");
+                c=index(s,"acompressor"); d=index(s,"deesser");
+                print (n<g && g<e && e<c && c<d) ? "yes" : "no" }')"
+
+    $BIN timeline export "$sp2" --out "$TMP/s.mp4" >/dev/null 2>&1
+    check "and it renders" "yes" \
+          "$([ -s "$TMP/s.mp4" ] && echo yes || echo no)"
+
+    # ---- fade shapes -----------------------------------------------------
+    $BIN timeline set "$sp2" 0 0 fade.in=0.5 fade.shape=qsin >/dev/null
+    $BIN timeline export "$sp2" --out "$TMP/s.mp4" --print \
+        | seen "a fade takes the shape it was given" "afade=t=in:st=0:d=0.5000:curve=qsin"
+    $BIN timeline set "$sp2" 0 0 fade.shape=linear >/dev/null
+    # ⚠ afade calls the straight one `tri`. The name a person types and the
+    # name the filter takes are different, and the table is what maps them.
+    $BIN timeline export "$sp2" --out "$TMP/s.mp4" --print \
+        | seen "and linear is afade's own tri" "curve=tri"
+
+    # ---- it survives a save and a reload ---------------------------------
+    # ⚠ A REAL tab. grep's BRE has no \t escape — `'^sound\t'` is the pattern
+    # `^soundt`, which matches nothing, and the check then fails on a file
+    # that is perfectly correct.
+    check "the sound chain round-trips" "1" "$(grep -c '^sound	' "$sp2")"
+    check "with the band that was set"  "-4" \
+          "$($BIN timeline get "$sp2" 0 0 | awk -F'\t' '/^eq.200/{print $2}')"
+fi
+
+# ---- delivery loudness ---------------------------------------------------
+#
+# After the mix, after the master fader and after the limiter, because a
+# broadcast target is a statement about the FILE and nothing downstream of it
+# may change the level again.
+$BIN timeline loudness "$sp2" | seen "a project has no loudness target by default" "none"
+$BIN timeline loudness "$sp2" --value -14 | seen "one can be set" "target	-14.00"
+$BIN timeline export "$sp2" --out "$TMP/s.mp4" --print \
+    | seen "and it reaches the graph after the limiter" "alimiter=limit=0.99:level=disabled,loudnorm=I=-14.00"
+$BIN timeline loudness "$sp2" --value -3 2>&1 | seen "an impossible target is refused" "between -40 and -5"
+
+if have ffmpeg; then
+    # ⚠ Measured, not asserted: the program has its own meter, so what came
+    # out can be held against what was asked for.
+    $BIN timeline export "$sp2" --out "$TMP/s14.mp4" >/dev/null 2>&1
+    got=$($BIN loudness "$TMP/s14.mp4" 2>/dev/null | awk -F'\t' '/^lufs/{print $2}')
+    check "and the delivered file measures at the target" "yes" \
+          "$(awk -v g="${got:-0}" 'BEGIN{d=g+14; if(d<0)d=-d; print (d<1.0)?"yes":"no"}')"
+fi
+$BIN timeline loudness "$sp2" --off | seen "and it can be taken off" "none"
+
+# ---- ducking -------------------------------------------------------------
+#
+# A music bed gets out of the way of the dialogue. The dialogue is another
+# TRACK, so its sound has to exist as one stream before it can key anything —
+# and every clip on it has already been spent on the main mix, which is why
+# each one is SPLIT rather than read twice: naming a stream twice fails the
+# whole graph.
+if have ffmpeg; then
+    dk=$TMP/duck.sstl
+    ffmpeg -v error -y -f lavfi -i "sine=f=200:d=6" -c:a aac "$TMP/music.m4a" 2>/dev/null
+    ffmpeg -v error -y -f lavfi -i "anoisesrc=d=2:c=pink:a=0.5" \
+           -af "adelay=2000|2000,apad=whole_dur=6" -c:a aac "$TMP/voice.m4a" 2>/dev/null
+    $BIN timeline new "$dk" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$dk" audio MUSIC >/dev/null
+    $BIN timeline track "$dk" audio VOICE >/dev/null
+    $BIN timeline clip "$dk" 0 "$TMP/music.m4a" --at 0 --dur 6 >/dev/null
+    $BIN timeline clip "$dk" 1 "$TMP/voice.m4a" --at 0 --dur 6 >/dev/null
+
+    $BIN timeline track "$dk" 0 --duck 1 --duck-amount 80 >/dev/null
+    dq=$($BIN timeline export "$dk" --out "$TMP/dk.m4a" --print)
+    echo "$dq" | seen "the key track is keyed into a compressor" "sidechaincompress"
+    echo "$dq" | seen "and split, because it is wanted twice"    "asplit="
+    $BIN timeline track "$dk" 1 --duck 1 2>&1 | seen "a track cannot duck itself" "cannot duck itself"
+
+    $BIN timeline export "$dk" --out "$TMP/dk.m4a"  >/dev/null 2>&1
+    $BIN timeline track "$dk" 0 --duck off >/dev/null
+    $BIN timeline export "$dk" --out "$TMP/dk0.m4a" >/dev/null 2>&1
+    at() { ffmpeg -v info -ss "$2" -t 1 -i "$1" -af volumedetect -f null - 2>&1 \
+           | awk -F': ' '/mean_volume/{print $2+0}'; }
+    # The discriminating pair: identical where the key is SILENT, and quieter
+    # where it is not. Either half alone would pass on a mix that was simply
+    # turned down.
+    check "nothing is ducked while the key track is silent" "yes" \
+          "$(awk -v a="$(at "$TMP/dk.m4a" 0)" -v b="$(at "$TMP/dk0.m4a" 0)" \
+                 'BEGIN{d=a-b; if(d<0)d=-d; print (d<0.5)?"yes":"no"}')"
+    check "and the bed drops while it is not" "yes" \
+          "$(awk -v a="$(at "$TMP/dk.m4a" 3)" -v b="$(at "$TMP/dk0.m4a" 3)" \
+                 'BEGIN{print (a < b-1.0)?"yes":"no"}')"
+fi
+
 # ------------------------------------------------- over-range highlights --
 #
 # ⚠ A WHITE PIXEL RENDERED BLACK, and five points of contrast were enough.

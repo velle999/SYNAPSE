@@ -71,6 +71,10 @@ void ss_clip_reset(ss_clip *c)
     c->freeze      = -1.0;
     c->stab_smooth = 10.0f;
     c->stab_zoom   = 0.0f;
+    /* Where a compressor starts working if somebody turns one on without
+     * saying where. Speech sits around -18 dBFS, so this catches the peaks
+     * and leaves the level alone. */
+    c->comp_thresh = -18.0f;
     ss_xform_reset(&c->xf);
 }
 
@@ -450,6 +454,7 @@ typedef struct {
                       "bottomleft|bottomcentre|bottomright"
 #define WEIGHT_CHOICES "regular|bold|light|italic|bolditalic"
 #define RETIME_CHOICES "nearest|blend|flow"
+#define AFADE_CHOICES  "linear|qsin|hsin|esin|log|exp"
 
 static const cfield cfields[] = {
     C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, "Levels", "Opacity", NULL, 1),
@@ -467,6 +472,22 @@ static const cfield cfields[] = {
     C("stab.zoom",    CO_FLOAT, stab_zoom,    0.0f,   20.0f, "Stabiliser", "Zoom %", NULL, 0),
     C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, "Levels", "Fade in (s)", NULL, 0),
     C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, "Levels", "Fade out (s)", NULL, 0),
+    C("fade.shape",   CO_ENUM,  fade_shape,   0.0f,    5.0f, "Levels", "Fade shape", AFADE_CHOICES, 0),
+
+    /* The dialogue chain, in the order it is built: clean it, shape it,
+     * control it. Each is one filter with one knob, and zero means the filter
+     * is not in the graph AT ALL rather than in it doing nothing. */
+    C("nr",           CO_FLOAT, nr_audio,     0.0f,  100.0f, "Sound", "Noise reduction", NULL, 0),
+    C("gate",         CO_FLOAT, gate,         0.0f,  100.0f, "Sound", "Gate", NULL, 0),
+    C("eq.60",        CO_FLOAT, eq_db[0],   -18.0f,   18.0f, "Sound", "60 Hz", NULL, 0),
+    C("eq.200",       CO_FLOAT, eq_db[1],   -18.0f,   18.0f, "Sound", "200 Hz", NULL, 0),
+    C("eq.600",       CO_FLOAT, eq_db[2],   -18.0f,   18.0f, "Sound", "600 Hz", NULL, 0),
+    C("eq.2k",        CO_FLOAT, eq_db[3],   -18.0f,   18.0f, "Sound", "2 kHz", NULL, 0),
+    C("eq.6k",        CO_FLOAT, eq_db[4],   -18.0f,   18.0f, "Sound", "6 kHz", NULL, 0),
+    C("eq.12k",       CO_FLOAT, eq_db[5],   -18.0f,   18.0f, "Sound", "12 kHz", NULL, 0),
+    C("comp",         CO_FLOAT, comp,         0.0f,  100.0f, "Sound", "Compression", NULL, 0),
+    C("comp.thresh",  CO_FLOAT, comp_thresh,-60.0f,    0.0f, "Sound", "Threshold (dB)", NULL, 0),
+    C("deess",        CO_FLOAT, deess,        0.0f,  100.0f, "Sound", "De-ess", NULL, 0),
 
     C("trans",        CO_ENUM,  trans,        0.0f, TRANS_COUNT - 1.0f, "Transition", "Kind", TRANS_CHOICES, 0),
     C("trans.dur",    CO_DOUBLE,trans_dur,    0.0f,   10.0f, "Transition", "Length (s)", NULL, 0),
@@ -1205,6 +1226,8 @@ int ss_timeline_add_track(ss_timeline *t, int type, const char *name)
     tr = &t->track[t->ntracks];
     memset(tr, 0, sizeof(*tr));
     tr->type = type;
+    /* Off is -1 here, and a zeroed struct means "duck from track 0". */
+    tr->duck_from = -1;
     snprintf(tr->name, sizeof tr->name, "%s",
              name && *name ? name : (type == SS_TRACK_VIDEO ? "V" : "A"));
     return t->ntracks++;
@@ -1470,6 +1493,7 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
     fprintf(fp, "size\t%d\t%d\n", t->w, t->h);
     fprintf(fp, "fps\t%.6g\n", t->fps);
     if (t->master_db != 0.0f) fprintf(fp, "master\t%.3f\n", t->master_db);
+    if (t->lufs < 0.0f) fprintf(fp, "loudness\t%.2f\n", t->lufs);
     /* The render range, when there is one. Absent means the whole timeline,
      * which is what a project without one has always meant. */
     if (t->range_out > t->range_in)
@@ -1488,6 +1512,9 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 tr->name, tr->muted, tr->hidden);
         /* The fader, on its own optional line, so a timeline that nobody has
          * mixed reads exactly as it did before there was a mixer. */
+        /* Ducking, on a line of its own for the same reason. */
+        if (tr->duck_from >= 0)
+            fprintf(fp, "duck\t%d\t%.3f\n", tr->duck_from, tr->duck);
         if (tr->gain_db != 0.0f || tr->pan != 0.0f || tr->solo)
             fprintf(fp, "mix\t%.3f\t%.4f\t%d\n",
                     tr->gain_db, tr->pan, tr->solo);
@@ -1515,6 +1542,21 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 fprintf(fp, "trans\t%s\t%.6f\t%.4f\t%.4f\t%.4f\n",
                         ss_trans_name(c->trans), c->trans_dur,
                         c->trans_r, c->trans_g, c->trans_b);
+            /* The sound chain, named fields, written only when something is
+             * on. A clip with no processing keeps the record it always had. */
+            if (c->nr_audio > 0 || c->gate > 0 || c->comp > 0 ||
+                c->deess > 0 || c->fade_shape ||
+                c->eq_db[0] || c->eq_db[1] || c->eq_db[2] ||
+                c->eq_db[3] || c->eq_db[4] || c->eq_db[5]) {
+                int q;
+                fprintf(fp, "sound\tnr=%.3f\tgate=%.3f\tcomp=%.3f"
+                            "\tthresh=%.3f\tdeess=%.3f\tshape=%s",
+                        c->nr_audio, c->gate, c->comp, c->comp_thresh,
+                        c->deess, ss_afade_name(c->fade_shape));
+                for (q = 0; q < 6; q++)
+                    fprintf(fp, "\teq%d=%.3f", q, c->eq_db[q]);
+                fputc('\n', fp);
+            }
             /* (the clip's own lines follow)
              * Retime and the stabiliser, named fields on one line, written
              * only when something is not the default — the same shape the
@@ -1658,6 +1700,8 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             t->fps = atof(line + 4);
         } else if (!strncmp(line, "master\t", 7)) {
             t->master_db = (float)atof(line + 7);
+        } else if (!strncmp(line, "loudness\t", 9)) {
+            t->lufs = (float)atof(line + 9);
         } else if (!strncmp(line, "range\t", 6)) {
             char *f[2];
             if (tabsplit(line + 6, f, 2) == 2) {
@@ -1684,6 +1728,12 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 t->track[cur_track].hidden = hidden;
             }
             cur_clip = -1;
+        } else if (!strncmp(line, "duck\t", 5) && cur_track >= 0) {
+            char *f[2];
+            if (tabsplit(line + 5, f, 2) == 2) {
+                t->track[cur_track].duck_from = atoi(f[0]);
+                t->track[cur_track].duck      = (float)atof(f[1]);
+            }
         } else if (!strncmp(line, "mix\t", 4) && cur_track >= 0) {
             float g = 0.0f, pan = 0.0f;
             int solo = 0;
@@ -1751,6 +1801,25 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 cc->text_b = (float)atof(f[3]);
                 if ((v = ss_textpos_value(f[4])) >= 0) cc->text_pos = v;
                 unesc_text(f[5], cc->text, sizeof cc->text);
+            }
+        } else if (!strncmp(line, "sound\t", 6) && cc) {
+            char *f[20];
+            int nf = tabsplit(line + 6, f, 20), q;
+            for (q = 0; q < nf; q++) {
+                char *eq = strchr(f[q], '=');
+                const char *v;
+                if (!eq) continue;
+                *eq = '\0';
+                v = eq + 1;
+                if      (!strcmp(f[q], "nr"))     cc->nr_audio    = (float)atof(v);
+                else if (!strcmp(f[q], "gate"))   cc->gate        = (float)atof(v);
+                else if (!strcmp(f[q], "comp"))   cc->comp        = (float)atof(v);
+                else if (!strcmp(f[q], "thresh")) cc->comp_thresh = (float)atof(v);
+                else if (!strcmp(f[q], "deess"))  cc->deess       = (float)atof(v);
+                else if (!strcmp(f[q], "shape"))  { int w = ss_afade_value(v);
+                                                    if (w >= 0) cc->fade_shape = w; }
+                else if (!strncmp(f[q], "eq", 2) && f[q][2] >= '0' && f[q][2] <= '5')
+                    cc->eq_db[f[q][2] - '0'] = (float)atof(v);
             }
         } else if (!strncmp(line, "retime\t", 7) && cc) {
             char *f[16];
@@ -2474,6 +2543,67 @@ static void chain_burnin(strbuf *fc, const ss_timeline *t, int burn,
     }
 }
 
+/* The sound of one clip, in the order a dialogue chain is actually built.
+ *
+ * Clean it, shape it, control it — noise reduction, gate, EQ, compressor,
+ * de-esser. Anything else is an argument about taste; that order is not,
+ * because each stage is deciding what the next one gets to work on. A gate
+ * after a compressor gates a signal whose quiet parts have already been
+ * lifted, and a de-esser before an EQ chases sibilance the EQ is about to
+ * move.
+ *
+ * Every one of these is skipped entirely at zero. A filter in the graph set
+ * to do nothing still costs a pass over every sample, and afftdn in
+ * particular is not cheap.
+ */
+static void chain_clip_audio(strbuf *fc, const ss_clip *c)
+{
+    static const int eq_hz[6] = { 60, 200, 600, 2000, 6000, 12000 };
+    int i;
+
+    /* First, because everything downstream is deciding what to do about a
+     * signal and the noise is not part of it. `nf` is where afftdn thinks the
+     * noise floor is; -40 dB is a room, not a hiss. */
+    if (c->nr_audio > 0.0f)
+        sb_add(fc, ",afftdn=nr=%.2f:nf=-40", (double)c->nr_audio * 0.97);
+
+    /* The gate is on the ORIGINAL dynamics, before anything lifts the quiet
+     * parts. 0..100 maps onto a threshold from silence to -20 dBFS, which is
+     * as far up as a gate can go before it starts eating speech. */
+    if (c->gate > 0.0f) {
+        double th = pow(10.0, (-60.0 + (double)c->gate * 0.4) / 20.0);
+        sb_add(fc, ",agate=threshold=%.6f:ratio=4:attack=10:release=200", th);
+    }
+
+    /* Six bands, six biquads. `anequalizer` does this in one filter and does
+     * it PER CHANNEL — a stereo clip needs every band written twice, and a
+     * mono one written once, which is a shape that gets out of step with the
+     * source the first time somebody swaps a take. A chain of `equalizer`
+     * applies to whatever channels arrive. */
+    for (i = 0; i < 6; i++)
+        if (c->eq_db[i] != 0.0f)
+            sb_add(fc, ",equalizer=f=%d:t=q:w=1.2:g=%.3f",
+                   eq_hz[i], (double)c->eq_db[i]);
+
+    /* One knob: the amount drives the ratio and the make-up together, because
+     * a compressor that squashes 4:1 and does not give the level back is a
+     * compressor that just made everything quieter. */
+    if (c->comp > 0.0f) {
+        double amt = ss_clampf(c->comp, 0.0f, 100.0f) / 100.0;
+        double ratio = 1.0 + amt * 7.0;                  /* 1:1 .. 8:1 */
+        double th = pow(10.0, (double)ss_clampf(c->comp_thresh, -60.0f, 0.0f) / 20.0);
+        double makeup = 1.0 + amt * 1.5;
+        sb_add(fc, ",acompressor=threshold=%.6f:ratio=%.3f:attack=20"
+                   ":release=250:makeup=%.3f", th, ratio, makeup);
+    }
+
+    /* Last, on the signal that is actually going out: a compressor lifts
+     * sibilance along with everything else, so de-essing before it would be
+     * de-essing the wrong level. */
+    if (c->deess > 0.0f)
+        sb_add(fc, ",deesser=i=%.4f", (double)c->deess / 100.0);
+}
+
 /* A tempo that atempo will actually accept.
  *
  * ⚠ atempo's range is 0.5 to 100 and the SPEED property's range is 0.1 to 10,
@@ -3182,7 +3312,7 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     char **av = NULL;
     int ac = 0, cap = 64;
     int i, j, input = 0, nvid = 0, naud = 0, nlayer = 0, nclip = 0;
-    int voffs[SS_MAX_TRACKS], *vlab = NULL;
+    int voffs[SS_MAX_TRACKS], *vlab = NULL, *atrack = NULL;
     double dur = ss_timeline_duration(t);
     double rng_in, rng_out;
     /* What actually leaves the graph. A range or a burn-in adds one more
@@ -3208,6 +3338,12 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     }
     vlab = malloc(sizeof(int) * (size_t)(nclip > 0 ? nclip : 1));
     if (!vlab) { free(av); return -1; }
+    /* Which TRACK each audio label came from. Ducking is a relationship
+     * between two tracks, and by the time the mix is built all that is left
+     * of a clip is a label — so the answer has to be written down while the
+     * chains are being emitted. */
+    atrack = malloc(sizeof(int) * (size_t)(nclip > 0 ? nclip : 1));
+    if (!atrack) { free(vlab); free(atrack); free(av); return -1; }
     for (i = 0; i < nclip; i++) vlab[i] = -1;
     for (i = 0; i < t->ntracks; i++) {
         if (!ss_track_shows(t, i) && !ss_track_sounds(t, i)) continue;
@@ -3594,6 +3730,10 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                         chain_atempo(&fc, c->speed);
                     }
                 }
+                /* Cleaned, shaped and controlled BEFORE the fader: the
+                 * gain is where a person sets the level, and a compressor
+                 * after it would undo whatever they set. */
+                chain_clip_audio(&fc, c);
                 if (ss_clip_prop_nkeys(c, "gain") > 0) {
                     /* A keyed fader needs no steps and no cubes: volume takes
                      * an expression, once told to evaluate it per frame rather
@@ -3623,10 +3763,12 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                         sb_add(&fc, ",pan=stereo|c0=%.4f*c0|c1=%.4f*c1", l, r);
                 }
                 if (c->fade_in > 0.0)
-                    sb_add(&fc, ",afade=t=in:st=0:d=%.4f", c->fade_in);
+                    sb_add(&fc, ",afade=t=in:st=0:d=%.4f:curve=%s",
+                           c->fade_in, ss_afade_curve(c->fade_shape));
                 if (c->fade_out > 0.0)
-                    sb_add(&fc, ",afade=t=out:st=%.4f:d=%.4f",
-                           len - c->fade_out, c->fade_out);
+                    sb_add(&fc, ",afade=t=out:st=%.4f:d=%.4f:curve=%s",
+                           len - c->fade_out, c->fade_out,
+                           ss_afade_curve(c->fade_shape));
                 /* And the sound follows the picture across a transition.
                  *
                  * `qsin` on both sides, not a straight line: two linear fades
@@ -3650,6 +3792,7 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 }
                 sb_add(&fc, ",adelay=%d:all=1[a%d]",
                        (int)(c->tl_in * 1000.0 + 0.5), naud);
+                if (atrack) atrack[naud] = i;
                 naud++;
             }
             input++;
@@ -3700,17 +3843,116 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
 
     if (naud > 0) {
         int k;
+        /* ---- ducking ----
+         *
+         * A music bed gets out of the way of the dialogue. The dialogue is
+         * another TRACK, so its sound has to exist as one stream before it
+         * can key anything — and every clip on it has already been spent on
+         * the main mix, which is why each one is split rather than read
+         * twice: naming a stream twice fails the whole graph.
+         *
+         * Built here, between the clip chains and the mix, because that is
+         * the only point where every clip's label exists and nothing has
+         * been summed yet. */
+        static char lab[SS_MAX_TRACKS][24];
+        char alab[64][24];
+        int ducked = 0, kt;
+
+        for (k = 0; k < naud && k < 64; k++)
+            snprintf(alab[k], sizeof alab[k], "[a%d]", k);
+
+        for (kt = 0; kt < t->ntracks; kt++) {
+            int users = 0, keyn = 0, ui;
+            if (t->track[kt].duck_from < 0) continue;
+            /* kt is ducked FROM track `key`. */
+            {
+                int key = t->track[kt].duck_from;
+                if (key < 0 || key >= t->ntracks || key == kt) continue;
+
+                /* Every audio label belonging to the key track, split off. */
+                for (k = 0; k < naud && k < 64; k++)
+                    if (atrack[k] == key) keyn++;
+                for (k = 0; k < naud && k < 64; k++)
+                    if (atrack[k] == kt) users++;
+                if (keyn == 0 || users == 0) continue;
+
+                sb_add(&fc, ";");
+                for (k = 0; k < naud && k < 64; k++) {
+                    if (atrack[k] != key) continue;
+                    sb_add(&fc, "%s", alab[k]);
+                }
+                /* One stream for the key, however many clips it came from. */
+                if (keyn > 1)
+                    sb_add(&fc, "amix=inputs=%d:normalize=0[kmix%d]", keyn, key);
+                else
+                    sb_add(&fc, "anull[kmix%d]", key);
+                /* ⚠ The key clips are CONSUMED by that mix, so they have to
+                 * come back for the main mix as well — one copy for it and
+                 * one for every clip they are keying. */
+                sb_add(&fc, ";[kmix%d]asplit=%d", key, users + 1);
+                for (ui = 0; ui <= users; ui++) sb_add(&fc, "[ks%d_%d]", key, ui);
+
+                /* The key track's own sound goes back into the mix as the
+                 * single stream it now is. */
+                ui = 0;
+                for (k = 0; k < naud && k < 64; k++)
+                    if (atrack[k] == key) {
+                        if (ui == 0) snprintf(alab[k], sizeof alab[k],
+                                              "[ks%d_0]", key);
+                        else         alab[k][0] = '\0';   /* folded into it */
+                        ui++;
+                    }
+
+                ui = 1;
+                for (k = 0; k < naud && k < 64; k++) {
+                    double amt;
+                    if (atrack[k] != kt) continue;
+                    amt = ss_clampf(t->track[kt].duck, 0.0f, 100.0f) / 100.0;
+                    sb_add(&fc, ";%s[ks%d_%d]sidechaincompress=threshold=0.03"
+                                ":ratio=%.3f:attack=20:release=400:makeup=1[dk%d]",
+                           alab[k], key, ui, 1.0 + amt * 19.0, k);
+                    snprintf(alab[k], sizeof alab[k], "[dk%d]", k);
+                    ui++;
+                }
+                ducked = 1;
+            }
+        }
+        (void)lab; (void)ducked;
+
         sb_add(&fc, ";");
-        for (k = 0; k < naud; k++) sb_add(&fc, "[a%d]", k);
+        for (k = 0; k < naud; k++)
+            sb_add(&fc, "%s", k < 64 ? alab[k] : "");
         /* normalize=0: amix otherwise divides every input by the number of
          * inputs, so adding a quiet music bed would duck the dialogue. */
-        sb_add(&fc, "amix=inputs=%d:normalize=0:dropout_transition=0", naud);
+        {
+            int nin = 0;
+            for (k = 0; k < naud; k++)
+                if (k >= 64 || alab[k][0]) nin++;
+            if (nin > 1)
+                sb_add(&fc, "amix=inputs=%d:normalize=0:dropout_transition=0", nin);
+            else
+                sb_add(&fc, "anull");
+        }
         if (t->master_db != 0.0f)
             sb_add(&fc, ",volume=%.3fdB", t->master_db);
         /* alimiter, not a clip: summing tracks with normalize=0 CAN go past
          * full scale, and what that sounds like is a crackle nobody can trace
          * back to the fader that caused it. 0.99 leaves a hair of headroom. */
-        sb_add(&fc, ",alimiter=limit=0.99:level=disabled[aout]");
+        sb_add(&fc, ",alimiter=limit=0.99:level=disabled");
+        /* Delivery loudness, LAST — after the mix, after the master fader
+         * and after the limiter, because a broadcast target is a statement
+         * about the FILE and nothing downstream of it may change the level
+         * again.
+         *
+         * ⚠ One pass, deliberately. Two-pass loudnorm measures the whole
+         * programme and then encodes it, which means rendering the timeline
+         * twice; single-pass is a live gain that reaches the target within a
+         * decibel or so and costs nothing. `loudness FILE` measures what
+         * actually came out, so the answer is checkable rather than
+         * promised. */
+        if (t->lufs < 0.0f)
+            sb_add(&fc, ",loudnorm=I=%.2f:TP=-1.5:LRA=11", (double)t->lufs);
+        sb_add(&fc, "[aout]");
         if (rng_in > 0.0 || rng_out < dur) {
             sb_add(&fc, ";[aout]atrim=start=%.6f:end=%.6f,asetpts=PTS-STARTPTS"
                         "[raout]", rng_in, rng_out);
@@ -3806,13 +4048,13 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     av[ac] = NULL;
 
     free(fc.s);
-    free(vlab);
+    free(vlab); free(atrack);
     *argv_out = av;
     return ac;
 
 fail:
     free(fc.s);
-    free(vlab);
+    free(vlab); free(atrack);
     for (i = 0; i < ac; i++) free(av[i]);
     free(av);
     return -1;

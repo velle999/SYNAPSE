@@ -283,3 +283,28 @@ const char *ss_retime_name(int v)
 {
     return (v >= 0 && v < 3) ? retime_names[v] : retime_names[0];
 }
+
+/* Fade shapes. ffmpeg's own curve names live in the third column so nothing
+ * here invents a vocabulary the renderer would then have to translate. */
+static const char *afade_names[6]  = { "linear", "qsin", "hsin",
+                                       "esin", "log", "exp" };
+static const char *afade_curves[6] = { "tri", "qsin", "hsin",
+                                       "esin", "log", "exp" };
+
+int ss_afade_value(const char *s)
+{
+    int i;
+    if (!s) return -1;
+    for (i = 0; i < 6; i++) if (!strcmp(s, afade_names[i])) return i;
+    return -1;
+}
+
+const char *ss_afade_name(int v)
+{
+    return (v >= 0 && v < 6) ? afade_names[v] : afade_names[0];
+}
+
+const char *ss_afade_curve(int v)
+{
+    return (v >= 0 && v < 6) ? afade_curves[v] : afade_curves[0];
+}

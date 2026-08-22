@@ -828,7 +828,41 @@ pkgver=0.1.0
 #   believed brightness climbs forever and pinned exposure at MINUS eight.
 #
 #   497 assertions, clean under ASan+UBSan+LSan.
-pkgrel=25
+#
+# 26 THE SOUND CHAIN — the audio section, closed out.
+#
+#   Noise reduction, a gate, six bands of EQ, a compressor, a de-esser, fade
+#   SHAPES, delivery loudness and ducking. The roadmap's own table called
+#   audio the weakest area in the program; it is not any more.
+#
+#   THE ORDER IS THE DESIGN: clean it, shape it, control it. A gate AFTER a
+#   compressor gates a signal whose quiet parts have already been lifted, and
+#   a de-esser BEFORE an EQ chases sibilance the EQ is about to move. The test
+#   asserts the order as positions in the graph string, so a reshuffle that
+#   still contains every filter fails it.
+#
+#   ⚠ Zero means the filter is NOT IN THE GRAPH, not in it doing nothing. A
+#   six-band EQ that always emits six biquads is six passes over the samples
+#   to do nothing four times, and afftdn is not cheap.
+#
+#   ⚠ A CHAIN OF `equalizer`, NOT ONE `anequalizer`. anequalizer is PER
+#   CHANNEL: a stereo clip needs every band written twice and a mono one
+#   written once, which is a shape that gets out of step with the source the
+#   first time somebody swaps a take.
+#
+#   ⚠ DUCKING SPLITS THE KEY TRACK. Every clip on it has already been spent on
+#   the main mix, and naming a stream twice fails the whole graph — so the key
+#   is mixed to one stream, split once per clip it keys plus once for the mix
+#   itself, and the main amix's input count follows what was actually named.
+#   Measured: identical to un-ducked where the key is silent, 2.6 dB down
+#   where it is not.
+#
+#   ⚠ SINGLE-pass loudnorm, deliberately. Two-pass measures the whole
+#   programme and then encodes it, which is rendering the timeline twice.
+#   `loudness FILE` measures what came out — -14.00 against a -14 target.
+#
+#   523 assertions, clean under ASan+UBSan+LSan.
+pkgrel=26
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
