@@ -285,6 +285,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
 | **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
+| **`synstudio`** | The darkroom and edit suite. Develop a photograph or cut a sequence, in one application, because both halves decide colour in the same place: `src/colour.c` is the only code that resolves a pixel, and a clip's grade is baked to a 3D LUT and handed to ffmpeg, so the still you graded and the frame that is delivered agree by construction rather than by care (the test suite renders both paths and fails under 45 dB PSNR between them). Photographs are non-destructive: edits live in a `<file>.synstudio` sidecar and the original is never written. RAW from every common camera, local adjustment masks, twelve looks, scopes computed by the engine rather than a display filter, and a `match` that fits one shot to another *through the engine* so the answer is one the stack can actually produce. Video is a text document until you export it — tracks, clips, sixty transitions, twenty-seven effects, per-clip motion and retiming, keyframed grades, a sound chain with ducking and LUFS normalisation, stabilisation, delivery presets and a render queue. The play button renders the *export* graph at 960 wide and plays that, rather than a second cheaper preview that might disagree about colour. Never links ffmpeg or libraw — subprocess and an argv array, because a pipe has no ABI. `synstudio gui`, or every one of those as a command. |
 | **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`, or the pad's **Guide** button) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, a browser, a terminal, music, any Plex or Jellyfin server on the network, headlines and the machine's own switches as tiles. It is drivable from a controller — including **as a mouse**, with an **on-screen keyboard**, in the browser — **steps aside for what it launches instead of closing**, and can open at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 
 ### Apps
@@ -459,10 +460,12 @@ moves. `SYNUI_RECORD_FPS` changes the rate if you want the display's own.
 Editing one is a separate problem, and not one SynapseOS can solve outright: the
 free edition of DaVinci Resolve on Linux decodes neither H.264 nor AAC, so an
 ordinary recording imports as media offline however many codecs are installed.
-That is a licensing limit inside Resolve, not a missing package. There are two
-ways round it — convert afterwards with `syn resolve transcode <file>`, which
-writes a DNxHR `.mov` beside the original, or record straight to that format
-with **Control panel ▸ Sound ▸ Record for editing**. The second skips a lossy
+That is a licensing limit inside Resolve, not a missing package, and it does not
+apply to **Studio** (`synstudio`), which reads a recording as it is. If you are
+staying with Resolve there are two ways round it — convert afterwards with
+`syn resolve transcode <file>`, which writes a DNxHR `.mov` beside the original,
+or record straight to that format with
+**Control panel ▸ Sound ▸ Record for editing**. The second skips a lossy
 generation but costs roughly 1 GB a minute against a few hundred KB for an
 ordinary take, so it is off by default and the panel row says the rate out loud.
 
@@ -665,6 +668,32 @@ syn-edit ex -c '%s/foo/bar/g' -w *.c     # ex commands, written back
 The third one is not a convenience — it is how the editor's own test suite
 drives it, which is why the keys the window sends and the keys a script sends
 cannot mean different things.
+
+### Photographs and video
+
+**`synstudio`** — **Studio** in the menu — is the darkroom and the cutting room
+in one window. One colour engine decides every pixel in both, so a grade means
+the same thing on a still and on a frame; a clip's grade is baked to a 3D LUT
+and handed to the renderer rather than reimplemented for video.
+
+```bash
+synstudio gui                                   # the window
+synstudio set photo.cr2 exposure=0.4 temp=200   # the original is never written
+synstudio render photo.cr2 --out developed.jpg
+synstudio timeline new cut.syntl --size 1920x1080 --fps 25
+synstudio timeline export cut.syntl --out delivery.mp4 --preset youtube-1080p
+```
+
+Everything the window does is a command underneath, so a hundred photographs is
+a loop rather than an afternoon. A project file is a text document you can read
+and diff, and **its first line decides what it is, not its extension** — a
+project saved as `.txt` is still a project.
+
+If you would rather use DaVinci Resolve, `syn resolve` gets it running and
+**DaVinci Doctor** in the menu walks you through it; see
+[the wiki](https://github.com/velle999/SYNAPSE/wiki/DaVinci-Resolve). Studio
+reads H.264 and AAC without any of that, which the free edition of Resolve on
+Linux does not.
 
 ### Fingerprint unlock
 
@@ -1113,7 +1142,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 |---|---|
 | `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard/nix …`, `syn shell`, `syn ui`, `syn install` |
 | `syn nix` | The optional Nix layer — `apply`, `build`, `update`, `facts`, `edit`, `rollback`, `init`. See [Declarative user environment](#declarative-user-environment-nix) |
-| `syn resolve` | DaVinci Resolve support — `doctor` (what is missing), `setup` (OpenCL runtime + launch environment), `install`, `transcode` (footage the free edition can read), `launch` |
+| `syn resolve` | DaVinci Resolve support — `doctor` (what is missing), `setup` (OpenCL runtime + launch environment), `install`, `transcode` (footage the free edition can read), `launch`, and `gui` — the **DaVinci Doctor** window, which reads the same checks and walks you through the rest |
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
@@ -1122,6 +1151,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
+| `synstudio` | The darkroom and edit suite — `probe`, `keys`, `get`/`set`/`reset` a photograph's sidecar, `mask`, `look`, `lut`, `render`, `match`, `histogram`, `scope`, and the `timeline …` family for video. `synstudio gui [file]` opens the window; `kind FILE` says what a file is, asked of ffmpeg rather than the extension |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
 | `syntty` | The terminal — `syntty` for a shell, `-e CMD` to run one, `--hold` to keep the output after it exits, `--config`/`--no-config` for the config file. See [The terminal](#the-terminal) |
 | `syn-arcade` | The game assistant — `hud toggle/cycle/set/path/adopt` drives the MangoHud overlay inside a running game, `pads list/info/test/rumble/calibrate` covers controllers outside Steam, `map add/remove` overrides SDL button mappings, `fit new`/`fit run` wraps a low-resolution game in the gamescope line that scales it to the screen, `binds install` puts the overlay on `Super`+`F11` / `Super`+`F12`, and `big start`/`big autostart on` opens the ten-foot big screen interface on `Super`+`F10` or at login — with `big music …` for what it plays and `big music source` for where that comes from. `syn-arcade gui` opens the window. See [Gaming](#gaming) |
