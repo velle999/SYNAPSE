@@ -636,3 +636,82 @@ int ss_look_save(const char *name, const char *label, const ss_develop *d,
     nkcat = 0;
     return wrote;
 }
+
+/* ------------------------------------------------------------- the queue -- */
+
+/* A render queue is a FILE of commands, not a daemon.
+ *
+ * One job per line: the arguments of a `timeline export`, tab separated, in
+ * the order they were given. That is the whole format, and it is chosen so
+ * that running the queue is running those commands — no second code path that
+ * renders things, no set of options that only the queue understands, and a
+ * job somebody typed and a job the window queued are the same object.
+ *
+ * It survives the program closing because it is a file, which is the same
+ * reason undo is a directory of documents.
+ */
+int ss_queue_path(char *out, size_t n)
+{
+    const char *home = getenv("HOME");
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    const char *env = getenv("SYNSTUDIO_QUEUE");
+
+    if (env && *env) { snprintf(out, n, "%s", env); return 0; }
+    if (xdg && *xdg) { snprintf(out, n, "%s/synstudio/queue", xdg); return 0; }
+    if (home && *home) { snprintf(out, n, "%s/.config/synstudio/queue", home); return 0; }
+    return -1;
+}
+
+int ss_queue_add(const char *const *argv, int argc)
+{
+    char path[1024], dir[1024], *slash;
+    FILE *fp;
+    int i;
+
+    if (argc < 1 || ss_queue_path(path, sizeof path) != 0) return -1;
+    snprintf(dir, sizeof dir, "%s", path);
+    slash = strrchr(dir, '/');
+    if (slash) { *slash = '\0'; if (mkdir_p(dir) != 0) return -1; }
+
+    fp = fopen(path, "a");
+    if (!fp) return -1;
+    for (i = 0; i < argc; i++) {
+        /* A tab or a newline in an argument would make one job read as two.
+         * A path can legally contain a tab; this refuses the job rather than
+         * writing a line that means something else when it is read back. */
+        if (strchr(argv[i], '\t') || strchr(argv[i], '\n')) { fclose(fp); return -2; }
+        fprintf(fp, "%s%s", i ? "\t" : "", argv[i]);
+    }
+    fputc('\n', fp);
+    if (fclose(fp) != 0) return -1;
+    return 0;
+}
+
+int ss_queue_read(char (*job)[SS_QUEUE_LINE], int max)
+{
+    char path[1024], line[SS_QUEUE_LINE];
+    FILE *fp;
+    int n = 0;
+
+    if (ss_queue_path(path, sizeof path) != 0) return -1;
+    fp = fopen(path, "r");
+    if (!fp) return 0;                  /* no queue is an empty queue */
+    while (n < max && fgets(line, sizeof line, fp)) {
+        size_t len = strlen(line);
+        while (len && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+        if (!len) continue;
+        snprintf(job[n], SS_QUEUE_LINE, "%s", line);
+        n++;
+    }
+    fclose(fp);
+    return n;
+}
+
+int ss_queue_clear(void)
+{
+    char path[1024];
+    if (ss_queue_path(path, sizeof path) != 0) return -1;
+    if (remove(path) != 0 && errno != ENOENT) return -1;
+    return 0;
+}

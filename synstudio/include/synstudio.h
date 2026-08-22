@@ -341,6 +341,21 @@ int             ss_look_save(const char *name, const char *label,
 /* Where a look of the user's own goes. */
 int             ss_look_dir(char *out, size_t n);
 
+/* ---- the render queue ----
+ *
+ * A file of commands, not a daemon. One job per line: the arguments of a
+ * `timeline export`, tab separated. Running the queue is running those
+ * commands, so there is no second code path that renders things and no option
+ * that only the queue understands — a job somebody typed and a job the window
+ * queued are the same object. It survives the program closing because it is a
+ * file, the same reason undo is a directory of documents. */
+#define SS_QUEUE_LINE 4096
+#define SS_QUEUE_MAX  256
+int ss_queue_path(char *out, size_t n);
+int ss_queue_add(const char *const *argv, int argc);   /* -2: a tab in an arg */
+int ss_queue_read(char (*job)[SS_QUEUE_LINE], int max);
+int ss_queue_clear(void);
+
 /* ------------------------------------------------------------------- io -- */
 
 /* Decode is delegated to ffmpeg (and to libraw's dcraw_emu for camera raw),

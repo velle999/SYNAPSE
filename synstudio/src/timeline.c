@@ -2421,6 +2421,59 @@ static void chain_title(strbuf *fc, const ss_timeline *t, const ss_clip *c,
     chain_title_at(fc, t, c, dir, track, idx, -1.0);
 }
 
+/* What gets written OVER the delivered picture: a timecode, the file's own
+ * name, or both.
+ *
+ * Deliberately not part of the cut. A burn-in is for a review copy — it says
+ * which version somebody is looking at and where in it they are, and it must
+ * never survive into the master, which is why it lives on the delivery
+ * arguments and not in the document.
+ *
+ * ⚠ The timecode starts at the RANGE, not at zero. The trim above resets
+ * timestamps so a ranged render begins at 0, and a burn-in reading 00:00:00
+ * for a clip that starts nine minutes into the timeline is worse than none at
+ * all — it is a wrong answer to the exact question it was added to answer.
+ */
+static void chain_burnin(strbuf *fc, const ss_timeline *t, int burn,
+                         const char *out, double range_in)
+{
+    char fesc[1024];
+    int size = (int)(t->h * 0.035f + 0.5f);
+
+    if (!burn) return;
+    if (size < 10) size = 10;
+    esc_filter(ss_font_file("", SS_FW_REGULAR), fesc, sizeof fesc);
+
+    if (burn & SS_BURN_TIMECODE) {
+        long f = (long)(range_in * t->fps + 0.5);
+        long fr = (long)(t->fps + 0.5);
+        int hh, mm, ss2, ff;
+        if (fr < 1) fr = 25;
+        ff = (int)(f % fr); f /= fr;
+        ss2 = (int)(f % 60);  f /= 60;
+        mm = (int)(f % 60);   f /= 60;
+        hh = (int)f;
+        /* The colons are escaped twice over: once for the filtergraph's own
+         * option splitting, and drawtext then reads the value it is handed. */
+        sb_add(fc, ",drawtext=fontfile='%s':timecode='%02d\\:%02d\\:%02d\\:%02d'"
+                   /* Bottom RIGHT, not bottom centre: a subtitle is bottom
+                    * centre by convention and the two landed on top of each
+                    * other on the first review copy this made. */
+                   ":rate=%.6g:fontcolor=white:fontsize=%d:box=1:boxcolor=black@0.5"
+                   ":boxborderw=%d:x=w-text_w-%d:y=h-text_h-%d",
+               fesc, hh, mm, ss2, ff, t->fps, size, size / 3, size, size);
+    }
+    if (burn & SS_BURN_NAME) {
+        const char *base = out ? strrchr(out, '/') : NULL;
+        char esc[2100];
+        esc_filter(base ? base + 1 : (out ? out : ""), esc, sizeof esc);
+        sb_add(fc, ",drawtext=fontfile='%s':text='%s':expansion=none"
+                   ":fontcolor=white:fontsize=%d:box=1:boxcolor=black@0.5"
+                   ":boxborderw=%d:x=%d:y=%d",
+               fesc, esc, size, size / 3, size, size);
+    }
+}
+
 /* A tempo that atempo will actually accept.
  *
  * ⚠ atempo's range is 0.5 to 100 and the SPEED property's range is 0.1 to 10,
@@ -3036,6 +3089,14 @@ static const ss_tl_format tl_formats[] = {
       "yuv420p",     "webvtt",   "VP9 and Opus, for the web" },
     { "prores", "mov",  "prores_ks",  "pcm_s16le", "-profile:v", "3",   NULL,   NULL,
       "yuv422p10le", "mov_text", "ProRes 422 HQ — 10-bit, for grading on" },
+    /* Image sequences. A folder of frames has nowhere to put a sound track,
+     * so the audio codec is NULL and the graph leaves the mix unmapped —
+     * which is also what makes `--out frames/f_%05d.png` a complete
+     * instruction rather than half of one. */
+    { "png",    "png",  "png",        NULL,        "-compression_level", "3", NULL, NULL,
+      "rgb24",       NULL,       "a PNG sequence — lossless, huge, no sound" },
+    { "exr",    "exr",  "exr",        NULL,        NULL,      NULL,     NULL,   NULL,
+      "gbrpf32le",   NULL,       "an OpenEXR sequence — 32-bit float, linear" },
     { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 };
 
@@ -3123,6 +3184,14 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     int i, j, input = 0, nvid = 0, naud = 0, nlayer = 0, nclip = 0;
     int voffs[SS_MAX_TRACKS], *vlab = NULL;
     double dur = ss_timeline_duration(t);
+    double rng_in, rng_out;
+    /* What actually leaves the graph. A range or a burn-in adds one more
+     * filter after [vout], and naming the result in ONE variable is what
+     * keeps the map, the preview scale and the muxer from each deciding for
+     * themselves which label was the last one written. */
+    const char *vlabel = "[vout]", *alabel = "[aout]";
+
+    ss_timeline_range(t, &rng_in, &rng_out);
 
     av = malloc(sizeof(char *) * cap);
     if (!av) return -1;
@@ -3599,8 +3668,35 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
      * yuv420p requires. */
     if (nlayer > 0) sb_add(&fc, ";[bg%d]null[vout]", nlayer);
     else            sb_add(&fc, ";[base]null[vout]");
+
+    /* The RENDER RANGE, and the burn-in that goes over whatever it leaves.
+     *
+     * Trimmed at the END rather than by seeking the inputs: every clip is
+     * placed at its own tl_in and composited onto a base the length of the
+     * whole timeline, so a range is a WINDOW onto the finished picture and
+     * not a different edit. Seeking would have to move every clip, every
+     * transition and every keyed expression with it.
+     *
+     * ⚠ setpts=PTS-STARTPTS after the trim. Without it the frames keep the
+     * timestamps they had on the timeline, and a render of minutes nine to
+     * ten arrives as a file with nine minutes of nothing at the front. */
+    if (rng_in > 0.0 || rng_out < dur) {
+        sb_add(&fc, ";[vout]trim=start=%.6f:end=%.6f,setpts=PTS-STARTPTS",
+               rng_in, rng_out);
+        chain_burnin(&fc, t, burn, out, rng_in);
+        sb_add(&fc, "[rout]");
+        vlabel = "[rout]";
+    } else if (burn) {
+        /* `null` because a chain has to start with a filter: `[vout],drawtext`
+         * is a graph ffmpeg refuses to parse. */
+        sb_add(&fc, ";[vout]null");
+        chain_burnin(&fc, t, burn, out, 0.0);
+        sb_add(&fc, "[rout]");
+        vlabel = "[rout]";
+    }
+
     if (preview && t->w > 960)
-        sb_add(&fc, ";[vout]scale=960:-2:flags=fast_bilinear[pout]");
+        sb_add(&fc, ";%sscale=960:-2:flags=fast_bilinear[pout]", vlabel);
 
     if (naud > 0) {
         int k;
@@ -3615,6 +3711,11 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
          * full scale, and what that sounds like is a crackle nobody can trace
          * back to the fader that caused it. 0.99 leaves a hair of headroom. */
         sb_add(&fc, ",alimiter=limit=0.99:level=disabled[aout]");
+        if (rng_in > 0.0 || rng_out < dur) {
+            sb_add(&fc, ";[aout]atrim=start=%.6f:end=%.6f,asetpts=PTS-STARTPTS"
+                        "[raout]", rng_in, rng_out);
+            alabel = "[raout]";
+        }
     }
 
     /* A soft subtitle stream is an INPUT, and it goes in last on purpose.
@@ -3633,14 +3734,25 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     PUSH(xdup("-filter_complex"));
     PUSH(xdup(fc.s ? fc.s : ""));
     PUSH(xdup("-map"));
-    PUSH(xdup(preview && t->w > 960 ? "[pout]" : "[vout]"));
-    if (naud > 0) { PUSH(xdup("-map")); PUSH(xdup("[aout]")); }
+    PUSH(xdup(preview && t->w > 960 ? "[pout]" : vlabel));
+    {
+        const ss_tl_format *af = fmt ? fmt : ss_timeline_format(NULL, out);
+        /* ⚠ A format with no audio codec is a format with nowhere to put the
+         * sound. Mapping the mix into a PNG sequence fails the whole render
+         * with "Could not find tag for codec", after the graph is built and
+         * the encode has started. */
+        if (naud > 0 && (preview || (af && af->acodec))) {
+            PUSH(xdup("-map")); PUSH(xdup(alabel));
+        }
+    }
     if (subs && *subs && !preview) {
         const ss_tl_format *sf = fmt ? fmt : ss_timeline_format(NULL, out);
         PUSH(xdup("-map")); PUSH(xfmt("%d:s:0", input));
         PUSH(xdup("-c:s")); PUSH(xdup(sf->scodec ? sf->scodec : "mov_text"));
     }
-    PUSH(xdup("-t")); PUSH(xfmt("%.6f", dur > 0 ? dur : 1.0));
+    PUSH(xdup("-t"));
+    PUSH(xfmt("%.6f", rng_out > rng_in ? rng_out - rng_in
+                                       : (dur > 0 ? dur : 1.0)));
     /* A preview is watched once and thrown away, so every setting there is
      * traded for the time it takes to produce: ultrafast/crf 30 is roughly an
      * order of magnitude quicker than the deliverable settings and looks it,
@@ -3661,7 +3773,7 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
         if (f->v1 && f->v2) { PUSH(xdup(f->v1)); PUSH(xdup(f->v2)); }
         if (f->v3 && f->v4) { PUSH(xdup(f->v3)); PUSH(xdup(f->v4)); }
         PUSH(xdup("-pix_fmt")); PUSH(xdup(f->pix));
-        if (naud > 0) {
+        if (naud > 0 && f->acodec) {
             PUSH(xdup("-c:a")); PUSH(xdup(f->acodec));
             /* A bitrate means nothing to a lossless codec and ffmpeg refuses
              * some of them outright, so it is only said where it applies. */

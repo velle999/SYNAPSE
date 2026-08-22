@@ -128,7 +128,14 @@ static void usage(void)
 "  timeline scope PROJ --at T --out F.png [--kind waveform|parade|vector]\n"
 "       the same frame, MEASURED — composited first, so it describes the\n"
 "       picture that will be delivered\n"
+"  timeline range PROJ [--at A] [--to B] [--off]   what a render covers\n"
+"  timeline presets              delivery sizes, by where they are going\n"
+"  timeline queue PROJ add --out F ...   put a render on the queue\n"
+"  timeline queue PROJ list|run|clear    run them one at a time\n"
 "  timeline export PROJ --out OUT [--format F] [--print] [--preview]\n"
+"       [--preset P]   deliver at that size and frame rate\n"
+"       [--burn timecode|name|both]   over the picture, for a review copy\n"
+"       --format png|exr with `--out dir/f_%04d.png` writes a SEQUENCE\n"
 "       [--subs FILE]  ship a .srt as a STREAM a player can switch off,\n"
 "                      instead of the burnt-in kind `subs import` makes\n"
 "  timeline formats              what an export can come out as\n"
@@ -175,6 +182,7 @@ typedef struct {
     const char *ease;
     int    off;                 /* --off: turn a thing off, keep its work */
     const char *burn;           /* what to write over the delivered picture */
+    const char *preset;         /* a delivery size and frame rate, by name */
     const char *style;          /* a title style, applied on creation */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
@@ -233,6 +241,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--off"))     { o->off = 1; }
         else if (!strcmp(a, "--burn"))    { const char *v = NEXT(); if (!v) return -1; o->burn = v; }
+        else if (!strcmp(a, "--preset"))  { const char *v = NEXT(); if (!v) return -1; o->preset = v; }
         else if (!strcmp(a, "--preview")) { o->preview = 1; }
         else if (!strcmp(a, "--format") && i + 1 < argc) { o->format = argv[++i]; }
         /* The same slot: an export names a container and a transition names a
@@ -1126,6 +1135,14 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             printf("%d\t%s\t%s\n", i, ss_trans_name(i), ss_trans_label(i));
         return 0;
     }
+    if (verb && !strcmp(verb, "presets")) {
+        const ss_tl_preset *pr = ss_timeline_presets();
+        int i;
+        for (i = 0; pr[i].name; i++)
+            printf("%s\t%d\t%d\t%.6g\t%s\n", pr[i].name, pr[i].w, pr[i].h,
+                   pr[i].fps, pr[i].label);
+        return 0;
+    }
     if (verb && !strcmp(verb, "styles")) {
         const ss_title_style *st = ss_title_styles();
         int i;
@@ -1215,6 +1232,120 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
      * `master` with no option PRINTS rather than refusing: the window needs to
      * read the value it is about to draw a fader for, and a verb that can only
      * be written is a verb the window has to keep its own copy of. */
+    /* The render queue.
+     *
+     * `run` re-invokes THIS binary, once per job, with the arguments the job
+     * was added with. Not a shared render function called two ways: a queued
+     * job is then literally the command somebody could have typed, a failure
+     * in one is a process exiting rather than a state to unwind, and there is
+     * no way for the two paths to drift apart because there is one path. */
+    if (!strcmp(verb, "queue")) {
+        static char job[SS_QUEUE_MAX][SS_QUEUE_LINE];
+        const char *act = argc > 4 ? argv[4] : "list";
+        char path[1024];
+        int n, k;
+
+        if (!strcmp(act, "add")) {
+            /* `timeline queue PROJ add --out F ...` — everything from the
+             * project onward is the job, so it is exactly what `timeline
+             * export` would have been given. */
+            const char *jv[64];
+            int jc = 0;
+            jv[jc++] = proj;
+            for (k = 5; k < argc && jc < 63; k++) jv[jc++] = argv[k];
+            n = ss_queue_add(jv, jc);
+            if (n == -2) return die("an argument contains a tab; the queue is "
+                                    "one job per line");
+            if (n != 0)  return die("cannot write the queue");
+            printf("queued\t%s\n", proj);
+            return 0;
+        }
+        if (!strcmp(act, "clear")) {
+            if (ss_queue_clear() != 0) return die("cannot clear the queue");
+            printf("cleared\n");
+            return 0;
+        }
+        n = ss_queue_read(job, SS_QUEUE_MAX);
+        if (n < 0) return die("cannot read the queue");
+        if (!strcmp(act, "list")) {
+            ss_queue_path(path, sizeof path);
+            printf("queue\t%s\njobs\t%d\n", path, n);
+            for (k = 0; k < n; k++) {
+                char buf[SS_QUEUE_LINE];
+                char *p2;
+                snprintf(buf, sizeof buf, "%s", job[k]);
+                for (p2 = buf; *p2; p2++) if (*p2 == '\t') *p2 = ' ';
+                printf("job\t%d\t%s\n", k, buf);
+            }
+            return 0;
+        }
+        if (!strcmp(act, "run")) {
+            int failed = 0, done = 0;
+            for (k = 0; k < n; k++) {
+                char *av[68], *p2, *tok;
+                int ac2 = 0, status;
+                pid_t pid;
+
+                av[ac2++] = (char *)"synstudio";
+                av[ac2++] = (char *)"timeline";
+                av[ac2++] = (char *)"export";
+                for (tok = strtok_r(job[k], "\t", &p2); tok && ac2 < 67;
+                     tok = strtok_r(NULL, "\t", &p2))
+                    av[ac2++] = tok;
+                av[ac2] = NULL;
+
+                fprintf(stderr, "== job %d of %d: %s\n", k + 1, n, av[3]);
+                pid = fork();
+                if (pid < 0) return die("cannot fork");
+                if (pid == 0) {
+                    /* This binary, not whatever `synstudio` resolves to on
+                     * PATH: a queue run must not depend on which build is
+                     * installed while a different one is queueing. */
+                    execv("/proc/self/exe", av);
+                    _exit(127);
+                }
+                while (waitpid(pid, &status, 0) < 0 && errno == EINTR) ;
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                    failed++;
+                    /* Kept going on purpose: a queue is left running while
+                     * nobody is watching, and stopping at the first bad job
+                     * wastes the night on the ones that would have worked. */
+                    fprintf(stderr, "   job %d FAILED\n", k + 1);
+                } else {
+                    done++;
+                }
+            }
+            printf("done\t%d\nfailed\t%d\n", done, failed);
+            /* The queue is kept. A job that failed is a job to look at, and a
+             * queue that empties itself takes the evidence with it. */
+            return failed ? 1 : 0;
+        }
+        return die("queue takes add, list, run or clear, not %s", act);
+    }
+
+    /* The render range: a DELIVERY decision that lives in the document,
+     * because it is set while looking at the cut and not while typing a
+     * render command. --off puts it back to the whole timeline. */
+    if (!strcmp(verb, "range")) {
+        double a, b;
+        if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0)
+            return die("bad option");
+        if (o.off) {
+            t->range_in = t->range_out = 0;
+        } else if (o.has_to || o.at > 0) {
+            t->range_in  = o.at;
+            t->range_out = o.has_to ? o.to : ss_timeline_duration(t);
+            if (!(t->range_out > t->range_in))
+                return die("--to has to come after --at");
+        }
+        if (argc > 4 && tl_save(proj, t) != 0)
+            return die("cannot write %s", proj);
+        ss_timeline_range(t, &a, &b);
+        printf("in\t%.3f\nout\t%.3f\nlength\t%.3f\nwhole\t%s\n",
+               a, b, b - a, t->range_out > t->range_in ? "no" : "yes");
+        return 0;
+    }
+
     if (!strcmp(verb, "master")) {
         int i;
         for (i = 4; i < argc; i++) {
@@ -2148,6 +2279,27 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         tl_fill_audio(t);
         {
             const ss_tl_format *f = ss_timeline_format(o.format, o.out);
+            /* A preset is a SIZE and a frame rate, applied by rendering the
+             * whole composite at them. Every clip, the base, the titles and
+             * the transitions are built from the project's own dimensions, so
+             * changing those changes all of them together and nothing has to
+             * be scaled afterwards — which is why this is a copy of the
+             * document rather than a filter on the end of the graph.
+             *
+             * A shallow copy on purpose: the clip arrays are shared with `t`
+             * and read-only from here, and the copy is never freed. */
+            ss_timeline tp;
+            const ss_timeline *rt = t;
+            if (o.preset) {
+                const ss_tl_preset *pr = ss_timeline_preset(o.preset);
+                if (!pr) { ss_timeline_unbake(t, dir); rmdir(dir);
+                           return die("no preset called %s  (try `timeline "
+                                      "presets`)", o.preset); }
+                tp = *t;
+                tp.w = pr->w; tp.h = pr->h;
+                if (pr->fps > 0) tp.fps = pr->fps;
+                rt = &tp;
+            }
             if (!f) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("no such format: %s  (try `timeline formats`)",
                                  o.format); }
@@ -2156,7 +2308,8 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                 return die("%s cannot carry a subtitle stream — burn them in "
                            "with `timeline subs`, or deliver as mkv", f->name);
             }
-            ac = ss_timeline_ffmpeg(t, o.out, dir, o.preview, f, o.subs, burn, &av);
+            ac = ss_timeline_ffmpeg(rt, o.out, dir, o.preview, f, o.subs,
+                                    burn, &av);
         }
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }

@@ -2181,6 +2181,176 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# -------------------------------------------------------------- scopes ---
+#
+# Computed HERE and not by an ffmpeg filter, for the reason the histogram is:
+# a scope is read to decide whether a shot is legal and whether two shots
+# match, and an answer from a different renderer than the picture is an answer
+# about something else.
+
+if have ffmpeg; then
+    scsrc=$TMP/scope.png
+    ffmpeg -v error -y -f lavfi -i "testsrc2=s=640x360" -frames:v 1 "$scsrc" 2>/dev/null
+    for k in waveform parade vector; do
+        $BIN scope "$scsrc" --out "$TMP/sc_$k.png" --kind "$k" --size 480 \
+            | seen "a $k renders" "kind	$k"
+    done
+    # A vectorscope is a POLAR plot, so it is square — a wide one stretches
+    # the hue wheel into an ellipse and every angle read off it is wrong.
+    check "a vectorscope is square" "yes" \
+          "$($BIN scope "$scsrc" --out "$TMP/sq.png" --kind vector --size 400 \
+             | awk -F'\t' '/^width/{w=$2} /^height/{h=$2} END{print (w==h)?"yes":"no"}')"
+    check "a waveform is not" "yes" \
+          "$($BIN scope "$scsrc" --out "$TMP/wf.png" --kind waveform --size 400 \
+             | awk -F'\t' '/^width/{w=$2} /^height/{h=$2} END{print (w>h)?"yes":"no"}')"
+    $BIN scope "$scsrc" --out "$TMP/x.png" --kind nonesuch 2>&1 \
+        | seen "an unknown kind is refused" "waveform, parade or vector"
+
+    # ⚠ The assertion that matters: a scope is not normalised by its BUSIEST
+    # cell. It was, and a vectorscope of colour bars came out almost black —
+    # the greys pile into a few cells at the centre and every hue around them
+    # divides down to nothing. Measured as: enough of the plot is actually
+    # lit to read.
+    lit=$(ffmpeg -v error -y -i "$TMP/sc_vector.png" -vf format=gray -f rawvideo - 2>/dev/null \
+          | od -An -tu1 -v | tr -s ' ' '\n' | awk 'NF && $1>16 {n++} END{print n+0}')
+    check "and the vectorscope is actually visible" "yes" \
+          "$(awk -v n="${lit:-0}" 'BEGIN{print (n>1500)?"yes":"no"}')"
+
+    # A scope of the CUT, composited first — grade, titles, transitions and
+    # all — so it describes the picture that will be delivered.
+    scp=$TMP/scopetl.sstl
+    $BIN timeline new "$scp" --size 640x360 --fps 25 >/dev/null
+    $BIN timeline track "$scp" video V >/dev/null
+    $BIN timeline solid "$scp" 0 --at 0 --dur 2 --colour 0.5,0.2,0.1 >/dev/null
+    $BIN timeline scope "$scp" --at 1 --out "$TMP/tlsc.png" --kind parade \
+        | seen "a scope of the timeline composites first" "kind	parade"
+    check "and writes a picture" "yes" \
+          "$([ -s "$TMP/tlsc.png" ] && echo yes || echo no)"
+fi
+
+# ------------------------------------------------------------ delivery ---
+#
+# A range, a preset, a burn-in, an image sequence and a queue. Everything here
+# is about what leaves the program, and none of it is allowed to change the
+# CUT: a render range is a window onto the finished picture, not a different
+# edit, and a burn-in must never survive into a master.
+
+dp=$TMP/deliver.sstl
+$BIN timeline new "$dp" --size 640x360 --fps 25 >/dev/null
+$BIN timeline track "$dp" video V >/dev/null
+$BIN timeline solid "$dp" 0 --at 0 --dur 3 --colour 0.8,0.1,0.1 >/dev/null
+$BIN timeline solid "$dp" 0 --at 3 --dur 3 --colour 0.1,0.1,0.8 >/dev/null
+
+check "a project renders the whole timeline by default" "yes" \
+      "$($BIN timeline range "$dp" | awk -F'\t' '/^whole/{print $2}')"
+$BIN timeline range "$dp" --at 2 --to 5 | seen "a range can be set" "length	3.000"
+check "and it is written into the document" "1" \
+      "$(grep -c '^range	' "$dp")"
+check "and read back" "2.000" "$($BIN timeline range "$dp" | awk -F'\t' '/^in/{print $2}')"
+$BIN timeline export "$dp" --out "$TMP/rng.mp4" --print \
+    | seen "the export trims to it" "trim=start=2.000000:end=5.000000"
+# ⚠ setpts=PTS-STARTPTS after the trim, or the frames keep the timestamps they
+# had on the timeline and a render of minutes 9 to 10 arrives with nine
+# minutes of nothing at the front of it.
+$BIN timeline export "$dp" --out "$TMP/rng.mp4" --print \
+    | seen "and restarts the clock" "setpts=PTS-STARTPTS"
+
+if have ffmpeg && have ffprobe; then
+    $BIN timeline export "$dp" --out "$TMP/rng.mp4" >/dev/null 2>&1
+    d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$TMP/rng.mp4")
+    check "a ranged render is the length of the range" "yes" \
+          "$(awk -v d="${d:-0}" 'BEGIN{print (d>2.9 && d<3.15)?"yes":"no"}')"
+    # And it is a WINDOW, not a different edit: one second into the render is
+    # three seconds into the timeline, which is the second solid and not the
+    # first. The discriminating half is that it does NOT match one second in.
+    ffmpeg -v error -y -i "$TMP/rng.mp4" -vf "select=eq(n\,25)" \
+           -fps_mode passthrough -frames:v 1 "$TMP/rng1.png"
+    $BIN timeline frame "$dp" --at 3.0 --out "$TMP/tl3.png" >/dev/null 2>&1
+    $BIN timeline frame "$dp" --at 1.0 --out "$TMP/tl1.png" >/dev/null 2>&1
+    # `inf` for an exact match — see psnr2 above.
+    psnr3() { ffmpeg -v error -i "$1" -i "$2" -lavfi psnr=stats_file=- -f null - 2>&1 \
+              | awk -F'psnr_avg:' '/psnr_avg/{split($2,a," "); v=(a[1]=="inf")?999:a[1]+0; print v}' \
+              | tail -1; }
+    check "one second in is three seconds along the timeline" "yes" \
+          "$(awk -v p="$(psnr3 "$TMP/rng1.png" "$TMP/tl3.png")" 'BEGIN{print (p>30)?"yes":"no"}')"
+    yv() { ffmpeg -v error -i "$1" -vf "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-" -f null - 2>&1 | awk -F= '/YAVG/{print $2}' | tail -1; }
+    check "and not one second along it" "yes" \
+          "$(awk -v p="$(psnr3 "$TMP/rng1.png" "$TMP/tl1.png")" 'BEGIN{print (p<25)?"yes":"no"}')"
+fi
+$BIN timeline range "$dp" --off | seen "a range can be taken off again" "whole	yes"
+
+# ---- presets -------------------------------------------------------------
+check "seven presets ship" "7" "$($BIN timeline presets | grep -c .)"
+$BIN timeline presets | seen "named for where they are going" "youtube-1080p"
+$BIN timeline export "$dp" --out "$TMP/p.mp4" --preset nonesuch 2>&1 \
+    | seen "an unknown preset is refused" "no preset called"
+# A preset is applied by rendering the whole COMPOSITE at that size — every
+# clip, the base and the titles are built from the project's dimensions — so
+# the base itself changes size and nothing is scaled afterwards.
+$BIN timeline export "$dp" --out "$TMP/p.mp4" --preset youtube-720p --print \
+    | seen "a preset resizes the composite" "s=1280x720"
+if have ffmpeg && have ffprobe; then
+    $BIN timeline export "$dp" --out "$TMP/p.mp4" --preset youtube-720p >/dev/null 2>&1
+    check "and the delivered file is that size" "1280,720" \
+          "$(ffprobe -v error -select_streams v -show_entries stream=width,height \
+                     -of csv=p=0 "$TMP/p.mp4")"
+fi
+
+# ---- burn-in -------------------------------------------------------------
+bg=$($BIN timeline export "$dp" --out "$TMP/b.mp4" --burn both --print)
+echo "$bg" | seen "a burn-in draws the timecode" "timecode="
+echo "$bg" | seen "and the file's own name"      "text='b.mp4'"
+$BIN timeline export "$dp" --out "$TMP/b.mp4" --burn nonesuch 2>&1 \
+    | seen "an unknown burn-in is refused" "timecode, name, both or off"
+# ⚠ The timecode starts at the RANGE. The trim resets timestamps, so a burn-in
+# reading 00:00:00 on a render that starts nine minutes in is a wrong answer to
+# the exact question it was added to answer.
+$BIN timeline range "$dp" --at 2 --to 5 >/dev/null
+$BIN timeline export "$dp" --out "$TMP/b.mp4" --burn timecode --print \
+    | seen "and it starts at the range, not at zero" "timecode='00\:00\:02\:00'"
+$BIN timeline range "$dp" --off >/dev/null
+
+# ---- image sequences -----------------------------------------------------
+$BIN timeline formats | seen "a PNG sequence is a delivery format" "png"
+if have ffmpeg; then
+    rm -rf "$TMP/seq"; mkdir -p "$TMP/seq"
+    $BIN timeline export "$dp" --out "$TMP/seq/f_%04d.png" --format png >/dev/null 2>&1
+    check "and writes one frame per file" "150" "$(ls "$TMP/seq" | wc -l)"
+    check "starting at the first one" "yes" \
+          "$([ -s "$TMP/seq/f_0001.png" ] && echo yes || echo no)"
+fi
+# ⚠ A format with no audio codec has nowhere to put the sound. Mapping the mix
+# into a PNG sequence fails the whole render with "Could not find tag for
+# codec", after the graph is built and the encode has started.
+$BIN timeline export "$dp" --out "$TMP/seq/f_%04d.png" --format png --print \
+    | notseen "and never maps a sound track into it" "-c:a"
+
+# ---- the queue -----------------------------------------------------------
+#
+# A file of commands, not a daemon: running the queue is running those
+# commands, so a job somebody typed and a job the window queued are the same
+# object and there is no second code path that renders things.
+export SYNSTUDIO_QUEUE=$TMP/queue.txt
+rm -f "$SYNSTUDIO_QUEUE"
+$BIN timeline queue "$dp" add --out "$TMP/q1.mp4" | seen "a job queues" "queued"
+$BIN timeline queue "$dp" add --out "$TMP/q2.mp4" --preset youtube-720p >/dev/null
+check "and the queue holds both" "2" \
+      "$($BIN timeline queue "$dp" list | awk -F'\t' '/^jobs/{print $2}')"
+$BIN timeline queue "$dp" list | seen "with the arguments it was given" "--preset youtube-720p"
+if have ffmpeg; then
+    $BIN timeline queue "$dp" run >/dev/null 2>&1
+    check "running it renders every job" "yes" \
+          "$([ -s "$TMP/q1.mp4" ] && [ -s "$TMP/q2.mp4" ] && echo yes || echo no)"
+    # ⚠ The queue is KEPT after a run. A job that failed is a job to look at,
+    # and a queue that empties itself takes the evidence with it.
+    check "and the queue is still there afterwards" "2" \
+          "$($BIN timeline queue "$dp" list | awk -F'\t' '/^jobs/{print $2}')"
+fi
+$BIN timeline queue "$dp" clear >/dev/null
+check "clear empties it" "0" \
+      "$($BIN timeline queue "$dp" list | awk -F'\t' '/^jobs/{print $2}')"
+unset SYNSTUDIO_QUEUE
+
 # ------------------------------------------------------------- retime ----
 #
 # Speed stopped being one number in 0.1.0-19. A clip can run backwards, hold
@@ -2201,9 +2371,18 @@ if have ffmpeg && have ffprobe; then
         $BIN timeline track "$1" video V >/dev/null
         $BIN timeline clip "$1" 0 "$rtc" --at 0 --dur 4 >/dev/null
     }
+    # ⚠ IDENTICAL pictures give psnr `inf`, and `$2+0` on that is ZERO — a
+    # perfect match reads as the worst possible one, and the assertion that
+    # two frames are the same fails precisely when they are.
+    #
+    # ⚠ And the test for it is on the FIRST TOKEN, not the field. The line is
+    # `psnr_avg:4.86 psnr_r:3.12 psnr_g:inf psnr_b:3.08` — one matching
+    # channel puts `inf` in the middle of a field whose number is 4.86, so
+    # `$2 ~ /inf/` calls two completely different pictures identical.
     psnr2() {  # psnr2 <a> <b>
         ffmpeg -v error -i "$1" -i "$2" -lavfi psnr=stats_file=- -f null - 2>&1 \
-            | awk -F'psnr_avg:' '/psnr_avg/{print $2+0}' | tail -1
+            | awk -F'psnr_avg:' '/psnr_avg/{split($2,a," "); v=(a[1]=="inf")?999:a[1]+0; print v}' \
+            | tail -1
     }
     nthframe() {  # nthframe <file> <n> <out.png>
         ffmpeg -v error -y -i "$1" -vf "select=eq(n\,$2)" \

@@ -734,7 +734,49 @@ pkgver=0.1.0
 #   divides down to nothing. Referenced to the mean of the OCCUPIED cells
 #   through a curve that saturates instead, which is scale-invariant: the same
 #   picture reads the same at any scope size and any resolution.
-pkgrel=23
+#
+# 24 DELIVERY — roadmap item 10 of 10, and the build order is finished.
+#
+#   A RENDER RANGE, in the document because it is set while looking at the
+#   cut. Trimmed at the END of the graph rather than by seeking the inputs:
+#   every clip is placed at its own tl_in and composited onto a base the
+#   length of the whole timeline, so a range is a WINDOW onto the finished
+#   picture and not a different edit. ⚠ setpts=PTS-STARTPTS after the trim, or
+#   a render of minutes nine to ten arrives as a file with nine minutes of
+#   nothing at the front of it.
+#
+#   SEVEN PRESETS, named for where they are going. Applied by rendering the
+#   whole composite at that size — every clip, the base, the titles and the
+#   transitions are built from the project's own dimensions, so changing those
+#   changes all of them together and nothing is scaled afterwards.
+#
+#   BURN-IN (timecode, name, both) on the delivery arguments and never in the
+#   document: it is for a review copy and must not survive into a master.
+#   ⚠ The timecode starts at the RANGE — the trim resets timestamps, and
+#   00:00:00 on a render that starts nine minutes in is a wrong answer to the
+#   exact question a burn-in was added to answer. ⚠ Bottom RIGHT, because a
+#   subtitle is bottom centre and the two landed on each other on the first
+#   review copy this made.
+#
+#   IMAGE SEQUENCES: png and exr rows with `--out dir/f_%04d.png`. ⚠ A format
+#   with no audio codec has nowhere to put the sound, and mapping the mix into
+#   one fails the whole render after the encode has started.
+#
+#   A RENDER QUEUE that is a FILE OF COMMANDS, not a daemon. One job per line:
+#   the arguments of a `timeline export`, run by re-invoking this binary. A
+#   job somebody typed and a job the window queued are the same object, and
+#   there is no second code path that renders things. ⚠ The queue is kept
+#   after a run: a job that failed is a job to look at.
+#
+#   483 assertions, clean under ASan+UBSan+LSan.
+#
+#   ⚠ TWO TEST BUGS FOUND WHILE WRITING THIS, BOTH THE SAME SHAPE. `psnr` of
+#   two IDENTICAL pictures is `inf`, and `$2+0` on that is ZERO — so an
+#   assertion that two frames match failed precisely when they matched. And
+#   the fix for THAT, `$2 ~ /inf/`, matched the `psnr_g:inf` sitting further
+#   along a line whose average was 4.86, so two completely different pictures
+#   read as identical. Test the FIRST TOKEN.
+pkgrel=24
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

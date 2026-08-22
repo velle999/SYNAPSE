@@ -24,7 +24,8 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
 | titles    | a face, a plate, more than one line, five styles, .srt both ways |
-| delivery  | works, thin — six formats, no range, no presets, no queue      |
+| delivery  | range, presets, burn-in, sequences and a queue                 |
+| scopes    | histogram, waveform, parade and vectorscope — all measured here |
 | media     | one project at a time — no pool, no proxies, no relink         |
 
 ## 1 · Audio  — **shipped in 0.1.0-10**
@@ -261,16 +262,47 @@ Fairlight-style automation: four features for one piece of work.
 - [x] six delivery formats with a name and format picker
 - [~] masks — darkroom only; a clip's grade is pointwise so it can ride the
       LUT, and a mask is spatial, so it needs the filter path
-- [ ] waveform, RGB parade, vectorscope on the monitor
-- [ ] colour management — input/output transforms; a `.cube` on the way in is
-      most of it
+- [x] **waveform, RGB parade, vectorscope** — **shipped in 0.1.0-23/24.**
+      Computed HERE rather than by an ffmpeg filter, which is the bargain the
+      histogram already strikes: a scope is read to decide whether a shot is
+      legal and whether two shots match, and an answer from a different
+      renderer than the picture is an answer about something else. `synstudio
+      scope FILE` measures a photograph through its own develop stack;
+      `timeline scope PROJ --at T` composites the frame first. ⚠ Not
+      normalised by the busiest cell — the greys of a colour-bar frame pile
+      into a few cells at the centre of a vectorscope and every hue around
+      them divides down to nothing. Referenced to the mean of the OCCUPIED
+      cells through a curve that saturates, which is scale-invariant
+- [~] colour management — the INPUT half shipped with the LUT reader in
+      0.1.0-17: a `.cube` on the way in is a develop setting that composes
+      into the baked cube. What is missing is the named transforms (a log
+      curve in, a Rec.709 display out) rather than the machinery to apply
+      them
 - [ ] shot match
-- [ ] render range (in/out on the timeline)
-- [ ] render presets — resolution, frame rate, bitrate; "YouTube 1080p" as one
-      row
-- [ ] image sequences (`ss_save` already writes PNG and EXR)
-- [ ] burn-in — timecode, filename, watermark
-- [ ] render queue, in the background
+- [x] **render range** — `timeline range`, in the document because it is set
+      while looking at the cut. Trimmed at the END of the graph rather than by
+      seeking the inputs: a range is a WINDOW onto the finished picture, not a
+      different edit. ⚠ `setpts=PTS-STARTPTS` after the trim, or a render of
+      minutes nine to ten arrives with nine minutes of nothing at the front
+- [x] **render presets** — seven, named for where they are going. Applied by
+      rendering the whole COMPOSITE at that size: every clip, the base and the
+      titles are built from the project's own dimensions, so changing those
+      changes all of them together and nothing is scaled afterwards
+- [x] **image sequences** — `--format png|exr` with `--out dir/f_%04d.png`.
+      ⚠ A format with no audio codec has nowhere to put the sound, and mapping
+      the mix into one fails the render after the encode has started
+- [x] **burn-in** — `--burn timecode|name|both`, on the delivery arguments and
+      never in the document: it is for a review copy and must not survive into
+      a master. ⚠ The timecode starts at the RANGE, because the trim resets
+      timestamps and 00:00:00 on a render that starts nine minutes in is a
+      wrong answer to the question it was added to answer
+- [x] **render queue** — a FILE of commands, not a daemon. One job per line:
+      the arguments of a `timeline export`. Running the queue is running those
+      commands, so a job somebody typed and a job the window queued are the
+      same object and there is no second code path that renders things. ⚠ The
+      queue is kept after a run — a job that failed is a job to look at
+- [ ] a watermark image — the burn-in draws text; an overlaid PNG is a second
+      input and a different graph
 
 ## Build order
 
@@ -297,7 +329,14 @@ Fairlight-style automation: four features for one piece of work.
 9. ~~**Retime and stabilisation**~~ — **done, 0.1.0-19.** Ramps, reverse,
    freeze, optical flow and a two-pass stabiliser — and a slow-motion export
    that had been failing outright for every clip under half speed.
-10. **Scopes and delivery** — 2–3 days.
+10. ~~**Scopes and delivery**~~ — **done, 0.1.0-23/24.** Waveform, parade and
+   vectorscope measured by this program rather than by a filter; a render
+   range, seven presets, burn-in, image sequences and a queue.
+
+**The build order is finished.** What is left in the sections above is a
+short list of named gaps rather than a plan: shot match, the named colour
+transforms, a watermark image, copy/paste, J-K-L and a source monitor, track
+automation, a curve editor over time, smooth cut, and auto-save.
 
 ## Not doing
 
