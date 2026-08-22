@@ -172,7 +172,14 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
 - [x] easing per key — linear, in, out, inout, hold. Polynomials, because the
       export has to evaluate the same shape in ffmpeg's expression language
 - [ ] a curve editor — the darkroom's curve widget, over time instead of tone
-- [ ] track automation (keyframes on a track's volume)
+- [x] **track automation** — shipped in 0.1.0-30. `timeline auto`, the same
+      shape as a clip's parameter keys and sharing their interpolation and
+      eases. ⚠ Its keys are in TIMELINE seconds, unlike a clip's, which are
+      relative to the clip — a clip can be moved and its keys have to move
+      with it, a track cannot, and its fader is ridden against what is on
+      screen. ⚠ Which means the exported expression's time variable is SHIFTED
+      by where each clip starts: without it, every clip on the track would
+      ride the automation from the top of the programme
 - [ ] keys on a title's size and colour — drawtext takes no expression for
       either, so they need the sendcmd path opacity uses
 

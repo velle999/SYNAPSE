@@ -1375,6 +1375,94 @@ int ss_timeline_at(const ss_timeline *t, int track, double time)
     return hit;
 }
 
+/* ---------------------------------------------------------- automation -- */
+
+/* A track's fader, keyed. The same shape as a clip's parameter keys — sorted,
+ * replace-at-the-same-instant, interpolated through eases the export can also
+ * evaluate — and kept separate for one reason: these keys are in TIMELINE
+ * seconds. A clip's are relative to the clip, because a clip can be moved and
+ * its keys have to move with it; a track cannot be moved, and its fader is
+ * ridden against the picture. */
+int ss_track_key_add(ss_timeline *t, int track, double at, double db, int ease)
+{
+    ss_track *tr;
+    int i, j;
+
+    if (!t || track < 0 || track >= t->ntracks) return -1;
+    tr = &t->track[track];
+    if (at < 0) at = 0;
+    if (db < -60.0) db = -60.0;
+    if (db > 24.0) db = 24.0;
+    if (ease < 0 || ease > SS_EASE_HOLD) ease = SS_EASE_LINEAR;
+
+    for (i = 0; i < tr->nauto; i++)
+        if (fabs(tr->akey[i].t - at) < 1e-9) {   /* replace, do not stack */
+            tr->akey[i].v = db;
+            tr->akey[i].ease = ease;
+            return i;
+        }
+    if (tr->nauto >= SS_MAX_PKEYS) return -1;
+    for (i = 0; i < tr->nauto && tr->akey[i].t < at; i++) ;
+    for (j = tr->nauto; j > i; j--) tr->akey[j] = tr->akey[j - 1];
+    snprintf(tr->akey[i].key, sizeof tr->akey[i].key, "gain");
+    tr->akey[i].t = at;
+    tr->akey[i].v = db;
+    tr->akey[i].ease = ease;
+    tr->nauto++;
+    return i;
+}
+
+int ss_track_key_remove(ss_timeline *t, int track, int i)
+{
+    ss_track *tr;
+    if (!t || track < 0 || track >= t->ntracks) return -1;
+    tr = &t->track[track];
+    if (i < 0 || i >= tr->nauto) return -1;
+    memmove(&tr->akey[i], &tr->akey[i + 1],
+            sizeof(ss_propkey) * (size_t)(tr->nauto - i - 1));
+    tr->nauto--;
+    return 0;
+}
+
+int ss_track_key_count(const ss_timeline *t, int track)
+{
+    if (!t || track < 0 || track >= t->ntracks) return 0;
+    return t->track[track].nauto;
+}
+
+int ss_track_key_at(const ss_timeline *t, int track, int i, ss_propkey *out)
+{
+    if (!t || track < 0 || track >= t->ntracks) return -1;
+    if (i < 0 || i >= t->track[track].nauto) return -1;
+    *out = t->track[track].akey[i];
+    return 0;
+}
+
+double ss_track_gain_at(const ss_timeline *t, int track, double time)
+{
+    const ss_track *tr;
+    const ss_propkey *a = NULL, *b = NULL;
+    int i;
+
+    if (!t || track < 0 || track >= t->ntracks) return 0.0;
+    tr = &t->track[track];
+    /* No automation at all means the static fader, which is what every track
+     * is until somebody rides one. */
+    if (tr->nauto == 0) return tr->gain_db;
+
+    for (i = 0; i < tr->nauto; i++) {
+        if (tr->akey[i].t <= time) a = &tr->akey[i];
+        else if (!b) b = &tr->akey[i];
+    }
+    /* Held before the first key and after the last, exactly as a clip's
+     * properties are: a fader that extrapolated would arrive at the programme
+     * already moving. */
+    if (!a) return b ? b->v : tr->gain_db;
+    if (!b || b->t <= a->t) return a->v;
+    return a->v + (b->v - a->v) *
+           ease_apply(a->ease, (time - a->t) / (b->t - a->t));
+}
+
 /* ------------------------------------------------------------- linking -- */
 
 static int link_max(const ss_timeline *t)
@@ -1770,6 +1858,14 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                 tr->name, tr->muted, tr->hidden);
         /* The fader, on its own optional line, so a timeline that nobody has
          * mixed reads exactly as it did before there was a mixer. */
+        /* Automation, one line per key, under the track it rides. */
+        {
+            int q;
+            for (q = 0; q < tr->nauto; q++)
+                fprintf(fp, "auto\t%.6f\t%.4f\t%s\n",
+                        tr->akey[q].t, tr->akey[q].v,
+                        ss_ease_name(tr->akey[q].ease));
+        }
         /* Ducking, on a line of its own for the same reason. */
         if (tr->duck_from >= 0)
             fprintf(fp, "duck\t%d\t%.3f\n", tr->duck_from, tr->duck);
@@ -1991,6 +2087,13 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 t->track[cur_track].hidden = hidden;
             }
             cur_clip = -1;
+        } else if (!strncmp(line, "auto\t", 5) && cur_track >= 0) {
+            char *f[3];
+            if (tabsplit(line + 5, f, 3) == 3) {
+                int e = ss_ease_value(f[2]);
+                ss_track_key_add(t, cur_track, atof(f[0]), atof(f[1]),
+                                 e < 0 ? SS_EASE_LINEAR : e);
+            }
         } else if (!strncmp(line, "duck\t", 5) && cur_track >= 0) {
             char *f[2];
             if (tabsplit(line + 5, f, 2) == 2) {
@@ -2282,13 +2385,15 @@ static void seg_expr(strbuf *b, const char *tv, const ss_propkey *a,
 }
 
 /* Returns 0 and writes nothing if the property is not keyed. */
-static int prop_expr(strbuf *b, const ss_clip *c, const char *key, const char *tv)
+/* The key list itself, as an expression. Split out of prop_expr so a TRACK's
+ * automation — which is not a clip property and never will be, because its
+ * axis is timeline seconds — generates the identical shape rather than a
+ * second implementation of the same interpolation. */
+static int keys_expr(strbuf *b, const ss_propkey *k, int n, const char *tv)
 {
-    ss_propkey k[SS_MAX_PKEYS];
-    int n = ss_clip_prop_nkeys(c, key), i;
+    int i;
 
     if (n <= 0) return 0;
-    for (i = 0; i < n; i++) ss_clip_prop_key(c, key, i, &k[i]);
     if (n == 1) { sb_add(b, "%.6f", k[0].v); return 1; }
 
     /* if(lt(t,t0), v0,                       — before the first key it HOLDS
@@ -2306,6 +2411,32 @@ static int prop_expr(strbuf *b, const ss_clip *c, const char *key, const char *t
     for (i = 0; i + 1 < n; i++) sb_add(b, ")");
     sb_add(b, ")");
     return 1;
+}
+
+static int prop_expr(strbuf *b, const ss_clip *c, const char *key, const char *tv)
+{
+    ss_propkey k[SS_MAX_PKEYS];
+    int n = ss_clip_prop_nkeys(c, key), i;
+
+    if (n <= 0) return 0;
+    for (i = 0; i < n; i++) ss_clip_prop_key(c, key, i, &k[i]);
+    return keys_expr(b, k, n, tv);
+}
+
+/* A track's fader as an expression, evaluated at TIMELINE time.
+ *
+ * ⚠ The clip's chain runs in CLIP seconds — the trim and the speed setpts are
+ * behind us by the time this is spliced in — so the variable handed to the
+ * track's keys has to be shifted by where the clip starts. A track fader
+ * generated against `t` alone would ride the automation from the top of the
+ * programme for every clip on it, which for a clip nine minutes in is the
+ * wrong nine minutes of the curve. */
+static int track_gain_expr(strbuf *b, const ss_track *tr, double tl_in)
+{
+    char tv[64];
+    if (tr->nauto <= 0) return 0;
+    snprintf(tv, sizeof tv, "(t)%+.6f", tl_in);
+    return keys_expr(b, tr->akey, tr->nauto, tv);
 }
 
 /* ffmpeg's filter argument syntax gives \ : ' and , their own meanings, so a
@@ -4100,17 +4231,26 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                  * gain is where a person sets the level, and a compressor
                  * after it would undo whatever they set. */
                 chain_clip_audio(&fc, c);
-                if (ss_clip_prop_nkeys(c, "gain") > 0) {
+                if (ss_clip_prop_nkeys(c, "gain") > 0 || tr->nauto > 0) {
                     /* A keyed fader needs no steps and no cubes: volume takes
                      * an expression, once told to evaluate it per frame rather
-                     * than once. The track's fader still ADDS in decibels, so
-                     * it is a term inside the expression and not a second
-                     * filter. asetpts first, because the expression is timed
-                     * from zero and a seeked input is not. */
+                     * than once. The clip's gain and the track's ADD in
+                     * decibels, so both are terms inside one expression and
+                     * not two filters. asetpts first, because the expression
+                     * is timed from zero and a seeked input is not. */
                     sb_add(&fc, ",asetpts=PTS-STARTPTS,volume=eval=frame:volume='"
                                 "pow(10,((");
-                    prop_expr(&fc, c, "gain", "t");
-                    sb_add(&fc, ")+%.4f)/20)'", (double)tr->gain_db);
+                    if (!prop_expr(&fc, c, "gain", "t"))
+                        sb_add(&fc, "%.4f", (double)c->gain_db);
+                    sb_add(&fc, ")+(");
+                    /* ⚠ The track's curve is in TIMELINE seconds and this
+                     * chain is in CLIP seconds, so its variable is shifted by
+                     * where the clip starts. Without the shift every clip on
+                     * the track would ride the automation from the top of the
+                     * programme. */
+                    if (!track_gain_expr(&fc, tr, c->tl_in))
+                        sb_add(&fc, "%.4f", (double)tr->gain_db);
+                    sb_add(&fc, "))/20)'");
                 } else if (g != 0.0f)
                     sb_add(&fc, ",volume=%.3fdB", g);
                 if (tr->pan != 0.0f) {

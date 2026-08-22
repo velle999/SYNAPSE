@@ -2181,6 +2181,79 @@ printf '%s\n' "$genv" | seen "the window still claims its own app_id" "QS_APP_ID
 # Skipped rather than failed where quickshell or a runtime dir is missing: a
 # build chroot has neither, and a test that only passes on a desktop is a test
 # that gets turned off.
+# --------------------------------------------------- track automation ----
+#
+# A fader ridden against the picture. ⚠ Its keys are in TIMELINE seconds,
+# unlike a clip's, which are relative to the clip: a clip can be moved and its
+# keys have to move with it, a track cannot, and its fader is set against what
+# is on screen.
+
+ap2=$TMP/auto.sstl
+$BIN timeline new "$ap2" --size 320x180 --fps 25 >/dev/null
+$BIN timeline track "$ap2" audio MUSIC >/dev/null
+
+check "a track starts with no automation" "0" \
+      "$($BIN timeline auto "$ap2" 0 list | awk -F'\t' '/^keys/{print $2}')"
+$BIN timeline auto "$ap2" 0 add --at 0 --value 0   >/dev/null
+$BIN timeline auto "$ap2" 0 add --at 2 --value -12 >/dev/null
+$BIN timeline auto "$ap2" 0 add --at 4 --value 0   >/dev/null
+check "three keys go on" "3" \
+      "$($BIN timeline auto "$ap2" 0 list | awk -F'\t' '/^keys/{print $2}')"
+# Adding at an instant that already has one REPLACES it rather than stacking a
+# second key at the same time, the way a clip's keys do.
+$BIN timeline auto "$ap2" 0 add --at 2 --value -6 >/dev/null
+check "and a key at the same instant replaces it" "3" \
+      "$($BIN timeline auto "$ap2" 0 list | awk -F'\t' '/^keys/{print $2}')"
+$BIN timeline auto "$ap2" 0 add --at 2 --value -12 >/dev/null
+
+# The engine's own answer, which is what the mixer reads.
+check "it interpolates between them" "-6.0000" \
+      "$($BIN timeline auto "$ap2" 0 at --at 1 | awk -F'\t' '{print $2}')"
+# ⚠ HELD past the last key, not extrapolated: a fader that extrapolated would
+# arrive at the programme already moving.
+check "and holds past the last key" "0.0000" \
+      "$($BIN timeline auto "$ap2" 0 at --at 99 | awk -F'\t' '{print $2}')"
+
+check "the automation is in the document" "3" "$(grep -c '^auto	' "$ap2")"
+$BIN timeline auto "$ap2" 0 remove 1 >/dev/null
+check "a key can be removed" "2" \
+      "$($BIN timeline auto "$ap2" 0 list | awk -F'\t' '/^keys/{print $2}')"
+$BIN timeline auto "$ap2" 0 clear >/dev/null
+check "and the lot cleared" "0" \
+      "$($BIN timeline auto "$ap2" 0 list | awk -F'\t' '/^keys/{print $2}')"
+
+if have ffmpeg; then
+    # ⚠ THE ONE THAT MATTERS: the track's curve is in TIMELINE seconds and a
+    # clip's chain runs in CLIP seconds, so the expression's variable is
+    # shifted by where the clip starts. Without the shift every clip on the
+    # track rides the automation from the top of the programme — which for a
+    # clip four seconds in is four seconds of the wrong curve.
+    #
+    # Built so the two answers are far apart: the fader is 0 dB at the top and
+    # -24 dB from four seconds on, and the clip does not start until four.
+    shp=$TMP/shift.sstl
+    ffmpeg -v error -y -f lavfi -i "sine=f=200:d=8" -c:a aac "$TMP/bed.m4a" 2>/dev/null
+    $BIN timeline new "$shp" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$shp" audio A >/dev/null
+    $BIN timeline clip "$shp" 0 "$TMP/bed.m4a" --at 4 --dur 2 >/dev/null
+    $BIN timeline auto "$shp" 0 add --at 0 --value 0   >/dev/null
+    $BIN timeline auto "$shp" 0 add --at 4 --value -24 >/dev/null
+    $BIN timeline auto "$shp" 0 add --at 6 --value -24 >/dev/null
+    $BIN timeline export "$shp" --out "$TMP/shift.m4a" --print \
+        | seen "the expression is shifted by the clip's start" "(t)+4.000000"
+
+    $BIN timeline export "$shp" --out "$TMP/shift.m4a" >/dev/null 2>&1
+    at2() { ffmpeg -v info -ss "$2" -t 1 -i "$1" -af volumedetect -f null - 2>&1 \
+            | awk -F': ' '/mean_volume/{print $2+0}'; }
+    # Reference: the same bed with no automation at all.
+    $BIN timeline auto "$shp" 0 clear >/dev/null
+    $BIN timeline export "$shp" --out "$TMP/flat.m4a" >/dev/null 2>&1
+    flat=$(at2 "$TMP/flat.m4a" 4.5)
+    rode=$(at2 "$TMP/shift.m4a" 4.5)
+    check "and the render is 24 dB down where the fader is" "yes" \
+          "$(awk -v f="$flat" -v r="$rode" 'BEGIN{d=f-r; print (d>20 && d<28)?"yes":"no"}')"
+fi
+
 # --------------------------------------------- linked audio and video ----
 #
 # Routing separated the picture from the sound — a video clip's dialogue plays

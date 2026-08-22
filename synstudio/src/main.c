@@ -85,6 +85,9 @@ static void usage(void)
 "       [--duck N|off] [--duck-amount 0-100]   this track gets out of the\n"
 "       way of track N — a music bed under dialogue\n"
 "  timeline master PROJ [--gain dB]              one fader after the mix\n"
+"  timeline auto PROJ T add --at S --value dB [--ease E]   ride the fader\n"
+"  timeline auto PROJ T list|at --at S|remove N|clear\n"
+"       ⚠ these keys are in TIMELINE seconds, not clip seconds\n"
 "  timeline loudness PROJ [--value LUFS] [--off]  what a DELIVERY is\n"
 "       normalised to: -23 is broadcast, -14 is what streaming does anyway\n"
 "  timeline normalise PROJ T C [--target LUFS]   measure, then set the gain\n"
@@ -1683,6 +1686,68 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("%d\n", cl);
         return 0;
+    }
+
+    /* Track automation — a fader ridden against the picture.
+     *
+     * ⚠ Its keys are in TIMELINE seconds, unlike a clip's, which are relative
+     * to the clip. A clip can be moved and its keys have to move with it; a
+     * track cannot, and its fader is set against what is on screen. The verb
+     * says so rather than leaving somebody to find out. */
+    if (!strcmp(verb, "auto")) {
+        const char *act = argc > 5 ? argv[5] : "list";
+        ss_propkey k;
+        int n, i;
+
+        if (argc < 5) return die("auto wants PROJ TRACK add|list|remove|clear");
+        if (tl_pick(t, argv[4], NULL, &tr, NULL) != 0) return 1;
+
+        if (!strcmp(act, "add")) {
+            int e = SS_EASE_LINEAR;
+            if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            if (!o.has_value) return die("auto add wants --value dB");
+            if (o.ease) {
+                e = ss_ease_value(o.ease);
+                if (e < 0) return die("ease is linear, in, out, inout or hold");
+            }
+            if (ss_track_key_add(t, tr, o.at, o.value, e) < 0)
+                return die("cannot add the key (a track holds %d)", SS_MAX_PKEYS);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("keys\t%d\n", ss_track_key_count(t, tr));
+            return 0;
+        }
+        if (!strcmp(act, "remove")) {
+            if (argc < 7) return die("auto remove wants an index");
+            if (ss_track_key_remove(t, tr, atoi(argv[6])) != 0)
+                return die("no key %s", argv[6]);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("keys\t%d\n", ss_track_key_count(t, tr));
+            return 0;
+        }
+        if (!strcmp(act, "clear")) {
+            while (ss_track_key_count(t, tr) > 0)
+                ss_track_key_remove(t, tr, 0);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("keys\t0\n");
+            return 0;
+        }
+        if (!strcmp(act, "at")) {
+            if (parse_opts(argc, argv, 6, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            printf("gain\t%.4f\n", ss_track_gain_at(t, tr, o.at));
+            return 0;
+        }
+        if (!strcmp(act, "list")) {
+            n = ss_track_key_count(t, tr);
+            printf("keys\t%d\n", n);
+            for (i = 0; i < n; i++)
+                if (ss_track_key_at(t, tr, i, &k) == 0)
+                    printf("key\t%d\t%.6f\t%.4f\t%s\n",
+                           i, k.t, k.v, ss_ease_name(k.ease));
+            return 0;
+        }
+        return die("auto takes add, list, at, remove or clear, not %s", act);
     }
 
     /* Linked audio and video.

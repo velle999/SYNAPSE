@@ -947,6 +947,19 @@ typedef struct {
     int    duck_from;
     float  duck;                /* how far down, 0..100 */
 
+    /* ---- automation ----
+     *
+     * Keys on the track's fader, in TIMELINE seconds — not clip seconds, the
+     * way a clip's own keys are. A track spans the whole programme and its
+     * fader is ridden against the picture, so its axis is the picture's. That
+     * difference is the entire reason this is a separate list rather than a
+     * clip property applied to a track.
+     *
+     * Decibels, like every other gain here, so a keyed fader and a static one
+     * are the same number and add the same way. */
+    int    nauto;
+    ss_propkey akey[SS_MAX_PKEYS];
+
     int    nclips, cap;
     ss_clip *clip;
 } ss_track;
@@ -1166,6 +1179,18 @@ int ss_timeline_link(ss_timeline *t, const int *track, const int *clip, int n);
 int ss_timeline_unlink(ss_timeline *t, int track, int clip);
 /* How many clips share this one's group, itself included. 1 = not linked. */
 int ss_timeline_linked(const ss_timeline *t, int track, int clip);
+
+/* ---- track automation ----
+ *
+ * `ss_track_gain_at` is the ONE place a keyed fader becomes a number, the way
+ * ss_clip_prop_at is for a clip. The mixer reads it and the export generates
+ * its expression from the same key list, so a meter and a render cannot
+ * disagree about where the fader was. */
+int ss_track_key_add(ss_timeline *t, int track, double at, double db, int ease);
+int ss_track_key_remove(ss_timeline *t, int track, int i);
+int ss_track_key_count(const ss_timeline *t, int track);
+int ss_track_key_at(const ss_timeline *t, int track, int i, ss_propkey *out);
+double ss_track_gain_at(const ss_timeline *t, int track, double time);
 /* Drag an edge. `which` <0 for the head, >0 for the tail. Trimming the head
  * moves the source in point AND the timeline position together, which is what
  * makes the frame under the cursor stay put — a head trim that only moved one

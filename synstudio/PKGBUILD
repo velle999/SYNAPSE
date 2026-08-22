@@ -937,7 +937,30 @@ pkgver=0.1.0
 #   them move.
 #
 #   564 assertions, clean under ASan+UBSan+LSan.
-pkgrel=29
+#
+# 30 TRACK AUTOMATION — a fader ridden against the picture.
+#
+#   The same shape as a clip's parameter keys, sharing their interpolation and
+#   their eases: the expression generator was split so a track's curve and a
+#   clip's produce the identical form rather than two implementations of one
+#   interpolation.
+#
+#   ⚠ ITS KEYS ARE IN TIMELINE SECONDS. A clip's are relative to the clip,
+#   because a clip can be MOVED and its keys have to move with it; a track
+#   cannot be moved, and its fader is set against what is on screen. That
+#   difference is the whole reason this is a separate list and not a clip
+#   property applied to a track.
+#
+#   ⚠ AND SO THE EXPORTED EXPRESSION'S TIME VARIABLE IS SHIFTED by where each
+#   clip starts — the chain it is spliced into runs in CLIP seconds, the trim
+#   and the speed setpts being behind it. Without the shift every clip on the
+#   track rides the automation from the top of the programme, which for a clip
+#   four seconds in is four seconds of the wrong curve. Measured: a bed under
+#   a fader at -24 dB from four seconds on renders 24 dB down where it plays,
+#   against the same bed with no automation.
+#
+#   574 assertions, clean under ASan+UBSan+LSan.
+pkgrel=30
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
