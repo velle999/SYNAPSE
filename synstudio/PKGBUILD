@@ -237,7 +237,37 @@ pkgver=0.1.0
 #   track fader and the master applied exactly as the graph applies them.
 #
 #   212 assertions.
-pkgrel=10
+# 11: voiceover.
+#
+#   `devices` asks ffmpeg what can capture and marks the monitors — a monitor
+#   records what the machine is PLAYING, which is a real thing to want and
+#   never what somebody asking for a voiceover meant. `record` takes it, with a
+#   live meter, and stops on a signal: SIGINT or SIGTERM finishes the file
+#   rather than killing the process, so the window's Stop button leaves a WAV
+#   with its real length in the header.
+#
+#   In the window: a countdown, the timeline rolling under the take, and
+#   monitoring muted for the duration unless somebody says they are on
+#   headphones — then put back exactly as it was, including after a failed
+#   take. The take lands beside the project, stamped, and punches in where the
+#   playhead was when it STARTED rather than where playback has since moved it.
+#
+#   ⚠ `ametadata=print` writes through avio's 4KB buffer. Without `direct=1` a
+#   take under about eight seconds delivered NOTHING until ffmpeg exited and
+#   then everything at once — on screen indistinguishable from a microphone
+#   that was never live. The test asserts the FIRST level line arrives seconds
+#   before the last one, which is the only way to tell those two apart.
+#
+#   The recorder also sets PR_SET_PDEATHSIG. A killed parent used to leave
+#   ffmpeg holding the microphone open for the rest of the session; that was
+#   found as an hour-old orphan from a test.
+#
+#   No microphone is needed to test any of it: `--format lavfi` records a
+#   generated signal through the same path, and `-re` is what makes a generated
+#   source stand in for a device rather than producing an hour in six seconds.
+#
+#   225 assertions.
+pkgrel=11
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

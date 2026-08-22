@@ -19,6 +19,7 @@
 #include <limits.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -853,6 +854,236 @@ int ss_media_loudness(const char *path, double in, double out, ss_loudness *l)
     if (l->lufs < -100.0) l->lufs = -100.0;
     if (l->peak_db < -100.0) l->peak_db = -100.0;
     return 0;
+}
+
+/* -------------------------------------------------------------- record -- */
+
+/* What can capture, from ffmpeg's own enumeration rather than from pactl —
+ * the same reason nothing here links a library: the program that will do the
+ * recording is the program that should say what it can record from.
+ *
+ *     Auto-detected sources for pulse:
+ *       alsa_output.pci-….monitor [Monitor of Analog Stereo] (none)
+ *     * alsa_input.pci-….analog-stereo [Analog Stereo] (none)
+ *
+ * The leading `*` is the default. A `.monitor` is the loopback of an output:
+ * it records what the machine is PLAYING, which is a real thing to want and
+ * never what somebody asking for a voiceover meant, so it is marked rather
+ * than hidden.
+ */
+int ss_devices(ss_device **out)
+{
+    char *argv[] = { "ffmpeg", "-hide_banner", "-sources", "pulse", NULL };
+    char *txt;
+    const char *p;
+    ss_device *d = NULL;
+    int n = 0, cap = 0;
+
+    if (!out) return -1;
+    *out = NULL;
+
+    txt = run_text_fd(argv, 1);
+    if (!txt) return -1;
+
+    for (p = txt; *p; ) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        char line[512], *br, *id;
+        int def = 0;
+
+        if (len >= sizeof line) len = sizeof line - 1;
+        memcpy(line, p, len);
+        line[len] = '\0';
+        if (nl) p = nl + 1; else p += len;
+
+        id = line;
+        while (*id == ' ' || *id == '\t') id++;
+        if (*id == '*') { def = 1; id++; while (*id == ' ') id++; }
+        /* Anything without a [name] is the banner or a blank. */
+        br = strchr(id, '[');
+        if (!br || br == id) continue;
+
+        if (n == cap) {
+            ss_device *nd = realloc(d, sizeof *nd * (cap ? cap * 2 : 8));
+            if (!nd) { free(d); free(txt); return -1; }
+            d = nd; cap = cap ? cap * 2 : 8;
+        }
+        memset(&d[n], 0, sizeof d[n]);
+        {
+            size_t idlen = (size_t)(br - id);
+            char *close;
+            while (idlen && (id[idlen - 1] == ' ' || id[idlen - 1] == '\t')) idlen--;
+            if (idlen >= sizeof d[n].id) idlen = sizeof d[n].id - 1;
+            memcpy(d[n].id, id, idlen);
+            d[n].id[idlen] = '\0';
+
+            close = strchr(br + 1, ']');
+            if (close) {
+                size_t nl2 = (size_t)(close - br - 1);
+                if (nl2 >= sizeof d[n].name) nl2 = sizeof d[n].name - 1;
+                memcpy(d[n].name, br + 1, nl2);
+                d[n].name[nl2] = '\0';
+            }
+        }
+        d[n].monitor = strstr(d[n].id, ".monitor") != NULL;
+        d[n].is_default = def;
+        n++;
+    }
+
+    free(txt);
+    *out = d;
+    return n;
+}
+
+/* The child, so a signal handler can reach it. One recording at a time is not
+ * a limitation worth a structure: a second microphone in the same window is
+ * not a thing this program does. */
+static volatile sig_atomic_t rec_child = -1;
+static volatile sig_atomic_t rec_stop;
+
+static void rec_signal(int sig)
+{
+    rec_stop = 1;
+    /* SIGINT rather than the signal we got: ffmpeg finalises the file on it,
+     * and a WAV whose header never got its real length is a take that plays
+     * back as three seconds of an eleven minute read. */
+    if (rec_child > 0) kill((pid_t)rec_child, SIGINT);
+    (void)sig;
+}
+
+int ss_record(const char *path, const char *fmt, const char *device,
+              double seconds, int channels,
+              void (*on_level)(double t, double db, void *user), void *user)
+{
+    char lim[32], ch[16], af[256];
+    char *argv[24];
+    int fd[2], status, n = 0, rc = -1;
+    pid_t pid;
+    struct sigaction sa, old_int, old_term;
+    char buf[4096];
+    size_t have = 0;
+    double last_emit = -1.0, t = 0.0, db = -120.0;
+
+    if (!path || !*path) return -1;
+    if (channels < 1) channels = 1;
+    if (channels > 2) channels = 2;
+
+    snprintf(lim, sizeof lim, "%.3f", seconds > 0 ? seconds : 3600.0);
+    snprintf(ch, sizeof ch, "%d", channels);
+    /* reset=5 is about a tenth of a second of audio frames, which is the rate
+     * a meter has to move at to look like a meter.
+     *
+     * ⚠ `direct=1` is the whole difference between a meter and a receipt.
+     * Without it `ametadata=print` writes through avio's 4KB buffer, so a
+     * take under about eight seconds delivers NOTHING until ffmpeg exits and
+     * then everything at once — which looks exactly like a microphone that
+     * was not live, right up until the moment it is too late to matter. */
+    snprintf(af, sizeof af,
+             "astats=metadata=1:reset=5,"
+             "ametadata=print:key=lavfi.astats.Overall.Peak_level:file=-:direct=1");
+
+    argv[n++] = "ffmpeg";
+    argv[n++] = "-hide_banner";
+    argv[n++] = "-v"; argv[n++] = "error";
+    /* A generated source has no clock and will produce an hour of audio in a
+     * few seconds, which is not recording — it is rendering. `-re` gives it
+     * the one property that makes it stand in for a microphone: it happens at
+     * the speed the room does. A real device paces itself and must not get
+     * this, or every take drifts. */
+    if (fmt && !strcmp(fmt, "lavfi")) argv[n++] = "-re";
+    argv[n++] = "-f"; argv[n++] = (char *)(fmt && *fmt ? fmt : "pulse");
+    argv[n++] = "-i"; argv[n++] = (char *)(device && *device ? device : "default");
+    argv[n++] = "-ac"; argv[n++] = ch;
+    argv[n++] = "-ar"; argv[n++] = "48000";
+    argv[n++] = "-t"; argv[n++] = lim;
+    argv[n++] = "-af"; argv[n++] = af;
+    argv[n++] = "-y"; argv[n++] = (char *)path;
+    argv[n] = NULL;
+
+    if (pipe(fd) != 0) return -1;
+    pid = fork();
+    if (pid < 0) { close(fd[0]); close(fd[1]); return -1; }
+
+    if (pid == 0) {
+        int null = open("/dev/null", O_RDWR);
+        /* If this process dies without running its handler — SIGKILL, a
+         * crash, a terminal closing on it — nothing else would ever tell
+         * ffmpeg to stop, and it would sit there holding the microphone open
+         * for the rest of the session. Found exactly that way: an orphan from
+         * a killed test was still recording an hour later.
+         *
+         * SIGINT rather than SIGTERM, because it is the one ffmpeg treats as
+         * "finish the file". */
+        prctl(PR_SET_PDEATHSIG, SIGINT);
+        /* The parent may already be gone by the time we get here, in which
+         * case the disposition above will never fire. */
+        if (getppid() == 1) _exit(0);
+        close(fd[0]);
+        if (null >= 0) { dup2(null, STDIN_FILENO); close(null); }
+        dup2(fd[1], STDOUT_FILENO);
+        dup2(fd[1], STDERR_FILENO);
+        close(fd[1]);
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+
+    close(fd[1]);
+    rec_child = (sig_atomic_t)pid;
+    rec_stop = 0;
+
+    /* Stopping is the ORDINARY end of a take, not a failure, so the signal is
+     * caught rather than left to kill this process — which would leave ffmpeg
+     * orphaned and still holding the microphone. */
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = rec_signal;
+    sigaction(SIGINT, &sa, &old_int);
+    sigaction(SIGTERM, &sa, &old_term);
+
+    for (;;) {
+        ssize_t got = read(fd[0], buf + have, sizeof buf - have - 1);
+        char *line, *nl;
+
+        if (got < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (got == 0) break;
+        have += (size_t)got;
+        buf[have] = '\0';
+
+        line = buf;
+        while ((nl = strchr(line, '\n'))) {
+            *nl = '\0';
+            if (!strncmp(line, "frame:", 6)) {
+                const char *pt = strstr(line, "pts_time:");
+                if (pt) t = atof(pt + 9);
+            } else if (!strncmp(line, "lavfi.astats.Overall.Peak_level=", 32)) {
+                db = atof(line + 32);
+                /* ffmpeg offers one of these per audio frame — forty-odd a
+                 * second, all saying the same thing. */
+                if (last_emit < 0 || t - last_emit >= 0.1) {
+                    last_emit = t;
+                    if (on_level) on_level(t, db, user);
+                }
+            }
+            line = nl + 1;
+        }
+        have = strlen(line);
+        memmove(buf, line, have + 1);
+    }
+
+    close(fd[0]);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) ;
+    rec_child = -1;
+    sigaction(SIGINT, &old_int, NULL);
+    sigaction(SIGTERM, &old_term, NULL);
+
+    /* Interrupted on purpose is a finished take. ffmpeg exits 255 when it is
+     * asked to stop, and calling that a failure would throw the recording
+     * away at exactly the moment somebody finished speaking. */
+    if (rec_stop) rc = 0;
+    else if (WIFEXITED(status) && WEXITSTATUS(status) == 0) rc = 0;
+    return rc;
 }
 
 /* ------------------------------------------------------------ formats -- */

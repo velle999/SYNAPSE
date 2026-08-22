@@ -104,6 +104,9 @@ static void usage(void)
 "  --quality 1-100 jpeg quality        --bits 8|16   output depth\n"
 "  --set K=V       an override applied on top of the sidecar, not saved\n"
 "\n"
+"  devices         what can capture, for a voiceover\n"
+"  record --out F [--device D] [--limit S] [--channels 1|2]\n"
+"                  a take, with a live meter; stops on a signal\n"
 "  loudness FILE [--in A] [--length S]\n"
 "                  integrated LUFS, true peak and range, from ebur128\n"
 "  formats         what a developed photograph can be written as\n"
@@ -1250,6 +1253,15 @@ static int cmd_kind(const char *path)
     }
 }
 
+/* Line-buffered on purpose: the window reads these while the take is running,
+ * and a meter that arrives in one lump at the end is not a meter. */
+static void rec_print(double t, double db, void *user)
+{
+    (void)user;
+    printf("level\t%.2f\t%.1f\n", t, db);
+    fflush(stdout);
+}
+
 static int cmd_browse(int argc, char **argv)
 {
     static const char *names[] = { "up", "dir", "image", "video", "audio",
@@ -1338,6 +1350,54 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!strcmp(cmd, "keys"))     return cmd_keys();
+    if (!strcmp(cmd, "devices")) {
+        ss_device *d = NULL;
+        int n = ss_devices(&d), i;
+        if (n < 0) return die("cannot ask what can capture");
+        for (i = 0; i < n; i++)
+            printf("%s\t%s\t%s\t%d\n",
+                   d[i].monitor ? "monitor" : "input",
+                   d[i].name[0] ? d[i].name : d[i].id, d[i].id, d[i].is_default);
+        free(d);
+        return 0;
+    }
+
+    /* A take, and a meter while it is taken.
+     *
+     * Prints `level <elapsed> <dB>` as it goes, because the question a
+     * voiceover has to answer before anybody says a word is whether the
+     * microphone is live — and finding out afterwards costs the take.
+     *
+     * Stopping is an ORDINARY end: SIGINT or SIGTERM finishes the file rather
+     * than killing this, so the window's Stop button and Ctrl-C both leave a
+     * WAV with its real length in the header. */
+    if (!strcmp(cmd, "record")) {
+        const char *fmt = "pulse", *device = "default";
+        double limit = 600.0;
+        int channels = 1, i;
+        const char *out = NULL;
+
+        for (i = 2; i < argc; i++) {
+            if (!strcmp(argv[i], "--out") && i + 1 < argc) out = argv[++i];
+            else if (!strcmp(argv[i], "--device") && i + 1 < argc) device = argv[++i];
+            else if (!strcmp(argv[i], "--format") && i + 1 < argc) fmt = argv[++i];
+            else if (!strcmp(argv[i], "--limit") && i + 1 < argc) limit = atof(argv[++i]);
+            else if (!strcmp(argv[i], "--channels") && i + 1 < argc) channels = atoi(argv[++i]);
+            else return die("record: unknown option %s", argv[i]);
+        }
+        if (!out) return die("record needs --out");
+        /* A forgotten session fills the disk, so there is always a limit and
+         * it is an hour whether anybody asked for one or not. */
+        if (limit <= 0 || limit > 3600) limit = 3600;
+
+        if (ss_record(out, fmt, device, limit, channels, rec_print, NULL) != 0)
+            return die("cannot record from %s", device);
+
+        printf("out\t%s\n", out);
+        printf("length\t%.3f\n", ss_media_duration(out));
+        return 0;
+    }
+
     if (!strcmp(cmd, "loudness")) {
         ss_loudness l;
         double in = 0, out = 0;

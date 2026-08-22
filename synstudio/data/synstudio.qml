@@ -1119,7 +1119,11 @@ FloatingWindow {
     // timeline, which rebuilds `tl.tracks`, which rebuilds the Repeater the
     // strips are delegates of — destroying the MouseArea holding the drag on
     // its first move. See the develop panel.
-    property bool mixerOpen: false
+    // The panel on the right shows ONE of these at a time. A boolean per panel
+    // would let two of them be open at once, which on a column this narrow
+    // means one of them silently wins.
+    property string panelMode: "clip"    // clip | mixer | voiceover
+    readonly property bool mixerOpen: root.panelMode === "mixer"
     property var  mixLive: ({})          // "<track>.<key>" while a hand is on it
 
     function mixOf(i, key) {
@@ -1157,6 +1161,162 @@ FloatingWindow {
     Process {
         id: masterProc
         onExited: root.reloadTimeline()
+    }
+
+    // ── Voiceover ───────────────────────────────────────────────────────────
+    //
+    // Resolve arms a track and punches in at the playhead; so does this. What
+    // makes it work or not work is none of the recording:
+    //
+    //   · MONITORING FEEDS BACK. The timeline plays while you talk, and on
+    //     speakers that goes straight back into the microphone. Playback is
+    //     muted for the take unless somebody says they are on headphones, and
+    //     whatever the monitor was set to is put back afterwards.
+    //   · A COUNTDOWN, because a punch-in with no lead is a take that starts
+    //     mid-word.
+    //   · A LIMIT, because a forgotten session fills the disk. The engine caps
+    //     it at an hour whether anybody asks or not.
+    //   · The take lands BESIDE THE PROJECT, not in a scratch directory. A
+    //     voiceover is footage; it has to survive a reboot.
+    readonly property bool voOpen: root.panelMode === "voiceover"
+    property var    voDevices: []
+    property int    voDevice: 0
+    property bool   voRecording: false
+    property int    voCount: 0           // counting in; 0 = not counting
+    property real   voElapsed: 0
+    property real   voLevel: -120        // dB, live off the take
+    property real   voStartAt: 0         // where on the timeline it goes
+    property string voTake: ""
+    property bool   voPlayWhile: true
+    property bool   voHeadphones: false  // monitor through while recording
+    property bool   voMonWas: false
+
+    function loadDevices() {
+        devProc.command = [root.bin, "devices"]
+        devProc.running = true
+    }
+
+    Process {
+        id: devProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    if (!lines[i]) continue
+                    const f = lines[i].split("\t")
+                    if (f.length < 4) continue
+                    out.push({ kind: f[0], name: f[1], id: f[2],
+                               isDefault: f[3] === "1" })
+                }
+                root.voDevices = out
+                // A real input, not a monitor, and the system's own default
+                // ahead of the first one that happens to be listed.
+                let pick = -1
+                for (let i = 0; i < out.length; i++)
+                    if (out[i].kind === "input" && out[i].isDefault) { pick = i; break }
+                if (pick < 0)
+                    for (let i = 0; i < out.length; i++)
+                        if (out[i].kind === "input") { pick = i; break }
+                root.voDevice = pick < 0 ? 0 : pick
+            }
+        }
+    }
+
+    function voTakePath() {
+        // Beside the project, named for it and stamped, so two takes never
+        // land on the same name and a take from last week is still findable.
+        const dir = root.proj.replace(/\/[^\/]*$/, "")
+        const base = root.proj.replace(/^.*\//, "").replace(/\.[^.]*$/, "")
+        const t = Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss")
+        return dir + "/" + base + "-vo-" + t + ".wav"
+    }
+
+    function startVoiceover() {
+        if (root.voRecording || root.voCount > 0) return
+        if (!root.proj) { root.say("start a project first"); return }
+        if (root.voDevices.length === 0) { root.say("nothing to record from"); return }
+        root.voCount = 3
+        voCountTimer.restart()
+    }
+
+    Timer {
+        id: voCountTimer
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            root.voCount--
+            if (root.voCount <= 0) { voCountTimer.stop(); root.beginTake() }
+        }
+    }
+
+    function beginTake() {
+        const d = root.voDevices[root.voDevice]
+        if (!d) return
+        root.voStartAt = root.playhead
+        root.voTake = root.voTakePath()
+        root.voElapsed = 0
+        root.voLevel = -120
+        root.voRecording = true
+
+        // The monitor is put back exactly as it was, whatever happens to the
+        // take — including a failed one.
+        root.voMonWas = root.monMuted
+        if (!root.voHeadphones) root.monMuted = true
+        if (root.voPlayWhile && root.playbackReady && root.tlDur > 0
+            && !root.playing) root.togglePlay()
+
+        recProc.command = [root.bin, "record", "--out", root.voTake,
+                           "--device", d.id, "--limit", "3600", "--channels", "1"]
+        recProc.running = true
+        root.say("recording…")
+    }
+
+    function stopVoiceover() {
+        if (!root.voRecording) { voCountTimer.stop(); root.voCount = 0; return }
+        // SIGTERM, which the engine catches and turns into a finished file.
+        recProc.running = false
+    }
+
+    Process {
+        id: recProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function (line) {
+                const f = line.split("\t")
+                if (f[0] === "level") {
+                    root.voElapsed = parseFloat(f[1]) || 0
+                    root.voLevel = parseFloat(f[2]) || -120
+                } else if (f[0] === "length") {
+                    root.voElapsed = parseFloat(f[1]) || root.voElapsed
+                }
+            }
+        }
+        stderr: SplitParser {
+            splitMarker: "\n"
+            onRead: function (line) { if (line.trim()) recProc.err = line.trim() }
+        }
+        property string err: ""
+
+        onExited: function (code, status) {
+            root.voRecording = false
+            root.monMuted = root.voMonWas
+            if (root.playing) root.pausePlayback()
+
+            if (code !== 0 || root.voElapsed < 0.1) {
+                root.say(recProc.err || "the take came back empty")
+                recProc.err = ""
+                return
+            }
+            recProc.err = ""
+            // Punched in where it started, not where the playhead ended up:
+            // playback ran for the length of the take and moved it.
+            root.addMediaAt(root.voTake, "audio", root.voStartAt)
+            root.say("take of " + root.voElapsed.toFixed(1) + "s at "
+                     + root.timecode(root.voStartAt))
+            root.playhead = root.voStartAt
+            root.requestFrame()
+        }
     }
 
     // ── What the meters show ────────────────────────────────────────────────
@@ -1270,11 +1430,17 @@ FloatingWindow {
     }
 
     function addMedia(path, kind) {
+        root.addMediaAt(path, kind, root.playhead)
+    }
+
+    // The position is a parameter because a voiceover lands where the take
+    // STARTED, and the playhead has been running for the length of it.
+    function addMediaAt(path, kind, at) {
         const t = root.trackFor(kind)
         if (t >= 0) {
             root.selTrack = t
             root.tlRun(["clip", root.proj, String(t), path,
-                        "--at", String(root.playhead)])
+                        "--at", String(at)])
             return
         }
         // No track of that type yet — an audio-only project, or one whose
@@ -1285,6 +1451,7 @@ FloatingWindow {
         for (let i = 0; i < root.tl.tracks.length; i++)
             if (root.tl.tracks[i].type === want) n++
         addTrackProc.pendingPath = path
+        addTrackProc.pendingAt = at
         addTrackProc.command = [root.bin, "timeline", "track", root.proj, want,
                                 (want === "audio" ? "A" : "V") + String(n + 1)]
         addTrackProc.running = true
@@ -1293,6 +1460,7 @@ FloatingWindow {
     Process {
         id: addTrackProc
         property string pendingPath: ""
+        property real pendingAt: 0
         property int newTrack: -1
         // `timeline track` prints the index it made, which is the only way to
         // know where the clip has to go without reloading the document first.
@@ -1310,7 +1478,7 @@ FloatingWindow {
             }
             root.selTrack = t
             root.tlRun(["clip", root.proj, String(t), path,
-                        "--at", String(root.playhead)])
+                        "--at", String(addTrackProc.pendingAt)])
         }
     }
 
@@ -1814,7 +1982,16 @@ FloatingWindow {
                     Btn { visible: root.mode === "video"; label: "Mixer"
                           on: root.mixerOpen
                           active: root.proj !== ""
-                          onClicked: root.mixerOpen = !root.mixerOpen }
+                          onClicked: root.panelMode =
+                              root.mixerOpen ? "clip" : "mixer" }
+                    Btn { visible: root.mode === "video"; label: "Voiceover"
+                          on: root.voOpen
+                          active: root.proj !== ""
+                          onClicked: {
+                              root.panelMode = root.voOpen ? "clip" : "voiceover"
+                              if (root.voOpen && root.voDevices.length === 0)
+                                  root.loadDevices()
+                          } }
                     Btn { visible: root.mode === "video"
                           label: root.normalising ? "…" : "Normalise"
                           active: root.selClip >= 0 && !root.normalising
@@ -2760,9 +2937,173 @@ FloatingWindow {
                         }
                     }
 
+                    // ── Voiceover ───────────────────────────────────────
+                    Item {
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        visible: root.voOpen
+
+                        Column {
+                            anchors.fill: parent
+                            spacing: 10
+
+                            Text {
+                                text: "Voiceover"
+                                color: root.cText
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: "Records from the playhead onto an audio "
+                                      + "track, into a file beside the project."
+                                color: root.cDim
+                                font.pixelSize: 10
+                                wrapMode: Text.WordWrap
+                            }
+
+                            // What to record from. Monitors are listed but
+                            // named as what they are: they capture what the
+                            // machine is PLAYING, which is never what somebody
+                            // asking for a voiceover meant.
+                            Text {
+                                text: "From"
+                                color: root.cDim
+                                font.pixelSize: 10
+                            }
+
+                            Column {
+                                width: parent.width
+                                spacing: 2
+
+                                Repeater {
+                                    model: root.voDevices
+
+                                    Rectangle {
+                                        id: devRow
+                                        required property var modelData
+                                        required property int index
+                                        width: parent.width
+                                        height: 26
+                                        radius: 3
+                                        color: root.voDevice === devRow.index
+                                               ? root.wash(0.24)
+                                               : devMa.containsMouse ? root.wash(0.12)
+                                                                     : "transparent"
+                                        border.width: root.voDevice === devRow.index ? 1 : 0
+                                        border.color: root.cAccent
+
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 8
+                                            text: (devRow.modelData.kind === "monitor"
+                                                   ? "↻ " : "") + devRow.modelData.name
+                                            color: devRow.modelData.kind === "monitor"
+                                                   ? root.cDim : root.cText
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                        }
+                                        MouseArea {
+                                            id: devMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !root.voRecording
+                                            onClicked: root.voDevice = devRow.index
+                                        }
+                                    }
+                                }
+                            }
+
+                            Row {
+                                spacing: 6
+                                Tag { label: "play"; on: root.voPlayWhile
+                                      onClicked: root.voPlayWhile = !root.voPlayWhile }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "roll the timeline"
+                                    color: root.cDim
+                                    font.pixelSize: 10
+                                }
+                            }
+                            Row {
+                                spacing: 6
+                                // Lettered, like every other stud in this
+                                // window. An emoji here renders as a box in
+                                // the fixed UI font on a fresh install, and
+                                // the sentence beside it is doing the work
+                                // anyway.
+                                Tag { label: "mon"; on: root.voHeadphones
+                                      onClicked: root.voHeadphones = !root.voHeadphones }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 150
+                                    text: root.voHeadphones
+                                          ? "monitoring on — headphones"
+                                          : "monitoring muted — speakers"
+                                    color: root.cDim
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+
+                            // The meter. This is the question a voiceover has
+                            // to answer before anybody speaks: is it live.
+                            Rectangle {
+                                width: parent.width
+                                height: 10
+                                radius: 3
+                                color: root.wash(0.14)
+
+                                Rectangle {
+                                    height: parent.height
+                                    radius: 3
+                                    width: parent.width
+                                           * root.meterFrac(Math.pow(10, root.voLevel / 20))
+                                    color: root.voLevel > -1 ? "#e0463c"
+                                           : root.voLevel > -6 ? "#d8a13a" : "#3fa06e"
+                                }
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: root.voCount > 0
+                                      ? "in " + root.voCount + "…"
+                                      : root.voRecording
+                                        ? "● " + root.timecode(root.voElapsed)
+                                          + "   " + root.voLevel.toFixed(0) + " dB"
+                                        : "from " + root.timecode(root.playhead)
+                                color: root.voRecording ? "#e0463c" : root.cDim
+                                font.pixelSize: 12
+                                font.family: "monospace"
+                            }
+
+                            Row {
+                                spacing: 8
+                                Btn {
+                                    label: root.voRecording || root.voCount > 0
+                                           ? "Stop" : "Record"
+                                    active: root.proj !== ""
+                                            && root.voDevices.length > 0
+                                    onClicked: root.voRecording || root.voCount > 0
+                                               ? root.stopVoiceover()
+                                               : root.startVoiceover()
+                                }
+                                Btn {
+                                    label: "Devices"
+                                    active: !root.voRecording
+                                    onClicked: root.loadDevices()
+                                }
+                            }
+                        }
+                    }
+
                     Text {
                         anchors.centerIn: parent
-                        visible: root.selClip < 0 && !root.mixerOpen
+                        visible: root.selClip < 0 && root.panelMode === "clip"
                         width: parent.width - 40
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
@@ -2774,7 +3115,7 @@ FloatingWindow {
 
                     Flickable {
                         anchors.fill: parent
-                        visible: root.selClip >= 0 && !root.mixerOpen
+                        visible: root.selClip >= 0 && root.panelMode === "clip"
                         contentHeight: inspCol.height
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds

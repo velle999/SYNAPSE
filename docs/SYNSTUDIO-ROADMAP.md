@@ -40,9 +40,10 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 - [x] normalise a clip — `timeline normalise`, ebur128, engine decides
 - [x] `loudness FILE` — integrated LUFS, true peak, range
 - [ ] loudness on delivery — two-pass `loudnorm`, −23 LUFS / −14 presets
-- [ ] voiceover recording — `devices` + `record`, armed track, punch in at the
-      playhead. ⚠ output muted while live or it feeds back; countdown and
-      pre-roll; a hard `--limit`; the take lands beside the project
+- [x] voiceover recording — `devices` + `record`, punch in at the playhead,
+      countdown, monitoring muted while live, a hard `--limit`, the take beside
+      the project. ⚠ `ametadata=print` needs `direct=1` or the meter arrives
+      all at once when it is already too late
 - [ ] clip EQ — `anequalizer`, six bands, as rows in the clip table
 - [ ] dynamics — `acompressor`, `alimiter`, `agate`, `deesser`
 - [ ] noise reduction — `afftdn`; `arnndn` needs a model, so it is also the
@@ -159,7 +160,7 @@ Fairlight-style automation: four features for one piece of work.
 1. ~~**Audio you can see and set**~~ — **done, 0.1.0-10.** Track volume/pan,
    master fader, meters, monitoring volume, normalise, solo — and a mute/hide
    split that was quietly wrong.
-2. **Voiceover** — 2 days.
+2. ~~**Voiceover**~~ — **done, 0.1.0-11.**
 3. **Undo, markers, snapping, multi-select** — 2 days. Undo first.
 4. **Keyframes on everything** — 3 days. Unblocks four other features.
 5. **xfade transitions + audio crossfades** — 1 day. The cheapest large win.

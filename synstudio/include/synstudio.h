@@ -508,6 +508,34 @@ typedef struct {
 } ss_loudness;
 int ss_media_loudness(const char *path, double in, double out, ss_loudness *l);
 
+/* ── Recording ───────────────────────────────────────────────────────────────
+ *
+ * What can capture. `id` is what to hand `record --device`; `monitor` marks
+ * the loopback of an OUTPUT, which records what the machine is playing rather
+ * than what the room is saying — useful, and never what somebody asking for a
+ * voiceover meant. */
+typedef struct {
+    char id[192];
+    char name[192];
+    int  monitor;
+    int  is_default;
+} ss_device;
+int ss_devices(ss_device **out);        /* count, or -1 */
+
+/* Record until `seconds` elapse or a signal arrives, whichever comes first.
+ *
+ * `on_level` is called with the elapsed time and the peak level in dB while it
+ * runs, because the one thing a voiceover has to answer before the take is
+ * whether the microphone is live at all. Throttled to about ten a second —
+ * ffmpeg offers one per audio frame, which is forty-odd and says nothing more.
+ *
+ * `fmt` is ffmpeg's input format: "pulse" for a device, "lavfi" for a
+ * generated signal, which is how this is tested on a machine with no
+ * microphone in it. */
+int ss_record(const char *path, const char *fmt, const char *device,
+              double seconds, int channels,
+              void (*on_level)(double t, double db, void *user), void *user);
+
 void   ss_timeline_reset(ss_timeline *t, int w, int h, double fps);
 void   ss_timeline_free(ss_timeline *t);
 int    ss_timeline_add_track(ss_timeline *t, int type, const char *name);

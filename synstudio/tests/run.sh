@@ -979,6 +979,81 @@ check "hiding it leaves the sound" "1" \
 check "and takes only the picture" "1" \
       "$(awk -v v="$(white "$mdir/hidden.mov")" 'BEGIN{print (v < 20) ? 1 : 0}')"
 
+# --------------------------------------------------------------- record --
+#
+# A microphone is not required and must never be: `--format lavfi` records a
+# GENERATED signal, which is the same code path with a source that exists on
+# every machine. `-re` is what makes it stand in for a device — without it a
+# generated source produces an hour of audio in a few seconds, which is
+# rendering rather than recording.
+echo "== record (a take, and a meter while it is taken)"
+
+rdir=$TMP/rec
+mkdir -p "$rdir"
+
+$BIN record --out "$rdir/take.wav" --format lavfi \
+     --device "sine=frequency=440" --limit 1 > "$rdir/out.txt" 2>&1
+check "a take succeeds" "0" "$?"
+seen "and says where it went" "out	$rdir/take.wav" < "$rdir/out.txt"
+check "the file is really there" "1" \
+      "$([ -s "$rdir/take.wav" ] && echo 1 || echo 0)"
+check "and is the length that was asked for" "1" \
+      "$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$rdir/take.wav" \
+         | awk '{d=$1-1; if(d<0)d=-d; print (d<0.15)?1:0}')"
+
+# The meter, and the thing that makes it one.
+#
+# `ametadata=print` writes through avio's 4KB buffer, so without direct=1 a
+# take under about eight seconds delivers NOTHING until ffmpeg exits and then
+# everything at once — which on screen is indistinguishable from a microphone
+# that was never live. So it is not enough that the lines exist: the FIRST one
+# has to arrive while the take is still running.
+$BIN record --out "$rdir/m.wav" --format lavfi --device "sine=frequency=440" \
+     --limit 3 2>/dev/null \
+    | while IFS= read -r l; do
+          case "$l" in level*) echo "$(date +%s.%N) $l" ;; esac
+      done > "$rdir/levels.txt"
+check "the meter reports while it records" "1" \
+      "$([ "$(grep -c . "$rdir/levels.txt")" -gt 5 ] && echo 1 || echo 0)"
+# The first line's wall clock against the last one's: buffered, they are the
+# same instant; live, they are seconds apart.
+check "and it arrives DURING the take, not at the end of it" "1" \
+      "$(awk 'NR==1{a=$1} END{print ($1-a > 1.0) ? 1 : 0}' "$rdir/levels.txt")"
+
+# Stopping is the ordinary end of a take. The engine catches the signal,
+# forwards it, and waits — so the WAV gets its real length written into its
+# header rather than being whatever was on disk when the process died.
+$BIN record --out "$rdir/stop.wav" --format lavfi --device "sine=frequency=440" \
+     --limit 600 > "$rdir/stop.txt" 2>&1 &
+recpid=$!
+sleep 2
+kill -TERM $recpid
+wait $recpid
+check "a stopped take exits cleanly" "0" "$?"
+seen "and still says where it went" "out	$rdir/stop.wav" < "$rdir/stop.txt"
+check "with a real length in the header" "1" \
+      "$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$rdir/stop.wav" \
+         | awk '{print ($1 > 0.5 && $1 < 30) ? 1 : 0}')"
+# Scoped to THIS take's file, because the machine running the tests may well
+# have somebody's real recording open at the same time.
+check "and nothing left holding the microphone" "0" \
+      "$({ pgrep -c -f "$rdir/stop.wav" 2>/dev/null || echo 0; } | head -1)"
+
+$BIN record --limit 1 >/dev/null 2>&1
+check "record without --out is refused" "1" "$?"
+
+# `devices` asks ffmpeg what can capture. A machine with no sound server has
+# nothing to say and says so; what must never happen is a row that is not a
+# row — the window builds a list from these.
+$BIN devices > "$rdir/dev.txt" 2>/dev/null
+devrc=$?
+check "devices either answers or fails cleanly" "1" \
+      "$([ $devrc -eq 0 ] || [ $devrc -eq 1 ] && echo 1 || echo 0)"
+if [ $devrc -eq 0 ] && [ -s "$rdir/dev.txt" ]; then
+    check "every device row is kind, name, id, default" "0" \
+          "$(awk -F'\t' 'NF != 4 || ($1 != "input" && $1 != "monitor")' "$rdir/dev.txt" | grep -c .)"
+fi
+
 # ------------------------------------------------------------- loudness --
 echo "== loudness and normalise"
 
