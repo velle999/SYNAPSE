@@ -633,14 +633,21 @@ static void close_button_draw(cairo_t *cr, int bx, int by)
 /* ── Welcome screen ──────────────────────────────────────── */
 
 /* Menu entries: input.c navigates with Up/Down and executes the entry's
- * bind action on Enter (welcome_menu_key). */
+ * bind action on Enter (welcome_menu_key).
+ *
+ * ⚠ THE KEY IS A FALLBACK, NOT THE ANSWER. welcome_hint() below reads the chord
+ * out of the LIVE bind table, because these strings are typed by hand and the
+ * binds are not: Super+Space was written here as the AI command bar, kept
+ * saying so after the default moved to Super+= (rofi took Super+Space), and
+ * would have gone on saying so for anyone who rebound it in the palette. The
+ * string is what the row shows when nothing is bound to its action at all. */
 const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Control Panel",    "Super+C",       "control"   },
     /* Second, because "what are the keys" is the first question this menu
      * exists to answer and the palette answers all of it. */
     { "Keyboard Shortcuts", "Super+/",     "keys"      },
     { "Terminal",         "Super+Enter",   "term"      },
-    { "AI Command Bar",   "Super+Space",   "cmdbar"    },
+    { "AI Command Bar",   "Super+=",       "cmdbar"    },
     { "Neural Overlay",   "Super+A",       "overlay"   },
     { "Display Settings", "Super+D",       "displays"  },
     { "Wallpaper",        "Super+W",       "wallpaper" },
@@ -687,6 +694,33 @@ static const char *synui_ai_backend_label(void)
     if (strcmp(b, "cpu") == 0) return "CPU";
     if (strcmp(b, "off") == 0) return "off";
     return "auto";
+}
+
+/*
+ * The key column, from the LIVE binds — the chord the user would actually press
+ * today, not the one that was true when the row was typed.
+ *
+ * First bind whose action matches and which carries no argument: an action can
+ * legitimately be bound several times (`control` bare and `control audio` are
+ * two rows of this table's world), and the bare one is what the menu's row
+ * runs. Falls back to the entry's own string when nothing is bound, which is
+ * the honest answer for a row you can only reach from here.
+ */
+static const char *welcome_hint(syn_server_t *s, const syn_welcome_entry_t *e,
+                                char *buf, size_t n)
+{
+    /* No bind at all, and never had one: this row toggles in place and its
+     * "hint" is the live backend instead of a key. */
+    if (strcmp(e->action, "ai_backend") == 0)
+        return synui_ai_backend_label();
+
+    for (int i = 0; i < s->config.bind_count; i++) {
+        const syn_bind_t *b = &s->config.binds[i];
+        if (strcmp(b->action, e->action) != 0 || b->arg[0]) continue;
+        ctlpanel_combo_str(b->mods, b->sym, buf, n);
+        return buf;
+    }
+    return e->hint;
 }
 
 void synui_render_welcome(syn_server_t *s)
@@ -804,11 +838,9 @@ void synui_render_welcome(syn_server_t *s)
         cairo_move_to(cr, 66, y);
         syn_show_text(cr, synui_welcome_menu[i].label);
 
-        /* The AI Backend row shows the live synapd backend instead of a fixed
-         * keybind — it has no default bind, it toggles in place on Enter. */
-        const char *hint = synui_welcome_menu[i].hint;
-        if (strcmp(synui_welcome_menu[i].action, "ai_backend") == 0)
-            hint = synui_ai_backend_label();
+        char hintbuf[48];
+        const char *hint = welcome_hint(s, &synui_welcome_menu[i],
+                                        hintbuf, sizeof(hintbuf));
 
         cairo_set_source_rgba(cr, sel ? 0.0 : 0.45, sel ? 0.85 : 0.45,
                               sel ? 0.75 : 0.55, sel ? 1.0 : 1.0);

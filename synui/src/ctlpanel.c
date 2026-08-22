@@ -2020,6 +2020,15 @@ static void key_name(xkb_keysym_t sym, char *out, size_t n)
      * WRITTEN in a bind (the combo is split on '+', so a literal '=' cannot be
      * the key name) — but the keycap says '='. */
     case XKB_KEY_equal:     snprintf(out, n, "=");         return;
+    /* And the rest of the punctuation this desktop binds, for the same reason:
+     * the shortcuts column, the palette and the welcome menu all read "Super+/"
+     * on a keycap and "super+slash" in a config file, and only one of those is
+     * a list of keys to press. */
+    case XKB_KEY_slash:     snprintf(out, n, "/");         return;
+    case XKB_KEY_question:  snprintf(out, n, "?");         return;
+    case XKB_KEY_comma:     snprintf(out, n, ",");         return;
+    case XKB_KEY_period:    snprintf(out, n, ".");         return;
+    case XKB_KEY_semicolon: snprintf(out, n, ";");         return;
     default: break;
     }
     char raw[64] = {0};
@@ -2034,8 +2043,12 @@ static void key_name(xkb_keysym_t sym, char *out, size_t n)
 }
 
 /* Modifier order matches how the binds are written in synuirc (super+shift+q),
- * so the panel and the config spell the same combo the same way. */
-static void combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
+ * so the panel and the config spell the same combo the same way.
+ *
+ * Exported (as ctlpanel_combo_str) for ctlpanel_tap_key_name()'s reason: the
+ * welcome menu names the keys too, and a second spelling of "Super+Shift+C" is
+ * a second one to keep in step. */
+void ctlpanel_combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
 {
     char key[64];
     key_name(sym, key, sizeof(key));
@@ -2111,7 +2124,7 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
         if (strcmp(b->action, "movews") == 0) { saw_movews = 1; continue; }
 
         memset(&out[n], 0, sizeof(out[n]));
-        combo_str(b->mods, b->sym, out[n].combo, sizeof(out[n].combo));
+        ctlpanel_combo_str(b->mods, b->sym, out[n].combo, sizeof(out[n].combo));
         snprintf(out[n].desc, sizeof(out[n].desc), "%s",
                  action_desc(b->action, b->arg));
         snprintf(out[n].action, sizeof(out[n].action), "%s", b->action);

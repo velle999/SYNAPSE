@@ -7552,6 +7552,11 @@ const char *ctlpanel_action_desc(const char *action, const char *arg);
  * line names the tap key the user just chose, and a third spelling of "Super"
  * is a third one to keep in step. syn_tap_mod_name() is the synuirc half. */
 const char *ctlpanel_tap_key_name(uint32_t mod);
+/* A chord as a keyboard says it — "Super+Shift+C", "Ctrl+Alt+Delete". The
+ * display half of syn_bind_format_combo(), which spells what synuirc TAKES
+ * ("super+shift+c"). render.c's welcome menu reads its key column out of the
+ * live bind table through this, so the menu cannot drift from the binds. */
+void ctlpanel_combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n);
 /* ── Shortcut palette + rebind helper (keys.c) ───────────────
  * Super+/ (and Super+?): the same list ctlpanel_shortcuts() builds, filtered as
  * you type, with Enter running the bind you land on. Same modal contract as
