@@ -1,0 +1,38 @@
+# /etc/synnet/trusted-ifaces — container and VM bridges this machine is the
+# gateway for. One interface name per line. '#' starts a comment.
+#
+# WHAT THIS IS FOR
+#
+# synnet runs a default-drop input firewall that trusts anything from a private
+# address (10/8, 172.16/12, 192.168/16). A container's traffic is covered by
+# that rule the moment it HAS an address — but the packet that asks for one is
+# not: a DHCPDISCOVER is sent from 0.0.0.0 to 255.255.255.255:67, matches no
+# accept in the chain, and the drop policy eats it. The guest then has no
+# network at all, and nothing in any log mentions the firewall.
+#
+# Naming the bridge here adds DHCP-server and DNS-server accepts on that link,
+# which is the whole difference. It is deliberately NOT `allow in on <iface>`:
+# trusting the interface wholesale would open every port on this machine to
+# whatever the guest is running, and would fix nothing extra, because an
+# addressed guest is already trusted by the rule above.
+#
+# The rules are matched by NAME, so listing a bridge that does not exist yet is
+# fine and is the normal case — these interfaces are created when the container
+# starts.
+#
+#   sudo synnet --trust-if <iface>     add one and apply it now
+#   sudo synnet --untrust-if <iface>   take one away
+#   synnet --status                    show the list
+#
+# Editing this file by hand does NOT change the running firewall: the daemon
+# only rebuilds a chain that has gone missing, and one that is merely out of
+# date looks healthy to it. Run `sudo synnet --firewall` after editing.
+
+# Waydroid's LXC bridge (192.168.240.0/24), created by waydroid-net.sh.
+waydroid0
+
+# Other common ones — uncomment the ones this machine actually runs:
+#virbr0        # libvirt's default NAT network
+#docker0       # Docker's default bridge
+#podman0       # Podman's default bridge
+#lxcbr0        # LXC's default bridge

@@ -29,6 +29,13 @@ static void usage(void) {
         "                  Apply the base input firewall now, or switch it on\n"
         "                  or off for good. Off is remembered, or the daemon\n"
         "                  would put it back within the minute. (root)\n"
+        "  --trust-if <iface>\n"
+        "  --untrust-if <iface>\n"
+        "                  Accept DHCP and DNS on a container/VM bridge this\n"
+        "                  box is the gateway for (waydroid0, virbr0, …). The\n"
+        "                  guest's first DHCP packet comes from 0.0.0.0 and is\n"
+        "                  otherwise dropped, so its network never comes up.\n"
+        "                  Applied immediately and remembered. (root)\n"
         "  --allow <ip>    Allow IP\n"
         "  --block <ip>    Block IP\n"
         "  -h, --help      This help\n",
@@ -103,6 +110,71 @@ int main(int argc, char *argv[]) {
                    "(default-drop input; loopback, established, ICMP, "
                    "private-range sources and DHCP accepted)\n");
             return 0;
+        } else if ((!strcmp(argv[i], "--trust-if") ||
+                    !strcmp(argv[i], "--untrust-if")) && i + 1 < argc) {
+            /* Trust a container/VM bridge for the gateway services this box
+             * serves on it. See SYNNET_FW_IFACES for why this is DHCP+DNS and
+             * not `allow in on <iface>`.
+             *
+             * Root because it writes /etc and loads a chain — and said here
+             * rather than letting fopen's EACCES arrive as a confusing "could
+             * not write" for something the user is simply not allowed to do. */
+            int on = !strcmp(argv[i], "--trust-if");
+            const char *ifn = argv[++i];
+
+            if (geteuid() != 0) {
+                fprintf(stderr, "synnet: %s needs root "
+                                "(sudo synnet %s %s)\n",
+                        on ? "--trust-if" : "--untrust-if",
+                        on ? "--trust-if" : "--untrust-if", ifn);
+                return 1;
+            }
+
+            int r = synnet_trusted_iface_set(ifn, on);
+            if (r == -2) {
+                fprintf(stderr, "synnet: '%s' is not a legal interface name "
+                                "(1-15 chars: letters, digits, '_', '.', '-')\n",
+                        ifn);
+                return 1;
+            }
+            if (r != 0) {
+                fprintf(stderr, "synnet: could not update %s\n",
+                        synnet_fw_ifaces_path());
+                return 1;
+            }
+
+            /* ⚠ THE FILE IS NOT THE FIREWALL. The daemon's re-assert tick only
+             * rebuilds a chain that has GONE; one that is merely out of date
+             * looks healthy to it and would keep dropping the container's DHCP
+             * until the next reboot. Reload the chain now. */
+            if (!synnet_firewall_enabled()) {
+                printf("synnet: %s %s in %s — the firewall is switched off, so "
+                       "nothing changed in the kernel.\n",
+                       on ? "trusted" : "untrusted", ifn,
+                       synnet_fw_ifaces_path());
+                return 0;
+            }
+            if (synnet_nft_ensure_firewall() != 0) {
+                fprintf(stderr, "synnet: %s recorded, but the firewall could "
+                                "not be reloaded — this box is NOT ingress-"
+                                "filtered right now\n", ifn);
+                return 1;
+            }
+            printf("synnet: %s %s — DHCP and DNS from that link are %s\n",
+                   on ? "trusting" : "no longer trusting", ifn,
+                   on ? "accepted" : "no longer accepted");
+            {
+                /* Matched by name, so an interface that does not exist yet is
+                 * fine and is the normal case: container bridges appear when
+                 * the container starts. Say so, or it reads like a typo. */
+                char sys[512];
+                snprintf(sys, sizeof(sys), "/sys/class/net/%s", ifn);
+                if (on && access(sys, F_OK) != 0)
+                    printf("synnet: %s does not exist yet — the rule matches by "
+                           "name and takes effect when it appears.\n", ifn);
+            }
+            return 0;
+
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             usage(); return 0;
         } else if (!strcmp(argv[i], "--allow") && i+1 < argc) {

@@ -42,6 +42,12 @@ hasnt() { case "$2" in *"$1"*) bad "$3" ;; *) ok "$3" ;; esac; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 export SYNNET_FW_STATE_FILE="$tmp/firewall.state"
+# ⚠ POINTED AT A FIXTURE BEFORE ANYTHING RUNS. The package ships
+# /etc/synnet/trusted-ifaces with waydroid0 in it, so without this override a
+# developer's box would put two extra rules into every ruleset asserted below
+# and CI's container would not — the same test proving different things
+# depending on where it ran.
+export SYNNET_FW_IFACES_FILE="$tmp/trusted-ifaces"
 
 # ⚠ THIS RUNS BOTH AS A USER AND AS ROOT. CI is a container running as root,
 # a developer is not, and the first version of this file assumed the second:
@@ -180,6 +186,134 @@ if [ "$ran" = yes ]; then
         || bad "no state file after --firewall; unprivileged status stays blind"
     has "state=active" "$(cat "$SYNNET_FW_STATE_FILE" 2>/dev/null)" \
         "…and it records the firewall as active"
+fi
+
+echo ""
+echo "=== container / VM links get DHCP and DNS, and nothing else ==="
+#
+# THE BUG THIS HALF EXISTS FOR (2026-08-22). A Waydroid guest came up with no
+# network. The LAN-trust rule accepts 192.168/16 and the guest's bridge is
+# 192.168.240.0/24, so everything it sends is trusted — once it HAS an address.
+# The packet that asks for one is sent from 0.0.0.0 to 255.255.255.255:67,
+# matches nothing, and hits the drop policy. waydroid-net.sh's own
+# `iptables -I INPUT -i waydroid0 --dport 67 -j ACCEPT` does not rescue it:
+# that is a different base chain, and a packet traverses them all — an accept in
+# one only ends that chain, while our drop is final.
+
+if [ "$ran" = yes ]; then
+    printf '# comment line\nwaydroid0\n\n   virbr0   # trailing comment\nwaydroid0\nbad name!\n../etc/passwd\n' \
+        > "$SYNNET_FW_IFACES_FILE"
+    : > "$NFT_LOG"
+    if [ "$AM_ROOT" = yes ]; then
+        PATH="$tmp/bin:$PATH" "$SYNNET" --firewall >/dev/null 2>&1
+    else
+        PATH="$tmp/bin:$PATH" fakeroot "$SYNNET" --firewall >/dev/null 2>&1
+    fi
+    rules=$(cat "$NFT_LOG")
+
+    has 'iifname "waydroid0" udp dport { 53, 67, 547 } accept' "$rules" \
+        "a trusted link accepts DHCP — the packet the drop policy was eating"
+    has 'iifname "waydroid0" tcp dport { 53, 67 } accept' "$rules" \
+        "…and DNS over TCP, which dnsmasq falls back to"
+    has 'iifname "virbr0"' "$rules" "an entry with a trailing comment is read"
+
+    # ⚠ THE ONE THAT MATTERS MOST. `iif` resolves the name to an ifindex when
+    # the rule is LOADED and errors with "Interface does not exist" otherwise —
+    # and these bridges are created when the container starts, hours after this
+    # chain came up at boot. The chain is one atomic `nft -f`, so a single `iif`
+    # on an absent interface does not lose that rule, it aborts the load and the
+    # box ends up with NO TABLE AT ALL. Verified against the real nft in a
+    # netns: the whole ruleset vanishes.
+    # ⚠ single-quoted: a backtick inside a double-quoted string is a command
+    # substitution, and "iif" is not a command.
+    hasnt 'iif "waydroid0"' "$rules" \
+        'links are matched by NAME — iif on an absent bridge kills the load'
+
+    # Not `allow in on <iface>`: an addressed guest is already trusted by the
+    # RFC1918 rule, so a blanket accept would add nothing but would open every
+    # host port to whatever the guest runs.
+    hasnt 'iifname "waydroid0" accept' "$rules" \
+        "a trusted link is not trusted wholesale, only for the gateway services"
+
+    # A name that cannot be pasted into a ruleset costs its own line and nothing
+    # else. If it reached nft it would be a syntax error, and a syntax error in
+    # an atomic load unfilters the machine.
+    hasnt "bad name" "$rules" "an illegal interface name never reaches nft"
+    hasnt "passwd" "$rules" "…nor does a path-shaped one"
+    has "policy drop" "$rules" "…and the firewall still comes up without them"
+
+    # Two identical entries would stack two identical rules on every apply.
+    n=$(printf '%s\n' "$rules" | grep -c 'iifname "waydroid0" udp')
+    [ "$n" = 1 ] && ok "a name listed twice produces one rule, not two" \
+                 || bad "duplicate entries stack rules (got $n)"
+
+    has "links=2" "$(cat "$SYNNET_FW_STATE_FILE" 2>/dev/null)" \
+        "the published state records how many links were applied"
+
+    # No file is the normal state of a machine running no containers, and must
+    # not be an error, a warning, or a missing firewall.
+    rm -f "$SYNNET_FW_IFACES_FILE"
+    : > "$NFT_LOG"
+    if [ "$AM_ROOT" = yes ]; then
+        PATH="$tmp/bin:$PATH" "$SYNNET" --firewall >/dev/null 2>&1
+    else
+        PATH="$tmp/bin:$PATH" fakeroot "$SYNNET" --firewall >/dev/null 2>&1
+    fi
+    rules=$(cat "$NFT_LOG")
+    hasnt "iifname" "$rules" "no list, no link rules"
+    has "policy drop" "$rules" "…and the base firewall is unaffected"
+fi
+
+echo ""
+echo "=== --trust-if / --untrust-if ==="
+
+if [ "$ran" = yes ]; then
+    run_as_root() {
+        if [ "$AM_ROOT" = yes ]; then PATH="$tmp/bin:$PATH" "$SYNNET" "$@"
+        else PATH="$tmp/bin:$PATH" fakeroot "$SYNNET" "$@"; fi
+    }
+
+    printf '# keep me\nvirbr0\n' > "$SYNNET_FW_IFACES_FILE"
+    run_as_root --trust-if waydroid0 >/dev/null 2>&1
+    body=$(cat "$SYNNET_FW_IFACES_FILE")
+    has "waydroid0" "$body" "--trust-if records the link"
+    has "# keep me" "$body" \
+        "…without eating the comments in a file meant to be hand-edited"
+
+    # Applying it is the point: the daemon's re-assert tick only rebuilds a
+    # chain that has GONE, so a chain that is merely out of date looks healthy
+    # and would keep dropping the container's DHCP until the next reboot.
+    has 'iifname "waydroid0"' "$(cat "$NFT_LOG")" \
+        "…and reloads the chain there and then, rather than at the next reboot"
+
+    run_as_root --trust-if waydroid0 >/dev/null 2>&1
+    n=$(grep -c '^waydroid0' "$SYNNET_FW_IFACES_FILE")
+    [ "$n" = 1 ] && ok "adding the same link twice is idempotent" \
+                 || bad "--trust-if stacked duplicate entries (got $n)"
+
+    printf 'waydroid0   # android\n' > "$SYNNET_FW_IFACES_FILE"
+    run_as_root --untrust-if waydroid0 >/dev/null 2>&1
+    hasnt "waydroid0" "$(cat "$SYNNET_FW_IFACES_FILE")" \
+        "--untrust-if matches the ENTRY, not the raw line, so a commented one goes"
+
+    out=$(run_as_root --trust-if 'no good' 2>&1)
+    has "not a legal interface name" "$out" \
+        "an illegal name is refused at the CLI, not pasted into a ruleset"
+
+    printf 'waydroid0\n' > "$SYNNET_FW_IFACES_FILE"
+    out=$("$SYNNET" --status 2>&1)
+    has "waydroid0" "$out" "--status lists the trusted links"
+    has "matched by name" "$out" \
+        "…and says an absent bridge is expected, not a typo"
+
+    rm -f "$SYNNET_FW_IFACES_FILE"
+    out=$("$SYNNET" --status 2>&1)
+    has "none" "$out" "…and says so when there are none"
+
+    if [ "$AM_ROOT" = no ]; then
+        out=$("$SYNNET" --trust-if waydroid0 2>&1)
+        has "needs root" "$out" "--trust-if below root says so"
+    fi
 fi
 
 echo ""

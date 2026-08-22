@@ -74,6 +74,50 @@ int  synnet_firewall_set_enabled(int on);/* write the preference; 0 on success *
  * silently unblock every IP the AI has flagged. */
 int  synnet_nft_drop_firewall(void);
 
+/* ── Container / VM links this box is the GATEWAY for ────────
+ *
+ * `/etc/synnet/trusted-ifaces`, one interface name per line, `#` comments and
+ * blank lines ignored. For each one the input chain gains DHCP-server and
+ * DNS-server accepts.
+ *
+ * ⚠ THIS EXISTS FOR THE PACKETS THAT ARRIVE BEFORE THE PEER HAS AN ADDRESS.
+ * Waydroid, libvirt and the rest hang a bridge off the host, run dnsmasq on it,
+ * and hand the guest an RFC1918 lease. Everything the guest sends AFTER that is
+ * already accepted — its source is 192.168.x, which the LAN-trust rule takes.
+ * The one packet that is not is the first one: a DHCPDISCOVER is sent from
+ * 0.0.0.0 to 255.255.255.255:67, matching no accept in the chain, so the
+ * default-drop policy eats it and the guest never gets a lease at all. The
+ * symptom is "the container has no network", and nothing in the log says
+ * firewall.
+ *
+ * ⚠ AND IT IS NOT `allow in on <iface>`. ufw's advice for these bridges is to
+ * trust the interface wholesale; doing that here would widen the trust boundary
+ * to every port on the host for whatever the guest is running — an arbitrary
+ * Android APK, in Waydroid's case — and would fix nothing extra, because
+ * everything an addressed guest sends is already accepted by the LAN-trust
+ * rule. The gateway services are the entire delta, so they are the entire rule.
+ *
+ * ⚠ MATCHED BY NAME (`iifname`), NEVER BY INDEX (`iif`). `iif` resolves the
+ * interface to an ifindex when the rule is LOADED, and fails if it does not
+ * exist — and these bridges are created when the container starts, hours after
+ * the firewall came up at boot. Since the whole chain is one atomic `nft -f`
+ * load, one `iif` naming an absent interface does not lose that rule, it loses
+ * THE FIREWALL. `iifname` is a string match and is happy to name something that
+ * does not exist yet. */
+#define SYNNET_FW_IFACES   "/etc/synnet/trusted-ifaces"
+#define SYNNET_IFNAME_MAX  16    /* IFNAMSIZ, without dragging in <net/if.h> */
+#define SYNNET_MAX_IFACES  32    /* far past plausible; bounds the nft script */
+const char *synnet_fw_ifaces_path(void); /* honours $SYNNET_FW_IFACES_FILE */
+
+/* Add or remove one interface. 0 on success, -1 if the file could not be
+ * written, -2 if the name is not a legal interface name.
+ *
+ * ⚠ THE CALLER HAS TO RE-APPLY THE FIREWALL. The daemon's re-assert tick only
+ * rebuilds a chain that has GONE; a chain that is present but out of date looks
+ * healthy to it, so editing this file changes nothing in the kernel until
+ * something calls synnet_nft_ensure_firewall(). `--trust-if` does. */
+int  synnet_trusted_iface_set(const char *ifname, int trusted);
+
 typedef enum {
     SYNNET_ACTION_ALLOW  = 0,
     SYNNET_ACTION_BLOCK  = 1,

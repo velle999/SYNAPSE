@@ -138,6 +138,11 @@ static const char *fw_pref_file(void)
 	const char *e = getenv("SYNNET_FW_PREF_FILE");
 	return (e && *e) ? e : "/etc/synnet/firewall";
 }
+static const char *fw_ifaces_file(void)
+{
+	const char *e = getenv("SYNNET_FW_IFACES_FILE");
+	return (e && *e) ? e : "/etc/synnet/trusted-ifaces";
+}
 
 /* One key out of a `key=value` file, or "" — used for both synnet files. */
 static void kv_get(const char *path, const char *key, char *out, size_t outlen)
@@ -209,6 +214,69 @@ static void firewall_rows(void)
 
 	rec_row("firewall\tinput filtering\t%s\t%s\t%s\tchoice:firewall",
 	        value, state, detail);
+
+	/* ── Container / VM links ────────────────────────────────────────────
+	 *
+	 * ⚠ THE ROW EXISTS BECAUSE THE FAILURE IS SILENT AND LOOKS LIKE ANYTHING
+	 * BUT A FIREWALL. A Waydroid or libvirt guest gets its address by DHCP, and
+	 * that first request is sent from 0.0.0.0 — before the guest has anything
+	 * the LAN-trust rule can recognise, so the drop policy eats it. The symptom
+	 * is "the container has no internet", which sends people to the container's
+	 * own settings, to DNS, to the bridge — anywhere but here. Naming the bridge
+	 * in /etc/synnet/trusted-ifaces fixes it, and this row is where somebody
+	 * looking at a broken container network can see whether that has been done.
+	 *
+	 * Read from the FILE rather than the published count, so a link that has
+	 * been added but not applied shows up as the name it is rather than as an
+	 * absence — and so the pane answers on a machine where synnet has never
+	 * started. The count from the state file is only used to flag the mismatch.
+	 */
+	{
+		char list[256] = "";
+		unsigned n = 0;
+		FILE *f = fopen(fw_ifaces_file(), "r");
+		if (f) {
+			char line[256];
+			while (fgets(line, sizeof line, f)) {
+				line[strcspn(line, "\r\n")] = '\0';
+				char *h = strchr(line, '#');
+				if (h) *h = '\0';
+				char *p = line;
+				while (*p == ' ' || *p == '\t') p++;
+				size_t l = strlen(p);
+				while (l && (p[l-1] == ' ' || p[l-1] == '\t')) p[--l] = '\0';
+				if (!*p) continue;
+				n++;
+				if (strlen(list) + strlen(p) + 3 < sizeof list)
+					snprintf(list + strlen(list), sizeof list - strlen(list),
+					         "%s%s", list[0] ? ", " : "", p);
+			}
+			fclose(f);
+		}
+		tsv_clean(list);
+
+		char applied[32] = "";
+		kv_get(fw_state_file(), "links", applied, sizeof applied);
+
+		/* ⚠ Only a mismatch on a LIVE firewall is news. An off or unpublished
+		 * firewall not matching the list is the definition of those states, not
+		 * a fault to send somebody chasing. */
+		int stale = want && !strcmp(st, "active") && applied[0] &&
+		            (unsigned)atoi(applied) != n;
+
+		rec_row("firewall\tcontainer links\t%s\t%s\t"
+		        "Bridges this machine serves DHCP and DNS on for a container or "
+		        "VM (Waydroid, libvirt, Docker). A guest asks for its address "
+		        "from 0.0.0.0, which the default-drop policy would otherwise "
+		        "eat — the guest then has no network and nothing says firewall. "
+		        "%s\t-",
+		        n ? list : "none",
+		        stale ? "warn" : "-",
+		        stale
+		          ? "⚠ synnet last applied a different number of these; "
+		            "`sudo synnet --firewall` loads the current list."
+		          : "Add one with `sudo synnet --trust-if <iface>`.");
+	}
 
 	/* Only when it has actually happened. A zero here would be a row about
 	 * nothing, and the pane is long enough already. */

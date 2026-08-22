@@ -17,6 +17,7 @@
 #include <linux/cn_proc.h>
 #include <poll.h>
 #include <time.h>
+#include <ctype.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -163,7 +164,12 @@ static int is_valid_ipv4(const char *ip) {
 }
 
 static int run_nft(const char *fmt, ...) {
-    char cmd[2048];   /* the input-firewall script (ensure_firewall) is ~1KB */
+    /* The input-firewall script is ~1KB of base rules plus two rules for every
+     * trusted interface, so this has to hold SYNNET_MAX_IFACES of them and not
+     * merely the fixed part. Under-sizing it would trip the truncation guard
+     * below and leave the box unfiltered rather than partly filtered — the safe
+     * failure, but a needless one. */
+    char cmd[16384];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(cmd, sizeof(cmd), fmt, ap);
@@ -276,6 +282,175 @@ int synnet_firewall_set_enabled(int on) {
     return 0;
 }
 
+/* ── Trusted container/VM links ──────────────────────────────
+ *
+ * See SYNNET_FW_IFACES in synnet.h for what this is for and, more importantly,
+ * for what it deliberately is not.
+ */
+const char *synnet_fw_ifaces_path(void) {
+    const char *e = getenv("SYNNET_FW_IFACES_FILE");
+    return (e && *e) ? e : SYNNET_FW_IFACES;
+}
+
+/* How many links the last apply trusted, for the published state file. */
+static unsigned g_fw_ifaces;
+
+/*
+ * Is this a legal interface name?
+ *
+ * ⚠ NOT COSMETIC VALIDATION. These names are interpolated into the nft script,
+ * which is loaded in ONE atomic `nft -f`: a line containing a space, a quote or
+ * a semicolon does not produce one bad rule, it produces a syntax error that
+ * fails the whole load and takes the entire firewall with it. An unparseable
+ * line in this file has to cost that line and nothing else, so anything that is
+ * not a kernel-legal interface name is dropped here with a warning and the
+ * firewall comes up without it.
+ *
+ * The kernel's own rules: 1..IFNAMSIZ-1 bytes, no '/' and no whitespace. This
+ * is stricter — alphanumerics, '_', '.', '-' — because every interface name a
+ * container runtime actually creates fits that, and the ones that would not are
+ * exactly the ones worth refusing to paste into a ruleset.
+ */
+static int iface_name_valid(const char *n) {
+    size_t len = strlen(n);
+    if (len == 0 || len >= SYNNET_IFNAME_MAX) return 0;
+    if (!isalnum((unsigned char)n[0]) && n[0] != '_') return 0;
+    for (size_t i = 0; i < len; i++) {
+        char c = n[i];
+        if (!isalnum((unsigned char)c) && c != '_' && c != '.' && c != '-')
+            return 0;
+    }
+    return 1;
+}
+
+/* Read the file into `out`, skipping comments, blanks, duplicates and anything
+ * that is not a legal name. Returns how many were taken. A missing file is not
+ * an error — it is the normal state of a box running no containers. */
+static size_t trusted_ifaces_load(char out[][SYNNET_IFNAME_MAX], size_t max) {
+    FILE *f = fopen(synnet_fw_ifaces_path(), "r");
+    if (!f) return 0;
+
+    size_t n = 0;
+    char line[256];
+    while (n < max && fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *p = strchr(line, '#');
+        if (p) *p = '\0';                       /* trailing comment */
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        size_t l = strlen(p);
+        while (l && (p[l-1] == ' ' || p[l-1] == '\t')) p[--l] = '\0';
+        if (!*p) continue;
+
+        if (!iface_name_valid(p)) {
+            syslog(LOG_WARNING, "synnet: ignoring '%s' in %s — not a legal "
+                                "interface name", p, synnet_fw_ifaces_path());
+            continue;
+        }
+        int dup = 0;
+        for (size_t i = 0; i < n; i++)
+            if (strcmp(out[i], p) == 0) { dup = 1; break; }
+        if (dup) continue;
+
+        /* memcpy, not snprintf: iface_name_valid() has already established
+         * strlen(p) < SYNNET_IFNAME_MAX, and snprintf here makes the compiler
+         * warn about a truncation that cannot happen — a warning a reader then
+         * has to go and disprove. */
+        memcpy(out[n++], p, strlen(p) + 1);
+    }
+    fclose(f);
+    return n;
+}
+
+/* Add or remove one name.
+ *
+ * Append-and-filter rather than load-modify-rewrite, the same shape the
+ * blocklist uses, and for a reason that matters more here: this is a pacman
+ * `backup=` file that ships with commented examples in it and is meant to be
+ * edited by hand. Rewriting it from the parsed list would silently eat every
+ * comment the user (or the package) put there the first time anything touched
+ * it through the CLI.
+ */
+int synnet_trusted_iface_set(const char *ifname, int trusted) {
+    if (!ifname || !iface_name_valid(ifname)) return -2;
+
+    const char *path = synnet_fw_ifaces_path();
+
+    char ifaces[SYNNET_MAX_IFACES][SYNNET_IFNAME_MAX];
+    size_t n = trusted_ifaces_load(ifaces, SYNNET_MAX_IFACES);
+    int present = 0;
+    for (size_t i = 0; i < n; i++)
+        if (strcmp(ifaces[i], ifname) == 0) { present = 1; break; }
+
+    if (trusted) {
+        if (present) return 0;                  /* idempotent */
+        if (n >= SYNNET_MAX_IFACES) return -1;
+
+        char dir[PATH_MAX];
+        snprintf(dir, sizeof(dir), "%s", path);
+        char *slash = strrchr(dir, '/');
+        if (slash && slash != dir) {
+            *slash = '\0';
+            if (mkdir(dir, 0755) != 0 && errno != EEXIST) return -1;
+        }
+
+        /* ⚠ A file whose last line has no newline would otherwise get the new
+         * name glued onto the end of it, turning `waydroid0` + `virbr0` into
+         * one unparseable `waydroid0virbr0` that then fails validation and
+         * takes the existing entry away with it. */
+        int need_nl = 0;
+        FILE *r = fopen(path, "rb");
+        if (r) {
+            if (fseek(r, -1, SEEK_END) == 0) {
+                int last = fgetc(r);
+                need_nl = (last != '\n' && last != EOF);
+            }
+            fclose(r);
+        }
+
+        FILE *f = fopen(path, "a");
+        if (!f) return -1;
+        fprintf(f, "%s%s\n", need_nl ? "\n" : "", ifname);
+        if (fclose(f) != 0) return -1;
+        return 0;
+    }
+
+    if (!present) return 0;                     /* nothing to take away */
+
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+    char tmp[PATH_MAX];
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) {
+        fclose(f);
+        return -1;
+    }
+    FILE *o = fopen(tmp, "w");
+    if (!o) { fclose(f); return -1; }
+
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        /* Compare the ENTRY, not the raw line: `  waydroid0   # android` is the
+         * same entry as `waydroid0`, and an --untrust-if that only matched the
+         * bare form would report success and leave the rule in place. */
+        char work[256];
+        snprintf(work, sizeof(work), "%s", line);
+        work[strcspn(work, "\r\n")] = '\0';
+        char *h = strchr(work, '#');
+        if (h) *h = '\0';
+        char *p = work;
+        while (*p == ' ' || *p == '\t') p++;
+        size_t l = strlen(p);
+        while (l && (p[l-1] == ' ' || p[l-1] == '\t')) p[--l] = '\0';
+
+        if (strcmp(p, ifname) == 0) continue;
+        fputs(line, o);
+    }
+    fclose(f);
+    if (fclose(o) != 0) { unlink(tmp); return -1; }
+    if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
+    return 0;
+}
+
 /* Take the input chain away, and nothing else.
  *
  * ⚠ NOT `delete table` and emphatically not `flush ruleset`. The egress
@@ -324,9 +499,10 @@ static void firewall_publish_state(const char *state) {
             "state=%s\n"
             "policy=drop\n"
             "trust=lan\n"
+            "links=%u\n"
             "since=%lld\n"
             "reasserts=%lu\n",
-            state, (long long)time(NULL), g_fw_reasserts);
+            state, g_fw_ifaces, (long long)time(NULL), g_fw_reasserts);
     fclose(f);
     if (rename(tmp, synnet_fw_state_path()) != 0)
         unlink(tmp);
@@ -362,7 +538,7 @@ static void firewall_publish_state(const char *state) {
  * for this model; per-subnet trust would be stricter but breaks on every roam.
  */
 int synnet_nft_ensure_firewall(void) {
-    static const char *script =
+    static const char *base =
         "nft -f - <<'SYNNET_FW'\n"
         "add table inet " SYNNET_NFT_TABLE "\n"
         /* add-then-delete so the delete cannot fail on a first run where the
@@ -381,10 +557,74 @@ int synnet_nft_ensure_firewall(void) {
         "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
         " ip6 saddr { fc00::/7, fe80::/10 } accept\n"
         /* DHCP client: offer/ack can arrive before we hold a trusted-range IP. */
-        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " udp dport { 68, 546 } accept\n"
-        "SYNNET_FW\n";
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " udp dport { 68, 546 } accept\n";
+
+    char script[16384];
+    int off = snprintf(script, sizeof(script), "%s", base);
+    if (off < 0 || (size_t)off >= sizeof(script)) {
+        syslog(LOG_ERR, "synnet: base firewall script does not fit — not applied");
+        firewall_publish(0);
+        return -1;
+    }
+
+    /* ── the container/VM links we are the gateway for ──────
+     *
+     * The mirror image of the DHCP rule above: that one is this box acting as a
+     * DHCP CLIENT, and these are it acting as the SERVER for a bridge it owns.
+     * A guest's first packet comes from 0.0.0.0 — no address yet, so the
+     * LAN-trust rule cannot see it — and every packet after the lease is
+     * already covered by that rule, which is why this stops at the gateway
+     * services instead of trusting the interface wholesale. See
+     * SYNNET_FW_IFACES.
+     *
+     * ⚠ `iifname`, never `iif`: these bridges appear when the container starts,
+     * long after this chain was loaded at boot, and `iif` on an interface that
+     * does not exist yet fails the atomic load — losing the whole firewall to
+     * fix one link. */
+    char ifaces[SYNNET_MAX_IFACES][SYNNET_IFNAME_MAX];
+    size_t n = trusted_ifaces_load(ifaces, SYNNET_MAX_IFACES);
+    size_t applied = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        int w = snprintf(script + off, sizeof(script) - (size_t)off,
+            "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+            " iifname \"%s\" udp dport { 53, 67, 547 } accept "
+            "comment \"synnet-gw\"\n"
+            "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+            " iifname \"%s\" tcp dport { 53, 67 } accept "
+            "comment \"synnet-gw\"\n",
+            ifaces[i], ifaces[i]);
+        /* ⚠ Stop, do not truncate. A clipped rule is a syntax error that fails
+         * the load and unfilters the box; dropping the tail of the list leaves
+         * a working firewall missing one link, which is recoverable and says so
+         * in the journal. */
+        if (w < 0 || (size_t)w >= sizeof(script) - (size_t)off) {
+            script[off] = '\0';
+            syslog(LOG_WARNING, "synnet: firewall script full at %zu of %zu "
+                                "trusted link(s) — '%s' and after are NOT "
+                                "applied", applied, n, ifaces[i]);
+            break;
+        }
+        off += w;
+        applied++;
+    }
+
+    if (off + 12 >= (int)sizeof(script)) {   /* "SYNNET_FW\n" and slack */
+        syslog(LOG_ERR, "synnet: no room to close the firewall script — not applied");
+        firewall_publish(0);
+        return -1;
+    }
+    snprintf(script + off, sizeof(script) - (size_t)off, "SYNNET_FW\n");
+
     int rc = run_nft("%s", script);
+    /* Published even on failure: the count describes what this apply TRIED, and
+     * a state file saying "failed, 1 link" is a better report than one that
+     * quietly keeps the previous run's number. */
+    g_fw_ifaces = (unsigned)applied;
     firewall_publish(rc == 0);
+    if (rc == 0 && applied)
+        syslog(LOG_INFO, "synnet: %zu container/VM link(s) trusted for DHCP+DNS",
+               applied);
     return rc;
 }
 
@@ -816,6 +1056,44 @@ int synnet_status(void) {
         printf("    See `journalctl -u synnet` for what nft said.\n");
     }
     printf("\n");
+
+    /* ── 1b. the links we serve DHCP and DNS on ─────────────
+     *
+     * Read from /etc/synnet/trusted-ifaces, not from the published state, so
+     * this answers even before the daemon has applied anything — and so a name
+     * that was added but never applied is visible as exactly that, rather than
+     * as a firewall that mysteriously still drops the container's DHCP. */
+    {
+        char ifaces[SYNNET_MAX_IFACES][SYNNET_IFNAME_MAX];
+        size_t n = trusted_ifaces_load(ifaces, SYNNET_MAX_IFACES);
+        printf("  Container / VM links (DHCP + DNS accepted on these)\n");
+        if (n == 0) {
+            printf("    none — %s is empty or absent.\n", synnet_fw_ifaces_path());
+            printf("    A container bridge needs one: its guest's first DHCP\n");
+            printf("    packet comes from 0.0.0.0 and the drop policy eats it.\n");
+            printf("    `sudo synnet --trust-if waydroid0` adds one.\n");
+        } else {
+            const char *live = fw_state_get("links");
+            for (size_t i = 0; i < n; i++) {
+                char sys[PATH_MAX];
+                snprintf(sys, sizeof(sys), "/sys/class/net/%s", ifaces[i]);
+                /* Absent is normal, not a fault: the rule is matched by name
+                 * and starts working the moment the container brings the
+                 * bridge up. Said out loud so nobody goes looking for a typo. */
+                printf("    %-15s %s\n", ifaces[i],
+                       access(sys, F_OK) == 0 ? "(up)"
+                                              : "(not present yet — matched by name)");
+            }
+            /* Only when the firewall is actually up and asserted: an "off" or
+             * never-applied firewall not matching this list is not news, it is
+             * the definition of those states. */
+            if (strcmp(st, "active") == 0 && live[0] && atoi(live) != (int)n)
+                printf("    ⚠ synnet last applied %s of these. Run\n"
+                       "      `sudo synnet --firewall` to load the current list.\n",
+                       live);
+        }
+        printf("\n");
+    }
 
     /* ── 2. what the kernel actually holds ──────────────────── */
     printf("  Live ruleset\n");

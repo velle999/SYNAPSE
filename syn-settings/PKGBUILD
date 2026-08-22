@@ -42,7 +42,21 @@ pkgver=0.1.0
 #   ⚠ Nothing here reads the kernel: "what synnet believes" is not "what
 #   nftables holds", and presenting the first as the second is the claim this
 #   area already got wrong once.
-pkgrel=31
+# 32: a "container links" row in the Network pane, because the firewall's effect
+#   on a container is INVISIBLE and does not look like a firewall. A Waydroid or
+#   libvirt guest lives on 192.168.x, which the LAN-trust rule accepts — but the
+#   DHCP request that gets it that address is sent from 0.0.0.0, matches no
+#   accept, and the default-drop policy eats it. The guest comes up with no
+#   network and nothing in any log says firewall, so people go looking at the
+#   container, at DNS, at the bridge. The row lists what
+#   /etc/synnet/trusted-ifaces names and warns when synnet has not loaded it.
+#   ⚠ It reads the FILE, not the published count, so a bridge added but not
+#   applied shows as itself rather than as an absence — that mismatch is exactly
+#   the state worth reporting, since synnet only rebuilds a chain that has GONE
+#   and one that is merely out of date looks healthy to it.
+#   ⚠ And a mismatch while the firewall is OFF is not a warning: that is the
+#   definition of off, not a fault.
+pkgrel=32
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

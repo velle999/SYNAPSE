@@ -1440,6 +1440,62 @@ if [ -f "$QML" ]; then
         && ok "the off label says what turning it off does" \
         || bad "the off label does not describe the consequence"
 
+    # ── The container / VM links row ────────────────────────────────────────
+    #
+    # THE BUG (2026-08-22): a Waydroid guest came up with no network. Its bridge
+    # is 192.168.240.0/24, which the LAN-trust rule accepts — but the DHCP
+    # request that gets it that address is sent from 0.0.0.0, matches nothing,
+    # and the drop policy eats it. Nothing in any log mentions the firewall, so
+    # this row is where somebody with a dead container network can see whether
+    # the bridge has been named in /etc/synnet/trusted-ifaces.
+    fwifaces="$fwdir/ifaces"
+    fwlinks() { SYNNET_FW_STATE_FILE="$fwstate" SYNNET_FW_PREF_FILE="$fwpref" \
+                SYNNET_FW_IFACES_FILE="$fwifaces" \
+                "$BIN" --rec network | grep "^firewall	container links"; }
+
+    printf 'state=active\nlinks=2\nreasserts=0\n' > "$fwstate"
+    printf '# comment\nwaydroid0\n\n  virbr0  # trailing\n' > "$fwifaces"
+    case "$(fwlinks | cut -f3)" in
+        *waydroid0*virbr0*) ok "the links row lists the trusted bridges" ;;
+        *) bad "the links row read '$(fwlinks | cut -f3)'" ;;
+    esac
+    # Comments and blanks are entries in the file, not interfaces.
+    case "$(fwlinks | cut -f3)" in
+        *comment*|*trailing*) bad "a comment was read as an interface name" ;;
+        *) ok "…and reads the entries, not the comments around them" ;;
+    esac
+
+    rm -f "$fwifaces"
+    case "$(fwlinks | cut -f3)" in
+        none) ok "no file reads as none — the normal state of a box with no containers" ;;
+        *)    bad "an absent list read as '$(fwlinks | cut -f3)'" ;;
+    esac
+
+    # ⚠ THE STALE CASE IS THE POINT OF THE WARN STATE. The daemon only rebuilds
+    # a chain that has GONE; one that is merely out of date looks healthy to it,
+    # so a bridge added by hand to the file is not in the kernel and the
+    # container's DHCP is still being dropped. The row has to say so.
+    printf 'waydroid0\nvirbr0\n' > "$fwifaces"
+    printf 'state=active\nlinks=0\nreasserts=0\n' > "$fwstate"
+    [ "$(fwlinks | cut -f4)" = warn ] \
+        && ok "a list the firewall has not loaded yet is flagged" \
+        || bad "a stale link list did not warn"
+
+    printf 'state=active\nlinks=2\nreasserts=0\n' > "$fwstate"
+    [ "$(fwlinks | cut -f4)" = warn ] \
+        && bad "an up-to-date link list warned anyway" \
+        || ok "…and an up-to-date one does not"
+
+    # ⚠ A mismatch on a firewall that is OFF is not news, it is the definition
+    # of off. Warning there sends somebody chasing a fault they created on
+    # purpose.
+    printf 'off\n' > "$fwpref"
+    printf 'state=active\nlinks=0\nreasserts=0\n' > "$fwstate"
+    [ "$(fwlinks | cut -f4)" = warn ] \
+        && bad "a switched-off firewall warned about its link list" \
+        || ok "…and a switched-off firewall does not warn about the list at all"
+    rm -f "$fwpref"
+
     rm -rf "$fwdir"
 
     # `unavailable` is the one verb the loop above cannot catch on its own: it
