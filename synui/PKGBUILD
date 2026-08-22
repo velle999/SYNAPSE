@@ -395,7 +395,7 @@ pkgver=0.1.0
 #   target, because a tab that is not drawn is a category the mouse cannot get
 #   to at all.
 
-pkgrel=424
+pkgrel=425
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

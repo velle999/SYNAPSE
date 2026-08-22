@@ -637,17 +637,17 @@ static void close_button_draw(cairo_t *cr, int bx, int by)
  *
  * ⚠ THE KEY IS A FALLBACK, NOT THE ANSWER. welcome_hint() below reads the chord
  * out of the LIVE bind table, because these strings are typed by hand and the
- * binds are not: Super+Space was written here as the AI command bar, kept
- * saying so after the default moved to Super+= (rofi took Super+Space), and
- * would have gone on saying so for anyone who rebound it in the palette. The
- * string is what the row shows when nothing is bound to its action at all. */
+ * binds are not: the command bar has now been on Super+Space, on Super+= and
+ * back on Super+Space, and each move left this column saying the old one — to
+ * say nothing of anyone who rebinds a key in the palette. The string is what
+ * the row shows when nothing is bound to its action at all. */
 const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Control Panel",    "Super+C",       "control"   },
     /* Second, because "what are the keys" is the first question this menu
      * exists to answer and the palette answers all of it. */
     { "Keyboard Shortcuts", "Super+/",     "keys"      },
     { "Terminal",         "Super+Enter",   "term"      },
-    { "AI Command Bar",   "Super+=",       "cmdbar"    },
+    { "AI Command Bar",   "Super+Space",   "cmdbar"    },
     { "Neural Overlay",   "Super+A",       "overlay"   },
     { "Display Settings", "Super+D",       "displays"  },
     { "Wallpaper",        "Super+W",       "wallpaper" },

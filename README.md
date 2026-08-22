@@ -358,8 +358,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
 | `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable; `F2` on a row moves it to another key |
 | `Super`+`Return` | Open a terminal (`syntty` — see [The terminal](#the-terminal)) |
-| `Super`+`Space` | App launcher (rofi, `-show drun`) |
-| `Super`+`=` | Command bar — synsh intents and output capture |
+| `Super`+`Space` | Command bar — synsh intents and output capture |
+| `Super`+`,` | App launcher (rofi, `-show drun`) |
 | `Super`+`Backspace` | Ask the AI |
 | `Super`+`A` | Neural activity overlay |
 | `Super`+`D` | Display settings — resolution, refresh, arrangement, and `m` to cycle `display_mode` (extend / mirror / external) |
@@ -382,7 +382,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |
 | `Super`+`Shift`+`Left` / `Super`+`Shift`+`Right` / `Super`+`Shift`+`Up` / `Super`+`Shift`+`Down` | Move the focused window. A floating window slides by a step; a tiled one moves through the layout instead, since a tiled window has no position of its own — Left and Up move it earlier in the order, Right and Down later |
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area (also a niri column's width) |
-| `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other five layouts |
+| `Super`+`[` / `Super`+`]` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other five layouts |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
 | `Super`+`Ctrl`+`Up` / `Super`+`Ctrl`+`Left` | Fill the screen height / width, leaving the other axis alone. Press again to put it back. Same thing as double-clicking the window's top or bottom border (height) or its left or right border (width) |
 | `Super`+`Shift`+`N` | Restore a minimized window |
@@ -414,7 +414,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
-`Super`+`Space` and `Super`+`=` are ordinary binds like everything else: swap
+`Super`+`Space` and `Super`+`,` are ordinary binds like everything else: swap
 them with two `bind =` lines, or move either one live with `F2` in the `Super`+`/`
 palette. (There used to be a `super_space = launcher|cmdbar` setting and a
 control-panel row for this. It re-applied at the end of every config load, which
