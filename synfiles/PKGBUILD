@@ -63,7 +63,39 @@ pkgver=0.1.0
 #   never carrying much contrast and had none left on the pale accents. It also
 #   puts this icon in the same ink as syn-settings, syn-arcade and syn-disks.
 
-pkgrel=56
+# 56: renaming a file could silently take its EXTENSION off. Renaming
+#   `tux95.png` to `tux95` in the window left an extensionless PNG: the bytes
+#   were untouched and every listing looked normal, so nothing about the file
+#   said anything was wrong.
+#
+#   ⛔ WHAT BREAKS IS DOWNSTREAM, AND IT BREAKS QUIETLY. synui's wallpaper
+#   picker filters a folder by extension (wppick.c) and its thumbnailer chooses
+#   a decoder the same way (wpthumb.c), so the picture left the wallpaper list
+#   and previewed as blank — with no error, in a different application, from a
+#   rename that had already been forgotten.
+#
+#   The inline editor did `selectAll()` on a name that included the suffix, so
+#   typing a new name replaced it. An extension is not part of the name a
+#   person is typing, and it cannot be removed as a side effect of typing one.
+#
+#   TWO HALVES, and the second is what makes it a rule rather than a nicety.
+#   stemLen() keeps the extension out of the initial selection — visible,
+#   reachable with the cursor, not destroyed by the first keystroke. keepExt()
+#   then restores it at COMMIT for any new name that arrived without one, which
+#   is what covers the paths that never touched that selection: a rename
+#   started from the context menu, a pasted name, a hand-extended selection.
+#   Typing an extension is how you change it, and that still works.
+#   ⚠ A folder has no extension, and a leading dot is not one (`.bashrc`).
+#
+#   ⚠ BOTH DELEGATES. The list rows and the icon/compact cells are two
+#   renderings of one row, and the editor has been fitted to only one of them
+#   before — that is why Rename read as a dead button in Icons view.
+#
+#   The check RUNS the two functions in a real engine rather than grepping for
+#   them, and asserts on PASS as well as the absence of FAIL: a run that
+#   printed its marker and nothing else would satisfy a bare "no FAIL" while
+#   proving nothing. ⚠ console.log needs QT_ASSUME_STDERR_HAS_CONSOLE.
+pkgrel=57
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -242,6 +242,31 @@ FloatingWindow {
     // stay encoded, so the result is still an identity and never needs
     // re-encoding — the step where a "%" in a real filename would become
     // "%25" a second time.
+    // How much of a name the inline rename SELECTS. Typing replaces the
+    // selection, so this is what decides whether a rename keeps the extension.
+    //
+    // ⛔ selectAll() HERE COSTS THE EXTENSION. Renaming `tux95.png` to `tux95`
+    // silently produced an extensionless file: still a perfectly good PNG, and
+    // invisible to everything that dispatches on the suffix — synui's wallpaper
+    // picker filters the folder by extension (wppick.c) and its thumbnailer
+    // chooses a decoder the same way (wpthumb.c), so the picture vanished from
+    // the wallpaper list and previewed as nothing, with no error anywhere.
+    //
+    // The extension stays out of the selection, the way every other file
+    // manager does it — visible, editable by moving the cursor, but not
+    // destroyed by typing.
+    //
+    // ⚠ A FOLDER HAS NO EXTENSION. Dots in `.config` or `My.Stuff` are part of
+    // the name, so a directory selects whole.
+    // ⚠ A LEADING DOT IS NOT A SEPARATOR either — `.bashrc` is all stem, which
+    // is why this tests `dot > 0` and not `dot >= 0`.
+    // Last dot, not first: `archive.tar.gz` offers `archive.tar`.
+    function stemLen(name, isDir) {
+        if (isDir) return name.length
+        var dot = name.lastIndexOf(".")
+        return dot > 0 ? dot : name.length
+    }
+
     function joinEnc(dirEnc, nameEnc) {
         if (dirEnc === "/") return "/" + nameEnc
         return dirEnc + "/" + nameEnc
@@ -954,9 +979,43 @@ FloatingWindow {
     // be selected is the same class of mistake as beginDrag reading the active
     // pane instead of its own — it agrees with the visible state right up until
     // it doesn't, and then it renames the wrong file.
+    // ⛔ AN EXTENSION IS NOT PART OF THE NAME YOU TYPE, so typing a name cannot
+    // take it away. Renaming `tux95.png` to `tux95` produced an extensionless
+    // file — still a perfectly good PNG, and invisible to everything that
+    // dispatches on the suffix: synui's wallpaper picker filters the folder by
+    // extension (wppick.c) and the thumbnailer picks its decoder the same way
+    // (wpthumb.c), so the picture dropped out of the wallpaper list and
+    // previewed as nothing. No error, nothing in a log, and the file looks
+    // untouched in every listing — the only clue is the missing suffix.
+    //
+    // A new name carrying no extension KEEPS the old one. Typing one is how
+    // you change it, which is the only way to say so deliberately.
+    //
+    // ⚠ stemLen() keeps the extension out of the initial selection, which is
+    // what makes the ordinary case pleasant; THIS is what makes it safe. The
+    // selection can be extended by hand, and a rename typed from a menu or
+    // pasted in never went through that selection at all.
+    //
+    // ⚠ A FOLDER HAS NO EXTENSION — dots in `.config` or `My.Stuff` are name.
+    // ⚠ A LEADING DOT IS NOT ONE either: `.bashrc` is all stem, so it counts as
+    // an untyped extension and the old suffix is kept.
+    function keepExt(oldName, newName, isDir) {
+        if (isDir) return newName
+        var oldDot = oldName.lastIndexOf(".")
+        if (oldDot <= 0) return newName                 // nothing to preserve
+        if (newName.lastIndexOf(".") > 0) return newName // one was typed
+        return newName + oldName.substring(oldDot)
+    }
+
     function commitRename(row, newName) {
         root.ap.renaming = ""
-        if (!row || !newName || newName === root.disp(row.name)) return
+        if (!row || !newName) return
+        var was = root.disp(row.name)
+        newName = root.keepExt(was, newName, row.type === "dir")
+        // Compared AFTER the extension is restored: typing `tux95` over
+        // `tux95.png` is now the same name, and must not spend a rename op
+        // (nor a line in the undo log) saying so.
+        if (newName === was) return
         root.runOp(["rename", root.disp(row.full), newName],
                    "renaming to " + newName)
     }
@@ -5106,7 +5165,7 @@ FloatingWindow {
                             if (visible) {
                                 text = root.disp(fileRow.modelData.name)
                                 forceActiveFocus()
-                                selectAll()
+                                select(0, root.stemLen(text, fileRow.modelData.type === "dir"))
                             }
                         }
                         onAccepted: root.commitRename(fileRow.modelData, text)
@@ -5423,7 +5482,7 @@ FloatingWindow {
                             if (visible) {
                                 text = root.disp(gridCell.modelData.name)
                                 forceActiveFocus()
-                                selectAll()
+                                select(0, root.stemLen(text, gridCell.modelData.type === "dir"))
                             }
                         }
                         onAccepted: root.commitRename(gridCell.modelData, text)

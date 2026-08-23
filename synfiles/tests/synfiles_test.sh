@@ -2473,6 +2473,68 @@ else
     echo "  skip  quickshell not installed, cannot check the wallpaper accent"
 fi
 
+# ── a rename cannot silently eat the extension ─────────────────────────────
+#
+# Renaming `tux95.png` to `tux95` in the window produced an EXTENSIONLESS PNG.
+# The bytes were fine and every listing looked normal; what broke was
+# everything downstream that dispatches on the suffix — synui's wallpaper
+# picker filters the folder by extension (wppick.c) and its thumbnailer chooses
+# a decoder the same way (wpthumb.c), so the picture left the wallpaper list
+# and previewed as nothing, with no error raised anywhere.
+#
+# Two halves, and the second is the one that makes it a rule: stemLen() keeps
+# the extension out of the initial SELECTION so typing does not overwrite it,
+# and keepExt() puts it back at COMMIT for a name that arrived without one —
+# a menu rename, a paste, or a hand-extended selection never touched stemLen.
+#
+# ⚠ RUN IN A REAL ENGINE, not grepped. These are two functions on root, and a
+# grep proves the text is present, not that the file still loads or that the
+# functions return anything in particular. ⚠ console.log is INVISIBLE without
+# QT_ASSUME_STDERR_HAS_CONSOLE.
+if [ -f "$QML" ] && command -v quickshell >/dev/null 2>&1; then
+    rq="$T/renameext.qml"
+    awk 'BEGIN{RS="\0"} {
+            n = match($0, /}[ \t\r\n]*$/)
+            printf "%s\n    Timer { running: true; interval: 1; repeat: false; onTriggered: {\n", substr($0,1,n-1)
+            printf "        var r = [];\n"
+            printf "        function t(label, got, want) { r.push((got === want ? \"PASS \" : \"FAIL \") + label + \" got[\" + got + \"] want[\" + want + \"]\") }\n"
+            printf "        t(\"stem-stops-at-ext\", root.stemLen(\"tux95.png\", false), 5);\n"
+            printf "        t(\"stem-dir-is-whole\", root.stemLen(\"My.Stuff\", true), 8);\n"
+            printf "        t(\"stem-dotfile-is-whole\", root.stemLen(\".bashrc\", false), 7);\n"
+            printf "        t(\"stem-no-ext-is-whole\", root.stemLen(\"README\", false), 6);\n"
+            printf "        t(\"stem-last-dot-wins\", root.stemLen(\"archive.tar.gz\", false), 11);\n"
+            printf "        t(\"keep-untyped-ext\", root.keepExt(\"tux95.png\", \"tux95\", false), \"tux95.png\");\n"
+            printf "        t(\"keep-on-new-stem\", root.keepExt(\"tux95.png\", \"penguin\", false), \"penguin.png\");\n"
+            printf "        t(\"typed-ext-wins\", root.keepExt(\"tux95.png\", \"tux95.jpg\", false), \"tux95.jpg\");\n"
+            printf "        t(\"dir-untouched\", root.keepExt(\"My.Stuff\", \"Other\", true), \"Other\");\n"
+            printf "        t(\"no-ext-to-keep\", root.keepExt(\"README\", \"NOTES\", false), \"NOTES\");\n"
+            printf "        console.log(\"RENAMEEXT \" + r.join(\" | \"));\n"
+            printf "        Qt.quit() } }\n%s", substr($0,n)
+         }' "$QML" > "$rq"
+    rqrun="$T/rqrun"; mkdir -p "$rqrun"
+    rqout=$(XDG_RUNTIME_DIR="$rqrun" QT_QPA_PLATFORM=offscreen \
+            QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+            timeout 30 quickshell -p "$rq" 2>&1 | grep 'RENAMEEXT' | head -1)
+    if [ -z "$rqout" ]; then
+        bad "the rename-extension checks did not run at all"
+    else
+        # ⚠ Assert on the ABSENCE of FAIL *and* the presence of PASS. A run that
+        # printed the marker and nothing else would satisfy a bare `grep -qv
+        # FAIL` while proving nothing.
+        if printf '%s' "$rqout" | grep -q 'FAIL '; then
+            bad "a rename would still lose or mangle the extension"
+            printf '%s\n' "$rqout" | tr '|' '\n' | grep 'FAIL ' | sed 's/^/        /' >&2
+        else
+            n=$(printf '%s' "$rqout" | grep -o 'PASS ' | wc -l | tr -d ' ')
+            [ "$n" -eq 10 ] \
+                && ok "a rename keeps the extension unless one is typed ($n checks)" \
+                || bad "expected 10 rename-extension checks, the engine ran $n"
+        fi
+    fi
+else
+    echo "  skip  quickshell not installed, cannot check rename extensions"
+fi
+
 unset SYNFILES_CONFIG
 
 echo
