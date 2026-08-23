@@ -1,0 +1,16 @@
+[Unit]
+# The desktop's accent, pushed to whatever OpenRGB can see.
+#
+# A ONESHOT, not a daemon: there is nothing to keep in memory between wallpaper
+# changes, and a process that sleeps for a colour is a process that can leak,
+# wedge or hold a device open. syn-rgb.path is what watches; this is what runs.
+Description=SynapseOS accent on the RGB hardware
+Documentation=man:openrgb(1)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/syn-rgb apply
+# ⚠ Never fail the session over lights. A device that has gone away, an
+# openrgb that is not installed and a wallpaper with no hue in it are all
+# ordinary, and none of them is a reason for a red unit in `systemctl --user`.
+SuccessExitStatus=0 1 3

@@ -507,8 +507,53 @@ pkgver=0.1.0
 #   tests/ctlpanel_table_test.c asserts what the label PROMISES — that the two
 #   surfaces somebody pinned come out opaque — not that the pins were cleared,
 #   which is only how.
+#
+# 431 THE DESKTOP'S ACCENT, ON THE HARDWARE THAT HAS LIGHTS IN IT.
+#
+#   synui already decides one colour per wallpaper: it measures the picture and
+#   writes `accent` to ~/.config/synui/palette.state, and the bar, the dock and
+#   the icons wear it. Everything else in the room that lights up — the RAM,
+#   the board, the keyboard — was still whatever somebody else's software had
+#   set it to.
+#
+#   `syn-rgb` is the bridge and nothing else: read the colour this desktop has
+#   already chosen and hand it to OpenRGB. Follow the wallpaper's accent, the
+#   THEME's accent, or a fixed colour; a brightness that scales the channels
+#   rather than changing the hue; `dark` for all off; `devices` for what
+#   OpenRGB can see.
+#
+#   ⚠ THE WATCHING IS SYSTEMD'S. syn-rgb.path fires on palette.state and
+#   theme.json, so there is no daemon, nothing polling and nothing running at
+#   all between one wallpaper and the next. The service is a oneshot.
+#
+#   ⛔ SHIPPED OFF, and enabled per user with `syn-rgb on`. It writes to
+#   HARDWARE, and hardware that is already doing what its owner asked is not a
+#   thing to take over on an update. Turning it off stops it following and
+#   leaves the lights where they are — blanking them is `syn-rgb dark`, which
+#   is its own word.
+#
+#   ⚠ `ok` in palette.state is the PICTURE's own answer. A greyscale wallpaper
+#   offers no hue, so the lights KEEP what they have rather than snapping to
+#   something invented. ⚠ `use` is deliberately NOT consulted: that setting is
+#   about whether the desktop draws with the colour, and somebody who turned
+#   the bar's tint off has said nothing about their keyboard.
+#
+#   ⚠ Not every device has a Direct mode — openrgb fails the whole call rather
+#   than skipping the ones that cannot — so a refused `direct` is retried once
+#   as `static`, which is what the other half of the hardware offers.
+#
+#   ⛔ AND THE COLOUR IS NOT A COMMENT. The state reader stripped `#` to the
+#   end of a line, which turned `accent=#9B610F` into an empty string: every
+#   wallpaper read as "no accent" and the lights never moved. A whole-line
+#   comment never reaches that code — the key anchor does not match one.
+#
+#   openrgb is an OPTDEPEND: a desktop with nothing in it that glows should not
+#   pull in a lighting daemon, and syn-rgb says which one is missing rather
+#   than doing nothing quietly. tests/syn_rgb.sh drives the whole contract
+#   against a STUB openrgb — no real device is touched, because a test that
+#   changed the colour of the machine running it is not one anybody runs twice.
 
-pkgrel=430
+pkgrel=431
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -615,6 +660,11 @@ optdepends=(# Network printers: cups does the discovery (its own dnssd backend) 
             'avahi: the mDNS announcements network printers and shares make'
             'kitty: the terminal SynapseOS defaulted to before syntty — every synuirc written between synui 215 and 358 still names it, and anim.c draws it on glass'
             'foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
+            # The lights follow the wallpaper's accent when this is here and
+            # `syn-rgb on` has been said. Not a dependency: a desktop with
+            # nothing in it that glows should not pull in a lighting daemon,
+            # and syn-rgb says which one is missing rather than doing nothing.
+            'openrgb: put the desktop accent on RGB hardware (syn-rgb)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
             'imagemagick: same — most cursor makefiles render their PNGs with it'
             # Event sounds (Super+S) ship OFF, so neither of these is needed for
@@ -813,6 +863,15 @@ package() {
         "$pkgdir/usr/share/synui/bluez5-quirks.conf"
     install -Dm755 systemd/synui-bluez-quirks.sh \
         "$pkgdir/usr/bin/synui-bluez-quirks"
+    # The accent, on the hardware that has lights in it. ⛔ The units are
+    # SHIPPED but not enabled: syn-rgb writes to hardware, and hardware doing
+    # what its owner asked is not a thing to take over on an update. `syn-rgb
+    # on` is the whole opt-in.
+    install -Dm755 tools/syn-rgb "$pkgdir/usr/bin/syn-rgb"
+    install -Dm644 systemd/syn-rgb.service \
+        "$pkgdir/usr/lib/systemd/user/syn-rgb.service"
+    install -Dm644 systemd/syn-rgb.path \
+        "$pkgdir/usr/lib/systemd/user/syn-rgb.path"
     install -Dm644 hooks/72-synui-bluez-quirks.hook \
         "$pkgdir/usr/share/libalpm/hooks/72-synui-bluez-quirks.hook"
     install -Dm644 config/wireplumber.service.d/10-synapse-spa-data-dir.conf \

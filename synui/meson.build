@@ -830,6 +830,13 @@ test('calc', calc_test)
 # depends on. calc_test cannot see any of that.
 test('syncalc', find_program('tests/syncalc.sh'), args : [syn_calc])
 
+# The desktop's accent, on the RGB hardware. ⛔ No real device is touched: the
+# test puts a stub `openrgb` on the path that writes down what it was asked
+# for, because a test that changed the colour of the machine running it is not
+# one anybody would run twice.
+test('synrgb', find_program('tests/syn_rgb.sh'),
+     args : [meson.current_source_dir() / 'tools' / 'syn-rgb'])
+
 # The clipboard history CAPTURES. Not the panel, not the keys — that a copy
 # reaches items[0] at all, which is what pkgrel 311 shipped not doing while
 # looking entirely healthy from outside (the selection is wlroots' job and went

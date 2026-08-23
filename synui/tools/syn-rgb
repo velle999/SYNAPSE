@@ -1,0 +1,221 @@
+#!/bin/bash
+# syn-rgb — the desktop's accent, on the hardware that has lights in it.
+#
+# SynapseOS already decides one colour per wallpaper: synui measures the
+# picture and writes `accent` to ~/.config/synui/palette.state, and the bar,
+# the dock and the icons wear it. Everything else in the room that lights up —
+# the RAM, the board, the keyboard — was still whatever it was set to in
+# somebody else's software.
+#
+# So this is a bridge and nothing more: read the colour the desktop already
+# chose, hand it to OpenRGB, and get out of the way.
+#
+# ⛔ OFF BY DEFAULT, and enabled per user. It writes to hardware, and hardware
+# that is currently doing what its owner asked is not a thing to take over on
+# an update.
+#
+# ⚠ THE WATCHING IS SYSTEMD'S. A path unit fires when palette.state changes,
+# so there is no daemon here, nothing to poll and nothing to leak — the
+# wallpaper changes, the file is rewritten, the colour follows.
+#
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+set -u
+
+CFG=${XDG_CONFIG_HOME:-$HOME/.config}/synui
+PAL=$CFG/palette.state
+THEME=$CFG/theme.json
+STATE=$CFG/rgb.state
+# The binary is looked up by NAME on PATH, and asked for by `command -v`.
+# ⚠ `openrgb ... || echo missing` cannot tell "not installed" from "ran and
+# failed", and those want opposite answers.
+RGB=${SYN_RGB_BIN:-openrgb}
+
+say()  { printf '%s\n' "$*"; }
+warn() { printf 'syn-rgb: %s\n' "$*" >&2; }
+
+have_openrgb() { command -v "$RGB" >/dev/null 2>&1; }
+
+# ---- the state file ------------------------------------------------------
+#
+# key=value, the same shape every other synui state file uses, so it greps and
+# a human can fix it with an editor.
+getval() {   # getval FILE KEY DEFAULT
+    local f=$1 k=$2 d=$3 v=
+    [ -r "$f" ] || { printf '%s' "$d"; return; }
+    v=$(sed -n "s/^[[:space:]]*$k[[:space:]]*=[[:space:]]*//p" "$f" | tail -1)
+    # ⛔ No comment stripping. `accent=#9B610F` IS the value, and a `%%#*` here
+    # turned every colour in the file into an empty string — which read as
+    # "this wallpaper has no accent" and left the lights alone for ever. A
+    # whole-line comment never reaches this: the key anchor does not match one.
+    v=${v%"${v##*[![:space:]]}"}
+    [ -n "$v" ] || v=$d
+    printf '%s' "$v"
+}
+
+setval() {   # setval KEY VALUE — in the rgb state only
+    local k=$1 v=$2 tmp
+    mkdir -p "$CFG"
+    [ -f "$STATE" ] || {
+        printf '# syn-rgb — the desktop accent on the lights.\n' > "$STATE"
+    }
+    tmp=$STATE.tmp.$$
+    if grep -q "^[[:space:]]*$k[[:space:]]*=" "$STATE" 2>/dev/null; then
+        sed "s|^[[:space:]]*$k[[:space:]]*=.*|$k=$v|" "$STATE" > "$tmp"
+    else
+        cat "$STATE" > "$tmp"
+        printf '%s=%s\n' "$k" "$v" >> "$tmp"
+    fi
+    mv "$tmp" "$STATE"
+}
+
+# ---- the colour ----------------------------------------------------------
+
+# The wallpaper's accent, as six hex digits, or nothing.
+#
+# ⚠ `ok` is the PICTURE's own answer: a greyscale wallpaper offers no hue and
+# says so. `use` is not consulted — that setting is about whether the DESKTOP
+# draws with the colour, and somebody who turned the bar's tint off has not
+# said anything about their keyboard.
+accent_colour() {
+    local ok acc
+    ok=$(getval "$PAL" ok no)
+    acc=$(getval "$PAL" accent "")
+    [ "$ok" = "yes" ] || return 1
+    acc=${acc#\#}
+    case $acc in
+        [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
+        *) return 1 ;;
+    esac
+    printf '%s' "$acc"
+}
+
+# The THEME's accent, for somebody whose desktop is not wearing the wallpaper.
+# theme.json is generated, one key per line, `"accent": [r, g, b]`.
+theme_colour() {
+    local line r g b
+    [ -r "$THEME" ] || return 1
+    line=$(sed -n 's/.*"accent"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' "$THEME" | head -1)
+    [ -n "$line" ] || return 1
+    r=$(printf '%s' "$line" | cut -d, -f1 | tr -dc '0-9')
+    g=$(printf '%s' "$line" | cut -d, -f2 | tr -dc '0-9')
+    b=$(printf '%s' "$line" | cut -d, -f3 | tr -dc '0-9')
+    [ -n "$r" ] && [ -n "$g" ] && [ -n "$b" ] || return 1
+    printf '%02X%02X%02X' "$r" "$g" "$b"
+}
+
+# What the lights should be, after the source and the brightness are applied.
+wanted_colour() {
+    local follow hex bright r g b
+    follow=$(getval "$STATE" follow accent)
+    case $follow in
+        theme)  hex=$(theme_colour) || return 1 ;;
+        fixed)  hex=$(getval "$STATE" colour "")
+                hex=${hex#\#}
+                [ -n "$hex" ] || return 1 ;;
+        *)      hex=$(accent_colour) || return 1 ;;
+    esac
+
+    # ⚠ Brightness is applied HERE and not by OpenRGB, which has no such
+    # control: a wallpaper accent at full value is a room-filling glow off a
+    # pair of RAM sticks, and the answer to that is a darker colour rather
+    # than a different one. Scaled in RGB, so the hue does not move.
+    bright=$(getval "$STATE" brightness 1.0)
+    r=$((16#${hex:0:2})); g=$((16#${hex:2:2})); b=$((16#${hex:4:2}))
+    r=$(awk -v v="$r" -v s="$bright" 'BEGIN{printf "%d", (v*s > 255 ? 255 : (v*s < 0 ? 0 : v*s))}')
+    g=$(awk -v v="$g" -v s="$bright" 'BEGIN{printf "%d", (v*s > 255 ? 255 : (v*s < 0 ? 0 : v*s))}')
+    b=$(awk -v v="$b" -v s="$bright" 'BEGIN{printf "%d", (v*s > 255 ? 255 : (v*s < 0 ? 0 : v*s))}')
+    printf '%02X%02X%02X' "$r" "$g" "$b"
+}
+
+# ---- pushing it ----------------------------------------------------------
+
+push() {   # push RRGGBB
+    local hex=$1 mode rc
+    mode=$(getval "$STATE" mode direct)
+    have_openrgb || { warn "openrgb is not installed"; return 3; }
+    "$RGB" --mode "$mode" --color "$hex" >/dev/null 2>&1
+    rc=$?
+    # ⚠ Not every device has every mode. `direct` is what a device that can be
+    # driven live offers and `static` is what the rest do, so one retry rather
+    # than a table of hardware this program has no way to keep current.
+    if [ "$rc" -ne 0 ] && [ "$mode" != static ]; then
+        "$RGB" --mode static --color "$hex" >/dev/null 2>&1
+        rc=$?
+    fi
+    return "$rc"
+}
+
+cmd_apply() {
+    local hex
+    [ "$(getval "$STATE" on no)" = "yes" ] || { say "off"; return 0; }
+    hex=$(wanted_colour) || {
+        # A greyscale wallpaper is an ANSWER, not a failure: there is no hue to
+        # follow, so the lights keep the last colour they were given rather
+        # than snapping to something invented.
+        say "no colour to follow"
+        return 0
+    }
+    push "$hex"
+    case $? in
+        0) say "$hex"; return 0 ;;
+        # ⚠ "not installed" already said so, once. Saying it twice reads as
+        # two different faults, and the unit treats this as the ordinary
+        # answer it is rather than a failed session service.
+        3) return 3 ;;
+        *) warn "openrgb refused the colour"; return 1 ;;
+    esac
+}
+
+unit_do() {   # unit_do enable|disable
+    command -v systemctl >/dev/null 2>&1 || return 0
+    systemctl --user "$1" --now syn-rgb.path >/dev/null 2>&1 || true
+}
+
+case ${1:-status} in
+    apply)  cmd_apply ;;
+    on)     setval on yes;  unit_do enable;  cmd_apply ;;
+    off)    setval on no;   unit_do disable
+            # Left as they are rather than blanked: turning the bridge off is
+            # saying "stop following", not "turn my lights off". `syn-rgb dark`
+            # is the other thing, and it is its own word.
+            say "off" ;;
+    dark)   push 000000 && say "000000" ;;
+    colour|color)
+            [ $# -ge 2 ] || { warn "colour wants RRGGBB"; exit 2; }
+            setval follow fixed
+            setval colour "${2#\#}"
+            setval on yes
+            cmd_apply ;;
+    follow) [ $# -ge 2 ] || { warn "follow wants accent, theme or fixed"; exit 2; }
+            case $2 in accent|theme|fixed) ;; *) warn "no such source: $2"; exit 2 ;; esac
+            setval follow "$2"
+            cmd_apply ;;
+    brightness)
+            [ $# -ge 2 ] || { warn "brightness wants 0.0 to 1.0"; exit 2; }
+            setval brightness "$2"
+            cmd_apply ;;
+    devices)
+            have_openrgb || { warn "openrgb is not installed"; exit 3; }
+            "$RGB" --list-devices ;;
+    status)
+            printf 'on\t%s\n'         "$(getval "$STATE" on no)"
+            printf 'follow\t%s\n'     "$(getval "$STATE" follow accent)"
+            printf 'brightness\t%s\n' "$(getval "$STATE" brightness 1.0)"
+            printf 'mode\t%s\n'       "$(getval "$STATE" mode direct)"
+            printf 'accent\t%s\n'     "$(accent_colour || printf 'none')"
+            printf 'colour\t%s\n'     "$(wanted_colour || printf 'none')"
+            printf 'openrgb\t%s\n'    "$(have_openrgb && printf yes || printf no)" ;;
+    -h|--help|help)
+            say "syn-rgb — the desktop accent, on the lights"
+            say ""
+            say "  syn-rgb on | off          follow the accent, or stop"
+            say "  syn-rgb apply             push it once, now"
+            say "  syn-rgb follow accent|theme|fixed"
+            say "  syn-rgb colour RRGGBB     one colour, and stay on it"
+            say "  syn-rgb brightness 0..1   how bright the lights run"
+            say "  syn-rgb dark              all off, without turning this off"
+            say "  syn-rgb devices           what OpenRGB can see"
+            say "  syn-rgb status            what it would do" ;;
+    *)      warn "unknown command: $1  (try syn-rgb help)"; exit 2 ;;
+esac

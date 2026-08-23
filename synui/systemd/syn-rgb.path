@@ -1,0 +1,19 @@
+[Unit]
+# ⚠ THE WATCHING IS SYSTEMD'S.
+#
+# synui writes palette.state whenever the wallpaper changes, so a path unit is
+# the whole mechanism: no daemon, no polling, no inotify code of our own, and
+# nothing running at all between one wallpaper and the next.
+Description=Watch the SynapseOS accent for the RGB hardware
+Documentation=man:openrgb(1)
+
+[Path]
+PathChanged=%h/.config/synui/palette.state
+# The theme's accent is the other source syn-rgb can follow, and a theme
+# switch rewrites this one.
+PathChanged=%h/.config/synui/theme.json
+# So a login lands on the current colour rather than on last night's.
+Unit=syn-rgb.service
+
+[Install]
+WantedBy=default.target
