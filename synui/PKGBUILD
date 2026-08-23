@@ -741,7 +741,36 @@ pkgver=0.1.0
 #   two headless outputs, with hand_placed set the way float_arrange.sh does it
 #   — through layout_restore_geometry reading windows.conf, no synthetic input —
 #   and fails on the old condition.
-pkgrel=436
+# 437 CLICKING THROUGH THE WALLPAPERS KILLED THE LIGHTS FOR THE REST OF THE
+#   SESSION. Not a wrong colour and not a slow one: the accent froze on some
+#   picture from the middle of the run and no later wallpaper moved it again.
+#   `syn-rgb apply` by hand still worked perfectly, which is the tell — the
+#   push was fine, the WATCHING was gone.
+#
+#   ⛔ A PATH-TRIGGERED SERVICE THAT TRIPS ITS START LIMIT TAKES THE PATH UNIT
+#   DOWN WITH IT. systemd's default is 5 starts in 10s; past that the service
+#   fails `start-limit-hit` AND syn-rgb.path fails `unit-start-limit-hit` and
+#   stays failed. Nothing re-arms it — not the next wallpaper, not a theme
+#   switch, not anything short of `systemctl --user start syn-rgb.path`. The
+#   journal here caught it happening TWICE in five minutes, 02:17 and 02:22,
+#   both ending on that pair of lines.
+#
+#   ⚠ 434 IS WHAT PUT THE LIMIT IN RANGE. While a push cost 8.8s of bus probe,
+#   five of them spanned ~44 seconds and the 10-second window could never fill;
+#   the fix that made it 1.0s also made five wallpapers in ten seconds an
+#   ordinary thing to do. The optimisation created the failure, so nothing in
+#   syn-rgb itself regressed and nothing in it needed changing.
+#
+#   StartLimitIntervalSec=0 on syn-rgb.service. A oneshot that already refuses
+#   to fail the session (SuccessExitStatus=0 1 3) has no crash loop for a rate
+#   limit to arrest, and the cost of an extra run is one 1-second push.
+#
+#   ⚠ THE ONE-INPUT TEST PROVES NOTHING — an un-limited unit surviving a burst
+#   looks the same as a limit that was never reached. tests/syn_rgb_burst.sh
+#   drives a scratch path+service PAIR, identical but for that one line, with 8
+#   writes a second apart: the limited arm must end `failed` and the unlimited
+#   arm `active` with all 8 runs landed. Both arms are the assertion.
+pkgrel=437
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

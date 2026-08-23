@@ -852,6 +852,22 @@ test('syncalc', find_program('tests/syncalc.sh'), args : [syn_calc])
 test('synrgb', find_program('tests/syn_rgb.sh'),
      args : [meson.current_source_dir() / 'tools' / 'syn-rgb'])
 
+# And that a BURST of wallpapers does not kill the watch (pkgrel 437). A
+# path-triggered service that trips systemd's default 5-in-10s start limit
+# fails the PATH unit too, permanently — so clicking through a folder froze
+# the lights until the next login.
+#
+# ⛔ Drives scratch units under $XDG_RUNTIME_DIR, never syn-rgb's own: stopping
+# the real path unit would leave the machine running the test with no bridge.
+# SKIPs itself where there is no user manager (a build chroot), keeping the
+# static half of the assertion.
+#
+# ⚠ Slower than the rest because the burst has to be REAL — the limit is
+# defined in wall-clock seconds, so there is nothing here to speed up. ~7s.
+test('synrgbburst', find_program('tests/syn_rgb_burst.sh'),
+     args : [meson.current_source_dir() / 'systemd' / 'syn-rgb.service'],
+     timeout : 60)
+
 # The clipboard history CAPTURES. Not the panel, not the keys — that a copy
 # reaches items[0] at all, which is what pkgrel 311 shipped not doing while
 # looking entirely healthy from outside (the selection is wlroots' job and went

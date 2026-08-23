@@ -18,6 +18,25 @@ Documentation=man:openrgb(1)
 # absent, masked or still starting leaves this SLOW rather than broken.
 After=syn-rgb-server.service
 
+# ⛔ NO RATE LIMIT. A BURST OF WALLPAPERS MUST NOT KILL THE WATCH.
+#
+# systemd's default is 5 starts per 10s, and when a PATH-TRIGGERED service
+# trips it the failure does not stop at the service: the path unit fails too,
+# with `unit-start-limit-hit`, and STAYS failed. Nothing re-arms it. The lights
+# freeze on whichever colour the burst happened to end on and never move again
+# until someone runs `systemctl --user start syn-rgb.path` by hand — which
+# reads as "syn-rgb broke", not as "a rate limit did exactly what it says".
+#
+# ⚠ Unreachable until 434 made the push FAST. At 8.8s a bus probe, five pushes
+# spanned ~44s and the window never filled; with the SDK server at ~1.0s, five
+# wallpapers in ten seconds is just a person clicking through a folder. The
+# optimisation is what put the limit in range.
+#
+# Nothing here needs the limit's protection: a oneshot that cannot fail the
+# session (SuccessExitStatus below) has no crash loop to arrest, and the cost
+# of an extra run is one 1-second push to a device that is idle anyway.
+StartLimitIntervalSec=0
+
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/syn-rgb apply
