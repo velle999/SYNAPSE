@@ -1,0 +1,57 @@
+[Unit]
+# ⚠ THIS UNIT EXISTS PURELY TO MAKE `syn-rgb apply` FAST, and the numbers are
+# the whole argument for it.
+#
+# OpenRGB's CLI re-detects every device on EVERY invocation: it walks the SMBus
+# and i2c probing for RAM, a mainboard controller and whatever else is there.
+# Measured on velle's box (2× Corsair DDR4, an ASUS Aura board + addressable
+# header, a G512) one `openrgb --mode direct --color` cost **8.8 seconds**, of
+# which 0.04s was user time — all of it was the probe. With this server up the
+# same call is **1.03 seconds**, because it connects to an already-enumerated
+# device list instead of building a new one.
+#
+# That is not only a comfort fix. syn-rgb.path CANNOT re-trigger while
+# syn-rgb.service is still running, and systemd does not queue what it misses —
+# measured: three writes two seconds apart during one nine-second run fired the
+# service ONCE, on the FIRST value, and dropped the other two entirely. So the
+# probe's cost was also a nine-second window in which wallpaper changes went
+# missing. Shrinking the run shrinks the window; cmd_apply's re-check closes
+# what is left of it.
+#
+# ⛔ THE SERVER IS AN OPTIMISATION, NEVER A DEPENDENCY. `openrgb` autoconnects
+# to a local server on its own and falls back to probing when there is not one,
+# so syn-rgb is correct with this unit stopped, masked or missing — just slow.
+# Nothing in syn-rgb asks whether it is running, and nothing should start to.
+Description=OpenRGB SDK server, so the accent does not re-probe the bus
+Documentation=man:openrgb(1)
+# Bound to the bridge, and to nothing else. PartOf means stopping syn-rgb.path
+# stops this with it, so `syn-rgb off` does not leave a process sitting on the
+# i2c controllers of somebody who has just said "stop following my wallpaper".
+PartOf=syn-rgb.path
+
+[Service]
+# ⚠ Stand down if something is ALREADY serving on 6742 — OpenRGB's own GUI or
+# tray runs the same server, and two of them fight over the port. ExecCondition
+# and not ExecStartPre: a condition that says no SKIPS the unit cleanly, while a
+# pre-exec that fails marks it FAILED, and a red unit in `systemctl --user` over
+# lighting is the thing these units are written not to do. syn-rgb does not care
+# whose server answers — it autoconnects to whatever is listening.
+ExecCondition=/bin/sh -c '! ss -ltn "sport = :6742" | grep -q LISTEN'
+# ⛔ 127.0.0.1, NOT OpenRGB's default. `--server` binds 0.0.0.0 — every network
+# interface — and the SDK protocol has no authentication of any kind, so the
+# stock invocation hands control of this machine's lighting to the whole LAN.
+# Nothing here needs to be reachable off the box: the only client is syn-rgb,
+# running as the same user on the same machine.
+ExecStart=/usr/bin/openrgb --server --server-host 127.0.0.1
+# It holds i2c devices open for the life of the session, so a crash must not
+# leave the desktop permanently back on the 8.8-second path.
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+# ⛔ WantedBy the PATH UNIT, never default.target. This holds the lighting
+# hardware open for the life of the session, and syn-rgb ships off — so a
+# desktop that has never said `syn-rgb on` must not get an OpenRGB server at
+# login as a side effect of installing an update. Hung off syn-rgb.path, it
+# exists exactly when the bridge does.
+WantedBy=syn-rgb.path

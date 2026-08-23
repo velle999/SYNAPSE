@@ -28,6 +28,17 @@ echo "openrgb $*" >> "$RGBLOG"
 case "${RGBNODIRECT:-}" in
     1) case "$*" in *"--mode direct"*) exit 1 ;; esac ;;
 esac
+# The wallpaper can change WHILE openrgb is running — that nine-second window is
+# the whole reason cmd_apply re-checks — so the stub can be told to move it. n is
+# how many calls have been made; RGBCHASE_TIMES how many of them rewrite.
+if [ -n "${RGBCHASE:-}" ]; then
+    n=$(cat "$RGBCHASE.n" 2>/dev/null || echo 0)
+    n=$((n + 1))
+    echo "$n" > "$RGBCHASE.n"
+    if [ "$n" -le "${RGBCHASE_TIMES:-1}" ]; then
+        printf 'use=yes\nok=yes\naccent=#%02d0000\n' "$((n + 1))" > "$RGBCHASE"
+    fi
+fi
 exit 0
 STUB
 chmod +x "$TMP/bin/openrgb"
@@ -116,6 +127,46 @@ before=$(calls)
 wallpaper yes '#00FF00'
 "$SCRIPT" apply >/dev/null
 check "off stops following" "$before" "$(calls)"
+
+# ---- a colour that moves DURING the push is not lost ---------------------
+#
+# ⛔ THE FAILURE THIS REPLACES WAS SILENT AND PERMANENT. syn-rgb.path cannot
+# re-trigger while syn-rgb.service is still running, and systemd does not queue
+# what it misses — measured with a scratch path unit: three writes two seconds
+# apart during one nine-second run fired the service ONCE, on the FIRST value,
+# and dropped the other two entirely. So a wallpaper changed while openrgb was
+# probing the bus left the lights on the colour from the START of the burst,
+# until something happened to touch the file again. `syn-rgb off; syn-rgb on`
+# looked like a fix because `on` calls cmd_apply directly.
+#
+# Nothing outside this process can close that window: by the time the run exits,
+# the event that would have re-triggered the unit is already gone. So the run
+# re-reads before it exits, and the stub stands in for the wallpaper moving.
+"$SCRIPT" on >/dev/null 2>&1
+"$SCRIPT" follow accent >/dev/null
+: > "$RGBLOG"; rm -f "$PAL.n"
+wallpaper yes '#010000'
+RGBCHASE=$PAL RGBCHASE_TIMES=1 "$SCRIPT" apply >/dev/null
+check "a colour that moved mid-push is chased" \
+      "openrgb --mode direct --color 020000" "$(tail -1 "$RGBLOG")"
+check "and the one it moved from was pushed first" "2" "$(calls)"
+
+# ⚠ The ordinary case must still be ONE push. A re-check that always went round
+# twice would double every colour change's traffic to the hardware for nothing,
+# and on a bus this slow that is the difference the whole change is about.
+: > "$RGBLOG"; rm -f "$PAL.n"
+wallpaper yes '#3355FF'
+"$SCRIPT" apply >/dev/null
+check "a colour that did not move is pushed once" "1" "$(calls)"
+
+# ⚠ And the chase is BOUNDED. A wallpaper slideshow rewriting the file faster
+# than openrgb can answer would otherwise pin this process open for ever.
+: > "$RGBLOG"; rm -f "$PAL.n"
+wallpaper yes '#010000'
+RGBCHASE=$PAL RGBCHASE_TIMES=99 "$SCRIPT" apply >/dev/null
+check "a colour that never settles stops at the bound" "4" "$(calls)"
+rm -f "$PAL.n"
+wallpaper yes '#3355FF'
 
 # ---- openrgb missing is an ANSWER ---------------------------------------
 #

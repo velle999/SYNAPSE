@@ -6,6 +6,17 @@
 # wedge or hold a device open. syn-rgb.path is what watches; this is what runs.
 Description=SynapseOS accent on the RGB hardware
 Documentation=man:openrgb(1)
+# The SDK server, which turns an 8.8-second bus probe into a 1.0-second push.
+#
+# ⚠ ORDERING ONLY — no Wants, and deliberately not. syn-rgb.path is what pulls
+# the server in (it is WantedBy that unit), because the path unit is what
+# `syn-rgb on` enables and the server must exist exactly when the bridge does.
+# A Wants here would also start it for a bare `syn-rgb apply` typed in a
+# terminal, and leave it running afterwards with nothing to stop it.
+#
+# openrgb probes the bus itself when nothing is serving, so a server that is
+# absent, masked or still starting leaves this SLOW rather than broken.
+After=syn-rgb-server.service
 
 [Service]
 Type=oneshot

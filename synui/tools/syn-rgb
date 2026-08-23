@@ -146,30 +146,70 @@ push() {   # push RRGGBB
     return "$rc"
 }
 
+# How many times one run will chase a colour that moved under it. See the
+# re-check in cmd_apply. Four is a bound rather than a target: it exists so a
+# wallpaper slideshow cannot pin this process open, not because a fifth change
+# would be wrong to follow.
+APPLY_MAX=4
+
 cmd_apply() {
-    local hex
+    local hex prev n=0
     [ "$(getval "$STATE" on no)" = "yes" ] || { say "off"; return 0; }
-    hex=$(wanted_colour) || {
-        # A greyscale wallpaper is an ANSWER, not a failure: there is no hue to
-        # follow, so the lights keep the last colour they were given rather
-        # than snapping to something invented.
-        say "no colour to follow"
-        return 0
-    }
-    push "$hex"
-    case $? in
-        0) say "$hex"; return 0 ;;
-        # ⚠ "not installed" already said so, once. Saying it twice reads as
-        # two different faults, and the unit treats this as the ordinary
-        # answer it is rather than a failed session service.
-        3) return 3 ;;
-        *) warn "openrgb refused the colour"; return 1 ;;
-    esac
+
+    while :; do
+        hex=$(wanted_colour) || {
+            # A greyscale wallpaper is an ANSWER, not a failure: there is no hue
+            # to follow, so the lights keep the last colour they were given
+            # rather than snapping to something invented.
+            say "no colour to follow"
+            return 0
+        }
+        push "$hex"
+        case $? in
+            0) ;;
+            # ⚠ "not installed" already said so, once. Saying it twice reads as
+            # two different faults, and the unit treats this as the ordinary
+            # answer it is rather than a failed session service.
+            3) return 3 ;;
+            *) warn "openrgb refused the colour"; return 1 ;;
+        esac
+        say "$hex"
+
+        # ⛔ RE-READ BEFORE EXITING, and this is not belt-and-braces.
+        #
+        # syn-rgb.path cannot re-trigger while syn-rgb.service is still running,
+        # and systemd does NOT queue what it misses — measured with a scratch
+        # unit: three writes two seconds apart during one nine-second run fired
+        # the service ONCE, on the FIRST value, and dropped the other two. So a
+        # wallpaper changed while openrgb was busy left the lights on the colour
+        # from the START of the burst, for ever, until something touched the file
+        # again. That is the "it misses changes until I flip it off and on" this
+        # loop is here to end — `on` re-runs cmd_apply directly, which is why
+        # that worked around it.
+        #
+        # The push itself is the window, so the check has to be AFTER it and
+        # inside the same process. Nothing else can do it: by the time this
+        # exits, the event that would have re-triggered the unit is already gone.
+        prev=$hex
+        n=$((n + 1))
+        [ "$n" -lt "$APPLY_MAX" ] || return 0
+        hex=$(wanted_colour) || return 0
+        [ "$hex" != "$prev" ] || return 0
+    done
 }
 
 unit_do() {   # unit_do enable|disable
     command -v systemctl >/dev/null 2>&1 || return 0
     systemctl --user "$1" --now syn-rgb.path >/dev/null 2>&1 || true
+    # ⚠ The SDK server comes and goes with the bridge, and it is deliberately
+    # NOT left running by `off`: it holds the i2c devices open for the life of
+    # the session, and somebody who has said "stop following my wallpaper" has
+    # not agreed to a process sitting on their RAM's lighting controller.
+    #
+    # An optimisation and never a dependency — openrgb probes the bus when there
+    # is no server — so a systemctl that refuses this is not an error worth
+    # reporting. See syn-rgb-server.service.
+    systemctl --user "$1" --now syn-rgb-server.service >/dev/null 2>&1 || true
 }
 
 case ${1:-status} in
