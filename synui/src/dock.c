@@ -39,8 +39,43 @@
 #include "contrast.h"
 #include "synui.h"
 
-#define DOCK_ICON_SIZE 48
-#define DOCK_ICON_PAD  8
+/*
+ * ── How big the dock is ──────────────────────────────────
+ *
+ * `dock_height` is the slab's thickness along the edge normal, and it used to be
+ * ONLY that: the icons were a fixed 48px whatever the number said. So the Dock
+ * size row turned a 64px bar into a 200px wall of glass with the same small
+ * pictures adrift in the middle of it, which is nobody's idea of a bigger dock.
+ *
+ * The icon is derived from the thickness instead — 16px of slab either side of
+ * it, which is exactly what 48-in-64 was — and the padding from the icon. At the
+ * stock 64 both come out at the numbers they were literals for, so a desktop
+ * that never touches the row is pixel-identical to the one before this.
+ *
+ * ⚠ NOTHING IN THIS FILE MAY GO BACK TO A CONSTANT. The icon size is now a
+ * function of a setting the user can move while looking at the bar, and a stray
+ * 48 shows up as a hit box that misses, a dot in the wrong place, or a cached
+ * picture at the wrong resolution — all of them silent.
+ */
+#define DOCK_ICON_INSET 16   /* slab left either side of the icon, cross-axis */
+
+static int dock_icon_size(const syn_config_t *c)
+{
+    int icon = c->dock_height - DOCK_ICON_INSET;
+    /* config.c clamps dock_height to 32..200; these are the same two ends. */
+    if (icon < 16)  icon = 16;
+    if (icon > 192) icon = 192;
+    return icon;
+}
+
+/* A sixth of the icon — 8px at stock, and the same proportion at every other
+ * size. The gaps are what make a row of icons read as a row rather than as a
+ * strip, so they have to grow with what they separate. */
+static int dock_icon_pad(const syn_config_t *c)
+{
+    int pad = dock_icon_size(c) / 6;
+    return pad < 4 ? 4 : pad;
+}
 
 /* ── Tray-resident apps ──────────────────────────────────────
  *
@@ -306,12 +341,13 @@ void dock_view_unmapped(syn_view_t *v)
  * They were the same rect until magnification. A swollen icon has to grow
  * somewhere, and growing it INTO a 64px bar means a ceiling of 64/48 = 1.33 —
  * not enough to read as magnification. So when `dock_magnify` is on the canvas
- * gains DOCK_MAG_HEADROOM of transparent room past the body, and icons grow out
+ * gains dock_headroom() of transparent room past the body, and icons grow out
  * through it, exactly the way macOS's do.
  *
- * The headroom is a CONSTANT, not something that grows with the effect: a canvas
- * that resized as the pointer arrived would move the body it contains, and the
- * body has to stay welded to the screen edge. Only the icons move.
+ * The headroom is a CONSTANT for a given size and swell, not something that
+ * grows with the effect as the pointer arrives: a canvas that resized under the
+ * pointer would move the body it contains, and the body has to stay welded to
+ * the screen edge. Only the icons move.
  *
  * The run axis is the other half. Scales are sampled from each icon's flat
  * position and the row is then laid out CUMULATIVELY, so neighbours slide apart
@@ -320,18 +356,139 @@ void dock_view_unmapped(syn_view_t *v)
  * is deliberate: sampling from the magnified one feeds the layout its own output
  * and the row shivers.
  */
-#define DOCK_MAG_SCALE     1.60   /* icon scale directly under the pointer */
 #define DOCK_MAG_SPAN      2.75   /* falloff reach, in flat cells either side */
 #define DOCK_MAG_EASE_SECS 0.10   /* fade the effect in/out over this */
-/* Room for the swell: 48 × 1.60 − 48 = 29px, rounded up to a round number. */
-#define DOCK_MAG_HEADROOM  32
 
-/* The clock's own cell, past the last icon on the run axis. Two numbers because
- * the run axis is the long one: a horizontal bar can give the clock 92px of
- * width, a vertical column has only `dock_height` to be wide in and pays on
- * height instead. */
-#define DOCK_CLOCK_RUN_H   92
+/*
+ * Room for the swell — and it has to FOLLOW the swell, which is why this is a
+ * function and `dock_magnify_scale` is a setting rather than the 1.60 literal
+ * it used to be. The body is welded to the screen edge, so an icon with nowhere
+ * to grow is not a smaller effect: it is an icon clipped off at the far side of
+ * the canvas, silently, because nothing in the scene graph objects to a buffer
+ * that is too small for what was drawn into it.
+ *
+ * Rounded up to a multiple of 8 the way the 32 this replaces was ("48 × 1.60 −
+ * 48 = 29px, rounded up to a round number") — which means the stock desktop
+ * still gets exactly 32 and this change is invisible until somebody moves the
+ * row. Zero with magnify off, and that zero is what collapses the canvas back
+ * onto the body.
+ */
+static int dock_headroom(const syn_config_t *c)
+{
+    if (!c->dock_magnify) return 0;
+    double swell = dock_icon_size(c) * ((double)c->dock_magnify_scale - 1.0);
+    if (swell < 0.0) swell = 0.0;
+    return (int)(ceil(swell / 8.0) * 8.0);
+}
+
+/* The clock's own cell, and the apps button's beside it.
+ *
+ * The 92 is a FLOOR now rather than the width. It was the width, and that is
+ * what put the rule between the icons and the clock hard against the first
+ * digit the moment seconds and an am/pm were both on: "3:03:11 AM" at 17px is
+ * as wide as the cell that was supposed to contain it. So the cell is measured
+ * from the strings it will actually draw (dock_clock_run) and 92 is only what
+ * it never goes below — a short "3:03" keeps the roomy cell it always had.
+ *
+ * Two numbers because the run axis is the long one: a horizontal bar can give
+ * the clock as much width as it needs, a vertical column has only `dock_height`
+ * to be wide in and pays on height instead. */
+#define DOCK_CLOCK_RUN_H   92   /* floor for a horizontal bar's clock cell */
 #define DOCK_CLOCK_RUN_V   40
+#define DOCK_CLOCK_GUTTER  12   /* ink to cell edge, each side */
+
+/* Defined below, with the clock itself; the layout needs both up here. */
+static void dock_clock_strings(syn_server_t *s, bool vertical,
+                               char *time_s, size_t tn, char *date_s, size_t dn);
+static long dock_clock_stamp(syn_server_t *s);
+
+/* Everything on the clock scales with the slab, so a 200px dock does not draw a
+ * 17px time adrift in the middle of it. At the stock 64 every one of these is
+ * the literal it used to be — the multiplier is exactly 1 there. */
+static int dock_clock_px(int base, int thick)
+{
+    return (int)lround(base * (thick / 64.0));
+}
+
+/* …with a floor, for the two numbers that are FONT SIZES. The thinnest dock is
+ * 32px and would otherwise ask for an 8px date, which is a row of grey smudges
+ * rather than a date. Offsets and gutters take dock_clock_px() raw: flooring a
+ * 1px nudge at 6 would shove the time out of its own cell. */
+static int dock_clock_font(int base, int thick)
+{
+    int v = dock_clock_px(base, thick);
+    return v < 9 ? 9 : v;
+}
+
+/*
+ * A 1×1 scratch surface, kept for the life of the process.
+ *
+ * The run length of the clock cell is GEOMETRY — the hit tests and the drag
+ * need it exactly as much as the renderer does — and none of those callers has
+ * a cairo context in hand. Measuring is the only honest way to size a cell
+ * around text; the alternative is the constant that caused this.
+ */
+static cairo_t *dock_measure;
+
+static cairo_t *dock_measure_cr(void)
+{
+    cairo_t *cr = dock_measure;
+    if (!cr) {
+        cairo_surface_t *surf =
+            cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+        cr = dock_measure = cairo_create(surf);
+        cairo_surface_destroy(surf);   /* cr holds its own reference */
+    }
+    /* Re-selected every time rather than once at creation: the desktop's UI font
+     * is a live setting (font.state), and a context that kept the face it was
+     * born with would measure the cell in one font while dock_draw_clock() drew
+     * it in another. Cheap — cairo caches the resolved face. */
+    cairo_select_font_face(cr, syn_text_ui_font(), CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    return cr;
+}
+
+static double dock_text_w(cairo_t *cr, const char *text, double size)
+{
+    cairo_text_extents_t ext;
+    cairo_set_font_size(cr, size);
+    syn_text_extents(cr, text, &ext);
+    return ext.width;
+}
+
+/*
+ * How much run the clock cell needs, measured.
+ *
+ * Cached on the clock's own stamp (which carries the format as well as the
+ * time — see dock_clock_stamp) and the thickness, because dock_metrics() is on
+ * the pointer-motion path and runs per output per event. The strings only
+ * change once a minute at stock.
+ */
+static int dock_clock_run(syn_server_t *s, bool vertical, int thick)
+{
+    if (vertical) return dock_clock_px(DOCK_CLOCK_RUN_V, thick);
+
+    static long cached_stamp = -1;
+    static int  cached_thick = -1, cached_run = 0;
+    long stamp = dock_clock_stamp(s);
+    if (stamp == cached_stamp && thick == cached_thick) return cached_run;
+
+    char time_s[32] = {0}, date_s[32] = {0};
+    dock_clock_strings(s, vertical, time_s, sizeof time_s,
+                       date_s, sizeof date_s);
+
+    cairo_t *cr = dock_measure_cr();
+    double w = dock_text_w(cr, time_s, dock_clock_font(17, thick));
+    double dw = dock_text_w(cr, date_s, dock_clock_font(11, thick));
+    if (dw > w) w = dw;
+
+    int run = (int)lround(w) + 2 * dock_clock_px(DOCK_CLOCK_GUTTER, thick);
+    int floor_run = dock_clock_px(DOCK_CLOCK_RUN_H, thick);
+    if (run < floor_run) run = floor_run;
+
+    cached_stamp = stamp; cached_thick = thick; cached_run = run;
+    return run;
+}
 
 /* Everything both the renderer and the hit tests need to agree about, derived
  * in one place from the config, the entry count and this output's magnification
@@ -346,10 +503,13 @@ typedef struct {
     int  head;                      /* transparent headroom past the body */
     int  bx, by, bw, bh;            /* BODY rect, canvas-local */
     int  n;                         /* cells laid out */
+    int  icon, pad;                 /* flat icon size and the gap between */
     int  cx[DOCK_MAX_ENTRIES];      /* drawn cell origin, canvas-local */
     int  cy[DOCK_MAX_ENTRIES];
     int  cs[DOCK_MAX_ENTRIES];      /* drawn cell size (square) */
     int  clk_x, clk_y, clk_w, clk_h;   /* canvas-local; clk_w = 0 when off */
+    int  clk_slot;                  /* icons to the clock's left; -1 when off */
+    int  apps_x, apps_y, apps_s;    /* the show-all-apps cell; apps_s = 0 off */
     int  base_run;                  /* the FLAT run length */
     int  base_origin;               /* layout coord where the flat run starts —
                                      * the origin o->dock.mag_run is measured
@@ -357,15 +517,73 @@ typedef struct {
                                      * magnified bar grows */
 } dock_metrics_t;
 
+/*
+ * Which gap along the run the clock sits in, resolved against the icons that
+ * exist RIGHT NOW: 0 is before the first icon, `n` is past the last.
+ *
+ * The stored -1 means "past the last one", and it is a position rather than a
+ * fallback. A clock pinned to slot 5 walks back up the row every time an app
+ * quits, because the gap it was pinned to stops existing; "last" is the only
+ * end of the row that survives apps coming and going, so it is what an
+ * untouched clock keeps.
+ *
+ * A live drag overrides the stored value so the cell follows the cursor while
+ * the button is down — the same way dock_display_order() previews an icon
+ * rearrange.
+ */
+static int dock_clock_slot(syn_server_t *s, int n)
+{
+    int slot = s->config.dock_clock_slot;
+    if (s->dock_drag.active && s->dock_drag.moved &&
+        s->dock_drag.icon == DOCK_DRAG_CLOCK)
+        slot = s->dock_drag.slot;
+    if (slot < 0 || slot > n) slot = n;
+    return slot;
+}
+
+/* The swell an icon whose FLAT centre is at `flat_c` currently has. A raised
+ * cosine, not a linear ramp: the ramp has a corner at the pointer and the row
+ * visibly kinks as it crosses an icon. */
+static double dock_mag_scale(syn_output_t *o, double amount, double peak,
+                             double flat_c, int icon, int pad)
+{
+    if (amount <= 0.0) return 1.0;
+    double d = fabs(o->dock.mag_run - flat_c) / (DOCK_MAG_SPAN * (icon + pad));
+    if (d >= 1.0) return 1.0;
+    return 1.0 + (peak - 1.0) * amount * 0.5 * (1.0 + cos(M_PI * d));
+}
+
+/*
+ * Where a cell sits on the CROSS axis. Each cell is anchored by the side FACING
+ * the screen edge, so it swells away from it and the running dot underneath —
+ * which is drawn off the flat cell, not the swollen one — stays put.
+ *
+ * `nudge` lifts a horizontal bar's icons off centre to leave room for that dot;
+ * it scales with the icon, so a 200px dock does not put its dot through the
+ * bottom of a 184px picture.
+ */
+static int dock_cell_cross(const dock_metrics_t *m, syn_dock_edge_t edge,
+                           int icon, int size, int nudge)
+{
+    switch (edge) {
+    case SYN_DOCK_EDGE_TOP:   return m->by + (m->thick - icon) / 2 - nudge;
+    case SYN_DOCK_EDGE_LEFT:  return m->bx + (m->thick - icon) / 2;
+    case SYN_DOCK_EDGE_RIGHT: return m->bx + (m->thick + icon) / 2 - size;
+    case SYN_DOCK_EDGE_BOTTOM:
+    default:                  return m->by + (m->thick + icon) / 2 - nudge - size;
+    }
+}
+
 /* Fully-shown canvas rect, body rect and cell rects for this output's mirror on
  * the current edge. The "run" axis (length) grows with the entry count, the
- * clock cell and the current magnification; the cross axis is the fixed
- * dock_height thickness plus any headroom. Shared by the renderer, the hit
- * tests and the auto-hide tick so all three agree on where the bar lives. */
+ * clock cell, the apps button and the current magnification; the cross axis is
+ * the fixed dock_height thickness plus any headroom. Shared by the renderer, the
+ * hit tests and the auto-hide tick so all three agree on where the bar lives. */
 static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
 {
     syn_server_t *s = o->server;
     memset(m, 0, sizeof(*m));
+    m->clk_slot = -1;
 
     output_box_of(s, o, &m->ob);
     if (m->ob.width <= 0 || m->ob.height <= 0) return false;
@@ -373,47 +591,68 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
     syn_dock_edge_t edge = s->config.dock_edge;
     m->vertical = edge_is_vertical(edge);
     m->thick = s->config.dock_height;
-    m->head  = s->config.dock_magnify ? DOCK_MAG_HEADROOM : 0;
+    m->head  = dock_headroom(&s->config);
 
-    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
+    int icon = dock_icon_size(&s->config), pad = dock_icon_pad(&s->config);
+    m->icon = icon; m->pad = pad;
     int n = s->dock_entry_count;
     if (n > DOCK_MAX_ENTRIES) n = DOCK_MAX_ENTRIES;
     m->n = n;
 
-    int clock_run = 0;
-    if (s->config.dock_clock)
-        clock_run = (m->vertical ? DOCK_CLOCK_RUN_V : DOCK_CLOCK_RUN_H) + pad;
+    int clock_run = s->config.dock_clock
+                    ? dock_clock_run(s, m->vertical, m->thick) : 0;
+    int apps_run  = s->config.dock_apps_button ? icon : 0;
+    if (clock_run > 0) m->clk_slot = dock_clock_slot(s, n);
 
-    m->base_run = (n > 0 ? n * icon + (n + 1) * pad : pad * 2) + clock_run;
+    m->base_run = pad + n * (icon + pad)
+                + (clock_run > 0 ? clock_run + pad : 0)
+                + (apps_run  > 0 ? apps_run  + pad : 0);
+    if (n == 0 && clock_run == 0 && apps_run == 0) m->base_run = pad * 2;
+
+    /* Flat centres first — dock_mag_scale() samples from where a cell WOULD be,
+     * never from where it currently is. The clock's cell takes its place in this
+     * walk like anything else, which is what lets it be dragged into the middle
+     * of the row without the icons past it magnifying off the wrong centres. */
+    double flat_c[DOCK_MAX_ENTRIES];
+    double flat_apps_c;
+    {
+        int run = pad;
+        for (int i = 0; i <= n; i++) {
+            if (i == m->clk_slot && clock_run > 0) run += clock_run + pad;
+            if (i == n) break;
+            flat_c[i] = run + icon / 2.0;
+            run += icon + pad;
+        }
+        flat_apps_c = run + icon / 2.0;
+    }
 
     /* Suppressed outright during a drag. The rearrange gesture measures cells
      * with flat arithmetic (dock_slot_at), and a row that resized under the
      * icon being dragged would move the very target the drop is aimed at. */
     double amount = (s->config.dock_magnify && !s->dock_drag.active)
                     ? o->dock.mag_amount : 0.0;
+    double peak = s->config.dock_magnify_scale;
 
-    int run = pad;
-    for (int i = 0; i < n; i++) {
-        double sc = 1.0;
-        if (amount > 0.0) {
-            double flat_c = pad + i * (icon + pad) + icon / 2.0;
-            double d = fabs(o->dock.mag_run - flat_c) /
-                       (DOCK_MAG_SPAN * (icon + pad));
-            /* A raised cosine, not a linear ramp: the ramp has a corner at the
-             * pointer and the row visibly kinks as it crosses an icon. */
-            if (d < 1.0)
-                sc = 1.0 + (DOCK_MAG_SCALE - 1.0) * amount *
-                           0.5 * (1.0 + cos(M_PI * d));
+    int run = pad, clk_at = 0, apps_at = 0, apps_size = 0;
+    for (int i = 0; i <= n; i++) {
+        if (i == m->clk_slot && clock_run > 0) {
+            clk_at = run;
+            run += clock_run + pad;
         }
-        int size = (int)lround(icon * sc);
+        if (i == n) break;
+        int size = (int)lround(icon * dock_mag_scale(o, amount, peak,
+                                                     flat_c[i], icon, pad));
         m->cs[i] = size;
         if (m->vertical) m->cy[i] = run; else m->cx[i] = run;
         run += size + pad;
     }
-
-    int clk_at = run;
-    run += clock_run;
-    int total_run = (n > 0 || clock_run > 0) ? run : pad * 2;
+    if (apps_run > 0) {
+        apps_size = (int)lround(icon * dock_mag_scale(o, amount, peak,
+                                                      flat_apps_c, icon, pad));
+        apps_at = run;
+        run += apps_size + pad;
+    }
+    int total_run = (n > 0 || clock_run > 0 || apps_run > 0) ? run : pad * 2;
 
     int cross = m->thick + m->head;
     if (m->vertical) { m->w = cross;     m->h = total_run; }
@@ -448,35 +687,25 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
         m->by = (edge == SYN_DOCK_EDGE_BOTTOM) ? m->head : 0;
     }
 
-    /* Cross-axis placement. Each icon is anchored by the side FACING the screen
-     * edge, so it swells away from it and the running dot underneath — which is
-     * drawn off the flat cell, not the swollen one — stays put. */
+    int nudge = icon / 12;   /* 4px at the stock 48 */
     for (int i = 0; i < n; i++) {
-        int size = m->cs[i];
-        switch (edge) {
-        case SYN_DOCK_EDGE_TOP:
-            m->cy[i] = m->by + (m->thick - icon) / 2 - 4;
-            break;
-        case SYN_DOCK_EDGE_LEFT:
-            m->cx[i] = m->bx + (m->thick - icon) / 2;
-            break;
-        case SYN_DOCK_EDGE_RIGHT:
-            m->cx[i] = m->bx + (m->thick + icon) / 2 - size;
-            break;
-        case SYN_DOCK_EDGE_BOTTOM:
-        default:
-            m->cy[i] = m->by + (m->thick + icon) / 2 - 4 - size;
-            break;
-        }
+        int c = dock_cell_cross(m, edge, icon, m->cs[i], nudge);
+        if (m->vertical) m->cx[i] = c; else m->cy[i] = c;
+    }
+    if (apps_size > 0) {
+        m->apps_s = apps_size;
+        int c = dock_cell_cross(m, edge, icon, apps_size, nudge);
+        if (m->vertical) { m->apps_x = c;       m->apps_y = apps_at; }
+        else             { m->apps_x = apps_at; m->apps_y = c; }
     }
 
     if (clock_run > 0) {
         if (m->vertical) {
-            m->clk_x = m->bx;   m->clk_y = clk_at;
-            m->clk_w = m->thick; m->clk_h = DOCK_CLOCK_RUN_V;
+            m->clk_x = m->bx;    m->clk_y = clk_at;
+            m->clk_w = m->thick; m->clk_h = clock_run;
         } else {
-            m->clk_x = clk_at;  m->clk_y = m->by;
-            m->clk_w = DOCK_CLOCK_RUN_H; m->clk_h = m->thick;
+            m->clk_x = clk_at;    m->clk_y = m->by;
+            m->clk_w = clock_run; m->clk_h = m->thick;
         }
     }
 
@@ -536,16 +765,52 @@ static double dock_bar_radius(syn_server_t *s, int bar_w, int bar_h)
 /* Which flat cell a point on the run axis falls in, clamped to the icons that
  * exist. `run` is canvas-local along the bar's long axis. Flat arithmetic on
  * purpose — its one caller is the rearrange drag, and dock_metrics() suppresses
- * magnification for the length of that gesture. */
-static int dock_slot_at(int run, int count)
+ * magnification for the length of that gesture.
+ *
+ * ⚠ THE CLOCK'S CELL IS IN THE RUN TOO, and it is not an icon. Magnification is
+ * suppressed during the drag; the clock is not, so every icon past it sits one
+ * cell of a different width further along than icon arithmetic alone would put
+ * it. Without the subtraction below, dragging an icon across a clock parked in
+ * the middle of the row drops it a slot early — silently, and only on the
+ * desktops that have moved their clock. */
+static int dock_slot_at(syn_server_t *s, int run, int count)
 {
     if (count <= 0) return 0;
-    int cell = DOCK_ICON_SIZE + DOCK_ICON_PAD;
-    int i = (run - DOCK_ICON_PAD) / cell;
-    if (run < DOCK_ICON_PAD) i = 0;      /* integer division truncates toward 0 */
+    int icon = dock_icon_size(&s->config), pad = dock_icon_pad(&s->config);
+
+    if (s->config.dock_clock) {
+        int clk_slot = dock_clock_slot(s, count);
+        int clk_run  = dock_clock_run(s, edge_is_vertical(s->config.dock_edge),
+                                      s->config.dock_height) + pad;
+        if (run >= pad + clk_slot * (icon + pad)) run -= clk_run;
+    }
+
+    int cell = icon + pad;
+    int i = (run - pad) / cell;
+    if (run < pad) i = 0;                /* integer division truncates toward 0 */
     if (i < 0) i = 0;
     if (i >= count) i = count - 1;
     return i;
+}
+
+/*
+ * Which GAP the clock wants, given a run coordinate along the body.
+ *
+ * Counted off the cells as they are currently DRAWN rather than off flat
+ * arithmetic, and that is what keeps the gesture from oscillating: inserting
+ * the clock at slot k pushes every icon past it along by the cell's width, so
+ * the icon that just decided the answer moves AWAY from the cursor. The
+ * hysteresis is free and it is in the right direction — one more nudge is
+ * needed to come back than was needed to go.
+ */
+static int dock_clock_slot_at(const dock_metrics_t *m, double run)
+{
+    int slot = 0;
+    for (int i = 0; i < m->n; i++) {
+        double c = (m->vertical ? m->cy[i] : m->cx[i]) + m->cs[i] / 2.0;
+        if (run > c) slot = i + 1;
+    }
+    return slot;
 }
 
 /*
@@ -932,12 +1197,17 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
  */
 typedef struct {
     char             app_id[128];
-    cairo_surface_t *surf;          /* DOCK_ICON_SIZE square, or NULL */
+    cairo_surface_t *surf;          /* dock_icon_cache_size square, or NULL */
 } dock_icon_cache_t;
 
 static dock_icon_cache_t dock_icon_cache[DOCK_MAX_ENTRIES * 2];
 static int      dock_icon_cache_n   = 0;
 static unsigned dock_icon_cache_gen = 0;
+/* ⚠ AND THE SIZE, now that the Dock size row changes it. The cache holds each
+ * icon rasterized at exactly the cell size; keeping a 48px surface after the
+ * dock grew to 184 would leave every picture on the bar upscaled and soft, and
+ * nothing would say so — the layout is right, the pixels are not. */
+static int      dock_icon_cache_size = 0;
 
 static void dock_icon_cache_flush(void)
 {
@@ -947,14 +1217,15 @@ static void dock_icon_cache_flush(void)
     dock_icon_cache_n = 0;
 }
 
-/* The icon at exactly DOCK_ICON_SIZE, or NULL if this app has no picture (the
+/* The icon at exactly `cell` px square, or NULL if this app has no picture (the
  * caller draws a monogram instead). */
-static cairo_surface_t *dock_icon_at_cell(const char *app_id)
+static cairo_surface_t *dock_icon_at_cell(const char *app_id, int cell)
 {
     unsigned gen = icon_generation();
-    if (gen != dock_icon_cache_gen) {
+    if (gen != dock_icon_cache_gen || cell != dock_icon_cache_size) {
         dock_icon_cache_flush();
-        dock_icon_cache_gen = gen;
+        dock_icon_cache_gen  = gen;
+        dock_icon_cache_size = cell;
     }
     for (int i = 0; i < dock_icon_cache_n; i++)
         if (strcmp(dock_icon_cache[i].app_id, app_id) == 0)
@@ -967,9 +1238,9 @@ static cairo_surface_t *dock_icon_at_cell(const char *app_id)
         double sh = cairo_image_surface_get_height(ic->icon_surface);
         if (sw > 0 && sh > 0) {
             scaled = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-                                                DOCK_ICON_SIZE, DOCK_ICON_SIZE);
+                                                cell, cell);
             cairo_t *sc = cairo_create(scaled);
-            cairo_scale(sc, DOCK_ICON_SIZE / sw, DOCK_ICON_SIZE / sh);
+            cairo_scale(sc, cell / sw, cell / sh);
             cairo_set_source_surface(sc, ic->icon_surface, 0, 0);
             /* The one place the expensive filter is still paid — once per icon
              * per generation, instead of once per icon per repaint. */
@@ -990,8 +1261,13 @@ static cairo_surface_t *dock_icon_at_cell(const char *app_id)
     return NULL;
 }
 
+/* `base` is the FLAT cell size — what the cache rasterizes at — and `icon` is
+ * how big this particular cell is drawn right now, which magnification makes
+ * bigger. Passing both is what keeps one swollen icon from evicting the cache
+ * for every other one on the bar. */
 static void dock_draw_icon(cairo_t *cr, const char *app_id,
-                           double ix, double iy, int icon, double scale)
+                           double ix, double iy, int icon, int base,
+                           double scale)
 {
     cairo_save(cr);
     if (scale != 1.0) {
@@ -1001,16 +1277,14 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
         cairo_translate(cr, -cx, -cy);
     }
 
-    cairo_surface_t *cell = dock_icon_at_cell(app_id);
+    cairo_surface_t *cell = dock_icon_at_cell(app_id, base);
     if (cell) {
         cairo_save(cr);
         cairo_translate(cr, ix, iy);
-        /* 1:1 when the cell size is what the dock asked for, which it is for
-         * every caller here; the scale survives for a caller that ever wants a
-         * different size, and costs nothing when it is 1. */
-        if (icon != DOCK_ICON_SIZE)
-            cairo_scale(cr, (double)icon / DOCK_ICON_SIZE,
-                            (double)icon / DOCK_ICON_SIZE);
+        /* 1:1 for a flat cell; a magnified one is the cached picture scaled up,
+         * which is what the headroom exists to make room for. */
+        if (icon != base)
+            cairo_scale(cr, (double)icon / base, (double)icon / base);
         cairo_set_source_surface(cr, cell, 0, 0);
         cairo_paint(cr);
         cairo_restore(cr);
@@ -1020,12 +1294,46 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
     cairo_restore(cr);
 }
 
+/*
+ * The GNOME-style "show all apps" button.
+ *
+ * A 3×3 grid of dots drawn in the panel ink, not an icon out of the theme:
+ * there is no .desktop behind this button, every icon theme that has a grid
+ * glyph draws it at a different weight, and the ink is by definition the colour
+ * that reads on this bar — the same rule the running dot follows, and for the
+ * same reason (a white glyph vanishes on XP's beige).
+ *
+ * Everything is a fraction of the cell so it scales with the Dock size row
+ * along with the icons beside it.
+ */
+static void dock_draw_apps(syn_server_t *s, cairo_t *cr,
+                           double x, double y, int size)
+{
+    double r    = size * 0.072;    /* 3.5px in a 48px cell */
+    double step = size * 0.26;
+    double cx0  = x + size / 2.0 - step;
+    double cy0  = y + size / 2.0 - step;
+
+    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
+                          s->config.panel_ink[2], 0.92);
+    for (int row = 0; row < 3; row++)
+        for (int col = 0; col < 3; col++) {
+            cairo_arc(cr, cx0 + col * step, cy0 + row * step, r, 0, 2 * M_PI);
+            cairo_fill(cr);
+        }
+}
+
 /* ── The clock ───────────────────────────────────────────
  *
  * Off by default, and the reason is worth stating: the bar already has a clock,
  * and a desktop that shows the time twice is a choice somebody makes rather than
- * one they should have to undo. On, it takes a cell of its own past the last
- * icon — inside the bar, not floating beside it — and the run grows to hold it.
+ * one they should have to undo. On, it takes a cell of its own INSIDE the bar —
+ * not floating beside it — and the run grows to hold it.
+ *
+ * Where that cell sits is the user's (dock_clock_slot): it starts past the last
+ * icon and can be dragged into any gap in the row, which is why the layout walk
+ * in dock_metrics() steps through slots rather than appending the clock at the
+ * end. Nothing else about it changes with the position.
  *
  * It reads its 12/24-hour and seconds settings out of the SAME syn_clock_t the
  * Clock & Time panel writes and the bar's clock module follows (clock.state), so
@@ -1057,7 +1365,8 @@ static void dock_clock_strings(syn_server_t *s, bool vertical,
     }
 
     /* A column has `dock_height` to be wide in — 64px at stock — so it gets the
-     * short form. The horizontal bar's cell is 92px and can take the weekday. */
+     * short form. A horizontal bar's cell is measured to fit and can take the
+     * weekday. */
     strftime(date_s, dn, vertical ? "%d %b" : "%a %d %b", &tm);
 }
 
@@ -1097,19 +1406,33 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     dock_clock_strings(s, m->vertical, time_s, sizeof time_s,
                        date_s, sizeof date_s);
 
-    /* A hairline between the icons and the clock, so the cell reads as its own
-     * thing rather than as a very wide gap after the last app. Skipped when
-     * there are no icons — a rule with nothing on one side of it. */
-    if (m->n > 0) {
-        cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
-                              s->config.panel_ink[2], 0.22);
-        cairo_set_line_width(cr, 1);
+    /*
+     * A hairline on each side of the cell that has something next to it, so the
+     * clock reads as its own thing rather than as a very wide gap in the row.
+     *
+     * BOTH sides, now that the cell can be dragged into the middle: a rule on
+     * the left alone was right for the only position the clock used to have and
+     * wrong everywhere else. A side with no icon beyond it gets none — a rule
+     * with nothing on one side of it is a mark on the end of the bar.
+     */
+    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
+                          s->config.panel_ink[2], 0.22);
+    cairo_set_line_width(cr, 1);
+    for (int side = 0; side < 2; side++) {
+        /* side 0 = the low end of the run, side 1 = the high end. */
+        bool has_neighbour = side == 0 ? m->clk_slot > 0
+                                       : m->clk_slot < m->n || m->apps_s > 0;
+        if (!has_neighbour) continue;
+
+        double half = m->pad / 2.0;
         if (m->vertical) {
-            double y = m->clk_y - DOCK_ICON_PAD / 2.0 + 0.5;
+            double y = (side == 0 ? m->clk_y - half
+                                  : m->clk_y + m->clk_h + half) + 0.5;
             cairo_move_to(cr, m->bx + 10, y);
             cairo_line_to(cr, m->bx + m->bw - 10, y);
         } else {
-            double x = m->clk_x - DOCK_ICON_PAD / 2.0 + 0.5;
+            double x = (side == 0 ? m->clk_x - half
+                                  : m->clk_x + m->clk_w + half) + 0.5;
             cairo_move_to(cr, x, m->by + 10);
             cairo_line_to(cr, x, m->by + m->bh - 10);
         }
@@ -1121,12 +1444,18 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     double cx = m->clk_x + m->clk_w / 2.0;
     double cy = m->clk_y + m->clk_h / 2.0;
 
+    /* Sized off the slab, so the whole cell grows with the Dock size row rather
+     * than leaving a 17px time adrift in a 200px bar. At the stock 64 every one
+     * of these is the literal it used to be. */
+    int t_px = dock_clock_font(m->vertical ? 15 : 17, m->thick);
+    int d_px = dock_clock_font(m->vertical ? 10 : 11, m->thick);
+
     cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
                           s->config.panel_ink[2], 0.95);
-    dock_clock_line(cr, time_s, m->vertical ? 15 : 17, cx, cy - 1);
+    dock_clock_line(cr, time_s, t_px, cx, cy - dock_clock_px(1, m->thick));
     cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
                           s->config.panel_ink[2], 0.62);
-    dock_clock_line(cr, date_s, m->vertical ? 10 : 11, cx, cy + 13);
+    dock_clock_line(cr, date_s, d_px, cx, cy + dock_clock_px(13, m->thick));
 }
 
 static void dock_render_output(syn_output_t *o)
@@ -1195,14 +1524,20 @@ static void dock_render_output(syn_output_t *o)
 
         /* Press-pop: scale the icon about its centre. Only the icon glyph is
          * transformed — the hit-box and running-dot stay put. */
-        dock_draw_icon(cr, e->app_id, ix, iy, size, dock_click_scale(e, now));
+        dock_draw_icon(cr, e->app_id, ix, iy, size, m.icon,
+                       dock_click_scale(e, now));
 
         if (e->running) {
             double dx, dy;
             /* Off the FLAT cell, not the swollen one: the dot marks the app's
              * place in the row and a dot that slid up the screen with the icon
              * would read as part of the icon rather than as a mark on the bar. */
-            int flat = DOCK_ICON_SIZE;
+            int flat = m.icon;
+            /* The same two nudges dock_cell_cross() uses, as fractions of the
+             * icon: at the stock 48 they are the 4 and the 6 they were literals
+             * for, and on a 184px icon the dot is still just under it rather
+             * than buried a third of the way up the picture. */
+            double lift = m.icon / 12.0, gap = m.icon / 8.0;
             if (vertical) {
                 /* Dot on the inner long edge of the column. */
                 dx = (s->config.dock_edge == SYN_DOCK_EDGE_LEFT)
@@ -1210,7 +1545,7 @@ static void dock_render_output(syn_output_t *o)
                 dy = iy + size / 2.0;
             } else {
                 dx = ix + size / 2.0;
-                dy = m.by + (m.thick + flat) / 2.0 - 4 + 6;
+                dy = m.by + (m.thick + flat) / 2.0 - lift + gap;
             }
             /* panel_ink, not a white literal: now that the body follows the
              * theme, a light theme (XP's beige, 95's silver) draws a near-white
@@ -1221,10 +1556,16 @@ static void dock_render_output(syn_output_t *o)
             cairo_set_source_rgba(cr, s->config.panel_ink[0],
                                   s->config.panel_ink[1],
                                   s->config.panel_ink[2], 0.9);
-            cairo_arc(cr, dx, dy, 2.5, 0, 2 * M_PI);
+            cairo_arc(cr, dx, dy, m.icon / 19.2, 0, 2 * M_PI);
             cairo_fill(cr);
         }
     }
+
+    /* The show-all-apps button, after the icons and outside their loop: it is
+     * not an entry, it has no app_id and no running dot, and the one thing it
+     * shares with them is the cell it is drawn in. */
+    if (m.apps_s > 0)
+        dock_draw_apps(s, cr, m.apps_x, m.apps_y, m.apps_s);
 
     /* The lifted icon, last so it is over everything, and slightly larger with a
      * shadow under it. Both say "this one is off the surface" — without them a
@@ -1234,13 +1575,13 @@ static void dock_render_output(syn_output_t *o)
     if (dragging_icon) {
         syn_dock_entry_t *e = &s->dock_entries[s->dock_drag.icon];
         double ix = s->dock_drag.icon_x, iy = s->dock_drag.icon_y;
-        int icon = DOCK_ICON_SIZE;
+        int icon = m.icon;
         cairo_save(cr);
         cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.30);
         cairo_arc(cr, ix + icon / 2.0, iy + icon * 0.86, icon * 0.40, 0, 2 * M_PI);
         cairo_fill(cr);
         cairo_restore(cr);
-        dock_draw_icon(cr, e->app_id, ix, iy, icon, 1.12);
+        dock_draw_icon(cr, e->app_id, ix, iy, icon, m.icon, 1.12);
     }
 
     cairo_destroy(cr);
@@ -1307,7 +1648,7 @@ void dock_init(syn_server_t *s)
     /* -1 is "no icon", and the server struct is zeroed — which would read as
      * "entry 0". Nothing looks at it while the drag is inactive, but a field
      * whose resting value is a valid index is one refactor from being read. */
-    s->dock_drag.icon = -1;
+    s->dock_drag.icon = DOCK_DRAG_BAR;
     dock_rebuild(s);   /* seeds pinned-only entries; nothing mapped yet */
 
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
@@ -1318,6 +1659,14 @@ void dock_init(syn_server_t *s)
 
 void dock_finish(syn_server_t *s)
 {
+    /* Process-lifetime, but freed anyway: the leak checker in the sanitizer
+     * build does not know "one allocation, held on purpose" from a bug, and a
+     * suppression is a worse answer than a destructor. */
+    if (dock_measure) {
+        cairo_destroy(dock_measure);
+        dock_measure = NULL;
+    }
+    dock_icon_cache_flush();
     if (s->dock_clock_timer) {
         wl_event_source_remove(s->dock_clock_timer);
         s->dock_clock_timer = NULL;
@@ -1495,7 +1844,7 @@ bool dock_tick(syn_output_t *o, double now)
 
     int margin = s->config.dock_hover_margin;
     if (margin < 1) margin = 1;
-    int pad = DOCK_ICON_PAD;
+    int pad = dock_icon_pad(&s->config);
     syn_dock_edge_t edge = s->config.dock_edge;
     /* The fully-shown BODY, which is the strip the reveal trigger runs along. */
     int bx = m.x + m.bx, by = m.y + m.by, bw = m.bw, bh = m.bh;
@@ -1615,8 +1964,7 @@ void dock_pointer_motion(syn_server_t *s)
      * pointer 20px above a bottom dock is already swelling icons, so a band
      * that stopped at the slab would leave the effect waiting on the next
      * incidental repaint to notice the pointer at all. */
-    int band = s->config.dock_height +
-               (s->config.dock_magnify ? DOCK_MAG_HEADROOM : 0) + 8;
+    int band = s->config.dock_height + dock_headroom(&s->config) + 8;
     syn_dock_edge_t edge = s->config.dock_edge;
 
     syn_output_t *o;
@@ -1743,6 +2091,59 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out)
         }
     }
     return false;
+}
+
+/*
+ * The two cells that are not apps, hit-tested the same way an icon is: off the
+ * metrics for the mirror being asked about, never off a rect cached on anything
+ * server-global. Only the screen the pointer is on magnifies, so the cells
+ * genuinely differ between mirrors.
+ *
+ * Both have to be asked BEFORE dock_bar_at(), and that is not a detail: they are
+ * drawn on the body, so every press that lands on one of them also lands on the
+ * bar. Asked the other way round, the apps button would start an edge-drag of
+ * the whole dock and the clock could never be picked up at all.
+ */
+static bool dock_cell_hit(syn_server_t *s, double lx, double ly,
+                          bool clock, syn_output_t **out)
+{
+    if (!s->config.dock_enabled) return false;
+    if (clock ? !s->config.dock_clock : !s->config.dock_apps_button)
+        return false;
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!o->dock.tree || !o->dock.shown) continue;
+        if (!dock_point_clear(s, o, lx, ly)) continue;
+        dock_metrics_t m;
+        if (!dock_metrics(o, &m)) continue;
+
+        double rx = lx - o->dock.tree->node.x;
+        double ry = ly - o->dock.tree->node.y;
+        int cx, cy, cw, ch;
+        if (clock) {
+            if (m.clk_w <= 0) continue;
+            cx = m.clk_x; cy = m.clk_y; cw = m.clk_w; ch = m.clk_h;
+        } else {
+            if (m.apps_s <= 0) continue;
+            cx = m.apps_x; cy = m.apps_y; cw = m.apps_s; ch = m.apps_s;
+        }
+        if (rx >= cx && rx < cx + cw && ry >= cy && ry < cy + ch) {
+            if (out) *out = o;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool dock_apps_at(syn_server_t *s, double lx, double ly)
+{
+    return dock_cell_hit(s, lx, ly, false, NULL);
+}
+
+bool dock_clock_at(syn_server_t *s, double lx, double ly)
+{
+    return dock_cell_hit(s, lx, ly, true, NULL);
 }
 
 /* How long a tray restore gets before we call it wedged. steam://open/main
@@ -1885,7 +2286,7 @@ void dock_drag_begin(syn_server_t *s, double lx, double ly)
 
     s->dock_drag.active  = 1;
     s->dock_drag.moved   = 0;
-    s->dock_drag.icon    = -1;        /* the bar, not an icon */
+    s->dock_drag.icon    = DOCK_DRAG_BAR;   /* the bar, not a cell */
     s->dock_drag.output  = o;
     s->dock_drag.start_x = lx;
     s->dock_drag.start_y = ly;
@@ -1929,13 +2330,69 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
      * the drag), so the grab offset is scaled back to the flat cell — otherwise
      * a press near the top of a 77px icon grabs past the bottom of the 48px one
      * it becomes. */
-    int cix = e->x, ciy = e->y, csz = e->w > 0 ? e->w : DOCK_ICON_SIZE;
+    int flat = dock_icon_size(&s->config);
+    int cix = e->x, ciy = e->y, csz = e->w > 0 ? e->w : flat;
     dock_entry_cell(o, idx, &cix, &ciy, &csz);
-    double scale = csz > 0 ? (double)DOCK_ICON_SIZE / csz : 1.0;
+    double scale = csz > 0 ? (double)flat / csz : 1.0;
     s->dock_drag.grab_dx = (lx - o->dock.tree->node.x - cix) * scale;
     s->dock_drag.grab_dy = (ly - o->dock.tree->node.y - ciy) * scale;
     s->dock_drag.icon_x  = cix;
     s->dock_drag.icon_y  = ciy;
+}
+
+/*
+ * A left press on the clock. Same shape as the icon rearrange above and for the
+ * same reason: until the pointer moves this is just a press, and the clock has
+ * no click of its own to owe on release.
+ *
+ * `slot` starts at wherever the clock already is, so a press that never travels
+ * commits nothing — the release compares nothing and writes nothing.
+ */
+void dock_clock_drag_begin(syn_server_t *s, double lx, double ly)
+{
+    syn_output_t *o = NULL;
+    if (!dock_cell_hit(s, lx, ly, true, &o) || !o) return;
+
+    s->dock_drag.active  = 1;
+    s->dock_drag.moved   = 0;
+    s->dock_drag.icon    = DOCK_DRAG_CLOCK;
+    s->dock_drag.icon_app[0] = '\0';
+    s->dock_drag.slot    = dock_clock_slot(s, s->dock_entry_count);
+    s->dock_drag.output  = o;
+    s->dock_drag.start_x = lx;
+    s->dock_drag.start_y = ly;
+}
+
+/*
+ * The clock does not get LIFTED the way an icon does, and that is deliberate.
+ *
+ * A lifted icon needs a picture under the cursor because the gap it came out of
+ * looks exactly like the gap it is going into. The clock's cell is four times
+ * as wide as anything around it — watching it jump from one gap to the next IS
+ * the feedback, and a second copy of the time floating over the bar would be two
+ * clocks disagreeing about where the clock is.
+ */
+static void dock_clock_drag_motion(syn_server_t *s, syn_output_t *o,
+                                   double lx, double ly)
+{
+    dock_metrics_t m;
+    if (!dock_metrics(o, &m)) return;
+
+    /* Relative to the BODY's origin, which on the run axis is the canvas's —
+     * the headroom only ever insets the cross axis. */
+    double run = m.vertical ? ly - o->dock.tree->node.y - m.by
+                            : lx - o->dock.tree->node.x - m.bx;
+
+    int slot = dock_clock_slot_at(&m, run);
+    if (slot == s->dock_drag.slot) return;   /* nothing to repaint */
+    s->dock_drag.slot = slot;
+
+    /* Every mirror: the slot is server-global, so the cell has to move on all of
+     * them or two monitors disagree for the length of the gesture. */
+    dock_relayout(s);
+    syn_output_t *out;
+    wl_list_for_each(out, &s->outputs, link)
+        if (out->wlr_output) wlr_output_schedule_frame(out->wlr_output);
 }
 
 /* The lifted icon follows the cursor, and the run-axis position of its centre
@@ -1954,9 +2411,9 @@ static void dock_icon_drag_motion(syn_server_t *s, syn_output_t *o,
     /* Clamped to the BODY, not the canvas. The magnification headroom is
      * transparent, and an icon parked in it would be a picture floating clear of
      * the bar it is being rearranged inside. */
-    double min_x = m.bx + DOCK_ICON_PAD, min_y = m.by + DOCK_ICON_PAD;
-    double max_x = m.bx + m.bw - DOCK_ICON_PAD - DOCK_ICON_SIZE;
-    double max_y = m.by + m.bh - DOCK_ICON_PAD - DOCK_ICON_SIZE;
+    double min_x = m.bx + m.pad, min_y = m.by + m.pad;
+    double max_x = m.bx + m.bw - m.pad - m.icon;
+    double max_y = m.by + m.bh - m.pad - m.icon;
     if (ix < min_x) ix = min_x;
     if (iy < min_y) iy = min_y;
     if (ix > max_x) ix = max_x > min_x ? max_x : min_x;
@@ -1980,8 +2437,9 @@ static void dock_icon_drag_motion(syn_server_t *s, syn_output_t *o,
      * to the body's origin, which on the run axis is the canvas's — the headroom
      * only ever insets the CROSS axis, and saying so is cheaper than a reader
      * having to re-derive it. */
-    double centre = (m.vertical ? iy - m.by : ix - m.bx) + DOCK_ICON_SIZE / 2.0;
-    s->dock_drag.slot = dock_slot_at((int)lround(centre), s->dock_entry_count);
+    double centre = (m.vertical ? iy - m.by : ix - m.bx) + m.icon / 2.0;
+    s->dock_drag.slot = dock_slot_at(s, (int)lround(centre),
+                                     s->dock_entry_count);
 
     /* Every mirror, not just this output's: the entry model is server-global, so
      * the shuffle has to show on all of them or two monitors disagree about what
@@ -2008,6 +2466,10 @@ void dock_drag_motion(syn_server_t *s, double lx, double ly)
     }
 
     if (s->dock_drag.icon >= 0) { dock_icon_drag_motion(s, o, lx, ly); return; }
+    if (s->dock_drag.icon == DOCK_DRAG_CLOCK) {
+        dock_clock_drag_motion(s, o, lx, ly);
+        return;
+    }
 
     int bx, by, bw, bh;
     if (!dock_geometry(o, &bx, &by, &bw, &bh)) return;
@@ -2141,7 +2603,7 @@ void dock_drag_end(syn_server_t *s, double lx, double ly)
     snprintf(pressed, sizeof(pressed), "%s", s->dock_drag.icon_app);
     s->dock_drag.active = 0;
     s->dock_drag.moved  = 0;
-    s->dock_drag.icon   = -1;
+    s->dock_drag.icon   = DOCK_DRAG_BAR;
     s->dock_drag.output = NULL;
 
     /* Cleared BEFORE the commit, not after: dock_display_order() and
@@ -2149,6 +2611,27 @@ void dock_drag_end(syn_server_t *s, double lx, double ly)
      * every output on its way through. Committing first would repaint the whole
      * dock still holding a drag that has ended. */
     if (icon >= 0) { dock_icon_drag_end(s, icon, slot, pressed, moved); return; }
+
+    if (icon == DOCK_DRAG_CLOCK) {
+        if (moved) {
+            /*
+             * Dropped past the last icon it goes back to -1 rather than being
+             * written as `n`. They look the same today and stop being the same
+             * the moment an app opens: a stored 5 is the fifth gap, which walks
+             * back up the row as apps quit, while -1 is "the end" and stays
+             * there. Nobody who drags the clock to the end of the dock means
+             * "and follow the fifth icon from now on".
+             */
+            int n = s->dock_entry_count;
+            s->config.dock_clock_slot = (slot < 0 || slot >= n) ? -1 : slot;
+            dock_state_save(s);
+        }
+        dock_relayout(s);
+        syn_output_t *o;
+        wl_list_for_each(o, &s->outputs, link)
+            if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
+        return;
+    }
 
     if (!moved || !drag_o) {
         /* A press with no travel: not a reposition — just settle back. */
@@ -2224,6 +2707,16 @@ void dock_state_load(syn_config_t *cfg)
             cfg->dock_magnify = strcmp(p + 8, "on") == 0;
         } else if (strncmp(p, "clock=", 6) == 0) {
             cfg->dock_clock = strcmp(p + 6, "on") == 0;
+        } else if (strncmp(p, "clock_slot=", 11) == 0) {
+            int v = atoi(p + 11);
+            /* Negative is "past the last icon" — see dock_clock_slot(). The
+             * upper end is clamped at layout time against the icons that exist,
+             * not here: this file is read before there are any. */
+            if (v < 0) v = -1;
+            if (v > DOCK_MAX_ENTRIES) v = DOCK_MAX_ENTRIES;
+            cfg->dock_clock_slot = v;
+        } else if (strncmp(p, "apps=", 5) == 0) {
+            cfg->dock_apps_button = strcmp(p + 5, "on") == 0;
         } else if (strncmp(p, "pin=", 4) == 0) {
             const char *v = p + 4;
             if (*v && cfg->dock_pin_count < DOCK_PIN_MAX) {
@@ -2252,6 +2745,8 @@ void dock_state_save(syn_server_t *s)
     fprintf(f, "ontop=%s\n",    s->config.dock_on_top   ? "on" : "off");
     fprintf(f, "magnify=%s\n",  s->config.dock_magnify  ? "on" : "off");
     fprintf(f, "clock=%s\n",    s->config.dock_clock    ? "on" : "off");
+    fprintf(f, "clock_slot=%d\n", s->config.dock_clock_slot);
+    fprintf(f, "apps=%s\n",     s->config.dock_apps_button ? "on" : "off");
     for (int i = 0; i < s->config.dock_pin_count; i++)
         fprintf(f, "pin=%s\n", s->config.dock_pin[i]);
     fclose(f);
@@ -2332,6 +2827,7 @@ bool dockmenu_row_checked(syn_server_t *s, int i)
     case SYN_DOCKACT_ONTOP:    return s->config.dock_on_top;
     case SYN_DOCKACT_MAGNIFY:  return s->config.dock_magnify;
     case SYN_DOCKACT_CLOCK:    return s->config.dock_clock;
+    case SYN_DOCKACT_APPS:     return s->config.dock_apps_button;
     default:                   return false;
     }
 }
@@ -2370,6 +2866,7 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
         s->dockmenu.actions[n++] = SYN_DOCKACT_ONTOP;
     s->dockmenu.actions[n++] = SYN_DOCKACT_MAGNIFY;
     s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_APPS;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SETTINGS;
     s->dockmenu.action_count = n;
@@ -2507,6 +3004,9 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
         break;
     case SYN_DOCKACT_MAGNIFY:
         dockmenu_toggle(s, &s->config.dock_magnify);
+        break;
+    case SYN_DOCKACT_APPS:
+        dockmenu_toggle(s, &s->config.dock_apps_button);
         break;
     case SYN_DOCKACT_CLOCK:
         dockmenu_toggle(s, &s->config.dock_clock);

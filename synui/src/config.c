@@ -153,10 +153,17 @@
  *                                dock; on, it floats over them)
  *   dock_magnify = on|off       (default on; the icons under the pointer swell
  *                                and the run slides apart to make room)
- *   dock_clock = on|off         (default off; time + date past the last icon)
+ *   dock_magnify_scale = 1.60   (1.00-2.50; how big the icon under the pointer
+ *                                gets. The canvas's headroom follows it)
+ *   dock_clock = on|off         (default off; time + date in a cell of its own)
+ *   dock_clock_slot = -1        (icons to the clock's left; -1 = past the last
+ *                                one. Written by dragging the clock)
+ *   dock_apps_button = on|off   (default on; the "show all apps" grid at the
+ *                                end of the run — opens the start menu)
  *   night_light  = on|off       (default off)   Super+Shift+B toggles
  *   night_light_temp = 4000     (Kelvin, 1000-6500; 6500 is daylight)
- *   dock_height = 64            (px)
+ *   dock_height = 64            (px; the SLAB and the icons — icons are this
+ *                                minus 16)
  *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
  *   dock_edge = bottom|top|left|right   (left/right draw a vertical column)
@@ -1308,7 +1315,16 @@ static void config_set_defaults(syn_config_t *cfg)
      * can never be in front of. */
     cfg->dock_on_top       = 0;
     cfg->dock_magnify      = 1;
+    /* The literal dock.c grew up with. See dock_headroom() for why the canvas's
+     * transparent room is derived from it rather than sitting beside it. */
+    cfg->dock_magnify_scale = 1.60f;
     cfg->dock_clock        = 0;
+    /* -1 = past the last icon, which is where the clock has always been and the
+     * only end of the row that survives apps opening and closing. */
+    cfg->dock_clock_slot   = -1;
+    /* On, unlike the clock: the bar does not have one of these, and a dock of
+     * pinned icons has no way to reach an app that is not on it. */
+    cfg->dock_apps_button  = 1;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
@@ -2393,6 +2409,17 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_magnify = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_clock") == 0)
         cfg->dock_clock = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_apps_button") == 0)
+        cfg->dock_apps_button = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_clock_slot") == 0) {
+        cfg->dock_clock_slot = atoi(val);
+        /* Anything negative is "last"; the upper end is clamped at layout time
+         * against the icons that actually exist, not here — the entry count is
+         * a live number and this file is read before there are any. */
+        if (cfg->dock_clock_slot < 0) cfg->dock_clock_slot = -1;
+        if (cfg->dock_clock_slot > DOCK_MAX_ENTRIES)
+            cfg->dock_clock_slot = DOCK_MAX_ENTRIES;
+    }
     /* Is there a bar, and how is it stopped and started. The compositor does
      * not start the bar (the session's autostart line does), so `bar_enabled`
      * is not read at boot to decide anything — it is the control panel row's
@@ -2549,6 +2576,14 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_height = atoi(val);
         if (cfg->dock_height < 32)  cfg->dock_height = 32;
         if (cfg->dock_height > 200) cfg->dock_height = 200;
+    }
+    else if (strcmp(key, "dock_magnify_scale") == 0) {
+        cfg->dock_magnify_scale = (float)atof(val);
+        /* 1.00 is "no swell at all", which is what dock_magnify = off already
+         * says — but it is a legal bottom to the range rather than a second way
+         * to spell off, and stopping there keeps the row's floor honest. */
+        if (cfg->dock_magnify_scale < 1.00f) cfg->dock_magnify_scale = 1.00f;
+        if (cfg->dock_magnify_scale > 2.50f) cfg->dock_magnify_scale = 2.50f;
     }
     else if (strcmp(key, "dock_hover_margin") == 0) {
         cfg->dock_hover_margin = atoi(val);

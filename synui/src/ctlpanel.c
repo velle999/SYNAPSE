@@ -652,15 +652,37 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_DOCK_MAGNIFY,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock magnify",     NULL,
       .help = "The icons under the pointer swell and the row slides apart to "
               "make room" },
+    /* Table-driven where the switch above it is bespoke, and the split is not an
+     * inconsistency: the SWITCH has to reach dock.state (where the dock's own
+     * on/off settings live, beside the edge and the pins), and the AMOUNT is a
+     * number like Dock size and Dock corners, which settings.state already
+     * holds. One value, one home — a copy in the other file is a value that is
+     * quietly discarded at the next load. */
+    { CTL_ROW_DOCK_MAGNIFY_SCALE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock magnify amount", NULL,
+      .key = "dock_magnify_scale", .off = CFG(dock_magnify_scale),
+      .vtype = CTL_VAL_FLOAT,
+      .vmin = 1.00f, .vmax = 2.50f, .vstep = 0.05f, .apply = CTL_APPLY_DOCK,
+      /* Worth saying that the bar gets taller: the canvas grows its transparent
+       * headroom to match (dock_headroom), so a big number is not free — it is
+       * a taller strip of screen the dock can be summoned into. */
+      .help = "How big the icon under the pointer gets. The dock makes room for "
+              "it, so a big swell is a taller dock" },
     { CTL_ROW_DOCK_CLOCK,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock clock",       NULL,
-      .help = "Time and date in a cell past the last icon. 12/24-hour follows "
-              "Clock & Time, like the bar's" },
+      .help = "Time and date in a cell of its own — drag the cell to move it "
+              "anywhere in the row. 12/24-hour follows Clock & Time" },
+    { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
+      .help = "A grid of dots at the end of the dock that opens the start menu "
+              "— every installed app, not just the pinned ones" },
     { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
       .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
     { CTL_ROW_DOCK_HEIGHT,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock size", NULL,
       .key = "dock_height", .off = CFG(dock_height), .vtype = CTL_VAL_INT,
-      .vmin = 32, .vmax = 200, .vstep = 4, .unit = "px", .apply = CTL_APPLY_DOCK },
+      .vmin = 32, .vmax = 200, .vstep = 4, .unit = "px", .apply = CTL_APPLY_DOCK,
+      /* Worth spelling out, because it did NOT until now: the number moved the
+       * slab and left the icons at 48, so the row read as broken past about
+       * 80px — a wall of glass with the same small pictures adrift in it. */
+      .help = "The slab AND the icons in it — the icons are this minus 16" },
     { CTL_ROW_DOCK_HOVER_MARGIN, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock reveal strip", NULL,
       .key = "dock_hover_margin", .off = CFG(dock_hover_margin), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DOCK,
@@ -1977,6 +1999,10 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
         else snprintf(buf, n, "%s", s->config.dock_clock ? "on" : "off");
         break;
+    case CTL_ROW_DOCK_APPS:
+        if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", s->config.dock_apps_button ? "on" : "off");
+        break;
     case CTL_ROW_BAR_AUTOHIDE:
         snprintf(buf, n, "%s", bar_autohide_label(s));
         break;
@@ -3188,21 +3214,30 @@ static void ctlpanel_activate(syn_server_t *s)
         return;
 
     case CTL_ROW_DOCK_MAGNIFY:
-    case CTL_ROW_DOCK_CLOCK: {
+    case CTL_ROW_DOCK_CLOCK:
+    case CTL_ROW_DOCK_APPS: {
         if (!s->config.dock_enabled) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                      "dock is off");
             ctlpanel_repaint(s);
             return;
         }
-        bool mag = row == CTL_ROW_DOCK_MAGNIFY;
-        int *flag = mag ? &s->config.dock_magnify : &s->config.dock_clock;
+        int *flag;
+        const char *what;
+        switch (row) {
+        case CTL_ROW_DOCK_MAGNIFY:
+            flag = &s->config.dock_magnify;     what = "magnify"; break;
+        case CTL_ROW_DOCK_CLOCK:
+            flag = &s->config.dock_clock;       what = "clock";   break;
+        default:
+            flag = &s->config.dock_apps_button; what = "all-apps button"; break;
+        }
         *flag = !*flag;
         dock_state_save(s);
         dock_relayout(s);
         dock_wake(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "dock %s %s", mag ? "magnify" : "clock", *flag ? "on" : "off");
+                 "dock %s %s", what, *flag ? "on" : "off");
         ctlpanel_repaint(s);
         return;
     }

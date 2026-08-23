@@ -1610,7 +1610,8 @@ typedef enum {
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_DOCK_ON_TOP,   /* a pinned dock floats over windows, or they cover it */
     CTL_ROW_DOCK_MAGNIFY,  /* macOS-style hover swell on the icons */
-    CTL_ROW_DOCK_CLOCK,    /* time + date in a cell past the last icon */
+    CTL_ROW_DOCK_CLOCK,    /* time + date in a cell of its own, dragged anywhere */
+    CTL_ROW_DOCK_APPS,     /* the "show all apps" button at the end of the run */
     CTL_ROW_DOCK_STYLE,    /* solid slab or frosted glass — auto follows the theme */
     CTL_ROW_DOCK_OPACITY,  /* how much of the wallpaper shows through the bar */
     CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
@@ -1721,6 +1722,7 @@ typedef enum {
 
     CTL_ROW_NIGHTLIGHT_TEMP,
     CTL_ROW_DOCK_HEIGHT,
+    CTL_ROW_DOCK_MAGNIFY_SCALE,
     CTL_ROW_DOCK_EDGE,
     CTL_ROW_DOCK_HOVER_MARGIN,
     CTL_ROW_DESKTOP_ICONS,
@@ -3026,10 +3028,14 @@ typedef enum {
     SYN_DOCKACT_ONTOP,     /* config.dock_on_top */
     SYN_DOCKACT_MAGNIFY,   /* config.dock_magnify */
     SYN_DOCKACT_CLOCK,     /* config.dock_clock */
+    SYN_DOCKACT_APPS,      /* config.dock_apps_button */
     SYN_DOCKACT_SETTINGS,  /* open Control panel ▸ Desktop, where the rest live */
 } syn_dockact_t;
-/* 4 app rows + a rule + 4 switches + the panel row. */
-#define SYN_DOCKMENU_MAX 12
+/* 4 app rows + a rule + 5 switches + a rule + the panel row = 12, and the two
+ * spare are deliberate: the menu carries every dock switch there is, so the next
+ * one to be added lands here, and an overflow would be a silent write past the
+ * end of an array in the middle of a right-click. */
+#define SYN_DOCKMENU_MAX 14
 
 /* deskmenu.c: the desktop (wallpaper) right-click menu. SEP draws a rule and
  * is not selectable; everything else is a row. */
@@ -3618,15 +3624,48 @@ typedef struct {
      * summoned over, or revealing it would show nothing. Persisted to
      * dock.state. */
     int   dock_on_top;          /* default 0 */
-    /* A clock (time, and the date under it) drawn at the far end of the bar,
-     * past the last icon. Off by default: the bar has one, and two clocks on
-     * one screen is a choice rather than a default. Persisted to dock.state. */
+    /* A clock (time, and the date under it) drawn in a cell of its own inside
+     * the bar. Off by default: the bar has one, and two clocks on one screen is
+     * a choice rather than a default. Persisted to dock.state. */
     int   dock_clock;           /* default 0 */
+    /*
+     * WHERE that cell sits along the run, counted in icons to its LEFT (or
+     * above it, on a vertical column): 0 puts the clock before the first icon,
+     * 3 puts it after the third, and -1 — the default — means "past the last
+     * one", wherever that turns out to be.
+     *
+     * -1 is a position rather than a fallback, and it has to be: a dock whose
+     * clock was pinned to slot 5 would walk back up the row every time an app
+     * quit, because the slot it was pinned to is a gap that stops existing.
+     * "Last" is the only end of the row that survives apps coming and going,
+     * so it is what an untouched clock keeps. Dragged anywhere else the number
+     * is stored and clamped to the icons that exist at layout time.
+     *
+     * Persisted to dock.state as `clock_slot=`. */
+    int   dock_clock_slot;      /* default -1 (past the last icon) */
+    /*
+     * The GNOME-style "show all apps" button: a 3×3 grid of dots in a cell at
+     * the far end of the run, which opens the start menu — every installed app,
+     * not the pinned few. On by default; it is the one thing a dock of pinned
+     * icons cannot do for itself. Persisted to dock.state. */
+    int   dock_apps_button;     /* default 1 */
     /* macOS-style hover magnification: the icons under the pointer swell and
      * the run slides apart to make room. On by default — it is the dock's
      * signature behaviour, and the flat row is what it was missing. Persisted
      * to dock.state. */
     int   dock_magnify;         /* default 1 */
+    /*
+     * HOW MUCH the icon directly under the pointer swells, as a multiple of its
+     * flat size. 1.60 is the number this was a literal at for its whole life,
+     * and it is macOS's default look.
+     *
+     * The canvas's transparent headroom is derived from this rather than being
+     * a constant beside it (dock_headroom): a bigger swell needs somewhere to
+     * grow, and a fixed 32px of room would simply clip the top off a 2.5×
+     * icon — silently, because the body is welded to the screen edge and the
+     * clipping happens at the far side of the canvas. Only meaningful while
+     * dock_magnify is on. Persisted to settings.state, like dock_height. */
+    float dock_magnify_scale;   /* 1.00..2.50, default 1.60 */
     /* Night light: warm the screen by writing the outputs' gamma LUTs directly
      * (nightlight.c). 6500K is daylight — the identity ramp — so the *temp* is
      * only meaningful while night_light is on. */
@@ -3641,6 +3680,13 @@ typedef struct {
      * what a laptop meeting a TV wants and a nuisance on a desk whose monitors
      * are permanently attached. See power_has_battery(). */
     int   hdmi_audio;           /* default -1 (auto) */
+    /*
+     * The dock's SIZE — the slab's thickness along the edge normal, and with it
+     * the icons: they are dock_height − 16 px square (dock_icon_size), so the
+     * one number really does make the whole dock bigger or smaller. It used to
+     * move the slab alone, which left a 200px dock as a wall of empty glass
+     * with the same 48px icons floating in it.
+     */
     int   dock_height;          /* px thickness, default 64 */
     int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
@@ -4595,6 +4641,11 @@ static inline int chrome_shadow(const syn_config_t *cfg)
  * (see syn_output::dock), so hit-box coordinates here are dock-canvas-local
  * and valid for every output alike. */
 #define DOCK_MAX_ENTRIES 32
+/* What `syn_server_t::dock_drag.icon` holds when the press did not land on an
+ * app icon. Both are negative so the same `>= 0` test that means "an entry
+ * index" keeps working unchanged. */
+#define DOCK_DRAG_BAR    (-1)
+#define DOCK_DRAG_CLOCK  (-2)
 typedef struct {
     char app_id[128];
     int  pinned;             /* came from synuirc dock_pin */
@@ -5481,22 +5532,27 @@ struct syn_server {
         double        start_x, start_y;   /* press point (layout coords) */
         double        float_x, float_y;   /* current bar top-left while floating */
         /*
-         * ONE press, two gestures, told apart by where it landed. On the bar's
-         * background this is a reposition and everything above applies. On an
-         * ICON it is a rearrange: `icon` is that entry's index in dock_entries
-         * at press time, `slot` is the position it would drop into, and the bar
-         * stays where it is — floating it under the cursor would take the
-         * icons' own row with it and there would be nothing to drag along.
+         * ONE press, THREE gestures, told apart by where it landed. On the
+         * bar's background this is a reposition and everything above applies.
+         * On an ICON it is a rearrange: `icon` is that entry's index in
+         * dock_entries at press time, `slot` is the position it would drop
+         * into, and the bar stays where it is — floating it under the cursor
+         * would take the icons' own row with it and there would be nothing to
+         * drag along. On the CLOCK it is the same rearrange one cell over:
+         * `slot` is how many icons end up to its left, and the release writes
+         * that to dock_clock_slot.
          *
-         * -1 in `icon` is what says "this is a bar drag", which is why the two
-         * can share the struct: only one press is ever down.
+         * DOCK_DRAG_BAR / DOCK_DRAG_CLOCK in `icon` are what say which of the
+         * two non-icon gestures this is, which is why all three can share the
+         * struct: only one press is ever down.
          *
          * A press on an icon that never travels is a CLICK, and the click is
          * what launches or raises the app — so unlike the bar drag, this one
          * owes an action on release even when nothing moved. See
          * dock_icon_drag_end().
          */
-        int           icon;     /* dragged entry index, or -1 for a bar drag */
+        int           icon;     /* dragged entry index, or DOCK_DRAG_BAR /
+                                 * DOCK_DRAG_CLOCK for the other two gestures */
         /* …and which app that index MEANT at press time. dock_rebuild() memcpy's
          * a whole fresh entry array over s->dock_entries whenever anything maps
          * or unmaps, so an index taken at press can be pointing at a different
@@ -8718,6 +8774,23 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out);
  * gesture it is. */
 void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
                           double lx, double ly);
+
+/* The two cells that are not apps.
+ *
+ * dock_apps_at() is the "show all apps" button: true when (lx,ly) is over it on
+ * a shown dock, so input.c can open the start menu instead of hit-testing the
+ * bar body underneath.
+ *
+ * dock_clock_at() is the clock cell, and it answers the same question for the
+ * gesture below — a left press there arms a drag that MOVES the clock along the
+ * run rather than repositioning the whole dock. Both are asked before
+ * dock_bar_at(), which would otherwise claim these presses: the cells are drawn
+ * on the body, so every one of them is also a hit on the body. */
+bool dock_apps_at(syn_server_t *s, double lx, double ly);
+bool dock_clock_at(syn_server_t *s, double lx, double ly);
+/* Arms the clock drag. Motion and release go through dock_drag_motion/_end like
+ * the other two gestures; the release commits the new slot to dock.state. */
+void dock_clock_drag_begin(syn_server_t *s, double lx, double ly);
 
 /* Right-click context menu (mouse-driven; rendered by synui_render_dockmenu).
  * open() builds the item list for an entry and shows the menu at (lx,ly);

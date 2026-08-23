@@ -34,11 +34,27 @@
  *      summoned dock that arrived behind the window it was summoned over would
  *      reveal nothing.
  *
- *   5. The clock takes a cell of its own, and only when it is on.
+ *   5. The clock takes a cell of its own, and only when it is on — and that
+ *      cell can be DRAGGED anywhere in the row, which is the thing a test has to
+ *      hold: everything past the clock's slot is one cell of a different width
+ *      further along than icon arithmetic alone would put it.
  *
  *   6. The right-click menu offers the dock's switches whether or not the click
  *      landed on an icon — the reach problem it exists to solve — and hides the
  *      on-top row in the state where it would be ignored.
+ *
+ *   7. `dock_height` resizes the ICONS, not only the slab. It moved the slab
+ *      alone for its whole life, which left a 200px dock as a wall of glass with
+ *      48px pictures adrift in it, and the row reading as broken past ~80px.
+ *
+ *   8. `dock_magnify_scale` drives the swell AND the headroom the swell needs.
+ *      A bigger scale against a fixed 32px of room is not a smaller effect: it
+ *      is an icon clipped off at the far edge of the canvas, silently.
+ *
+ *   9. The show-all-apps button takes a cell at the end of the run and is
+ *      hit-testable there. It is drawn ON the body, so dock_bar_at() answers
+ *      true for the very same point — which is exactly why input.c has to ask
+ *      dock_apps_at() first, and why that ordering is asserted here.
  *
  * Run as:
  *     ninja -C build && ./build/dock_options_test
@@ -48,6 +64,7 @@
  */
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,13 +91,49 @@ static void check_int(int got, int want, const char *what)
 }
 
 /* dock.c's, and private to it — spelt out so a change to either has to be made
- * in both places deliberately. */
+ * in both places deliberately.
+ *
+ * They are FUNCTIONS of the dock's size now rather than constants, so they are
+ * derived here the same way. The bare defines are what the stock 64px dock comes
+ * out at, which is what most of the cases below run at. */
+#define STOCK    64
 #define ICON     48
 #define PAD      8
 #define HEADROOM 32
 #define CLOCK_H  92
+#define MAG      1.60f
 #define OUT_W    1920
 #define OUT_H    1080
+
+static int icon_for(int thick)
+{
+    int icon = thick - 16;
+    return icon < 16 ? 16 : (icon > 192 ? 192 : icon);
+}
+
+static int pad_for(int thick)
+{
+    int pad = icon_for(thick) / 6;
+    return pad < 4 ? 4 : pad;
+}
+
+/* Rounded up to a multiple of 8, the way the 32 it replaces was. */
+static int head_for(int thick, double scale)
+{
+    double swell = icon_for(thick) * (scale - 1.0);
+    if (swell < 0.0) swell = 0.0;
+    return (int)(ceil(swell / 8.0) * 8.0);
+}
+
+/* The clock's cell is MEASURED from the strings it draws now, with a floor —
+ * and syn_text_extents() is stubbed to zero here, so the floor is always what
+ * wins in this rig. That is deliberate: the measurement belongs to the font
+ * stack, the floor belongs to the layout, and only the second is ours to
+ * assert. */
+static int clock_for(int thick)
+{
+    return (int)lround(CLOCK_H * (thick / 64.0));
+}
 
 /* ── The compositor, stubbed ─────────────────────────────── */
 
@@ -240,11 +293,35 @@ static void set_pins(const char *const *pins, int n)
     relayout();
 }
 
-/* The flat run for `n` icons, plus the clock's cell when it is on. */
-static int flat_run(int n, bool clock)
+/* The flat run for `n` icons at thickness `thick`, plus the clock's cell and the
+ * apps button when those are on. Each extra cell brings its own trailing pad,
+ * exactly as the layout walk does. */
+static int run_for(int n, int thick, bool clock, bool apps)
 {
-    return (n > 0 ? n * ICON + (n + 1) * PAD : PAD * 2) +
-           (clock ? CLOCK_H + PAD : 0);
+    int icon = icon_for(thick), pad = pad_for(thick);
+    if (n == 0 && !clock && !apps) return pad * 2;
+    int run = pad + n * (icon + pad);
+    if (clock) run += clock_for(thick) + pad;
+    if (apps)  run += icon + pad;
+    return run;
+}
+
+/* The stock dock, which is what most of the cases below run at. */
+static int flat_run(int n, bool clock) { return run_for(n, STOCK, clock, false); }
+
+/* The canvas-local run-axis span a cell hit test answers true over, or -1/-1
+ * when it is nowhere on the bar. The probe is the real entry point input.c
+ * calls, so what is asserted is what a click would find. */
+static void span_of(bool (*probe)(syn_server_t *, double, double),
+                    double bar_x, double probe_y, int width,
+                    int *first, int *last)
+{
+    *first = *last = -1;
+    for (int x = 0; x < width; x++)
+        if (probe(&server, bar_x + x, probe_y)) {
+            if (*first < 0) *first = x;
+            *last = x;
+        }
 }
 
 static bool menu_has(syn_dockact_t a)
@@ -283,11 +360,20 @@ int main(void)
     server.config.dock_enabled  = 1;
     server.config.dock_autohide = 0;   /* pinned, so the on-top rule is live */
     server.config.dock_magnify  = 1;
+    /* ⚠ NOT the zero memset leaves. A scale of 0 makes every swell negative,
+     * the headroom collapses to nothing, and the whole magnification half of
+     * this file passes vacuously — which is how this rig's own copy of the
+     * defaults bit the first time. */
+    server.config.dock_magnify_scale = MAG;
     server.config.dock_clock    = 0;
+    server.config.dock_clock_slot = -1;   /* past the last icon */
+    /* Off in the rig, on by default on a real desktop: the cases that care
+     * switch it on, and the run arithmetic everywhere else stays about icons. */
+    server.config.dock_apps_button = 0;
     server.config.dock_on_top   = 0;
-    server.config.dock_height   = 64;
+    server.config.dock_height   = STOCK;
     server.config.dock_edge     = SYN_DOCK_EDGE_BOTTOM;
-    server.dock_drag.icon = -1;
+    server.dock_drag.icon = DOCK_DRAG_BAR;
 
     fake_wlr_output.data = &output;
     output.wlr_output = &fake_wlr_output;
@@ -373,10 +459,54 @@ int main(void)
     server.config.dock_autohide = 0;
     relayout();
 
-    /* ── 5. The clock's cell ───────────────────────────────────────────── */
+    /* ── 5. The clock's cell, and dragging it along the run ────────────── */
     server.config.dock_clock = 1;
     relayout();
     check_int(buf_w, flat_run(4, true), "the clock takes a cell past the icons");
+
+    /* Where it actually is, asked the way a click asks. With slot -1 it is past
+     * the last icon, so its span starts after every entry's. */
+    bar_x = fake_tree.node.x;
+    probe_y = fake_tree.node.y + buf_h - 24;
+    int clk_first, clk_last;
+    span_of(dock_clock_at, bar_x, probe_y, buf_w, &clk_first, &clk_last);
+    check(clk_first >= 0, "…and the clock cell is hit-testable");
+    check_int(clk_last - clk_first + 1, CLOCK_H, "…at the width it asked for");
+
+    int last_icon_end = -1;
+    for (int x = 0; x < buf_w; x++)
+        if (dock_entry_at(&server, bar_x + x, probe_y)) last_icon_end = x;
+    check(clk_first > last_icon_end, "…past the last icon, which is slot -1");
+
+    /* Now drag it to the front. The whole gesture, through the same three entry
+     * points input.c uses — a slot written by anything else is a slot the real
+     * press cannot produce. */
+    double grab_x = bar_x + clk_first + 4;
+    dock_clock_drag_begin(&server, grab_x, probe_y);
+    check(server.dock_drag.active && server.dock_drag.icon == DOCK_DRAG_CLOCK,
+          "a press on the clock arms the clock drag, not a bar drag");
+    dock_drag_motion(&server, bar_x + 2, probe_y);
+    dock_drag_end(&server, bar_x + 2, probe_y);
+    check_int(server.config.dock_clock_slot, 0, "…and dropping it at the front");
+
+    relayout();
+    span_of(dock_clock_at, bar_x, probe_y, buf_w, &clk_first, &clk_last);
+    int first_icon_start = -1;
+    for (int x = 0; x < buf_w; x++)
+        if (dock_entry_at(&server, bar_x + x, probe_y)) { first_icon_start = x; break; }
+    check(clk_first >= 0 && clk_last < first_icon_start,
+          "…puts the cell before every icon");
+    check_int(buf_w, flat_run(4, true), "…and costs the run exactly nothing");
+
+    /* Dropped past the last icon it goes back to -1 rather than being written as
+     * `n`: they look the same today and stop being the same the moment an app
+     * opens. */
+    dock_clock_drag_begin(&server, bar_x + clk_first + 4, probe_y);
+    dock_drag_motion(&server, bar_x + buf_w - 2, probe_y);
+    dock_drag_end(&server, bar_x + buf_w - 2, probe_y);
+    check_int(server.config.dock_clock_slot, -1,
+              "…and dragging it back to the end stores -1, not 4");
+
     server.config.dock_clock = 0;
     relayout();
     check_int(buf_w, flat_run(4, false), "…and gives it back when switched off");
@@ -387,7 +517,8 @@ int main(void)
     check(!menu_has(SYN_DOCKACT_PIN) && !menu_has(SYN_DOCKACT_UNPIN),
           "a menu opened on the bar body offers no app rows");
     check(menu_has(SYN_DOCKACT_AUTOHIDE) && menu_has(SYN_DOCKACT_MAGNIFY) &&
-          menu_has(SYN_DOCKACT_CLOCK) && menu_has(SYN_DOCKACT_SETTINGS),
+          menu_has(SYN_DOCKACT_CLOCK) && menu_has(SYN_DOCKACT_APPS) &&
+          menu_has(SYN_DOCKACT_SETTINGS),
           "…and does offer the dock's own switches");
     check(menu_has(SYN_DOCKACT_ONTOP),
           "…including on-top, with the dock pinned");
@@ -408,6 +539,76 @@ int main(void)
           "an auto-hiding dock does not offer the on-top row");
     dockmenu_close(&server);
     server.config.dock_autohide = 0;
+
+    /* ── 7. Dock size resizes the ICONS ────────────────────────────────── */
+    server.config.dock_height = 100;
+    relayout();
+    check_int(buf_h, 100 + head_for(100, MAG),
+              "a bigger dock is a taller canvas");
+    check_int(buf_w, run_for(4, 100, false, false),
+              "…and the icons and gaps in it grew too");
+
+    /* The claim in one number: the drawn cell is the new icon size, not 48. */
+    bar_x = fake_tree.node.x;
+    probe_y = fake_tree.node.y + buf_h - 24;
+    int icon_first = -1, icon_last = -1;
+    for (int x = 0; x < buf_w; x++)
+        if (dock_entry_at(&server, bar_x + x, probe_y) == &server.dock_entries[0]) {
+            if (icon_first < 0) icon_first = x;
+            icon_last = x;
+        }
+    check_int(icon_last - icon_first + 1, icon_for(100),
+              "…which is what a click actually lands on");
+
+    server.config.dock_height = 32;
+    relayout();
+    check_int(buf_w, run_for(4, 32, false, false),
+              "and the smallest dock shrinks them the same way");
+
+    server.config.dock_height = STOCK;
+    relayout();
+
+    /* ── 8. The magnification amount drives the headroom ───────────────── */
+    server.config.dock_magnify_scale = 2.50f;
+    relayout();
+    check_int(buf_h, STOCK + head_for(STOCK, 2.50f),
+              "a bigger swell asks for more headroom");
+    check(head_for(STOCK, 2.50f) > HEADROOM,
+          "…which is more than the constant it replaced");
+
+    output.dock.mag_run = PAD + 1 * (ICON + PAD) + ICON / 2.0;
+    output.dock.mag_amount = 1.0;
+    relayout();
+    int wide = buf_w;
+    server.config.dock_magnify_scale = MAG;
+    relayout();
+    check(wide > buf_w, "…and swells the row further than 1.60 does");
+    output.dock.mag_amount = 0.0;
+    relayout();
+
+    /* ── 9. The show-all-apps button ───────────────────────────────────── */
+    server.config.dock_apps_button = 1;
+    relayout();
+    check_int(buf_w, run_for(4, STOCK, false, true),
+              "the apps button takes a cell of its own");
+
+    bar_x = fake_tree.node.x;
+    probe_y = fake_tree.node.y + buf_h - 24;
+    int apps_first, apps_last;
+    span_of(dock_apps_at, bar_x, probe_y, buf_w, &apps_first, &apps_last);
+    check_int(apps_last - apps_first + 1, ICON, "…the size of an icon");
+    check(!dock_entry_at(&server, bar_x + apps_first + 2, probe_y),
+          "…and it is not an entry — no app_id, no click on an app");
+
+    /* THE ordering fact: the same point is on the bar body, so a press that
+     * reached dock_bar_at() first would drag the dock instead of opening the
+     * menu. input.c asks dock_apps_at() before it, and this is why. */
+    check(dock_bar_at(&server, bar_x + apps_first + 2, probe_y, NULL),
+          "…while the bar answers for that point too, hence the ask order");
+
+    server.config.dock_apps_button = 0;
+    relayout();
+    check_int(buf_w, flat_run(4, false), "…and gives the cell back when off");
 
     printf("dock_options_test: %s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;

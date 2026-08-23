@@ -3390,6 +3390,21 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         }
 
         if (button == BTN_LEFT) {
+            /* The show-all-apps button, before the icons and well before the
+             * bar: it is drawn ON the body, so a press that reached
+             * dock_bar_at() below would start dragging the whole dock to
+             * another edge instead. Every installed app, which is the one thing
+             * a row of pinned icons cannot offer. */
+            if (dock_apps_at(s, s->cursor->x, s->cursor->y)) {
+                synui_start_menu_open(s);
+                return;
+            }
+            /* …and the clock, which arms a drag that moves the cell along the
+             * run. Same ordering rule, same reason. */
+            if (dock_clock_at(s, s->cursor->x, s->cursor->y)) {
+                dock_clock_drag_begin(s, s->cursor->x, s->cursor->y);
+                return;
+            }
             syn_dock_entry_t *dock_hit =
                 dock_entry_at(s, s->cursor->x, s->cursor->y);
             if (dock_hit) {

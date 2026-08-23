@@ -1487,3 +1487,94 @@ table). `ctlpanel_table_test` drives the real key handler for the pin invariant
 including both release paths and a reload from disk. `bar_ink_test.c` gained the
 letterboxed-television case as arithmetic; `bar_backdrop.sh` asserts the
 per-output keys are in the file and that one screen folds to its own answer.
+
+---
+
+## The dock grows up: size, swell, a way to all your apps, and a clock you can put where you like
+
+Four asks in one pass, and three of them turned out to be the same bug wearing
+different clothes: a number in the config that the dock only half obeyed.
+
+**`dock_height` resizes the DOCK, not the slab it is drawn on.** The Dock size
+row has always been there and has always moved one rectangle: the icons stayed
+48px whatever it said. Past about 80px the row therefore read as broken — a
+growing wall of glass with the same small pictures adrift in the middle of it,
+and at the 200px top of the range a bar with more empty space than dock.
+
+- [x] **The icon is `dock_height − 16`**, which is exactly what 48-in-64 was, and
+      the padding a sixth of the icon, which is exactly what 8-at-48 was. A
+      desktop that never touches the row is pixel-identical to the one before.
+- [x] **Everything that was a literal is a fraction now** — the running dot's
+      offset and radius, the cross-axis nudge, the drag's grab offset and its
+      clamp to the body. A stray 48 left anywhere shows up as a hit box that
+      misses or a dot through the middle of a picture, and nothing warns.
+- [x] **The icon cache is keyed on the size**, not only on `icon_generation()`.
+      It holds each picture rasterized at the cell size; keeping the 48px surface
+      after the dock grew to 184 leaves every icon on the bar upscaled and soft,
+      with a layout that is entirely correct.
+
+**`dock_magnify_scale`** — the swell was a `#define` at 1.60 with a `#define` at
+32 beside it for the room to do it in, and the second is *derived* from the
+first now. It has to be: the body is welded to the screen edge, so a bigger
+scale against a fixed headroom is not a smaller effect, it is an icon clipped
+off at the far side of the canvas — silently, because nothing in the scene graph
+objects to a buffer too small for what was drawn into it. Rounded up to a
+multiple of 8 the way the old constant was, so stock still gets exactly 32.
+
+**A show-all-apps button.** A dock of pinned icons has no route to an app that
+is not on it; the bar's start menu does, and nothing on the dock pointed at it.
+
+- [x] **A 3×3 grid of dots** in a cell at the end of the run, drawn in
+      `panel_ink` rather than pulled from the icon theme — there is no `.desktop`
+      behind this button, and the ink is by definition the colour that reads on
+      this bar (the same rule the running dot follows, and for the same reason: a
+      white glyph vanishes on XP's beige).
+- [x] **`dock_apps_at()` is asked BEFORE `dock_bar_at()`**, and that ordering is
+      the whole of the wiring. The button is drawn *on* the body, so every press
+      that lands on it also lands on the bar; asked the other way round it would
+      start dragging the dock to another screen edge. Asserted in the test,
+      including the fact that the bar answers true for the same point.
+- [x] **A switch like the others** — the right-click menu and Control panel ▸
+      Desktop, persisted to `dock.state` beside the edge and the pins.
+
+**The clock can be dragged anywhere in the row.** It sat past the last icon
+because that is where it was appended, which is a fact about the layout loop
+rather than a decision about the clock.
+
+- [x] **`dock_clock_slot` counts icons to its left**, and the layout walks slots
+      rather than appending. `-1` means "past the last one" and is a *position*,
+      not a fallback: a clock pinned to slot 5 walks back up the row every time
+      an app quits, so dropping it at the end stores -1 rather than the `n` that
+      looks identical today.
+- [x] **The gesture is the third one `dock_drag` carries** (`DOCK_DRAG_CLOCK`),
+      beside the bar reposition and the icon rearrange. The cell is not lifted
+      under the cursor the way an icon is — an icon needs a picture because the
+      gap it came from looks like the gap it is going to, and a second copy of
+      the time floating over the bar would be two clocks disagreeing about where
+      the clock is.
+- [x] **The target slot is counted off the cells as DRAWN**, which is what keeps
+      the gesture from oscillating: inserting the clock pushes the icon that just
+      decided the answer *away* from the cursor, so the hysteresis is free and in
+      the right direction.
+- [x] **`dock_slot_at()` subtracts the clock's cell.** Magnification is suppressed
+      during an icon drag; the clock is not, so everything past its slot sits one
+      cell of a different width further along than icon arithmetic puts it.
+      Without this, dragging an icon across a clock parked mid-row drops it a slot
+      early — only on the desktops that have moved their clock.
+- [x] **A hairline on each side that has a neighbour.** One rule on the left was
+      right for the only position the clock used to have.
+
+**…and the rule was too close to the first digit**, which is what started this
+half. The cell was a 92px constant and "3:03:11 AM" at 17px is 92px wide, so
+seconds plus an am/pm put the separator hard against the time. The cell is
+measured from the strings it will actually draw now — 92 is a floor, so a short
+"3:03" keeps the roomy cell it always had — off a scratch cairo context, because
+the cell's length is geometry and the hit tests need it as much as the renderer
+does. The clock's font sizes scale with the slab for the same reason the icons
+do.
+
+`dock_options_test` grew to 43 cases: the icons resize with the slab and a click
+lands on the new size, the headroom follows the swell, the apps button takes a
+cell and is found by the hit test the compositor actually calls, and the clock is
+dragged front and back through `dock_clock_drag_begin` → `dock_drag_motion` →
+`dock_drag_end` rather than by writing the slot.
