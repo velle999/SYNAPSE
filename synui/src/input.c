@@ -3457,6 +3457,16 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                 appgrid_toggle(s);
                 return;
             }
+            /* …the power button, which opens its own menu rather than doing
+             * anything. Same ordering rule, same reason — and see
+             * dockmenu_open_power() for why a menu and not five buttons. A
+             * RIGHT click here is deliberately not special-cased: it falls
+             * through to dock_bar_at() below and opens the dock's settings
+             * menu, exactly as a right click on the apps button does. */
+            if (dock_power_at(s, s->cursor->x, s->cursor->y)) {
+                dockmenu_open_power(s, s->cursor->x, s->cursor->y);
+                return;
+            }
             /* …and the clock, which arms a drag that moves the cell along the
              * run. Same ordering rule, same reason. */
             if (dock_clock_at(s, s->cursor->x, s->cursor->y)) {

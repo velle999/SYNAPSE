@@ -296,14 +296,20 @@ static void set_pins(const char *const *pins, int n)
 /* The flat run for `n` icons at thickness `thick`, plus the clock's cell and the
  * apps button when those are on. Each extra cell brings its own trailing pad,
  * exactly as the layout walk does. */
-static int run_for(int n, int thick, bool clock, bool apps)
+static int run_for_full(int n, int thick, bool clock, bool apps, bool power)
 {
     int icon = icon_for(thick), pad = pad_for(thick);
-    if (n == 0 && !clock && !apps) return pad * 2;
+    if (n == 0 && !clock && !apps && !power) return pad * 2;
     int run = pad + n * (icon + pad);
     if (clock) run += clock_for(thick) + pad;
     if (apps)  run += icon + pad;
+    if (power) run += icon + pad;
     return run;
+}
+
+static int run_for(int n, int thick, bool clock, bool apps)
+{
+    return run_for_full(n, thick, clock, apps, false);
 }
 
 /* The stock dock, which is what most of the cases below run at. */
@@ -518,6 +524,7 @@ int main(void)
           "a menu opened on the bar body offers no app rows");
     check(menu_has(SYN_DOCKACT_AUTOHIDE) && menu_has(SYN_DOCKACT_MAGNIFY) &&
           menu_has(SYN_DOCKACT_CLOCK) && menu_has(SYN_DOCKACT_APPS) &&
+          menu_has(SYN_DOCKACT_POWER) &&
           menu_has(SYN_DOCKACT_SETTINGS),
           "…and does offer the dock's own switches");
     check(menu_has(SYN_DOCKACT_ONTOP),
@@ -609,6 +616,84 @@ int main(void)
     server.config.dock_apps_button = 0;
     relayout();
     check_int(buf_w, flat_run(4, false), "…and gives the cell back when off");
+
+    /* ── 10. The power button ──────────────────────────────────────────── */
+    server.config.dock_power_button = 1;
+    relayout();
+    check_int(buf_w, run_for_full(4, STOCK, false, false, true),
+              "the power button takes a cell of its own");
+
+    bar_x = fake_tree.node.x;
+    probe_y = fake_tree.node.y + buf_h - 24;
+    int pwr_first, pwr_last;
+    span_of(dock_power_at, bar_x, probe_y, buf_w, &pwr_first, &pwr_last);
+    check_int(pwr_last - pwr_first + 1, ICON, "…the size of an icon");
+    check(!dock_entry_at(&server, bar_x + pwr_first + 2, probe_y),
+          "…and it is not an entry either");
+    /* Same ordering fact as the apps button: the cell is drawn ON the body. */
+    check(dock_bar_at(&server, bar_x + pwr_first + 2, probe_y, NULL),
+          "…while the bar answers for that point too, hence the ask order");
+
+    /* ⚠ THE CELLS MUST NOT ANSWER FOR EACH OTHER. dock_cell_hit() took a bool
+     * until this button existed, and `true` meaning "clock" is the same 1 that
+     * now means "apps" — so a stale caller hit-tested the wrong cell and the
+     * compiler said nothing. Every probe, over the whole bar, on a dock that
+     * has all three. */
+    server.config.dock_apps_button = 1;
+    server.config.dock_clock       = 1;
+    relayout();
+    bar_x = fake_tree.node.x;
+    probe_y = fake_tree.node.y + buf_h - 24;
+    check_int(buf_w, run_for_full(4, STOCK, true, true, true),
+              "all three cells sit in the run at once");
+    {
+        int overlap = 0, pwr_seen = 0, apps_seen = 0, clk_seen = 0;
+        for (int x = 0; x < buf_w; x++) {
+            double px = bar_x + x;
+            int hits = (dock_power_at(&server, px, probe_y) ? 1 : 0)
+                     + (dock_apps_at (&server, px, probe_y) ? 1 : 0)
+                     + (dock_clock_at(&server, px, probe_y) ? 1 : 0);
+            if (hits > 1) overlap++;
+            if (dock_power_at(&server, px, probe_y)) pwr_seen  = 1;
+            if (dock_apps_at (&server, px, probe_y)) apps_seen = 1;
+            if (dock_clock_at(&server, px, probe_y)) clk_seen  = 1;
+        }
+        check(pwr_seen && apps_seen && clk_seen,
+              "…and each one is reachable");
+        check_int(overlap, 0, "…and no point answers for two of them");
+    }
+
+    /* The power button is LAST in the run, past the apps button — the rule that
+     * keeps Shut Down furthest from the icons a hand is already aiming at. */
+    span_of(dock_power_at, bar_x, probe_y, buf_w, &pwr_first, &pwr_last);
+    span_of(dock_apps_at,  bar_x, probe_y, buf_w, &apps_first, &apps_last);
+    check(pwr_first > apps_last, "…and the power cell comes after the apps one");
+
+    /* A LEFT press opens the power menu, and the power menu is not the settings
+     * menu: same popup, different rows. */
+    dockmenu_open_power(&server, bar_x + pwr_first + 2, probe_y);
+    check(server.dockmenu.visible, "a press on it opens a menu");
+    check(menu_has(SYN_DOCKACT_LOCK) && menu_has(SYN_DOCKACT_LOGOUT) &&
+          menu_has(SYN_DOCKACT_SUSPEND) && menu_has(SYN_DOCKACT_REBOOT) &&
+          menu_has(SYN_DOCKACT_POWEROFF),
+          "…carrying all five power rows");
+    check(!menu_has(SYN_DOCKACT_AUTOHIDE) && !menu_has(SYN_DOCKACT_PIN) &&
+          !menu_has(SYN_DOCKACT_SETTINGS),
+          "…and none of the dock's own rows");
+    /* Shut Down last, nearest the cursor's own edge of the popup and therefore
+     * furthest from the button that was just pressed — see dockmenu_open_power. */
+    check(server.dockmenu.actions[server.dockmenu.action_count - 1]
+              == SYN_DOCKACT_POWEROFF,
+          "…with Shut Down the furthest row from the press");
+    dockmenu_close(&server);
+
+    server.config.dock_power_button = 0;
+    server.config.dock_apps_button  = 0;
+    server.config.dock_clock        = 0;
+    relayout();
+    check_int(buf_w, flat_run(4, false), "…and gives its cell back when off");
+    check(!dock_power_at(&server, bar_x + pwr_first + 2, probe_y),
+          "…and stops answering for the point it used to hold");
 
     printf("dock_options_test: %s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;

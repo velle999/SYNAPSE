@@ -510,6 +510,7 @@ typedef struct {
     int  clk_x, clk_y, clk_w, clk_h;   /* canvas-local; clk_w = 0 when off */
     int  clk_slot;                  /* icons to the clock's left; -1 when off */
     int  apps_x, apps_y, apps_s;    /* the show-all-apps cell; apps_s = 0 off */
+    int  pwr_x, pwr_y, pwr_s;       /* the power-button cell; pwr_s = 0 off */
     int  base_run;                  /* the FLAT run length */
     int  base_origin;               /* layout coord where the flat run starts —
                                      * the origin o->dock.mag_run is measured
@@ -602,19 +603,24 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
     int clock_run = s->config.dock_clock
                     ? dock_clock_run(s, m->vertical, m->thick) : 0;
     int apps_run  = s->config.dock_apps_button ? icon : 0;
+    /* Past the apps button, and that order is fixed: both are drawn at the end
+     * of the run, and the destructive one is the one further from the icons. */
+    int pwr_run   = s->config.dock_power_button ? icon : 0;
     if (clock_run > 0) m->clk_slot = dock_clock_slot(s, n);
 
     m->base_run = pad + n * (icon + pad)
                 + (clock_run > 0 ? clock_run + pad : 0)
-                + (apps_run  > 0 ? apps_run  + pad : 0);
-    if (n == 0 && clock_run == 0 && apps_run == 0) m->base_run = pad * 2;
+                + (apps_run  > 0 ? apps_run  + pad : 0)
+                + (pwr_run   > 0 ? pwr_run   + pad : 0);
+    if (n == 0 && clock_run == 0 && apps_run == 0 && pwr_run == 0)
+        m->base_run = pad * 2;
 
     /* Flat centres first — dock_mag_scale() samples from where a cell WOULD be,
      * never from where it currently is. The clock's cell takes its place in this
      * walk like anything else, which is what lets it be dragged into the middle
      * of the row without the icons past it magnifying off the wrong centres. */
     double flat_c[DOCK_MAX_ENTRIES];
-    double flat_apps_c;
+    double flat_apps_c, flat_pwr_c;
     {
         int run = pad;
         for (int i = 0; i <= n; i++) {
@@ -624,6 +630,8 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
             run += icon + pad;
         }
         flat_apps_c = run + icon / 2.0;
+        if (apps_run > 0) run += icon + pad;
+        flat_pwr_c  = run + icon / 2.0;
     }
 
     /* Suppressed outright during a drag. The rearrange gesture measures cells
@@ -634,6 +642,7 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
     double peak = s->config.dock_magnify_scale;
 
     int run = pad, clk_at = 0, apps_at = 0, apps_size = 0;
+    int pwr_at = 0, pwr_size = 0;
     for (int i = 0; i <= n; i++) {
         if (i == m->clk_slot && clock_run > 0) {
             clk_at = run;
@@ -652,7 +661,14 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
         apps_at = run;
         run += apps_size + pad;
     }
-    int total_run = (n > 0 || clock_run > 0 || apps_run > 0) ? run : pad * 2;
+    if (pwr_run > 0) {
+        pwr_size = (int)lround(icon * dock_mag_scale(o, amount, peak,
+                                                     flat_pwr_c, icon, pad));
+        pwr_at = run;
+        run += pwr_size + pad;
+    }
+    int total_run = (n > 0 || clock_run > 0 || apps_run > 0 || pwr_run > 0)
+                    ? run : pad * 2;
 
     int cross = m->thick + m->head;
     if (m->vertical) { m->w = cross;     m->h = total_run; }
@@ -697,6 +713,12 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
         int c = dock_cell_cross(m, edge, icon, apps_size, nudge);
         if (m->vertical) { m->apps_x = c;       m->apps_y = apps_at; }
         else             { m->apps_x = apps_at; m->apps_y = c; }
+    }
+    if (pwr_size > 0) {
+        m->pwr_s = pwr_size;
+        int c = dock_cell_cross(m, edge, icon, pwr_size, nudge);
+        if (m->vertical) { m->pwr_x = c;      m->pwr_y = pwr_at; }
+        else             { m->pwr_x = pwr_at; m->pwr_y = c; }
     }
 
     if (clock_run > 0) {
@@ -1321,6 +1343,44 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
  * Everything is a fraction of the cell so it scales with the Dock size row
  * along with the icons beside it.
  */
+/*
+ * The IEC 5009 power mark: a ring broken at the top with a stroke through the
+ * break. Drawn rather than pulled from the icon theme for the reason the grid
+ * of dots beside it is — the cell has to be the panel's ink at the panel's
+ * alpha on every one of the fourteen themes, and a theme icon is a fixed
+ * picture in somebody else's colour.
+ *
+ * Every measurement is a fraction of the cell, so it swells with the rest of the
+ * row under magnification instead of sitting at 48px inside a 120px cell.
+ */
+static void dock_draw_power(syn_server_t *s, cairo_t *cr,
+                            double x, double y, int size)
+{
+    double cx = x + size / 2.0, cy = y + size / 2.0;
+    double r  = size * 0.28;
+    double lw = size * 0.094;   /* 4.5px in a 48px cell */
+
+    cairo_save(cr);
+    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
+                          s->config.panel_ink[2], 0.92);
+    cairo_set_line_width(cr, lw);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+    /* The ring, from just past top-left round to just short of top-right. Cairo
+     * angles run clockwise from 3 o'clock, so the gap is centred on -M_PI_2. */
+    double gap = 0.38;   /* radians each side of straight up */
+    cairo_arc(cr, cx, cy, r, -M_PI_2 + gap, -M_PI_2 - gap + 2 * M_PI);
+    cairo_stroke(cr);
+
+    /* The stroke through the gap. It starts ABOVE the ring and ends inside it,
+     * which is what the standard draws and what keeps the mark readable once
+     * the whole thing is 14px on a small dock. */
+    cairo_move_to(cr, cx, cy - r - lw * 0.55);
+    cairo_line_to(cr, cx, cy - r * 0.30);
+    cairo_stroke(cr);
+    cairo_restore(cr);
+}
+
 static void dock_draw_apps(syn_server_t *s, cairo_t *cr,
                            double x, double y, int size)
 {
@@ -1435,8 +1495,9 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     cairo_set_line_width(cr, 1);
     for (int side = 0; side < 2; side++) {
         /* side 0 = the low end of the run, side 1 = the high end. */
-        bool has_neighbour = side == 0 ? m->clk_slot > 0
-                                       : m->clk_slot < m->n || m->apps_s > 0;
+        bool has_neighbour = side == 0
+            ? m->clk_slot > 0
+            : m->clk_slot < m->n || m->apps_s > 0 || m->pwr_s > 0;
         if (!has_neighbour) continue;
 
         double half = m->pad / 2.0;
@@ -1581,6 +1642,10 @@ static void dock_render_output(syn_output_t *o)
      * shares with them is the cell it is drawn in. */
     if (m.apps_s > 0)
         dock_draw_apps(s, cr, m.apps_x, m.apps_y, m.apps_s);
+    /* Same again for the power button, which is the same kind of thing: a cell
+     * with no app_id behind it, past the apps button at the end of the run. */
+    if (m.pwr_s > 0)
+        dock_draw_power(s, cr, m.pwr_x, m.pwr_y, m.pwr_s);
 
     /* The lifted icon, last so it is over everything, and slightly larger with a
      * shadow under it. Both say "this one is off the surface" — without them a
@@ -2109,22 +2174,34 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out)
 }
 
 /*
- * The two cells that are not apps, hit-tested the same way an icon is: off the
+ * The cells that are not apps, hit-tested the same way an icon is: off the
  * metrics for the mirror being asked about, never off a rect cached on anything
  * server-global. Only the screen the pointer is on magnifies, so the cells
  * genuinely differ between mirrors.
  *
- * Both have to be asked BEFORE dock_bar_at(), and that is not a detail: they are
- * drawn on the body, so every press that lands on one of them also lands on the
- * bar. Asked the other way round, the apps button would start an edge-drag of
- * the whole dock and the clock could never be picked up at all.
+ * All of them have to be asked BEFORE dock_bar_at(), and that is not a detail:
+ * they are drawn on the body, so every press that lands on one of them also
+ * lands on the bar. Asked the other way round, the apps and power buttons would
+ * start an edge-drag of the whole dock and the clock could never be picked up
+ * at all.
+ *
+ * ⚠ AN ENUM AND NOT A BOOL, and it used to be a bool. `clock` meant "the clock,
+ * otherwise the apps button", so the moment a third cell existed the false case
+ * would have silently answered for the wrong one — the same shape as the dock
+ * drag's `icon < 0`, which cost a release. Adding a fourth cell means adding a
+ * case here and the compiler saying where else.
  */
+typedef enum { DOCK_CELL_CLOCK, DOCK_CELL_APPS, DOCK_CELL_POWER } dock_cell_t;
+
 static bool dock_cell_hit(syn_server_t *s, double lx, double ly,
-                          bool clock, syn_output_t **out)
+                          dock_cell_t which, syn_output_t **out)
 {
     if (!s->config.dock_enabled) return false;
-    if (clock ? !s->config.dock_clock : !s->config.dock_apps_button)
-        return false;
+    switch (which) {
+    case DOCK_CELL_CLOCK: if (!s->config.dock_clock)        return false; break;
+    case DOCK_CELL_APPS:  if (!s->config.dock_apps_button)  return false; break;
+    case DOCK_CELL_POWER: if (!s->config.dock_power_button) return false; break;
+    }
 
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
@@ -2136,12 +2213,20 @@ static bool dock_cell_hit(syn_server_t *s, double lx, double ly,
         double rx = lx - o->dock.tree->node.x;
         double ry = ly - o->dock.tree->node.y;
         int cx, cy, cw, ch;
-        if (clock) {
+        switch (which) {
+        case DOCK_CELL_CLOCK:
             if (m.clk_w <= 0) continue;
             cx = m.clk_x; cy = m.clk_y; cw = m.clk_w; ch = m.clk_h;
-        } else {
+            break;
+        case DOCK_CELL_APPS:
             if (m.apps_s <= 0) continue;
             cx = m.apps_x; cy = m.apps_y; cw = m.apps_s; ch = m.apps_s;
+            break;
+        case DOCK_CELL_POWER:
+        default:
+            if (m.pwr_s <= 0) continue;
+            cx = m.pwr_x; cy = m.pwr_y; cw = m.pwr_s; ch = m.pwr_s;
+            break;
         }
         if (rx >= cx && rx < cx + cw && ry >= cy && ry < cy + ch) {
             if (out) *out = o;
@@ -2153,12 +2238,17 @@ static bool dock_cell_hit(syn_server_t *s, double lx, double ly,
 
 bool dock_apps_at(syn_server_t *s, double lx, double ly)
 {
-    return dock_cell_hit(s, lx, ly, false, NULL);
+    return dock_cell_hit(s, lx, ly, DOCK_CELL_APPS, NULL);
 }
 
 bool dock_clock_at(syn_server_t *s, double lx, double ly)
 {
-    return dock_cell_hit(s, lx, ly, true, NULL);
+    return dock_cell_hit(s, lx, ly, DOCK_CELL_CLOCK, NULL);
+}
+
+bool dock_power_at(syn_server_t *s, double lx, double ly)
+{
+    return dock_cell_hit(s, lx, ly, DOCK_CELL_POWER, NULL);
 }
 
 /* How long a tray restore gets before we call it wedged. steam://open/main
@@ -2366,7 +2456,12 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
 void dock_clock_drag_begin(syn_server_t *s, double lx, double ly)
 {
     syn_output_t *o = NULL;
-    if (!dock_cell_hit(s, lx, ly, true, &o) || !o) return;
+    /* ⚠ DOCK_CELL_CLOCK by name. This read `true` while the parameter was a
+     * bool meaning "the clock, otherwise the apps button", and `true` is 1 —
+     * which is now DOCK_CELL_APPS. The compiler converts a bool to an enum
+     * without a word, so the clock drag silently began hit-testing the apps
+     * button and a press on the clock armed nothing at all. */
+    if (!dock_cell_hit(s, lx, ly, DOCK_CELL_CLOCK, &o) || !o) return;
 
     s->dock_drag.active  = 1;
     s->dock_drag.moved   = 0;
@@ -2732,6 +2827,8 @@ void dock_state_load(syn_config_t *cfg)
             cfg->dock_clock_slot = v;
         } else if (strncmp(p, "apps=", 5) == 0) {
             cfg->dock_apps_button = strcmp(p + 5, "on") == 0;
+        } else if (strncmp(p, "power=", 6) == 0) {
+            cfg->dock_power_button = strcmp(p + 6, "on") == 0;
         } else if (strncmp(p, "pin=", 4) == 0) {
             const char *v = p + 4;
             if (*v && cfg->dock_pin_count < DOCK_PIN_MAX) {
@@ -2762,6 +2859,7 @@ void dock_state_save(syn_server_t *s)
     fprintf(f, "clock=%s\n",    s->config.dock_clock    ? "on" : "off");
     fprintf(f, "clock_slot=%d\n", s->config.dock_clock_slot);
     fprintf(f, "apps=%s\n",     s->config.dock_apps_button ? "on" : "off");
+    fprintf(f, "power=%s\n",    s->config.dock_power_button ? "on" : "off");
     for (int i = 0; i < s->config.dock_pin_count; i++)
         fprintf(f, "pin=%s\n", s->config.dock_pin[i]);
     fclose(f);
@@ -2843,8 +2941,37 @@ bool dockmenu_row_checked(syn_server_t *s, int i)
     case SYN_DOCKACT_MAGNIFY:  return s->config.dock_magnify;
     case SYN_DOCKACT_CLOCK:    return s->config.dock_clock;
     case SYN_DOCKACT_APPS:     return s->config.dock_apps_button;
+    case SYN_DOCKACT_POWER:    return s->config.dock_power_button;
     default:                   return false;
     }
+}
+
+/* Size the popup from the rows already in the array, put it at the cursor and
+ * show it. Shared by both menus, so the app menu and the power menu cannot come
+ * to sit in different places or clamp to the screen differently. */
+static void dockmenu_place(syn_server_t *s, double lx, double ly)
+{
+    int n = s->dockmenu.action_count;
+    int w = DOCKMENU_W, h = 8;
+    for (int i = 0; i < n; i++) h += dockmenu_row_h(s, i);
+
+    /* Position above/left of the cursor so a bottom dock's menu pops upward,
+     * then clamp within the output under the cursor. */
+    int x = (int)lx, y = (int)ly - h;
+    struct wlr_output *wo =
+        wlr_output_layout_output_at(s->output_layout, lx, ly);
+    if (wo && wo->data) {
+        struct wlr_box ob;
+        output_box_of(s, (syn_output_t *)wo->data, &ob);
+        if (x + w > ob.x + ob.width) x = ob.x + ob.width - w;
+        if (y < ob.y) y = ob.y;
+        if (x < ob.x) x = ob.x;
+        if (y + h > ob.y + ob.height) y = ob.y + ob.height - h;
+    }
+    s->dockmenu.x = x; s->dockmenu.y = y; s->dockmenu.w = w; s->dockmenu.h = h;
+    s->dockmenu.selected = -1;
+    s->dockmenu.visible = 1;
+    synui_render_dockmenu(s);
 }
 
 /* `e` NULL means the click landed on the bar body rather than on an icon. */
@@ -2882,30 +3009,40 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
     s->dockmenu.actions[n++] = SYN_DOCKACT_MAGNIFY;
     s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK;
     s->dockmenu.actions[n++] = SYN_DOCKACT_APPS;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_POWER;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SETTINGS;
     s->dockmenu.action_count = n;
+    dockmenu_place(s, lx, ly);
+}
 
-    int w = DOCKMENU_W, h = 8;
-    for (int i = 0; i < n; i++) h += dockmenu_row_h(s, i);
+/*
+ * The power button's menu. Five rows, in the order they escalate: the two that
+ * cost nothing, then sleep, then the two that end the session.
+ *
+ * Ordered that way on purpose. dockmenu_place() puts the popup ABOVE the cursor
+ * for a bottom dock, so the row nearest the pointer — and nearest the button
+ * that was just pressed — is the last one in the list. Shut Down is therefore
+ * the FURTHEST from where the hand already is, which is the same rule that put
+ * Quit All Windows at the bottom of the icon menu.
+ *
+ * No confirmation dialog, and that is deliberate rather than an omission: the
+ * menu is the confirmation. A press on the button commits to nothing, and
+ * nothing here fires until a second, aimed press lands on a named row.
+ */
+void dockmenu_open_power(syn_server_t *s, double lx, double ly)
+{
+    s->dockmenu.app_id[0] = '\0';   /* not an app menu — no icon behind it */
 
-    /* Position above/left of the cursor so a bottom dock's menu pops upward,
-     * then clamp within the output under the cursor. */
-    int x = (int)lx, y = (int)ly - h;
-    struct wlr_output *wo =
-        wlr_output_layout_output_at(s->output_layout, lx, ly);
-    if (wo && wo->data) {
-        struct wlr_box ob;
-        output_box_of(s, (syn_output_t *)wo->data, &ob);
-        if (x + w > ob.x + ob.width) x = ob.x + ob.width - w;
-        if (y < ob.y) y = ob.y;
-        if (x < ob.x) x = ob.x;
-        if (y + h > ob.y + ob.height) y = ob.y + ob.height - h;
-    }
-    s->dockmenu.x = x; s->dockmenu.y = y; s->dockmenu.w = w; s->dockmenu.h = h;
-    s->dockmenu.selected = -1;
-    s->dockmenu.visible = 1;
-    synui_render_dockmenu(s);
+    int n = 0;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_LOCK;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_LOGOUT;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_SUSPEND;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_REBOOT;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_POWEROFF;
+    s->dockmenu.action_count = n;
+    dockmenu_place(s, lx, ly);
 }
 
 /* Item index under (lx,ly), or -1 if outside the menu or over a separator. */
@@ -3023,6 +3160,9 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
     case SYN_DOCKACT_APPS:
         dockmenu_toggle(s, &s->config.dock_apps_button);
         break;
+    case SYN_DOCKACT_POWER:
+        dockmenu_toggle(s, &s->config.dock_power_button);
+        break;
     case SYN_DOCKACT_CLOCK:
         dockmenu_toggle(s, &s->config.dock_clock);
         break;
@@ -3032,6 +3172,43 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
          * anywhere else would make this the one menu entry that does not take
          * you to what it names. */
         synui_binding_execute(s, "control", "desktop");
+        break;
+
+    /*
+     * ── The power menu ──────────────────────────────────────────────────────
+     *
+     * Lock and Log Out go through synui_binding_execute() rather than doing the
+     * work here, because both are already actions with a keybinding, a control
+     * panel row and a start-menu entry pointing at them, and a fourth caller
+     * that reimplements either is a fourth thing to keep in step. The lock in
+     * particular is idempotent for exactly this reason — see the `lock` branch
+     * in input.c.
+     */
+    case SYN_DOCKACT_LOCK:
+        synui_binding_execute(s, "lock", "");
+        break;
+    case SYN_DOCKACT_LOGOUT:
+        synui_binding_execute(s, "quit", "");
+        break;
+    case SYN_DOCKACT_SUSPEND:
+        /* The configured command, not a literal: power_suspend_cmd is what the
+         * idle timer and the lid switch already run, and a dock row that slept
+         * the machine a different way from the lid would be a second policy. */
+        if (s->config.power_suspend_cmd[0])
+            synui_spawn(s->config.power_suspend_cmd);
+        break;
+    /*
+     * ⚠ NO `sudo`. logind's CanPowerOff/CanReboot answer "yes" for the user
+     * holding the active seat, so systemctl asks polkit and polkit says yes
+     * without a password. Prefixing sudo makes it a command that needs a TTY to
+     * prompt on — and spawned from the compositor there is no TTY, so it would
+     * fail silently and the dock button would appear to do nothing at all.
+     */
+    case SYN_DOCKACT_REBOOT:
+        synui_spawn("systemctl reboot");
+        break;
+    case SYN_DOCKACT_POWEROFF:
+        synui_spawn("systemctl poweroff");
         break;
 
     case SYN_DOCKACT_SEP:

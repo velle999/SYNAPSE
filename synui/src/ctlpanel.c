@@ -679,6 +679,9 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
       .help = "A grid of dots at the end of the dock. Always opens the "
               "application overlay" },
+    { CTL_ROW_DOCK_POWER,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show power button", NULL,
+      .help = "A power mark past the apps button. Clicking it opens a menu — "
+              "Lock, Log Out, Suspend, Restart, Shut Down" },
     /* Not a dock row, and it sits among them anyway: it is the row a user
      * reading about the dock is most likely to go looking for next.
      *
@@ -2025,6 +2028,10 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
         else snprintf(buf, n, "%s", s->config.dock_apps_button ? "on" : "off");
         break;
+    case CTL_ROW_DOCK_POWER:
+        if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", s->config.dock_power_button ? "on" : "off");
+        break;
     case CTL_ROW_BAR_AUTOHIDE:
         snprintf(buf, n, "%s", bar_autohide_label(s));
         break;
@@ -3268,7 +3275,8 @@ static void ctlpanel_activate(syn_server_t *s)
 
     case CTL_ROW_DOCK_MAGNIFY:
     case CTL_ROW_DOCK_CLOCK:
-    case CTL_ROW_DOCK_APPS: {
+    case CTL_ROW_DOCK_APPS:
+    case CTL_ROW_DOCK_POWER: {
         if (!s->config.dock_enabled) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                      "dock is off");
@@ -3282,8 +3290,10 @@ static void ctlpanel_activate(syn_server_t *s)
             flag = &s->config.dock_magnify;     what = "magnify"; break;
         case CTL_ROW_DOCK_CLOCK:
             flag = &s->config.dock_clock;       what = "clock";   break;
-        default:
+        case CTL_ROW_DOCK_APPS:
             flag = &s->config.dock_apps_button; what = "all-apps button"; break;
+        default:
+            flag = &s->config.dock_power_button; what = "power button"; break;
         }
         *flag = !*flag;
         dock_state_save(s);

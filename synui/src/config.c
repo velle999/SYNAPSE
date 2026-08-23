@@ -164,6 +164,9 @@
  *                                all open — see syn_start_menu_t)
  *   dock_apps_button = on|off   (default on; the "show all apps" grid at the
  *                                end of the run — opens the start menu)
+ *   dock_power_button = on|off  (default on; the power button past it — a menu
+ *                                of Lock / Log Out / Suspend / Restart / Shut
+ *                                Down)
  *   night_light  = on|off       (default off)   Super+Shift+B toggles
  *   night_light_temp = 4000     (Kelvin, 1000-6500; 6500 is daylight)
  *   dock_height = 64            (px; the SLAB and the icons — icons are this
@@ -1329,6 +1332,9 @@ static void config_set_defaults(syn_config_t *cfg)
     /* On, unlike the clock: the bar does not have one of these, and a dock of
      * pinned icons has no way to reach an app that is not on it. */
     cfg->dock_apps_button  = 1;
+    /* On for the same reason: none of the five things it offers is a program,
+     * so no arrangement of pinned icons can reach them. */
+    cfg->dock_power_button = 1;
     cfg->start_menu_style  = SYN_START_MENU_BAR;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
@@ -2429,6 +2435,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_clock = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_apps_button") == 0)
         cfg->dock_apps_button = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_power_button") == 0)
+        cfg->dock_power_button = strcmp(val, "on") == 0;
     else if (strcmp(key, "start_menu_style") == 0) {
         /* These ARE the control panel's option names folded to lower case —
          * ctl_format() persists an enum that way and there is deliberately no

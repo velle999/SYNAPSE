@@ -841,6 +841,21 @@ appgrid_test = executable('appgrid_test',
   build_by_default : false)
 test('appgrid', appgrid_test)
 
+# Where icons.c looks for an icon file, driven against a mkdtemp sandbox with
+# HOME, XDG_DATA_HOME and XDG_DATA_DIRS pointed into it — so the answers do not
+# depend on which themes the machine running the test has installed. Every
+# failure this pins is SILENT on a real desktop (a missing icon is a monogram,
+# not an error), which is why it is worth a test of its own. iconhue.c and
+# text.c come along because icons.c tints its own icons and draws the monogram.
+icon_lookup_test = executable('icon_lookup_test',
+  ['tests/icon_lookup_test.c', 'src/icons.c', 'src/iconhue.c', 'src/text.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman,
+                  xkbcommon, rsvg],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('icon_lookup', icon_lookup_test)
+
 # The emoji picker's logic, driven through emoji_key() the way input.c calls it
 # — nothing can synthesise input into a headless synui. text.c comes along for
 # syn_utf8_copy() (the recents file is on disk and can be edited by hand), hit.c

@@ -27,6 +27,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <strings.h>
+#include <unistd.h>
 
 #include <cairo.h>
 #include <librsvg/rsvg.h>
@@ -75,9 +77,24 @@ static void icon_cache_flush_all(void)
  * switch would be a worse bug than not theming them at all. */
 static float g_icon_accent[3] = { 0.00f, 0.85f, 0.75f };
 
-/* ── PNG decode (mirrors wallpaper.c's decode_png; not shared — see the
- * rationale in the implementation plan: both are 5-line cairo wrappers, and
- * duplicating avoids coupling icons.c's lifecycle to wallpaper.c's). ── */
+/* ── PNG decode ───────────────────────────────────────────── */
+
+/*
+ * A PNG, rasterized down to ICON_RASTER_SIZE if the file is bigger than that.
+ *
+ * The cap is not cosmetic. The theme walk below prefers the LARGEST raster it
+ * can find, because a 512px picture resampled into a 64px dock cell looks far
+ * better than a 32px one blown up to fill it — but the application grid holds
+ * up to APPGRID_MAX entries and OWNS every decode it asks for (icon_decode_named
+ * hands the surface over and keeps no cache of its own). An uncapped preference
+ * for the largest file is a megabyte of ARGB per tile, resident for as long as
+ * the page has been opened once.
+ *
+ * ICON_RASTER_SIZE is already the size every SVG is rendered at and no consumer
+ * draws an icon larger, so this costs nothing on screen and bounds an icon at
+ * 64KB. Aspect ratio is kept: a few icons in the wild are not square, and
+ * squashing them to a box is a worse picture than the one we were given.
+ */
 static cairo_surface_t *decode_png(const char *path)
 {
     cairo_surface_t *surf = cairo_image_surface_create_from_png(path);
@@ -85,7 +102,37 @@ static cairo_surface_t *decode_png(const char *path)
         cairo_surface_destroy(surf);
         return NULL;
     }
-    return surf;
+
+    int w = cairo_image_surface_get_width(surf);
+    int h = cairo_image_surface_get_height(surf);
+    if (w <= ICON_RASTER_SIZE && h <= ICON_RASTER_SIZE) return surf;
+
+    int nw, nh;
+    if (w >= h) { nw = ICON_RASTER_SIZE; nh = h * ICON_RASTER_SIZE / w; }
+    else        { nh = ICON_RASTER_SIZE; nw = w * ICON_RASTER_SIZE / h; }
+    if (nw < 1) nw = 1;
+    if (nh < 1) nh = 1;
+
+    cairo_surface_t *small =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, nw, nh);
+    if (cairo_surface_status(small) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(small);
+        return surf;   /* not fatal: the oversized surface still draws */
+    }
+
+    cairo_t *cr = cairo_create(small);
+    cairo_scale(cr, (double)nw / w, (double)nh / h);
+    cairo_set_source_surface(cr, surf, 0, 0);
+    /* GOOD rather than the default, for the same reason the dock and the grid
+     * ask for it at paint time: a downsampled icon aliases badly enough to look
+     * like the wrong picture. */
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    cairo_surface_flush(small);
+
+    cairo_surface_destroy(surf);
+    return small;
 }
 
 /* Render an SVG into a square ARGB32 surface. Same contract as decode_png:
@@ -228,9 +275,6 @@ static void parse_desktop_file(const char *path, syn_icon_entry_t *e)
 
 /* ── Icon file lookup ─────────────────────────────────────── */
 
-/* Find an icon for `name` (either an Icon= value or, as a last resort, the
- * bare app_id), preferring a pre-rasterized PNG at a fixed hicolor size, then
- * the scalable SVG, then the legacy /usr/share/pixmaps drop. */
 /*
  * The icon theme to look in first, pushed by config load — `bar_icon_theme` in
  * synuirc, which is the one place this desktop records which set of pictures it
@@ -258,19 +302,97 @@ void icon_set_theme(const char *name)
     icon_cache_flush_all();
 }
 
+/*
+ * Decode whatever `path` is, if it is there at all.
+ *
+ * The access() is what makes the walk below affordable. It probes several
+ * thousand candidate paths for a MISS, and handing each one straight to
+ * rsvg_handle_new_from_file() builds a GFile and a parser per attempt; a stat
+ * that fails costs a few microseconds and skips all of it.
+ */
+static cairo_surface_t *try_icon_file(const char *path)
+{
+    if (access(path, R_OK) != 0) return NULL;
+    size_t len = strlen(path);
+    if (len > 4 && strcasecmp(path + len - 4, ".svg") == 0)
+        return decode_svg(path, ICON_RASTER_SIZE);
+    return decode_png(path);
+}
+
+/*
+ * ── Where icon themes live ──────────────────────────────────────────────────
+ *
+ * `~/.local/share/icons` and `/usr/share/icons` were hardcoded here, and that
+ * is not where all of them are. XDG_DATA_DIRS is a LIST, and on this desktop it
+ * carries `/var/lib/flatpak/exports/share` — which is the only place a flatpak's
+ * icon exists. Every flatpak on the box therefore drew a letter monogram in the
+ * dock and in the application grid, and nothing said why: a missing icon is not
+ * an error, it is the fallback working.
+ *
+ * So the roots come from the environment, exactly the way appgrid.c already
+ * derives the applications/ directories it scans — same list, same order, one
+ * suffix different. `~/.icons` is added because it is the pre-XDG location and
+ * hand-installed themes still land there.
+ *
+ * Built once: the environment does not change under a running compositor, and
+ * icon_set_theme() flushes decoded surfaces rather than this.
+ */
+#define ICON_ROOTS_MAX 12
+static char g_icon_roots[ICON_ROOTS_MAX][320];
+static int  g_icon_roots_count = -1;
+
+static void icon_roots_add(const char *dir)
+{
+    if (!dir || !*dir || g_icon_roots_count >= ICON_ROOTS_MAX) return;
+    for (int i = 0; i < g_icon_roots_count; i++)
+        if (strcmp(g_icon_roots[i], dir) == 0) return;   /* XDG lists repeat */
+    snprintf(g_icon_roots[g_icon_roots_count++], sizeof(g_icon_roots[0]),
+             "%s", dir);
+}
+
+static void icon_roots_build(void)
+{
+    if (g_icon_roots_count >= 0) return;
+    g_icon_roots_count = 0;
+
+    char dir[320];
+    const char *home = getenv("HOME");
+    const char *data_home = getenv("XDG_DATA_HOME");
+
+    if (data_home && *data_home) {
+        snprintf(dir, sizeof(dir), "%s/icons", data_home);
+        icon_roots_add(dir);
+    } else if (home && *home) {
+        snprintf(dir, sizeof(dir), "%s/.local/share/icons", home);
+        icon_roots_add(dir);
+    }
+    if (home && *home) {
+        snprintf(dir, sizeof(dir), "%s/.icons", home);   /* the legacy one */
+        icon_roots_add(dir);
+    }
+
+    const char *dirs = getenv("XDG_DATA_DIRS");
+    if (!dirs || !*dirs) dirs = "/usr/local/share:/usr/share";
+    char buf[2048];
+    snprintf(buf, sizeof(buf), "%s", dirs);
+    for (char *tok = strtok(buf, ":"); tok; tok = strtok(NULL, ":")) {
+        if (!*tok) continue;
+        snprintf(dir, sizeof(dir), "%s/icons", tok);
+        icon_roots_add(dir);
+    }
+    /* Named outright as well as taken from the list: a session started without
+     * XDG_DATA_DIRS set at all still has to find the system theme, and the
+     * default this falls back to above is a spec quotation rather than a
+     * promise about this box. icon_roots_add() de-duplicates. */
+    icon_roots_add("/usr/share/icons");
+}
+
 static cairo_surface_t *find_and_decode_icon(const char *name)
 {
     if (!name || !*name) return NULL;
 
     /* Icon= may already be an absolute path. */
-    if (name[0] == '/') {
-        size_t len = strlen(name);
-        if (len > 4 && strcmp(name + len - 4, ".png") == 0)
-            return decode_png(name);
-        if (len > 4 && strcmp(name + len - 4, ".svg") == 0)
-            return decode_svg(name, ICON_RASTER_SIZE);
-        return NULL;
-    }
+    if (name[0] == '/') return try_icon_file(name);
 
     /*
      * ── The theme walk ──────────────────────────────────────────────────────
@@ -286,20 +408,24 @@ static cairo_surface_t *find_and_decode_icon(const char *name)
      * So: every theme this desktop might be using, every root, every size, every
      * category subdirectory the spec allows. It is a lot of candidate paths —
      * but only for a MISS, only once per icon per session (both callers cache),
-     * and an access() that fails is a few microseconds. The alternative is
-     * parsing each theme's index.theme to learn its real directory list, which
-     * is the correct answer and a great deal more code for the same pictures.
+     * and try_icon_file() reduces each one to an access() that fails.
+     *
+     * ⚠ TWO DIRECTORY LAYOUTS, and the second is not an edge case. The spec's
+     * shape is <theme>/<size>/<category>; breeze inverts it to
+     * <theme>/<category>/<size>, and breeze is where most of SYNAPSE's own
+     * panels resolve — `transform-crop`, `office-calendar`, `view-media-equalizer`,
+     * `preferences-system-power-management`, `preferences-desktop-cursors`,
+     * `message-news`, `viewimage`, `view-grid`. Only the `apps` category was
+     * tried the inverted way round, so eight of this desktop's own entries drew
+     * monograms in its own application grid. Both orders, every category.
      *
      * Ordered so the first hit is the best one: scalable before raster (an SVG
-     * rasterizes to exactly the size asked for), large before small, the
-     * configured theme before the fallbacks, hicolor last because it is the
-     * per-application drop rather than a designed set — an app that ships both
-     * usually wants its own, and gets it, because `apps` is the first category
-     * tried at every size.
+     * rasterizes to exactly the size asked for), large before small (decode_png
+     * caps the result, so a big source is free), the configured theme before the
+     * fallbacks, hicolor last because it is the per-application drop rather than
+     * a designed set — an app that ships both usually wants its own, and gets
+     * it, because `apps` is the first category tried at every size.
      */
-    const char *home = getenv("HOME");
-    char path[512];
-
     const char *themes[6];
     int nthemes = 0;
     /* Whatever the shell was told to use. The bar exports it as QS_ICON_THEME,
@@ -312,58 +438,73 @@ static cairo_surface_t *find_and_decode_icon(const char *name)
     themes[nthemes++] = "breeze";
     themes[nthemes++] = "hicolor";
 
-    const char *roots[2];
-    int nroots = 0;
-    char home_root[320];
-    if (home) {
-        snprintf(home_root, sizeof(home_root), "%s/.local/share/icons", home);
-        roots[nroots++] = home_root;
-    }
-    roots[nroots++] = "/usr/share/icons";
+    icon_roots_build();
 
-    /* "scalable" is spelt among the sizes and handled by extension below. */
-    static const char *const sizes[] = {
-        "scalable", "128x128", "96x96", "64x64", "48x48", "32x32", "24x24",
-        "22x22", "16x16",
+    /*
+     * "scalable" is spelt among the sizes and handled by extension below.
+     *
+     * 512/256/192 are here because they are the ONLY size some applications
+     * ship — waydroid, cliamp and the Blackmagic tools each have exactly one
+     * PNG, at 512 or 256, and drew monograms for want of these three rows.
+     *
+     * ⚠ THE TWO LAYOUTS ALSO SPELL THE SIZE DIFFERENTLY, which is the reason
+     * the inverted probe that was already here never once hit: it asked breeze
+     * for `apps/48x48`, and breeze's directory is `apps/48`. A dead branch that
+     * looks like coverage is worse than no branch, so the two spellings are
+     * named side by side and neither can be changed without the other.
+     */
+    static const struct { const char *sized, *bare; } sizes[] = {
+        { "scalable", "scalable" },
+        { "512x512",  "512" }, { "256x256", "256" }, { "192x192", "192" },
+        { "128x128",  "128" }, { "96x96",   "96"  }, { "64x64",   "64"  },
+        { "48x48",    "48"  }, { "32x32",   "32"  }, { "24x24",   "24"  },
+        { "22x22",    "22"  }, { "16x16",   "16"  },
     };
     /* `apps` is where an application icon belongs; the rest are where the
      * themes actually put the ones applications ask for. `legacy` is Adwaita's,
-     * and it is where most of SYNAPSE's own .desktop icon names resolve. */
+     * and `preferences`/`actions` are breeze's — between them they hold most of
+     * what SYNAPSE's own .desktop files name. */
     static const char *const cats[] = {
-        "apps", "legacy", "devices", "categories", "status", "places",
-        "mimetypes",
+        "apps", "legacy", "preferences", "actions", "devices", "categories",
+        "status", "places", "applets", "mimetypes",
     };
 
+    char path[512];
     for (int t = 0; t < nthemes; t++) {
-        for (int r = 0; r < nroots; r++) {
+        for (int r = 0; r < g_icon_roots_count; r++) {
             for (size_t z = 0; z < sizeof(sizes) / sizeof(sizes[0]); z++) {
-                bool scalable = strcmp(sizes[z], "scalable") == 0;
+                bool scalable = strcmp(sizes[z].sized, "scalable") == 0;
                 for (size_t c = 0; c < sizeof(cats) / sizeof(cats[0]); c++) {
                     cairo_surface_t *s;
+
+                    /* <theme>/<size>/<category>/ — the spec's layout. */
                     if (!scalable) {
                         snprintf(path, sizeof(path), "%s/%s/%s/%s/%s.png",
-                                 roots[r], themes[t], sizes[z], cats[c], name);
-                        s = decode_png(path);
+                                 g_icon_roots[r], themes[t], sizes[z].sized,
+                                 cats[c], name);
+                        s = try_icon_file(path);
                         if (s) return s;
-                        /* Some themes put the SVG in a sized directory too. */
-                        snprintf(path, sizeof(path), "%s/%s/%s/%s/%s.svg",
-                                 roots[r], themes[t], sizes[z], cats[c], name);
-                        s = decode_svg(path, ICON_RASTER_SIZE);
-                        if (s) return s;
-                        continue;
                     }
-                    snprintf(path, sizeof(path), "%s/%s/scalable/%s/%s.svg",
-                             roots[r], themes[t], cats[c], name);
-                    s = decode_svg(path, ICON_RASTER_SIZE);
+                    snprintf(path, sizeof(path), "%s/%s/%s/%s/%s.svg",
+                             g_icon_roots[r], themes[t], sizes[z].sized,
+                             cats[c], name);
+                    s = try_icon_file(path);
                     if (s) return s;
-                }
-                /* Papirus and breeze nest a category under the size the other
-                 * way round (48x48/apps vs apps/48). Cheap to try both. */
-                if (!scalable) {
-                    snprintf(path, sizeof(path), "%s/%s/apps/%s/%s.svg",
-                             roots[r], themes[t], sizes[z], name);
-                    cairo_surface_t *s = decode_svg(path, ICON_RASTER_SIZE);
+
+                    /* <theme>/<category>/<size>/ — breeze's, the other way up
+                     * and with the size spelt as a bare number. */
+                    snprintf(path, sizeof(path), "%s/%s/%s/%s/%s.svg",
+                             g_icon_roots[r], themes[t], cats[c],
+                             sizes[z].bare, name);
+                    s = try_icon_file(path);
                     if (s) return s;
+                    if (!scalable) {
+                        snprintf(path, sizeof(path), "%s/%s/%s/%s/%s.png",
+                                 g_icon_roots[r], themes[t], cats[c],
+                                 sizes[z].bare, name);
+                        s = try_icon_file(path);
+                        if (s) return s;
+                    }
                 }
             }
         }
@@ -371,10 +512,10 @@ static cairo_surface_t *find_and_decode_icon(const char *name)
 
     /* The legacy drop, which belongs to no theme at all. */
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.png", name);
-    cairo_surface_t *s = decode_png(path);
+    cairo_surface_t *s = try_icon_file(path);
     if (s) return s;
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.svg", name);
-    return decode_svg(path, ICON_RASTER_SIZE);
+    return try_icon_file(path);
 }
 
 /* ── Theme tinting (iconhue.c) ───────────────────────────── */

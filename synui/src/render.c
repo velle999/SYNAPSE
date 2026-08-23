@@ -8196,7 +8196,16 @@ static const char *dockact_label(syn_dockact_t a)
     case SYN_DOCKACT_MAGNIFY:  return "Magnify Icons";
     case SYN_DOCKACT_CLOCK:    return "Show Clock";
     case SYN_DOCKACT_APPS:     return "Show All Apps Button";
+    case SYN_DOCKACT_POWER:    return "Show Power Button";
     case SYN_DOCKACT_SETTINGS: return "Dock Settings…";
+    /* The power button's own menu. "Shut Down" and "Restart" rather than
+     * poweroff/reboot: those are the words on every other desktop's menu, and
+     * this is not the place to be technically correct at the user's expense. */
+    case SYN_DOCKACT_LOCK:     return "Lock Screen";
+    case SYN_DOCKACT_LOGOUT:   return "Log Out";
+    case SYN_DOCKACT_SUSPEND:  return "Suspend";
+    case SYN_DOCKACT_REBOOT:   return "Restart";
+    case SYN_DOCKACT_POWEROFF: return "Shut Down";
     case SYN_DOCKACT_SEP:      return "";
     }
     return "?";

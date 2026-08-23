@@ -8,7 +8,12 @@ Comment=Pick and download the model the AI backend loads
 # keybind opens. StartupNotify is off because no window ever appears, so a
 # startup spinner would spin until it timed out.
 Exec=synctl dispatch aimodel
-Icon=synapd
+# ⚠ NOT `synapd`. That was the daemon's name, and no icon of that name has ever
+# existed in any theme on this box — so the one entry SYNAPSE ships that names a
+# picture nobody drew was its own, and it was the only monogram left in the
+# application grid once icons.c learned where themes really keep their files.
+# A stock freedesktop name, like the other thirty synui-*.desktop panels.
+Icon=applications-science
 Terminal=false
 StartupNotify=false
 Categories=Settings;

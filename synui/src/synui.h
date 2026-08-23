@@ -1680,6 +1680,7 @@ typedef enum {
     CTL_ROW_DOCK_MAGNIFY,  /* macOS-style hover swell on the icons */
     CTL_ROW_DOCK_CLOCK,    /* time + date in a cell of its own, dragged anywhere */
     CTL_ROW_DOCK_APPS,     /* the "show all apps" button at the end of the run */
+    CTL_ROW_DOCK_POWER,    /* the power button, and its menu, at the end of the run */
     CTL_ROW_DOCK_STYLE,    /* solid slab or frosted glass — auto follows the theme */
     CTL_ROW_DOCK_OPACITY,  /* how much of the wallpaper shows through the bar */
     CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
@@ -3122,13 +3123,36 @@ typedef enum {
     SYN_DOCKACT_MAGNIFY,   /* config.dock_magnify */
     SYN_DOCKACT_CLOCK,     /* config.dock_clock */
     SYN_DOCKACT_APPS,      /* config.dock_apps_button */
+    SYN_DOCKACT_POWER,     /* config.dock_power_button */
     SYN_DOCKACT_SETTINGS,  /* open Control panel ▸ Desktop, where the rest live */
+
+    /*
+     * ── The power button's own menu ──────────────────────────────────────────
+     *
+     * These are NOT rows of the right-click menu above; they are the whole of a
+     * DIFFERENT menu, the one a LEFT click on the dock's power button opens, and
+     * dockmenu_open_power() is the only thing that ever puts them in the array.
+     * They share the popup because it is the same popup — same rect, same modal
+     * grab, same hover, same renderer — and giving the shell a second identical
+     * one would mean two places to fix the next time a menu bug is found.
+     *
+     * The menu IS the confirmation. A single dock button that powered the
+     * machine off on one press would be a click away from the icons either side
+     * of it; asking for a second, aimed press is the whole reason these are a
+     * submenu rather than five buttons.
+     */
+    SYN_DOCKACT_LOCK,      /* the native lock (lock.c), via the `lock` binding */
+    SYN_DOCKACT_LOGOUT,    /* end the session — the `quit` binding */
+    SYN_DOCKACT_SUSPEND,   /* config.power_suspend_cmd */
+    SYN_DOCKACT_REBOOT,
+    SYN_DOCKACT_POWEROFF,
 } syn_dockact_t;
-/* 4 app rows + a rule + 5 switches + a rule + the panel row = 12, and the two
+/* 4 app rows + a rule + 6 switches + a rule + the panel row = 13, and the three
  * spare are deliberate: the menu carries every dock switch there is, so the next
  * one to be added lands here, and an overflow would be a silent write past the
- * end of an array in the middle of a right-click. */
-#define SYN_DOCKMENU_MAX 14
+ * end of an array in the middle of a right-click. The power menu is five rows
+ * and a rule, well under. */
+#define SYN_DOCKMENU_MAX 16
 
 /* deskmenu.c: the desktop (wallpaper) right-click menu. SEP draws a rule and
  * is not selectable; everything else is a row. */
@@ -3743,6 +3767,22 @@ typedef struct {
      * default; it is the one thing a dock of pinned icons cannot do for
      * itself. Persisted to dock.state. */
     int   dock_apps_button;     /* default 1 */
+    /*
+     * The power button: a cell at the far end of the run, past the apps button,
+     * whose LEFT click opens a menu of Lock / Log Out / Suspend / Restart /
+     * Shut Down.
+     *
+     * It is a button and not a pinned .desktop because none of those five is a
+     * program — Lock and Log Out are compositor actions with no Exec at all, and
+     * the dock's icon row can only hold things that map to an app_id.
+     *
+     * Persisted to dock.state, and switchable from BOTH the dock's right-click
+     * menu and Control panel ▸ Desktop, which is the standard the apps button
+     * and the clock already set. On by default, like the apps button: a desktop
+     * whose only way to shut down is a start menu is one you have to be told
+     * about, and the dock is where the rest of the session's furniture lives.
+     */
+    int   dock_power_button;    /* default 1 */
     /* macOS-style hover magnification: the icons under the pointer swell and
      * the run slides apart to make room. On by default — it is the dock's
      * signature behaviour, and the flat row is what it was missing. Persisted
@@ -8964,6 +9004,7 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
  * on the body, so every one of them is also a hit on the body. */
 bool dock_apps_at(syn_server_t *s, double lx, double ly);
 bool dock_clock_at(syn_server_t *s, double lx, double ly);
+bool dock_power_at(syn_server_t *s, double lx, double ly);
 /* Arms the clock drag. Motion and release go through dock_drag_motion/_end like
  * the other two gestures; the release commits the new slot to dock.state. */
 void dock_clock_drag_begin(syn_server_t *s, double lx, double ly);
@@ -8973,6 +9014,10 @@ void dock_clock_drag_begin(syn_server_t *s, double lx, double ly);
  * motion() updates the hover highlight; click() runs the item under the
  * cursor (or dismisses on an outside click); close() hides it. */
 void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly);
+/* The SAME popup, carrying the power rows instead of the app/settings ones —
+ * see the SYN_DOCKACT_LOCK block in syn_dockact_t. Opened by a LEFT click on
+ * the dock's power button; a right click there still gets dockmenu_open(). */
+void dockmenu_open_power(syn_server_t *s, double lx, double ly);
 /* Row geometry, shared with the renderer the way deskmenu's is — separators
  * are shorter than items, so the walk has to be in one place. */
 int  dockmenu_row_top(syn_server_t *s, int i);
