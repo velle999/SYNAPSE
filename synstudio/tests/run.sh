@@ -3456,6 +3456,110 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+# ------------------------------------------------- three-point editing --
+#
+# The cut had one viewer and one way in: whole files landed at the end of a
+# track and were trimmed afterwards. What an editor does is decide the in and
+# the out ON THE FOOTAGE, put the playhead where it goes, and let the third
+# point follow.
+
+tp3=$TMP/three.syntl
+$BIN timeline new "$tp3" --size 320x180 --fps 25 >/dev/null
+$BIN timeline track "$tp3" video V >/dev/null
+$BIN timeline track "$tp3" video V2 >/dev/null
+$BIN timeline solid "$tp3" 0 --at 0 --dur 3 --colour 1,0,0 >/dev/null
+$BIN timeline solid "$tp3" 0 --at 3 --dur 3 --colour 0,1,0 >/dev/null
+$BIN timeline solid "$tp3" 1 --at 0 --dur 6 --colour 0,0,1 >/dev/null
+
+# ---- insert: make room ---------------------------------------------------
+#
+# ⚠ EVERY track moves, which is what an insert edit IS. Rippling one track
+# would slide a shot off its own dialogue — this program has linked clips
+# precisely because those belong together.
+if have ffmpeg; then
+    fo=$TMP/footage.mp4
+    ffmpeg -v error -f lavfi -i testsrc=s=320x180:d=6 -pix_fmt yuv420p "$fo" -y
+    $BIN timeline insert "$tp3" 0 "$fo" --at 2 --in 0 --out-at 2 >/dev/null
+    # The clip the point landed inside gives up its tail: 0..2 stays, the rest
+    # travels with everything downstream.
+    check "an insert splits what it lands in" "2.000000" \
+          "$($BIN timeline get "$tp3" 0 0 | awk -F'\t' '/^length/{print $2}')"
+    check "and the shot downstream moved by its length" "5.000000" \
+          "$($BIN timeline get "$tp3" 0 1 | awk -F'\t' '/^tl_in/{print $2}')"
+    # The tail it gave up is where the shot it came from now continues.
+    check "the tail it gave up follows the insert" "4.000000" \
+          "$($BIN timeline get "$tp3" 0 2 | awk -F'\t' '/^tl_in/{print $2}')"
+    # ⚠ The OTHER track moved too, or the sound is now two seconds early for
+    # the picture — silent, and only audible.
+    check "the other track was split at the point too" "2.000000" \
+          "$($BIN timeline get "$tp3" 1 0 | awk -F'\t' '/^length/{print $2}')"
+    check "and its remainder moved with everything else" "4.000000" \
+          "$($BIN timeline get "$tp3" 1 1 | awk -F'\t' '/^tl_in/{print $2}')"
+    check "the cut is two seconds longer" "8.0000" \
+          "$($BIN timeline show "$tp3" | awk -F'\t' '/^# duration/{print $2}')"
+
+    # ---- overwrite: cut a hole exactly its own length --------------------
+    ov=$TMP/over.syntl
+    $BIN timeline new "$ov" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$ov" video V >/dev/null
+    $BIN timeline solid "$ov" 0 --at 0 --dur 3 --colour 1,0,0 >/dev/null
+    $BIN timeline solid "$ov" 0 --at 3 --dur 3 --colour 0,1,0 >/dev/null
+    $BIN timeline solid "$ov" 0 --at 6 --dur 3 --colour 0,0,1 >/dev/null
+    $BIN timeline overwrite "$ov" 0 "$fo" --at 2.5 --in 0 --out-at 2 >/dev/null
+    check "an overwrite does not move the end" "9.0000" \
+          "$($BIN timeline show "$ov" | awk -F'\t' '/^# duration/{print $2}')"
+    check "the shot before it is trimmed to the hole" "2.500000" \
+          "$($BIN timeline get "$ov" 0 0 | awk -F'\t' '/^length/{print $2}')"
+    # ⚠ And the far side of the hole keeps its SOURCE position: a hole cut by
+    # deleting and re-adding would restart the remaining half of that shot.
+    check "and what is left of the next one starts where it was" "1.500000" \
+          "$($BIN timeline get "$ov" 0 2 | awk -F'\t' '/^src_in/{print $2}')"
+
+    # A clip entirely inside the hole is gone, not stacked under the new one.
+    ov2=$TMP/over2.syntl
+    $BIN timeline new "$ov2" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$ov2" video V >/dev/null
+    $BIN timeline solid "$ov2" 0 --at 1 --dur 1 --colour 1,0,0 >/dev/null
+    $BIN timeline overwrite "$ov2" 0 "$fo" --at 0 --in 0 --out-at 3 >/dev/null
+    check "a clip swallowed by the hole is removed" "1" \
+          "$($BIN timeline show "$ov2" | grep -c '^clip')"
+
+    # ---- the source monitor's frame --------------------------------------
+    #
+    # One frame of a file that is not in a project yet — what an in and an out
+    # point are decided on.
+    $BIN source "$fo" --at 2.5 --out "$TMP/src.png" --size 320 \
+        | seen "a source frame reports the file's length" "duration	6.000000"
+    check "and comes out at the size asked for" "320" \
+          "$($BIN source "$fo" --at 1 --out "$TMP/src.png" --size 320 |
+             awk -F'\t' '/^width/{print $2}')"
+
+    # ⚠ THROUGH THE SIDECAR. The source monitor has to show what an insert
+    # will put in the cut, and an insert brings a photograph's develop with
+    # it — a flat viewer beside a graded timeline is a disagreement the eye
+    # catches at once and cannot explain.
+    if have ffprobe; then
+        sp=$TMP/srcshot.png
+        ffmpeg -v error -f lavfi -i color=c=0x404040:s=64x64:d=1 -frames:v 1 "$sp" -y
+        $BIN reset "$sp"
+        $BIN source "$sp" --at 0 --out "$TMP/flat.png" >/dev/null
+        $BIN set "$sp" exposure=2 >/dev/null
+        $BIN source "$sp" --at 0 --out "$TMP/dev.png" >/dev/null
+        fy=$(ffprobe -v error -f lavfi -i "movie=$TMP/flat.png,signalstats" \
+                     -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0 | head -1)
+        dy=$(ffprobe -v error -f lavfi -i "movie=$TMP/dev.png,signalstats" \
+                     -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0 | head -1)
+        if [ -n "$fy" ] && [ -n "$dy" ] && \
+           [ "$(awk -v a="$dy" -v b="$fy" 'BEGIN{print (a > b + 8) ? 1 : 0}')" = "1" ]; then ok
+        else bad "the source monitor shows the develop: $dy vs $fy"; fi
+    fi
+
+    # ⚠ A still is decoded at 0 whatever is asked for: -ss past the end of a
+    # one-frame input yields NOTHING, and a photograph has nothing to scrub.
+    $BIN source "$sp" --at 90 --out "$TMP/still.png" \
+        | seen "a still ignores the time asked for" "at	0.000000"
+fi
+
 # ------------------------------------------------- undo in the darkroom --
 #
 # A photograph's document is its SIDECAR, and history is a property of a file,
@@ -3661,6 +3765,12 @@ if [ -f "$qml" ]; then
     # and not to it is a binding nobody can find.
     seen "and the sheet is built from it"    'model: root.keyRows' < "$qml"
     seen "the darkroom has undo now"         'root.devStep(' < "$qml"
+    # The source monitor is the window's half of three-point editing. ⚠ The
+    # frame call is what dies quietly: without it the viewer opens, shows
+    # nothing, and says nothing about why.
+    seen "the window has a source monitor"   '"source", root.srcFile' < "$qml"
+    seen "and can insert from it"            'root.srcEdit("insert")' < "$qml"
+    seen "and overwrite from it"             'root.srcEdit("overwrite")' < "$qml"
     # ⚠ Ticks during a drag are not history. Without this one gesture is a
     # hundred steps back.
     seen "and a drag is one step, not a hundred" '"--no-history"' < "$qml"

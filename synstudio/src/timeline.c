@@ -1791,6 +1791,23 @@ void ss_timeline_ripple(ss_timeline *t, int track, double from, double len)
     }
 }
 
+/* The other direction: make ROOM. Every clip at or after `from` moves later
+ * by `len`, which is what an insert edit does to everything downstream.
+ *
+ * ⚠ A separate function rather than a negative `len` to ss_timeline_ripple:
+ * that one clamps at `from` so a gap can never be over-closed, and the clamp
+ * is exactly wrong here — it would pile every pushed clip onto the insert
+ * point. Two names, two rules, no flag to get the wrong way round. */
+void ss_timeline_push(ss_timeline *t, int track, double from, double len)
+{
+    int j;
+    if (track < 0 || track >= t->ntracks || len <= 0) return;
+    for (j = 0; j < t->track[track].nclips; j++) {
+        ss_clip *c = &t->track[track].clip[j];
+        if (c->tl_in >= from - 1e-9) c->tl_in += len;
+    }
+}
+
 /* -------------------------------------------------------- serialisation -- */
 
 static const char *kind_name(int v)

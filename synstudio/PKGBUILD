@@ -1172,7 +1172,49 @@ pkgver=0.1.0
 #   read by the frame renderer would pass every other assertion here.
 #
 #   645 assertions, clean under ASan+UBSan+LSan.
-pkgrel=35
+#
+# 36 A SOURCE MONITOR, AND THE TWO EDITS THAT COME OFF ONE.
+#
+#   The cut had one viewer and one way in: a whole file landed at the end of a
+#   track and was trimmed afterwards. What an editor does is decide the in and
+#   the out ON THE FOOTAGE first, put the playhead where it goes, and let the
+#   third point follow from the other two.
+#
+#   `synstudio source FILE --at S --out F.png` is one frame of a file that is
+#   not in a project yet — the other half of `timeline frame`, which
+#   composites one that is. `timeline insert` and `timeline overwrite` are the
+#   two ways a marked range lands.
+#
+#   ⚠ AN INSERT RIPPLES EVERY TRACK. That is what an insert edit IS: moving
+#   one track would slide a shot off its own dialogue, and this program has
+#   linked clips precisely because those belong together. A clip the point
+#   lands inside is split first, so its tail travels with everything else.
+#
+#   ⚠ AN OVERWRITE CUTS A HOLE ITS OWN LENGTH, splitting at BOTH ends before
+#   removing what lies entirely inside. Splitting is what keeps the far side's
+#   SOURCE position: a hole cut by deleting and re-adding would restart the
+#   remaining half of the shot it cut into, which looks like a jump nobody
+#   made. Clips are removed highest index first — the same rule the window's
+#   multi-delete had to learn, because removing one renumbers the rest.
+#
+#   ⚠ `ss_timeline_push` is a SEPARATE function, not a negative length to
+#   ss_timeline_ripple: that one clamps at the point so a gap can never be
+#   over-closed, and the clamp is exactly wrong here — it would pile every
+#   pushed clip onto the insert point.
+#
+#   ⚠ THE VIEWER RENDERS THROUGH THE FILE'S SIDECAR. An insert brings a
+#   photograph's develop with it (pkgrel 35), so a flat source viewer beside a
+#   graded timeline is a disagreement the eye catches at once and cannot
+#   explain. And a still is decoded at 0 whatever time is asked for: -ss past
+#   the end of a one-frame input yields nothing at all.
+#
+#   ONE VIEWER, SWITCHED, not two side by side: on a 1400-wide window a pair
+#   leaves neither big enough to judge a shot on, and judging the shot is what
+#   a source monitor is for. I and O mark, comma and period insert and
+#   overwrite — what a hand that knows another NLE will already try.
+#
+#   662 assertions, clean under ASan+UBSan+LSan.
+pkgrel=36
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

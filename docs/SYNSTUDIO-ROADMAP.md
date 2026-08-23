@@ -18,7 +18,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | area      | state                                                        |
 |-----------|--------------------------------------------------------------|
 | colour    | strongest — 64 settings, curves, HSL, masks, LUT bridge, undo |
-| cutting   | undo, markers, snapping, keys, copy/paste, and Save as        |
+| cutting   | keys, undo, markers, snapping, copy/paste, three-point editing |
 | retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
 | audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
 | effects   | sixty transitions, twenty-seven effects, and a format for more |
@@ -307,7 +307,19 @@ Fairlight-style automation: four features for one piece of work.
       is what it is. ⚠ A FOCUS ITEM, not Shortcut objects — Qt matches a
       shortcut before the key reaches whatever has focus, so Ctrl+C over a
       name field would copy a clip and J would shuttle while somebody typed
-- [ ] source monitor + three-point editing
+- [x] **source monitor + three-point editing** — shipped in 0.1.0-36.
+      `synstudio source FILE --at S` is one frame of a file that is not in a
+      project yet, and `timeline insert|overwrite PROJ T FILE --at S --in A
+      --out-at B` are the two ways it lands. Mark in and out on the footage,
+      put the playhead where it goes, and the third point follows. ⚠ An
+      INSERT ripples EVERY track — that is what an insert edit is, and moving
+      one would slide a shot off its own dialogue. An OVERWRITE cuts a hole
+      exactly the clip's length on the selected track, splitting at both ends
+      so the far side keeps its source position. ⚠ The viewer renders through
+      the file's SIDECAR, because an insert brings a photograph's develop with
+      it and a flat source viewer beside a graded timeline is a disagreement
+      the eye catches at once and cannot explain. One viewer, switched — two
+      side by side leaves neither big enough to judge a shot on
 - [x] **linked audio and video** — shipped in 0.1.0-29. A link is a GROUP id,
       not a pointer to a partner: a link is not necessarily a pair (a shot,
       its dialogue and its room tone is three), a pointer would not survive
@@ -454,9 +466,8 @@ Fairlight-style automation: four features for one piece of work.
    range, seven presets, burn-in, image sequences and a queue.
 
 **The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan: the named colour transforms, a
-watermark image, a source monitor, track automation, a curve editor over time,
-and smooth cut. Auto-save was never a gap and is not a feature
+short list of named gaps rather than a plan: a curve editor over time, smooth
+cut, and `arnndn`'s model file. Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what
 that was missing, until 0.1.0-34, was a way to give it a name.
 

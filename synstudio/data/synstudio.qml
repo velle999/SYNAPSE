@@ -2530,6 +2530,112 @@ FloatingWindow {
         if (root.playing) root.pausePlayback()
     }
 
+    // ── The source monitor, and three-point editing ─────────────────────────
+    //
+    // The cut had one viewer and one way in: whole files landed at the end of
+    // a track and were trimmed afterwards. What an editor actually does is
+    // decide the in and the out ON THE FOOTAGE first, put the playhead where
+    // it goes, and let the third point follow from the other two.
+    //
+    // `synstudio source FILE --at S` is one frame of a file that is not in a
+    // project yet — and it goes through that file's sidecar, so a developed
+    // photograph looks in here exactly like the clip an insert will make of
+    // it. A flat source viewer beside a graded timeline is a disagreement the
+    // eye catches at once and cannot explain.
+    property string srcFile: ""
+    property real   srcDur: 0
+    property real   srcPos: 0
+    property real   srcIn: 0
+    property real   srcOut: -1        // -1: to the end of the file
+    property bool   srcShown: false
+    property string srcUrl: ""
+    property int    srcSerial: 0
+    property bool   srcBusy: false
+    property bool   srcAgain: false
+
+    function openSource(path) {
+        root.srcFile = path
+        root.srcIn = 0
+        root.srcOut = -1
+        root.srcPos = 0
+        root.srcDur = 0
+        root.srcShown = true
+        root.requestSourceFrame()
+        root.say("source: " + path.replace(/^.*\//, ""))
+    }
+
+    // ⚠ The same coalescing the program monitor uses. `running = true` on a
+    // busy Process is a silent no-op, so a scrub without this renders the
+    // first frame of the gesture and nothing else.
+    function requestSourceFrame() {
+        if (!root.srcFile) return
+        if (root.srcBusy) { root.srcAgain = true; return }
+        root.srcBusy = true
+        root.srcSerial++
+        srcProc.command = [root.bin, "source", root.srcFile,
+                           "--at", String(root.srcPos),
+                           "--out", root.scratch + "-source.png",
+                           "--size", "1400"]
+        srcProc.running = true
+    }
+
+    Process {
+        id: srcProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    // The file says how long it is; nothing here guesses.
+                    if (f[0] === "duration") root.srcDur = parseFloat(f[1]) || 0
+                }
+            }
+        }
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.say(this.text.split("\n")[0])
+        }
+        onExited: function (code, status) {
+            root.srcBusy = false
+            if (code === 0)
+                root.srcUrl = "file://" + root.scratch + "-source.png?v="
+                              + root.srcSerial
+            if (root.srcAgain) { root.srcAgain = false; root.requestSourceFrame() }
+        }
+    }
+
+    function srcSeek(t) {
+        root.srcPos = Math.max(0, Math.min(root.srcDur > 0 ? root.srcDur : 0, t))
+        root.requestSourceFrame()
+    }
+
+    function srcMarkIn()  {
+        root.srcIn = root.srcPos
+        // An out point before the in point is not a range. Pushing it rather
+        // than refusing keeps the gesture — mark in, then out — working in
+        // either order.
+        if (root.srcOut >= 0 && root.srcOut <= root.srcIn) root.srcOut = -1
+        root.say("in " + root.timecode(root.srcIn))
+    }
+    function srcMarkOut() {
+        root.srcOut = root.srcPos
+        if (root.srcOut <= root.srcIn) root.srcIn = 0
+        root.say("out " + root.timecode(root.srcOut))
+    }
+
+    // The third point: where the playhead is. `insert` makes room on every
+    // track, `overwrite` cuts a hole its own length on the selected one.
+    function srcEdit(how) {
+        if (!root.proj) { root.say("start a project first"); return }
+        if (!root.srcFile) { root.say("open something in the source monitor"); return }
+        if (root.selTrack < 0) { root.say("pick a track first"); return }
+        const args = [how, root.proj, String(root.selTrack), root.srcFile,
+                      "--at", String(root.playhead), "--in", String(root.srcIn)]
+        if (root.srcOut > root.srcIn) { args.push("--out-at"); args.push(String(root.srcOut)) }
+        root.tlRun(args)
+        root.say(how === "insert" ? "inserted at the playhead"
+                                  : "overwrote at the playhead")
+    }
+
     Timer {
         id: revTimer
         interval: 80
@@ -2962,6 +3068,19 @@ FloatingWindow {
                     // ⚠ A button for the key list. Bindings nobody can find
                     // are half a feature, and "press ? to see the keys" is
                     // itself a key nobody has been told about.
+                    // Program or source in the one viewer. Named, because
+                    // an editor knows both words and a glyph for either would
+                    // be somebody's guess.
+                    Btn { visible: root.mode === "video"
+                          label: root.srcShown ? "Program" : "Source"
+                          on: root.srcShown
+                          onClicked: {
+                              root.srcShown = !root.srcShown
+                              if (root.srcShown && !root.srcFile) {
+                                  root.pickerFor = "source"
+                                  root.openPicker()
+                              }
+                          } }
                     Btn { label: "Keys"; on: root.helpOpen
                           onClicked: root.helpOpen = !root.helpOpen }
                 }
@@ -3287,6 +3406,125 @@ FloatingWindow {
                             visible: root.playing
                             asynchronous: false
                             source: Qt.resolvedUrl("synstudio-playback.qml")
+                        }
+
+                        // ── The source viewer ───────────────────────
+                        //
+                        // The SAME rectangle as the program monitor, not a
+                        // second pane. Two viewers side by side on a 1400
+                        // wide window leaves each of them too small to judge
+                        // anything, and what a source monitor is for is
+                        // deciding where a shot starts — which needs the
+                        // picture at the size the window can give it.
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: root.srcShown
+                            color: root.cViewport
+
+                            Monitor {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                anchors.bottomMargin: 58
+                                source: root.srcUrl
+                                visible: root.srcUrl !== ""
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: root.srcFile === ""
+                                text: "Open something to edit from"
+                                color: "#9a9a9a"
+                                font.pixelSize: 16
+                            }
+
+                            // Its own scrub bar, with the in and out points
+                            // drawn ON it: a range you cannot see is a range
+                            // nobody trusts, and the numbers alone do not say
+                            // how much of the file it is.
+                            Rectangle {
+                                id: srcBar
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 14
+                                anchors.bottomMargin: 30
+                                height: 16
+                                radius: 3
+                                color: root.wash(0.14)
+                                visible: root.srcDur > 0
+
+                                readonly property real inFrac:
+                                    root.srcDur > 0 ? root.srcIn / root.srcDur : 0
+                                readonly property real outFrac:
+                                    root.srcDur > 0
+                                    ? (root.srcOut > root.srcIn ? root.srcOut : root.srcDur)
+                                      / root.srcDur : 1
+
+                                Rectangle {
+                                    x: srcBar.inFrac * srcBar.width
+                                    width: Math.max(2, (srcBar.outFrac - srcBar.inFrac)
+                                                       * srcBar.width)
+                                    height: parent.height
+                                    radius: 3
+                                    color: root.wash(0.42)
+                                }
+                                Rectangle {
+                                    x: (root.srcDur > 0 ? root.srcPos / root.srcDur : 0)
+                                       * srcBar.width - 1
+                                    width: 2
+                                    height: parent.height
+                                    color: root.cAccent
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -8
+                                    preventStealing: true
+                                    function scrub(mx) {
+                                        root.srcSeek((mx + 8) / srcBar.width * root.srcDur)
+                                    }
+                                    onPressed: function (m) { scrub(m.x) }
+                                    onPositionChanged: function (m) { if (pressed) scrub(m.x) }
+                                }
+                            }
+
+                            Row {
+                                anchors.left: parent.left
+                                anchors.bottom: parent.bottom
+                                anchors.leftMargin: 14
+                                anchors.bottomMargin: 6
+                                spacing: 6
+
+                                Btn { label: "Open"
+                                      onClicked: { root.pickerFor = "source"
+                                                   root.openPicker() } }
+                                Btn { label: "Mark in";  active: root.srcFile !== ""
+                                      onClicked: root.srcMarkIn() }
+                                Btn { label: "Mark out"; active: root.srcFile !== ""
+                                      onClicked: root.srcMarkOut() }
+                                Btn { label: "Insert"
+                                      active: root.srcFile !== "" && root.proj !== ""
+                                              && root.selTrack >= 0
+                                      onClicked: root.srcEdit("insert") }
+                                Btn { label: "Overwrite"
+                                      active: root.srcFile !== "" && root.proj !== ""
+                                              && root.selTrack >= 0
+                                      onClicked: root.srcEdit("overwrite") }
+                            }
+
+                            Text {
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.rightMargin: 14
+                                anchors.bottomMargin: 10
+                                text: root.timecode(root.srcPos) + "   in "
+                                      + root.timecode(root.srcIn) + "   out "
+                                      + (root.srcOut > root.srcIn
+                                         ? root.timecode(root.srcOut) : "end")
+                                color: root.cDim
+                                font.pixelSize: 11
+                                font.family: "monospace"
+                            }
                         }
 
                         Text {
@@ -4874,6 +5112,8 @@ FloatingWindow {
         { mode: "video", k: "S",              d: "split at the playhead" },
         { mode: "video", k: "T",              d: "transition at the playhead" },
         { mode: "video", k: "M",              d: "a marker here" },
+        { mode: "video", k: "I / O",          d: "mark in, mark out on the source" },
+        { mode: "video", k: ", / .",          d: "insert, overwrite at the playhead" },
         { mode: "video", k: "Del / Shift+Del", d: "delete, ripple delete" }
     ]
 
@@ -4940,10 +5180,17 @@ FloatingWindow {
         case Qt.Key_L: root.shuttleForward(); break
         case Qt.Key_K: root.shuttleStop(); break
         case Qt.Key_J: root.shuttleBack(); break
+        // ⚠ The arrows follow the VIEWER that is showing. Stepping the
+        // program while looking at the source is a picture that does not move
+        // for a key that clearly did something.
         case Qt.Key_Left:  root.stopShuttle()
-                           root.seekTo(root.playhead - (shift ? 1 : frame)); break
+                           if (root.srcShown) root.srcSeek(root.srcPos - (shift ? 1 : frame))
+                           else root.seekTo(root.playhead - (shift ? 1 : frame))
+                           break
         case Qt.Key_Right: root.stopShuttle()
-                           root.seekTo(root.playhead + (shift ? 1 : frame)); break
+                           if (root.srcShown) root.srcSeek(root.srcPos + (shift ? 1 : frame))
+                           else root.seekTo(root.playhead + (shift ? 1 : frame))
+                           break
         case Qt.Key_Home: root.stopShuttle(); root.seekTo(0); break
         case Qt.Key_End:  root.stopShuttle(); root.seekTo(root.tlDur); break
         case Qt.Key_S:
@@ -4959,6 +5206,13 @@ FloatingWindow {
                             "--dur", String(root.defaultTransDur)])
             break
         case Qt.Key_M: if (root.proj) root.addMarker(); break
+        // The source monitor's own three. I and O are what every editor binds
+        // them to; comma and period are insert and overwrite for the same
+        // reason — a hand that knows one NLE should not have to look these up.
+        case Qt.Key_I: if (root.srcFile) root.srcMarkIn(); break
+        case Qt.Key_O: if (root.srcFile) root.srcMarkOut(); break
+        case Qt.Key_Comma:  root.srcEdit("insert"); break
+        case Qt.Key_Period: root.srcEdit("overwrite"); break
         case Qt.Key_Delete:
         case Qt.Key_Backspace:
             if (root.selClip >= 0) root.deleteSelection(shift)
@@ -5648,6 +5902,13 @@ FloatingWindow {
                                     root.pickerOpen = false
                                     root.pickerFor = "photo"
                                     root.setLut(m.path)
+                                } else if (root.pickerFor === "source") {
+                                    // Into the SOURCE monitor rather than
+                                    // onto a track: what this picker chose is
+                                    // footage to decide an in and an out on.
+                                    root.pickerOpen = false
+                                    root.pickerFor = "photo"
+                                    root.openSource(m.path)
                                 } else if (root.pickerFor === "clip") {
                                     // The video page borrows the same picker.
                                     // It lists what the ENGINE can decode, so

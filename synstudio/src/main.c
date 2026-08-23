@@ -52,6 +52,8 @@ static void usage(void)
 "  mask FILE list                list them\n"
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
 "  render FILE --out OUT         apply the sidecar and write a new file\n"
+"  source FILE --at S --out F.png [--size N]   one frame of any file, for\n"
+"                                a source monitor — through its sidecar\n"
 "  histogram FILE                256 bins per channel, tab separated\n"
 "  logcurve [none|slog3|vlog] [--value CODE]   what a camera's own curve\n"
 "                                means: a code value in, scene light out\n"
@@ -97,6 +99,10 @@ static void usage(void)
 "       normalised to: -23 is broadcast, -14 is what streaming does anyway\n"
 "  timeline normalise PROJ T C [--target LUFS]   measure, then set the gain\n"
 "  timeline clip PROJ TRACK FILE [--at T] [--in A] [--out-at B] [--dur S]\n"
+"  timeline insert PROJ TRACK FILE --at T [--in A] [--out-at B]\n"
+"                  make room for it: every track moves later\n"
+"  timeline overwrite PROJ TRACK FILE --at T [--in A] [--out-at B]\n"
+"                  cut a hole its own length on that track\n"
 "                  [--flat]                      ignore its own develop\n"
 "       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
 "  timeline title PROJ TRACK TEXT [--at T] [--dur S] [--colour R,G,B]\n"
@@ -654,6 +660,49 @@ static int cmd_render(const char *path, const opts *o)
     printf("out\t%s\nwidth\t%d\nheight\t%d\n", o->out, im.w, im.h);
     ss_image_free(&im);
     return rc == 0 ? 0 : die("cannot write %s", o->out);
+}
+
+/* One frame of ANY file, for a source monitor.
+ *
+ * `timeline frame` composites a project; this decodes a file that is not in
+ * one yet — the footage somebody is deciding an in and an out point on.
+ *
+ * ⚠ Through the sidecar, when there is one. The source monitor has to show
+ * what an insert would actually put in the cut, and an insert brings a
+ * photograph's develop with it (see `timeline clip`). A flat source viewer
+ * beside a developed timeline is a disagreement the eye catches immediately
+ * and cannot explain.
+ *
+ * ⚠ A still is decoded at 0 whatever is asked for: -ss past the end of a
+ * one-frame input yields NOTHING, and scrubbing a photograph is not a thing
+ * anybody is trying to do. */
+static int cmd_source(const char *path, const opts *o)
+{
+    ss_image im;
+    ss_edit e;
+    char side[4200];
+    double dur = ss_media_duration(path);
+    double at = dur > 0 ? o->at : 0;
+    int max = o->size > 0 ? o->size : 960;
+
+    if (!o->out) return die("source needs --out");
+    if (at < 0) at = 0;
+    if (dur > 0 && at > dur) at = dur;
+    if (ss_load_frame(path, at, &im, max) != 0)
+        return die("cannot decode %s at %.3f  (is ffmpeg installed?)", path, at);
+
+    ss_sidecar_path(path, side, sizeof side);
+    if (path_exists(side) && ss_edit_load(&e, side) == 0)
+        ss_edit_apply(&im, &e);
+
+    if (ss_save(o->out, &im, o->quality, 8) != 0) {
+        ss_image_free(&im);
+        return die("cannot write %s", o->out);
+    }
+    printf("out\t%s\nwidth\t%d\nheight\t%d\nduration\t%.6f\nat\t%.6f\n",
+           o->out, im.w, im.h, dur > 0 ? dur : 0.0, at);
+    ss_image_free(&im);
+    return 0;
 }
 
 /* A scope of a photograph, through the same develop stack the picture goes
@@ -1859,11 +1908,19 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         return 0;
     }
 
-    if (!strcmp(verb, "clip")) {
+    /* clip, insert and overwrite differ only in what they do to what is
+     * already on the track — the clip they build is the same one, so it is
+     * built in one place. Three copies of the still/duration/probe reasoning
+     * is three places for an insert to disagree with an add about how long a
+     * photograph is. */
+    if (!strcmp(verb, "clip") || !strcmp(verb, "insert")
+        || !strcmp(verb, "overwrite")) {
         ss_clip c;
         ss_probe p;
+        int inserting  = !strcmp(verb, "insert");
+        int overwriting = !strcmp(verb, "overwrite");
 
-        if (argc < 6) return die("clip wants PROJ TRACK FILE");
+        if (argc < 6) return die("%s wants PROJ TRACK FILE", verb);
         if (tl_pick(t, argv[4], NULL, &tr, NULL) != 0) return 1;
         ss_clip_reset(&c);
         snprintf(c.path, sizeof c.path, "%s", argv[5]);
@@ -1936,6 +1993,55 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                 && !ss_develop_is_identity(&e.dev)) {
                 c.grade = e.dev;
                 c.has_grade = 1;
+            }
+        }
+
+        /* ── three-point editing ─────────────────────────────────────────
+         *
+         * INSERT makes room: everything at or after the point moves later by
+         * the clip's length, and a shot the point lands inside is split so
+         * its tail travels with the rest.
+         *
+         * ⚠ EVERY TRACK, not just this one. That is what an insert edit IS —
+         * rippling one track would slide a shot off its own dialogue, and
+         * this program has linked clips precisely because those belong
+         * together. Somebody who wants one track to move alone wants
+         * overwrite, or a move.
+         *
+         * OVERWRITE cuts a hole exactly the clip's length on THIS track and
+         * drops the clip into it, which is the other half of what a source
+         * monitor is for: mark in and out on the footage, put the playhead
+         * where it goes, and the third point is decided by the first two. */
+        if (inserting || overwriting) {
+            double a = c.tl_in, len = ss_clip_length(&c), b;
+            int k;
+
+            if (len <= 0) return die("that clip has no length");
+            b = a + len;
+            if (inserting) {
+                for (k = 0; k < t->ntracks; k++) {
+                    int hit = ss_timeline_at(t, k, a);
+                    /* Split first: a clip STRADDLING the point has to give up
+                     * its tail, or the insert lands on top of it. `split`
+                     * refuses a time that is not strictly inside, which is
+                     * exactly the case where nothing needs splitting. */
+                    if (hit >= 0) ss_timeline_split(t, k, hit, a);
+                    ss_timeline_push(t, k, a, len);
+                }
+            } else {
+                int hit = ss_timeline_at(t, tr, a);
+                if (hit >= 0) ss_timeline_split(t, tr, hit, a);
+                hit = ss_timeline_at(t, tr, b);
+                if (hit >= 0) ss_timeline_split(t, tr, hit, b);
+                /* Highest index first: removing one renumbers everything
+                 * above it, which is the same rule the window's multi-delete
+                 * had to learn. */
+                for (k = t->track[tr].nclips - 1; k >= 0; k--) {
+                    const ss_clip *e = &t->track[tr].clip[k];
+                    double s0 = e->tl_in, e0 = s0 + ss_clip_length(e);
+                    if (s0 >= a - 1e-6 && e0 <= b + 1e-6)
+                        ss_timeline_remove(t, tr, k);
+                }
             }
         }
 
@@ -3560,6 +3666,7 @@ int main(int argc, char **argv)
     if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0) return die("bad option");
     if (!strcmp(cmd, "peaks"))     return cmd_peaks(argv[2], &o);
     if (!strcmp(cmd, "render"))    return cmd_render(argv[2], &o);
+    if (!strcmp(cmd, "source"))    return cmd_source(argv[2], &o);
     if (!strcmp(cmd, "match")) {
         if (argc < 3) return die("match wants a file and --to REFERENCE");
         if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0)

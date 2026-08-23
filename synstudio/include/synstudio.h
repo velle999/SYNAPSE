@@ -1237,6 +1237,10 @@ int ss_timeline_remove(ss_timeline *t, int track, int clip);
  * back by `len`. This is the ripple that separates a delete from a lift. */
 void ss_timeline_ripple(ss_timeline *t, int track, double from, double len);
 
+/* And the other way: every clip at or after `from` moves LATER by `len`, so
+ * an insert edit has somewhere to land. */
+void ss_timeline_push(ss_timeline *t, int track, double from, double len);
+
 /* Which clip is under a timeline time on a track, or -1. Later clips win, so
  * the answer matches what the compositor draws when two overlap. */
 int ss_timeline_at(const ss_timeline *t, int track, double time);
