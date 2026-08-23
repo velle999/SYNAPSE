@@ -868,6 +868,74 @@ extern const int              syn_emoji_count;
 extern const char *const      syn_emoji_cats[];
 extern const int              syn_emoji_cat_count;
 
+/* ── The application grid (appgrid.c) ─────────────────────────
+ *
+ * GNOME's "show all applications": a FULLSCREEN page of every application on
+ * the box, not a menu that drops out of a bar. Type to search, arrows and Enter
+ * to launch, Esc to leave.
+ *
+ * WHY IT IS THE COMPOSITOR'S AND NOT THE BAR'S. The bar's start menu is a
+ * quickshell surface: it needs the bar running, it is one output's popup, and
+ * it is a list rather than a page. A grid that covers the screen has to be able
+ * to cover the bar too, which a layer-shell client of the bar cannot do — and
+ * "every installed app" must still be reachable on a desktop whose bar is
+ * switched off. Same reason mission control is here.
+ *
+ * The two lists are NOT the same list, and that is deliberate: this one has no
+ * categories and no pages of settings panels, because it is answering "what is
+ * installed" rather than "where do I go".
+ */
+#define APPGRID_MAX      512   /* applications tracked; a stock box has ~150 */
+#define APPGRID_COLS       6
+#define APPGRID_ROWS       4
+#define APPGRID_PER_PAGE  (APPGRID_COLS * APPGRID_ROWS)
+#define APPGRID_SEARCH_MAX 64
+
+/* One application, as read off its .desktop file. */
+typedef struct {
+    /* The freedesktop entry id: the path under applications/ with '/' folded to
+     * '-' and the suffix dropped, so a Wine shortcut three directories down is
+     * `wine-Programs-Foo` — which is exactly what menu-hidden.conf lists and
+     * what the Wine noise rules key off. */
+    char id[128];
+    char name[128];        /* Name=, or the id when the file has none */
+    char exec[256];        /* Exec= with the field codes stripped */
+    char icon_hint[128];   /* Icon=; resolved lazily, see `icon` */
+    int  terminal;         /* Terminal=true — launched through the terminal */
+    /* Decoded on the first frame this entry is actually DRAWN on, not at scan
+     * time: a box with 300 applications would otherwise decode 300 PNGs and
+     * SVGs to show 24 of them, on a keypress. NULL after the attempt means the
+     * entry draws a monogram, which is also what a missing icon looks like. */
+    cairo_surface_t *icon;
+    int  icon_tried;
+} syn_app_entry_t;
+
+typedef struct {
+    int visible;
+    /* The scan is done once per session, on the first open. Applications do not
+     * appear while you are looking at the grid, and re-walking every XDG data
+     * directory on each open would put a readdir storm on a keypress. */
+    int scanned;
+
+    syn_app_entry_t apps[APPGRID_MAX];
+    int count;
+
+    /* Indices into apps[] matching the current search, in display order.
+     * Indices rather than copies for the reason emoji_rebuild() gives: the
+     * entries own decoded icon surfaces, and copying them around would either
+     * duplicate the pointers or re-decode. */
+    int filt[APPGRID_MAX];
+    int filt_count;
+
+    char search[APPGRID_SEARCH_MAX];
+    int  search_len;
+
+    int selected;   /* index into filt[], NOT into apps[] */
+    int page;       /* which page of APPGRID_PER_PAGE is on screen */
+
+    syn_hit_t hit;
+} syn_appgrid_t;
+
 /* The picker's live state. A named type rather than an anonymous struct inside
  * syn_server_t (as the other panels use) because emoji.c passes it around as
  * one thing — the key handler alone touches eight of these fields. */
@@ -3645,9 +3713,10 @@ typedef struct {
     int   dock_clock_slot;      /* default -1 (past the last icon) */
     /*
      * The GNOME-style "show all apps" button: a 3×3 grid of dots in a cell at
-     * the far end of the run, which opens the start menu — every installed app,
-     * not the pinned few. On by default; it is the one thing a dock of pinned
-     * icons cannot do for itself. Persisted to dock.state. */
+     * the far end of the run, opening the FULL-SCREEN application page
+     * (appgrid.c) — every application installed, not the pinned few. On by
+     * default; it is the one thing a dock of pinned icons cannot do for
+     * itself. Persisted to dock.state. */
     int   dock_apps_button;     /* default 1 */
     /* macOS-style hover magnification: the icons under the pointer swell and
      * the run slides apart to make room. On by default — it is the dock's
@@ -6192,6 +6261,17 @@ struct syn_server {
     } emoji_ui;
     syn_emoji_panel_t emoji;
 
+    /* The application grid (appgrid.c). FULL-SCREEN, so it is shaped like
+     * mission control rather than like the modal panels: a scene rect that
+     * covers the output for the dim, and one cairo buffer the size of the
+     * output over it. No `accent` node — the grid draws its own chrome. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_buffer *text_buf;
+    } appgrid_ui;
+    syn_appgrid_t appgrid;
+
     /* Equalizer panel (eq.c) — Control panel ▸ Sound ▸ Equalizer. */
     struct {
         struct wlr_scene_tree   *tree;
@@ -8331,11 +8411,49 @@ void fontpick_state_read(int *size, int *scale);
 void fontpick_push_size(syn_server_t *s, int size);
 void fontpick_push_scale(syn_server_t *s, int scale);
 
+/* ── appgrid.c (the fullscreen application grid) ─────────────
+ *
+ * GNOME's "show all applications": a FULL-SCREEN page of every application on
+ * the box, not a menu that drops out of a bar. Type to search, arrows and Enter
+ * to launch, Esc to leave.
+ *
+ * WHY IT IS THE COMPOSITOR'S AND NOT THE BAR'S. The bar's start menu is a
+ * quickshell surface — it needs the bar running, it is one output's popup, and
+ * it is a list. A page that covers the screen has to be able to cover the bar
+ * too, which a layer-shell client of the bar cannot do, and "every installed
+ * app" has to stay reachable on a desktop whose bar is switched off. Same
+ * reason mission control lives here.
+ *
+ * Same panel contract as all the others: show / hide / toggle, a key handler
+ * returning 1 when it consumed the press, pointer entry points on syn_hit_t.
+ */
+void appgrid_show(syn_server_t *s);
+void appgrid_hide(syn_server_t *s);
+void appgrid_toggle(syn_server_t *s);
+/* Walk the XDG application directories and rebuild the entry list. Run on the
+ * first show; exposed because the test drives it against a sandbox tree, and
+ * because `synctl dispatch apps_rescan` is the honest way to pick up something
+ * installed while the session has been running. */
+void appgrid_rescan(syn_server_t *s);
+/* How many entries the current search matches, and the entry at a filtered
+ * index — the two things the renderer asks. NULL for an index out of range. */
+int  appgrid_total(syn_server_t *s);
+syn_app_entry_t *appgrid_at(syn_server_t *s, int i);
+/* The icon for an entry, decoded on first use. NULL means "draw a monogram",
+ * which the caller does with icon_draw_monogram() exactly as the dock does. */
+cairo_surface_t *appgrid_icon(syn_app_entry_t *e);
+int  appgrid_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+int  appgrid_motion(syn_server_t *s, double lx, double ly);
+int  appgrid_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                   uint32_t state);
+int  appgrid_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_appgrid(syn_server_t *s);
+
 /* ── emoji.c (emoji picker) ──────────────────────────────────
  *
- * A GRID, and the only panel that is one — everything else here is a list. It
- * exists because text.c can now resolve a colour font per glyph; before that a
- * compositor-drawn emoji grid was a grid of question marks. */
+ * The other grid — everything else here is a list. It exists because text.c can
+ * now resolve a colour font per glyph; before that a compositor-drawn emoji
+ * grid was a grid of question marks. */
 
 void emoji_show(syn_server_t *s);
 void emoji_hide(syn_server_t *s);
@@ -8676,6 +8794,18 @@ void icon_provide_name(const char *app_id, const char *icon_name);
  * file (SVG icon themes, or nothing on disk at all: both out of scope). */
 void icon_draw_monogram(cairo_t *cr, const char *app_id,
                         double x, double y, double size);
+/* Decode the picture an `Icon=` value names — a theme name, or an absolute
+ * path — at the icon theme's raster size, for a caller that keeps its OWN
+ * cache. The app grid does: icon_lookup()'s cache is 64 entries sized for the
+ * dock's pinned+running set, and a page of applications would evict it on every
+ * arrow key. Ownership passes to the caller (cairo_surface_destroy). */
+cairo_surface_t *icon_decode_named(const char *name);
+/* Which icon theme to resolve names in first — synuirc's `bar_icon_theme`, the
+ * one place this desktop records the set of pictures it is using. Pushed on
+ * every config load; empty means "no opinion" and the built-in fallback order
+ * stands. Changing it drops every cached decode, so a caller holding its own
+ * derived copy must be watching icon_generation(). */
+void icon_set_theme(const char *name);
 /* The accent SynapseOS's own app icons follow. Pushed by theme.c on every
  * theme change (and by Prism whenever the wallpaper accent moves), it re-tints
  * every already-cached icon of ours in place, so a theme switch does not have

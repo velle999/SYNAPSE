@@ -1295,7 +1295,11 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
 }
 
 /*
- * The GNOME-style "show all apps" button.
+ * The GNOME-style "show all apps" button — the one that opens the FULL-SCREEN
+ * application page (appgrid.c), not the bar's start menu. It briefly did the
+ * latter, and the difference is the whole feature: a dock of pinned icons has
+ * no route to an application that is not on it, and a menu that needs the bar
+ * running is not a route on a desktop whose bar is off.
  *
  * A 3×3 grid of dots drawn in the panel ink, not an icon out of the theme:
  * there is no .desktop behind this button, every icon theme that has a grid

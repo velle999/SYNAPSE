@@ -1578,3 +1578,80 @@ lands on the new size, the headroom follows the swell, the apps button takes a
 cell and is found by the hit test the compositor actually calls, and the clock is
 dragged front and back through `dock_clock_drag_begin` → `dock_drag_motion` →
 `dock_drag_end` rather than by writing the slot.
+
+---
+
+## The show-all-apps button opens an actual application page
+
+The first version of that dock button asked the bar to toggle its start menu.
+That is not what "GNOME-style show all apps" means, and it was wrong in three
+separate ways at once — the menu is a categorised LIST rather than a page, it
+belongs to one output's popup layer, and on a desktop with `bar_enabled = off`
+the button silently did nothing at all. So the page is the compositor's now:
+`src/appgrid.c`, full-screen, keyboard-first, the native idiom mission control
+already uses.
+
+- [x] **A page, not a menu.** The screen dims behind a scene rect, six columns
+      by four rows of large icons with their names under them, page dots at the
+      bottom, and a search pill at the top. Type to search, arrows and Page
+      Up/Down to move, Enter to launch, Esc to leave — Esc clears a search
+      before it closes the page, the rule the emoji picker set.
+- [x] **The geometry is derived from the output**, and the cell is CAPPED as
+      well as floored: six columns of a 3840px screen give 600px tiles with a
+      96px icon marooned in the middle of each, which is the shape "make it
+      fill the screen" produces if you only ever test it on one screen.
+- [x] **It launches through the desktop's own terminal** for a `Terminal=true`
+      entry — synuirc's `terminal`, the same value the file manager and the
+      desktop menu use — and it CLOSES before it spawns, because a window that
+      maps while a modal panel is up arrives behind it and without focus.
+
+**The list is not the .desktop files**, and getting that wrong is the whole
+difference between a launcher and a directory listing.
+
+- [x] **The same `menu-hidden.conf` the start menu reads**, both files, in the
+      same order, with the same `!id` un-hide. Shared *data* is the only sharing
+      available across a process boundary, so a line added to hide something
+      hides it in both launchers.
+- [x] **The full freedesktop rules**: `NoDisplay`, `Hidden`, `Type`, `TryExec`,
+      and `OnlyShowIn`/`NotShowIn` tested against **both** of this desktop's
+      names — `synui` AND `SynapseOS`. Testing one spelling is how an
+      application goes missing on a desktop that looks correct everywhere else,
+      and the list match is whole-token so `synuix` is not `synui`.
+- [x] **The id is the path under `applications/` with `/` folded to `-`**, which
+      is what makes a Wine shortcut three directories down come out as
+      `wine-Programs-Foo` — the string `menu-hidden.conf` lists and the string
+      the Wine rules test. Built any other way, both filters silently stop
+      working. The scan is recursive for the same reason: a flat readdir finds
+      none of Wine's shortcuts, which on a box with games installed is most of
+      what anybody launches.
+- [x] **⚠ The Wine noise rules are a SECOND COPY** of `isNoise()` in
+      `quickshell/StartMenu.qml`, and there is no way to have one: that is QML
+      in another process. They are kept literal and in the same order so a diff
+      reads straight across, and both files name the other. The scoping is the
+      part that matters — "Help Viewer" outside a prefix is a real application,
+      and `.nfo` must not match `nfoview`.
+
+**…and the icon search had to grow up with it.** `find_and_decode_icon()` knew
+`hicolor/<size>/apps` and `/usr/share/pixmaps`, which was survivable while the
+dock was the only caller — a pinned application almost always ships its own
+hicolor icon. A page of ninety entries broke it immediately: a third drew a
+letter monogram, because they name a *theme* icon (`accessories-calculator`,
+`printer`) that lives in Adwaita under `legacy/` or `devices/`.
+
+- [x] **Every theme, root, size and category subdirectory**, ordered so the first
+      hit is the best one — scalable before raster, large before small, the
+      configured theme before the fallbacks, `hicolor` last because it is the
+      per-application drop rather than a designed set. Only paid on a MISS, only
+      once per icon per session.
+- [x] **`bar_icon_theme` is pushed into icons.c** (`icon_set_theme`) with the
+      accent, so the compositor's pictures and the bar's come out of one theme
+      rather than two. Changing it drops the whole decode cache and bumps
+      `icon_generation()`, which is what makes the dock throw away its own
+      pre-scaled copies.
+
+`appgrid_test` drives the real scan against a mkdtemp sandbox with
+`XDG_DATA_HOME` *and* `XDG_DATA_DIRS` pointed at it — unset, the scan falls back
+to the tester's own `~/.local/share/applications` and the assertions become
+about their desktop. One `.desktop` file per rule, named for the rule; the
+two-desktop-names case was confirmed discriminating by removing the `SynapseOS`
+half and watching it fail.

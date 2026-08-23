@@ -278,6 +278,7 @@ synui_exe = executable('synui',
     'src/wpthumb.c',
     'src/cursor.c',
     'src/fontpick.c',
+    'src/appgrid.c',
     'src/emoji.c',
     'src/emoji_data.c',
     'src/calc.c',
@@ -435,6 +436,7 @@ install_data(['data/synui-calc.desktop',
               # an entry; tests/menu_apps.sh fails the build when a new one
               # does not.
               'data/synui-news.desktop',
+              'data/synui-apps.desktop',
               'data/synui-emoji.desktop',
               'data/synui-wallpaper.desktop',
               'data/synui-cursor.desktop',
@@ -812,6 +814,18 @@ text_fallback_test = executable('text_fallback_test',
   build_by_default : false)
 test('text_fallback', text_fallback_test,
   args : [meson.current_build_dir() / 'text_fallback.png'])
+
+# The application grid's scan and filters, driven against a mkdtemp sandbox with
+# XDG_DATA_HOME and XDG_DATA_DIRS pointed at it — so the counts do not depend on
+# what the machine running the test happens to have installed. hit.c comes along
+# for the grid geometry the pointer entry points read.
+appgrid_test = executable('appgrid_test',
+  ['tests/appgrid_test.c', 'src/appgrid.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('appgrid', appgrid_test)
 
 # The emoji picker's logic, driven through emoji_key() the way input.c calls it
 # — nothing can synthesise input into a headless synui. text.c comes along for

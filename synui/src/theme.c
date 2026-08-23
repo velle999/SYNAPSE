@@ -1006,6 +1006,11 @@ static void theme_push_panel_colors(const syn_config_t *cfg)
      * dock stops being the one part of the bar that ignored the theme. Third
      * party icons are untouched; see iconhue.c for what "ours" means. */
     icon_set_accent(cfg->panel_accent);
+    /* …and WHERE the third-party ones are looked up. `bar_icon_theme` is the
+     * one place this desktop names its icon set (the bar exports it as
+     * QS_ICON_THEME), so pushing it here is what keeps the compositor's own
+     * pictures and the bar's out of two different themes. */
+    icon_set_theme(cfg->bar_icon_theme);
     render_set_panel_surface(cfg->panel_bg, cfg->panel_ink);
     /* Glass is a property of the theme too, so it travels with the colours:
      * switching to Prism has to reach the panels in the same push that recolours

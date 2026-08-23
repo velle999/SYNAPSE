@@ -1208,6 +1208,15 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         else             crop_view_toggle(s);
     } else if (strcmp(action, "equalizer") == 0) {
         eq_toggle(s);
+    } else if (strcmp(action, "apps") == 0) {
+        appgrid_toggle(s);
+    } else if (strcmp(action, "apps_rescan") == 0) {
+        /* Separate from `apps` on purpose: the scan is once per session, so a
+         * thing installed while you were logged in is invisible until something
+         * says so, and making the OPEN rescan would put a walk of every XDG
+         * data directory on a keypress. */
+        appgrid_rescan(s);
+        if (s->appgrid.visible) synui_render_appgrid(s);
     } else if (strcmp(action, "emoji") == 0) {
         emoji_toggle(s);
     } else if (strcmp(action, "calc") == 0) {
@@ -2079,6 +2088,14 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
                 absorbed = true;
         if (absorbed) return;
 
+        /* The application grid. Full-screen and modal, like every panel in this
+         * chain — its handler swallows everything it does not act on, so a
+         * keystroke cannot reach the window it is covering. */
+        for (int i = 0; i < nsyms; i++)
+            if (appgrid_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
         /* Emoji picker. BEFORE the font picker only because the list is
          * walked in the order panels were added; no two are ever open at
          * once, so the order carries no meaning beyond that. */
@@ -2870,6 +2887,7 @@ void pointer_rebase(syn_server_t *s)
     X(ctlpanel, ctlpanel) \
     X(keys,     keys)     \
     X(overview, overview) \
+    X(appgrid,  appgrid)  \
     X(theme,    thememgr) \
     X(clipboard, clipboard) \
     X(welcome,  welcome_ui)
@@ -3396,7 +3414,7 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
              * another edge instead. Every installed app, which is the one thing
              * a row of pinned icons cannot offer. */
             if (dock_apps_at(s, s->cursor->x, s->cursor->y)) {
-                synui_start_menu_open(s);
+                appgrid_toggle(s);
                 return;
             }
             /* …and the clock, which arms a drag that moves the cell along the

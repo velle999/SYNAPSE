@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=All Applications
+GenericName=Application Grid
+Comment=Every application installed, as a full-screen page
+Exec=synctl dispatch apps
+Icon=view-grid
+Terminal=false
+Categories=System;
+Keywords=apps;applications;launcher;grid;all;
+OnlyShowIn=synui;SynapseOS;

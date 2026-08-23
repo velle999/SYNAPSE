@@ -2545,6 +2545,248 @@ void synui_render_fontpick(syn_server_t *s)
 }
 
 
+/* ── The application grid ────────────────────────────────────
+ *
+ * FULL-SCREEN, which makes it the second panel shaped like mission control
+ * rather than like the modal boxes: a scene rect covering the output carries
+ * the dim, and one cairo buffer the size of the output carries everything else.
+ * The modal panels centre a small buffer instead, and the difference is not
+ * cosmetic — a full-screen cairo fill on every hover would repaint the whole
+ * screen per pointer motion, which is exactly why the dim is a scene rect.
+ *
+ * The tiles are a GRID, so like the emoji picker the hit rect is written with
+ * hit_set_grid(), and hit_set_first() is handed the index of the entry in the
+ * top-left cell — here the page origin rather than a scroll row.
+ */
+void synui_render_appgrid(syn_server_t *s)
+{
+    if (!s->appgrid_ui.tree) return;
+
+    if (!s->appgrid.visible) {
+        wlr_scene_node_set_enabled(&s->appgrid_ui.tree->node, false);
+        hit_clear(&s->appgrid.hit);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+    if (ob.width <= 0 || ob.height <= 0) return;
+
+    syn_appgrid_t *g = &s->appgrid;
+    int total = g->filt_count;
+    int pages = total > 0 ? (total + APPGRID_PER_PAGE - 1) / APPGRID_PER_PAGE : 1;
+    if (g->page >= pages) g->page = pages - 1;
+    if (g->page < 0)      g->page = 0;
+
+    wlr_scene_node_set_position(&s->appgrid_ui.tree->node, ob.x, ob.y);
+    wlr_scene_node_set_enabled(&s->appgrid_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->appgrid_ui.tree->node);
+
+    /* The same near-opaque dim mission control uses, and for the reason given
+     * there: the residual is multiplied by what is UNDER it, and what is under
+     * it is windows — a white browser page at 10% still reads as a bright slab
+     * behind the tiles. */
+    float dim[4] = { 0.03f, 0.03f, 0.06f, 0.97f };
+    if (!s->appgrid_ui.bg)
+        s->appgrid_ui.bg = wlr_scene_rect_create(s->appgrid_ui.tree,
+                                                 ob.width, ob.height, dim);
+    else
+        wlr_scene_rect_set_size(s->appgrid_ui.bg, ob.width, ob.height);
+    wlr_scene_rect_set_color(s->appgrid_ui.bg, dim);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(ob.width, ob.height, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* ── Geometry ──
+     *
+     * Derived from the output rather than fixed, so the page fills a 4K screen
+     * and still fits a 1366x768 laptop. The cell is capped as well as floored:
+     * uncapped, six columns of a 3840px screen give 600px tiles with a 96px
+     * icon marooned in the middle of each. */
+    const int SEARCH_H = 44, SEARCH_W = 460;
+    const int top_pad  = ob.height / 12;
+    int search_x = (ob.width - SEARCH_W) / 2;
+    int search_y = top_pad;
+
+    int grid_top = search_y + SEARCH_H + ob.height / 14;
+    int foot_h   = 56;                       /* the page dots and the hint */
+    int avail_h  = ob.height - grid_top - foot_h;
+    int avail_w  = (int)(ob.width * 0.80);
+
+    int cell_w = avail_w / APPGRID_COLS;
+    int cell_h = avail_h / APPGRID_ROWS;
+    if (cell_w > 200) cell_w = 200;
+    if (cell_h > 176) cell_h = 176;
+    if (cell_w < 96)  cell_w = 96;
+    if (cell_h < 90)  cell_h = 90;
+
+    int grid_w = cell_w * APPGRID_COLS;
+    int grid_x = (ob.width - grid_w) / 2;
+    /* Re-centred vertically inside the space left over, so a capped cell does
+     * not leave the whole page hugging the search box with a gulf under it. */
+    int grid_y = grid_top + (avail_h - cell_h * APPGRID_ROWS) / 2;
+    if (grid_y < grid_top) grid_y = grid_top;
+
+    int icon_px = cell_h - 46;               /* room for the label under it */
+    if (icon_px > cell_w - 24) icon_px = cell_w - 24;
+    if (icon_px > 96) icon_px = 96;
+    if (icon_px < 32) icon_px = 32;
+
+    int first = g->page * APPGRID_PER_PAGE;
+
+    hit_set_panel(&g->hit, ob.x, ob.y, ob.width, ob.height);
+    hit_set_grid(&g->hit, grid_x, grid_y, cell_w, cell_h,
+                 APPGRID_COLS, APPGRID_ROWS);
+    hit_set_first(&g->hit, first);
+
+    /* ── The search box ──
+     *
+     * Drawn as a field even though it can never lose focus: the page is modal
+     * and every printable key goes into it, so there is nothing to focus it
+     * WITH — but a bare line of text at the top of a screen does not say "type
+     * here", and the whole fast path of this panel is that you can. */
+    cairo_set_line_width(cr, 1);
+    cairo_rounded_rect(cr, search_x, search_y, SEARCH_W, SEARCH_H, SEARCH_H / 2.0);
+    set_ink(cr, INK_STRONG, 0.10);
+    cairo_fill_preserve(cr);
+    set_ink(cr, INK_RULE, 0.55);
+    cairo_stroke(cr);
+
+    cairo_select_font_face(cr, syn_text_ui_font(), CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 16);
+    if (g->search_len > 0) {
+        set_ink(cr, INK_STRONG, 0.95);
+        draw_clipped(cr, search_x + 22, search_y + SEARCH_H / 2 + 6,
+                     SEARCH_W - 44, g->search);
+    } else {
+        set_ink(cr, INK_DIM, 0.85);
+        cairo_move_to(cr, search_x + 22, search_y + SEARCH_H / 2 + 6);
+        syn_show_text(cr, "Type to search");
+    }
+
+    /* ── Nothing matched ──
+     *
+     * Said in words rather than left as an empty screen. An empty grid and a
+     * grid that has not loaded look identical, and the one thing the user needs
+     * to know is which of the two they are looking at. */
+    if (total == 0) {
+        cairo_set_font_size(cr, 15);
+        set_ink(cr, INK_MUTED, 0.9);
+        const char *msg = g->search_len > 0 ? "No applications match"
+                                            : "No applications found";
+        cairo_text_extents_t ext;
+        syn_text_extents(cr, msg, &ext);
+        cairo_move_to(cr, (ob.width - ext.width) / 2.0, grid_y + cell_h);
+        syn_show_text(cr, msg);
+    }
+
+    /* ── The tiles ── */
+    for (int cell = 0; cell < APPGRID_PER_PAGE; cell++) {
+        int idx = first + cell;
+        if (idx >= total) break;
+
+        syn_app_entry_t *e = appgrid_at(s, idx);
+        if (!e) continue;
+
+        int cx = grid_x + (cell % APPGRID_COLS) * cell_w;
+        int cy = grid_y + (cell / APPGRID_COLS) * cell_h;
+
+        if (idx == g->selected) {
+            /* The selection is a plate under the tile, not a border around it:
+             * a 1px outline on a 200px cell is invisible at arm's length, and
+             * this page is meant to be read from further away than a menu. */
+            cairo_rounded_rect(cr, cx + 6, cy + 4, cell_w - 12, cell_h - 8, 16);
+            set_ink(cr, INK_STRONG, 0.13);
+            cairo_fill_preserve(cr);
+            set_accent(cr, 0.55);
+            cairo_stroke(cr);
+        }
+
+        double ix = cx + (cell_w - icon_px) / 2.0;
+        double iy = cy + 12;
+
+        cairo_surface_t *icon = appgrid_icon(e);
+        if (icon) {
+            double sw = cairo_image_surface_get_width(icon);
+            double sh = cairo_image_surface_get_height(icon);
+            if (sw > 0 && sh > 0) {
+                cairo_save(cr);
+                cairo_translate(cr, ix, iy);
+                cairo_scale(cr, icon_px / sw, icon_px / sh);
+                cairo_set_source_surface(cr, icon, 0, 0);
+                /* The decode is at a fixed raster size and the cell is derived
+                 * from the screen, so this is almost never 1:1 — GOOD rather
+                 * than the default, or a downscaled icon aliases badly enough
+                 * to look like the wrong picture. */
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+                cairo_paint(cr);
+                cairo_restore(cr);
+            }
+        } else {
+            icon_draw_monogram(cr, e->name, ix, iy, icon_px);
+        }
+
+        /* The label, centred and clipped to the cell. draw_clipped measures and
+         * ellipsizes; the centring has to measure the CLIPPED string, so it is
+         * done by asking for the extents of what will actually be drawn — an
+         * application called "LibreOffice Calc" is wider than its own cell and
+         * centring on the full name would push the ellipsis off the tile. */
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, idx == g->selected ? INK_STRONG : INK_BODY, 0.95);
+        {
+            double max_w = cell_w - 16;
+            cairo_text_extents_t ext;
+            syn_text_extents(cr, e->name, &ext);
+            double w = ext.width < max_w ? ext.width : max_w;
+            draw_clipped(cr, cx + (cell_w - w) / 2.0, cy + 12 + icon_px + 22,
+                         max_w, e->name);
+        }
+    }
+
+    /* ── The page dots ──
+     *
+     * GNOME's, and they earn their place: without them a grid that scrolls has
+     * no way of saying how much more of itself there is, and Page Down into
+     * nothing is indistinguishable from a key that did not work.
+     */
+    if (pages > 1) {
+        double dot_r = 4, gap = 18;
+        double dots_w = (pages - 1) * gap;
+        double dx = (ob.width - dots_w) / 2.0;
+        double dy = ob.height - foot_h + 12;
+        for (int p = 0; p < pages; p++) {
+            if (p == g->page) set_accent(cr, 0.95);
+            else              set_ink(cr, INK_RULE, 0.8);
+            cairo_arc(cr, dx + p * gap, dy, dot_r, 0, 2 * M_PI);
+            cairo_fill(cr);
+        }
+    }
+
+    /* The footer hint. `\xe2\x80\xa2` and not an arrow: render.c's UI face
+     * draws U+2192 as a garbage glyph — see the note over the control panel's
+     * key hints, which spell out "Enter" for the same reason. */
+    {
+        char foot[128];
+        snprintf(foot, sizeof(foot),
+                 "%d application%s \xc2\xb7 type to search \xc2\xb7 Enter opens "
+                 "\xc2\xb7 Esc closes",
+                 total, total == 1 ? "" : "s");
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_LABEL, 0.85);
+        cairo_text_extents_t ext;
+        syn_text_extents(cr, foot, &ext);
+        cairo_move_to(cr, (ob.width - ext.width) / 2.0, ob.height - 16);
+        syn_show_text(cr, foot);
+    }
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->appgrid_ui.text_buf, s->appgrid_ui.tree, buf);
+}
+
+
 /* ── The emoji picker ────────────────────────────────────────
  *
  * The one panel drawn as a GRID. Everything about that is in the geometry: the
@@ -9244,6 +9486,10 @@ void synui_ui_init(syn_server_t *s)
      * on the first render. */
     s->overview_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->overview_ui.thumb_tree = wlr_scene_tree_create(s->overview_ui.tree);
+    /* The application grid, after mission control and for the same reason the
+     * palette is after the control panel: it is full-screen, so anything
+     * created before it would be covered rather than merely behind it. */
+    s->appgrid_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->deskmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);

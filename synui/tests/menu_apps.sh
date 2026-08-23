@@ -58,6 +58,7 @@ action_for() {
         calendar)  echo calendar   ;;
         ctlpanel)  echo control    ;;
         sound)     echo sounds     ;;
+        appgrid)   echo apps       ;;
         *)         echo "$1"       ;;   # emoji, calc, crop, news, saver, …
     esac
 }

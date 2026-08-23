@@ -802,7 +802,7 @@ pkgver=0.1.0
 #   tests/readme_binds.sh is what makes the README the sixth: every combo in
 #   seed_default_binds() must appear in the hotkey table, so the row moves or
 #   the build fails.
-pkgrel=440
+pkgrel=441
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

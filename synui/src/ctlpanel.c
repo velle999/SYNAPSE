@@ -671,8 +671,8 @@ static const struct ctl_item ctl_items[] = {
       .help = "Time and date in a cell of its own — drag the cell to move it "
               "anywhere in the row. 12/24-hour follows Clock & Time" },
     { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
-      .help = "A grid of dots at the end of the dock that opens the start menu "
-              "— every installed app, not just the pinned ones" },
+      .help = "A grid of dots at the end of the dock. Opens the full-screen "
+              "application page — every app installed, not just the pinned" },
     { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
       .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
