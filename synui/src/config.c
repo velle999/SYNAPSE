@@ -760,9 +760,13 @@ static void seed_default_binds(syn_config_t *cfg)
         /* Move the focused window with the arrow keys, meaning whichever of the
          * two things "move" can mean for the window under the cursor.
          *
-         * A FLOATING window slides by a fixed step, which is the capability
-         * that was missing outright: nothing but a mouse drag could change a
-         * floating window's position. A TILED one moves through the layout
+         * A window the USER places slides by a fixed step, which is the
+         * capability that was missing outright: nothing but a mouse drag could
+         * change such a window's position. That is a floating window, and ⚠
+         * ALSO EVERY WINDOW ON A FLOATING DESKTOP — where nothing is marked
+         * floating because the desktop is, and reading `v->floating` alone made
+         * this key look dead on exactly the desktop people run it on (439).
+         * A TILED one moves through the layout
          * instead, because a tiled window has no position of its own to slide —
          * every layout derives its geometry from the order of ws->windows, so
          * "move" there can only mean "move along that order".

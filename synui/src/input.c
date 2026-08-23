@@ -716,7 +716,34 @@ static void window_move_key(syn_server_t *s, syn_view_t *v, int dx, int dy)
      * fullscreen. */
     if (v->fullscreen) return;
 
-    if (!v->floating) {
+    /*
+     * ⛔ `v->floating` IS THE WINDOW'S FLAG, NOT THE DESKTOP'S — the same trap
+     * move_output fell into in 436, reached here by a different road.
+     *
+     * On a FLOATING desktop no window is marked floating; the DESKTOP is. So
+     * every window there took the reorder branch: layout_move_in_stack duly
+     * rewrote ws->windows and layout_apply ran LAYOUT_FLOATING's pass,
+     * layout_float_arrange — which deliberately steps over every window the
+     * user has ever placed by hand. The record moved and the pixels did not,
+     * and the key read as dead the moment it shipped.
+     *
+     * The question this branch has to ask is not "is this window floating" but
+     * "does a LAYOUT own where this window sits". Only then is its order the
+     * only thing there is to move. A floating desktop hands that ownership to
+     * the user, which is precisely what the slide below is for — so it belongs
+     * on the same side as a floating window.
+     *
+     * ⚠ This is a WIDER test than move_output's, which also asked
+     * `!v->hand_placed`: there the question was whether anything would place
+     * the window after its output changed, and float_arrange still places a
+     * window nobody has touched. Here a grid slot is not a position the user
+     * chose, and pressing a move key IS choosing one — hand_placed below then
+     * opts it out of the grid exactly as a drag would. One chord, one meaning
+     * per kind of desktop: pixels where the user places, order where the
+     * layout does.
+     */
+    if (!v->floating && v->workspace &&
+        v->workspace->layout != LAYOUT_FLOATING) {
         /* One dimension, so both axes fold onto it. Left/Up move earlier in
          * ws->windows, Right/Down later; every layout re-derives its geometry
          * from that order. */
