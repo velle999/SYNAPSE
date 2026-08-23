@@ -130,20 +130,118 @@ wanted_colour() {
 
 # ---- pushing it ----------------------------------------------------------
 
+# ⛔ A MODE THE HARDWARE FORGETS IS A LIGHT THAT GOES OUT.
+#
+# `direct` means "show exactly what the host is streaming", and an ASUS Aura
+# USB mainboard drops back to dark the moment the process that set it exits —
+# which here is every single time, because this is a oneshot with nothing left
+# running behind it. On velle's box that read as the board and its addressable
+# strip lighting up at login and then going out seconds later, while the
+# Corsair DIMMs and the G512 stayed on: those two latch their last direct
+# frame, the Aura board does not. It was not the bridge failing to push. It
+# pushed, the board took it, and then forgot it.
+#
+# `static` is the same colour handed to the controller's OWN effect engine, so
+# it holds with nothing running at all — which is the only thing that can be
+# true for a program that exits.
+#
+# ⚠ So the mode is per DEVICE and not per push. It cannot be one mode for
+# everything: the Corsair Vengeance DIMMs offer Direct and nothing else, and
+# asking a device for a mode it does not have fails the WHOLE call rather than
+# that one device.
+MAP=$CFG/rgb.devices
+
+# The map: `index<TAB>mode<TAB>name`, one line per device, and a plain file so
+# somebody who wants their keyboard on a different mode can say so with an
+# editor.
+#
+# ⚠ CACHED, because `--list-devices` is a full bus probe — 8.6 seconds measured
+# here — and a push that had to enumerate first would pay it twice. Every path
+# that can notice the map is wrong rebuilds it: a push that fails, `syn-rgb on`,
+# and `syn-rgb devices`.
+map_build() {   # map_build [LISTING] — parse a listing, or fetch one
+    local out=${1:-} tmp
+    have_openrgb || return 1
+    [ -n "$out" ] || out=$("$RGB" --list-devices 2>/dev/null) || return 1
+    mkdir -p "$CFG"
+    tmp=$MAP.tmp.$$
+    printf '%s\n' "$out" | awk '
+        /^[0-9]+:[ ]/ {
+            idx = $0; sub(/:.*/, "", idx)
+            name = $0; sub(/^[0-9]+:[ ]*/, "", name)
+            seen = 0
+            next
+        }
+        # ⚠ The ACTIVE mode is the bracketed one, and `[Static]` and `Static`
+        # are the same answer to the only question being asked here: can this
+        # device hold a colour by itself once we are gone?
+        /^[ \t]*Modes:/ {
+            if (idx == "" || seen) next
+            printf "%s\t%s\t%s\n", idx,
+                   ($0 ~ /(^|[ \t])\[?Static\]?([ \t]|$)/ ? "static" : "direct"),
+                   name
+            seen = 1
+        }
+    ' > "$tmp" 2>/dev/null
+    if [ -s "$tmp" ]; then
+        mv "$tmp" "$MAP"
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# One invocation, one bus probe, every device in it — `--device` can be given
+# repeatedly with its own mode and colour, so this stays exactly as expensive
+# as the single blanket push it replaces.
+#
+# ⚠ A STALE MAP CANNOT PAINT THE WRONG COLOUR. Every device is being handed the
+# same one; an index that has shifted under us can only hand a device the wrong
+# MODE, and an index that has gone away fails the call, which is what triggers
+# the rebuild below.
+push_mapped() {   # push_mapped RRGGBB
+    local hex=$1 idx mode name
+    local -a args=()
+    [ -s "$MAP" ] || return 1
+    while IFS=$'\t' read -r idx mode name; do
+        case $idx in ''|\#*) continue ;; esac
+        [ -n "$mode" ] || continue
+        args+=(-d "$idx" -m "$mode" -c "$hex")
+    done < "$MAP"
+    [ "${#args[@]}" -gt 0 ] || return 1
+    "$RGB" "${args[@]}" >/dev/null 2>&1
+}
+
+push_all() {   # push_all MODE RRGGBB — every device, one mode, the old way
+    "$RGB" --mode "$1" --color "$2" >/dev/null 2>&1
+}
+
 push() {   # push RRGGBB
     local hex=$1 mode rc
-    mode=$(getval "$STATE" mode direct)
     have_openrgb || { warn "openrgb is not installed"; return 3; }
-    "$RGB" --mode "$mode" --color "$hex" >/dev/null 2>&1
-    rc=$?
-    # ⚠ Not every device has every mode. `direct` is what a device that can be
-    # driven live offers and `static` is what the rest do, so one retry rather
-    # than a table of hardware this program has no way to keep current.
-    if [ "$rc" -ne 0 ] && [ "$mode" != static ]; then
-        "$RGB" --mode static --color "$hex" >/dev/null 2>&1
+
+    # An explicit `mode=` in rgb.state is somebody overriding all of this by
+    # hand, and it stays one mode for everything, as it always did. `auto` —
+    # the default, and what an absent key means — is the per-device map.
+    mode=$(getval "$STATE" mode auto)
+    if [ "$mode" != auto ]; then
+        push_all "$mode" "$hex"
         rc=$?
+        if [ "$rc" -ne 0 ] && [ "$mode" != static ]; then
+            push_all static "$hex"
+            rc=$?
+        fi
+        return "$rc"
     fi
-    return "$rc"
+
+    push_mapped "$hex" && return 0
+    # No map yet, or a device came or went since it was built.
+    map_build && push_mapped "$hex" && return 0
+    # ⚠ The blanket push is still the last word. A machine whose listing this
+    # cannot parse gets its colour — just not, on the hardware that needs it,
+    # the mode that would have held it.
+    push_all direct "$hex" && return 0
+    push_all static "$hex"
 }
 
 # How many times one run will chase a colour that moved under it. See the
@@ -214,7 +312,10 @@ unit_do() {   # unit_do enable|disable
 
 case ${1:-status} in
     apply)  cmd_apply ;;
-    on)     setval on yes;  unit_do enable;  cmd_apply ;;
+    # ⚠ The map is dropped rather than kept: `syn-rgb on` after plugging
+    # something in is the natural place to notice new hardware, and the
+    # apply below rebuilds it.
+    on)     setval on yes;  unit_do enable;  rm -f "$MAP";  cmd_apply ;;
     off)    setval on no;   unit_do disable
             # Left as they are rather than blanked: turning the bridge off is
             # saying "stop following", not "turn my lights off". `syn-rgb dark`
@@ -237,12 +338,21 @@ case ${1:-status} in
             cmd_apply ;;
     devices)
             have_openrgb || { warn "openrgb is not installed"; exit 3; }
-            "$RGB" --list-devices ;;
+            # ⚠ ONE PROBE, BOTH JOBS: the listing a human asked to see is the
+            # same listing the map is built from, so this doubles as the repair
+            # for a map that has gone stale.
+            listing=$("$RGB" --list-devices) || exit 1
+            printf '%s\n' "$listing"
+            map_build "$listing" || true ;;
     status)
             printf 'on\t%s\n'         "$(getval "$STATE" on no)"
             printf 'follow\t%s\n'     "$(getval "$STATE" follow accent)"
             printf 'brightness\t%s\n' "$(getval "$STATE" brightness 1.0)"
-            printf 'mode\t%s\n'       "$(getval "$STATE" mode direct)"
+            printf 'mode\t%s\n'       "$(getval "$STATE" mode auto)"
+            # ⚠ The redirect is what fails when there is no map, and its
+            # complaint is the SHELL'S, printed before a `2>/dev/null` on the
+            # command has been applied. Ask whether the file is there instead.
+            printf 'devices\t%s\n'    "$([ -s "$MAP" ] && wc -l < "$MAP" || printf 0)"
             printf 'accent\t%s\n'     "$(accent_colour || printf 'none')"
             printf 'colour\t%s\n'     "$(wanted_colour || printf 'none')"
             printf 'openrgb\t%s\n'    "$(have_openrgb && printf yes || printf no)" ;;
@@ -255,7 +365,7 @@ case ${1:-status} in
             say "  syn-rgb colour RRGGBB     one colour, and stay on it"
             say "  syn-rgb brightness 0..1   how bright the lights run"
             say "  syn-rgb dark              all off, without turning this off"
-            say "  syn-rgb devices           what OpenRGB can see"
+            say "  syn-rgb devices           what OpenRGB can see, and re-read it"
             say "  syn-rgb status            what it would do" ;;
     *)      warn "unknown command: $1  (try syn-rgb help)"; exit 2 ;;
 esac

@@ -689,7 +689,41 @@ pkgver=0.1.0
 #   Bounded at four so a slideshow cannot pin the process open, and the ordinary
 #   case is still exactly one push — asserted, because a re-check that always
 #   went round twice would double the traffic to a bus this slow.
-pkgrel=434
+# 435 THE BOARD'S LIGHTS WENT OUT A FEW SECONDS AFTER LOGIN, AND THE RAM'S DID
+#   NOT. Every device came up lit and then all but the RAM and the keyboard
+#   dropped to dark — which read as the bridge failing to reach them, and was
+#   the opposite: it reached them, they took the colour, and then forgot it.
+#
+#   ⛔ `direct` MEANS "SHOW WHAT THE HOST IS STREAMING", AND THIS IS A ONESHOT.
+#   An ASUS Aura USB mainboard falls back to dark the moment the process that
+#   set it exits, which for syn-rgb is a second or so after every push. The
+#   Corsair DIMMs and the G512 latch their last direct frame and so looked
+#   fine; the board and its addressable header did not, and so looked broken.
+#   Nothing was wrong before 431 because the only thing driving these devices
+#   was a resident OpenRGB, and a resident host is exactly what direct needs.
+#
+#   `static` is the same colour handed to the controller's OWN effect engine.
+#   It holds with nothing attached, which is the only thing that can be true
+#   for a program that exits.
+#
+#   ⚠ SO THE MODE IS PER DEVICE, and it cannot be one mode for everything: the
+#   Corsair Vengeance DIMMs here have Direct and nothing else, and asking a
+#   device for a mode it does not have fails the WHOLE call rather than that
+#   device. syn-rgb enumerates once, writes `index<TAB>mode<TAB>name` to
+#   ~/.config/synui/rgb.devices, and pushes every device in ONE invocation with
+#   its own -d/-m/-c — so a push costs exactly what the old blanket one did.
+#
+#   ⚠ The map is CACHED because `--list-devices` is a full bus probe (8.6s
+#   measured here, 1.0s against the SDK server of 434). Everything that can
+#   notice it is stale rebuilds it: a failed push, `syn-rgb on`, `syn-rgb
+#   devices`. A stale map cannot paint the wrong COLOUR — every device is being
+#   handed the same one — only the wrong mode, and a device that has gone away
+#   fails the call, which is what triggers the rebuild.
+#
+#   `mode=` in rgb.state is still honoured as a hand override for everything,
+#   and its default is now `auto`. The old blanket direct-then-static push
+#   survives as the last resort for a listing this cannot parse.
+pkgrel=435
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
