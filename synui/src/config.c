@@ -162,6 +162,9 @@
  *                               (default menu; what the Super tap, the
  *                                `start_menu` action and the dock's apps button
  *                                all open — see syn_start_menu_t)
+ *   dock_clock_analog = on|off  (default off; the clock cell as a DIAL. The
+ *                                one clock that fits a vertical dock — a
+ *                                column cannot widen for a time string)
  *   dock_apps_button = on|off   (default on; the "show all apps" grid at the
  *                                end of the run — opens the start menu)
  *   dock_power_button = on|off  (default on; the power button past it — a menu
@@ -210,6 +213,10 @@
  * quickshell (WidgetFrame.qml). Here so the key has one spelling and one clamp,
  * exactly like bar_shell/bar_edge below:
  *   widget_glass = auto|off|on  (auto follows the theme, like dock_style)
+ *   widget_clock_face = minimal|classic|roman|neon
+ *                               (default minimal; the face the analog clock
+ *                                WIDGET draws. Not the dock's clock — that is
+ *                                dock_clock_analog and has one design)
  *
  * The bar (quickshell) — a SEPARATE PROCESS, so the compositor parses these
  * four and acts on none of them. They live here so each setting has one
@@ -1329,6 +1336,10 @@ static void config_set_defaults(syn_config_t *cfg)
     /* -1 = past the last icon, which is where the clock has always been and the
      * only end of the row that survives apps opening and closing. */
     cfg->dock_clock_slot   = -1;
+    /* Off: a horizontal dock's digits work, and an upgrade must not swap
+     * somebody's clock for a different one. The row exists because a VERTICAL
+     * dock's digits do not — see dock_clock_analog in syn_config_t. */
+    cfg->dock_clock_analog = 0;
     /* On, unlike the clock: the bar does not have one of these, and a dock of
      * pinned icons has no way to reach an app that is not on it. */
     cfg->dock_apps_button  = 1;
@@ -1354,6 +1365,7 @@ static void config_set_defaults(syn_config_t *cfg)
      * Mac dock has, without becoming a lozenge on a 200px dock. */
     cfg->dock_radius       = 26;
     cfg->widget_glass      = SYN_WIDGET_GLASS_AUTO;
+    cfg->widget_clock_face = SYN_CLOCK_FACE_MINIMAL;
     cfg->scene_ink         = 1;
     cfg->wallpaper_accent  = SYN_WP_ACCENT_AUTO;
     cfg->dock_pin_count    = 0;
@@ -2433,6 +2445,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_magnify = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_clock") == 0)
         cfg->dock_clock = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_clock_analog") == 0)
+        cfg->dock_clock_analog = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_apps_button") == 0)
         cfg->dock_apps_button = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_power_button") == 0)
@@ -2658,6 +2672,16 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_radius = atoi(val);
         if (cfg->dock_radius < 0)  cfg->dock_radius = 0;
         if (cfg->dock_radius > 64) cfg->dock_radius = 64;
+    }
+    else if (strcmp(key, "widget_clock_face") == 0) {
+        /* These ARE the control panel's option names folded to lower case, the
+         * rule start_menu_style already states: ctl_format() persists an enum
+         * that way and there is deliberately no second table. */
+        if      (strcmp(val, "minimal") == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_MINIMAL;
+        else if (strcmp(val, "classic") == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_CLASSIC;
+        else if (strcmp(val, "roman")   == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_ROMAN;
+        else if (strcmp(val, "neon")    == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_NEON;
+        else wlr_log(WLR_ERROR, "synui: widget_clock_face: unknown '%s'", val);
     }
     else if (strcmp(key, "widget_glass") == 0) {
         if      (strcmp(val, "auto") == 0) cfg->widget_glass = SYN_WIDGET_GLASS_AUTO;

@@ -649,6 +649,19 @@ dock_options_test = executable('dock_options_test',
   build_by_default : false)
 test('dock_options', dock_options_test)
 
+# Does the clock FIT the cell the layout gives it? A separate rig from the one
+# above because that one stubs syn_text_extents() to zero on purpose — which is
+# right for asserting the layout's floor and is exactly why a clock that ran off
+# both edges of a vertical dock never failed a test. This one draws with cairo's
+# real text and reads the pixels back. Same stub set otherwise.
+dock_clock_fit_test = executable('dock_clock_fit_test',
+  ['tests/dock_clock_fit_test.c', 'src/dock.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('dock_clock_fit', dock_clock_fit_test)
+
 # The clock cell's own drag: it can be picked up and carried into any gap in the
 # icon row (dock_clock_slot, persisted as clock_slot in dock.state). Same stub
 # rig as the reorder test — no pointer exists headless, so dock.c is driven

@@ -617,6 +617,43 @@ int main(void)
     relayout();
     check_int(buf_w, flat_run(4, false), "…and gives the cell back when off");
 
+    /* ── 9b. The analog row is a STYLE, and only appears with a clock ──── */
+    /* dock_clock is off at this point — see the end of section 5. */
+    dockmenu_open(&server, NULL, 400, OUT_H - 20);
+    check(!menu_has(SYN_DOCKACT_CLOCK_ANALOG),
+          "with no dock clock, the menu offers no face for it");
+    dockmenu_close(&server);
+
+    server.config.dock_clock = 1;
+    relayout();
+    dockmenu_open(&server, NULL, 400, OUT_H - 20);
+    check(menu_has(SYN_DOCKACT_CLOCK_ANALOG), "…and offers one when there is");
+    dockmenu_close(&server);
+
+    /* The switch, through the menu's own click path — and the CELL changes
+     * shape, which is the whole point: a dial is square and a time is wide. */
+    int digital_run = 0, analog_run = 0;
+    {
+        bar_x = fake_tree.node.x;
+        probe_y = fake_tree.node.y + buf_h - 24;
+        int f, l;
+        span_of(dock_clock_at, bar_x, probe_y, buf_w, &f, &l);
+        digital_run = l - f + 1;
+
+        server.config.dock_clock_analog = 1;
+        relayout();
+        bar_x = fake_tree.node.x;
+        probe_y = fake_tree.node.y + buf_h - 24;
+        span_of(dock_clock_at, bar_x, probe_y, buf_w, &f, &l);
+        analog_run = l - f + 1;
+    }
+    check_int(analog_run, STOCK, "an analog cell is the slab's own thickness");
+    check(analog_run != digital_run,
+          "…which is not the width the digits asked for");
+    server.config.dock_clock_analog = 0;
+    server.config.dock_clock = 0;
+    relayout();
+
     /* ── 10. The power button ──────────────────────────────────────────── */
     server.config.dock_power_button = 1;
     relayout();

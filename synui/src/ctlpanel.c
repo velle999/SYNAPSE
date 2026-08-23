@@ -107,6 +107,11 @@ static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Rig
  * the only one of the three that is not an override. */
 static const char *const ctl_names_dock_style[]   = { "Auto", "Solid", "Glass" };
 static const char *const ctl_names_widget_glass[] = { "Auto", "Off", "On" };
+/* syn_clock_face_t, in its order. ⚠ ctl_format() persists an enum as its option
+ * name FOLDED TO LOWER CASE, and config.c parses exactly those four words back —
+ * so renaming one of these renames a config key's legal value. */
+static const char *const ctl_names_clock_face[] =
+    { "Minimal", "Classic", "Roman", "Neon" };
 /* syn_wp_accent_t, same three positions and the same spellings — a separate
  * array rather than sharing the one above because the two enums are free to
  * grow apart, and a shared table is how a fourth position on one of them
@@ -676,6 +681,10 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_DOCK_CLOCK,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock clock",       NULL,
       .help = "Time and date in a cell of its own — drag the cell to move it "
               "anywhere in the row. 12/24-hour follows Clock & Time" },
+    { CTL_ROW_DOCK_CLOCK_ANALOG, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Analog dock clock", NULL,
+      .help = "Draw the dock clock as a dial. The one clock that fits a "
+              "dock on the left or right edge — a column cannot widen for a "
+              "time string" },
     { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
       .help = "A grid of dots at the end of the dock. Always opens the "
               "application overlay" },
@@ -745,6 +754,13 @@ static const struct ctl_item ctl_items[] = {
       .key = "widget_glass", .off = CFG(widget_glass), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_widget_glass), .apply = CTL_APPLY_NONE,
       .help = "Desktop widgets take the dock's glass instead of the HUD panel" },
+
+    { CTL_ROW_CLOCK_FACE,    CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Analog clock face", NULL,
+      .key = "widget_clock_face", .off = CFG(widget_clock_face),
+      .vtype = CTL_VAL_ENUM, NAMES(ctl_names_clock_face),
+      .apply = CTL_APPLY_NONE,
+      .help = "Which dial the analog clock WIDGET draws — the desktop one, "
+              "from Widgets. The dock's own analog clock has one design" },
 
     { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL,
       .section = "Shell" },
@@ -2024,6 +2040,13 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
         else snprintf(buf, n, "%s", s->config.dock_clock ? "on" : "off");
         break;
+    case CTL_ROW_DOCK_CLOCK_ANALOG:
+        /* "n/a" for a dock with no clock as well as for no dock: this row is a
+         * style, and there is nothing to style. */
+        if (!s->config.dock_enabled || !s->config.dock_clock)
+            snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", s->config.dock_clock_analog ? "on" : "off");
+        break;
     case CTL_ROW_DOCK_APPS:
         if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
         else snprintf(buf, n, "%s", s->config.dock_apps_button ? "on" : "off");
@@ -3270,6 +3293,24 @@ static void ctlpanel_activate(syn_server_t *s)
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock %s windows",
                  s->config.dock_on_top ? "above" : "below");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_DOCK_CLOCK_ANALOG:
+        if (!s->config.dock_enabled || !s->config.dock_clock) {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     s->config.dock_enabled ? "the dock clock is off"
+                                            : "dock is off");
+            ctlpanel_repaint(s);
+            return;
+        }
+        s->config.dock_clock_analog = !s->config.dock_clock_analog;
+        dock_state_save(s);
+        dock_relayout(s);
+        dock_wake(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "dock clock %s",
+                 s->config.dock_clock_analog ? "analog" : "digital");
         ctlpanel_repaint(s);
         return;
 

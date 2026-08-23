@@ -396,6 +396,7 @@ static int dock_headroom(const syn_config_t *c)
 #define DOCK_CLOCK_RUN_H   92   /* floor for a horizontal bar's clock cell */
 #define DOCK_CLOCK_RUN_V   40
 #define DOCK_CLOCK_GUTTER  12   /* ink to cell edge, each side */
+#define DOCK_CLOCK_LINE_GAP 3   /* between the time and the date, in a column */
 
 /* Defined below, with the clock itself; the layout needs both up here. */
 static void dock_clock_strings(syn_server_t *s, bool vertical,
@@ -457,37 +458,137 @@ static double dock_text_w(cairo_t *cr, const char *text, double size)
 }
 
 /*
- * How much run the clock cell needs, measured.
+ * ── The clock cell's size, and the two font sizes inside it ─────────────────
  *
- * Cached on the clock's own stamp (which carries the format as well as the
- * time — see dock_clock_stamp) and the thickness, because dock_metrics() is on
- * the pointer-motion path and runs per output per event. The strings only
- * change once a minute at stock.
+ * ⚠ MEASURE AND DRAW HAVE TO AGREE, and this is the second time that has had to
+ * be said in this file. dock_measure_cr() re-selects the UI font on every call
+ * precisely so a cell is never measured in one face and drawn in another; the
+ * font SIZES had exactly the same split, because dock_clock_run() measured at
+ * 17/11 and dock_draw_clock() wrote 17/11 out again a few hundred lines away.
+ *
+ * That was harmless while the sizes were constants. It stopped being harmless
+ * the moment the sizes had to move, which is what a VERTICAL column forces:
+ *
+ * ⛔ A COLUMN CANNOT WIDEN. A horizontal bar's clock cell grows along the run
+ * until the string fits, which is what dock_clock_run() has always done. A
+ * column's run is its HEIGHT — the width is `dock_height`, 64px at stock, and
+ * nothing the clock does can change it. So the old code did the only thing left
+ * and gave up: DOCK_CLOCK_RUN_V was a flat 40px cell with a 15px time drawn
+ * centred in it. "12:34 PM" at 15px is about 65px wide. It ran straight off both
+ * sides of the column and out of the dock — reported as the clock not fitting in
+ * vertical mode, which is exactly what it was.
+ *
+ * The fix is the other axis: hold the width and bring the SIZE down until the
+ * string fits it, then grow the run (the height) to hold both lines at whatever
+ * size that turned out to be. Both answers come from here so the two callers
+ * cannot drift again.
  */
-static int dock_clock_run(syn_server_t *s, bool vertical, int thick)
-{
-    if (vertical) return dock_clock_px(DOCK_CLOCK_RUN_V, thick);
+typedef struct {
+    int  run;            /* along the bar's long axis */
+    int  t_px, d_px;     /* the time and date font sizes, as drawn */
+    bool analog;         /* a face, not two lines of text */
+} dock_clock_layout_t;
 
-    static long cached_stamp = -1;
-    static int  cached_thick = -1, cached_run = 0;
-    long stamp = dock_clock_stamp(s);
-    if (stamp == cached_stamp && thick == cached_thick) return cached_run;
+/* Largest size at or below `want` whose rendering of `text` fits `avail`, with
+ * a floor: below about 9px a date is a row of grey smudges rather than a date,
+ * and a clock nobody can read is not an improvement on one that overflows. */
+static int dock_clock_fit(cairo_t *cr, const char *text, int want, int avail)
+{
+    for (int px = want; px > 9; px--)
+        if (dock_text_w(cr, text, px) <= avail) return px;
+    return 9;
+}
+
+static void dock_clock_layout(syn_server_t *s, bool vertical, int thick,
+                              dock_clock_layout_t *out)
+{
+    memset(out, 0, sizeof(*out));
+
+    /*
+     * The analog face: a SQUARE cell, in both orientations, and that is the
+     * whole reason it fixes the column. A dial has no wide side — it needs the
+     * same number of pixels each way and a column has `thick` of them, so the
+     * cell is thick × thick and the face fills it. Nothing is measured, nothing
+     * can overflow, and the same cell reads identically on a bar and a column.
+     */
+    if (s->config.dock_clock_analog) {
+        out->analog = true;
+        out->run    = thick;
+        return;
+    }
 
     char time_s[32] = {0}, date_s[32] = {0};
     dock_clock_strings(s, vertical, time_s, sizeof time_s,
                        date_s, sizeof date_s);
 
     cairo_t *cr = dock_measure_cr();
-    double w = dock_text_w(cr, time_s, dock_clock_font(17, thick));
-    double dw = dock_text_w(cr, date_s, dock_clock_font(11, thick));
-    if (dw > w) w = dw;
+    int gutter  = dock_clock_px(DOCK_CLOCK_GUTTER, thick);
 
-    int run = (int)lround(w) + 2 * dock_clock_px(DOCK_CLOCK_GUTTER, thick);
-    int floor_run = dock_clock_px(DOCK_CLOCK_RUN_H, thick);
-    if (run < floor_run) run = floor_run;
+    if (!vertical) {
+        /* The bar's: the sizes are fixed and the CELL grows to fit them. */
+        out->t_px = dock_clock_font(17, thick);
+        out->d_px = dock_clock_font(11, thick);
 
-    cached_stamp = stamp; cached_thick = thick; cached_run = run;
-    return run;
+        double w  = dock_text_w(cr, time_s, out->t_px);
+        double dw = dock_text_w(cr, date_s, out->d_px);
+        if (dw > w) w = dw;
+
+        out->run = (int)lround(w) + 2 * gutter;
+        int floor_run = dock_clock_px(DOCK_CLOCK_RUN_H, thick);
+        if (out->run < floor_run) out->run = floor_run;
+        return;
+    }
+
+    /* The column's: the CELL's width is fixed and the sizes come down to fit
+     * it. A narrower gutter than the bar's, because the whole budget here is
+     * `thick` — 12px each side of a 64px column is a third of it. */
+    int avail = thick - 2 * (gutter / 2);
+    if (avail < 16) avail = 16;
+
+    out->t_px = dock_clock_fit(cr, time_s, dock_clock_font(15, thick), avail);
+    out->d_px = dock_clock_fit(cr, date_s, dock_clock_font(10, thick), avail);
+    /* The date never outsizes the time: it is the secondary line, and a fitted
+     * time that came down to 10px beside a 10px date reads as two times. */
+    if (out->d_px > out->t_px) out->d_px = out->t_px;
+
+    /* Run = both lines, the gap between them, and a margin top and bottom. The
+     * floor is what a short time on a stock dock has always had. */
+    out->run = out->t_px + DOCK_CLOCK_LINE_GAP + out->d_px
+             + 2 * dock_clock_px(6, thick);
+    int floor_run = dock_clock_px(DOCK_CLOCK_RUN_V, thick);
+    if (out->run < floor_run) out->run = floor_run;
+}
+
+/*
+ * How much run the clock cell needs.
+ *
+ * Cached on the clock's own stamp (which carries the format and the analog
+ * switch as well as the time — see dock_clock_stamp) and the thickness, because
+ * dock_metrics() is on the pointer-motion path and runs per output per event.
+ * The strings only change once a minute at stock.
+ *
+ * ⚠ THE ORIENTATION IS IN THE CACHE KEY. It was not, and it did not have to be
+ * while the vertical answer was a constant that never reached this code; both
+ * orientations are measured now, and one dock can be asked for both within a
+ * frame — dock_slot_at() asks for the current edge while a drag is asking about
+ * another.
+ */
+static int dock_clock_run(syn_server_t *s, bool vertical, int thick)
+{
+    static long cached_stamp = -1;
+    static int  cached_thick = -1, cached_run = 0;
+    static int  cached_vert = -1;
+    long stamp = dock_clock_stamp(s);
+    if (stamp == cached_stamp && thick == cached_thick &&
+        cached_vert == (int)vertical)
+        return cached_run;
+
+    dock_clock_layout_t l;
+    dock_clock_layout(s, vertical, thick, &l);
+
+    cached_stamp = stamp; cached_thick = thick; cached_vert = (int)vertical;
+    cached_run = l.run;
+    return l.run;
 }
 
 /* Everything both the renderer and the hit tests need to agree about, derived
@@ -1457,8 +1558,12 @@ static void dock_clock_strings(syn_server_t *s, bool vertical,
 static long dock_clock_stamp(syn_server_t *s)
 {
     time_t now = time(NULL);
+    /* ⚠ ANALOG TICKS AT 1 Hz WHATEVER THE SECONDS SETTING SAYS — but only when
+     * there is a second hand to move, which is the same setting. A face with no
+     * second hand is as still as the digits it replaced. */
     long t = (long)(s->clock.seconds ? now : now / 60);
-    return t * 4 + (s->clock.fmt24 ? 2 : 0) + (s->clock.seconds ? 1 : 0);
+    return t * 8 + (s->config.dock_clock_analog ? 4 : 0)
+                 + (s->clock.fmt24 ? 2 : 0) + (s->clock.seconds ? 1 : 0);
 }
 
 /* Centre `text` at `size` px in the box, `dy` down from its middle. */
@@ -1472,14 +1577,111 @@ static void dock_clock_line(cairo_t *cr, const char *text, double size,
     syn_show_text(cr, text);
 }
 
+/*
+ * The analog face.
+ *
+ * ⚠ THIS IS WHY IT EXISTS: it is the only clock that fits a vertical dock
+ * without compromise. A column is `dock_height` wide and a time is a WIDE
+ * string; a dial is square, so the same 64px that cannot hold "12:34 PM" holds
+ * a complete clock with room to spare. On a horizontal bar it is a preference —
+ * on a column it is the answer.
+ *
+ * Drawn rather than themed, like the apps and power buttons beside it: the ink
+ * and the accent are the panel's, on all fourteen themes.
+ *
+ * `frac` on the hour and minute hands is not decoration. A minute hand that
+ * jumps and an hour hand that sits exactly on 3 until it snaps to 4 is a clock
+ * that reads wrong twice an hour — the hour hand belongs between the numerals
+ * for 58 of every 60 minutes, and that is most of what makes a dial legible at
+ * a glance.
+ */
+static void dock_draw_clock_face(syn_server_t *s, cairo_t *cr,
+                                 const dock_metrics_t *m)
+{
+    double cx = m->clk_x + m->clk_w / 2.0;
+    double cy = m->clk_y + m->clk_h / 2.0;
+    double box = (m->clk_w < m->clk_h ? m->clk_w : m->clk_h);
+    double r   = box / 2.0 - box * 0.10;
+    if (r < 4) return;
+
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+
+    const float *ink = s->config.panel_ink;
+    const float *acc = s->config.panel_accent;
+
+    /* The dial: a rim, and a tick at each hour with the quarters longer. Four
+     * long marks is what tells you which way up a face with no numerals is, and
+     * at this size numerals would be three pixels tall. */
+    cairo_save(cr);
+    cairo_set_line_width(cr, r * 0.075);
+    cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.30);
+    cairo_arc(cr, cx, cy, r, 0, 2 * M_PI);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < 12; i++) {
+        double a = i * M_PI / 6.0 - M_PI_2;
+        bool quarter = (i % 3) == 0;
+        double outer = r * 0.90;
+        double inner = r * (quarter ? 0.68 : 0.78);
+        cairo_set_line_width(cr, r * (quarter ? 0.10 : 0.06));
+        cairo_set_source_rgba(cr, ink[0], ink[1], ink[2],
+                              quarter ? 0.70 : 0.38);
+        cairo_move_to(cr, cx + cos(a) * inner, cy + sin(a) * inner);
+        cairo_line_to(cr, cx + cos(a) * outer, cy + sin(a) * outer);
+        cairo_stroke(cr);
+    }
+
+    double sec  = tm.tm_sec;
+    double minf = tm.tm_min + sec / 60.0;
+    double hourf = (tm.tm_hour % 12) + minf / 60.0;
+
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+    /* Hour, then minute: the longer hand on top, so where they overlap the one
+     * that moves is the one you can see. */
+    double ha = hourf * M_PI / 6.0 - M_PI_2;
+    cairo_set_line_width(cr, r * 0.16);
+    cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.95);
+    cairo_move_to(cr, cx - cos(ha) * r * 0.14, cy - sin(ha) * r * 0.14);
+    cairo_line_to(cr, cx + cos(ha) * r * 0.50, cy + sin(ha) * r * 0.50);
+    cairo_stroke(cr);
+
+    double ma = minf * M_PI / 30.0 - M_PI_2;
+    cairo_set_line_width(cr, r * 0.11);
+    cairo_move_to(cr, cx - cos(ma) * r * 0.16, cy - sin(ma) * r * 0.16);
+    cairo_line_to(cr, cx + cos(ma) * r * 0.78, cy + sin(ma) * r * 0.78);
+    cairo_stroke(cr);
+
+    /* The second hand follows the SAME setting the digits did — Clock & Time's
+     * "Show seconds" — so the desktop has one answer about whether it counts
+     * seconds, and a dock that is not animating a hand is not waking once a
+     * second to redraw one. */
+    if (s->clock.seconds) {
+        double sa = sec * M_PI / 30.0 - M_PI_2;
+        cairo_set_line_width(cr, r * 0.055);
+        cairo_set_source_rgba(cr, acc[0], acc[1], acc[2], 0.95);
+        cairo_move_to(cr, cx - cos(sa) * r * 0.22, cy - sin(sa) * r * 0.22);
+        cairo_line_to(cr, cx + cos(sa) * r * 0.86, cy + sin(sa) * r * 0.86);
+        cairo_stroke(cr);
+    }
+
+    /* The pin, over both hands — an accent dot when there is a second hand to
+     * belong to, the ink when there is not. */
+    if (s->clock.seconds)
+        cairo_set_source_rgba(cr, acc[0], acc[1], acc[2], 1.0);
+    else
+        cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.95);
+    cairo_arc(cr, cx, cy, r * 0.085, 0, 2 * M_PI);
+    cairo_fill(cr);
+    cairo_restore(cr);
+}
+
 static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
                             const dock_metrics_t *m)
 {
     if (m->clk_w <= 0 || m->clk_h <= 0) return;
-
-    char time_s[32] = {0}, date_s[32] = {0};
-    dock_clock_strings(s, m->vertical, time_s, sizeof time_s,
-                       date_s, sizeof date_s);
 
     /*
      * A hairline on each side of the cell that has something next to it, so the
@@ -1515,23 +1717,52 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
         cairo_stroke(cr);
     }
 
+    /* The rules above belong to the CELL and are drawn either way; only what
+     * goes inside it changes. */
+    dock_clock_layout_t l;
+    dock_clock_layout(s, m->vertical, m->thick, &l);
+    if (l.analog) {
+        dock_draw_clock_face(s, cr, m);
+        return;
+    }
+
+    char time_s[32] = {0}, date_s[32] = {0};
+    dock_clock_strings(s, m->vertical, time_s, sizeof time_s,
+                       date_s, sizeof date_s);
+
     cairo_select_font_face(cr, syn_text_ui_font(), CAIRO_FONT_SLANT_NORMAL,
                            CAIRO_FONT_WEIGHT_NORMAL);
     double cx = m->clk_x + m->clk_w / 2.0;
     double cy = m->clk_y + m->clk_h / 2.0;
 
+    const float *ink = s->config.panel_ink;
+
+    if (m->vertical) {
+        /*
+         * STACKED FROM THE MIDDLE at the sizes dock_clock_layout() fitted, and
+         * the two lines are placed against each other rather than at offsets
+         * from the centre. The old code drew the date at a flat +13px from the
+         * middle whatever size the time was, which is a gap that only looked
+         * right at one font size — and once the time can shrink to fit the
+         * column, there is no one size any more.
+         */
+        double total = l.t_px + DOCK_CLOCK_LINE_GAP + l.d_px;
+        double top   = cy - total / 2.0;
+
+        cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.95);
+        dock_clock_line(cr, time_s, l.t_px, cx, top + l.t_px);
+        cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.62);
+        dock_clock_line(cr, date_s, l.d_px, cx, top + total);
+        return;
+    }
+
     /* Sized off the slab, so the whole cell grows with the Dock size row rather
      * than leaving a 17px time adrift in a 200px bar. At the stock 64 every one
      * of these is the literal it used to be. */
-    int t_px = dock_clock_font(m->vertical ? 15 : 17, m->thick);
-    int d_px = dock_clock_font(m->vertical ? 10 : 11, m->thick);
-
-    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
-                          s->config.panel_ink[2], 0.95);
-    dock_clock_line(cr, time_s, t_px, cx, cy - dock_clock_px(1, m->thick));
-    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
-                          s->config.panel_ink[2], 0.62);
-    dock_clock_line(cr, date_s, d_px, cx, cy + dock_clock_px(13, m->thick));
+    cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.95);
+    dock_clock_line(cr, time_s, l.t_px, cx, cy - dock_clock_px(1, m->thick));
+    cairo_set_source_rgba(cr, ink[0], ink[1], ink[2], 0.62);
+    dock_clock_line(cr, date_s, l.d_px, cx, cy + dock_clock_px(13, m->thick));
 }
 
 static void dock_render_output(syn_output_t *o)
@@ -2825,6 +3056,8 @@ void dock_state_load(syn_config_t *cfg)
             if (v < 0) v = -1;
             if (v > DOCK_MAX_ENTRIES) v = DOCK_MAX_ENTRIES;
             cfg->dock_clock_slot = v;
+        } else if (strncmp(p, "clock_analog=", 13) == 0) {
+            cfg->dock_clock_analog = strcmp(p + 13, "on") == 0;
         } else if (strncmp(p, "apps=", 5) == 0) {
             cfg->dock_apps_button = strcmp(p + 5, "on") == 0;
         } else if (strncmp(p, "power=", 6) == 0) {
@@ -2858,6 +3091,8 @@ void dock_state_save(syn_server_t *s)
     fprintf(f, "magnify=%s\n",  s->config.dock_magnify  ? "on" : "off");
     fprintf(f, "clock=%s\n",    s->config.dock_clock    ? "on" : "off");
     fprintf(f, "clock_slot=%d\n", s->config.dock_clock_slot);
+    fprintf(f, "clock_analog=%s\n",
+            s->config.dock_clock_analog ? "on" : "off");
     fprintf(f, "apps=%s\n",     s->config.dock_apps_button ? "on" : "off");
     fprintf(f, "power=%s\n",    s->config.dock_power_button ? "on" : "off");
     for (int i = 0; i < s->config.dock_pin_count; i++)
@@ -2940,6 +3175,7 @@ bool dockmenu_row_checked(syn_server_t *s, int i)
     case SYN_DOCKACT_ONTOP:    return s->config.dock_on_top;
     case SYN_DOCKACT_MAGNIFY:  return s->config.dock_magnify;
     case SYN_DOCKACT_CLOCK:    return s->config.dock_clock;
+    case SYN_DOCKACT_CLOCK_ANALOG: return s->config.dock_clock_analog;
     case SYN_DOCKACT_APPS:     return s->config.dock_apps_button;
     case SYN_DOCKACT_POWER:    return s->config.dock_power_button;
     default:                   return false;
@@ -3008,6 +3244,12 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
         s->dockmenu.actions[n++] = SYN_DOCKACT_ONTOP;
     s->dockmenu.actions[n++] = SYN_DOCKACT_MAGNIFY;
     s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK;
+    /* Only with a clock to be a style OF. A switch that changes how something
+     * absent is drawn is a row that appears to do nothing, and on a vertical
+     * dock — where this row is the fix rather than a preference — that is
+     * exactly the wrong impression to leave. */
+    if (s->config.dock_clock)
+        s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK_ANALOG;
     s->dockmenu.actions[n++] = SYN_DOCKACT_APPS;
     s->dockmenu.actions[n++] = SYN_DOCKACT_POWER;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
@@ -3165,6 +3407,9 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
         break;
     case SYN_DOCKACT_CLOCK:
         dockmenu_toggle(s, &s->config.dock_clock);
+        break;
+    case SYN_DOCKACT_CLOCK_ANALOG:
+        dockmenu_toggle(s, &s->config.dock_clock_analog);
         break;
     case SYN_DOCKACT_SETTINGS:
         /* The category, not the bare panel: the rest of the dock's settings —

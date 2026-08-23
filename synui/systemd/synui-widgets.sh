@@ -23,7 +23,7 @@ STATE="$CONF_HOME/synui/widgets.state"
 # Where a dragged widget's corner is remembered. NOT written here — see `home`.
 POS="$CONF_HOME/synui/widgets.pos"
 
-WIDGETS="visualizer sysmon clock launcher postit pizza tux"
+WIDGETS="visualizer sysmon clock launcher postit pizza tux analog music"
 
 usage() {
     cat <<EOF
@@ -49,6 +49,15 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
                                     Lives in ~/.config/synui/tuxagotchi.state;
                                     delete that file to start again with a new
                                     egg. The speaker in its corner mutes it.
+  synui-widgets analog on           an analog clock face on the desktop. Pick
+                                    the face in Control panel > Desktop >
+                                    Analog clock face: minimal, classic, roman
+                                    or neon. Its second hand follows Date &
+                                    Time > Show seconds, like every other clock
+  synui-widgets music on            what is playing, with prev/play/next. Acts
+                                    on whatever is making the noise (MPRIS) —
+                                    cliamp, Spotify, mpv, a browser tab — not on
+                                    one chosen player
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
@@ -59,6 +68,10 @@ Widgets are dragged by the grip in their top-right corner — on the reporting
 ones that grip is the only part that takes a click at all, so everything else
 still goes through to the desktop. Double-clicking a grip sends that one widget
 home; the command above sends all of them.
+
+The music widget is empty until something is playing; that is not a fault, it
+is a desktop with nothing making a noise on it. It needs no extra package — it
+reads MPRIS, which every media player on Linux publishes.
 
 The visualiser needs cava (an optdepend); without it that widget stays dark
 however this file is set. Tuxagotchi needs pw-play or paplay to make a sound;

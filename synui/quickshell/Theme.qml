@@ -1262,6 +1262,13 @@ QtObject {
         BarConfig.widgetGlass === "on"  ? true :
         BarConfig.widgetGlass === "off" ? false : root.squareChromeGlass
 
+    /* The analog clock widget's face. Passed straight through rather than
+     * resolved, because unlike the glass there is nothing for the theme to
+     * decide: a face is the user's choice and no palette implies one. It is
+     * surfaced HERE rather than read from BarConfig directly so a widget keeps
+     * importing one singleton for how it looks. */
+    readonly property string analogClockFace: BarConfig.clockFace
+
     /*
      * …and how transparent they are when they do. The ASK was that the widgets
      * match the dock, so this is the dock's own opacity — verbatim.

@@ -46,6 +46,8 @@ const char *widget_row_name(int row)
     case WIDGET_ROW_POSTIT:     return "postit";
     case WIDGET_ROW_PIZZA:      return "pizza";
     case WIDGET_ROW_TUX:        return "tux";
+    case WIDGET_ROW_ANALOG:     return "analog";
+    case WIDGET_ROW_MUSIC:      return "music";
     default:                    return NULL;
     }
 }
@@ -61,6 +63,8 @@ const char *widget_row_label(int row)
     case WIDGET_ROW_POSTIT:     return "Post-it note";
     case WIDGET_ROW_PIZZA:      return "Pizza";
     case WIDGET_ROW_TUX:        return "Tuxagotchi";
+    case WIDGET_ROW_ANALOG:     return "Analog clock";
+    case WIDGET_ROW_MUSIC:      return "Music player";
     default:                    return "?";
     }
 }

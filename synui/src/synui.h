@@ -1409,6 +1409,8 @@ typedef enum {
     WIDGET_ROW_POSTIT,
     WIDGET_ROW_PIZZA,
     WIDGET_ROW_TUX,
+    WIDGET_ROW_ANALOG,
+    WIDGET_ROW_MUSIC,
     WIDGET_ROW_COUNT,
 } syn_widget_row_t;
 
@@ -1679,12 +1681,14 @@ typedef enum {
     CTL_ROW_DOCK_ON_TOP,   /* a pinned dock floats over windows, or they cover it */
     CTL_ROW_DOCK_MAGNIFY,  /* macOS-style hover swell on the icons */
     CTL_ROW_DOCK_CLOCK,    /* time + date in a cell of its own, dragged anywhere */
+    CTL_ROW_DOCK_CLOCK_ANALOG, /* that cell as a dial — the one that fits a column */
     CTL_ROW_DOCK_APPS,     /* the "show all apps" button at the end of the run */
     CTL_ROW_DOCK_POWER,    /* the power button, and its menu, at the end of the run */
     CTL_ROW_DOCK_STYLE,    /* solid slab or frosted glass — auto follows the theme */
     CTL_ROW_DOCK_OPACITY,  /* how much of the wallpaper shows through the bar */
     CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
     CTL_ROW_WIDGET_GLASS,  /* desktop widgets take the dock's glass, or keep the HUD */
+    CTL_ROW_CLOCK_FACE,    /* which dial the analog clock WIDGET draws */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_BAR_SHELL,     /* which QML tree synui-bar starts: SYNAPSE or Antiquity */
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza, pet */
@@ -2996,6 +3000,24 @@ typedef enum {
 } syn_widget_glass_t;
 
 /*
+ * Which face the analog clock WIDGET draws (quickshell's AnalogClock.qml).
+ *
+ * Parsed here for the same reason widget_glass is and for no other: so the key
+ * has one spelling and one clamp, and so the control panel has a row to write.
+ * Nothing on this side draws a dial — the DOCK's analog clock is
+ * `dock_clock_analog`, which is a different clock in a different process and
+ * deliberately has no face setting: a 64px cell in a bar has room for one
+ * design.
+ */
+typedef enum {
+    SYN_CLOCK_FACE_MINIMAL = 0,
+    SYN_CLOCK_FACE_CLASSIC,
+    SYN_CLOCK_FACE_ROMAN,
+    SYN_CLOCK_FACE_NEON,
+    SYN_CLOCK_FACE_COUNT,
+} syn_clock_face_t;
+
+/*
  * Whether the desktop's accent is taken off the WALLPAPER (palette.c) instead
  * of out of the theme — and the same three positions, in the same order, for
  * the same reason.
@@ -3122,6 +3144,7 @@ typedef enum {
     SYN_DOCKACT_ONTOP,     /* config.dock_on_top */
     SYN_DOCKACT_MAGNIFY,   /* config.dock_magnify */
     SYN_DOCKACT_CLOCK,     /* config.dock_clock */
+    SYN_DOCKACT_CLOCK_ANALOG, /* config.dock_clock_analog */
     SYN_DOCKACT_APPS,      /* config.dock_apps_button */
     SYN_DOCKACT_POWER,     /* config.dock_power_button */
     SYN_DOCKACT_SETTINGS,  /* open Control panel ▸ Desktop, where the rest live */
@@ -3147,7 +3170,7 @@ typedef enum {
     SYN_DOCKACT_REBOOT,
     SYN_DOCKACT_POWEROFF,
 } syn_dockact_t;
-/* 4 app rows + a rule + 6 switches + a rule + the panel row = 13, and the three
+/* 4 app rows + a rule + 7 switches + a rule + the panel row = 14, and the two
  * spare are deliberate: the menu carries every dock switch there is, so the next
  * one to be added lands here, and an overflow would be a silent write past the
  * end of an array in the middle of a right-click. The power menu is five rows
@@ -3761,6 +3784,19 @@ typedef struct {
      * Persisted to dock.state as `clock_slot=`. */
     int   dock_clock_slot;      /* default -1 (past the last icon) */
     /*
+     * The dock clock as a DIAL rather than two lines of text.
+     *
+     * ⚠ THIS IS THE FIX FOR A VERTICAL DOCK, not only a style. A column's clock
+     * cell is `dock_height` wide — 64px at stock — and it cannot grow sideways,
+     * so a time string runs off both edges of the bar. A face is square: it
+     * needs the same pixels each way, and a column has exactly that many. See
+     * dock_clock_layout().
+     *
+     * Off by default: a desktop that has a working horizontal clock should not
+     * have it replaced by an upgrade. Persisted to dock.state.
+     */
+    int   dock_clock_analog;    /* default 0 */
+    /*
      * The GNOME-style "show all apps" button: a 3×3 grid of dots in a cell at
      * the far end of the run, opening the FULL-SCREEN application page
      * (appgrid.c) — every application installed, not the pinned few. On by
@@ -3839,6 +3875,8 @@ typedef struct {
     /* Read by quickshell, not by the compositor. Parsed here so `widget_glass`
      * has one spelling and one clamp — see syn_widget_glass_t. */
     syn_widget_glass_t widget_glass;   /* default AUTO */
+    /* Read by quickshell, not by the compositor — see syn_clock_face_t. */
+    syn_clock_face_t widget_clock_face;   /* default MINIMAL */
     /*
      * Whether a see-through surface measures the SCENE behind it — the window
      * it actually opened over — or only the wallpaper.

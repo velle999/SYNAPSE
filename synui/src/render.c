@@ -8195,6 +8195,7 @@ static const char *dockact_label(syn_dockact_t a)
     case SYN_DOCKACT_ONTOP:    return "Dock Above Windows";
     case SYN_DOCKACT_MAGNIFY:  return "Magnify Icons";
     case SYN_DOCKACT_CLOCK:    return "Show Clock";
+    case SYN_DOCKACT_CLOCK_ANALOG: return "Analog Clock Face";
     case SYN_DOCKACT_APPS:     return "Show All Apps Button";
     case SYN_DOCKACT_POWER:    return "Show Power Button";
     case SYN_DOCKACT_SETTINGS: return "Dock Settings…";

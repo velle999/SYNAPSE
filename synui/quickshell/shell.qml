@@ -129,6 +129,14 @@ ShellRoot {
         model: Quickshell.screens
         delegate: Tuxagotchi {}
     }
+    Variants {
+        model: Quickshell.screens
+        delegate: AnalogClock {}
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: MusicPlayer {}
+    }
     /*
      * The notes. One window per NOTE per screen, which is why this model is
      * built by hand instead of being Quickshell.screens like the others: the

@@ -74,6 +74,13 @@ QtObject {
     readonly property bool atBottom: root.edge === "bottom"
     property string edge: "top"
 
+    /* Which face the analog clock widget draws — `widget_clock_face`, read the
+     * same way and for the same reason `widget_glass` beside it is: it is a
+     * Desktop row on the control panel, and settings.state is what that panel
+     * writes. See AnalogClock.qml for why the face is a setting rather than
+     * something you click the widget to change. */
+    property string clockFace: "minimal"
+
     /* ── The desktop's corner radius ─────────────────────────────────────────
      *
      * Global for the same reason the edge is, and read the same way: the bar's
@@ -260,6 +267,16 @@ QtObject {
         const w = root.readKey(settingsFile.text(), "widget_glass")
                   || root.readKey(synuircFile.text(), "widget_glass")
         root.widgetGlass = (w === "on" || w === "off") ? w : "auto"
+
+        // Which dial the analog clock widget draws. Same pair, same order —
+        // it is a control panel row and the control panel writes settings.state.
+        // An unrecognised word falls back rather than blanking the widget: a
+        // typo in a config file must not leave a card with nothing on it and no
+        // way to tell why.
+        const cf = root.readKey(settingsFile.text(), "widget_clock_face")
+                   || root.readKey(synuircFile.text(), "widget_clock_face")
+        root.clockFace = ["minimal", "classic", "roman", "neon"].indexOf(cf) >= 0
+                         ? cf : "minimal"
 
         // Is there a bar at all. Same pair and order again. Only the exact
         // string "off" turns it off: an absent key, a typo and a synuirc from a
