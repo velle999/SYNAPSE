@@ -21,7 +21,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | cutting   | keys, undo, markers, snapping, copy/paste, three-point editing |
 | retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
 | audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
-| effects   | sixty transitions, twenty-seven effects, and a format for more |
+| effects   | sixty-one transitions (a morph among them), twenty-seven effects |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
 | titles    | a face, a plate, more than one line, five styles, .srt both ways |
 | delivery  | range, presets, burn-in, sequences and a queue                 |
@@ -221,9 +221,21 @@ Fairlight-style automation: four features for one piece of work.
       `timeline transition`, which makes the OVERLAP too: out of the outgoing
       clip's handles when it has them, by rippling what follows when it does
       not
-- [ ] smooth cut — `minterpolate` across a jump cut. Not an xfade and not a
-      blend: it needs frames that were never shot, which is a different piece
-      of work from everything above
+- [x] **smooth cut** — shipped in 0.1.0-39. A morph across a jump cut: the
+      outgoing picture at the start of the overlap, the incoming at its end,
+      and every frame between them invented by `minterpolate`. Like every
+      editor that offers one it wants a SHORT duration — a morph over a large
+      movement is mush. ⚠ minterpolate cannot be handed two frames: fed a
+      two-frame stream it emits nothing at all, so each side is doubled and
+      the pads sit one frame from their own side. ⚠ It has no alpha either —
+      its formats are YUV — so the matte is carried around it and merged back
+      on, or a transition on an upper track would black out everything
+      beneath it. ⚠ `extractplanes=a`, never `alphaextract`, which cannot
+      negotiate a format in this graph at all. ⛔ The monitor builds the SAME
+      four frames and selects one, and both sides are seeked to the fixed
+      instants the export morphs between — verified frame-exact against the
+      exported file. ⚠ The morph runs at 960 wide in BOTH builders: at 1920 a
+      one-second morph cost nineteen seconds for one monitor frame
 
 ## 5 · Titles — **shipped in 0.1.0-18**
 
@@ -482,8 +494,8 @@ Fairlight-style automation: four features for one piece of work.
    range, seven presets, burn-in, image sequences and a queue.
 
 **The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan: smooth cut, and whatever the
-next hour of using it turns up. Auto-save was never a gap and is not a feature
+short list of named gaps rather than a plan — and as of 0.1.0-39 it is empty.
+What is left is whatever the next hour of using it turns up. Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what
 that was missing, until 0.1.0-34, was a way to give it a name.
 

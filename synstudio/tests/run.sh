@@ -3456,6 +3456,81 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+# ----------------------------------------------------------- smooth cut --
+#
+# The one transition that is neither an xfade nor a dip: a MORPH across a jump
+# cut, with every frame between the two sides INVENTED by motion estimation.
+# It is what makes a cut inside one shot look like the shot never stopped.
+
+if have ffmpeg && have ffprobe; then
+    smd=$TMP/smooth
+    mkdir -p "$smd"
+    # A box moving steadily, so a jump cut in it is a measurable jump and a
+    # morph across it is a measurable slide.
+    ffmpeg -v error -f lavfi -i "color=c=black:s=320x180:d=3:r=25" \
+           -f lavfi -i "color=c=white:s=40x40:d=3:r=25" \
+           -filter_complex "[0:v][1:v]overlay=x='40+8*t':y=70[o]" -map "[o]" \
+           -pix_fmt yuv420p -c:v libx264 "$smd/mv.mp4" -y
+    sp=$smd/s.syntl
+    $BIN timeline new "$sp" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$sp" video V >/dev/null
+    $BIN timeline clip "$sp" 0 "$smd/mv.mp4" --at 0 --in 0 --out-at 1 >/dev/null
+    $BIN timeline clip "$sp" 0 "$smd/mv.mp4" --at 1 --in 2 --out-at 3 >/dev/null
+    $BIN timeline transition "$sp" 0 1 --kind smooth --dur 0.4 >/dev/null
+
+    g=$($BIN timeline export "$sp" --out "$smd/o.mp4" --print)
+    printf '%s' "$g" | seen "the morph is motion estimation"  "minterpolate=fps=25"
+    # ⚠ extractplanes, NOT alphaextract: the two do the same thing and
+    # alphaextract cannot negotiate a format in this graph at all — "the
+    # following filters could not choose their formats", and the whole render
+    # dies. Measured; nothing in the documentation says so.
+    printf '%s' "$g" | seen "and the matte goes around it"    "extractplanes=a"
+    printf '%s' "$g" | notseen "never through alphaextract"   "alphaextract"
+
+    # ---- the PICTURE, which is the only thing that proves a morph ---------
+    $BIN timeline export "$sp" --out "$smd/o.mp4" >/dev/null 2>&1
+    rm -f "$smd"/ex*.png
+    ffmpeg -v error -i "$smd/o.mp4" -f image2 "$smd/ex%03d.png" -y
+    # Where the white box's left edge is, on one row of one frame.
+    boxl() {   # boxl <png>
+        ffmpeg -v error -i "$1" -vf "crop=320:1:0:90,format=gray" \
+               -f rawvideo - 2>/dev/null |
+        od -An -v -tu1 | tr ' ' '\n' | grep -n . |
+        awk -F: '$2 > 128 { print $1 - 1; exit }'
+    }
+    a=$(boxl "$smd/ex026.png")     # the first frame of the transition
+    b=$(boxl "$smd/ex031.png")     # halfway through it
+    c=$(boxl "$smd/ex035.png")     # the last frame of it
+    if [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ]; then
+        # ⚠ The DISCRIMINATING assertion: the box has to MOVE THROUGH the
+        # transition. A dissolve would show both boxes at once and a hard cut
+        # would jump — only a morph slides one into the other.
+        if [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ]; then ok
+        else bad "the picture morphs across the cut: $a $b $c"; fi
+        # And it lands on the incoming shot rather than somewhere between.
+        if [ $((c - a)) -ge 5 ]; then ok
+        else bad "the morph covers the jump: $a to $c"; fi
+    else
+        printf '  skip  the morph frames could not be measured\n'
+    fi
+
+    # ---- and the monitor shows the SAME frame -----------------------------
+    #
+    # ⛔ The invariant this whole program is built on. The monitor builds the
+    # same four frames and SELECTS one rather than working the morph out a
+    # second way — and the two are compared frame-exactly, never with a seek,
+    # because a seek lands on whichever frame is nearest and at a fast move
+    # that is half the movement.
+    for k in 0 4 8; do
+        $BIN timeline frame "$sp" --at "$(awk -v k=$k 'BEGIN{print 1.0 + k/25}')" \
+             --out "$smd/f.png" --size 320 >/dev/null 2>&1
+        m=$(boxl "$smd/f.png")
+        e=$(boxl "$smd/ex$(printf '%03d' $((26 + k))).png")
+        if [ -n "$m" ] && [ "$m" = "$e" ]; then ok
+        else bad "monitor and export agree on morph frame $((25 + k)): $m vs $e"; fi
+    done
+fi
+
 # ------------------------------------------------- the curve, over time --
 #
 # The darkroom has a curve widget over TONE; this is the same idea over TIME.

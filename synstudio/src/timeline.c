@@ -413,7 +413,8 @@ static double alpha_at(const ss_clip *c, double tt, double len)
     X("fadeslow",    "fadeslow",    "Fade, slow out") \
     X("squeezeh",    "squeezeh",    "Squeeze horizontally") \
     X("squeezev",    "squeezev",    "Squeeze vertically") \
-    X("zoomin",      "zoomin",      "Zoom in")
+    X("zoomin",      "zoomin",      "Zoom in") \
+    X("smooth",      NULL,          "Smooth cut (morph)")
 
 #define TRANS_ROW(n, x, l) { n, x, l },
 #define TRANS_BAR(n, x, l) "|" n
@@ -446,6 +447,17 @@ const char *ss_trans_label(int v)
 const char *ss_trans_xfade(int v)
 {
     return (v > 0 && v < TRANS_COUNT) ? transes[v].xfade : NULL;
+}
+
+/* The one transition that is neither an xfade nor a dip: a MORPH across the
+ * jump, made by motion-interpolating between the outgoing picture at the
+ * start of the overlap and the incoming picture at its end.
+ *
+ * Asked by NAME rather than by a number, because it is the newest row and
+ * every existing row's number is a value projects already carry. */
+int ss_trans_is_smooth(int v)
+{
+    return v > 0 && v < TRANS_COUNT && !strcmp(transes[v].name, "smooth");
 }
 
 int ss_trans_value(const char *s)
@@ -3258,6 +3270,84 @@ static void chain_trans_join(strbuf *fc, const ss_timeline *t, const ss_clip *c,
     const char *xf = ss_trans_xfade(c->trans);
     char col[32];
 
+    /* ---- the smooth cut ----
+     *
+     * A morph, not a blend: the outgoing picture at the START of the overlap
+     * and the incoming picture at its END, with every frame between them
+     * INVENTED by motion estimation. That is what makes a jump cut in one
+     * shot look like the shot never stopped, and it is why the duration wants
+     * to be short — a morph over a large movement is mush, which is true of
+     * every editor that offers one.
+     *
+     * ⚠ minterpolate CANNOT BE HANDED TWO FRAMES. Fed a two-frame stream it
+     * emits NOTHING at all — measured, not guessed — because its pipeline
+     * needs a frame either side of the pair it is inventing between. So each
+     * side is doubled with `loop`, the four are spaced `dur` apart, and the
+     * middle span is the one that is kept: inputs at 0, D, 2D, 3D, output
+     * covering 0..2D, and the morph is exactly [D, 2D].
+     *
+     * ⚠ AND MINTERPOLATE HAS NO ALPHA. Its formats are YUV, so the picture
+     * comes back opaque and a transition on an upper track would black out
+     * everything under it for its whole length. The matte is carried around
+     * the morph — both sides' alpha, dissolved, merged back on — which for
+     * the ordinary full-frame clip is opaque either way and for a scaled one
+     * is the shape the overlay expects.
+     *
+     * The monitor builds the SAME four frames and selects one of them; see
+     * chain_frame_join. */
+    if (ss_trans_is_smooth(c->trans)) {
+        double fps = t->fps > 0 ? t->fps : 25.0;
+        double step = 1.0 / fps;
+        char mscale[64] = "", mback[64] = "";
+
+        /* ⚠ THE MORPH IS COMPUTED AT A BOUNDED SIZE, and both builders use
+         * the same bound, so what the monitor shows is still what the export
+         * writes. Motion estimation is the most expensive thing this program
+         * asks ffmpeg for: at 1920 wide it costs about half a second PER
+         * INVENTED FRAME, so a one-second morph is nineteen seconds — for one
+         * monitor frame, on every scrub step. At 960 it is a couple of
+         * seconds, and the softness it costs is invisible against the
+         * softness a morph already has. */
+        if (t->w > SS_SMOOTH_W) {
+            int mh = (int)((double)t->h * SS_SMOOTH_W / t->w + 0.5);
+            mh -= mh & 1;
+            snprintf(mscale, sizeof mscale, ",scale=%d:%d", SS_SMOOTH_W, mh);
+            snprintf(mback, sizeof mback, ",scale=%d:%d", t->w, t->h);
+        }
+
+        sb_add(fc, ";[xa%d]split[xaf%d][xaa%d]", id, id, id);
+        sb_add(fc, ";[xb%d]split[xbf%d][xba%d]", id, id, id);
+        /* The first frame of the one going out, the last of the one coming
+         * in — the two pictures the cut is between. */
+        sb_add(fc, ";[xaf%d]trim=end=%.6f,setpts=PTS-STARTPTS%s,format=yuv420p,"
+                   "loop=loop=1:size=1:start=0[xam%d]", id, step, mscale, id);
+        sb_add(fc, ";[xbf%d]trim=start=%.6f,setpts=PTS-STARTPTS%s,format=yuv420p,"
+                   "loop=loop=1:size=1:start=0[xbm%d]", id, dur - step, mscale, id);
+        /* ⚠ The pads sit ONE FRAME from their own side, not a whole duration
+         * away. minterpolate needs a frame either side of the pair it is
+         * inventing between, and spacing the pads by `dur` made it invent a
+         * second, identical span that is thrown away — twice the motion
+         * estimation for the same result. Frames land at 0, step, step+dur,
+         * 2*step+dur, and the morph is the span in the middle. */
+        sb_add(fc, ";[xam%d][xbm%d]concat=n=2:v=1:a=0,"
+                   "setpts='if(lt(N,2),N*%.6f,%.6f+(N-1)*%.6f)/TB',"
+                   "minterpolate=fps=%.6g:mi_mode=mci:me_mode=bidir:vsbmc=1"
+                   ":scd=none,trim=start=%.6f:end=%.6f,setpts=PTS-STARTPTS%s"
+                   "[xmo%d]",
+               id, id, step, step, dur, fps, step, step + dur, mback, id);
+        /* ⚠ extractplanes, NOT alphaextract. The two do the same thing and
+         * `alphaextract` cannot negotiate a format in this graph at all —
+         * "the following filters could not choose their formats", and the
+         * whole render dies. Measured; there is no way to see it coming from
+         * the documentation. */
+        sb_add(fc, ";[xaa%d]format=rgba,extractplanes=a[xal%d]", id, id);
+        sb_add(fc, ";[xba%d]format=rgba,extractplanes=a[xbl%d]", id, id);
+        sb_add(fc, ";[xal%d][xbl%d]xfade=transition=fade:duration=%.6f"
+                   ":offset=0[xmm%d]", id, id, dur, id);
+        sb_add(fc, ";[xmo%d][xmm%d]alphamerge,format=rgba[xj%d]", id, id, id);
+        return;
+    }
+
     if (c->trans == SS_TRANS_DIP || !xf) {
         /* Two dissolves through a colour, rather than a colour laid over a cut
          * with a fade on it. `fade` steps by FRAME INDEX while the monitor
@@ -4685,6 +4775,62 @@ static void chain_frame_join(strbuf *fc, const ss_timeline *t, const ss_clip *c,
     const char *xf = ss_trans_xfade(c->trans);
     char col[40];
 
+    /* The smooth cut, at one instant.
+     *
+     * The export builds four frames — the outgoing picture doubled, the
+     * incoming picture doubled, spaced `dur` apart — interpolates between
+     * them and keeps the middle span. This builds the SAME four and selects
+     * ONE of them, which is why the two agree: it is not a second way of
+     * working out what the morph looks like, it is the same graph asked for
+     * one frame.
+     *
+     * ⚠ Both sides are already the frames the export morphs between — the
+     * seek that put them there is in ss_timeline_frame, and it is the piece
+     * that makes this true. A monitor seeked to the moment ON SCREEN would be
+     * morphing between two pictures the export never saw. */
+    if (ss_trans_is_smooth(c->trans)) {
+        double fps = t->fps > 0 ? t->fps : 25.0;
+        int n = (int)(dur * fps + 0.5);
+        /* ⚠ ONE frame of lead-in now, not a whole span: the pads sit a single
+         * frame from their own side, so the morph starts at output index 1
+         * and the frame for progress p is the one the export's trim keeps at
+         * the same place. */
+        int k = 1 + (int)(p * n + 0.5);
+
+        char mscale[64] = "", mback[64] = "";
+        double step = 1.0 / fps;
+
+        if (n < 1) n = 1;
+        /* The same bound the export uses, so the frame this selects is the
+         * frame that will be written. */
+        if (t->w > SS_SMOOTH_W) {
+            int mh = (int)((double)t->h * SS_SMOOTH_W / t->w + 0.5);
+            mh -= mh & 1;
+            snprintf(mscale, sizeof mscale, ",scale=%d:%d", SS_SMOOTH_W, mh);
+            snprintf(mback, sizeof mback, ",scale=%d:%d", t->w, t->h);
+        }
+        sb_add(fc, ";[xa%d]split[xaf%d][xaa%d]", id, id, id);
+        sb_add(fc, ";[xb%d]split[xbf%d][xba%d]", id, id, id);
+        sb_add(fc, ";[xaf%d]%s%sformat=yuv420p,loop=loop=1:size=1:start=0[xam%d]",
+               id, mscale[0] ? mscale + 1 : "", mscale[0] ? "," : "", id);
+        sb_add(fc, ";[xbf%d]%s%sformat=yuv420p,loop=loop=1:size=1:start=0[xbm%d]",
+               id, mscale[0] ? mscale + 1 : "", mscale[0] ? "," : "", id);
+        sb_add(fc, ";[xam%d][xbm%d]concat=n=2:v=1:a=0,"
+                   "setpts='if(lt(N,2),N*%.6f,%.6f+(N-1)*%.6f)/TB',"
+                   "minterpolate=fps=%.6g:mi_mode=mci:me_mode=bidir:vsbmc=1"
+                   ":scd=none,select=eq(n\\,%d),setpts=PTS-STARTPTS%s[xmo%d]",
+               id, id, step, step, dur, fps, k, mback, id);
+        sb_add(fc, ";[xaa%d]format=rgba,extractplanes=a[xal%d]", id, id);
+        sb_add(fc, ";[xba%d]format=rgba,extractplanes=a[xbl%d]", id, id);
+        loop_at(fc, "xal", id, p * dur, "xalp");
+        loop_at(fc, "xbl", id, p * dur, "xblp");
+        sb_add(fc, ";[xalp%d][xblp%d]xfade=transition=fade:duration=%.6f"
+                   ":offset=0,select=eq(n\\,1),setpts=PTS-STARTPTS[xmm%d]",
+               id, id, dur, id);
+        sb_add(fc, ";[xmo%d][xmm%d]alphamerge,format=rgba[xj%d]", id, id, id);
+        return;
+    }
+
     if (c->trans == SS_TRANS_DIP || !xf) {
         /* The export's two dissolves through a colour, run at one instant.
          * BOTH of them, even though only one is ever moving: the second half's
@@ -4720,6 +4866,39 @@ static void chain_frame_join(strbuf *fc, const ss_timeline *t, const ss_clip *c,
     sb_add(fc, ";[xal%d][xbl%d]xfade=transition=%s:duration=%.6f:offset=0"
                ",select=eq(n\\,1),setpts=PTS-STARTPTS[xj%d]",
            id, id, xf, dur, id);
+}
+
+/* Where to seek a clip that is inside a SMOOTH transition at `time`.
+ *
+ * A morph is between two FIXED pictures — the outgoing one at the START of
+ * the overlap and the incoming one at its END — so both sides are seeked to
+ * those instants and NOT to the moment on screen. Get this wrong and the
+ * monitor morphs between two frames the export never saw, which looks right
+ * and is a different picture on every scrub step.
+ *
+ * Writes the offset INTO THE CLIP and returns 1, or leaves it alone and
+ * returns 0 when this clip is not in a smooth transition here. */
+static int smooth_seek_off(const ss_timeline *t, int tr, int j, double time,
+                           double *off)
+{
+    double p, d;
+    int part, i;
+
+    if (trans_at(t, tr, j, time, &p, &d, &part)
+        && ss_trans_is_smooth(t->track[tr].clip[j].trans)) {
+        *off = d;                       /* the incoming side: the overlap END */
+        return 1;
+    }
+    for (i = 0; i < t->track[tr].nclips; i++) {
+        double t0, dd;
+        int pp;
+        if (!trans_span(t, tr, i, &t0, &dd, &pp) || pp != j) continue;
+        if (!ss_trans_is_smooth(t->track[tr].clip[i].trans)) continue;
+        if (time < t0 || time >= t0 + dd) continue;
+        *off = t0 - t->track[tr].clip[j].tl_in;   /* the outgoing side: START */
+        return 1;
+    }
+    return 0;
 }
 
 /* Whether some clip on this track is transitioning FROM clip j at `time` —
@@ -4796,9 +4975,15 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
             } else {
                 /* Where the ramp, the reverse and the freeze are ALL
                  * resolved for the monitor: one function, the same one the
-                 * length and the export expression come from. */
-                double srct = c->freeze >= 0.0 ? c->src_in + c->freeze
-                                               : ss_clip_source_at(c, off, t->fps);
+                 * length and the export expression come from.
+                 *
+                 * ⚠ Except inside a smooth cut, where the two sides are the
+                 * FIXED frames the morph is between — see smooth_seek_off. */
+                double soff = off;
+                double srct;
+                (void)smooth_seek_off(t, i, j, time, &soff);
+                srct = c->freeze >= 0.0 ? c->src_in + c->freeze
+                                        : ss_clip_source_at(c, soff, t->fps);
                 if (!c->still && srct > 0.0) {
                     PUSH(xdup("-ss")); PUSH(xfmt("%.6f", srct));
                 }
@@ -4829,8 +5014,18 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
 
             /* A single frame has nothing to animate, so the transform and the
              * fades are just numbers here — evaluated by the same xform_at and
-             * alpha_at the export's filters are generated from. */
-            xform_at(c, off, len, &s, &px, &py, &rot);
+             * alpha_at the export's filters are generated from.
+             *
+             * ⚠ The TRANSFORM is read at the same frozen instant the picture
+             * was seeked to when this clip is a side of a smooth cut: the
+             * export bakes the transform into the two frames it morphs
+             * between, so a monitor evaluating it at the moment on screen
+             * would pan while the morph did not. */
+            {
+                double soff = off;
+                (void)smooth_seek_off(t, i, j, time, &soff);
+                xform_at(c, soff, len, &s, &px, &py, &rot);
+            }
             a = alpha_at(c, off, len);
             fitted_size(t, s, &fw, &fh);
 

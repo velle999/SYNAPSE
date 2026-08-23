@@ -1302,7 +1302,50 @@ pkgver=0.1.0
 #   stay on the old shape until something else happened to repaint it.
 #
 #   689 assertions, clean under ASan+UBSan+LSan.
-pkgrel=38
+#
+# 39 THE SMOOTH CUT — THE LAST NAMED GAP.
+#
+#   A morph across a jump cut: the outgoing picture at the START of the
+#   overlap, the incoming picture at its END, and every frame between them
+#   INVENTED by motion estimation. It is what makes a cut inside one shot look
+#   like the shot never stopped, and like every editor that offers one it
+#   wants a SHORT duration — a morph over a large movement is mush.
+#
+#   ⚠ minterpolate CANNOT BE HANDED TWO FRAMES. Fed a two-frame stream it
+#   emits NOTHING AT ALL — measured on a real file, not guessed — because its
+#   pipeline needs a frame either side of the pair it is inventing between.
+#   Each side is doubled with `loop`, and the pads sit ONE FRAME from their
+#   own side rather than a whole duration away: spacing them by `dur` made it
+#   invent a second identical span that is thrown away, at twice the cost.
+#
+#   ⚠ AND MINTERPOLATE HAS NO ALPHA. Its formats are YUV, so the picture comes
+#   back opaque and a transition on an upper track would black out everything
+#   under it for its whole length. The matte is carried around the morph —
+#   both sides' alpha, dissolved, merged back on.
+#
+#   ⚠ extractplanes, NOT alphaextract. The two do the same thing and
+#   `alphaextract` cannot negotiate a format in this graph at all: "the
+#   following filters could not choose their formats", and the whole render
+#   dies. Nothing in the documentation says so.
+#
+#   ⛔ THE MONITOR BUILDS THE SAME FOUR FRAMES AND SELECTS ONE. It is not a
+#   second way of working out what a morph looks like — it is the same graph
+#   asked for one frame, which is the only way the two can agree. That needed
+#   the SEEK to move too: both sides are seeked to the fixed instants the
+#   export morphs between, not to the moment on screen, and the transform is
+#   evaluated at those same instants because the export bakes it into the two
+#   frames. Verified frame-exact against the exported file.
+#
+#   ⚠ THE MORPH RUNS AT 960 WIDE, in BOTH builders. Motion estimation is the
+#   most expensive thing this program asks ffmpeg for: at 1920 it costs about
+#   half a second per invented frame, so a one-second morph was NINETEEN
+#   SECONDS for one monitor frame — on every scrub step. Bounded, it is a
+#   couple of seconds, and the softness that costs is invisible against the
+#   softness a morph already has. A bound both builders share is not a
+#   disagreement; a faster monitor would have been.
+#
+#   697 assertions, clean under ASan+UBSan+LSan.
+pkgrel=39
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

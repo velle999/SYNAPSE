@@ -1381,6 +1381,15 @@ const char *ss_trans_label(int v);
 /* The xfade name this kind renders as, or NULL for the two that are not one:
  * `none`, and `dip`, which is a cut under a colour. */
 const char *ss_trans_xfade(int v);
+/* Whether a transition is the smooth cut — a MORPH rather than a blend, and
+ * the only kind whose two sides are single frames. */
+int ss_trans_is_smooth(int v);
+/* How wide the smooth cut's motion estimation runs. A bound and not a
+ * preference: minterpolate costs about half a second per invented frame at
+ * 1920, which is nineteen seconds for a one-second morph — for ONE monitor
+ * frame. Both builders use this same number, so the picture stays the same
+ * one at either end. */
+#define SS_SMOOTH_W 960
 int    ss_clip_kind_value(const char *s);
 int    ss_textpos_value(const char *s);
 
