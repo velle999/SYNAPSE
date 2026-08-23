@@ -370,6 +370,29 @@ int                 ss_lut_resolve(const char *ref, char *out, size_t n);
  * per reference, not once per pixel. */
 const ss_lut3d     *ss_lut_cached(const char *ref);
 
+/* ------------------------------------------------- noise models (rnnn) -- */
+
+/* `arnndn` is a trained speech denoiser and is nothing without its model
+ * file, which is somebody else's licensed work — so none ship, exactly as no
+ * .cube does. Found the way LUTs are: what is installed, then the user's own
+ * in ~/.config/synstudio/rnn, then anything in SYNSTUDIO_RNN.
+ *
+ * ⚠ A listed model is one FFMPEG ITSELF accepted: there is no parser for the
+ * format here, and the alternative to asking is listing a file that fails in
+ * the middle of a delivery render. */
+typedef struct {
+    char name[64];
+    char path[1024];
+} ss_rnn_entry;
+
+int                 ss_rnn_count(void);
+const ss_rnn_entry *ss_rnn_at(int i);
+/* A catalogue NAME, or a path if it has a '/' in it (~ is expanded). 0 when
+ * something answers to it, -1 when nothing does — a model this machine has
+ * not got is KEPT in the project and simply does not denoise, the way a
+ * missing LUT renders as nothing. */
+int                 ss_rnn_resolve(const char *ref, char *out, size_t n);
+
 /* ------------------------------------------------------------- looks -- */
 
 /* A look is a develop stack in a file: the same tab-separated text the
@@ -797,7 +820,12 @@ typedef struct {
      *
      * Zero means the filter is not in the graph at all — not that it is in
      * the graph doing nothing. */
-    float  nr_audio;            /* afftdn, 0..100 */
+    float  nr_audio;            /* afftdn, 0..100 — or arnndn's mix, below */
+    /* Which denoiser `nr` drives. Empty is the built-in afftdn; a catalogue
+     * name or a path is an arnndn model, and then `nr` is its mix. Two
+     * answers to one question, so one knob and one row rather than a second
+     * amount that can disagree with the first. */
+    char   nr_model[256];
     float  gate;                /* agate, 0..100 */
     float  eq_db[6];            /* 60, 200, 600, 2k, 6k, 12k — each ±18 dB */
     float  comp;                /* acompressor amount, 0..100 */

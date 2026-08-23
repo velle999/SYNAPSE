@@ -3456,6 +3456,65 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+# --------------------------------------- arnndn, and other people's models --
+#
+# `arnndn` is a TRAINED denoiser and is nothing without its model file, which
+# is somebody else's licensed work — so none ship, exactly as no .cube does.
+# That makes a model the fourth thing this program takes from other people and
+# the second that is pure data.
+
+rn=$TMP/rnn
+mkdir -p "$rn"
+echo "this is not a model" > "$rn/bogus.rnnn"
+# ⚠ A listed model is one FFMPEG ITSELF accepted. There is no parser for the
+# format here, and the alternative to asking is listing a file that fails in
+# the middle of a delivery render.
+if have ffmpeg; then
+    check "a file that is not a model is not listed" "" \
+          "$(SYNSTUDIO_RNN=$rn $BIN rnns)"
+fi
+
+ap2=$TMP/arnndn.syntl
+$BIN timeline new "$ap2" --size 160x90 --fps 25 >/dev/null
+$BIN timeline track "$ap2" audio A >/dev/null
+if have ffmpeg; then
+    ffmpeg -v error -f lavfi -i "sine=f=440:d=1" -c:a pcm_s16le "$TMP/tone.wav" -y
+    $BIN timeline clip "$ap2" 0 "$TMP/tone.wav" --at 0 >/dev/null
+    $BIN timeline set "$ap2" 0 0 nr=60 >/dev/null
+    $BIN timeline export "$ap2" --out "$TMP/nr.mp4" --print \
+        | seen "the built-in denoiser is afftdn" "afftdn=nr=58.20"
+
+    # A model this machine has not got is KEPT and does not denoise — the way
+    # a missing LUT renders as nothing. ⛔ NOT a silent fall back to afftdn:
+    # substituting a different denoiser is how a delivery comes back sounding
+    # unlike every take that was approved.
+    $BIN timeline set "$ap2" 0 0 nr.model=nothing-here >/dev/null
+    g=$($BIN timeline export "$ap2" --out "$TMP/nr.mp4" --print)
+    check "a model nothing answers to leaves no denoiser" "0" \
+          "$(printf '%s' "$g" | grep -c 'afftdn\|arnndn')"
+    check "and the name is kept" "nothing-here" \
+          "$($BIN timeline get "$ap2" 0 0 | awk -F'\t' '/^nr.model\t/{print $2}')"
+    check "and the engine says it is not here" "0" \
+          "$($BIN timeline get "$ap2" 0 0 | awk -F'\t' '/^nr.model.found/{print $2}')"
+
+    # A path is a path: resolution does not ask ffmpeg again, because that
+    # would be a subprocess per graph build.
+    $BIN timeline set "$ap2" 0 0 "nr.model=$rn/bogus.rnnn" >/dev/null
+    $BIN timeline export "$ap2" --out "$TMP/nr.mp4" --print \
+        | seen "a model that IS here reaches the graph" "arnndn=m=$rn/bogus.rnnn:mix=0.600"
+    check "and the amount is its mix" "1" \
+          "$($BIN timeline get "$ap2" 0 0 | awk -F'\t' '/^nr.model.found/{print $2}')"
+    # ⚠ The name survives a save and a reload: it is written on the sound
+    # line, escaped, and a project written before models existed still reads
+    # back byte for byte.
+    $BIN timeline set "$ap2" 0 0 nr.model=speech >/dev/null
+    check "the model name survives the file" "speech" \
+          "$($BIN timeline get "$ap2" 0 0 | awk -F'\t' '/^nr.model\t/{print $2}')"
+    $BIN timeline set "$ap2" 0 0 nr.model= >/dev/null
+    $BIN timeline export "$ap2" --out "$TMP/nr.mp4" --print \
+        | seen "clearing it goes back to the built-in" "afftdn"
+fi
+
 # ------------------------------------------------- three-point editing --
 #
 # The cut had one viewer and one way in: whole files landed at the end of a
@@ -3833,6 +3892,84 @@ if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
         # slower than the one this was written on — which it did, on a
         # ThinkPad compiling this same package at the time.
         printf '  skip  the window did not start inside 60s (rc %s), nothing asserted\n' "$rc"
+    fi
+fi
+
+# ---- dragging the photograph onto the Video tab -------------------------
+#
+# ⛔ THE ONE GESTURE NO GREP CAN TEST, AND IT SHIPPED BROKEN TWICE.
+#
+# The window has a DropArea filling it for files dragged in from a file
+# manager, declared last so it is on top. That made it the topmost target for
+# the window's OWN photo drag too: it took the drag, found no urls, refused
+# it, and flashed its "drop a photograph" overlay on the way past. The tab
+# never saw the drag. What the hand saw was a blink and nothing happening.
+#
+# The other half was the proxy: `drag.target` moves an item by the mouse
+# DELTA, and it was reset to the picture pane's top-left corner on every
+# press, so the point being hit-tested was as far up and left of the pointer
+# as the press was down and right of the corner.
+#
+# Neither is visible in the file. This drives the real drag in a real window.
+if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ] && have ffmpeg; then
+    dg=$TMP/dragtest
+    mkdir -p "$dg"
+    cp "$qml" "$dg/drv.qml"
+    cp "$(dirname "$qml")/synstudio-playback.qml" "$dg/" 2>/dev/null
+    ffmpeg -v error -f lavfi -i color=c=orange:s=64x36:d=1 -frames:v 1 "$dg/shot.png" -y
+    # The driver goes INSIDE the root object, so it can name the ids the
+    # window gives its drag proxy and its tab.
+    head -c -2 "$dg/drv.qml" > "$dg/drv.tmp" 2>/dev/null || cp "$dg/drv.qml" "$dg/drv.tmp"
+    python3 - "$dg" <<'PYEOF'
+import sys
+d = sys.argv[1]
+s = open(d + "/drv.qml").read()
+drv = """
+    Timer {
+        interval: 900; repeat: true; running: true
+        property int n: 0
+        onTriggered: {
+            n++
+            if (n === 1) {
+                root.mode = "photo"
+                root.loadFile(Quickshell.env("HOME") + "/shot.png")
+            } else if (n === 3) {
+                // Pressed in the MIDDLE of the photograph, which is the case
+                // the corner-reset got wrong, and dragged to the tab.
+                const mid = Qt.point(photoDrag.width / 2, photoDrag.height / 2)
+                photoDragProxy.x = mid.x
+                photoDragProxy.y = mid.y
+                photoDragProxy.Drag.start()
+                const c = videoTab.mapToItem(photoDrag, videoTab.width / 2,
+                                             videoTab.height / 2)
+                photoDragProxy.x = c.x
+                photoDragProxy.y = c.y
+            } else if (n === 4) {
+                console.warn("TAB " + videoTabDrop.containsDrag)
+                console.warn("DROP " + photoDragProxy.Drag.drop())
+            } else if (n === 7) {
+                console.warn("MODE " + root.mode)
+                console.warn("CLIPS " + (root.tl.tracks.length
+                                         ? root.tl.tracks[0].clips.length : -1))
+            } else if (n === 9) {
+                Qt.quit()
+            }
+        }
+    }
+"""
+open(d + "/drv.qml", "w").write(s[:s.rstrip().rfind("}")] + drv + "}\n")
+PYEOF
+    HOME=$dg SYNSTUDIO_BIN=$BIN DISABLE_MANGOHUD=1 MANGOHUD=0         QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1         timeout 45 quickshell -p "$dg/drv.qml" > "$dg/log" 2>&1
+    if grep -q "MODE\|TAB" "$dg/log"; then
+        grep -F "TAB true" "$dg/log" > /dev/null \
+            && ok || bad "the Video tab sees the photograph being dragged onto it"
+        # 2 is Qt.CopyAction: the drop was ACCEPTED, not merely delivered.
+        grep -F "DROP 2" "$dg/log" > /dev/null \
+            && ok || bad "and takes the drop"
+        grep -F "CLIPS 1" "$dg/log" > /dev/null \
+            && ok || bad "and the photograph lands in the cut"
+    else
+        printf '  skip  the window did not start, no drag asserted\n'
     fi
 fi
 

@@ -564,6 +564,10 @@ static const cfield cfields[] = {
      * control it. Each is one filter with one knob, and zero means the filter
      * is not in the graph AT ALL rather than in it doing nothing. */
     C("nr",           CO_FLOAT, nr_audio,     0.0f,  100.0f, "Sound", "Noise reduction", NULL, 0),
+    /* Which denoiser that amount drives: empty is afftdn, a name or a path is
+     * an arnndn model. A model this machine has not got is KEPT and does not
+     * denoise, the way a missing LUT renders as nothing. */
+    C("nr.model",     CO_TEXT,  nr_model,     0.0f,    0.0f, "Sound", "Noise model", NULL, 0),
     C("gate",         CO_FLOAT, gate,         0.0f,  100.0f, "Sound", "Gate", NULL, 0),
     C("eq.60",        CO_FLOAT, eq_db[0],   -18.0f,   18.0f, "Sound", "60 Hz", NULL, 0),
     C("eq.200",       CO_FLOAT, eq_db[1],   -18.0f,   18.0f, "Sound", "200 Hz", NULL, 0),
@@ -1921,7 +1925,7 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
             /* The sound chain, named fields, written only when something is
              * on. A clip with no processing keeps the record it always had. */
             if (c->nr_audio > 0 || c->gate > 0 || c->comp > 0 ||
-                c->deess > 0 || c->fade_shape ||
+                c->deess > 0 || c->fade_shape || *c->nr_model ||
                 c->eq_db[0] || c->eq_db[1] || c->eq_db[2] ||
                 c->eq_db[3] || c->eq_db[4] || c->eq_db[5]) {
                 int q;
@@ -1931,6 +1935,15 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                         c->deess, ss_afade_name(c->fade_shape));
                 for (q = 0; q < 6; q++)
                     fprintf(fp, "\teq%d=%.3f", q, c->eq_db[q]);
+                /* Last, and only when there is one, so every project written
+                 * before models existed reads back byte for byte. ⚠ Escaped
+                 * like a caption: this is a PATH, and a tab in one would end
+                 * the record halfway through. */
+                if (*c->nr_model) {
+                    char esc[600];
+                    esc_text(c->nr_model, esc, sizeof esc);
+                    fprintf(fp, "\tmodel=%s", esc);
+                }
                 fputc('\n', fp);
             }
             /* (the clip's own lines follow)
@@ -2201,6 +2214,8 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                 else if (!strcmp(f[q], "comp"))   cc->comp        = (float)atof(v);
                 else if (!strcmp(f[q], "thresh")) cc->comp_thresh = (float)atof(v);
                 else if (!strcmp(f[q], "deess"))  cc->deess       = (float)atof(v);
+                else if (!strcmp(f[q], "model"))
+                    unesc_text(v, cc->nr_model, sizeof cc->nr_model);
                 else if (!strcmp(f[q], "shape"))  { int w = ss_afade_value(v);
                                                     if (w >= 0) cc->fade_shape = w; }
                 else if (!strncmp(f[q], "eq", 2) && f[q][2] >= '0' && f[q][2] <= '5')
@@ -2977,8 +2992,23 @@ static void chain_clip_audio(strbuf *fc, const ss_clip *c)
     /* First, because everything downstream is deciding what to do about a
      * signal and the noise is not part of it. `nf` is where afftdn thinks the
      * noise floor is; -40 dB is a room, not a hiss. */
-    if (c->nr_audio > 0.0f)
-        sb_add(fc, ",afftdn=nr=%.2f:nf=-40", (double)c->nr_audio * 0.97);
+    if (c->nr_audio > 0.0f) {
+        char model[1024];
+        /* ⚠ arnndn is a TRAINED denoiser and nothing without its model, so a
+         * clip naming one this machine has not got falls through to no
+         * filter at all rather than to afftdn: silently substituting a
+         * different denoiser is how a delivery comes back sounding unlike
+         * every take that was approved. `timeline get` says whether the name
+         * resolved, so the window can show it the way it shows a font this
+         * machine has not got. */
+        if (*c->nr_model) {
+            if (ss_rnn_resolve(c->nr_model, model, sizeof model) == 0)
+                sb_add(fc, ",arnndn=m=%s:mix=%.3f", model,
+                       (double)c->nr_audio / 100.0);
+        } else {
+            sb_add(fc, ",afftdn=nr=%.2f:nf=-40", (double)c->nr_audio * 0.97);
+        }
+    }
 
     /* The gate is on the ORIGINAL dynamics, before anything lifts the quiet
      * parts. 0..100 maps onto a threshold from silence to -20 dBFS, which is

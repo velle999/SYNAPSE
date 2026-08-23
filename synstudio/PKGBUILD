@@ -1214,7 +1214,55 @@ pkgver=0.1.0
 #   overwrite — what a hand that knows another NLE will already try.
 #
 #   662 assertions, clean under ASan+UBSan+LSan.
-pkgrel=36
+#
+# 37 THE PHOTO DRAG NEVER WORKED, AND arnndn's MODEL.
+#
+#   ⛔ DRAGGING A PHOTOGRAPH ONTO THE VIDEO TAB FLASHED AN OVERLAY AND DID
+#   NOTHING — and had done since the gesture shipped at pkgrel 12, because the
+#   only thing ever tested was `dropUrls()` called directly. TWO faults, both
+#   invisible in the file:
+#
+#   1. `fileDrop` fills the window and is declared LAST, so it is the topmost
+#      target for every drag — including the window's own. It took the photo
+#      drag, found no urls on it, refused, and lit its own "drop a
+#      photograph" overlay on the way past. The tab never saw the drag. That
+#      flash IS the bug report. A DropArea whose `keys` do not match is not
+#      entered and delivery carries on underneath, so the drag names itself
+#      (`Drag.keys: ["synstudio.photo"]`) and the window-wide area takes
+#      files only.
+#
+#   2. `drag.target` moves an item by the mouse DELTA, and the proxy was reset
+#      to the picture pane's TOP-LEFT CORNER on every press — so the point
+#      being hit-tested was as far up and left of the pointer as the press was
+#      down and right of the corner. Pressing in the middle of the photograph
+#      and dragging to the tab put the proxy off the window entirely. It
+#      starts under the pointer now.
+#
+#   ⚠ TESTED BY DRIVING THE REAL DRAG, in a real window, offscreen: press in
+#   the MIDDLE of the picture, move the proxy to the tab, assert the tab sees
+#   it, that the drop returns CopyAction, and that a clip lands. No grep over
+#   the QML could have caught either fault, and both survived a feature that
+#   looked finished.
+#
+#   AND `arnndn` — the last named gap in the audio chain. A trained denoiser
+#   is nothing without its model file, which is somebody else's licensed work,
+#   so none ship: `nr.model` is a catalogue name or a path, found the way a
+#   LUT is (installed, then ~/.config/synstudio/rnn, then SYNSTUDIO_RNN), and
+#   `nr` becomes its mix. One knob, two answers to the same question.
+#
+#   ⚠ A LISTED MODEL IS ONE FFMPEG ITSELF ACCEPTED. There is no parser for the
+#   format here, and the alternative to asking is listing a file that fails in
+#   the middle of a delivery render — the same bargain `fx check` strikes with
+#   an effect recipe. A bogus .rnnn is simply not in the catalogue.
+#
+#   ⛔ A MODEL THIS MACHINE HAS NOT GOT LEAVES NO DENOISER AT ALL, and the
+#   name is kept. Falling back to afftdn would be substituting a different
+#   denoiser for the one that was approved, silently. `timeline get` answers
+#   `nr.model.found`, and the inspector's row goes red — the same way the font
+#   field says fontconfig has never heard of a family.
+#
+#   674 assertions, clean under ASan+UBSan+LSan.
+pkgrel=37
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

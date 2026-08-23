@@ -32,7 +32,10 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -238,8 +241,9 @@ static void each_dir(const char *leaf, void (*visit)(const char *, void *),
 {
     const char *home = getenv("HOME");
     const char *xdg = getenv("XDG_CONFIG_HOME");
-    const char *env = getenv(!strcmp(leaf, "luts") ? "SYNSTUDIO_LUTS"
-                                                   : "SYNSTUDIO_LOOKS");
+    const char *env = !strcmp(leaf, "luts") ? getenv("SYNSTUDIO_LUTS")
+                    : !strcmp(leaf, "rnn") ? getenv("SYNSTUDIO_RNN")
+                                           : getenv("SYNSTUDIO_LOOKS");
     char buf[1024];
 
     snprintf(buf, sizeof buf, "%s/%s", SYNSTUDIO_DATADIR, leaf);
@@ -362,6 +366,145 @@ int ss_lut_resolve(const char *ref, char *out, size_t n)
     lut_load();
     for (i = 0; i < nlcat; i++)
         if (!strcmp(lcat[i].name, ref)) { snprintf(out, n, "%s", lcat[i].path); return 0; }
+    return -1;
+}
+
+/* ------------------------------------------- the noise-model catalogue -- */
+
+/* `arnndn` is a trained speech denoiser and it is nothing without its model
+ * file — which is somebody else's work, licensed their way, so SynapseOS
+ * ships none of them, exactly as it ships no .cube. That makes a model the
+ * fourth thing this program takes from other people, and the second one that
+ * is pure data.
+ *
+ * ⚠ VALIDATED BY FFMPEG ITSELF, once, at catalogue time. A .rnnn is a text
+ * format this program has no parser for, so "is this a model" is not a
+ * question it can answer alone — and the alternative is listing a file that
+ * fails in the middle of a delivery render. One `-f null` pass over a tenth
+ * of a second of silence answers it for real, which is the same bargain
+ * `fx check` strikes with an effect recipe. */
+static ss_rnn_entry *rcat;
+static int nrcat, rcatcap, rloaded;
+
+static int rnn_usable(const char *path)
+{
+    char graph[1200];
+    char *av[20];
+    int n = 0, status;
+    pid_t pid;
+
+    /* ⚠ A colon, a backslash or a quote SEPARATES a filter's own options, so
+     * a path containing one would silently become a different option. The
+     * stabiliser refuses such a path for the same reason; refusing is the
+     * whole policy here, because there is no escaping that survives being
+     * read back out of a project file by a future version. */
+    if (strchr(path, ':') || strchr(path, '\\') || strchr(path, '\''))
+        return 0;
+    if (strlen(path) > 900) return 0;
+    snprintf(graph, sizeof graph, "arnndn=m=%s", path);
+
+    /* The filter's own parser, on the smallest input that reaches it. */
+    av[n++] = (char *)"ffmpeg";
+    av[n++] = (char *)"-v";      av[n++] = (char *)"error";
+    av[n++] = (char *)"-nostdin";
+    av[n++] = (char *)"-f";      av[n++] = (char *)"lavfi";
+    av[n++] = (char *)"-i";      av[n++] = (char *)"anullsrc=r=48000:cl=mono";
+    av[n++] = (char *)"-af";     av[n++] = graph;
+    av[n++] = (char *)"-t";      av[n++] = (char *)"0.1";
+    av[n++] = (char *)"-f";      av[n++] = (char *)"null";
+    av[n++] = (char *)"-";
+    av[n] = NULL;
+
+    pid = fork();
+    if (pid < 0) return 0;
+    if (pid == 0) {
+        int null = open("/dev/null", O_RDWR);
+        if (null >= 0) {
+            dup2(null, STDIN_FILENO);
+            dup2(null, STDOUT_FILENO);
+            dup2(null, STDERR_FILENO);
+            close(null);
+        }
+        execvp(av[0], av);
+        _exit(127);
+    }
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) ;
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static void rnn_add(const char *path)
+{
+    ss_rnn_entry e;
+    int i;
+
+    memset(&e, 0, sizeof e);
+    basename_noext(path, ".rnnn", e.name, sizeof e.name);
+    snprintf(e.path, sizeof e.path, "%s", path);
+    if (!rnn_usable(path)) return;
+
+    for (i = 0; i < nrcat; i++)
+        if (!strcmp(rcat[i].name, e.name)) { rcat[i] = e; return; }
+    if (nrcat >= rcatcap) {
+        int want = rcatcap ? rcatcap * 2 : 8;
+        ss_rnn_entry *n = realloc(rcat, sizeof *n * (size_t)want);
+        if (!n) return;
+        rcat = n; rcatcap = want;
+    }
+    rcat[nrcat++] = e;
+}
+
+static void rnn_dir(const char *dir, void *ctx)
+{
+    DIR *d = opendir(dir);
+    struct dirent *e;
+    (void)ctx;
+    if (!d) return;
+    while ((e = readdir(d)) != NULL) {
+        char path[1024];
+        const char *dot = strrchr(e->d_name, '.');
+        if (!dot || strcasecmp(dot, ".rnnn")) continue;
+        snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
+        rnn_add(path);
+    }
+    closedir(d);
+}
+
+static void rnn_load(void)
+{
+    if (rloaded) return;
+    rloaded = 1;
+    each_dir("rnn", rnn_dir, NULL);
+}
+
+int ss_rnn_count(void) { rnn_load(); return nrcat; }
+const ss_rnn_entry *ss_rnn_at(int i)
+{
+    rnn_load();
+    return (i >= 0 && i < nrcat) ? &rcat[i] : NULL;
+}
+
+/* A NAME from the catalogue, or a path if there is a '/' in it — the same
+ * rule a LUT reference follows, and for the same reason: a project naming
+ * `speech` opens on a machine where that file lives somewhere else. */
+int ss_rnn_resolve(const char *ref, char *out, size_t n)
+{
+    int i;
+
+    if (!ref || !*ref) return -1;
+    if (strchr(ref, '/')) {
+        char full[1024];
+        struct stat st;
+        expand_path(ref, full, sizeof full);
+        if (stat(full, &st) != 0) return -1;
+        snprintf(out, n, "%s", full);
+        return 0;
+    }
+    rnn_load();
+    for (i = 0; i < nrcat; i++)
+        if (!strcmp(rcat[i].name, ref)) {
+            snprintf(out, n, "%s", rcat[i].path);
+            return 0;
+        }
     return -1;
 }
 

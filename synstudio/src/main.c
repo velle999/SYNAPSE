@@ -71,6 +71,8 @@ static void usage(void)
 "LOOKS\n"
 "  lut --out F.cube              bake the colour half as a 3D LUT\n"
 "       [--from FILE] [--size 33] [--set K=V]...\n"
+"  rnns                          the arnndn noise models this machine has\n"
+"       (none ship: a trained model is somebody else's licensed work)\n"
 "\n"
 "VIDEO  (a project file is a text document; nothing is rendered until export)\n"
 "  timeline new PROJ [--size WxH] [--fps F] [--unique|--no-clobber]\n"
@@ -2612,6 +2614,16 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                 clip_get_at(c, f.key, o.at, buf, sizeof buf);
                 printf("%s\t%s\n", f.key, buf);
             }
+            /* Whether the noise model this clip names is on THIS machine.
+             * A model is somebody else's file and travels no better than a
+             * LUT does — so the project keeps the name and the window shows
+             * the row as unfound, the way the font field goes red for a
+             * family fontconfig has never heard of. */
+            if (*c->nr_model) {
+                char found[1024];
+                printf("nr.model.found\t%d\n",
+                       ss_rnn_resolve(c->nr_model, found, sizeof found) == 0);
+            }
         }
         return 0;
     }
@@ -3610,6 +3622,18 @@ int main(int argc, char **argv)
     }
     if (!strcmp(cmd, "fx"))       return cmd_fx(argc, argv);
     if (!strcmp(cmd, "luts"))     return cmd_luts();
+    /* The noise models this machine has, the way `luts` lists the LUTs. None
+     * ship: a trained model is somebody's licensed work far more often than a
+     * slider position is, so on most machines this list is empty until
+     * somebody puts a .rnnn in ~/.config/synstudio/rnn. */
+    if (!strcmp(cmd, "rnns")) {
+        int i;
+        for (i = 0; i < ss_rnn_count(); i++) {
+            const ss_rnn_entry *r = ss_rnn_at(i);
+            printf("%s\t%s\n", r->name, r->path);
+        }
+        return 0;
+    }
     if (!strcmp(cmd, "look"))     return cmd_look(argc, argv);
     if (!strcmp(cmd, "gui"))      return cmd_gui(argc, argv);
     if (!strcmp(cmd, "timeline")) return cmd_timeline(argc, argv);

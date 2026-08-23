@@ -68,7 +68,14 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 - [x] **noise reduction** — `afftdn`, first in the chain, because everything
       downstream is deciding what to do about a signal and the noise is not
       part of it
-- [ ] `arnndn` — needs a model file, so it is also the first importable effect
+- [x] **`arnndn`** — shipped in 0.1.0-37. `nr.model` is a catalogue name or a
+      path and `nr` becomes its mix; models are found the way LUTs are and
+      NONE ship, because a trained model is somebody else's licensed work.
+      ⚠ A listed model is one ffmpeg itself accepted — there is no parser for
+      the format here, and the alternative is listing a file that fails in the
+      middle of a delivery render. ⛔ A model this machine has not got leaves
+      no denoiser at all and keeps the name: falling back to afftdn would
+      substitute a different denoiser for the one that was approved
 - [x] **ducking** — `timeline track N --duck K`, `sidechaincompress` keyed off
       the nominated track. A TRACK and not a clip, because that is what ducking
       is: a relationship between two layers of a mix. ⚠ The key track's clips
@@ -466,8 +473,8 @@ Fairlight-style automation: four features for one piece of work.
    range, seven presets, burn-in, image sequences and a queue.
 
 **The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan: a curve editor over time, smooth
-cut, and `arnndn`'s model file. Auto-save was never a gap and is not a feature
+short list of named gaps rather than a plan: a curve editor over time, and
+smooth cut. Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what
 that was missing, until 0.1.0-34, was a way to give it a name.
 

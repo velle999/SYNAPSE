@@ -2939,6 +2939,9 @@ FloatingWindow {
                         DropArea {
                             id: videoTabDrop
                             anchors.fill: parent
+                            // A photograph dragged from the darkroom, and a
+                            // file dragged in from anywhere else.
+                            keys: ["synstudio.photo", "text/uri-list", "text/plain"]
                             // A little wider than the word: a drop target the
                             // size of its label is a target you have to aim at.
                             anchors.margins: -6
@@ -3130,6 +3133,22 @@ FloatingWindow {
                             // up and the drop would do nothing at all.
                             Drag.active: photoDragMa.drag.active
                             Drag.supportedActions: Qt.CopyAction
+                            // ⛔ THE KEY IS WHAT GETS IT PAST THE WINDOW-WIDE
+                            // DROP TARGET.
+                            //
+                            // `fileDrop` fills the window and is declared
+                            // last, so it is the topmost thing any drag lands
+                            // on — including this one. It took every photo
+                            // drag, found no urls on it, refused, and lit its
+                            // own "drop a photograph" overlay on the way past:
+                            // the tab never saw the drag at all, and what the
+                            // hand saw was a flash and nothing happening.
+                            //
+                            // A DropArea whose `keys` do not match is not
+                            // entered and delivery CARRIES ON to what is
+                            // underneath — so naming this drag is what lets it
+                            // reach the tab.
+                            Drag.keys: ["synstudio.photo"]
                             // An internal drag carries the SOURCE, not mime
                             // data, so the file travels as a property on it.
                             property string filePath: root.file
@@ -3145,9 +3164,28 @@ FloatingWindow {
                             drag.threshold: 12
                             cursorShape: drag.active ? Qt.ClosedHandCursor
                                                      : Qt.ArrowCursor
-                            onPressed: {
-                                photoDragProxy.x = 0
-                                photoDragProxy.y = 0
+                            // ⛔ THE PROXY STARTS UNDER THE POINTER, NOT AT THE
+                            // CORNER.
+                            //
+                            // `drag.target` moves an item by the mouse's
+                            // DELTA, and this reset it to (0,0) of the picture
+                            // pane on every press — so the thing being
+                            // hit-tested was the pointer's movement measured
+                            // from the pane's top-left corner, not the
+                            // pointer. Press in the middle of the photograph,
+                            // drag to the Video tab, and the proxy lands as
+                            // far up and left of the tab as the press was
+                            // right and below the corner: off the tab, off the
+                            // window, over nothing at all. The tab lit up only
+                            // if the proxy happened to sweep across it on the
+                            // way, which is what "it blinks and does nothing"
+                            // was.
+                            //
+                            // A drag is hit-tested at the ITEM, so the item
+                            // has to BE where the hand is.
+                            onPressed: function (m) {
+                                photoDragProxy.x = m.x
+                                photoDragProxy.y = m.y
                             }
                         }
                     }
@@ -5031,6 +5069,15 @@ FloatingWindow {
     DropArea {
         id: fileDrop
         anchors.fill: parent
+        // ⛔ FILES ONLY. Without this it is the topmost target for the
+        // window's OWN photo drag as well, which is how dragging a photograph
+        // onto the Video tab came to flash an overlay and do nothing: this
+        // area took the drag, found no urls, refused it, and the tab
+        // underneath never heard about it.
+        // ⚠ text/plain as well: not every source offers a uri-list, and the
+        // handler already falls back to the dropped TEXT. The internal drag
+        // carries neither, which is the whole point.
+        keys: ["text/uri-list", "text/plain"]
         onDropped: function (drop) {
             if (!drop.hasUrls) { drop.accepted = false; return }
             root.dropUrls(drop.urls)
@@ -6569,6 +6616,13 @@ FloatingWindow {
             cc.row.type === "enum" && cc.row.choices.length > 10
         // The font row is a text row with a LIST — see the picker below.
         readonly property bool isFont: cc.row.key === "text.font"
+        // ⚠ A noise model is somebody else's FILE and travels no better than
+        // a LUT does. The engine says whether the name resolved HERE, because
+        // a project that names one is perfectly valid on the machine that has
+        // it and silently does not denoise on the machine that does not.
+        readonly property bool isModel: cc.row.key === "nr.model"
+        readonly property bool modelMissing:
+            cc.isModel && cc.raw !== "" && root.clipValue("nr.model.found") !== "1"
         property bool fontOpen: false
         // A colour to dip THROUGH is only a colour if the transition dips.
         readonly property bool applies:
@@ -6724,6 +6778,7 @@ FloatingWindow {
             // what was meant, and a plain field had no way to say so.
             border.color: cti.activeFocus ? root.cAccent
                         : (cc.isFont && !root.fontInstalled(cc.raw)) ? root.cBad
+                        : cc.modelMissing ? root.cBad
                         : root.wash(0.2)
 
             TextInput {
