@@ -770,7 +770,39 @@ pkgver=0.1.0
 #   drives a scratch path+service PAIR, identical but for that one line, with 8
 #   writes a second apart: the limited arm must end `failed` and the unlimited
 #   arm `active` with all 8 runs landed. Both arms are the assertion.
-pkgrel=437
+# 438 THE WINDOW MOVE KEYS LOSE THE SHIFT. Super+arrows move the focused
+#   window now; Super+Shift+arrows, where they shipped, no longer do — moved,
+#   not aliased, so the palette lists one chord for one action.
+#
+#   ⚠ AND SUPER+ARROWS WAS NEVER BOUND TO ANYTHING, which is the other half of
+#   why this came up: it read as a key that had broken, arriving close enough
+#   to 436 to look like fallout from it. `git log -S` finds no commit that ever
+#   added or removed a bare `super+<arrow>` from seed_default_binds(), and
+#   436's diff lives entirely inside the `move_output` branch of
+#   synui_binding_execute — it changes what happens after that action is
+#   chosen, never how a chord is matched. Nothing regressed; the key had
+#   always done nothing, and only the timing suggested otherwise.
+#
+#   The Shift was deliberate and the reason no longer holds. It was reserved
+#   against a keyboard snap, that being the chord most desktops snap with —
+#   but snap.c is drag-to-edge and driven by the POINTER, so the reservation
+#   was against a feature nothing was building, and it charged the most-used
+#   window action an extra modifier to hold the seat. Super+Ctrl+arrows are
+#   still the expand toggles; a keyboard snap can have those, a letter, or the
+#   Shift chord this just vacated.
+#
+#   ⚠ FIVE SURFACES, and the table is only the first. The rationale comment
+#   above the binds said in as many words that Super+arrows were left alone
+#   deliberately, and the expand-toggle comment below it claimed to hold the
+#   first arrow binds in the table — both false the moment the binds moved, and
+#   neither is anything a compiler can see. Also src/input.c's header on
+#   window_move_key, the --help block in synui_main.c, and the 0.2.9.3 release
+#   notes, which describe this cycle and had already been written.
+#
+#   tests/readme_binds.sh is what makes the README the sixth: every combo in
+#   seed_default_binds() must appear in the hotkey table, so the row moves or
+#   the build fails.
+pkgrel=438
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

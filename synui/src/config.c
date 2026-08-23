@@ -776,14 +776,20 @@ static void seed_default_binds(syn_config_t *cfg)
          * the same list operation, so both keys do it rather than one pair
          * mysteriously doing nothing depending on which layout is up.
          *
-         * Super+Shift+arrows were free. Super+Ctrl+arrows are the expand
-         * toggles above, and Super+arrows are left alone deliberately — that is
-         * the chord most desktops use for snapping, which synui does with the
-         * pointer, and taking it here would foreclose it. */
-        { "super+shift+left",  "move_left"  },
-        { "super+shift+right", "move_right" },
-        { "super+shift+up",    "move_up"    },
-        { "super+shift+down",  "move_down"  },
+         * ⚠ ON PLAIN SUPER+ARROWS, and the Shift these shipped on until 438
+         * is GONE — not aliased. It was reserved for a keyboard snap that does
+         * not exist and was never scheduled: snap.c is drag-to-edge, driven by
+         * the POINTER, so holding the chord empty foreclosed nothing that was
+         * being built and cost the reach on the one window action people use
+         * most. Nothing else in synui claims a bare Super+arrow.
+         *
+         * Super+Ctrl+arrows remain the expand toggles below. A snap bound to
+         * the keyboard later can have those, a letter, or Super+Shift+arrows
+         * back — this is the chord that earns its place by use. */
+        { "super+left",  "move_left"  },
+        { "super+right", "move_right" },
+        { "super+up",    "move_up"    },
+        { "super+down",  "move_down"  },
         { "super+f",         "float_toggle" },
         { "super+shift+f",   "fullscreen_toggle" },
         { "super+m",         "maximize_toggle" },
@@ -795,8 +801,9 @@ static void seed_default_binds(syn_config_t *cfg)
          * On the ARROWS because the axis is the whole point and no letter says
          * it — Up for the up/down axis, Left for left/right. Ctrl+Super rather
          * than Shift+Super next to maximize: super+shift+m is Do Not Disturb
-         * and has been since before this existed. These are the first arrow
-         * binds in the table; nothing else in synui claims one. */
+         * and has been since before this existed. Ctrl is also what keeps
+         * these clear of the move binds above, which took the bare arrows in
+         * 438. */
         { "super+ctrl+up",   "expand_v_toggle" },
         { "super+ctrl+left", "expand_h_toggle" },
         { "super+shift+d",   "decorations_toggle" },

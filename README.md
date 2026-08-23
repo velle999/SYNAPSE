@@ -392,7 +392,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
 | `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |
-| `Super`+`Shift`+`Left` / `Super`+`Shift`+`Right` / `Super`+`Shift`+`Up` / `Super`+`Shift`+`Down` | Move the focused window. A floating window slides by a step; a tiled one moves through the layout instead, since a tiled window has no position of its own — Left and Up move it earlier in the order, Right and Down later |
+| `Super`+`Left` / `Super`+`Right` / `Super`+`Up` / `Super`+`Down` | Move the focused window. A floating window slides by a step; a tiled one moves through the layout instead, since a tiled window has no position of its own — Left and Up move it earlier in the order, Right and Down later |
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area (also a niri column's width) |
 | `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other five layouts |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |

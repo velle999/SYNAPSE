@@ -703,8 +703,8 @@ void synui_start_menu_open(syn_server_t *s)
 #define WINDOW_MOVE_KEEP_VIS 64
 
 /*
- * Super+Shift+arrow. See the comment on these binds in config.c for why one
- * chord means two different things.
+ * Super+arrow (Super+Shift+arrow before 438). See the comment on these binds
+ * in config.c for why one chord means two different things.
  *
  * dx/dy are -1, 0 or +1.
  */
