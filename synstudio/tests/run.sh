@@ -4038,29 +4038,26 @@ fi
 
 # ---- dragging the photograph onto the Video tab -------------------------
 #
-# ⛔ THE ONE GESTURE NO GREP CAN TEST, AND IT SHIPPED BROKEN TWICE.
+# ⛔ THE ONE GESTURE NO GREP CAN TEST, AND IT SHIPPED BROKEN THREE TIMES.
 #
-# The window has a DropArea filling it for files dragged in from a file
-# manager, declared last so it is on top. That made it the topmost target for
-# the window's OWN photo drag too: it took the drag, found no urls, refused
-# it, and flashed its "drop a photograph" overlay on the way past. The tab
-# never saw the drag. What the hand saw was a blink and nothing happening.
+# 1. The window-wide DropArea for files is declared last, so it was the
+#    topmost target for the window's OWN drag: it took it, found no urls,
+#    refused, and flashed its overlay on the way past. Fixed with Drag.keys.
+# 2. `drag.target` moves an item by the mouse DELTA from a start position
+#    MouseArea captured at PRESS — before the pressed handler can move it. So
+#    setting the proxy under the pointer on press was overwritten by the first
+#    move, using a start left over from the last drag (0,0 the first time).
+#    The drag started and never arrived: exactly what it looked like.
+# 3. And a drop four pixels short of a 56-pixel tab did nothing at all.
 #
-# The other half was the proxy: `drag.target` moves an item by the mouse
-# DELTA, and it was reset to the picture pane's top-left corner on every
-# press, so the point being hit-tested was as far up and left of the pointer
-# as the press was down and right of the corner.
-#
-# Neither is visible in the file. This drives the real drag in a real window.
+# So this drives the drag the way QT does — stale position, our move, drop —
+# and asserts all three answers: on the tab, near it, and back on the picture.
 if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ] && have ffmpeg; then
     dg=$TMP/dragtest
     mkdir -p "$dg"
     cp "$qml" "$dg/drv.qml"
     cp "$(dirname "$qml")/synstudio-playback.qml" "$dg/" 2>/dev/null
     ffmpeg -v error -f lavfi -i color=c=orange:s=64x36:d=1 -frames:v 1 "$dg/shot.png" -y
-    # The driver goes INSIDE the root object, so it can name the ids the
-    # window gives its drag proxy and its tab.
-    head -c -2 "$dg/drv.qml" > "$dg/drv.tmp" 2>/dev/null || cp "$dg/drv.qml" "$dg/drv.tmp"
     python3 - "$dg" <<'PYEOF'
 import sys
 d = sys.argv[1]
@@ -4069,30 +4066,52 @@ drv = """
     Timer {
         interval: 900; repeat: true; running: true
         property int n: 0
+        // Qt's own sequence: the proxy carries whatever the last drag left on
+        // it, MouseArea writes start+delta on every move, and the window's
+        // move handler writes the pointer over the top.
+        function grab() {
+            photoDragProxy.x = 0
+            photoDragProxy.y = 0
+            root.photoDragTo(photoDrag.width / 2, photoDrag.height / 2)
+            photoDragProxy.Drag.start()
+        }
+        function moveTo(dx, dy) {
+            const c = videoTab.mapToItem(photoDrag, videoTab.width / 2 + dx,
+                                         videoTab.height / 2 + dy)
+            photoDragProxy.x = c.x - photoDrag.width / 2
+            photoDragProxy.y = c.y - photoDrag.height / 2
+            root.photoDragTo(c.x, c.y)
+        }
         onTriggered: {
             n++
             if (n === 1) {
                 root.mode = "photo"
                 root.loadFile(Quickshell.env("HOME") + "/shot.png")
             } else if (n === 3) {
-                // Pressed in the MIDDLE of the photograph, which is the case
-                // the corner-reset got wrong, and dragged to the tab.
-                const mid = Qt.point(photoDrag.width / 2, photoDrag.height / 2)
-                photoDragProxy.x = mid.x
-                photoDragProxy.y = mid.y
-                photoDragProxy.Drag.start()
-                const c = videoTab.mapToItem(photoDrag, videoTab.width / 2,
-                                             videoTab.height / 2)
-                photoDragProxy.x = c.x
-                photoDragProxy.y = c.y
+                grab(); moveTo(0, 0)
             } else if (n === 4) {
-                console.warn("TAB " + videoTabDrop.containsDrag)
-                console.warn("DROP " + photoDragProxy.Drag.drop())
+                console.warn("ONTAB " + photoDragProxy.Drag.drop())
             } else if (n === 7) {
-                console.warn("MODE " + root.mode)
-                console.warn("CLIPS " + (root.tl.tracks.length
-                                         ? root.tl.tracks[0].clips.length : -1))
-            } else if (n === 9) {
+                console.warn("CLIPS1 " + (root.tl.tracks.length
+                                          ? root.tl.tracks[0].clips.length : -1))
+                root.mode = "photo"
+                grab(); moveTo(200, 0)      // along the toolbar, off the tab
+            } else if (n === 8) {
+                console.warn("NEAR " + photoDragProxy.Drag.drop())
+            } else if (n === 11) {
+                console.warn("CLIPS2 " + (root.tl.tracks.length
+                                          ? root.tl.tracks[0].clips.length : -1))
+                root.mode = "photo"
+                photoDragProxy.x = 0; photoDragProxy.y = 0
+                root.photoDragTo(photoDrag.width / 2, photoDrag.height / 2)
+                photoDragProxy.Drag.start()
+                root.photoDragTo(photoDrag.width / 2 + 60, photoDrag.height / 2 + 20)
+            } else if (n === 12) {
+                console.warn("ONPIC " + photoDragProxy.Drag.drop())
+            } else if (n === 15) {
+                console.warn("CLIPS3 " + (root.tl.tracks.length
+                                          ? root.tl.tracks[0].clips.length : -1))
+            } else if (n === 17) {
                 Qt.quit()
             }
         }
@@ -4100,15 +4119,28 @@ drv = """
 """
 open(d + "/drv.qml", "w").write(s[:s.rstrip().rfind("}")] + drv + "}\n")
 PYEOF
-    HOME=$dg SYNSTUDIO_BIN=$BIN DISABLE_MANGOHUD=1 MANGOHUD=0         QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1         timeout 45 quickshell -p "$dg/drv.qml" > "$dg/log" 2>&1
-    if grep -q "MODE\|TAB" "$dg/log"; then
-        grep -F "TAB true" "$dg/log" > /dev/null \
-            && ok || bad "the Video tab sees the photograph being dragged onto it"
-        # 2 is Qt.CopyAction: the drop was ACCEPTED, not merely delivered.
-        grep -F "DROP 2" "$dg/log" > /dev/null \
-            && ok || bad "and takes the drop"
-        grep -F "CLIPS 1" "$dg/log" > /dev/null \
-            && ok || bad "and the photograph lands in the cut"
+    HOME=$dg SYNSTUDIO_BIN=$BIN DISABLE_MANGOHUD=1 MANGOHUD=0 \
+        QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+        timeout 60 quickshell -p "$dg/drv.qml" > "$dg/log" 2>&1
+    if grep -q "CLIPS3" "$dg/log"; then
+        # 2 is Qt.CopyAction: delivered AND accepted.
+        grep -F "ONTAB 2" "$dg/log" >/dev/null \
+            && ok || bad "the Video tab takes the photograph dropped on it"
+        grep -F "CLIPS1 1" "$dg/log" >/dev/null \
+            && ok || bad "and it lands in the cut"
+        # ⚠ Four pixels short of a small tab is the common case, not the edge
+        # case. The window catches it anywhere the hand actually went.
+        grep -F "NEAR 2" "$dg/log" >/dev/null \
+            && ok || bad "a drop near the tab is caught too"
+        grep -F "CLIPS2 2" "$dg/log" >/dev/null \
+            && ok || bad "and that one lands as well"
+        # ⛔ But NOT back onto the photograph: that is a mis-click, and
+        # answering it by adding a clip and swapping the page under the hand
+        # is worse than doing nothing.
+        grep -F "ONPIC 0" "$dg/log" >/dev/null \
+            && ok || bad "a drag that ends on the picture does nothing"
+        grep -F "CLIPS3 2" "$dg/log" >/dev/null \
+            && ok || bad "and adds no clip"
     else
         printf '  skip  the window did not start, no drag asserted\n'
     fi

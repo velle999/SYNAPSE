@@ -1345,7 +1345,40 @@ pkgver=0.1.0
 #   disagreement; a faster monitor would have been.
 #
 #   697 assertions, clean under ASan+UBSan+LSan.
-pkgrel=39
+#
+# 40 THE PHOTO DRAG, FOR REAL THIS TIME.
+#
+#   pkgrel 37 fixed two of the three things wrong with dragging a photograph
+#   onto the Video tab. The one it missed is the one that mattered: the drag
+#   started and never arrived.
+#
+#   ⛔ `drag.target` MOVES AN ITEM BY THE MOUSE DELTA FROM A START POSITION
+#   MOUSEAREA CAPTURED AT PRESS — before the `pressed` handler runs. So
+#   putting the proxy under the pointer on press, which is what 37 did, is
+#   OVERWRITTEN by the first move: Qt writes start + delta, where start is
+#   whatever the last drag left on the item (0,0 the first time). The
+#   hit-tested point therefore tracked the pointer's MOVEMENT measured from
+#   the picture pane's corner, not the pointer — so it left the window on the
+#   way to a tab near the top left, and the drag went nowhere.
+#
+#   The position is written from the MOVE handler now, after Qt's own update,
+#   which is the write that lands.
+#
+#   ⚠ AND A DROP FOUR PIXELS SHORT OF A 56-PIXEL TAB DID NOTHING. That is the
+#   common case, not the edge case. The window-wide drop area catches the
+#   photograph anywhere the hand actually went — the toolbar, the panels, the
+#   timeline — and the tab stays lit for the whole gesture rather than only
+#   once the pointer is already on it. ⛔ Except back onto the PICTURE, which
+#   is a mis-click: adding a clip and swapping the page under the hand is
+#   worse than doing nothing.
+#
+#   ⚠ The test drives the drag THE WAY QT DOES — stale start position, Qt's
+#   write, the window's write, then the drop — and asserts all three answers.
+#   The old one set the position itself, which is exactly why it passed while
+#   the gesture was broken.
+#
+#   700 assertions, clean under ASan+UBSan+LSan.
+pkgrel=40
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
