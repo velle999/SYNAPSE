@@ -110,6 +110,7 @@ install_data(
   'data/icons/lutris.svg',
   'data/icons/heroic.svg',
   'data/icons/moonlight.svg',
+  'data/icons/greenlight.svg',
   'data/icons/music.svg',
   'data/icons/kodi.svg',
   'data/icons/plex.svg',

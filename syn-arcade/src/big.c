@@ -1035,6 +1035,51 @@ static const char *browser_prog(void)
 }
 
 /*
+ * Greenlight — Xbox cloud gaming and console remote play — as an argv, or NULL.
+ *
+ * ⚠ THE ONLY TILE HERE THAT MAY NOT BE ON PATH, and that is the whole reason
+ * this is a function rather than one more have() beside Moonlight. Greenlight
+ * ships as a Flatpak (io.github.unknownskl.greenlight, on Flathub), and a
+ * Flatpak is invisible to have(), which is `command -v` and nothing else. As a
+ * plain have("greenlight") the tile would simply never have appeared — no
+ * warning, no empty tile, nothing on the shelf at all — on precisely the
+ * install this package recommends. There is an AUR build that would have put
+ * the name on PATH and made this unnecessary; it is a five-vote package, and a
+ * television four metres away is the wrong place to discover one went stale.
+ *
+ * PATH first all the same: a native binary is somebody's deliberate choice, it
+ * costs one fork to find, and `flatpak info` is a far heavier question than
+ * `command -v` to ask on the way to drawing a shelf. Cached for the reason
+ * first_installed() is — apps_table() is walked twice per invocation, once to
+ * decide the tile exists and once for its command.
+ */
+static const char *greenlight_prog(void)
+{
+	static const char *cache;
+	if (cache)
+		return *cache ? cache : NULL;
+
+	if (have("greenlight")) {
+		cache = "greenlight";
+		return cache;
+	}
+
+	/* ⚠ `flatpak info <id>`, NOT `flatpak list | grep`. list prints the
+	 * whole installation formatted for a person to read, and a grep over
+	 * it matches a remote name, a branch or another app's description as
+	 * readily as the app itself. info takes the ID and answers with its
+	 * exit status, which is the question actually being asked. */
+	if (system("flatpak info io.github.unknownskl.greenlight "
+		   ">/dev/null 2>&1") == 0) {
+		cache = "flatpak run io.github.unknownskl.greenlight";
+		return cache;
+	}
+
+	cache = "";
+	return NULL;
+}
+
+/*
  * The terminal.
  *
  * syntty first because it is this system's own terminal and the default
@@ -1306,6 +1351,19 @@ static int apps_table(struct row *rows, int max)
 	if (have("moonlight"))
 		rows[n++] = (struct row){ "moonlight", "Moonlight", "moonlight",
 			"moonlight", "app", "play", true, false, true, false };
+	/* ⚠ THE EXEC MAY BE THREE WORDS — `flatpak run <id>` — which big_run's
+	 * space split already handles and which nothing else in this table
+	 * needed. And the id stays `greenlight` rather than the Flatpak's:
+	 * tile_for() matches a window's app-id against the tile id and against
+	 * the LAST dot-component of that app-id, so a window reporting
+	 * io.github.unknownskl.greenlight finds this row on the Running shelf
+	 * with no second spelling anywhere to fall out of step. Matched in the
+	 * FIRST pass, too — the second pass looks at the first word of the
+	 * exec, which for a Flatpak is `flatpak` and is evidence of nothing. */
+	if (greenlight_prog())
+		rows[n++] = (struct row){ "greenlight", "Greenlight",
+			greenlight_prog(), "greenlight", "app", "play",
+			true, false, true, false };
 
 	/* ── media ── */
 	{

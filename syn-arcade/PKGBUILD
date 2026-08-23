@@ -212,6 +212,65 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-40: Game Pass on the television, and a tile that would have ─────
+# ── been installed and invisible ──────────────────────────────────
+#
+# A Greenlight tile on the Play shelf, beside Moonlight, which is the shelf it
+# belongs on for the same reason: it is a game that runs somewhere else and
+# arrives here as a video stream. Xbox Cloud Gaming and remote play from a
+# console in the house, both of which mean Game Pass on a screen four metres
+# away without a Windows machine anywhere in the room.
+#
+# ⚠ A CLIENT AND NOT A BROWSER, and this file already knows why. browser_prog()
+# carries the note about --kiosk, which this package shipped once and reverted
+# the moment there was an on-screen keyboard. Pointing the Web tile at
+# xbox.com/play would have re-made that mistake and added two of its own:
+#
+#   · the stream is THROTTLED on a Linux user-agent. Microsoft drops the
+#     resolution, quietly, and the workaround is spoofing a Windows UA — a
+#     string in a config that breaks with no message the day the sniff
+#     changes, on a machine whose owner is sitting on a sofa.
+#   · it would need vptr. The controller-as-a-mouse exists BECAUSE a browser
+#     cannot be driven by words on a pipe (vptr.c), so every session would be
+#     played through a simulated cursor. Greenlight takes the pad directly.
+#
+# ⚠ AND IT IS THE ONLY TILE IN apps_table() THAT MAY NOT BE ON PATH. Greenlight
+# is distributed as a Flatpak, and a Flatpak is invisible to have(), which is
+# `command -v` and nothing else. Written as have("greenlight") — which is what
+# every other row in that table is — the tile would have drawn nothing, logged
+# nothing, and failed on exactly the install this package recommends. Hence
+# greenlight_prog(): PATH first, because a native binary is somebody's
+# deliberate choice and costs one fork to find, then `flatpak info` BY ID.
+#
+# ⚠ `flatpak info <id>`, never `flatpak list | grep`. list prints the whole
+# installation formatted for a person, and a grep over it matches a remote
+# name or a branch as readily as an app. The suite pins the case that separates
+# a real probe from a lazy one: a machine WITH Flatpak and WITHOUT Greenlight
+# must grow no tile, and the stub answers for that one id alone so a pass
+# cannot be an accident.
+#
+# ⚠ Its exec is THREE words — `flatpak run <id>` — where every other one is one
+# or two. big_run splits on spaces into an argv, which already handled it; a
+# launcher that had taken only the first word would have run bare `flatpak`
+# and opened nothing. Asserted, because nothing else in the table proves it.
+#
+# The tile id stays `greenlight` rather than the Flatpak's. tile_for() matches
+# a window's app-id against the tile id and against the LAST dot-component of
+# that app-id, so a window reporting io.github.unknownskl.greenlight finds this
+# row on the Running shelf in the FIRST pass, with no second spelling anywhere
+# to fall out of step. The second pass would not have found it: it reads the
+# first word of the exec, which for a Flatpak is `flatpak` and is evidence of
+# nothing at all.
+#
+# ⚠ DETECTED, NEVER DEPENDED ON, and that is a judgement about the upstream
+# rather than packaging habit. Greenlight's v2 is in maintenance mode — critical
+# fixes only, v3 with no date — and it talks to a service whose owner can change
+# it on any morning. As a detected row it behaves like Moonlight: if it stops
+# working, or is never installed, the tile is simply not on the shelf. Nothing
+# to unship, no broken install, no ISO regression. There is no optdepends line
+# for the same reason there is none for Moonlight, and one more: the package we
+# recommend is not a pacman package at all.
+#
 # ── 0.1.0-37: the Plex tile opened with no mouse and no keyboard ────────────
 #
 # Reported as "the controller mouse isn't working when I launch Plex in big
@@ -906,7 +965,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=39
+pkgrel=40
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

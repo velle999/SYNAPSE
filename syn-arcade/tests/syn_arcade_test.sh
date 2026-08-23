@@ -1175,6 +1175,58 @@ check "the power tiles are on the system shelf" $?
                                    END { exit bad?1:0 }'
 check "every tile on the apps shelf wants a pointer" $?
 
+# ── the one tile that is not on PATH ───────────────────────────────────────
+#
+# ⚠ THIS IS THE ONLY TILE THAT CAN BE INSTALLED AND STILL INVISIBLE, which is
+# why it is the only one with assertions of its own rather than a rule. Every
+# other row in apps_table() is `have("name")` — `command -v` — and Greenlight
+# is distributed as a Flatpak, which puts nothing on PATH. Written the obvious
+# way it would have drawn no tile, logged nothing and failed on exactly the
+# install the package recommends, which is the shape of dead feature this
+# project keeps writing memos about.
+#
+# ⚠ AND THE FOURTH CASE IS THE ONE THAT MATTERS. A probe that answers "yes" to
+# `flatpak info <anything>` passes the first three of these while being wrong,
+# so the stub answers for THAT ID ALONE and the last check proves a machine
+# with Flatpak but without Greenlight grows no tile.
+GLB=$T/gl-bin
+mkdir -p "$GLB"
+
+printf '#!/bin/sh\nexit 0\n' > "$GLB/greenlight"
+chmod +x "$GLB/greenlight"
+row=$(PATH="$GLB:$PATH" "$SA" big apps --rec | awk -F'\t' '$1 == "greenlight" { print $3 }')
+[ "$row" = "greenlight" ]
+check "a native greenlight on PATH is the tile's exec" $?
+rm -f "$GLB/greenlight"
+
+cat > "$GLB/flatpak" <<'STUB'
+#!/bin/sh
+[ "$1" = info ] && [ "$2" = io.github.unknownskl.greenlight ] && exit 0
+exit 1
+STUB
+chmod +x "$GLB/flatpak"
+
+row=$(PATH="$GLB:$PATH" "$SA" big apps --rec | awk -F'\t' '$1 == "greenlight" { print $3 }')
+[ "$row" = "flatpak run io.github.unknownskl.greenlight" ]
+check "...and a Flatpak-only install still draws one" $?
+
+# The exec is three words where every other one is one or two. big_run splits
+# on spaces into an argv; a launcher that passed the string to a shell, or that
+# took only the first word, would run bare `flatpak` and open nothing.
+words=$(printf '%s\n' "$row" | wc -w)
+[ "$words" = 3 ]
+check "...whose exec is the three words big_run splits into an argv" $?
+
+cat > "$GLB/flatpak" <<'STUB'
+#!/bin/sh
+exit 1
+STUB
+chmod +x "$GLB/flatpak"
+row=$(PATH="$GLB:$PATH" "$SA" big apps --rec | awk -F'\t' '$1 == "greenlight" { print $1 }')
+[ -z "$row" ]
+check "...and Flatpak WITHOUT greenlight grows no tile" $?
+rm -f "$GLB/flatpak"
+
 # ── the drawn tile glyphs ───────────────────────────────────────────────────
 #
 # An app tile is a word on a rounded rectangle, so a shelf of them is a list of
