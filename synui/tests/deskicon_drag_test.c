@@ -111,6 +111,7 @@ void wppick_toggle(syn_server_t *s)          { (void)s; }
 void theme_toggle(syn_server_t *s)           { (void)s; }
 void dispcfg_toggle(syn_server_t *s)         { (void)s; }
 void taskmgr_toggle(syn_server_t *s)         { (void)s; }
+void widgets_toggle(syn_server_t *s)         { (void)s; }
 void synui_start_menu_open(syn_server_t *s)  { (void)s; }
 
 /* deskicons.state lands in the scratch tree's config dir rather than the real

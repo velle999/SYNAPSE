@@ -80,6 +80,7 @@ const char *deskact_label(syn_deskact_t a)
     case SYN_DESKACT_WALLPAPER: return "Change Wallpaper…";
     case SYN_DESKACT_THEME:     return "Appearance…";
     case SYN_DESKACT_DISPLAY:   return "Display Settings…";
+    case SYN_DESKACT_WIDGETS:   return "Desktop Widgets…";
     case SYN_DESKACT_ICONS:     return "Show Desktop Icons";
     case SYN_DESKACT_REFRESH:   return "Refresh";
     case SYN_DESKACT_ARRANGE_NAME: return "Arrange by Name";
@@ -134,6 +135,11 @@ void deskmenu_open(syn_server_t *s, double lx, double ly)
     s->deskmenu.actions[n++] = SYN_DESKACT_WALLPAPER;
     s->deskmenu.actions[n++] = SYN_DESKACT_THEME;
     s->deskmenu.actions[n++] = SYN_DESKACT_DISPLAY;
+    /* With the other panel openers, above the icons toggle: the ellipsis rows
+     * open something, "Show Desktop Icons" flips in place, and mixing the two
+     * kinds is what makes a menu unreadable. Offered unconditionally — unlike
+     * the arrange rows it does something on a bare desktop. */
+    s->deskmenu.actions[n++] = SYN_DESKACT_WIDGETS;
     s->deskmenu.actions[n++] = SYN_DESKACT_ICONS;
     /* The arrange rows only exist while there is a desktop to arrange —
      * otherwise they are four rows that visibly do nothing. */
@@ -265,6 +271,13 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
         break;
     case SYN_DESKACT_DISPLAY:
         dispcfg_toggle(s);
+        break;
+    case SYN_DESKACT_WIDGETS:
+        /* Same door Super+Shift+A uses. widgets_show would be the tighter
+         * verb, but the menu is closed by the time we get here and _toggle is
+         * what every other panel row calls, so a panel already up from the
+         * keybind behaves the way the keybind does. */
+        widgets_toggle(s);
         break;
     case SYN_DESKACT_ICONS:
         s->config.desktop_icons = !s->config.desktop_icons;

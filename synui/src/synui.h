@@ -3187,6 +3187,11 @@ typedef enum {
     SYN_DESKACT_WALLPAPER,
     SYN_DESKACT_THEME,
     SYN_DESKACT_DISPLAY,
+    /* The Super+Shift+A manager, one row per widget. A row rather than a
+     * per-widget submenu: synui-widgets is the single writer of widgets.state
+     * and the panel is the one thing that reads it back, so a second surface
+     * that flipped widgets from here would be a second bug surface. */
+    SYN_DESKACT_WIDGETS,
     SYN_DESKACT_ICONS,       /* toggle desktop icons at runtime */
     /* Rescan ~/Desktop. ⚠ Not a nicety: there is NO inotify watch on that
      * directory (see deskicons_reload in deskmenu.c), so a file put there by
@@ -3207,7 +3212,9 @@ typedef enum {
     SYN_DESKACT_ICON_OPEN,
     SYN_DESKACT_ICON_TRASH,
 } syn_deskact_t;
-#define SYN_DESKMENU_MAX 20
+/* Headroom over the longest menu (20 rows: an icon is selected AND the icons
+ * are on), because the fill in deskmenu_open is an unchecked n++ walk. */
+#define SYN_DESKMENU_MAX 24
 
 /* The order the auto-grid flows ~/Desktop in. Every mode falls back to name
  * order for ties, so the desktop never reshuffles between two equal files. */

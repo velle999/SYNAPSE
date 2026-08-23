@@ -1235,6 +1235,18 @@ test('imgview_mouse', imgview_mouse,
      depends : [synui_exe, synctl_exe, vpointer_click],
      timeout : 120)
 
+# `deskmenu_widgets`: the desktop right-click menu's widget-manager row. The
+# row is put on screen by an n++ walk, so deleting it builds and runs clean and
+# just draws a menu with nothing about widgets in it — only a pointer landing
+# where the row should be can see that. Driven with a real pointer and wtype;
+# the ledger is a fake synui-widgets on PATH.
+deskmenu_widgets = find_program('tests/deskmenu_widgets.sh')
+test('deskmenu_widgets', deskmenu_widgets,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                vpointer_click.full_path()],
+     depends : [synui_exe, synctl_exe, vpointer_click],
+     timeout : 120)
+
 edge_expand = find_program('tests/edge_expand.sh')
 test('edge_expand', edge_expand,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),
