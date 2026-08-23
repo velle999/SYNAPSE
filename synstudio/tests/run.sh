@@ -3456,6 +3456,67 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+# ------------------------------------------------- the curve, over time --
+#
+# The darkroom has a curve widget over TONE; this is the same idea over TIME.
+# ⛔ The curve is SAMPLED BY THE ENGINE and never interpolated in the window:
+# `ss_clip_prop_at` is the one place a keyed property becomes a number, and
+# five eases re-implemented in QML would be a picture of something nothing
+# renders — right up until the day one of the two changed.
+
+cv=$TMP/curve.syntl
+$BIN timeline new "$cv" --size 160x90 --fps 25 >/dev/null
+$BIN timeline track "$cv" video V >/dev/null
+$BIN timeline solid "$cv" 0 --at 0 --dur 4 --colour 1,1,1 >/dev/null
+$BIN timeline anim "$cv" 0 0 add opacity --at 0 --value 0 >/dev/null
+$BIN timeline anim "$cv" 0 0 add opacity --at 4 --value 1 >/dev/null
+
+check "the curve is sampled at the count asked for" "11" \
+      "$($BIN timeline anim "$cv" 0 0 curve opacity --count 11 | wc -l)"
+check "it starts where the first key is" "0.000000" \
+      "$($BIN timeline anim "$cv" 0 0 curve opacity --count 11 |
+         head -1 | cut -f2)"
+check "and ends where the last one is"   "1.000000" \
+      "$($BIN timeline anim "$cv" 0 0 curve opacity --count 11 |
+         tail -1 | cut -f2)"
+# ⚠ THE DISCRIMINATING ONE: the curve has to be the same number the renderer
+# would use at that instant. A drawing that merely looks plausible is exactly
+# the failure a second implementation produces.
+check "and every sample IS what the renderer reads there" \
+      "$($BIN timeline anim "$cv" 0 0 at opacity --at 2.4)" \
+      "$($BIN timeline anim "$cv" 0 0 curve opacity --count 11 |
+         awk -F'\t' '$1 > 2.39 && $1 < 2.41 {print $2}')"
+# ⚠ `nr` and not `speed`: speed IS keyable (that is what a ramp is), and a
+# test that picked it would have asserted nothing.
+$BIN timeline anim "$cv" 0 0 curve nr 2>&1 \
+    | seen "a property the renderer cannot animate is refused" "cannot be keyed"
+
+# ---- move: one gesture, one edit ----------------------------------------
+#
+# A drag that removed a key and added another would be two processes, two
+# writes and two steps of undo for one gesture — and two chances for the
+# second half to be dropped, which reads as the editor eating the key.
+check "a move prints where the key landed" "1" \
+      "$($BIN timeline anim "$cv" 0 0 move opacity 1 --at 2 --value 0.5)"
+check "and there are still two keys" "2" \
+      "$($BIN timeline anim "$cv" 0 0 list opacity | wc -l)"
+check "at the time it was moved to" "2.000000" \
+      "$($BIN timeline anim "$cv" 0 0 list opacity | sed -n '2p' | cut -f3)"
+$BIN timeline anim "$cv" 0 0 move opacity 1 --ease inout >/dev/null
+check "an ease can be set without moving it" "2.000000" \
+      "$($BIN timeline anim "$cv" 0 0 list opacity | sed -n '2p' | cut -f3)"
+check "and it is the ease that changed" "inout" \
+      "$($BIN timeline anim "$cv" 0 0 list opacity | sed -n '2p' | cut -f5)"
+# ⚠ Fields not named KEEP what they were: a drag along the time axis must not
+# reset an ease somebody chose.
+$BIN timeline anim "$cv" 0 0 move opacity 1 --at 3 >/dev/null
+check "a move along time keeps the ease" "inout" \
+      "$($BIN timeline anim "$cv" 0 0 list opacity | sed -n '2p' | cut -f5)"
+$BIN timeline anim "$cv" 0 0 move opacity 9 --at 1 2>&1 \
+    | seen "moving a key that is not there is refused" "has no key 9"
+check "and the keys are untouched" "2" \
+      "$($BIN timeline anim "$cv" 0 0 list opacity | wc -l)"
+
 # --------------------------------------- arnndn, and other people's models --
 #
 # `arnndn` is a TRAINED denoiser and is nothing without its model file, which
@@ -3828,6 +3889,11 @@ if [ -f "$qml" ]; then
     # frame call is what dies quietly: without it the viewer opens, shows
     # nothing, and says nothing about why.
     seen "the window has a source monitor"   '"source", root.srcFile' < "$qml"
+    # The curve editor. ⛔ The window must ASK for the curve, not interpolate
+    # one: the eases live in the engine because the monitor and the export
+    # have to agree about a keyed property frame by frame.
+    seen "the window asks the engine for the curve" '"curve", root.curveKey' < "$qml"
+    seen "and a drag is ONE edit"                   '"move", key, String(i)' < "$qml"
     seen "and can insert from it"            'root.srcEdit("insert")' < "$qml"
     seen "and overwrite from it"             'root.srcEdit("overwrite")' < "$qml"
     # ⚠ Ticks during a drag are not history. Without this one gesture is a

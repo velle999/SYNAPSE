@@ -178,7 +178,16 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
       as well so the monitor is equal to the export and not merely close
 - [x] easing per key — linear, in, out, inout, hold. Polynomials, because the
       export has to evaluate the same shape in ffmpeg's expression language
-- [ ] a curve editor — the darkroom's curve widget, over time instead of tone
+- [x] **a curve editor** — shipped in 0.1.0-38. The darkroom's curve widget,
+      over TIME instead of tone: x is time inside the clip, y is the
+      property's range, the line is the curve and the squares are its keys.
+      Drag, click to add, double-click to remove, five eases below. ⛔ The
+      curve is SAMPLED BY THE ENGINE (`timeline anim ... curve PROP`) and
+      never interpolated in QML — `ss_clip_prop_at` exists because the monitor
+      and the export must agree about a keyed property frame by frame, and a
+      second implementation would draw something nothing renders. ⚠ A drag is
+      ONE edit: `anim move PROP N` keeps the fields it was not told about, so
+      moving a key along time does not reset its ease
 - [x] **track automation** — shipped in 0.1.0-30. `timeline auto`, the same
       shape as a clip's parameter keys and sharing their interpolation and
       eases. ⚠ Its keys are in TIMELINE seconds, unlike a clip's, which are
@@ -473,8 +482,8 @@ Fairlight-style automation: four features for one piece of work.
    range, seven presets, burn-in, image sequences and a queue.
 
 **The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan: a curve editor over time, and
-smooth cut. Auto-save was never a gap and is not a feature
+short list of named gaps rather than a plan: smooth cut, and whatever the
+next hour of using it turns up. Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what
 that was missing, until 0.1.0-34, was a way to give it a name.
 

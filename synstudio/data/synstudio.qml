@@ -1841,6 +1841,89 @@ FloatingWindow {
         root.tlRun(arg)
     }
 
+    // ── The curve, over time ────────────────────────────────────────────────
+    //
+    // The darkroom has a curve widget over TONE; this is the same idea over
+    // TIME, and it is the last thing the keyframes were missing: they could
+    // be dropped and nudged, but a move over four seconds was a list of
+    // numbers rather than a shape.
+    //
+    // ⛔ THE CURVE IS SAMPLED BY THE ENGINE, never interpolated here.
+    // `ss_clip_prop_at` is the one place a keyed property becomes a number,
+    // and the whole reason it exists is that the monitor and the export have
+    // to agree about it frame by frame. Five eases re-implemented in QML
+    // would be a picture of something nothing renders — right until the day
+    // one of the two changed.
+    property string curveKey: ""     // whose curve is open, "" for none
+    property var    curvePts: []     // [{t, v}] as the engine samples it
+    property int    curveSerial: 0
+
+    function openCurve(key) {
+        root.curveKey = root.curveKey === key ? "" : key
+        root.curvePts = []
+        if (root.curveKey) root.readCurve()
+    }
+
+    function readCurve() {
+        if (!root.curveKey || root.selTrack < 0 || root.selClip < 0) return
+        curveProc.running = false
+        curveProc.command = [root.bin, "timeline", "anim", root.proj,
+                             String(root.selTrack), String(root.selClip),
+                             "curve", root.curveKey, "--count", "160"]
+        curveProc.running = true
+    }
+
+    Process {
+        id: curveProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 2) continue
+                    out.push({ t: parseFloat(f[0]), v: parseFloat(f[1]) })
+                }
+                root.curvePts = out
+                root.curveSerial++
+            }
+        }
+    }
+
+    // The curve is a picture of the document, so it is re-read whenever the
+    // document changes — not only when the editor is opened.
+    onClipValsChanged: if (root.curveKey) root.readCurve()
+
+    // One edit, not two. A drag that removed a key and added another would be
+    // two processes, two writes and two steps of undo for one gesture, and
+    // the second half can be dropped.
+    function curveMove(key, i, t, v) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["anim", root.proj, String(root.selTrack), String(root.selClip),
+                    "move", key, String(i),
+                    "--at", String(Math.round(t * 1000) / 1000),
+                    "--value", String(Math.round(v * 10000) / 10000)])
+    }
+
+    function curveAdd(key, t, v) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["anim", root.proj, String(root.selTrack), String(root.selClip),
+                    "add", key, "--at", String(Math.round(t * 1000) / 1000),
+                    "--value", String(Math.round(v * 10000) / 10000)])
+    }
+
+    function curveRemove(key, i) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["anim", root.proj, String(root.selTrack), String(root.selClip),
+                    "remove", key, String(i)])
+    }
+
+    function curveEase(key, i, ease) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["anim", root.proj, String(root.selTrack), String(root.selClip),
+                    "move", key, String(i), "--ease", ease])
+    }
+
     // The index of the key sitting AT the playhead, or -1. Eight milliseconds
     // of tolerance: a key is placed from a playhead that has been rounded to
     // milliseconds, and an exact float compare would never find it again.
@@ -6631,9 +6714,11 @@ FloatingWindow {
                                           : true
         visible: cc.applies
         width: inspCol.width
+        readonly property bool curveOpen: root.curveKey === cc.row.key
         height: !cc.applies ? 0
                 : cc.longEnum ? 150
                 : (cc.isFont && cc.fontOpen) ? 214
+                : cc.curveOpen ? 190
                 : cc.row.type === "text" ? 52 : 44
 
         Text {
@@ -6673,6 +6758,21 @@ FloatingWindow {
                     anchors.fill: parent
                     anchors.margins: -5
                     onClicked: root.animToggle(cc.row.key)
+                }
+            }
+
+            // The curve, over time. Only where there is one to look at: a
+            // graph of a property with a single key is a flat line and a
+            // control that opens one is a control that wasted a click.
+            Text {
+                visible: cc.row.anim && cc.nkeys > 1
+                text: cc.curveOpen ? "▴∿" : "▾∿"
+                color: cc.curveOpen ? root.cAccent : root.cDim
+                font.pixelSize: 11
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -5
+                    onClicked: root.openCurve(cc.row.key)
                 }
             }
         }
@@ -6822,6 +6922,189 @@ FloatingWindow {
             MouseArea {
                 anchors.fill: parent
                 onClicked: cc.fontOpen = !cc.fontOpen
+            }
+        }
+
+        // ── The curve editor ────────────────────────────────────────────────
+        //
+        // x is time INSIDE the clip, y is the property's own range. The line
+        // is what the engine sampled; the squares are the keys. Drag one,
+        // click the empty space to put one there, double-click one to take it
+        // away, and the row of eases below sets how the selected key LEAVES.
+        Rectangle {
+            id: cccurve
+            visible: cc.curveOpen
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 30
+            height: visible ? 110 : 0
+            radius: 3
+            color: root.wash(0.10)
+            border.width: 1
+            border.color: root.wash(0.22)
+            clip: true
+
+            readonly property real len: root.selClipObj ? root.selClipObj.len : 0
+            readonly property real lo: cc.row.lo
+            readonly property real hi: cc.row.hi
+            property int picked: -1
+
+            function xOf(t) { return cccurve.len > 0 ? t / cccurve.len * width : 0 }
+            function yOf(v) {
+                const f = cccurve.hi > cccurve.lo
+                          ? (v - cccurve.lo) / (cccurve.hi - cccurve.lo) : 0
+                return (1 - Math.max(0, Math.min(1, f))) * height
+            }
+            function tOf(x) {
+                return Math.max(0, Math.min(cccurve.len,
+                                            x / Math.max(1, width) * cccurve.len))
+            }
+            function vOf(y) {
+                const f = 1 - Math.max(0, Math.min(1, y / Math.max(1, height)))
+                return cccurve.lo + f * (cccurve.hi - cccurve.lo)
+            }
+
+            Canvas {
+                id: curveCanvas
+                anchors.fill: parent
+                // ⚠ Repainted from the SERIAL, not from the array: assigning
+                // a new array of the same length changes no property QML can
+                // see a difference in, and the line would stay on the old
+                // shape until something else happened to repaint it.
+                property int serial: root.curveSerial
+                onSerialChanged: requestPaint()
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
+
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    // A midline, so a value in the middle of the range is not
+                    // a line floating in an empty box.
+                    ctx.strokeStyle = Qt.rgba(root.cAccent.r, root.cAccent.g,
+                                              root.cAccent.b, 0.18)
+                    ctx.lineWidth = 1
+                    ctx.beginPath()
+                    ctx.moveTo(0, height / 2)
+                    ctx.lineTo(width, height / 2)
+                    ctx.stroke()
+
+                    const pts = root.curvePts
+                    if (!pts || pts.length < 2) return
+                    ctx.strokeStyle = root.cAccent
+                    ctx.lineWidth = 2
+                    ctx.beginPath()
+                    for (let i = 0; i < pts.length; i++) {
+                        const x = cccurve.xOf(pts[i].t)
+                        const y = cccurve.yOf(pts[i].v)
+                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+                    }
+                    ctx.stroke()
+                }
+            }
+
+            // Where the playhead is inside the clip, so a key can be read
+            // against the frame on screen.
+            Rectangle {
+                x: cccurve.xOf(root.clipOffset) - 1
+                width: 2
+                height: parent.height
+                color: root.cText
+                opacity: 0.35
+            }
+
+            // The keys. Dragged with the mouse, committed on RELEASE — one
+            // `anim move` for the gesture rather than one per pixel, which
+            // the busy Process would drop anyway.
+            Repeater {
+                model: root.clipAnimKeys(cc.row.key)
+
+                Rectangle {
+                    id: kn
+                    required property var modelData
+                    required property int index
+                    width: 9; height: 9; radius: 2
+                    x: cccurve.xOf(kn.modelData.t) - 4
+                    y: cccurve.yOf(kn.modelData.v) - 4
+                    color: cccurve.picked === kn.index ? root.cText : root.cAccent
+                    border.width: 1
+                    border.color: root.cPanel
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        preventStealing: true
+                        property real lastT: 0
+                        property real lastV: 0
+                        onPressed: function (m) {
+                            cccurve.picked = kn.index
+                            lastT = kn.modelData.t
+                            lastV = kn.modelData.v
+                        }
+                        onPositionChanged: function (m) {
+                            if (!pressed) return
+                            const p = mapToItem(cccurve, m.x, m.y)
+                            lastT = cccurve.tOf(p.x)
+                            lastV = cccurve.vOf(p.y)
+                            // Moved live so the hand sees the key follow it;
+                            // the document only hears about it on release.
+                            kn.x = cccurve.xOf(lastT) - 4
+                            kn.y = cccurve.yOf(lastV) - 4
+                        }
+                        onReleased: root.curveMove(cc.row.key, kn.index, lastT, lastV)
+                        onDoubleClicked: root.curveRemove(cc.row.key, kn.index)
+                    }
+                }
+            }
+
+            // Empty space: a new key where it was clicked. LAST, so a click
+            // that lands on a key reaches the key and not this.
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onClicked: function (m) {
+                    root.curveAdd(cc.row.key, cccurve.tOf(m.x), cccurve.vOf(m.y))
+                }
+            }
+        }
+
+        // How the picked key LEAVES. Five polynomials, because the export has
+        // to evaluate the same shape in ffmpeg's expression language.
+        Row {
+            visible: cc.curveOpen
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.top: cccurve.bottom; anchors.topMargin: 6
+            spacing: 6
+
+            Repeater {
+                model: ["linear", "in", "out", "inout", "hold"]
+
+                Rectangle {
+                    id: eb
+                    required property var modelData
+                    width: 46; height: 20; radius: 3
+                    color: ebm.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                    Text {
+                        anchors.centerIn: parent
+                        text: eb.modelData
+                        color: root.cText
+                        font.pixelSize: 9
+                    }
+                    MouseArea {
+                        id: ebm
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        // Nothing picked yet is not an error: the ease lands
+                        // on the key the hand last touched, and until it has
+                        // touched one there is nothing to change.
+                        onClicked: {
+                            if (cccurve.picked >= 0)
+                                root.curveEase(cc.row.key, cccurve.picked,
+                                               eb.modelData)
+                            else root.say("pick a key on the curve first")
+                        }
+                    }
+                }
             }
         }
 

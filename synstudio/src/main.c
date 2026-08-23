@@ -152,6 +152,8 @@ static void usage(void)
 "       two or more keys and the grade MOVES between them\n"
 "  timeline anim PROJ T C add PROP --at S [--value V] [--ease E]\n"
 "  timeline anim PROJ T C list|clear [PROP]   remove PROP N   at PROP --at S\n"
+"  timeline anim PROJ T C move PROP N [--at S] [--value V] [--ease E]\n"
+"  timeline anim PROJ T C curve PROP [--count N]   the curve, sampled\n"
 "       a key on ONE property — opacity, gain, a scale, a position, an\n"
 "       angle. `timeline keys` marks which ones take them; ease is\n"
 "       linear, in, out, inout or hold\n"
@@ -3006,7 +3008,7 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (tl_pick(t, argc > 4 ? argv[4] : NULL,
                        argc > 5 ? argv[5] : NULL, &tr, &cl) != 0) return 1;
         c = &t->track[tr].clip[cl];
-        if (!sub) return die("anim wants add|list|set|remove|clear|at");
+        if (!sub) return die("anim wants add|list|set|move|curve|remove|clear|at");
 
         if (!strcmp(sub, "list")) {
             ss_clip_info f;
@@ -3057,6 +3059,80 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                                   "(limit %d)", SS_MAX_PKEYS);
             if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
             printf("%d\n", n);
+            return 0;
+        }
+
+        /* One key, moved — a drag in the curve editor is ONE edit.
+         *
+         * Remove-then-add from the window would work and would be two
+         * commands: two processes, two writes, and two steps to undo for a
+         * gesture that was one. It would also be two chances for the second
+         * half to be dropped, and a key that vanished on a drag reads as the
+         * editor eating it.
+         *
+         * ⚠ Fields not named KEEP what they were: a drag along the time axis
+         * must not reset an ease somebody chose. */
+        if (!strcmp(sub, "move")) {
+            ss_propkey pk;
+            int n = argc > 8 ? atoi(argv[8]) : -1, ease, made;
+            double at, v;
+
+            if (!key) return die("anim move wants a property");
+            if (argc <= 8) return die("anim move wants a key index");
+            /* ⚠ ss_clip_prop_key returns 1 on SUCCESS, unlike almost
+             * everything else in this header — a plain `!= 0` reads every
+             * key that IS there as one that is not. */
+            if (!ss_clip_prop_key(c, key, n, &pk))
+                return die("%s has no key %d", key, n);
+            if (parse_opts(argc, argv, 9, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            ease = pk.ease;
+            if (o.ease && (ease = ss_ease_value(o.ease)) < 0)
+                return die("no such ease: %s — linear, in, out, inout, hold",
+                           o.ease);
+            at = o.has_at    ? o.at    : pk.t;
+            v  = o.has_value ? o.value : pk.v;
+
+            if (ss_clip_prop_remove(c, key, n) != 0)
+                return die("%s has no key %d", key, n);
+            made = ss_clip_prop_add(c, key, at, v, ease);
+            if (made < 0) {
+                /* Put it back rather than leave the clip a key short: a
+                 * failed move must change nothing. */
+                ss_clip_prop_add(c, key, pk.t, pk.v, pk.ease);
+                return die("cannot move that key");
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            /* ⚠ The index it landed at, which is NOT the one it left: keys
+             * are held in time order, so a drag past its neighbour renumbers
+             * both. The window follows this to keep the same key selected. */
+            printf("%d\n", made);
+            return 0;
+        }
+
+        /* The curve itself, SAMPLED BY THE ENGINE.
+         *
+         * The window draws this and nothing else. Interpolating in QML would
+         * be a second implementation of the five eases — and the whole reason
+         * `ss_clip_prop_at` exists is that the monitor and the export must
+         * agree about a keyed property to the frame. A curve drawn from a
+         * second opinion is a picture of something nothing renders. */
+        if (!strcmp(sub, "curve")) {
+            int n, i2;
+            double len = ss_clip_length(c);
+            if (!key) return die("anim curve wants a property");
+            if (!ss_clip_prop_animatable(key))
+                return die("%s cannot be keyed — `timeline keys` marks the "
+                           "ones that can", key);
+            if (parse_opts(argc, argv, 8, &o, &rest, &nrest) != 0)
+                return die("bad option");
+            n = o.count > 1 ? o.count : 200;
+            if (n > 4000) n = 4000;
+            if (len <= 0) return die("that clip has no length");
+            for (i2 = 0; i2 < n; i2++) {
+                double tt = len * (double)i2 / (double)(n - 1);
+                printf("%.6f\t%.6f\n", tt, ss_clip_prop_at(c, key, tt));
+            }
             return 0;
         }
 

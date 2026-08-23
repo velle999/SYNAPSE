@@ -1262,7 +1262,47 @@ pkgver=0.1.0
 #   field says fontconfig has never heard of a family.
 #
 #   674 assertions, clean under ASan+UBSan+LSan.
-pkgrel=37
+#
+# 38 THE CURVE, OVER TIME.
+#
+#   The darkroom has had a curve widget over TONE since the beginning. This is
+#   the same idea over TIME, and it is the last thing keyframes were missing:
+#   a key could be dropped and nudged, but a move over four seconds was a list
+#   of numbers rather than a shape, and the ease on it was a word.
+#
+#   The ∿ opens on any animatable row with more than one key: x is time inside
+#   the clip, y is the property's own range, the line is the curve and the
+#   squares are the keys. Drag one, click the empty space to put one there,
+#   double-click to take it away, and the five eases below set how the picked
+#   key LEAVES.
+#
+#   ⛔ THE CURVE IS SAMPLED BY THE ENGINE — `timeline anim ... curve PROP`.
+#   `ss_clip_prop_at` is the one place a keyed property becomes a number, and
+#   it exists because the monitor and the export have to agree about one frame
+#   by frame. Five eases re-implemented in QML would be a picture of something
+#   nothing renders, right up until the day one of the two changed. The test
+#   asserts a sample IS what `anim at` answers at the same instant.
+#
+#   ⚠ A DRAG IS ONE EDIT. `anim move PROP N [--at] [--value] [--ease]` moves a
+#   key in place; remove-then-add from the window would be two processes, two
+#   writes and two steps of undo for one gesture — and two chances for the
+#   second half to be dropped, which reads as the editor eating the key.
+#   Fields not named KEEP what they were, so a drag along the time axis does
+#   not reset an ease somebody chose, and a failed move puts the key back.
+#
+#   ⚠ It prints the index it LANDED at, which is not the one it left: keys are
+#   held in time order, so a drag past a neighbour renumbers both.
+#
+#   ⚠ `ss_clip_prop_key` returns 1 on SUCCESS, unlike almost everything else
+#   in the header — `!= 0` read every key that was there as one that was not,
+#   and every move failed with "has no key N".
+#
+#   ⚠ The Canvas repaints from a SERIAL, not from the array: assigning a new
+#   array of the same length changes nothing QML can see, and the line would
+#   stay on the old shape until something else happened to repaint it.
+#
+#   689 assertions, clean under ASan+UBSan+LSan.
+pkgrel=38
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
