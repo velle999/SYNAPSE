@@ -293,48 +293,215 @@ void dock_view_unmapped(syn_view_t *v)
  * cairo_shapes.c now, because the right-click menus need the same four arcs to
  * round their own borders — one path rather than two that can drift. */
 
-/* Fully-shown bar rect for this output's mirror on the current edge. The
- * "run" axis (length) grows with the entry count; the cross axis is the fixed
- * dock_height thickness. Shared by the renderer and the auto-hide tick so both
- * agree on where the bar lives. */
-static bool dock_geometry(syn_output_t *o, int *bx, int *by,
-                          int *bar_w, int *bar_h)
+/* ── Magnification, headroom, and the clock cell ──────────
+ *
+ * THE DOCK HAS TWO RECTS NOW, and keeping them apart is what the rest of this
+ * file is about.
+ *
+ *   the CANVAS  the buffer and the scene tree — what dock_geometry() returns,
+ *               what gets cropped to the output and slid off the edge.
+ *   the BODY    the painted slab, inset into the canvas by `head` pixels on the
+ *               side facing away from the screen edge.
+ *
+ * They were the same rect until magnification. A swollen icon has to grow
+ * somewhere, and growing it INTO a 64px bar means a ceiling of 64/48 = 1.33 —
+ * not enough to read as magnification. So when `dock_magnify` is on the canvas
+ * gains DOCK_MAG_HEADROOM of transparent room past the body, and icons grow out
+ * through it, exactly the way macOS's do.
+ *
+ * The headroom is a CONSTANT, not something that grows with the effect: a canvas
+ * that resized as the pointer arrived would move the body it contains, and the
+ * body has to stay welded to the screen edge. Only the icons move.
+ *
+ * The run axis is the other half. Scales are sampled from each icon's flat
+ * position and the row is then laid out CUMULATIVELY, so neighbours slide apart
+ * to open room rather than overlapping — the bar itself grows and re-centres,
+ * which is the "slide over" half of the gesture. Sampling from the flat position
+ * is deliberate: sampling from the magnified one feeds the layout its own output
+ * and the row shivers.
+ */
+#define DOCK_MAG_SCALE     1.60   /* icon scale directly under the pointer */
+#define DOCK_MAG_SPAN      2.75   /* falloff reach, in flat cells either side */
+#define DOCK_MAG_EASE_SECS 0.10   /* fade the effect in/out over this */
+/* Room for the swell: 48 × 1.60 − 48 = 29px, rounded up to a round number. */
+#define DOCK_MAG_HEADROOM  32
+
+/* The clock's own cell, past the last icon on the run axis. Two numbers because
+ * the run axis is the long one: a horizontal bar can give the clock 92px of
+ * width, a vertical column has only `dock_height` to be wide in and pays on
+ * height instead. */
+#define DOCK_CLOCK_RUN_H   92
+#define DOCK_CLOCK_RUN_V   40
+
+/* Everything both the renderer and the hit tests need to agree about, derived
+ * in one place from the config, the entry count and this output's magnification
+ * state. Per OUTPUT, because only the screen the pointer is on magnifies — the
+ * cell rects genuinely differ between mirrors now, which is why they cannot go
+ * on the (server-global) entries any more. */
+typedef struct {
+    bool vertical;
+    struct wlr_box ob;              /* the output box */
+    int  x, y, w, h;                /* CANVAS rect, layout coords */
+    int  thick;                     /* body thickness along the edge normal */
+    int  head;                      /* transparent headroom past the body */
+    int  bx, by, bw, bh;            /* BODY rect, canvas-local */
+    int  n;                         /* cells laid out */
+    int  cx[DOCK_MAX_ENTRIES];      /* drawn cell origin, canvas-local */
+    int  cy[DOCK_MAX_ENTRIES];
+    int  cs[DOCK_MAX_ENTRIES];      /* drawn cell size (square) */
+    int  clk_x, clk_y, clk_w, clk_h;   /* canvas-local; clk_w = 0 when off */
+    int  base_run;                  /* the FLAT run length */
+    int  base_origin;               /* layout coord where the flat run starts —
+                                     * the origin o->dock.mag_run is measured
+                                     * from, and it does not move when the
+                                     * magnified bar grows */
+} dock_metrics_t;
+
+/* Fully-shown canvas rect, body rect and cell rects for this output's mirror on
+ * the current edge. The "run" axis (length) grows with the entry count, the
+ * clock cell and the current magnification; the cross axis is the fixed
+ * dock_height thickness plus any headroom. Shared by the renderer, the hit
+ * tests and the auto-hide tick so all three agree on where the bar lives. */
+static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
 {
     syn_server_t *s = o->server;
-    int n = s->dock_entry_count;
-    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
-    int run = n > 0 ? n * icon + (n + 1) * pad : pad * 2;
-    int thick = s->config.dock_height;
+    memset(m, 0, sizeof(*m));
+
+    output_box_of(s, o, &m->ob);
+    if (m->ob.width <= 0 || m->ob.height <= 0) return false;
+
     syn_dock_edge_t edge = s->config.dock_edge;
+    m->vertical = edge_is_vertical(edge);
+    m->thick = s->config.dock_height;
+    m->head  = s->config.dock_magnify ? DOCK_MAG_HEADROOM : 0;
 
-    struct wlr_box ob;
-    output_box_of(s, o, &ob);
-    if (ob.width <= 0 || ob.height <= 0) return false;
+    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
+    int n = s->dock_entry_count;
+    if (n > DOCK_MAX_ENTRIES) n = DOCK_MAX_ENTRIES;
+    m->n = n;
 
-    int w, h;
-    if (edge_is_vertical(edge)) { w = thick; h = run; }
-    else                        { w = run;   h = thick; }
+    int clock_run = 0;
+    if (s->config.dock_clock)
+        clock_run = (m->vertical ? DOCK_CLOCK_RUN_V : DOCK_CLOCK_RUN_H) + pad;
 
-    int x, y;
+    m->base_run = (n > 0 ? n * icon + (n + 1) * pad : pad * 2) + clock_run;
+
+    /* Suppressed outright during a drag. The rearrange gesture measures cells
+     * with flat arithmetic (dock_slot_at), and a row that resized under the
+     * icon being dragged would move the very target the drop is aimed at. */
+    double amount = (s->config.dock_magnify && !s->dock_drag.active)
+                    ? o->dock.mag_amount : 0.0;
+
+    int run = pad;
+    for (int i = 0; i < n; i++) {
+        double sc = 1.0;
+        if (amount > 0.0) {
+            double flat_c = pad + i * (icon + pad) + icon / 2.0;
+            double d = fabs(o->dock.mag_run - flat_c) /
+                       (DOCK_MAG_SPAN * (icon + pad));
+            /* A raised cosine, not a linear ramp: the ramp has a corner at the
+             * pointer and the row visibly kinks as it crosses an icon. */
+            if (d < 1.0)
+                sc = 1.0 + (DOCK_MAG_SCALE - 1.0) * amount *
+                           0.5 * (1.0 + cos(M_PI * d));
+        }
+        int size = (int)lround(icon * sc);
+        m->cs[i] = size;
+        if (m->vertical) m->cy[i] = run; else m->cx[i] = run;
+        run += size + pad;
+    }
+
+    int clk_at = run;
+    run += clock_run;
+    int total_run = (n > 0 || clock_run > 0) ? run : pad * 2;
+
+    int cross = m->thick + m->head;
+    if (m->vertical) { m->w = cross;     m->h = total_run; }
+    else             { m->w = total_run; m->h = cross;     }
+
     switch (edge) {
     case SYN_DOCK_EDGE_TOP:
-        x = ob.x + (ob.width - w) / 2; y = ob.y;
+        m->x = m->ob.x + (m->ob.width - m->w) / 2; m->y = m->ob.y;
         break;
     case SYN_DOCK_EDGE_LEFT:
-        x = ob.x; y = ob.y + (ob.height - h) / 2;
+        m->x = m->ob.x; m->y = m->ob.y + (m->ob.height - m->h) / 2;
         break;
     case SYN_DOCK_EDGE_RIGHT:
-        x = ob.x + ob.width - w; y = ob.y + (ob.height - h) / 2;
+        m->x = m->ob.x + m->ob.width - m->w;
+        m->y = m->ob.y + (m->ob.height - m->h) / 2;
         break;
     case SYN_DOCK_EDGE_BOTTOM:
     default:
-        x = ob.x + (ob.width - w) / 2; y = ob.y + ob.height - h;
+        m->x = m->ob.x + (m->ob.width - m->w) / 2;
+        m->y = m->ob.y + m->ob.height - m->h;
         break;
     }
-    if (x < ob.x) x = ob.x;   /* longer than the output: clip to origin */
-    if (y < ob.y) y = ob.y;
+    if (m->x < m->ob.x) m->x = m->ob.x;   /* longer than the output: clip */
+    if (m->y < m->ob.y) m->y = m->ob.y;
 
-    *bx = x; *by = y; *bar_w = w; *bar_h = h;
+    /* The body, inset by the headroom on the side facing away from the edge. */
+    if (m->vertical) {
+        m->bw = m->thick; m->bh = m->h; m->by = 0;
+        m->bx = (edge == SYN_DOCK_EDGE_RIGHT) ? m->head : 0;
+    } else {
+        m->bh = m->thick; m->bw = m->w; m->bx = 0;
+        m->by = (edge == SYN_DOCK_EDGE_BOTTOM) ? m->head : 0;
+    }
+
+    /* Cross-axis placement. Each icon is anchored by the side FACING the screen
+     * edge, so it swells away from it and the running dot underneath — which is
+     * drawn off the flat cell, not the swollen one — stays put. */
+    for (int i = 0; i < n; i++) {
+        int size = m->cs[i];
+        switch (edge) {
+        case SYN_DOCK_EDGE_TOP:
+            m->cy[i] = m->by + (m->thick - icon) / 2 - 4;
+            break;
+        case SYN_DOCK_EDGE_LEFT:
+            m->cx[i] = m->bx + (m->thick - icon) / 2;
+            break;
+        case SYN_DOCK_EDGE_RIGHT:
+            m->cx[i] = m->bx + (m->thick + icon) / 2 - size;
+            break;
+        case SYN_DOCK_EDGE_BOTTOM:
+        default:
+            m->cy[i] = m->by + (m->thick + icon) / 2 - 4 - size;
+            break;
+        }
+    }
+
+    if (clock_run > 0) {
+        if (m->vertical) {
+            m->clk_x = m->bx;   m->clk_y = clk_at;
+            m->clk_w = m->thick; m->clk_h = DOCK_CLOCK_RUN_V;
+        } else {
+            m->clk_x = clk_at;  m->clk_y = m->by;
+            m->clk_w = DOCK_CLOCK_RUN_H; m->clk_h = m->thick;
+        }
+    }
+
+    /* Where the FLAT run starts, in layout coordinates. The magnified bar is
+     * centred on the same point as the flat one, so this is fixed for a given
+     * entry count — which is exactly what makes mag_run a stable input rather
+     * than a value the layout it feeds keeps moving. */
+    if (m->vertical) {
+        m->base_origin = m->ob.y + (m->ob.height - m->base_run) / 2;
+        if (m->base_origin < m->ob.y) m->base_origin = m->ob.y;
+    } else {
+        m->base_origin = m->ob.x + (m->ob.width - m->base_run) / 2;
+        if (m->base_origin < m->ob.x) m->base_origin = m->ob.x;
+    }
+    return true;
+}
+
+/* The CANVAS rect, for the callers that only want to know where the tree goes
+ * and how big its buffer is. */
+static bool dock_geometry(syn_output_t *o, int *bx, int *by,
+                          int *bar_w, int *bar_h)
+{
+    dock_metrics_t m;
+    if (!dock_metrics(o, &m)) return false;
+    *bx = m.x; *by = m.y; *bar_w = m.w; *bar_h = m.h;
     return true;
 }
 
@@ -353,6 +520,10 @@ static bool dock_geometry(syn_output_t *o, int *bx, int *by,
  * the blur node's fx_corner_radii is set from it — an unclamped radius there
  * leaves the frosted patch a different shape from the pane on top of it, which
  * shows as a bright rim in each corner.
+ *
+ * Measured on the BODY, never the canvas: the canvas is taller than the slab by
+ * the magnification headroom, and feeding that in would let the radius exceed
+ * half the slab and bow-tie the very path this clamp exists to protect.
  */
 static double dock_bar_radius(syn_server_t *s, int bar_w, int bar_h)
 {
@@ -362,25 +533,10 @@ static double dock_bar_radius(syn_server_t *s, int bar_w, int bar_h)
     return r > cap ? cap : r;
 }
 
-/* Top-left of the icon in display position `i`, dock-canvas-local. The layout
- * is a single run of equal cells, so this is the whole of it — and having it in
- * one place is what lets the drag ask "which cell is the pointer over" with the
- * same arithmetic the renderer places cells with. */
-static void dock_slot_pos(syn_server_t *s, int i, int bar_w, int bar_h,
-                          int *ix, int *iy)
-{
-    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
-    if (edge_is_vertical(s->config.dock_edge)) {
-        *iy = pad + i * (icon + pad);
-        *ix = (bar_w - icon) / 2;
-    } else {
-        *ix = pad + i * (icon + pad);
-        *iy = (bar_h - icon) / 2 - 4;   /* room for the dot below */
-    }
-}
-
-/* Which cell a point on the run axis falls in, clamped to the icons that exist.
- * `run` is canvas-local along the bar's long axis. */
+/* Which flat cell a point on the run axis falls in, clamped to the icons that
+ * exist. `run` is canvas-local along the bar's long axis. Flat arithmetic on
+ * purpose — its one caller is the rearrange drag, and dock_metrics() suppresses
+ * magnification for the length of that gesture. */
 static int dock_slot_at(int run, int count)
 {
     if (count <= 0) return 0;
@@ -477,10 +633,46 @@ static void dock_set_crop(syn_output_t *o, int sx, int sy, int w, int h,
  * it (along the edge normal). While this output's dock is being dragged, the
  * bar floats under the cursor instead. Called after (re)rendering and every
  * anim tick. */
+/*
+ * Does the dock float over windows on this output, or do they cover it?
+ *
+ * Three answers folded into one, in the order they override each other:
+ *
+ *   a FULLSCREEN window always wins. The dock's tree is a UI sibling of
+ *   window_tree, so "raised" floats it over everything — including a fullscreen
+ *   game or video, which only raises within window_tree.
+ *
+ *   an AUTO-HIDING dock is always on top. It is summoned by the pointer, over
+ *   whatever happens to be there; arriving behind that window would mean
+ *   revealing nothing, which is not a mode anyone would choose.
+ *
+ *   otherwise `dock_on_top` decides, and it is OFF by default. An always-visible
+ *   dock that floats is a strip of screen a maximized window can never be in
+ *   front of; tucked below window_tree it is furniture on the desktop, still
+ *   above the wallpaper and the bottom layer.
+ */
+static bool dock_floats_over_windows(syn_server_t *s)
+{
+    return s->config.dock_autohide || s->config.dock_on_top;
+}
+
+static bool dock_on_top_here(syn_output_t *o)
+{
+    return dock_floats_over_windows(o->server) && !dock_output_fullscreen(o);
+}
+
+/* Place the tree at its slide offset and enable it only while any part is
+ * on-screen. slide_progress 1 = flush against the edge, 0 = pushed fully off
+ * it (along the edge normal). While this output's dock is being dragged, the
+ * bar floats under the cursor instead. Called after (re)rendering and every
+ * anim tick. */
 static void dock_apply_position(syn_output_t *o)
 {
     syn_server_t *s = o->server;
     if (!o->dock.tree) return;
+
+    dock_metrics_t m;
+    bool have = dock_metrics(o, &m);
 
     /* Dragging THE BAR: float freely under the cursor, always visible.
      * Deliberately uncropped — a drag is how the dock is moved between edges and
@@ -492,9 +684,7 @@ static void dock_apply_position(syn_output_t *o)
      * relative to. */
     if (s->dock_drag.active && s->dock_drag.moved && s->dock_drag.icon < 0 &&
         s->dock_drag.output == o) {
-        int dw, dh, dbx, dby;
-        if (dock_geometry(o, &dbx, &dby, &dw, &dh))
-            dock_set_crop(o, 0, 0, dw, dh, dw, dh);
+        if (have) dock_set_crop(o, 0, 0, m.w, m.h, m.w, m.h);
         wlr_scene_node_set_position(&o->dock.tree->node,
                                     (int)s->dock_drag.float_x,
                                     (int)s->dock_drag.float_y);
@@ -503,35 +693,38 @@ static void dock_apply_position(syn_output_t *o)
         return;
     }
 
-    int bx, by, bw, bh;
-    if (!s->config.dock_enabled || !dock_geometry(o, &bx, &by, &bw, &bh)) {
+    if (!s->config.dock_enabled || !have) {
         wlr_scene_node_set_enabled(&o->dock.tree->node, false);
         return;
     }
 
     double p = o->dock.slide_progress;
     double off = 1.0 - p;
-    int x = bx, y = by;
+    /* Travel is the BODY's thickness, not the canvas's. The magnification
+     * headroom is transparent, so sliding by it would spend part of the
+     * animation moving nothing anyone can see — and, at a fixed duration, make
+     * the visible part of the slide faster on a magnifying dock than on a flat
+     * one. */
+    int travel = m.thick;
+    int x = m.x, y = m.y;
     switch (s->config.dock_edge) {
-    case SYN_DOCK_EDGE_TOP:    y = by - (int)lround(off * bh); break;
-    case SYN_DOCK_EDGE_LEFT:   x = bx - (int)lround(off * bw); break;
-    case SYN_DOCK_EDGE_RIGHT:  x = bx + (int)lround(off * bw); break;
+    case SYN_DOCK_EDGE_TOP:    y = m.y - (int)lround(off * travel); break;
+    case SYN_DOCK_EDGE_LEFT:   x = m.x - (int)lround(off * travel); break;
+    case SYN_DOCK_EDGE_RIGHT:  x = m.x + (int)lround(off * travel); break;
     case SYN_DOCK_EDGE_BOTTOM:
-    default:                   y = by + (int)lround(off * bh); break;
+    default:                   y = m.y + (int)lround(off * travel); break;
     }
 
     /* Clip the slid rect to this output and paint only that part. */
-    struct wlr_box ob;
-    output_box_of(s, o, &ob);
-    int cx0 = x > ob.x ? x : ob.x;
-    int cy0 = y > ob.y ? y : ob.y;
-    int cx1 = (x + bw) < (ob.x + ob.width)  ? (x + bw) : (ob.x + ob.width);
-    int cy1 = (y + bh) < (ob.y + ob.height) ? (y + bh) : (ob.y + ob.height);
+    int cx0 = x > m.ob.x ? x : m.ob.x;
+    int cy0 = y > m.ob.y ? y : m.ob.y;
+    int cx1 = (x + m.w) < (m.ob.x + m.ob.width)  ? (x + m.w) : (m.ob.x + m.ob.width);
+    int cy1 = (y + m.h) < (m.ob.y + m.ob.height) ? (y + m.h) : (m.ob.y + m.ob.height);
     int cw = cx1 - cx0, ch = cy1 - cy0;
 
     bool visible = p > 0.001 && cw > 0 && ch > 0;
     if (visible) {
-        dock_set_crop(o, cx0 - x, cy0 - y, cw, ch, bw, bh);
+        dock_set_crop(o, cx0 - x, cy0 - y, cw, ch, m.w, m.h);
         /* The crop just changed the buffer's painted size and offset, and the
          * blur companion is sized and placed FROM those — so it has to be
          * re-synced here and not only after a render, or the frosted patch keeps
@@ -540,21 +733,15 @@ static void dock_apply_position(syn_output_t *o)
          * old size across a resize; see blur_sync_geometry() in anim.c. */
         syn_buffer_backdrop_blur(o->dock.icons_buf,
                                  dock_style_is_glass(&s->config) && s->config.blur,
-                                 (int)lround(dock_bar_radius(s, bw, bh)));
+                                 (int)lround(dock_bar_radius(s, m.bw, m.bh)));
     }
     wlr_scene_node_set_position(&o->dock.tree->node, x, y);
     wlr_scene_node_set_enabled(&o->dock.tree->node, visible);
     if (visible) {
-        /* The dock's tree is a UI sibling of window_tree, so raising it to top
-         * floats it over everything — including a fullscreen window, which only
-         * raises within window_tree. An always-visible dock must not sit on top
-         * of a fullscreen game/video: when this output shows one, tuck the dock
-         * just below window_tree so the fullscreen view covers it. Otherwise
-         * keep it above ordinary windows. */
-        if (dock_output_fullscreen(o))
-            wlr_scene_node_place_below(&o->dock.tree->node, &s->window_tree->node);
-        else
+        if (dock_on_top_here(o))
             wlr_scene_node_raise_to_top(&o->dock.tree->node);
+        else
+            wlr_scene_node_place_below(&o->dock.tree->node, &s->window_tree->node);
     }
 }
 
@@ -833,6 +1020,115 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
     cairo_restore(cr);
 }
 
+/* ── The clock ───────────────────────────────────────────
+ *
+ * Off by default, and the reason is worth stating: the bar already has a clock,
+ * and a desktop that shows the time twice is a choice somebody makes rather than
+ * one they should have to undo. On, it takes a cell of its own past the last
+ * icon — inside the bar, not floating beside it — and the run grows to hold it.
+ *
+ * It reads its 12/24-hour and seconds settings out of the SAME syn_clock_t the
+ * Clock & Time panel writes and the bar's clock module follows (clock.state), so
+ * there is one answer to "does this desktop use a 24-hour clock" and the dock is
+ * not a second place to set it.
+ */
+static void dock_clock_strings(syn_server_t *s, bool vertical,
+                               char *time_s, size_t tn,
+                               char *date_s, size_t dn)
+{
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+
+    const char *tfmt;
+    if (s->clock.fmt24) tfmt = s->clock.seconds ? "%H:%M:%S" : "%H:%M";
+    else                tfmt = s->clock.seconds ? "%l:%M:%S" : "%l:%M";
+    strftime(time_s, tn, tfmt, &tm);
+    /* %l pads with a space; the cell is centred, so a leading blank would put a
+     * one-o'clock time visibly off-centre against a ten-o'clock one. */
+    while (*time_s == ' ') memmove(time_s, time_s + 1, strlen(time_s));
+
+    if (!s->clock.fmt24) {
+        char ap[8];
+        strftime(ap, sizeof(ap), "%p", &tm);
+        size_t len = strlen(time_s);
+        if (len + 1 + strlen(ap) < tn)
+            snprintf(time_s + len, tn - len, " %s", ap);
+    }
+
+    /* A column has `dock_height` to be wide in — 64px at stock — so it gets the
+     * short form. The horizontal bar's cell is 92px and can take the weekday. */
+    strftime(date_s, dn, vertical ? "%d %b" : "%a %d %b", &tm);
+}
+
+/* The value the clock last DREW, so a 1 Hz wake only repaints when the string it
+ * would produce has actually changed. Seconds off, that is once a minute.
+ *
+ * ⚠ THE FORMAT IS IN THE STAMP, not just the time, and it has to be. clock.state
+ * is loaded by clock_init() — which runs AFTER dock_init() — and the Clock &
+ * Time panel can change 12/24-hour at any moment after that. Both change the
+ * string while leaving the minute alone, so a stamp that counted only minutes
+ * would leave a dock that had already drawn showing the old format until the
+ * clock happened to tick over. */
+static long dock_clock_stamp(syn_server_t *s)
+{
+    time_t now = time(NULL);
+    long t = (long)(s->clock.seconds ? now : now / 60);
+    return t * 4 + (s->clock.fmt24 ? 2 : 0) + (s->clock.seconds ? 1 : 0);
+}
+
+/* Centre `text` at `size` px in the box, `dy` down from its middle. */
+static void dock_clock_line(cairo_t *cr, const char *text, double size,
+                            double cx, double cy)
+{
+    cairo_set_font_size(cr, size);
+    cairo_text_extents_t ext;
+    syn_text_extents(cr, text, &ext);
+    cairo_move_to(cr, cx - ext.width / 2.0 - ext.x_bearing, cy);
+    syn_show_text(cr, text);
+}
+
+static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
+                            const dock_metrics_t *m)
+{
+    if (m->clk_w <= 0 || m->clk_h <= 0) return;
+
+    char time_s[32] = {0}, date_s[32] = {0};
+    dock_clock_strings(s, m->vertical, time_s, sizeof time_s,
+                       date_s, sizeof date_s);
+
+    /* A hairline between the icons and the clock, so the cell reads as its own
+     * thing rather than as a very wide gap after the last app. Skipped when
+     * there are no icons — a rule with nothing on one side of it. */
+    if (m->n > 0) {
+        cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
+                              s->config.panel_ink[2], 0.22);
+        cairo_set_line_width(cr, 1);
+        if (m->vertical) {
+            double y = m->clk_y - DOCK_ICON_PAD / 2.0 + 0.5;
+            cairo_move_to(cr, m->bx + 10, y);
+            cairo_line_to(cr, m->bx + m->bw - 10, y);
+        } else {
+            double x = m->clk_x - DOCK_ICON_PAD / 2.0 + 0.5;
+            cairo_move_to(cr, x, m->by + 10);
+            cairo_line_to(cr, x, m->by + m->bh - 10);
+        }
+        cairo_stroke(cr);
+    }
+
+    cairo_select_font_face(cr, syn_text_ui_font(), CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    double cx = m->clk_x + m->clk_w / 2.0;
+    double cy = m->clk_y + m->clk_h / 2.0;
+
+    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
+                          s->config.panel_ink[2], 0.95);
+    dock_clock_line(cr, time_s, m->vertical ? 15 : 17, cx, cy - 1);
+    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
+                          s->config.panel_ink[2], 0.62);
+    dock_clock_line(cr, date_s, m->vertical ? 10 : 11, cx, cy + 13);
+}
+
 static void dock_render_output(syn_output_t *o)
 {
     syn_server_t *s = o->server;
@@ -843,21 +1139,28 @@ static void dock_render_output(syn_output_t *o)
         return;
     }
 
-    int bx, by, bar_w, bar_h;
-    if (!dock_geometry(o, &bx, &by, &bar_w, &bar_h)) return;
+    dock_metrics_t m;
+    if (!dock_metrics(o, &m)) return;
     int n = s->dock_entry_count;
-    int icon = DOCK_ICON_SIZE;
-    bool vertical = edge_is_vertical(s->config.dock_edge);
+    bool vertical = m.vertical;
 
     bool glass  = dock_style_is_glass(&s->config);
-    double radius = dock_bar_radius(s, bar_w, bar_h);
+    /* On the BODY, which is what gets the rounded fill — see dock_bar_radius. */
+    double radius = dock_bar_radius(s, m.bw, m.bh);
 
     cairo_t *cr;
-    struct wlr_buffer *buf = create_cairo_buf(bar_w, bar_h, &cr);
+    struct wlr_buffer *buf = create_cairo_buf(m.w, m.h, &cr);
     if (!buf) return;
     cairo_begin(cr);
 
-    dock_paint_body(s, cr, bar_w, bar_h, radius, glass);
+    /* The slab is drawn in BODY-local coordinates; everything after it is in
+     * canvas coordinates, which is where dock_metrics() reports the cells. */
+    cairo_save(cr);
+    cairo_translate(cr, m.bx, m.by);
+    dock_paint_body(s, cr, m.bw, m.bh, radius, glass);
+    cairo_restore(cr);
+
+    if (s->config.dock_clock) dock_draw_clock(s, cr, &m);
 
     /* Is an icon on THIS server being dragged, and to where. The dragged entry
      * is drawn last and elsewhere, so the loop below skips its cell. */
@@ -866,37 +1169,48 @@ static void dock_render_output(syn_output_t *o)
 
     int order[DOCK_MAX_ENTRIES];
     int ndisp = dock_display_order(s, order, DOCK_MAX_ENTRIES);
+    if (ndisp > m.n) ndisp = m.n;
 
     double now = dock_now();
     for (int slot = 0; slot < ndisp; slot++) {
         int i = order[slot];
         syn_dock_entry_t *e = &s->dock_entries[i];
-        int ix, iy;
-        dock_slot_pos(s, slot, bar_w, bar_h, &ix, &iy);
+        int ix = m.cx[slot], iy = m.cy[slot], size = m.cs[slot];
 
         /* The hit-box goes on the CELL, not on where the icon is painted: the
          * dragged icon is painted under the cursor, and a hit-box that followed
          * it would leave the gap it came out of clickable and the icon itself
          * hit-testable in mid-air. Nothing hit-tests during a drag anyway, and
-         * on release the box is right for wherever the icon settled. */
-        e->x = ix; e->y = iy; e->w = icon; e->h = icon;
+         * on release the box is right for wherever the icon settled.
+         *
+         * ⚠ These are the LAST-RENDERED output's cells, and with magnification
+         * the mirrors genuinely disagree — so nothing that has an output in hand
+         * may read them. dock_entry_at() and dock_icon_drag_begin() re-derive
+         * from dock_metrics() for the output they are asking about; what is left
+         * here is the flat rect every mirror agrees on during a drag, which is
+         * the only time it is read. */
+        e->x = ix; e->y = iy; e->w = size; e->h = size;
 
         if (dragging_icon && i == s->dock_drag.icon) continue;   /* drawn below */
 
         /* Press-pop: scale the icon about its centre. Only the icon glyph is
          * transformed — the hit-box and running-dot stay put. */
-        dock_draw_icon(cr, e->app_id, ix, iy, icon, dock_click_scale(e, now));
+        dock_draw_icon(cr, e->app_id, ix, iy, size, dock_click_scale(e, now));
 
         if (e->running) {
             double dx, dy;
+            /* Off the FLAT cell, not the swollen one: the dot marks the app's
+             * place in the row and a dot that slid up the screen with the icon
+             * would read as part of the icon rather than as a mark on the bar. */
+            int flat = DOCK_ICON_SIZE;
             if (vertical) {
                 /* Dot on the inner long edge of the column. */
                 dx = (s->config.dock_edge == SYN_DOCK_EDGE_LEFT)
-                         ? bar_w - 5.0 : 5.0;
-                dy = iy + icon / 2.0;
+                         ? m.bx + m.bw - 5.0 : m.bx + 5.0;
+                dy = iy + size / 2.0;
             } else {
-                dx = ix + icon / 2.0;
-                dy = iy + icon + 6;
+                dx = ix + size / 2.0;
+                dy = m.by + (m.thick + flat) / 2.0 - 4 + 6;
             }
             /* panel_ink, not a white literal: now that the body follows the
              * theme, a light theme (XP's beige, 95's silver) draws a near-white
@@ -920,6 +1234,7 @@ static void dock_render_output(syn_output_t *o)
     if (dragging_icon) {
         syn_dock_entry_t *e = &s->dock_entries[s->dock_drag.icon];
         double ix = s->dock_drag.icon_x, iy = s->dock_drag.icon_y;
+        int icon = DOCK_ICON_SIZE;
         cairo_save(cr);
         cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.30);
         cairo_arc(cr, ix + icon / 2.0, iy + icon * 0.86, icon * 0.40, 0, 2 * M_PI);
@@ -930,6 +1245,7 @@ static void dock_render_output(syn_output_t *o)
 
     cairo_destroy(cr);
     set_scene_buffer(&o->dock.icons_buf, o->dock.tree, buf);
+    o->dock.clock_drawn = dock_clock_stamp(s);
 
     /* Frosted glass is what the blur does behind the buffer, not what the fill
      * does on it — see dock_paint_body(). Gated on the user's master blur switch
@@ -962,6 +1278,29 @@ void dock_wake(syn_server_t *s)
 
 /* ── Public API ──────────────────────────────────────────── */
 
+/*
+ * The dock clock's heartbeat.
+ *
+ * The rest of the dock is driven by output frames, and output frames stop when
+ * nothing on screen is moving — which is precisely the state a clock has to keep
+ * ticking through. So the clock gets a timer of its own rather than a `return
+ * true` out of dock_tick(), which would hold every output at its refresh rate
+ * for the sake of one string a minute.
+ *
+ * It only wakes the outputs; dock_tick() decides whether the string has actually
+ * changed (dock_clock_due) and repaints if so. Re-arms unconditionally so the
+ * clock can be switched on mid-session without anything having to re-arm it.
+ */
+#define DOCK_CLOCK_POLL_MS 1000
+
+static int dock_clock_tick(void *data)
+{
+    syn_server_t *s = data;
+    if (s->config.dock_enabled && s->config.dock_clock) dock_wake(s);
+    wl_event_source_timer_update(s->dock_clock_timer, DOCK_CLOCK_POLL_MS);
+    return 0;
+}
+
 void dock_init(syn_server_t *s)
 {
     s->dock_entry_count = 0;
@@ -970,6 +1309,19 @@ void dock_init(syn_server_t *s)
      * whose resting value is a valid index is one refactor from being read. */
     s->dock_drag.icon = -1;
     dock_rebuild(s);   /* seeds pinned-only entries; nothing mapped yet */
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    s->dock_clock_timer = wl_event_loop_add_timer(loop, dock_clock_tick, s);
+    if (s->dock_clock_timer)
+        wl_event_source_timer_update(s->dock_clock_timer, DOCK_CLOCK_POLL_MS);
+}
+
+void dock_finish(syn_server_t *s)
+{
+    if (s->dock_clock_timer) {
+        wl_event_source_remove(s->dock_clock_timer);
+        s->dock_clock_timer = NULL;
+    }
 }
 
 void dock_output_created(syn_output_t *o)
@@ -982,6 +1334,10 @@ void dock_output_created(syn_output_t *o)
     o->dock.hover_since = 0.0;
     o->dock.unhover_since = 0.0;
     o->dock.last_tick = 0.0;
+    o->dock.mag_run = 0.0;
+    o->dock.mag_amount = 0.0;
+    o->dock.mag_want = 0;
+    o->dock.clock_drawn = -1;   /* nothing drawn yet — never a real stamp */
     dock_render_output(o);
 }
 
@@ -998,6 +1354,39 @@ void dock_output_destroy(syn_output_t *o)
         o->dock.tree = NULL;
         o->dock.icons_buf = NULL;
     }
+}
+
+/*
+ * Is the dock the topmost thing at (lx,ly) on this output?
+ *
+ * With `dock_on_top` off the dock sits BELOW window_tree, so a window can be in
+ * front of it — and every question the dock asks about the pointer has to be
+ * asked of a dock that can actually be seen there. Without this the bar stayed
+ * fully clickable through whatever covered it: a right-click on a maximized
+ * window's bottom strip opened the dock's menu instead of the app's.
+ *
+ * surface_at() walks the scene graph, so it already answers this in the dock's
+ * own stacking terms: with the dock on top its buffer is the topmost node and
+ * is not a wl_surface, so the call returns NULL and every window under it is
+ * correctly invisible to the test. Which is why the check is SKIPPED when the
+ * dock floats — asking it then would find the window the dock is covering and
+ * refuse a click the user can plainly see landing on the dock.
+ */
+static bool dock_point_clear(syn_server_t *s, syn_output_t *o, double lx, double ly)
+{
+    if (dock_on_top_here(o)) return true;
+    double sx, sy;
+    return surface_at(s, lx, ly, NULL, &sx, &sy) == NULL;
+}
+
+/* Would the clock draw a different string than the one on this output's canvas?
+ * False when the clock is off, so the 1 Hz wake costs nothing on a dock without
+ * one. See dock_clock_stamp(). */
+static bool dock_clock_due(syn_output_t *o)
+{
+    syn_server_t *s = o->server;
+    return s->config.dock_clock &&
+           o->dock.clock_drawn != dock_clock_stamp(s);
 }
 
 /* ── Auto-hide ───────────────────────────────────────────── */
@@ -1029,6 +1418,57 @@ bool dock_tick(syn_output_t *o, double now)
         return false;
     }
 
+    dock_metrics_t m;
+    if (!dock_metrics(o, &m)) return false;
+
+    double cx = s->cursor->x, cy = s->cursor->y;
+    bool on_output = cx >= m.ob.x && cx < m.ob.x + m.ob.width &&
+                     cy >= m.ob.y && cy < m.ob.y + m.ob.height;
+
+    /* The canvas as it currently sits, so "over the bar" is asked of where the
+     * bar actually is rather than of where it would be fully shown. */
+    double ox = o->dock.tree->node.x, oy = o->dock.tree->node.y;
+    bool on_screen = o->dock.shown || o->dock.slide_progress > 0.0;
+    bool over_canvas = on_screen && on_output &&
+                       cx >= ox && cx < ox + m.w &&
+                       cy >= oy && cy < oy + m.h;
+
+    /* ── Magnification ──
+     *
+     * The centre is the pointer's position on the FLAT run — measured from
+     * base_origin, which does not move when the magnified bar grows. Feeding
+     * the live canvas origin in instead makes the layout an input to itself and
+     * the row oscillates.
+     *
+     * It also has to survive the dock being covered: with `dock_on_top` off a
+     * window can be in front of the bar, and swelling icons under it would be a
+     * dock reacting to a pointer that is demonstrably doing something else. */
+    bool anim_mag = false;
+    if (s->config.dock_magnify) {
+        bool want = over_canvas && dock_point_clear(s, o, cx, cy);
+        double run = (m.vertical ? cy : cx) - m.base_origin;
+        double goal = want ? 1.0 : 0.0;
+
+        if (want && fabs(run - o->dock.mag_run) >= 1.0) {
+            o->dock.mag_run = run;
+            if (o->dock.mag_amount > 0.0) anim_mag = true;
+        }
+        if (o->dock.mag_amount != goal) {
+            double dt = (o->dock.last_tick > 0.0) ? now - o->dock.last_tick : 0.0;
+            if (dt <= 0.0 || dt > 0.5) dt = 0.016;
+            double step = dt / DOCK_MAG_EASE_SECS;
+            if (o->dock.mag_amount < goal)
+                o->dock.mag_amount = fmin(goal, o->dock.mag_amount + step);
+            else
+                o->dock.mag_amount = fmax(goal, o->dock.mag_amount - step);
+            anim_mag = true;
+        }
+        o->dock.mag_want = want;
+    } else if (o->dock.mag_amount != 0.0) {
+        o->dock.mag_amount = 0.0;
+        anim_mag = true;
+    }
+
     /* Always-visible mode: pin the bar on screen and skip the hover state
      * machine entirely — the same fixed pose the drag branch holds, but
      * permanent. It still floats above content rather than reserving layout
@@ -1045,23 +1485,20 @@ bool dock_tick(syn_output_t *o, double now)
         bool clicking = false;
         for (int i = 0; i < s->dock_entry_count; i++)
             if (dock_entry_animating(&s->dock_entries[i], now)) { clicking = true; break; }
-        if (clicking) dock_render_output(o);
-        return clicking;
+        bool ticking = dock_clock_due(o);
+        if (clicking || anim_mag || ticking) {
+            if (anim_mag) o->dock.last_tick = now;
+            dock_render_output(o);
+        }
+        return clicking || anim_mag;
     }
 
-    int bx, by, bw, bh;
-    if (!dock_geometry(o, &bx, &by, &bw, &bh)) return false;
-    struct wlr_box ob;
-    output_box_of(s, o, &ob);
-
-    double cx = s->cursor->x, cy = s->cursor->y;
     int margin = s->config.dock_hover_margin;
     if (margin < 1) margin = 1;
     int pad = DOCK_ICON_PAD;
     syn_dock_edge_t edge = s->config.dock_edge;
-
-    bool on_output = cx >= ob.x && cx < ob.x + ob.width &&
-                     cy >= ob.y && cy < ob.y + ob.height;
+    /* The fully-shown BODY, which is the strip the reveal trigger runs along. */
+    int bx = m.x + m.bx, by = m.y + m.by, bw = m.bw, bh = m.bh;
 
     /* Reveal trigger: a `margin`-thick strip along the dock's edge, within
      * the bar's footprint (plus a little padding on the long axis). */
@@ -1069,32 +1506,31 @@ bool dock_tick(syn_output_t *o, double now)
     if (on_output) {
         switch (edge) {
         case SYN_DOCK_EDGE_TOP:
-            in_trigger = cy < ob.y + margin &&
+            in_trigger = cy < m.ob.y + margin &&
                          cx >= bx - pad && cx < bx + bw + pad;
             break;
         case SYN_DOCK_EDGE_LEFT:
-            in_trigger = cx < ob.x + margin &&
+            in_trigger = cx < m.ob.x + margin &&
                          cy >= by - pad && cy < by + bh + pad;
             break;
         case SYN_DOCK_EDGE_RIGHT:
-            in_trigger = cx >= ob.x + ob.width - margin &&
+            in_trigger = cx >= m.ob.x + m.ob.width - margin &&
                          cy >= by - pad && cy < by + bh + pad;
             break;
         case SYN_DOCK_EDGE_BOTTOM:
         default:
-            in_trigger = cy >= ob.y + ob.height - margin &&
+            in_trigger = cy >= m.ob.y + m.ob.height - margin &&
                          cx >= bx - pad && cx < bx + bw + pad;
             break;
         }
     }
     /* Keep-shown region: anywhere over the bar, but only once some of it is
-     * actually on screen. dock_geometry() reports the *fully-shown* rect, so
-     * testing it unconditionally would treat the whole dock_height band as a
-     * reveal trigger and make `margin` meaningless. */
-    bool on_screen = o->dock.shown || o->dock.slide_progress > 0.0;
-    bool in_bar = on_screen && on_output &&
-                  cx >= bx && cx < bx + bw &&
-                  cy >= by && cy < by + bh;
+     * actually on screen. The CANVAS and not the body, so a magnified icon
+     * standing out past the slab keeps the dock out while the pointer is on it.
+     * dock_metrics() reports the *fully-shown* rect, so testing it
+     * unconditionally would treat the whole dock_height band as a reveal
+     * trigger and make `margin` meaningless. */
+    bool in_bar = over_canvas;
 
     /* Don't summon a hidden dock mid-drag: a client holding an implicit
      * pointer grab (rubber-band select, window drag) owns the cursor, and
@@ -1140,6 +1576,8 @@ bool dock_tick(syn_output_t *o, double now)
             o->dock.slide_progress = fmax(goal, o->dock.slide_progress - step);
 
         dock_apply_position(o);
+    } else if (anim_mag) {
+        o->dock.last_tick = now;
     } else {
         o->dock.last_tick = 0.0;
     }
@@ -1151,7 +1589,9 @@ bool dock_tick(syn_output_t *o, double now)
     for (int i = 0; i < s->dock_entry_count; i++) {
         if (dock_entry_animating(&s->dock_entries[i], now)) { clicking = true; break; }
     }
-    if (clicking && on_screen)
+    /* A magnification step changes the SIZE of the canvas, so unlike the slide
+     * it has to go through a full repaint, not just a reposition. */
+    if ((clicking || anim_mag || dock_clock_due(o)) && on_screen)
         dock_render_output(o);
 
     bool animating = o->dock.slide_progress != goal;
@@ -1160,7 +1600,7 @@ bool dock_tick(syn_output_t *o, double now)
      * strip — dock_pointer_motion() won't wake us again, so keep frames coming
      * until the dwell elapses or the cursor leaves. */
     bool waiting_to_show = in_trigger && !engaged;
-    return animating || waiting_to_hide || waiting_to_show || clicking;
+    return animating || waiting_to_hide || waiting_to_show || clicking || anim_mag;
 }
 
 /* Pointer moved: wake the outputs whose dock might need to react (cursor near
@@ -1171,7 +1611,12 @@ void dock_pointer_motion(syn_server_t *s)
     if (!s->config.dock_enabled) return;
 
     double cx = s->cursor->x, cy = s->cursor->y;
-    int band = s->config.dock_height + 8;
+    /* Past the body AND past the magnification headroom: with magnify on, a
+     * pointer 20px above a bottom dock is already swelling icons, so a band
+     * that stopped at the slab would leave the effect waiting on the next
+     * incidental repaint to notice the pointer at all. */
+    int band = s->config.dock_height +
+               (s->config.dock_magnify ? DOCK_MAG_HEADROOM : 0) + 8;
     syn_dock_edge_t edge = s->config.dock_edge;
 
     syn_output_t *o;
@@ -1208,19 +1653,70 @@ syn_dock_entry_t *dock_entry_at(syn_server_t *s, double lx, double ly)
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         if (!o->dock.tree || !o->dock.shown) continue;
+        if (!dock_point_clear(s, o, lx, ly)) continue;
 
-        /* Entry hit-boxes are dock-canvas-local (identical on every output's
-         * mirror); the tree's scene position is that canvas's layout-
-         * coordinate origin (which already reflects any slide/float). */
+        /* Cell rects are dock-canvas-local and, since magnification, are the
+         * property of ONE output rather than of the entry — so they are derived
+         * here for the mirror being tested instead of read off s->dock_entries.
+         * The tree's scene position is that canvas's layout-coordinate origin
+         * (which already reflects any slide/float). */
+        dock_metrics_t m;
+        if (!dock_metrics(o, &m)) continue;
+
         double rx = lx - o->dock.tree->node.x;
         double ry = ly - o->dock.tree->node.y;
 
-        for (int i = 0; i < s->dock_entry_count; i++) {
-            syn_dock_entry_t *e = &s->dock_entries[i];
-            if (rx >= e->x && rx < e->x + e->w &&
-                ry >= e->y && ry < e->y + e->h)
-                return e;
+        int order[DOCK_MAX_ENTRIES];
+        int ndisp = dock_display_order(s, order, DOCK_MAX_ENTRIES);
+        if (ndisp > m.n) ndisp = m.n;
+
+        /* Back to front along the run: a swollen icon overlaps the gaps either
+         * side of it, and the last one drawn is the one the pointer is on. */
+        for (int slot = ndisp - 1; slot >= 0; slot--) {
+            if (rx >= m.cx[slot] && rx < m.cx[slot] + m.cs[slot] &&
+                ry >= m.cy[slot] && ry < m.cy[slot] + m.cs[slot])
+                return &s->dock_entries[order[slot]];
         }
+    }
+    return NULL;
+}
+
+/* The cell the entry at `idx` is currently DRAWN in on this output, canvas-local.
+ * The drag needs it because the icon it lifts may be a magnified one, and
+ * grabbing it by its flat rect makes it jump the moment the button goes down. */
+static bool dock_entry_cell(syn_output_t *o, int idx,
+                            int *ix, int *iy, int *size)
+{
+    syn_server_t *s = o->server;
+    dock_metrics_t m;
+    if (!dock_metrics(o, &m)) return false;
+
+    int order[DOCK_MAX_ENTRIES];
+    int ndisp = dock_display_order(s, order, DOCK_MAX_ENTRIES);
+    if (ndisp > m.n) ndisp = m.n;
+
+    for (int slot = 0; slot < ndisp; slot++) {
+        if (order[slot] != idx) continue;
+        *ix = m.cx[slot]; *iy = m.cy[slot]; *size = m.cs[slot];
+        return true;
+    }
+    return false;
+}
+
+/* The output whose dock CANVAS covers this point. dock_bar_at() answers for the
+ * body alone, which is the right question for an edge-drag and the wrong one for
+ * an icon: a magnified icon stands up out of the slab, so the press that lifts
+ * it can land entirely in the headroom. */
+static syn_output_t *dock_canvas_at(syn_server_t *s, double lx, double ly)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!o->dock.tree || !o->dock.shown) continue;
+        dock_metrics_t m;
+        if (!dock_metrics(o, &m)) continue;
+        double ox = o->dock.tree->node.x, oy = o->dock.tree->node.y;
+        if (lx >= ox && lx < ox + m.w && ly >= oy && ly < oy + m.h)
+            return o;
     }
     return NULL;
 }
@@ -1232,11 +1728,16 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out)
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         if (!o->dock.tree || !o->dock.shown) continue;
-        int bx, by, bw, bh;
-        if (!dock_geometry(o, &bx, &by, &bw, &bh)) continue;
-        /* Use the tree's live position (slide/float already applied). */
-        double ox = o->dock.tree->node.x, oy = o->dock.tree->node.y;
-        if (lx >= ox && lx < ox + bw && ly >= oy && ly < oy + bh) {
+        if (!dock_point_clear(s, o, lx, ly)) continue;
+        dock_metrics_t m;
+        if (!dock_metrics(o, &m)) continue;
+        /* The BODY, not the canvas: the magnification headroom is transparent,
+         * and a press in it must not start an edge-drag of a bar that visibly
+         * is not there. Icons standing up into it are caught by dock_entry_at(),
+         * which every caller runs first. */
+        double ox = o->dock.tree->node.x + m.bx;
+        double oy = o->dock.tree->node.y + m.by;
+        if (lx >= ox && lx < ox + m.bw && ly >= oy && ly < oy + m.bh) {
             if (out) *out = o;
             return true;
         }
@@ -1405,8 +1906,9 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
     int idx = (int)(e - s->dock_entries);
     if (idx < 0 || idx >= s->dock_entry_count) return;
 
-    syn_output_t *o = NULL;
-    if (!dock_bar_at(s, lx, ly, &o) || !o) return;
+    /* The CANVAS, not the body — dock_canvas_at() says why. */
+    syn_output_t *o = dock_canvas_at(s, lx, ly);
+    if (!o) return;
 
     s->dock_drag.active  = 1;
     s->dock_drag.moved   = 0;
@@ -1418,11 +1920,22 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
     s->dock_drag.start_x = lx;
     s->dock_drag.start_y = ly;
     /* Where in the icon the press landed, so the lifted icon stays under the
-     * same point of itself instead of jumping its centre to the cursor. */
-    s->dock_drag.grab_dx = lx - o->dock.tree->node.x - e->x;
-    s->dock_drag.grab_dy = ly - o->dock.tree->node.y - e->y;
-    s->dock_drag.icon_x  = e->x;
-    s->dock_drag.icon_y  = e->y;
+     * same point of itself instead of jumping its centre to the cursor.
+     *
+     * Off the cell as DRAWN on this output, not off e->x/e->y: with magnify on
+     * the icon being grabbed is a swollen one standing out of the slab, and its
+     * flat rect is neither where it looks nor how big it looks. The lifted icon
+     * is drawn flat (dock_metrics() suppresses magnification for the length of
+     * the drag), so the grab offset is scaled back to the flat cell — otherwise
+     * a press near the top of a 77px icon grabs past the bottom of the 48px one
+     * it becomes. */
+    int cix = e->x, ciy = e->y, csz = e->w > 0 ? e->w : DOCK_ICON_SIZE;
+    dock_entry_cell(o, idx, &cix, &ciy, &csz);
+    double scale = csz > 0 ? (double)DOCK_ICON_SIZE / csz : 1.0;
+    s->dock_drag.grab_dx = (lx - o->dock.tree->node.x - cix) * scale;
+    s->dock_drag.grab_dy = (ly - o->dock.tree->node.y - ciy) * scale;
+    s->dock_drag.icon_x  = cix;
+    s->dock_drag.icon_y  = ciy;
 }
 
 /* The lifted icon follows the cursor, and the run-axis position of its centre
@@ -1432,18 +1945,22 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
 static void dock_icon_drag_motion(syn_server_t *s, syn_output_t *o,
                                   double lx, double ly)
 {
-    int bx, by, bw, bh;
-    if (!dock_geometry(o, &bx, &by, &bw, &bh)) return;
+    dock_metrics_t m;
+    if (!dock_metrics(o, &m)) return;
 
     double ix = lx - o->dock.tree->node.x - s->dock_drag.grab_dx;
     double iy = ly - o->dock.tree->node.y - s->dock_drag.grab_dy;
 
-    double max_x = bw - DOCK_ICON_PAD - DOCK_ICON_SIZE;
-    double max_y = bh - DOCK_ICON_PAD - DOCK_ICON_SIZE;
-    if (ix < DOCK_ICON_PAD) ix = DOCK_ICON_PAD;
-    if (iy < DOCK_ICON_PAD) iy = DOCK_ICON_PAD;
-    if (ix > max_x) ix = max_x > DOCK_ICON_PAD ? max_x : DOCK_ICON_PAD;
-    if (iy > max_y) iy = max_y > DOCK_ICON_PAD ? max_y : DOCK_ICON_PAD;
+    /* Clamped to the BODY, not the canvas. The magnification headroom is
+     * transparent, and an icon parked in it would be a picture floating clear of
+     * the bar it is being rearranged inside. */
+    double min_x = m.bx + DOCK_ICON_PAD, min_y = m.by + DOCK_ICON_PAD;
+    double max_x = m.bx + m.bw - DOCK_ICON_PAD - DOCK_ICON_SIZE;
+    double max_y = m.by + m.bh - DOCK_ICON_PAD - DOCK_ICON_SIZE;
+    if (ix < min_x) ix = min_x;
+    if (iy < min_y) iy = min_y;
+    if (ix > max_x) ix = max_x > min_x ? max_x : min_x;
+    if (iy > max_y) iy = max_y > min_y ? max_y : min_y;
 
     /* A high-polling-rate mouse sends motion far faster than a pixel of travel,
      * so most events land on the position the icon already has. Repainting the
@@ -1459,9 +1976,11 @@ static void dock_icon_drag_motion(syn_server_t *s, syn_output_t *o,
     /* The cell the icon's CENTRE is over, so a swap happens when the two icons
      * are half past each other rather than a full cell apart. Measured on the
      * icon, not on the cursor: the cursor is wherever in the icon it was pressed
-     * and would put the swap point somewhere different for every grab. */
-    bool vertical = edge_is_vertical(s->config.dock_edge);
-    double centre = (vertical ? iy : ix) + DOCK_ICON_SIZE / 2.0;
+     * and would put the swap point somewhere different for every grab. Relative
+     * to the body's origin, which on the run axis is the canvas's — the headroom
+     * only ever insets the CROSS axis, and saying so is cheaper than a reader
+     * having to re-derive it. */
+    double centre = (m.vertical ? iy - m.by : ix - m.bx) + DOCK_ICON_SIZE / 2.0;
     s->dock_drag.slot = dock_slot_at((int)lround(centre), s->dock_entry_count);
 
     /* Every mirror, not just this output's: the entry model is server-global, so
@@ -1694,8 +2213,17 @@ void dock_state_load(syn_config_t *cfg)
             else if (strcmp(v, "right")  == 0) cfg->dock_edge = SYN_DOCK_EDGE_RIGHT;
         } else if (strncmp(p, "autohide=", 9) == 0) {
             /* Only overrides synuirc when the line is present, so an older
-             * dock.state written before this key leaves the config value alone. */
+             * dock.state written before this key leaves the config value alone.
+             * The same is true of every key below it, which is the whole reason
+             * they are matched rather than positional: a dock.state written by
+             * an older synui simply carries fewer opinions. */
             cfg->dock_autohide = strcmp(p + 9, "on") == 0;
+        } else if (strncmp(p, "ontop=", 6) == 0) {
+            cfg->dock_on_top = strcmp(p + 6, "on") == 0;
+        } else if (strncmp(p, "magnify=", 8) == 0) {
+            cfg->dock_magnify = strcmp(p + 8, "on") == 0;
+        } else if (strncmp(p, "clock=", 6) == 0) {
+            cfg->dock_clock = strcmp(p + 6, "on") == 0;
         } else if (strncmp(p, "pin=", 4) == 0) {
             const char *v = p + 4;
             if (*v && cfg->dock_pin_count < DOCK_PIN_MAX) {
@@ -1721,6 +2249,9 @@ void dock_state_save(syn_server_t *s)
     static const char *edge_name[] = { "bottom", "top", "left", "right" };
     fprintf(f, "edge=%s\n", edge_name[s->config.dock_edge]);
     fprintf(f, "autohide=%s\n", s->config.dock_autohide ? "on" : "off");
+    fprintf(f, "ontop=%s\n",    s->config.dock_on_top   ? "on" : "off");
+    fprintf(f, "magnify=%s\n",  s->config.dock_magnify  ? "on" : "off");
+    fprintf(f, "clock=%s\n",    s->config.dock_clock    ? "on" : "off");
     for (int i = 0; i < s->config.dock_pin_count; i++)
         fprintf(f, "pin=%s\n", s->config.dock_pin[i]);
     fclose(f);
@@ -1751,31 +2282,100 @@ void dock_pin_toggle(syn_server_t *s, const char *app_id)
     dock_rebuild(s);
 }
 
-/* ── Right-click context menu ────────────────────────────── */
+/* ── Right-click context menu ──────────────────────────────
+ *
+ * TWO menus in one, and the reason they are one menu is reach.
+ *
+ * The dock's settings had no pointer route at all: auto-hide lived on the
+ * control panel and nowhere else, while the BAR — the other piece of shell
+ * furniture on the same desktop — puts every one of its switches on a
+ * right-click. So the two halves of the desktop disagreed about how you change
+ * them, and the dock's half was the one you had to know a keybinding for.
+ *
+ * They could not go on a bar-body-only menu, which was the obvious shape. The
+ * body a right-click can actually land on is the 8px of padding between icons
+ * and whatever is left past the last one; on a full dock that is a target you
+ * hunt for. So the settings are on EVERY dock right-click, with the app rows
+ * above them when the click landed on an icon. Same rule the desktop menu
+ * follows: what you clicked first, what you clicked it on second.
+ */
 
 #define DOCKMENU_ITEM_H 30
-#define DOCKMENU_W      184
+#define DOCKMENU_SEP_H  9      /* separator rows are shorter than items */
+#define DOCKMENU_W      210    /* fits "Windows cover the dock" at 14px */
 
+static bool dockact_is_sep(syn_dockact_t a) { return a == SYN_DOCKACT_SEP; }
+
+static int dockmenu_row_h(syn_server_t *s, int i)
+{
+    return dockact_is_sep(s->dockmenu.actions[i]) ? DOCKMENU_SEP_H
+                                                  : DOCKMENU_ITEM_H;
+}
+
+int dockmenu_row_top(syn_server_t *s, int i)
+{
+    int top = 4;
+    for (int k = 0; k < i; k++) top += dockmenu_row_h(s, k);
+    return top;
+}
+
+int dockmenu_row_height(syn_server_t *s, int i) { return dockmenu_row_h(s, i); }
+
+/* The switches draw a checkmark in the state they are already in, so a row reads
+ * as a setting rather than as an action that might do it twice — the same
+ * convention deskmenu_row_checked() established. */
+bool dockmenu_row_checked(syn_server_t *s, int i)
+{
+    if (i < 0 || i >= s->dockmenu.action_count) return false;
+    switch (s->dockmenu.actions[i]) {
+    case SYN_DOCKACT_AUTOHIDE: return s->config.dock_autohide;
+    case SYN_DOCKACT_ONTOP:    return s->config.dock_on_top;
+    case SYN_DOCKACT_MAGNIFY:  return s->config.dock_magnify;
+    case SYN_DOCKACT_CLOCK:    return s->config.dock_clock;
+    default:                   return false;
+    }
+}
+
+/* `e` NULL means the click landed on the bar body rather than on an icon. */
 void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
 {
-    snprintf(s->dockmenu.app_id, sizeof(s->dockmenu.app_id), "%s", e->app_id);
+    snprintf(s->dockmenu.app_id, sizeof(s->dockmenu.app_id), "%s",
+             e ? e->app_id : "");
 
     int n = 0;
-    s->dockmenu.actions[n++] = e->pinned ? SYN_DOCKACT_UNPIN : SYN_DOCKACT_PIN;
+    if (e) {
+        s->dockmenu.actions[n++] = e->pinned ? SYN_DOCKACT_UNPIN
+                                             : SYN_DOCKACT_PIN;
 
-    const syn_icon_entry_t *ic = icon_lookup(e->app_id);
-    if (ic->exec[0])
-        s->dockmenu.actions[n++] = e->running ? SYN_DOCKACT_NEWWIN
-                                              : SYN_DOCKACT_OPEN;
-    /* Close-one before quit-all: closing a single window is the common intent,
-     * and Quit sits furthest from the cursor so it is hard to hit by accident. */
-    if (e->running) {
-        s->dockmenu.actions[n++] = SYN_DOCKACT_CLOSEWIN;
-        s->dockmenu.actions[n++] = SYN_DOCKACT_QUIT;
+        const syn_icon_entry_t *ic = icon_lookup(e->app_id);
+        if (ic->exec[0])
+            s->dockmenu.actions[n++] = e->running ? SYN_DOCKACT_NEWWIN
+                                                  : SYN_DOCKACT_OPEN;
+        /* Close-one before quit-all: closing a single window is the common
+         * intent, and Quit sits furthest from the cursor so it is hard to hit by
+         * accident. */
+        if (e->running) {
+            s->dockmenu.actions[n++] = SYN_DOCKACT_CLOSEWIN;
+            s->dockmenu.actions[n++] = SYN_DOCKACT_QUIT;
+        }
+        s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
     }
+
+    s->dockmenu.actions[n++] = SYN_DOCKACT_AUTOHIDE;
+    /* Only while the dock is pinned on screen. An auto-hiding dock is always on
+     * top (see dock_floats_over_windows), so the row would be a switch with
+     * nothing behind it — worse than an absent one, because it would appear to
+     * be set and ignored. */
+    if (!s->config.dock_autohide)
+        s->dockmenu.actions[n++] = SYN_DOCKACT_ONTOP;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_MAGNIFY;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
+    s->dockmenu.actions[n++] = SYN_DOCKACT_SETTINGS;
     s->dockmenu.action_count = n;
 
-    int w = DOCKMENU_W, h = n * DOCKMENU_ITEM_H + 8;
+    int w = DOCKMENU_W, h = 8;
+    for (int i = 0; i < n; i++) h += dockmenu_row_h(s, i);
 
     /* Position above/left of the cursor so a bottom dock's menu pops upward,
      * then clamp within the output under the cursor. */
@@ -1796,15 +2396,22 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
     synui_render_dockmenu(s);
 }
 
-/* Item index under (lx,ly), or -1 if outside the menu. */
+/* Item index under (lx,ly), or -1 if outside the menu or over a separator. */
 static int dockmenu_item_at(syn_server_t *s, double lx, double ly)
 {
     if (lx < s->dockmenu.x || lx >= s->dockmenu.x + s->dockmenu.w ||
         ly < s->dockmenu.y || ly >= s->dockmenu.y + s->dockmenu.h)
         return -1;
-    int idx = (int)((ly - s->dockmenu.y - 4) / DOCKMENU_ITEM_H);
-    if (idx < 0 || idx >= s->dockmenu.action_count) return -1;
-    return idx;
+
+    int rel = (int)(ly - s->dockmenu.y - 4);
+    int top = 0;
+    for (int i = 0; i < s->dockmenu.action_count; i++) {
+        int rh = dockmenu_row_h(s, i);
+        if (rel >= top && rel < top + rh)
+            return dockact_is_sep(s->dockmenu.actions[i]) ? -1 : i;
+        top += rh;
+    }
+    return -1;
 }
 
 void dockmenu_motion(syn_server_t *s, double lx, double ly)
@@ -1822,6 +2429,19 @@ void dockmenu_close(syn_server_t *s)
     if (!s->dockmenu.visible) return;
     s->dockmenu.visible = 0;
     synui_render_dockmenu(s);
+}
+
+/* One switch, flipped, persisted and applied. Every one of these lives in
+ * dock.state next to the edge and the pins, so a dock configured by pointer
+ * comes back the way it was left — which the auto-hide row already did and is
+ * the standard the three new ones are held to. */
+static void dockmenu_toggle(syn_server_t *s, int *flag)
+{
+    *flag = !*flag;
+    dock_state_save(s);
+    dock_relayout(s);  /* every one of these changes the canvas: repaint all
+                        * mirrors, not just the one the menu was opened on */
+    dock_wake(s);      /* and act on it this frame, not the next stray one */
 }
 
 void dockmenu_click(syn_server_t *s, double lx, double ly)
@@ -1878,5 +2498,28 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
             }
         }
         break;
+
+    case SYN_DOCKACT_AUTOHIDE:
+        dockmenu_toggle(s, &s->config.dock_autohide);
+        break;
+    case SYN_DOCKACT_ONTOP:
+        dockmenu_toggle(s, &s->config.dock_on_top);
+        break;
+    case SYN_DOCKACT_MAGNIFY:
+        dockmenu_toggle(s, &s->config.dock_magnify);
+        break;
+    case SYN_DOCKACT_CLOCK:
+        dockmenu_toggle(s, &s->config.dock_clock);
+        break;
+    case SYN_DOCKACT_SETTINGS:
+        /* The category, not the bare panel: the rest of the dock's settings —
+         * edge, size, style, opacity, corners — are rows on Desktop, and landing
+         * anywhere else would make this the one menu entry that does not take
+         * you to what it names. */
+        synui_binding_execute(s, "control", "desktop");
+        break;
+
+    case SYN_DOCKACT_SEP:
+        break;   /* not selectable; dockmenu_item_at never returns one */
     }
 }

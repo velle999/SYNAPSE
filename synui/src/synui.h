@@ -1608,6 +1608,9 @@ typedef enum {
     CTL_ROW_LAYOUT,        /* tiling / floating / monocle / AI / niri — of the ACTIVE desktop */
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
+    CTL_ROW_DOCK_ON_TOP,   /* a pinned dock floats over windows, or they cover it */
+    CTL_ROW_DOCK_MAGNIFY,  /* macOS-style hover swell on the icons */
+    CTL_ROW_DOCK_CLOCK,    /* time + date in a cell past the last icon */
     CTL_ROW_DOCK_STYLE,    /* solid slab or frosted glass — auto follows the theme */
     CTL_ROW_DOCK_OPACITY,  /* how much of the wallpaper shows through the bar */
     CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
@@ -1756,6 +1759,10 @@ typedef enum {
     CTL_ROW_SETTINGS,      /* System ▸ System settings — syn-settings, the APP */
     CTL_ROW_MONITORS,      /* Display ▸ Monitor settings — syn-settings' display pane */
     CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */
+    CTL_ROW_BAR_AUTOHIDE,  /* the bar's answer to Dock auto-hide — PER MONITOR
+                            * in bar.json, so this row is a master switch over
+                            * the bar's own right-click menu, not a second copy
+                            * of it. See ctl_bar_autohide_label(). */
     CTL_ROW_BAR_OPACITY,   /* how much wallpaper the bar lets through; auto = theme */
     CTL_ROW_BAR_SHAPE,     /* full-width / rounded-ends / floating-pill, when rounded */
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
@@ -3008,8 +3015,21 @@ typedef enum {
     SYN_DOCKACT_NEWWIN,    /* launch another instance — already running */
     SYN_DOCKACT_CLOSEWIN,  /* close one window of this app_id — the focused one */
     SYN_DOCKACT_QUIT,      /* close every mapped window of this app_id */
+    /* The dock's own settings, the bar's right-click menu's answer to the
+     * module switches on quickshell's. Always present, whether or not the
+     * click landed on an icon: the bar body a right-click can reach is the
+     * padding between icons and the strip past the last one, which on a full
+     * dock is a few pixels — a menu you can only open by aiming at those is a
+     * menu nobody finds. Drawn with a checkmark (see dockmenu_row_checked). */
+    SYN_DOCKACT_SEP,       /* a rule, not a row — not selectable */
+    SYN_DOCKACT_AUTOHIDE,  /* config.dock_autohide */
+    SYN_DOCKACT_ONTOP,     /* config.dock_on_top */
+    SYN_DOCKACT_MAGNIFY,   /* config.dock_magnify */
+    SYN_DOCKACT_CLOCK,     /* config.dock_clock */
+    SYN_DOCKACT_SETTINGS,  /* open Control panel ▸ Desktop, where the rest live */
 } syn_dockact_t;
-#define SYN_DOCKMENU_MAX 6
+/* 4 app rows + a rule + 4 switches + the panel row. */
+#define SYN_DOCKMENU_MAX 12
 
 /* deskmenu.c: the desktop (wallpaper) right-click menu. SEP draws a rule and
  * is not selectable; everything else is a row. */
@@ -3585,6 +3605,28 @@ typedef struct {
      * pinned like the drag branch, still floating above content, not reserving
      * layout space. Persisted to dock.state. */
     int   dock_autohide;        /* default 1 */
+    /* Does a NON-auto-hiding dock float over windows, or do windows cover it?
+     *
+     * Default 0 — covered — and that is the answer the always-visible mode
+     * should always have had: pinning the dock on screen used to pin it on top
+     * of everything, so a maximized window lost a 64px strip to a bar it could
+     * never be in front of. Off, the dock tucks below window_tree and behaves
+     * like the desktop furniture it is.
+     *
+     * Only meaningful while `dock_autohide` is off. An auto-hiding dock is
+     * summoned by the pointer and has to arrive in FRONT of whatever it was
+     * summoned over, or revealing it would show nothing. Persisted to
+     * dock.state. */
+    int   dock_on_top;          /* default 0 */
+    /* A clock (time, and the date under it) drawn at the far end of the bar,
+     * past the last icon. Off by default: the bar has one, and two clocks on
+     * one screen is a choice rather than a default. Persisted to dock.state. */
+    int   dock_clock;           /* default 0 */
+    /* macOS-style hover magnification: the icons under the pointer swell and
+     * the run slides apart to make room. On by default — it is the dock's
+     * signature behaviour, and the flat row is what it was missing. Persisted
+     * to dock.state. */
+    int   dock_magnify;         /* default 1 */
     /* Night light: warm the screen by writing the outputs' gamma LUTs directly
      * (nightlight.c). 6500K is daylight — the identity ramp — so the *temp* is
      * only meaningful while night_light is on. */
@@ -5175,6 +5217,19 @@ struct syn_output {
                                      * over it. Debounces the slide-out. */
         double   last_tick;        /* CLOCK_MONOTONIC secs of the last anim
                                      * step; 0 while settled (no slide). */
+        /* Magnification (dock_magnify). `mag_run` is where the pointer sits
+         * along the bar's LONG axis in dock-canvas coordinates — the centre the
+         * falloff is measured from — and `mag_amount` is how much of the effect
+         * is currently applied, eased 0→1 as the pointer arrives over the bar
+         * and back to 0 as it leaves. Per output because only the screen the
+         * pointer is on magnifies; the other mirrors keep the flat layout. */
+        double   mag_run;
+        double   mag_amount;
+        int      mag_want;         /* 1 while the pointer is over this mirror */
+        /* Wall-clock minute (or second, with seconds on) the dock clock last
+         * drew, so the 1 Hz repaint only actually repaints when the string
+         * would change. -1 = nothing drawn yet. */
+        long     clock_drawn;
     } dock;
 
     /* launcher.c: this output's "◢ SYNAPSE" start-menu button, drawn top-left
@@ -5454,6 +5509,12 @@ struct syn_server {
         double        icon_x, icon_y;   /* dragged icon's top-left, canvas-local */
         double        grab_dx, grab_dy; /* cursor offset within that icon */
     } dock_drag;
+    /* dock.c: a 1 Hz wake, and only for the dock clock. The auto-hide state
+     * machine rides on output frames — which stop the moment nothing is moving,
+     * which is exactly when a clock still has to tick. Armed for the life of the
+     * session and cheap when the clock is off: the callback re-arms and returns
+     * without touching an output. */
+    struct wl_event_source *dock_clock_timer;
 
     /* dock.c / render.c: right-click context menu for a dock icon. */
     struct {
@@ -5464,6 +5525,9 @@ struct syn_server {
     } dockmenu_ui;
     struct {
         int  visible;
+        /* The icon the menu opened on, or "" when it opened on the bar body —
+         * which is a real state, not a missing one: the settings half of the
+         * menu is offered either way and the app half only when this is set. */
         char app_id[128];                 /* snapshot (entries rebuild live) */
         syn_dockact_t actions[SYN_DOCKMENU_MAX];
         int  action_count;
@@ -8046,6 +8110,12 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
  * start menu and the volume mixer; quickshell's IPC goes client-ward, which is
  * the direction synui cannot go on its own. */
 void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn);
+/* The same call with an explicit argument instead of the focused output's name.
+ * The bar's own settings are per-monitor and the compositor has no business
+ * picking which monitor a control-panel row means, so the rows that drive the
+ * bar pass a value ("on"/"off") and let it apply that to every screen. */
+void synui_bar_ipc_arg(syn_server_t *s, const char *target, const char *fn,
+                       const char *arg);
 void synui_start_menu_open(syn_server_t *s);
 
 void power_state_save(syn_server_t *s);
@@ -8559,6 +8629,7 @@ void icon_set_accent(const float rgb[3]);
 
 /* ── dock.c ──────────────────────────────────────────────── */
 void dock_init(syn_server_t *s);                  /* load config; entries start empty */
+void dock_finish(syn_server_t *s);                /* drop the clock timer */
 void dock_output_created(syn_output_t *o);        /* create this output's dock tree */
 void dock_output_destroy(syn_output_t *o);        /* destroy this output's dock tree */
 
@@ -8653,6 +8724,11 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
  * motion() updates the hover highlight; click() runs the item under the
  * cursor (or dismisses on an outside click); close() hides it. */
 void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly);
+/* Row geometry, shared with the renderer the way deskmenu's is — separators
+ * are shorter than items, so the walk has to be in one place. */
+int  dockmenu_row_top(syn_server_t *s, int i);
+int  dockmenu_row_height(syn_server_t *s, int i);
+bool dockmenu_row_checked(syn_server_t *s, int i);
 void dockmenu_motion(syn_server_t *s, double lx, double ly);
 void dockmenu_click(syn_server_t *s, double lx, double ly);
 void dockmenu_close(syn_server_t *s);

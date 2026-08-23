@@ -668,19 +668,25 @@ static uint32_t now_msec(void)
  * an output name. Those come from the kernel rather than from a user, but a
  * shell in the path is a shell to get wrong later, and nothing here needs one.
  */
-void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
+void synui_bar_ipc_arg(syn_server_t *s, const char *target, const char *fn,
+                       const char *arg)
 {
-    syn_output_t *o = server_focused_output(s);
-    const char *name = (o && o->wlr_output && o->wlr_output->name)
-                       ? o->wlr_output->name : "";
-
+    (void)s;
     if (fork() == 0) {
         setsid();
         synui_child_reset_signals();
         execlp("synui-bar", "synui-bar", "ipc", "call", target, fn,
-               name, (char *)NULL);
+               arg ? arg : "", (char *)NULL);
         _exit(1);
     }
+}
+
+void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
+{
+    syn_output_t *o = server_focused_output(s);
+    synui_bar_ipc_arg(s, target, fn,
+                      (o && o->wlr_output && o->wlr_output->name)
+                          ? o->wlr_output->name : "");
 }
 
 void synui_start_menu_open(syn_server_t *s)
@@ -3319,12 +3325,21 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
          * every other module's. Hit-testing it in the compositor is what made
          * the bar's top-left corner invisible-but-clickable to the bar itself. */
 
-        /* Right-click a dock icon → its context menu. */
+        /* Right-click the dock → its context menu: the app's rows when the
+         * click landed on an icon, and the dock's own switches either way. The
+         * bar body is the second half of that and not an afterthought — until it
+         * was hit-tested here, the dock's settings had no pointer route at all
+         * while the bar beside it put every one of its switches on a
+         * right-click. See the comment over dockmenu_open(). */
         if (button == BTN_RIGHT) {
             syn_dock_entry_t *e =
                 dock_entry_at(s, s->cursor->x, s->cursor->y);
             if (e) {
                 dockmenu_open(s, e, s->cursor->x, s->cursor->y);
+                return;
+            }
+            if (dock_bar_at(s, s->cursor->x, s->cursor->y, NULL)) {
+                dockmenu_open(s, NULL, s->cursor->x, s->cursor->y);
                 return;
             }
         }

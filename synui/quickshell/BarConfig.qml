@@ -370,6 +370,29 @@ QtObject {
 
     function toggle(output, key) { root.set(output, key, !root.get(output, key)) }
 
+    /* Every screen at once, in ONE write.
+     *
+     * The control panel's "Bar auto-hide" row is a master over a per-monitor
+     * setting — the compositor has no business deciding which monitor a row on a
+     * panel means — and it reaches this through the `bar` IPC handler in
+     * shell.qml. Looping set() from over there would be one bar.json write per
+     * screen, each triggering a watch reload the next one races.
+     *
+     * Quickshell.screens rather than the keys already in perOutput: a monitor
+     * nobody has ever touched is not in the file, and leaving it out is exactly
+     * how a master switch ends up not covering the one screen it was reached for.
+     */
+    function setAll(key, value) {
+        const next = {}
+        for (const k in root.perOutput) next[k] = Object.assign({}, root.perOutput[k])
+        for (const screen of Quickshell.screens) {
+            if (!next[screen.name]) next[screen.name] = {}
+            next[screen.name][key] = value === true
+        }
+        root.perOutput = next
+        configFile.setText(JSON.stringify(next, null, 2) + "\n")
+    }
+
     function parse(text) {
         try {
             const j = JSON.parse(text)

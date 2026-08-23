@@ -125,6 +125,12 @@ int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
 void deco_toggle_titlebars(syn_server_t *s)   { (void)s; }
 void dock_state_save(syn_server_t *s)         { (void)s; }
 void dock_wake(syn_server_t *s)               { (void)s; }
+/* The bar is a separate process and the Bar auto-hide row asks it over
+ * quickshell's IPC. Nothing here forks — the row's value comes from bar.json,
+ * which this rig does not write, so the stub only has to link. */
+void synui_bar_ipc_arg(syn_server_t *s, const char *target, const char *fn,
+                       const char *arg)
+{ (void)s; (void)target; (void)fn; (void)arg; }
 void game_toggle(syn_server_t *s)             { (void)s; }
 void launcher_toggle_style(syn_server_t *s)   { (void)s; }
 void nightlight_toggle(syn_server_t *s)       { (void)s; }

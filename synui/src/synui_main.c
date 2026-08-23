@@ -2583,6 +2583,7 @@ void synui_destroy(syn_server_t *s)
     notif_finish(s);
     bt_finish(s);
     clock_finish(s);
+    dock_finish(s);
     screensaver_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */

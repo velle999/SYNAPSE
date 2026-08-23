@@ -148,6 +148,12 @@
  * Dock (dock.c):
  *   dock_enabled = on|off       (default on)
  *   dock_autohide = on|off      (default on; off = always on screen)
+ *   dock_on_top = on|off        (default off; only means anything with
+ *                                dock_autohide off. Off, windows cover the
+ *                                dock; on, it floats over them)
+ *   dock_magnify = on|off       (default on; the icons under the pointer swell
+ *                                and the run slides apart to make room)
+ *   dock_clock = on|off         (default off; time + date past the last icon)
  *   night_light  = on|off       (default off)   Super+Shift+B toggles
  *   night_light_temp = 4000     (Kelvin, 1000-6500; 6500 is daylight)
  *   dock_height = 64            (px)
@@ -1286,6 +1292,12 @@ static void config_set_defaults(syn_config_t *cfg)
 
     cfg->dock_enabled      = 1;
     cfg->dock_autohide     = 1;
+    /* Covered by windows, not floating over them. See the field's comment in
+     * synui.h — an always-visible dock on top is a strip a maximized window
+     * can never be in front of. */
+    cfg->dock_on_top       = 0;
+    cfg->dock_magnify      = 1;
+    cfg->dock_clock        = 0;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
@@ -2364,6 +2376,12 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_enabled = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_autohide") == 0)
         cfg->dock_autohide = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_on_top") == 0)
+        cfg->dock_on_top = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_magnify") == 0)
+        cfg->dock_magnify = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_clock") == 0)
+        cfg->dock_clock = strcmp(val, "on") == 0;
     /* Is there a bar, and how is it stopped and started. The compositor does
      * not start the bar (the session's autostart line does), so `bar_enabled`
      * is not read at boot to decide anything — it is the control panel row's

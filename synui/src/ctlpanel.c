@@ -643,6 +643,18 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock",             NULL,
       .section = "Dock" },
     { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock auto-hide",   NULL      },
+    /* Bespoke like the row above it (.key/.off left zeroed): each of these has
+     * to persist to dock.state and wake the mirrors, which the table-driven path
+     * writes to settings.state and cannot do. See ctlpanel_activate. */
+    { CTL_ROW_DOCK_ON_TOP,   CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock above windows", NULL,
+      .help = "Off, windows cover a pinned dock. Auto-hide always arrives on "
+              "top — it is summoned over whatever is there" },
+    { CTL_ROW_DOCK_MAGNIFY,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock magnify",     NULL,
+      .help = "The icons under the pointer swell and the row slides apart to "
+              "make room" },
+    { CTL_ROW_DOCK_CLOCK,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock clock",       NULL,
+      .help = "Time and date in a cell past the last icon. 12/24-hour follows "
+              "Clock & Time, like the bar's" },
     { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
       .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
@@ -729,6 +741,14 @@ static const struct ctl_item ctl_items[] = {
       .key = "bar_edge", .off = CFG(bar_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_WALLPAPER,
       .help = "Which edge the bar sits on. The bar picks this up live" },
+    /* The bar's half of Dock auto-hide, and the one row on this panel that
+     * neither reads nor writes a setting the compositor owns. See
+     * ctl_bar_autohide_label() for why it reads bar.json and asks the bar to
+     * write it rather than writing the file itself. */
+    { CTL_ROW_BAR_AUTOHIDE,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar auto-hide",    NULL,
+      .apply = CTL_APPLY_NONE,
+      .help = "Every monitor's bar at once. Per-monitor lives on the bar's own "
+              "right-click menu, and \"mixed\" means they disagree" },
     /* The bar's half of Dock opacity, in the same place in the same order — what
      * kind of surface, then how much of the wallpaper it lets through, then its
      * shape. Watched live by the bar like Bar edge, hence APPLY_NONE.
@@ -1744,6 +1764,96 @@ static const char *widgets_label(void)
     return on == total ? "on" : "partial";
 }
 
+/* ── The bar's auto-hide, read out of the bar's own file ──────────────────
+ *
+ * ⚠ THIS ONE SETTING IS PER MONITOR, and that is why the row looks different
+ * from every other one on this panel.
+ *
+ * bar.json is the bar's own file: quickshell's right-click menu writes it and
+ * nothing else does, which is exactly what lets the bar write it back without a
+ * second writer to race (see the header of BarConfig.qml). A control-panel row
+ * that wrote it would introduce that second writer for one switch.
+ *
+ * So the row READS the file and ASKS the bar to change it — synui_bar_ipc_arg()
+ * over quickshell's IPC, the same direction the start menu and the mixer already
+ * go. The bar stays the only writer.
+ *
+ * And because the setting is per monitor while the row is not, it is a MASTER:
+ * it reports on/off/mixed across the live outputs and sets them all at once.
+ * "mixed" is a real answer, not a fudge — the same one widgets_label() gives for
+ * the same reason. Per-monitor control stays where it already is, on the bar's
+ * right-click menu.
+ */
+
+/* Does bar.json say this output auto-hides? Absent output, absent file and
+ * absent key all mean the default, which is off — a monitor nobody has touched
+ * has the bar a fresh install has. Deliberately a scan and not a parser: the
+ * file is two levels of flat objects written by JSON.stringify, and a JSON
+ * parser in the compositor for one boolean is a dependency with a CVE feed. */
+static bool bar_json_autohide(const char *json, const char *output)
+{
+    if (!json || !output || !*output) return false;
+
+    char needle[80];
+    snprintf(needle, sizeof(needle), "\"%s\"", output);
+    const char *p = strstr(json, needle);
+    if (!p) return false;
+
+    p = strchr(p + strlen(needle), '{');
+    if (!p) return false;
+
+    /* The output's object, brace-counted so a key that happened to contain a
+     * brace cannot run the search off into the next monitor's settings. */
+    int depth = 0;
+    const char *end = p;
+    for (; *end; end++) {
+        if (*end == '{') depth++;
+        else if (*end == '}' && --depth == 0) break;
+    }
+    if (!*end) return false;
+
+    for (const char *k = strstr(p, "\"autohide\""); k && k < end;
+         k = strstr(k + 1, "\"autohide\"")) {
+        const char *c = strchr(k, ':');
+        if (!c || c > end) return false;
+        c++;
+        while (*c == ' ' || *c == '\t' || *c == '\n' || *c == '\r') c++;
+        return strncmp(c, "true", 4) == 0;
+    }
+    return false;
+}
+
+/* "on" when every live output's bar auto-hides, "off" when none does, "mixed"
+ * when they disagree — and "n/a" with no bar to hide. */
+static const char *bar_autohide_label(syn_server_t *s)
+{
+    if (!s->config.bar_enabled) return "n/a";
+
+    char path[256];
+    if (!syn_config_path(path, sizeof(path), "bar.json")) return "off";
+
+    /* Small file — a few hundred bytes per monitor — so one read, no streaming.
+     * A missing file is the normal case: nobody has changed anything yet. */
+    char json[8192] = {0};
+    FILE *f = fopen(path, "re");
+    if (f) {
+        size_t got = fread(json, 1, sizeof(json) - 1, f);
+        json[got] = '\0';
+        fclose(f);
+    }
+
+    int on = 0, total = 0;
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!o->wlr_output || !o->wlr_output->name) continue;
+        total++;
+        if (bar_json_autohide(json, o->wlr_output->name)) on++;
+    }
+    if (total == 0) return "off";
+    if (on == 0)     return "off";
+    return on == total ? "on" : "mixed";
+}
+
 /* ---- the RGB bridge, as a row -------------------------------------------
  *
  * syn-rgb(1) owns the state and the hardware; this reads its file to draw the
@@ -1847,9 +1957,28 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         snprintf(buf, n, "%s", s->config.bar_enabled ? "on" : "off");
         break;
     case CTL_ROW_DOCK_AUTOHIDE:
-        /* "n/a" when the dock is off entirely: hide-behaviour is moot. */
+        /* "n/a" when the dock is off entirely: hide-behaviour is moot. The
+         * three rows below take the same line for the same reason. */
         if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
         else snprintf(buf, n, "%s", s->config.dock_autohide ? "on" : "off");
+        break;
+    case CTL_ROW_DOCK_ON_TOP:
+        /* Also n/a while the dock auto-hides: a summoned dock is always on top,
+         * so the switch would appear to be set and be ignored. */
+        if (!s->config.dock_enabled)      snprintf(buf, n, "n/a");
+        else if (s->config.dock_autohide) snprintf(buf, n, "always");
+        else snprintf(buf, n, "%s", s->config.dock_on_top ? "on" : "off");
+        break;
+    case CTL_ROW_DOCK_MAGNIFY:
+        if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", s->config.dock_magnify ? "on" : "off");
+        break;
+    case CTL_ROW_DOCK_CLOCK:
+        if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", s->config.dock_clock ? "on" : "off");
+        break;
+    case CTL_ROW_BAR_AUTOHIDE:
+        snprintf(buf, n, "%s", bar_autohide_label(s));
         break;
     case CTL_ROW_TITLEBARS:
         /* The row is the titlebars, not the hiding of them: "on" means shown. */
@@ -3022,11 +3151,85 @@ static void ctlpanel_activate(syn_server_t *s)
         }
         s->config.dock_autohide = !s->config.dock_autohide;
         dock_state_save(s);   /* persist to dock.state, like edge/pins */
+        dock_relayout(s);     /* the canvas changed shape; repaint every mirror */
         dock_wake(s);         /* pin or release the bar on the next frame */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock auto-hide %s", s->config.dock_autohide ? "on" : "off");
         ctlpanel_repaint(s);
         return;
+
+    /* The three below share the autohide row's shape: flip, persist to
+     * dock.state (NOT settings.state — dock.state is where the dock's own
+     * switches live, beside the edge and the pins), repaint every mirror and
+     * wake them. */
+    case CTL_ROW_DOCK_ON_TOP:
+        if (!s->config.dock_enabled) {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "dock is off");
+            ctlpanel_repaint(s);
+            return;
+        }
+        if (s->config.dock_autohide) {
+            /* Not a silent no-op: the row reads "always" in this state, and a
+             * key that appeared to do nothing would read as a broken row. */
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "an auto-hiding dock is always on top");
+            ctlpanel_repaint(s);
+            return;
+        }
+        s->config.dock_on_top = !s->config.dock_on_top;
+        dock_state_save(s);
+        dock_relayout(s);
+        dock_wake(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "dock %s windows",
+                 s->config.dock_on_top ? "above" : "below");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_DOCK_MAGNIFY:
+    case CTL_ROW_DOCK_CLOCK: {
+        if (!s->config.dock_enabled) {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "dock is off");
+            ctlpanel_repaint(s);
+            return;
+        }
+        bool mag = row == CTL_ROW_DOCK_MAGNIFY;
+        int *flag = mag ? &s->config.dock_magnify : &s->config.dock_clock;
+        *flag = !*flag;
+        dock_state_save(s);
+        dock_relayout(s);
+        dock_wake(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "dock %s %s", mag ? "magnify" : "clock", *flag ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+    }
+
+    case CTL_ROW_BAR_AUTOHIDE: {
+        /* Asks the bar; does not write bar.json. See bar_autohide_label().
+         * "mixed" resolves to ON, because the reason two monitors disagree is
+         * almost always that one was set from its own right-click menu and the
+         * master is being reached for to finish the job. */
+        const char *now = bar_autohide_label(s);
+        if (strcmp(now, "n/a") == 0) {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "the bar is off");
+            ctlpanel_repaint(s);
+            return;
+        }
+        bool want = strcmp(now, "on") != 0;
+        synui_bar_ipc_arg(s, "bar", "autohide", want ? "on" : "off");
+        /* No local flag to flip and nothing to persist: the bar owns both. The
+         * row re-reads bar.json on the next repaint, so it catches up on its
+         * own once the bar has written — which is why the status line says what
+         * was ASKED for rather than claiming it is done. */
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "bar auto-hide %s on every monitor", want ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+    }
 
     case CTL_ROW_DND:
         /* notif_dnd_toggle(), not a flip of the config field: turning it on

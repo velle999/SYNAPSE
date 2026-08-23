@@ -147,6 +147,10 @@ void dock_rebuild(syn_server_t *s)                   { (void)s; }
 void dock_relayout(syn_server_t *s)                  { (void)s; }
 void dock_state_save(syn_server_t *s)                { (void)s; }
 void dock_wake(syn_server_t *s)                      { (void)s; }
+/* Bar auto-hide asks synui-bar over quickshell's IPC; nothing here forks. */
+void synui_bar_ipc_arg(syn_server_t *s, const char *target, const char *fn,
+                       const char *arg)
+{ (void)s; (void)target; (void)fn; (void)arg; }
 void game_toggle(syn_server_t *s)                    { (void)s; }
 void launcher_toggle_style(syn_server_t *s)          { (void)s; }
 void notif_dnd_toggle(syn_server_t *s)        { (void)s; }

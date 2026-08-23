@@ -583,7 +583,65 @@ pkgver=0.1.0
 #   The table test asserts the row is a toggle with NO key rather than pressing
 #   it: activating it spawns syn-rgb, and a suite that turned on the lighting
 #   of the machine running it is not one anybody runs twice.
-pkgrel=432
+#
+# 433 THE DOCK AND THE BAR NOW AGREE ABOUT WHERE THEIR SETTINGS ARE — AND THE
+#     DOCK STOPPED SITTING ON TOP OF EVERYTHING.
+#
+#   Two pieces of furniture on one desktop had opposite answers to "how do I
+#   change this". The bar put every switch on a right-click and none on the
+#   control panel; the dock put auto-hide on the control panel and offered no
+#   right-click at all except on an icon. Both halves are filled in.
+#
+#   ⛔ THE DEFAULT CHANGED: an always-visible dock is now COVERED by windows.
+#   Pinning the dock on screen used to pin it above everything, so a maximized
+#   window lost a 64px strip to a bar it could never be in front of.
+#   `dock_on_top` (default off) is the switch, and it is only meaningful with
+#   auto-hide off — an auto-hiding dock is summoned OVER whatever is there and
+#   has to arrive in front of it, so the row reads "always" and the menu drops
+#   the entry rather than offering a switch that would be ignored.
+#
+#   ⚠ AND THE HIT TESTS HAD TO LEARN ABOUT IT. dock_entry_at/dock_bar_at ran
+#   before the view hit test in pointer_button() and knew nothing about
+#   stacking, so a dock under a window stayed fully clickable through it — a
+#   right-click on a maximized window's bottom strip opened the DOCK's menu.
+#   dock_point_clear() asks surface_at(), which walks the scene graph and so
+#   answers in the dock's own stacking terms; skipped when the dock floats,
+#   where it would find the window the dock is covering.
+#
+#   ⚠ THE DOCK HAS TWO RECTS NOW. Magnification needs somewhere for an icon to
+#   grow — into a 64px bar the ceiling is 64/48 = 1.33, which does not read as
+#   magnification at all — so the CANVAS gains 32px of transparent headroom past
+#   the BODY. Confusing the two is silent both ways: a body measured on the
+#   canvas floats the slab clear of the screen edge, a canvas measured on the
+#   body clips the swollen icons off. tests/dock_options_test.c asserts the
+#   numbers the compositor hands the scene, which is the only place the
+#   difference shows.
+#
+#   ⚠ The scales are sampled from each icon's FLAT position and the row is laid
+#   out cumulatively, so the bar grows and re-centres rather than overlapping
+#   itself. Sampling from the magnified position feeds the layout its own output
+#   and the row shivers. Suppressed outright during a rearrange drag, whose
+#   drop-target arithmetic is flat.
+#
+#   ⚠ Cell rects are per OUTPUT now — only the screen the pointer is on
+#   magnifies — so they can no longer live on the (server-global) entries. Every
+#   hit test derives them from dock_metrics() for the mirror it is asking about.
+#
+#   The dock clock reads its 12/24-hour and seconds settings out of the same
+#   syn_clock_t the Clock & Time panel writes and the bar's clock follows, so
+#   there is one answer to "does this desktop use a 24-hour clock". It gets a
+#   1 Hz timer of its own rather than a `return true` out of dock_tick(): output
+#   frames stop when nothing is moving, which is precisely the state a clock has
+#   to tick through, and holding every output at its refresh rate for one string
+#   a minute is the alternative.
+#
+#   ⚠ Bar auto-hide is PER MONITOR (bar.json), and the control-panel row is not.
+#   So the row is a MASTER — on/off/mixed across the live outputs, setting them
+#   all — and it ASKS the bar over quickshell's IPC rather than writing the file.
+#   bar.json has exactly one writer, which is what lets the bar write it back
+#   without racing its own watch; a control-panel row writing it would be the
+#   second. Per-monitor control stays on the bar's right-click menu.
+pkgrel=433
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

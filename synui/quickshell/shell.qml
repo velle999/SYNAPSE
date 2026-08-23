@@ -73,6 +73,26 @@ ShellRoot {
     // ONE handler here rather than one inside Volume.qml: that module is
     // instantiated per screen, so a handler in it would register the same IPC
     // target once per monitor.
+    // …and the bar's own per-monitor switches, for the ONE of them that also has
+    // a control-panel row.
+    //
+    // bar.json has exactly one writer — this process — and that is what lets the
+    // bar write it back without racing its own watch (see BarConfig.qml). The
+    // control panel's "Bar auto-hide" row therefore asks rather than writes, the
+    // same direction the two handlers around it already go.
+    //
+    // No output argument, unlike those two: the setting is per monitor and a row
+    // on a panel is not, so the row is a master and this applies to every screen.
+    // Per-monitor control stays on the bar's right-click menu, which is where it
+    // was already.
+    IpcHandler {
+        target: "bar"
+
+        function autohide(mode: string): void {
+            BarConfig.setAll("autohide", mode === "on")
+        }
+    }
+
     IpcHandler {
         target: "mixer"
 

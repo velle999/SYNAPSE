@@ -126,6 +126,31 @@ syn_workspace_t *server_active_workspace(syn_server_t *s)
 void xwayland_unwedge(syn_server_t *s, const char *app_id, const char *title)
 { (void)s; (void)app_id; (void)title; }
 void synui_render_dockmenu(syn_server_t *s) { (void)s; }
+bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
+{ (void)s; (void)action; (void)arg; return true; }
+
+/* The dock clock's text. Never reached with the clock off (its default), and
+ * measured-and-drawn through the fallback stack in render.c when it is on —
+ * which is a font system, not something to link a model test against. */
+void syn_show_text(cairo_t *cr, const char *text) { (void)cr; (void)text; }
+void syn_text_extents(cairo_t *cr, const char *text, cairo_text_extents_t *ext)
+{ (void)cr; (void)text; memset(ext, 0, sizeof(*ext)); }
+const char *syn_text_ui_font(void) { return "monospace"; }
+
+/*
+ * The occlusion test behind dock_point_clear(), which asks "is a window in front
+ * of the dock here" — and only when the dock is NOT on top, which in this rig it
+ * always is (dock_autohide defaults on). NULL is "nothing over the dock", the
+ * answer that lets every hit test through; a stub that claimed otherwise would
+ * silently disarm every assertion in this file rather than fail one.
+ */
+struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
+                               syn_view_t **view_out, double *sx, double *sy)
+{
+    (void)s; (void)lx; (void)ly; (void)sx; (void)sy;
+    if (view_out) *view_out = NULL;
+    return NULL;
+}
 
 /* The one thing worth OBSERVING rather than discarding: a click launches, and
  * this counts it. Nothing else in the model distinguishes "the release ran the

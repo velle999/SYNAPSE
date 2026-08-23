@@ -632,6 +632,21 @@ dock_reorder_test = executable('dock_reorder_test',
   build_by_default : false)
 test('dock_reorder', dock_reorder_test)
 
+# The dock's four switches — magnify, clock, on-top, and the right-click menu
+# that carries all of them plus auto-hide. Same stub rig as the reorder test with
+# ONE difference that is the reason it is a second binary: create_cairo_buf()
+# hands back a REAL cairo context on a throwaway image surface, because the
+# numbers under test (the buffer size, the tree's position) are written on the
+# far side of the early return a NULL context takes. Nothing here resolves a
+# config path, so no dock.state can be reached.
+dock_options_test = executable('dock_options_test',
+  ['tests/dock_options_test.c', 'src/dock.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('dock_options', dock_options_test)
+
 # The text/uri-list a drag-and-drop hands the desktop. INCLUDES deskdrop.c
 # rather than linking it: the percent-decoding, the list walk and the
 # collision-renaming are all static, and there is no way to drive the wire side

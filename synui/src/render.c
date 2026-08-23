@@ -7900,6 +7900,15 @@ static const char *dockact_label(syn_dockact_t a)
     case SYN_DOCKACT_NEWWIN:   return "New Window";
     case SYN_DOCKACT_CLOSEWIN: return "Close Window";
     case SYN_DOCKACT_QUIT:     return "Quit All Windows";
+    /* Named for what they DO, not for the flag they set — "Dock above windows"
+     * checked and unchecked says which way round it is, where "Windows cover the
+     * dock" checked would be a double negative to read past. */
+    case SYN_DOCKACT_AUTOHIDE: return "Auto-hide Dock";
+    case SYN_DOCKACT_ONTOP:    return "Dock Above Windows";
+    case SYN_DOCKACT_MAGNIFY:  return "Magnify Icons";
+    case SYN_DOCKACT_CLOCK:    return "Show Clock";
+    case SYN_DOCKACT_SETTINGS: return "Dock Settings…";
+    case SYN_DOCKACT_SEP:      return "";
     }
     return "?";
 }
@@ -7912,7 +7921,6 @@ void synui_render_dockmenu(syn_server_t *s)
     }
 
     int pw = s->dockmenu.w, ph = s->dockmenu.h;
-    const int item_h = 30;
 
     wlr_scene_node_set_position(&s->dockmenu_ui.tree->node,
                                 s->dockmenu.x, s->dockmenu.y);
@@ -7966,17 +7974,38 @@ void synui_render_dockmenu(syn_server_t *s)
     cairo_clip(cr);
 
     for (int i = 0; i < s->dockmenu.action_count; i++) {
-        int iy = 4 + i * item_h;
+        int iy = dockmenu_row_top(s, i);
+        int rh = dockmenu_row_height(s, i);
+
+        /* The rule between the app rows and the dock's own switches, drawn the
+         * way the desktop menu draws its separators. */
+        if (s->dockmenu.actions[i] == SYN_DOCKACT_SEP) {
+            set_accent(cr, 0.22);
+            cairo_set_line_width(cr, 1);
+            cairo_move_to(cr, 10, iy + rh / 2.0 + 0.5);
+            cairo_line_to(cr, pw - 10, iy + rh / 2.0 + 0.5);
+            cairo_stroke(cr);
+            continue;
+        }
+
         int sel = (i == s->dockmenu.selected);
         if (sel) {
             set_accent(cr, 0.35);
-            cairo_rectangle(cr, 3, iy, pw - 6, item_h);
+            cairo_rectangle(cr, 3, iy, pw - 6, rh);
             cairo_fill(cr);
         }
         cairo_set_font_size(cr, 14);
         set_ink(cr, sel ? INK_STRONG : INK_TITLE, 1.0);
         cairo_move_to(cr, 14, iy + 20);
         syn_show_text(cr, dockact_label(s->dockmenu.actions[i]));
+
+        /* A checkmark on the switches, in the state they are already in — the
+         * same convention the desktop menu uses, and the reason those rows read
+         * as settings rather than as actions. */
+        if (dockmenu_row_checked(s, i)) {
+            cairo_move_to(cr, pw - 24, iy + 20);
+            syn_show_text(cr, "✓");
+        }
     }
 
     cairo_restore(cr);
