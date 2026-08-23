@@ -4036,22 +4036,25 @@ if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
     fi
 fi
 
-# ---- dragging the photograph onto the Video tab -------------------------
+# ---- carrying the photograph to the Video tab ---------------------------
 #
-# ⛔ THE ONE GESTURE NO GREP CAN TEST, AND IT SHIPPED BROKEN THREE TIMES.
+# ⛔ THIS GESTURE SHIPPED BROKEN THREE TIMES, AND EVERY FIX WAS TO QT'S DRAG.
 #
 # 1. The window-wide DropArea for files is declared last, so it was the
-#    topmost target for the window's OWN drag: it took it, found no urls,
-#    refused, and flashed its overlay on the way past. Fixed with Drag.keys.
-# 2. `drag.target` moves an item by the mouse DELTA from a start position
-#    MouseArea captured at PRESS — before the pressed handler can move it. So
-#    setting the proxy under the pointer on press was overwritten by the first
-#    move, using a start left over from the last drag (0,0 the first time).
-#    The drag started and never arrived: exactly what it looked like.
-# 3. And a drop four pixels short of a 56-pixel tab did nothing at all.
+#    topmost target for the window's OWN drag: it took the event, found no
+#    urls, refused, and flashed its overlay on the way past.
+# 2. `drag.target` writes an item's position as start + delta, from a start
+#    MouseArea captured at PRESS — before any handler could correct it.
+# 3. And a drop four pixels short of a 56-pixel tab did nothing.
 #
-# So this drives the drag the way QT does — stale position, our move, drop —
-# and asserts all three answers: on the tab, near it, and back on the picture.
+# So there is no Qt drag in it any more: a press, a threshold, a pointer
+# position and a release, all in the picture pane's own coordinates. The hit
+# test is one rectangle check and the drop is a direct call — both of them
+# functions, which is the only reason this can be driven without a mouse.
+#
+# ⚠ And the harness no longer sets the thing under test. The old one placed
+# the drag item itself, which is exactly why it passed while the gesture was
+# broken twice over.
 if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ] && have ffmpeg; then
     dg=$TMP/dragtest
     mkdir -p "$dg"
@@ -4066,21 +4069,12 @@ drv = """
     Timer {
         interval: 900; repeat: true; running: true
         property int n: 0
-        // Qt's own sequence: the proxy carries whatever the last drag left on
-        // it, MouseArea writes start+delta on every move, and the window's
-        // move handler writes the pointer over the top.
-        function grab() {
-            photoDragProxy.x = 0
-            photoDragProxy.y = 0
-            root.photoDragTo(photoDrag.width / 2, photoDrag.height / 2)
-            photoDragProxy.Drag.start()
+        function tab(dx) {
+            return videoTab.mapToItem(photoDrag, videoTab.width / 2 + dx,
+                                      videoTab.height / 2)
         }
-        function moveTo(dx, dy) {
-            const c = videoTab.mapToItem(photoDrag, videoTab.width / 2 + dx,
-                                         videoTab.height / 2 + dy)
-            photoDragProxy.x = c.x - photoDrag.width / 2
-            photoDragProxy.y = c.y - photoDrag.height / 2
-            root.photoDragTo(c.x, c.y)
+        function clips() {
+            return root.tl.tracks.length ? root.tl.tracks[0].clips.length : -1
         }
         onTriggered: {
             n++
@@ -4088,30 +4082,22 @@ drv = """
                 root.mode = "photo"
                 root.loadFile(Quickshell.env("HOME") + "/shot.png")
             } else if (n === 3) {
-                grab(); moveTo(0, 0)
-            } else if (n === 4) {
-                console.warn("ONTAB " + photoDragProxy.Drag.drop())
-            } else if (n === 7) {
-                console.warn("CLIPS1 " + (root.tl.tracks.length
-                                          ? root.tl.tracks[0].clips.length : -1))
+                console.warn("OVERTAB " + root.photoOverTab(tab(0).x, tab(0).y))
+                console.warn("OVERPIC " + root.photoOverTab(photoDrag.width / 2,
+                                                            photoDrag.height / 2))
+                root.photoDropAt(tab(0).x, tab(0).y)
+            } else if (n === 6) {
+                console.warn("MODE " + root.mode)
+                console.warn("CLIPS1 " + clips())
                 root.mode = "photo"
-                grab(); moveTo(200, 0)      // along the toolbar, off the tab
-            } else if (n === 8) {
-                console.warn("NEAR " + photoDragProxy.Drag.drop())
-            } else if (n === 11) {
-                console.warn("CLIPS2 " + (root.tl.tracks.length
-                                          ? root.tl.tracks[0].clips.length : -1))
+                root.photoDropAt(tab(200).x, tab(200).y)   // off the tab, still up top
+            } else if (n === 9) {
+                console.warn("CLIPS2 " + clips())
                 root.mode = "photo"
-                photoDragProxy.x = 0; photoDragProxy.y = 0
-                root.photoDragTo(photoDrag.width / 2, photoDrag.height / 2)
-                photoDragProxy.Drag.start()
-                root.photoDragTo(photoDrag.width / 2 + 60, photoDrag.height / 2 + 20)
+                root.photoDropAt(photoDrag.width / 2, photoDrag.height / 2)
             } else if (n === 12) {
-                console.warn("ONPIC " + photoDragProxy.Drag.drop())
-            } else if (n === 15) {
-                console.warn("CLIPS3 " + (root.tl.tracks.length
-                                          ? root.tl.tracks[0].clips.length : -1))
-            } else if (n === 17) {
+                console.warn("CLIPS3 " + clips())
+            } else if (n === 14) {
                 Qt.quit()
             }
         }
@@ -4123,27 +4109,33 @@ PYEOF
         QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
         timeout 60 quickshell -p "$dg/drv.qml" > "$dg/log" 2>&1
     if grep -q "CLIPS3" "$dg/log"; then
-        # 2 is Qt.CopyAction: delivered AND accepted.
-        grep -F "ONTAB 2" "$dg/log" >/dev/null \
-            && ok || bad "the Video tab takes the photograph dropped on it"
-        grep -F "CLIPS1 1" "$dg/log" >/dev/null \
-            && ok || bad "and it lands in the cut"
+        grep -F "OVERTAB true"  "$dg/log" >/dev/null \
+            && ok || bad "the pointer over the Video tab is recognised"
+        grep -F "OVERPIC false" "$dg/log" >/dev/null \
+            && ok || bad "and the middle of the picture is not the tab"
+        grep -F "MODE video"    "$dg/log" >/dev/null \
+            && ok || bad "dropping on the tab opens the cutting room"
+        grep -F "CLIPS1 1"      "$dg/log" >/dev/null \
+            && ok || bad "and the photograph lands in the cut"
         # ⚠ Four pixels short of a small tab is the common case, not the edge
-        # case. The window catches it anywhere the hand actually went.
-        grep -F "NEAR 2" "$dg/log" >/dev/null \
-            && ok || bad "a drop near the tab is caught too"
-        grep -F "CLIPS2 2" "$dg/log" >/dev/null \
-            && ok || bad "and that one lands as well"
-        # ⛔ But NOT back onto the photograph: that is a mis-click, and
-        # answering it by adding a clip and swapping the page under the hand
-        # is worse than doing nothing.
-        grep -F "ONPIC 0" "$dg/log" >/dev/null \
-            && ok || bad "a drag that ends on the picture does nothing"
-        grep -F "CLIPS3 2" "$dg/log" >/dev/null \
-            && ok || bad "and adds no clip"
+        # case: anywhere off the picture is the gesture.
+        grep -F "CLIPS2 2"      "$dg/log" >/dev/null \
+            && ok || bad "a drop near the tab lands too"
+        # ⛔ But a drag that ends back on the photograph is a mis-click.
+        grep -F "CLIPS3 2"      "$dg/log" >/dev/null \
+            && ok || bad "a drag that ends on the picture adds nothing"
     else
         printf '  skip  the window did not start, no drag asserted\n'
     fi
+fi
+
+# ⚠ And the gesture is NOT Qt's drag any more. This is the grep that keeps it
+# that way: `drag.target` is what wrote the position from a start captured at
+# press, and reintroducing it would take the last two fixes with it.
+if [ -f "$qml" ]; then
+    notseen "the photograph is carried by the pointer, not by Drag" \
+            'drag.target: photoDragProxy' < "$qml"
+    seen "the release is what puts it in the cut" 'root.photoDropAt(' < "$qml"
 fi
 
 pass=$(grep -c '^p' "$RESULTS")

@@ -816,19 +816,46 @@ FloatingWindow {
     property var dropQueue: []
     property bool dropBusy: false
 
-    // Where the photograph being dragged out of the darkroom currently is, in
-    // the picture pane's own coordinates. One function, because the press and
-    // every move have to agree about it and because a test can call it — the
-    // gesture itself cannot be synthesised without a seat.
+    // ── Carrying the photograph to the Video tab ────────────────────────────
+    //
+    // Where the hand is, in the picture pane's own coordinates, and what
+    // happens when it lets go. Both are plain functions so a test can drive
+    // the whole gesture — a real drag cannot be synthesised without a seat,
+    // and every previous version of this was "tested" by a harness that set
+    // the very thing the bug was in.
     property real photoDragX: 0
     property real photoDragY: 0
+    property bool photoCarrying: false
+
     function photoDragTo(x, y) {
         root.photoDragX = x
         root.photoDragY = y
-        // ⚠ ASSIGNED, after Qt has already written its own start+delta for
-        // this move. Last write wins, and this is the one that has to.
-        photoDragProxy.x = x
-        photoDragProxy.y = y
+    }
+
+    // Whether the pointer is on the Video tab, in the picture pane's
+    // coordinates. Six pixels of margin, because a tab is a small thing to
+    // hit and the drop is forgiving anyway.
+    function photoOverTab(x, y) {
+        if (!videoTab.visible) return false
+        const p = photoDrag.mapToItem(videoTab, x, y)
+        return p.x >= -6 && p.y >= -6
+               && p.x <= videoTab.width + 6 && p.y <= videoTab.height + 6
+    }
+
+    // ⚠ Anywhere OUT of the picture is the gesture; back onto the picture is
+    // a mis-click. A 56-pixel tab is not a fair target, and a drop that does
+    // nothing because it missed by four pixels is the same complaint as a
+    // drop that does nothing at all — but answering a stray drag on the photo
+    // by adding a clip and swapping the page under the hand is worse than
+    // ignoring it.
+    function photoDropAt(x, y) {
+        if (!root.file) return
+        if (x >= 0 && y >= 0 && x <= photoDrag.width && y <= photoDrag.height) {
+            root.say("drag it up to the Video tab to put it in the cut")
+            return
+        }
+        root.mode = "video"
+        root.dropUrls(["file://" + encodeURI(root.file)])
     }
 
     // One attempt at starting a project for a dropped file, so a drop that
@@ -3030,11 +3057,12 @@ FloatingWindow {
                     Tab {
                         id: videoTab
                         label: "Video"
-                        // Lit for the whole gesture, not only when the
-                        // proxy is over it: a target that only appears once
-                        // you have already hit it is not a target.
+                        // Lit for the whole gesture, and BRIGHT when the
+                        // pointer is actually on it: a target that only
+                        // appears once you have already hit it is not a
+                        // target, and one that never says "here" is a guess.
                         on: root.mode === "video" || videoTabDrop.containsDrag
-                            || photoDragMa.drag.active
+                            || root.photoCarrying
                         onClicked: { root.mode = "video"
                                      root.say(root.proj ? "" : "New project, then Add media") }
 
@@ -3043,7 +3071,10 @@ FloatingWindow {
                             anchors.fill: parent
                             // A photograph dragged from the darkroom, and a
                             // file dragged in from anywhere else.
-                            keys: ["synstudio.photo", "text/uri-list", "text/plain"]
+                            // Files dragged in from a file manager. The
+                            // window's OWN photograph no longer comes through
+                            // here at all — see the note on photoDragMa.
+                            keys: ["text/uri-list", "text/plain"]
                             // A little wider than the word: a drop target the
                             // size of its label is a target you have to aim at.
                             anchors.margins: -6
@@ -3225,87 +3256,90 @@ FloatingWindow {
                         anchors.fill: parent
                         visible: root.mode === "photo" && root.file !== ""
 
-                        Item {
-                            id: photoDragProxy
-                            width: 1; height: 1
-
-                            // Internal, which is the DEFAULT and the only kind
-                            // a DropArea in this same window can see. An
-                            // Automatic drag goes out through the compositor
-                            // and comes back to nothing — the tab would light
-                            // up and the drop would do nothing at all.
-                            Drag.active: photoDragMa.drag.active
-                            Drag.supportedActions: Qt.CopyAction
-                            // ⛔ THE KEY IS WHAT GETS IT PAST THE WINDOW-WIDE
-                            // DROP TARGET.
-                            //
-                            // `fileDrop` fills the window and is declared
-                            // last, so it is the topmost thing any drag lands
-                            // on — including this one. It took every photo
-                            // drag, found no urls on it, refused, and lit its
-                            // own "drop a photograph" overlay on the way past:
-                            // the tab never saw the drag at all, and what the
-                            // hand saw was a flash and nothing happening.
-                            //
-                            // A DropArea whose `keys` do not match is not
-                            // entered and delivery CARRIES ON to what is
-                            // underneath — so naming this drag is what lets it
-                            // reach the tab.
-                            Drag.keys: ["synstudio.photo"]
-                            // An internal drag carries the SOURCE, not mime
-                            // data, so the file travels as a property on it.
-                            property string filePath: root.file
-                        }
-
+                        // ⛔ NO `Drag` ATTACHED PROPERTY, AND NO DropArea.
+                        //
+                        // Three releases in a row lost this gesture to Qt's
+                        // drag machinery: a window-wide DropArea that ate the
+                        // event before the tab saw it, and `drag.target`
+                        // writing an item's position from a start it captured
+                        // at PRESS — before any handler could correct it. Both
+                        // were fixed and it still did not arrive.
+                        //
+                        // So it is not Qt's drag any more. This is a press, a
+                        // threshold, a pointer position and a release, all in
+                        // this window's own coordinates: the hit test is one
+                        // rectangle check written here, and the drop is a
+                        // direct call. Nothing is hit-tested by a filter this
+                        // file cannot see, and every step of it can be driven
+                        // without a mouse — which is what let it be tested at
+                        // last.
+                        //
+                        // Nothing is lost by leaving Qt's drag behind: this
+                        // gesture never left the window. Files dragged IN from
+                        // a file manager are a different path entirely, and
+                        // still a DropArea.
                         MouseArea {
                             id: photoDragMa
                             anchors.fill: parent
-                            // The drag has to start before the develop panel's
-                            // Flickable decides the gesture was a scroll.
+                            // The gesture has to start before the develop
+                            // panel's Flickable decides it was a scroll.
                             preventStealing: true
-                            drag.target: photoDragProxy
-                            drag.threshold: 12
-                            cursorShape: drag.active ? Qt.ClosedHandCursor
-                                                     : Qt.ArrowCursor
-                            // ⛔ THE PROXY STARTS UNDER THE POINTER, NOT AT THE
-                            // CORNER.
-                            //
-                            // `drag.target` moves an item by the mouse's
-                            // DELTA, and this reset it to (0,0) of the picture
-                            // pane on every press — so the thing being
-                            // hit-tested was the pointer's movement measured
-                            // from the pane's top-left corner, not the
-                            // pointer. Press in the middle of the photograph,
-                            // drag to the Video tab, and the proxy lands as
-                            // far up and left of the tab as the press was
-                            // right and below the corner: off the tab, off the
-                            // window, over nothing at all. The tab lit up only
-                            // if the proxy happened to sweep across it on the
-                            // way, which is what "it blinks and does nothing"
-                            // was.
-                            //
-                            // A drag is hit-tested at the ITEM, so the item
-                            // has to BE where the hand is.
+                            cursorShape: root.photoCarrying ? Qt.ClosedHandCursor
+                                                            : Qt.ArrowCursor
+
+                            property real pressX: 0
+                            property real pressY: 0
+
                             onPressed: function (m) {
+                                pressX = m.x
+                                pressY = m.y
+                                root.photoCarrying = false
+                            }
+                            onPositionChanged: function (m) {
+                                if (!pressed) return
+                                // Twelve pixels before it is a drag at all, so
+                                // a click on the picture stays a click.
+                                if (!root.photoCarrying
+                                    && Math.abs(m.x - pressX) < 12
+                                    && Math.abs(m.y - pressY) < 12) return
+                                root.photoCarrying = true
                                 root.photoDragTo(m.x, m.y)
                             }
-                            // ⛔ AND IT IS SET ON EVERY MOVE, NOT LEFT TO
-                            // `drag.target`.
-                            //
-                            // MouseArea records the target's position at
-                            // PRESS — before the pressed handler can run — and
-                            // then writes start + delta on every move. So the
-                            // position set above is OVERWRITTEN by the first
-                            // move, using a start position left over from the
-                            // last drag (or 0,0 the first time). The proxy
-                            // therefore tracked the pointer's MOVEMENT from
-                            // the pane's corner rather than the pointer, which
-                            // is why the drag started and never arrived
-                            // anywhere. This runs after Qt's own update, so it
-                            // is the one that lands.
-                            onPositionChanged: function (m) {
-                                if (!drag.active) return
-                                root.photoDragTo(m.x, m.y)
+                            // ⚠ The release position is still in THIS item's
+                            // coordinates even when the pointer has left it —
+                            // the grab holds — so a release over the tab
+                            // arrives as a negative y, which is exactly the
+                            // number the drop test wants.
+                            onReleased: function (m) {
+                                if (!root.photoCarrying) return
+                                root.photoCarrying = false
+                                root.photoDropAt(m.x, m.y)
+                            }
+                            onCanceled: root.photoCarrying = false
+                        }
+
+                        // What the hand is carrying. An invisible drag is why
+                        // "is it even dragging?" was a question at all.
+                        Rectangle {
+                            visible: root.photoCarrying
+                            x: Math.max(0, Math.min(parent.width - width,
+                                                    root.photoDragX + 14))
+                            y: Math.max(0, Math.min(parent.height - height,
+                                                    root.photoDragY + 10))
+                            width: ghostText.implicitWidth + 18
+                            height: 26
+                            radius: 4
+                            color: root.cPanel
+                            opacity: 0.92
+                            border.width: 1
+                            border.color: root.cAccent
+
+                            Text {
+                                id: ghostText
+                                anchors.centerIn: parent
+                                text: "→ " + root.file.replace(/^.*\//, "")
+                                color: root.cText
+                                font.pixelSize: 11
                             }
                         }
                     }
@@ -5197,32 +5231,11 @@ FloatingWindow {
         // ⚠ text/plain as well: not every source offers a uri-list, and the
         // handler already falls back to the dropped TEXT.
         //
-        // And the window's OWN photograph drag, which is the reason this list
-        // exists at all — but as a CATCH, not as the target. The tab is where
-        // the gesture is aimed and where it lights up; this is what happens
-        // when the hand lets go a few pixels short of it, which on a small
-        // tab is most of the time. A drop that does nothing because it missed
-        // by four pixels is the same bug as a drop that does nothing at all.
-        keys: ["text/uri-list", "text/plain", "synstudio.photo"]
+        // ⚠ Files from OUTSIDE only. The window's own photograph is carried
+        // by the pointer, not by Qt's drag — see the note on photoDragMa —
+        // so nothing internal arrives here any more.
+        keys: ["text/uri-list", "text/plain"]
         onDropped: function (drop) {
-            if (drop.source && drop.source.filePath) {
-                // ⚠ Not onto the photograph itself. A drag that starts and
-                // ends on the picture is a mis-click, and answering it by
-                // adding a clip and swapping the page under the hand is worse
-                // than doing nothing. Anywhere the hand actually went — the
-                // tab, the toolbar, the panel, four pixels short of the tab —
-                // is the gesture.
-                const p = fileDrop.mapToItem(photoDrag, drop.x, drop.y)
-                if (photoDrag.visible && p.x >= 0 && p.y >= 0
-                    && p.x <= photoDrag.width && p.y <= photoDrag.height) {
-                    drop.accepted = false
-                    return
-                }
-                root.mode = "video"
-                root.dropUrls(["file://" + encodeURI(drop.source.filePath)])
-                drop.acceptProposedAction()
-                return
-            }
             if (!drop.hasUrls) { drop.accepted = false; return }
             root.dropUrls(drop.urls)
             drop.acceptProposedAction()
@@ -5244,9 +5257,7 @@ FloatingWindow {
                 // "drop a photograph to open it" is the answer to a file
                 // arriving from a file manager and reads as a refusal to the
                 // one already open.
-                text: photoDragMa.drag.active
-                      ? "drop it on the Video tab to put it in the cut"
-                      : root.mode === "video"
+                text: root.mode === "video"
                       ? (root.proj ? "drop clips onto the timeline"
                                    : "drop clips to start a project")
                       : "drop a photograph to open it"

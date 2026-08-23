@@ -1378,7 +1378,38 @@ pkgver=0.1.0
 #   the gesture was broken.
 #
 #   700 assertions, clean under ASan+UBSan+LSan.
-pkgrel=40
+#
+# 41 THE PHOTOGRAPH IS CARRIED BY THE POINTER NOW, NOT BY Qt's DRAG.
+#
+#   Three releases fixed three real faults in this one gesture — a
+#   window-wide DropArea that ate the event, a drag item positioned from a
+#   start captured at press, a tab too small to hit — and it still did not
+#   work. At that point the machinery is the problem, not the settings.
+#
+#   There is no `Drag` attached property and no DropArea in it any more. A
+#   press, a twelve-pixel threshold, a pointer position on every move, and a
+#   release: all in the picture pane's own coordinates, all in this file. The
+#   hit test is one rectangle check and the drop is a direct call to the same
+#   handler a file dropped from a file manager goes through.
+#
+#   Nothing is lost by leaving Qt's drag behind — this gesture never left the
+#   window. Files dragged IN from elsewhere are a different path and are still
+#   a DropArea.
+#
+#   ⚠ AND THE HARNESS NO LONGER SETS THE THING UNDER TEST. Every previous
+#   version of this test placed the drag item itself, which is precisely why
+#   it passed while the gesture was broken twice over. What is driven now is
+#   what the mouse drives: `photoOverTab` and `photoDropAt`, with the tab's
+#   position asked of the window rather than assumed.
+#
+#   ⚠ A drop anywhere OFF the picture is the gesture, because a 56-pixel tab
+#   is not a fair target; back onto the picture is a mis-click and says so
+#   rather than adding a clip and swapping the page under the hand. And the
+#   thing being carried is VISIBLE at last — a label follows the pointer with
+#   the file's name on it, which is why "is it even dragging?" was a question.
+#
+#   702 assertions, clean under ASan+UBSan+LSan.
+pkgrel=41
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
