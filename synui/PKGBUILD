@@ -802,7 +802,7 @@ pkgver=0.1.0
 #   tests/readme_binds.sh is what makes the README the sixth: every combo in
 #   seed_default_binds() must appear in the hotkey table, so the row moves or
 #   the build fails.
-pkgrel=448
+pkgrel=449
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -915,6 +915,16 @@ optdepends=(# Network printers: cups does the discovery (its own dnssd backend) 
             # and syn-rgb says which one is missing rather than doing nothing.
             'openrgb: put the desktop accent on RGB hardware (syn-rgb)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
+            # The music widget's LIBRARY half. Without it the widget is the
+            # transport it shipped as — MPRIS, three buttons, whatever is
+            # already making noise — which works on every install and can only
+            # act on music something else started. syn-arcade brings `big
+            # music`: the source picker, the Plex albums and the YouTube
+            # stations, and the widget grows a chip that unfolds into them.
+            # An optdepend rather than a depend because the shell must not
+            # require the television's package to draw a card, and
+            # MusicLibrary.qml probes for the command rather than assuming it.
+            'syn-arcade: pick a source and play from a library in the music widget'
             'imagemagick: same — most cursor makefiles render their PNGs with it'
             # Event sounds (Super+S) ship OFF, so neither of these is needed for
             # a working desktop — but with sounds turned on and no theme

@@ -74,6 +74,12 @@ QtObject {
     readonly property string mediaPrev:  "\uF048"
     readonly property string mediaNote:  "\uF001"
 
+    // The music widget's library chip: the caret says the card unfolds, and
+    // which way it will go. Same fa block as the transport glyphs above, so the
+    // chip sits in the family the buttons beside it belong to.
+    readonly property string caretDown: "\uF0D7"
+    readonly property string caretUp:   "\uF0D8"
+
     // U+F0200 sits outside the BMP, so QML needs the surrogate pair.
     readonly property string ethernet: "\uDB80\uDE00"
 }
