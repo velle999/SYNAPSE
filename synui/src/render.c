@@ -209,6 +209,45 @@ void render_set_panel_surface(const float bg[4], const float ink[4])
     panel_legibility_recompute();
 }
 
+/*
+ * ── The full-screen overlays' own surface ─────────────────
+ *
+ * Mission control and the application page do not draw on a PANEL. They lay a
+ * fixed near-black scrim over the desktop (the `dim` rect each one creates) and
+ * draw straight onto that, so the theme's panel surface is the wrong pair for
+ * them entirely: on a pale theme g_panel_bg is near-white and g_panel_ink is
+ * near-black, and set_ink() duly hands them BLACK TEXT to draw on a BLACK
+ * scrim. Every label, hint and page dot went invisible — not dimmed, gone —
+ * and only on the light themes, which is why it survived being looked at.
+ *
+ * So the scrim IS the surface while they draw, and the panel's goes back
+ * afterwards. Pushed rather than hard-coded because the whole ink ladder,
+ * accent and legibility floor read the file-scope pair; setting one colour by
+ * hand would fix one label and leave the other thirty.
+ *
+ * Not theme-dependent on purpose: the scrim is not, either. It is the same
+ * near-black on every theme, so the ink that reads on it is the same too.
+ */
+static const float OVERLAY_SURFACE_BG[4]  = { 0.03f, 0.03f, 0.06f, 1.0f };
+static const float OVERLAY_SURFACE_INK[4] = { 0.95f, 0.95f, 1.00f, 1.0f };
+
+typedef struct { float bg[4], ink[4]; } syn_ink_saved_t;
+
+static void overlay_surface_push(syn_ink_saved_t *saved)
+{
+    for (int i = 0; i < 3; i++) {
+        saved->bg[i]  = g_panel_bg[i];
+        saved->ink[i] = g_panel_ink[i];
+    }
+    saved->bg[3] = saved->ink[3] = 1.0f;
+    render_set_panel_surface(OVERLAY_SURFACE_BG, OVERLAY_SURFACE_INK);
+}
+
+static void overlay_surface_pop(const syn_ink_saved_t *saved)
+{
+    render_set_panel_surface(saved->bg, saved->ink);
+}
+
 /* The ink ladder. `level` is how far from the surface toward the ink a colour
  * sits: 1.0 is full-strength text, 0.28 is a hairline rule that should barely
  * separate itself from the panel. The old absolute greys map onto it within a
@@ -2599,6 +2638,12 @@ void synui_render_appgrid(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    /* Everything below draws on the scrim, not on a panel — see
+     * overlay_surface_push(). Popped at the bottom, and there is no return
+     * between the two. */
+    syn_ink_saved_t saved_ink;
+    overlay_surface_push(&saved_ink);
+
     /* ── Geometry ──
      *
      * Derived from the output rather than fixed, so the page fills a 4K screen
@@ -2782,6 +2827,7 @@ void synui_render_appgrid(syn_server_t *s)
         syn_show_text(cr, foot);
     }
 
+    overlay_surface_pop(&saved_ink);
     cairo_destroy(cr);
     set_scene_buffer(&s->appgrid_ui.text_buf, s->appgrid_ui.tree, buf);
 }
@@ -9130,6 +9176,13 @@ void synui_render_overview(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    /* The same scrim, and so the same surface push — see
+     * overlay_surface_push(). Mission control had the identical defect: its
+     * heading and its per-desktop counts were black text on the black scrim on
+     * every pale theme. */
+    syn_ink_saved_t saved_ink;
+    overlay_surface_push(&saved_ink);
+
     /* Everything below is drawn in TREE-LOCAL coordinates — the tree sits at
      * the output's origin — while the layout works in layout space, because
      * that is what the pointer arrives in. One subtraction, done once. */
@@ -9335,6 +9388,7 @@ void synui_render_overview(syn_server_t *s)
          * compile error rather than a stray glyph. */
         "Del closes it \xc2\xb7 1\xe2\x80\x93" "9 switch desktop \xc2\xb7 Esc close");
 
+    overlay_surface_pop(&saved_ink);
     cairo_destroy(cr);
     set_scene_buffer(&s->overview_ui.text_buf, s->overview_ui.tree, buf);
 

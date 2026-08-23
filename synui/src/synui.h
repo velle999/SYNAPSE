@@ -1793,6 +1793,7 @@ typedef enum {
     CTL_ROW_DOCK_MAGNIFY_SCALE,
     CTL_ROW_DOCK_EDGE,
     CTL_ROW_DOCK_HOVER_MARGIN,
+    CTL_ROW_START_MENU_STYLE,
     CTL_ROW_DESKTOP_ICONS,
     CTL_ROW_DESKTOP_ICON_ARRANGE,
     CTL_ROW_CAT_START,
@@ -2959,6 +2960,30 @@ typedef enum {
     SYN_DOCK_STYLE_GLASS,
 } syn_dock_style_t;
 
+/*
+ * What the start menu IS on this desktop.
+ *
+ * Three things now answer "show me my applications", and until this existed the
+ * choice between them was made by whichever key you happened to press: the Super
+ * tap and Super+Escape opened the bar's menu, the dock's grid-of-dots opened the
+ * application page, and rofi was whatever the user had bound `spawn` to. They
+ * are the same request, so they get one answer and one place to set it.
+ *
+ * The value is read at the point of use in synui_start_menu_open(), which is the
+ * ONE funnel every route goes through — the tap, the `start_menu` action, and
+ * the dock's apps button. Adding a fourth route means calling that, not
+ * re-reading this.
+ *
+ * ROFI is spawned rather than embedded, and takes no argument here: a user who
+ * wants different rofi flags already has `tap_action = spawn rofi …`, which is a
+ * finer-grained answer than this row can be and is left working untouched.
+ */
+typedef enum {
+    SYN_START_MENU_BAR = 0,   /* the bar's own start menu (quickshell) */
+    SYN_START_MENU_APPGRID,   /* the full-screen application page (appgrid.c) */
+    SYN_START_MENU_ROFI,      /* rofi -show drun */
+} syn_start_menu_t;
+
 /* Same three positions for the desktop widgets, which are quickshell's and read
  * the resolved answer out of theme.state + settings.state (see Theme.qml). The
  * compositor parses it purely so the key has ONE spelling and one clamp — like
@@ -3764,6 +3789,10 @@ typedef struct {
      * literal 16 — see the comments there for why neither could simply borrow
      * panel_bg[3] or corner_radius. Both are the dock's own, because the dock is
      * the one piece of chrome that floats over the wallpaper. */
+    /* What the start menu opens — see syn_start_menu_t. Not a dock field, but
+     * it sits here because the dock's apps button is one of the three routes
+     * into it and they must not disagree. */
+    syn_start_menu_t start_menu_style;   /* default BAR */
     syn_dock_style_t dock_style;   /* default AUTO */
     float dock_opacity;            /* body alpha, 0.20..1.00, default 0.72 */
     int   dock_radius;             /* px corner radius, default 26 */
@@ -7795,7 +7824,12 @@ int  ctlpanel_shortcut_selected(syn_server_t *s, syn_ctl_shortcut_t *out);
 /* What a bind action does, in words — the same table the shortcuts column
  * labels its rows from. Exposed for the rebind helper, which has to name the
  * shortcut a chord is already taken by. */
-const char *ctlpanel_action_desc(const char *action, const char *arg);
+/* ⚠ TAKES THE SERVER. Most actions describe themselves from a static table, but
+ * `start_menu` cannot: what it opens is start_menu_style, and a list that always
+ * said "Start menu" would be a keybind listing disagreeing with the keyboard —
+ * the same defect the tap row's own comment in ctlpanel_shortcuts() calls out. */
+const char *ctlpanel_action_desc(syn_server_t *s, const char *action,
+                                 const char *arg);
 /* The tap modifier as a KEYCAP word — "Super", "Ctrl", "Alt", "Shift", or "Off"
  * for no tap. Exposed for the same reason as the line above: keys.c's status
  * line names the tap key the user just chose, and a third spelling of "Super"
@@ -8444,8 +8478,10 @@ syn_app_entry_t *appgrid_at(syn_server_t *s, int i);
 cairo_surface_t *appgrid_icon(syn_app_entry_t *e);
 int  appgrid_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 int  appgrid_motion(syn_server_t *s, double lx, double ly);
+/* ⚠ `time_msec`, like every other panel on SYN_PANEL_LIST — NOT a button
+ * state. See the comment over the definition in appgrid.c. */
 int  appgrid_click(syn_server_t *s, double lx, double ly, uint32_t button,
-                   uint32_t state);
+                   uint32_t time_msec);
 int  appgrid_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_appgrid(syn_server_t *s);
 

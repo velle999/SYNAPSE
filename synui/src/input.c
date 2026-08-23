@@ -689,9 +689,39 @@ void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
                           ? o->wlr_output->name : "");
 }
 
+/*
+ * The ONE funnel for "show me my applications".
+ *
+ * Three things answer that question and the user picks which in the control
+ * panel (Desktop ▸ Start menu, start_menu_style). Every route goes through here
+ * — the Super tap, the `start_menu` action, and the dock's grid-of-dots — so
+ * they cannot disagree with each other, which is exactly what they did before
+ * this existed: the tap opened the bar's menu while the button beside it opened
+ * the application page.
+ *
+ * Read at the point of use rather than resolved at config load, so changing the
+ * row takes effect on the next keypress with nothing to reload. A fourth route
+ * calls this; it does not re-read the setting.
+ */
 void synui_start_menu_open(syn_server_t *s)
 {
-    synui_bar_ipc(s, "menu", "toggle");
+    switch (s->config.start_menu_style) {
+    case SYN_START_MENU_APPGRID:
+        appgrid_toggle(s);
+        break;
+    case SYN_START_MENU_ROFI:
+        /* `-show drun` and not plain rofi: this row means "my applications", and
+         * bare rofi opens whatever mode its own config defaults to — which on a
+         * fresh install is the window switcher. A user who wants other flags has
+         * `tap_action = spawn rofi …`, which is finer-grained than this row can
+         * be and is untouched by it. */
+        synui_spawn("rofi -show drun");
+        break;
+    case SYN_START_MENU_BAR:
+    default:
+        synui_bar_ipc(s, "menu", "toggle");
+        break;
+    }
 }
 
 /* How far one press slides a floating window, and how much of it must stay
@@ -3414,7 +3444,10 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
              * another edge instead. Every installed app, which is the one thing
              * a row of pinned icons cannot offer. */
             if (dock_apps_at(s, s->cursor->x, s->cursor->y)) {
-                appgrid_toggle(s);
+                /* Through the funnel, not straight to the grid: this button and
+                 * the Super tap are the same request, and the control panel's
+                 * Start menu row is where the answer is chosen. */
+                synui_start_menu_open(s);
                 return;
             }
             /* …and the clock, which arms a drag that moves the cell along the

@@ -649,6 +649,20 @@ dock_options_test = executable('dock_options_test',
   build_by_default : false)
 test('dock_options', dock_options_test)
 
+# The clock cell's own drag: it can be picked up and carried into any gap in the
+# icon row (dock_clock_slot, persisted as clock_slot in dock.state). Same stub
+# rig as the reorder test — no pointer exists headless, so dock.c is driven
+# through the exact entry points input.c calls. The cell is LOCATED by sweeping
+# dock_clock_at() rather than by re-deriving its rect, so a bug in the layout
+# walk cannot be copied into the test that is supposed to catch it.
+dock_clock_drag_test = executable('dock_clock_drag_test',
+  ['tests/dock_clock_drag_test.c', 'src/dock.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('dock_clock_drag', dock_clock_drag_test)
+
 # The text/uri-list a drag-and-drop hands the desktop. INCLUDES deskdrop.c
 # rather than linking it: the percent-decoding, the list walk and the
 # collision-renaming are all static, and there is no way to drive the wire side

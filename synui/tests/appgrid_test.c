@@ -436,6 +436,68 @@ static void test_search_and_keys(void)
     appgrid_key(s, XKB_KEY_Escape, 0);
     CHECK(!s->appgrid.visible, "Esc on an empty query closes the grid");
 
+    /*
+     * ── The POINTER ──
+     *
+     * appgrid_click() is reached through SYN_PANEL_LIST's macro, which is
+     * `fn##_click(s, lx, ly, button, time_msec)` — a TIMESTAMP in the fourth
+     * slot, like every other panel on the roster. It was declared `uint32_t
+     * state` and opened by returning early unless that equalled
+     * WL_POINTER_BUTTON_STATE_PRESSED (1), so every real click — whose
+     * timestamp is a millisecond counter and never 1 — was swallowed and
+     * discarded. Both types are uint32_t, so nothing warned and the grid simply
+     * did not respond to the mouse.
+     *
+     * Driven here with a plausible timestamp for exactly that reason: pass 1 and
+     * this test passes against the bug it exists to catch.
+     */
+    {
+        const uint32_t T = 51234567;   /* a real-looking time_msec, NOT 1 */
+
+        appgrid_show(s);
+        s->appgrid.search[0] = '\0';
+        s->appgrid.search_len = 0;
+        appgrid_rescan(s);
+
+        /* The hit grid the renderer would have written: one 100x100 cell per
+         * tile, laid out the way synui_render_appgrid() lays them out. */
+        hit_clear(&s->appgrid.hit);
+        hit_set_panel(&s->appgrid.hit, 0, 0, 1920, 1080);
+        hit_set_grid(&s->appgrid.hit, 100, 100, 100, 100, 6, 4);
+        hit_set_first(&s->appgrid.hit, 0);
+
+        CHECK(appgrid_motion(s, 150, 150) == 1,
+              "the grid takes pointer motion while it is up");
+        CHECK(s->appgrid.selected == 0,
+              "hovering the first tile selects it (got %d)", s->appgrid.selected);
+        CHECK(appgrid_motion(s, 250, 150) == 1, "…and motion onto the next");
+        CHECK(s->appgrid.selected == 1,
+              "hovering the second tile selects it (got %d)", s->appgrid.selected);
+
+        spawn_count = 0;
+        CHECK(appgrid_click(s, 150, 150, BTN_LEFT, T) == 1,
+              "a left click on a tile is taken by the grid");
+        CHECK(spawn_count == 1,
+              "…and LAUNCHES it (got %d spawns)", spawn_count);
+        CHECK(!s->appgrid.visible, "…and closes the grid, as Enter does");
+
+        /* A click on the page but off every tile is the only click-off a
+         * full-screen panel has, and it closes. */
+        appgrid_show(s);
+        spawn_count = 0;
+        CHECK(appgrid_click(s, 10, 10, BTN_LEFT, T) == 1,
+              "a click off the tiles is taken too");
+        CHECK(spawn_count == 0, "…without launching anything");
+        CHECK(!s->appgrid.visible, "…and closes the grid");
+
+        /* Closed, it must let the pointer through to the window underneath —
+         * the panel roster walks every entry on every click. */
+        CHECK(appgrid_click(s, 150, 150, BTN_LEFT, T) == 0,
+              "a closed grid does not swallow clicks");
+        CHECK(appgrid_motion(s, 150, 150) == 0,
+              "…nor motion");
+    }
+
     /* Super and Ctrl still belong to the compositor: a page that swallowed
      * Super+C would trap you in it. */
     appgrid_show(s);

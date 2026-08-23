@@ -575,7 +575,7 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
         char combo[64];
         syn_bind_format_combo(mods, sym, combo, sizeof(combo));
         snprintf(status, status_n, "%s is already %s",
-                 combo, ctlpanel_action_desc(b->action, b->arg));
+                 combo, ctlpanel_action_desc(s, b->action, b->arg));
         return 0;
     }
 

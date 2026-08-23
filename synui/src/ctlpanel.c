@@ -167,6 +167,12 @@ static const char *const ctl_names_bar_shape[]   = {
  * words for the reason the whole table is — "Main screen" would be written to
  * settings.state as `main screen`. The help line carries the meaning. */
 static const char *const ctl_names_game_output[] = { "Primary", "Focused", "Ask" };
+/* Order matches syn_start_menu_t, and folded to lower case these ARE the
+ * synuirc spellings config.c's `start_menu_style` case parses back.
+ * "App-overlay" carries its hyphen for the reason anim_curve's "Ease-out" does:
+ * ctl_format() persists the DISPLAYED name lower-cased, and "app overlay" is a
+ * word config.c would not know. */
+static const char *const ctl_names_start_menu[] = { "Menu", "App-overlay", "Rofi" };
 
 /*
  * Which file a row is STORED in.
@@ -671,8 +677,20 @@ static const struct ctl_item ctl_items[] = {
       .help = "Time and date in a cell of its own — drag the cell to move it "
               "anywhere in the row. 12/24-hour follows Clock & Time" },
     { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
-      .help = "A grid of dots at the end of the dock. Opens the full-screen "
-              "application page — every app installed, not just the pinned" },
+      .help = "A grid of dots at the end of the dock. Opens whatever Start menu "
+              "is set to below" },
+    /* Not a dock row, and it sits among them anyway: the dock's apps button is
+     * one of the three routes into the start menu, and a user who has just read
+     * that row is exactly the user asking what it opens. CTL_APPLY_NONE because
+     * nothing is drawn from this — synui_start_menu_open() reads it at the
+     * moment a key is pressed, which is also what makes the change take effect
+     * with no reload. */
+    { CTL_ROW_START_MENU_STYLE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Start menu", NULL,
+      .key = "start_menu_style", .off = CFG(start_menu_style),
+      .vtype = CTL_VAL_ENUM, NAMES(ctl_names_start_menu),
+      .apply = CTL_APPLY_NONE,
+      .help = "What the Super tap, Super+Escape and the dock's apps button all "
+              "open. The keyboard shortcut list follows this row" },
     { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
       .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
@@ -2221,7 +2239,8 @@ int ctlpanel_row_options(int row)
 /* What a bind action does, in words. An action with no entry here still lists —
  * it falls back to the action name — so a bind added to input.c and forgotten
  * here degrades to "slightly terse", not "missing from the panel". */
-static const char *action_desc(const char *action, const char *arg)
+static const char *action_desc(syn_server_t *s, const char *action,
+                               const char *arg)
 {
     static const struct { const char *action, *desc; } tbl[] = {
         { "term",              "Terminal" },
@@ -2300,6 +2319,21 @@ static const char *action_desc(const char *action, const char *arg)
         && arg && *arg)
         return arg;
 
+    /* The start menu is three different things depending on start_menu_style,
+     * and this list exists to say what the keys actually DO. A row that always
+     * read "Start menu" would be the list disagreeing with the keyboard —
+     * exactly what the tap row's comment in ctlpanel_shortcuts() refuses to do
+     * about which modifier the tap is on. Both halves of the tap row now come
+     * from the live config, not from a word compiled in here. */
+    if (s && strcmp(action, "start_menu") == 0) {
+        switch (s->config.start_menu_style) {
+        case SYN_START_MENU_APPGRID: return "Start menu (application page)";
+        case SYN_START_MENU_ROFI:    return "Start menu (rofi)";
+        case SYN_START_MENU_BAR:
+        default:                     return "Start menu (bar menu)";
+        }
+    }
+
     for (unsigned i = 0; i < sizeof(tbl) / sizeof(tbl[0]); i++)
         if (strcmp(action, tbl[i].action) == 0) {
             /* move_output takes a direction; "prev" is a different line. */
@@ -2315,9 +2349,10 @@ static const char *action_desc(const char *action, const char *arg)
  * shortcut list would mean searching a list of strings for the row that happens
  * to hold the same action — with the answer depending on which of the three
  * `spawn` rows it found first. */
-const char *ctlpanel_action_desc(const char *action, const char *arg)
+const char *ctlpanel_action_desc(syn_server_t *s, const char *action,
+                                 const char *arg)
 {
-    return action_desc(action, arg);
+    return action_desc(s, action, arg);
 }
 
 /* xkbcommon spells keys for machines ("Return", "space", "e"). Spell them the
@@ -2416,7 +2451,7 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
          * bar, and a row that always said "Start menu" would be a list
          * disagreeing with the keyboard on the other axis. */
         snprintf(out[n].desc,  sizeof(out[n].desc),  "%s",
-                 action_desc(s->config.tap_action, s->config.tap_arg));
+                 action_desc(s, s->config.tap_action, s->config.tap_arg));
         /* No bind, but there IS an action behind it — the palette can run this
          * one even though no combo in the table produces it. */
         snprintf(out[n].action, sizeof(out[n].action), "%s",
@@ -2442,7 +2477,7 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
         memset(&out[n], 0, sizeof(out[n]));
         ctlpanel_combo_str(b->mods, b->sym, out[n].combo, sizeof(out[n].combo));
         snprintf(out[n].desc, sizeof(out[n].desc), "%s",
-                 action_desc(b->action, b->arg));
+                 action_desc(s, b->action, b->arg));
         snprintf(out[n].action, sizeof(out[n].action), "%s", b->action);
         snprintf(out[n].arg,    sizeof(out[n].arg),    "%s", b->arg);
         /* One bind, one chord — the only shape the rebind helper can move. */

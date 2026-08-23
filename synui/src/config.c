@@ -158,6 +158,10 @@
  *   dock_clock = on|off         (default off; time + date in a cell of its own)
  *   dock_clock_slot = -1        (icons to the clock's left; -1 = past the last
  *                                one. Written by dragging the clock)
+ *   start_menu_style = menu|app-overlay|rofi
+ *                               (default menu; what the Super tap, the
+ *                                `start_menu` action and the dock's apps button
+ *                                all open — see syn_start_menu_t)
  *   dock_apps_button = on|off   (default on; the "show all apps" grid at the
  *                                end of the run — opens the start menu)
  *   night_light  = on|off       (default off)   Super+Shift+B toggles
@@ -1325,6 +1329,7 @@ static void config_set_defaults(syn_config_t *cfg)
     /* On, unlike the clock: the bar does not have one of these, and a dock of
      * pinned icons has no way to reach an app that is not on it. */
     cfg->dock_apps_button  = 1;
+    cfg->start_menu_style  = SYN_START_MENU_BAR;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
@@ -2411,6 +2416,16 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_clock = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_apps_button") == 0)
         cfg->dock_apps_button = strcmp(val, "on") == 0;
+    else if (strcmp(key, "start_menu_style") == 0) {
+        /* These ARE the control panel's option names folded to lower case —
+         * ctl_format() persists an enum that way and there is deliberately no
+         * second table. "app-overlay" carries its hyphen for the reason
+         * anim_curve's "ease-out" does: the row shows two words. */
+        if      (strcmp(val, "menu")        == 0) cfg->start_menu_style = SYN_START_MENU_BAR;
+        else if (strcmp(val, "app-overlay") == 0) cfg->start_menu_style = SYN_START_MENU_APPGRID;
+        else if (strcmp(val, "rofi")        == 0) cfg->start_menu_style = SYN_START_MENU_ROFI;
+        else wlr_log(WLR_ERROR, "synui: start_menu_style: unknown '%s'", val);
+    }
     else if (strcmp(key, "dock_clock_slot") == 0) {
         cfg->dock_clock_slot = atoi(val);
         /* Anything negative is "last"; the upper end is clamped at layout time

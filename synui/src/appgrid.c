@@ -791,11 +791,25 @@ int appgrid_motion(syn_server_t *s, double lx, double ly)
     return 1;
 }
 
+/*
+ * ⚠ THE FOURTH ARGUMENT IS `time_msec`, NOT A BUTTON STATE.
+ *
+ * SYN_PANEL_LIST's click macro is `fn##_click(s, lx, ly, button, time_msec)`
+ * and it is only ever reached from the PRESSED branch of pointer_button(), so
+ * every panel on the roster takes a timestamp there and none of them has a
+ * state to test. This one was declared `uint32_t state` and opened by returning
+ * early unless it equalled WL_POINTER_BUTTON_STATE_PRESSED — which is 1, and a
+ * millisecond timestamp is never 1. Both are uint32_t, so nothing warned: the
+ * grid swallowed every click (returning 1 keeps it off the window underneath)
+ * and acted on none of them, which is exactly "the mouse does nothing in the
+ * application page". Hover worked the whole time, because _motion's signature
+ * happened to match.
+ */
 int appgrid_click(syn_server_t *s, double lx, double ly, uint32_t button,
-                  uint32_t state)
+                  uint32_t time_msec)
 {
+    (void)time_msec;
     if (!s->appgrid.visible) return 0;
-    if (state != WL_POINTER_BUTTON_STATE_PRESSED) return 1;
     if (button != BTN_LEFT) return 1;
 
     int i = appgrid_index_at(s, lx, ly);
