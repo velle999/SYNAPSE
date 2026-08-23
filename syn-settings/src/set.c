@@ -87,6 +87,52 @@ int do_set(int argc, char **argv)
 		              (char *)val, NULL };
 		return run_or_show(a);
 	}
+	/* ── The machine's name ──────────────────────────────────────────────
+	 *
+	 * `hostnamectl` does its own polkit check, exactly as localectl and
+	 * timedatectl do above — so this stays a settings app that runs a
+	 * systemd tool rather than one that ships a way to become root.
+	 *
+	 * ⚠ VALIDATED HERE ANYWAY, and more narrowly than sane_value: a hostname
+	 * is not a filename. Letters, digits, hyphen and dot, no leading or
+	 * trailing hyphen or dot, 63 characters. systemd would reject a bad one
+	 * too — but it would reject it with an exit code, and "hostnamectl exited
+	 * 1" is not a sentence that tells anybody what was wrong with what they
+	 * typed.
+	 *
+	 * ⚠ Worth doing at all because EVERY SynapseOS install is `synapse`: two
+	 * on one network and Avahi renames one of them `synapse-2.local`, with no
+	 * say in which, and the .local address stops being stable. */
+	if (!strcmp(key, "hostname")) {
+		size_t n = strlen(val);
+		if (n > 63) return refuse("a hostname is at most 63 characters");
+		if (val[0] == '-' || val[0] == '.' || val[n - 1] == '-' || val[n - 1] == '.')
+			return refuse("a hostname may not begin or end with '-' or '.'");
+		for (const char *p = val; *p; p++) {
+			if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+			    (*p >= '0' && *p <= '9') || *p == '-' || *p == '.')
+				continue;
+			return refuse("a hostname takes letters, digits, '-' and '.' only");
+		}
+		char *a[] = { (char *)"hostnamectl", (char *)"set-hostname",
+		              (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	/* The desktop's accent, on the RGB hardware. syn-rgb(1) owns the state,
+	 * the systemd path unit and the hardware; this is the switch, and it is
+	 * the SAME command the control panel's row runs — one owner, two doors.
+	 *
+	 * ⚠ No privilege anywhere: the lights are a user's own session, so this
+	 * is the one write in this file that does not go through a tool with a
+	 * polkit check because there is nothing to check. */
+	if (!strcmp(key, "rgb")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("rgb takes on or off");
+		char *a[] = { (char *)"syn-rgb", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "timezone")) {
 		char *a[] = { (char *)"timedatectl", (char *)"set-timezone",
 		              (char *)val, NULL };

@@ -1586,6 +1586,67 @@ else
     echo "  skip  quickshell not installed, cannot check the wallpaper accent"
 fi
 
+# ── The machine's name ──────────────────────────────────────────────────────
+#
+# ⚠ Every SynapseOS install ships as `synapse`, so two on one network means
+# Avahi renames one of them and the .local address stops being stable. The
+# System pane offers the rename; hostnamectl does the polkit check.
+#
+# ⛔ DRY RUN ONLY. A test that renamed the machine running it would be a test
+# nobody runs twice, and the interesting half is the VALIDATION anyway.
+out=$("$BIN" --rec system)
+if grep -q 'set:hostname' <<<"$out"; then
+    ok "the System pane offers the hostname"
+else
+    bad "the System pane has no settable hostname"
+fi
+
+out=$("$BIN" -n set hostname studio-01 2>&1)
+case $out in
+    *"hostnamectl set-hostname studio-01"*) ok "a good name reaches hostnamectl" ;;
+    *) bad "setting the hostname ran [$out]" ;;
+esac
+
+# ⚠ Narrower than the general value filter: a hostname is not a filename, and
+# `a/b` passes that filter. Rejected HERE rather than by systemd, because
+# "hostnamectl exited 1" does not tell anybody what was wrong with what they
+# typed.
+for bad_name in 'a/b' 'ends-' '.starts' 'has_underscore'; do
+    if "$BIN" -n set hostname "$bad_name" >/dev/null 2>&1; then
+        bad "'$bad_name' was accepted as a hostname"
+    else
+        ok "'$bad_name' is refused"
+    fi
+done
+long=$(printf 'a%.0s' $(seq 1 70))
+if "$BIN" -n set hostname "$long" >/dev/null 2>&1; then
+    bad "a 70-character hostname was accepted"
+else
+    ok "a name past 63 characters is refused"
+fi
+
+# ── The lights ──────────────────────────────────────────────────────────────
+#
+# One switch, two doors: this row and the control panel's both run `syn-rgb`,
+# which owns the state and the hardware. The row is drawn whether openrgb is
+# installed or not — a control that vanishes is a feature nobody finds out
+# about — so what is asserted is that it is THERE and that it is a toggle.
+if "$BIN" --rec system | grep -q 'toggle:rgb'; then
+    ok "the System pane offers the RGB lights"
+else
+    bad "no RGB row on the System pane"
+fi
+out=$("$BIN" -n set rgb on 2>&1)
+case $out in
+    *"syn-rgb on"*) ok "switching them on runs syn-rgb" ;;
+    *) bad "the RGB row ran [$out]" ;;
+esac
+if "$BIN" -n set rgb maybe >/dev/null 2>&1; then
+    bad "'maybe' was accepted for a switch"
+else
+    ok "anything but on or off is refused"
+fi
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"
     exit 1

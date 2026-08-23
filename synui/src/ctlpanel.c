@@ -391,6 +391,21 @@ static const struct ctl_item ctl_items[] = {
       .help = "Take the accent off the wallpaper instead of the theme. "
               "Auto is Prism (light or dark), which is built on it, and "
               "nothing else" },
+    /* The same accent, on the hardware that has lights in it.
+     *
+     * ⚠ EXTERNAL, like the font rows: the answer lives in
+     * ~/.config/synui/rgb.state, which syn-rgb(1) owns and writes — and which
+     * survives a logout, which a syn_config_t field would not. Giving it a
+     * config key would create the second source of truth the state file exists
+     * to avoid: `syn-rgb on` from a terminal has to move this row.
+     *
+     * ⛔ The row is drawn wherever OpenRGB is installed or not. A toggle that
+     * disappears when its optdepend is missing is a feature nobody can find
+     * out about; syn-rgb says which package to install, which is the answer
+     * somebody can act on. */
+    { CTL_ROW_RGB_LIGHTS,   CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "RGB lights", NULL,
+      .vtype = CTL_VAL_BOOL, .external = true,
+      .help = "Put the wallpaper's accent on RGB hardware (needs openrgb)" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
@@ -1729,6 +1744,50 @@ static const char *widgets_label(void)
     return on == total ? "on" : "partial";
 }
 
+/* ---- the RGB bridge, as a row -------------------------------------------
+ *
+ * syn-rgb(1) owns the state and the hardware; this reads its file to draw the
+ * row and runs the command to change it. Nothing here knows what OpenRGB is,
+ * which is the point: the row is a switch on a script, and the script is
+ * where the colour, the brightness and the device quirks live.
+ */
+static int synrgb_is_on(void)
+{
+    char path[256];
+    syn_config_path(path, sizeof(path), "rgb.state");
+    if (!path[0]) return 0;
+
+    FILE *f = fopen(path, "re");
+    if (!f) return 0;   /* no file is the shipped state: off */
+
+    char line[256];
+    int on = 0;
+    while (fgets(line, sizeof(line), f)) {
+        char v[32];
+        /* ⚠ `on=` and not `on =`: syn-rgb writes the same key=value shape
+         * every other state file in this directory uses. */
+        if (sscanf(line, "on=%31s", v) == 1)
+            on = (strcmp(v, "yes") == 0);
+    }
+    fclose(f);
+    return on;
+}
+
+static void synrgb_toggle(syn_server_t *s)
+{
+    int on = synrgb_is_on();
+
+    /* ⚠ Through the COMMAND, never by writing the file. `syn-rgb on` also
+     * enables the systemd path unit and pushes the colour immediately; a row
+     * that only flipped a key would leave the lights unchanged until the next
+     * wallpaper, which reads as the switch not working. */
+    synui_spawn(on ? "syn-rgb off" : "syn-rgb on");
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             on ? "RGB lights: off"
+                : "RGB lights: following the accent");
+    ctlpanel_repaint(s);
+}
+
 /* Event sounds, summarised the same way. Unlike the widgets this state IS
  * mirrored in syn_server_t (sound.c caches it to skip a fork per event), so the
  * summary is read from the cache — refreshed first, because the panel is one of
@@ -1880,6 +1939,12 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         case SYN_DISPLAY_EXTERNAL: snprintf(buf, n, "Built-in off"); break;
         default:                   snprintf(buf, n, "Extend");       break;
         }
+        break;
+    case CTL_ROW_RGB_LIGHTS:
+        /* Read off rgb.state every time rather than cached, so the row is
+         * right when `syn-rgb on` was typed in a terminal a moment ago. One
+         * short file read on a repaint of a panel that is open. */
+        snprintf(buf, n, "%s", synrgb_is_on() ? "On" : "Off");
         break;
     case CTL_ROW_UI_FONT_SIZE:
     case CTL_ROW_UI_TEXT_SCALE: {
@@ -2830,6 +2895,14 @@ static void ctlpanel_activate(syn_server_t *s)
         break;
     }
 
+    /* ⛔ An EXTERNAL row first. The generic flip below reads and writes the
+     * config field the item names, and an external row names none — so
+     * ctl_get/ctl_put would read the top of syn_config_t as this row's value
+     * and write a bool over whatever field is declared first. A plausible
+     * number and a silent corruption, which is the pair the `external` flag
+     * exists to prevent. */
+    if (row == CTL_ROW_RGB_LIGHTS) { synrgb_toggle(s); return; }
+
     /* A table-driven TOGGLE: flip it generically. Checked before the bespoke
      * switch below so that a row which names a config field never needs a case
      * there — the switch is now only for the toggles whose state is NOT a plain
@@ -3258,6 +3331,11 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
     const struct ctl_item *it = ctl_item(row);
     if (!it || it->vtype == CTL_VAL_NONE) return 0;
 
+    /* ⚠ Two external rows now, and they are not the same one. Dispatched by
+     * ROW rather than by the flag: `external` says only "the value is not in
+     * the config struct", and sending a lighting toggle to the font stepper
+     * would move the desktop's text size. */
+    if (row == CTL_ROW_RGB_LIGHTS) { synrgb_toggle(s); return 1; }
     if (it->external) return ctlpanel_adjust_font(s, row, dir);
 
     if (!ctl_adjust(s, it, dir)) {

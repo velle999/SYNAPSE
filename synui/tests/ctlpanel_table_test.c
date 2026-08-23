@@ -986,6 +986,33 @@ static void test_solid_leaves_nothing_clear(void)
     printf("  make it all solid ........ ok\n");
 }
 
+/* ── The RGB row, which owns no config field ──────────────────────
+ *
+ * ⛔ It is EXTERNAL: the answer lives in ~/.config/synui/rgb.state, which
+ * syn-rgb(1) writes and which outlives a logout. What that buys is also what
+ * makes it dangerous — the generic toggle path would read and write the
+ * config field the row names, and this row names none, so a missed branch
+ * reads the top of syn_config_t as a boolean and writes one back over it.
+ *
+ * Asserted here rather than by pressing the key: activating it SPAWNS
+ * `syn-rgb on`, and a test suite that turned on the lighting of the machine
+ * running it would be a test nobody runs twice.
+ */
+static void test_rgb_row_owns_no_key(void)
+{
+    assert(ctlpanel_row_kind(CTL_ROW_RGB_LIGHTS) == CTL_KIND_TOGGLE);
+    /* No synuirc key: nothing about it belongs in settings.state, and
+     * test_every_row_round_trips skips it for exactly that reason. */
+    assert(ctlpanel_row_key(CTL_ROW_RGB_LIGHTS) == NULL);
+
+    /* And it draws a WORD either way — never an empty column, which is what a
+     * row whose value formatter was never reached would show. */
+    char v[64] = "";
+    ctlpanel_row_value(&g_s, CTL_ROW_RGB_LIGHTS, v, sizeof(v));
+    assert(strcmp(v, "On") == 0 || strcmp(v, "Off") == 0);
+    printf("  rgb row is external ....... ok (%s)\n", v);
+}
+
 int main(void)
 {
     /* Unbuffered: every failure here prints WHICH row and why, immediately
@@ -997,6 +1024,7 @@ int main(void)
 
     printf("ctlpanel_table_test\n");
     test_table_covers_every_row();
+    test_rgb_row_owns_no_key();
     test_no_category_overflows();
     test_every_category_named();
     test_every_row_round_trips();

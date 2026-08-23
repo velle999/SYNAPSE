@@ -49,7 +49,11 @@ static const struct cfg_path paths[] = {
 
 int pane_system(void)
 {
-	rec_header("kind\tkey\tvalue\tdetail");
+	/* ⚠ An `action` column, so the two rows that are SETTINGS can be set.
+	 * Every other row here is a fact about the machine and says "-": the GUI
+	 * decides what is editable purely from this column, so a fact with a verb
+	 * on it would draw a button that writes somewhere nothing reads. */
+	rec_header("kind\tkey\tvalue\tdetail\taction");
 
 	/* ── Identity ─────────────────────────────────────────────────────── */
 	/* Sized to the destination it feeds, not to the file's line length:
@@ -75,24 +79,77 @@ int pane_system(void)
 		}
 		fclose(f);
 	}
-	rec_row("about\tos\t%s\t/etc/os-release", pretty);
+	rec_row("about\tos\t%s\t/etc/os-release\t-", pretty);
 
 	struct utsname u;
 	if (uname(&u) == 0) {
-		rec_row("about\tkernel\t%s %s\trunning kernel", u.sysname, u.release);
-		rec_row("about\thostname\t%s\t/etc/hostname", u.nodename);
+		rec_row("about\tkernel\t%s %s\trunning kernel\t-", u.sysname, u.release);
+		/* ⚠ SETTABLE, and worth setting: every SynapseOS install is called
+		 * `synapse`, so two of them on one network means Avahi renames one
+		 * `synapse-2.local` — with no say in which one, and no promise the
+		 * suffix is the same tomorrow. The row says so, because "hostname:
+		 * synapse" on its own gives nobody a reason to change it. */
+		rec_row("about\thostname\t%s\tthe name this machine answers to on the "
+		        "network — every SynapseOS install ships as `synapse`\t"
+		        "set:hostname", u.nodename);
 	}
 
 	if (read_line_file("/proc/uptime", buf, sizeof buf)) {
 		double secs = atof(buf);
 		long h = (long)(secs / 3600), m = ((long)secs % 3600) / 60;
-		rec_row("about\tuptime\t%ldh %ldm\tsince boot", h, m);
+		rec_row("about\tuptime\t%ldh %ldm\tsince boot\t-", h, m);
+	}
+
+	/* ── The lights ───────────────────────────────────────────────────── */
+	//
+	// The desktop already decides one colour per wallpaper; syn-rgb(1) is what
+	// puts it on the RAM, the board and the keyboard. The row is here rather
+	// than on a pane of its own because it is one switch, and it says whether
+	// OpenRGB is installed rather than vanishing when it is not: a control
+	// that disappears is a feature nobody finds out about.
+	{
+		int have = have_cmd("syn-rgb");
+		int rgb  = have_cmd("openrgb");
+		char on[16] = "off";
+		char path[512];
+		const char *home = getenv("HOME");
+		const char *xdg  = getenv("XDG_CONFIG_HOME");
+
+		if (xdg && *xdg) snprintf(path, sizeof path, "%s/synui/rgb.state", xdg);
+		else if (home)   snprintf(path, sizeof path, "%s/.config/synui/rgb.state", home);
+		else             path[0] = '\0';
+
+		if (path[0]) {
+			FILE *rf = fopen(path, "re");
+			if (rf) {
+				char line[128];
+				while (fgets(line, sizeof line, rf))
+					if (!strncmp(line, "on=", 3)) {
+						/* ⚠ The FILE is the answer, not this program's idea
+						 * of it: `syn-rgb on` in a terminal has to move this
+						 * row, and a cached copy here would disagree the
+						 * moment anything else wrote the state. */
+						snprintf(on, sizeof on, "%s",
+						         strncmp(line + 3, "yes", 3) == 0 ? "on" : "off");
+					}
+				fclose(rf);
+			}
+		}
+
+		if (!have)
+			rec_row("lighting\trgb\tunavailable\tsyn-rgb is not installed\t-");
+		else if (!rgb)
+			rec_row("lighting\trgb\t%s\tthe wallpaper accent on RGB hardware — "
+			        "install `openrgb` to use it\ttoggle:rgb", on);
+		else
+			rec_row("lighting\trgb\t%s\tthe wallpaper accent on the RAM, the "
+			        "board and the keyboard\ttoggle:rgb", on);
 	}
 
 	/* ── Where configuration lives ────────────────────────────────────── */
 	for (size_t i = 0; i < sizeof paths / sizeof paths[0]; i++) {
 		const char *state = access(paths[i].path, F_OK) == 0 ? "present" : "absent";
-		rec_row("config\t%s\t%s (%s)\t%s",
+		rec_row("config\t%s\t%s (%s)\t%s\t-",
 		        paths[i].path, state, paths[i].layer, paths[i].what);
 	}
 

@@ -56,7 +56,37 @@ pkgver=0.1.0
 #   and one that is merely out of date looks healthy to it.
 #   ⚠ And a mismatch while the firewall is OFF is not a warning: that is the
 #   definition of off, not a fault.
-pkgrel=32
+#
+# 33 THE MACHINE'S NAME, AND THE LIGHTS.
+#
+#   ⚠ EVERY SynapseOS install answers to `synapse`. Two of them on one network
+#   and Avahi renames one `synapse-2.local`, with no say in which and no
+#   promise the suffix survives a reboot — so the .local address stops being a
+#   thing anybody can rely on. Renaming was a `hostnamectl` one-liner, which is
+#   to say it was not in the settings app at all.
+#
+#   `set:hostname` on the System pane's identity row, `hostnamectl
+#   set-hostname` underneath it. That keeps the design this file has had from
+#   the first commit: the write goes through a systemd tool that does its OWN
+#   polkit check, and this binary stays not-setuid with no policy of its own.
+#
+#   ⚠ Validated HERE and more narrowly than sane_value, which allows `/`
+#   because most values here are paths. A hostname is letters, digits, hyphen
+#   and dot, no leading or trailing punctuation, 63 characters — and refusing
+#   it here says what was wrong with what was typed, where refusing it in
+#   systemd says "hostnamectl exited 1".
+#
+#   AND THE RGB LIGHTS. syn-rgb(1) — synui 431 — puts the wallpaper's accent on
+#   the RAM, the board and the keyboard. The switch is a row on this pane and a
+#   row on synui's control panel, and BOTH run the same command: syn-rgb owns
+#   the state file, the systemd path unit and the hardware, so neither door has
+#   an opinion of its own to drift.
+#
+#   ⚠ The row reads rgb.state on every pane load rather than caching it, so
+#   `syn-rgb on` typed in a terminal moves it. ⛔ And it is drawn whether
+#   openrgb is installed or not — a control that vanishes with its optdepend is
+#   a feature nobody finds out about — saying which package to install instead.
+pkgrel=33
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

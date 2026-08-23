@@ -553,7 +553,37 @@ pkgver=0.1.0
 #   against a STUB openrgb — no real device is touched, because a test that
 #   changed the colour of the machine running it is not one anybody runs twice.
 
-pkgrel=431
+#
+# 432 A SWITCH FOR IT, ON THE PANEL WHERE THE ACCENT ALREADY LIVES.
+#
+#   431 shipped syn-rgb with `syn-rgb on` as its only door. The control panel
+#   is where the wallpaper accent is switched on, so it is where somebody
+#   looks for the lights that follow it.
+#
+#   ⚠ EXTERNAL, like the font rows: the answer lives in rgb.state, which
+#   syn-rgb owns and which outlives a logout. Giving the row a config key would
+#   have created the second source of truth the state file exists to prevent —
+#   `syn-rgb on` from a terminal has to move this row, and it does, because the
+#   row reads the file on every repaint.
+#
+#   ⛔ AND IT IS INTERCEPTED BEFORE THE GENERIC FLIP. The table-driven toggle
+#   path reads and writes the syn_config_t field the row names, and an external
+#   row names none: ctl_get/ctl_put would read the top of the config struct as
+#   this row's value and write a boolean back over whatever field is declared
+#   first. A plausible number and a silent corruption — the exact pair the
+#   `external` flag exists to prevent, which is why the font rows say so too.
+#   Dispatched by ROW rather than by the flag, since sending a lighting toggle
+#   to the font stepper would change the desktop's text size.
+#
+#   ⚠ Enter runs `syn-rgb on|off`, never a write to the file: the command also
+#   enables the path unit and pushes the colour immediately, and a row that
+#   only flipped a key would leave the lights unchanged until the next
+#   wallpaper — which reads as the switch not working.
+#
+#   The table test asserts the row is a toggle with NO key rather than pressing
+#   it: activating it spawns syn-rgb, and a suite that turned on the lighting
+#   of the machine running it is not one anybody runs twice.
+pkgrel=432
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
