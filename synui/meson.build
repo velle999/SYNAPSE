@@ -1481,6 +1481,18 @@ test('bar_shape', bar_shape,
      depends : [synui_exe],
      timeout : 180)
 
+# `bar_enabled`: turning the bar off turns off THE BAR. It used to be a
+# `pkill -x quickshell`, and that process is also every desktop widget, the OSD,
+# the start menu, the mixer and the notes — so the switch cleared the desktop.
+# Three captures: bar+widget up, then bar_enabled = off (the top edge back to
+# bare wallpaper, the widget's corner UNCHANGED — that is the assertion a stop
+# command cannot pass), then on again from the watch alone.
+bar_enabled = find_program('tests/bar_enabled.sh')
+test('bar_enabled', bar_enabled,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # `bar_opacity`: the user's alpha for the bar, over the theme's. ctlpanel_table
 # proves the row stores and restores; this proves it ARRIVES — three captures
 # over a magenta desktop, asserting that 0.00 leaves most of the strip showing

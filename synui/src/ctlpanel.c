@@ -753,13 +753,14 @@ static const struct ctl_item ctl_items[] = {
      * Super+= from Control panel ▸ Shortcuts (or the Super+/ palette) instead. */
     /* Is there a bar at all — the row the Dock switch above has always had and
      * this side of the desktop never did. Bespoke rather than table-driven
-     * (.key/.off left zeroed) because flipping the flag is the easy half: the
-     * bar is a separate process, so the row also has to go and stop or start
-     * it. See CTL_ROW_BAR in ctlpanel_activate. */
+     * (.key/.off left zeroed) because the bar is a separate process: the flag
+     * has to reach settings.state, which is the file the bar watches, and a
+     * foreign bar still needs the optional command pair run.
+     * See CTL_ROW_BAR in ctlpanel_activate. */
     { CTL_ROW_BAR,           CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar",              NULL,
       .section = "Bar",
-      .help = "The top bar. Off stops it now; a waybar desktop needs "
-              "bar_start_cmd in synuirc to put it back" },
+      .help = "The top bar, and only it — the widgets, notes and start menu "
+              "stay. A waybar desktop needs bar_stop_cmd/bar_start_cmd" },
     /* The bar is a SEPARATE PROCESS, and this is the one row on the panel whose
      * value the compositor does not act on — synui-bar reads it at startup.
      * CTL_APPLY_NONE is therefore literally right, and the help line has to say
@@ -3165,24 +3166,38 @@ static void ctlpanel_activate(syn_server_t *s)
     /*
      * The bar, which unlike every other row on this panel is not ours to draw.
      *
-     * So the flag is only the bookkeeping — the actual work is running one of
-     * the two commands, and the flag exists so that reopening the panel says
-     * what the desktop looks like rather than always "on".
+     * So THE WRITE IS THE WORK: settings.state is the file the bar watches
+     * (BarConfig.qml), and Bar.qml maps or unmaps its window off the key. That
+     * is a change of shape, not a tidy-up. This row used to do its job by
+     * running `bar_stop_cmd`, whose default was `pkill -x quickshell` — and the
+     * bar's process is also the desktop widgets, the OSD, the start menu, the
+     * mixer and the post-it notes, all mapped from one shell.qml. So switching
+     * the bar off cleared the whole desktop: velle asked for the strip and lost
+     * the visualiser, the big clock, the notes and Tux, with no message anywhere
+     * connecting the two. Unmapping one window cannot do that.
      *
-     * Fire-and-forget through synui_spawn, like every other shell-out here. A
-     * start command that is wrong for this desktop (the default names the
-     * shipped bar, and this box may run waybar) therefore fails silently — the
-     * help line on the row is where that is said, because there is nothing to
-     * wait for and nothing to report.
+     * The flag is still kept so that reopening the panel says what the desktop
+     * looks like rather than always "on".
+     *
+     * The command pair is now an ESCAPE HATCH for a bar that cannot be asked —
+     * waybar — and is empty by default, so the usual desktop shells out to
+     * nothing. When it is set it is fire-and-forget through synui_spawn like
+     * every other shell-out here, so a command that is wrong for this desktop
+     * fails silently; the help line on the row is where that is said, because
+     * there is nothing to wait for and nothing to report.
      */
     case CTL_ROW_BAR: {
         s->config.bar_enabled = !s->config.bar_enabled;
+
+        /* The key FIRST. It is what the shipped bar acts on, and a foreign
+         * bar's command should not get a head start on the file that decides
+         * what the panel and the bar both believe. */
+        settings_state_set("bar_enabled", s->config.bar_enabled ? "on" : "off");
 
         const char *cmd = s->config.bar_enabled ? s->config.bar_start_cmd
                                                 : s->config.bar_stop_cmd;
         if (cmd && *cmd) synui_spawn(cmd);
 
-        settings_state_set("bar_enabled", s->config.bar_enabled ? "on" : "off");
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "bar %s", s->config.bar_enabled ? "on" : "off");
         ctlpanel_repaint(s);

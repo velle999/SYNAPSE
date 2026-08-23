@@ -387,23 +387,28 @@ numlock      = on
 # Control panel ▸ Windows ▸ Panels.
 
 # ── The bar (synui-bar) ────────────────────────────────────
-# Is there a bar at all. Control panel ▸ Desktop ▸ Bar flips this and, unlike
-# every other row on that panel, also has to go and DO something: the bar is a
-# separate process this compositor never started (the `autostart =` line above
-# did), so switching it off means stopping it and switching it back on means
-# knowing what to run.
+# Is there a bar at all. Control panel ▸ Desktop ▸ Bar flips this, and the
+# SHIPPED BAR READS IT ITSELF — quickshell watches settings.state, so the strip
+# goes away (and gives its reserved edge back) while you are looking at it, with
+# no restart and nothing killed.
 #
-# Hence a command pair rather than a flag. The default stop names BOTH shipped
-# bars — pkill -x on a name that is not running costs nothing, and a switch
-# whose "off" silently fails on the bar you happen to run is worse than useless.
-# The default start is the shipped bar, so a WAYBAR desktop must say so here or
-# the switch turns the bar off and cannot put it back:
+# ⚠ It used to be a command pair whose default stop was
+# `pkill -x quickshell ; pkill -x waybar`, and that was too blunt by half: the
+# bar's process is ALSO the desktop widgets, the OSD, the start menu, the volume
+# mixer and the post-it notes (they are one quickshell shell.qml). Switching the
+# bar off therefore took the visualiser, the big clock, the notes and Tux with
+# it, silently. It does not any more.
 #
+# The pair is still here for a bar that cannot be asked — waybar — and is EMPTY
+# by default, so a quickshell desktop never shells out. A WAYBAR desktop sets
+# BOTH, or the row writes a key waybar does not read and appears to do nothing:
+#
+#   bar_stop_cmd  = pkill -x waybar
 #   bar_start_cmd = synui-waybar
 #
 # bar_enabled   = off
-# bar_stop_cmd  = pkill -x quickshell ; pkill -x waybar
-# bar_start_cmd = synui-bar
+# bar_stop_cmd  =
+# bar_start_cmd =
 #
 # TWO shells ship. `synapse` (the default) is SynapseOS's own bar; `antiquity`
 # is a port of diinki's linux-antiquity — a radial taskbar, a sidebar and a

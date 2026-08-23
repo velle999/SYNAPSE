@@ -3859,19 +3859,29 @@ typedef struct {
      *
      * The dock is drawn by the compositor and switches off by not drawing it.
      * The bar is a SEPARATE PROCESS this compositor did not start — the
-     * session's `autostart =` line did — so turning it off means killing
-     * something, and turning it back on means knowing what to run.
+     * session's `autostart =` line did — so this side only writes the key, to
+     * settings.state, and the bar reads it back.
      *
-     * Hence a command pair rather than a flag the renderer could honour. Same
-     * shape as game_bar_stop_cmd / game_bar_start_cmd below, which solve the
-     * identical problem for game mode, and overridable for the same reason:
-     * two bars ship (quickshell and waybar) and only the user's autostart line
-     * knows which one this desktop actually runs.
+     * ⚠ IT USED TO BE A COMMAND PAIR, AND THE PAIR HAD FAR TOO LONG A REACH.
+     * The old default STOP was `pkill -x quickshell ; pkill -x waybar`, but
+     * the shipped bar's process is not only the bar: quickshell/shell.qml maps
+     * the bar, every desktop widget, the OSD, the start menu, the mixer and the
+     * post-it notes from one instance. So "Bar: off" killed all of them —
+     * turning off the strip across the top took the visualiser, the big clock,
+     * the notes and Tux with it, with nothing on screen to say why.
      *
-     * The default STOP covers both, so "off" always works. The default START
-     * is the shipped bar; a waybar desktop wants
+     * The shipped bar honours the key itself now (BarConfig.qml watches
+     * settings.state; Bar.qml unmaps its window, which is also what releases
+     * the exclusive zone), so the switch reaches the bar and stops there.
+     *
+     * The pair survives ONLY for a foreign bar that cannot be asked — waybar —
+     * and is EMPTY by default, so nothing is killed unless someone names it:
+     *     bar_stop_cmd  = pkill -x waybar
      *     bar_start_cmd = synui-waybar
-     * in synuirc, or the switch turns the bar off and cannot put it back. */
+     * An empty command is skipped, not run, so a quickshell desktop never
+     * shells out at all. Compare game_bar_stop_cmd / game_bar_start_cmd below,
+     * which DO still kill the whole shell — that is game mode's point (it is
+     * after the few hundred MB, not the strip) and it is off by default. */
     /* How each of the three panels you work IN is dismissed — one setting per
      * panel, not one for all of them: a calculator you drag around and a
      * control panel you want gone the moment you look away are different

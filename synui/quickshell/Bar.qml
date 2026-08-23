@@ -103,6 +103,25 @@ PanelWindow {
     // to be known here rather than one configure later. See BarConfig.uifxFile.
     exclusiveZone: bar.autohide ? 0 : Theme.barSpan
 
+    /*
+     * Is there a bar on this desktop at all — Control panel ▸ Desktop ▸ Bar.
+     *
+     * UNMAPPING THE WINDOW is the whole implementation, and it is why the switch
+     * no longer kills anything. This process is the bar AND the desktop widgets,
+     * the OSD, the start menu, the mixer and the notes (shell.qml); the old
+     * `bar_stop_cmd = pkill -x quickshell` could only turn the bar off by taking
+     * all of them with it. Here the layer surface is destroyed and the rest of
+     * the shell never notices.
+     *
+     * Destroying it is also what gives the exclusive zone back: the reservation
+     * belongs to the surface, so a bar switched off stops holding a strip of the
+     * screen and maximized windows grow into it. Coming back builds a NEW
+     * surface, which is the only moment set_exclusive_zone is honoured (see
+     * below) — and since BarConfig reads settings.state with blockLoading, the
+     * autohide answer is already there when that happens.
+     */
+    visible: BarConfig.barEnabled
+
     // Not focusable: the bar is pointer-driven, and taking keyboard focus here
     // would steal keys from the focused window for no benefit. (synui grants
     // layer-shell keyboard focus correctly — verified 2026-07-22 — so this is a

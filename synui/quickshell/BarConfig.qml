@@ -124,6 +124,28 @@ QtObject {
      */
     property string widgetGlass: "auto"
 
+    /* ── Is there a bar at all ───────────────────────────────────────────────
+     *
+     * Global, read the same pair-and-order as bar_shape, and the one setting on
+     * this object that decides whether the bar's window is MAPPED (see Bar.qml).
+     *
+     * It lives here rather than in a stop/start command pair — which is what it
+     * used to be — because this process is not only the bar. The desktop
+     * widgets, the OSD, the start menu, the mixer and the post-it notes are all
+     * windows of the SAME quickshell instance (shell.qml), so the old default
+     * `bar_stop_cmd = pkill -x quickshell` turned the bar off by killing every
+     * one of them: switching off the strip across the top took the visualiser,
+     * the clock, the notes and Tux with it, and nothing said so.
+     *
+     * A bar that can unmap its own window has no such reach. The compositor's
+     * row now just writes the key, this reads it back through a watch that was
+     * already here, and the strip goes away on its own while the rest of the
+     * shell carries on. The command pair survives for a FOREIGN bar (waybar),
+     * which cannot be asked this way — it is empty by default now, so nothing
+     * is killed unless someone names something to kill.
+     */
+    property bool barEnabled: true
+
     // config.c's default and its clamp, restated for the same reason
     // cornerRadius restates its own: a typo'd synuirc line must not hand the
     // compositor its default and the widgets a NaN, which would paint every
@@ -238,6 +260,15 @@ QtObject {
         const w = root.readKey(settingsFile.text(), "widget_glass")
                   || root.readKey(synuircFile.text(), "widget_glass")
         root.widgetGlass = (w === "on" || w === "off") ? w : "auto"
+
+        // Is there a bar at all. Same pair and order again. Only the exact
+        // string "off" turns it off: an absent key, a typo and a synuirc from a
+        // synui too old to know the key all have to mean the bar everyone
+        // already has, or an unreadable file would leave the desktop with no
+        // bar and no obvious way back.
+        const be = root.readKey(settingsFile.text(), "bar_enabled")
+                   || root.readKey(synuircFile.text(), "bar_enabled")
+        root.barEnabled = be !== "off"
 
         /*
          * ⚠ theme.state COMES FIRST ON THESE TWO, AND IT IS THE WHOLE REASON THE

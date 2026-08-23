@@ -1383,9 +1383,22 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->ctlpanel_close    = SYN_PANEL_CLOSE_WINDOW;
     cfg->taskmgr_close     = SYN_PANEL_CLOSE_WINDOW;
     cfg->bar_enabled       = 1;
-    snprintf(cfg->bar_stop_cmd,  sizeof(cfg->bar_stop_cmd),
-             "pkill -x quickshell ; pkill -x waybar");
-    snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "synui-bar");
+    /* EMPTY BY DEFAULT, and that is the fix rather than an omission.
+     *
+     * These used to be `pkill -x quickshell ; pkill -x waybar` / `synui-bar`,
+     * which turned the bar off by killing the process — and that process is not
+     * only the bar. shell.qml is the bar, the desktop widgets, the OSD, the
+     * start menu, the mixer and the post-it notes in one quickshell instance, so
+     * the Bar row took the visualiser, the big clock, the notes and Tux down
+     * with the strip and said nothing about it.
+     *
+     * The shipped bar honours `bar_enabled` itself now — BarConfig.qml watches
+     * settings.state and Bar.qml unmaps its window — so nothing needs killing
+     * and nothing else in the shell is touched. The pair stays for a FOREIGN
+     * bar that cannot be asked (waybar), and empty means "the bar handles it",
+     * which is true of every bar SynapseOS ships. */
+    cfg->bar_stop_cmd[0]   = '\0';
+    cfg->bar_start_cmd[0]  = '\0';
     cfg->bar_edge          = SYN_BAR_EDGE_TOP;
     cfg->bar_shape         = SYN_BAR_SHAPE_FULL;
     /* Negative is "the theme decides", not a number the bar could use — see the
