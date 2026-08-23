@@ -943,11 +943,22 @@ static void dock_apply_position(syn_output_t *o)
      * Deliberately uncropped — a drag is how the dock is moved between edges and
      * outputs, so it has to be able to cross them.
      *
-     * An ICON drag (icon >= 0) is not this. The bar stays exactly where it is:
-     * floating it would carry the row of icons the gesture is rearranging along
-     * with the cursor, and there would be nothing for the dragged icon to move
-     * relative to. */
-    if (s->dock_drag.active && s->dock_drag.moved && s->dock_drag.icon < 0 &&
+     * Neither CELL gesture is this. The bar stays exactly where it is: floating
+     * it would carry the row the gesture is rearranging along with the cursor,
+     * and there would be nothing for the dragged cell to move relative to.
+     *
+     * ⚠ DOCK_DRAG_BAR by name, never `icon < 0`. That test read as "not an
+     * icon" for as long as there were only two gestures, and DOCK_DRAG_CLOCK is
+     * -2: the clock drag took this branch and flung the whole dock to
+     * `float_x/float_y`, which a clock drag never writes — 0,0 on a fresh
+     * session. The cell could not be placed after that either, because
+     * dock_clock_drag_motion() turns the cursor into a run coordinate by
+     * subtracting this very node position. That is the whole of why the clock
+     * "could not be moved" while every model test passed: the tests stub
+     * create_cairo_buf() to NULL, dock_render_output() returns before it reaches
+     * dock_apply_position(), and this line is in the half they do not run. */
+    if (s->dock_drag.active && s->dock_drag.moved &&
+        s->dock_drag.icon == DOCK_DRAG_BAR &&
         s->dock_drag.output == o) {
         if (have) dock_set_crop(o, 0, 0, m.w, m.h, m.w, m.h);
         wlr_scene_node_set_position(&o->dock.tree->node,

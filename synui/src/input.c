@@ -690,18 +690,19 @@ void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
 }
 
 /*
- * The ONE funnel for "show me my applications".
+ * What the START KEY opens: the Super tap and the `start_menu` action, which is
+ * all that is bound to it. Desktop ▸ Start menu (start_menu_style) picks one of
+ * the three.
  *
- * Three things answer that question and the user picks which in the control
- * panel (Desktop ▸ Start menu, start_menu_style). Every route goes through here
- * — the Super tap, the `start_menu` action, and the dock's grid-of-dots — so
- * they cannot disagree with each other, which is exactly what they did before
- * this existed: the tap opened the bar's menu while the button beside it opened
- * the application page.
+ * ⚠ NOT the dock's grid-of-dots, and not the bar's start button. A key is a
+ * keystroke with no picture on it, so it is free to mean whatever this row says.
+ * A BUTTON is its own label: the grid-of-dots means the application overlay and
+ * the bar's start button means the bar's menu, and neither changes because of a
+ * setting somewhere else. Sending the dock button through here is what made
+ * pressing the app-grid icon open Rofi.
  *
  * Read at the point of use rather than resolved at config load, so changing the
- * row takes effect on the next keypress with nothing to reload. A fourth route
- * calls this; it does not re-read the setting.
+ * row takes effect on the next keypress with nothing to reload.
  */
 void synui_start_menu_open(syn_server_t *s)
 {
@@ -3444,10 +3445,16 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
              * another edge instead. Every installed app, which is the one thing
              * a row of pinned icons cannot offer. */
             if (dock_apps_at(s, s->cursor->x, s->cursor->y)) {
-                /* Through the funnel, not straight to the grid: this button and
-                 * the Super tap are the same request, and the control panel's
-                 * Start menu row is where the answer is chosen. */
-                synui_start_menu_open(s);
+                /* appgrid_toggle(), NOT synui_start_menu_open(). This button IS
+                 * the application overlay — that is what the grid-of-dots draws
+                 * and the only thing it has ever meant. Desktop ▸ Start menu
+                 * chooses what the SUPER TAP opens, which is a keystroke with no
+                 * picture on it and therefore nothing to disagree with. Routing
+                 * a labelled button through that row makes the button's own
+                 * meaning depend on a setting elsewhere: velle's says Rofi, so
+                 * pressing the app-grid icon opened Rofi. The start button on
+                 * the bar does not change what it opens either. */
+                appgrid_toggle(s);
                 return;
             }
             /* …and the clock, which arms a drag that moves the cell along the

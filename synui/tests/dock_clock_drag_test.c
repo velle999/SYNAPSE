@@ -23,6 +23,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -53,15 +54,32 @@ void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
     box->x = OUT_X; box->y = OUT_Y; box->width = OUT_W; box->height = OUT_H;
 }
 
-/* Rendering is skipped wholesale: create_cairo_buf() returning NULL makes
- * dock_render_output() bail before it touches a scene node, which is the whole
- * half of the file this test is not about. The hit-boxes it would have written
- * are set by hand below instead — they are pure layout arithmetic and the test
- * needs them to be the ones the renderer produces, not the ones it happens to
- * have left over. */
+/*
+ * A REAL cairo context on a scratch image surface, and a buffer handle that is
+ * never dereferenced (set_scene_buffer() below is the only thing handed it).
+ *
+ * ⚠ This used to return NULL, and that is exactly how the clock drag shipped
+ * broken with this file green. `if (!buf) return;` is the third statement of
+ * dock_render_output(), so a NULL here skips the whole renderer — INCLUDING the
+ * dock_apply_position() call at the end of it, which is where the bar's own
+ * position is written and where the bug was. The model was sound the entire
+ * time; the half that was stubbed out flung the dock to 0,0 the moment the
+ * gesture crossed its threshold, and the drag then measured the cursor against
+ * a node position that had nothing to do with the bar on screen.
+ *
+ * The drawing itself is still cheap — every text, icon and rounded-rect call is
+ * a stub below — but the CONTROL FLOW is now the real one.
+ */
+static struct wlr_buffer *const fake_buf = (struct wlr_buffer *)(uintptr_t)0x1;
+
 struct wlr_buffer *create_cairo_buf(int w, int h, cairo_t **cr)
 {
-    (void)w; (void)h; *cr = NULL; return NULL;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    *cr = cairo_create(surf);
+    cairo_surface_destroy(surf);   /* the context holds its own reference */
+    return fake_buf;
 }
 
 void cairo_begin(cairo_t *cr) { (void)cr; }
@@ -189,13 +207,20 @@ void wlr_output_schedule_frame(struct wlr_output *output) { (void)output; }
 static syn_server_t server;
 static syn_output_t output;
 
-/* The bar is always shown here (autohide off, as velle's dock.state has it), so
- * the tree sits where dock_apply_position would have put it. The renderer is
- * stubbed out, so nothing else writes this. */
+/*
+ * Put the bar where the code under test says it goes, by RUNNING that code:
+ * dock_relayout() → dock_render_output() → dock_apply_position(). Nothing here
+ * writes fake_tree.node by hand any more.
+ *
+ * That is not tidiness. The old version assigned the canvas origin itself, and
+ * the assignment happened to be self-consistent with every hit test in this
+ * file — so a dock_apply_position() that put the bar somewhere else entirely
+ * could not be seen from in here. Asking the renderer where the bar is is the
+ * only version of this that can fail.
+ */
 static void place_tree(void)
 {
-    fake_tree.node.x = OUT_X;
-    fake_tree.node.y = OUT_Y + OUT_H - server.config.dock_height;
+    dock_relayout(&server);
 }
 
 /* Sweep the run axis for the clock cell. Returns its layout-space x, or -1. */
@@ -246,14 +271,23 @@ int main(void)
      * clock ON and parked past the last icon, the apps button ON, auto-hide and
      * on-top OFF, and the full sixteen pins. The pin COUNT matters — it is what
      * decides how many gaps the clock has to walk through. */
-    server.config.dock_enabled     = 1;
-    server.config.dock_autohide    = 0;
-    server.config.dock_height      = 64;
-    server.config.dock_edge        = SYN_DOCK_EDGE_BOTTOM;
-    server.config.dock_clock       = 1;
-    server.config.dock_clock_slot  = -1;
-    server.config.dock_apps_button = 1;
-    server.dock_drag.icon          = DOCK_DRAG_BAR;
+    server.config.dock_enabled       = 1;
+    server.config.dock_autohide      = 0;
+    server.config.dock_on_top        = 0;
+    server.config.dock_height        = 56;
+    server.config.dock_edge          = SYN_DOCK_EDGE_BOTTOM;
+    server.config.dock_clock         = 1;
+    server.config.dock_clock_slot    = -1;
+    server.config.dock_apps_button   = 1;
+    /* magnify=on at a 1.50 swell, which is what settings.state says beside the
+     * 56px height. The flat layout is what the assertions below measure —
+     * mag_amount is 0 with the pointer away, and dock_metrics() suppresses the
+     * swell outright for the length of a drag — but the switch being ON is what
+     * makes dock_apply_position() take the branches it takes on the real
+     * desktop. */
+    server.config.dock_magnify       = 1;
+    server.config.dock_magnify_scale = 1.50;
+    server.dock_drag.icon            = DOCK_DRAG_BAR;
 
     output.server = &server;
     output.dock.tree = &fake_tree;
@@ -321,12 +355,36 @@ int main(void)
     printf("      dragging from x=%.1f to x=%.1f (icon 3's centre)\n", cx, target);
     check(target >= 0, "icon 3 is somewhere on the bar to aim at");
 
+    /* Where the BAR itself is, before the gesture travels. It must not move.
+     *
+     * ⚠ This is the assertion the feature actually needed, and the one this
+     * file could not make while create_cairo_buf() returned NULL.
+     * dock_apply_position() has a "dragging THE BAR: float under the cursor"
+     * branch that was gated on `icon < 0` — true for DOCK_DRAG_BAR (-1) and
+     * ALSO for DOCK_DRAG_CLOCK (-2). So crossing the threshold below threw the
+     * whole dock to dock_drag.float_x/float_y, which a clock drag never writes:
+     * 0,0 on a fresh session, or wherever the last bar drag left it. Every
+     * subsequent motion then fed dock_clock_drag_motion() a cursor measured
+     * against a node position with no relation to the bar, so the cell could
+     * not be aimed anywhere and the release committed nothing — which is
+     * precisely "the clock cannot be moved", reported against a model whose
+     * every assertion passed. */
+    int bar_x = fake_tree.node.x, bar_y = fake_tree.node.y;
+    printf("      bar canvas before the drag: (%d,%d)\n", bar_x, bar_y);
+
     dock_drag_motion(&server, cx - 18, y);       /* past the 6px threshold */
     check(server.dock_drag.moved == 1, "the gesture crosses the drag threshold");
+    printf("      bar canvas after threshold:  (%d,%d)\n",
+           fake_tree.node.x, fake_tree.node.y);
+    check(fake_tree.node.x == bar_x && fake_tree.node.y == bar_y,
+          "the BAR does not move: a clock drag is not a bar drag");
+
     dock_drag_motion(&server, target, y);
     printf("      slot during drag: %d\n", server.dock_drag.slot);
     check(server.dock_drag.slot > 0 && server.dock_drag.slot < npins,
           "…and the slot follows the cursor into the middle of the row");
+    check(fake_tree.node.x == bar_x && fake_tree.node.y == bar_y,
+          "…with the bar still where it started");
 
     /* ── 4. The release commits it ─────────────────────────────────────── */
     int want = server.dock_drag.slot;
@@ -351,6 +409,44 @@ int main(void)
     dock_drag_end(&server, cx2, y);
     check(server.config.dock_clock_slot == before,
           "a press with no travel leaves the slot alone");
+
+    /* ── 7. …and the BAR drag still floats ─────────────────────────────── */
+    /* The other half of the fix. Naming DOCK_DRAG_BAR instead of testing
+     * `icon < 0` must not cost the gesture that branch was written for: pressing
+     * the bar background and dragging is how the dock is moved between screen
+     * edges, and it floats under the cursor for the whole of it. A guard that
+     * excluded the clock by excluding everything would pass every assertion
+     * above and leave the dock unable to be moved at all. */
+    {
+        int settled_x = fake_tree.node.x, settled_y = fake_tree.node.y;
+        /* Swept for, not guessed at: the body is CENTRED on the output, so its
+         * left edge is nowhere near the output's, and the background between the
+         * cells is one `pad` wide. Ask for the first point that is the bar and
+         * is none of the three cells drawn on it — which is exactly the test
+         * input.c makes before it calls dock_drag_begin(). */
+        double bar_px = -1;
+        for (double px = fake_tree.node.x; px < fake_tree.node.x + OUT_W; px += 1.0) {
+            if (dock_bar_at(&server, px, y, NULL) &&
+                !dock_entry_at(&server, px, y) &&
+                !dock_clock_at(&server, px, y) &&
+                !dock_apps_at(&server, px, y)) { bar_px = px; break; }
+        }
+        printf("      bar background at x=%.0f (canvas x=%d)\n",
+               bar_px, fake_tree.node.x);
+        check(bar_px >= 0, "the bar background is hit-testable between the cells");
+        if (bar_px < 0) bar_px = fake_tree.node.x + 1;
+        dock_drag_begin(&server, bar_px, y);
+        check(server.dock_drag.icon == DOCK_DRAG_BAR, "…and it arms the BAR drag");
+        dock_drag_motion(&server, bar_px + 40, y - 200);
+        printf("      bar canvas during a BAR drag: (%d,%d) was (%d,%d)\n",
+               fake_tree.node.x, fake_tree.node.y, settled_x, settled_y);
+        check(fake_tree.node.x != settled_x || fake_tree.node.y != settled_y,
+              "the bar DOES float under the cursor when the bar is dragged");
+        /* Put it back on the bottom edge rather than leaving the rig mid-drag. */
+        dock_drag_end(&server, OUT_X + OUT_W / 2.0, OUT_Y + OUT_H - 4);
+        check(server.config.dock_edge == SYN_DOCK_EDGE_BOTTOM,
+              "…and dropping it at the bottom keeps it on the bottom edge");
+    }
 
     printf("%s\n", failures ? "FAILURES" : "all ok");
     return failures ? 1 : 0;

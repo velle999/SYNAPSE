@@ -1655,3 +1655,57 @@ to the tester's own `~/.local/share/applications` and the assertions become
 about their desktop. One `.desktop` file per rule, named for the rule; the
 two-desktop-names case was confirmed discriminating by removing the `SynapseOS`
 half and watching it fail.
+
+---
+
+## The clock that could not be moved, and the button that changed its mind
+
+Two dock regressions from the pass above, and they are opposite failures: one
+gesture that was wired correctly and could not run, one button that ran
+correctly and should not have been wired at all.
+
+**A clock drag was taking the BAR drag's branch.** `dock_apply_position()` has a
+"dragging the bar: float freely under the cursor" case, and it was gated on
+`s->dock_drag.icon < 0`. That read as "not an icon" for exactly as long as there
+were two gestures. `DOCK_DRAG_CLOCK` is **-2**.
+
+- [x] **The guard names `DOCK_DRAG_BAR`.** The moment a clock drag crossed its
+      6px threshold, the whole dock was thrown to `dock_drag.float_x/float_y` —
+      coordinates a clock drag never writes, so 0,0 on a fresh session or
+      wherever the last edge-drag happened to leave them. Every motion after
+      that fed `dock_clock_drag_motion()` a cursor measured against a node
+      position with no relation to the bar on screen, so the cell could not be
+      aimed anywhere and the release committed nothing.
+- [x] **⚠ The model test could not have caught it, and passed the whole time.**
+      `tests/dock_clock_drag_test.c` stubbed `create_cairo_buf()` to NULL, and
+      `if (!buf) return;` is the third statement of `dock_render_output()` — so
+      the test skipped the renderer *including the `dock_apply_position()` call
+      at the end of it*, which is the only place the bug lives. Being told "the
+      model is sound, so the fault is above dock.c" was the model test reporting
+      on the half of the file it ran.
+- [x] **The rig renders now.** A real cairo context on a scratch image surface
+      (every text, icon and rounded-rect call is still a stub, but the CONTROL
+      FLOW is the real one), and the bar's position is read from the code under
+      test instead of being assigned by the test — the old `place_tree()` wrote
+      `fake_tree.node` by hand, which was self-consistent with every hit test in
+      the file and therefore blind to a `dock_apply_position()` that put the bar
+      somewhere else entirely. The rig is velle's live dock: 56px, magnify on at
+      1.50, sixteen pins, apps button on.
+- [x] **Both directions asserted.** The bar does not move for the length of a
+      clock drag, and it still *does* float under the cursor for a bar drag —
+      excluding the clock by excluding everything would pass every other
+      assertion in the file and leave the dock unable to be moved between edges.
+
+**The dock's apps button opens the application overlay. Always.** 442 routed it
+through `synui_start_menu_open()` on the reasoning that it and the Super tap are
+the same request. They are not, and nobody asked for that: velle's
+`start_menu_style` is `rofi`, so pressing a button that draws a 3×3 grid of dots
+opened Rofi.
+
+- [x] **`appgrid_toggle()` directly**, as 441 had it. A button is its own label:
+      the grid-of-dots means the overlay it is a picture of, the same way the
+      bar's start button means the bar's menu and does not change either.
+- [x] **Desktop ▸ Start menu governs the START KEY** — the Super tap,
+      Super+Escape and the `start_menu` action, which have no picture on them and
+      are therefore free to be chosen. Its help line and the apps button's say so
+      now; both used to claim the button followed the row.

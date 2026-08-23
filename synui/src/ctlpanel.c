@@ -677,20 +677,23 @@ static const struct ctl_item ctl_items[] = {
       .help = "Time and date in a cell of its own — drag the cell to move it "
               "anywhere in the row. 12/24-hour follows Clock & Time" },
     { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
-      .help = "A grid of dots at the end of the dock. Opens whatever Start menu "
-              "is set to below" },
-    /* Not a dock row, and it sits among them anyway: the dock's apps button is
-     * one of the three routes into the start menu, and a user who has just read
-     * that row is exactly the user asking what it opens. CTL_APPLY_NONE because
-     * nothing is drawn from this — synui_start_menu_open() reads it at the
-     * moment a key is pressed, which is also what makes the change take effect
-     * with no reload. */
+      .help = "A grid of dots at the end of the dock. Always opens the "
+              "application overlay" },
+    /* Not a dock row, and it sits among them anyway: it is the row a user
+     * reading about the dock is most likely to go looking for next.
+     *
+     * ⚠ It does NOT govern the apps button above it. That button draws a grid of
+     * dots and opens the overlay those dots are a picture of; this row is what
+     * the START KEY opens, which has no picture and so is free to be chosen.
+     * CTL_APPLY_NONE because nothing is drawn from this — synui_start_menu_open()
+     * reads it at the moment a key is pressed, which is also what makes the
+     * change take effect with no reload. */
     { CTL_ROW_START_MENU_STYLE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Start menu", NULL,
       .key = "start_menu_style", .off = CFG(start_menu_style),
       .vtype = CTL_VAL_ENUM, NAMES(ctl_names_start_menu),
       .apply = CTL_APPLY_NONE,
-      .help = "What the Super tap, Super+Escape and the dock's apps button all "
-              "open. The keyboard shortcut list follows this row" },
+      .help = "What the Super tap and Super+Escape open. The keyboard shortcut "
+              "list follows this row; the dock's apps button does not" },
     { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
       .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
