@@ -100,6 +100,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <cairo.h>
 
@@ -253,6 +254,35 @@ syn_workspace_t *server_active_workspace(syn_server_t *s)
 void xwayland_unwedge(syn_server_t *s, const char *app_id, const char *title)
 { (void)s; (void)app_id; (void)title; }
 void synui_render_dockmenu(syn_server_t *s) { (void)s; }
+
+/*
+ * ⚠ THE CLOCK IS FROZEN, and it has to be.
+ *
+ * The ink assertions below count lit pixels inside the clock's cell, and what
+ * is drawn there is the actual time — so the count moves with the digits. At a
+ * 32px column the difference between a thin minute and a fat one is about ten
+ * pixels against a threshold of forty, which made this test pass or fail by
+ * the clock on the wall. It cost a wholly innocent change an hour in 447.
+ *
+ * dock.c calls time(NULL) and nothing else, and it is statically linked into
+ * this binary, so a definition here is the one it resolves to. TZ is pinned as
+ * well: localtime_r() is what turns the epoch into digits.
+ *
+ * 11:11 on the 11th is deliberate — the thinnest time there is. An assertion
+ * that holds for it holds for every other.
+ */
+/* 2026-01-11 11:11:00 UTC. */
+#define FAKE_NOW ((time_t)1768129860)
+time_t time(time_t *t)
+{
+    time_t fake = FAKE_NOW;
+    if (t) *t = fake;
+    return fake;
+}
+/* The application overlay. Counted rather than ignored: the apps button acts on
+ * RELEASE now, so "did the click fire" is a thing a dock test can ask. */
+int appgrid_toggle_calls = 0;
+void appgrid_toggle(syn_server_t *s) { (void)s; appgrid_toggle_calls++; }
 void synui_spawn(const char *cmd) { (void)cmd; }
 bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 { (void)s; (void)action; (void)arg; return true; }
@@ -519,6 +549,12 @@ static void arrange(syn_dock_edge_t edge, int analog, int thick,
 
 int main(void)
 {
+    /* With time() frozen above, TZ is the other half of "what digits get
+     * drawn": localtime_r() reads it, and a developer in Sydney would otherwise
+     * render a different hour from CI. */
+    setenv("TZ", "UTC", 1);
+    tzset();
+
     printf("dock clock: does it fit the cell it is given?\n");
     rig_init();
 

@@ -3445,30 +3445,36 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
              * another edge instead. Every installed app, which is the one thing
              * a row of pinned icons cannot offer. */
             if (dock_apps_at(s, s->cursor->x, s->cursor->y)) {
-                /* appgrid_toggle(), NOT synui_start_menu_open(). This button IS
-                 * the application overlay — that is what the grid-of-dots draws
-                 * and the only thing it has ever meant. Desktop ▸ Start menu
-                 * chooses what the SUPER TAP opens, which is a keystroke with no
-                 * picture on it and therefore nothing to disagree with. Routing
-                 * a labelled button through that row makes the button's own
-                 * meaning depend on a setting elsewhere: velle's says Rofi, so
-                 * pressing the app-grid icon opened Rofi. The start button on
-                 * the bar does not change what it opens either. */
-                appgrid_toggle(s);
+                /* ⚠ ARMS A DRAG; it does NOT open the overlay here any more.
+                 * The cell can be moved along the run like the clock, and a
+                 * button that acted on press would fire on the way into every
+                 * such gesture. dock_drag_end() runs the click when the press
+                 * never travelled — and it is appgrid_toggle() there, NOT
+                 * synui_start_menu_open(). This button IS the application
+                 * overlay: that is what the grid-of-dots draws and the only
+                 * thing it has ever meant. Desktop ▸ Start menu chooses what
+                 * the SUPER TAP opens, which is a keystroke with no picture on
+                 * it and therefore nothing to disagree with. Routing a labelled
+                 * button through that row makes the button's own meaning depend
+                 * on a setting elsewhere: velle's says Rofi, so pressing the
+                 * app-grid icon opened Rofi. The start button on the bar does
+                 * not change what it opens either. */
+                dock_apps_drag_begin(s, s->cursor->x, s->cursor->y);
                 return;
             }
-            /* …the power button, which opens its own menu rather than doing
-             * anything. Same ordering rule, same reason — and see
-             * dockmenu_open_power() for why a menu and not five buttons. A
+            /* …the power button, which on release opens its own menu rather
+             * than doing anything — see dockmenu_open_power() for why a menu
+             * and not five buttons. Same ordering rule, same reason, and the
+             * same press-arms-a-drag contract as the apps button above. A
              * RIGHT click here is deliberately not special-cased: it falls
              * through to dock_bar_at() below and opens the dock's settings
              * menu, exactly as a right click on the apps button does. */
             if (dock_power_at(s, s->cursor->x, s->cursor->y)) {
-                dockmenu_open_power(s, s->cursor->x, s->cursor->y);
+                dock_power_drag_begin(s, s->cursor->x, s->cursor->y);
                 return;
             }
-            /* …and the clock, which arms a drag that moves the cell along the
-             * run. Same ordering rule, same reason. */
+            /* …and the clock, the third cell and the one with no click to owe.
+             * Same ordering rule, same reason. */
             if (dock_clock_at(s, s->cursor->x, s->cursor->y)) {
                 dock_clock_drag_begin(s, s->cursor->x, s->cursor->y);
                 return;

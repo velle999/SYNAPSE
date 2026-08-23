@@ -155,6 +155,14 @@ void dock_rebuild(syn_server_t *s)                   { (void)s; }
 void dock_relayout(syn_server_t *s)                  { (void)s; }
 void dock_state_save(syn_server_t *s)                { (void)s; }
 void dock_wake(syn_server_t *s)                      { (void)s; }
+
+/* The three dock-cell position rows read their value through the dock, which
+ * this rig does not link. "end" is what a stock dock answers, so every row that
+ * is not about the position reads exactly as it did before they existed. */
+const char *dock_slot_label(syn_server_t *s, dock_cell_t c)
+{ (void)s; (void)c; return "end"; }
+void dock_slot_cycle(syn_server_t *s, dock_cell_t c, int dir)
+{ (void)s; (void)c; (void)dir; }
 /* Bar auto-hide asks synui-bar over quickshell's IPC; nothing here forks. */
 void synui_bar_ipc_arg(syn_server_t *s, const char *target, const char *fn,
                        const char *arg)

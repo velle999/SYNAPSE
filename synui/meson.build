@@ -676,6 +676,20 @@ dock_clock_drag_test = executable('dock_clock_drag_test',
   build_by_default : false)
 test('dock_clock_drag', dock_clock_drag_test)
 
+# The clock, the all-apps button and the power button as ONE model: three cells
+# parked in a gap of the icon row, each draggable and each with a position
+# setting that writes the very field the drag commits to. The assertion that
+# matters most is the dullest — a stock dock, with all three defaulting to the
+# end, must lay out exactly as it did when the tail was hard-coded, and nothing
+# in a build sees it move.
+dock_cell_slots_test = executable('dock_cell_slots_test',
+  ['tests/dock_cell_slots_test.c', 'src/dock.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('dock_cell_slots', dock_cell_slots_test)
+
 # The text/uri-list a drag-and-drop hands the desktop. INCLUDES deskdrop.c
 # rather than linking it: the percent-decoding, the list walk and the
 # collision-renaming are all static, and there is no way to drive the wire side

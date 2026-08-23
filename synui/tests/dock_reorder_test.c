@@ -126,6 +126,10 @@ syn_workspace_t *server_active_workspace(syn_server_t *s)
 void xwayland_unwedge(syn_server_t *s, const char *app_id, const char *title)
 { (void)s; (void)app_id; (void)title; }
 void synui_render_dockmenu(syn_server_t *s) { (void)s; }
+/* The application overlay. Counted rather than ignored: the apps button acts on
+ * RELEASE now, so "did the click fire" is a thing a dock test can ask. */
+int appgrid_toggle_calls = 0;
+void appgrid_toggle(syn_server_t *s) { (void)s; appgrid_toggle_calls++; }
 bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 { (void)s; (void)action; (void)arg; return true; }
 

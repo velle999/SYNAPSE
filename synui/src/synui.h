@@ -1684,6 +1684,14 @@ typedef enum {
     CTL_ROW_DOCK_CLOCK_ANALOG, /* that cell as a dial — the one that fits a column */
     CTL_ROW_DOCK_APPS,     /* the "show all apps" button at the end of the run */
     CTL_ROW_DOCK_POWER,    /* the power button, and its menu, at the end of the run */
+    /* WHERE each of those three sits along the run — left/centre/right, or the
+     * gap a drag left it in. Cycling rows: Left and Right step them, Enter
+     * steps forward, and the value is the row's own text. They read and write
+     * the very fields the drag commits to, so the panel always says where a
+     * dragged cell actually ended up. */
+    CTL_ROW_DOCK_CLOCK_POS,
+    CTL_ROW_DOCK_APPS_POS,
+    CTL_ROW_DOCK_POWER_POS,
     CTL_ROW_DOCK_STYLE,    /* solid slab or frosted glass — auto follows the theme */
     CTL_ROW_DOCK_OPACITY,  /* how much of the wallpaper shows through the bar */
     CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
@@ -3147,6 +3155,27 @@ typedef enum {
     SYN_DOCKACT_CLOCK_ANALOG, /* config.dock_clock_analog */
     SYN_DOCKACT_APPS,      /* config.dock_apps_button */
     SYN_DOCKACT_POWER,     /* config.dock_power_button */
+    /*
+     * ── The four CYCLING rows ───────────────────────────────────────────────
+     *
+     * Not switches: each steps a setting with three or four values, and the
+     * value it is currently on is IN THE LABEL ("Dock Edge: Bottom"). They draw
+     * no checkmark, because a checkmark answers a yes/no question and these are
+     * not one.
+     *
+     * ⚠ FOUR ROWS AND NOT THIRTEEN. A radio row per value is the obvious
+     * shape and it would have taken this menu from fourteen rows to twenty
+     * seven — the dock's settings would then be something you scroll, which is
+     * the opposite of "the drag targets are too fiddly, give me a menu".
+     *
+     * Each of the three cell rows is offered only while its cell is switched
+     * on, for the reason CLOCK_ANALOG is: a position for something that is not
+     * drawn is a row that appears to do nothing.
+     */
+    SYN_DOCKACT_EDGE,      /* config.dock_edge — bottom/left/top/right */
+    SYN_DOCKACT_CLOCK_POS, /* config.dock_clock_slot */
+    SYN_DOCKACT_APPS_POS,  /* config.dock_apps_slot */
+    SYN_DOCKACT_POWER_POS, /* config.dock_power_slot */
     SYN_DOCKACT_SETTINGS,  /* open Control panel ▸ Desktop, where the rest live */
 
     /*
@@ -3170,12 +3199,12 @@ typedef enum {
     SYN_DOCKACT_REBOOT,
     SYN_DOCKACT_POWEROFF,
 } syn_dockact_t;
-/* 4 app rows + a rule + 7 switches + a rule + the panel row = 14, and the two
- * spare are deliberate: the menu carries every dock switch there is, so the next
- * one to be added lands here, and an overflow would be a silent write past the
- * end of an array in the middle of a right-click. The power menu is five rows
- * and a rule, well under. */
-#define SYN_DOCKMENU_MAX 16
+/* 4 app rows + a rule + 7 switches + 3 cell positions + a rule + the edge row +
+ * the panel row = 18, and the spare is deliberate: the menu carries every dock
+ * setting there is, so the next one to be added lands here, and an overflow
+ * would be a silent write past the end of an array in the middle of a
+ * right-click. The power menu is five rows and a rule, well under. */
+#define SYN_DOCKMENU_MAX 24
 
 /* deskmenu.c: the desktop (wallpaper) right-click menu. SEP draws a rule and
  * is not selectable; everything else is a row. */
@@ -3788,8 +3817,11 @@ typedef struct {
      * so it is what an untouched clock keeps. Dragged anywhere else the number
      * is stored and clamped to the icons that exist at layout time.
      *
+     * DOCK_SLOT_CENTER (-2) is the third position, and it is a sentinel for the
+     * same reason -1 is: "the middle of the row" is not a fixed gap either.
+     *
      * Persisted to dock.state as `clock_slot=`. */
-    int   dock_clock_slot;      /* default -1 (past the last icon) */
+    int   dock_clock_slot;      /* gap index, DOCK_SLOT_END or _CENTER */
     /*
      * The dock clock as a DIAL rather than two lines of text.
      *
@@ -3810,6 +3842,11 @@ typedef struct {
      * default; it is the one thing a dock of pinned icons cannot do for
      * itself. Persisted to dock.state. */
     int   dock_apps_button;     /* default 1 */
+    /* WHERE that cell sits along the run, in exactly the units and with exactly
+     * the sentinels dock_clock_slot uses — the three cells that are not apps
+     * are one model with three config fields. Dragged, or set from the dock's
+     * right-click menu and Control panel ▸ Desktop. Persisted as `apps_slot=`. */
+    int   dock_apps_slot;       /* gap index, DOCK_SLOT_END or _CENTER */
     /*
      * The power button: a cell at the far end of the run, past the apps button,
      * whose LEFT click opens a menu of Lock / Log Out / Suspend / Restart /
@@ -3826,6 +3863,13 @@ typedef struct {
      * about, and the dock is where the rest of the session's furniture lives.
      */
     int   dock_power_button;    /* default 1 */
+    /* As dock_apps_slot. Persisted as `power_slot=`.
+     *
+     * ⚠ The default leaves it at END *behind* the apps button, and that
+     * ordering is not incidental: two cells sharing a gap are laid out in the
+     * fixed order clock, apps, power, so the destructive one stays furthest
+     * from the icons however the row is arranged. */
+    int   dock_power_slot;      /* gap index, DOCK_SLOT_END or _CENTER */
     /* macOS-style hover magnification: the icons under the pointer swell and
      * the run slides apart to make room. On by default — it is the dock's
      * signature behaviour, and the flat row is what it was missing. Persisted
@@ -4835,10 +4879,53 @@ static inline int chrome_shadow(const syn_config_t *cfg)
  * and valid for every output alike. */
 #define DOCK_MAX_ENTRIES 32
 /* What `syn_server_t::dock_drag.icon` holds when the press did not land on an
- * app icon. Both are negative so the same `>= 0` test that means "an entry
- * index" keeps working unchanged. */
+ * app icon. All four are negative so the same `>= 0` test that means "an entry
+ * index" keeps working unchanged.
+ *
+ * ⛔ THEY ARE NOT ORDERED, AND `icon < 0` IS NOT "THE BAR". It read that way
+ * while BAR was the only negative value; 440 added the clock under it and
+ * dock_apply_position() flung the whole dock to 0,0 on a clock drag for three
+ * releases. Compare these BY NAME, always — and this is now four gestures deep,
+ * so a fifth one has to re-audit every relational test on `dock_drag.icon`
+ * rather than trusting that the last one did. */
 #define DOCK_DRAG_BAR    (-1)
 #define DOCK_DRAG_CLOCK  (-2)
+#define DOCK_DRAG_APPS   (-3)
+#define DOCK_DRAG_POWER  (-4)
+
+/* What a cell's stored slot holds when it is not a plain gap index.
+ *
+ * A gap index (0…n) is where a DRAG puts a cell — "after exactly this many
+ * icons" — and the two sentinels are the two positions that are not a count at
+ * all. END is the default and START is simply gap 0, which needs no sentinel
+ * because the first gap does not move when the row grows.
+ *
+ * ⚠ CENTRE HAS TO BE A SENTINEL. Resolving it once to n/2 and storing that
+ * number would make a centred cell walk off-centre the moment an app opened —
+ * the same bug the END sentinel exists to avoid, for the same reason. Both are
+ * re-resolved against the icons that exist at layout time. */
+#define DOCK_SLOT_END    (-1)
+#define DOCK_SLOT_CENTER (-2)
+#define DOCK_SLOT_START  (0)
+
+/*
+ * The three cells of the dock that are not apps.
+ *
+ * ⚠ AN ENUM AND NOT A BOOL, and it used to be a bool. `clock` meant "the clock,
+ * otherwise the apps button", so the moment a third cell existed the false case
+ * silently answered for the wrong one — the same shape as the dock drag's
+ * `icon < 0`, which cost a release. Adding a fourth cell means adding a case to
+ * every switch on this and letting the compiler say where they are.
+ *
+ * ⚠ THE ORDER IS LOAD-BEARING. All three park in a gap of the icon row, and two
+ * that end up in the SAME gap are laid out in this order — which is what keeps
+ * the power button furthest from the icons however the row is arranged, and
+ * what makes a stock dock (all three at the end) lay out exactly as it did when
+ * the tail was hard-coded clock-then-apps-then-power.
+ */
+typedef enum {
+    DOCK_CELL_CLOCK, DOCK_CELL_APPS, DOCK_CELL_POWER, DOCK_CELL_N
+} dock_cell_t;
 typedef struct {
     char app_id[128];
     int  pinned;             /* came from synuirc dock_pin */
@@ -5735,17 +5822,22 @@ struct syn_server {
          * `slot` is how many icons end up to its left, and the release writes
          * that to dock_clock_slot.
          *
-         * DOCK_DRAG_BAR / DOCK_DRAG_CLOCK in `icon` are what say which of the
-         * two non-icon gestures this is, which is why all three can share the
-         * struct: only one press is ever down.
+         * The APPS and POWER cells are the same gesture as the clock's, and
+         * they own the same `slot`: all three are cells parked in a gap of the
+         * icon row, and the only thing that differs is which config field the
+         * release writes.
+         *
+         * DOCK_DRAG_BAR / _CLOCK / _APPS / _POWER in `icon` are what say which
+         * of the four non-icon gestures this is, which is why they can share
+         * the struct: only one press is ever down.
          *
          * A press on an icon that never travels is a CLICK, and the click is
          * what launches or raises the app — so unlike the bar drag, this one
          * owes an action on release even when nothing moved. See
          * dock_icon_drag_end().
          */
-        int           icon;     /* dragged entry index, or DOCK_DRAG_BAR /
-                                 * DOCK_DRAG_CLOCK for the other two gestures */
+        int           icon;     /* dragged entry index, or one of the four
+                                 * DOCK_DRAG_* sentinels — compare BY NAME */
         /* …and which app that index MEANT at press time. dock_rebuild() memcpy's
          * a whole fresh entry array over s->dock_entries whenever anything maps
          * or unmaps, so an index taken at press can be pointing at a different
@@ -9050,9 +9142,26 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
 bool dock_apps_at(syn_server_t *s, double lx, double ly);
 bool dock_clock_at(syn_server_t *s, double lx, double ly);
 bool dock_power_at(syn_server_t *s, double lx, double ly);
-/* Arms the clock drag. Motion and release go through dock_drag_motion/_end like
- * the other two gestures; the release commits the new slot to dock.state. */
+/* Arms a cell drag. Motion and release go through dock_drag_motion/_end like
+ * the other gestures; the release commits the new slot to dock.state.
+ *
+ * ⚠ THE APPS AND POWER BUTTONS ACT ON RELEASE NOW, not on press. A button that
+ * can also be dragged cannot act the moment it is touched, or every attempt to
+ * move one opens the overlay or the power menu on the way past. The release
+ * runs the click iff the pointer never travelled — the same contract the icons
+ * have had since they became draggable. */
 void dock_clock_drag_begin(syn_server_t *s, double lx, double ly);
+void dock_apps_drag_begin(syn_server_t *s, double lx, double ly);
+void dock_power_drag_begin(syn_server_t *s, double lx, double ly);
+
+/* Where a cell sits, as a word, and stepping it to the next named position.
+ * The dock's right-click menu and Control panel ▸ Desktop both go through
+ * these, so the two rows cannot come to disagree — and both are reading and
+ * writing the very field the drag commits to, which is what "the toggles and
+ * the drag are the same setting" means. ⚠ The label follows dock_edge: "left"
+ * and "right" become "top" and "bottom" on a vertical dock. */
+const char *dock_slot_label(syn_server_t *s, dock_cell_t c);
+void        dock_slot_cycle(syn_server_t *s, dock_cell_t c, int dir);
 
 /* Right-click context menu (mouse-driven; rendered by synui_render_dockmenu).
  * open() builds the item list for an entry and shows the menu at (lx,ly);

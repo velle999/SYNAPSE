@@ -1333,9 +1333,13 @@ static void config_set_defaults(syn_config_t *cfg)
      * transparent room is derived from it rather than sitting beside it. */
     cfg->dock_magnify_scale = 1.60f;
     cfg->dock_clock        = 0;
-    /* -1 = past the last icon, which is where the clock has always been and the
-     * only end of the row that survives apps opening and closing. */
-    cfg->dock_clock_slot   = -1;
+    /* END = past the last icon, which is where all three of these have always
+     * been and the only end of the row that survives apps opening and closing.
+     * A shared gap lays out in dock_cell_t order, so the stock dock is still
+     * clock, then apps, then power. */
+    cfg->dock_clock_slot   = DOCK_SLOT_END;
+    cfg->dock_apps_slot    = DOCK_SLOT_END;
+    cfg->dock_power_slot   = DOCK_SLOT_END;
     /* Off: a horizontal dock's digits work, and an upgrade must not swap
      * somebody's clock for a different one. The row exists because a VERTICAL
      * dock's digits do not — see dock_clock_analog in syn_config_t. */
@@ -1831,6 +1835,36 @@ void synui_config_load(syn_config_t *cfg)
  *
  * `val` is mutable: the bind case splits it in place.
  */
+/*
+ * A dock cell's slot: a gap index, or one of the two sentinels.
+ *
+ * ⚠ THE OLD CLAMP FOLDED EVERY NEGATIVE TO -1, which is exactly what a
+ * `center` written here would have been read as — silently, as "end", with the
+ * setting looking like it had simply not taken. The words are accepted as well
+ * as the numbers because these are the three positions the menu and the panel
+ * offer, and a hand-edited synuirc should be able to say what they say.
+ *
+ * The upper end is clamped at layout time against the icons that actually
+ * exist, not here: the entry count is a live number and this file is read
+ * before there are any.
+ */
+static int config_dock_slot(const char *val)
+{
+    if (strcmp(val, "end")    == 0 || strcmp(val, "last")   == 0)
+        return DOCK_SLOT_END;
+    if (strcmp(val, "center") == 0 || strcmp(val, "centre") == 0 ||
+        strcmp(val, "middle") == 0)
+        return DOCK_SLOT_CENTER;
+    if (strcmp(val, "start")  == 0 || strcmp(val, "first")  == 0)
+        return DOCK_SLOT_START;
+
+    int v = atoi(val);
+    if (v == DOCK_SLOT_CENTER) return DOCK_SLOT_CENTER;
+    if (v < 0)                 return DOCK_SLOT_END;
+    if (v > DOCK_MAX_ENTRIES)  return DOCK_MAX_ENTRIES;
+    return v;
+}
+
 void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
 {
     if (strcmp(key, "terminal") == 0) {
@@ -2461,15 +2495,12 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         else if (strcmp(val, "rofi")        == 0) cfg->start_menu_style = SYN_START_MENU_ROFI;
         else wlr_log(WLR_ERROR, "synui: start_menu_style: unknown '%s'", val);
     }
-    else if (strcmp(key, "dock_clock_slot") == 0) {
-        cfg->dock_clock_slot = atoi(val);
-        /* Anything negative is "last"; the upper end is clamped at layout time
-         * against the icons that actually exist, not here — the entry count is
-         * a live number and this file is read before there are any. */
-        if (cfg->dock_clock_slot < 0) cfg->dock_clock_slot = -1;
-        if (cfg->dock_clock_slot > DOCK_MAX_ENTRIES)
-            cfg->dock_clock_slot = DOCK_MAX_ENTRIES;
-    }
+    else if (strcmp(key, "dock_clock_slot") == 0)
+        cfg->dock_clock_slot = config_dock_slot(val);
+    else if (strcmp(key, "dock_apps_slot") == 0)
+        cfg->dock_apps_slot = config_dock_slot(val);
+    else if (strcmp(key, "dock_power_slot") == 0)
+        cfg->dock_power_slot = config_dock_slot(val);
     /* Is there a bar, and how is it stopped and started. The compositor does
      * not start the bar (the session's autostart line does), so `bar_enabled`
      * is not read at boot to decide anything — it is the control panel row's

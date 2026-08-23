@@ -8179,8 +8179,48 @@ void synui_render_news(syn_server_t *s)
 
 /* ── Dock right-click context menu (dock.c) ──────────────── */
 
-static const char *dockact_label(syn_dockact_t a)
+/*
+ * ⚠ TAKES THE SERVER, because four of these rows say what they are currently
+ * SET TO rather than what they do — "Dock Edge: Bottom", not "Dock Edge…".
+ * They are the settings with more than two values, and a checkmark cannot
+ * answer for them (dockmenu_row_checked returns false for all four).
+ *
+ * The returned pointer is a static buffer for exactly those four, so a caller
+ * that wanted two labels alive at once would get the same one twice. Nothing
+ * does — the renderer draws a row and moves on — and the alternative is a
+ * caller-supplied buffer at every one of the twenty other call sites that never
+ * needed one.
+ */
+static const char *dockact_label(syn_server_t *s, syn_dockact_t a)
 {
+    static char buf[64];
+    static const char *const edge_word[] =
+        { "Bottom", "Top", "Left", "Right" };
+
+    /* The cell rows print the shared word dock_slot_label() picks, with its
+     * first letter raised to match the Title Case every other row is in. One
+     * word table, two places it is read: Control panel ▸ Desktop shows the same
+     * string in lower case, which is that panel's own convention. */
+    dock_cell_t cell = DOCK_CELL_N;
+    const char *what = NULL;
+    switch (a) {
+    case SYN_DOCKACT_CLOCK_POS: cell = DOCK_CELL_CLOCK; what = "Clock";  break;
+    case SYN_DOCKACT_APPS_POS:  cell = DOCK_CELL_APPS;  what = "Apps";   break;
+    case SYN_DOCKACT_POWER_POS: cell = DOCK_CELL_POWER; what = "Power";  break;
+    case SYN_DOCKACT_EDGE:
+        snprintf(buf, sizeof(buf), "Dock Edge: %s",
+                 edge_word[s->config.dock_edge % 4]);
+        return buf;
+    default: break;
+    }
+    if (what) {
+        char v[32];
+        snprintf(v, sizeof(v), "%s", dock_slot_label(s, cell));
+        if (v[0] >= 'a' && v[0] <= 'z') v[0] = (char)(v[0] - 'a' + 'A');
+        snprintf(buf, sizeof(buf), "%s At: %s", what, v);
+        return buf;
+    }
+
     switch (a) {
     case SYN_DOCKACT_PIN:    return "Pin to Dock";
     case SYN_DOCKACT_UNPIN:  return "Unpin from Dock";
@@ -8208,6 +8248,13 @@ static const char *dockact_label(syn_dockact_t a)
     case SYN_DOCKACT_REBOOT:   return "Restart";
     case SYN_DOCKACT_POWEROFF: return "Shut Down";
     case SYN_DOCKACT_SEP:      return "";
+    /* Handled above, off the live config — listed so -Wswitch keeps covering
+     * this table when the next row is added. */
+    case SYN_DOCKACT_EDGE:
+    case SYN_DOCKACT_CLOCK_POS:
+    case SYN_DOCKACT_APPS_POS:
+    case SYN_DOCKACT_POWER_POS:
+        break;
     }
     return "?";
 }
@@ -8296,7 +8343,7 @@ void synui_render_dockmenu(syn_server_t *s)
         cairo_set_font_size(cr, 14);
         set_ink(cr, sel ? INK_STRONG : INK_TITLE, 1.0);
         cairo_move_to(cr, 14, iy + 20);
-        syn_show_text(cr, dockact_label(s->dockmenu.actions[i]));
+        syn_show_text(cr, dockact_label(s, s->dockmenu.actions[i]));
 
         /* A checkmark on the switches, in the state they are already in — the
          * same convention the desktop menu uses, and the reason those rows read

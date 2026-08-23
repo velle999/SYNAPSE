@@ -487,16 +487,37 @@ typedef struct {
     int  run;            /* along the bar's long axis */
     int  t_px, d_px;     /* the time and date font sizes, as drawn */
     bool analog;         /* a face, not two lines of text */
+    /*
+     * The DATE AS IT WILL BE DRAWN, which on a narrow column is not the date
+     * dock_clock_strings() would hand out.
+     *
+     * ⚠ It has to come from here, not from a second call in the renderer. The
+     * size floor below means a wide date can still overflow a thin column, and
+     * the answer is a shorter date — but a layout that measured "11 Jan" while
+     * the paint drew "11/01" would be back to the two callers disagreeing that
+     * this struct exists to stop. Empty means "whatever the strings say".
+     */
+    char time[32];
+    char date[32];
 } dock_clock_layout_t;
 
 /* Largest size at or below `want` whose rendering of `text` fits `avail`, with
  * a floor: below about 9px a date is a row of grey smudges rather than a date,
- * and a clock nobody can read is not an improvement on one that overflows. */
+ * and a clock nobody can read is not an improvement on one that overflows.
+ *
+ * ⚠ THE FLOOR IS RETURNED WHETHER OR NOT IT FITS, which is what the callers
+ * have to handle. Ask dock_clock_fits() before trusting the answer. */
+#define DOCK_CLOCK_MIN_PX 9
 static int dock_clock_fit(cairo_t *cr, const char *text, int want, int avail)
 {
-    for (int px = want; px > 9; px--)
+    for (int px = want; px > DOCK_CLOCK_MIN_PX; px--)
         if (dock_text_w(cr, text, px) <= avail) return px;
-    return 9;
+    return DOCK_CLOCK_MIN_PX;
+}
+
+static bool dock_clock_fits(cairo_t *cr, const char *text, int px, int avail)
+{
+    return dock_text_w(cr, text, px) <= avail;
 }
 
 static void dock_clock_layout(syn_server_t *s, bool vertical, int thick,
@@ -545,8 +566,62 @@ static void dock_clock_layout(syn_server_t *s, bool vertical, int thick,
     int avail = thick - 2 * (gutter / 2);
     if (avail < 16) avail = 16;
 
+    /*
+     * ⚠ THE SIZE FLOOR IS NOT A FIT. dock_clock_fit() stops at 9px and returns
+     * it whether or not the string fits, so on the thinnest column the size row
+     * offers — 32px, which leaves 26px of ink budget — the lines still ran out
+     * of the bar. A 12-hour time with seconds is "11:11:00 AM": 55px of text in
+     * 26px of column, more than twice over.
+     *
+     * It had gone unseen because the rig that watches for exactly this renders
+     * the CURRENT time, and whether the overflow lands ink in the two outermost
+     * pixel columns depends on which digits are on the clock. It passed by the
+     * glyph pattern of whatever minute it happened to run in.
+     *
+     * So when the size cannot come down any further, the STRING does. Each line
+     * has a ladder of progressively shorter forms and takes the first that
+     * fits: the time gives up its seconds, then its AM/PM; the date gives up
+     * its month name, then the month. Every rung is still a time and still a
+     * date. A column this narrow is what dock_clock_analog exists for, and this
+     * is what it does until somebody switches that on.
+     */
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+
+    /* Both ladders start BELOW what dock_clock_strings() produced, and that
+     * string is tried first — so a column with room for the full form is
+     * byte-identical to what it drew before any of this existed. */
+    static const char *const time_rungs24[] = { "%H:%M", NULL };
+    static const char *const time_rungs12[] = { "%l:%M %p", "%l:%M", NULL };
+    static const char *const date_rungs[]   = { "%d/%m", "%d", NULL };
+
     out->t_px = dock_clock_fit(cr, time_s, dock_clock_font(15, thick), avail);
+    if (!dock_clock_fits(cr, time_s, out->t_px, avail)) {
+        const char *const *rung = s->clock.fmt24 ? time_rungs24 : time_rungs12;
+        for (; *rung; rung++) {
+            strftime(time_s, sizeof time_s, *rung, &tm);
+            /* %l pads with a space, and the cell is centred — the same trim
+             * dock_clock_strings() does, for the same reason. */
+            while (*time_s == ' ') memmove(time_s, time_s + 1, strlen(time_s));
+            out->t_px = dock_clock_fit(cr, time_s,
+                                       dock_clock_font(15, thick), avail);
+            if (dock_clock_fits(cr, time_s, out->t_px, avail)) break;
+        }
+    }
+    snprintf(out->time, sizeof out->time, "%s", time_s);
+
     out->d_px = dock_clock_fit(cr, date_s, dock_clock_font(10, thick), avail);
+    if (!dock_clock_fits(cr, date_s, out->d_px, avail)) {
+        for (const char *const *rung = date_rungs; *rung; rung++) {
+            strftime(date_s, sizeof date_s, *rung, &tm);
+            out->d_px = dock_clock_fit(cr, date_s,
+                                       dock_clock_font(10, thick), avail);
+            if (dock_clock_fits(cr, date_s, out->d_px, avail)) break;
+        }
+    }
+    snprintf(out->date, sizeof out->date, "%s", date_s);
+
     /* The date never outsizes the time: it is the secondary line, and a fitted
      * time that came down to 10px beside a 10px date reads as two times. */
     if (out->d_px > out->t_px) out->d_px = out->t_px;
@@ -609,9 +684,14 @@ typedef struct {
     int  cy[DOCK_MAX_ENTRIES];
     int  cs[DOCK_MAX_ENTRIES];      /* drawn cell size (square) */
     int  clk_x, clk_y, clk_w, clk_h;   /* canvas-local; clk_w = 0 when off */
-    int  clk_slot;                  /* icons to the clock's left; -1 when off */
     int  apps_x, apps_y, apps_s;    /* the show-all-apps cell; apps_s = 0 off */
     int  pwr_x, pwr_y, pwr_s;       /* the power-button cell; pwr_s = 0 off */
+    /* The gap each non-icon cell resolved to this frame, indexed by
+     * dock_cell_t; -1 for a cell that is switched off. dock_slot_at() needs
+     * every one of them, because each cell parked before a point pushes the
+     * icons past it along by its own width. */
+    int  cell_slot[DOCK_CELL_N];
+    int  cell_run[DOCK_CELL_N];     /* its length along the run, 0 when off */
     int  base_run;                  /* the FLAT run length */
     int  base_origin;               /* layout coord where the flat run starts —
                                      * the origin o->dock.mag_run is measured
@@ -619,29 +699,82 @@ typedef struct {
                                      * magnified bar grows */
 } dock_metrics_t;
 
-/*
- * Which gap along the run the clock sits in, resolved against the icons that
- * exist RIGHT NOW: 0 is before the first icon, `n` is past the last.
+/* ── The three non-icon cells, as one model ───────────────
  *
- * The stored -1 means "past the last one", and it is a position rather than a
- * fallback. A clock pinned to slot 5 walks back up the row every time an app
+ * The clock, the apps button and the power button are all cells parked in a gap
+ * of the icon row. They were three separate pieces of layout — the clock had a
+ * slot and the other two were welded to the end of the run — and generalising
+ * that is what let all three be dragged and given a position setting. The only
+ * thing that differs between them now is which config field holds the slot,
+ * which switch turns the cell on, and how long the cell is along the run.
+ */
+
+/* Whether the cell is drawn at all. */
+static bool dock_cell_on(syn_server_t *s, dock_cell_t c)
+{
+    switch (c) {
+    case DOCK_CELL_CLOCK: return s->config.dock_clock != 0;
+    case DOCK_CELL_APPS:  return s->config.dock_apps_button != 0;
+    case DOCK_CELL_POWER: return s->config.dock_power_button != 0;
+    case DOCK_CELL_N:     break;
+    }
+    return false;
+}
+
+/* The config field holding its slot, so the setters have one place to write. */
+static int *dock_cell_slot_field(syn_server_t *s, dock_cell_t c)
+{
+    switch (c) {
+    case DOCK_CELL_CLOCK: return &s->config.dock_clock_slot;
+    case DOCK_CELL_APPS:  return &s->config.dock_apps_slot;
+    case DOCK_CELL_POWER: return &s->config.dock_power_slot;
+    case DOCK_CELL_N:     break;
+    }
+    return NULL;
+}
+
+/* Which drag gesture moves it. */
+static int dock_cell_drag_id(dock_cell_t c)
+{
+    switch (c) {
+    case DOCK_CELL_CLOCK: return DOCK_DRAG_CLOCK;
+    case DOCK_CELL_APPS:  return DOCK_DRAG_APPS;
+    case DOCK_CELL_POWER: return DOCK_DRAG_POWER;
+    case DOCK_CELL_N:     break;
+    }
+    return DOCK_DRAG_BAR;
+}
+
+/*
+ * Which gap along the run a cell sits in, resolved against the icons that exist
+ * RIGHT NOW: 0 is before the first icon, `n` is past the last.
+ *
+ * DOCK_SLOT_END means "past the last one", and it is a position rather than a
+ * fallback. A cell pinned to slot 5 walks back up the row every time an app
  * quits, because the gap it was pinned to stops existing; "last" is the only
  * end of the row that survives apps coming and going, so it is what an
- * untouched clock keeps.
+ * untouched cell keeps. DOCK_SLOT_CENTER is a sentinel for exactly the same
+ * reason — a stored n/2 stops being the middle as soon as n changes.
  *
  * A live drag overrides the stored value so the cell follows the cursor while
  * the button is down — the same way dock_display_order() previews an icon
- * rearrange.
+ * rearrange. Only the cell actually under the press: the drag carries one slot,
+ * and letting the other two read it would move all three at once.
  */
-static int dock_clock_slot(syn_server_t *s, int n)
+static int dock_cell_slot(syn_server_t *s, dock_cell_t c, int n)
 {
-    int slot = s->config.dock_clock_slot;
+    const int *field = dock_cell_slot_field(s, c);
+    int slot = field ? *field : DOCK_SLOT_END;
+
     if (s->dock_drag.active && s->dock_drag.moved &&
-        s->dock_drag.icon == DOCK_DRAG_CLOCK)
+        s->dock_drag.icon == dock_cell_drag_id(c))
         slot = s->dock_drag.slot;
-    if (slot < 0 || slot > n) slot = n;
+
+    if (slot == DOCK_SLOT_CENTER) return n / 2;
+    if (slot < 0 || slot > n)     return n;
     return slot;
 }
+
 
 /* The swell an icon whose FLAT centre is at `flat_c` currently has. A raised
  * cosine, not a linear ramp: the ramp has a corner at the pointer and the row
@@ -685,7 +818,7 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
 {
     syn_server_t *s = o->server;
     memset(m, 0, sizeof(*m));
-    m->clk_slot = -1;
+    for (int c = 0; c < DOCK_CELL_N; c++) m->cell_slot[c] = -1;
 
     output_box_of(s, o, &m->ob);
     if (m->ob.width <= 0 || m->ob.height <= 0) return false;
@@ -701,38 +834,44 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
     if (n > DOCK_MAX_ENTRIES) n = DOCK_MAX_ENTRIES;
     m->n = n;
 
-    int clock_run = s->config.dock_clock
-                    ? dock_clock_run(s, m->vertical, m->thick) : 0;
-    int apps_run  = s->config.dock_apps_button ? icon : 0;
-    /* Past the apps button, and that order is fixed: both are drawn at the end
-     * of the run, and the destructive one is the one further from the icons. */
-    int pwr_run   = s->config.dock_power_button ? icon : 0;
-    if (clock_run > 0) m->clk_slot = dock_clock_slot(s, n);
+    /* The three non-icon cells: how long each one is along the run, and which
+     * gap it wants. Only the clock's length depends on anything but the icon
+     * size — it is a block of text (or a dial) sized by dock_clock_layout(). */
+    int cells_run = 0;
+    for (int c = 0; c < DOCK_CELL_N; c++) {
+        if (!dock_cell_on(s, c)) continue;
+        m->cell_run[c]  = (c == DOCK_CELL_CLOCK)
+                          ? dock_clock_run(s, m->vertical, m->thick) : icon;
+        if (m->cell_run[c] <= 0) continue;
+        m->cell_slot[c] = dock_cell_slot(s, c, n);
+        cells_run += m->cell_run[c] + pad;
+    }
 
-    m->base_run = pad + n * (icon + pad)
-                + (clock_run > 0 ? clock_run + pad : 0)
-                + (apps_run  > 0 ? apps_run  + pad : 0)
-                + (pwr_run   > 0 ? pwr_run   + pad : 0);
-    if (n == 0 && clock_run == 0 && apps_run == 0 && pwr_run == 0)
-        m->base_run = pad * 2;
+    /* The flat run is slot-independent — moving a cell along the row rearranges
+     * it, it never resizes it — so this stays one sum and the origin it feeds
+     * does not move when a cell is dragged. */
+    m->base_run = pad + n * (icon + pad) + cells_run;
+    if (n == 0 && cells_run == 0) m->base_run = pad * 2;
 
     /* Flat centres first — dock_mag_scale() samples from where a cell WOULD be,
-     * never from where it currently is. The clock's cell takes its place in this
-     * walk like anything else, which is what lets it be dragged into the middle
-     * of the row without the icons past it magnifying off the wrong centres. */
+     * never from where it currently is. The non-icon cells take their place in
+     * this walk like anything else, which is what lets any of them be dragged
+     * into the middle of the row without the icons past it magnifying off the
+     * wrong centres. */
     double flat_c[DOCK_MAX_ENTRIES];
-    double flat_apps_c, flat_pwr_c;
+    double flat_cell_c[DOCK_CELL_N] = { 0 };
     {
         int run = pad;
         for (int i = 0; i <= n; i++) {
-            if (i == m->clk_slot && clock_run > 0) run += clock_run + pad;
+            for (int c = 0; c < DOCK_CELL_N; c++) {
+                if (m->cell_slot[c] != i) continue;
+                flat_cell_c[c] = run + m->cell_run[c] / 2.0;
+                run += m->cell_run[c] + pad;
+            }
             if (i == n) break;
             flat_c[i] = run + icon / 2.0;
             run += icon + pad;
         }
-        flat_apps_c = run + icon / 2.0;
-        if (apps_run > 0) run += icon + pad;
-        flat_pwr_c  = run + icon / 2.0;
     }
 
     /* Suppressed outright during a drag. The rearrange gesture measures cells
@@ -742,12 +881,21 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
                     ? o->dock.mag_amount : 0.0;
     double peak = s->config.dock_magnify_scale;
 
-    int run = pad, clk_at = 0, apps_at = 0, apps_size = 0;
-    int pwr_at = 0, pwr_size = 0;
+    /* The same walk again, this time at the sizes actually drawn. The clock is
+     * NOT magnified — it is a block of text whose height was fitted to the bar,
+     * and swelling it would either clip it or rewrap it under the pointer — but
+     * the two buttons are icons and swell exactly as the apps do. */
+    int run = pad;
+    int cell_at[DOCK_CELL_N] = { 0 }, cell_size[DOCK_CELL_N] = { 0 };
     for (int i = 0; i <= n; i++) {
-        if (i == m->clk_slot && clock_run > 0) {
-            clk_at = run;
-            run += clock_run + pad;
+        for (int c = 0; c < DOCK_CELL_N; c++) {
+            if (m->cell_slot[c] != i) continue;
+            cell_size[c] = (c == DOCK_CELL_CLOCK)
+                ? m->cell_run[c]
+                : (int)lround(icon * dock_mag_scale(o, amount, peak,
+                                                    flat_cell_c[c], icon, pad));
+            cell_at[c] = run;
+            run += cell_size[c] + pad;
         }
         if (i == n) break;
         int size = (int)lround(icon * dock_mag_scale(o, amount, peak,
@@ -756,20 +904,7 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
         if (m->vertical) m->cy[i] = run; else m->cx[i] = run;
         run += size + pad;
     }
-    if (apps_run > 0) {
-        apps_size = (int)lround(icon * dock_mag_scale(o, amount, peak,
-                                                      flat_apps_c, icon, pad));
-        apps_at = run;
-        run += apps_size + pad;
-    }
-    if (pwr_run > 0) {
-        pwr_size = (int)lround(icon * dock_mag_scale(o, amount, peak,
-                                                     flat_pwr_c, icon, pad));
-        pwr_at = run;
-        run += pwr_size + pad;
-    }
-    int total_run = (n > 0 || clock_run > 0 || apps_run > 0 || pwr_run > 0)
-                    ? run : pad * 2;
+    int total_run = (n > 0 || cells_run > 0) ? run : pad * 2;
 
     int cross = m->thick + m->head;
     if (m->vertical) { m->w = cross;     m->h = total_run; }
@@ -809,26 +944,28 @@ static bool dock_metrics(syn_output_t *o, dock_metrics_t *m)
         int c = dock_cell_cross(m, edge, icon, m->cs[i], nudge);
         if (m->vertical) m->cx[i] = c; else m->cy[i] = c;
     }
-    if (apps_size > 0) {
-        m->apps_s = apps_size;
-        int c = dock_cell_cross(m, edge, icon, apps_size, nudge);
-        if (m->vertical) { m->apps_x = c;       m->apps_y = apps_at; }
-        else             { m->apps_x = apps_at; m->apps_y = c; }
+    if (cell_size[DOCK_CELL_APPS] > 0) {
+        int sz = cell_size[DOCK_CELL_APPS], at = cell_at[DOCK_CELL_APPS];
+        m->apps_s = sz;
+        int c = dock_cell_cross(m, edge, icon, sz, nudge);
+        if (m->vertical) { m->apps_x = c;  m->apps_y = at; }
+        else             { m->apps_x = at; m->apps_y = c; }
     }
-    if (pwr_size > 0) {
-        m->pwr_s = pwr_size;
-        int c = dock_cell_cross(m, edge, icon, pwr_size, nudge);
-        if (m->vertical) { m->pwr_x = c;      m->pwr_y = pwr_at; }
-        else             { m->pwr_x = pwr_at; m->pwr_y = c; }
+    if (cell_size[DOCK_CELL_POWER] > 0) {
+        int sz = cell_size[DOCK_CELL_POWER], at = cell_at[DOCK_CELL_POWER];
+        m->pwr_s = sz;
+        int c = dock_cell_cross(m, edge, icon, sz, nudge);
+        if (m->vertical) { m->pwr_x = c;  m->pwr_y = at; }
+        else             { m->pwr_x = at; m->pwr_y = c; }
     }
-
-    if (clock_run > 0) {
+    if (cell_size[DOCK_CELL_CLOCK] > 0) {
+        int sz = cell_size[DOCK_CELL_CLOCK], at = cell_at[DOCK_CELL_CLOCK];
         if (m->vertical) {
-            m->clk_x = m->bx;    m->clk_y = clk_at;
-            m->clk_w = m->thick; m->clk_h = clock_run;
+            m->clk_x = m->bx;    m->clk_y = at;
+            m->clk_w = m->thick; m->clk_h = sz;
         } else {
-            m->clk_x = clk_at;    m->clk_y = m->by;
-            m->clk_w = clock_run; m->clk_h = m->thick;
+            m->clk_x = at; m->clk_y = m->by;
+            m->clk_w = sz; m->clk_h = m->thick;
         }
     }
 
@@ -901,12 +1038,33 @@ static int dock_slot_at(syn_server_t *s, int run, int count)
     if (count <= 0) return 0;
     int icon = dock_icon_size(&s->config), pad = dock_icon_pad(&s->config);
 
-    if (s->config.dock_clock) {
-        int clk_slot = dock_clock_slot(s, count);
-        int clk_run  = dock_clock_run(s, edge_is_vertical(s->config.dock_edge),
-                                      s->config.dock_height) + pad;
-        if (run >= pad + clk_slot * (icon + pad)) run -= clk_run;
+    /*
+     * Every non-icon cell parked at or before this point pushes the icons past
+     * it along by its own width, so `run` has to be brought back to icon-only
+     * arithmetic before the division below can mean anything.
+     *
+     * Walked in SLOT order and subtracted as we go, which is what makes the
+     * comparison legal: each threshold is in icon-only coordinates, and by the
+     * time a cell is tested every cell before it has already been taken out.
+     * Doing them in cell order instead reads a run that still contains a
+     * later-numbered cell sitting earlier in the row.
+     */
+    bool vert = edge_is_vertical(s->config.dock_edge);
+    int  cslot[DOCK_CELL_N], clen[DOCK_CELL_N], cn = 0;
+    for (int c = 0; c < DOCK_CELL_N; c++) {
+        if (!dock_cell_on(s, c)) continue;
+        int len = (c == DOCK_CELL_CLOCK)
+                  ? dock_clock_run(s, vert, s->config.dock_height) : icon;
+        if (len <= 0) continue;
+        int slot = dock_cell_slot(s, c, count);
+        int k = cn++;
+        while (k > 0 && cslot[k - 1] > slot) {
+            cslot[k] = cslot[k - 1]; clen[k] = clen[k - 1]; k--;
+        }
+        cslot[k] = slot; clen[k] = len;
     }
+    for (int k = 0; k < cn; k++)
+        if (run >= pad + cslot[k] * (icon + pad)) run -= clen[k] + pad;
 
     int cell = icon + pad;
     int i = (run - pad) / cell;
@@ -926,7 +1084,7 @@ static int dock_slot_at(syn_server_t *s, int run, int count)
  * hysteresis is free and it is in the right direction — one more nudge is
  * needed to come back than was needed to go.
  */
-static int dock_clock_slot_at(const dock_metrics_t *m, double run)
+static int dock_cell_slot_at(const dock_metrics_t *m, double run)
 {
     int slot = 0;
     for (int i = 0; i < m->n; i++) {
@@ -1697,9 +1855,21 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     cairo_set_line_width(cr, 1);
     for (int side = 0; side < 2; side++) {
         /* side 0 = the low end of the run, side 1 = the high end. */
+        /* ⚠ Not `apps_s > 0 || pwr_s > 0` for the high side any more: those two
+         * were welded to the end of the run and are cells with slots of their
+         * own now, so either can sit BEFORE the clock. Ask where they actually
+         * are. Nothing can precede the clock inside a shared gap — it is first
+         * in dock_cell_t, and that order is what lays out a tie. */
+        int clk = m->cell_slot[DOCK_CELL_CLOCK];
+        bool other_before = false, other_after = false;
+        for (int c = 0; c < DOCK_CELL_N; c++) {
+            if (c == DOCK_CELL_CLOCK || m->cell_slot[c] < 0) continue;
+            if (m->cell_slot[c] < clk)  other_before = true;
+            else                        other_after  = true;
+        }
         bool has_neighbour = side == 0
-            ? m->clk_slot > 0
-            : m->clk_slot < m->n || m->apps_s > 0 || m->pwr_s > 0;
+            ? (clk > 0 || other_before)
+            : (clk < m->n || other_after);
         if (!has_neighbour) continue;
 
         double half = m->pad / 2.0;
@@ -1729,6 +1899,11 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     char time_s[32] = {0}, date_s[32] = {0};
     dock_clock_strings(s, m->vertical, time_s, sizeof time_s,
                        date_s, sizeof date_s);
+    /* ⚠ The layout's strings win where it has them. On a narrow column it chose
+     * shorter forms than dock_clock_strings() hands out, and drawing the long
+     * ones at the short ones' fitted sizes is the overflow all over again. */
+    if (l.time[0]) snprintf(time_s, sizeof time_s, "%s", l.time);
+    if (l.date[0]) snprintf(date_s, sizeof date_s, "%s", l.date);
 
     cairo_select_font_face(cr, syn_text_ui_font(), CAIRO_FONT_SLANT_NORMAL,
                            CAIRO_FONT_WEIGHT_NORMAL);
@@ -2416,23 +2591,16 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out)
  * start an edge-drag of the whole dock and the clock could never be picked up
  * at all.
  *
- * ⚠ AN ENUM AND NOT A BOOL, and it used to be a bool. `clock` meant "the clock,
- * otherwise the apps button", so the moment a third cell existed the false case
- * would have silently answered for the wrong one — the same shape as the dock
- * drag's `icon < 0`, which cost a release. Adding a fourth cell means adding a
- * case here and the compiler saying where else.
+ * See dock_cell_t, up with the geometry, for why it is an enum.
  */
-typedef enum { DOCK_CELL_CLOCK, DOCK_CELL_APPS, DOCK_CELL_POWER } dock_cell_t;
-
 static bool dock_cell_hit(syn_server_t *s, double lx, double ly,
                           dock_cell_t which, syn_output_t **out)
 {
     if (!s->config.dock_enabled) return false;
-    switch (which) {
-    case DOCK_CELL_CLOCK: if (!s->config.dock_clock)        return false; break;
-    case DOCK_CELL_APPS:  if (!s->config.dock_apps_button)  return false; break;
-    case DOCK_CELL_POWER: if (!s->config.dock_power_button) return false; break;
-    }
+    /* Through dock_cell_on() rather than a second switch on the same three
+     * flags: the layout asks the identical question, and two copies of it is
+     * how a cell ends up drawn but not clickable. */
+    if (!dock_cell_on(s, which)) return false;
 
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
@@ -2677,44 +2845,70 @@ void dock_icon_drag_begin(syn_server_t *s, syn_dock_entry_t *e,
 }
 
 /*
- * A left press on the clock. Same shape as the icon rearrange above and for the
- * same reason: until the pointer moves this is just a press, and the clock has
- * no click of its own to owe on release.
+ * A left press on one of the three non-icon cells. Same shape as the icon
+ * rearrange above and for the same reason: until the pointer moves this is just
+ * a press.
  *
- * `slot` starts at wherever the clock already is, so a press that never travels
+ * `slot` starts at wherever the cell already is, so a press that never travels
  * commits nothing — the release compares nothing and writes nothing.
+ *
+ * ⚠ THE APPS AND POWER BUTTONS OWE AN ACTION ON RELEASE, and the clock does
+ * not. They used to act on PRESS, which is what a button with no gesture on it
+ * can afford; a button you can also drag cannot, or every attempt to move one
+ * would open the overlay or the power menu on the way. dock_cell_drag_end()
+ * runs the click when the press never travelled, exactly as an icon's does.
+ *
+ * ⚠ Hit-tested by dock_cell_t BY NAME. This read `true` while the parameter was
+ * a bool meaning "the clock, otherwise the apps button", and `true` is 1 —
+ * which is DOCK_CELL_APPS. The compiler converts a bool to an enum without a
+ * word, so the clock drag silently began hit-testing the apps button and a
+ * press on the clock armed nothing at all.
  */
-void dock_clock_drag_begin(syn_server_t *s, double lx, double ly)
+static void dock_cell_drag_begin(syn_server_t *s, dock_cell_t c,
+                                 double lx, double ly)
 {
     syn_output_t *o = NULL;
-    /* ⚠ DOCK_CELL_CLOCK by name. This read `true` while the parameter was a
-     * bool meaning "the clock, otherwise the apps button", and `true` is 1 —
-     * which is now DOCK_CELL_APPS. The compiler converts a bool to an enum
-     * without a word, so the clock drag silently began hit-testing the apps
-     * button and a press on the clock armed nothing at all. */
-    if (!dock_cell_hit(s, lx, ly, DOCK_CELL_CLOCK, &o) || !o) return;
+    if (!dock_cell_hit(s, lx, ly, c, &o) || !o) return;
 
     s->dock_drag.active  = 1;
     s->dock_drag.moved   = 0;
-    s->dock_drag.icon    = DOCK_DRAG_CLOCK;
+    s->dock_drag.icon    = dock_cell_drag_id(c);
     s->dock_drag.icon_app[0] = '\0';
-    s->dock_drag.slot    = dock_clock_slot(s, s->dock_entry_count);
+    s->dock_drag.slot    = dock_cell_slot(s, c, s->dock_entry_count);
     s->dock_drag.output  = o;
     s->dock_drag.start_x = lx;
     s->dock_drag.start_y = ly;
 }
 
+void dock_clock_drag_begin(syn_server_t *s, double lx, double ly)
+{
+    dock_cell_drag_begin(s, DOCK_CELL_CLOCK, lx, ly);
+}
+
+void dock_apps_drag_begin(syn_server_t *s, double lx, double ly)
+{
+    dock_cell_drag_begin(s, DOCK_CELL_APPS, lx, ly);
+}
+
+void dock_power_drag_begin(syn_server_t *s, double lx, double ly)
+{
+    dock_cell_drag_begin(s, DOCK_CELL_POWER, lx, ly);
+}
+
 /*
- * The clock does not get LIFTED the way an icon does, and that is deliberate.
+ * A non-icon cell does not get LIFTED the way an icon does, and that is
+ * deliberate.
  *
  * A lifted icon needs a picture under the cursor because the gap it came out of
- * looks exactly like the gap it is going into. The clock's cell is four times
- * as wide as anything around it — watching it jump from one gap to the next IS
- * the feedback, and a second copy of the time floating over the bar would be two
- * clocks disagreeing about where the clock is.
+ * looks exactly like the gap it is going into. These three come out of a row of
+ * identical squares and are not one — the clock's cell is four times as wide as
+ * anything around it, and the two buttons are the only marks on the bar that
+ * are not app icons — so watching the cell jump from one gap to the next IS the
+ * feedback, and a second copy floating over the bar would be two of the same
+ * thing disagreeing about where it is.
  */
-static void dock_clock_drag_motion(syn_server_t *s, syn_output_t *o,
-                                   double lx, double ly)
+static void dock_cell_drag_motion(syn_server_t *s, syn_output_t *o,
+                                  double lx, double ly)
 {
     dock_metrics_t m;
     if (!dock_metrics(o, &m)) return;
@@ -2724,7 +2918,7 @@ static void dock_clock_drag_motion(syn_server_t *s, syn_output_t *o,
     double run = m.vertical ? ly - o->dock.tree->node.y - m.by
                             : lx - o->dock.tree->node.x - m.bx;
 
-    int slot = dock_clock_slot_at(&m, run);
+    int slot = dock_cell_slot_at(&m, run);
     if (slot == s->dock_drag.slot) return;   /* nothing to repaint */
     s->dock_drag.slot = slot;
 
@@ -2807,8 +3001,12 @@ void dock_drag_motion(syn_server_t *s, double lx, double ly)
     }
 
     if (s->dock_drag.icon >= 0) { dock_icon_drag_motion(s, o, lx, ly); return; }
-    if (s->dock_drag.icon == DOCK_DRAG_CLOCK) {
-        dock_clock_drag_motion(s, o, lx, ly);
+    /* All three non-icon cells take the SAME motion: the only thing that
+     * differs between them is which config field the release writes. */
+    if (s->dock_drag.icon == DOCK_DRAG_CLOCK ||
+        s->dock_drag.icon == DOCK_DRAG_APPS  ||
+        s->dock_drag.icon == DOCK_DRAG_POWER) {
+        dock_cell_drag_motion(s, o, lx, ly);
         return;
     }
 
@@ -2953,24 +3151,63 @@ void dock_drag_end(syn_server_t *s, double lx, double ly)
      * dock still holding a drag that has ended. */
     if (icon >= 0) { dock_icon_drag_end(s, icon, slot, pressed, moved); return; }
 
-    if (icon == DOCK_DRAG_CLOCK) {
+    if (icon == DOCK_DRAG_CLOCK || icon == DOCK_DRAG_APPS ||
+        icon == DOCK_DRAG_POWER) {
+        dock_cell_t c = icon == DOCK_DRAG_CLOCK ? DOCK_CELL_CLOCK
+                      : icon == DOCK_DRAG_APPS  ? DOCK_CELL_APPS
+                                                : DOCK_CELL_POWER;
         if (moved) {
             /*
-             * Dropped past the last icon it goes back to -1 rather than being
-             * written as `n`. They look the same today and stop being the same
-             * the moment an app opens: a stored 5 is the fifth gap, which walks
-             * back up the row as apps quit, while -1 is "the end" and stays
-             * there. Nobody who drags the clock to the end of the dock means
-             * "and follow the fifth icon from now on".
+             * Dropped past the last icon it goes back to DOCK_SLOT_END rather
+             * than being written as `n`. They look the same today and stop
+             * being the same the moment an app opens: a stored 5 is the fifth
+             * gap, which walks back up the row as apps quit, while END is "the
+             * end" and stays there. Nobody who drags a cell to the end of the
+             * dock means "and follow the fifth icon from now on".
+             *
+             * A drop anywhere else is written as the plain gap it is, NOT
+             * snapped to the nearest of the three named positions. That is what
+             * "the toggles and the drag are the same setting" has to mean in
+             * this direction: the menu can always say where the cell is, and it
+             * says "after 3 icons" when that is the truth rather than rounding
+             * the gesture to a word.
              */
             int n = s->dock_entry_count;
-            s->config.dock_clock_slot = (slot < 0 || slot >= n) ? -1 : slot;
+            int *field = dock_cell_slot_field(s, c);
+            if (field) *field = (slot < 0 || slot >= n) ? DOCK_SLOT_END : slot;
             dock_state_save(s);
         }
+
+        /* ⚠ THE RELAYOUT COMES FIRST, EVEN WHEN NOTHING MOVED. dock_metrics()
+         * suppresses magnification for the whole length of a drag, so a press
+         * that is only a click still left the row drawn flat — it healed on the
+         * next pointer motion, which is to say it healed everywhere except a
+         * click delivered without the mouse then moving. */
         dock_relayout(s);
         syn_output_t *o;
         wl_list_for_each(o, &s->outputs, link)
             if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
+
+        /*
+         * A press that never travelled is the CLICK these two buttons used to
+         * owe on press. The clock has no click, so it owes nothing — which is
+         * why this is a switch and not an "else act".
+         */
+        if (!moved) {
+            switch (c) {
+            case DOCK_CELL_APPS:
+                /* appgrid_toggle(), NOT synui_start_menu_open() — see the
+                 * comment at the press site in input.c. */
+                appgrid_toggle(s);
+                break;
+            case DOCK_CELL_POWER:
+                dockmenu_open_power(s, lx, ly);
+                break;
+            case DOCK_CELL_CLOCK:
+            case DOCK_CELL_N:
+                break;
+            }
+        }
         return;
     }
 
@@ -3003,12 +3240,111 @@ void dock_drag_end(syn_server_t *s, double lx, double ly)
         wlr_output_schedule_frame(o->wlr_output);
 }
 
+/* ── Where the three non-icon cells sit, as a setting ─────
+ *
+ * The drag is one way to move a cell and this is the other. They are the SAME
+ * setting — dock_cell_slot_field() is the one place either writes — which is
+ * what makes the menu able to say where a dragged cell ended up, and what makes
+ * choosing "centre" here move a cell the pointer had put somewhere else.
+ *
+ * velle asked for the toggles because the drag targets are small: on a full
+ * dock the clock cell is the only roomy one, and aiming at the apps button
+ * without hitting the bar body (which drags the whole dock to another edge) is
+ * finicky. Neither route replaces the other.
+ */
+
+/* The three positions the toggles offer, in cycle order. A cell dragged to some
+ * other gap is at none of them, which is a state the label can say and the
+ * cycle simply steps out of. */
+static const int dock_slot_cycle_order[] = {
+    DOCK_SLOT_START, DOCK_SLOT_CENTER, DOCK_SLOT_END,
+};
+
+/*
+ * What to CALL a slot, in the reader's own axis.
+ *
+ * ⚠ "Left" and "right" are wrong on a vertical dock and this says top and
+ * bottom there — the words follow dock_edge. Start/end would have been
+ * edge-agnostic and would also have meant nothing to anyone: the row is read
+ * while looking at the dock, and on the stock bottom dock the ends of the run
+ * are simply the left and the right.
+ *
+ * A gap that is none of the three is named for what it is. It is deliberately
+ * NOT rounded to the nearest word: the drag stores the exact gap, and a menu
+ * that reported "right" for a cell sitting two icons short of the end would be
+ * the toggle and the drag disagreeing in the one place they must not.
+ */
+const char *dock_slot_label(syn_server_t *s, dock_cell_t c)
+{
+    static char buf[32];
+    const int *field = dock_cell_slot_field(s, c);
+    int slot = field ? *field : DOCK_SLOT_END;
+    bool vert = edge_is_vertical(s->config.dock_edge);
+
+    switch (slot) {
+    case DOCK_SLOT_START:  return vert ? "top" : "left";
+    case DOCK_SLOT_CENTER: return "centre";
+    case DOCK_SLOT_END:    return vert ? "bottom" : "right";
+    default: break;
+    }
+    if (slot < 0) return vert ? "bottom" : "right";   /* an unknown sentinel */
+    snprintf(buf, sizeof(buf), "after %d icon%s", slot, slot == 1 ? "" : "s");
+    return buf;
+}
+
+/*
+ * Step a cell to the next named position. `dir` is +1 or -1.
+ *
+ * A cell sitting at a dragged gap is at none of them, so it enters the cycle at
+ * the first — stepping "forward" from nowhere has to land somewhere definite,
+ * and the alternative (find the nearest word and step from that) would make the
+ * result depend on a rounding the user never asked for.
+ */
+void dock_slot_cycle(syn_server_t *s, dock_cell_t c, int dir)
+{
+    int *field = dock_cell_slot_field(s, c);
+    if (!field) return;
+
+    const int n = (int)(sizeof(dock_slot_cycle_order) /
+                        sizeof(dock_slot_cycle_order[0]));
+    int at = -1;
+    for (int i = 0; i < n; i++)
+        if (dock_slot_cycle_order[i] == *field) { at = i; break; }
+
+    int next = at < 0 ? 0 : ((at + dir) % n + n) % n;
+    *field = dock_slot_cycle_order[next];
+
+    dock_state_save(s);
+    dock_relayout(s);
+    dock_wake(s);
+}
+
 /* ── Pinning + persistence ───────────────────────────────── */
 
 /* Resolve ~/.config/synui/dock.state; false if $HOME is unset. */
 static bool dock_state_path(char *buf, size_t n)
 {
     return syn_config_path(buf, n, "dock.state");
+}
+
+/*
+ * A slot as dock.state spells it: a plain integer, because this file is written
+ * by dock_state_save() and read by nothing else.
+ *
+ * ⚠ IT MUST NOT FOLD EVERY NEGATIVE TO -1. That is what the clock's reader did,
+ * and it predates DOCK_SLOT_CENTER by three cells — a centred dock would have
+ * been saved correctly, reloaded as "end", and looked like a setting that did
+ * not stick across a login. Only the values these sentinels actually use are
+ * let through; anything else negative is still "end", which is the right answer
+ * for a file written by a future synui that grew a fourth position.
+ */
+static int dock_state_slot(const char *v)
+{
+    int n = atoi(v);
+    if (n == DOCK_SLOT_CENTER) return DOCK_SLOT_CENTER;
+    if (n < 0)                 return DOCK_SLOT_END;
+    if (n > DOCK_MAX_ENTRIES)  return DOCK_MAX_ENTRIES;
+    return n;
 }
 
 void dock_state_load(syn_config_t *cfg)
@@ -3049,13 +3385,11 @@ void dock_state_load(syn_config_t *cfg)
         } else if (strncmp(p, "clock=", 6) == 0) {
             cfg->dock_clock = strcmp(p + 6, "on") == 0;
         } else if (strncmp(p, "clock_slot=", 11) == 0) {
-            int v = atoi(p + 11);
-            /* Negative is "past the last icon" — see dock_clock_slot(). The
-             * upper end is clamped at layout time against the icons that exist,
-             * not here: this file is read before there are any. */
-            if (v < 0) v = -1;
-            if (v > DOCK_MAX_ENTRIES) v = DOCK_MAX_ENTRIES;
-            cfg->dock_clock_slot = v;
+            cfg->dock_clock_slot = dock_state_slot(p + 11);
+        } else if (strncmp(p, "apps_slot=", 10) == 0) {
+            cfg->dock_apps_slot = dock_state_slot(p + 10);
+        } else if (strncmp(p, "power_slot=", 11) == 0) {
+            cfg->dock_power_slot = dock_state_slot(p + 11);
         } else if (strncmp(p, "clock_analog=", 13) == 0) {
             cfg->dock_clock_analog = strcmp(p + 13, "on") == 0;
         } else if (strncmp(p, "apps=", 5) == 0) {
@@ -3094,7 +3428,9 @@ void dock_state_save(syn_server_t *s)
     fprintf(f, "clock_analog=%s\n",
             s->config.dock_clock_analog ? "on" : "off");
     fprintf(f, "apps=%s\n",     s->config.dock_apps_button ? "on" : "off");
+    fprintf(f, "apps_slot=%d\n",  s->config.dock_apps_slot);
     fprintf(f, "power=%s\n",    s->config.dock_power_button ? "on" : "off");
+    fprintf(f, "power_slot=%d\n", s->config.dock_power_slot);
     for (int i = 0; i < s->config.dock_pin_count; i++)
         fprintf(f, "pin=%s\n", s->config.dock_pin[i]);
     fclose(f);
@@ -3247,12 +3583,25 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
     /* Only with a clock to be a style OF. A switch that changes how something
      * absent is drawn is a row that appears to do nothing, and on a vertical
      * dock — where this row is the fix rather than a preference — that is
-     * exactly the wrong impression to leave. */
-    if (s->config.dock_clock)
+     * exactly the wrong impression to leave. The position row below follows the
+     * same rule, and so do the two under the buttons. */
+    if (s->config.dock_clock) {
         s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK_ANALOG;
+        s->dockmenu.actions[n++] = SYN_DOCKACT_CLOCK_POS;
+    }
     s->dockmenu.actions[n++] = SYN_DOCKACT_APPS;
+    if (s->config.dock_apps_button)
+        s->dockmenu.actions[n++] = SYN_DOCKACT_APPS_POS;
     s->dockmenu.actions[n++] = SYN_DOCKACT_POWER;
+    if (s->config.dock_power_button)
+        s->dockmenu.actions[n++] = SYN_DOCKACT_POWER_POS;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
+    /* The dock's own place on the screen, under a rule and away from the cells:
+     * it is the only row here about the whole bar rather than something in it.
+     * This is what a right-click reaches for when the edge drag will not take —
+     * the bar body a press can land on is the padding between icons, which on a
+     * full dock is a few pixels wide. */
+    s->dockmenu.actions[n++] = SYN_DOCKACT_EDGE;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SETTINGS;
     s->dockmenu.action_count = n;
     dockmenu_place(s, lx, ly);
@@ -3411,6 +3760,41 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
     case SYN_DOCKACT_CLOCK_ANALOG:
         dockmenu_toggle(s, &s->config.dock_clock_analog);
         break;
+
+    /* The cycling rows. Forward only from a click — there is one mouse button
+     * on a menu row, and Control panel ▸ Desktop is where Left and Right can
+     * step either way. */
+    case SYN_DOCKACT_CLOCK_POS:
+        dock_slot_cycle(s, DOCK_CELL_CLOCK, +1);
+        break;
+    case SYN_DOCKACT_APPS_POS:
+        dock_slot_cycle(s, DOCK_CELL_APPS, +1);
+        break;
+    case SYN_DOCKACT_POWER_POS:
+        dock_slot_cycle(s, DOCK_CELL_POWER, +1);
+        break;
+    case SYN_DOCKACT_EDGE:
+        /* Bottom → left → top → right, which walks the screen clockwise so the
+         * dock visibly goes round rather than jumping across. The same values
+         * the edge drag writes, saved the same way. */
+        s->config.dock_edge = (syn_dock_edge_t)((s->config.dock_edge + 1) % 4);
+        dock_state_save(s);
+        /* Every mirror lands SHOWN on the new edge, exactly as the drag's
+         * release does — an auto-hiding dock that changed edge while hidden
+         * would be a menu row with nothing to see for it. */
+        {
+            syn_output_t *o;
+            wl_list_for_each(o, &s->outputs, link) {
+                o->dock.shown = 1;
+                o->dock.slide_progress = 1.0;
+                o->dock.unhover_since = 0.0;
+                o->dock.last_tick = 0.0;
+            }
+        }
+        dock_relayout(s);
+        dock_wake(s);
+        break;
+
     case SYN_DOCKACT_SETTINGS:
         /* The category, not the bare panel: the rest of the dock's settings —
          * edge, size, style, opacity, corners — are rows on Desktop, and landing

@@ -691,6 +691,25 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_DOCK_POWER,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show power button", NULL,
       .help = "A power mark past the apps button. Clicking it opens a menu — "
               "Lock, Log Out, Suspend, Restart, Shut Down" },
+    /*
+     * The three cell positions, each under the switch that puts its cell on
+     * screen. CTL_KIND_VALUE with no .key: they are not one config field with a
+     * name and a range, they are a gap index with two sentinels, so the value
+     * is formatted and stepped by id like the AI-model row is.
+     *
+     * ⚠ ALL THREE ARE ALSO A DRAG on the dock itself, and the drag can leave a
+     * cell in a gap none of these three words names. The row says so ("after 3
+     * icons") rather than rounding — see dock_slot_label().
+     */
+    { CTL_ROW_DOCK_CLOCK_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Clock position", NULL,
+      .help = "Where the dock clock sits along the run. Dragging the clock "
+              "on the dock sets the same thing" },
+    { CTL_ROW_DOCK_APPS_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Apps button position", NULL,
+      .help = "Where the all-apps button sits along the run. Dragging the "
+              "button on the dock sets the same thing" },
+    { CTL_ROW_DOCK_POWER_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Power button position", NULL,
+      .help = "Where the power button sits along the run. Dragging the "
+              "button on the dock sets the same thing" },
     /* Not a dock row, and it sits among them anyway: it is the row a user
      * reading about the dock is most likely to go looking for next.
      *
@@ -2055,6 +2074,22 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
         else snprintf(buf, n, "%s", s->config.dock_power_button ? "on" : "off");
         break;
+    /* "n/a" for a cell that is switched off as well as for no dock, exactly as
+     * the analog-face row does: a position for something not drawn is a value
+     * with nothing to be about. */
+    case CTL_ROW_DOCK_CLOCK_POS:
+    case CTL_ROW_DOCK_APPS_POS:
+    case CTL_ROW_DOCK_POWER_POS: {
+        dock_cell_t c = row == CTL_ROW_DOCK_CLOCK_POS ? DOCK_CELL_CLOCK
+                      : row == CTL_ROW_DOCK_APPS_POS  ? DOCK_CELL_APPS
+                                                      : DOCK_CELL_POWER;
+        int on = c == DOCK_CELL_CLOCK ? s->config.dock_clock
+               : c == DOCK_CELL_APPS  ? s->config.dock_apps_button
+                                      : s->config.dock_power_button;
+        if (!s->config.dock_enabled || !on) snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", dock_slot_label(s, c));
+        break;
+    }
     case CTL_ROW_BAR_AUTOHIDE:
         snprintf(buf, n, "%s", bar_autohide_label(s));
         break;
@@ -3049,6 +3084,51 @@ static void ctlpanel_focus_items(syn_server_t *s)
     s->ctlpanel.focus = CTL_FOCUS_ITEMS;
 }
 
+/*
+ * Step one of the three dock-cell position rows; 0 if `row` is not one of them.
+ *
+ * They have no .key/.off/.vtype to drive ctl_adjust() with, because the thing
+ * being stepped is a gap index with two sentinels rather than a number in a
+ * range. Handled by id rather than made CTL_KIND_CHOICE: Enter on a CHOICE row
+ * opens the panel that owns the setting, and there is no such panel — the
+ * dock's own right-click menu is the other route, and it is a menu.
+ *
+ * Shared by Left/Right and by Enter (and so by a click, which is Enter) so all
+ * three routes step the same way and say the same thing.
+ */
+static int ctlpanel_dock_pos_step(syn_server_t *s, int row, int dir)
+{
+    dock_cell_t c;
+    int on;
+    switch (row) {
+    case CTL_ROW_DOCK_CLOCK_POS:
+        c = DOCK_CELL_CLOCK; on = s->config.dock_clock;        break;
+    case CTL_ROW_DOCK_APPS_POS:
+        c = DOCK_CELL_APPS;  on = s->config.dock_apps_button;  break;
+    case CTL_ROW_DOCK_POWER_POS:
+        c = DOCK_CELL_POWER; on = s->config.dock_power_button; break;
+    default:
+        return 0;
+    }
+
+    const struct ctl_item *it = ctl_item(row);
+    const char *label = it ? it->label : "position";
+
+    if (!s->config.dock_enabled || !on) {
+        /* Says WHICH thing is off. "n/a" in the value column with nothing in
+         * the status line is a key that appears to be dead. */
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status), "%s",
+                 s->config.dock_enabled ? "turn the cell on first"
+                                        : "dock is off");
+        return 1;
+    }
+
+    dock_slot_cycle(s, c, dir);
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             "%s: %s", label, dock_slot_label(s, c));
+    return 1;
+}
+
 static void ctlpanel_activate(syn_server_t *s)
 {
     int row = ctlpanel_selected_row(s);
@@ -3106,6 +3186,11 @@ static void ctlpanel_activate(syn_server_t *s)
          * every other row on the panel does something on Enter, and a row that
          * ignored the key people press first would read as broken. Left/Right
          * remain the way to move it in both directions. */
+        /* The dock-cell rows first: ctl_adjust() cannot move them (no vtype),
+         * so without this Enter — and therefore a CLICK, which is Enter — was
+         * dead on exactly the three rows added because the mouse could not
+         * reach the setting any other way. */
+        if (ctlpanel_dock_pos_step(s, row, +1)) return;
         const struct ctl_item *it = ctl_item(row);
         if (it && ctl_adjust(s, it, +1)) {
             char v[64];
@@ -3670,6 +3755,10 @@ static int ctlpanel_adjust_font(syn_server_t *s, int row, int dir)
 
 static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
 {
+    /* The three dock-cell positions, before the table lookup — see
+     * ctlpanel_dock_pos_step(). */
+    if (ctlpanel_dock_pos_step(s, row, dir)) return 1;
+
     const struct ctl_item *it = ctl_item(row);
     if (!it || it->vtype == CTL_VAL_NONE) return 0;
 

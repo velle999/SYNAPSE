@@ -125,6 +125,14 @@ int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
 void deco_toggle_titlebars(syn_server_t *s)   { (void)s; }
 void dock_state_save(syn_server_t *s)         { (void)s; }
 void dock_wake(syn_server_t *s)               { (void)s; }
+
+/* The three dock-cell position rows read their value through the dock, which
+ * this rig does not link. "end" is what a stock dock answers, so every row that
+ * is not about the position reads exactly as it did before they existed. */
+const char *dock_slot_label(syn_server_t *s, dock_cell_t c)
+{ (void)s; (void)c; return "end"; }
+void dock_slot_cycle(syn_server_t *s, dock_cell_t c, int dir)
+{ (void)s; (void)c; (void)dir; }
 /* The bar is a separate process and the Bar auto-hide row asks it over
  * quickshell's IPC. Nothing here forks — the row's value comes from bar.json,
  * which this rig does not write, so the stub only has to link. */
