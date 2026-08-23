@@ -24,7 +24,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | effects   | sixty-one transitions (a morph among them), twenty-seven effects |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
 | titles    | a face, a plate, more than one line, five styles, .srt both ways |
-| delivery  | range, presets, burn-in, sequences and a queue                 |
+| delivery  | range, presets, burn-in, sequences, a queue, and thumbnails    |
 | scopes    | histogram, waveform, parade and vectorscope — all measured here |
 | media     | one project, named and saved as — no pool, no proxies, no relink |
 
@@ -395,6 +395,20 @@ Fairlight-style automation: four features for one piece of work.
 
 ## 7 · Scopes, colour management, delivery
 
+- [x] **the thumbnail maker** — shipped in 0.1.0-42. A thumbnail is a SECOND
+      picture made from a photograph: a canvas by destination (YouTube, a
+      Short, square, a link preview, or a size of your own), the developed
+      frame filled into it or fitted with a background, and up to three
+      captions with outline, shadow and a plate — big enough to read at the
+      size a thumbnail is actually seen. It rides in the SAME sidecar as the
+      develop stack, because it is a decision about the same file, and it
+      comes back when the photograph is reopened. ⚠ The words are lettered by
+      ffmpeg's `drawtext`, the same code a timeline's titles use: nothing here
+      is linked to a font rasteriser and nothing is going to be. ⚠ And the
+      captions go through a FILE — drawtext's argument is parsed twice, so a
+      caption with a colon or a percent sign in it would otherwise fail the
+      render long after it was typed. `thumb keys|sizes|get|set|reset|render`,
+      one table, and the panel is built from it
 - [x] histogram (stills)
 - [x] six delivery formats with a name and format picker
 - [~] masks — darkroom only; a clip's grade is pointwise so it can ride the

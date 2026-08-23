@@ -3755,6 +3755,132 @@ if have ffmpeg; then
         | seen "a still ignores the time asked for" "at	0.000000"
 fi
 
+# --------------------------------------------------------- the thumbnail --
+#
+# A thumbnail is a SECOND picture made from a photograph: a fixed canvas, the
+# developed frame framed into it, and a few words big enough to read at the
+# size a thumbnail is actually seen. It rides in the SAME sidecar, because it
+# is a decision about the same file.
+
+if have ffmpeg && have ffprobe; then
+    tb=$TMP/thumb
+    mkdir -p "$tb"
+    timg=$tb/shot.png
+    ffmpeg -v error -f lavfi -i "color=c=0x2050a0:s=1600x900:d=1" \
+           -frames:v 1 "$timg" -y
+
+    $BIN thumb "$timg" sizes | seen "the canvases are by DESTINATION" "youtube	1280	720"
+    $BIN thumb "$timg" sizes | seen "including a vertical one"        "short	1080	1920"
+    check "a fresh photograph has no thumbnail" "0" \
+          "$($BIN thumb "$timg" get on)"
+    # ⚠ And no thumbnail means NO LINES: a sidecar written before thumbnails
+    # existed has to read back byte for byte.
+    $BIN set "$timg" exposure=0.5 >/dev/null
+    check "and nothing about one in the sidecar" "0" \
+          "$(grep -c '^thumb\.' "$timg.synstudio")"
+
+    # ---- setting one ------------------------------------------------------
+    #
+    # ⚠ Typing anything about a thumbnail means wanting one. Making somebody
+    # set `on=1` as well is the kind of second step that reads as the feature
+    # not working.
+    $BIN thumb "$timg" set text1.words="HOW IT WORKS" >/dev/null
+    check "a setting turns the thumbnail on" "1" "$($BIN thumb "$timg" get on)"
+    check "and the words are kept"           "HOW IT WORKS" \
+          "$($BIN thumb "$timg" get text1.words)"
+    check "the canvas resolves to a size"    "1280" \
+          "$($BIN thumb "$timg" get | awk -F'\t' '/^width/{print $2; exit}')"
+    $BIN thumb "$timg" set canvas=short >/dev/null
+    check "a vertical canvas is taller than it is wide" "1920" \
+          "$($BIN thumb "$timg" get | awk -F'\t' '/^height/{print $2; exit}')"
+    # An enum takes its NAME, and a number out of range is clamped rather than
+    # stored — the same contract every other table in this program has.
+    $BIN thumb "$timg" set text1.size=99 >/dev/null
+    check "a size beyond the range clamps"   "0.6" "$($BIN thumb "$timg" get text1.size)"
+    $BIN thumb "$timg" set nonesuch=1 2>&1 \
+        | seen "and a key nobody has is refused" "no such thumbnail setting"
+
+    # ⚠ The layout SURVIVES THE FILE. It is in the sidecar next to the develop
+    # stack, so reopening the photograph a month later brings it back.
+    check "the develop stack is still there too" "0.5" "$($BIN get "$timg" exposure)"
+    check "and the words come back off disk"     "HOW IT WORKS" \
+          "$($BIN thumb "$timg" get text1.words)"
+
+    # ---- the picture ------------------------------------------------------
+    $BIN thumb "$timg" set canvas=youtube text1.size=0.18 >/dev/null
+    $BIN thumb "$timg" render --out "$tb/t.png" >/dev/null
+    check "the thumbnail is the canvas, exactly" "1280,720" \
+          "$(ffprobe -v error -show_entries stream=width,height -of csv=p=0 "$tb/t.png")"
+    # ⚠ And the temporaries are gone. They live beside the OUTPUT rather than
+    # in /tmp — a rename across filesystems is a copy — so a leftover is
+    # somebody's folder with rubbish in it.
+    check "and nothing is left beside it" "0" \
+          "$(ls "$tb" | grep -c 'thumbtext\|thumb-build')"
+
+    # The words have to be ON the picture, not merely in the document.
+    $BIN thumb "$timg" set text1.words= >/dev/null
+    $BIN thumb "$timg" render --out "$tb/plain.png" >/dev/null
+    $BIN thumb "$timg" set text1.words="HOW IT WORKS" >/dev/null
+    $BIN thumb "$timg" render --out "$tb/lettered.png" >/dev/null
+    py=$(python3 - "$tb" <<'PYEOF'
+import subprocess, sys
+d = sys.argv[1]
+def gray(f):
+    return subprocess.run(['ffmpeg','-v','error','-i',f,'-vf','format=gray',
+                           '-f','rawvideo','-'], capture_output=True).stdout
+a, b = gray(d + '/plain.png'), gray(d + '/lettered.png')
+changed = sum(1 for x, y in zip(a, b) if abs(x - y) > 30)
+print('%d %d %d' % (changed, max(a) if a else 0, max(b) if b else 0))
+PYEOF
+)
+    set -- $py
+    if [ "$1" -gt 2000 ]; then ok
+    else bad "the words reach the picture: only $1 pixels changed"; fi
+    # ⚠ White words on a mid-blue picture: the brightest pixel has to MOVE, or
+    # what changed was the plate and not the lettering.
+    if [ "$3" -gt "$2" ]; then ok
+    else bad "and they are brighter than what was under them: $3 vs $2"; fi
+
+    # ---- fit, and the background it leaves ---------------------------------
+    #
+    # FILL crops to the canvas and FIT pads to it. Fill is the default because
+    # a thumbnail is a fixed rectangle somebody else's page will show whatever
+    # happens; letterboxing inside it is a decision, not a default.
+    $BIN thumb "$timg" set fit=fit bg.r=1 bg.g=0 bg.b=0 canvas=square >/dev/null
+    $BIN thumb "$timg" render --out "$tb/fit.png" >/dev/null
+    edge=$(ffmpeg -v error -i "$tb/fit.png" -vf "crop=1:1:4:4,format=rgb24" \
+                  -f rawvideo - 2>/dev/null | od -An -tu1 | tr -s ' ' | sed 's/^ //')
+    check "a fitted picture is padded with the background" "255 0 0" "$edge"
+    $BIN thumb "$timg" set fit=fill >/dev/null
+    $BIN thumb "$timg" render --out "$tb/fill.png" >/dev/null
+    edge=$(ffmpeg -v error -i "$tb/fill.png" -vf "crop=1:1:4:4,format=rgb24" \
+                  -f rawvideo - 2>/dev/null | od -An -tu1 | tr -s ' ' | sed 's/^ //')
+    if [ "$edge" != "255 0 0" ]; then ok
+    else bad "a filled picture reaches the edge: found the background at the corner"; fi
+
+    # ---- a caption is not a shell, and not one line either ------------------
+    #
+    # ⚠ drawtext's argument is parsed TWICE — by the filtergraph splitter and
+    # by drawtext itself — so the words go in a FILE. A caption with a colon,
+    # a comma or a quote in it would otherwise fail the whole render, at the
+    # moment somebody exports rather than the moment they typed it.
+    $BIN thumb "$timg" set text1.words="10:30, 'the best' — 50% off" >/dev/null
+    $BIN thumb "$timg" render --out "$tb/hard.png" >/dev/null 2>&1
+    check "a caption full of punctuation renders" "0" "$?"
+    check "and survives the sidecar unchanged" "10:30, 'the best' — 50% off" \
+          "$($BIN thumb "$timg" get text1.words)"
+    printf 'two\nlines' > "$tb/x"
+    $BIN thumb "$timg" set "text1.words=$(cat "$tb/x")" >/dev/null
+    check "a caption with a line break survives the file too" "2" \
+          "$($BIN thumb "$timg" get text1.words | wc -l)"
+    check "and the sidecar is still one record per line" "1" \
+          "$(grep -c '^thumb.text1.words' "$timg.synstudio")"
+
+    $BIN thumb "$timg" reset >/dev/null
+    check "reset clears the layout" "0" "$($BIN thumb "$timg" get on)"
+    check "and leaves the develop stack alone" "0.5" "$($BIN get "$timg" exposure)"
+fi
+
 # ------------------------------------------------- undo in the darkroom --
 #
 # A photograph's document is its SIDECAR, and history is a property of a file,
@@ -3960,6 +4086,12 @@ if [ -f "$qml" ]; then
     # and not to it is a binding nobody can find.
     seen "and the sheet is built from it"    'model: root.keyRows' < "$qml"
     seen "the darkroom has undo now"         'root.devStep(' < "$qml"
+    # The thumbnail panel. ⛔ Its rows come from the ENGINE's table, so it
+    # cannot offer a control the renderer does not have — and the preview is
+    # the same command the export runs, so what is on screen is what gets
+    # written.
+    seen "the thumbnail panel is built from the table" '"thumb", root.file, "keys"' < "$qml"
+    seen "and its preview is the export's own render"  '"thumb", root.file, "render"' < "$qml"
     # The source monitor is the window's half of three-point editing. ⚠ The
     # frame call is what dies quietly: without it the viewer opens, shows
     # nothing, and says nothing about why.

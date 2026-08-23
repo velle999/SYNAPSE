@@ -1409,7 +1409,46 @@ pkgver=0.1.0
 #   the file's name on it, which is why "is it even dragging?" was a question.
 #
 #   702 assertions, clean under ASan+UBSan+LSan.
-pkgrel=41
+#
+# 42 THE THUMBNAIL MAKER.
+#
+#   A thumbnail is a SECOND picture made from a photograph, and it is about
+#   the thumbnail rather than about the photograph: a fixed canvas somebody
+#   else's page will show whatever happens, the developed frame framed into
+#   it, and a few words big enough to read at the size one is actually seen.
+#
+#   Canvases are listed by DESTINATION and not by aspect ratio — nobody has
+#   ever wanted "16:9", they have wanted the one YouTube takes. Fill crops to
+#   the canvas, fit pads it with a colour. Three captions, each with the nine
+#   anchors a title has, plus a nudge, an outline, a shadow and a plate.
+#
+#   ⚠ IT RIDES IN THE SIDECAR, beside the develop stack, because it is a
+#   decision about the same file — so it comes back when the photograph is
+#   reopened rather than belonging to whoever last exported one. Written only
+#   when it is not the default, so every sidecar made before this reads back
+#   byte for byte.
+#
+#   ⚠ THE WORDS ARE LETTERED BY FFMPEG, the same `drawtext` a timeline's
+#   titles use. Nothing here is linked to a font rasteriser and nothing is
+#   going to be — so this program develops the picture, writes it once, and
+#   one ffmpeg pass frames it and letters it. Colour never leaves colour.c.
+#
+#   ⚠ AND THE CAPTIONS GO THROUGH A FILE. drawtext's argument is parsed twice
+#   — once by the filtergraph splitter and once by drawtext itself — so a
+#   caption with a colon, a comma or a quote in it fails the whole render at
+#   the moment somebody exports, long after it was typed. `expansion=none`
+#   for the same reason with a percent sign.
+#
+#   ⚠ The temporaries live BESIDE THE OUTPUT, not in /tmp: the output is
+#   somewhere writable by definition, /tmp may be another filesystem, and a
+#   rename across one is a copy. They are removed even when the render fails.
+#
+#   One table in src/thumb.c drives the CLI, the sidecar and the panel, so a
+#   control the renderer has not got cannot appear in the window. The panel's
+#   preview is the SAME command the export runs, at a smaller size.
+#
+#   728 assertions, clean under ASan+UBSan+LSan.
+pkgrel=42
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

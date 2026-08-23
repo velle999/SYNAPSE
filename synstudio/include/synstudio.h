@@ -237,6 +237,85 @@ float ss_mask_at(const ss_mask *m, float fx, float fy);
 /* Apply one mask: renders the masked develop and blends by coverage. */
 int  ss_apply_mask(ss_image *im, const ss_mask *m);
 
+/* ------------------------------------------------------ the thumbnail -- */
+
+/* A thumbnail is a SECOND picture made from the same photograph: a fixed
+ * canvas, the developed frame filling it, and a few words over the top big
+ * enough to read at the size a thumbnail is actually seen.
+ *
+ * It rides in the SIDECAR beside the develop stack, so it belongs to the
+ * photograph rather than to whoever last exported one — reopening the file a
+ * month later brings the layout back with it.
+ *
+ * ⚠ The words are drawn by ffmpeg's `drawtext`, not by this program: nothing
+ * here is linked to a font rasteriser and nothing here is going to be. That
+ * is the same bargain the titles in a timeline strike, and it means a
+ * thumbnail's caption and a video's caption are lettered by the same code. */
+#define SS_THUMB_TEXTS 3
+
+typedef struct {
+    char  words[256];
+    float size;              /* fraction of the canvas HEIGHT */
+    float r, g, b;
+    float border;            /* outline, as a fraction of the size */
+    float br, bg_, bb;       /* the outline's own colour */
+    float shadow;            /* offset, as a fraction of the size */
+    int   pos;               /* the nine anchors titles use */
+    float dx, dy;            /* a nudge, as a fraction of the canvas */
+    char  font[64];
+    int   weight;
+    float plate;             /* 0 = none, else the plate's opacity */
+    float pr, pg, pb;        /* the plate's colour */
+    float pad;               /* the plate's padding, fraction of the size */
+} ss_thumb_text;
+
+typedef struct {
+    int   on;
+    int   canvas;            /* an index into ss_thumb_sizes() */
+    int   w, h;              /* used when the canvas is `custom` */
+    int   fit;               /* 0 fill the frame and crop, 1 fit and pad */
+    float bg_r, bg_g, bg_b;  /* what shows where a fitted picture does not */
+    ss_thumb_text text[SS_THUMB_TEXTS];
+} ss_thumb;
+
+typedef struct {
+    const char *name;
+    int         w, h;
+    const char *label;
+} ss_thumb_size;
+
+/* The canvas list, terminated by a NULL name. `custom` is the last row and
+ * takes its size from the document. */
+const ss_thumb_size *ss_thumb_sizes(void);
+void ss_thumb_reset(ss_thumb *t);
+/* What this thumbnail's canvas actually is, after the preset is resolved. */
+void ss_thumb_canvas(const ss_thumb *t, int *w, int *h);
+
+/* The settings table, the same shape `keys` uses for a develop stack and
+ * `timeline keys` for a clip: one table, and the CLI, the sidecar and the
+ * window are all built from it. */
+typedef struct {
+    const char *key;
+    const char *value;       /* filled by describe: the current value */
+    float       lo, hi;
+    const char *type;        /* float | int | enum | text | colour */
+    const char *group, *label, *choices;
+} ss_thumb_info;
+
+int  ss_thumb_describe(const ss_thumb *t, int i, ss_thumb_info *out);
+int  ss_thumb_set(ss_thumb *t, const char *key, const char *val);
+int  ss_thumb_get(const ss_thumb *t, const char *key, char *out, size_t n);
+int  ss_thumb_write(const ss_thumb *t, FILE *fp);
+/* Whether anything about this thumbnail is not the default — which is what
+ * decides that it is written to the sidecar at all. */
+int  ss_thumb_used(const ss_thumb *t);
+/* The ffmpeg filter chain that turns the DEVELOPED picture into the
+ * thumbnail: the canvas, then the words. Returns how many text layers it
+ * wrote, and expects each layer's words to have been written to
+ * `<textdir>/thumbtextN.txt` — drawtext reads a caption from a FILE, because
+ * its argument is parsed twice and a caption is not. */
+int  ss_thumb_graph(const ss_thumb *t, const char *textdir, char *out, size_t n);
+
 /* -------------------------------------------------------------- the edit -- */
 
 #define SS_MAX_MASKS 16
@@ -248,6 +327,9 @@ typedef struct {
     ss_develop dev;
     int        nmasks;
     ss_mask    mask[SS_MAX_MASKS];
+    /* The thumbnail layout, which is about this photograph and so lives with
+     * it. Empty on almost every sidecar, and written only when it is not. */
+    ss_thumb   thumb;
 } ss_edit;
 
 void ss_edit_reset(ss_edit *e);

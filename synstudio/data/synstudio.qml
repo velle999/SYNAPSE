@@ -382,6 +382,9 @@ FloatingWindow {
         // come up with a dead Undo button — the same trap the cutting room's
         // history had.
         root.readDevHistory()
+        // The thumbnail layout rides in the same sidecar, so it arrives with
+        // the photograph rather than the first time the panel is opened.
+        root.loadThumb()
         getProc.command = [root.bin, "get", f]
         getProc.running = true
     }
@@ -404,6 +407,113 @@ FloatingWindow {
                           .concat(root.dragging ? ["--no-history"] : [])
         setProc.running = true
         root.requestRender()
+    }
+
+    // ── The thumbnail ───────────────────────────────────────────────────────
+    //
+    // A thumbnail is a SECOND picture made from the same photograph: a fixed
+    // canvas, the developed frame framed into it, and a few words big enough
+    // to read at the size a thumbnail is actually seen. It belongs to the
+    // photograph — it rides in the same sidecar — so reopening the file a
+    // month later brings the layout back with it.
+    //
+    // Every row in this panel comes from `thumb keys`, which is one table in
+    // src/thumb.c. Nothing about a thumbnail is decided here.
+    property bool   thumbOpen: false
+    property var    thumbRows: []
+    property var    thumbGroups: []
+    property string thumbUrl: ""
+    property int    thumbSerial: 0
+    property bool   thumbBusy: false
+    property bool   thumbAgain: false
+
+    function thumbValue(key) {
+        for (let i = 0; i < root.thumbRows.length; i++)
+            if (root.thumbRows[i].key === key) return root.thumbRows[i].value
+        return ""
+    }
+
+    function loadThumb() {
+        if (!root.file) { root.thumbRows = []; return }
+        thumbKeysProc.running = false
+        thumbKeysProc.running = true
+    }
+
+    Process {
+        id: thumbKeysProc
+        command: [root.bin, "thumb", root.file, "keys"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], seen = []
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    if (!lines[i]) continue
+                    const f = lines[i].split("\t")
+                    if (f.length < 7) continue
+                    const r = { key: f[0], value: f[1],
+                                lo: parseFloat(f[2]), hi: parseFloat(f[3]),
+                                type: f[4], group: f[5], label: f[6],
+                                choices: (f[7] || "") ? f[7].split("|") : [] }
+                    out.push(r)
+                    if (seen.indexOf(r.group) < 0) seen.push(r.group)
+                }
+                root.thumbGroups = seen
+                root.thumbRows = out
+                if (root.thumbOpen) root.requestThumb()
+            }
+        }
+    }
+
+    function setThumb(key, v) {
+        if (!root.file) return
+        thumbSetProc.command = [root.bin, "thumb", root.file, "set", key + "=" + v]
+        thumbSetProc.running = true
+    }
+
+    Process {
+        id: thumbSetProc
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.say(this.text.split("\n")[0])
+        }
+        // ⚠ The table is re-read when the write has FINISHED. The engine owns
+        // the document — it clamps a value, resolves an enum name and turns
+        // any setting at all into `on` — so what the panel shows has to come
+        // back from it rather than from what was typed.
+        onExited: function (code, status) { root.loadThumb() }
+    }
+
+    // The preview is the SAME command the export runs, at a smaller size:
+    // what is on screen is what will be written, which is the whole reason
+    // the render lives in the engine.
+    function requestThumb() {
+        if (!root.file || !root.thumbOpen) return
+        if (root.thumbBusy) { root.thumbAgain = true; return }
+        root.thumbBusy = true
+        root.thumbSerial++
+        thumbProc.command = [root.bin, "thumb", root.file, "render",
+                             "--out", root.scratch + "-thumb.png",
+                             "--size", "1400"]
+        thumbProc.running = true
+    }
+
+    Process {
+        id: thumbProc
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.say(this.text.split("\n")[0])
+        }
+        onExited: function (code, status) {
+            root.thumbBusy = false
+            if (code === 0)
+                root.thumbUrl = "file://" + root.scratch + "-thumb.png?v="
+                                + root.thumbSerial
+            if (root.thumbAgain) { root.thumbAgain = false; root.requestThumb() }
+        }
+    }
+
+    function resetThumb() {
+        if (!root.file) return
+        thumbSetProc.command = [root.bin, "thumb", root.file, "reset"]
+        thumbSetProc.running = true
     }
 
     // ── Undo in the darkroom ────────────────────────────────────────────────
@@ -580,6 +690,10 @@ FloatingWindow {
     property string exportName: ""
     property int    exportFmt: 0
     property bool   exportingStill: false
+    // Which of the three things this window can write is being asked for.
+    // "" is the page's own answer — a still in the darkroom, the cut in the
+    // cutting room — and "thumb" is the thumbnail panel asking for its own.
+    property string exportKind: ""
 
     // ── Naming a project ────────────────────────────────────────────────────
     //
@@ -773,7 +887,8 @@ FloatingWindow {
         // The source's own name, without its extension and without the
         // directory — the one part somebody actually wants to edit.
         const base = root.exportSrc.replace(/^.*\//, "").replace(/\.[^.]*$/, "")
-        root.exportName = root.mode === "video" ? base : base + "-edited"
+        root.exportName = root.exportKind === "thumb" ? base + "-thumb"
+                          : root.mode === "video" ? base : base + "-edited"
         root.exportFmt = 0
         root.exportOpen = true
     }
@@ -783,6 +898,21 @@ FloatingWindow {
         const fmt = root.exportFormats[root.exportFmt]
         const out = root.exportPath
         root.exportOpen = false
+        // A thumbnail is written by the SAME command the preview runs, at the
+        // full canvas size — which is what makes the panel a preview rather
+        // than an impression.
+        if (root.exportKind === "thumb") {
+            root.exportKind = ""
+            if (root.exportingStill) return
+            root.exportingStill = true
+            root.exportOut = out
+            exportProc.command = [root.bin, "thumb", root.file, "render",
+                                  "--out", out, "--quality", "95"]
+            exportProc.running = true
+            root.say("writing the thumbnail…")
+            return
+        }
+        root.exportKind = ""
         if (root.mode === "video") {
             if (root.exportingCut) return
             root.exportingCut = true
@@ -3101,6 +3231,19 @@ FloatingWindow {
                           label: root.exportingStill ? "Export…" : "Export"
                           active: root.file !== "" && !root.exportingStill
                           onClicked: root.openExport() }
+                    // A thumbnail is a second picture made from this one,
+                    // so it is a MODE of the darkroom rather than a page:
+                    // every develop control is still the thing underneath it.
+                    Btn { visible: root.mode === "photo"; label: "Thumbnail"
+                          on: root.thumbOpen
+                          active: root.file !== ""
+                          onClicked: {
+                              root.thumbOpen = !root.thumbOpen
+                              if (root.thumbOpen) {
+                                  root.loadThumb()
+                                  root.requestThumb()
+                              }
+                          } }
                     Btn { visible: root.mode === "photo"; label: "Undo"
                           active: root.devUndo > 0
                           onClicked: root.devStep("undo") }
@@ -3239,7 +3382,17 @@ FloatingWindow {
                         anchors.fill: parent
                         anchors.margins: 18
                         source: root.previewUrl
-                        visible: root.previewUrl !== ""
+                        visible: root.previewUrl !== "" && !root.thumbOpen
+                    }
+
+                    // The thumbnail, in the same rectangle as the photograph
+                    // — one viewer, so the picture is as big as the window
+                    // can make it and nothing moves when the panel opens.
+                    Monitor {
+                        anchors.fill: parent
+                        anchors.margins: 18
+                        source: root.thumbUrl
+                        visible: root.thumbOpen && root.thumbUrl !== ""
                     }
 
                     // Drag the photograph onto the Video tab to put it in the
@@ -3433,10 +3586,111 @@ FloatingWindow {
                             }
                         }
 
+                        // ── The thumbnail panel ─────────────────────
+                        //
+                        // Its rows come from `thumb keys`, grouped the way
+                        // that table groups them — Canvas, then a block per
+                        // caption. A control here is a row there and nothing
+                        // else, which is why the panel cannot offer a setting
+                        // the renderer does not have.
+                        Flickable {
+                            width: parent.width
+                            height: parent.height - 110
+                            visible: root.thumbOpen
+                            contentHeight: thumbCol.height
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            Column {
+                                id: thumbCol
+                                width: parent.width
+
+                                Repeater {
+                                    model: root.thumbGroups
+
+                                    Column {
+                                        id: tgrp
+                                        required property var modelData
+                                        required property int index
+                                        width: thumbCol.width
+                                        // The canvas open, the captions
+                                        // closed: three text blocks unrolled
+                                        // is a panel nobody can find the top
+                                        // of, and the first thing anybody
+                                        // does is choose where it is going.
+                                        property bool open: tgrp.index === 0
+
+                                        Rectangle {
+                                            width: parent.width
+                                            height: 30
+                                            color: root.wash(0.10)
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 12
+                                                text: (tgrp.open ? "▾  " : "▸  ")
+                                                      + tgrp.modelData
+                                                color: root.cText
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                            }
+                                            // What the caption says, on the
+                                            // header, so a closed block is
+                                            // still legible.
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.right: parent.right
+                                                anchors.rightMargin: 12
+                                                width: parent.width / 2
+                                                horizontalAlignment: Text.AlignRight
+                                                elide: Text.ElideRight
+                                                visible: !tgrp.open && tgrp.index > 0
+                                                text: root.thumbValue("text"
+                                                          + tgrp.index + ".words")
+                                                color: root.cDim
+                                                font.pixelSize: 10
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                onClicked: tgrp.open = !tgrp.open
+                                            }
+                                        }
+
+                                        Repeater {
+                                            model: tgrp.open ? root.thumbRows : []
+                                            ThumbCtl {
+                                                required property var modelData
+                                                required property int index
+                                                row: modelData
+                                                group: tgrp.modelData
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item { width: 1; height: 10 }
+
+                                Row {
+                                    x: 12
+                                    spacing: 8
+                                    Btn { label: "Export thumbnail"
+                                          active: root.file !== ""
+                                          onClicked: { root.exportKind = "thumb"
+                                                       root.openExport() } }
+                                    Btn { label: "Reset"
+                                          active: root.file !== ""
+                                          onClicked: root.resetThumb() }
+                                }
+
+                                Item { width: 1; height: 14 }
+                            }
+                        }
+
                         // Every group, every control, from the engine's table.
                         Flickable {
                             width: parent.width
                             height: parent.height - 110
+                            visible: !root.thumbOpen
                             contentHeight: panelCol.height
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
@@ -6139,6 +6393,160 @@ FloatingWindow {
     }
 
     // ── One control ─────────────────────────────────────────────────────────
+    // ── One thumbnail control ───────────────────────────────────────────────
+    //
+    // Four kinds and no more: a number with a range, a choice, a switch and
+    // some words. The develop panel's slider knows about curves, LUT rows,
+    // keyframes and the develop stack's own setter — none of which a canvas
+    // size has — so this is its own delegate rather than a fifth mode of
+    // that one.
+    component ThumbCtl: Item {
+        id: tc
+        required property var row
+        required property string group
+
+        readonly property bool mine: tc.row.group === tc.group
+        readonly property real val: parseFloat(tc.row.value) || 0
+        readonly property bool isSwitch: tc.row.type === "int" && tc.row.hi === 1
+        // A custom size only means anything on a custom canvas, and a plate's
+        // colour only once there is a plate. A control that does nothing is
+        // worse than a missing one: it is a thing to try.
+        readonly property bool applies:
+            (tc.row.key === "width" || tc.row.key === "height")
+                ? root.thumbValue("canvas") === "custom"
+            : (tc.row.key.indexOf("plate.") >= 0 || tc.row.key.indexOf(".pad") >= 0)
+                ? parseFloat(root.thumbValue(tc.row.key.split(".")[0] + ".plate")) > 0
+            : (tc.row.key === "bg.r" || tc.row.key === "bg.g" || tc.row.key === "bg.b")
+                ? root.thumbValue("fit") === "fit"
+            : true
+
+        width: thumbCol.width
+        visible: tc.mine && tc.applies
+        height: !visible ? 0 : tc.row.type === "text" ? 52 : 44
+
+        Text {
+            id: tclbl
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 6
+            text: tc.row.label
+            color: root.cText
+            font.pixelSize: 11
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 6
+            visible: tc.row.type !== "text"
+            text: tc.row.type === "enum" ? tc.row.value
+                  : tc.isSwitch ? (tc.val > 0 ? "on" : "off")
+                  : (Math.round(tc.val * 100) / 100)
+            color: root.cAccent
+            font.pixelSize: 11
+        }
+
+        // A switch: the whole row is the target, because a checkbox drawn at
+        // eleven pixels is a thing to aim at.
+        MouseArea {
+            anchors.fill: parent
+            visible: tc.isSwitch
+            enabled: tc.isSwitch
+            onClicked: root.setThumb(tc.row.key, tc.val > 0 ? "0" : "1")
+        }
+
+        // An enum: click to advance, which needs no overlay and no dismissal.
+        MouseArea {
+            anchors.fill: parent
+            visible: tc.row.type === "enum"
+            enabled: tc.row.type === "enum"
+            onClicked: {
+                const c = tc.row.choices
+                if (!c.length) return
+                const at = c.indexOf(tc.row.value)
+                root.setThumb(tc.row.key, c[(at + 1) % c.length])
+            }
+        }
+
+        // A number with a range.
+        Rectangle {
+            visible: !tc.isSwitch && tc.row.type !== "enum" && tc.row.type !== "text"
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: tclbl.bottom; anchors.topMargin: 8
+            height: 4
+            radius: 2
+            color: root.wash(0.20)
+
+            readonly property real frac:
+                tc.row.hi > tc.row.lo
+                ? Math.max(0, Math.min(1, (tc.val - tc.row.lo)
+                                          / (tc.row.hi - tc.row.lo))) : 0
+
+            Rectangle {
+                width: parent.width * parent.frac
+                height: parent.height
+                radius: 2
+                color: root.cAccent
+            }
+            Rectangle {
+                x: parent.width * parent.frac - 5
+                y: -4
+                width: 10; height: 12; radius: 2
+                color: root.cAccent
+            }
+
+            MouseArea {
+                id: tcdrag
+                anchors.fill: parent
+                anchors.margins: -10
+                preventStealing: true
+                property real last: 0
+                function pick(mx) {
+                    const f = Math.max(0, Math.min(1, (mx - 10) / parent.width))
+                    let v = tc.row.lo + f * (tc.row.hi - tc.row.lo)
+                    v = tc.row.type === "int" ? Math.round(v)
+                                              : Math.round(v * 1000) / 1000
+                    tcdrag.last = v
+                    return v
+                }
+                // ⚠ ONE `set` on release, not one per tick. Every tick is a
+                // process, a sidecar write, an undo step and a re-render of
+                // the whole thumbnail — the mixer's faders learned this and
+                // so did the develop sliders.
+                onPressed: function (m) { pick(m.x) }
+                onPositionChanged: function (m) { if (pressed) pick(m.x) }
+                onReleased: root.setThumb(tc.row.key, String(tcdrag.last))
+                onDoubleClicked: root.setThumb(tc.row.key, String(tc.row.lo))
+            }
+        }
+
+        // Words. Committed on Enter or on losing focus, never per keystroke:
+        // a `set` per character is a process per letter typed.
+        Rectangle {
+            visible: tc.row.type === "text"
+            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: tclbl.bottom; anchors.topMargin: 6
+            height: 24
+            radius: 3
+            color: root.wash(0.14)
+            border.width: 1
+            border.color: tcin.activeFocus ? root.cAccent : root.wash(0.2)
+
+            TextInput {
+                id: tcin
+                anchors.fill: parent
+                anchors.leftMargin: 7
+                anchors.rightMargin: 7
+                verticalAlignment: TextInput.AlignVCenter
+                color: root.cText
+                font.pixelSize: 11
+                clip: true
+                text: tc.row.value
+                onEditingFinished: if (text !== tc.row.value)
+                                       root.setThumb(tc.row.key, text)
+            }
+        }
+    }
+
     component Slider2: Item {
         id: sl
         // Taken as a REQUIRED property rather than read off the delegate's

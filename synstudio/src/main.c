@@ -52,6 +52,11 @@ static void usage(void)
 "  mask FILE list                list them\n"
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
 "  render FILE --out OUT         apply the sidecar and write a new file\n"
+"  thumb FILE keys|sizes|get|set K=V...|reset\n"
+"  thumb FILE render --out F.jpg [--size N] [--quality Q]\n"
+"                                a THUMBNAIL of it: a canvas, the picture\n"
+"                                framed into it, and words big enough to\n"
+"                                read at the size one is actually seen\n"
 "  source FILE --at S --out F.png [--size N]   one frame of any file, for\n"
 "                                a source monitor — through its sidecar\n"
 "  histogram FILE                256 bins per channel, tab separated\n"
@@ -707,6 +712,196 @@ static int cmd_source(const char *path, const opts *o)
            o->out, im.w, im.h, dur > 0 ? dur : 0.0, at);
     ss_image_free(&im);
     return 0;
+}
+
+/* ------------------------------------------------------- the thumbnail -- */
+
+/* `thumb render` is two steps and one temporary: this program develops the
+ * photograph and writes it once, and ONE ffmpeg pass frames it and letters
+ * it. Colour never leaves src/colour.c, and no font rasteriser is linked.
+ *
+ * ⚠ The temporary and the caption files live BESIDE THE OUTPUT, not in /tmp:
+ * the output is somewhere the user can write by definition, /tmp may be a
+ * different filesystem, and a rename across one is a copy. They are removed
+ * on the way out, including when the render fails. */
+static void thumb_side(const char *out, const char *leaf, char *buf, size_t n)
+{
+    const char *slash = strrchr(out, '/');
+    if (slash) snprintf(buf, n, "%.*s/.synstudio-%s",
+                        (int)(slash - out), out, leaf);
+    else       snprintf(buf, n, ".synstudio-%s", leaf);
+}
+
+static int cmd_thumb(const char *path, int argc, char **argv, int start)
+{
+    char side[4200];
+    ss_edit e;
+    const char *sub = start < argc ? argv[start] : "get";
+    opts o;
+    char **rest;
+    int nrest, i;
+
+    ss_sidecar_path(path, side, sizeof side);
+    if (ss_edit_load(&e, side) != 0) return die("cannot read %s", side);
+
+    if (!strcmp(sub, "keys")) {
+        ss_thumb_info f;
+        for (i = 0; ss_thumb_describe(&e.thumb, i, &f); i++)
+            printf("%s\t%s\t%g\t%g\t%s\t%s\t%s\t%s\n",
+                   f.key, f.value, (double)f.lo, (double)f.hi,
+                   f.type, f.group, f.label, f.choices);
+        return 0;
+    }
+
+    if (!strcmp(sub, "sizes")) {
+        const ss_thumb_size *z = ss_thumb_sizes();
+        for (i = 0; z[i].name; i++)
+            printf("%s\t%d\t%d\t%s\n", z[i].name, z[i].w, z[i].h, z[i].label);
+        return 0;
+    }
+
+    if (!strcmp(sub, "get")) {
+        char buf[512];
+        if (start + 1 < argc) {
+            if (ss_thumb_get(&e.thumb, argv[start + 1], buf, sizeof buf) != 0)
+                return die("no such thumbnail setting: %s", argv[start + 1]);
+            puts(buf);
+            return 0;
+        }
+        {
+            int w, h;
+            ss_thumb_info f;
+            ss_thumb_canvas(&e.thumb, &w, &h);
+            printf("width\t%d\nheight\t%d\n", w, h);
+            for (i = 0; ss_thumb_describe(&e.thumb, i, &f); i++)
+                printf("%s\t%s\n", f.key, f.value);
+        }
+        return 0;
+    }
+
+    if (!strcmp(sub, "reset")) {
+        ss_thumb_reset(&e.thumb);
+        if (dev_save(&e, side) != 0) return die("cannot write %s", side);
+        return 0;
+    }
+
+    if (!strcmp(sub, "set")) {
+        int changed = 0;
+        for (i = start + 1; i < argc; i++) {
+            char *eq = strchr(argv[i], '=');
+            if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
+            *eq = '\0';
+            if (ss_thumb_set(&e.thumb, argv[i], eq + 1) != 0)
+                return die("no such thumbnail setting: %s", argv[i]);
+            /* Typing anything about a thumbnail means wanting one. Making
+             * somebody set `on=1` as well is the kind of second step that
+             * reads as the feature not working. */
+            e.thumb.on = 1;
+            changed++;
+        }
+        if (!changed) return die("nothing to set");
+        if (dev_save(&e, side) != 0) return die("cannot write %s", side);
+        return 0;
+    }
+
+    if (strcmp(sub, "render")) return die("thumb: unknown subcommand %s — try "
+                                         "keys, sizes, get, set, reset, render", sub);
+
+    /* ---- render ---------------------------------------------------------- */
+    opts_default(&o);
+    if (parse_opts(argc, argv, start + 1, &o, &rest, &nrest) != 0)
+        return die("bad option");
+    if (!o.out) return die("thumb render needs --out");
+
+    {
+        ss_image im;
+        char built[4200], graph[8192], qbuf[16];
+        char *av[24];
+        int ac = 0, w, h, ntext, rc = -1, q;
+
+        thumb_side(o.out, "thumb-build.png", built, sizeof built);
+
+        /* Developed HERE, by this program, exactly as `render` does it — so a
+         * thumbnail and an export of the same photograph are the same
+         * colours, and the words are the only difference. */
+        if (load_edited(path, &o, &im, &e) != 0) return 1;
+        if (ss_save(built, &im, 100, 8) != 0) {
+            ss_image_free(&im);
+            return die("cannot write %s", built);
+        }
+        ss_image_free(&im);
+
+        ss_thumb_canvas(&e.thumb, &w, &h);
+        {
+            /* The caption files, one per layer, beside the output. */
+            char dir[4200];
+            const char *slash = strrchr(o.out, '/');
+            if (slash) snprintf(dir, sizeof dir, "%.*s", (int)(slash - o.out), o.out);
+            else       snprintf(dir, sizeof dir, ".");
+            for (i = 0; i < SS_THUMB_TEXTS; i++) {
+                char tp[4300];
+                FILE *fp;
+                snprintf(tp, sizeof tp, "%s/thumbtext%d.txt", dir, i);
+                fp = fopen(tp, "w");
+                if (!fp) { unlink(built); return die("cannot write %s", tp); }
+                fputs(e.thumb.text[i].words, fp);
+                fclose(fp);
+            }
+            ntext = ss_thumb_graph(&e.thumb, dir, graph, sizeof graph);
+        }
+
+        /* ⚠ quality is the JPEG one and reaches ffmpeg as -q:v 2..31, where
+         * LOWER is better — the opposite direction from every other quality
+         * number in this program, which is why it is converted in one place.
+         * PNG ignores it, which is correct: a PNG has no quality knob. */
+        q = o.quality > 0 ? o.quality : 95;
+        {
+            int qv = 2 + (int)((100 - q) * 29 / 100);
+            if (qv < 2) qv = 2;
+            if (qv > 31) qv = 31;
+            snprintf(qbuf, sizeof qbuf, "%d", qv);
+        }
+        av[ac++] = (char *)"ffmpeg";
+        av[ac++] = (char *)"-v";        av[ac++] = (char *)"error";
+        av[ac++] = (char *)"-nostdin";
+        av[ac++] = (char *)"-y";
+        av[ac++] = (char *)"-i";        av[ac++] = built;
+        av[ac++] = (char *)"-vf";       av[ac++] = graph;
+        av[ac++] = (char *)"-frames:v"; av[ac++] = (char *)"1";
+        av[ac++] = (char *)"-q:v";      av[ac++] = qbuf;
+        av[ac++] = (char *)o.out;
+        av[ac] = NULL;
+
+        if (o.print) {
+            puts(graph);
+            rc = 0;
+        } else {
+            pid_t pid = fork();
+            int status = 0;
+            if (pid == 0) { execvp(av[0], av); _exit(127); }
+            if (pid > 0) {
+                while (waitpid(pid, &status, 0) < 0 && errno == EINTR) ;
+                rc = (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+            }
+        }
+
+        unlink(built);
+        {
+            char dir[4200], tp[4300];
+            const char *slash = strrchr(o.out, '/');
+            if (slash) snprintf(dir, sizeof dir, "%.*s", (int)(slash - o.out), o.out);
+            else       snprintf(dir, sizeof dir, ".");
+            for (i = 0; i < SS_THUMB_TEXTS; i++) {
+                snprintf(tp, sizeof tp, "%s/thumbtext%d.txt", dir, i);
+                unlink(tp);
+            }
+        }
+        if (rc != 0) return die("cannot render the thumbnail");
+        if (!o.print)
+            printf("out\t%s\nwidth\t%d\nheight\t%d\ntexts\t%d\n",
+                   o.out, w, h, ntext);
+        return 0;
+    }
 }
 
 /* A scope of a photograph, through the same develop stack the picture goes
@@ -3762,6 +3957,7 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "undo") || !strcmp(cmd, "redo") || !strcmp(cmd, "history"))
         return cmd_devhist(argv[2], cmd);
     if (!strcmp(cmd, "mask"))   return cmd_mask(argv[2], argc, argv, 3);
+    if (!strcmp(cmd, "thumb"))  return cmd_thumb(argv[2], argc, argv, 3);
 
     if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0) return die("bad option");
     if (!strcmp(cmd, "peaks"))     return cmd_peaks(argv[2], &o);

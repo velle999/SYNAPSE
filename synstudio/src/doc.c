@@ -24,6 +24,7 @@ void ss_edit_reset(ss_edit *e)
 {
     memset(e, 0, sizeof(*e));
     ss_develop_reset(&e->dev);
+    ss_thumb_reset(&e->thumb);
 }
 
 int ss_edit_apply(ss_image *im, const ss_edit *e)
@@ -60,6 +61,9 @@ int ss_edit_write(const ss_edit *e, FILE *fp)
         if (ss_develop_write(&m->dev, fp) != 0) return -1;
         fprintf(fp, "endmask\n");
     }
+    /* Last, and only when it is not the default, so every sidecar written
+     * before thumbnails existed reads back byte for byte. */
+    if (ss_thumb_write(&e->thumb, fp) != 0) return -1;
     return ferror(fp) ? -1 : 0;
 }
 
@@ -102,6 +106,28 @@ int ss_edit_read(ss_edit *e, FILE *fp)
         tab = strchr(line, '\t');
         if (!tab) continue;
         *tab = '\0';
+        /* The thumbnail layout, which is about the same photograph and so
+         * lives in the same document. ⚠ Its own namespace, so a thumbnail
+         * setting can never be mistaken for a develop key — and an unknown
+         * `thumb.*` from a later version is skipped like any other unknown
+         * key rather than reaching ss_develop_set and being refused. */
+        if (!strncmp(line, "thumb.", 6)) {
+            char un[512];
+            const char *v = tab + 1;
+            size_t o = 0, k;
+            /* The words came through esc: a caption can contain anything. */
+            for (k = 0; v[k] && o + 1 < sizeof un; k++) {
+                if (v[k] == '\\' && v[k + 1]) {
+                    k++;
+                    un[o++] = v[k] == 'n' ? '\n' : v[k] == 't' ? '\t' : v[k];
+                } else {
+                    un[o++] = v[k];
+                }
+            }
+            un[o] = '\0';
+            ss_thumb_set(&e->thumb, line + 6, un);
+            continue;
+        }
         ss_develop_set(target, line, tab + 1);
     }
     return 0;

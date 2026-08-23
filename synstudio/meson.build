@@ -29,6 +29,7 @@ sources = files(
   'src/mask.c',
   'src/develop.c',
   'src/doc.c',
+  'src/thumb.c',
   'src/lut.c',
   'src/look.c',
   'src/io.c',
