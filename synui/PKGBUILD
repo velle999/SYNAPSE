@@ -723,7 +723,25 @@ pkgver=0.1.0
 #   `mode=` in rgb.state is still honoured as a hand override for everything,
 #   and its default is now `auto`. The old blanket direct-then-static push
 #   survives as the last resort for a listing this cannot parse.
-pkgrel=435
+# 436 SUPER+O MOVED THE RECORD AND LEFT THE PIXELS. Both monitor keys read as
+#   dead: nothing on screen changed, and pressing again only walked the
+#   window's idea of its monitor further out of step with where it was.
+#
+#   ⛔ `v->floating` IS THE WINDOW'S FLAG, NOT THE DESKTOP'S. move_output
+#   reassigns view->output and leaves the placing to layout_apply, which is
+#   right for a layout that places windows; the two cases carrying their own
+#   absolute geometry were spotted with `v->floating`. On a FLOATING desktop no
+#   window is marked floating — the desktop is — and LAYOUT_FLOATING's pass is
+#   layout_float_arrange, which deliberately steps over every window the user
+#   has ever dragged (hand_placed). So a dragged window on a floating desktop
+#   was placed by nobody at all.
+#
+#   The branch now asks whether any layout is going to place THIS window, and
+#   carries it across itself when none will. tests/move_output.sh drives it on
+#   two headless outputs, with hand_placed set the way float_arrange.sh does it
+#   — through layout_restore_geometry reading windows.conf, no synthetic input —
+#   and fails on the old condition.
+pkgrel=436
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -1668,6 +1668,18 @@ test('float_arrange', float_arrange,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# Super+O / Super+Shift+O (move_output): that the window CROSSES to the other
+# monitor rather than just changing which monitor it claims to be on. Two
+# headless outputs, and a window hand-placed through windows.conf on a floating
+# desktop — the case where `v->floating` is 0, nothing lays the window out, and
+# the key looked completely dead.
+move_output_t = find_program('tests/move_output.sh')
+test('move_output', move_output_t,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # Whether the layout you chose is still there next login (layout_state_save /
 # _load, layout.c): two desktops changed, the compositor restarted on the same
 # XDG_CONFIG_HOME, then a junk state file. No client — a desktop's layout is a

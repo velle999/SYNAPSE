@@ -1513,6 +1513,24 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         output_box_of(s, cur,  &from);
         output_box_of(s, next, &to);
 
+        /* ⛔ `v->floating` IS THE WINDOW'S FLAG, NOT THE DESKTOP'S, and that is
+         * the difference between this key working and looking dead.
+         *
+         * On a FLOATING desktop no window is marked floating — the desktop is —
+         * so a window there took the branch below that places nothing and left
+         * the rest to layout_apply. But LAYOUT_FLOATING's pass is
+         * layout_float_arrange, which deliberately steps over every window the
+         * user has ever dragged or resized (hand_placed). So view_set_output
+         * moved the RECORD and left the pixels exactly where they were: the key
+         * did nothing visible, and pressing it again only walked the window's
+         * idea of which monitor it was on round the ring, out of step with what
+         * was on screen.
+         *
+         * Anything no layout is going to place has to be carried across here. */
+        bool placed_by_layout = !v->floating && v->workspace &&
+                                (v->workspace->layout != LAYOUT_FLOATING ||
+                                 !v->hand_placed);
+
         view_set_output(s, v, next);
 
         if (v->fullscreen) {
@@ -1526,7 +1544,7 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                                           to.width, to.height);
             wlr_scene_node_set_position(view_node(v), to.x, to.y);
             wlr_scene_node_raise_to_top(view_node(v));
-        } else if (v->floating) {
+        } else if (!placed_by_layout) {
             /* Keep the same on-screen position relative to the monitor. */
             int nx = v->x + (to.x - from.x);
             int ny = v->y + (to.y - from.y);
