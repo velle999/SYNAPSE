@@ -51,6 +51,11 @@ Item {
     property alias volume: ao.volume
     property alias muted:  ao.muted
 
+    // Shuttle speed. The player's own rate on the rendered preview, so a
+    // faster L is still the export, played — not a second renderer with its
+    // own opinion about what the cut looks like.
+    property alias rate: mp.playbackRate
+
     function play()  { mp.play() }
     function pause() { mp.pause() }
     // Assignment rather than a setter: `position` is documented read-only and

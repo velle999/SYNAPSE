@@ -44,8 +44,10 @@ static void usage(void)
 "  probe FILE                    what the file is: size, codec, duration\n"
 "  keys                          every develop key, with its range\n"
 "  get FILE [KEY]                read the sidecar\n"
-"  set FILE KEY=VALUE...         change the sidecar\n"
-"  reset FILE                    throw the sidecar away\n"
+"  set FILE KEY=VALUE... [--no-history]   change the sidecar\n"
+"  reset FILE                    back to the picture as it arrived\n"
+"  undo FILE / redo FILE         step the sidecar back and forward\n"
+"  history FILE                  how far each way\n"
 "  mask FILE add linear|radial   add a local adjustment\n"
 "  mask FILE list                list them\n"
 "  mask FILE N KEY=VALUE...      change one (geom=x0,y0,x1,y1,feather)\n"
@@ -95,6 +97,7 @@ static void usage(void)
 "       normalised to: -23 is broadcast, -14 is what streaming does anyway\n"
 "  timeline normalise PROJ T C [--target LUFS]   measure, then set the gain\n"
 "  timeline clip PROJ TRACK FILE [--at T] [--in A] [--out-at B] [--dur S]\n"
+"                  [--flat]                      ignore its own develop\n"
 "       [--gain dB] [--opacity F] [--fade-in S] [--fade-out S] [--speed F]\n"
 "  timeline title PROJ TRACK TEXT [--at T] [--dur S] [--colour R,G,B]\n"
 "       [--style S]      \\n in TEXT is a line break; `timeline styles`\n"
@@ -217,6 +220,7 @@ typedef struct {
     const char *colour;
     const char *ease;
     int    force;               /* --force: write over a file already there */
+    int    flat;                /* --flat: ignore the photograph's own develop */
     int    off;                 /* --off: turn a thing off, keep its work */
     int    grade;               /* --grade: the develop stack and nothing else */
     int    all;                 /* --all: every clip on the track */
@@ -248,6 +252,20 @@ static void opts_default(opts *o)
     o->speed = 1.0;
     o->opacity = 1.0f;
     o->outp = -1.0;
+}
+
+/* Does a path exist?
+ *
+ * Asked before anything is written under a name somebody TYPED. Every verb in
+ * this file writes its document the instant it runs, so nothing is ever
+ * unsaved — but that same habit is what makes `new` on a name already in use,
+ * or a Save as onto an existing project, a thing you find out about
+ * afterwards. The one answer an editor must never give to "save this as
+ * Holiday" is to throw away the Holiday that was already there. */
+static int path_exists(const char *p)
+{
+    struct stat st;
+    return p && *p && stat(p, &st) == 0;
 }
 
 /* Returns the index of the first non-option argument left over, or -1. */
@@ -286,6 +304,8 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--force"))   { o->force = 1; }
+        /* --flat: take the file as it is, ignoring the develop beside it. */
+        else if (!strcmp(a, "--flat"))    { o->flat = 1; }
         else if (!strcmp(a, "--off"))     { o->off = 1; }
         else if (!strcmp(a, "--grade"))   { o->grade = 1; }
         else if (!strcmp(a, "--all"))     { o->all = 1; }
@@ -396,6 +416,43 @@ static int cmd_keys(void)
     return 0;
 }
 
+
+/* The darkroom's tl_save.
+ *
+ * A photograph's document is its SIDECAR, and history is a property of a file
+ * — so the machinery that gives the cutting room undo gives the darkroom undo
+ * with no second history, no second shape of it on disk and nothing new to
+ * get out of step. Every verb that writes a sidecar ends here, exactly as
+ * every timeline verb ends in tl_save.
+ *
+ * ⚠ The UNTOUCHED photograph is a state undo has to be able to reach, and
+ * ss_history_seed can only snapshot a file that is there. A first edit
+ * therefore writes the defaults FIRST and seeds from those — otherwise the
+ * oldest state undo knows is the one the first edit produced, and the picture
+ * as it arrived is gone from the moment the first slider moves. */
+static int dev_save_opt(const ss_edit *e, const char *side, int nohist)
+{
+    if (!path_exists(side)) {
+        ss_edit base;
+        if (ss_edit_load(&base, side) == 0) ss_edit_save(&base, side);
+    }
+    /* ⚠ Seeded even when this write is not being recorded: the state to come
+     * back to is the picture BEFORE the gesture started, and a drag that
+     * happened to be the first edit of the session would otherwise have
+     * nothing behind it. */
+    ss_history_seed(side);
+    if (ss_edit_save(e, side) != 0) return -1;
+    /* A failed snapshot is not a failed edit — the same bargain tl_save
+     * strikes. What is lost is one step of undo. */
+    if (!nohist) ss_history_push(side);
+    return 0;
+}
+
+static int dev_save(const ss_edit *e, const char *side)
+{
+    return dev_save_opt(e, side, 0);
+}
+
 static int cmd_get(const char *path, const char *key)
 {
     char side[4200], buf[512];
@@ -424,30 +481,81 @@ static int cmd_set(const char *path, int argc, char **argv, int start)
 {
     char side[4200];
     ss_edit e;
-    int i, changed = 0;
+    int i, changed = 0, nohist = 0;
 
     ss_sidecar_path(path, side, sizeof side);
     if (ss_edit_load(&e, side) != 0) return die("cannot read %s", side);
 
     for (i = start; i < argc; i++) {
-        char *eq = strchr(argv[i], '=');
+        char *eq;
+        /* ⚠ --no-history is what makes undo step by GESTURE rather than by
+         * mouse event. A slider drag is one `set` per tick, so recording each
+         * would fill a hundred-deep history with a hundred stops of one
+         * exposure slider — and Ctrl+Z would walk back through them a
+         * hundredth of a stop at a time, which is not undo. The window passes
+         * it while the hand is down and commits once on release. */
+        if (!strcmp(argv[i], "--no-history")) { nohist = 1; continue; }
+        eq = strchr(argv[i], '=');
         if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
         *eq = '\0';
         if (apply_set(&e.dev, argv[i], eq + 1) != 0) return 1;
         changed++;
     }
     if (!changed) return die("nothing to set");
-    if (ss_edit_save(&e, side) != 0) return die("cannot write %s", side);
+    if (dev_save_opt(&e, side, nohist) != 0) return die("cannot write %s", side);
     return 0;
 }
 
+/* ⚠ Reset WRITES the defaults rather than unlinking the sidecar, so that it
+ * is an edit like any other and `undo` takes it back. Pressing Reset on an
+ * afternoon's work and having no way back is the single worst thing this
+ * window could do, and unlinking the file put that state outside the history
+ * entirely — there is nothing on disk left to snapshot. A sidecar of defaults
+ * renders identically to no sidecar at all; that is why `get` works on a
+ * photograph that has never been touched. */
 static int cmd_reset(const char *path)
 {
     char side[4200];
+    ss_edit e;
+
     ss_sidecar_path(path, side, sizeof side);
-    if (unlink(side) != 0 && errno != ENOENT)
-        return die("cannot remove %s: %s", side, strerror(errno));
+    if (!path_exists(side)) return 0;          /* nothing to take back */
+    if (ss_edit_load(&e, side) != 0) return die("cannot read %s", side);
+    ss_edit_reset(&e);
+    if (dev_save(&e, side) != 0) return die("cannot write %s", side);
     return 0;
+}
+
+/* Undo, redo and how deep they go — for a PHOTOGRAPH.
+ *
+ * The same three answers the cutting room gives, in the same shape, off the
+ * same machinery: a sidecar is a document on disk and history is a property
+ * of a file. ⚠ Like the timeline's, these move the FILE and so do NOT go
+ * through dev_save — a history move that recorded itself would bury the thing
+ * it moved to.
+ *
+ * `undo` on a photograph nobody has edited is not an error: it prints
+ * `nothing` and exits 1, which is what the window reads to grey the button. */
+static int cmd_devhist(const char *path, const char *verb)
+{
+    char side[4200];
+    int u = 0, r = 0;
+
+    ss_sidecar_path(path, side, sizeof side);
+    if (!strcmp(verb, "history")) {
+        ss_history_depth(side, &u, &r);
+        printf("undo\t%d\nredo\t%d\n", u, r);
+        return 0;
+    }
+    {
+        int rc = !strcmp(verb, "undo") ? ss_history_undo(side)
+                                       : ss_history_redo(side);
+        if (rc < 0) return die("cannot %s: the history is unreadable", verb);
+        ss_history_depth(side, &u, &r);
+        printf("%s\tundo\t%d\tredo\t%d\n",
+               rc == 0 ? "moved" : "nothing", u, r);
+        return rc == 0 ? 0 : 1;
+    }
 }
 
 static int cmd_mask(const char *path, int argc, char **argv, int start)
@@ -478,7 +586,7 @@ static int cmd_mask(const char *path, int argc, char **argv, int start)
         ss_mask_reset(&e.mask[e.nmasks],
                       strcmp(kind, "radial") ? SS_MASK_LINEAR : SS_MASK_RADIAL);
         e.nmasks++;
-        if (ss_edit_save(&e, side) != 0) return die("cannot write %s", side);
+        if (dev_save(&e, side) != 0) return die("cannot write %s", side);
         printf("%d\n", e.nmasks - 1);
         return 0;
     }
@@ -488,7 +596,7 @@ static int cmd_mask(const char *path, int argc, char **argv, int start)
         if (n < 0 || n >= e.nmasks) return die("no mask %d", n);
         memmove(&e.mask[n], &e.mask[n+1], sizeof(ss_mask) * (e.nmasks - n - 1));
         e.nmasks--;
-        if (ss_edit_save(&e, side) != 0) return die("cannot write %s", side);
+        if (dev_save(&e, side) != 0) return die("cannot write %s", side);
         return 0;
     }
 
@@ -511,7 +619,7 @@ static int cmd_mask(const char *path, int argc, char **argv, int start)
                 return 1;
             }
         }
-        if (ss_edit_save(&e, side) != 0) return die("cannot write %s", side);
+        if (dev_save(&e, side) != 0) return die("cannot write %s", side);
         return 0;
     }
 }
@@ -617,7 +725,7 @@ static int cmd_match(const char *path, const opts *o)
     ss_image_free(&ref);
     ss_image_free(&tgt);
 
-    if (ss_edit_save(&te, side) != 0) return die("cannot write %s", side);
+    if (dev_save(&te, side) != 0) return die("cannot write %s", side);
 
     {
         char v[64];
@@ -881,7 +989,7 @@ static int cmd_look(int argc, char **argv)
         if (ss_edit_load(&e, side) != 0) return die("cannot read %s", side);
         bad = ss_look_apply(k, &e.dev);
         if (bad < 0) return die("cannot read %s", k->path);
-        if (ss_edit_save(&e, side) != 0) return die("cannot write %s", side);
+        if (dev_save(&e, side) != 0) return die("cannot write %s", side);
         /* A look written by a newer synstudio still lands, minus whatever
          * this build has never heard of — but it says so, because a look that
          * arrived 80%% applied and silent is a look somebody will spend an
@@ -961,19 +1069,6 @@ static int tl_save(const char *proj, const ss_timeline *t)
     return 0;
 }
 
-/* Does a path exist?
- *
- * Asked before anything is written under a name somebody TYPED. Every verb in
- * this file writes the project the instant it runs, so a cut is never unsaved
- * — but that same habit is what makes `new` on a name already in use, or a
- * Save as onto an existing project, a thing you find out about afterwards.
- * The one answer an editor must never give to "save this as Holiday" is to
- * throw away the Holiday that was already there. */
-static int path_exists(const char *p)
-{
-    struct stat st;
-    return p && *p && stat(p, &st) == 0;
-}
 
 static int copy_bytes(const char *from, const char *to)
 {
@@ -1811,6 +1906,38 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         c.opacity  = o.opacity;
         c.fade_in  = o.fade_in;
         c.fade_out = o.fade_out;
+
+        /* ⚠ A PHOTOGRAPH ARRIVES DEVELOPED.
+         *
+         * The darkroom writes every change to `<photo>.synstudio` as it is
+         * made, so a still dragged from the photo page onto the cut has its
+         * work sitting beside it on disk — and a clip whose grade started at
+         * the defaults showed the picture as the camera left it. That is
+         * worse than an error: the shot looks like the develop never
+         * happened, and the only clue is that it is exactly the original.
+         *
+         * A clip's grade IS an ss_develop, the same table the sidecar holds,
+         * so the whole stack travels by assignment and every setting is still
+         * a row in the inspector afterwards.
+         *
+         * ⚠ MASKS DO NOT TRAVEL. A mask is a local adjustment on the ss_edit,
+         * not part of the develop stack, and a clip has no such list — so a
+         * photograph with masks lands with everything except them.
+         *
+         * ⚠ And an untouched photograph must not be marked as graded: an
+         * identity stack written to the project is a clip that claims a grade
+         * it has not got, which is the difference between "no grade" and "a
+         * grade that happens to do nothing" in every reader downstream. */
+        if (!o.flat) {
+            char side[4200];
+            ss_edit e;
+            ss_sidecar_path(c.path, side, sizeof side);
+            if (path_exists(side) && ss_edit_load(&e, side) == 0
+                && !ss_develop_is_identity(&e.dev)) {
+                c.grade = e.dev;
+                c.has_grade = 1;
+            }
+        }
 
         cl = ss_timeline_add_clip(t, tr, &c);
         if (cl < 0) return die("no track %d, or no room on it", tr);
@@ -3426,6 +3553,8 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "get"))    return cmd_get(argv[2], argc > 3 ? argv[3] : NULL);
     if (!strcmp(cmd, "set"))    return cmd_set(argv[2], argc, argv, 3);
     if (!strcmp(cmd, "reset"))  return cmd_reset(argv[2]);
+    if (!strcmp(cmd, "undo") || !strcmp(cmd, "redo") || !strcmp(cmd, "history"))
+        return cmd_devhist(argv[2], cmd);
     if (!strcmp(cmd, "mask"))   return cmd_mask(argv[2], argc, argv, 3);
 
     if (parse_opts(argc, argv, 3, &o, &rest, &nrest) != 0) return die("bad option");

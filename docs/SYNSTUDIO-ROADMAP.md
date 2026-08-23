@@ -17,7 +17,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 
 | area      | state                                                        |
 |-----------|--------------------------------------------------------------|
-| colour    | strongest — 64 settings, curves, HSL, masks, the LUT bridge   |
+| colour    | strongest — 64 settings, curves, HSL, masks, LUT bridge, undo |
 | cutting   | undo, markers, snapping, keys, copy/paste, and Save as        |
 | retime    | ramps, reverse, freeze, optical flow, and a stabiliser         |
 | audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
@@ -254,6 +254,16 @@ Fairlight-style automation: four features for one piece of work.
       render. Halvings multiply; it chains them now
 - [x] **undo and redo** — whole documents in `<project>.undo/`, on disk, so it
       survives the window closing. `timeline undo|redo|history`
+- [x] **undo in the DARKROOM too** — shipped in 0.1.0-35. `undo|redo|history
+      FILE`, off the same machinery: a photograph's document is its sidecar,
+      history is a property of a file, and the engine moves whole documents
+      either way. ⚠ Reset WRITES the defaults now rather than unlinking the
+      sidecar, so it is an edit like any other and can be taken back — the
+      deletion put an afternoon's work outside the history entirely, because
+      there was nothing left on disk to snapshot. ⚠ And a slider drag is one
+      step, not a hundred: the ticks carry `--no-history` and the release
+      commits once, or a hundred-deep ring would hold nothing but one
+      slider's journey
 - [x] **copy/paste/duplicate clips, and paste a grade to many clips** —
       shipped in 0.1.0-27. The clipboard is a one-clip DOCUMENT, written and
       read by the same two functions the project file uses, so everything the
@@ -283,7 +293,20 @@ Fairlight-style automation: four features for one piece of work.
       go there. ⚠ still nothing on a CLIP
 - [x] snapping to cuts, markers and the playhead, on moves, trims and scrubs
 - [x] multi-select — shift-click; deletes run highest index first
-- [ ] J K L, and keys at all — the window binds none
+- [x] **J K L, and keys at all** — shipped in 0.1.0-35. The window bound
+      nothing until then: every action was a button, the transport included.
+      Space plays, L plays and doubles on each press (the PLAYER's rate on the
+      rendered preview, so a fast pass is still the export, played), K stops,
+      arrows step a frame and a second, Home/End, S splits, T transitions, M
+      marks, Del and Shift+Del delete, Ctrl+C/V copy and paste at the
+      playhead, Ctrl+Z/Ctrl+Shift+Z, Ctrl+S saves as, and `?` lists them all.
+      ⚠ J cannot be what L is: nothing plays an encoded preview backwards, and
+      rendering the timeline in reverse to watch it would be a second renderer
+      with its own opinion of the cut. J shuttles the frame monitor back at
+      1/2/4 frames a step, and both the status line and the key sheet say that
+      is what it is. ⚠ A FOCUS ITEM, not Shortcut objects — Qt matches a
+      shortcut before the key reaches whatever has focus, so Ctrl+C over a
+      name field would copy a clip and J would shuttle while somebody typed
 - [ ] source monitor + three-point editing
 - [x] **linked audio and video** — shipped in 0.1.0-29. A link is a GROUP id,
       not a pointer to a partner: a link is not necessarily a pair (a shot,
@@ -432,8 +455,8 @@ Fairlight-style automation: four features for one piece of work.
 
 **The build order is finished.** What is left in the sections above is a
 short list of named gaps rather than a plan: the named colour transforms, a
-watermark image, J-K-L and a source monitor, track automation, a curve editor
-over time, and smooth cut. Auto-save was never a gap and is not a feature
+watermark image, a source monitor, track automation, a curve editor over time,
+and smooth cut. Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what
 that was missing, until 0.1.0-34, was a way to give it a name.
 

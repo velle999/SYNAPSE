@@ -250,6 +250,12 @@ FloatingWindow {
         stderr: StdioCollector {
             onStreamFinished: if (this.text) root.say(this.text.split("\n")[0])
         }
+        // ⚠ The history depth is read when the write has FINISHED, not beside
+        // it. Asking while the `set` is still running answers about the
+        // sidecar as it was a moment ago — which is zero on the first edit, so
+        // Undo stayed grey until the SECOND change and the first one could
+        // never be taken back.
+        onExited: function (code, status) { root.readDevHistory() }
     }
 
     // ── Rendering the preview ───────────────────────────────────────────────
@@ -371,6 +377,11 @@ FloatingWindow {
         root.file = f
         root.dirty = false
         root.say("reading " + f.replace(/^.*\//, ""))
+        // ⚠ Asked on OPEN, not only after an edit. A photograph carries its
+        // history beside it, so a picture with fifty steps behind it must not
+        // come up with a dead Undo button — the same trap the cutting room's
+        // history had.
+        root.readDevHistory()
         getProc.command = [root.bin, "get", f]
         getProc.running = true
     }
@@ -383,9 +394,64 @@ FloatingWindow {
         // the sidecar, so a dropped intermediate value is harmless — but the
         // LAST one must land, which is what the render debounce below and the
         // final set on release guarantee.
+        //
+        // ⚠ And a tick DURING a drag is not recorded in the history. Undo has
+        // to step by gesture: recording each tick would put a hundred stops of
+        // one slider in a hundred-deep ring, so Ctrl+Z would walk back through
+        // a drag a hundredth of a stop at a time and the edit before it would
+        // be gone. The release commits the same value again, without the flag.
         setProc.command = [root.bin, "set", root.file, key + "=" + v]
+                          .concat(root.dragging ? ["--no-history"] : [])
         setProc.running = true
         root.requestRender()
+    }
+
+    // ── Undo in the darkroom ────────────────────────────────────────────────
+    //
+    // The same three answers the cutting room gives, off the same machinery:
+    // a photograph's document is its sidecar, history is a property of a file,
+    // and `undo FILE` steps it. Nothing here knows what an edit WAS — the
+    // engine moves whole documents, exactly as it does for a project.
+    property int devUndo: 0
+    property int devRedo: 0
+
+    function readDevHistory() {
+        if (!root.file) { root.devUndo = 0; root.devRedo = 0; return }
+        devHistProc.running = false
+        devHistProc.running = true
+    }
+
+    Process {
+        id: devHistProc
+        command: [root.bin, "history", root.file]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f[0] === "undo") root.devUndo = parseInt(f[1]) || 0
+                    if (f[0] === "redo") root.devRedo = parseInt(f[1]) || 0
+                }
+            }
+        }
+    }
+
+    function devStep(verb) {
+        if (!root.file) return
+        if (verb === "undo" ? root.devUndo <= 0 : root.devRedo <= 0) return
+        devStepProc.command = [root.bin, verb, root.file]
+        devStepProc.running = true
+    }
+
+    Process {
+        id: devStepProc
+        onExited: function (code, status) {
+            // The sliders, the masks and the picture all come off the sidecar,
+            // and the engine has just replaced it wholesale — so this reloads
+            // the file rather than trying to work out what moved.
+            root.readDevHistory()
+            root.loadFile(root.file)
+        }
     }
 
     // ── The picker ──────────────────────────────────────────────────────────
@@ -2398,6 +2464,7 @@ FloatingWindow {
             pl.seek(root.playhead * 1000)
         }
         root.playing = true
+        pl.rate = root.playRate
         pl.play()
     }
 
@@ -2413,6 +2480,71 @@ FloatingWindow {
         // rough, and it is not what anyone should be grading against.
         root.playhead = pl.position / 1000
         root.requestFrame()
+    }
+
+    // ── J K L ───────────────────────────────────────────────────────────────
+    //
+    // L plays and doubles on each press: that is the PLAYER'S rate on the
+    // rendered preview, so a fast pass is still the export, played.
+    //
+    // ⚠ J cannot be the same thing. Nothing plays an H.264 preview backwards,
+    // and rendering the timeline in reverse to watch it would be a second
+    // renderer with its own opinion of the cut — the one thing this program
+    // has refused since the first commit. So J is a SHUTTLE: the frame
+    // monitor, stepped back one, two or four frames at a time as fast as it
+    // answers. It is a scrub wearing the transport's vocabulary, and the
+    // status line says which it is rather than letting the speed be a lie.
+    property real playRate: 1
+    property int  revStep: 0            // frames per tick, 0 = not shuttling
+
+    function applyRate() {
+        if (root.playbackReady) playbackLoader.item.rate = root.playRate
+    }
+
+    function shuttleForward() {
+        root.stopShuttle()
+        if (!root.playing) { root.playRate = 1; root.applyRate(); root.togglePlay(); return }
+        root.playRate = root.playRate >= 8 ? 1 : root.playRate * 2
+        root.applyRate()
+        root.say("play ×" + root.playRate)
+    }
+
+    function shuttleBack() {
+        if (!root.proj || root.tlDur <= 0) return
+        if (root.playing) root.pausePlayback()
+        root.revStep = root.revStep === 0 ? 1 : Math.min(4, root.revStep * 2)
+        revTimer.start()
+        root.say("shuttle back ×" + root.revStep + " (frames, not playback)")
+    }
+
+    function stopShuttle() {
+        root.revStep = 0
+        revTimer.stop()
+    }
+
+    // K, and every other reason to stop.
+    function shuttleStop() {
+        root.stopShuttle()
+        root.playRate = 1
+        root.applyRate()
+        if (root.playing) root.pausePlayback()
+    }
+
+    Timer {
+        id: revTimer
+        interval: 80
+        repeat: true
+        // ⚠ Faster than the monitor can answer ON PURPOSE. The frame request
+        // is already coalesced — one in flight and one queued — so a tick
+        // that arrives early is dropped rather than queued up behind the
+        // render, and the shuttle runs at whatever the machine can do.
+        onTriggered: {
+            if (root.revStep === 0 || root.playhead <= 0) {
+                root.stopShuttle()
+                return
+            }
+            root.seekTo(root.playhead - root.revStep / (root.tl.fps || 25))
+        }
     }
 
     // The player itself lives in synstudio-playback.qml, behind a Loader,
@@ -2727,13 +2859,18 @@ FloatingWindow {
                           label: root.exportingStill ? "Export…" : "Export"
                           active: root.file !== "" && !root.exportingStill
                           onClicked: root.openExport() }
+                    Btn { visible: root.mode === "photo"; label: "Undo"
+                          active: root.devUndo > 0
+                          onClicked: root.devStep("undo") }
+                    Btn { visible: root.mode === "photo"; label: "Redo"
+                          active: root.devRedo > 0
+                          onClicked: root.devStep("redo") }
+                    // ⚠ Reset is an edit like any other now, so Undo takes it
+                    // back. It used to delete the sidecar, which put the work
+                    // it threw away outside the history entirely.
                     Btn { visible: root.mode === "photo"
-                          label: "Reset"; active: root.file !== ""; onClicked: {
-                        setProc.command = [root.bin, "reset", root.file]
-                        setProc.running = true
-                        root.dirty = false
-                        Qt.callLater(function () { root.loadFile(root.file) })
-                    } }
+                          label: "Reset"; active: root.file !== ""
+                          onClicked: root.resetPhoto() }
 
                     Btn { visible: root.mode === "video"; label: "New project"
                           onClicked: root.openNewProject() }
@@ -2822,6 +2959,11 @@ FloatingWindow {
                           active: root.proj !== "" && root.tlDur > 0
                                   && !root.exportingCut
                           onClicked: root.openExport() }
+                    // ⚠ A button for the key list. Bindings nobody can find
+                    // are half a feature, and "press ? to see the keys" is
+                    // itself a key nobody has been told about.
+                    Btn { label: "Keys"; on: root.helpOpen
+                          onClicked: root.helpOpen = !root.helpOpen }
                 }
 
             }
@@ -4682,6 +4824,244 @@ FloatingWindow {
         }
     }
 
+    // ── Keys ────────────────────────────────────────────────────────────────
+    //
+    // The window bound NOTHING until 0.1.0-35. Every action was a button,
+    // including the ones a hand keeps on the keyboard — play, step, split,
+    // undo — and a cutting room where the transport is mouse-only is a
+    // cutting room nobody can work quickly in.
+    //
+    // ⚠ A FOCUS ITEM, not a set of Shortcut objects. Qt matches a Shortcut
+    // BEFORE the key is delivered to whatever has focus, so Ctrl+C over the
+    // project-name field would copy a CLIP instead of the word under the
+    // cursor, and J would shuttle the timeline while somebody typed "Jan"
+    // into a name. A focused TextInput swallows its own keys and this item
+    // never sees them, which is the behaviour every one of these needs.
+    // Focus comes back here whenever a sheet closes.
+    Item {
+        id: keyCatcher
+        anchors.fill: parent
+        focus: true
+        Keys.onPressed: function (e) { root.handleKey(e) }
+    }
+
+    onSaveOpenChanged:    if (!root.saveOpen)    keyCatcher.forceActiveFocus()
+    onExportOpenChanged:  if (!root.exportOpen)  keyCatcher.forceActiveFocus()
+    onPickerOpenChanged:  if (!root.pickerOpen)  keyCatcher.forceActiveFocus()
+    onLutMenuOpenChanged: if (!root.lutMenuOpen) keyCatcher.forceActiveFocus()
+    onHelpOpenChanged:    if (!root.helpOpen)    keyCatcher.forceActiveFocus()
+
+    property bool helpOpen: false
+
+    // ⚠ The sheet below is built from THIS table, so a binding that is added
+    // to the handler and not to it is a binding nobody can find. `mode` is
+    // which page it belongs to: "" is both.
+    readonly property var keyRows: [
+        { mode: "",      k: "?",              d: "this list" },
+        { mode: "",      k: "Esc",            d: "close what is open" },
+        { mode: "",      k: "Ctrl+O",         d: "open a file" },
+        { mode: "",      k: "Ctrl+E",         d: "export" },
+        { mode: "",      k: "Ctrl+Z / Ctrl+Shift+Z", d: "undo, redo" },
+        { mode: "photo", k: "Ctrl+S",         d: "export the photograph" },
+        { mode: "photo", k: "Ctrl+R",         d: "back to the picture as it arrived" },
+        { mode: "video", k: "Ctrl+S",         d: "save the cut under a name" },
+        { mode: "video", k: "Ctrl+N",         d: "new project" },
+        { mode: "video", k: "Space",          d: "play, pause" },
+        { mode: "video", k: "L / K / J",      d: "play faster, stop, shuttle back" },
+        { mode: "video", k: "← →",            d: "a frame; with Shift, a second" },
+        { mode: "video", k: "Home / End",     d: "the start, the end" },
+        { mode: "video", k: "Ctrl+C / Ctrl+V", d: "copy a clip, paste at the playhead" },
+        { mode: "video", k: "S",              d: "split at the playhead" },
+        { mode: "video", k: "T",              d: "transition at the playhead" },
+        { mode: "video", k: "M",              d: "a marker here" },
+        { mode: "video", k: "Del / Shift+Del", d: "delete, ripple delete" }
+    ]
+
+    function handleKey(e) {
+        const ctrl  = (e.modifiers & Qt.ControlModifier) !== 0
+        const shift = (e.modifiers & Qt.ShiftModifier) !== 0
+        const video = root.mode === "video"
+        const sheet = root.saveOpen || root.exportOpen || root.pickerOpen
+                      || root.lutMenuOpen || root.helpOpen
+
+        if (e.key === Qt.Key_Escape) {
+            if (root.helpOpen)          root.helpOpen = false
+            else if (root.saveOpen)     root.saveOpen = false
+            else if (root.exportOpen)   root.exportOpen = false
+            else if (root.pickerOpen)   root.pickerOpen = false
+            else if (root.lutMenuOpen)  root.lutMenuOpen = false
+            else if (root.playing || root.revStep > 0) root.shuttleStop()
+            else return
+            e.accepted = true
+            return
+        }
+        // A sheet is over the window: it owns the keyboard. A shortcut acting
+        // on the cut behind it is an edit nobody can see happening.
+        if (sheet) return
+
+        if (ctrl) {
+            switch (e.key) {
+            case Qt.Key_S:
+                if (video) root.openSaveAs(); else root.openExport()
+                break
+            case Qt.Key_N: root.openNewProject(); break
+            case Qt.Key_O:
+                root.pickerFor = video ? "project" : "photo"
+                root.openPicker()
+                break
+            case Qt.Key_E: root.openExport(); break
+            case Qt.Key_C: if (video) root.copyClip(); break
+            case Qt.Key_V: if (video) root.pasteClip(); break
+            case Qt.Key_R: if (!video && root.file) root.resetPhoto(); break
+            case Qt.Key_Y:
+                if (video) root.redoEdit(); else root.devStep("redo")
+                break
+            case Qt.Key_Z:
+                if (shift) { if (video) root.redoEdit(); else root.devStep("redo") }
+                else       { if (video) root.undoEdit(); else root.devStep("undo") }
+                break
+            default: return
+            }
+            e.accepted = true
+            return
+        }
+
+        if (e.key === Qt.Key_Question || e.text === "?" || e.key === Qt.Key_F1) {
+            root.helpOpen = true
+            e.accepted = true
+            return
+        }
+
+        if (!video) return
+        const frame = 1 / (root.tl.fps || 25)
+
+        switch (e.key) {
+        case Qt.Key_Space: root.stopShuttle(); root.togglePlay(); break
+        case Qt.Key_L: root.shuttleForward(); break
+        case Qt.Key_K: root.shuttleStop(); break
+        case Qt.Key_J: root.shuttleBack(); break
+        case Qt.Key_Left:  root.stopShuttle()
+                           root.seekTo(root.playhead - (shift ? 1 : frame)); break
+        case Qt.Key_Right: root.stopShuttle()
+                           root.seekTo(root.playhead + (shift ? 1 : frame)); break
+        case Qt.Key_Home: root.stopShuttle(); root.seekTo(0); break
+        case Qt.Key_End:  root.stopShuttle(); root.seekTo(root.tlDur); break
+        case Qt.Key_S:
+            if (root.selTrack >= 0)
+                root.tlRun(["split", root.proj, String(root.selTrack),
+                            "--at", String(root.playhead)])
+            break
+        case Qt.Key_T:
+            if (root.selTrack >= 0)
+                root.tlRun(["transition", root.proj, String(root.selTrack),
+                            "--at", String(root.playhead),
+                            "--kind", root.defaultTrans,
+                            "--dur", String(root.defaultTransDur)])
+            break
+        case Qt.Key_M: if (root.proj) root.addMarker(); break
+        case Qt.Key_Delete:
+        case Qt.Key_Backspace:
+            if (root.selClip >= 0) root.deleteSelection(shift)
+            break
+        default: return
+        }
+        e.accepted = true
+    }
+
+    // Reset lives in a function now because two things ask for it — the
+    // button and Ctrl+R — and a second copy of it in a key handler is how the
+    // two come to do different things.
+    function resetPhoto() {
+        if (!root.file) return
+        setProc.command = [root.bin, "reset", root.file]
+        setProc.running = true
+        root.dirty = false
+        Qt.callLater(function () { root.loadFile(root.file) })
+    }
+
+    // ── What the keys do ───────────────────────────────────────────────
+    Rectangle {
+        anchors.fill: parent
+        visible: root.helpOpen
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        MouseArea { anchors.fill: parent; hoverEnabled: true
+                    onClicked: root.helpOpen = false }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(540, parent.width - 80)
+            height: Math.min(helpCol.implicitHeight + 28, parent.height - 80)
+            color: root.cPanel
+            radius: 6
+            border.width: 1
+            border.color: root.wash(0.28)
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+            Column {
+                id: helpCol
+                x: 14
+                y: 14
+                width: parent.width - 28
+                spacing: 6
+
+                Text {
+                    text: "Keys"
+                    color: root.cText
+                    font.pixelSize: 13
+                    font.bold: true
+                    bottomPadding: 4
+                }
+
+                Repeater {
+                    model: root.keyRows
+
+                    Row {
+                        id: keyRow
+                        required property var modelData
+                        // Only what this page can do. A list of bindings that
+                        // do nothing here is a list nobody trusts.
+                        visible: keyRow.modelData.mode === ""
+                                 || keyRow.modelData.mode === root.mode
+                        width: parent.width
+                        height: visible ? 20 : 0
+                        spacing: 10
+
+                        Text {
+                            width: 150
+                            text: keyRow.modelData.k
+                            color: root.cAccent
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                        }
+                        Text {
+                            width: keyRow.width - 160
+                            text: keyRow.modelData.d
+                            color: root.cText
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    topPadding: 6
+                    wrapMode: Text.WordWrap
+                    // ⚠ Said out loud, because the speed is real and the
+                    // direction is not: J steps the frame monitor backwards
+                    // rather than playing in reverse, which nothing can do to
+                    // an encoded preview.
+                    text: "J shuttles back through the frame monitor — it is a "
+                          + "fast scrub, not playback in reverse."
+                    color: root.cDim
+                    font.pixelSize: 10
+                }
+            }
+        }
+    }
+
     // ── The start screen ───────────────────────────────────────────────
     //
     // Shown only while nothing at all is open. Three doors, because there are
@@ -5454,17 +5834,25 @@ FloatingWindow {
                 // the scroll after ten pixels. See the timeline ruler.
                 preventStealing: true
 
+                property real lastVal: 0
+
                 function commit(mx, live) {
                     const f = Math.max(0, Math.min(1, (mx - 10) / track.width))
                     let v = sl.row.lo + f * (sl.row.hi - sl.row.lo)
                     v = sl.row.type === "int" ? Math.round(v)
                                               : Math.round(v * 100) / 100
+                    lastVal = v
                     root.change(sl.row.key, v)
                 }
                 onPressed: function (m) { root.dragging = true; commit(m.x, true) }
                 onPositionChanged: function (m) { if (pressed) commit(m.x, true) }
                 onReleased: function (m) {
                     root.dragging = false
+                    // ⚠ The same value, set once more with the hand off the
+                    // mouse — which is the press that goes in the undo
+                    // history. Every tick before it carried --no-history, so
+                    // one drag is one step back rather than a hundred.
+                    root.change(sl.row.key, lastVal)
                     // The full-size render only happens once, here. Rendering
                     // at export resolution on every mouse move would make the
                     // slider lag behind the hand.

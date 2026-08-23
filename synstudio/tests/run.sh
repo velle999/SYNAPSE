@@ -3456,6 +3456,103 @@ if have ffprobe; then
                      -of csv=p=0 "$TMP/soft.mp4" | head -1)"
 fi
 
+# ------------------------------------------------- undo in the darkroom --
+#
+# A photograph's document is its SIDECAR, and history is a property of a file,
+# so the machinery that gives the cutting room undo gives the darkroom undo
+# with no second history and no second shape of it on disk.
+
+dk=$TMP/dark
+mkdir -p "$dk"
+if have ffmpeg; then
+    dimg=$dk/shot.png
+    ffmpeg -v error -f lavfi -i color=c=0x404040:s=64x64:d=1 -frames:v 1 "$dimg" -y
+    check "an untouched photograph has no history" "undo	0" \
+          "$($BIN history "$dimg" | head -1)"
+
+    $BIN set "$dimg" exposure=1.5 >/dev/null
+    $BIN set "$dimg" contrast=30 >/dev/null
+    check "two edits are two steps back" "undo	2" "$($BIN history "$dimg" | head -1)"
+
+    $BIN undo "$dimg" | seen "undo moves" "moved"
+    check "and it is the LAST edit that goes" "0" "$($BIN get "$dimg" contrast)"
+    check "while the one before it stays"    "1.5" "$($BIN get "$dimg" exposure)"
+
+    # ⚠ The untouched photograph is a state undo has to REACH. Seeding only
+    # when the first edit is written is what makes it reachable — without it
+    # the oldest state is the one the first slider produced.
+    $BIN undo "$dimg" >/dev/null
+    check "and back to the picture as it arrived" "0" "$($BIN get "$dimg" exposure)"
+    $BIN undo "$dimg" >/dev/null 2>&1
+    check "undo with nothing behind it says so" "1" "$?"
+    $BIN redo "$dimg" >/dev/null
+    check "redo comes forward again" "1.5" "$($BIN get "$dimg" exposure)"
+
+    # ⚠ Reset is an EDIT now, not a deletion. It used to unlink the sidecar,
+    # which put an afternoon's work outside the history entirely: there was
+    # nothing left on disk to snapshot, so there was nothing to come back to.
+    $BIN redo "$dimg" >/dev/null
+    $BIN reset "$dimg"
+    check "reset clears the stack" "0" "$($BIN get "$dimg" exposure)"
+    $BIN undo "$dimg" >/dev/null
+    check "and undo takes a reset back" "1.5" "$($BIN get "$dimg" exposure)"
+
+    # ⚠ A slider drag is one `set` per tick. Recording each would fill a
+    # hundred-deep ring with one slider's journey, and Ctrl+Z would walk back
+    # through it a hundredth of a stop at a time — which is not undo.
+    before=$($BIN history "$dimg" | head -1)
+    $BIN set "$dimg" exposure=0.1 --no-history >/dev/null
+    $BIN set "$dimg" exposure=0.2 --no-history >/dev/null
+    $BIN set "$dimg" exposure=0.3 --no-history >/dev/null
+    check "ticks during a drag are not steps" "$before" \
+          "$($BIN history "$dimg" | head -1)"
+    check "but the value is the last one written" "0.3" "$($BIN get "$dimg" exposure)"
+    $BIN set "$dimg" exposure=0.3 >/dev/null
+    $BIN undo "$dimg" >/dev/null
+    # One press back from the committed drag is the value BEFORE the gesture,
+    # not the tick before the last one.
+    check "and one undo clears the whole drag" "1.5" "$($BIN get "$dimg" exposure)"
+
+    # ---- a photograph arrives in the cut DEVELOPED ------------------------
+    #
+    # ⚠ The failure this prevents is silent and reads as nothing having
+    # happened: a still dragged from the darkroom onto the timeline used to
+    # land with a default grade, so the shot in the cut was the picture as the
+    # camera left it, and the only clue was that it looked exactly original.
+    dp=$dk/cut.syntl
+    $BIN timeline new "$dp" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$dp" video V >/dev/null
+    $BIN reset "$dimg"
+    $BIN timeline clip "$dp" 0 "$dimg" --at 0 --dur 1 >/dev/null
+    check "an undeveloped photograph lands ungraded" "0" \
+          "$($BIN timeline get "$dp" 0 0 | awk -F'\t' '/^graded/{print $2}')"
+    $BIN set "$dimg" exposure=1.5 >/dev/null
+    $BIN timeline clip "$dp" 0 "$dimg" --at 2 --dur 1 >/dev/null
+    check "a developed one brings its develop with it" "1" \
+          "$($BIN timeline get "$dp" 0 1 | awk -F'\t' '/^graded/{print $2}')"
+    $BIN timeline clip "$dp" 0 "$dimg" --at 4 --dur 1 >/dev/null
+    check "and --flat is how to say take it as it is" "0" \
+          "$($BIN timeline clip "$dp" 0 "$dimg" --at 6 --dur 1 --flat >/dev/null
+             $BIN timeline get "$dp" 0 3 | awk -F'\t' '/^graded/{print $2}')"
+
+    # ⚠ And the PICTURE has to differ, not just the flag. A grade that is
+    # copied into the clip and then not read by the frame renderer would pass
+    # every assertion above and show the original.
+    if have ffprobe; then
+        $BIN timeline frame "$dp" --at 2.5 --out "$dk/g.png" >/dev/null 2>&1
+        $BIN timeline frame "$dp" --at 6.5 --out "$dk/f.png" >/dev/null 2>&1
+        gy=$(ffprobe -v error -f lavfi -i "movie=$dk/g.png,signalstats" \
+                     -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0 | head -1)
+        fy=$(ffprobe -v error -f lavfi -i "movie=$dk/f.png,signalstats" \
+                     -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0 | head -1)
+        # ⚠ awk, not bc: bc is not installed on a fresh SynapseOS, and a
+        # comparison that silently answers 0 fails a passing assertion.
+        if [ -n "$gy" ] && [ -n "$fy" ] && \
+           [ "$(awk -v a="$gy" -v b="$fy" 'BEGIN{print (a > b + 8) ? 1 : 0}')" = "1" ]; then ok
+        else bad "the developed frame is brighter than the flat one: $gy vs $fy"; fi
+    fi
+fi
+
 # ------------------------------------------------------ naming a project --
 #
 # Nothing here is about persistence: every verb in the engine ends in a write,
@@ -3550,6 +3647,23 @@ if [ -f "$qml" ]; then
     # what a clipboard on disk means.
     seen "the window can copy a clip"        '"copy", root.proj' < "$qml"
     seen "and asks what it can paste"        '"clipboard"' < "$qml"
+    # ---- keys ------------------------------------------------------------
+    #
+    # ⚠ A FOCUS ITEM, not Shortcut objects: Qt matches a Shortcut before the
+    # key reaches whatever has focus, so Ctrl+C over the project-name field
+    # would copy a CLIP and J would shuttle the cut while somebody typed a
+    # name. A grep is weak, but this one catches the specific way that dies —
+    # somebody "simplifying" the handler into Shortcut blocks.
+    seen "the window binds keys at all"      'Keys.onPressed' < "$qml"
+    notseen "and not as window-wide Shortcuts" 'Shortcut {' < "$qml"
+    seen "the key list is a table"           'keyRows' < "$qml"
+    # ⚠ The sheet is BUILT from that table, so a binding added to the handler
+    # and not to it is a binding nobody can find.
+    seen "and the sheet is built from it"    'model: root.keyRows' < "$qml"
+    seen "the darkroom has undo now"         'root.devStep(' < "$qml"
+    # ⚠ Ticks during a drag are not history. Without this one gesture is a
+    # hundred steps back.
+    seen "and a drag is one step, not a hundred" '"--no-history"' < "$qml"
     # ⚠ And never carries a list of its own. A hardcoded family is a name that
     # is right on the machine it was written on and a blank title everywhere
     # else — the same bargain every other list in this window strikes with the

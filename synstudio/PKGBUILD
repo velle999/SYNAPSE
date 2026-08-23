@@ -1103,7 +1103,76 @@ pkgver=0.1.0
 #   from — at the one place somebody pasting at 0 is looking.
 #
 #   622 assertions, clean under ASan+UBSan+LSan.
-pkgrel=34
+#
+# 35 KEYS, UNDO IN THE DARKROOM, AND A PHOTOGRAPH THAT ARRIVES DEVELOPED.
+#
+#   The window bound NOTHING. Every action was a button, the transport
+#   included, and a cutting room whose play, step and split are mouse-only is
+#   one nobody can work quickly in.
+#
+#   Space plays. L plays and doubles on each press — the PLAYER's rate on the
+#   rendered preview, so a fast pass is still the export, played. K stops.
+#   Arrows step a frame, with Shift a second; Home and End; S splits, T makes
+#   a transition, M marks, Del and Shift+Del delete and ripple delete;
+#   Ctrl+C/Ctrl+V copy and paste at the playhead; Ctrl+Z and Ctrl+Shift+Z;
+#   Ctrl+S saves the cut under a name (and exports the photograph, which is
+#   what saving a still means here); Ctrl+O, Ctrl+E, Ctrl+N. `?` lists them,
+#   and so does a Keys button — a binding nobody can find is half a feature.
+#
+#   ⚠ J CANNOT BE WHAT L IS. Nothing plays an encoded preview backwards, and
+#   rendering the timeline in reverse to watch it would be a second renderer
+#   with its own opinion of the cut — the thing this program has refused since
+#   the first commit. J shuttles the frame monitor back at 1, 2 or 4 frames a
+#   step, and the status line and the key sheet both say so rather than
+#   letting the speed imply something the picture cannot do.
+#
+#   ⚠ A FOCUS ITEM, NOT `Shortcut` OBJECTS. Qt matches a shortcut BEFORE the
+#   key is delivered to whatever has focus, so Ctrl+C over the project-name
+#   field would copy a clip instead of the word under the cursor, and J would
+#   shuttle the cut while somebody typed "Jan" into a name. A focused
+#   TextInput swallows its own keys and the catcher never sees them; focus
+#   comes back to it whenever a sheet closes.
+#
+#   THE DARKROOM HAS UNDO NOW — `undo FILE`, `redo FILE`, `history FILE`, off
+#   the same machinery the cutting room uses, because a photograph's document
+#   is its sidecar and history is a property of a file. Every verb that writes
+#   a sidecar ends in dev_save, exactly as every timeline verb ends in
+#   tl_save.
+#
+#   ⚠ THE UNTOUCHED PHOTOGRAPH HAS TO BE REACHABLE. ss_history_seed can only
+#   snapshot a file that exists, so a first edit writes the defaults FIRST and
+#   seeds from those — otherwise the oldest state undo knows is the one the
+#   first slider produced, and the picture as it arrived is gone the moment
+#   anything moves.
+#
+#   ⚠ RESET IS AN EDIT, NOT A DELETION. Unlinking the sidecar put the work it
+#   threw away outside the history entirely — nothing on disk left to
+#   snapshot, and no way back from a mis-click. It writes the defaults now; a
+#   sidecar of defaults renders identically to none, which is why `get` works
+#   on a photograph nobody has touched.
+#
+#   ⚠ AND A DRAG IS ONE STEP BACK, NOT A HUNDRED. A slider is one `set` per
+#   tick; recording each would fill a hundred-deep ring with one slider's
+#   journey and Ctrl+Z would walk back through it a hundredth of a stop at a
+#   time. Ticks carry --no-history and the release commits once.
+#
+#   AND A PHOTOGRAPH ARRIVES IN THE CUT DEVELOPED. A still dragged from the
+#   darkroom onto the Video tab landed with a default grade, so the shot in
+#   the cut was the picture as the camera left it — worse than an error,
+#   because the only clue is that it looks exactly original. A clip's grade IS
+#   an ss_develop, the same table the sidecar holds, so the stack travels by
+#   assignment and every setting is still a row in the inspector. `--flat`
+#   takes the file as it is. ⚠ Masks do not travel: a mask is a local
+#   adjustment on the ss_edit and a clip has no such list. ⚠ An identity stack
+#   is NOT marked as a grade — a clip claiming one it has not got means
+#   something different to every reader downstream.
+#
+#   ⚠ Proven by the picture, not the flag: the developed frame measures 59
+#   YAVG against the flat one's 36. A grade copied into the clip and then not
+#   read by the frame renderer would pass every other assertion here.
+#
+#   645 assertions, clean under ASan+UBSan+LSan.
+pkgrel=35
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
