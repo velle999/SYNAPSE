@@ -116,18 +116,47 @@ void icon_draw_monogram(cairo_t *cr, const char *name, double x, double y,
 { (void)cr; (void)name; (void)x; (void)y; (void)size; }
 void syn_buffer_backdrop_blur(struct wlr_scene_buffer *b, bool want, int radius)
 { (void)b; (void)want; (void)radius; }
-/* dock_ink_resolve() asks what is behind the dock so its clock, apps grid and
- * power mark can be inked for the surface they actually land on. UNMEASURED
- * here, which is the answer that hands the theme's own ink straight back — so
- * every geometry assertion in this file is made against exactly the colours it
- * was written for, and none of them depends on a wallpaper this harness has
- * not got. syn_mark_ink()'s own behaviour is dock_ink_test's. */
+/* dock_ink_for_cell() asks what is behind each MARK so the clock, apps grid,
+ * power mark and running dots can be inked for the surface they actually land
+ * on. UNMEASURED here, which is the answer that hands the theme's own ink
+ * straight back — so every geometry assertion in this file is made against
+ * exactly the colours it was written for, and none of them depends on a
+ * wallpaper this harness has not got. syn_mark_ink()'s own behaviour is
+ * dock_ink_test's.
+ *
+ * ⚠ IT ALSO RECORDS WHAT IT WAS ASKED, which is the only way to see the
+ * difference between one fold and several. The boxes are the whole assertion in
+ * the last section of main(): a slab-wide question and a per-mark question
+ * produce identical pixels on a UNIFORM backdrop and differ only on a split
+ * one, so nothing rendered here could tell them apart. */
+#define ASKED_MAX 64
+static struct wlr_box asked[ASKED_MAX];
+static int nasked;
+
 void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
                                 double target, syn_backdrop_t *out)
 {
-    (void)s; (void)box; (void)target;
+    (void)s; (void)target;
+    if (box && nasked < ASKED_MAX) asked[nasked++] = *box;
     out->lum = -1.0; out->lum_min = -1.0; out->lum_max = -1.0;
     out->ink = SYN_INK_NONE; out->best = SYN_INK_NONE;
+}
+
+/* Was any recorded box asked entirely inside this run-axis span? */
+static bool asked_within(double lo, double hi)
+{
+    for (int i = 0; i < nasked; i++)
+        if (asked[i].x >= lo - 1 && asked[i].x + asked[i].width <= hi + 2)
+            return true;
+    return false;
+}
+
+static int asked_widest(void)
+{
+    int w = 0;
+    for (int i = 0; i < nasked; i++)
+        if (asked[i].width > w) w = asked[i].width;
+    return w;
 }
 
 static syn_icon_entry_t the_icon;
@@ -488,6 +517,41 @@ int main(void)
     double first_icon = find_entry_x(&server.dock_entries[0]);
     check(first_icon > pwr_hi,
           "…with every icon after them");
+
+    /* ── 4. Each mark asks about its OWN cell ─────────────────────────
+     *
+     * ⛔ THE BUG THIS GUARDS IS A MARK THAT CANNOT BE SEEN. The renderer used
+     * to measure the whole body in one box and hand every mark the answer, and
+     * a dock is routinely standing on two different backdrops at once — a white
+     * window under half of it and a night wallpaper under the rest. The fold
+     * then averages them, the bright half wins, and the marks over the dark half
+     * are inked for pixels they are not on. Reported on Prism Light as the
+     * clock, the apps grid and the power button turning black when the software
+     * window opened; measured at 246 peak luminance before and 74 after, on a
+     * background that had not changed at all.
+     *
+     * ⚠ SO THE ASSERTION IS ON THE QUESTION, NOT ON THE PIXELS. Both versions
+     * paint identically over the uniform backdrop a harness can offer; the
+     * difference is only ever visible in WHAT WAS ASKED. */
+    server.config.dock_clock_slot = DOCK_SLOT_END;
+    server.config.dock_apps_slot  = DOCK_SLOT_END;
+    server.config.dock_power_slot = DOCK_SLOT_END;
+    place_tree();
+    clk = find_cell(dock_clock_at, &clk_lo, &clk_hi);
+    app = find_cell(dock_apps_at,  &app_lo, &app_hi);
+    pwr = find_cell(dock_power_at, &pwr_lo, &pwr_hi);
+
+    nasked = 0;
+    place_tree();
+
+    check(nasked >= 3, "the renderer asks about a backdrop once per mark");
+    check(asked_within(clk_lo, clk_hi), "…the clock asks about the clock cell");
+    check(asked_within(app_lo, app_hi), "…the apps grid about its own");
+    check(asked_within(pwr_lo, pwr_hi), "…and the power mark about its own");
+    /* The body spans every cell in the run; a question that wide is the old
+     * one-fold-for-everything, and it is what made the marks unreadable. */
+    check(asked_widest() < (int)(pwr_hi - clk_lo),
+          "…and NOTHING asks about the whole body");
 
     printf("\n");
     if (failures) { printf("%d failure(s)\n", failures); return 1; }

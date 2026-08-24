@@ -1647,20 +1647,50 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
  */
 #define DOCK_INK_MIN 3.0   /* AA large text; see syn_mark_ink for why not 4.5 */
 
-static void dock_ink_resolve(syn_server_t *s, const dock_metrics_t *m,
-                             syn_mark_ink_t *out)
+/*
+ * ⛔ PER MARK, NOT PER SLAB — AND THE SLAB VERSION IS WHY THE MARKS VANISHED.
+ *
+ * This measured the whole body in one box and gave every mark the one answer
+ * that came back. That is correct only while the dock stands on one kind of
+ * backdrop, and a centred dock on a wide screen rarely does: with the software
+ * window open over the left half of a night wallpaper, the fold spans a white
+ * page AND near-black water. Measured on that desktop, Prism Light:
+ *
+ *   theme ink #1A1D24   1.63:1 on the dark end, 14.4:1 on the bright end
+ *   syn_ink_for_backdrop wants LIGHT for the dark end, DARK for the bright one
+ *   → syn_ink_combine returns NONE, and the tie-break falls to the MEAN, which
+ *     the white window drags to ~0.40, so it picks DARK
+ *   → dark scores 1.60:1 on the dark end, WORSE than the 1.63 already there,
+ *     so syn_mark_ink's own "never make it worse" guard keeps the theme's ink
+ *
+ * Every step doing what it says, and the result is a clock, a grid and a power
+ * mark drawn near-black on near-black — on screen and impossible to see. The
+ * bright half votes and the dark half loses, because a mean is not a place.
+ *
+ * ⚠ SO THE BOX IS THE MARK'S OWN CELL. The grid is 16x9, which on a 2560-wide
+ * screen is a 160px cell: the dock spans six of them, and the clock, the grid
+ * and the power button each sit inside ONE. Asking per mark is the difference
+ * between an average of the whole strip and the pixels the mark is actually
+ * standing on — the same move the bar made when its ink went per module.
+ *
+ * ⚠ And a mark whose own cell is genuinely split still gets syn_mark_ink's
+ * worst-end arithmetic, unchanged. This narrows what is folded; it does not
+ * second-guess what the fold decides.
+ */
+static void dock_ink_for_cell(syn_server_t *s, const dock_metrics_t *m,
+                              int cx, int cy, int cw, int ch,
+                              syn_mark_ink_t *out)
 {
-    /* The SLAB in layout coordinates, which is what the backdrop grid is
-     * indexed by. m->x/m->y place the canvas on the output and m->bx/m->by the
-     * body inside it; the magnification headroom above the body is transparent
-     * and nothing is drawn in it, so measuring the canvas would fold in cells
-     * the dock does not cover. */
-    struct wlr_box slab = {
-        .x = m->x + m->bx, .y = m->y + m->by,
-        .width = m->bw, .height = m->bh,
+    /* Canvas-local in, layout coordinates out: m->x/m->y place the canvas on
+     * the output and the backdrop grid is indexed by the layout. The headroom
+     * above the body is transparent and nothing is drawn in it, so a cell rect
+     * is already the right box — it never covers what the dock does not. */
+    struct wlr_box cell = {
+        .x = m->x + cx, .y = m->y + cy,
+        .width = cw, .height = ch,
     };
     syn_backdrop_t bd;
-    wallpaper_backdrop_for_box(s, &slab, DOCK_INK_MIN, &bd);
+    wallpaper_backdrop_for_box(s, &cell, DOCK_INK_MIN, &bd);
 
     syn_mark_ink(s->config.panel_bg, syn_dock_alpha_asked(&s->config),
                  s->config.panel_ink, s->config.panel_accent,
@@ -2042,11 +2072,10 @@ static void dock_render_output(syn_output_t *o)
     if (!buf) return;
     cairo_begin(cr);
 
-    /* One measurement per output per repaint, before anything is drawn in it:
-     * the marks synui paints on the dock are the theme's colours only while the
-     * body is thick enough to carry them. See dock_ink_resolve(). */
-    syn_mark_ink_t k;
-    dock_ink_resolve(s, &m, &k);
+    /* The marks synui paints on the dock are the theme's colours only while the
+     * body is thick enough to carry them; where it is not, each one asks about
+     * its OWN cell. See dock_ink_for_cell(), which carries why that is per mark
+     * and not once for the strip. */
 
     /* The slab is drawn in BODY-local coordinates; everything after it is in
      * canvas coordinates, which is where dock_metrics() reports the cells. */
@@ -2055,7 +2084,11 @@ static void dock_render_output(syn_output_t *o)
     dock_paint_body(s, cr, m.bw, m.bh, radius, glass);
     cairo_restore(cr);
 
-    if (s->config.dock_clock) dock_draw_clock(s, cr, &m, &k);
+    if (s->config.dock_clock) {
+        syn_mark_ink_t kc;
+        dock_ink_for_cell(s, &m, m.clk_x, m.clk_y, m.clk_w, m.clk_h, &kc);
+        dock_draw_clock(s, cr, &m, &kc);
+    }
 
     /* Is an icon on THIS server being dragged, and to where. The dragged entry
      * is drawn last and elsewhere, so the loop below skips its cell. */
@@ -2119,7 +2152,14 @@ static void dock_render_output(syn_output_t *o)
              * The ink is by definition the colour that reads on that surface.
              * Costs stock a hair — SYNAPSE's ink is 0.95/0.95/1.00 against the
              * old 0.92/0.92/0.96 — which is below noticing on a 2.5px dot. */
-            cairo_set_source_rgba(cr, k.ink[0], k.ink[1], k.ink[2], 0.9);
+            /* ⚠ THE DOT'S OWN COLUMN, not the strip's average — a row of
+             * running dots crosses the whole dock, so on a split backdrop they
+             * are the marks a slab-wide answer gets wrong one at a time. The
+             * box is the cell this icon occupies through the body's thickness,
+             * which is where the dot is however the cell above it swells. */
+            syn_mark_ink_t kd;
+            dock_ink_for_cell(s, &m, ix, m.by, size, m.thick, &kd);
+            cairo_set_source_rgba(cr, kd.ink[0], kd.ink[1], kd.ink[2], 0.9);
             cairo_arc(cr, dx, dy, m.icon / 19.2, 0, 2 * M_PI);
             cairo_fill(cr);
         }
@@ -2128,12 +2168,18 @@ static void dock_render_output(syn_output_t *o)
     /* The show-all-apps button, after the icons and outside their loop: it is
      * not an entry, it has no app_id and no running dot, and the one thing it
      * shares with them is the cell it is drawn in. */
-    if (m.apps_s > 0)
-        dock_draw_apps(&k, cr, m.apps_x, m.apps_y, m.apps_s);
+    if (m.apps_s > 0) {
+        syn_mark_ink_t ka;
+        dock_ink_for_cell(s, &m, m.apps_x, m.apps_y, m.apps_s, m.apps_s, &ka);
+        dock_draw_apps(&ka, cr, m.apps_x, m.apps_y, m.apps_s);
+    }
     /* Same again for the power button, which is the same kind of thing: a cell
      * with no app_id behind it, past the apps button at the end of the run. */
-    if (m.pwr_s > 0)
-        dock_draw_power(&k, cr, m.pwr_x, m.pwr_y, m.pwr_s);
+    if (m.pwr_s > 0) {
+        syn_mark_ink_t kp;
+        dock_ink_for_cell(s, &m, m.pwr_x, m.pwr_y, m.pwr_s, m.pwr_s, &kp);
+        dock_draw_power(&kp, cr, m.pwr_x, m.pwr_y, m.pwr_s);
+    }
 
     /* The lifted icon, last so it is over everything, and slightly larger with a
      * shadow under it. Both say "this one is off the surface" — without them a

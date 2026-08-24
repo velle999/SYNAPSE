@@ -226,8 +226,8 @@ void icon_draw_monogram(cairo_t *cr, const char *name, double x, double y,
 }
 void syn_buffer_backdrop_blur(struct wlr_scene_buffer *b, bool want, int radius)
 { (void)b; (void)want; (void)radius; }
-/* dock_ink_resolve() asks what is behind the dock so its clock, apps grid and
- * power mark can be inked for the surface they actually land on. UNMEASURED
+/* dock_ink_for_cell() asks what is behind each MARK so the clock, apps grid,
+ * power mark and running dots can be inked for the surface they land on. UNMEASURED
  * here, which is the answer that hands the theme's own ink straight back — so
  * every geometry assertion in this file is made against exactly the colours it
  * was written for, and none of them depends on a wallpaper this harness has

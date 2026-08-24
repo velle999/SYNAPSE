@@ -134,6 +134,32 @@ static const syn_backdrop_t midband = {
     .ink = SYN_INK_NONE, .best = SYN_INK_LIGHT,
 };
 
+/* ── The split backdrop, and why the dock stopped folding one ──────────────
+ *
+ * ⛔ THIS IS THE CASE A SLAB-WIDE FOLD CANNOT ANSWER, and for a long time the
+ * dock asked it one. A centred dock on a wide screen routinely stands on two
+ * backdrops at once: a white application window under one half and a night
+ * wallpaper under the other. Folded into a single measurement that is a
+ * near-black minimum, a near-white maximum, and a MEAN the bright half drags
+ * upward — the numbers below are off the reported Prism Light desktop, with the
+ * software window over the left of the stock wallpaper.
+ *
+ * Read what syn_mark_ink() must do with it: the two ends want opposite inks, so
+ * syn_ink_combine gives NONE; the tie-break goes to the mean, which says dark;
+ * dark is then WORSE at the dark end than the theme's own ink already was, so
+ * the "never make it worse" guard keeps the theme's. Correct at every step, and
+ * the marks over the dark half stay invisible.
+ *
+ * ⚠ SO THE ANSWER IS NOT HERE. Nothing syn_mark_ink() can return is right for
+ * both halves — the fix is to stop asking it about both at once, which is
+ * dock.c's dock_ink_for_cell() and dock_cell_slots_test's business. What this
+ * fixture pins is the REASON: that a single fold over a split backdrop is a
+ * dead end, so nobody tries to rescue it by moving the tie-break. */
+static const syn_backdrop_t split = {
+    .lum = 0.376, .lum_min = 0.0255, .lum_max = 0.850,
+    .ink = SYN_INK_NONE, .best = SYN_INK_DARK,
+};
+
 /* An external client painting the background — wallpaper-engine. Genuinely
  * unknowable, and an ink cannot be chosen for pixels nobody measured. */
 static const syn_backdrop_t unmeasured = {
@@ -186,6 +212,27 @@ int main(void)
         CHECK(k.ink[0] > 0.9f && same(k.ink, k.ink) && k.ink[0] == k.ink[1] &&
               k.ink[1] == k.ink[2],
               "…in white, because the wallpaper under the dock is dark");
+    }
+
+    printf("\n== a split backdrop has no single right answer ==\n");
+    {
+        const int t = PRISM_LIGHT;
+        double before = worst(themes[t].bg, ALPHA_GLASS, themes[t].ink, &split);
+        syn_mark_ink(themes[t].bg, ALPHA_GLASS, themes[t].ink,
+                     themes[t].accent, &split, TRIP, &k);
+        double after = worst(themes[t].bg, ALPHA_GLASS, k.ink, &split);
+
+        CHECK(before < TRIP,
+              "half on a white window, half on night water: the theme's ink "
+              "fails (%.2f:1)", before);
+        /* Whatever it returns, it cannot clear the target — that is the point.
+         * Both poles are wrong at one end, and the guard is what stops it
+         * swapping one unreadable ink for another. */
+        CHECK(after < TRIP,
+              "…and NO single ink clears it either (%.2f:1)", after);
+        CHECK(after >= before,
+              "…so the rescue never makes the worst end worse");
+        printf("       ⇒ the fold is the bug; dock.c asks per mark instead\n");
     }
 
     printf("\n== and its dark twin is untouched ==\n");
