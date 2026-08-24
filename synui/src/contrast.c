@@ -271,3 +271,84 @@ double syn_ink_floor(const float bg[3], const float ink[3], double target)
     }
     return hi;
 }
+
+/*
+ * The mark's colour, resolved against what the surface actually presents.
+ *
+ * The header carries the argument; this is the arithmetic. Three steps, and the
+ * first two are the ones that keep every existing desktop where it is:
+ *
+ *   1. Composite. `surface` at `alpha` over the backdrop, at BOTH extremes —
+ *      the worst cell and not the mean, which is the rule render.c's alpha walk
+ *      had to learn: a mean over a photograph is a number describing no pixel
+ *      on the screen, and a dock spanning a black river and a lit bridge has to
+ *      be legible on both or it is legible sometimes.
+ *   2. Ask whether the theme's ink still clears `target` on both. If it does,
+ *      nothing here changes a byte.
+ *   3. Otherwise take the black-or-white answer — and only if it is genuinely
+ *      better, because a backdrop where BOTH inks fail must leave the theme's
+ *      standing. Swapping one unreadable mark for another is churn, and on a
+ *      live wallpaper crossing that band it is a dock that flickers.
+ */
+void syn_mark_ink(const float surface[3], double alpha,
+                  const float ink[3], const float accent[3],
+                  const syn_backdrop_t *bd, double target,
+                  syn_mark_ink_t *out)
+{
+    for (int i = 0; i < 3; i++) {
+        out->ink[i]    = ink[i];
+        out->accent[i] = accent[i];
+    }
+    out->rescued = false;
+    if (!bd || bd->lum_min < 0.0 || bd->lum_max < 0.0) return;
+
+    if (alpha < 0.0) alpha = 0.0;
+    if (alpha > 1.0) alpha = 1.0;
+
+    double surf = syn_rel_luminance(surface[0], surface[1], surface[2]);
+    double lo   = syn_lum_over(surf, alpha, bd->lum_min);
+    double hi   = syn_lum_over(surf, alpha, bd->lum_max);
+    double mid  = syn_lum_over(surf, alpha, bd->lum);
+
+    double themed = syn_rel_luminance(ink[0], ink[1], ink[2]);
+    double c_lo   = syn_contrast_lum(themed, lo);
+    double c_hi   = syn_contrast_lum(themed, hi);
+    if (c_lo >= target && c_hi >= target) return;
+
+    syn_ink_t pick = syn_ink_combine(syn_ink_for_backdrop(lo, target),
+                                     syn_ink_for_backdrop(hi, target));
+    /* Neither clears both ends: the closer of the two over the mean, which is
+     * the contract a clear bar already runs on rather than a third answer. */
+    if (pick == SYN_INK_NONE) pick = syn_ink_best(mid);
+    if (pick == SYN_INK_NONE) return;
+
+    double cand = (pick == SYN_INK_LIGHT) ? SYN_INK_LIGHT_LUM : SYN_INK_DARK_LUM;
+    double n_lo = syn_contrast_lum(cand, lo), n_hi = syn_contrast_lum(cand, hi);
+    double worst_new = n_lo < n_hi ? n_lo : n_hi;
+    double worst_old = c_lo < c_hi ? c_lo : c_hi;
+    if (worst_new <= worst_old) return;
+
+    /* #FFFFFF and #1D1D1F, the two the enum names. */
+    float v = (pick == SYN_INK_LIGHT) ? 1.0f : 0.1137f;
+    out->ink[0] = out->ink[1] = out->ink[2] = v;
+    out->rescued = true;
+
+    /* The hands follow the dial. Quarter-steps toward the ink until the accent
+     * separates from the surface it is now landing on — the same move a panel
+     * accent that cannot be read on its own panel takes, and it holds the hue
+     * because every channel moves together. Bounded at four, after which the
+     * accent IS the ink and there is nothing further to gain.
+     *
+     * Against the MEAN and not the extremes: the hands are a thin moving mark
+     * over a few cells rather than a block of text across the surface, and
+     * demanding they clear the worst cell of a photograph would drag every
+     * accent to the pole and throw the hue away for a case that is one pixel
+     * wide. The ink above is the guarantee; this is the accent following it. */
+    for (int i = 0; i < 4; i++) {
+        double al = syn_rel_luminance(out->accent[0], out->accent[1],
+                                      out->accent[2]);
+        if (syn_contrast_lum(al, mid) >= target) break;
+        for (int c = 0; c < 3; c++)
+            out->accent[c] += (out->ink[c] - out->accent[c]) * 0.25f;
+    }
+}

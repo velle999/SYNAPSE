@@ -1000,7 +1000,41 @@ pkgver=0.1.0
 #   ladder rather than an absolute so a dense table stays readable next to a
 #   menu. panel_glass_test reads the constant rather than the number and needs
 #   no change; the arithmetic it checks is unchanged.
-pkgrel=459
+# 460: the dock's clock, apps grid and power mark were washed out on Prism
+#   Light and fine on Prism. Reported off two screenshots of the same desktop,
+#   and they were: those marks are drawn by synui rather than pulled from an
+#   icon theme, in `panel_ink` — the colour the theme chose to read on
+#   `panel_bg` — and for fifteen presets that WAS the surface the mark landed
+#   on, because every pale preset drew a SOLID dock.
+#   ⚠ 459 IS WHAT BROKE IT, and the shape is worth keeping. Prism Light is the
+#   first preset that is pale AND glass; at the house dock_opacity of 0.05
+#   there is no surface left under the mark at all, so its #1A1D24 lands
+#   straight on a night photograph. Measured on the stock wallpaper under a
+#   centred pill: 1.40:1, against dark Prism's 5.78:1 on the same pixels. One
+#   ink happened to suit the picture and neither of them ever asked. At the old
+#   0.72 the same theme measures 8.66:1 — the body was carrying it.
+#   syn_mark_ink() in contrast.c is the rescue, beside the ink rules the clear
+#   bar already runs on: composite the surface at its alpha over the backdrop
+#   at BOTH extremes (the worst cell, not the mean — render.c's alpha walk
+#   learnt that one the hard way), keep the theme's ink wherever it still
+#   clears, and otherwise take the two-colour answer syn_ink_for_backdrop
+#   gives. The analog clock's hands go with it, mixed toward the new ink in
+#   quarter-steps so #00727E keeps its hue instead of being thrown away.
+#   ⚠ A RESCUE, NOT A POLICY. The trip point is AA large text (3.0) and NOT
+#   CONTRAST_TARGET, deliberately: a dot grid at 3.2:1 is a mark somebody
+#   chose, at 1.4:1 it is a mark nobody can find, and asking for 4.5 would
+#   start repainting dark themes' docks black over a bright photograph. It also
+#   refuses to act unless the replacement is strictly better, so the mid-tone
+#   band where both inks fail changes nothing rather than flickering under a
+#   live wallpaper. dock_ink_test drives all fifteen presets over a night and a
+#   bright wallpaper: the eleven solid-dock presets are untouched on both, and
+#   only the three glass ones are ever rescued — macOS 26 on a dark wallpaper
+#   and Prism on a bright one are the same bug, found by writing the test.
+#   ⚠ The five dock model tests gained a `wallpaper_backdrop_for_box` stub
+#   answering UNMEASURED, which is the value that hands the theme's ink back
+#   unchanged — so every geometry assertion in them is still made against the
+#   colours it was written for.
+pkgrel=460
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

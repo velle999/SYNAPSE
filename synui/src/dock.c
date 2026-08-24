@@ -1587,6 +1587,57 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
 }
 
 /*
+ * ── What colour the dock's own marks are drawn in ───────────────────────────
+ *
+ * The clock, the apps grid, the power mark and the running dots are drawn by
+ * synui rather than pulled from an icon theme, precisely so they can be "the
+ * colour that reads on this bar" on all fifteen presets. For that whole time
+ * the colour was `panel_ink` — the theme's, flat — and that was correct because
+ * the bar it had to read on WAS the theme's surface: every pale preset drew a
+ * SOLID dock, so near-black ink landed on near-white panel_bg and cleared 11:1.
+ *
+ * ⚠ THAT STOPPED BEING TRUE THE MOMENT A PALE THEME WENT GLASS. Prism Light is
+ * the first preset that is both pale and see-through, and at the house
+ * dock_opacity of 0.05 there is no surface left to read on. Measured on the
+ * stock wallpaper under a centred pill, its #1A1D24 lands at 1.90:1 on the
+ * darkest cell and 3.16:1 on the brightest — a clock, a grid and a power button
+ * that are on screen and cannot be seen. Dark Prism is 11.63:1 / 5.67:1 on the
+ * same pixels, which is why it looks right and its light twin does not: one ink
+ * happens to suit the picture, and neither of them ever asked.
+ *
+ * So the mark asks. All of the deciding is syn_mark_ink() in contrast.c — pure
+ * arithmetic, and tested there against every preset by dock_ink_test — and all
+ * that is left here is the one thing contrast.c cannot do, which is knowing
+ * WHERE the dock is.
+ *
+ * Nothing here is gated on `glass_legibility`: that row is about a surface
+ * raising its own ALPHA, and this changes no alpha at all. `scene_ink` it
+ * follows for free — wallpaper_backdrop_for_box() folds the scene grid over the
+ * wallpaper's per cell, so a dock with a window behind it inks off the window.
+ */
+#define DOCK_INK_MIN 3.0   /* AA large text; see syn_mark_ink for why not 4.5 */
+
+static void dock_ink_resolve(syn_server_t *s, const dock_metrics_t *m,
+                             syn_mark_ink_t *out)
+{
+    /* The SLAB in layout coordinates, which is what the backdrop grid is
+     * indexed by. m->x/m->y place the canvas on the output and m->bx/m->by the
+     * body inside it; the magnification headroom above the body is transparent
+     * and nothing is drawn in it, so measuring the canvas would fold in cells
+     * the dock does not cover. */
+    struct wlr_box slab = {
+        .x = m->x + m->bx, .y = m->y + m->by,
+        .width = m->bw, .height = m->bh,
+    };
+    syn_backdrop_t bd;
+    wallpaper_backdrop_for_box(s, &slab, DOCK_INK_MIN, &bd);
+
+    syn_mark_ink(s->config.panel_bg, s->config.dock_opacity,
+                 s->config.panel_ink, s->config.panel_accent,
+                 &bd, DOCK_INK_MIN, out);
+}
+
+/*
  * The GNOME-style "show all apps" button — the one that opens the FULL-SCREEN
  * application page (appgrid.c), not the bar's start menu. It briefly did the
  * latter, and the difference is the whole feature: a dock of pinned icons has
@@ -1612,7 +1663,7 @@ static void dock_draw_icon(cairo_t *cr, const char *app_id,
  * Every measurement is a fraction of the cell, so it swells with the rest of the
  * row under magnification instead of sitting at 48px inside a 120px cell.
  */
-static void dock_draw_power(syn_server_t *s, cairo_t *cr,
+static void dock_draw_power(const syn_mark_ink_t *k, cairo_t *cr,
                             double x, double y, int size)
 {
     double cx = x + size / 2.0, cy = y + size / 2.0;
@@ -1620,8 +1671,7 @@ static void dock_draw_power(syn_server_t *s, cairo_t *cr,
     double lw = size * 0.094;   /* 4.5px in a 48px cell */
 
     cairo_save(cr);
-    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
-                          s->config.panel_ink[2], 0.92);
+    cairo_set_source_rgba(cr, k->ink[0], k->ink[1], k->ink[2], 0.92);
     cairo_set_line_width(cr, lw);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
@@ -1640,7 +1690,7 @@ static void dock_draw_power(syn_server_t *s, cairo_t *cr,
     cairo_restore(cr);
 }
 
-static void dock_draw_apps(syn_server_t *s, cairo_t *cr,
+static void dock_draw_apps(const syn_mark_ink_t *k, cairo_t *cr,
                            double x, double y, int size)
 {
     double r    = size * 0.072;    /* 3.5px in a 48px cell */
@@ -1648,8 +1698,7 @@ static void dock_draw_apps(syn_server_t *s, cairo_t *cr,
     double cx0  = x + size / 2.0 - step;
     double cy0  = y + size / 2.0 - step;
 
-    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
-                          s->config.panel_ink[2], 0.92);
+    cairo_set_source_rgba(cr, k->ink[0], k->ink[1], k->ink[2], 0.92);
     for (int row = 0; row < 3; row++)
         for (int col = 0; col < 3; col++) {
             cairo_arc(cr, cx0 + col * step, cy0 + row * step, r, 0, 2 * M_PI);
@@ -1754,7 +1803,7 @@ static void dock_clock_line(cairo_t *cr, const char *text, double size,
  * a glance.
  */
 static void dock_draw_clock_face(syn_server_t *s, cairo_t *cr,
-                                 const dock_metrics_t *m)
+                                 const dock_metrics_t *m, const syn_mark_ink_t *k)
 {
     double cx = m->clk_x + m->clk_w / 2.0;
     double cy = m->clk_y + m->clk_h / 2.0;
@@ -1766,8 +1815,8 @@ static void dock_draw_clock_face(syn_server_t *s, cairo_t *cr,
     struct tm tm;
     localtime_r(&now, &tm);
 
-    const float *ink = s->config.panel_ink;
-    const float *acc = s->config.panel_accent;
+    const float *ink = k->ink;
+    const float *acc = k->accent;
 
     /* The dial: a rim, and a tick at each hour with the quarters longer. Four
      * long marks is what tells you which way up a face with no numerals is, and
@@ -1837,7 +1886,7 @@ static void dock_draw_clock_face(syn_server_t *s, cairo_t *cr,
 }
 
 static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
-                            const dock_metrics_t *m)
+                            const dock_metrics_t *m, const syn_mark_ink_t *k)
 {
     if (m->clk_w <= 0 || m->clk_h <= 0) return;
 
@@ -1850,8 +1899,7 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
      * wrong everywhere else. A side with no icon beyond it gets none — a rule
      * with nothing on one side of it is a mark on the end of the bar.
      */
-    cairo_set_source_rgba(cr, s->config.panel_ink[0], s->config.panel_ink[1],
-                          s->config.panel_ink[2], 0.22);
+    cairo_set_source_rgba(cr, k->ink[0], k->ink[1], k->ink[2], 0.22);
     cairo_set_line_width(cr, 1);
     for (int side = 0; side < 2; side++) {
         /* side 0 = the low end of the run, side 1 = the high end. */
@@ -1892,7 +1940,7 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     dock_clock_layout_t l;
     dock_clock_layout(s, m->vertical, m->thick, &l);
     if (l.analog) {
-        dock_draw_clock_face(s, cr, m);
+        dock_draw_clock_face(s, cr, m, k);
         return;
     }
 
@@ -1910,7 +1958,7 @@ static void dock_draw_clock(syn_server_t *s, cairo_t *cr,
     double cx = m->clk_x + m->clk_w / 2.0;
     double cy = m->clk_y + m->clk_h / 2.0;
 
-    const float *ink = s->config.panel_ink;
+    const float *ink = k->ink;
 
     if (m->vertical) {
         /*
@@ -1964,6 +2012,12 @@ static void dock_render_output(syn_output_t *o)
     if (!buf) return;
     cairo_begin(cr);
 
+    /* One measurement per output per repaint, before anything is drawn in it:
+     * the marks synui paints on the dock are the theme's colours only while the
+     * body is thick enough to carry them. See dock_ink_resolve(). */
+    syn_mark_ink_t k;
+    dock_ink_resolve(s, &m, &k);
+
     /* The slab is drawn in BODY-local coordinates; everything after it is in
      * canvas coordinates, which is where dock_metrics() reports the cells. */
     cairo_save(cr);
@@ -1971,7 +2025,7 @@ static void dock_render_output(syn_output_t *o)
     dock_paint_body(s, cr, m.bw, m.bh, radius, glass);
     cairo_restore(cr);
 
-    if (s->config.dock_clock) dock_draw_clock(s, cr, &m);
+    if (s->config.dock_clock) dock_draw_clock(s, cr, &m, &k);
 
     /* Is an icon on THIS server being dragged, and to where. The dragged entry
      * is drawn last and elsewhere, so the loop below skips its cell. */
@@ -2035,9 +2089,7 @@ static void dock_render_output(syn_output_t *o)
              * The ink is by definition the colour that reads on that surface.
              * Costs stock a hair — SYNAPSE's ink is 0.95/0.95/1.00 against the
              * old 0.92/0.92/0.96 — which is below noticing on a 2.5px dot. */
-            cairo_set_source_rgba(cr, s->config.panel_ink[0],
-                                  s->config.panel_ink[1],
-                                  s->config.panel_ink[2], 0.9);
+            cairo_set_source_rgba(cr, k.ink[0], k.ink[1], k.ink[2], 0.9);
             cairo_arc(cr, dx, dy, m.icon / 19.2, 0, 2 * M_PI);
             cairo_fill(cr);
         }
@@ -2047,11 +2099,11 @@ static void dock_render_output(syn_output_t *o)
      * not an entry, it has no app_id and no running dot, and the one thing it
      * shares with them is the cell it is drawn in. */
     if (m.apps_s > 0)
-        dock_draw_apps(s, cr, m.apps_x, m.apps_y, m.apps_s);
+        dock_draw_apps(&k, cr, m.apps_x, m.apps_y, m.apps_s);
     /* Same again for the power button, which is the same kind of thing: a cell
      * with no app_id behind it, past the apps button at the end of the run. */
     if (m.pwr_s > 0)
-        dock_draw_power(s, cr, m.pwr_x, m.pwr_y, m.pwr_s);
+        dock_draw_power(&k, cr, m.pwr_x, m.pwr_y, m.pwr_s);
 
     /* The lifted icon, last so it is over everything, and slightly larger with a
      * shadow under it. Both say "this one is off the surface" — without them a

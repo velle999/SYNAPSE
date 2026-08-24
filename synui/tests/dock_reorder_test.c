@@ -93,6 +93,19 @@ void icon_draw_monogram(cairo_t *cr, const char *name, double x, double y,
 { (void)cr; (void)name; (void)x; (void)y; (void)size; }
 void syn_buffer_backdrop_blur(struct wlr_scene_buffer *b, bool want, int radius)
 { (void)b; (void)want; (void)radius; }
+/* dock_ink_resolve() asks what is behind the dock so its clock, apps grid and
+ * power mark can be inked for the surface they actually land on. UNMEASURED
+ * here, which is the answer that hands the theme's own ink straight back — so
+ * every geometry assertion in this file is made against exactly the colours it
+ * was written for, and none of them depends on a wallpaper this harness has
+ * not got. syn_mark_ink()'s own behaviour is dock_ink_test's. */
+void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
+                                double target, syn_backdrop_t *out)
+{
+    (void)s; (void)box; (void)target;
+    out->lum = -1.0; out->lum_min = -1.0; out->lum_max = -1.0;
+    out->ink = SYN_INK_NONE; out->best = SYN_INK_NONE;
+}
 
 static syn_icon_entry_t the_icon;
 const syn_icon_entry_t *icon_lookup(const char *app_id)

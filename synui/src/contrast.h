@@ -11,6 +11,8 @@
 #ifndef SYNUI_CONTRAST_H
 #define SYNUI_CONTRAST_H
 
+#include <stdbool.h>   /* syn_mark_ink_t's `rescued` — the only type not a double */
+
 /* WCAG AA for body text. */
 #define CONTRAST_TARGET 4.5
 
@@ -222,5 +224,53 @@ typedef struct {
 void syn_backdrop_for_box(const double *grid, double fx, double fy,
                           double fw, double fh, double target,
                           syn_backdrop_t *out);
+
+/* ── A MARK drawn on a see-through surface ───────────────────
+ *
+ * Everything above answers for TEXT on a panel, where the surface is thick
+ * enough to be a surface and the only question is which rung of the theme's own
+ * ink ladder survives. This answers for the other case: a mark drawn straight
+ * onto glass so thin there is nothing under it but the wallpaper — the dock's
+ * clock, its apps grid, its power mark and its running dots.
+ *
+ * ⚠ THE THEME'S INK IS AN ASSUMPTION ABOUT THE SURFACE, AND GLASS BREAKS IT.
+ * `panel_ink` is chosen to read on `panel_bg`, and for every preset that was
+ * the same thing the mark landed on, because every PALE preset drew a solid
+ * dock. Prism Light is the first that is pale AND see-through: at a body alpha
+ * of 0.05 its near-black ink lands on a night photograph at 1.9:1 and the marks
+ * are simply not there, while dark Prism's near-white ink on the same pixels is
+ * 11.6:1. Neither theme ever asked what was behind it; one of them happened to
+ * be right.
+ *
+ * Two colours, because that is the honest range for a surface that cannot tint
+ * itself out of trouble — the same argument syn_ink_for_backdrop() is built on,
+ * and this defers to it rather than inventing a third answer.
+ *
+ * ⚠ A RESCUE, NOT A POLICY, and `target` is what keeps it one. The theme's ink
+ * stands wherever it still reads, so a solid dock, a dark preset and every
+ * desktop that looks right today come out bit-for-bit unchanged. Callers pass
+ * AA's large-text 3.0 rather than CONTRAST_TARGET deliberately: a dot grid at
+ * 3.2:1 is a mark somebody chose, at 1.9:1 it is a mark nobody can find, and
+ * asking for 4.5 would start repainting dark themes' marks black over a bright
+ * photograph — a different change, and not one that was asked for.
+ *
+ * `accent` follows the ink rather than being left behind: it is the analog
+ * clock's hands, and an accent picked to read on a near-white panel is exactly
+ * as invisible on a night sky as the ink was. Pulled toward whichever pole the
+ * ink landed on in quarter-steps until it separates, so it keeps its hue.
+ *
+ * An unmeasured backdrop, or one where neither ink beats the theme's, passes
+ * both colours straight through — `rescued` says which happened.
+ */
+typedef struct {
+    float ink[3];
+    float accent[3];
+    bool  rescued;   /* the theme's ink could not carry; these are chosen */
+} syn_mark_ink_t;
+
+void syn_mark_ink(const float surface[3], double alpha,
+                  const float ink[3], const float accent[3],
+                  const syn_backdrop_t *bd, double target,
+                  syn_mark_ink_t *out);
 
 #endif /* SYNUI_CONTRAST_H */

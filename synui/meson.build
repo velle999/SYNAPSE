@@ -1006,6 +1006,27 @@ test('panel_contrast', panel_contrast_test)
 # had to ask what it was drawn on. Links contrast.c and nothing else, for the
 # same reason panel_contrast does: it is arithmetic over a grid and two
 # luminances, and a test that needed a compositor to reach it would not be run.
+# The colour the DOCK's own marks are drawn in — its clock, apps grid, power
+# mark and running dots. They are drawn in `panel_ink`, which is the colour the
+# theme picked to read on `panel_bg`; that was the same surface the mark landed
+# on only for as long as every PALE preset drew a SOLID dock. Prism Light is the
+# first that is pale AND glass, and at the house dock alpha its near-black ink
+# was landing straight on a night photograph at 1.90:1 — reported as the clock,
+# the apps button and the power icon being washed out on the light Prism and
+# fine on the dark one.
+#
+# The claim that needs a test is not the fix, it is the OTHER half: fourteen
+# presets look right today, some of them at contrasts that are low by choice,
+# and a legibility rescue that repaints them is worse than the bug. Every preset
+# that still reads must come back bit-for-bit. Pure arithmetic, so it links
+# contrast.c alone and needs no compositor.
+dock_ink_test = executable('dock_ink_test',
+  ['tests/dock_ink_test.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('dock_ink', dock_ink_test)
+
 backdrop_test = executable('backdrop_test',
   ['tests/backdrop_test.c', 'src/contrast.c'],
   include_directories : include_directories('src'),
