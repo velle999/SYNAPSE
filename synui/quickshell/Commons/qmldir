@@ -1,0 +1,6 @@
+# The module a bar plugin imports as `qs.Commons` — Omarchy's spelling, over
+# SynapseOS's own theme. See Style.qml for why these are a shim and not a copy
+# of their 23KB original, which would drag their palette onto this desktop.
+singleton Style 1.0 Style.qml
+singleton Color 1.0 Color.qml
+singleton Util  1.0 Util.qml

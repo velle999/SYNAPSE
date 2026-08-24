@@ -3,3 +3,6 @@
 # has thirty-odd types and reproducing them would be reimplementing somebody
 # else's desktop. This is the one that is a CONTRACT rather than a component.
 BarWidget 1.0 BarWidget.qml
+# The base for an interactive widget — a label you can click. One type, and it
+# is the one five of Omarchy's eight shipped bar widgets fail on without it.
+WidgetButton 1.0 WidgetButton.qml

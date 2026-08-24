@@ -71,6 +71,20 @@ PanelWindow {
     readonly property bool vertical: false
     readonly property int  barSize: bar.height
 
+    /* The rest of what an interactive plugin widget reads off its host
+     * (Ui/WidgetButton.qml). Every one of these is guarded on the widget's side,
+     * so a bar that offered none of them would still work — they are here so a
+     * plugin picks up THIS desktop's font and ink rather than falling back to
+     * the shim's desktop-wide answer, which cannot know which monitor it is on.
+     *
+     * ⚠ bar.pal IS PER-STRIP AND PER-MODULE, which is the whole reason to hand
+     * it over rather than let the widget ask Color: a clear bar takes its ink
+     * off the wallpaper under THIS bar, and the singleton has one value for the
+     * whole desktop. */
+    readonly property string fontFamily:    Theme.fontFamily
+    readonly property color  barForeground: bar.pal.fg
+    readonly property color  urgent:        Theme.red
+
     /*
      * Every live instance of one plugin, across every monitor.
      *

@@ -72,8 +72,14 @@ mk good.plain Plain.qml 'import QtQuick' 'import qs.Ui' 'BarWidget { }'
 mk good.bare Bare.qml 'import QtQuick' 'Item { }'
 # Not hostable: Hyprland's IPC has no counterpart here.
 mk no.hypr H.qml 'import QtQuick' 'import Quickshell.Hyprland' 'BarWidget { }'
-# Not hostable: Omarchy's own Commons singletons.
-mk no.commons C.qml 'import QtQuick' 'import qs.Commons' 'BarWidget { }'
+# Hostable now: qs.Commons is provided — a shim over synui's own theme, so an
+# Omarchy widget picks up THIS desktop's font, spacing and ink rather than
+# dragging their palette across. It was refused until synui 469.
+mk yes.commons C.qml 'import QtQuick' 'import qs.Commons' 'BarWidget { }'
+# Not hostable: a qs module nothing provides. Named rather than invented from
+# the same list as the others, so this keeps testing the RULE — "ask the
+# filesystem" — after Commons stopped being an example of it.
+mk no.qsmod Q.qml 'import QtQuick' 'import qs.NoSuchModule' 'BarWidget { }'
 # Not hostable: the manifest names a file that is not there.
 mk no.entry Missing.qml
 # Not hostable: the entry point climbs out of the plugin directory.
@@ -119,16 +125,21 @@ case "$(why no.hypr)" in
     *) bad "a Hyprland import is refused, by name (got '$(why no.hypr)')" ;;
 esac
 
-# ⚠ qs.Ui IS PROVIDED AND qs.Commons IS NOT, and the difference has to be asked
-# of the filesystem: quickshell resolves `import qs.Foo` to <shell root>/Foo, so
-# a hardcoded list would refuse qs.Ui — where BarWidget actually lives — or keep
-# allowing a module after it was deleted.
-case "$(why no.commons)" in
-    *qs.Commons*) ok "an unprovided qs module is refused, and named" ;;
-    *) bad "an unprovided qs module is refused, and named (got '$(why no.commons)')" ;;
+# ⚠ THE DIFFERENCE IS ASKED OF THE FILESYSTEM, AND THIS IS THE CHECK THAT PROVED
+# IT WORTH IT. quickshell resolves `import qs.Foo` to <shell root>/Foo, so a
+# hardcoded list would have refused qs.Ui — where BarWidget lives — and would
+# have gone on refusing qs.Commons after the shim for it was added. Neither
+# needed a line changed: the module directory appeared and the answer changed
+# with it.
+case "$(why no.qsmod)" in
+    *qs.NoSuchModule*) ok "an unprovided qs module is refused, and named" ;;
+    *) bad "an unprovided qs module is refused, and named (got '$(why no.qsmod)')" ;;
 esac
+check "…and qs.Commons is hostable now that it is provided" "" "$(why yes.commons)"
 [ -d "$SYNUI_BAR/Ui" ] && ok "…and qs.Ui is provided, which is why it passes" \
                        || bad "quickshell/Ui is missing — BarWidget has no home"
+[ -d "$SYNUI_BAR/Commons" ] && ok "…as is qs.Commons" \
+                            || bad "quickshell/Commons is missing"
 
 case "$(why no.entry)" in
     *missing*) ok "a manifest naming a file that is not there is refused" ;;

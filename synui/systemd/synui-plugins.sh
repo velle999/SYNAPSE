@@ -81,10 +81,15 @@ usage() {
     cat <<EOF
 usage: synui-plugins [list|scan]
        synui-plugins <id> [on|off|toggle]
+       synui-plugins add <git-url> [name]
+       synui-plugins remove <id>
 
   list                  what is installed, and whether each one is on
   scan                  the same, as TSV — what the bar reads
   synui-plugins x on    turn one on
+  add <git-url>         clone a plugin into ~/.config/synui/plugins and, if it
+                        is hostable, turn it on
+  remove <id>           delete one you installed. Only from your own directory
 
   Plugins are directories holding a manifest.json, in Omarchy's shell-plugin
   format. Searched, in order:
@@ -205,9 +210,193 @@ set_state() {  # set_state <id> <on|off>
     mv "$tmp" "$STATE"
 }
 
+# Where `add` puts things. Never Omarchy's directory: that one is theirs, and
+# `omarchy plugin add` is what owns it. Two programs writing one tree is how a
+# plugin ends up half-removed by whichever ran last.
+MINE="$CONF_HOME/synui/plugins"
+
+# What `browse` offers. Beside the shipped example, so a checkout and an install
+# both find it.
+CATALOGUE="${SYNUI_PLUGIN_CATALOGUE:-/usr/share/synui/plugins/catalogue.tsv}"
+[ -r "$CATALOGUE" ] || CATALOGUE="$(dirname "$0")/../data/plugins/catalogue.tsv"
+
+# Is this id already on disk, whatever directory it came from?
+installed_id() { scan | awk -F'\t' -v i="$1" '$1==i {print $1; exit}'; }
+
+# ── Fetching ONE widget out of a repository that holds many ─────────────────
+#
+# Omarchy's bar widgets live together in shell/plugins/bar/widgets, so a plain
+# clone would drop their whole desktop into a plugin directory. A partial +
+# sparse checkout takes the one path; --filter=blob:none means the blobs for
+# everything else are never downloaded at all, so this is a few files over the
+# wire rather than a repository.
+#
+# ⚠ AND THE MANIFEST IS RENAMED ON THE WAY IN. Theirs is <Base>.manifest.json
+# because the widgets share a directory; a plugin directory holds one plugin and
+# the scanner looks for manifest.json. That rename is the entire difference
+# between the two shapes.
+fetch_subpath() {  # fetch_subpath <repo> <ref> <path> <base> <dest>
+    local repo=$1 ref=$2 path=$3 base=$4 dest=$5 tmp
+    tmp=$(mktemp -d) || return 1
+    if ! git clone --depth 1 --branch "$ref" --filter=blob:none --sparse \
+             -- "$repo" "$tmp/r" >/dev/null 2>&1; then
+        rm -rf "$tmp"; return 1
+    fi
+    # ⚠ THE LICENCE IS IN THE CHECKOUT SET, NOT ONLY IN THE COPY LOOP BELOW. A
+    # sparse checkout of the widget path alone leaves the repository ROOT empty,
+    # so the LICENSE the loop goes looking for is not on disk and the copy
+    # silently does nothing — which would put somebody else's MIT code on a
+    # user's machine with no notice attached. Naming the files here is what
+    # makes them exist to copy.
+    if ! git -C "$tmp/r" sparse-checkout set --no-cone \
+             "$path" "/LICENSE" "/LICENSE.md" "/COPYING" >/dev/null 2>&1; then
+        rm -rf "$tmp"; return 1
+    fi
+    local src="$tmp/r/$path"
+    [ -f "$src/$base.qml" ] || { rm -rf "$tmp"; return 1; }
+
+    mkdir -p "$dest"
+    cp "$src/$base.qml" "$dest/" || { rm -rf "$tmp" "$dest"; return 1; }
+    if [ -f "$src/$base.manifest.json" ]; then
+        cp "$src/$base.manifest.json" "$dest/manifest.json"
+    elif [ -f "$src/manifest.json" ]; then
+        cp "$src/manifest.json" "$dest/manifest.json"
+    else
+        rm -rf "$tmp" "$dest"; return 1
+    fi
+    # Whatever else the widget names beside itself — their KeyboardLayout has a
+    # KeyboardLayoutModel.js, and a widget without its model is a widget that
+    # loads and then throws on first use.
+    for extra in "$src/$base"*.js; do
+        [ -f "$extra" ] && cp "$extra" "$dest/"
+    done
+    # The licence travels with the code. MIT requires the notice in "all copies
+    # or substantial portions", and a file copied onto somebody's machine is a
+    # copy however it got there.
+    for lic in LICENSE LICENSE.md COPYING; do
+        [ -f "$tmp/r/$lic" ] && { cp "$tmp/r/$lic" "$dest/LICENSE"; break; }
+    done
+    rm -rf "$tmp"
+    return 0
+}
+
 case "${1:-list}" in
     -h|--help|help) usage ;;
     scan) scan ;;
+    browse)
+        [ -r "$CATALOGUE" ] || { printf 'synui-plugins: no catalogue at %s\n' \
+                                        "$CATALOGUE" >&2; exit 1; }
+        printf '  %-24s %-28s %s\n' "ID" "NAME" "STATE"
+        while IFS=$'\t' read -r id name desc repo ref path base; do
+            case "$id" in ''|'#'*) continue ;; esac
+            if [ -n "$(installed_id "$id")" ]; then st=installed; else st="—"; fi
+            printf '  %-24s %-28s %s\n' "$id" "$name" "$st"
+            printf '  %-24s %s\n' "" "$desc"
+        done < "$CATALOGUE"
+        printf '\n  synui-plugins add <id>        install one of these\n'
+        printf '  synui-plugins add <git-url>  install a plugin repository\n'
+        ;;
+    add)
+        url=${2:-}
+        [ -n "$url" ] || { printf 'synui-plugins add: need a git URL or a catalogue id\n' >&2; exit 2; }
+        command -v git >/dev/null 2>&1 || {
+            printf 'synui-plugins: git is not installed\n' >&2; exit 2; }
+
+        # A catalogue id rather than a URL: one widget out of a repository that
+        # holds many. Tried FIRST, because an id is unambiguous — it has no
+        # scheme and no slash, so nothing that is a URL can be mistaken for one.
+        if [ "${url#*/}" = "$url" ] && [ -r "$CATALOGUE" ]; then
+            row=$(awk -F'\t' -v i="$url" '$1==i {print; exit}' "$CATALOGUE")
+            if [ -n "$row" ]; then
+                IFS=$'\t' read -r cid cname cdesc crepo cref cpath cbase <<EOFROW
+$row
+EOFROW
+                [ -n "$(installed_id "$cid")" ] && {
+                    printf 'synui-plugins: %s is already installed\n' "$cid" >&2; exit 1; }
+                dest="$MINE/${cid##*.}"
+                [ -e "$dest" ] && { printf 'synui-plugins: %s already exists\n' "$dest" >&2; exit 1; }
+                printf 'fetching %s from %s…\n' "$cbase" "$crepo"
+                fetch_subpath "$crepo" "$cref" "$cpath" "$cbase" "$dest" || {
+                    printf 'synui-plugins: could not fetch %s\n' "$cid" >&2; exit 1; }
+                why=$(scan | awk -F'\t' -v i="$cid" '$1==i {print $7}' | head -1)
+                if [ -n "$why" ]; then
+                    printf 'installed %s, but it cannot be hosted — %s\n' "$cid" "$why" >&2
+                    exit 2
+                fi
+                set_state "$cid" on
+                printf '%s: installed and on\n' "$cid"
+                exit 0
+            fi
+            printf 'synui-plugins: no catalogue entry %s, and it is not a URL\n' "$url" >&2
+            printf '  `synui-plugins browse` lists what there is\n' >&2
+            exit 1
+        fi
+
+        # The directory name. Given, or the URL's last path element with a
+        # trailing .git dropped — which is what `git clone` would have picked.
+        name=${3:-}
+        if [ -z "$name" ]; then
+            name=${url##*/}; name=${name%.git}
+        fi
+        # ⛔ ONE PATH ELEMENT, ALWAYS. The name reaches a path, and a URL ending
+        # in `../../.local/bin` would otherwise clone over something else. A
+        # name with a slash in it is refused rather than sanitised: quietly
+        # rewriting somebody's argument is how you install the wrong thing.
+        case "$name" in
+            */*|.|..|"") printf 'synui-plugins: bad plugin name %s\n' "$name" >&2; exit 2 ;;
+        esac
+
+        dest="$MINE/$name"
+        [ -e "$dest" ] && { printf 'synui-plugins: %s already exists\n' "$dest" >&2
+                            printf '  remove it first: synui-plugins remove <id>\n' >&2
+                            exit 1; }
+        mkdir -p "$MINE"
+        # --depth 1: a plugin is a few QML files and nobody wants its history.
+        git clone --depth 1 -- "$url" "$dest" || {
+            rm -rf "$dest"; printf 'synui-plugins: clone failed\n' >&2; exit 1; }
+
+        [ -f "$dest/manifest.json" ] || {
+            rm -rf "$dest"
+            printf 'synui-plugins: %s has no manifest.json — not a plugin\n' "$url" >&2
+            printf '  the format is documented in %s\n' \
+                   "/usr/share/synui/plugins/README.md" >&2
+            exit 1; }
+
+        id=$(jfield "$dest/manifest.json" id)
+        [ -n "$id" ] || { rm -rf "$dest"
+                          printf 'synui-plugins: manifest has no id\n' >&2; exit 1; }
+
+        why=$(scan | awk -F'\t' -v i="$id" '$1==i {print $7}' | head -1)
+        if [ -n "$why" ]; then
+            # ⚠ KEPT, NOT DELETED. It is on disk and named, so `list` can say
+            # why it cannot run — and a plugin refused today may be hostable
+            # after a synui that provides what it wants. Throwing it away would
+            # make the reason unreadable.
+            printf 'installed %s, but it cannot be hosted — %s\n' "$id" "$why" >&2
+            exit 2
+        fi
+        set_state "$id" on
+        printf '%s: installed and on\n' "$id"
+        ;;
+    remove)
+        id=${2:-}
+        [ -n "$id" ] || { printf 'synui-plugins remove: need a plugin id\n' >&2; exit 2; }
+        dir=$(scan | awk -F'\t' -v i="$id" '$1==i {print $4}' | head -1)
+        [ -n "$dir" ] || { printf 'synui-plugins: no plugin with id %s\n' "$id" >&2; exit 1; }
+        # ⛔ ONLY OUT OF OUR OWN DIRECTORY. The other two are Omarchy's (theirs
+        # to manage, with their own command) and the package's (pacman's). A
+        # remove that reached either would delete a file somebody else believes
+        # they own, and on the packaged one the next upgrade would put it back.
+        case "$dir" in
+            "$MINE"/*) ;;
+            *) printf 'synui-plugins: %s is not one you installed (%s)\n' "$id" "$dir" >&2
+               printf '  turn it off instead: synui-plugins %s off\n' "$id" >&2
+               exit 2 ;;
+        esac
+        rm -rf "$dir"
+        set_state "$id" off
+        printf '%s: removed\n' "$id"
+        ;;
     list)
         scan | tail -n +2 | while IFS=$'\t' read -r id name desc dir entry on why; do
             if [ -n "$why" ]; then

@@ -1,0 +1,21 @@
+# synui-plugins browse — widgets you can install, and where they come from.
+#
+# ⚠ EVERY ROW HERE HAS BEEN LOADED INTO A REAL BAR, not merely read. A catalogue
+# that lists a widget which turns out to need Hyprland, or a component this
+# desktop does not implement, is a catalogue that installs disappointments — so
+# a row is added only after the widget has been through tests/plugin_load.sh's
+# path. Omarchy's KeyboardLayout and Workspaces are deliberately absent: both
+# import Quickshell.Hyprland and would be refused at install time. Their Tray
+# needs a PopupCard this desktop does not have, and SynapseOS has its own tray.
+#
+# ⚠ THE MANIFEST IS NAMED <Base>.manifest.json IN THEIR TREE, not manifest.json.
+# Their bar widgets share one directory, so each carries its own; a standalone
+# plugin has the plain name. The installer renames on the way in, which is the
+# one shape difference between "a widget in Omarchy's repo" and "a plugin".
+#
+# id <TAB> name <TAB> description <TAB> repo <TAB> ref <TAB> path <TAB> base
+omarchy.spacer	Spacer	Configurable blank space between bar widgets	https://github.com/basecamp/omarchy	quattro	shell/plugins/bar/widgets	Spacer
+omarchy.active-window	Active window	The focused window's title	https://github.com/basecamp/omarchy	quattro	shell/plugins/bar/widgets	ActiveWindow
+omarchy.indicators	Indicators	Battery, network and volume as one compact group	https://github.com/basecamp/omarchy	quattro	shell/plugins/bar/widgets	Indicators
+omarchy.microphone	Microphone	Mute state, click to toggle, wheel to set level	https://github.com/basecamp/omarchy	quattro	shell/plugins/bar/widgets	Microphone
+omarchy.system-update	System update	How many updates are waiting	https://github.com/basecamp/omarchy	quattro	shell/plugins/bar/widgets	SystemUpdate

@@ -82,11 +82,24 @@ anything else fails because it genuinely is not.
 ## Using them
 
 ```
+synui-plugins browse                  widgets you can install, and where from
+synui-plugins add omarchy.spacer      install one of them
+synui-plugins add <git-url>           install a plugin repository
 synui-plugins list                    what is installed, and why anything is refused
 synui-plugins synapse.uptime on       turn one on
-synui-plugins synapse.uptime toggle
+synui-plugins remove <id>             delete one you installed
 synui-plugins scan                    the TSV the bar reads
 ```
+
+`add` takes a catalogue id or a git URL. A catalogue id is one widget out of a
+repository that holds many, so it is a partial + sparse checkout of that one
+path rather than a clone of somebody's whole desktop — and the repository's
+LICENSE comes with it, because MIT wants the notice in every copy and a file put
+on your disk is one.
+
+> `remove` only deletes out of `~/.config/synui/plugins`. The other two search
+> paths are Omarchy's (theirs, with their own command) and the package's
+> (pacman's) — turn those off instead.
 
 Everything is off until asked for: a plugin is third-party code running inside
 the bar's own process.

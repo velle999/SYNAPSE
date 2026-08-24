@@ -1299,7 +1299,62 @@ pkgver=0.1.0
 #   tests run for it (plugins, dock_options, keys) are all pure C and none of
 #   them loads a line of QML. Any change under quickshell/ needs one of the
 #   bar_*.sh tests run against it, not the unit suite.
-pkgrel=468
+# 469: Omarchy's own bar widgets actually run now, and there is something to
+#   browse and install them with.
+#   468 shipped the FORMAT and refused anything that reached past BarWidget,
+#   because their widgets also import qs.Commons and several import
+#   Quickshell.Hyprland. Measured rather than assumed this time: across the eight
+#   bar widgets they ship, the whole qs.Commons surface is ELEVEN Style
+#   properties, two Color and two Util — and five of the eight fail on one shared
+#   type, WidgetButton.
+#   ⚠ A SHIM, NOT A VENDORED COPY, AND THAT IS A DESIGN DECISION RATHER THAN A
+#   LICENCE ONE. Omarchy is MIT so copying Style.qml would be perfectly legal; it
+#   is 23KB carrying THEIR spacing scale, THEIR font tokens and THEIR palette, so
+#   a widget dropped on this desktop would look like a piece of Omarchy sitting
+#   on SynapseOS. What a widget wants from Style is "how big is body text here" —
+#   a question this desktop already answers. Same names, synui's answers.
+#   ⚠ Color takes Theme.barFg/barAccent and NOT fg/magenta: those are the FOLDED
+#   answers that already resolve the clear-bar case to ink measured off the
+#   wallpaper. Reading fg directly would hand a widget the palette's colour on a
+#   clear bar — the unreadable text that measurement exists to prevent. The bar
+#   hands over its own per-strip ink through `bar.barForeground`, which a
+#   singleton cannot express: it has one value for a desktop with one answer per
+#   monitor and per module.
+#   ⚠ WidgetButton is REIMPLEMENTED and that one is practical, not courteous:
+#   theirs calls into THEIR host for tooltips, click registration and an
+#   indicator reveal, so a verbatim copy would be a file full of calls this bar
+#   does not have. Every one of those calls is guarded in their own file, which
+#   is what makes a host that offers none of them a supported case.
+#   ⛔ THE REFUSAL NEEDED NO EDIT. It asks the filesystem — quickshell resolves
+#   `import qs.Foo` to <shell root>/Foo — so qs.Commons became hostable the
+#   moment the directory existed. That is the whole reason it was not a
+#   hardcoded list, and plugins.sh now asserts the rule against a module nothing
+#   provides instead.
+#   Verified at RUNTIME, not by lint: tests/plugin_load.sh starts a headless
+#   synui, starts the real quickshell tree with a plugin enabled, and reads the
+#   bar's log. The fixture is Omarchy's own Spacer verbatim (MIT, © DHH, notice
+#   inline) because a widget written to pass proves nothing about compatibility.
+#   ⚠ Its ERROR filter drops ONE line by name — pipewire has no daemon in a
+#   headless session — rather than the whole service, so every other error a
+#   plugin can cause is still fatal. The needle is `ERROR` and not `Error:`.
+#   `synui-plugins browse|add|remove` is the manager half. `add` takes a git URL
+#   or a catalogue id; a catalogue id is one widget out of a repository holding
+#   many, so it is a partial + sparse checkout of that one path rather than a
+#   clone of their whole desktop.
+#   ⚠ THEIR MANIFEST IS <Base>.manifest.json, not manifest.json — their bar
+#   widgets share a directory so each carries its own. The installer renames on
+#   the way in, and that is the only shape difference between "a widget in their
+#   repo" and "a plugin".
+#   ⚠ THE LICENCE IS IN THE SPARSE-CHECKOUT SET. A checkout of the widget path
+#   alone leaves the repo root empty, so the LICENSE the copy loop looks for is
+#   not on disk and the copy silently does nothing — which would put somebody
+#   else's MIT code on a user's machine with no notice. Caught by installing one
+#   and looking.
+#   ⛔ `remove` only deletes out of ~/.config/synui/plugins. The other two search
+#   paths are Omarchy's (theirs, with their own command) and the package's
+#   (pacman's); a remove reaching either deletes a file somebody else owns, and
+#   on the packaged one the next upgrade puts it back.
+pkgrel=469
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1312,6 +1367,21 @@ arch=('x86_64')
 # raises no GPL/CC compatibility question. Attribution ships to
 # /usr/share/licenses/synui/WALLPAPERS.md; the reasoning is in
 # data/wallpapers/WALLPAPERS.md.
+#
+# ⚠ AND OMARCHY (MIT, © David Heinemeier Hansson) IS A THIRD RELATIONSHIP, and
+# the distinction is worth stating because all three words apply somewhere:
+#
+#   * quickshell/Ui and quickshell/Commons are OURS. They carry Omarchy's NAMES
+#     and their documented contract — which is not copyrightable — over synui's
+#     own theme, so a widget written for their bar runs on this one and looks
+#     like it belongs here. Nothing is copied; GPL, like the rest of synui.
+#   * tests/plugin_load.sh vendors ONE file of theirs verbatim as a fixture,
+#     with their copyright and permission notice inline beside it, because a
+#     compatibility claim proved with a widget we wrote ourselves proves nothing.
+#   * Anything a user installs with `synui-plugins add` is THEIRS and is fetched
+#     at run time — never in this package. The installer copies the repository's
+#     LICENSE in with the code, because MIT wants the notice in "all copies" and
+#     a file put on somebody's disk is one however it got there.
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0' 'CC-BY-SA-4.0')
 # xdg-desktop-portal{,-wlr,-gtk}: screen sharing. Without the wlr backend, portal
 #   falls back to GTK, which cannot do ScreenCast on wlroots — so Firefox/OBS/
@@ -1707,6 +1777,15 @@ package() {
     done
     install -Dm644 quickshell/Ui/qmldir \
         "$pkgdir/usr/share/synui/quickshell/Ui/qmldir"
+    # …and the other half a bar plugin imports. Same qmldir trap: `import
+    # qs.Commons` resolves to <shell root>/Commons, and without the file the
+    # module is not a module.
+    for _cm in quickshell/Commons/*.qml; do
+        install -Dm644 "$_cm" \
+            "$pkgdir/usr/share/synui/quickshell/Commons/${_cm##*/}"
+    done
+    install -Dm644 quickshell/Commons/qmldir \
+        "$pkgdir/usr/share/synui/quickshell/Commons/qmldir"
     for _wid in quickshell/widgets/*.qml; do
         install -Dm644 "$_wid" \
             "$pkgdir/usr/share/synui/quickshell/widgets/${_wid##*/}"
@@ -1798,6 +1877,10 @@ package() {
     # that demonstrates all three.
     install -Dm644 data/plugins/README.md \
         "$pkgdir/usr/share/synui/plugins/README.md"
+    # What `synui-plugins browse` offers. Not a plugin directory — the loop
+    # above matches `*/` and skips it, same as the README.
+    install -Dm644 data/plugins/catalogue.tsv \
+        "$pkgdir/usr/share/synui/plugins/catalogue.tsv"
 
     # The single writer of sounds.state AND the thing that plays a sample —
     # both jobs in one script so "is this event enabled?" has one answer. The

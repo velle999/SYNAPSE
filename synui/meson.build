@@ -1310,6 +1310,20 @@ test('imgview_mouse', imgview_mouse,
 # Runs entirely inside a scratch HOME: the real plugin directories are the
 # user's, and a test that could enable a plugin on the machine running it is one
 # bad path away from changing the desktop it is testing.
+# ⛔ AND THAT ONE RUNS NOTHING. plugins.sh is a shell script reading files: it
+# proves synui will OFFER a plugin and nothing about whether one runs. qmllint
+# does not close that gap either — "the types resolve" is not "it instantiates".
+# plugin_load.sh starts a headless synui, starts the real quickshell tree against
+# it with a plugin enabled, and reads the bar's own log. The fixture is
+# OMARCHY'S OWN Spacer widget verbatim (MIT, © DHH), because a plugin written to
+# pass proves the loader works and nothing about the compatibility claim.
+plugin_load_sh = find_program('tests/plugin_load.sh')
+test('plugin_load', plugin_load_sh,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 120)
+
 plugins_sh = find_program('tests/plugins.sh')
 test('plugins', plugins_sh,
      args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],
