@@ -1122,7 +1122,44 @@ pkgver=0.1.0
 #   assertions, not a code bug — fixed here as TAP_DESC, spelt once, because a
 #   test that hardcodes a setting-derived string in seven places goes stale in
 #   seven places. 189 checks green now, from 156 with 7 failing.
-pkgrel=462
+# 463: the dock's right-click menu — the app's own rows moved to the BOTTOM,
+#   and the menu stops hiding behind an auto-hiding dock.
+#   The app block (Unpin, New Window, Close Window, Quit All Windows) was
+#   first. It is one to four rows depending on whether the icon is pinned,
+#   whether the app has an Exec and whether it is running, so every setting
+#   below it moved by up to four positions from one icon to the next and
+#   "Auto-hide Dock" was never twice in the same place. Below the settings, the
+#   dock's rows start at the top of the menu on every icon and on the bar body
+#   alike — and since dockmenu_place() opens the popup ABOVE the cursor on a
+#   bottom dock, the LAST rows are the ones nearest the pointer, which is
+#   sitting on the icon those rows are about. Quit All Windows is now the last
+#   row in the menu. The separator moved with the block: left where it was it
+#   would have ruled off the settings from nothing.
+#   ⚠ THE SECOND HALF IS A REAL STACKING BUG, reported as the menu vanishing
+#   behind the dock for a moment and coming back once the dock shrank — on an
+#   AUTO-HIDING dock only. synui_render_dockmenu() raises the menu when it
+#   draws, which was enough while nothing raised the dock afterwards. An
+#   auto-hiding dock is always on top (dock_on_top_here), and the slide is an
+#   ANIMATION: dock_apply_position() runs once per frame for its length and
+#   every one of those frames put the dock back over the menu it had just
+#   opened. It reappeared when the slide ended and the ticking stopped — which
+#   is exactly "until the dock shrinks", and why a pinned dock never showed it.
+#   Fixed by re-raising the menu at the END of dock_apply_position() rather
+#   than by not raising the dock: a sliding dock does have to be over the
+#   windows it is sliding across. The rule is the ORDER of the two, and that
+#   function is the one place the dock's depth is set.
+#   ⚠ The stacking test needs the menu a TREE OF ITS OWN. dock_options_test
+#   stubs wlr_scene_tree_create() to hand every caller the same fake_tree, so
+#   with the real plumbing the dock's node and the menu's would be one pointer
+#   and "which was raised last" would be unobservable — the assertion would
+#   have passed against the bug. Proven by reverting the fix: the two stacking
+#   checks fail, and pass again with it back.
+#   Eleven new checks in dock_options_test, all about ORDER, because reordering
+#   four lines is a one-minute edit and the reason they are where they are does
+#   not survive in a diff. ⚠ Two of them needed menu_last_at(): an icon menu
+#   carries TWO separators now — one above the dock's placement rows, one above
+#   the app block — and menu_at() answers with the wrong one.
+pkgrel=463
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -1300,6 +1300,34 @@ static void dock_apply_position(syn_output_t *o)
         else
             wlr_scene_node_place_below(&o->dock.tree->node, &s->window_tree->node);
     }
+
+    /*
+     * ⚠ AND THE DOCK'S OWN MENU BACK ABOVE IT.
+     *
+     * Reported as the right-click menu disappearing behind the dock for a
+     * moment and coming back once the dock shrank, on an AUTO-HIDING dock only.
+     *
+     * The menu raises itself when it is drawn (synui_render_dockmenu), and that
+     * was enough for as long as nothing raised the dock afterwards. An
+     * auto-hiding dock is always on top (dock_on_top_here), and the slide is an
+     * ANIMATION: dock_apply_position() runs once per frame for the length of
+     * it, and every one of those frames put the dock back above the menu it had
+     * just opened. The menu reappeared when the slide finished and the ticking
+     * stopped — which is exactly "until the dock shrinks", and why a pinned
+     * dock never showed it: nothing re-raises a dock that is not moving.
+     *
+     * ⚠ RAISED HERE RATHER THAN "DON'T RAISE THE DOCK", because the dock does
+     * have to be on top of the windows while it is sliding over them. The rule
+     * is the order between these two, not whether the dock is raised: a menu
+     * the dock opened is above the dock, always, and this is the one place that
+     * can go wrong because it is the one place the dock's depth is set.
+     *
+     * The tree is server-wide while this runs per output, so it is re-raised
+     * once per output per frame — three pointer-free node moves on a
+     * three-monitor desk, against a scene walk that is already happening.
+     */
+    if (s->dockmenu.visible && s->dockmenu_ui.tree)
+        wlr_scene_node_raise_to_top(&s->dockmenu_ui.tree->node);
 }
 
 /* ── Rendering ───────────────────────────────────────────── */
@@ -3605,24 +3633,6 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
              e ? e->app_id : "");
 
     int n = 0;
-    if (e) {
-        s->dockmenu.actions[n++] = e->pinned ? SYN_DOCKACT_UNPIN
-                                             : SYN_DOCKACT_PIN;
-
-        const syn_icon_entry_t *ic = icon_lookup(e->app_id);
-        if (ic->exec[0])
-            s->dockmenu.actions[n++] = e->running ? SYN_DOCKACT_NEWWIN
-                                                  : SYN_DOCKACT_OPEN;
-        /* Close-one before quit-all: closing a single window is the common
-         * intent, and Quit sits furthest from the cursor so it is hard to hit by
-         * accident. */
-        if (e->running) {
-            s->dockmenu.actions[n++] = SYN_DOCKACT_CLOSEWIN;
-            s->dockmenu.actions[n++] = SYN_DOCKACT_QUIT;
-        }
-        s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
-    }
-
     s->dockmenu.actions[n++] = SYN_DOCKACT_AUTOHIDE;
     /* Only while the dock is pinned on screen. An auto-hiding dock is always on
      * top (see dock_floats_over_windows), so the row would be a switch with
@@ -3655,6 +3665,48 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
      * full dock is a few pixels wide. */
     s->dockmenu.actions[n++] = SYN_DOCKACT_EDGE;
     s->dockmenu.actions[n++] = SYN_DOCKACT_SETTINGS;
+
+    /*
+     * ── The app's own rows, LAST ────────────────────────────────────────────
+     *
+     * They used to be first, above the dock's settings, which is where a menu
+     * about a thing usually puts the thing. Two reasons they moved:
+     *
+     *   1. THE DOCK'S ROWS ARE THE STABLE ONES AND THE APP'S ARE NOT. This
+     *      block is between one and four rows depending on whether the icon is
+     *      pinned, whether the app has an Exec and whether it is running — so
+     *      with it on top, every row below it moved by up to four positions
+     *      from one icon to the next, and "Auto-hide Dock" was never twice in
+     *      the same place. Below, the settings start at the top of the menu on
+     *      every icon and on the bar body alike.
+     *   2. THE MENU OPENS ABOVE THE CURSOR on a bottom dock (dockmenu_place),
+     *      so the LAST row is the one nearest the pointer — and the pointer is
+     *      on the icon these rows are about. The app's own actions are now the
+     *      ones closest to the app.
+     *
+     * ⚠ THE SEPARATOR MOVED WITH THEM AND HAS TO. It is what marks the seam
+     * between "this dock" and "this application", and left at the top it would
+     * have ruled off the settings from nothing.
+     */
+    if (e) {
+        s->dockmenu.actions[n++] = SYN_DOCKACT_SEP;
+        s->dockmenu.actions[n++] = e->pinned ? SYN_DOCKACT_UNPIN
+                                             : SYN_DOCKACT_PIN;
+
+        const syn_icon_entry_t *ic = icon_lookup(e->app_id);
+        if (ic->exec[0])
+            s->dockmenu.actions[n++] = e->running ? SYN_DOCKACT_NEWWIN
+                                                  : SYN_DOCKACT_OPEN;
+        /* Close-one before quit-all: closing a single window is the common
+         * intent, and Quit All Windows is the last row in the menu — the one
+         * you have to travel furthest DOWN the list to reach, past everything
+         * else this menu can do. */
+        if (e->running) {
+            s->dockmenu.actions[n++] = SYN_DOCKACT_CLOSEWIN;
+            s->dockmenu.actions[n++] = SYN_DOCKACT_QUIT;
+        }
+    }
+
     s->dockmenu.action_count = n;
     dockmenu_place(s, lx, ly);
 }

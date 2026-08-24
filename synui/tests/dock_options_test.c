@@ -267,8 +267,12 @@ void wlr_scene_node_set_position(struct wlr_scene_node *node, int x, int y)
 { node->x = x; node->y = y; }
 void wlr_scene_node_set_enabled(struct wlr_scene_node *node, bool enabled)
 { (void)node; (void)enabled; }
+/* ⚠ WHICH node, not just how many. The dock and its own menu are siblings in
+ * the scene, so "the menu is above the dock" is a statement about the ORDER of
+ * two raises and is invisible to a counter. See the auto-hide case in main(). */
+static struct wlr_scene_node *last_raised;
 void wlr_scene_node_raise_to_top(struct wlr_scene_node *node)
-{ (void)node; raises++; }
+{ raises++; last_raised = node; }
 void wlr_scene_node_place_below(struct wlr_scene_node *node,
                                 struct wlr_scene_node *sibling)
 { (void)node; (void)sibling; tucks++; }
@@ -352,6 +356,34 @@ static bool menu_has(syn_dockact_t a)
     for (int i = 0; i < server.dockmenu.action_count; i++)
         if (server.dockmenu.actions[i] == a) return true;
     return false;
+}
+
+/* Where a row sits, or -1. The menu's ORDER is a design decision that a
+ * presence check cannot see, and reordering it is a one-line edit — so the
+ * order is asserted rather than described in a comment somebody has to find. */
+static int menu_at(syn_dockact_t a)
+{
+    for (int i = 0; i < server.dockmenu.action_count; i++)
+        if (server.dockmenu.actions[i] == a) return i;
+    return -1;
+}
+
+/* ⚠ THE LAST one, and there are two: the icon menu carries a rule above the
+ * dock's own placement rows AND a rule above the app block. menu_at() answers
+ * with the first, which is not the one the seam assertions are about. */
+static int menu_last_at(syn_dockact_t a)
+{
+    int at = -1;
+    for (int i = 0; i < server.dockmenu.action_count; i++)
+        if (server.dockmenu.actions[i] == a) at = i;
+    return at;
+}
+static int menu_count(syn_dockact_t a)
+{
+    int n = 0;
+    for (int i = 0; i < server.dockmenu.action_count; i++)
+        if (server.dockmenu.actions[i] == a) n++;
+    return n;
 }
 
 int main(void)
@@ -554,6 +586,57 @@ int main(void)
           "a menu opened on a pinned icon offers to unpin it");
     check(menu_has(SYN_DOCKACT_AUTOHIDE) && menu_has(SYN_DOCKACT_SEP),
           "…with the dock's switches under a rule");
+
+    /*
+     * ── The order, which is the whole of what an icon menu IS ──────────────
+     *
+     * The app's rows used to be FIRST. Two things were wrong with that: the
+     * block is one to four rows depending on the icon (pinned? has an Exec?
+     * running?), so every setting below it moved by up to four positions from
+     * one icon to the next — "Auto-hide Dock" was never twice in the same
+     * place; and the menu opens ABOVE the cursor on a bottom dock, so the rows
+     * nearest the pointer are the LAST ones, and the pointer is sitting on the
+     * icon those rows are about.
+     *
+     * Asserted rather than described, because "move these four lines" is a
+     * one-minute edit and the reason they are where they are is not in the
+     * diff.
+     */
+    check(menu_at(SYN_DOCKACT_AUTOHIDE) == 0,
+          "the dock's settings start at the top, on every icon");
+    check(menu_at(SYN_DOCKACT_UNPIN) > menu_at(SYN_DOCKACT_SETTINGS),
+          "the app's own rows come after them");
+    check(menu_last_at(SYN_DOCKACT_SEP) == menu_at(SYN_DOCKACT_UNPIN) - 1,
+          "…with a rule immediately above the app block, marking the seam");
+    dockmenu_close(&server);
+
+    /* The two rows that only exist while the app IS running, which is what puts
+     * Quit All Windows on the end of the menu. The entry is not running in the
+     * rest of this file, so it is turned on for these four checks and turned
+     * back off — a running flag left set would change what every later menu
+     * offers. */
+    server.dock_entries[0].running = 1;
+    dockmenu_open(&server, &server.dock_entries[0], 400, OUT_H - 20);
+    check(menu_at(SYN_DOCKACT_QUIT) == server.dockmenu.action_count - 1,
+          "Quit All Windows is the LAST row in the menu");
+    check(menu_at(SYN_DOCKACT_CLOSEWIN) == menu_at(SYN_DOCKACT_QUIT) - 1,
+          "…with close-one directly above it, the commoner intent first");
+    check(menu_at(SYN_DOCKACT_QUIT) > menu_at(SYN_DOCKACT_SETTINGS),
+          "…and both of them below the dock's own settings");
+    dockmenu_close(&server);
+    server.dock_entries[0].running = 0;
+
+    /* On the BAR BODY there is no app block — so there is ONE rule (the one
+     * above the dock's placement rows) rather than two, and nothing after
+     * Dock Settings for a second one to sit above. A menu ending in a hanging
+     * separator would be a line drawn under nothing. */
+    dockmenu_open(&server, NULL, 400, OUT_H - 20);
+    check(menu_at(SYN_DOCKACT_AUTOHIDE) == 0,
+          "the bar body's menu starts on the same row an icon's does");
+    check(menu_count(SYN_DOCKACT_SEP) == 1,
+          "…and carries one rule, not the app block's as well");
+    check(menu_at(SYN_DOCKACT_SETTINGS) == server.dockmenu.action_count - 1,
+          "…ending on Dock Settings");
     dockmenu_close(&server);
 
     /* Auto-hiding, the on-top row would be a switch that is ignored. */
@@ -562,6 +645,46 @@ int main(void)
     check(!menu_has(SYN_DOCKACT_ONTOP),
           "an auto-hiding dock does not offer the on-top row");
     dockmenu_close(&server);
+
+    /*
+     * ── …and the menu stays ON TOP of an auto-hiding dock ──────────────────
+     *
+     * Reported as the right-click menu vanishing behind the dock for a moment
+     * and coming back once the dock shrank — on an auto-hiding dock only.
+     *
+     * The menu raises itself when it draws, which was enough while nothing
+     * raised the dock afterwards. An auto-hiding dock is always on top, and the
+     * slide is an ANIMATION: dock_apply_position() runs once per frame for its
+     * length, and every one of those frames put the dock back over the menu it
+     * had just opened. It reappeared when the slide ended and the ticking
+     * stopped — exactly "until the dock shrinks", and why a pinned dock never
+     * showed it.
+     *
+     * ⚠ THE MENU NEEDS A TREE OF ITS OWN HERE. wlr_scene_tree_create() is
+     * stubbed to hand every caller the same fake_tree, so with the real plumbing
+     * the dock's node and the menu's node would be one pointer and the order
+     * between them would be unobservable. Assigning a distinct one is what makes
+     * "which was raised LAST" a real question.
+     */
+    static struct wlr_scene_tree menu_tree;
+    server.dockmenu_ui.tree = &menu_tree;
+    dockmenu_open(&server, &server.dock_entries[0], 400, OUT_H - 20);
+    last_raised = NULL;
+    relayout();
+    check(last_raised == &menu_tree.node,
+          "an auto-hiding dock leaves its own menu on top, not under it");
+
+    /* And the dock is still raised at all — the fix is the ORDER of the two,
+     * never "stop raising the dock", which would put a sliding dock behind the
+     * windows it is sliding over. */
+    check(raises >= 2, "…having raised itself first, as it must");
+
+    dockmenu_close(&server);
+    last_raised = NULL;
+    relayout();
+    check(last_raised != &menu_tree.node,
+          "…and stops re-raising it once the menu is closed");
+    server.dockmenu_ui.tree = NULL;
     server.config.dock_autohide = 0;
 
     /* ── 7. Dock size resizes the ICONS ────────────────────────────────── */
