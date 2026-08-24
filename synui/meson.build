@@ -1328,7 +1328,19 @@ plugins_sh = find_program('tests/plugins.sh')
 test('plugins', plugins_sh,
      args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],
      env     : ['SYNUI_BAR=' + meson.current_source_dir() / 'quickshell'],
-     timeout : 30)
+     timeout : 60)
+
+# ⛔ THE MODULE A PLUGIN IMPORTS, CHECKED AS A UNIT. plugins.sh proves the
+# manager will OFFER a widget and plugin_load.sh proves one RUNS; neither says
+# anything about qs.Ui / qs.Commons themselves — and a typo in Style.qml is not
+# a QML compile error, it is a binding that silently evaluates to undefined for
+# every widget on the desktop. It also catches the qmldir gap in both
+# directions: a type written but never listed does not exist to an importer,
+# however complete its file is. Skips (77) where Qt 6's qmllint is absent.
+qs_module_sh = find_program('tests/qs_module.sh')
+test('qs_module', qs_module_sh,
+     args    : [meson.current_source_dir() / 'quickshell'],
+     timeout : 60)
 
 deskmenu_widgets = find_program('tests/deskmenu_widgets.sh')
 test('deskmenu_widgets', deskmenu_widgets,

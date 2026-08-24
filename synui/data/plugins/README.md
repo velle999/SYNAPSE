@@ -61,18 +61,41 @@ shipped off, and the thing to copy.
 > ⚠ Set `implicitWidth`. The bar lays widgets out by it, and one that leaves it
 > at 0 is loaded, running and invisible.
 
-## What SynapseOS cannot host
+## What SynapseOS can and cannot host
 
-**An arbitrary Omarchy widget will not run here**, and the plugin system says so
-rather than showing an empty space.
+synui implements Omarchy's `qs.Ui` and `qs.Commons` over **this** desktop's
+theme — the same type names and the same contracts, drawing SynapseOS's font,
+spacing and ink. `quickshell/Ui/` and `quickshell/Commons/` are that module.
 
-Their shipped widgets root at `BarWidget` — that part is portable and is
-implemented in `quickshell/Ui/BarWidget.qml` — but they also:
+Measured against 40 of the most-installed community widgets, **39 of 40 resolve
+every type they name.** It did not start there:
 
-- `import qs.Commons`, Omarchy's own singletons. `Style.qml` alone is 23 KB of
-  API; reproducing it would be reimplementing their desktop.
+| the module was | widgets resolving |
+|---|---|
+| `BarWidget` + `WidgetButton` | 9 of 40 |
+| `+ BarIconButton` | 18 of 40 |
+| `+ the Panel layer` | 22 of 40 |
+| `+ Button, Toggle, ToggleSwitch` | 32 of 40 |
+| `+ Dropdown, TextField, the rest` | 40 of 40 |
+
+`tools/plugin-compat.sh` is what produced those numbers and is how to decide
+what to build next: it clones a sample off the registry and prints which missing
+type blocks the most widgets.
+
+> ⚠ **"Resolves" is not "works."** It is a question about the module, not about
+> behaviour. A widget can name every type correctly and still want something
+> else — see below.
+
+**What is still refused**, by name, before it reaches the bar:
+
 - `import Quickshell.Hyprland`, which talks to Hyprland's IPC socket. synui is
   its own wlroots compositor and there is nothing to shim.
+- A `qs.<Module>` this bar does not ship at all.
+
+**What is not refused and still may not work**: a widget that reaches for a
+HOST service rather than a type — `bar.shell.serviceFor(id)` is Omarchy's
+service registry, and a widget built on one comes up idle here rather than
+broken. Nothing in a manifest or an import can predict that.
 
 `synui-plugins` refuses those **before** they reach the bar, naming the import.
 The check is asked of the filesystem — quickshell resolves `import qs.Foo` to
@@ -81,10 +104,9 @@ anything else fails because it genuinely is not.
 
 ### The softer case: a module we have, a type we have not
 
-`import qs.Ui` passes, because synui ships a `qs.Ui`. Theirs has thirty-odd
-types in it and ours has two, so a widget can clear the refusal and still name
-`BarIconButton`, `Panel` or `PopupCard` — and most of the registry is written
-against their version.
+`import qs.Ui` passes because synui ships a `qs.Ui`. Where a widget names a type
+that module still does not have, it clears the refusal and then draws nothing
+useful — so the gap is reported rather than guessed at.
 
 That is a **warning, not a refusal**. `add` runs Qt 6's `qmllint` against the
 entry point with the bar's own modules on the import path, and prints the types

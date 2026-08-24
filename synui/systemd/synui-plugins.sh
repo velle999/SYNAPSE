@@ -100,6 +100,8 @@ usage: synui-plugins [list|scan]
                         them has to match, across the id, the name, the
                         description, the category, the tags and the author.
                         --all prints the lot; --refresh fetches first
+  check [<id>]          whether what is installed can actually draw, and what
+                        it is missing if not
   refresh               fetch the community list now
   catalogue             browse as TSV — what the window reads
   tui                   all of it in the terminal, with arrow keys and /
@@ -521,6 +523,27 @@ case "${1:-list}" in
               print $1, $2, $3, i, (i ? en[$1] : "off"), $8, $9, $10, $11, $12 }
         ' <(scan_once) -
         ;;
+    check)
+        # What `add` asks, asked again — for the widgets that went on before
+        # anything asked, and for anything installed by hand or by Omarchy's own
+        # command. Read-only.
+        cid=${2:-}
+        scan_once | tail -n +2 | while IFS= read -r line; do
+            rid=$(fld "$line" 1); rdir=$(fld "$line" 4); rentry=$(fld "$line" 5)
+            [ -n "$cid" ] && [ "$cid" != "$rid" ] && continue
+            rwhy=$(fld "$line" 7)
+            if [ -n "$rwhy" ]; then
+                printf '  %-30s unsupported — %s\n' "$rid" "$rwhy"
+                continue
+            fi
+            rmiss=$(unresolved_types "$rdir" "$rentry")
+            if [ -n "$rmiss" ]; then
+                printf '  %-30s will not draw — needs %s\n' "$rid" "$rmiss"
+            else
+                printf '  %-30s ok\n' "$rid"
+            fi
+        done
+        ;;
     refresh)
         # The registry, fetched now rather than whenever it next ages out. What
         # the window's Refresh button runs, and the answer to "it is not in the
@@ -818,11 +841,19 @@ case "${1:-list}" in
                     exit 2
                 fi
                 miss=$(unresolved_types "$dest" "$(jfield "$dest/manifest.json" barWidget)")
-                if [ -n "$miss" ]; then
-                    printf '⚠ %s uses types this bar does not provide: %s\n' "$mid" "$miss" >&2
-                    printf '  it loads; whatever needed them will not. The bar logs what fails.\n' >&2
-                fi
                 set_state "$mid" on
+                if [ -n "$miss" ]; then
+                    # ⛔ EXIT 3, NOT 0. It IS installed and it IS on — but a
+                    # window that only shows a message when the exit code is
+                    # non-zero showed nothing at all here, so three widgets went
+                    # on and never appeared and the browser said "installed and
+                    # on" three times. A degraded install is not a clean one and
+                    # must not report as one. 3 rather than 1 so a script can
+                    # still tell it from "did not install".
+                    printf '%s needs types this bar has not got: %s\n' "$mid" "$miss" >&2
+                    printf '  installed and on, but it will not draw. See the README.\n' >&2
+                    exit 3
+                fi
                 printf '%s: installed and on\n' "$mid"
                 exit 0
             fi
@@ -876,11 +907,14 @@ case "${1:-list}" in
             exit 2
         fi
         miss=$(unresolved_types "$dest" "$(jfield "$dest/manifest.json" barWidget)")
-        if [ -n "$miss" ]; then
-            printf '⚠ %s uses types this bar does not provide: %s\n' "$id" "$miss" >&2
-            printf '  it loads; whatever needed them will not. The bar logs what fails.\n' >&2
-        fi
         set_state "$id" on
+        if [ -n "$miss" ]; then
+            # See the note on the same check above: exit 3, so the window has
+            # something to show.
+            printf '%s needs types this bar has not got: %s\n' "$id" "$miss" >&2
+            printf '  installed and on, but it will not draw. See the README.\n' >&2
+            exit 3
+        fi
         printf '%s: installed and on\n' "$id"
         ;;
     remove)

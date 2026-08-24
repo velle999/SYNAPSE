@@ -3,6 +3,44 @@
 # has thirty-odd types and reproducing them would be reimplementing somebody
 # else's desktop. This is the one that is a CONTRACT rather than a component.
 BarWidget 1.0 BarWidget.qml
-# The base for an interactive widget — a label you can click. One type, and it
-# is the one five of Omarchy's eight shipped bar widgets fail on without it.
+# The base for an interactive widget — a label you can click. It is the one five
+# of Omarchy's eight shipped bar widgets fail on without it.
 WidgetButton 1.0 WidgetButton.qml
+
+# ⛔ THE ONE MORE THAN HALF THE COMMUNITY WIDGETS FAIL ON. Probed across 40 of
+# the most-installed, 21 name BarIconButton — and a widget that sizes itself
+# `implicitWidth: button.implicitWidth` against a type that is not there comes
+# out zero-wide: loaded, running, on, and invisible. OpticalGlyph is what it
+# draws with.
+BarIconButton 1.0 BarIconButton.qml
+OpticalGlyph  1.0 OpticalGlyph.qml
+
+# The panel layer. A bar plugin is usually a button in the strip AND a popup
+# under it; Panel is the contract for the second half, and the rest is what a
+# popup is built out of. BorderSurface/CursorSurface are the shared chrome —
+# see CursorSurface for why a row must never colour itself from containsMouse.
+Panel              1.0 Panel.qml
+PanelController    1.0 PanelController.qml
+PanelSeparator     1.0 PanelSeparator.qml
+PanelSectionHeader 1.0 PanelSectionHeader.qml
+BorderSurface      1.0 BorderSurface.qml
+BorderOverlay      1.0 BorderOverlay.qml
+CursorSurface      1.0 CursorSurface.qml
+PanelKeyCatcher    1.0 PanelKeyCatcher.qml
+# ⛔ A LAYER SURFACE, NOT AN xdg-popup, AND THE FOCUS IS PRIMED IN TWO STEPS.
+# Both are load-bearing and both are explained in the file.
+KeyboardPanel      1.0 KeyboardPanel.qml
+PanelHero          1.0 PanelHero.qml
+PanelActionButton  1.0 PanelActionButton.qml
+PanelToolTip       1.0 PanelToolTip.qml
+TextField          1.0 TextField.qml
+Button             1.0 Button.qml
+Toggle             1.0 Toggle.qml
+ToggleSwitch       1.0 ToggleSwitch.qml
+PointerMoveGate    1.0 PointerMoveGate.qml
+PanelSlider        1.0 PanelSlider.qml
+ButtonGroup        1.0 ButtonGroup.qml
+ConfirmDialog      1.0 ConfirmDialog.qml
+NumberField        1.0 NumberField.qml
+Dropdown           1.0 Dropdown.qml
+SearchableDropdown 1.0 SearchableDropdown.qml

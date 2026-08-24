@@ -4,3 +4,7 @@
 singleton Style 1.0 Style.qml
 singleton Color 1.0 Color.qml
 singleton Util  1.0 Util.qml
+# A control's edge, as a plain spec object. Theirs is 242 lines because most of
+# it reads a user token file synui does not have; this is the defaults behind
+# the same function names. See Border.qml.
+singleton Border 1.0 Border.qml

@@ -71,6 +71,13 @@ PanelWindow {
     readonly property bool vertical: false
     readonly property int  barSize: bar.height
 
+    /* Which edge this strip is on, spelt the way a plugin's panel expects —
+     * "top" | "bottom" | "left" | "right". A KeyboardPanel reads it to decide
+     * which side of the bar to open on, and a panel handed nothing would open
+     * downwards off the bottom of a bottom bar. synui offers two of the four;
+     * the other two are answered honestly by never being returned. */
+    readonly property string position: BarConfig.atBottom ? "bottom" : "top"
+
     /* The rest of what an interactive plugin widget reads off its host
      * (Ui/WidgetButton.qml). Every one of these is guarded on the widget's side,
      * so a bar that offered none of them would still work — they are here so a

@@ -342,8 +342,13 @@ WIDGET
 
     out=$(plug add "file://$REPO" 2>&1)
     rc=$?
-    check "a plugin clones from a git URL and turns on" "0" "$rc"
-    check "…and it is on disk under our own directory" "on" \
+    # ⛔ 3, NOT 0. It installed and it is on — and it will not draw, because the
+    # type it reaches for is not in this bar's qs.Ui. The window only shows a
+    # message when the exit code is non-zero, so reporting 0 here is exactly how
+    # three dead widgets came to be reported as "installed and on". 3 rather
+    # than 1 so a script can still tell it from "did not install".
+    check "a degraded install exits 3, not 0" "3" "$rc"
+    check "…and it is still on disk and on" "on" \
           "$(plug scan | awk -F'\t' '$1=="fixture.cloned" {print $6}')"
     # ⚠ NAMED. "something is missing" is a message nobody can act on.
     case "$out" in
@@ -351,7 +356,37 @@ WIDGET
             ok "…and the type this bar has not got is named" ;;
         *)  bad "the missing type was not named (got [$out])" ;;
     esac
+    check "check reports the same thing for what is installed" "1" \
+          "$(plug check fixture.cloned | grep -c 'BarIconButtonThatDoesNotExist')"
     plug remove fixture.cloned >/dev/null 2>&1
+
+    # ⚠ AND THE CLEAN CASE, or the assertion above would pass just as well
+    # against a check that fails everything. This one names only types the
+    # module really provides, so it must install silently and exit 0.
+    REPO2="$TREE/fixture-repo-ok"
+    mkdir -p "$REPO2"
+    cat > "$REPO2/manifest.json" <<'MANIFEST2'
+{ "schemaVersion": 1, "id": "fixture.clean", "name": "Clean widget",
+  "version": "1.0.0", "description": "names only what the module has",
+  "kinds": ["bar-widget"], "entryPoints": { "barWidget": "W.qml" } }
+MANIFEST2
+    cat > "$REPO2/W.qml" <<'WIDGET2'
+import QtQuick
+import qs.Ui
+import qs.Commons
+BarIconButton {
+    moduleName: "fixture.clean"
+    text: "\uf0e7"
+    fontSize: Style.bar.iconFont
+}
+WIDGET2
+    git -c init.defaultBranch=main init -q "$REPO2"
+    git -C "$REPO2" -c user.email=t@example.invalid -c user.name=t add -A
+    git -C "$REPO2" -c user.email=t@example.invalid -c user.name=t commit -qm f
+
+    plug add "file://$REPO2" >/dev/null 2>&1
+    check "a widget naming only what the module has installs clean" "0" "$?"
+    plug remove fixture.clean >/dev/null 2>&1
 else
     ok "git or Qt 6's qmllint is absent — the clone path is not checked here"
 fi

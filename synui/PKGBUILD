@@ -1449,7 +1449,53 @@ pkgver=0.1.0
 #   already on the machine and passes green over a broken tree. It bit during
 #   this change. 40 checks now, and not one byte over the network — the registry
 #   URL is an override and curl reads file://.
-pkgrel=473
+# 474: three widgets installed off the new browser went on and never appeared,
+#   and the browser had said "installed and on" for every one of them. The cause
+#   was not the browser. synui's qs.Ui had TWO types — BarWidget and
+#   WidgetButton — and Omarchy's has thirty-two, so most of the nine hundred
+#   widgets the registry lists were written against a module this desktop did
+#   not have. So qs.Ui and qs.Commons are now IMPLEMENTED, over this desktop's
+#   theme: the same type names and contracts, drawing SynapseOS's font, spacing
+#   and ink rather than theirs.
+#   Measured against 40 of the most-installed community widgets — 9 of 40
+#   resolved before, 39 of 40 do now. The staging came off the measurement and
+#   not off taste: +BarIconButton took it to 18, +the Panel layer to 22, +Button
+#   and the toggles to 32, +Dropdown and the fields to 40 (entry points; 39 of
+#   40 whole plugins). tools/plugin-compat.sh is that measurement, and it is
+#   deliberately NOT a meson test — it clones off the network.
+#   ⛔ A MISSING TYPE IS LOUD AND A MISSING PROPERTY IS SILENT, which is why
+#   Style.qml and Color.qml were built from a COUNT over the real corpus rather
+#   than written to taste. `import qs.Ui` naming a type nothing provides refuses
+#   to load and says which; `Style.spacing.md` where there is no `md` is
+#   undefined, lays out as zero, and draws a widget that is present, running,
+#   enabled and invisible. That IS the bug this release is fixing — two of the
+#   three dead widgets sized themselves `implicitWidth: button.implicitWidth`
+#   against a BarIconButton that did not exist.
+#   ⛔ BarIconButton ALONE DOUBLED THE NUMBER. 21 of the 40 name it.
+#   ⚠ KeyboardPanel is a LAYER SURFACE, not an xdg-popup: an xdg-popup only gets
+#   keys after a click has routed focus through its parent, so a
+#   keyboard-summoned panel would ignore every key. Its focus is primed
+#   Exclusive→OnDemand because OnDemand is granted on first map but NOT to a
+#   still-mapped fade-out surface reopening, nor over a client holding a pointer
+#   constraint; and focus follows `open`, never `visible`, or the keyboard is
+#   locked out for the length of the fade.
+#   ⚠ The bar's host contract gained `position` — a panel handed nothing opens
+#   downwards off the bottom of a bottom bar.
+#   Border is a shim: theirs is 242 lines because most of it reads a user token
+#   file synui has no counterpart for, so this is those defaults behind the same
+#   function names.
+#   ⚠ tests/qs_module.sh guards the module as a unit — every file resolves every
+#   name, and qmldir agrees with the directory in BOTH directions (a type
+#   written but never listed does not exist to an importer, however complete its
+#   file is). ⛔ It needs a `qs/` SYMLINK FARM: quickshell resolves `import
+#   qs.Foo` to <shell root>/Foo and no import path reproduces that. Without it
+#   our OWN shipped example fails, which is the tell that the harness is wrong
+#   rather than the code. ⛔ /usr/lib/qt6/bin/qmllint, never /usr/bin/qmllint.
+#   `synui-plugins check` reports the same thing for what is already installed,
+#   and a degraded install now exits 3 rather than 0 — the window only showed a
+#   message on a non-zero code, which is why it reported three dead widgets as
+#   installed and on.
+pkgrel=474
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
