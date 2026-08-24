@@ -1377,6 +1377,20 @@ test('music_errands', music_errands,
                 meson.current_source_dir() / 'quickshell/widgets/MusicPlayer.qml'],
      timeout : 30)
 
+# A queued track is drawn by its NAME, on the card and in the bar. cliamp
+# reports the path it was handed as the title, which on YouTube reduces to the
+# word `watch` before MPRIS ever sees it — so the widget's own "a title that is
+# really a path" rule had nothing left to strip and every song in a playlist was
+# drawn with the same non-name. The names live in syn-arcade's titles cache;
+# this asserts both surfaces ask for them and that neither grew a second copy of
+# the C's key rule. Source-only, same as above.
+music_title = find_program('tests/music_title.sh')
+test('music_title', music_title,
+     args    : [meson.current_source_dir() / 'quickshell/MusicLibrary.qml',
+                meson.current_source_dir() / 'quickshell/widgets/MusicPlayer.qml',
+                meson.current_source_dir() / 'quickshell/modules/Media.qml'],
+     timeout : 30)
+
 # The windows synui opens to run ONE command, and the flag that keeps them
 # open. Three terminals spell --hold and two of them take the command
 # differently; syntty handed the trailing form dies at argument parsing, which

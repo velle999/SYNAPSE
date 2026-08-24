@@ -364,6 +364,123 @@ QtObject {
         itemsJob.running = true
     }
 
+    /* ── What the track is CALLED ────────────────────────────────────────── */
+
+    /*
+     * ⚠ CLIAMP DOES NOT NAME A QUEUED TRACK, AND THE ANSWER IS ALREADY IN C.
+     *
+     * `cliamp queue <thing>` takes a path and reports that path back as the
+     * title — no tags are read — so every song off a YouTube station arrives on
+     * MPRIS called `watch`, from the last segment of `…/watch?v=<id>`, with no
+     * artist at all. Measured on this machine while a playlist was playing:
+     *
+     *     xesam:title  "watch"        xesam:url  https://www.youtube.com/watch?v=…
+     *
+     * which is what put "watch" and "Cliamp" on the card while the playlist
+     * itself had loaded perfectly. The list was never the broken half.
+     *
+     * big.c solved this once, for the television, and the fix is a CACHE rather
+     * than a parser: whatever queues a track writes down what it queued
+     * (`music-titles.rec`), keyed by music_key(), and `big music status` reads
+     * it back. A second copy of that key rule here is the second roster this
+     * project keeps being bitten by — see MusicPlayer.qml's header — so the
+     * question asked is "what is playing", never "what is this URL called".
+     *
+     * ⚠ AND IT IS A FORK PER TRACK, NOT PER SECOND. The objection in
+     * MusicPlayer.qml's header stands and is not weakened here: MPRIS says,
+     * event-driven, when the track CHANGES, and only that edge asks. A track is
+     * three minutes long.
+     */
+
+    // Written by whoever is drawing a track: the `xesam:url` it wants named.
+    // Only for a player that names tracks by path — `big music status` answers
+    // about CLIAMP, so asking it about Firefox would name the wrong song.
+    property string nowUrl: ""
+    onNowUrlChanged: root.resolveName()
+
+    // The answer, and the url it belongs to. Kept as a pair for the reason
+    // `itemsFor` exists: an answer that outlives the question it was asked
+    // about is an answer drawn against the wrong track.
+    property string nowKey: ""
+    property string nowTitle: ""
+
+    property Process nameProc: Process {
+        id: nameJob
+
+        // ⚠ Stamped at LAUNCH, not read on arrival — the same race itemsProc
+        // documents. cliamp advances tracks on its own, so `nowUrl` can move
+        // under a fetch that is already out.
+        property string forUrl: ""
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (nameJob.forUrl !== root.nowUrl) {
+                    // Asked about a track nobody is looking at any more. The
+                    // fetch that was skipped while this one held the Process is
+                    // started here, because this is the moment it can run.
+                    root.resolveName()
+                    return
+                }
+
+                const rows = root.records(this.text)
+                const r = rows.length > 0 ? rows[0] : null
+
+                // ⚠ RECORDED EVEN WHEN IT IS EMPTY. `status` answering with no
+                // title is a real answer — a track this file never queued — and
+                // marking the question asked is what stops it being asked again
+                // on every repaint. The caller falls back on its own.
+                root.nowKey = nameJob.forUrl
+                root.nowTitle = r && r.title ? r.title : ""
+            }
+        }
+    }
+
+    function resolveName() {
+        if (!root.have || root.nowUrl === "") return
+        if (root.nowUrl === root.nowKey) return   // already answered
+        if (nameJob.running) return               // the arrival re-fires it
+        nameJob.forUrl = root.nowUrl
+        nameJob.command = ["syn-arcade", "big", "music", "status", "--rec"]
+        nameJob.running = true
+    }
+
+    /*
+     * What that url is called, or "" where nothing here knows.
+     *
+     * ⚠ A PURE READ, deliberately: this is called from a BINDING on two
+     * surfaces, and a binding that starts a subprocess re-runs it on every
+     * repaint. Wanting a name is `nowUrl`; asking for one is this.
+     */
+    function nameFor(url) {
+        return (url !== "" && url === root.nowKey) ? root.nowTitle : ""
+    }
+
+    /*
+     * A title that is really a path, made into something to draw — the fallback
+     * for everything the cache does not know, and the one home for the rule.
+     *
+     * ⚠ THE QUERY COMES OFF FIRST, AND THAT IS NOT TIDYING. A Plex stream's
+     * path carries the account token in its query string, and both callers sit
+     * where a screenshot or a shoulder catches it — the wallpaper and the bar.
+     * Cut the query, then take the last path segment, then drop a file
+     * extension, which is what music_title_fallback() does on the television.
+     */
+    function displayTitle(raw) {
+        let t = String(raw || "").replace(/[\x00-\x1f\x7f]/g, " ")
+                                 .replace(/\s+/g, " ").trim()
+        if (!t || t.indexOf("/") < 0) return t
+
+        const q = t.indexOf("?")
+        if (q >= 0) t = t.slice(0, q)
+        t = t.slice(t.lastIndexOf("/") + 1)
+        try { t = decodeURIComponent(t) } catch (e) { /* leave it as it came */ }
+        const dot = t.lastIndexOf(".")
+        // Only a short trailing extension: a track genuinely called
+        // "Nine. Point. Five" must not lose its last word.
+        if (dot > 0 && t.length - dot <= 5) t = t.slice(0, dot)
+        return t.trim()
+    }
+
     /* ── Making noise ────────────────────────────────────────────────────── */
 
     /*

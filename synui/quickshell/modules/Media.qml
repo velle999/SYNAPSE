@@ -37,9 +37,40 @@ BarModule {
     // A 25-char cap rather than an elide: this sits in a row of fixed-width
     // readouts, and a title that grows the bar shifts every module beside it
     // every time the track changes.
+    /*
+     * ── A TITLE THAT IS REALLY A PATH ────────────────────────────────────
+     *
+     * ⚠ THE BAR DREW `xesam:title` RAW, and for cliamp that is not a title at
+     * all: it queues by path and reports the path back, so a local file put an
+     * absolute path in the bar, a Plex stream put THE ACCOUNT TOKEN there, and
+     * a YouTube station put the word `watch` — the last segment of
+     * `…/watch?v=<id>` — on every song in the playlist. The card next to it had
+     * the same bug and the same report.
+     *
+     * MusicLibrary owns both halves of the answer: the titles cache
+     * syn-arcade writes when it queues (nameFor), and the path reduction that
+     * strips a query before anything is drawn (displayTitle). One home, because
+     * a bar and a card that disagree about a song's name is two bugs.
+     */
+    readonly property string trackUrl:
+        player && player.metadata
+            ? String(player.metadata["xesam:url"] || "") : ""
+
+    // Only cliamp is asked: `big music status` answers about cliamp alone.
+    readonly property string wantNamed:
+        (player && String(player.dbusName) === "org.mpris.MediaPlayer2.cliamp"
+         && MusicLibrary.have) ? trackUrl : ""
+    onWantNamedChanged: if (wantNamed !== "") MusicLibrary.nowUrl = wantNamed
+
+    readonly property string trackName: {
+        if (!player) return ""
+        const named = MusicLibrary.nameFor(root.wantNamed)
+        return named ? named : MusicLibrary.displayTitle(player.trackTitle)
+    }
+
     text: {
         if (!player) return ""
-        const title = clean(player.trackTitle)
+        const title = root.trackName
         const artist = clean(player.trackArtist)
         if (!title) return "playing"
         const s = artist ? artist + " — " + title : title
@@ -48,7 +79,7 @@ BarModule {
 
     tooltipText: {
         if (!player) return ""
-        const title = clean(player.trackTitle) || "(unknown track)"
+        const title = root.trackName || "(unknown track)"
         const artist = clean(player.trackArtist)
         let s = title
         if (artist) s += "\n" + artist

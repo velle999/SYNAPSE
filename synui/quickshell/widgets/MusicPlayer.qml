@@ -44,6 +44,12 @@ import ".."
  *      TOKEN IN ITS QUERY. Drawing it raw would put a credential on the desktop
  *      wallpaper. Nothing that reaches the label below has a query on it.
  *
+ *      ⚠ AND STRIPPING IT IS NOT ENOUGH ON YOUTUBE, which is the half this
+ *      widget shipped without: `…/watch?v=<id>` reduces to the word `watch`,
+ *      so every song off a playlist was drawn with the same non-name. The
+ *      television has never had that bug because it asks the titles cache
+ *      first; so does the card now — see WHAT THE TRACK IS CALLED below.
+ *
  * ⚠ AND THE TRANSPORT STILL DOES NOT SHELL OUT TO `big transport`. That command
  * is the same MPRIS interface reached through `busctl`, which is right for a C
  * program that must not link libsystemd — and wrong here, because this file is
@@ -175,31 +181,50 @@ WidgetFrame {
     }
 
     /*
-     * A title that is really a path, made into something to draw.
+     * ── WHAT THE TRACK IS CALLED ──────────────────────────────────
      *
-     * ⚠ THE QUERY COMES OFF FIRST, AND THAT IS NOT TIDYING. A Plex stream's
-     * path carries the account token in its query string; this widget sits on
-     * the wallpaper where a screenshot or a shoulder catches it. Cut the query,
-     * then take the last path segment, then drop a file extension — which is
-     * what music_title_fallback() does on the television.
+     * ⚠ CLIAMP DOES NOT NAME A QUEUED TRACK, AND RULE 2 ABOVE IS ONLY HALF OF
+     * IT. Stripping a path down to its last segment is right for a local file
+     * and for a Plex stream; on YouTube it is what NAMES EVERY SONG `watch`.
+     * cliamp has already done that reduction by the time MPRIS is published —
+     * `xesam:title` arrives as the literal word `watch`, with no artist — so
+     * there is nothing left here to strip and nothing to notice. Reported
+     * exactly that way: a playlist that loaded and played perfectly, drawn on
+     * the card as "watch" over "Cliamp".
+     *
+     * The name lives in syn-arcade's titles cache, written by whatever queued
+     * the track, and MusicLibrary.nameFor() reads it back — one fork per TRACK
+     * CHANGE, which does not touch the no-polling rule above. Where the cache
+     * has nothing, or on a machine without syn-arcade, displayTitle() is
+     * exactly the fallback that shipped.
      */
-    function displayTitle(raw) {
-        let t = clean(raw)
-        if (!t || t.indexOf("/") < 0) return t
 
-        const q = t.indexOf("?")
-        if (q >= 0) t = t.slice(0, q)
-        t = t.slice(t.lastIndexOf("/") + 1)
-        try { t = decodeURIComponent(t) } catch (e) { /* leave it as it came */ }
-        const dot = t.lastIndexOf(".")
-        // Only a short trailing extension: a track genuinely called
-        // "Nine. Point. Five" must not lose its last word.
-        if (dot > 0 && t.length - dot <= 5) t = t.slice(0, dot)
-        return t.trim()
+    // ⚠ THE URL IS THE IDENTITY, NOT THE TITLE. Two songs off one playlist can
+    // both be called `watch`; their urls differ, and the url is what the answer
+    // is stamped against.
+    readonly property string trackUrl:
+        haveAny && player.metadata
+            ? String(player.metadata["xesam:url"] || "") : ""
+
+    // ⚠ ONLY CLIAMP IS ASKED ABOUT. `big music status` answers about cliamp
+    // and nothing else, so pointing it at a Firefox tab would put cliamp's song
+    // under Firefox's. Matched on the bus name the same way big.c's transport
+    // does — the part after `org.mpris.MediaPlayer2.`, compared whole.
+    readonly property bool pathNamed:
+        haveAny && String(player.dbusName) === "org.mpris.MediaPlayer2.cliamp"
+
+    // The want, as one property so it re-fires when EITHER half moves: a track
+    // change, or the player being swapped for cliamp mid-song.
+    readonly property string wantNamed:
+        (pathNamed && canBrowse) ? trackUrl : ""
+    onWantNamedChanged: if (wantNamed !== "") MusicLibrary.nowUrl = wantNamed
+
+    readonly property string titleText: {
+        if (!haveAny) return ""
+        const named = MusicLibrary.nameFor(root.wantNamed)
+        if (named) return named
+        return MusicLibrary.displayTitle(player.trackTitle) || "(unknown track)"
     }
-
-    readonly property string titleText:
-        haveAny ? (displayTitle(player.trackTitle) || "(unknown track)") : ""
     readonly property string artistText: {
         if (!haveAny) return ""
         const a = clean(player.trackArtist)
