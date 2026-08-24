@@ -206,19 +206,36 @@ int main(void)
         check(monotonic, "every curve is monotonic across 0..100");
     }
 
-    /* ── 4. The bar reaches nothing; the window does not ──────────────── */
+    /* ── 4. The bar reaches the frost floor; the window does not ──────── */
     /*
      * With the correction ON these two ends are deliberately different, and the
-     * difference is the design: the bar has no content of its own to lose — its
-     * modules draw straight onto the wallpaper and backdrop.state says which ink
-     * survives — while a window you can see straight through is one you cannot
-     * find the edges of.
+     * difference is the design: the bar goes far further than a window, because
+     * a window you can see straight through is one whose edges you cannot find.
+     *
+     * ⚠ FAR FURTHER IS NOT ALL THE WAY, AND THAT IS THE POINT OF THIS CHECK.
+     * The slider used to bottom the bar out at 0.00, on the argument that the
+     * bar has no content of its own to lose — its modules draw onto the
+     * wallpaper and backdrop.state says which ink survives there. What that
+     * missed is that at 0.00 there is no SURFACE, and three separate mechanisms
+     * need one: the backdrop blur masks to what the client painted (so it frosts
+     * the glyphs instead of the strip), the legibility walk has no alpha to walk
+     * from, and the dock takes this number exactly — a dock body at 0.00 frosts
+     * its ICONS. See SYN_BAR_ALPHA_FROSTED.
+     *
+     * Asserted against the constant rather than the literal 0.05, so moving the
+     * floor moves the test with it — but asserted STRICTLY ABOVE ZERO as well,
+     * because "the surface still exists" is the promise, and a floor quietly
+     * edited back to 0.0f would satisfy the first check and not the second.
      */
     {
         syn_config_t cfg;
         at_level(&cfg, 100, 0);
-        check(near(cfg.bar_opacity, 0.0f),
-              "at 100 the bar is gone entirely");
+        check(near(cfg.bar_opacity, SYN_BAR_ALPHA_FROSTED),
+              "at 100 the bar is as thin as it goes");
+        check(cfg.bar_opacity > 0.0f,
+              "…and it is still a surface, which is what the blur masks to");
+        check(near(cfg.dock_opacity, SYN_BAR_ALPHA_FROSTED),
+              "…and the dock is there with it, as it is at every other level");
         check(cfg.active_opacity > 0.5f,
               "…and a window still has findable edges");
     }
@@ -241,8 +258,15 @@ int main(void)
               "correction off, level 100: the window goes fully clear");
         check(near(cfg.foot_alpha, 0.0f),
               "…and so does the terminal's background");
-        check(near(cfg.bar_opacity, 0.0f),
-              "…and the bar, which already did");
+        /* ⚠ AND THE BAR DOES NOT, WHICH IS THE ONE ASYMMETRY HERE.
+         * glass_legibility opens the window and terminal curves all the way to
+         * nothing because their whole floor is a legibility floor. The bar's is
+         * not: SYN_BAR_ALPHA_FROSTED is there so the surface EXISTS — for the
+         * blur to mask to and the dock to be drawn as — and none of that is a
+         * correction anybody switched off. A desktop that wants no bar
+         * background asks for one, through the row or Make it all clear. */
+        check(near(cfg.bar_opacity, SYN_BAR_ALPHA_FROSTED),
+              "…but not the bar: its floor is a surface, not a correction");
     }
 
     /* ── 6. A pin is not moved, and its neighbours still are ──────────── */
@@ -440,6 +464,63 @@ int main(void)
         check(def->glass_level == SYN_GLASS_UNSET &&
               !near(def->active_opacity, 0.62f),
               "and 0.62 is reachable only by setting the slider to 100");
+    }
+
+    /* ── 9. What a theme asks for, and what the blur gate makes of it ─── */
+    /*
+     * The other half of "take the transparency out of the Prism defaults". The
+     * slider's floor above is what a desktop that MOVED the slider gets; this is
+     * what one that never touched it gets, and the two have to agree or a fresh
+     * install looks nothing like the same install after one nudge.
+     *
+     * ⚠ macOS 26 IS THE EXCEPTION AND STAYS ONE. Tahoe's menu bar has no
+     * background in the operating system it is named after; a frosted strip
+     * across the top would be a different desktop wearing the name. The two
+     * Prisms were never that — they are built on the compositor's own glass, and
+     * glass is a surface.
+     */
+    {
+        syn_config_t cfg;
+        memcpy(&cfg, def, sizeof(cfg));
+
+        cfg.theme = SYN_THEME_PRISM;
+        check(near(theme_bar_alpha(&cfg), SYN_BAR_ALPHA_FROSTED),
+              "Prism asks for the thinnest surface, not for none");
+        check(syn_bar_has_background(&cfg),
+              "…so there is something for the backdrop blur to mask to");
+
+        cfg.theme = SYN_THEME_PRISM_LIGHT;
+        check(near(theme_bar_alpha(&cfg), SYN_BAR_ALPHA_FROSTED),
+              "…and light Prism with it — one theme in two schemes");
+
+        cfg.theme = SYN_THEME_MACOS26;
+        check(near(theme_bar_alpha(&cfg), 0.0f),
+              "macOS 26's bar still has no background at all");
+        check(!syn_bar_has_background(&cfg),
+              "…so the blur must NOT frost it: there is nothing there but glyphs");
+
+        /* Every other preset has no view, which is what leaves the twelve retro
+         * chromes on the scheme's own 0.85/0.95 exactly as they always were. */
+        cfg.theme = SYN_THEME_WIN95;
+        check(theme_bar_alpha(&cfg) < 0.0f,
+              "a theme with no opinion still says so out of band");
+        check(syn_bar_has_background(&cfg),
+              "…and 'no opinion' resolves to a background, never to nothing");
+
+        /* ⚠ THE USER'S ROW WINS OUTRIGHT, INCLUDING AT ZERO — which is the only
+         * way anybody reaches a clear bar now that the presets have stopped
+         * asking for one. "Make it all clear" is this line, committed as a row.
+         * If bar_opacity ever stopped overriding the theme here, that action
+         * would silently do nothing on a Prism desktop. */
+        cfg.theme = SYN_THEME_PRISM;
+        cfg.bar_opacity = 0.0f;
+        check(near(syn_bar_alpha_asked(&cfg), 0.0f) && !syn_bar_has_background(&cfg),
+              "asking for 0.00 by hand still gets a bar with no background");
+        cfg.bar_opacity = 1.0f;
+        check(syn_bar_has_background(&cfg), "…and asking for solid gets solid");
+        cfg.bar_opacity = -1.0f;
+        check(near(syn_bar_alpha_asked(&cfg), SYN_BAR_ALPHA_FROSTED),
+              "…and handing the row back returns the theme's answer");
     }
 
     if (fails == 0) { printf("glass_sync_test: OK\n"); return 0; }

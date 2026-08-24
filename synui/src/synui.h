@@ -1767,6 +1767,7 @@ typedef enum {
     CTL_ROW_GLASS_LEVEL,
     CTL_ROW_GLASS_SYNC,        /* do the per-surface rows follow the slider  */
     CTL_ROW_SOLID,             /* one press: glass off, windows opaque       */
+    CTL_ROW_CLEAR,             /* …and the other end: no backgrounds at all  */
     CTL_ROW_GLASS_LEGIBILITY,  /* may a surface overrule its own alpha       */
     CTL_ROW_SCENE_INK,         /* does it read the windows or the wallpaper  */
     CTL_ROW_WP_ACCENT,         /* accent off the wallpaper, or out of the theme */
@@ -3006,6 +3007,7 @@ typedef enum {
     SYN_WIDGET_GLASS_OFF,
     SYN_WIDGET_GLASS_ON,
 } syn_widget_glass_t;
+
 
 /*
  * Which face the analog clock WIDGET draws (quickshell's AnalogClock.qml).
@@ -4256,25 +4258,107 @@ static inline int chrome_is_mac(const syn_config_t *cfg)
            cfg->chrome == SYN_CHROME_PLATINUM;
 }
 
+/*
+ * The alpha a GLASS theme's bar and menus are drawn at when they are not clear.
+ *
+ * It is `dock_opacity`'s compiled default, and stating it as one constant is the
+ * whole of "the bar matches the widgets": the desktop widgets take the dock's
+ * number verbatim (Theme.widgetAlpha is BarConfig.dockOpacity), the dock's blur
+ * comes from dock_style_is_glass(), and once the bar asks for the same number
+ * and claims the same backdrop blur the three surfaces are the same piece of
+ * glass by arithmetic rather than by three numbers that happen to agree today.
+ *
+ * ⚠ IT IS A THEME'S ASK, NOT A FLOOR. Anyone who drags Bar opacity, or moves the
+ * Glass slider with the sync on, overrides it in the ordinary way — this is only
+ * what a Prism desktop that has never opened either row is handed.
+ */
+/*
+ * The thinnest surface that is still a surface.
+ *
+ * ⚠ THE DIFFERENCE BETWEEN 0.00 AND 0.05 IS NOT FIVE PERCENT OF ANYTHING — it is
+ * whether the surface EXISTS, and three separate mechanisms key off that:
+ *
+ *   1. THE BACKDROP BLUR HAS SOMETHING TO MASK. syn_buffer_backdrop_blur() masks
+ *      by what the client actually painted — which is what lets the start menu
+ *      frost its own rectangle and leave its full-screen click-catcher clear. At
+ *      0.00 the only thing a bar paints is its glyphs, so the frost lands as a
+ *      little halo behind each letter of the clock. At 0.05 it is the strip, and
+ *      the strip is what frosted glass looks like. The dock has the same shape:
+ *      its icons are drawn over the body at full opacity, so a 0.00 body frosts
+ *      the ICONS.
+ *   2. THERE IS A TINT TO CORRECT. glass_legibility walks a surface's alpha up
+ *      until its own ink reads; a surface with no alpha to walk from is not a
+ *      thing the walk can rescue, and the ink has to be abandoned for the
+ *      wallpaper's black-or-white instead.
+ *   3. THE SURFACE HAS EDGES. A strip you can see straight through is one whose
+ *      extent you cannot find, which is the same argument the window opacity
+ *      floor is built on.
+ *
+ * So the glass presets and the top of the Glass slider stop at this rather than
+ * at nothing, and a bar with genuinely NO background — which is still what macOS
+ * 26 is, and what anyone can ask for — is reached deliberately, through
+ * Appearance ▸ Make it all clear.
+ *
+ * ⚠ IT IS AN ASK, NOT A FLOOR. Anyone who types `bar_opacity = 0` or drags the
+ * row there gets exactly that; this is only what a desktop that has not chosen
+ * is handed.
+ */
+#define SYN_BAR_ALPHA_FROSTED 0.05f
+
 /* How opaque this desktop's BAR should be, or negative for "this theme has no
- * opinion" — which is every theme but one, and leaves synui-apply-theme picking
- * from the scheme as it always has (0.85 dark, 0.95 light).
+ * opinion", which leaves synui-apply-theme picking from the scheme as it always
+ * has (0.85 dark, 0.95 light).
  *
- * macOS 26's menu bar has no background at all: it is the wallpaper, with the
- * clock and the menus drawn straight onto it. That is not a colour and so could
- * not live in the preset table with the rest of the palette — it is a fact about
- * the STYLE, like square_chrome, and it travels the same way (a positional
- * argument to synui-apply-theme, which writes theme.json's barAlpha).
+ * A theme's bar alpha is not a colour and so could not live in the preset table
+ * with the rest of the palette — it is a fact about the STYLE, like
+ * square_chrome, and it travels the same way (a positional argument to
+ * synui-apply-theme, which writes theme.json's barAlpha).
  *
- * A ZERO here is only half an instruction. The other half is backdrop.state,
- * written by wallpaper.c: ink drawn on the wallpaper has to be picked from the
- * wallpaper, and where no legible ink exists the bar keeps its background. See
- * syn_ink_for_backdrop() in contrast.h. */
+ * ⚠ ZERO IS ONLY HALF AN INSTRUCTION, which is why it is no longer what the two
+ * Prisms ask for. The other half is backdrop.state, written by wallpaper.c: ink
+ * drawn on the wallpaper has to be picked from the wallpaper, and where no
+ * legible ink exists the surface has to keep a background it does not have. All
+ * of that machinery is sound and macOS 26 still runs on it — a Tahoe with a
+ * frosted strip across the top would be a different operating system wearing the
+ * name. The two Prisms were never that: they are built on the compositor's own
+ * glass, and glass is a SURFACE. They ask for the thinnest one.
+ *
+ * The three glass presets are the only ones with a view at all; everything else
+ * falls through to the scheme, exactly as it did before any of this existed. */
 static inline float theme_bar_alpha(const syn_config_t *cfg)
 {
-    return (cfg->theme == SYN_THEME_MACOS26 ||
-            cfg->theme == SYN_THEME_PRISM ||
-            cfg->theme == SYN_THEME_PRISM_LIGHT) ? 0.0f : -1.0f;
+    if (cfg->theme == SYN_THEME_MACOS26) return 0.0f;
+    if (cfg->theme == SYN_THEME_PRISM ||
+        cfg->theme == SYN_THEME_PRISM_LIGHT) return SYN_BAR_ALPHA_FROSTED;
+    return -1.0f;
+}
+
+/*
+ * What the bar is ASKED to draw at, before the wallpaper gets a say — the C twin
+ * of Theme.qml's `barAlphaAsked`, in the same order and for the same reason.
+ *
+ * The user's row wins outright where it holds an opinion; the theme's answer
+ * stands where it does not; and a negative result means neither has one, which
+ * synui-apply-theme resolves from the scheme into a value well above zero.
+ */
+static inline float syn_bar_alpha_asked(const syn_config_t *cfg)
+{
+    return cfg->bar_opacity >= 0.0f ? cfg->bar_opacity : theme_bar_alpha(cfg);
+}
+
+/*
+ * Does the bar paint a background at all?
+ *
+ * ⚠ THIS IS THE QUESTION THE BACKDROP BLUR HAS TO ASK, and it is not the same as
+ * "is this desktop glass" — see SYN_BAR_ALPHA_FROSTED above for why frosting a
+ * surface that is not there puts a halo behind every glyph instead of a sheet
+ * behind the strip.
+ *
+ * A negative ask is the scheme's 0.85/0.95, which is very much a background.
+ */
+static inline bool syn_bar_has_background(const syn_config_t *cfg)
+{
+    return syn_bar_alpha_asked(cfg) != 0.0f;
 }
 
 /*
@@ -4479,15 +4563,32 @@ static inline float syn_glass_foot_alpha(const syn_config_t *cfg)
  * than one alpha for all of them, and it has to ask theme_is_glass(), which is
  * declared further down — so the panel half of glass_level lives there. */
 
-/* The bar, and the only surface that goes all the way to nothing. It has no
- * content of its own to lose — its modules draw straight onto the wallpaper,
- * and the ink for that is what backdrop.state is for. */
+/*
+ * The bar, and the surface that goes furthest.
+ *
+ * ⚠ IT USED TO GO ALL THE WAY TO NOTHING, and that is the change. The argument
+ * for 0.00 was that the bar has no content of its own to lose — its modules draw
+ * straight onto the wallpaper and the ink for that is what backdrop.state is
+ * for. True, and it is a fine bar over a flat wallpaper. Over a photograph it is
+ * a strip of glyphs with no frost behind them, correcting itself off a MEAN
+ * luminance that moves as the picture does, and it took the dock with it: the
+ * dock takes this number exactly, and a dock body at 0.00 leaves the backdrop
+ * blur masking its ICONS.
+ *
+ * So the top of the slider is SYN_BAR_ALPHA_FROSTED — the thinnest surface that
+ * is still a surface — and `0.95 - 0.90t` is that curve: the same 0.95 at the
+ * bottom the bar has always drawn at, landing on 0.05 rather than 0.00 at the
+ * top. Nothing in the middle of the range moves by more than half a percent.
+ *
+ * Nothing has NO surface any more except by asking outright: `bar_opacity = 0`,
+ * the row dragged to 0.00, or Appearance ▸ Make it all clear.
+ */
 static inline float syn_glass_bar_alpha(const syn_config_t *cfg)
 {
     if (!syn_glass_set(cfg)) return -1.0f;
     float t = (float)cfg->glass_level / 100.0f;
-    float a = 0.95f - 0.95f * t;
-    return a < 0.0f ? 0.0f : a;
+    float a = 0.95f - 0.90f * t;
+    return a < SYN_BAR_ALPHA_FROSTED ? SYN_BAR_ALPHA_FROSTED : a;
 }
 
 /*
@@ -5240,6 +5341,15 @@ typedef struct syn_layer_surface {
     struct wl_listener destroy;
     struct wl_listener commit;
     struct wl_listener new_popup;
+
+    /* The xdg_popups hanging off this surface (syn_layer_popup::link, a type
+     * private to layer.c). Kept only so the glass walk can PRUNE them: a
+     * popup's scene tree is created under this surface's own tree, and the
+     * bar's menus and mixer own their blur through layer_popup_glass() while
+     * the bar owns its own. Without the list, clearing the bar's frost would
+     * clear the open mixer's on the same pass and the bar commits every second
+     * that the clock ticks. See layer_blur_own_buffers(). */
+    struct wl_list popups;
 } syn_layer_surface_t;
 
 /* ── Output ──────────────────────────────────────────────── */
@@ -7967,6 +8077,10 @@ void ctlpanel_toggle(syn_server_t *s);
  * put any of it back, and remembering four numbers across a logout to offer an
  * "undo" would be a switch that half-works. */
 void synui_effects_solid(syn_server_t *s);
+/* Its mirror — bar, dock, menus and widgets lose their backgrounds outright.
+ * Deliberately NOT the inverse: the legibility correction is what makes a
+ * cleared background readable, so this leaves it alone. See ctlpanel.c. */
+void synui_effects_clear(syn_server_t *s);
 /* Open onto a named category ("display", "appearance", … — the sidebar names,
  * case-insensitively). The `control` bind action's argument, and how the start
  * menu's Settings submenu reaches the same tree instead of listing its own copy

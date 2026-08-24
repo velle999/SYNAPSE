@@ -198,7 +198,10 @@
  *   glass_legibility = on|off   (default on; a surface may raise its own alpha
  *                                until its text clears AA against the wallpaper
  *                                behind it. Off draws exactly what was asked,
- *                                including nothing at all)
+ *                                including nothing at all. ⚠ it is asked of the
+ *                                WORST cell under the surface, not the mean —
+ *                                see syn_backdrop_t, where the mean is why the
+ *                                correction used to fire only sometimes)
  *   scene_ink = on|off          (default on; does a see-through surface measure
  *                                the WINDOW behind it, or only the wallpaper?
  *                                Off is the wallpaper alone, which is what
@@ -226,7 +229,13 @@
  *   bar_edge  = top|bottom          (BarConfig.qml watches this — it moves live)
  *   bar_opacity = auto|0.00-1.00    (auto = the theme decides; 0 = no background
  *       at all, its ink taken off the wallpaper — which needs a wallpaper that
- *       HAS a legible ink, or the bar keeps its background. See contrast.h)
+ *       HAS a legible ink, or the bar keeps its background. See contrast.h.
+ *       ⚠ `auto` on a glass preset is SYN_BAR_ALPHA_FROSTED and NOT 0 any more,
+ *       except on macOS 26: a strip thin enough to read as glass, thick enough
+ *       for the backdrop blur to have something to mask. The clear bar is a
+ *       thing to ask for now — this row, or Appearance ▸ Make it all clear —
+ *       rather than what two of the three glass themes handed you. The Glass
+ *       slider bottoms out there too, so no amount of dragging reaches nothing)
  *   bar_shape = full-width|rounded-ends|floating-pill
  *     — what the bar does with `corner_radius`. rounded-ends curves the two
  *       corners facing the desktop; floating-pill also lifts it off the edge and

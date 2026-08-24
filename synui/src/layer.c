@@ -27,16 +27,6 @@
  * That is what "the glass should reach the system menus too" was about; the
  * compositor-drawn half is panel_chrome_sync()'s.
  *
- * ⚠ THE BAR IS DELIBERATELY NOT IN THIS. It is a quickshell PanelWindow like
- * the rest, so the namespace is what separates them — the shell marks the
- * surfaces it wants frosted as SYN_GLASS_NAMESPACE and the bar keeps the plain
- * one. The bar already has a whole tuned opacity system of its own (bar_opacity,
- * the clear bar, the scrim and the backdrop ink), all of it measured WITHOUT a
- * blur underneath, and a clear bar paints nothing but its glyphs — so blurring
- * it by namespace would put a frosted halo behind each glyph and quietly
- * invalidate the contrast those numbers were chosen for. Frosting the bar is a
- * change to that system, not to this one.
- *
  * The mask source inside syn_buffer_backdrop_blur() is what makes this safe on
  * a surface like the start menu, whose layer surface is the WHOLE SCREEN with a
  * transparent click-catcher and the menu drawn as a rectangle inside it: the
@@ -45,8 +35,48 @@
  *
  * No corner radius is passed for the same reason — the shape comes from what
  * the client painted, and quickshell has already rounded it.
+ *
+ * ── AND THE BAR, WHICH USED TO BE THE ONE EXCLUSION ──────────
+ *
+ * It was left out because "a clear bar paints nothing but its glyphs, so
+ * blurring it by namespace would put a frosted halo behind each glyph and
+ * quietly invalidate the contrast bar_opacity was tuned for". That reasoning was
+ * right and it is entirely about the CLEAR bar. The glass presets do not ask for
+ * one any more (SYN_BAR_ALPHA_FROSTED), so the bar is the same kind of surface
+ * the dock has always been — a strip with a background — and the same frost
+ * belongs behind it. Without it, a bar at 0.05 is not glass, it is a 5% tint.
+ *
+ * ⚠ SO THE BAR'S ANSWER IS A MEASUREMENT, NOT A NAMESPACE. It marks itself
+ * SYN_BAR_NAMESPACE and layer_wants_glass() asks syn_bar_has_background() —
+ * because the shell can still be dragged to 0.00 by hand, or by Make it all
+ * clear, and at that moment the halo argument comes back exactly as written. The
+ * compositor is the side that can answer it: bar_opacity and the preset are both
+ * config, and layer_glass_all() already re-asserts on every event that moves
+ * either.
  */
+/*
+ * An xdg_popup attached to a layer surface via get_popup (the bar's right-click
+ * menu, the mixer, waybar menus, wofi submenus).
+ *
+ * Defined up here rather than beside its own handlers because the bar's blur
+ * walk has to PRUNE popup subtrees and runs long before them — see
+ * layer_node_is_popup(). The lifecycle is all further down.
+ */
+typedef struct syn_layer_popup {
+    struct wlr_xdg_popup *popup;
+    syn_layer_surface_t  *ls;
+    struct wl_listener    commit;
+    struct wl_listener    destroy;
+    /* In syn_layer_surface::popups, so the walk above can tell a popup subtree
+     * from the bar's own buffers. */
+    struct wl_list        link;
+} syn_layer_popup_t;
+
 #define SYN_GLASS_NAMESPACE "synui-glass"
+/* The bar's own, so it can be told apart from both the frosted surfaces and a
+ * foreign layer client. Set in Bar.qml; changing it there means changing it
+ * here. */
+#define SYN_BAR_NAMESPACE   "synui-bar"
 
 static void layer_blur_buffer(struct wlr_scene_buffer *buffer,
                               int sx, int sy, void *data)
@@ -58,19 +88,78 @@ static void layer_blur_buffer(struct wlr_scene_buffer *buffer,
 /* Is this one of the shell's own surfaces at all? Popups are keyed off this
  * rather than off their own namespace, which they do not have: an xdg_popup
  * inherits the identity of the layer surface that opened it, so the bar's menus
- * and the mixer are reached through the BAR — which is why they get glass while
- * the bar itself does not. */
+ * and the mixer are reached through the BAR. */
 static bool layer_is_shell(const syn_layer_surface_t *ls)
 {
     const char *ns = ls->layer_surface->namespace;
     return ns && (strcmp(ns, "quickshell") == 0 ||
+                  strcmp(ns, SYN_BAR_NAMESPACE) == 0 ||
                   strcmp(ns, SYN_GLASS_NAMESPACE) == 0);
+}
+
+static bool layer_is_bar(const syn_layer_surface_t *ls)
+{
+    const char *ns = ls->layer_surface->namespace;
+    return ns && strcmp(ns, SYN_BAR_NAMESPACE) == 0;
 }
 
 static bool layer_wants_glass(const syn_layer_surface_t *ls)
 {
     const char *ns = ls->layer_surface->namespace;
-    return ns && strcmp(ns, SYN_GLASS_NAMESPACE) == 0;
+    if (!ns) return false;
+    if (strcmp(ns, SYN_GLASS_NAMESPACE) == 0) return true;
+    /* The bar: frosted exactly when there is a background to frost. */
+    return strcmp(ns, SYN_BAR_NAMESPACE) == 0 &&
+           syn_bar_has_background(&ls->server->config);
+}
+
+/*
+ * Is this node the scene tree of one of `ls`'s xdg_popups?
+ *
+ * ⚠ THE POPUP'S TREE IS A CHILD OF THE LAYER SURFACE'S OWN — layer_surface_new_popup()
+ * creates it there, because that is where a popup parented by get_popup has to
+ * live. So a plain walk of the bar's tree reaches the bar's right-click menu and
+ * the mixer, whose blur belongs to layer_popup_glass() and not to this. Asked
+ * against the surface's own list rather than off `node->data`, which on a scene
+ * tree means "the syn_view_t this frame belongs to" all over input.c and would
+ * be a wild cast the first time anything hit-tested a menu.
+ */
+static bool layer_node_is_popup(const syn_layer_surface_t *ls,
+                                struct wlr_scene_node *node)
+{
+    /* Converted rather than compared raw: a wlr_scene_tree begins with its
+     * node, so the two addresses happen to be equal and `data == node` would
+     * work today by struct layout alone. */
+    struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
+    const syn_layer_popup_t *lp;
+    wl_list_for_each(lp, &ls->popups, link)
+        if (lp->popup->base->data == (const void *)tree) return true;
+    return false;
+}
+
+/*
+ * Set the blur over a layer surface's OWN buffers, pruning the popup subtrees.
+ *
+ * wlr_scene_node_for_each_buffer() cannot prune, and until the bar joined this
+ * scheme nothing needed it to: every surface that opted in wanted `want = true`
+ * for its whole tree, popups included, which is the same answer
+ * layer_popup_glass() gives. The bar is the first surface whose answer can be
+ * FALSE — it is frosted only while it has a background — and clearing its whole
+ * tree would clear an open mixer's frost too. The bar commits every time the
+ * clock ticks, so that is not a rare race; it is once a second.
+ */
+static void layer_blur_own_buffers(const syn_layer_surface_t *ls,
+                                   struct wlr_scene_tree *tree, bool want)
+{
+    struct wlr_scene_node *node;
+    wl_list_for_each(node, &tree->children, link) {
+        if (node->type == WLR_SCENE_NODE_BUFFER) {
+            syn_buffer_backdrop_blur(wlr_scene_buffer_from_node(node), want, 0);
+        } else if (node->type == WLR_SCENE_NODE_TREE) {
+            if (layer_node_is_popup(ls, node)) continue;
+            layer_blur_own_buffers(ls, wlr_scene_tree_from_node(node), want);
+        }
+    }
 }
 
 /* Idempotent, and cheap for the same reason the panel walk is: every setter
@@ -81,18 +170,20 @@ void layer_glass_apply(syn_layer_surface_t *ls)
 {
     if (!ls || !ls->scene) return;
 
-    /* ⚠ ONLY THE SURFACES THAT ASKED, and this must be an early return rather
-     * than a walk with want=false. A layer surface's xdg_popups are scene trees
-     * created UNDER its own (see layer_surface_new_popup), so walking the bar to
-     * clear blur it never had would also walk the mixer and the bar menu and
-     * clear theirs — which layer_popup_glass() had just set. The two would then
-     * fight on every commit and the mixer would flicker between frosted and
-     * flat. Surfaces that never opt in are simply not touched here. */
-    if (!layer_wants_glass(ls)) return;
+    /* ⚠ ONLY THE SURFACES THAT ASKED. A surface that never opted in is not
+     * touched at all — not even with want=false — because walking somebody
+     * else's tree to clear blur they never had would also walk their popups and
+     * fight layer_popup_glass() on every commit.
+     *
+     * The BAR is the exception and needs the walk in both directions: its answer
+     * changes with bar_opacity, so the frost has to come off when the bar goes
+     * clear. That is what layer_blur_own_buffers()' pruning is for. */
+    bool is_bar = layer_is_bar(ls);
+    if (!is_bar && !layer_wants_glass(ls)) return;
 
-    bool want = syn_glass_active(&ls->server->config);
-    wlr_scene_node_for_each_buffer(&ls->scene->tree->node,
-                                   layer_blur_buffer, &want);
+    bool want = syn_glass_active(&ls->server->config) &&
+                (!is_bar || syn_bar_has_background(&ls->server->config));
+    layer_blur_own_buffers(ls, ls->scene->tree, want);
 }
 
 /* Re-assert glass over every layer surface on the desktop. For the events that
@@ -328,26 +419,25 @@ static void layer_surface_commit(struct wl_listener *listener, void *data)
         layer_arrange_output(ls->output);
 }
 
-/* An xdg_popup attached to a layer surface via get_popup (waybar menus,
- * wofi submenus). It reached the xdg-shell new_popup signal parentless, so
- * this is the only place its scene tree can be created. Unconstraining and
- * the initial configure both have to wait for the initial commit — the
- * popup surface isn't initialized before then and calling either trips a
- * wlroots assert. */
-typedef struct {
-    struct wlr_xdg_popup *popup;
-    syn_layer_surface_t  *ls;
-    struct wl_listener    commit;
-    struct wl_listener    destroy;
-} syn_layer_popup_t;
+/* ── The lifecycle of syn_layer_popup_t, whose struct is at the top ─────────
+ *
+ * A layer surface's xdg_popup reached the xdg-shell new_popup signal
+ * parentless, so layer_surface_new_popup() below is the only place its scene
+ * tree can be created. Unconstraining and the initial configure both have to
+ * wait for the initial commit — the popup surface isn't initialized before then
+ * and calling either trips a wlroots assert. */
 
 /* Glass for a menu the shell opened off one of its own surfaces — the bar's
  * right-click menu and the mixer, which are xdg_popups parented to the BAR.
  *
  * Keyed on the parent being a shell surface rather than on a namespace of its
- * own, because a popup has none. That is also what lets the bar's menus be
- * frosted while the bar is not: the menu is reached through this path and the
- * bar is only ever reached through layer_glass_apply(), which skips it.
+ * own, because a popup has none.
+ *
+ * ⚠ AND IT IS STILL THE ONLY OWNER OF A POPUP'S BLUR, which used to follow from
+ * layer_glass_apply() skipping the bar entirely and now has to be arranged: the
+ * bar joined the scheme and its answer can be FALSE, so its walk prunes every
+ * subtree in ls->popups rather than clearing what this had just set. A menu is
+ * frosted because it painted a surface, whatever the strip above it is doing.
  */
 static void layer_popup_glass(syn_layer_popup_t *lp)
 {
@@ -400,6 +490,7 @@ static void layer_popup_destroy(struct wl_listener *listener, void *data)
     syn_layer_popup_t *lp = wl_container_of(listener, lp, destroy);
     wl_list_remove(&lp->commit.link);
     wl_list_remove(&lp->destroy.link);
+    wl_list_remove(&lp->link);
     free(lp);
 }
 
@@ -418,6 +509,7 @@ static void layer_surface_new_popup(struct wl_listener *listener, void *data)
     wl_signal_add(&popup->base->surface->events.commit, &lp->commit);
     lp->destroy.notify = layer_popup_destroy;
     wl_signal_add(&popup->events.destroy, &lp->destroy);
+    wl_list_insert(&ls->popups, &lp->link);
 }
 
 static void layer_surface_destroy(struct wl_listener *listener, void *data)
@@ -433,6 +525,19 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&ls->destroy.link);
     wl_list_remove(&ls->new_popup.link);
     wl_list_remove(&ls->link);
+
+    /* ⚠ UNLINK ANY POPUP STILL HELD, because this frees the list HEAD. In the
+     * ordinary teardown the client destroys its popups first and the list is
+     * already empty; a client that dies with one open, or an xdg-shell that
+     * chooses the other order, would otherwise leave layer_popup_destroy()
+     * writing its neighbours' pointers into freed memory. Each link is
+     * re-initialised so that remove is a no-op rather than a second bug. */
+    syn_layer_popup_t *lp, *tmp;
+    wl_list_for_each_safe(lp, tmp, &ls->popups, link) {
+        wl_list_remove(&lp->link);
+        wl_list_init(&lp->link);
+    }
+
     free(ls);
 
     /* Reclaim the exclusive zone it held (unless the output is going away). */
@@ -472,6 +577,9 @@ static void server_new_layer_surface(struct wl_listener *listener, void *data)
     if (ls->layer > ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY)
         ls->layer = ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY;
     lsurf->data = ls;   /* so xdg popups can find our scene tree */
+    /* Before any listener is attached, so neither a popup arriving nor the
+     * first commit's blur walk can reach an uninitialised head. */
+    wl_list_init(&ls->popups);
 
     ls->scene = wlr_scene_layer_surface_v1_create(s->layer_tree[ls->layer], lsurf);
 

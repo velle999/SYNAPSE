@@ -179,9 +179,11 @@ void syn_backdrop_for_box(const double *grid, double fx, double fy,
                           double fw, double fh, double target,
                           syn_backdrop_t *out)
 {
-    out->lum  = -1.0;
-    out->ink  = SYN_INK_NONE;
-    out->best = SYN_INK_NONE;
+    out->lum     = -1.0;
+    out->lum_min = -1.0;
+    out->lum_max = -1.0;
+    out->ink     = SYN_INK_NONE;
+    out->best    = SYN_INK_NONE;
     if (!grid) return;
 
     /* Clamp into the output. A panel can legitimately hang off the edge (the
@@ -207,6 +209,7 @@ void syn_backdrop_for_box(const double *grid, double fx, double fy,
     if (r1 < r0) r1 = r0;
 
     double sum   = 0.0;
+    double lo    = 0.0, hi = 0.0;
     int    n     = 0;
     bool   seen  = false;
     syn_ink_t ink = SYN_INK_NONE, best = SYN_INK_NONE;
@@ -217,10 +220,14 @@ void syn_backdrop_for_box(const double *grid, double fx, double fy,
             if (l < 0.0) {
                 /* One unmeasured cell vetoes the box, exactly as one
                  * unmeasured monitor vetoes the clear bar. */
-                out->lum = -1.0; out->ink = SYN_INK_NONE; out->best = SYN_INK_NONE;
+                out->lum = -1.0; out->lum_min = -1.0; out->lum_max = -1.0;
+                out->ink = SYN_INK_NONE; out->best = SYN_INK_NONE;
                 return;
             }
-            sum += l; n++;
+            sum += l;
+            if (!n || l < lo) lo = l;
+            if (!n || l > hi) hi = l;
+            n++;
             syn_ink_t this_one  = syn_ink_for_backdrop(l, target);
             syn_ink_t this_best = syn_ink_best(l);
             ink  = seen ? syn_ink_combine(ink,  this_one)  : this_one;
@@ -230,9 +237,14 @@ void syn_backdrop_for_box(const double *grid, double fx, double fy,
     }
     if (!n) return;
 
-    out->lum  = sum / n;
-    out->ink  = ink;
-    out->best = best;
+    out->lum     = sum / n;
+    /* The extremes the alpha walk has to survive — see syn_backdrop_t. On a
+     * single cell all three are the same number, which is why nothing with a
+     * flat wallpaper or a small surface moves at all. */
+    out->lum_min = lo;
+    out->lum_max = hi;
+    out->ink     = ink;
+    out->best    = best;
 }
 
 /* Windows 95 is the theme with the least room to work in: black on its #C0C0C0

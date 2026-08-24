@@ -367,6 +367,27 @@ static const struct ctl_item ctl_items[] = {
      * put any of it back. */
     { CTL_ROW_SOLID,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, "Make it all solid", "solid",
       .help = "Glass off and windows opaque, in one press. The rows above put it back" },
+    /*
+     * …and the other end of the same argument.
+     *
+     * The glass presets stopped asking for a bar and dock with NO background
+     * (SYN_BAR_ALPHA_FROSTED): a surface that thin still frosts, still has edges
+     * and still gives the legibility walk something to walk from, and the clear
+     * bar over a photograph was the failure that prompted it. But a clear bar
+     * over the right wallpaper is the best-looking thing this desktop does, and
+     * taking it away as a DEFAULT is not the same as taking it away — so it
+     * becomes a thing you ask for, in one press, beside its opposite.
+     *
+     * ⚠ IT IS NOT "SOLID BACKWARDS". Solid is a retreat to somewhere safe and
+     * can be blunt about it; this is the opposite and has to leave the guards
+     * standing — the legibility correction, the wallpaper ink, the scrim are
+     * exactly what make a clear bar readable, and switching them off here would
+     * hand somebody an unreadable desktop from a row labelled with a look.
+     * See synui_effects_clear().
+     */
+    { CTL_ROW_CLEAR,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, "Make it all clear", "clear",
+      .help = "Bar, dock and menus lose their background entirely, inked off "
+              "the wallpaper. The rows above put it back" },
     { CTL_ROW_GLASS_LEGIBILITY, CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Legibility correction", NULL,
       .key = "glass_legibility", .off = CFG(glass_legibility), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_GLASS,
@@ -1642,8 +1663,82 @@ void synui_effects_solid(syn_server_t *s)
     if (bar)  ctl_commit(s, bar,  1.0f);
     if (dock) ctl_commit(s, dock, 1.0f);
 
+    /*
+     * ⚠ AND THE DESKTOP WIDGETS, WHICH NONE OF THE ABOVE REACHES.
+     *
+     * `widget_glass` defaults to AUTO — "follow the theme" — and on a glass
+     * preset that resolves to glass whatever the two masters say, because the
+     * widgets are quickshell's and the only thing they can ask is theme.state.
+     * Every other see-through surface on the desktop went solid and the clock,
+     * the sysmon and the notes stayed frosted, which reads as the row not having
+     * worked rather than as a setting it does not cover.
+     *
+     * OFF and not AUTO: auto is the thing being overruled. It is set as a ROW so
+     * it persists to settings.state and shows as modified, exactly like the two
+     * above — this is now an opinion the desktop holds, and Delete on the row is
+     * how it is given back.
+     */
+    const struct ctl_item *wg = ctl_item(CTL_ROW_WIDGET_GLASS);
+    if (wg) ctl_commit(s, wg, (float)SYN_WIDGET_GLASS_OFF);
+
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             "glass off \xc2\xb7 bar and dock solid \xc2\xb7 windows opaque");
+             "glass off \xc2\xb7 bar, dock and widgets solid \xc2\xb7 windows opaque");
+    ctlpanel_repaint(s);
+}
+
+/*
+ * The other one-press: every chrome surface loses its background outright.
+ *
+ * The mirror of synui_effects_solid() and deliberately not its inverse. Solid
+ * can be blunt — it is a retreat to a desktop nobody can fail to read. This one
+ * hands over the look that the frost floor stopped being a DEFAULT precisely
+ * because it can fail, so the machinery that rescues it has to be left standing:
+ *
+ *   * `glass_legibility` IS NOT TOUCHED. It is what picks the ink off the
+ *     wallpaper when the theme's own stops reading, and what puts the scrim
+ *     behind a bar over a wallpaper where neither ink survives. Clearing the
+ *     background and disabling the thing that makes a cleared background legible
+ *     would be a row that hands somebody an unreadable desktop.
+ *   * `transparency` IS turned ON. A surface with no background on a desktop
+ *     with the master transparency off is a contradiction, and the row's label
+ *     promises a look rather than a setting.
+ *
+ * ⚠ 0.00 IS SET AS A ROW ON BOTH STRIPS, so each pins itself — the same reason
+ * solid does it. syn_glass_bar_alpha() bottoms out at SYN_BAR_ALPHA_FROSTED now,
+ * so the Glass slider alone can no longer reach nothing however far it is
+ * dragged; leaving these unpinned would mean the next nudge of Glass silently
+ * put the frost back.
+ *
+ * One-way, like solid: no stored "before". The rows above put any of it back.
+ */
+void synui_effects_clear(syn_server_t *s)
+{
+    if (!s) return;
+
+    if (!s->config.transparency)
+        transparency_set_enabled(s, true);
+
+    /* Unconditional and before the rows, exactly as in solid(): a bar pinned at
+     * 0.95 would sit there looking like the thing that was just switched off. */
+    ctl_glass_pins_set(s, 0);
+
+    const struct ctl_item *sync  = ctl_item(CTL_ROW_GLASS_SYNC);
+    const struct ctl_item *level = ctl_item(CTL_ROW_GLASS_LEVEL);
+    if (sync)  ctl_commit(s, sync,  1.0f);
+    if (level) ctl_commit(s, level, 100.0f);
+
+    const struct ctl_item *bar  = ctl_item(CTL_ROW_BAR_OPACITY);
+    const struct ctl_item *dock = ctl_item(CTL_ROW_DOCK_OPACITY);
+    if (bar)  ctl_commit(s, bar,  0.0f);
+    if (dock) ctl_commit(s, dock, 0.0f);
+
+    /* ON and not AUTO, for the reason solid() sets it OFF: auto asks the theme,
+     * and the answer being overruled here is the theme's. */
+    const struct ctl_item *wg = ctl_item(CTL_ROW_WIDGET_GLASS);
+    if (wg) ctl_commit(s, wg, (float)SYN_WIDGET_GLASS_ON);
+
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             "glass full \xc2\xb7 bar and dock clear \xc2\xb7 ink off the wallpaper");
     ctlpanel_repaint(s);
 }
 

@@ -1309,6 +1309,10 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * cannot come to mean different things. Idempotent: pressing it on a
          * desktop that is already solid changes nothing and says so. */
         synui_effects_solid(s);
+    } else if (strcmp(action, "clear") == 0) {
+        /* Its opposite, and reached the same way for the same reason: the
+         * control panel's "Make it all clear" row IS this action. Idempotent. */
+        synui_effects_clear(s);
     } else if (strcmp(action, "lock") == 0) {
         /* The native lock (lock.c). Idempotent, so the idle timer, the power
          * panel's Lock row, the menu's Lock Screen and logind's before-sleep

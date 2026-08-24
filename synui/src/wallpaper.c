@@ -1175,13 +1175,17 @@ void wallpaper_live_finish(syn_output_t *o)
 void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
                                 double target, syn_backdrop_t *out)
 {
-    out->lum  = -1.0;
-    out->ink  = SYN_INK_NONE;
-    out->best = SYN_INK_NONE;
+    out->lum     = -1.0;
+    out->lum_min = -1.0;
+    out->lum_max = -1.0;
+    out->ink     = SYN_INK_NONE;
+    out->best    = SYN_INK_NONE;
     if (!s || !box) return;
 
     double sum  = 0.0;
     double area = 0.0;
+    double lo   = 0.0, hi = 0.0;
+    bool   any  = false;
     bool   seen = false;
     syn_ink_t ink = SYN_INK_NONE, best = SYN_INK_NONE;
 
@@ -1224,15 +1228,27 @@ void wallpaper_backdrop_for_box(syn_server_t *s, const struct wlr_box *box,
         double w = (double)(ix1 - ix0) * (double)(iy1 - iy0);
         if (part.lum >= 0.0) { sum += part.lum * w; area += w; }
 
+        /* The extremes are NOT weighted and NOT averaged — see syn_backdrop_t.
+         * A worst case is a worst case however little of the panel is over it;
+         * the whole point of carrying them is that the mean hides exactly this.
+         * A part with no measurement contributes neither. */
+        if (part.lum_min >= 0.0) {
+            if (!any || part.lum_min < lo) lo = part.lum_min;
+            if (!any || part.lum_max > hi) hi = part.lum_max;
+            any = true;
+        }
+
         ink  = seen ? syn_ink_combine(ink,  part.ink)  : part.ink;
         best = seen ? syn_ink_combine(best, part.best) : part.best;
         seen = true;
     }
 
     if (!seen || area <= 0.0) return;
-    out->lum  = sum / area;
-    out->ink  = ink;
-    out->best = best;
+    out->lum     = sum / area;
+    out->lum_min = any ? lo : -1.0;
+    out->lum_max = any ? hi : -1.0;
+    out->ink     = ink;
+    out->best    = best;
 }
 
 static void backdrop_export(syn_server_t *s)

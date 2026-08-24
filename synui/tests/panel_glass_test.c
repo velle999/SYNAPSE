@@ -291,11 +291,19 @@ int main(void)
 
         /* The top of the range reaches the bar's own bottom — which is the
          * point of the whole change. Before it, the panels stopped at 0.62
-         * while the bar went to nothing. */
+         * while the bar went further.
+         *
+         * ⚠ ASSERTED AGAINST THE BAR RATHER THAN AGAINST A NUMBER. What is being
+         * pinned is "the chrome and the bar are one desktop", and writing the
+         * bar's bottom out as a literal made that a test about 0.00 — so when
+         * the bar's floor became SYN_BAR_ALPHA_FROSTED (a surface thin enough to
+         * frost, rather than no surface at all) this failed while the property
+         * it names still held perfectly. Ask the same function the bar asks. */
         syn_config_t full = cfg_make(SYN_THEME_PRISM, 1, 1, 100);
         full.bar_opacity  = syn_glass_bar_alpha(&full);
-        CHECK(near(syn_glass_apply(syn_glass_resolve(&full), A_DENSE), 0.0f),
-              "at level 100 the chrome must reach the bar's own 0.00");
+        CHECK(near(syn_glass_apply(syn_glass_resolve(&full), A_DENSE),
+                   syn_glass_bar_alpha(&full)),
+              "at level 100 the chrome must reach the bar's own floor");
     }
 
     /* ── 8. Off is better than half ──────────────────────────── */

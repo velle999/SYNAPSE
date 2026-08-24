@@ -256,6 +256,103 @@ int main(void)
               "the panel's own colours must pass, or the walk has no target");
     }
 
+    /* ── 7. THE MEAN IS NOT WHAT THE WALK MAY ASK ────────────
+     *
+     * The bug this pins was reported as "the colour inversion is not reliable" —
+     * the same menu, in the same place, on the same wallpaper, frosting itself
+     * one minute and drawing its ink straight onto the picture the next.
+     *
+     * The mechanism is exactly this fold. `lum` is a mean over the cells a
+     * surface covers, and over a photograph that is a number describing no pixel
+     * on the screen: a dark tree trunk at 0.02 and sunlit leaves at 0.60 average
+     * to 0.31, and a pale theme's near-black ink clears AA on 0.31 (5.8:1) while
+     * sitting at 1.2:1 on the trunk it is actually over. So the walk decided no
+     * correction was needed. Nudge the menu a cell, open a window behind it,
+     * change the picture — the mean crosses back and the frost returns, which is
+     * what "sometimes" looked like from outside.
+     *
+     * The ink fold never had this problem: disagreeing cells VETO, because one
+     * surface draws one colour of text (case 2). The alpha had no equivalent, and
+     * lum_min/lum_max are it — a surface has to survive its WORST cell.
+     *
+     * ⚠ BOTH ENDS ARE KEPT BECAUSE WHICH ONE LOSES DEPENDS ON THE INK. Dark ink
+     * drowns on the DARK cell (this case, a pale theme); light ink drowns on the
+     * bright one. A fold that carried only the worse of the two for one direction
+     * would fix the pale themes and leave the dark ones exactly as they were.
+     */
+    {
+        double g[SYN_LUM_CELLS];
+        syn_backdrop_t bd;
+
+        /* A flat wallpaper: all three answers are the same number, which is what
+         * makes this change a no-op for every desktop that is not showing a
+         * photograph. Checked FIRST, because it is the promise that nothing
+         * anybody already had moves. */
+        grid_flat(g, 0.42);
+        syn_backdrop_for_box(g, 0.0, 0.0, 1.0, 1.0, 4.5, &bd);
+        CHECK(near(bd.lum, 0.42) && near(bd.lum_min, 0.42) && near(bd.lum_max, 0.42),
+              "a flat wallpaper answers the same on all three (%.3f/%.3f/%.3f)",
+              bd.lum, bd.lum_min, bd.lum_max);
+
+        /* One cell: same again, and for the same reason — a surface inside a
+         * single cell has no spread to hide anything in. */
+        syn_backdrop_for_box(g, 0.0, 0.0, 0.01, 0.01, 4.5, &bd);
+        CHECK(near(bd.lum_min, bd.lum) && near(bd.lum_max, bd.lum),
+              "a one-cell box has no spread to report");
+
+        /* THE CASE. A box across the seam of a split wallpaper: the mean is a
+         * midtone that exists nowhere on it, and both real values are carried
+         * out beside it. */
+        grid_split(g, 0.02, 0.60);
+        syn_backdrop_for_box(g, 0.0, 0.0, 1.0, 1.0, 4.5, &bd);
+        CHECK(near(bd.lum_min, 0.02), "the darkest cell survives the fold (got %.3f)",
+              bd.lum_min);
+        CHECK(near(bd.lum_max, 0.60), "and so does the brightest (got %.3f)",
+              bd.lum_max);
+        CHECK(bd.lum > bd.lum_min && bd.lum < bd.lum_max,
+              "the mean sits between them and describes neither (%.3f)", bd.lum);
+
+        /* And the consequence, stated as the walk states it. This is the pair
+         * the whole change exists for: if it ever stops holding, the mean was a
+         * safe statistic after all and lum_min/lum_max can go.
+         *
+         * Both directions, because the fold has to serve both: a pale theme's
+         * near-black ink is lost on the darkest cell, a dark theme's white one on
+         * the brightest, and the MEAN lets each of them through. */
+        const double dark_ink  = 0.0122771;             /* #1D1D1F, contrast.h */
+        const double light_ink = 1.0;                   /* #FFFFFF             */
+        CHECK(syn_contrast_lum(dark_ink, bd.lum) >= 4.5,
+              "the mean is what made the old walk say 'no correction needed'");
+        CHECK(syn_contrast_lum(dark_ink, bd.lum_min) < 4.5,
+              "…while a pale theme's ink is lost on the darkest cell under it");
+
+        /* The other end, and it needs its OWN wallpaper — which is the point.
+         * A split is only a trap for the ink whose losing cell the mean happens
+         * to hide, so 0.02/0.60 (above) hides nothing from a dark theme: white
+         * fails on that mean outright. Shade the bright half down to 0.30 and
+         * the same shape catches the other direction — white clears the 0.16
+         * mean and is lost on the 0.30 cell. Carry one extreme and you fix one
+         * family of themes. */
+        grid_split(g, 0.02, 0.30);
+        syn_backdrop_for_box(g, 0.0, 0.0, 1.0, 1.0, 4.5, &bd);
+        CHECK(syn_contrast_lum(light_ink, bd.lum) >= 4.5,
+              "a dimmer split hides the other end: white clears the mean (%.3f)",
+              bd.lum);
+        CHECK(syn_contrast_lum(light_ink, bd.lum_max) < 4.5,
+              "…and is lost on the brightest cell under the same surface");
+
+        /* Unmeasured has to survive in all three, not just in `lum` — a caller
+         * reading lum_min as a legitimate black backdrop would frost every
+         * surface on a wallpaper-engine desktop to full opacity. */
+        grid_flat(g, -1.0);
+        syn_backdrop_for_box(g, 0.0, 0.0, 1.0, 1.0, 4.5, &bd);
+        CHECK(bd.lum < 0.0 && bd.lum_min < 0.0 && bd.lum_max < 0.0,
+              "unmeasured is unmeasured in the extremes too");
+        syn_backdrop_for_box(NULL, 0.0, 0.0, 1.0, 1.0, 4.5, &bd);
+        CHECK(bd.lum_min < 0.0 && bd.lum_max < 0.0,
+              "…and with no grid at all");
+    }
+
     if (failures) {
         printf("backdrop_test: %d failure(s)\n", failures);
         return 1;

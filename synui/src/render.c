@@ -320,7 +320,8 @@ static syn_glass_t g_panel_glass = { -1.0f, 1.0f };
  * argument for them is written out. Same file-scope-cache reasoning as the two
  * above: render runs on the main loop only, and thirty renderers would
  * otherwise each need to carry them. */
-static syn_backdrop_t g_panel_backdrop = { -1.0, SYN_INK_NONE, SYN_INK_NONE };
+static syn_backdrop_t g_panel_backdrop = { -1.0, -1.0, -1.0,
+                                           SYN_INK_NONE, SYN_INK_NONE };
 static float          g_panel_drawn_alpha = 1.0f;
 
 /* Whether panel_alpha_floor() is allowed to overrule the alpha it is handed.
@@ -376,14 +377,30 @@ static float panel_alpha_floor(float want)
      * Appearance, beside the slider it corrects. */
     if (!g_panel_legibility) return want;
 
-    double back = g_panel_backdrop.lum;
-    if (back < 0.0 || want >= 1.0f) return want;
+    /*
+     * ⚠ THE WORST CELL, NOT THE MEAN ONE — see syn_backdrop_t.
+     *
+     * `lum` is an average over the cells the panel covers, and over a photograph
+     * that is a number describing no pixel on the screen: a tree trunk and a
+     * sunlit leaf average to something the text reads on while neither half is
+     * anything the text reads on. Asked that way the walk would decide no
+     * correction was needed, and the correction would appear to work only some
+     * of the time — which is exactly how it was reported.
+     *
+     * Both extremes, because either can be the losing one: dark ink drowns on
+     * the bright cell and light ink on the dark cell, and a panel that spans
+     * both has to clear on both. On a flat wallpaper, or a panel inside one
+     * cell, min and max ARE the mean and nothing here moves.
+     */
+    double lo = g_panel_backdrop.lum_min, hi = g_panel_backdrop.lum_max;
+    if (lo < 0.0 || hi < 0.0 || want >= 1.0f) return want;
 
     double surf = syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
     double ink  = syn_rel_luminance(g_panel_ink[0], g_panel_ink[1], g_panel_ink[2]);
 
     for (float a = want; a < 1.0f; a += 0.02f)
-        if (syn_contrast_lum(ink, syn_lum_over(surf, a, back)) >= CONTRAST_TARGET)
+        if (syn_contrast_lum(ink, syn_lum_over(surf, a, lo)) >= CONTRAST_TARGET &&
+            syn_contrast_lum(ink, syn_lum_over(surf, a, hi)) >= CONTRAST_TARGET)
             return a;
     return 1.0f;
 }

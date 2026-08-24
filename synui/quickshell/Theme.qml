@@ -383,7 +383,14 @@ QtObject {
      * caller has to read as "keep the background you had".
      */
     function backdropFor(screen, x, y, w, h) {
-        const none = { lum: -1, ink: "", best: "" }
+        // lumMin/lumMax are the QML half of syn_backdrop_t's extremes, and they
+        // exist for the reason written out there: `lum` is a mean over the cells
+        // a surface covers, and over a photograph that is a number describing no
+        // pixel on the screen. alphaWalkOn() has to survive the worst cell, not
+        // the average one, or the correction fires on some openings of the same
+        // menu and not others as the picture behind it drifts across the
+        // threshold. -1 in all three is the one unmeasured answer.
+        const none = { lum: -1, lumMin: -1, lumMax: -1, ink: "", best: "" }
         if (!screen) return none
         const cells = root.lumGrids[screen.name]
         if (!cells || screen.width <= 0 || screen.height <= 0) return none
@@ -403,12 +410,15 @@ QtObject {
                             Math.floor((y + h) / screen.height * root.lumRows)))
 
         let sum = 0, n = 0, ink = null, best = null
+        let lo = 0, hi = 0
         for (let r = r0; r <= r1; r++) {
             for (let c = c0; c <= c1; c++) {
                 const i = r * root.lumCols + c
                 const s = scene ? scene[i] : -1
                 const l = s >= 0 ? s : cells[i]
                 if (!(l >= 0)) return none      // one unmeasured cell vetoes
+                if (!n || l < lo) lo = l
+                if (!n || l > hi) hi = l
                 sum += l; n++
                 const cd = root.lumContrast(root.inkDarkLum,  l)
                 const cl = root.lumContrast(root.inkLightLum, l)
@@ -421,7 +431,8 @@ QtObject {
             }
         }
         if (!n) return none
-        return { lum: sum / n, ink: ink || "", best: best || "" }
+        return { lum: sum / n, lumMin: lo, lumMax: hi,
+                 ink: ink || "", best: best || "" }
     }
 
     // The ink actually drawn: the safe one where there is one, the closest one
@@ -451,9 +462,40 @@ QtObject {
         BarConfig.barOpacity >= 0 ? BarConfig.barOpacity
       : (p.barAlpha !== undefined ? p.barAlpha : -1)
 
-    // The bar is clear only when it is ASKED to be AND an ink survives the
-    // wallpaper. Either half alone is a bar you cannot read.
-    readonly property bool clearBar: root.barAlphaAsked === 0 && root.barInkUsed !== ""
+    /*
+     * ── When is the bar's surface not what its ink is read against? ──────────
+     *
+     * "Asked for exactly 0.00" was the whole test, and it was right for as long
+     * as the only two answers on offer were a full strip and no strip at all.
+     * The glass presets ask for SYN_BAR_ALPHA_FROSTED now — a real surface, thin
+     * enough for the backdrop blur to have something to mask and no thicker —
+     * and an equality test reads that as an ordinary tinted bar and hands it the
+     * theme's own ink.
+     *
+     * ⚠ WHICH IS THE ONE THING A THIN SURFACE CANNOT CARRY. Work it through on
+     * Prism dark over a bright photograph: bar #191C23 at 0.20 over a backdrop
+     * of luminance 0.60 composites to about 0.39, and the theme's #E6EAF1 ink on
+     * that is 1.9:1. At 0.05 it is nearer 1.4:1. The surface is present enough
+     * to frost and nowhere near present enough to decide what colour the clock
+     * is — so below this the ink comes off the wallpaper exactly as it does for a
+     * bar with no background, which is the machinery that already exists and
+     * already works (barPalette, the per-module strip, the scrim).
+     *
+     * 0.20 is a judgement, and this is the arithmetic it rests on: the composite
+     * above only clears AA somewhere past 0.60, so everything from here up to
+     * there is a bar the correctors would be fighting either way, and the line
+     * has to fall somewhere in it. It is drawn low deliberately — a bar someone
+     * dialled to 0.30 by hand keeps the theme's ink exactly as it always did,
+     * and only the band that reads as "see straight through" changes hands.
+     */
+    readonly property real barThinAlpha: 0.20
+
+    // The bar is clear only when its surface is too thin to carry its own ink
+    // AND an ink survives the wallpaper. Either half alone is a bar you cannot
+    // read. Negative is "nobody asked", which is the scheme's 0.85/0.95.
+    readonly property bool clearBar: root.barAlphaAsked >= 0
+                                  && root.barAlphaAsked <= root.barThinAlpha
+                                  && root.barInkUsed !== ""
 
     // …and it is clear-WITH-A-SCRIM when the ink it is using is the closest one
     // rather than a safe one. Nothing else changes: same ink, same modules, one
@@ -477,8 +519,17 @@ QtObject {
     // The scheme's default, and also the floor a clear bar falls back to when
     // the wallpaper offers no legible ink. Spelt once so the two cannot drift.
     readonly property real  bgAlphaDefault: root.isLight ? 0.95 : 0.85
+    /*
+     * ⚠ THE CLEAR CASE PAINTS WHAT IT WAS ASKED FOR, WHICH IS USUALLY NOT ZERO.
+     * It used to be a literal 0.0, because "clear" and "asked for 0.00" were the
+     * same statement. They are not any more (see barThinAlpha): a Prism bar is
+     * clear in the sense that matters here — its ink comes off the wallpaper —
+     * while still painting the 0.05 the theme asked for, and that 5% is what the
+     * backdrop blur masks to. Drop it and the frost goes back to haloing the
+     * glyphs. A bar that really asked for 0.00 still gets 0.00 and is untouched.
+     */
     readonly property real  bgAlpha:    root.barScrim ? root.scrimAlpha
-                                      : root.clearBar ? 0.0
+                                      : root.clearBar ? root.barAlphaAsked
                                       : root.barAlphaAsked > 0
                                         ? root.barAlphaAsked : root.bgAlphaDefault
     /*
@@ -615,11 +666,34 @@ QtObject {
         // render.c's panel_alpha_floor() answers to. Half the desktop obeying it
         // would be worse than neither half doing.
         if (!BarConfig.legibility) return from
-        if (!bd || !(bd.lum >= 0)) return from
+        if (!bd) return from
+        /*
+         * ⚠ THE WORST CELL, NOT THE MEAN ONE, and this is the whole of "the
+         * correction is not reliable". `bd.lum` averages the cells the surface
+         * covers, so a menu lying half on a dark tree trunk and half on sunlit
+         * leaves was asked about a luminance that is on neither: it landed just
+         * the safe side of AA, the walk returned the asked-for alpha untouched,
+         * and a pale theme drew its dark ink straight onto the photograph. Move
+         * the menu one cell, change the wallpaper, open a window behind it, and
+         * the mean crosses back and the frost reappears — the same menu in the
+         * same place behaving differently minute to minute.
+         *
+         * Both ends, because either can be the losing one: dark ink drowns on
+         * the bright cell and light ink on the dark cell, and a surface across
+         * both has to clear on both. Over a flat wallpaper — or a surface inside
+         * a single cell — min and max ARE the mean and nothing moves.
+         *
+         * The C twin is panel_alpha_floor() in render.c; the two walk the same
+         * step from the same statistic or synui's own panels and the shell's
+         * menus correct themselves by different amounts on one desktop.
+         */
+        const lo = bd.lumMin, hi = bd.lumMax
+        if (!(lo >= 0) || !(hi >= 0)) return from
         const surf = root.lumOf(root.popupBg)
         const ink  = root.lumOf(root.fg)
         for (let a = from; a < 1.0; a += 0.02)
-            if (root.lumContrast(ink, root.lumOver(surf, a, bd.lum)) >= 4.5) return a
+            if (root.lumContrast(ink, root.lumOver(surf, a, lo)) >= 4.5 &&
+                root.lumContrast(ink, root.lumOver(surf, a, hi)) >= 4.5) return a
         return 1.0
     }
 
@@ -662,10 +736,16 @@ QtObject {
      * and the ink flips, which is what the old shorthand did.
      */
     function inkOn(bd, a) {
-        if (!bd || !(bd.lum >= 0)) return root.fg
+        if (!bd || !(bd.lumMin >= 0) || !(bd.lumMax >= 0)) return root.fg
         const surf = root.lumOf(root.popupBg)
         const ink  = root.lumOf(root.fg)
-        if (root.lumContrast(ink, root.lumOver(surf, a, bd.lum)) >= 4.5)
+        // Both extremes, exactly as alphaWalkOn asks them — this is the SAME
+        // test at the alpha that walk settled on, and asking it of the mean here
+        // while the walk asked it of the worst cell would let the two disagree:
+        // an alpha raised because the dark cell needed it, then judged safe
+        // against an average that never needed anything.
+        if (root.lumContrast(ink, root.lumOver(surf, a, bd.lumMin)) >= 4.5 &&
+            root.lumContrast(ink, root.lumOver(surf, a, bd.lumMax)) >= 4.5)
             return root.fg
         const which = bd.ink !== "" ? bd.ink : bd.best
         if (which === "") return root.fg
@@ -877,7 +957,12 @@ QtObject {
      * the same correction, applied more gently.
      */
     function clearBarOn(name) {
-        if (root.barAlphaAsked !== 0) return false
+        // barThinAlpha, not `=== 0` — see clearBar, whose reasoning this is the
+        // per-output half of. The two must ask the same question of the same
+        // number or one screen's bar inks itself off the wallpaper while the
+        // desktop-wide properties say it did not.
+        if (!(root.barAlphaAsked >= 0) || root.barAlphaAsked > root.barThinAlpha)
+            return false
         return !BarConfig.legibility || root.barInkUsedOn(name) !== ""
     }
     function barScrimOn(name) {
@@ -1119,7 +1204,11 @@ QtObject {
             bg:       root.barScrimOn(n)
                         ? (dark ? Qt.rgba(0, 0, 0, root.scrimAlpha)
                                 : Qt.rgba(1, 1, 1, root.scrimAlpha))
-                      : clear ? Qt.rgba(0, 0, 0, 0)
+                      /* The asked-for alpha and not a hard 0 — the thin
+                       * surface a glass preset asks for is what the backdrop
+                       * blur masks to. See bgAlpha, which is the desktop-wide
+                       * twin of this line. */
+                      : clear ? root.themed("bar", 11, 11, 20, root.barAlphaAsked)
                       /* Asked for clear and refused it — no legible ink on this
                        * screen — falls to the scheme's own alpha, which is the
                        * same rung `bgAlpha` lands a refused bar on. */

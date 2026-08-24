@@ -28,6 +28,30 @@ PanelWindow {
     required property var modelData
     screen: modelData
 
+    /*
+     * ── How the compositor knows this is the bar ─────────────────────────────
+     *
+     * synui keys the backdrop blur off the layer surface's namespace: the shell
+     * marks the surfaces it wants frosted "synui-glass", and until the glass
+     * presets stopped asking for a CLEAR bar the strip deliberately kept the
+     * plain one. It could not join that set, because blur is masked by what the
+     * client actually painted and a bar with no background paints nothing but
+     * glyphs — which would have put a little frosted halo behind each letter of
+     * the clock instead of a sheet behind the strip.
+     *
+     * ⚠ SO THE BAR HAS ITS OWN NAMESPACE RATHER THAN THE GLASS ONE, and the
+     * decision moves to the compositor, which is the only side that can make it:
+     * layer.c's layer_wants_glass() asks syn_bar_has_background(), so the frost
+     * appears and disappears with bar_opacity while this string never changes.
+     * A namespace is fixed at map time; a bar's opacity is not.
+     *
+     * It also has to keep reading as one of the shell's own surfaces, because
+     * the bar's right-click menu and the mixer are xdg_popups parented to it and
+     * inherit their glass through layer_is_shell(). Both spellings live in
+     * layer.c; changing this means changing SYN_BAR_NAMESPACE there.
+     */
+    WlrLayershell.namespace: "synui-bar"
+
     readonly property string outName: modelData.name
 
     /*

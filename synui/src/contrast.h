@@ -173,14 +173,33 @@ double syn_contrast_lum(double a, double b);
  * those are all contrast and contrast is a function of luminance alone. */
 double syn_lum_to_srgb(double lum);
 
-/* The backdrop under one box, in the two answers the bar already asks for.
+/* The backdrop under one box, in the answers the bar already asks for.
  * `lum` is the mean over the cells it covers and is what syn_lum_over() wants;
  * the two inks are for the surface itself, and follow the bar's contract
  * exactly — `ink` is "clear is safe here", `best` is "clear is safe once you
  * have dimmed it this way", and NONE from `ink` with a real `best` is a scrim.
+ *
+ * ⚠ AND THE TWO EXTREMES, BECAUSE THE MEAN IS THE WRONG STATISTIC FOR THE ONE
+ * QUESTION THAT MATTERS MOST. The alpha walk (panel_alpha_floor in render.c, and
+ * alphaWalkOn in Theme.qml) asks "does my text still read on the composite" and
+ * asked it of `lum` alone, which over a photograph is an average of a dark tree
+ * trunk and bright leaves — a number that describes no pixel on the screen. The
+ * failure that produced it is exact: on a pale theme the mean would land just
+ * past the AA threshold, the walk would decide no correction was needed, and the
+ * menu would draw its ink straight onto the picture. Move a window, change the
+ * wallpaper, drag the menu a cell to the left and the mean crosses back — so the
+ * same menu in the same place frosts itself one minute and not the next, which
+ * is exactly what it looks like from outside: a correction that works sometimes.
+ *
+ * The ink fold already refused to average — disagreeing cells veto, because one
+ * surface draws one colour of text. The alpha had no equivalent and now does:
+ * a surface has to survive its WORST cell, not its mean one. Both ends are kept
+ * because both can be the worst, depending on which way the ink runs.
  */
 typedef struct {
     double    lum;   /* mean luminance under the box, or -1 if unmeasured   */
+    double    lum_min; /* darkest cell under it, or -1 if unmeasured        */
+    double    lum_max; /* brightest cell under it, or -1 if unmeasured      */
     syn_ink_t ink;   /* the ink that clears `target` over ALL of it         */
     syn_ink_t best;  /* the closer of the two, whether or not it clears     */
 } syn_backdrop_t;
