@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# omarchy_shims.sh — the two commands Omarchy's weather widgets call by name.
+# omarchy_shims.sh — the commands Omarchy's plugins call by name.
 #
 # ⚠ THE CONTRACT IS WITH SOFTWARE THIS REPOSITORY DOES NOT CONTROL, which is
 # the whole reason these are worth a test. eduardodallecort.weather-radar
@@ -29,7 +29,8 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 LOC=${1:-$HERE/../systemd/omarchy-weather-location.sh}
 NOTIFY=${2:-$HERE/../systemd/omarchy-notification-send.sh}
-for s in "$LOC" "$NOTIFY"; do
+SHELL_SHIM=${3:-$HERE/../systemd/omarchy-shell.sh}
+for s in "$LOC" "$NOTIFY" "$SHELL_SHIM"; do
     [ -r "$s" ] || { echo "not readable: $s" >&2; exit 1; }
 done
 command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 not installed."; exit 77; }
@@ -160,6 +161,63 @@ echo ""
 STUB
 check "an unchosen action runs nothing" "" \
       "$(notify "H" "D" --exec echo ran)"
+
+# ── omarchy-shell ───────────────────────────────────────────────────────────
+#
+# ⛔ THE ONE WHOSE ABSENCE WRITES NOTHING ANYWHERE. The three above are spawned
+# as a Process, so Quickshell logs a missing binary to the shell log. This one
+# is reached through `bar.run`, which is `sh -c` — exit 127 in a detached shell
+# nobody is reading. YT Mini's bar button called it and the button was
+# indistinguishable from a working one: no error, no log line, no clue.
+#
+# ⚠ WHAT IS CHECKED IS THE ARGUMENT LIST HANDED TO quickshell, because that IS
+# the contract — the shim's whole job is to turn their verb into our IPC call,
+# and the two failure modes are calling the wrong function and dropping the
+# payload on the floor. quickshell is stubbed so no live shell is touched: the
+# real one would drive the desktop the suite is running on.
+cat > "$TMP/bin/quickshell" <<'STUB'
+#!/bin/sh
+echo "$@"
+STUB
+chmod +x "$TMP/bin/quickshell"
+
+SHELL_TREE=$TMP/bar
+mkdir -p "$SHELL_TREE"
+: > "$SHELL_TREE/shell.qml"
+shim() { PATH="$TMP/bin:$PATH" SYNUI_BAR="$SHELL_TREE" bash "$SHELL_SHIM" "$@"; }
+# The tail of the call — everything after the config path, which is the part
+# that says what the shell is being asked to do.
+verb_of() { shim "$@" | sed 's|^-p [^ ]* ||'; }
+
+check "toggle carries the payload to the shell" \
+      "ipc call plugin toggleWith x.y {\"clipboard\":true}" \
+      "$(verb_of shell toggle x.y '{"clipboard":true}')"
+check "summon opens rather than toggling" \
+      "ipc call plugin openWith x.y {\"url\":\"u\"}" \
+      "$(verb_of shell summon x.y '{"url":"u"}')"
+check "close needs no payload" \
+      "ipc call plugin close x.y" \
+      "$(verb_of shell close x.y)"
+
+# ⚠ THE PAYLOAD-CARRYING SPELLING EVEN WHEN THERE IS NO PAYLOAD. quickshell
+# matches an IPC call on arity: `toggleWith` with one argument is refused
+# outright, so an empty payload has to be passed as an empty argument rather
+# than left off. Dropping it would make the no-payload case the broken one.
+check "an absent payload is still an argument" \
+      "ipc call plugin toggleWith x.y " \
+      "$(verb_of shell toggle x.y)"
+
+# `shell` is their subcommand group and is accepted, not required.
+check "the group name is optional by hand" \
+      "ipc call plugin toggleWith x.y " \
+      "$(verb_of toggle x.y)"
+
+# ⛔ AND AN UNKNOWN VERB FAILS LOUDLY. A shim that swallowed a verb it does not
+# implement would be the same dead button wearing a working command's name.
+shim shell warp x.y >/dev/null 2>&1
+check "an unimplemented verb is refused" "2" "$?"
+shim shell toggle >/dev/null 2>&1
+check "a missing plugin id is a usage error" "2" "$?"
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fails"
 [ "$fails" = 0 ] || exit 1

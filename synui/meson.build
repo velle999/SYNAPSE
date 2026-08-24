@@ -1341,15 +1341,21 @@ test('launch_tui', launch_tui_sh,
      args    : [meson.current_source_dir() / 'systemd/omarchy-launch-or-focus-tui.sh'],
      timeout : 60)
 
-# The other two commands their QML names. Same contract, same silence: the
+# The other commands their QML names. Same contract, same silence: the
 # weather widgets write their location through omarchy-weather-location and
 # read it back out of a JSON file, and announce storms through
 # omarchy-notification-send — so a shim that writes an unparseable file or
 # forwards a flag notify-send rejects looks exactly like weather that is fine.
+#
+# ⛔ AND omarchy-shell, WHICH IS QUIETER STILL. The others are spawned as a
+# Process, so Quickshell logs a missing binary. That one is reached through
+# `bar.run` — `sh -c`, exit 127, nothing written anywhere — and it is how a
+# plugin opens its own panel.
 omarchy_shims_sh = find_program('tests/omarchy_shims.sh')
 test('omarchy_shims', omarchy_shims_sh,
      args    : [meson.current_source_dir() / 'systemd/omarchy-weather-location.sh',
-                meson.current_source_dir() / 'systemd/omarchy-notification-send.sh'],
+                meson.current_source_dir() / 'systemd/omarchy-notification-send.sh',
+                meson.current_source_dir() / 'systemd/omarchy-shell.sh'],
      timeout : 60)
 
 plugin_host_sh = find_program('tests/plugin_host.sh')

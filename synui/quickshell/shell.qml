@@ -133,6 +133,33 @@ ShellRoot {
         function toggle(id: string): void { PluginHost.toggle(id, "") }
         function open(id: string): void   { PluginHost.show(id, "") }
         function close(id: string): void  { PluginHost.hide(id) }
+
+        /*
+         * The same two, carrying the payload a panel is opened WITH.
+         *
+         * ⛔ A PAYLOAD IS NOT OPTIONAL SUGAR — IT IS THE WHOLE POINT OF THE
+         * OPEN. YT Mini's bar button asks for `{"clipboard":true}`, which is
+         * what makes it a YouTube window that plays the link you just copied
+         * rather than an empty one; its panel reads `url`, `clipboard`, `grab`,
+         * `radio`, `corner` and `move` out of it. Dropping the payload leaves a
+         * button that opens something and appears to ignore you.
+         *
+         * ⚠ WHY TWO SPELLINGS AND NOT ONE OPTIONAL ARGUMENT. quickshell matches
+         * an IPC call on arity and refuses a short one — "Too few arguments
+         * provided (2 required but 1 were provided)" — so widening `toggle`
+         * would break every `ipc call plugin toggle <id>` already written. And
+         * a default value is worse than useless: `function f(id: string,
+         * payload = "")` leaves the parameter untyped, and an untyped parameter
+         * takes the function OUT OF THE HANDLER ENTIRELY — the call answers
+         * "Function not found." for a function plainly there in the file, with
+         * nothing logged on either side. Both measured against quickshell here.
+         */
+        function toggleWith(id: string, payload: string): void {
+            PluginHost.toggle(id, payload)
+        }
+        function openWith(id: string, payload: string): void {
+            PluginHost.show(id, payload)
+        }
         /* Answering rather than acting, so a test can assert on the result of
          * the three above and a script can ask before it acts. */
         function opened(id: string): string {

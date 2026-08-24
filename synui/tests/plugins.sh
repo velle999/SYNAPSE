@@ -437,6 +437,72 @@ else
 fi
 
 # ── The window itself ───────────────────────────────────────────────────────
+# ── Their directory name, and one row per plugin ────────────────────────────
+#
+# ⛔ WHAT THIS GUARDS IS A WIDGET THAT RUNS AND SHOWS NOTHING. The Vitals widget
+# spawns its own helper as a literal `$HOME/.config/omarchy/plugins/<id>/
+# stats.sh`, hardcoded, with no way to configure it — installed anywhere else it
+# starts nothing for ever. On the machine this was written on it failed that way
+# 291 times in one session and the widget looked merely empty. So a plugin we
+# install is ALSO reachable under the path it may expect.
+#
+# ⚠ AND THE SECOND PATH MUST NOT BECOME A SECOND WIDGET. Both directories are
+# searched, and neither scan() nor Plugins.qml used to dedupe: two rows for one
+# id is two copies on the bar, each with its own timers and its own state.
+#
+# These run with the DEFAULT search path — SYNUI_PLUGIN_DIRS is what everything
+# above overrides, and the whole point here is which directories the shim picks
+# on its own.
+CFG=$XDG_CONFIG_HOME
+MY=$CFG/synui/plugins
+mkdir -p "$MY/link.me"
+cat > "$MY/link.me/manifest.json" <<'MANIFEST'
+{ "schemaVersion": 1, "id": "link.me", "name": "Linked", "version": "1.0.0",
+  "kinds": ["bar-widget"], "entryPoints": { "barWidget": "W.qml" } }
+MANIFEST
+printf 'import QtQuick\nItem { }\n' > "$MY/link.me/W.qml"
+
+defaults() { env -u SYNUI_PLUGIN_DIRS bash "$SYNPLUG" "$@"; }
+
+# ⚠ The clone section above put a plugin in omarchy's directory to prove that
+# one is searched, and an omarchy tree we did not create is one we never touch —
+# which is asserted below, and would otherwise make the first check here fail
+# for the right reason at the wrong time.
+rm -rf "$CFG/omarchy"
+
+defaults relink >/dev/null 2>&1
+check "a plugin is reachable under omarchy's name too" "$MY/link.me" \
+      "$(readlink "$CFG/omarchy/plugins/link.me")"
+check "…and it is still ONE row in the scan" "1" \
+      "$(defaults scan | awk -F'\t' '$1=="link.me"' | wc -l)"
+# ⚠ OURS, NOT THE LINK. Every consumer of this TSV takes the first row for an
+# id and then reads column four to find the files; resolving to the compat path
+# would work by accident today and break the moment the link is not there.
+check "…and the row points at the real directory" "$MY/link.me" \
+      "$(defaults scan | awk -F'\t' '$1=="link.me" {print $4}')"
+
+# ⛔ NEVER INTO A TREE THAT IS ALREADY THEIRS. `omarchy plugin add` owns that
+# directory on a machine that has Omarchy, and two programs writing one tree is
+# how a plugin ends up half-removed by whichever ran last. The marker is how we
+# know which of the two wrote it.
+rm -rf "$CFG/omarchy"
+mkdir -p "$CFG/omarchy/plugins/theirs.own"
+defaults relink >/dev/null 2>&1
+check "an omarchy tree we did not create is left alone" "no" \
+      "$([ -e "$CFG/omarchy/plugins/link.me" ] && echo yes || echo no)"
+check "…and nothing of theirs is disturbed" "yes" \
+      "$([ -d "$CFG/omarchy/plugins/theirs.own" ] && echo yes || echo no)"
+
+# A link left behind by a plugin removed by hand is a manifest read that fails
+# on every scan from then on.
+rm -rf "$CFG/omarchy"
+defaults relink >/dev/null 2>&1
+rm -rf "$MY/link.me"
+defaults relink >/dev/null 2>&1
+check "a dangling link is cleared away" "no" \
+      "$([ -L "$CFG/omarchy/plugins/link.me" ] && echo yes || echo no)"
+rm -rf "$CFG/omarchy"
+
 #
 # ⚠ THE GUI HAD NO CHECK OF ANY KIND until it grew a category pane, and a QML
 # file that will not load is a window that draws NOTHING — `synui-plugins gui`

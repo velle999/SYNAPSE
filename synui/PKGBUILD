@@ -1495,7 +1495,7 @@ pkgver=0.1.0
 #   and a degraded install now exits 3 rather than 0 — the window only showed a
 #   message on a non-zero code, which is why it reported three dead widgets as
 #   installed and on.
-pkgrel=478
+pkgrel=479
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2018,6 +2018,16 @@ package() {
         "$pkgdir/usr/bin/omarchy-weather-location"
     install -Dm755 systemd/omarchy-notification-send.sh \
         "$pkgdir/usr/bin/omarchy-notification-send"
+
+    # ⛔ AND THEIR SHELL'S OWN CLI, WHICH IS THE QUIETEST OF THE LOT. The three
+    # above are commands a plugin spawns, so Quickshell logs a missing one to
+    # the bar log. This one is reached through `bar.run`, which hands the string
+    # to `sh -c` — a missing binary is exit 127 inside a detached shell and
+    # NOTHING is written anywhere. YT Mini's whole bar button is
+    # `omarchy-shell shell toggle <id> '{"clipboard":true}'`, and without the
+    # command it was a button that could not be told from a working one.
+    install -Dm755 systemd/omarchy-shell.sh \
+        "$pkgdir/usr/bin/omarchy-shell"
 
     # The worked example, shipped OFF like every plugin. It is the third search
     # directory, so `synui-plugins list` has something in it on a machine that

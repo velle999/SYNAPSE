@@ -94,9 +94,19 @@ BarWidget {
   // ⚠ A HANDLER OF ITS OWN, which is what real widgets do — snake and calendar
   // both register one. It is how the test reads a widget-side value back: the
   // host cannot answer "did settings reach the widget", only the widget can.
+  function panelPayload() {
+    var p = root.bar && root.bar.shell ? root.bar.shell.panelFor("test.host") : null
+    return p ? p.lastPayload : "no panel"
+  }
+
   IpcHandler {
     target: "test.host"
     function probe(): string { return String(root.setting("probe", "unset")) }
+
+    // What the panel was opened WITH, verbatim. A payload dropped on the way
+    // in is a panel that opens and appears to ignore the request that opened
+    // it — see the payload assertions below.
+    function payload(): string { return String(root.panelPayload()) }
 
     // ⚠ THE MEMBERS A WIDGET READS OFF ITS HOST, asked for by name. Every one
     // of these was missing at some point and none of them said so: `foreground`
@@ -202,6 +212,9 @@ ok()  { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fail_n=$((fail_n + 1)); }
 
 ipc() { quickshell -p "$TREE/shell.qml" ipc call plugin "$@" 2>&1; }
+# The FIXTURE's own handler, which answers about itself. A different target
+# from `plugin` above: that one is the host's, this one is the widget's.
+hostipc() { quickshell -p "$TREE/shell.qml" ipc call test.host "$@" 2>&1; }
 
 # ⚠ THE SCAN HAS TO SEE THE ENTRY POINTS FIRST. Everything below is downstream
 # of two columns in one TSV row, and a scan that lost them would fail every
@@ -256,6 +269,34 @@ ipc toggle test.host >/dev/null; sleep 1
 # ⚠ A BAR-WIDGET-ONLY PLUGIN HAS NOTHING TO OPEN, and must not claim otherwise.
 # The intent map answers while a panel is still loading, and on its own it
 # reported "open" for a plugin that has no panel at all.
+# ── The payload ─────────────────────────────────────────────────────────────
+#
+# ⛔ AN OPEN THAT LOSES ITS PAYLOAD IS A BUTTON THAT IGNORES YOU. YT Mini's bar
+# button asks for `{"clipboard":true}`, which is the difference between a window
+# that plays the link you just copied and an empty one; its panel also reads
+# `url`, `grab`, `radio`, `corner` and `move` out of the same object. The bare
+# `toggle`/`open` above hand the panel an empty string by design, so the
+# payload-carrying spellings are a separate contract and need their own check.
+#
+# ⚠ THEY EXIST BECAUSE quickshell MATCHES ON ARITY. Widening `toggle` would
+# refuse every one-argument call already written, and a default value is worse:
+# an untyped parameter drops the function out of the handler altogether and the
+# call answers "Function not found." for a function plainly there in the file.
+ipc openWith test.host '{"clipboard":true}' >/dev/null; sleep 1
+[ "$(ipc opened test.host)" = "open" ] \
+    && ok "openWith opens the panel" \
+    || bad "openWith did not open the panel"
+[ "$(hostipc payload)" = '{"clipboard":true}' ] \
+    && ok "…and the payload arrived at open() untouched" \
+    || bad "the panel was opened with '$(hostipc payload)'"
+
+ipc close test.host >/dev/null; sleep 1
+ipc toggleWith test.host '{"url":"u"}' >/dev/null; sleep 1
+[ "$(hostipc payload)" = '{"url":"u"}' ] \
+    && ok "toggleWith carries one too" \
+    || bad "toggleWith delivered '$(hostipc payload)'"
+ipc close test.host >/dev/null; sleep 1
+
 ipc toggle synapse.uptime >/dev/null; sleep 1
 [ "$(ipc opened synapse.uptime)" = "closed" ] \
     && ok "a plugin with no panel never reports one open" \

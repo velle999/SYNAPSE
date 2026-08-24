@@ -71,11 +71,18 @@ STATE="$CONF_HOME/synui/plugins.state"
 # point at a checkout instead of the installed copy.
 SHELL_ROOT="${SYNUI_BAR:-/usr/share/synui/quickshell}"
 
-# ⚠ OMARCHY'S OWN DIRECTORY IS SEARCHED FIRST AND ON PURPOSE. `omarchy plugin
+# ⚠ OMARCHY'S OWN DIRECTORY IS SEARCHED TOO AND ON PURPOSE. `omarchy plugin
 # add <git-url>` clones into ~/.config/omarchy/plugins, and a user who has done
 # that on this machine should find the plugin listed here rather than having to
-# copy it. Ours is second so a name collision resolves to the one we ship.
-DIRS="${SYNUI_PLUGIN_DIRS:-$CONF_HOME/omarchy/plugins:$CONF_HOME/synui/plugins:/usr/share/synui/plugins}"
+# copy it.
+#
+# ⛔ OURS IS FIRST, AND THE ORDER ONLY MEANS ANYTHING BECAUSE scan() DEDUPES.
+# This said "ours is second so a name collision resolves to the one we ship",
+# which was wrong twice over: nothing deduped, so a plugin in two directories
+# produced two rows and the bar mounted it TWICE — and every consumer of this
+# TSV takes the first row for an id, which under that order was theirs, not
+# ours. Both halves are fixed: ours first, and one row per id.
+DIRS="${SYNUI_PLUGIN_DIRS:-$CONF_HOME/synui/plugins:$CONF_HOME/omarchy/plugins:/usr/share/synui/plugins}"
 
 usage() {
     cat <<EOF
@@ -85,6 +92,7 @@ usage: synui-plugins [list|scan]
        synui-plugins remove <id>
        synui-plugins browse [text]
        synui-plugins refresh
+       synui-plugins relink
        synui-plugins tui
        synui-plugins gui
 
@@ -103,6 +111,10 @@ usage: synui-plugins [list|scan]
   check [<id>]          whether what is installed can actually draw, and what
                         it is missing if not
   refresh               fetch the community list now
+  relink                make every plugin you installed reachable under the
+                        ~/.config/omarchy/plugins/<id> path some of them
+                        hardcode to find their own helper scripts. `add` does
+                        this; run it once for plugins installed before it did
   catalogue             browse as TSV — what the window reads
   tui                   all of it in the terminal, with arrow keys and /
   gui                   all of it in a window
@@ -249,7 +261,14 @@ entry_point() {  # entry_point <dir> <key>
 # ⛔ APPENDED, NEVER INSERTED. Plugins.qml reads this by POSITION — see its note
 # on why — and every awk in this script names $1..$7. A column added in the
 # middle moves all of them at once and nothing says a word.
-scan() {
+# ⛔ ONE ROW PER ID, WHICHEVER DIRECTORY IT CAME FROM. A plugin reachable
+# through two search directories — which the compat link below makes routine —
+# is still ONE plugin: Plugins.qml pushes a widget per row and does not dedupe
+# either, so a second row is a second copy of the widget on the bar, with its
+# own timers and its own state. First wins, and DIRS decides who is first.
+scan() { scan_dirs | awk -F'\t' 'NR == 1 || !seen[$1]++'; }
+
+scan_dirs() {
     local d p id name desc kinds entry why on panel svc
     printf 'id\tname\tdescription\tdir\tentry\tenabled\tunsupported\tpanel\tservice\n'
     printf '%s\n' "$DIRS" | tr ':' '\n' | while IFS= read -r d; do
@@ -289,6 +308,82 @@ set_state() {  # set_state <id> <on|off>
 # `omarchy plugin add` is what owns it. Two programs writing one tree is how a
 # plugin ends up half-removed by whichever ran last.
 MINE="$CONF_HOME/synui/plugins"
+
+# ── Their directory name, for plugins that hardcode it ──────────────────────
+#
+# ⛔ A PLUGIN'S OWN FILES ARE NOT ALWAYS REACHED THROUGH A PATH WE GIVE IT.
+# The Vitals widget spawns its helper as
+#
+#     Quickshell.env("HOME") + "/.config/omarchy/plugins/<its id>/stats.sh"
+#
+# a literal, with no way to configure it — so installed anywhere else it runs
+# nothing and shows no readings for ever. It logged that failure 291 times in
+# one session and the widget still looked merely empty. Any plugin shipping a
+# helper script can spell it the same way, so this is a class and not a widget.
+#
+# So a plugin we install is ALSO reachable under the name it may expect: a
+# symlink, per plugin, pointing at the real directory. scan() dedupes by id, so
+# the second path costs nothing and the bar still mounts one widget.
+#
+# ⛔ ONLY WHERE THAT TREE IS NOT ALREADY SOMEBODY ELSE'S. `omarchy plugin add`
+# owns ~/.config/omarchy/plugins on a machine that has Omarchy, and two programs
+# writing one tree is how a plugin ends up half-removed by whichever ran last.
+# We create the directory only when it does not exist, and we leave a marker
+# saying we did; without our marker we never touch it and the plugin simply goes
+# on being unable to find itself, which is theirs to fix, not ours to break.
+COMPAT="$CONF_HOME/omarchy/plugins"
+COMPAT_MARK="$COMPAT/.synui-compat"
+
+compat_ours() {
+    [ -e "$COMPAT_MARK" ] && return 0
+    [ -e "$CONF_HOME/omarchy" ] && return 1
+    mkdir -p "$COMPAT" 2>/dev/null || return 1
+    printf '%s\n' \
+        "Created by synui-plugins. Every entry here is a symlink into" \
+        "$MINE, so a plugin that hardcodes ~/.config/omarchy/plugins/<id>" \
+        "can find its own files. Delete this file and synui will stop" \
+        "touching this directory." > "$COMPAT_MARK" 2>/dev/null || return 1
+    return 0
+}
+
+compat_link() {  # compat_link <id> <real-dir>
+    local link="$COMPAT/$1"
+    compat_ours || return 0
+    # ⚠ NEVER OVER SOMETHING THAT IS NOT OUR OWN LINK. A real directory here is
+    # a plugin somebody installed with their command, and replacing it with a
+    # link to ours would delete it in all but name.
+    [ -e "$link" ] && [ ! -L "$link" ] && return 0
+    ln -sfn "$2" "$link" 2>/dev/null || true
+}
+
+compat_unlink() {  # compat_unlink <id>
+    local link="$COMPAT/$1"
+    [ -L "$link" ] || return 0
+    [ -e "$COMPAT_MARK" ] || return 0
+    rm -f "$link"
+}
+
+# Every link this tree should have, made to match what is installed now. `add`
+# calls it, and it is a verb of its own because a plugin installed BEFORE this
+# existed has no link and nothing else would ever give it one.
+compat_relink() {
+    local p id n=0
+    compat_ours || { printf 'synui-plugins: %s belongs to omarchy, leaving it alone\n' \
+                            "$COMPAT" >&2; return 0; }
+    # Dangling links first: a plugin removed by hand leaves one behind, and a
+    # dangling entry is a manifest read that fails on every scan.
+    for p in "$COMPAT"/*; do
+        [ -L "$p" ] || continue
+        [ -e "$p" ] || rm -f "$p"
+    done
+    for p in "$MINE"/*/; do
+        [ -f "$p/manifest.json" ] || continue
+        id=$(jfield "$p/manifest.json" id)
+        [ -n "$id" ] || continue
+        compat_link "$id" "${p%/}" && n=$((n + 1))
+    done
+    printf '%s: %d plugin(s) linked\n' "$COMPAT" "$n"
+}
 
 # What `browse` offers. Beside the shipped example, so a checkout and an install
 # both find it.
@@ -878,6 +973,7 @@ case "${1:-list}" in
                     exit 2
                 fi
                 miss=$(unresolved_types "$dest" "$(jfield "$dest/manifest.json" barWidget)")
+                compat_link "$mid" "$dest"
                 set_state "$mid" on
                 if [ -n "$miss" ]; then
                     # ⛔ EXIT 3, NOT 0. It IS installed and it IS on — but a
@@ -944,6 +1040,7 @@ case "${1:-list}" in
             exit 2
         fi
         miss=$(unresolved_types "$dest" "$(jfield "$dest/manifest.json" barWidget)")
+        compat_link "$id" "$dest"
         set_state "$id" on
         if [ -n "$miss" ]; then
             # See the note on the same check above: exit 3, so the window has
@@ -970,8 +1067,12 @@ case "${1:-list}" in
                exit 2 ;;
         esac
         rm -rf "$dir"
+        compat_unlink "$id"
         set_state "$id" off
         printf '%s: removed\n' "$id"
+        ;;
+    relink)
+        compat_relink
         ;;
     list)
         # ⚠ awk, NOT `read` — see fld(). A manifest with no description is
