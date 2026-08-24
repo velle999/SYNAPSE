@@ -107,7 +107,24 @@ pkgver=0.1.0
 #   development, and the tell is that the identical construct passed for
 #   Flathub (18 rows fit the pipe buffer) and failed for the repositories (239
 #   did not).
-pkgrel=38
+# 39: the GUI drew very few icons. Mostly correct — measured on this box, 147 of
+#   187 explicitly-installed packages have no icon under any name because they
+#   are not applications (libraries, fonts, kernel modules, CLI tools), and the
+#   monogram is the right answer for those rather than a fault.
+#   ⚠ BUT AN APPLICATION'S ICON IS OFTEN NOT NAMED AFTER ITS PACKAGE, and the
+#   two tries shipped in 38 only ever asked that. `retroarch` installs
+#   `com.libretro.RetroArch`, `openrgb` installs `org.openrgb.OpenRGB`,
+#   `calibre` installs `calibre-gui` — so the rows a person actually recognises
+#   in a package list were the blank ones, which is what "very few icons" looks
+#   like from outside. A third step reads the Icon= out of the .desktop files
+#   and matches on their basename AND their Exec binary, because neither alone
+#   matches a package reliably. 34 by name, 6 more by this, on 345 map entries.
+#   ⚠ ONE SCAN PER WINDOW, not per row: /usr/share/applications is a few hundred
+#   files and asking it per row would be that scan times the length of a search
+#   result. ⚠ `ENDFILE` is GNU awk's; Arch's base pulls in gawk, and the failure
+#   mode without it is the honest one — the map stays empty and every row falls
+#   back to the two name tries, which is where this started.
+pkgrel=39
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

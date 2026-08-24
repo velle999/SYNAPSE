@@ -1204,7 +1204,22 @@ pkgver=0.1.0
 #   scratch HOME: the real plugin directories are the user's, and a test that
 #   could enable one on the machine running it would change the desktop it is
 #   testing.
-pkgrel=464
+# 465: cliamp would not open from the start menu. It is a terminal application,
+#   so its .desktop carries Terminal=true and a launcher owes it a terminal —
+#   and the menu left that to quickshell's DesktopEntry.execute(), which looks
+#   for one the way GLib does: down a list compiled into libgio (xterm, konsole,
+#   gnome-terminal, …) that syntty, kitty and foot are not on and never will be.
+#   That list is the whole reason /usr/bin/xdg-terminal-exec exists in this
+#   tree; execute() does not consult it.
+#   ⛔ AND IT FAILED SILENTLY, which is why it went unnoticed on every other
+#   Terminal=true entry too: a menu row that launches nothing looks exactly like
+#   one whose program crashed on startup.
+#   StartMenu.qml handles runInTerminal itself now, through syntty — which is
+#   what every static row in that same file already hardcodes, and what
+#   appgrid_launch() has always done, so all three doors open a CLI program the
+#   same way. Uses quickshell's parsed `command` argv, so it stays
+#   argv-not-a-shell-string.
+pkgrel=465
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

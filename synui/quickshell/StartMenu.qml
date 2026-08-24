@@ -644,8 +644,41 @@ PanelWindow {
                 Quickshell.execDetached(row.argv)
                 break
             case "app":
-                // execute() handles the field codes (%f %u %i %c), Terminal=
-                // and Path= that menu.c had to implement by hand.
+                /*
+                 * ⚠ Terminal=true IS HANDLED HERE, NOT LEFT TO execute().
+                 *
+                 * Reported as cliamp not opening from the menu. It is a
+                 * terminal application, so its .desktop carries Terminal=true,
+                 * and a launcher owes it a terminal. execute() goes looking for
+                 * one the way GLib does — down a list compiled into libgio
+                 * (xterm, konsole, gnome-terminal, …) that syntty, kitty and
+                 * foot are not on and never will be. The row therefore did
+                 * nothing, silently, on exactly the entries that need the most
+                 * help.
+                 *
+                 * ⛔ AND IT FAILS SILENTLY, which is why it went unnoticed: a
+                 * menu row that launches nothing looks identical to one whose
+                 * program crashed on startup.
+                 *
+                 * syntty is the shipped terminal and what every static row in
+                 * this file already hardcodes ("AI Shell", "Network Setup").
+                 * The application page does the same thing in appgrid_launch(),
+                 * so all three doors open a CLI program the same way.
+                 *
+                 * `command` is quickshell's PARSED argv with the field codes
+                 * already resolved, so this stays argv-not-a-shell-string —
+                 * the rule the "exec" case above states at length.
+                 */
+                if (row.entry.runInTerminal) {
+                    const argv = row.entry.command || []
+                    if (argv.length > 0)
+                        Quickshell.execDetached(["syntty", "-e"].concat(argv))
+                    else
+                        row.entry.execute()   /* nothing to wrap; let it try */
+                    break
+                }
+                // execute() handles the field codes (%f %u %i %c) and Path=
+                // that menu.c had to implement by hand.
                 row.entry.execute()
                 break
             }
