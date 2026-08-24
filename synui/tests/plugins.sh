@@ -39,6 +39,15 @@ export SYNUI_PLUGIN_DIRS="$TREE/plugins"
 # them. This is what makes the qs.Ui / qs.Commons split a real answer.
 export SYNUI_BAR="$HERE/../quickshell"
 
+# ⛔ THE CATALOGUE AND THE FILTER OUT OF THIS CHECKOUT, NOT /usr/share. Both
+# default to the installed copies, and an installed copy is the LAST RELEASE —
+# so without these the suite proves things about the package already on the
+# machine and passes green while the tree it was run on is broken. It bit here:
+# the twelve-column catalogue was in the tree, the seven-column one was
+# installed, and the test read the installed one.
+export SYNUI_PLUGIN_CATALOGUE="$HERE/../data/plugins/catalogue.tsv"
+export SYNUI_PLUGIN_FILTER="$HERE/../data/plugins/registry.py"
+
 pass=0 fail=0
 ok()   { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }
@@ -192,6 +201,160 @@ MANIFEST
 printf 'import QtQuick\nItem { }\n' > "$XDG_CONFIG_HOME/omarchy/plugins/cloned.one/C.qml"
 check "a plugin in omarchy's own directory is found" \
       "cloned.one" "$(plug scan | awk -F'\t' '$1=="cloned.one" {print $1}')"
+
+# ── the community registry ──────────────────────────────────────────────────
+#
+# `browse` used to be five rows out of the file this package ships. It is now
+# those five plus everything omarchyplugins.com lists that this desktop could
+# host, which is where the games and most of the widgets anybody wants actually
+# are — and a filter deciding what "could host" means is a thing that can go
+# quietly wrong in both directions.
+#
+# ⛔ NOT ONE BYTE OVER THE NETWORK. The URL is an override and curl reads
+# file://, so the whole fetch path — curl, registry.py, the cache write, the
+# merge, the search — runs against a fixture. A test that phones a website is a
+# test that fails on a train.
+#
+# ⚠ AND THE CACHE IS REDIRECTED INTO THE SCRATCH TREE. Its default is
+# ~/.cache/synui, which is the user's; a suite that wrote there would rewrite
+# the list on the machine running it.
+export SYNUI_PLUGIN_REGISTRY_CACHE="$TREE/registry.tsv"
+export SYNUI_PLUGIN_REGISTRY="file://$TREE/catalog.json"
+
+cat > "$TREE/catalog.json" <<'CATALOG'
+{ "generatedAt": "2026-08-24", "plugins": [
+  { "id": "fixture.keeper", "name": "Keeper", "description": "A bar widget that survives the filter",
+    "author": "Someone", "category": "Widgets", "tags": ["bar", "games"],
+    "kind": "Bar widget", "status": "Available", "repo": "https://example.invalid/keeper",
+    "installCommand": "omarchy plugin add https://example.invalid/keeper.git --enable",
+    "sourceType": "community", "verificationStatus": "verified",
+    "repositoryLayout": "root-plugin", "installAvailable": true, "stars": 12 },
+  { "id": "fixture.overlay", "name": "Overlay", "description": "Not a bar widget",
+    "kind": "Overlay", "status": "Available", "repo": "https://example.invalid/overlay",
+    "sourceType": "community", "repositoryLayout": "root-plugin", "installAvailable": true },
+  { "id": "fixture.broken", "name": "Broken", "description": "Their own harness says it does not load",
+    "kind": "Bar widget", "status": "Compatibility failed", "repo": "https://example.invalid/broken",
+    "sourceType": "community", "repositoryLayout": "root-plugin", "installAvailable": true },
+  { "id": "fixture.manual", "name": "Manual", "description": "Has its own installer",
+    "kind": "Bar widget", "status": "Manual setup", "repo": "https://example.invalid/manual",
+    "sourceType": "community", "repositoryLayout": "root-plugin", "installAvailable": false },
+  { "id": "fixture.mono", "name": "Mono", "description": "One widget inside a monorepo",
+    "kind": "Bar widget", "status": "Available", "repo": "https://example.invalid/mono",
+    "sourceType": "community", "repositoryLayout": "monorepo", "installAvailable": true },
+  { "id": "omarchy.spacer", "name": "Spacer", "description": "Their own, and ours is hand-tested",
+    "kind": "Bar widget", "status": "Available", "repo": "https://example.invalid/spacer",
+    "sourceType": "builtin", "repositoryLayout": "root-plugin", "installAvailable": true },
+  { "id": "fixture.badurl", "name": "Bad URL", "description": "The address is not one git could be handed",
+    "kind": "Bar widget", "status": "Available", "repo": "http://example.invalid/x; rm -rf /",
+    "sourceType": "community", "repositoryLayout": "root-plugin", "installAvailable": true }
+] }
+CATALOG
+
+plug refresh >/dev/null 2>&1
+check "refresh writes the cache" "yes" \
+      "$([ -s "$TREE/registry.tsv" ] && echo yes || echo no)"
+
+# ⚠ COUNTED, never `| grep -q`: a producer killed by SIGPIPE on the first match
+# reports 141, and a construct that fails ON A MATCH is the worst kind of test.
+n=$(grep -cv '^[[:space:]]*\(#\|$\)' "$TREE/registry.tsv")
+check "one of seven listings survives the filter" "1" "$n"
+
+check "…and it is the bar widget"  "fixture.keeper" \
+      "$(awk -F'\t' '!/^#/{print $1; exit}' "$TREE/registry.tsv")"
+check "…with twelve columns"       "12" \
+      "$(awk -F'\t' '!/^#/{print NF; exit}' "$TREE/registry.tsv")"
+# The install URL comes off their own install command, `.git` and all.
+check "…and the URL git will be handed" "https://example.invalid/keeper.git" \
+      "$(awk -F'\t' '!/^#/{print $4; exit}' "$TREE/registry.tsv")"
+# Empty path and base are what "the repository IS the plugin" looks like, and
+# what tells `add` to clone rather than sparse-checkout.
+check "…and no sub-path, so add clones the repository" "" \
+      "$(awk -F'\t' '!/^#/{print $6 $7; exit}' "$TREE/registry.tsv")"
+
+# ⛔ THE SHIPPED ROW WINS. Both lists carry omarchy.spacer; two rows for one
+# widget would offer two different installs for it, and only ours has been
+# loaded into a real bar.
+n=$(plug catalogue 2>/dev/null | awk -F'\t' '$1=="omarchy.spacer"' | wc -l)
+check "a widget in both lists is one row" "1" "$n"
+check "…and it is the shipped one" "shipped" \
+      "$(plug catalogue 2>/dev/null | awk -F'\t' '$1=="omarchy.spacer" {print $10}')"
+
+check "catalogue has ten columns"  "10" \
+      "$(plug catalogue 2>/dev/null | awk -F'\t' 'NR==2 {print NF}')"
+
+# Search: every word has to match, and it reaches the tags. `games` appears
+# nowhere in the fixture's name or description — only in its tags — which is
+# exactly the case that matters, because that is how the registry files games.
+check "browse finds a widget by a tag" "1" \
+      "$(plug browse games 2>/dev/null | grep -c '^  fixture.keeper ')"
+check "browse narrows on every word" "0" \
+      "$(plug browse games nothinglikethis 2>/dev/null | grep -c '^  fixture.keeper ')"
+
+# ⛔ A REGISTRY THAT PARSED TO NOTHING MUST NOT REPLACE A GOOD CACHE. One
+# renamed field upstream would otherwise turn this back into a list of five.
+printf '{ "plugins": [] }\n' > "$TREE/catalog.json"
+plug refresh >/dev/null 2>&1
+check "an empty parse leaves the last cache alone" "fixture.keeper" \
+      "$(awk -F'\t' '!/^#/{print $1; exit}' "$TREE/registry.tsv")"
+
+# And with no registry at all, browse is still the shipped list rather than an
+# error — a machine with no network gets a short answer, not a broken one.
+export SYNUI_PLUGIN_REGISTRY_CACHE="$TREE/gone.tsv"
+export SYNUI_PLUGIN_REGISTRY="file://$TREE/not-there.json"
+plug browse >/dev/null 2>&1
+check "browse survives an unreachable registry" "0" "$?"
+check "…and still offers the shipped widgets" "1" \
+      "$(plug browse 2>/dev/null | grep -c '^  omarchy.spacer ')"
+
+# ── installing from a repository, and the types it reaches for ──────────────
+#
+# ⛔ A LOCAL REPOSITORY OVER file://, so the clone path is exercised without the
+# network. `add <git-url>` is how every registry row installs — the id only
+# chooses the URL — so it is the path nine hundred widgets go down.
+#
+# What is being proved past the clone is the SOFT warning. `refusal` answers
+# from the imports and passes anything importing qs.Ui, which synui provides;
+# the widgets in the registry are written against Omarchy's qs.Ui, which has
+# thirty-odd types this one does not. A widget naming one of those loads with a
+# corner missing, so it is installed and warned about rather than refused — and
+# the warning has to NAME the type or it is not worth printing.
+if command -v git >/dev/null 2>&1 && [ -x /usr/lib/qt6/bin/qmllint ]; then
+    REPO="$TREE/fixture-repo"
+    mkdir -p "$REPO"
+    cat > "$REPO/manifest.json" <<'MANIFEST'
+{ "schemaVersion": 1, "id": "fixture.cloned", "name": "Cloned widget",
+  "version": "1.0.0", "description": "installed over file://",
+  "kinds": ["bar-widget"], "entryPoints": { "barWidget": "W.qml" } }
+MANIFEST
+    # Roots at BarWidget, which this bar DOES provide, and then reaches for a
+    # type it does not — which is the shape of a real Omarchy widget here.
+    cat > "$REPO/W.qml" <<'WIDGET'
+import QtQuick
+import qs.Ui
+BarWidget {
+    implicitWidth: 20
+    BarIconButtonThatDoesNotExist { }
+}
+WIDGET
+    git -c init.defaultBranch=main init -q "$REPO"
+    git -C "$REPO" -c user.email=t@example.invalid -c user.name=t add -A
+    git -C "$REPO" -c user.email=t@example.invalid -c user.name=t commit -qm f
+
+    out=$(plug add "file://$REPO" 2>&1)
+    rc=$?
+    check "a plugin clones from a git URL and turns on" "0" "$rc"
+    check "…and it is on disk under our own directory" "on" \
+          "$(plug scan | awk -F'\t' '$1=="fixture.cloned" {print $6}')"
+    # ⚠ NAMED. "something is missing" is a message nobody can act on.
+    case "$out" in
+        *BarIconButtonThatDoesNotExist*)
+            ok "…and the type this bar has not got is named" ;;
+        *)  bad "the missing type was not named (got [$out])" ;;
+    esac
+    plug remove fixture.cloned >/dev/null 2>&1
+else
+    ok "git or Qt 6's qmllint is absent — the clone path is not checked here"
+fi
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

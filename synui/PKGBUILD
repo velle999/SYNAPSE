@@ -1338,9 +1338,10 @@ pkgver=0.1.0
 #   headless session — rather than the whole service, so every other error a
 #   plugin can cause is still fatal. The needle is `ERROR` and not `Error:`.
 #   `synui-plugins browse|add|remove` is the manager half. `add` takes a git URL
-#   or a catalogue id; a catalogue id is one widget out of a repository holding
+#   or a catalogue id; a SHIPPED id is one widget out of a repository holding
 #   many, so it is a partial + sparse checkout of that one path rather than a
-#   clone of their whole desktop.
+#   clone of their whole desktop. (A REGISTRY id — see pkgrel 473 — is a
+#   repository that IS one plugin, and that one is a plain shallow clone.)
 #   ⚠ THEIR MANIFEST IS <Base>.manifest.json, not manifest.json — their bar
 #   widgets share a directory so each carries its own. The installer renames on
 #   the way in, and that is the only shape difference between "a widget in their
@@ -1401,7 +1402,54 @@ pkgver=0.1.0
 #   the one thing a config reference must never leave unsaid.
 #   The wiki's new Configuration page is derived from this header and names all
 #   187 as well. If the two ever disagree, this file is right.
-pkgrel=472
+# 473: the bar-plugin browser browsed five widgets. That was every row in the
+#   catalogue this package ships, and the catalogue was hand-written — so the
+#   window, the TUI and `browse` were all faithfully showing a list nobody had
+#   any way to grow. The format has around nine hundred community bar widgets
+#   written for it, listed at omarchyplugins.com, and none of them were reachable
+#   from here. Two dozen of those are GAMES — Tetris, Snake, Minesweeper, 2048,
+#   Wordle, solitaire — which is most of what a person opens a widget browser
+#   hoping to find.
+#   `synui-plugins refresh` fetches their catalogue; data/plugins/registry.py
+#   reduces it to the twelve columns catalogue.tsv already had, so a row is a row
+#   whichever list it came from and the shipped one wins on a collision. Cached
+#   under ~/.cache/synui/plugins, refetched at a week old, fetched on first use.
+#   ⛔ EVERYTHING KNOWABLE FROM A LISTING IS DROPPED AND NO MORE: not a bar
+#   widget, their own harness says it fails, the repository has its own
+#   installer, it is a monorepo the installer cannot address. 869 of 1,229
+#   survive. Whether one can actually RUN here is not a listing's business — that
+#   is answered at install time, by name, by the refusal check.
+#   ⚠ THE `trust` COLUMN EXISTS SO THE WINDOW CANNOT LIE. `shipped` means loaded
+#   into a real bar before it was listed; `verified` is THEIR word about THEIR
+#   desktop. One badge for both would be this project vouching for code it has
+#   never run.
+#   A soft check joins the hard one: `import qs.Ui` passes because synui ships a
+#   qs.Ui, but theirs has thirty-odd types and ours has two, so a widget can
+#   clear the refusal and still name `BarIconButton`. `add` now runs Qt 6's
+#   qmllint against the entry point with the bar's modules on the import path and
+#   NAMES what it could not resolve — a warning, not a refusal, because a type
+#   can be named on a path nothing runs.
+#   ⛔ /usr/lib/qt6/bin/qmllint, never /usr/bin/qmllint: the one on PATH is
+#   another Qt's, prints nothing and exits 0 — a check that always passes.
+#   ⚠ AND IT NEEDS A `qs/` SYMLINK FARM. quickshell resolves `import qs.Foo` to
+#   <shell root>/Foo, which no import path reproduces; without it our OWN shipped
+#   example fails the check, which is the setup being wrong and not the widget.
+#   ⛔ `IFS=$'\t' read -r a b c` IS WRONG ON THIS DATA and was the bug that broke
+#   the first install. Tab is IFS WHITESPACE, so a run of tabs collapses to one
+#   delimiter and every EMPTY field vanishes, shifting the rest left. A registry
+#   row is three empty columns in the middle; the read handed the category to
+#   `ref`, `add` believed it had a sub-path, and a clone tried to be a sparse
+#   checkout of a directory that does not exist. `cut -f` keeps empty fields.
+#   ⚠ ONE `scan` PER RUN, cached in a temp file. It walks every search directory
+#   and reads every manifest, and the browsers ask it a question per row — at
+#   five rows that was invisible, at nine hundred it is a window that looks hung.
+#   ⛔ THE TESTS READ THE CHECKOUT, NOT /usr/share. Both the catalogue and the
+#   filter default to the installed copies, and an installed copy is the LAST
+#   RELEASE: without the overrides the suite proves things about the package
+#   already on the machine and passes green over a broken tree. It bit during
+#   this change. 40 checks now, and not one byte over the network — the registry
+#   URL is an override and curl reads file://.
+pkgrel=473
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1928,6 +1976,13 @@ package() {
     # above matches `*/` and skips it, same as the README.
     install -Dm644 data/plugins/catalogue.tsv \
         "$pkgdir/usr/share/synui/plugins/catalogue.tsv"
+    # ⚠ EXECUTABLE, AND synui-plugins EXECS IT BY PATH. It turns
+    # omarchyplugins.com's catalog.json into catalogue.tsv's twelve columns —
+    # the only thing in the plugin system that speaks JSON. Without it
+    # `synui-plugins refresh` reports it is missing and `browse` falls back to
+    # the five shipped rows, which is a browser showing five widgets.
+    install -Dm755 data/plugins/registry.py \
+        "$pkgdir/usr/share/synui/plugins/registry.py"
     # The window. Beside the tree it manages rather than inside it: this is a
     # standalone quickshell app like synpkg's, not part of the bar's own QML —
     # `synui-plugins gui` execs quickshell against it.

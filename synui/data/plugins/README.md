@@ -79,10 +79,55 @@ The check is asked of the filesystem — quickshell resolves `import qs.Foo` to
 `<shell root>/Foo` — so `qs.Ui` passes because it is genuinely provided, and
 anything else fails because it genuinely is not.
 
+### The softer case: a module we have, a type we have not
+
+`import qs.Ui` passes, because synui ships a `qs.Ui`. Theirs has thirty-odd
+types in it and ours has two, so a widget can clear the refusal and still name
+`BarIconButton`, `Panel` or `PopupCard` — and most of the registry is written
+against their version.
+
+That is a **warning, not a refusal**. `add` runs Qt 6's `qmllint` against the
+entry point with the bar's own modules on the import path, and prints the types
+it could not resolve by name:
+
+```
+⚠ sebasgl23.snake uses types this bar does not provide: BarIconButton
+  it loads; whatever needed them will not. The bar logs what fails.
+```
+
+It is installed and turned on anyway, because a type can be named on a path
+nothing ever runs — a popup nobody opens — and a widget with a corner missing is
+still a widget. Refusing on that guess would hide ones that work.
+
+## Where the list comes from
+
+Two places, and `browse` reads them as one list.
+
+**Shipped** — `catalogue.tsv` beside this file. Five widgets out of Omarchy's
+own repository, and the rule for that file is that *every row has been loaded
+into a real bar*, not merely read. Those rows say `shipped`, and it is the only
+`trust` value this project puts its own name to.
+
+**The community registry** — [omarchyplugins.com](https://omarchyplugins.com),
+around nine hundred bar widgets written for this format by other people, games
+included. `synui-plugins refresh` fetches it; `registry.py` reduces their
+catalogue to the same twelve columns and drops everything that could not
+possibly run here — anything that is not a bar widget, anything their own
+harness marks as failing, anything whose repository needs its own installer. The
+result is cached under `~/.cache/synui/plugins` and refetched when it is a week
+old. `verified` and `unverified` on those rows are **their** judgement about
+**their** desktop, carried through unchanged; neither means anybody has loaded
+the thing here.
+
+> With no network you get the shipped rows and a line saying why the list is
+> short. Nothing errors and nothing is empty.
+
 ## Using them
 
 ```
 synui-plugins browse                  widgets you can install, and where from
+synui-plugins browse games            narrow it — every word has to match
+synui-plugins refresh                 fetch the community list now
 synui-plugins add omarchy.spacer      install one of them
 synui-plugins add <git-url>           install a plugin repository
 synui-plugins list                    what is installed, and why anything is refused
@@ -91,11 +136,17 @@ synui-plugins remove <id>             delete one you installed
 synui-plugins scan                    the TSV the bar reads
 ```
 
-`add` takes a catalogue id or a git URL. A catalogue id is one widget out of a
+`browse` searches the id, the name, the description, the category, the tags and
+the author. The tags are why `browse games` finds two dozen widgets whose
+category is "Widgets" and whose names say nothing about games. It prints a page;
+`--all` prints the lot.
+
+`add` takes a catalogue id or a git URL. A shipped id is one widget out of a
 repository that holds many, so it is a partial + sparse checkout of that one
 path rather than a clone of somebody's whole desktop — and the repository's
 LICENSE comes with it, because MIT wants the notice in every copy and a file put
-on your disk is one.
+on your disk is one. A registry id is a repository that *is* one plugin, so that
+one is a plain shallow clone.
 
 > `remove` only deletes out of `~/.config/synui/plugins`. The other two search
 > paths are Omarchy's (theirs, with their own command) and the package's
