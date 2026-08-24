@@ -802,7 +802,62 @@ pkgver=0.1.0
 #   tests/readme_binds.sh is what makes the README the sixth: every combo in
 #   seed_default_binds() must appear in the hotkey table, so the row moves or
 #   the build fails.
-pkgrel=449
+# 450 EVERY ROW IN THE MUSIC WIDGET'S DRAWER WAS DRAWN AND THEN REFUSED.
+#   Reported from the desktop: Spotify's row invited a sign-in and did nothing
+#   when it was pressed, and the YouTube page — with a Firefox session already
+#   configured and being read correctly — offered Search…, Your playlists and
+#   Search inside cliamp… and acted on none of them.
+#
+#   ⛔ THE SECOND-ROSTER TRAP, and both halves of the report are one instance of
+#   it. `syn-arcade big music` answers, for THIS machine, what each row needs —
+#   an `action` column on the source picker, a `kind` column on the YouTube page
+#   — and MusicLibrary.qml drew both answers faithfully and had no branch that
+#   acted on either. Nothing warns: the build is green, the fetch succeeds, the
+#   row appears, and pressing it does nothing at all.
+#
+#   · Spotify came back `action=setup`, note "press to sign in — needs Spotify
+#     Premium". The note was drawn in the middle of an empty drawer and the only
+#     thing to press was the source chip that had already been pressed. There
+#     was no path in the shell that ran `big music setup`. It is a BUTTON now,
+#     under the note, labelled from the action rather than from the note — a
+#     button is its own label, and "press to sign in — needs Spotify Premium" is
+#     a sentence. `install` and `browse` are the same property, because the set
+#     MOVES: Spotify becomes `browse` the moment somebody finishes signing in,
+#     and a widget that learned only `setup` would break at the moment it worked.
+#
+#   · The YouTube page's three errand rows — Search…, Your playlists, Search
+#     inside cliamp… — were refused by chooseItem() on the grounds that `yt
+#     find` and `yt login` READ FROM STDIN, which from a widget is a process sat
+#     waiting for a line that can never arrive. ⚠ THAT WAS TRUE WHEN IT WAS
+#     WRITTEN AND STOPPED BEING TRUE: both verbs ask can_be_asked() first and
+#     re-run themselves inside a terminal when there is none. So the reward for
+#     signing a browser in was three rows of grey text. All four ids dispatch
+#     now, to the same verbs syn-arcade's own shell uses.
+#
+#   ⚠ `mine` IS A LIST, NOT AN ERRAND — it is the whole payoff of signing in and
+#   it cannot be shown by opening a terminal. The drawer goes one level down
+#   (`drill`) and back out through a row at the head of the list, which is the
+#   television's menu page in the shape a 246px drawer can hold. Measured on
+#   velle's own session: twelve playlists, Liked videos and Watch later
+#   included, off the Firefox cookies that were already configured.
+#
+#   ⚠ AND THE ERRANDS ARE NOT ON THE TRANSPORT POOL. Each blocks for as long as
+#   the terminal it opened is on screen; through actPool one would hold a slot
+#   of three for however long a sign-in takes, and `running = true` on a busy
+#   Process is a SILENT no-op — three of them and every skip is dropped with
+#   nothing said. One Process, its `running` the guard, and the picker refreshed
+#   when it exits: every errand exists to change big.c's answer, and a row still
+#   saying "press to sign in" afterwards is the fix looking like a failure.
+#
+#   The delegate stopped deciding which rows are live (`kind !== "action"`) and
+#   asks MusicLibrary.pressable() — one answer in one place, beside the
+#   dispatch. tests/music_errands.sh is source-only for the reason menu_back.sh
+#   is: the widget is a quickshell surface on the RUNNING compositor and
+#   MusicLibrary shells out to a real Plex server and a real YouTube session, so
+#   loading it to press rows would drive the live desktop and start the music.
+#   ⚠ Needs syn-arcade 0.1.0-41, which stops these terminals fullscreening
+#   themselves when there is no television to fill.
+pkgrel=450
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

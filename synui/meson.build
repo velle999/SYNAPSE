@@ -1358,6 +1358,25 @@ test('menu_cats', menu_cats,
                 meson.current_source_dir() / 'quickshell/StartMenu.qml'],
      timeout : 30)
 
+# Every row of the music widget's drawer against the verbs syn-arcade answers
+# with. Same shape as menu_cats above and there for the same reason: a
+# hand-written QML dispatch over a list another program owns, with nothing
+# keeping the two in step — and it had already drifted the whole way. Spotify's
+# row came back `action=setup` and the shell had no branch that ran `big music
+# setup`, so the drawer said "press to sign in" and had nowhere to sign in; the
+# YouTube page's three errand rows were drawn and then refused on a stdin
+# argument that stopped being true when `yt find` and `yt login` learned to open
+# their own terminal. Neither is visible from a build, a run or the journal —
+# the row is simply inert. Source-only: the widget is a quickshell surface on
+# the running compositor and MusicLibrary shells out to a real Plex server and a
+# real YouTube session, so loading it to press rows would drive the live desktop
+# and start the music.
+music_errands = find_program('tests/music_errands.sh')
+test('music_errands', music_errands,
+     args    : [meson.current_source_dir() / 'quickshell/MusicLibrary.qml',
+                meson.current_source_dir() / 'quickshell/widgets/MusicPlayer.qml'],
+     timeout : 30)
+
 # The windows synui opens to run ONE command, and the flag that keeps them
 # open. Three terminals spell --hold and two of them take the command
 # differently; syntty handed the trailing form dies at argument parsing, which

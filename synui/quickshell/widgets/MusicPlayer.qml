@@ -669,13 +669,20 @@ WidgetFrame {
                 required property var modelData
 
                 /*
-                 * ⚠ NOT EVERY ROW IS A TRACK. A YouTube list carries Search…
-                 * and Sign in… beside the stations, and those two read from
-                 * stdin — see MusicLibrary.chooseItem(). They are drawn as what
-                 * they are rather than hidden: which of them exist is the C
-                 * side's answer about this machine, not this file's.
+                 * ⚠ NOT EVERY ROW IS A TRACK. A YouTube list carries Search…,
+                 * Your playlists and Sign in… beside the stations, and the way
+                 * back out of a playlist is a row too.
+                 *
+                 * ⚠ AND THE ANSWER COMES FROM MusicLibrary RATHER THAN FROM
+                 * `kind` HERE. This file used to draw every `action` row dim,
+                 * which was right while none of them could be pressed and is
+                 * the whole of what velle saw: signed in through Firefox, three
+                 * grey rows and nothing to do with them. Which errands this
+                 * machine can actually run is one answer in one place — see
+                 * pressable() — and a second opinion about it here is a second
+                 * thing to keep in step.
                  */
-                readonly property bool playable: modelData.kind !== "action"
+                readonly property bool playable: MusicLibrary.pressable(modelData)
 
                 width: items.width
                 height: 26
@@ -743,21 +750,74 @@ WidgetFrame {
          * source" under 250px of nothing — the message read as a footnote to an
          * empty drawer rather than as the drawer's answer.
          */
-        Text {
+        Column {
             anchors {
                 left: parent.left; right: parent.right
                 verticalCenter: items.verticalCenter
                 margins: 10
             }
             visible: items.count === 0
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            text: MusicLibrary.loading ? "loading…"
-                : MusicLibrary.status !== "" ? MusicLibrary.status
-                                             : "nothing to show for this source"
-            color: root.inkDim
-            font.family: Theme.fontFamily
-            font.pixelSize: 10
+            spacing: 9
+
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: MusicLibrary.loading ? "loading…"
+                    : MusicLibrary.status !== "" ? MusicLibrary.status
+                                                 : "nothing to show for this source"
+                color: root.inkDim
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
+
+            /*
+             * ── and the thing that FIXES it ─────────────────────────────────
+             *
+             * ⚠ THE SENTENCE WAS NOT A BUTTON, AND IT READ LIKE ONE. Spotify's
+             * note is "press to sign in — needs Spotify Premium", drawn in the
+             * middle of an empty drawer, and the only thing to press was the
+             * source chip that had already been pressed. So the widget invited
+             * somebody to sign in and then had nowhere for them to do it,
+             * which is how it was reported: a row that says to click to log in
+             * and does nothing when it is clicked.
+             *
+             * ⚠ A BUTTON IS ITS OWN LABEL. The note above says what is missing
+             * and why; this says what the press does, in its own words, and
+             * MusicLibrary keys it off big.c's action column so a source that
+             * grows a new one arrives here already working.
+             *
+             * ⚠ AND IT IS NOT DRAWN WHILE THE LIST IS STILL COMING. `action` is
+             * "" until the first fetch lands, so a button bound to it would
+             * flicker into existence a beat after the drawer opens.
+             */
+            Rectangle {
+                id: errandBtn
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: !MusicLibrary.loading && MusicLibrary.sourceErrand !== ""
+                width: errandLabel.implicitWidth + 24
+                height: 22
+                radius: 6
+                color: errandHover.hovered
+                     ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.30)
+                     : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
+                border.width: 1
+                border.color: Qt.rgba(root.accent.r, root.accent.g,
+                                      root.accent.b, 0.50)
+
+                Text {
+                    id: errandLabel
+                    anchors.centerIn: parent
+                    text: MusicLibrary.sourceErrand
+                    color: root.ink
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 10
+                    font.letterSpacing: 0.4
+                }
+
+                HoverHandler { id: errandHover }
+                TapHandler { onTapped: MusicLibrary.runSourceErrand() }
+            }
         }
 
         /*

@@ -212,6 +212,35 @@ pkgname=syn-arcade
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
+# ── 0.1.0-41: the music rows had a second surface, and the errands ────────
+# ── still behaved as though they had one ──────────────────────────
+#
+# Reported from the desktop rather than the sofa: Spotify's row invited a sign-in
+# and did nothing when it was pressed, and the YouTube page — with a Firefox
+# session already configured and being read correctly — was three rows of text
+# that could not be pressed at all. The desktop music widget draws THIS
+# package's source picker and YouTube page — the same rows,
+# from the same `--rec` output, so the two cannot grow different libraries — and
+# two things here were written when the television was the only reader.
+#
+# ⚠ A NOTE THAT NAMES ONE SURFACE IS WRONG ON THE OTHER. The Search row said
+# "type a search on the television" to somebody looking at a 268px card on their
+# wallpaper. What happens is the same on both and the note says that now: a
+# terminal comes up to type into, which on the television is the one the
+# on-screen keyboard is pointed at.
+#
+# ⚠ AND `fill` IS THE TELEVISION'S RULE. term_run_and_hold() and
+# big_music_browse() fullscreened the terminal they opened, which is right for
+# something launched from four metres away and wrong for a button on a
+# wallpaper: pressing Sign in threw a fullscreen terminal over whatever somebody
+# was working in. Both now pass big_running() — the shell's presence rather than
+# a guess at it, since the lock is held for exactly as long as that process
+# lives — so it fills the screen on the television and opens a window on the
+# desktop.
+#
+# The shell half of the report is synui's; the rows themselves were already
+# right, which is why nothing else here changed.
+#
 # ── 0.1.0-40: Game Pass on the television, and a tile that would have ─────
 # ── been installed and invisible ──────────────────────────────────
 #
@@ -965,7 +994,7 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=40
+pkgrel=41
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

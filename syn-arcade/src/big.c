@@ -4694,8 +4694,15 @@ static int yt_stations(bool rec)
 	bool signed_in = yt_cookie_browser(browser, sizeof(browser));
 
 	if (rec) {
+		/* ⚠ THE NOTE HAS TO BE TRUE ON BOTH SURFACES. This list is
+		 * the television's AND the desktop widget's — same rows, same
+		 * `kind`, one C answer — and it used to say "type a search on
+		 * the television" to somebody looking at a card on their
+		 * wallpaper. What actually happens is the same on both: a
+		 * terminal comes up to type into, which on the television is
+		 * the one the on-screen keyboard points at. See yt_find(). */
 		rec_row(4, "find", "Search…",
-			"type a search on the television", "action");
+			"opens a terminal to type in", "action");
 
 		if (signed_in)
 			rec_row(4, "mine", "Your playlists", browser, "action");
@@ -5778,7 +5785,16 @@ static int big_music_browse(void)
 	}
 	argv[argc] = NULL;
 
-	return spawn_wait(argv, true, false);
+	/* ⚠ FULL SCREEN ONLY WHERE THERE IS A SCREEN TO FILL. This is reached
+	 * from two places now — a tile on the television, and the desktop music
+	 * widget's source picker — and `fill` is the television's rule: an
+	 * application launched from four metres away should take the whole
+	 * display. Applied unconditionally it means pressing a button on a
+	 * 268px card on the wallpaper throws a fullscreen terminal over
+	 * whatever somebody was doing, which is not what that card promised.
+	 * big_running() is the shell's presence rather than a guess at it: the
+	 * lock is held for exactly as long as that process lives. */
+	return spawn_wait(argv, big_running(NULL), false);
 }
 
 /*
@@ -5825,7 +5841,9 @@ static int term_run_and_hold(const char *command)
 	argv[argc++] = script;
 	argv[argc] = NULL;
 
-	return spawn_wait(argv, true, false);
+	/* Fullscreen for the television and windowed for the desktop, for the
+	 * reason big_music_browse() gives at length. */
+	return spawn_wait(argv, big_running(NULL), false);
 }
 
 /*

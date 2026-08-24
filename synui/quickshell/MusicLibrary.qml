@@ -100,6 +100,19 @@ QtObject {
     property string itemsFor: ""
     property bool loading: false
 
+    /*
+     * One level DOWN inside a source, or "" for the source's own list.
+     *
+     * ⚠ ONLY "mine" SO FAR, AND IT EARNS THE STATE ON ITS OWN. Signing a
+     * browser in is what puts somebody's own playlists within reach — it is the
+     * whole point of `yt login` — and until now the row that holds them was
+     * drawn and then refused, so the reward for signing in was a line of grey
+     * text. Their playlists are a LIST, not an errand: they cannot be shown by
+     * opening a terminal, so the drawer has to be able to go into one and come
+     * back.
+     */
+    property string drill: ""
+
     // One line under the list when something cannot be done and the reason is
     // not visible. A picker that answers a press with silence is the thing
     // big.c's `note` column exists to prevent, and it would be a waste to have
@@ -192,6 +205,10 @@ QtObject {
         root.items = []
         root.itemsFor = ""
         root.status = ""
+        // ⚠ AND THE DRILL WITH IT. "Your playlists" belongs to YouTube Music;
+        // left set across a switch to Plex it would send the next fetch to
+        // `yt mine` and draw a YouTube library under the word Plex.
+        root.drill = ""
         setProc.command = ["syn-arcade", "big", "music", "source", String(id)]
         setProc.running = true
     }
@@ -208,9 +225,37 @@ QtObject {
     }
 
     property Process itemsProc: Process {
+        id: itemsJob
+
+        /*
+         * ⚠ WHAT THIS FETCH WAS ASKED ABOUT, stamped at LAUNCH.
+         *
+         * `itemsFor` was written from root.sourceId when the answer ARRIVED,
+         * and that is a different question: a switch made while a fetch is in
+         * flight changes sourceId under it, so the old source's rows were
+         * stamped with the NEW source's name and passed the gate that exists to
+         * catch exactly this. Worse, loadItems() bows out while this is running
+         * — so the switch fetched nothing of its own and the wrong list was the
+         * only list. `yt mine` is a round trip through yt-dlp and takes seconds,
+         * which is what made a latent race into a reachable one.
+         */
+        property string forSource: ""
+        property string forDrill: ""
+
         stdout: StdioCollector {
             onStreamFinished: {
                 root.loading = false
+
+                // Asked about something nobody is looking at any more. Dropped
+                // rather than drawn — and the fetch that was skipped while this
+                // one held the Process is started here, because this is the
+                // moment it can run.
+                if (itemsJob.forSource !== root.sourceId ||
+                    itemsJob.forDrill  !== root.drill) {
+                    root.loadItems()
+                    return
+                }
+
                 const rows = root.records(this.text)
 
                 /*
@@ -240,14 +285,62 @@ QtObject {
                     out.push({ id: id, name: name || id, note: note || "",
                                kind: r.kind !== undefined ? r.kind : "item" })
                 }
+                /*
+                 * ⚠ THE WAY BACK IS A ROW, because there is nowhere else to put
+                 * one. The drawer is 246px wide with a source strip along the
+                 * top and a list under it; a back chip in that strip would sit
+                 * among the sources and read as a sixth source. A row at the
+                 * head of the list is where the list came from.
+                 *
+                 * `kind` is "back" rather than "action" on purpose: an action
+                 * is an errand this file may or may not be able to run, and
+                 * pressable() answers for both from the one place.
+                 */
+                if (root.drill !== "")
+                    out.unshift({ id: "", name: "‹ back", note: "",
+                                  kind: "back" })
+
                 root.items = out
-                root.itemsFor = root.sourceId
+                root.itemsFor = itemsJob.forSource
+
+                // ⚠ AN EMPTY DRILL STILL HAS THE BACK ROW IN IT, so the centre
+                // message that explains an empty list cannot fire and the
+                // status line has to carry it. Nothing coming back from a
+                // signed-in session is a real answer worth showing — see
+                // yt_mine(), which says the same thing on the television.
+                if (root.drill === "mine" && out.length <= 1)
+                    root.status = "nothing came back from that YouTube session"
             }
         }
     }
 
     function loadItems() {
         if (!root.have) return
+
+        /*
+         * ⚠ THE DRILL IS ANSWERED FIRST, AND IT IS CHECKED AGAINST THE SOURCE.
+         * refreshSources() ends here, so an errand exiting or the picker being
+         * reopened re-runs whatever is on screen — which is right, and is only
+         * right while the drill still belongs to the source. big.c decides
+         * whether this source has a YouTube list at all; if it does not, there
+         * is nothing to be one level down inside.
+         */
+        if (root.drill === "mine") {
+            if (root.listVerb(root.sourceAction) !== "yt") {
+                root.drill = ""
+            } else {
+                if (itemsJob.running) return
+                root.status = ""
+                root.loading = true
+                itemsJob.forSource = root.sourceId
+                itemsJob.forDrill = root.drill
+                itemsJob.command = ["syn-arcade", "big", "music",
+                                     "yt", "mine", "--rec"]
+                itemsJob.running = true
+                return
+            }
+        }
+
         const verb = root.listVerb(root.sourceAction)
         if (verb === "") {
             // Nothing to browse. Say WHY, from the note big.c already worked
@@ -262,11 +355,13 @@ QtObject {
                           : "this source opens in cliamp"
             return
         }
-        if (itemsProc.running) return
+        if (itemsJob.running) return
         root.status = ""
         root.loading = true
-        itemsProc.command = ["syn-arcade", "big", "music", verb, "--rec"]
-        itemsProc.running = true
+        itemsJob.forSource = root.sourceId
+        itemsJob.forDrill = root.drill
+        itemsJob.command = ["syn-arcade", "big", "music", verb, "--rec"]
+        itemsJob.running = true
     }
 
     /* ── Making noise ────────────────────────────────────────────────────── */
@@ -299,6 +394,71 @@ QtObject {
         return false
     }
 
+    /*
+     * ── the errands ─────────────────────────────────────────────────────────
+     *
+     * The presses that do not play anything: signing in, installing what a
+     * source needs, opening cliamp's own interface. Every one of them ends in
+     * big.c's term_run_and_hold(), which opens a terminal and WAITS with what
+     * it said still on the screen.
+     *
+     * ⚠ NOT THE TRANSPORT POOL, and the reason is the pool's own header. Each
+     * of these blocks for as long as the terminal is open — minutes, while
+     * somebody signs in to Spotify in a browser — so an errand put through
+     * actPool would hold one of the three slots for all of it, and three of
+     * them would leave every skip silently dropped. One Process, and its
+     * `running` IS the guard: there is nothing to be gained by opening a
+     * second sign-in terminal over the first.
+     *
+     * ⚠ AND THE PICKER IS ASKED AGAIN WHEN IT EXITS. Every errand exists to
+     * change big.c's answer about this machine — a `[spotify]` section, a
+     * yt-dlp on PATH, an OAuth client — and a row that still says "press to
+     * sign in" after somebody has signed in is the fix looking like a failure.
+     */
+    property Process errandProc: Process {
+        onExited: {
+            root.status = ""
+            root.refreshSources()
+        }
+    }
+
+    function errand(args) {
+        if (!root.have) return false
+        if (errandProc.running) {
+            root.status = "that is already open — look for the terminal"
+            return false
+        }
+        errandProc.command = ["syn-arcade", "big", "music"].concat(args)
+        errandProc.running = true
+        // A terminal takes a moment to map, and a button that appears to do
+        // nothing for a second is the bug being fixed here.
+        root.status = "opening a terminal…"
+        return true
+    }
+
+    /*
+     * What the CHOSEN SOURCE needs before it can play anything, as the words to
+     * put on a button — or "" where there is nothing to press.
+     *
+     * ⚠ IT IS KEYED ON THE ACTION AND NAMES NO PACKAGE. Which package YouTube
+     * Music is missing is big.c's answer about this machine, it is already on
+     * screen as the note above the button, and a second copy of it here is a
+     * copy that stops being true — the same rule that keeps the action column
+     * in C. The label only has to say what the press DOES.
+     */
+    readonly property string sourceErrand:
+          sourceAction === "setup"   ? "Sign in"
+        : sourceAction === "install" ? "Install it"
+        : sourceAction === "browse"  ? "Open in cliamp"
+        : ""
+
+    function runSourceErrand() {
+        if (root.sourceAction === "setup")   return root.errand(["setup"])
+        if (root.sourceAction === "install") return root.errand(["install", root.sourceId])
+        if (root.sourceAction === "browse")  return root.errand(["browse"])
+        return false
+    }
+
     // Start the chosen source from nothing. This is the verb that answers "no
     // way to play music through the widget": `big music play` fills an empty
     // queue from whatever `--provider` is set, rather than trying to resume a
@@ -315,28 +475,85 @@ QtObject {
     }
 
     /*
-     * Choose a row: play it, or say why it cannot be played HERE.
+     * ── which rows a press does something to ────────────────────────────────
      *
-     * ⚠ AN `action` ROW MUST NOT BE PLAYED, AND THE REASON IS NOT COSMETIC.
-     * `big music yt find` and `... yt login` READ FROM STDIN — on the
-     * television that is a terminal with the on-screen keyboard pointed at it,
-     * and from a widget it is a process with no stdin at all, sat waiting for a
-     * line that can never arrive. Nothing would play and nothing would say so.
+     * ⚠ ASKED HERE RATHER THAN DECIDED IN THE DELEGATE, for the reason big.c
+     * keeps the `action` column: a row is drawn dim when pressing it will not
+     * work, and a second opinion about that in the widget is a second thing to
+     * keep in step with this file.
+     */
+    readonly property var errandRows: ["find", "login", "setup", "mine"]
+
+    function pressable(it) {
+        if (!it) return false
+        if (it.kind !== "action") return true
+        return root.errandRows.indexOf(it.id) >= 0
+    }
+
+    /*
+     * Choose a row: play it, run the errand it stands for, or go back.
      *
-     * The rows are still SHOWN. Which of them exist is big.c's answer about
-     * this machine (signed in or not, OAuth client or not), and its header is
-     * explicit that a copy of that reasoning in QML is a copy that stops being
-     * true. So the list is exactly the television's list, the errands are drawn
-     * as errands, and pressing one says what it needs — which is the note the
-     * C side already wrote for that purpose.
+     * ── ⚠ THE REFUSAL THAT USED TO LIVE HERE, AND WHY IT WAS WRONG ──────────
+     *
+     * This said that an `action` row must not be pressed because `big music yt
+     * find` and `... yt login` READ FROM STDIN, and from a widget that is a
+     * process with no stdin at all, sat waiting for a line that can never
+     * arrive. That was true when it was written and it stopped being true: both
+     * of those verbs now ask can_be_asked() FIRST and, with no terminal to be
+     * read from, re-run themselves inside one — which is the same mechanism
+     * that puts the on-screen keyboard in front of them on the television.
+     *
+     * So the whole YouTube list was inert. Signed in through Firefox, the
+     * drawer drew Search…, Your playlists and Search inside cliamp… and refused
+     * all three, which is exactly the shape of the bug the widget was built to
+     * end: a picker that answers a press with a sentence. Every row here now
+     * does the thing it is named after.
+     *
+     * ⚠ AND A ROW THIS FILE CANNOT RUN IS STILL DRAWN. Which errands exist is
+     * big.c's answer about this machine — signed in or not, OAuth client or not
+     * — and the header there is explicit that a copy of that reasoning in QML
+     * is a copy that stops being true. So the list stays the television's list,
+     * and anything with an id nobody here knows says what it needs rather than
+     * doing nothing.
      */
     function chooseItem(it) {
         if (!it) return false
+
+        if (it.kind === "back") {
+            root.drill = ""
+            root.status = ""
+            // Cleared BEFORE the fetch, the same rule setSource() follows: the
+            // playlists must not sit under the stations list, clickable, for
+            // however long the round trip takes.
+            root.items = []
+            root.loadItems()
+            return true
+        }
+
         if (it.kind === "action") {
+            // Their own playlists are a LIST and the only row here that is:
+            // one level further into the same drawer rather than a terminal.
+            if (it.id === "mine") {
+                root.drill = "mine"
+                root.items = []
+                root.status = ""
+                root.loadItems()
+                return true
+            }
+            // `setup` is cliamp's own wizard, and it is the same command
+            // whether it was reached from this row (a Google OAuth client for
+            // searching inside cliamp) or from the Spotify source. big.c owns
+            // which one it configures.
+            if (it.id === "setup")
+                return root.errand(["setup"])
+            if (it.id === "find" || it.id === "login")
+                return root.errand(["yt", it.id])
+
             root.status = it.note !== ""
                         ? it.note : "that one has to be done on the television"
             return false
         }
+
         return root.playItem(it.id)
     }
 

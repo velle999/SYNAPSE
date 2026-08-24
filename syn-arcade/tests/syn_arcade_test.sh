@@ -2632,6 +2632,49 @@ check "the installer passes --noconfirm BEFORE the verb" $?
   says "$SA" big music install ytmusic ) | grep -q "already installed"
 check "installing what is already there is a sentence, not a terminal" $?
 
+# ── and the terminal it opens is not always the television's ────────────────
+#
+# ⚠ THESE VERBS HAVE A SECOND CALLER NOW: the desktop music widget's source
+# picker, which reaches `setup`, `install` and `browse` from a 268px card on the
+# wallpaper. `fill` is the television's rule — an application launched from four
+# metres away takes the whole display — and applied unconditionally it means
+# pressing Sign in on that card throws a fullscreen terminal over whatever
+# somebody was working in.
+#
+# Source-only, and it has to be: `fill` decides whether a fullscreen_toggle is
+# dispatched at a compositor, which is the one thing this suite is forbidden to
+# do (see the seatbelt above). big_running() is the shell's presence rather than
+# a guess at it — the lock is held for exactly as long as that process lives.
+[ "$(grep -c 'return spawn_wait(argv, big_running(NULL), false);' src/big.c)" = 2 ]
+check "an errand fills the screen only when the television is up" $?
+
+# ⚠ SCOPED TO THE TWO FUNCTIONS. `big web --wait` fullscreens unconditionally
+# and should: a headline is a browser window opened from the television and
+# nothing about a web page fills a screen by itself. A file-wide grep here
+# fails on that one and says nothing about music.
+mfill=$(sed -n '/^static int big_music_browse(void)/,/^}/p;/^static int term_run_and_hold(/,/^}/p' src/big.c |
+        grep -c 'spawn_wait(argv, true, false)')
+[ "$mfill" = 0 ]
+check "...and neither music path fullscreens unconditionally any more" $?
+
+# ⚠ THE ROWS ARE THE DESKTOP'S TOO, so a note that names one surface is wrong on
+# the other. This said "type a search on the television" to somebody looking at
+# their wallpaper; what actually happens is the same on both — a terminal comes
+# up to type into, which on the television is the one the on-screen keyboard is
+# pointed at.
+#
+# ⚠ Captured rather than piped into `grep -q`, for the reason spelled out on the
+# Spotify Premium check above: this is the NEGATIVE half, `grep -q` exits the
+# instant it matches, and the SIGPIPE that kills awk comes back through
+# `set -o pipefail` as 141 — which is not 0, so the row would report a pass at
+# exactly the moment the note was wrong again.
+findnote=$(srcpath yt --rec | awk -F'\t' '$1 == "find" { print $3 }')
+case "$findnote" in
+    ""|*television*) false ;;
+    *) true ;;
+esac
+check "the Search row's note is true on a desktop as well as a sofa" $?
+
 # ── quitting has to let go of the music ─────────────────────────────────────
 #
 # ⚠ REPORTED: Quit, and the music is still playing. The player this interface
