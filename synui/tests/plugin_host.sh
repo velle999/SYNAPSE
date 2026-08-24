@@ -302,6 +302,26 @@ ipc toggle synapse.uptime >/dev/null; sleep 1
     && ok "a plugin with no panel never reports one open" \
     || bad "a panel-less plugin reported '$(ipc opened synapse.uptime)'"
 
+# ── …and nothing threw while it drew ────────────────────────────────────────
+#
+# ⛔ A THROWN BINDING IS LOGGED AT **WARN**, NOT ERROR, WHICH IS HOW ONE LIVED
+# IN THE SHIPPED SHELL. Osd.qml asked for `root.screen` in a file whose window
+# is `id: osd` — no root anywhere in it — and every OSD that has ever opened
+# logged `WARN scene: @Osd.qml[80:-1]: ReferenceError: root is not defined`,
+# three times a session, one per screen. The check above greps for ERROR and
+# walked straight past it, and the popup went on drawing: the binding it killed
+# only fed the glass-legibility correction, which falls back to the asked-for
+# alpha when handed nothing. A whole subsystem quietly not applying.
+#
+# ⚠ ReferenceError AND TypeError, AND NOT "Unable to assign": those two are
+# always a bug in the file that threw, while an assign warning can be a binding
+# that is briefly undefined during startup and settles. Grepping the loose one
+# would make this test flap.
+threw=$(grep -E "ReferenceError|TypeError" "$QSLOG")
+[ -z "$threw" ] && ok "…and nothing threw while it drew" \
+                || bad "a binding threw:
+$threw"
+
 # ── The settings round trip ─────────────────────────────────────────────────
 #
 # ⛔ THE FILE HAS TO EXIST BEFORE A FileView WILL WRITE TO IT — no `saved`, no

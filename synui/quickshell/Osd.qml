@@ -77,12 +77,20 @@ PanelWindow {
          * anchored edge — the same box layer-shell gives the surface, so the
          * screen coordinates can be reconstructed from what is declared above
          * rather than measured. */
-        readonly property var backdrop: Theme.backdropFor(root.screen,
-            (root.screen.width - root.implicitWidth) / 2,
+        /* ⛔ `osd`, NOT `root` — THIS FILE HAS NO root AND NEVER HAD ONE. It
+         * was copied from StartMenu.qml, whose window IS `id: root`, and the
+         * six references came with it: every OSD that ever opened threw
+         * `ReferenceError: root is not defined` and the popup drew anyway,
+         * because a backdrop of `undefined` is what alphaWalkOn() returns the
+         * asked-for alpha for. The correction simply never ran here. ⚠ And the
+         * throw is logged at WARN, so a check grepping for ERROR walks past it;
+         * plugin_host.sh greps for the throw itself now. */
+        readonly property var backdrop: Theme.backdropFor(osd.screen,
+            (osd.screen.width - osd.implicitWidth) / 2,
             BarConfig.atBottom
-                ? root.screen.height - Theme.barHeight - 10 - root.implicitHeight
+                ? osd.screen.height - Theme.barHeight - 10 - osd.implicitHeight
                 : Theme.barHeight + 10,
-            root.implicitWidth, root.implicitHeight)
+            osd.implicitWidth, osd.implicitHeight)
 
         color: Theme.popupBgOn(card.backdrop)
         border.color: Theme.magenta
