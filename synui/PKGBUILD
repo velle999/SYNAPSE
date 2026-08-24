@@ -1219,7 +1219,44 @@ pkgver=0.1.0
 #   appgrid_launch() has always done, so all three doors open a CLI program the
 #   same way. Uses quickshell's parsed `command` argv, so it stays
 #   argv-not-a-shell-string.
-pkgrel=465
+# 466: the analog clock widget is frameless, and resizable by its corner.
+#   Frameless first: `chrome: false` drops the card, the header rule and the
+#   "CLOCK" label, so what is on the desktop is the dial and nothing else. A
+#   clock face is already a bounded, self-evident object — round, obviously a
+#   clock, with no reading that needs a caption — so the frame was doing what a
+#   frame is for on the widgets that need it (a column of numbers has to be told
+#   where it ends) and nothing at all here. `inkOnBackdrop` matters MORE with the
+#   card gone: the hands are hairlines straight onto the wallpaper now.
+#   ⚠ THE DIAL IS THE ONLY WIDGET THAT CAN HONESTLY RESIZE, which is why
+#   `resizable` is opt-in on WidgetFrame rather than on by default. Every part of
+#   a dial is a fraction of its own box, so a bigger one is the same drawing at a
+#   bigger size; a reporting widget has a FONT SIZE rather than a dimension, and
+#   stretching its card would put the same glyphs in more space.
+#   ⚠ EVERY STROKE WIDTH IN onPaint HAD TO BE SCALED. The radii were already
+#   fractions of `r` and scaled for free; the widths were absolute pixels — a 3px
+#   hour mark and a 10px neon glow are right at the designed 148 and are
+#   hairlines at 420, a blob at 96. One `k` (the ratio to the designed radius)
+#   through a `px()` floored at one device pixel, so every literal keeps meaning
+#   exactly what it did and nothing was re-tuned. Left alone the resize would
+#   have produced a bigger clock that looked progressively worse, which reads as
+#   the resize being broken rather than as line widths being fixed.
+#   ⚠ WidgetLayout.place() NOW MERGES INSTEAD OF REPLACING, and that is the
+#   fragile part of this change. It built the entry from scratch, so dragging a
+#   clock you had resized threw the size away mid-gesture and the card snapped
+#   back to its designed one. resize() takes the same care in the other
+#   direction. Verified by hand both ways — resize-then-drag keeps the size,
+#   drag-then-resize keeps the position — and there is no automated cover for it,
+#   because testing QML's own JS would mean a JS engine in synui's test suite for
+#   ten lines, which is a build dependency this distro should not grow for that.
+#   ⚠ The resize grip is BOTTOM-LEFT while the drag grip is top-right, so the two
+#   18px targets can never be adjacent however small the card gets — and it is in
+#   the input mask, because a Region that omits it is a corner that lights up on
+#   hover and cannot be pressed.
+#   Size is stored in widgets.pos beside the position, and a widget that has
+#   never been resized has no `size` and takes its designed one — the same rule
+#   the position takes, so a later change to a default reaches everyone who never
+#   touched it.
+pkgrel=466
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

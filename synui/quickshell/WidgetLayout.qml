@@ -82,6 +82,12 @@ QtObject {
     function edgeV(name, fallback) { const e = root.pos[name]; return e && e.edgeV ? e.edgeV : fallback }
     function x(name, fallback) { const e = root.pos[name]; return e && typeof e.x === "number" ? e.x : fallback }
     function y(name, fallback) { const e = root.pos[name]; return e && typeof e.y === "number" ? e.y : fallback }
+    /* How big the user dragged it, for the widgets that can be resized. A
+     * widget that has never been resized has no `size` and takes its designed
+     * one — the same rule the position takes, and for the same reason: a later
+     * change to a widget's default size has to reach everyone who never touched
+     * it. */
+    function size(name, fallback) { const e = root.pos[name]; return e && typeof e.size === "number" ? e.size : fallback }
 
     /*
      * Writes go through here rather than to pos[name] directly because `pos` is
@@ -91,9 +97,32 @@ QtObject {
      * Replacing the whole object is what makes the position a live binding.
      */
     function place(name, edgeH, edgeV, x, y) {
+        /* ⚠ MERGED OVER THE OLD ENTRY, NOT REPLACING IT. A resized widget keeps
+         * its size in the same record, and this used to build the entry from
+         * scratch — so dragging a clock you had resized threw the size away and
+         * the card snapped back to its designed one mid-gesture. Anything else
+         * that ever joins this record is preserved for free. */
         const next = {}
         for (const k in root.pos) next[k] = root.pos[k]
-        next[name] = { edgeH: edgeH, edgeV: edgeV, x: Math.round(x), y: Math.round(y) }
+        const was = root.pos[name] || {}
+        const now = {}
+        for (const k in was) now[k] = was[k]
+        now.edgeH = edgeH; now.edgeV = edgeV
+        now.x = Math.round(x); now.y = Math.round(y)
+        next[name] = now
+        root.pos = next
+    }
+
+    /* The other half: how big it was dragged to. Same merge rule — a widget
+     * that is resized must not lose where it was put. */
+    function resize(name, size) {
+        const next = {}
+        for (const k in root.pos) next[k] = root.pos[k]
+        const was = root.pos[name] || {}
+        const now = {}
+        for (const k in was) now[k] = was[k]
+        now.size = Math.round(size)
+        next[name] = now
         root.pos = next
     }
 

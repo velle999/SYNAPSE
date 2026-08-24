@@ -110,6 +110,35 @@ PanelWindow {
     // no card to put a shadow under.
     property bool fillWidth: false
     property bool chrome:    true
+
+    /*
+     * ── Resizing ────────────────────────────────────────────────────────────
+     *
+     * Off for every widget but the ones that opt in, because most of them have
+     * no honest answer to "bigger": a text readout has a font size, not a
+     * dimension, and stretching its card would leave the same glyphs in more
+     * space. A DIAL is the case that does — it is a drawing, and every part of
+     * it is a fraction of its own box.
+     *
+     * ONE number. See ResizeGrip: a widget with two axes to grow is a widget
+     * that needs its own handle, not this one lying about what it measures.
+     */
+    property bool resizable: false
+    /* The designed size, and the floor and ceiling a drag is held between. A
+     * widget that sets `resizable` sets these to whatever its drawing survives. */
+    property int  baseSize:  0
+    property int  minSize:   64
+    property int  maxSize:   480
+
+    /* What it is right now: the stored size if there is one, the designed size
+     * until then. Not a binding to WidgetLayout after the first read — the grip
+     * writes to it live, many times a second, and a binding would fight the
+     * pointer and win. */
+    property int  userSize:  win.clampSize(WidgetLayout.size(win.widgetId,
+                                                             win.baseSize))
+    function clampSize(v) {
+        return Math.max(win.minSize, Math.min(win.maxSize, Math.round(v)))
+    }
     property bool dragX:     true
     property bool dragY:     true
 
@@ -360,7 +389,21 @@ PanelWindow {
 
     // The grip is the whole input surface of a reporting widget. An interactive
     // one takes its card, which it was already doing.
-    mask: Region { item: win.interactive ? card : grip }
+    /*
+     * The grip is the whole input surface of a reporting widget. An interactive
+     * one takes its card, which it was already doing.
+     *
+     * ⚠ A RESIZABLE WIDGET NEEDS BOTH GRIPS IN THE MASK. Regions compose by
+     * nesting, and leaving the resize handle out means a corner that lights up
+     * on hover and cannot be pressed — the pointer never reaches it, because
+     * the compositor was told the surface does not accept input there. It is
+     * the exact failure the drag grip's own mask exists to avoid, one corner
+     * over.
+     */
+    mask: Region {
+        item: win.interactive ? card : grip
+        Region { item: win.resizable && !win.interactive ? sizeGrip : null }
+    }
 
     data: [
         /* ── The card ──────────────────────────────────────────────────────
@@ -620,6 +663,20 @@ PanelWindow {
                     top: parent.top; right: parent.right
                     topMargin: win.chrome ? 5 : 4
                     rightMargin: win.chrome ? 6 : 12
+                }
+            }
+
+            ResizeGrip {
+                id: sizeGrip
+                frame: win
+                visible: win.resizable
+                /* Above the body for the same reason the drag grip is: an
+                 * interactive widget fills its body with a MouseArea. */
+                z: 5
+                anchors {
+                    bottom: parent.bottom; left: parent.left
+                    bottomMargin: win.chrome ? 5 : 4
+                    leftMargin:   win.chrome ? 6 : 12
                 }
             }
 

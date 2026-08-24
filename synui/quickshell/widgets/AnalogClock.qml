@@ -45,11 +45,47 @@ WidgetFrame {
     // hairlines straight onto the wallpaper with nothing behind them.
     inkOnBackdrop: true
 
+    /*
+     * ── Frameless, and resizable by its corner ──────────────────────────────
+     *
+     * `chrome: false` drops the card, the header rule and the "CLOCK" label, so
+     * what is on the desktop is the dial and nothing else. A clock face is
+     * already a bounded, self-evident object — it is round, it is obviously a
+     * clock, and it has no reading that needs a caption. The frame was doing
+     * what a frame is for on the widgets that DO need it (a column of numbers
+     * has to be told where it ends) and nothing at all here.
+     *
+     * `inkOnBackdrop` above matters more with the card gone, not less: the
+     * hands are now hairlines straight onto the wallpaper with nothing behind
+     * them, so they have to be inked against what is actually there.
+     *
+     * ⚠ THE DIAL IS THE ONLY WIDGET THAT CAN HONESTLY RESIZE. Every part of it
+     * is a fraction of its own box — the rim, the ticks, the hand lengths and
+     * widths are all computed from `dial` below — so a bigger one is the same
+     * drawing at a bigger size. The reporting widgets have a font size rather
+     * than a dimension, and stretching their cards would put the same glyphs in
+     * more space, which is why `resizable` is opt-in and this is the only
+     * widget that opts in.
+     *
+     * The floor is where the hour ticks stop being distinguishable from the
+     * minute ones; the ceiling is a dial that still fits a 1080p desktop beside
+     * something else.
+     */
+    chrome: false
+
+    resizable: true
+    baseSize: 148
+    minSize: 96
+    maxSize: 420
+
     homeEdgeH: "right"; homeEdgeV: "top"
     homeMarginX: 22
     homeMarginY: 24
 
-    readonly property int dial: 148
+    /* What the whole face is drawn from. It was a constant; it is the frame's
+     * live size now, so a drag on the corner reaches every fraction below with
+     * no second number to keep in step. */
+    readonly property int dial: root.userSize
     cardWidth: dial
     bodyHeight: dial
 
@@ -85,7 +121,15 @@ WidgetFrame {
         // nothing until the next second ticked over.
         readonly property string repaintKey:
             root.face + "|" + root.hh + ":" + root.mm + ":" + root.ss +
-            "|" + root.seconds + "|" + root.ink + "|" + root.accent
+            "|" + root.seconds + "|" + root.ink + "|" + root.accent +
+            /* ⚠ THE SIZE IS ONE OF THEM NOW. It was a constant when this list
+             * was written; the corner grip changes it many times a second, and
+             * every stroke width in onPaint is scaled from it. A Canvas does
+             * repaint on resize, but this list's own rule is that anything the
+             * picture depends on is named here — and relying on the implicit
+             * one would mean the widths lagged the geometry by a frame during a
+             * drag, which is exactly when somebody is looking at it. */
+            "|" + root.dial
         onRepaintKeyChanged: requestPaint()
 
         onPaint: {
@@ -98,6 +142,26 @@ WidgetFrame {
             const r  = Math.min(w, h) / 2 - 6
             if (r <= 4) return
 
+            /*
+             * ⚠ EVERY STROKE WIDTH BELOW IS AN ABSOLUTE PIXEL COUNT, and the
+             * dial is resizable now — so they all go through `k`.
+             *
+             * The radii were always fractions of `r` and scaled for free. The
+             * WIDTHS were not: a 3px hour mark and a 10px neon glow are exactly
+             * right on the designed 148px face, hairlines on a 420px one and a
+             * blob on a 96px one. Left alone, dragging the corner would have
+             * produced a bigger clock that looked progressively worse, which is
+             * the kind of thing that reads as the resize being broken rather
+             * than as line widths being fixed.
+             *
+             * `k` is the ratio to the radius at the designed size, so every
+             * literal keeps meaning exactly what it does today and nothing had
+             * to be re-tuned. Floored at 1 device pixel: a mark thinner than
+             * that does not get thinner, it disappears.
+             */
+            const k = r / (root.baseSize / 2 - 6)
+            function px(v) { return Math.max(1, v * k) }
+
             const ink    = root.ink
             const dim    = root.inkDim
             const accent = root.accent
@@ -105,7 +169,7 @@ WidgetFrame {
 
             function stroke(a, b, width, colour, alpha, cap) {
                 ctx.beginPath()
-                ctx.lineWidth   = width
+                ctx.lineWidth   = px(width)
                 ctx.lineCap     = cap || "round"
                 ctx.strokeStyle = Qt.rgba(colour.r, colour.g, colour.b,
                                           alpha === undefined ? 1 : alpha)
@@ -126,7 +190,7 @@ WidgetFrame {
             /* ── The bezel ── */
             if (root.face !== "minimal") {
                 ctx.beginPath()
-                ctx.lineWidth   = neon ? 2.5 : 2
+                ctx.lineWidth   = px(neon ? 2.5 : 2)
                 ctx.strokeStyle = neon
                     ? Qt.rgba(accent.r, accent.g, accent.b, 0.85)
                     : Qt.rgba(ink.r, ink.g, ink.b, 0.30)
@@ -152,7 +216,7 @@ WidgetFrame {
                     const p = at(hours(i), r * 0.92)
                     ctx.beginPath()
                     ctx.fillStyle = Qt.rgba(dim.r, dim.g, dim.b, 0.55)
-                    ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2)
+                    ctx.arc(p.x, p.y, px(1.6), 0, Math.PI * 2)
                     ctx.fill()
                 }
             } else if (root.face === "classic") {
@@ -189,7 +253,7 @@ WidgetFrame {
                 // neon: a glow ring and a tick at each hour, in the accent.
                 for (let pass = 0; pass < 3; pass++) {
                     ctx.beginPath()
-                    ctx.lineWidth   = 10 - pass * 3
+                    ctx.lineWidth   = px(10 - pass * 3)
                     ctx.strokeStyle = Qt.rgba(accent.r, accent.g, accent.b,
                                               0.05 + pass * 0.06)
                     ctx.arc(cx, cy, r, 0, Math.PI * 2)
@@ -240,7 +304,7 @@ WidgetFrame {
                 const tail = at(sa + Math.PI, r * 0.20)
                 ctx.beginPath()
                 ctx.fillStyle = Qt.rgba(accent.r, accent.g, accent.b, 0.95)
-                ctx.arc(tail.x, tail.y, 2.6, 0, Math.PI * 2)
+                ctx.arc(tail.x, tail.y, px(2.6), 0, Math.PI * 2)
                 ctx.fill()
             }
 
@@ -249,12 +313,12 @@ WidgetFrame {
             ctx.fillStyle = root.seconds
                 ? Qt.rgba(accent.r, accent.g, accent.b, 1)
                 : Qt.rgba(ink.r, ink.g, ink.b, 0.95)
-            ctx.arc(cx, cy, root.seconds ? 3.4 : 3.0, 0, Math.PI * 2)
+            ctx.arc(cx, cy, px(root.seconds ? 3.4 : 3.0), 0, Math.PI * 2)
             ctx.fill()
             if (!neon) {
                 ctx.beginPath()
                 ctx.fillStyle = Qt.rgba(0, 0, 0, 0.55)
-                ctx.arc(cx, cy, 1.3, 0, Math.PI * 2)
+                ctx.arc(cx, cy, px(1.3), 0, Math.PI * 2)
                 ctx.fill()
             }
         }
