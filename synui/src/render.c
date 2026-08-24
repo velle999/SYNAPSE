@@ -590,6 +590,42 @@ static void panel_effective_surface(float out[3], double *lum_out)
         syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]), a, back);
 }
 
+/* The theme's OWN panel surface, which is the yardstick every glass correction
+ * is measured against — see syn_glass_restore(). Not the composite: that is
+ * g_panel_lum, and the whole point is the difference between the two. */
+static double panel_own_lum(void)
+{
+    return syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
+}
+
+/*
+ * One colour, corrected for the surface this panel is presenting.
+ *
+ * TWO correctors in a fixed order, and both are needed because each covers a
+ * case the other cannot:
+ *
+ *   1. syn_contrast_fix() — the pale-surface corrector. Darkens, and only on a
+ *      pale surface. It is what makes XP's beige and 95's silver readable and
+ *      it is deliberately unchanged: panel_contrast_test asserts that it moves
+ *      nothing on a dark theme, including the rice palettes that are already
+ *      under 4.5:1 because their authors shipped them that way.
+ *   2. syn_glass_restore() — the composite corrector. Runs in whichever
+ *      direction has room, and asks only for what the theme's own surface
+ *      already gives, so it is a no-op on every opaque panel by arithmetic.
+ *
+ * ⚠ THE SECOND IS WHAT WAS MISSING, and the gap between them is exactly the
+ * mid-tone. A glass panel over a bright window composites to the middle, which
+ * is neither pale (so 1 sits out) nor the theme's own surface (so the palette's
+ * own choices no longer describe it). Measured on a stock Prism desktop: the
+ * accent at 1.49:1 and the hint line at 1.24:1, on a panel whose ink was
+ * clearing 4.75:1 because the alpha walk asks about the ink and nothing else.
+ */
+static void panel_fix_color(const float in[3], float out[3])
+{
+    syn_contrast_fix(in, out, g_panel_lum);
+    syn_glass_restore(out, out, panel_own_lum(), g_panel_lum, CONTRAST_TARGET);
+}
+
 static void panel_legibility_recompute(void)
 {
     float surf[3];
@@ -597,13 +633,21 @@ static void panel_legibility_recompute(void)
     panel_effective_surface(surf, &lum);
 
     g_panel_lum = lum;               /* what set_hue() corrects against */
-    syn_contrast_fix(g_panel_accent, g_panel_accent_ink, lum);
+    panel_fix_color(g_panel_accent, g_panel_accent_ink);
     for (int i = 0; i < STAT_COUNT; i++)
-        syn_contrast_fix(stat_dark[i], g_stat[i], lum);
+        panel_fix_color(stat_dark[i], g_stat[i]);
     /* The ladder's floor against the same composite, so a rung that has become
      * illegible over a bright wallpaper is lifted exactly as it is on a pale
      * theme — one mechanism, two causes of the same problem. */
     g_ink_floor = syn_ink_floor(surf, g_panel_ink, INK_TEXT_MIN);
+    /* …and the composite's own floor over the top of it. The line above asks
+     * the PALE question of a stand-in surface; this asks whether the ladder
+     * still separates from what the panel is really presenting, which on a
+     * mid-tone composite is a different and usually stricter answer. The higher
+     * of the two wins — neither is allowed to lower the other. */
+    double gf = syn_ink_floor_glass(g_panel_bg, g_panel_ink, INK_TEXT, lum,
+                                    INK_TEXT_MIN);
+    if (gf > g_ink_floor) g_ink_floor = gf;
 }
 
 /* cairo_set_source_rgba with the active panel accent at alpha `a`, corrected for
@@ -638,7 +682,9 @@ static inline void set_hue(cairo_t *cr, double r, double g, double b, double a)
 {
     const float in[3] = { (float)r, (float)g, (float)b };
     float out[3];
-    syn_contrast_fix(in, out, g_panel_lum);
+    /* Both correctors, in panel_fix_color()'s order — a literal drawn straight
+     * onto a glass panel is in exactly the position the accent was. */
+    panel_fix_color(in, out);
     cairo_set_source_rgba(cr, out[0], out[1], out[2], a);
 }
 

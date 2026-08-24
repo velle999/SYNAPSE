@@ -352,3 +352,123 @@ void syn_mark_ink(const float surface[3], double alpha,
             out->accent[c] += (out->ink[c] - out->accent[c]) * 0.25f;
     }
 }
+
+/* ── A panel drawn on glass ─────────────────────────────────
+ *
+ * The header carries the argument. What is here is the arithmetic, and the one
+ * thing worth pointing at is that both functions START by asking whether there
+ * is anything to do — and on an opaque panel the answer is always no, because
+ * the composite and the theme's surface are the same number.
+ */
+
+/* The contrast a colour earns against a surface, both as luminances. */
+static double col_on(const float c[3], double surface_lum)
+{
+    return syn_contrast_lum(syn_rel_luminance(c[0], c[1], c[2]), surface_lum);
+}
+
+/* One rung of the ink ladder, as set_ink() mixes it. */
+static void ladder_at(float out[3], const float bg[3], const float ink[3],
+                      double level)
+{
+    for (int i = 0; i < 3; i++)
+        out[i] = (float)(bg[i] + (ink[i] - bg[i]) * level);
+}
+
+void syn_glass_restore(const float in[3], float out[3],
+                       double own_lum, double surface_lum, double target)
+{
+    for (int i = 0; i < 3; i++) out[i] = in[i];
+
+    /* Never more than the theme itself delivers on its own panels. This is the
+     * line that makes the whole thing a no-op off glass, and the line that
+     * stops it repainting a rice whose palette is low-contrast on purpose. */
+    double goal = col_on(in, own_lum);
+    if (goal > target) goal = target;
+
+    double have = col_on(in, surface_lum);
+    if (have >= goal) return;
+
+    /*
+     * Which way is out. On a pale composite it is down and on a dark one up,
+     * and in the middle it is whichever pole is further from the surface —
+     * asked as a contrast rather than as a threshold, so there is no band where
+     * the answer is arbitrary.
+     */
+    bool up = syn_contrast_lum(1.0, surface_lum) >
+              syn_contrast_lum(0.0, surface_lum);
+
+    /*
+     * Bisect the walk toward that pole. Monotonic in t, so twelve iterations
+     * put it within a thousandth — the same shape and the same count as
+     * syn_contrast_fix()'s walk toward black.
+     *
+     * Toward white is `c + (1 - c) * t` and toward black `c * (1 - t)`. Both
+     * move every channel together, which is what holds the hue: the wallpaper's
+     * #D66318 comes back a lighter orange, not a grey.
+     */
+    double lo = 0.0, hi = 1.0;
+    for (int it = 0; it < 12; it++) {
+        double t = (lo + hi) / 2.0;
+        float c[3];
+        for (int i = 0; i < 3; i++)
+            c[i] = up ? (float)(in[i] + (1.0 - in[i]) * t)
+                      : (float)(in[i] * (1.0 - t));
+        if (col_on(c, surface_lum) >= goal) hi = t;
+        else                                lo = t;
+    }
+    for (int i = 0; i < 3; i++)
+        out[i] = up ? (float)(in[i] + (1.0 - in[i]) * hi)
+                    : (float)(in[i] * (1.0 - hi));
+}
+
+double syn_ink_floor_glass(const float bg[3], const float ink[3],
+                           double ref_level, double surface_lum, double target)
+{
+    double own = syn_rel_luminance(bg[0], bg[1], bg[2]);
+
+    /* The goal: what the dimmest text rung earns on the theme's own surface,
+     * capped at the target. On an opaque panel this is what that rung already
+     * earns here, so the walk below settles at or under ref_level and the clamp
+     * in set_ink() is a no-op. */
+    float ref[3];
+    ladder_at(ref, bg, ink, ref_level);
+    double goal = syn_contrast_lum(syn_rel_luminance(ref[0], ref[1], ref[2]), own);
+    if (goal > target) goal = target;
+
+    if (col_on(ref, surface_lum) >= goal) return 0.0;
+
+    /*
+     * ⚠ NOT MONOTONIC, AND THE SCAN STARTS AT ref_level BECAUSE OF IT.
+     *
+     * The ladder runs from the panel's own background colour to its ink. On an
+     * opaque panel the bottom of that ladder IS the surface, so contrast rises
+     * from 1:1 all the way up and any search finds the same answer. On a
+     * MID-TONE composite it does not: the theme's background is no longer what
+     * the text is landing on, so level 0 has real contrast of its own — a
+     * near-black bg over an L=0.135 composite measures 2.87:1 — and the curve
+     * dips to 1:1 somewhere in the middle and climbs again.
+     *
+     * A scan from zero therefore "succeeds" immediately and returns 0, which is
+     * a floor that clamps nothing. That is exactly what the first draft did, and
+     * the legibility test caught it: the accent was fixed and every dim rung was
+     * left where it was. A bisect would have been worse — it assumes one
+     * crossing and can settle on either side of the dip.
+     *
+     * Starting at ref_level keeps the ladder's meaning: more ink is more
+     * contrast, and a floor is a rung you are lifted TO, never one you are
+     * dropped to. 200 steps of 0.005, taking the first level that clears — the
+     * smallest, which is what the clamp wants, and which leaves every rung
+     * already above it exactly where the theme put it.
+     */
+    for (int i = 0; i <= 200; i++) {
+        double t = ref_level + (1.0 - ref_level) * (i / 200.0);
+        float c[3];
+        ladder_at(c, bg, ink, t);
+        if (col_on(c, surface_lum) >= goal) return t;
+    }
+    /* Not reachable anywhere on the ladder: the full-strength ink is the best
+     * the palette has, which is the honest answer rather than a colour from
+     * outside the theme. */
+    return 1.0;
+}

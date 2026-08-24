@@ -273,4 +273,73 @@ void syn_mark_ink(const float surface[3], double alpha,
                   const syn_backdrop_t *bd, double target,
                   syn_mark_ink_t *out);
 
+/* ── A PANEL drawn on glass ──────────────────────────────────
+ *
+ * ⚠ syn_contrast_fix() AND syn_ink_floor() BOTH SIT OUT ON A MID-TONE SURFACE,
+ * and until glass there was no such thing. Each opens with the same line —
+ * `if (lum <= SURFACE_PALE) return` — because each was written when a panel's
+ * surface was the THEME's own opaque colour, which is either dark (the ink is
+ * near-white, everything clears, nothing to do) or pale (correct downward). A
+ * glass panel's effective surface is neither: it is the theme's colour
+ * composited over whatever is behind the panel, and over a bright window that
+ * lands squarely in the middle.
+ *
+ * Measured on a stock Prism desktop with the shortcuts panel over a white web
+ * page: the surface composites to L=0.135, and on it the wallpaper accent
+ * measured 1.49:1, the hint line 1.24:1 and the count 1.70:1 — text that is on
+ * screen and cannot be read. Both correctors were doing exactly what they say:
+ * 0.135 is not pale, so both returned at the first line.
+ *
+ * ── The rule, and why it is this one ─────────────────────────
+ *
+ * EVERY COLOUR MUST REACH AT LEAST THE CONTRAST IT WOULD HAVE HAD ON THE
+ * THEME'S OWN OPAQUE SURFACE, capped at its ordinary target.
+ *
+ * Relative, not absolute, and that is the whole of it being safe:
+ *
+ *   * On an opaque panel the composite IS the theme's surface, so the goal is
+ *     already met by construction and NOTHING moves. Every desktop that is not
+ *     glass is untouched, by arithmetic rather than by a gate.
+ *   * On glass it restores precisely what the glass took away and never asks
+ *     for more than the theme itself delivers. An absolute 4.5 would demand
+ *     more of a glass Gruvbox than Gruvbox gives on its own panels — which is
+ *     the "fixing four working dark themes to settle a complaint about two
+ *     light ones" that panel_contrast_test exists to forbid.
+ *   * It runs in whichever direction has headroom. syn_contrast_fix() only ever
+ *     darkens, because on a pale surface that is the only way out; on a
+ *     mid-tone composite the way out is usually up, and a corrector that can
+ *     only go down has nothing to offer a dark theme at all.
+ */
+
+/*
+ * One colour — an accent, a status hue, a badge — restored onto the composite.
+ *
+ * `own_lum` is the theme's own panel surface and `surface_lum` the composite the
+ * panel is actually presenting. Channels are scaled together toward whichever
+ * pole has room, so hue and saturation hold and only value moves: the same
+ * property syn_contrast_fix() is built on, and the reason the wallpaper's orange
+ * comes back as a lighter orange rather than as white.
+ *
+ * In-place is allowed (`in` and `out` may be the same array).
+ */
+void syn_glass_restore(const float in[3], float out[3],
+                       double own_lum, double surface_lum, double target);
+
+/*
+ * …and the same for the ink LADDER, which is not one colour but a family of
+ * them: a position between the surface and the ink, so every rung moves when the
+ * surface does.
+ *
+ * Returns the smallest level that reaches the goal on `surface_lum`, for the
+ * clamp set_ink() already applies — the same contract as syn_ink_floor(), with
+ * the surface it must clear against separated from the two ends of the ladder.
+ * `ref_level` is the rung the goal is taken from: the dimmest thing that counts
+ * as text, so the promise is "the dimmest text is at least as readable as the
+ * dimmest text has always been".
+ *
+ * 0 when nothing needs clamping, which is what an opaque panel always gets.
+ */
+double syn_ink_floor_glass(const float bg[3], const float ink[3],
+                           double ref_level, double surface_lum, double target);
+
 #endif /* SYNUI_CONTRAST_H */

@@ -1034,7 +1034,56 @@ pkgver=0.1.0
 #   answering UNMEASURED, which is the value that hands the theme's ink back
 #   unchanged — so every geometry assertion in them is still made against the
 #   colours it was written for.
-pkgrel=460
+# 461: panel text was illegible on glass, and the two correctors that exist to
+#   stop that were both sitting out. Reported as the emoji picker's
+#   unhighlighted categories and the keyboard shortcuts panel being hard to
+#   read; measured off the screenshot, on stock Prism with the panel over a
+#   white web page, the surface composites to L=0.135 and on it the accent
+#   lands at 1.52:1, the hint line (INK_DIM) at 1.26:1 and the count
+#   (INK_LABEL) at 1.70:1 — while the panel's own INK cleared 4.75:1.
+#   ⚠ ONE ROOT CAUSE, AND IT IS A SHARED FIRST LINE. syn_contrast_fix() and
+#   syn_ink_floor() both open `if (lum <= SURFACE_PALE) return`, because both
+#   were written when a panel surface was the THEME's opaque colour: dark
+#   (nothing to do) or pale (correct downward). A glass panel's effective
+#   surface is neither — it is the theme's colour composited over whatever the
+#   panel opened on top of, which over a bright window is the middle. Both
+#   returned at the first line and every derived colour kept its dark-theme
+#   tuning on a mid-tone surface.
+#   ⚠ AND THE ALPHA WALK CANNOT SEE IT. panel_alpha_floor() raises a glass
+#   panel until the FULL-STRENGTH ink clears CONTRAST_TARGET and asks about
+#   nothing else, so it settles on a surface chosen to suit exactly one of the
+#   colours the panel draws. That is why the descriptions read and the key
+#   combos did not.
+#   syn_glass_restore() + syn_ink_floor_glass() in contrast.c, on one rule:
+#   EVERY COLOUR REACHES AT LEAST THE CONTRAST IT WOULD HAVE HAD ON THE THEME'S
+#   OWN OPAQUE SURFACE, capped at its ordinary target. Relative and not
+#   absolute, which is what makes it safe — on an opaque panel the composite IS
+#   the theme's surface, so the goal is met by construction and nothing moves;
+#   on glass it restores precisely what the glass took away and never asks for
+#   more than the theme itself delivers. An absolute 4.5 would demand more of a
+#   glass Gruvbox than Gruvbox gives on its own panels, which is the "repaint
+#   four working dark themes to settle a complaint about two light ones" that
+#   panel_contrast_test forbids. It also runs in whichever direction has room;
+#   syn_contrast_fix() only ever darkens, which offers a dark theme nothing.
+#   ⚠ syn_ink_floor_glass() SCANS UPWARD FROM ref_level AND MUST. The ladder is
+#   not monotonic against a mid-tone composite: the panel's own background
+#   colour has real contrast of its own there (2.87:1 on this surface), so a
+#   scan from zero returns 0 and clamps nothing. The first draft did exactly
+#   that and panel_legibility_test caught it — the accent was fixed and every
+#   dim rung was left where it was. A bisect would be worse: it assumes one
+#   crossing and can settle on either side of the dip.
+#   Measured result on the reported panel: accent 1.52:1 -> 4.50:1 (and
+#   #D66318 comes back #E2905B — a lighter orange, not a grey, because the
+#   channels scale together), INK_DIM 1.26:1 -> 2.47:1 with the floor lifting
+#   that rung from 0.44 to 0.70. The emoji picker's unhighlighted categories
+#   are the same INK_DIM and are fixed by the same line.
+#   panel_legibility_test is the new gate: 15 themes x 5 backdrops x 4 tuned
+#   alphas, the alpha walk modelled FIRST (leaving it out is what made the
+#   first draft report every glass case as broken), then every text rung, the
+#   accent and the four status colours — 6000 pairs, 450 of them on glass. Its
+#   second claim is the load-bearing one: on an OPAQUE panel every theme must
+#   come back bit-for-bit.
+pkgrel=461
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

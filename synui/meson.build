@@ -1020,6 +1020,25 @@ test('panel_contrast', panel_contrast_test)
 # and a legibility rescue that repaints them is worse than the bug. Every preset
 # that still reads must come back bit-for-bit. Pure arithmetic, so it links
 # contrast.c alone and needs no compositor.
+# Can you actually READ a panel — on every theme, over everything a panel can
+# open on top of. panel_contrast_test asks the same question of the theme's OWN
+# panel surface and could not have caught this: every panel is glass now, and a
+# glass panel's surface is the theme's colour composited over whatever it opened
+# over, which on a desktop is a window far more often than the wallpaper.
+#
+# Reported as the emoji picker's categories and the keyboard shortcuts panel
+# being hard to read. Measured off the screenshot on stock Prism over a white
+# web page, the panel composites to L=0.135 and the accent lands at 1.49:1 —
+# because syn_contrast_fix() and syn_ink_floor() both open with
+# `if (lum <= SURFACE_PALE) return`, and a mid-tone is neither pale nor the
+# theme's own surface. Pure arithmetic; contrast.c alone.
+panel_legibility_test = executable('panel_legibility_test',
+  ['tests/panel_legibility_test.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('panel_legibility', panel_legibility_test)
+
 dock_ink_test = executable('dock_ink_test',
   ['tests/dock_ink_test.c', 'src/contrast.c'],
   include_directories : include_directories('src'),
