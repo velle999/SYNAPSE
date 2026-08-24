@@ -4401,6 +4401,50 @@ static inline float theme_bar_alpha(const syn_config_t *cfg)
     return -1.0f;
 }
 
+/* The dock's compiled default: a slab with a hint of the desktop through it,
+ * for the eleven presets that are not glass. Named because two files need it. */
+#define SYN_DOCK_ALPHA_DEFAULT 0.72f
+
+/*
+ * How opaque this desktop's DOCK should be, or negative for "this theme has no
+ * opinion" — the exact shape of theme_bar_alpha() above, and deliberately so.
+ *
+ * ⚠ THE DOCK HAD NO SUCH QUESTION AND THAT IS WHY `auto` WAS NOT AUTO. Every
+ * other surface on a glass theme resolves its own alpha from the theme — the
+ * bar through theme_bar_alpha(), the windows through the preset's own
+ * active_opacity, the panels through syn_glass_resolve() — and the dock simply
+ * kept its compiled 0.72 whatever theme was on screen. So a Prism desktop that
+ * had not been handed an explicit glass level came up with a see-through bar,
+ * see-through panels, see-through windows and a solid slab of a dock: three
+ * quarters of a design. It is the only reason the house desktop had to write a
+ * number down.
+ *
+ * ⚠ THE TWO PRISMS ONLY, NOT EVERY GLASS THEME. macOS 26 is glass and its BAR
+ * asks for nothing at all (0.0 above), but a dock body at 0.0 does not read as
+ * a clear dock — the icons are painted over it at full opacity, so the backdrop
+ * blur masks to the ICONS and frosts each one instead of the slab. Tahoe's dock
+ * is a solid pane and stays one.
+ */
+static inline float theme_dock_alpha(const syn_config_t *cfg)
+{
+    if (cfg->theme == SYN_THEME_PRISM ||
+        cfg->theme == SYN_THEME_PRISM_LIGHT) return SYN_BAR_ALPHA_FROSTED;
+    return -1.0f;
+}
+
+/*
+ * What the dock is ASKED to draw at. The user's row wins where it holds an
+ * opinion, the theme's answer stands where it does not, and the compiled
+ * default is what is left — the same three-step order syn_bar_alpha_asked()
+ * takes, so the two strips cannot come to be resolved by different rules.
+ */
+static inline float syn_dock_alpha_asked(const syn_config_t *cfg)
+{
+    if (cfg->dock_opacity >= 0.0f) return cfg->dock_opacity;
+    float t = theme_dock_alpha(cfg);
+    return t >= 0.0f ? t : SYN_DOCK_ALPHA_DEFAULT;
+}
+
 /*
  * What the bar is ASKED to draw at, before the wallpaper gets a say — the C twin
  * of Theme.qml's `barAlphaAsked`, in the same order and for the same reason.
@@ -4651,12 +4695,24 @@ static inline float syn_glass_foot_alpha(const syn_config_t *cfg)
  * Nothing has NO surface any more except by asking outright: `bar_opacity = 0`,
  * the row dragged to 0.00, or Appearance ▸ Make it all clear.
  */
+/* The curve itself, at any level.
+ *
+ * Split out because AUTO has to be able to ask it too: "what a glass theme does
+ * when nobody chose a level" is defined as the curve at
+ * SYN_GLASS_PANEL_DEFAULT, and computing that meant either a scratch config or
+ * a second copy of the arithmetic. A second copy is how auto and explicit came
+ * to disagree in the first place. */
+static inline float syn_glass_bar_alpha_at(int level)
+{
+    float t = (float)level / 100.0f;
+    float a = 0.95f - 0.90f * t;
+    return a < SYN_BAR_ALPHA_FROSTED ? SYN_BAR_ALPHA_FROSTED : a;
+}
+
 static inline float syn_glass_bar_alpha(const syn_config_t *cfg)
 {
     if (!syn_glass_set(cfg)) return -1.0f;
-    float t = (float)cfg->glass_level / 100.0f;
-    float a = 0.95f - 0.90f * t;
-    return a < SYN_BAR_ALPHA_FROSTED ? SYN_BAR_ALPHA_FROSTED : a;
+    return syn_glass_bar_alpha_at(cfg->glass_level);
 }
 
 /*
@@ -4817,7 +4873,7 @@ static inline syn_glass_t syn_glass_resolve(const syn_config_t *cfg)
     }
 
     /*
-     * And with neither, the tuned ladder off the THEME.
+     * And with neither: what a GLASS theme does when nobody chose a level.
      *
      * Unset means "nobody chose a level", never "nobody wanted glass" — the
      * preset already answered the second question, and gating on the level
@@ -4826,11 +4882,19 @@ static inline syn_glass_t syn_glass_resolve(const syn_config_t *cfg)
      * A theme that is neither glass nor given a level keeps the opacities it
      * was tuned with, which is the twelve retro presets and is why they see
      * nothing of any of this.
+     *
+     * ⚠ THE SAME ANSWER THE EXPLICIT LEVEL GIVES, AND THAT IS THE WHOLE POINT.
+     * This used to be a tuned LADDER — a multiplier on each panel's designed
+     * alpha — while the arm above returned an absolute. So `auto` and
+     * `glass_level = 100` produced visibly different desktops on the same
+     * theme, which is why the house desktop had to ship the number written down
+     * to get the look it was designed with. Two paths to "how glassy is this
+     * desktop" that disagree is one path too many; auto is now defined as the
+     * curve at SYN_GLASS_PANEL_DEFAULT and nothing else.
      */
     if (!theme_is_glass(cfg)) return off;
 
-    syn_glass_t g = { -1.0f,
-                      1.00f - 0.30f * (SYN_GLASS_PANEL_DEFAULT / 100.0f) };
+    syn_glass_t g = { syn_glass_bar_alpha_at(SYN_GLASS_PANEL_DEFAULT), 1.0f };
     return g;
 }
 

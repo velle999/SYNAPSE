@@ -1372,7 +1372,9 @@ static void dock_paint_body(syn_server_t *s, cairo_t *cr,
      * them a row set to 0.00 drew a body you could still see. The icons are
      * painted over this at full opacity, so a zero body is a row of icons on the
      * wallpaper — see the note on dock_opacity in config.c. */
-    double a = s->config.dock_opacity;
+    /* The RESOLVED ask, not the raw field: -1 there means "the theme decides"
+     * and painting it would be a body at no alpha with a bright rim round it. */
+    double a = syn_dock_alpha_asked(&s->config);
     if (a < 0.0) a = 0.0;
     if (a > 1.0) a = 1.0;
 
@@ -1660,7 +1662,7 @@ static void dock_ink_resolve(syn_server_t *s, const dock_metrics_t *m,
     syn_backdrop_t bd;
     wallpaper_backdrop_for_box(s, &slab, DOCK_INK_MIN, &bd);
 
-    syn_mark_ink(s->config.panel_bg, s->config.dock_opacity,
+    syn_mark_ink(s->config.panel_bg, syn_dock_alpha_asked(&s->config),
                  s->config.panel_ink, s->config.panel_accent,
                  &bd, DOCK_INK_MIN, out);
 }

@@ -824,8 +824,32 @@ static void theme_state_save(syn_server_t *s)
             s->config.glass_legibility ? "on" : "off");
     if (syn_glass_drives(&s->config, SYN_GLASS_PIN_BAR))
         fprintf(f, "bar_opacity=%.2f\n", syn_glass_bar_alpha(&s->config));
-    if (syn_glass_drives(&s->config, SYN_GLASS_PIN_DOCK))
+
+    if (syn_glass_drives(&s->config, SYN_GLASS_PIN_DOCK)) {
         fprintf(f, "dock_opacity=%.2f\n", syn_glass_dock_alpha(&s->config));
+    } else if (s->config.dock_opacity < 0.0f) {
+        /*
+         * ⚠ AND THE THEME'S OWN ANSWER WHEN THERE IS NO SLIDER, which is the
+         * other half of making `auto` mean something.
+         *
+         * The dock body is drawn by the compositor and resolves
+         * theme_dock_alpha() in-process, but the desktop WIDGETS are
+         * quickshell's and take the dock's number verbatim (Theme.widgetAlpha
+         * is BarConfig.dockOpacity). BarConfig reads theme.state, then
+         * settings.state, then synuirc — and on `auto` none of the three used to
+         * carry a dock_opacity at all, so the widgets fell back to their own
+         * built-in 0.72 while the dock beside them drew at 0.05. One desktop,
+         * two amounts of glass, which is the thing this export was added to end.
+         *
+         * ⚠ ONLY WHILE THE ROW IS GENUINELY UNSET. theme.state is read FIRST by
+         * BarConfig, so writing this unconditionally would override a number the
+         * user put in settings.state — and a row that cannot be set is worse
+         * than one that does not follow the theme. A parsed dock_opacity is >= 0
+         * by construction, so `< 0` IS "nobody has chosen".
+         */
+        float t = theme_dock_alpha(&s->config);
+        if (t >= 0.0f) fprintf(f, "dock_opacity=%.2f\n", t);
+    }
     fclose(f);
 }
 

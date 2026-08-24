@@ -134,20 +134,44 @@ int main(void)
         syn_config_t c = cfg_make(SYN_THEME_PRISM, 1, 1, SYN_GLASS_UNSET);
         syn_glass_t  g = syn_glass_resolve(&c);
 
-        CHECK(g.factor < 1.0f,
+        /*
+         * ⚠ THIS USED TO ASSERT A `factor`, AND THE CHANGE IS THE WHOLE FIX.
+         *
+         * Auto on a glass theme returned a tuned LADDER — a multiplier on each
+         * panel's designed alpha — while an explicit level returned an
+         * ABSOLUTE. So `auto` and `glass_level = 100` produced visibly
+         * different desktops on the same theme, and the house desktop had to
+         * ship the number written down to get the look it was drawn for. Auto
+         * is defined as the curve at SYN_GLASS_PANEL_DEFAULT now and nothing
+         * else, so it comes back as an alpha like every other answer here.
+         *
+         * `syn_glass_active` is what "is this glass" actually means, and it
+         * passed throughout — it reads the alpha first. Only the field the
+         * answer arrives in changed.
+         */
+        CHECK(syn_glass_active(&c), "PRISM should be drawing glass");
+        CHECK(g.alpha >= 0.0f,
               "PRISM without a glass_level must still be glass — the theme "
               "manager never writes that key");
-        CHECK(syn_glass_active(&c), "PRISM should be drawing glass");
-        /* Pinned to the default level's arithmetic, not merely "less than 1":
-         * a fallback that silently became 5 would pass a looser assertion and
-         * look identical to no fallback at all. */
-        CHECK(near(g.factor, 1.00f - 0.30f * (SYN_GLASS_PANEL_DEFAULT / 100.0f)),
-              "the fallback must be SYN_GLASS_PANEL_DEFAULT, got %.3f", g.factor);
+        /* Pinned to the default level's own arithmetic, not merely "less than
+         * 1": a fallback that silently became 5 would pass a looser assertion
+         * and look identical to no fallback at all. */
+        CHECK(near(g.alpha, syn_glass_bar_alpha_at(SYN_GLASS_PANEL_DEFAULT)),
+              "the fallback must be SYN_GLASS_PANEL_DEFAULT, got %.3f", g.alpha);
+
+        /* ⛔ AND IT IS THE SAME ANSWER AN EXPLICIT LEVEL GIVES. This is the
+         * assertion the bug would have failed and the reason the fresh-install
+         * synuirc can go back to `auto`: if these two ever diverge again,
+         * somebody has to write a number down to get the house look. */
+        syn_config_t x = cfg_make(SYN_THEME_PRISM, 1, 1, SYN_GLASS_PANEL_DEFAULT);
+        CHECK(near(syn_glass_resolve(&x).alpha, g.alpha),
+              "auto must resolve to exactly what the explicit level does "
+              "(auto %.3f, explicit %.3f)", g.alpha, syn_glass_resolve(&x).alpha);
 
         /* And the same for the other glass preset, so this is a property of
          * theme_is_glass() rather than a special case for the house theme. */
         syn_config_t m = cfg_make(SYN_THEME_MACOS26, 1, 1, SYN_GLASS_UNSET);
-        CHECK(near(syn_glass_resolve(&m).factor, g.factor),
+        CHECK(near(syn_glass_resolve(&m).alpha, g.alpha),
               "macOS 26 must get the same fallback as Prism");
     }
 
@@ -194,18 +218,39 @@ int main(void)
               "…and every panel draws solid");
     }
 
-    /* ── 5. The ladder between panels survives the fallback ─── */
+    /* ── 5. AUTO LOSES THE LADDER TOO ─────────────────────────
+     *
+     * ⚠ THIS ASSERTED THE OPPOSITE, AND IT WAS THE LAST PLACE THE LADDER
+     * SURVIVED — which is exactly what made `auto` not auto.
+     *
+     * Section 3 above already pins the rule for a desktop that HAS an answer:
+     * every panel lands on the bar's number whatever it was tuned at, and that
+     * is called "the deliberate loss of the ladder" there in as many words. The
+     * complaint it settles is a menu and the bar at two different alphas.
+     *
+     * The fallback was the one arm still returning a multiplier, so a Prism
+     * desktop on `auto` kept its tuned order while the same desktop with
+     * `glass_level = 100` collapsed to one number — two paths to "how glassy is
+     * this desktop" that disagree, and the reason a fresh install had to ship
+     * the level written down to get the look the theme was drawn for.
+     *
+     * So the ladder is gone here as well, and what is asserted is the property
+     * that replaced it: every panel matches, and it matches the SAME number the
+     * explicit level gives.
+     */
     {
         syn_config_t c = cfg_make(SYN_THEME_PRISM, 1, 1, SYN_GLASS_UNSET);
-        c.bar_opacity = -1.0f;          /* no desktop-wide answer: use the ladder */
+        c.bar_opacity = -1.0f;          /* no desktop-wide answer: the theme's */
         syn_glass_t g = syn_glass_resolve(&c);
         float menu  = syn_glass_apply(g, A_MENU);
         float mid   = syn_glass_apply(g, A_MID);
         float dense = syn_glass_apply(g, A_DENSE);
 
-        CHECK(menu < mid && mid < dense,
-              "the tuned order must survive glass: %.3f / %.3f / %.3f",
+        CHECK(near(menu, mid) && near(mid, dense),
+              "every panel must land on one number: %.3f / %.3f / %.3f",
               menu, mid, dense);
+        CHECK(near(dense, syn_glass_bar_alpha_at(SYN_GLASS_PANEL_DEFAULT)),
+              "…and that number is the default level's, got %.3f", dense);
         CHECK(dense < A_DENSE, "the densest panel must actually become glass");
     }
 

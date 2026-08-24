@@ -1256,7 +1256,50 @@ pkgver=0.1.0
 #   never been resized has no `size` and takes its designed one — the same rule
 #   the position takes, so a later change to a default reaches everyone who never
 #   touched it.
-pkgrel=466
+# 467: `auto` was not auto, which is the only reason 459 had to write a glass
+#   level into a fresh install's synuirc. Two halves were missing, and the
+#   desktop that came out of them was three quarters of a design.
+#   ⚠ THE PANELS FELL THROUGH TO A LADDER WHERE AN EXPLICIT LEVEL RETURNED AN
+#   ABSOLUTE. syn_glass_resolve()'s auto arm handed back a multiplier on each
+#   panel's designed alpha; the explicit arm handed back syn_glass_bar_alpha().
+#   So `auto` and `glass_level = 100` produced visibly different desktops on the
+#   same theme. Auto is now defined as the curve at SYN_GLASS_PANEL_DEFAULT and
+#   nothing else — one call, shared with the explicit arm through
+#   syn_glass_bar_alpha_at(), because a second copy of that arithmetic is how
+#   they came to disagree in the first place.
+#   ⚠ AND THE DOCK HAD NO WAY TO ASK ITS THEME AT ALL. Every other surface
+#   resolves one — the bar through theme_bar_alpha(), the windows through the
+#   preset's own opacity pair, the panels through syn_glass_resolve() — and the
+#   dock kept its compiled 0.72 whatever was on screen. theme_dock_alpha() is
+#   the question it was missing and dock_opacity takes -1 = "the theme decides"
+#   like bar_opacity always has; SYN_DOCK_ALPHA_DEFAULT is that same 0.72 for
+#   the eleven presets that are not glass.
+#   ⚠ THE TWO PRISMS ONLY, NOT EVERY GLASS THEME. macOS 26's BAR asks for
+#   nothing at all, but a dock BODY at 0.00 does not read as a clear dock: the
+#   icons are painted over it at full opacity, so the backdrop blur masks to the
+#   ICONS and frosts each one instead of the slab. Tahoe's dock stays a pane.
+#   theme.state now carries the dock's resolved alpha when the row is genuinely
+#   unset, because the widgets are quickshell and take the dock's number
+#   verbatim — without it they sat at their built-in 0.72 beside a dock the
+#   compositor had drawn at 0.05. Guarded on `< 0` so it can never override a
+#   number the user put in settings.state, which theme.state is read before.
+#   Verified with a hermetic probe against the real parser: auto and
+#   glass_level = 100 now resolve identically on Prism (bar 0.05, dock 0.05,
+#   panels 0.05) while Gruvbox keeps 0.72 and no glass at all. syn-install 94
+#   puts the fresh-install synuirc back to `glass_level = auto` and drops both
+#   the window opacity and the pin it needed — with no level set, both Prisms'
+#   own 0.90/0.84 preset pair stands on its own.
+# 468: ⛔ THE BAR DID NOT LOAD AT ALL, from 464. The plugin registration added a
+#   second `Component.onCompleted` to Bar.qml, which already had one, and QML
+#   refuses a property assigned twice by failing the WHOLE type:
+#   `Property value set multiple times` -> `Type Bar unavailable` -> no bar and
+#   no start menu, from a package that built and installed cleanly.
+#   Folded into the handler that was already there. ⚠ CAUGHT BY bar_shape.sh,
+#   which loads the real QML tree — and missed when 464 shipped because the
+#   tests run for it (plugins, dock_options, keys) are all pure C and none of
+#   them loads a line of QML. Any change under quickshell/ needs one of the
+#   bar_*.sh tests run against it, not the unit suite.
+pkgrel=468
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

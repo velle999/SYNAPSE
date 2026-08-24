@@ -133,7 +133,24 @@ pkgver=0.1.0
 #   asserts the two files agree. It also asserts the ISO's synuirc matches this
 #   heredoc key for key — 0.2.9.2 shipped an image on the neon theme and a disk
 #   on Prism, and nothing caught it.
-pkgrel=93
+# 94: the fresh-install synuirc goes back to `glass_level = auto`.
+#   93 wrote 100 because `auto` did not produce the desktop Prism is drawn for
+#   — a workaround for a bug, and one that cost exactly what the check before it
+#   was written to prevent: an explicit level survives a theme switch, so a user
+#   who later picked Gruvbox was handed Prism's glass. synui 467 fixes both
+#   halves (the panels' ladder and the dock having no theme question), so auto
+#   and 100 resolve identically on Prism and the number is simply redundant.
+#   ⚠ active_opacity AND glass_pinned COME OUT WITH IT. At level 100 the slider
+#   drove windows to 1.00 - 0.38 = 0.62, the floor of that curve, so 93 had to
+#   write 0.90 down and pin it off the slider. With no level set there is
+#   nothing to drive them and both Prisms' own preset pair stands. A pin in a
+#   fresh install's synuirc is a row the user never touched claiming to be one
+#   they did.
+#   ⚠ bar_opacity and dock_opacity STAY, and they are not the level in disguise:
+#   the bar and the widgets are quickshell and read them out of theme.state ->
+#   settings.state -> synuirc, and a fresh install has neither of the first two.
+#   Same gap widget_glass works around, same one-line way out.
+pkgrel=94
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

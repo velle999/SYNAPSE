@@ -1371,7 +1371,13 @@ static void config_set_defaults(syn_config_t *cfg)
      * floating; 0.80 is a slab with a hint of the desktop behind it. Still well
      * clear of the point where a dark icon on a dark wallpaper stops reading —
      * the row goes down to 0.20 for anyone who wants that. */
-    cfg->dock_opacity      = 0.72f;
+    /* ⚠ -1 IS "THE THEME DECIDES", NOT AN OPACITY. It was a flat 0.72, which is
+     * why a Prism desktop with no explicit glass level came up with a solid dock
+     * beside a see-through everything-else — the dock was the one surface with
+     * no route to ask its theme. syn_dock_alpha_asked() resolves it: the user's
+     * row, then theme_dock_alpha(), then SYN_DOCK_ALPHA_DEFAULT, which IS that
+     * same 0.72 for the eleven presets that are not glass. */
+    cfg->dock_opacity      = -1.0f;
     /* 26 against the old literal 16, and clamped to half the bar's thickness at
      * draw time so it can never round past a capsule. At the default 64px
      * thickness that is 26 of a possible 32 — noticeably round, the shape the
@@ -2687,6 +2693,14 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         else wlr_log(WLR_ERROR, "synui: dock_style: unknown '%s'", val);
     }
     else if (strcmp(key, "dock_opacity") == 0) {
+        /* `auto` is "the theme decides", the same word and the same meaning
+         * bar_opacity's row has. It has to be sayable, or a desktop that had
+         * once set a number could never hand the decision back — the one-way
+         * door glass_release() exists to stop on the other rows. */
+        if (strcmp(val, "auto") == 0) {
+            cfg->dock_opacity = -1.0f;
+            return;
+        }
         cfg->dock_opacity = (float)atof(val);
         /*
          * ⚠ THE 0.20 FLOOR IS GONE, AND IT WAS THE WRONG ANSWER TO A REAL

@@ -74,26 +74,27 @@ theme = prism
 # and deliberately not copied here — two copies of an argument drift the way two
 # copies of a config do. What follows is the summary.
 
-# Glass at 100: the bar, the dock and synui's panels resolve to
-# SYN_BAR_ALPHA_FROSTED (0.05), the thinnest surface the backdrop blur still has
-# something to mask. `auto` is the theme's own, more solid answer.
-glass_level = 100
+# Glass on AUTO, which is the house look now. It said 100 for one release, and
+# that was a workaround for a bug rather than a decision: `auto` was not auto —
+# a glass theme's panels fell through to a tuned ladder where an explicit level
+# returned an absolute, and the dock had no way to ask its theme at all. Both
+# are fixed in synui 467, so auto and 100 produce the same desktop on Prism and
+# every other theme keeps its own answer through a switch.
+glass_level = auto
 glass_sync  = on
 
-# The same two numbers, said outright, because the bar and the desktop widgets
-# are quickshell and read these keys out of theme.state → settings.state → this
-# file. The live session has none of the first two, so without these the strip
-# across the top comes up at its built-in 0.72 over a dock the compositor has
-# already drawn at 0.05. Unpinned: the sync recomputes both to 0.05 anyway.
+# ⚠ FOR QUICKSHELL, NOT FOR THE COMPOSITOR. The bar and the desktop widgets are
+# a separate process and read these out of theme.state → settings.state → this
+# file; the live session has none of the first two, so without them the strip
+# comes up at its built-in 0.85 over a dock synui has already drawn at 0.05.
+# Same gap widget_glass below works around, same way out.
 bar_opacity  = 0.05
 dock_opacity = 0.05
 
-# See-through application windows, at the 0.90/0.84 pair both Prisms were
-# designed with. Pinned, because the slider's own curve at level 100 is 0.62 —
-# the floor of that curve, and not a number anybody chose.
-transparency   = on
-active_opacity = 0.90
-glass_pinned   = active_opacity
+# See-through application windows. No number with it: both Prisms carry
+# 0.90/0.84 in their own preset and that is what a window draws at with no glass
+# level set — which is the whole point of being on auto.
+transparency = on
 
 # Menus and panels ink themselves off the window behind them, not the wallpaper
 # it covers. synui's compiled default; said here because this is the desktop

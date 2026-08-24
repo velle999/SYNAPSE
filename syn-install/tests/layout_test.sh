@@ -789,44 +789,55 @@ check "the keymap is no longer fed straight to xkb" "no" \
 # somebody installs the OS — by which point it is on every machine that shipped.
 # These checks are cheap and the failures they guard against are not.
 #
-# ⚠ THE glass_level CHECK USED TO ASSERT THE OPPOSITE, and the reason it flipped
-# is worth keeping. It read "a fresh install leaves glass_level on auto" and
-# forbade a number outright, because a NUMBER is an explicit answer and an
-# explicit answer survives a theme switch: `glass_level = 55` was handing Prism's
-# level to all eleven non-glass themes, permanently, on every install.
+# ⚠ THIS CHECK HAS NOW FLIPPED TWICE, AND THE HISTORY IS THE POINT.
 #
-# That cost is still real and is now being PAID rather than avoided. The house
-# desktop is glass at the top of the slider, the numbers under it (0.05 strips,
-# 0.90 windows) follow from that one level, and there is no way to ship it as a
-# default without writing it down — `auto` is a different, more solid desktop.
-# The way out for a user who picks Gruvbox is one row: Appearance ▸ Glass ▸ Auto.
+# It began as "a fresh install leaves glass_level on auto", forbidding a number
+# outright, because an explicit level survives a theme switch and `glass_level =
+# 55` was handing Prism's glass to all eleven non-glass themes for ever.
 #
-# So what is asserted now is that the decision is COMPLETE and CONSISTENT, which
-# is what the old check was really protecting: the level, the surfaces that
-# follow from it, the one pin that does not, and the two other files that have to
-# say the same thing.
-check "a fresh install ships the house glass level" "100" "$(in_synuirc 'glass_level')"
-check "…with the sync on, so the surfaces follow it" "on" "$(in_synuirc 'glass_sync')"
+# Then it asserted 100, because `auto` did not produce the desktop Prism is
+# drawn for and a number looked like the only way to get it.
+#
+# ⛔ AND THAT SECOND ROUND WAS A WORKAROUND FOR A BUG, NOT A DECISION. `auto`
+# was not auto. A glass theme's panels fell through to a tuned LADDER — a
+# multiplier on each panel's designed alpha — where an explicit level returned
+# an absolute; and the DOCK had no way to ask its theme at all, so it kept its
+# compiled 0.72 while everything around it went see-through. Three quarters of a
+# design, and writing 100 down papered over it at exactly the cost the first
+# check existed to prevent.
+#
+# synui 467 fixes both halves, so `auto` and `glass_level = 100` now produce the
+# same desktop on Prism — measured, not asserted. The number comes out again,
+# and this time because it is genuinely redundant rather than because the cost
+# was being dodged.
+check "a fresh install leaves glass_level on auto" "auto" "$(in_synuirc 'glass_level')"
+check "…and never writes a number, which would pin it off the theme" "no" \
+    "$(grep -qE '^glass_level *= *[0-9]' <<<"$(synuirc_body)" && echo yes || echo no)"
+check "…with the sync on, so a level set later reaches every surface" "on" \
+    "$(in_synuirc 'glass_sync')"
 
-# The bar and the widgets are quickshell and read these two out of theme.state,
+# ⚠ NO active_opacity AND NO PIN, and their absence is load-bearing. At level
+# 100 the slider drove windows to 1.00 - 0.38 = 0.62 — the floor of that curve,
+# and not a number anybody chose — so the release before this one had to write
+# 0.90 down and PIN it off the slider. With no level set there is nothing to
+# drive them and both Prisms' own preset pair (0.90/0.84, theme.c) stands. A pin
+# in a fresh install's synuirc is a row the user never touched claiming to be
+# one they did.
+check "no window opacity is written down" "" "$(in_synuirc 'active_opacity')"
+check "…and nothing is pinned off the slider" "no" \
+    "$(grep -qE '^glass_pinned' <<<"$(synuirc_body)" && echo yes || echo no)"
+
+# ⚠ THESE TWO ARE FOR QUICKSHELL, NOT THE GLASS LEVEL IN DISGUISE. The bar and
+# the desktop widgets are a separate process and read them out of theme.state,
 # then settings.state, then synuirc. A fresh install has neither of the first
-# two, so an absent key here is a 0.72 bar over a 0.05 dock — one desktop drawn
-# at two amounts of glass, with only the half synui draws itself correct.
+# two — theme.state is written when somebody PICKS a theme and refuses to create
+# itself otherwise — so without these the strip comes up at its built-in 0.85
+# over a dock the compositor has already drawn at 0.05 from the theme. Same gap
+# widget_glass below works around, and the same one-line way out.
 check "the bar's alpha is spelt out for quickshell"  "0.05" "$(in_synuirc 'bar_opacity')"
 check "the dock's alpha is spelt out for quickshell" "0.05" "$(in_synuirc 'dock_opacity')"
 
-# See-through windows, at the pair both Prisms were tuned with. The pin is
-# load-bearing: syn_glass_window_alpha at level 100 is 1.00 - 0.38 = 0.62, the
-# FLOOR of that curve, so without it the slider quietly overwrites 0.90 at every
-# login and the desktop ships at a number nobody chose.
-check "transparency is on"                    "on"   "$(in_synuirc 'transparency')"
-check "…at Prism's own focused opacity"       "0.90" "$(in_synuirc 'active_opacity')"
-check "…and pinned, or the slider takes it"   "yes" \
-    "$(grep -qE '^glass_pinned *=.*\bactive_opacity\b' <<<"$(synuirc_body)" && echo yes || echo no)"
-# The derived row must NOT be pinned: it is active - 0.06 and lands on the
-# theme's own 0.84 by itself. Pinning it would freeze it at today's arithmetic.
-check "…while the unfocused row stays on the slider" "no" \
-    "$(grep -qE '^glass_pinned *=.*\binactive_opacity\b' <<<"$(synuirc_body)" && echo yes || echo no)"
+check "transparency is on" "on" "$(in_synuirc 'transparency')"
 
 check "the dock style follows the theme" "auto" "$(in_synuirc 'dock_style')"
 check "the dock corners are a capsule"   "64"   "$(in_synuirc 'dock_radius')"
@@ -886,18 +897,23 @@ else
     printf '  skip  the ISO synuirc is not beside this checkout\n'
 fi
 
-# ── THE COMPILED DEFAULT HAS TO MATCH THE ONE WRITTEN HERE ──────────────────
+# ── WHAT `auto` ACTUALLY RESOLVES TO ────────────────────────────────────────
 #
-# SYN_GLASS_PANEL_DEFAULT is what a desktop is handed when it reaches Prism by
-# PICKING it in the theme manager rather than by being installed — the same
-# decision, written twice, because one copy has to survive a synuirc that
-# predates the key. Let them drift and the two ways of arriving at the house
-# theme stop looking alike.
+# SYN_GLASS_PANEL_DEFAULT is the level a glass theme uses when nobody has set
+# one — which, since the synuirc above sets none, is what every fresh install
+# now gets. It used to be checked against the number in this file; there is no
+# number any more, so what matters is that the constant is still the house level
+# rather than having quietly drifted back to something else.
 synui_h=$here/../../synui/src/synui.h
 if [ -r "$synui_h" ]; then
-    check "synui's glass default matches the installer's level" \
-        "$(in_synuirc 'glass_level')" \
+    check "synui's glass default is still the house level" "100" \
         "$(sed -n 's/^#define SYN_GLASS_PANEL_DEFAULT *\([0-9]*\).*/\1/p' "$synui_h" | head -1)"
+    # ⛔ And the DOCK can ask its theme at all, which is the half that made
+    # `auto` a lie. Without theme_dock_alpha() the dock keeps its compiled 0.72
+    # whatever theme is on screen, and every fix above goes back to needing a
+    # number written down.
+    grep -q "theme_dock_alpha" "$synui_h"
+    check "…and the dock has a theme answer to fall back on" 0 $?
 else
     printf '  skip  synui/src/synui.h is not beside this checkout\n'
 fi

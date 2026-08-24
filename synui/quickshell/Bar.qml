@@ -71,12 +71,6 @@ PanelWindow {
     readonly property bool vertical: false
     readonly property int  barSize: bar.height
 
-    /* Register with the singleton so a plugin on THIS bar can reach its
-     * instances on the others. Unregistered on destruction: a monitor being
-     * unplugged must not leave a dead bar in the list for broadcast() to walk. */
-    Component.onCompleted: Plugins.registerBar(bar)
-    Component.onDestruction: Plugins.unregisterBar(bar)
-
     /*
      * Every live instance of one plugin, across every monitor.
      *
@@ -135,7 +129,27 @@ PanelWindow {
         if (bar.wantsReveal) { hideDelay.stop(); bar.revealed = true }
         else                   hideDelay.restart()
     }
-    Component.onCompleted: bar.revealed = bar.wantsReveal
+    /*
+     * ⚠ ONE Component.onCompleted, AND THAT IS NOT A STYLE PREFERENCE. QML
+     * refuses a property assigned twice — "Property value set multiple times" —
+     * and it refuses it by failing to load the WHOLE type, so a second handler
+     * here does not lose its own line, it takes the entire bar off the screen.
+     *
+     * The plugin registration below arrived as its own `Component.onCompleted`
+     * and did exactly that: `Type Bar unavailable`, no bar, no start menu, from
+     * a package that built and installed cleanly. bar_shape.sh caught it by
+     * loading the real tree; nothing else in the suite loads QML at all.
+     */
+    Component.onCompleted: {
+        bar.revealed = bar.wantsReveal
+        /* Register with the singleton so a plugin on THIS bar can reach its
+         * instances on the others — a Bar cannot see its siblings, the Variants
+         * that makes them is in shell.qml. */
+        Plugins.registerBar(bar)
+    }
+    /* Unregistered when the surface goes: a monitor unplugged must not leave a
+     * dead bar in the list for broadcast() to walk. */
+    Component.onDestruction: Plugins.unregisterBar(bar)
 
     Timer {
         id: hideDelay

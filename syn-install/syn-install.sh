@@ -4592,57 +4592,62 @@ terminal = syntty
 # wallpaper change. A greyscale wallpaper has no colour to give and the theme's
 # own cyan stands; the journal says which is happening.
 theme = prism
-# ── Glass: 100, and every number under it follows from that ──────────────────
+# ── Glass: AUTO, and auto is now the house look ──────────────────────────────
 #
 # One slider for how much of the desktop you see through: 0 solid, 100 as clear
 # as it goes, `auto` to let the theme answer. It drives the windows, synui's own
 # panels, the terminal, the bar and the dock together, each with the number that
 # surface needs (syn_glass_* in synui.h).
 #
-# 100 is the SynapseOS house look, and it is written down here rather than left
-# on `auto` because the number is the point: at 100 the bar and the dock resolve
-# to SYN_BAR_ALPHA_FROSTED (0.05) — the thinnest surface that is still a surface,
-# thin enough to read as a sheet of glass and thick enough for the backdrop blur
-# to have something to mask. `auto` on Prism is the theme's own answer and is a
-# different, more solid desktop.
+# ⚠ THIS SAID `glass_level = 100` FOR ONE RELEASE, AND THAT WAS A WORKAROUND FOR
+# A BUG RATHER THAN A DECISION. `auto` was not auto: a glass theme's panels fell
+# through to a tuned LADDER (a multiplier on each panel's designed alpha) where
+# an explicit level returned an absolute, and the DOCK had no way to ask its
+# theme at all and simply kept its compiled 0.72. So a Prism desktop left on
+# `auto` came up with a see-through bar, see-through windows and a solid slab of
+# a dock — three quarters of a design — and writing 100 down was the only way to
+# get the look the theme was drawn for.
 #
-# ⚠ AN EXPLICIT NUMBER SURVIVES A THEME SWITCH, and that is the cost of saying
-# it. This line used to be `glass_level = 55` and was removed for exactly that
-# reason: a user who later picks Gruvbox or Win95 is handed Prism's glass
-# instead of the opacities that theme was tuned with, because the installer
-# wrote a number down on their behalf. The trade is being made deliberately this
-# time — the house desktop is glass at 100 and has to arrive that way — and the
-# way out is one keystroke: Appearance ▸ Glass ▸ Auto hands every surface back
-# to whatever theme is on screen.
+# Both halves are fixed in synui 467: syn_glass_resolve()'s auto arm returns the
+# curve at SYN_GLASS_PANEL_DEFAULT, which is the same call the explicit arm
+# makes, and theme_dock_alpha() gives the dock the question the bar has always
+# had. `auto` and `glass_level = 100` now produce the same desktop on Prism,
+# measured.
 #
-# synui's SYN_GLASS_PANEL_DEFAULT is 100 to match. The two are the same decision
-# written twice (one of them has to survive a synuirc that predates the key), so
-# they move together or the theme manager's Prism stops matching this one's.
-glass_level = 100
+# So the number comes out, and with it the whole reason it was a problem: an
+# explicit level survives a theme switch, so a user who later picked Gruvbox or
+# Win95 was handed Prism's glass instead of the opacities that theme was tuned
+# with. On `auto` every theme gets its own answer, for ever, with nothing to
+# undo.
+glass_level = auto
 
-# On, which is also the compiled default, and written here because the three
-# lines under it only make sense next to it: with the sync on, every surface
-# takes its number from Glass above unless it is named in `glass_pinned`.
+# On, which is also the compiled default. With the sync on, a level set later
+# reaches every surface at once; on `auto` there is nothing to sync and this is
+# simply the state to come back to.
 glass_sync = on
 
-# The two strips, at the number Glass 100 resolves to anyway.
+# ── The two strips, for QUICKSHELL and for no other reason ───────────────────
 #
-# ⚠ NOT redundant, and the reason is a process boundary. The bar and the desktop
-# widgets are quickshell (BarConfig.qml), and they read these two keys out of
-# theme.state, then settings.state, then THIS FILE. A fresh install has neither
-# of the first two — theme.state is only written when somebody PICKS a theme —
-# so without these lines the strip across the top and every widget on the
-# desktop would come up at their built-in 0.72 while the compositor's own dock,
-# which resolves the level in-process, sat at 0.05. One desktop, two amounts of
-# glass, and only the halves synui draws itself would have been right.
+# ⚠ NOT a glass level in disguise, and not the numbers above written out — the
+# COMPOSITOR resolves both of these from the theme now and needs neither line.
+# The bar and the desktop widgets are a separate process (quickshell,
+# BarConfig.qml), and they read these keys out of theme.state, then
+# settings.state, then this file.
 #
-# Left UNPINNED on purpose: the sync recomputes both to 0.05 from the level, so
-# these agree with it rather than overriding it, and dragging Glass still moves
-# them.
+# A fresh install has neither of the first two. theme.state is written when
+# somebody PICKS a theme and deliberately refuses to create itself otherwise, so
+# on a machine that has only ever been told `theme = prism` there is nothing for
+# the bar to read and it falls back to its own built-in 0.85 strip and 0.72
+# widgets — beside a dock the compositor has already drawn at 0.05. One desktop,
+# two amounts of glass, and only the halves synui draws itself correct.
+#
+# This is the SAME gap `widget_glass = on` below works around, for the same
+# process, with the same one-line way out: set them to `auto` after picking any
+# theme from the manager and they follow along like everything else.
 bar_opacity  = 0.05
 dock_opacity = 0.05
 
-# ── Transparency: on, at Prism's own 0.90 ────────────────────────────────────
+# ── Transparency: on ─────────────────────────────────────────────────────────
 #
 # The master switch for see-through WINDOWS, which is a different question from
 # the chrome above — `glass_level` is the panels, the bar and the dock; this is
@@ -4650,18 +4655,13 @@ dock_opacity = 0.05
 # every window on an existing desktop translucent is not something an upgrade
 # may do. A fresh install has no desktop to preserve and Prism is built on it.
 #
-# 0.90/0.84 is the pair the theme was designed with (theme.c, both Prisms), and
-# it is PINNED because the slider would otherwise take it: syn_glass_window_alpha
-# at level 100 is 1.00 - 0.38 = 0.62, which is the floor of that curve and not a
-# number anybody chose. A pin is the mechanism for exactly this — one row off the
-# slider, the rest still following it — and the unfocused pair is deliberately
-# NOT pinned, because it is derived (active - 0.06) and lands on 0.84 by itself.
-#
-# Switching Appearance ▸ Sync all glass off and on again releases the pin and
-# hands this row back to the slider.
-transparency   = on
-active_opacity = 0.90
-glass_pinned   = active_opacity
+# ⚠ AND NO NUMBER WITH IT, WHICH IS THE POINT OF BEING ON `auto`. Both Prisms
+# carry 0.90/0.84 in their own preset (theme.c) and that is what a window draws
+# at with no level set. The release before this one had to write `active_opacity
+# = 0.90` AND pin it, because at level 100 the slider drove windows to
+# 1.00 - 0.38 = 0.62 — the floor of that curve, and not a number anybody chose.
+# With the level gone the theme's own pair stands, and the pin with it.
+transparency = on
 
 # Menus and panels ink themselves off the WINDOW behind them rather than the
 # wallpaper it covers. Already synui's compiled default; written here because a

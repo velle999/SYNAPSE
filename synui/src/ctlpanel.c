@@ -769,6 +769,12 @@ static const struct ctl_item ctl_items[] = {
       .help = "Glass frosts the wallpaper behind the bar. Auto follows the theme" },
     { CTL_ROW_DOCK_OPACITY,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock opacity", NULL,
       .key = "dock_opacity", .off = CFG(dock_opacity), .vtype = CTL_VAL_FLOAT,
+      /* `Auto` is the theme's own answer — frosted on the two Prisms, the
+       * 0.72 slab elsewhere — and it is the DEFAULT, so a desktop that has
+       * never touched this row follows whatever theme is on it. Same rung and
+       * same word Bar opacity has, because they are the same question about
+       * two strips. */
+      .vauto = "Auto",
       /* Down to a real 0.00: the icons are painted over the body at full
        * opacity, so the bottom of this range is a row of icons floating on the
        * wallpaper rather than a dock nobody can find. The 0.20 that used to be
