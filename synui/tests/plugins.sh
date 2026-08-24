@@ -48,6 +48,15 @@ export SYNUI_BAR="$HERE/../quickshell"
 export SYNUI_PLUGIN_CATALOGUE="$HERE/../data/plugins/catalogue.tsv"
 export SYNUI_PLUGIN_FILTER="$HERE/../data/plugins/registry.py"
 
+# ⛔ POINTED SOMEWHERE HARMLESS FROM THE FIRST LINE, not only in the registry
+# section below. `browse`, `catalogue` and `add <id>` fetch the community list
+# when the cache is missing, and the cache defaults to the USER'S ~/.cache — so
+# a test added above that section would reach omarchyplugins.com from a build
+# machine and write into whoever is building. The registry section overrides
+# both with its own fixture; these two are the floor under it.
+export SYNUI_PLUGIN_REGISTRY_CACHE="$TREE/registry-default.tsv"
+export SYNUI_PLUGIN_REGISTRY="file://$TREE/no-registry-here.json"
+
 pass=0 fail=0
 ok()   { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }

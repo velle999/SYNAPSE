@@ -1507,14 +1507,23 @@ PKGB=$(dirname "$0")/../PKGBUILD
 # reading a path no dependency guarantees is a window that silently loses its
 # icons on a fresh install; the dependency without the code is 23MB installed
 # for nothing. Either way round is silent.
-if grep -q 'swcatalog' "$QML"; then
+#
+# ⛔ AND IT CANNOT RUN DURING THE BUILD, WHICH IS HOW IT BROKE ONE. `makepkg`
+# extracts the TARBALL, and the tarball does not contain the PKGBUILD — the
+# PKGBUILD is what unpacks it, so it lives one level up and outside. A test that
+# reads `../PKGBUILD` finds it in a working tree and finds nothing in
+# src/synpkg-0.1.0/, where grep printed "No such file or directory" and the
+# check failed the whole package. Guarded on the file being there, so it runs
+# for a developer and for preflight and says so when it cannot.
+if [ ! -r "$PKGB" ]; then
+    ok "the PKGBUILD is not in the tarball — the dependency drift check needs a working tree"
+elif grep -q 'swcatalog' "$QML"; then
     grep -q "archlinux-appstream-data" "$PKGB"
     check "the QML reads swcatalog and the PKGBUILD depends on it" $?
+elif grep -q "archlinux-appstream-data" "$PKGB"; then
+    bad "the PKGBUILD depends on archlinux-appstream-data and nothing reads it"
 else
-    grep -q "archlinux-appstream-data" "$PKGB"
-    [ $? -ne 0 ] \
-        && ok "no swcatalog in the QML and no dependency on it" \
-        || bad "the PKGBUILD depends on archlinux-appstream-data and nothing reads it"
+    ok "no swcatalog in the QML and no dependency on it"
 fi
 
 # The naming contract the map is built on: a cached AppStream icon is
