@@ -2,9 +2,12 @@
 
 Everything in this directory installs **flat into `/usr/share/backgrounds`**,
 which is what the Super+W picker (`wppick_scan_dir()` in `src/wppick.c`) reads.
-None of it is SynapseOS artwork — our own drawings are `data/synapse-*.png` and
-go through `install_data()` in `meson.build`. **This directory is the
-third-party one**, and nothing lands here without a grant recorded below.
+**This is the third-party directory** — SynapseOS's own drawings are
+`data/synapse-*.png` and go through `install_data()` in `meson.build`. Nothing
+lands here without a grant recorded below. That includes work of ours that is
+*derived* from someone else's: the noir grade below is SynapseOS's edit, and it
+lives here rather than with our own artwork precisely because it carries
+somebody else's licence with it.
 
 The filename prefix says where a file came from, because that list is flat and
 shared with every other package: `antiquity-` for diinki's, `commons-` for
@@ -53,16 +56,88 @@ licence notice are the entire obligation. At 1.35 MB for 3000×1929 there was
 nothing to win by re-encoding it — the collages were re-encoded because they
 were 23 MB of PNG, and this already is a JPEG at a sane size.
 
-Renaming the file is not a modification of the work. If you ever *do* crop,
-recolour or re-encode this picture, it stops being a redistribution and the
-paragraph above stops applying — say so here, and ship the result CC BY-SA 4.0.
+Renaming the file is not a modification of the work.
 
-### Attribution actually has to ship
+## `commons-st-louis-night-noir.jpg` — an ADAPTED work
+
+A black-and-white grade of the photograph above, made for SynapseOS. **This one
+IS a modified copy, and the paragraph directly above therefore does not apply to
+it.**
+
+| | |
+|---|---|
+| **Original photograph** | **Daniel Schwen**, as above, CC BY-SA 4.0 |
+| **Adaptation** | greyscale noir grade, the SynapseOS project, 2026 |
+| **Licence of the adaptation** | **CC BY-SA 4.0** — *required*, not chosen |
+| **Changes made** | converted to greyscale and re-graded for contrast; alpha channel dropped; re-encoded PNG → JPEG |
+
+**The ShareAlike term is why the licence is not a decision.** CC BY-SA 4.0 §3(b)
+requires an adaptation to be released under the same licence or a compatible
+one, so this grade is CC BY-SA 4.0 whatever we would have preferred, and §3(a)
+still requires Daniel Schwen to be credited as the author of the underlying
+photograph and the modification to be **indicated** — which is what this section
+is. Both obligations are inherited; neither is discretionary.
+
+Nothing else in the package is affected. An adaptation of a CC BY-SA photograph
+is still just a picture sitting beside the code (see the aggregation note
+below), and ShareAlike reaches the adapted *work*, never the software shipped
+alongside it.
+
+### Re-encoded, and here the licence did not object
+
+velle's master is a 4.03 MB PNG at 3000×1929 with a fully opaque alpha channel.
+Shipped as **JPEG, quality 92, 4:4:4 (no chroma subsampling)**, matching the
+treatment the antiquity collages got and for the same reason — `syn-update`
+pushes this package to every install:
+
+    magick St_Louis_night_expblend-noir.png \
+        -alpha off -strip -quality 92 -sampling-factor 1x1 \
+        data/wallpapers/commons-st-louis-night-noir.jpg
+
+4.03 MB → **1.21 MB** at **44.70 dB PSNR**, maximum per-channel deviation
+16/255, 0.42% of pixels differing at all — the antiquity collages measured
+43–45 dB and 14/255, so this sits in the same band. The dropped alpha was
+uniformly opaque (`min == max == 65535`) and carried nothing.
+
+Re-encoding was licence-neutral here **only because the work was already an
+adaptation** — there was no verbatim-copy exemption left to lose. Do not read
+this as permission to re-encode the colour original.
+
+⚠ **It stays exactly greyscale through the JPEG**, which matters more than it
+looks: HSL saturation measures `max = 0` on the encoded file, so every pixel is
+still `r == g == b` to the byte. Had 4:2:0 subsampling or a lower quality
+introduced a faint chroma drift, `syn_palette_from_pixels()` would have found a
+*hue* in a black-and-white picture and tinted the whole desktop off it. That is
+the reason for 4:4:4 here, not sharpness.
+
+### What it does to the desktop accent
+
+**It gives a grey desktop, and that is correct.** Verified by linking the real
+`src/imgdec.c` + `src/palette.c` + `src/contrast.c` into a harness rather than
+guessing: `syn_palette_from_pixels()` returns **`ok = false`** on this file — the
+documented "nothing worth taking" answer — while `wallpaper.c` still sets
+`wp_measured = true`, because it *did* look. That pair is what routes it to
+`syn_palette_monochrome()`: white and greys on a dark panel, deep greys on a
+pale one. `ok = false` alone would have meant "I could not look" and would have
+given the theme's own accent — a colour from nowhere near the screen, which is
+the bug that answer was written to fix.
+
+⚠ It also decodes as a **1-component greyscale JPEG**, not 3-component — the
+encoder picks that on its own for a grey image. `syn_decode_jpeg()` asks libjpeg
+for `JCS_EXT_BGRA` and gets a correct opaque BGRA surface out of it (3000×1929,
+`CAIRO_FORMAT_RGB24`, stride 12000). Tested, not assumed.
+
+On a multi-monitor desktop this picture does not drag the accent grey: per the
+comment on `wallpaper_palette()`, a greyscale wallpaper on the first output
+hands the question to the next one instead of averaging toward grey.
+
+## Attribution actually has to ship
 
 CC BY-SA 4.0 §3(a) requires the creator's name, the licence notice, the
 warranty disclaimer and a link to the material to travel *with* the copy — a
 line in a repo file the user never receives does not satisfy it. `package()`
-therefore installs this document to
+therefore installs this document — the notice for **both** St. Louis files, the
+verbatim one and the adaptation — to
 **`/usr/share/licenses/synui/WALLPAPERS.md`**, which is where Arch packages put
 a licence that is not one of the common ones. It is not put in
 `/usr/share/backgrounds` next to the image: that directory is a picker list, not
@@ -73,11 +148,12 @@ a document store.
 > <https://creativecommons.org/licenses/by-sa/4.0/legalcode> for the complete
 > disclaimer of warranties and limitation of liability.
 
-### It does not affect synui's own licence
+## None of it affects synui's own licence
 
-synui's code is GPL-2.0-or-later and this is a **CC BY-SA 4.0 photograph that
-sits beside it in the same package** — mere aggregation, not linking and not a
-derivative work. `license=()` in `PKGBUILD` names `CC-BY-SA-4.0` so the metadata
+synui's code is GPL-2.0-or-later, and these are **two CC BY-SA 4.0 photographs
+sitting beside it in the same package** — mere aggregation, not linking and not
+a derivative work. ShareAlike reaches the adapted picture and stops there; it
+does not reach software merely shipped in the same package. `license=()` in `PKGBUILD` names `CC-BY-SA-4.0` so the metadata
 is honest about what is in the package; no synui source file is affected by it,
 and no GPL/CC compatibility question arises, because nothing here combines the
 two into one work.

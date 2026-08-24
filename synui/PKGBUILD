@@ -961,7 +961,30 @@ pkgver=0.1.0
 #   the package() loop now filters to image extensions so that same .md does not
 #   also get dropped into /usr/share/backgrounds. wppick filters on extension
 #   and would have drawn no row for it, so that would have shipped unnoticed.
-pkgrel=455
+# 456: the noir cut of the same photograph, velle's greyscale grade of it, as a
+#   fifth stock wallpaper. ⚠ Unlike 455's it is an ADAPTED work under CC BY-SA
+#   4.0, so the licence is inherited rather than chosen: §3(b) forces the grade
+#   to CC BY-SA 4.0 as well, and §3(a) still wants Daniel Schwen credited for
+#   the underlying photograph and the modification INDICATED — which is what the
+#   new section of data/wallpapers/WALLPAPERS.md is for. 455's "ship it
+#   verbatim" reasoning does NOT carry over: there was no exemption left to
+#   lose, so this one is re-encoded (4.03 MB PNG → 1.21 MB JPEG, q92 4:4:4,
+#   44.70 dB, max deviation 16/255 — the same band the antiquity collages
+#   measured). The master PNG's alpha was uniformly opaque and carried nothing.
+#   ⚠ 4:4:4 is NOT about sharpness here. Chroma subsampling on a black-and-white
+#   picture introduces a faint tint, and syn_palette_from_pixels() would then
+#   find a HUE in it and paint the desktop off a colour that is not in the
+#   photograph. The shipped file measures HSL saturation max = 0 — still r == g
+#   == b to the byte.
+#   The accent answer is grey, and that is correct: the palette returns
+#   ok = false ("nothing worth taking") while wallpaper.c still sets
+#   wp_measured = true because it DID look, and that pair is what routes it to
+#   syn_palette_monochrome() instead of the theme's own accent.
+#   ⚠ It encodes as a ONE-COMPONENT greyscale JPEG — the encoder picks that by
+#   itself for a grey image — so syn_decode_jpeg() is asking libjpeg for
+#   JCS_EXT_BGRA from a grayscale source. Verified against the real decoder in a
+#   harness (3000x1929, CAIRO_FORMAT_RGB24, stride 12000), not assumed.
+pkgrel=456
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1664,11 +1687,17 @@ package() {
     #
     # Three antiquity-* from diinki's linux-antiquity, under the same MIT grant
     # as the QML (the full write-up stays in quickshell-antiquity/WALLPAPERS.md),
-    # and commons-st-louis-night.jpg, Daniel Schwen's Gateway Arch photograph
-    # from Wikimedia Commons under CC BY-SA 4.0 — byte-for-byte upstream's, on
-    # purpose: a modified copy would be an ADAPTED work under that licence and
-    # would have to be released CC BY-SA 4.0 and marked as changed, where a
-    # verbatim copy only owes attribution.
+    # and two commons-st-louis-night*, from Daniel Schwen's Gateway Arch
+    # photograph on Wikimedia Commons under CC BY-SA 4.0.
+    #
+    # ⚠ THE TWO ARE NOT UNDER THE SAME OBLIGATION, which is the whole reason
+    # they are documented separately. The colour one is byte-for-byte
+    # upstream's, on purpose — a verbatim copy owes attribution and nothing
+    # more. The *-noir one is OUR greyscale grade of it, which makes it an
+    # ADAPTED work: CC BY-SA 4.0 §3(b) forces the adaptation to CC BY-SA 4.0
+    # too, and §3(a) still wants Schwen credited and the change INDICATED.
+    # Neither is a decision we get to make. Re-encoding the noir one was
+    # therefore free, and re-encoding the colour one would cost the exemption.
     #
     # /usr/share/backgrounds FLAT, not a subdirectory of it: wppick_scan_dir()
     # in src/wppick.c reads one directory and does not recurse, so a tidy
