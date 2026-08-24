@@ -1381,7 +1381,27 @@ pkgver=0.1.0
 #   The window is verified by RUNNING it headless and reading the log for
 #   "Configuration Loaded"; the TUI by driving it through a pty and reading what
 #   it drew. Neither is proven by qmllint or by `bash -n`.
-pkgrel=470
+# 471: config.c documents all 187 synuirc keys. It documented 84.
+#   ⚠ OVER HALF THE PARSER WAS UNDISCOVERABLE, and not the obscure half: the
+#   whole of xkb, every animation, every blur and shadow knob, the lock screen,
+#   the screensaver, most of the pointer, the power timeouts and the lid. A key
+#   with no line in that header is a key nobody outside this file can find —
+#   the panels reach some of them and nothing reaches the rest.
+#   Written from EVIDENCE rather than from memory: each key's own parser arm
+#   (which is the authority on its values and clamps), its struct field comment,
+#   its control-panel label and help text, and its compiled default. Nothing was
+#   described that could not be sourced from one of those four.
+#   ⚠ CHECKED BOTH DIRECTIONS. Every documented enum value is asserted against
+#   the values the parser actually accepts, and every documented clamp against
+#   the numbers it actually clamps to — and, the half that matters more, nothing
+#   is documented that is NOT a real key. A reference that invents a setting is
+#   worse than one that omits it.
+#   ⛔ super_space is documented as OBSOLETE AND IGNORED, because that is what it
+#   is: the arm logs a line and does nothing. A key that silently does nothing is
+#   the one thing a config reference must never leave unsaid.
+#   The wiki's new Configuration page is derived from this header and names all
+#   187 as well. If the two ever disagree, this file is right.
+pkgrel=471
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

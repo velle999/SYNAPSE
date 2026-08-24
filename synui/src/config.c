@@ -365,6 +365,258 @@
  *       looked intermittent — it worked whenever nothing happened to connect
  *       during the game, and silently did nothing whenever something did.
  *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE REST OF THE KEYS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ EVERYTHING ABOVE THIS LINE WAS DOCUMENTED AND 103 KEYS WERE NOT, which is
+ * over half of what the parser accepts. Not obscure ones either: the whole of
+ * xkb, every animation, every blur and shadow knob, the lock screen, the
+ * screensaver and most of the pointer. A key with no line here is a key nobody
+ * outside this file can find — the panels reach some of them and nothing
+ * reaches the rest.
+ *
+ * Grouped by what they are about rather than alphabetically, because a person
+ * reading this is looking for "how do I change the pointer" and not for a
+ * particular spelling.
+ *
+ * ── Keyboard, and what a key does when held ────────────────
+ *   xkb_layout = us               (the layout synui itself uses. ⚠ THE CONSOLE
+ *                                  KEYMAP DOES NOT REACH WAYLAND — vconsole.conf
+ *                                  is a separate answer, which is why the
+ *                                  installer asks once and writes both)
+ *   xkb_variant = colemak        (a variant of the layout above)
+ *   xkb_model = pc105
+ *   xkb_options = ctrl:nocaps    (comma-separated xkb option names)
+ *   xkb_rules = evdev
+ *   repeat_delay = 600           (ms held before a key starts repeating)
+ *   repeat_rate = 25             (repeats per second once it does)
+ *   numlock = on|off             (num lock at login)
+ *
+ * ── Pointer ────────────────────────────────────────────────
+ *   accel_speed = 0.0            (-1.0 to 1.0; 0 is the driver's own)
+ *   natural_scroll = on|off      (unset follows libinput's device default)
+ *   left_handed = on|off         (swaps the buttons; unset is the default)
+ *   tap = on|off                 (tap-to-click on a touchpad)
+ *   focus_mode = click|sloppy|strict
+ *       Click: only a click focuses. Sloppy and Strict both follow the pointer;
+ *       over the DESKTOP, Strict drops focus and Sloppy keeps the last window.
+ *   focus_delay_ms = 0           (0-3000; how long the pointer must rest before
+ *                                 focus follows. 0 is instant, which also
+ *                                 focuses windows you only crossed on the way)
+ *   cursor_theme = Adwaita
+ *   cursor_size = 24             (clamped 8-256: 0 makes wlroots fall back in
+ *                                 ways that are hard to explain afterwards, and
+ *                                 a mistyped 2400 leaves a pointer covering a
+ *                                 third of the screen with no visible undo)
+ *   snap_zone = 28               (2-200 px; how close to an edge a DRAG arms
+ *                                 the snap. Raise it on a high-DPI panel, or if
+ *                                 a fast pointer crosses the band)
+ *   panel_follow_pointer = on|off  (does a panel open on the monitor the
+ *                                   pointer is on, or the focused one)
+ *
+ * ── Windows: frame, shape and shadow ───────────────────────
+ *   border_width = 2             (0-32)
+ *   border_color_norm  = #2a2a40   Unfocused frame.
+ *   border_color_focus = #ff296d   Focused.
+ *   border_color_ai    = #05d9e8   A window the AI is holding context for.
+ *   border_color_warn  = #ff3524   One synguard has flagged.
+ *       ⚠ These four are OVERRIDDEN BY THE THEME. A preset carries its own
+ *       four, so a line here only shows on a desktop whose theme has not
+ *       spoken — which is none of the fifteen. They are the pre-theme
+ *       mechanism, kept because a pushed custom palette still uses them.
+ *   titlebar_height = 24         (0 removes the titlebar entirely; below 14
+ *                                 there is no room for a button, so the parser
+ *                                 clamps up to 14 or down to 0 rather than
+ *                                 drawing buttons that cannot be hit)
+ *   titlebar_color = #1b1e25         Unfocused caption.
+ *   titlebar_color_focus = #252932   Focused.
+ *   titlebar_text = #8b92a0          Unfocused caption text.
+ *   titlebar_text_focus = #e6eaf1    Focused.
+ *   corner_radius = 12           (0-48; forced SQUARE while maximized, so
+ *                                 nothing pokes past the output)
+ *   shadow = on|off
+ *   shadow_color = #000000
+ *   shadow_opacity = 0.75        (0.00-1.00)
+ *   shadow_blur_sigma = 9.0      (0-80; how soft the falloff is)
+ *   shadow_spread = 0.0          (0-64; SOLID shadow before the falloff starts
+ *                                 — what gives it weight rather than haze)
+ *   shadow_offset_x = 0
+ *   shadow_offset_y = 3          (a light source above, as every desktop
+ *                                 assumes)
+ *   remember_geometry = on|off   (reopen each app where and how big it was)
+ *
+ * ── Blur ───────────────────────────────────────────────────
+ *   blur = on|off                (frosts what is behind a TRANSLUCENT window.
+ *                                 An opaque one costs nothing — there is
+ *                                 nothing to see through)
+ *   blur_radius = 5              (1-20)
+ *   blur_passes = 3              (1-5; more passes is a wider, softer blur for
+ *                                 less cost than the same radius in one)
+ *   blur_noise = 0.02            (dither, which is what stops a wide blur
+ *                                 banding on a gradient)
+ *   blur_brightness = 0.90
+ *   blur_contrast = 1.00
+ *   blur_saturation = 1.15
+ *   glass_halo = 0               (0-64; how far the blur reaches PAST the
+ *                                 window. 0 keeps it inside the frame)
+ *
+ * ── Animation ──────────────────────────────────────────────
+ *   anim_window = fade|rise|scale|none   (how a window ARRIVES. Closing is not
+ *       animated and cannot be: the client's buffer is gone the moment it
+ *       unmaps, so there is nothing left to animate)
+ *   anim_window_ms = 140         (0 jumps straight to the end state. Also
+ *                                 times the niri strip slide)
+ *   anim_rise_px = 24            (0-200; how far a Rise window travels up into
+ *                                 place. Ignored by the other styles)
+ *   anim_workspace = fade|slide|none   (Fade cross-fades the two desks; Slide
+ *       sends them off the way you switched)
+ *   anim_workspace_ms = 140      (a slide wants longer than a fade — the eye
+ *                                 has to follow it somewhere)
+ *   anim_curve = linear|ease-in|ease-out|ease-in-out
+ *       Shared by both, and by the strip slide: two easings read as two
+ *       desktops.
+ *   animation_ms = 140           (the older single knob; the three above are
+ *                                 what the panel writes)
+ *
+ * ── Layout ─────────────────────────────────────────────────
+ *   gap = 8                      (0-128; between tiled windows)
+ *   master_factor = 0.60         (share of the screen the master window takes)
+ *   float_inset = 8              (0-40 %; kept clear at each edge by the
+ *                                 floating desktop's own grid)
+ *   float_gap = 24               (0-256 px between those tiles)
+ *   cascade_stack_max = 3        (windows per pile before the cascade layout
+ *                                 starts a new one)
+ *
+ * ── Windows: what is see-through ───────────────────────────
+ *   transparency = on|off        (the MASTER switch for see-through windows.
+ *                                 Off, the two opacities below do nothing)
+ *   active_opacity = 0.90        (the focused window)
+ *   inactive_opacity = 0.84      (how far the others fade back)
+ *   foot_alpha = 0.40            (the terminal, which needs its OWN number:
+ *                                 foot and syntty draw their own background
+ *                                 with the glyphs left opaque, so the same
+ *                                 value reads far more solid there)
+ *
+ * ── The lock screen and the screensaver ────────────────────
+ *   lock_background = wallpaper|colour|blur
+ *   lock_blur = 0                (0-64)
+ *   lock_dim = 0                 (0-100 %)
+ *   lock_accent = #00d6e5        (the ring and the caret)
+ *   screensaver = on|off
+ *   screensaver_timeout = 300    (idle seconds before it starts)
+ *   screensaver_interval = 30    (5-600; seconds per slide, where the mode has
+ *                                 slides)
+ *   screensaver_dir = ~/Pictures (what the picture modes show)
+ *   screensaver_lock = on|off    (does dismissing it need the password)
+ *
+ * ── Panels: how each one closes ────────────────────────────
+ *   ctlpanel_close = window|clickoff|button   (the control panel)
+ *   taskmgr_close  = window|clickoff|button
+ *   calc_close     = window|clickoff|button
+ *       Window: drag it by the header and click elsewhere freely.
+ *       Clickoff: it closes the moment you click away. Esc always closes.
+ *
+ * ── The AI's own two ───────────────────────────────────────
+ *   ai_layout = on|off           (let the AI layout decide where a NEW window
+ *                                 goes. Off falls back to the plain tiler)
+ *   ai_ctx_decor = on|off        (tint a window's border while the AI is
+ *                                 holding context for it — border_color_ai
+ *                                 above is that colour)
+ *
+ * ── The dock's three cells, and where each sits ────────────
+ *   dock_clock_slot = -1
+ *   dock_apps_slot = -1
+ *   dock_power_slot = -1
+ *       Icons to that cell's left; -1 is past the last one. All three are
+ *       WRITTEN BY DRAGGING the cell rather than typed, and they share one
+ *       gap: a tie lays out in dock_cell_t order, which is clock, apps, power.
+ *
+ * ── The desktop itself ─────────────────────────────────────
+ *   desktop_icons = on|off       (draw ~/Desktop on the wallpaper)
+ *   desktop_icon_arrange = name|type|date|size
+ *   welcome_at_startup = on|off
+ *   start_overlay = on|off       (the neural overlay at login)
+ *   cat = on|off
+ *   cat_breed = neon|ginger|tuxedo|siamese|calico
+ *       Coat and markings only; every breed walks the same.
+ *   widget_clock_face = minimal|classic|roman|neon
+ *   theme = prism                (one of the fifteen presets — see
+ *                                 syn_theme_names in theme.c. A fresh install
+ *                                 is written `prism` by syn-install; synui's
+ *                                 COMPILED default is still `synapse`, so an
+ *                                 existing machine that never picked one keeps
+ *                                 the desktop it has)
+ *   ui_font = Liberation Mono    (⚠ the COMPOSITOR's own panels. The desktop
+ *                                 -wide font is font.state, which every
+ *                                 SynapseOS app reads — this is not that)
+ *   notif_dnd = on|off           (Do Not Disturb, persisted)
+ *
+ * ── The CRT post-process ───────────────────────────────────
+ *   effects = on|off             (the master switch for all of these)
+ *   effect_scanline = 0.35
+ *   effect_curvature = 0.25
+ *   effect_aberration = 0.40
+ *   effect_bloom = 0.55
+ *   effect_glitch = 0.60         (fires on window close and, sustained, while
+ *                                 synguard holds a window in ALERT/DENY)
+ *   effect_phosphor = off|amber|green|white   (the tint)
+ *   effect_mono = 0.90           (blend TOWARD that tint. ⚠ bloom only bites
+ *                                 once this is up)
+ *   effect_hue = 0.45            (turns the tint: down is redder, up yellower.
+ *                                 0.50 is the preset)
+ *   effect_lift = 0.40           (how far the UNLIT field glows: 0 keeps it
+ *                                 black, up lights the raster)
+ *
+ * ── Wallpaper, per monitor ─────────────────────────────────
+ *   wallpaper_output = DP-1 matrix        (a per-monitor override of
+ *   wallpaper_output_mode = DP-1 fit       `wallpaper` and `wallpaper_mode`.
+ *       Same token vocabulary as the global keys, so there is one thing to
+ *       learn. Lines are read IN ORDER, and an override inherits whatever the
+ *       global keys hold when it is first named)
+ *
+ * ── Commands synui shells out to ───────────────────────────
+ *   terminal = syntty            (what the `term` bind runs. An empty value or
+ *                                 a shipped default takes the fallback chain;
+ *                                 anything else is a choice and is obeyed even
+ *                                 when it is missing — see synui_terminal_cmd)
+ *   about_cmd = fetch            (the About OS readout)
+ *   network_cmd = nm-connection-editor
+ *   bar_start_cmd = synui-bar        How the bar is started and stopped, for
+ *   bar_stop_cmd = pkill quickshell  game mode and the Bar row.
+ *   game_bar_start_cmd = ...         The same pair, as game mode runs them.
+ *   game_bar_stop_cmd = ...
+ *   game_wp_start_cmd = ...          The wallpaper engine, likewise.
+ *   game_wp_stop_cmd = ...
+ *   game_kmod_quiet_cmd = ...        And the kernel module's telemetry.
+ *   game_kmod_restore_cmd = ...
+ *       ⚠ EACH PAIR MUST MATCH. These are fire-and-forget, so a stop that
+ *       works with a start that does not leaves the desktop in the half-state
+ *       and says nothing — the same trap game_ai_stop_cmd documents above.
+ *   bar_icon_theme = Papirus     (the icon theme the BAR uses, where it differs
+ *                                 from the desktop's)
+ *
+ * ── Keys, and one that is gone ─────────────────────────────
+ *   bind = super+Return term     (see the keybinding section below)
+ *   unbind = super+Return        (take a chord away. What binds.state writes to
+ *                                 record a shortcut you removed)
+ *   tap_action = start_menu      (what the modifier TAP opens; tap_key is which
+ *                                 modifier)
+ *   autostart = synui-bar        (run at session start; repeat the key for
+ *                                 more than one)
+ *   super_space = anything       ⛔ OBSOLETE AND IGNORED, with a line in the
+ *       journal saying so rather than silence. Rebind Super+Space in the
+ *       palette (Super+/, then F2), or with `bind =` / `unbind =`.
+ *
+ * ── Read but not acted on here ─────────────────────────────
+ * A few keys are parsed by the compositor and consumed by quickshell, so they
+ * have one spelling and one clamp even though this file only stores them:
+ *   bar_enabled = on|off         (is there a bar at all)
+ *   bar_shell = synapse|antiquity   ·   bar_edge = top|bottom
+ *   bar_opacity = auto|0.00-1.00    ·   bar_shape = full-width|rounded-ends|floating-pill
+ *   dock_opacity = auto|0.00-1.00   ·   widget_glass = auto|off|on
+ * See the bar and dock sections above for what each one means.
+ *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
