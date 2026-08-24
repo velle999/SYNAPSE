@@ -944,14 +944,37 @@ pkgver=0.1.0
 #   `meson test`, which has re-themed the live desktop. Six new checks, the two
 #   load-bearing ones being r == g == b to the byte (the red failure above) and
 #   the dark green in the teal's hue window staying where it was drawn.
-pkgrel=454
+# 455: a fourth stock wallpaper — St. Louis at night, the Gateway Arch over the
+#   Mississippi, Daniel Schwen's Commons photograph under CC BY-SA 4.0. It goes
+#   in data/wallpapers/, which is now documented as THE third-party directory
+#   (our own art is data/synapse-*.png through meson's install_data), with the
+#   grant for every file in it recorded in data/wallpapers/WALLPAPERS.md.
+#   ⚠ Shipped BYTE-FOR-BYTE upstream's, and that is a licence decision, not
+#   laziness: CC BY-SA 4.0 makes a modified copy an ADAPTED work, which we would
+#   then owe under CC BY-SA 4.0 ourselves and have to mark as changed. A
+#   verbatim copy owes attribution and nothing else. The antiquity collages were
+#   re-encoded because they were 23 MB of PNG; this is already a 1.35 MB JPEG at
+#   3000×1929, so there was nothing to win. Crop or re-encode it and that whole
+#   paragraph stops being true.
+#   ⚠ Attribution has to SHIP — a repo file the user never receives does not
+#   satisfy §3(a) — so WALLPAPERS.md installs to /usr/share/licenses/synui/, and
+#   the package() loop now filters to image extensions so that same .md does not
+#   also get dropped into /usr/share/backgrounds. wppick filters on extension
+#   and would have drawn no row for it, so that would have shipped unnoticed.
+pkgrel=455
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
 # of diinki's linux-antiquity whose LICENSE.antiquity ships inside that tree; the
 # fonts it carries are Apache-2.0 (Material Symbols) and ITF-credit-clause
 # (Boska/Recia/Quilon), both documented in quickshell-antiquity/FONTS.md.
-license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
+# CC-BY-SA-4.0 is ONE wallpaper — Daniel Schwen's Gateway Arch photograph in
+# data/wallpapers/, shipped verbatim. Mere aggregation: it sits beside the code
+# in the package, is not linked into it and is not a derivative of it, so it
+# raises no GPL/CC compatibility question. Attribution ships to
+# /usr/share/licenses/synui/WALLPAPERS.md; the reasoning is in
+# data/wallpapers/WALLPAPERS.md.
+license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0' 'CC-BY-SA-4.0')
 # xdg-desktop-portal{,-wlr,-gtk}: screen sharing. Without the wlr backend, portal
 #   falls back to GTK, which cannot do ScreenCast on wlroots — so Firefox/OBS/
 #   Discord screen capture silently fails. slurp is xdpw's output chooser.
@@ -1632,25 +1655,56 @@ package() {
     install -Dm755 systemd/synui-game-run.sh \
         "$pkgdir/usr/bin/synui-game-run"
 
-    # ── The Antiquity wallpapers ─────────────────────────────────────────────
+    # ── The third-party wallpapers ───────────────────────────────────────────
     #
-    # The three that ship with diinki's linux-antiquity, under the same MIT
-    # grant as the QML. Provenance, the licence reasoning and what was
-    # re-encoded are all in quickshell-antiquity/WALLPAPERS.md — read that
-    # before adding a fourth.
+    # data/wallpapers/ is the THIRD-PARTY directory — SynapseOS's own artwork is
+    # data/synapse-*.png and goes through install_data() in meson.build. Nothing
+    # lands here without a grant recorded in data/wallpapers/WALLPAPERS.md; read
+    # that before adding a fifth.
+    #
+    # Three antiquity-* from diinki's linux-antiquity, under the same MIT grant
+    # as the QML (the full write-up stays in quickshell-antiquity/WALLPAPERS.md),
+    # and commons-st-louis-night.jpg, Daniel Schwen's Gateway Arch photograph
+    # from Wikimedia Commons under CC BY-SA 4.0 — byte-for-byte upstream's, on
+    # purpose: a modified copy would be an ADAPTED work under that licence and
+    # would have to be released CC BY-SA 4.0 and marked as changed, where a
+    # verbatim copy only owes attribution.
     #
     # /usr/share/backgrounds FLAT, not a subdirectory of it: wppick_scan_dir()
     # in src/wppick.c reads one directory and does not recurse, so a tidy
-    # backgrounds/antiquity/ would hide all three from the Super+W picker,
-    # which is the only reason to ship them. Hence the `antiquity-` prefix on
-    # the filenames — that list is flat and shared with SynapseOS's own
-    # artwork, so the name has to say where it came from.
+    # backgrounds/antiquity/ would hide them all from the Super+W picker, which
+    # is the only reason to ship them. Hence the source prefix on the filenames
+    # — that list is flat and shared with SynapseOS's own artwork, so the name
+    # has to say where it came from.
     #
     # NOT under /usr/share/synui/quickshell-antiquity with the rest of the
     # tree, even though the `find` above would have picked them up for free: a
     # wallpaper is not a property of a bar, and both shells and the
     # compositor's own picker should see them.
+    #
+    # ⚠ Images ONLY — WALLPAPERS.md lives in that directory too and a bare
+    # `data/wallpapers/*` would drop it into the picker's directory. wppick
+    # filters on extension so it would not have drawn a row for it, which is
+    # exactly why this would have gone unnoticed.
+    #
+    # A `case` rather than an extglob `*.@(png|jpg)`: extglob is not reliably on
+    # inside a PKGBUILD, and rather than a `*.png *.jpg *.jpeg` glob list, which
+    # passes the unmatched pattern through as a literal filename the moment one
+    # of the three extensions has no files and dies in install(). The extension
+    # list matches wp_is_image() in src/wppick.c — keep them in step.
     for _wp in data/wallpapers/*; do
+        case "$_wp" in
+            *.png|*.jpg|*.jpeg) ;;
+            *) continue ;;
+        esac
         install -Dm644 "$_wp" "$pkgdir/usr/share/backgrounds/${_wp##*/}"
     done
+
+    # CC BY-SA 4.0 §3(a) wants the creator, the licence notice, the warranty
+    # disclaimer and a link to the material to travel WITH the copy — a line in
+    # a repo file the user never receives does not satisfy it. /usr/share/
+    # licenses/$pkgname is where a non-common licence goes on Arch; the picker
+    # directory is a list, not a document store.
+    install -Dm644 data/wallpapers/WALLPAPERS.md \
+        "$pkgdir/usr/share/licenses/$pkgname/WALLPAPERS.md"
 }

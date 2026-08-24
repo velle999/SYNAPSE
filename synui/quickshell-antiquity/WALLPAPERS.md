@@ -1,5 +1,11 @@
 # Antiquity wallpapers — provenance and licence
 
+> **This document covers the three `antiquity-*` files only.** They are no
+> longer the only third-party artwork in `/usr/share/backgrounds` — the register
+> for that whole directory, and the place a new one gets recorded, is
+> [`../data/wallpapers/WALLPAPERS.md`](../data/wallpapers/WALLPAPERS.md). The
+> detail below is not duplicated there.
+
 Three wallpapers ship with the Antiquity shell. They come from
 [diinki/linux-antiquity](https://github.com/diinki/linux-antiquity)
 (`configs/hypr/wallpapers_bundled/`), the same repository this QML tree is
