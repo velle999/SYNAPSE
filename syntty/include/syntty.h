@@ -1178,6 +1178,25 @@ typedef struct {
 	double      flag_size;     /* --font-size=, or 0 */
 	const char *font;          /* the family in use (NULL: the default) */
 	double      size;          /* and its size, resolved */
+
+	/* ── who this window says it is ─────────────────────────────────────
+	 *
+	 * xdg_toplevel's app_id, which is what the dock, the compositor and
+	 * `synctl dispatch focus_app` all key off — see
+	 * reference_dock_pin_desktop_basename_must_equal_app_id. It was the
+	 * literal "syntty" and nothing could change it.
+	 *
+	 * ⚠ A TUI IS AN APPLICATION, NOT A TERMINAL. `omarchy-launch-or-focus-tui`
+	 * is how every Omarchy plugin that ships a terminal game starts one: it
+	 * focuses the window if it is already up and launches it if it is not,
+	 * and it finds it BY APP-ID. With one hardcoded id every syntty on the
+	 * desk is the same window to that question, so "focus the tetris you
+	 * already have open" could only ever mean "focus some terminal", and
+	 * pinning the game to the dock would pin the terminal.
+	 *
+	 * NULL keeps the literal, so a plain `syntty` is a terminal called
+	 * syntty exactly as it always was. */
+	const char *app_id;        /* --app-id=, or NULL for "syntty" */
 } st_win_conf_t;
 
 /* Open a window and run until the last tab's child exits or it is closed.

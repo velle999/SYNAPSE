@@ -1495,7 +1495,7 @@ pkgver=0.1.0
 #   and a degraded install now exits 3 rather than 0 — the window only showed a
 #   message on a non-zero code, which is why it reported three dead widgets as
 #   installed and on.
-pkgrel=474
+pkgrel=475
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1996,6 +1996,15 @@ package() {
     # difference between "it is off" and "it was refused".
     install -Dm755 systemd/synui-plugins.sh \
         "$pkgdir/usr/bin/synui-plugins"
+
+    # ⚠ THE LAUNCHER OMARCHY'S PLUGINS CALL BY NAME. Not a shim for `omarchy`
+    # the command — this is the one thing a plugin hardcodes into its own QML
+    # (`bar.run("omarchy-launch-or-focus-tui --app-id=… " + path)`), so on a
+    # desktop without it every terminal game in their catalogue has a Play
+    # button that does nothing at all. Installed under THEIR name because the
+    # call site is not configurable.
+    install -Dm755 systemd/omarchy-launch-or-focus-tui.sh \
+        "$pkgdir/usr/bin/omarchy-launch-or-focus-tui"
 
     # The worked example, shipped OFF like every plugin. It is the third search
     # directory, so `synui-plugins list` has something in it on a machine that

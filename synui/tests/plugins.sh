@@ -116,8 +116,44 @@ echo "synui-plugins — $SYNPLUG"
 
 # ── the format is read at all ───────────────────────────────────────────────
 hdr=$(plug scan | head -1)
+# ⛔ THE WHOLE HEADER, IN ORDER, AND NOT A PREFIX MATCH. Plugins.qml reads this
+# TSV by POSITION — one place parses a manifest, so the columns are a contract
+# rather than a guess — and a column INSERTED in the middle shifts every field
+# after it into the wrong property with nothing said by either end. Appending is
+# the only safe way to grow this, which is why the assertion is exact: it fails
+# on an insertion and it fails on a rename, and it is meant to.
 check "scan emits the header the bar reads" \
-      $'id\tname\tdescription\tdir\tentry\tenabled\tunsupported' "$hdr"
+      $'id\tname\tdescription\tdir\tentry\tenabled\tunsupported\tpanel\tservice' "$hdr"
+
+# The two columns that carry a plugin's session-scoped entry points. Mounted
+# once for the desktop rather than once per bar (see PluginMount), and scanned
+# straight past for as long as this file emitted seven columns — which is why a
+# widget declaring a `panel` appeared on the bar and did nothing when clicked.
+mkdir -p "$TREE/plugins/has.panel"
+cat > "$TREE/plugins/has.panel/manifest.json" <<'MANIFEST'
+{ "schemaVersion": 1, "id": "has.panel", "name": "Panelled", "version": "1.0.0",
+  "kinds": ["service", "panel", "bar-widget"],
+  "entryPoints": { "service": "S.qml", "panel": "P.qml", "barWidget": "B.qml" } }
+MANIFEST
+: > "$TREE/plugins/has.panel/B.qml"
+: > "$TREE/plugins/has.panel/P.qml"
+: > "$TREE/plugins/has.panel/S.qml"
+check "a panel entry point is scanned"   "P.qml" "$(col has.panel 8)"
+check "…and a service entry point too"   "S.qml" "$(col has.panel 9)"
+
+# ⚠ AND A PATH OUT OF THE PLUGIN IS NOT AN ENTRY POINT. The manifest is
+# third-party; the rule barWidget already lives under applies to these two as
+# well, and a refusal is not available here because there is no widget to hang
+# the reason on — the entry is simply not offered.
+mkdir -p "$TREE/plugins/panel.escape"
+cat > "$TREE/plugins/panel.escape/manifest.json" <<'MANIFEST'
+{ "schemaVersion": 1, "id": "panel.escape", "name": "Escaper", "version": "1.0.0",
+  "kinds": ["panel", "bar-widget"],
+  "entryPoints": { "panel": "../../../etc/passwd", "barWidget": "B.qml" } }
+MANIFEST
+: > "$TREE/plugins/panel.escape/B.qml"
+check "a panel path escaping the plugin is dropped" "" "$(col panel.escape 8)"
+check "a panel entry point that is not there is dropped" "" "$(col good.plain 8)"
 
 check "a bar-widget manifest is listed"        "good.plain" "$(col good.plain 1)"
 check "…with its name off the manifest"        "good.plain widget" "$(col good.plain 2)"

@@ -25,7 +25,8 @@ Singleton {
     id: root
 
     /* One entry per installed bar-widget plugin:
-     *   { id, name, description, dir, entry, enabled, unsupported } */
+     *   { id, name, description, dir, entry, enabled, unsupported,
+     *     panelEntry, serviceEntry } */
     property var all: []
 
     /* The ones the bar should actually instantiate: enabled, and hostable.
@@ -33,6 +34,19 @@ Singleton {
      * loaded by a Repeater that forgot to check. */
     readonly property var active:
         root.all.filter(p => p.enabled && p.unsupported === "")
+
+    /*
+     * The ones with something to mount ONCE PER SESSION rather than once per
+     * monitor — a `panel` or a `service` entry point. shell.qml's Variants
+     * model; see PluginMount for why they cannot live on the bar.
+     *
+     * ⚠ A SEPARATE LIST RATHER THAN A CHECK IN THE DELEGATE, for the same
+     * reason `active` is one: a mount instantiated for a plugin with neither
+     * entry point would be an Item and two idle Loaders per installed plugin,
+     * created and destroyed on every rescan.
+     */
+    readonly property var sessionScoped:
+        root.active.filter(p => p.panelEntry !== "" || p.serviceEntry !== "")
 
     property bool scanned: false
 
@@ -101,9 +115,15 @@ Singleton {
                 for (let i = 1; i < lines.length; i++) {
                     const f = lines[i].split("\t")
                     if (f.length < 7 || !f[0]) continue
+                    /* Columns 8 and 9 are the session-scoped entry points, and
+                     * they are read with a fallback rather than by widening the
+                     * length check above: a scan from an older synui-plugins on
+                     * $PATH still produces every bar widget it always did, and
+                     * loses only the panels it never knew about. */
                     out.push({ id: f[0], name: f[1], description: f[2],
                                dir: f[3], entry: f[4],
-                               enabled: f[5] === "on", unsupported: f[6] })
+                               enabled: f[5] === "on", unsupported: f[6],
+                               panelEntry: f[7] || "", serviceEntry: f[8] || "" })
                 }
                 root.all = out
                 root.scanned = true

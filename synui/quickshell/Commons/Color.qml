@@ -103,6 +103,26 @@ QtObject {
         readonly property color background: Theme.popupBg
         readonly property color text:       Theme.fg
         readonly property color border:     Theme.magenta
+
+        /*
+         * What a full-screen surface dims the desktop with behind itself.
+         *
+         * ⚠ MISSING IS NOT A FALLBACK, IT IS BLACK. flappy-pipes reads
+         * `Color.menu.scrim` for the wash behind its playfield; an absent
+         * member is `undefined`, assigning undefined to a `color` leaves the
+         * default, and the default is opaque black — so the one member nobody
+         * had asked for yet turned a translucent dim into a blackout, with a
+         * "Unable to assign [undefined] to QColor" line in a log on tty1 as
+         * the only notice. A missing PROPERTY is silent where a missing TYPE is
+         * loud, which is the whole reason this module is built from a count
+         * over the real corpus rather than to taste (tools/plugin-compat.sh).
+         *
+         * Derived from the popup background rather than named as a colour of
+         * its own: a scrim is the surface beneath, held back, and a theme that
+         * moves its cards moves this with them.
+         */
+        readonly property color scrim: Qt.rgba(Theme.popupBg.r, Theme.popupBg.g,
+                                               Theme.popupBg.b, 0.62)
     }
 
     /*

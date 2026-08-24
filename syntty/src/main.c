@@ -71,6 +71,8 @@ static const char *usage_text =
 "  --config=FILE             read that instead of the usual place\n"
 "  --no-config               ignore the config file entirely\n"
 "  --tabs=N                  win: open N tabs at startup, all running CMD\n"
+"  --app-id=NAME             win: the app_id the window reports, so a TUI\n"
+"                            can be focused and pinned as itself\n"
 "  --hold                    win: keep a tab open after its command exits,\n"
 "                            with its status — for a window opened to run one\n"
 "                            thing, where the output is the point\n"
@@ -117,6 +119,7 @@ typedef struct {
 	const char *drag;
 	int         scroll_after;
 
+	const char *app_id;      /* --app-id=NAME: what the window calls itself */
 	int      tabs;           /* --tabs=N: open N at startup */
 	bool     hold;           /* --hold: keep the window after the command */
 	const char *resize;      /* --resize=COLSxROWS, applied after the stream */
@@ -752,6 +755,7 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 		.flag_size = o->flag_size,
 		.font      = o->font,
 		.size      = o->font_size,
+		.app_id    = o->app_id,
 	};
 
 	st_win_stats_t ws = {0};
@@ -1504,6 +1508,7 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--select=", 9))      o.select = a + 9;
 		else if (!strncmp(a, "--tabs=", 7))        o.tabs = atoi(a + 7);
 		else if (!strcmp(a, "--hold"))             o.hold = true;
+		else if (!strncmp(a, "--app-id=", 9))      o.app_id = a + 9;
 		else if (!strncmp(a, "--resize=", 9))      o.resize = a + 9;
 		else if (!strncmp(a, "--config=", 9))      o.config = a + 9;
 		else if (!strcmp(a, "--no-config"))        o.no_config = true;

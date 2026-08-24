@@ -2962,7 +2962,8 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 	/* The app_id is what the dock and the compositor key everything off —
 	 * see reference_dock_pin_desktop_basename_must_equal_app_id. It must
 	 * match the .desktop basename this ships with, when it ships one. */
-	xdg_toplevel_set_app_id(w->toplevel, "syntty");
+	xdg_toplevel_set_app_id(w->toplevel,
+	                        conf && conf->app_id ? conf->app_id : "syntty");
 
 	wl_surface_commit(w->surface);
 	wl_display_roundtrip(w->dpy);

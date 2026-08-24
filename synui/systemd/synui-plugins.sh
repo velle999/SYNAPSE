@@ -120,10 +120,14 @@ EOF
     printf '    %s\n' $(printf '%s\n' "$DIRS" | tr ':' ' ')
     cat <<EOF
 
-  Only the "bar-widget" kind is hosted. A widget must root at BarWidget and
-  keep to that contract; one importing qs.Ui, qs.Commons or Quickshell.Hyprland
-  is listed as unsupported with the reason, because those are Omarchy's own
-  and have no counterpart here.
+  A plugin is listed when it declares the "bar-widget" kind, and its widget
+  must root at BarWidget and keep to that contract; one importing
+  Quickshell.Hyprland, or a qs module this bar does not ship, is listed as
+  unsupported with the reason.
+
+  Its "panel" and "service" entry points are hosted too, mounted once for the
+  session rather than once per bar — that is where a plugin that opens a window
+  keeps the window, and the bar widget is only the button that asks for it.
 EOF
 }
 
@@ -214,10 +218,40 @@ refusal() {  # refusal <dir> <manifest> <entry>
 # per row.
 fld() { printf '%s\n' "$1" | cut -f"$2"; }
 
-# id \t name \t description \t dir \t entry \t on \t refusal
+# One entry point out of `entryPoints`, refused unless it is a safe relative
+# path inside the plugin.
+#
+# ⚠ THE SAME RULE refusal() APPLIES TO barWidget, AND FOR THE SAME REASON: a
+# manifest is third-party and `"panel": "../../../etc/passwd"` must not be
+# loaded into the shell's process. barWidget's copy stays where it is because
+# its failure is a REFUSAL with a reason attached; a bad panel path is simply
+# not mounted, there being no widget to explain it on.
+entry_point() {  # entry_point <dir> <key>
+    local dir=$1 file
+    file=$(jfield "$dir/manifest.json" "$2")
+    [ -n "$file" ] || return 0
+    case "$file" in
+        /*|*..*) return 0 ;;
+    esac
+    [ -f "$dir/$file" ] || return 0
+    printf '%s' "$file"
+}
+
+# id \t name \t description \t dir \t entry \t on \t refusal \t panel \t service
+#
+# ⚠ THE LAST TWO COLUMNS ARE MOUNTED ONCE PER SESSION, NOT ONCE PER BAR. A
+# plugin may declare `panel` and `service` alongside its bar widget — flappy's
+# game and chess's board both do — and the bar widget is then a button that asks
+# the shell to open something it does not itself own. Those entry points were
+# scanned right past for as long as this file emitted seven columns, which is
+# why both widgets appeared on the bar and did nothing at all when clicked.
+#
+# ⛔ APPENDED, NEVER INSERTED. Plugins.qml reads this by POSITION — see its note
+# on why — and every awk in this script names $1..$7. A column added in the
+# middle moves all of them at once and nothing says a word.
 scan() {
-    local d p id name desc kinds entry why on
-    printf 'id\tname\tdescription\tdir\tentry\tenabled\tunsupported\n'
+    local d p id name desc kinds entry why on panel svc
+    printf 'id\tname\tdescription\tdir\tentry\tenabled\tunsupported\tpanel\tservice\n'
     printf '%s\n' "$DIRS" | tr ':' '\n' | while IFS= read -r d; do
         [ -n "$d" ] && [ -d "$d" ] || continue
         for p in "$d"/*/; do
@@ -230,10 +264,13 @@ scan() {
             desc=$(jfield "$p/manifest.json" description)
             entry=$(jfield "$p/manifest.json" barWidget)
             why=$(refusal "${p%/}" "$p/manifest.json" "$entry")
+            panel=$(entry_point "${p%/}" panel)
+            svc=$(entry_point "${p%/}" service)
             on=off
             state_on "$id" && on=on
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                   "$id" "${name:-$id}" "$desc" "${p%/}" "$entry" "$on" "$why"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                   "$id" "${name:-$id}" "$desc" "${p%/}" "$entry" "$on" "$why" \
+                   "$panel" "$svc"
         done
     done
 }

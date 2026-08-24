@@ -1324,6 +1324,30 @@ test('plugin_load', plugin_load_sh,
      depends : [synui_exe],
      timeout : 120)
 
+# ⛔ AND plugin_load.sh STOPS AT THE BAR WIDGET. A plugin declaring a `panel` or
+# a `service` delegates its whole behaviour to an entry point the bar never
+# touches, and every call into the host is guarded — so a missing member is a
+# button that does nothing and logs nothing. plugin_host.sh mounts both, drives
+# the panel over the `plugin` IPC handler (a headless session has nothing to
+# click with) and asserts the settings write-back lands on disk and comes back
+# to the widget.
+# ⚠ AND THE LAUNCHER A PLUGIN CALLS BY NAME. Its name is hardcoded in somebody
+# else's QML and reached through `bar.run`, which detaches — so a wrong branch,
+# a dead shim or a flag syntty does not know all look identical from the widget:
+# a Play button that does nothing. Stubs on PATH, because the real thing would
+# open a game window on the seat running the suite.
+launch_tui_sh = find_program('tests/launch_tui.sh')
+test('launch_tui', launch_tui_sh,
+     args    : [meson.current_source_dir() / 'systemd/omarchy-launch-or-focus-tui.sh'],
+     timeout : 60)
+
+plugin_host_sh = find_program('tests/plugin_host.sh')
+test('plugin_host', plugin_host_sh,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 120)
+
 plugins_sh = find_program('tests/plugins.sh')
 test('plugins', plugins_sh,
      args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],

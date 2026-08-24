@@ -16,7 +16,10 @@ singleton TuxState 1.0 TuxState.qml
 singleton EqState 1.0 EqState.qml
 singleton MusicLibrary 1.0 MusicLibrary.qml
 singleton Plugins 1.0 Plugins.qml
+singleton PluginHost 1.0 PluginHost.qml
+singleton PluginConfig 1.0 PluginConfig.qml
 Bar 1.0 Bar.qml
+PluginMount 1.0 PluginMount.qml
 PostItFile 1.0 PostItFile.qml
 Osd 1.0 Osd.qml
 StartMenu 1.0 StartMenu.qml

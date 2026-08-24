@@ -92,6 +92,24 @@ QtObject {
         readonly property int iconLarge:    root.fontPx(1.5)     // 18
     }
 
+    /*
+     * The same two, at the top level, because half the corpus spells them that
+     * way.
+     *
+     * ⚠ COUNTED, NOT GUESSED. chess reaches for `Style.fontFamily` 30-odd times
+     * across its components and never once for `Style.font.family`; snake and
+     * tetris do the opposite. Both spellings are live in widgets people have
+     * installed, so a module that offers one of them is a module that draws
+     * half the corpus in the wrong typeface — silently, because `font.family:
+     * undefined` is not an error, it is Qt's default font.
+     *
+     * Derived from the group above rather than repeated off Theme: one owner
+     * for the value, two names for it. See tools/plugin-compat.sh for why this
+     * module is built from a count over real widgets.
+     */
+    readonly property string fontFamily: root.font.family
+    readonly property int    fontBaseSize: root.font.baseSize
+
     // ── The bar's own measurements ──────────────────────────────────────────
     //
     // Fractions of THIS bar rather than Omarchy's literals (26/27/21 at their

@@ -89,8 +89,58 @@ PanelWindow {
      * off the wallpaper under THIS bar, and the singleton has one value for the
      * whole desktop. */
     readonly property string fontFamily:    Theme.fontFamily
-    readonly property color  barForeground: bar.pal.fg
     readonly property color  urgent:        Theme.red
+
+    /*
+     * ⚠ TWO NAMES, ONE VALUE, AND ONLY ONE OF THEM IS OURS TO CHOOSE.
+     * `foreground` is what Omarchy's bar is called by every widget written
+     * against it — snake, tetris, calendar and flappy all read
+     * `bar ? bar.foreground : Color.foreground` — and this bar answered only to
+     * `barForeground`. The ternary took its fallback branch, `Color.foreground`
+     * is a Theme colour that resolves fine, and nothing looked wrong…
+     *
+     * ⛔ …EXCEPT IN THE PANELS, WHERE IT WAS NOT A TERNARY. tetris and calendar
+     * read `bar.foreground` with `bar` non-null, got undefined, and the log on
+     * tty1 filled with "Unable to assign [undefined] to QColor" while their
+     * panels drew text in the default colour. That is the whole failure: an
+     * assignment of undefined to a colour is a warning nobody sees and a
+     * component that keeps running.
+     *
+     * `barForeground` is derived rather than duplicated, so there is one
+     * expression to be wrong: two `bar.pal.fg` bindings would be two owners of
+     * one value, and the second to be edited would silently disagree.
+     */
+    readonly property color  foreground:    bar.pal.fg
+    readonly property color  barForeground: bar.foreground
+
+    /* The strip's own backdrop, which a plugin's panel uses to sit its controls
+     * on something that matches the bar they were summoned from — tetris's four
+     * dropdowns read it three times each. Same undefined-to-QColor silence as
+     * `foreground` had, in the same panel. `pal.bg` and not Theme.bg because a
+     * clear bar's backdrop is a scrim over THIS screen's wallpaper. */
+    readonly property color  background:    bar.pal.bg
+
+    /*
+     * ── The rest of the host, which is NOT the bar ──────────────────────────
+     *
+     * `shell` is the session — the panels and services this bar's widgets ask
+     * to open, which are mounted once for the desktop and not once per strip.
+     * A widget reaches it as `bar.shell` because that is where Omarchy puts it;
+     * what it points at is PluginHost, and the reasons live there.
+     *
+     * ⚠ IT WAS UNDEFINED, AND EVERY CALLER GUARDS. flappy's click is
+     * `if (bar.shell && typeof bar.shell.toggle === "function")` — careful code
+     * whose reward on a host missing the member was a button that did nothing
+     * and said nothing. Two of the five installed plugins failed exactly that
+     * way.
+     */
+    readonly property var shell: PluginHost
+
+    /* Launch a command line. Omarchy's `bar.run`, and the one call of the three
+     * that was loud when it was missing — tetris's Start threw a TypeError
+     * rather than failing a guard. PluginHost owns the launching; this is the
+     * name a widget knows it by. */
+    function run(cmd) { PluginHost.run(cmd) }
 
     /*
      * Every live instance of one plugin, across every monitor.
@@ -527,18 +577,25 @@ PanelWindow {
                                  * win — which reads as the widget's own code
                                  * being ignored.
                                  *
-                                 * ⚠ `settings` IS DELIBERATELY LEFT AT ITS
-                                 * DEFAULT EMPTY OBJECT. Omarchy fills it from a
-                                 * per-widget entry in shell.json's layout, and
-                                 * synui has no equivalent file — inventing one
-                                 * here would be a second settings format for a
-                                 * feature nothing has asked for yet. setting()
-                                 * returns the widget's own fallbacks until
-                                 * there is, which is exactly what the contract
-                                 * says an absent key does.
+                                 * ⚠ `settings` NOW COMES FROM A FILE, WHICH
+                                 * THIS NOTE USED TO SAY IT DELIBERATELY DID
+                                 * NOT. It was left at its empty default on the
+                                 * grounds that Omarchy fills it from shell.json,
+                                 * synui has no equivalent, and inventing one
+                                 * would be a second settings format for a
+                                 * feature nothing had asked for. Three
+                                 * installed plugins then asked at once —
+                                 * flappy's best score, chess's `defaults`,
+                                 * tetris's sound and theme — so PluginConfig is
+                                 * that file, and its header carries the
+                                 * argument. An absent key still returns the
+                                 * widget's own fallback, which is what the
+                                 * contract says it should.
                                  */
                                 pluginSlot.item.bar = bar
                                 pluginSlot.item.moduleName = pluginSlot.modelData.id
+                                pluginSlot.item.settings =
+                                    PluginConfig.settingsFor(pluginSlot.modelData.id)
                             }
 
                             onStatusChanged: {
@@ -547,6 +604,31 @@ PanelWindow {
                                                  pluginSlot.modelData.id,
                                                  "failed to load from",
                                                  pluginSlot.source)
+                            }
+
+                            /*
+                             * ⚠ ASSIGNED SETTINGS GO STALE, and this is what
+                             * stops them. The assignment above happens once, at
+                             * load — it has to, for the reason given there —
+                             * and a plugin's own panel writes settings back
+                             * while both are up: flappy's best score is written
+                             * by the panel and read by the widget in the bar. A
+                             * widget still holding the value it was handed at
+                             * startup would show the previous record for the
+                             * rest of the session.
+                             *
+                             * Re-assigned rather than bound, so a plugin that
+                             * writes its own `settings` is not fought over the
+                             * frames in between.
+                             */
+                            Connections {
+                                target: PluginConfig
+                                function onRevisionChanged() {
+                                    if (!pluginSlot.item) return
+                                    pluginSlot.item.settings =
+                                        PluginConfig.settingsFor(
+                                            pluginSlot.modelData.id)
+                                }
                             }
                         }
                     }

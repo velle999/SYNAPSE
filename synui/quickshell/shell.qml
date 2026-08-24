@@ -27,6 +27,26 @@ ShellRoot {
         delegate: Bar {}
     }
 
+    /*
+     * A bar plugin's `panel` and `service` entry points.
+     *
+     * ⚠ HERE AND NOT IN Bar.qml BECAUSE THERE IS ONE OF THESE AND THREE BARS.
+     * Everything above and below is per screen, which is right for a strip, an
+     * OSD and a desktop widget. A plugin's panel is a game and its service is
+     * the state that game is played on — mounted once for the session, exactly
+     * as their own headers say the shell does it. Three copies of flappy's loop
+     * would be three simulations racing over one best score.
+     *
+     * ⛔ THIS WAS THE MISSING HALF OF "synui READS OMARCHY'S PLUGIN FORMAT".
+     * The format was read, the bar widget was hosted, and a plugin that put its
+     * actual behaviour in a panel got a button on the bar that did nothing when
+     * pressed — no error, because every caller guards. See PluginHost.
+     */
+    Variants {
+        model: Plugins.sessionScoped
+        delegate: PluginMount {}
+    }
+
     // The OSD is also one-per-screen, but only the focused one is ever visible
     // (OsdState decides). Same Variants model so a hotplugged monitor gets both
     // a bar and an OSD without a restart.
@@ -90,6 +110,37 @@ ShellRoot {
 
         function autohide(mode: string): void {
             BarConfig.setAll("autohide", mode === "on")
+        }
+    }
+
+    /*
+     * …and a plugin's panel, for the same reason the two above exist: something
+     * outside this process has to be able to open it.
+     *
+     * ⚠ IT IS ALSO THE ONLY WAY TO TEST THE PANEL PATH WITHOUT A POINTER. A
+     * panel-kind plugin is opened by clicking its bar widget, and a headless
+     * test session has nothing to click with — synthetic input on a live seat is
+     * refused outright, and rightly. tests/plugin_host.sh drives this handler
+     * instead, which exercises the same PluginHost call the click makes.
+     *
+     * ONE handler here rather than one per bar, exactly as the mixer's note
+     * says: a handler inside Bar.qml would register the same target once per
+     * monitor and quickshell would refuse all but the first.
+     */
+    IpcHandler {
+        target: "plugin"
+
+        function toggle(id: string): void { PluginHost.toggle(id, "") }
+        function open(id: string): void   { PluginHost.show(id, "") }
+        function close(id: string): void  { PluginHost.hide(id) }
+        /* Answering rather than acting, so a test can assert on the result of
+         * the three above and a script can ask before it acts. */
+        function opened(id: string): string {
+            return PluginHost.isOpen(id) ? "open" : "closed"
+        }
+        function mounted(id: string): string {
+            return (PluginHost.panelFor(id) ? "panel" : "")
+                 + (PluginHost.serviceFor(id) ? " service" : "")
         }
     }
 
