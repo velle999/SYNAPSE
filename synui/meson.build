@@ -1294,6 +1294,28 @@ test('imgview_mouse', imgview_mouse,
 # just draws a menu with nothing about widgets in it — only a pointer landing
 # where the row should be can see that. Driven with a real pointer and wtype;
 # the ledger is a fake synui-widgets on PATH.
+# Bar plugins, in Omarchy's shell-plugin format. Their desktop is quickshell and
+# so is this bar, which makes their format the only one already describing "a
+# QML widget you can drop into a quickshell bar" — so synui reads it rather than
+# growing a second directory layout for the same idea.
+#
+# ⛔ WHAT THIS GUARDS IS THE REFUSALS. An Omarchy widget that imports qs.Commons
+# or Quickshell.Hyprland cannot run here — their own singletons, and a
+# compositor socket synui does not have — and enabling one anyway leaves a state
+# file claiming something is on with an empty space where it should be. Every
+# refusal is asserted by name, including the one that must NOT fire: qs.Ui is
+# provided (it is where BarWidget lives) and is asked of the filesystem rather
+# than of a hardcoded list.
+#
+# Runs entirely inside a scratch HOME: the real plugin directories are the
+# user's, and a test that could enable a plugin on the machine running it is one
+# bad path away from changing the desktop it is testing.
+plugins_sh = find_program('tests/plugins.sh')
+test('plugins', plugins_sh,
+     args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],
+     env     : ['SYNUI_BAR=' + meson.current_source_dir() / 'quickshell'],
+     timeout : 30)
+
 deskmenu_widgets = find_program('tests/deskmenu_widgets.sh')
 test('deskmenu_widgets', deskmenu_widgets,
      args    : [synui_exe.full_path(), synctl_exe.full_path(),

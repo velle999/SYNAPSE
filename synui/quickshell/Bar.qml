@@ -55,6 +55,57 @@ PanelWindow {
     readonly property string outName: modelData.name
 
     /*
+     * ── The half of the plugin contract the HOST owes ───────────────────────
+     *
+     * BarWidget promises a widget three things about the bar it is in (Ui/
+     * BarWidget.qml). Two are facts and the third is a service, and without
+     * them the base type's guards would simply hand every plugin its fallback
+     * for ever — a contract that compiles and is not kept.
+     *
+     * `vertical` is false and stated rather than omitted: synui's bar is a
+     * horizontal strip and has no column form (see the note on bar_edge in
+     * config.c, which offers top and bottom only where the dock offers four).
+     * A widget branching on it gets the right answer today and will get the
+     * right answer if that ever changes.
+     */
+    readonly property bool vertical: false
+    readonly property int  barSize: bar.height
+
+    /* Register with the singleton so a plugin on THIS bar can reach its
+     * instances on the others. Unregistered on destruction: a monitor being
+     * unplugged must not leave a dead bar in the list for broadcast() to walk. */
+    Component.onCompleted: Plugins.registerBar(bar)
+    Component.onDestruction: Plugins.unregisterBar(bar)
+
+    /*
+     * Every live instance of one plugin, across every monitor.
+     *
+     * ⚠ THIS IS WHAT MAKES broadcast() MEAN ANYTHING. A bar surface exists per
+     * screen, so a widget that has just learned something — a click, a file
+     * change — has peers on the other monitors still holding the old answer.
+     * Omarchy's base falls back to refreshing itself alone when the host cannot
+     * enumerate, which is honest and is also a widget that updates on one
+     * screen and not the others.
+     *
+     * ⚠ THROUGH THE SINGLETON, because a Bar cannot see its siblings: the
+     * Variants that creates them is in shell.qml, so there is no id to reach
+     * and no parent to walk. Plugins is where they all meet, for the same
+     * reason Theme and BarConfig are singletons.
+     */
+    function moduleWidgets(name) { return Plugins.widgetsFor(name) }
+
+    /* This bar's own instances of one plugin — what the singleton folds. */
+    function pluginWidgets(name) {
+        const out = []
+        for (let i = 0; i < pluginRow.count; i++) {
+            const slot = pluginRow.itemAt(i)
+            if (slot && slot.item && slot.modelData
+                && slot.modelData.id === name) out.push(slot.item)
+        }
+        return out
+    }
+
+    /*
      * This screen's strip palette — the ink, the washes and the background, all
      * resolved against the wallpaper under THIS bar rather than under the desk.
      *
@@ -390,6 +441,81 @@ PanelWindow {
                     // an alert, not a readout, and it is invisible unless
                     // something is actually being captured. No BarConfig key
                     // for the same reason GameMode has none — see Recording.qml.
+                    /*
+                     * ── Plugin widgets ───────────────────────────────
+                     *
+                     * Third-party bar widgets, in Omarchy's shell-plugin
+                     * format (see synui-plugins). First in the right-hand run,
+                     * nearest the centre, so a plugin never displaces the
+                     * modules somebody relies on being at the end of the bar —
+                     * the clock, the tray and the volume keep their place
+                     * whatever is installed.
+                     *
+                     * ⚠ EACH ONE IN A Loader, AND THAT IS THE POINT. A plugin
+                     * is somebody else's QML in this process: a syntax error, a
+                     * missing import or a type that does not resolve must cost
+                     * that one widget and not the bar. A Loader isolates the
+                     * failure and reports it as `status`, where instantiating
+                     * the component inline would take the whole surface down
+                     * with it — and the bar is the thing you would use to fix
+                     * it.
+                     *
+                     * Plugins.active is already filtered to enabled AND
+                     * hostable, so nothing here has to re-ask.
+                     */
+                    Repeater {
+                        id: pluginRow
+                        model: Plugins.active
+
+                        delegate: Loader {
+                            id: pluginSlot
+                            required property var modelData
+
+                            anchors.verticalCenter: parent ? parent.verticalCenter
+                                                           : undefined
+                            asynchronous: true
+                            source: Plugins.entryUrl(pluginSlot.modelData)
+
+                            /* A widget that failed to load takes no width: a
+                             * broken plugin leaving a gap in the bar would read
+                             * as a bar layout bug rather than as one plugin
+                             * being wrong. `synui-plugins list` is where the
+                             * reason lives. */
+                            visible: pluginSlot.status === Loader.Ready
+                            width: visible && item ? item.implicitWidth : 0
+
+                            onLoaded: {
+                                /*
+                                 * The two the host injects. Assigned and not
+                                 * bound: a plugin is free to write to its own
+                                 * properties, and a binding would fight it and
+                                 * win — which reads as the widget's own code
+                                 * being ignored.
+                                 *
+                                 * ⚠ `settings` IS DELIBERATELY LEFT AT ITS
+                                 * DEFAULT EMPTY OBJECT. Omarchy fills it from a
+                                 * per-widget entry in shell.json's layout, and
+                                 * synui has no equivalent file — inventing one
+                                 * here would be a second settings format for a
+                                 * feature nothing has asked for yet. setting()
+                                 * returns the widget's own fallbacks until
+                                 * there is, which is exactly what the contract
+                                 * says an absent key does.
+                                 */
+                                pluginSlot.item.bar = bar
+                                pluginSlot.item.moduleName = pluginSlot.modelData.id
+                            }
+
+                            onStatusChanged: {
+                                if (pluginSlot.status === Loader.Error)
+                                    console.warn("synui-bar: plugin",
+                                                 pluginSlot.modelData.id,
+                                                 "failed to load from",
+                                                 pluginSlot.source)
+                            }
+                        }
+                    }
+
                     Recording { barScreen: bar.screen }
 
                     Tray      { barScreen: bar.screen

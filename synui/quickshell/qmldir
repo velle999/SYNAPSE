@@ -15,6 +15,7 @@ singleton PostItState 1.0 PostItState.qml
 singleton TuxState 1.0 TuxState.qml
 singleton EqState 1.0 EqState.qml
 singleton MusicLibrary 1.0 MusicLibrary.qml
+singleton Plugins 1.0 Plugins.qml
 Bar 1.0 Bar.qml
 PostItFile 1.0 PostItFile.qml
 Osd 1.0 Osd.qml

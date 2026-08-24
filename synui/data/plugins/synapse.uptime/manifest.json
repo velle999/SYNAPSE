@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "synapse.uptime",
+  "name": "Uptime",
+  "version": "1.0.0",
+  "author": "SynapseOS",
+  "description": "How long this machine has been up — and the worked example for writing a bar plugin",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Uptime.qml" },
+  "barWidget": {
+    "displayName": "Uptime",
+    "description": "How long this machine has been up",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

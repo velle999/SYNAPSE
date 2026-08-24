@@ -1159,7 +1159,52 @@ pkgver=0.1.0
 #   not survive in a diff. ⚠ Two of them needed menu_last_at(): an icon menu
 #   carries TWO separators now — one above the dock's placement rows, one above
 #   the app block — and menu_at() answers with the wrong one.
-pkgrel=463
+# 464: the bar takes third-party widgets, in OMARCHY'S shell-plugin format.
+#   Their desktop is one long-lived quickshell process in which the bar, the
+#   panels and the overlays are all plugins; this bar is quickshell too. That
+#   makes their format the only one already describing "a QML widget you can
+#   drop into a quickshell bar", so synui reads it rather than growing a second
+#   directory layout for the same idea — a widget written once loads on either.
+#   A plugin is a directory with a manifest.json and some QML. Searched in
+#   order: ~/.config/omarchy/plugins (theirs, FIRST, so a plugin installed with
+#   `omarchy plugin add` is found without copying it), ~/.config/synui/plugins,
+#   /usr/share/synui/plugins.
+#   ⛔ AN ARBITRARY OMARCHY WIDGET WILL NOT RUN HERE, and the whole design is
+#   about saying so rather than showing an empty space. Their widgets root at
+#   BarWidget — 45 lines of contract, portable, reimplemented (not copied: it is
+#   somebody else's project under somebody else's licence) as
+#   quickshell/Ui/BarWidget.qml — but they also `import qs.Commons`, whose
+#   Style.qml alone is 23KB of API, and several `import Quickshell.Hyprland`,
+#   which speaks to a compositor socket synui does not have. synui-plugins
+#   refuses those BEFORE the bar sees them, naming the import, and refuses to
+#   write `on` for one: a state file claiming a plugin is enabled with nothing
+#   on the bar is the failure this exists to prevent.
+#   ⚠ THE qs.* CHECK IS ASKED OF THE FILESYSTEM, NOT A HARDCODED LIST.
+#   quickshell resolves `import qs.Foo` to <shell root>/Foo, so whether an
+#   import can be satisfied is a question about which module directories this
+#   bar ships. A list would have refused qs.Ui — which IS provided, and is where
+#   BarWidget lives — or kept allowing a module after it was deleted.
+#   ⚠ Ui/ NEEDS ITS OWN qmldir OR NOTHING IMPORTS IT. Same trap the top-level
+#   qmldir's note describes, one directory down: without it every plugin fails
+#   with "BarWidget is not a type" from a package that installed cleanly.
+#   ⚠ Peer lookup goes through the Plugins SINGLETON because a Bar cannot see
+#   its siblings — the Variants that creates them is in shell.qml, so there is
+#   no id to reach and no parent to walk. That is what makes BarWidget's
+#   broadcast() mean anything on a multi-monitor desk; without it a widget
+#   refreshes one screen and leaves the others stale. Registration builds a NEW
+#   array rather than push()ing: reassigning the same object notifies no QML
+#   binding.
+#   Each plugin is instantiated in its own Loader, first in the right-hand run
+#   so it never displaces the clock or the tray. Third-party QML in the bar's
+#   own process: a Loader isolates a failure to that widget, where instantiating
+#   inline would take down the surface you would use to fix it.
+#   data/plugins/synapse.uptime is the worked example, shipped OFF like every
+#   plugin — a plugin system whose list is empty until you have already written
+#   one teaches nobody the format. 21 checks in tests/plugins.sh, all inside a
+#   scratch HOME: the real plugin directories are the user's, and a test that
+#   could enable one on the machine running it would change the desktop it is
+#   testing.
+pkgrel=464
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1555,6 +1600,18 @@ package() {
         install -Dm644 "$_mod" \
             "$pkgdir/usr/share/synui/quickshell/modules/${_mod##*/}"
     done
+    # ⚠ Ui/ IS AN IMPORT TARGET, NOT A FOLDER OF COMPONENTS, and its qmldir is
+    # what makes it one. quickshell resolves `import qs.Ui` to <shell root>/Ui,
+    # which is how a bar plugin reaches BarWidget — drop the qmldir and every
+    # plugin fails with "BarWidget is not a type" from a package that installed
+    # cleanly. Same trap the top-level qmldir's note above describes, one
+    # directory down.
+    for _ui in quickshell/Ui/*.qml; do
+        install -Dm644 "$_ui" \
+            "$pkgdir/usr/share/synui/quickshell/Ui/${_ui##*/}"
+    done
+    install -Dm644 quickshell/Ui/qmldir \
+        "$pkgdir/usr/share/synui/quickshell/Ui/qmldir"
     for _wid in quickshell/widgets/*.qml; do
         install -Dm644 "$_wid" \
             "$pkgdir/usr/share/synui/quickshell/widgets/${_wid##*/}"
@@ -1616,6 +1673,36 @@ package() {
     # implementation of the toggle however it is reached.
     install -Dm755 systemd/synui-widgets.sh \
         "$pkgdir/usr/bin/synui-widgets"
+
+    # Bar plugins, in Omarchy's shell-plugin format. The single writer of
+    # plugins.state and the only thing that parses a manifest — the bar reads
+    # its TSV, so the command line and the bar cannot come to different
+    # conclusions about what is installed, which for a plugin system is the
+    # difference between "it is off" and "it was refused".
+    install -Dm755 systemd/synui-plugins.sh \
+        "$pkgdir/usr/bin/synui-plugins"
+
+    # The worked example, shipped OFF like every plugin. It is the third search
+    # directory, so `synui-plugins list` has something in it on a machine that
+    # has never installed one — a plugin system whose list is empty until you
+    # have already written a plugin teaches nobody the format.
+    #
+    # ⚠ `*/` AND NOT `*`: the trailing slash matches DIRECTORIES only, which is
+    # what keeps README.md below out of the loop. Without it the README would be
+    # installed as a plugin directory of its own and `synui-plugins list` would
+    # show a row for it — a manifest-less one, so the answer would be silence
+    # rather than an error.
+    for _pl in data/plugins/*/; do
+        _plid=${_pl%/}; _plid=${_plid##*/}
+        for _plf in "$_pl"*; do
+            install -Dm644 "$_plf" \
+                "$pkgdir/usr/share/synui/plugins/$_plid/${_plf##*/}"
+        done
+    done
+    # The format, the contract and what cannot be hosted, beside the example
+    # that demonstrates all three.
+    install -Dm644 data/plugins/README.md \
+        "$pkgdir/usr/share/synui/plugins/README.md"
 
     # The single writer of sounds.state AND the thing that plays a sample —
     # both jobs in one script so "is this event enabled?" has one answer. The

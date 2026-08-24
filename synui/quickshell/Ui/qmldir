@@ -1,0 +1,5 @@
+# The module a bar plugin imports as `qs.Ui`, which is the import Omarchy's own
+# widgets open with. Only BarWidget is here, and deliberately: their Ui module
+# has thirty-odd types and reproducing them would be reimplementing somebody
+# else's desktop. This is the one that is a CONTRACT rather than a component.
+BarWidget 1.0 BarWidget.qml
