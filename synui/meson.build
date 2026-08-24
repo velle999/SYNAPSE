@@ -1341,6 +1341,17 @@ test('launch_tui', launch_tui_sh,
      args    : [meson.current_source_dir() / 'systemd/omarchy-launch-or-focus-tui.sh'],
      timeout : 60)
 
+# The other two commands their QML names. Same contract, same silence: the
+# weather widgets write their location through omarchy-weather-location and
+# read it back out of a JSON file, and announce storms through
+# omarchy-notification-send — so a shim that writes an unparseable file or
+# forwards a flag notify-send rejects looks exactly like weather that is fine.
+omarchy_shims_sh = find_program('tests/omarchy_shims.sh')
+test('omarchy_shims', omarchy_shims_sh,
+     args    : [meson.current_source_dir() / 'systemd/omarchy-weather-location.sh',
+                meson.current_source_dir() / 'systemd/omarchy-notification-send.sh'],
+     timeout : 60)
+
 plugin_host_sh = find_program('tests/plugin_host.sh')
 test('plugin_host', plugin_host_sh,
      args    : [synui_exe.full_path(),

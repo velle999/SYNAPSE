@@ -1495,7 +1495,7 @@ pkgver=0.1.0
 #   and a degraded install now exits 3 rather than 0 — the window only showed a
 #   message on a non-zero code, which is why it reported three dead widgets as
 #   installed and on.
-pkgrel=475
+pkgrel=476
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2005,6 +2005,19 @@ package() {
     # call site is not configurable.
     install -Dm755 systemd/omarchy-launch-or-focus-tui.sh \
         "$pkgdir/usr/bin/omarchy-launch-or-focus-tui"
+
+    # ⚠ AND THE TWO THE WEATHER WIDGETS NAME. Every weather widget in their
+    # catalogue keeps its location in ONE file, and omarchy-weather-location is
+    # the only thing that writes it: without the command the city picker takes
+    # a click, spawns nothing, and the widget goes on showing no location —
+    # Quickshell reports the missing binary to the shell log, never to the
+    # plugin that asked. omarchy-notification-send is the same story one step
+    # quieter: it carries the storm alerts, so its absence is a setting that is
+    # on and a warning that never arrives.
+    install -Dm755 systemd/omarchy-weather-location.sh \
+        "$pkgdir/usr/bin/omarchy-weather-location"
+    install -Dm755 systemd/omarchy-notification-send.sh \
+        "$pkgdir/usr/bin/omarchy-notification-send"
 
     # The worked example, shipped OFF like every plugin. It is the third search
     # directory, so `synui-plugins list` has something in it on a machine that
