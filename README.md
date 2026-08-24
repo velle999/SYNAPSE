@@ -725,6 +725,39 @@ Turn it off in **Control panel ▸ Power ▸ Unlock with fingerprint**, or with
 `lock_fingerprint = off` in `synuirc`. It is on by default and costs a machine
 without a reader one extra fork per lock and no visible change.
 
+### The look it ships with
+
+A fresh install boots into **SYNAPSE Prism**, and Prism has no colour of its
+own. It is one dark, desaturated, near-neutral surface at low alpha, and **the
+wallpaper supplies the colour through it** — measured live, on every wallpaper
+change. That is the whole theme. Everything that is *not* the accent is fixed,
+and that is the design: a theme whose chrome colour also came off the wallpaper
+would be a different theme on every picture, and the glass would have nothing
+constant to be glass *against*.
+
+**Prism Light** is the same theme with the surface inverted and deliberately
+nothing else changed — the same glass, the same accent off the picture. Fifteen
+themes in total; `Super`+`T` is the picker.
+
+The wallpaper under it is *St. Louis on the Mississippi by Night*, Daniel
+Schwen's photograph of the Gateway Arch. The **colour** cut and not the noir
+one, on purpose: a greyscale picture has no hue to give, so the noir version
+would boot a new desktop onto Prism's fallback cyan with the one thing that
+makes Prism *Prism* doing nothing.
+
+Everything else follows from one row. **Appearance ▸ Glass** is a single slider
+for the whole desktop — the windows, synui's own panels, the terminal, the bar
+and the dock, each with the number that surface needs. On `auto` it is the
+theme's own answer, which on Prism is the frosted surface the theme was drawn
+for; switch to Gruvbox or Win95 and it is whatever *that* theme was tuned with,
+with nothing to undo. A floating-pill bar and a capsule dock come with it.
+
+> **`auto` genuinely means auto.** For one release it did not — a glass theme's
+> panels fell through to a tuned ladder where an explicit level returned an
+> absolute, and the dock had no way to ask its theme at all — so a fresh install
+> had to write a number down, which then pinned Prism's glass onto every other
+> theme you might pick later. Both halves are fixed, and the number is gone.
+
 ### Making it yours
 
 Themes, cursors and sounds all have a panel *and* a command-line tool, and both
@@ -743,6 +776,78 @@ should not start making noises or redecorating a desktop nobody asked it to.
 The CRT filters are off on a fresh install too; turn them on with `Super`+`E`.
 `Tab` on that panel is the second page: rounded corners, drop shadow, backdrop
 blur and translucency, each on a knob you turn while watching the window change.
+
+### Bar plugins
+
+The bar takes third-party widgets, in
+**[Omarchy](https://omarchy.org/manual/shell-plugins/)'s shell-plugin format**.
+
+Omarchy's desktop is a single long-lived [quickshell](https://quickshell.org/)
+process in which the bar, the panels and the overlays are all plugins.
+SynapseOS's bar is quickshell too. That makes their format the only one already
+describing *"a QML widget you can drop into a quickshell bar"* — so synui reads
+it, rather than growing an incompatible directory layout for the same idea. A
+widget written once loads on either desktop.
+
+```bash
+synui-plugins browse                  # what you can install, and where from
+synui-plugins add omarchy.spacer      # one widget, straight out of their repo
+synui-plugins tui                     # the same list, arrow keys
+synui-plugins gui                     # …or a window
+```
+
+A plugin is a directory with a `manifest.json` and some QML. Searched in order:
+`~/.config/omarchy/plugins` (**theirs, first** — so a plugin installed with
+`omarchy plugin add` is found without copying it), `~/.config/synui/plugins`,
+then `/usr/share/synui/plugins`.
+
+Of the eight bar widgets Omarchy ships, **five run**: Spacer, Active window,
+Indicators, Microphone and System update. Keyboard layout and Workspaces are
+refused because they `import Quickshell.Hyprland`, which talks to a compositor
+socket synui does not have; their Tray needs a `PopupCard` this desktop does not
+implement, and synui has its own tray.
+
+`qs.Ui` gives a plugin `BarWidget` and `WidgetButton`; `qs.Commons` gives it
+`Style`, `Color` and `Util` — **the same names, over SynapseOS's own theme**.
+That is deliberate rather than lazy: Omarchy is MIT, so vendoring their 23 KB
+`Style.qml` would be perfectly legal, and it carries *their* spacing scale,
+*their* font tokens and *their* palette. A widget would come out looking like a
+piece of Omarchy sitting on SynapseOS. What a widget actually asks `Style` is
+"how big is body text here" — a question this desktop already answers.
+
+Refusals happen **before** the bar sees the plugin, with the import named, and
+`synui-plugins <id> on` refuses too: a state file claiming a plugin is enabled
+with nothing on screen is the failure the whole check exists to prevent.
+Everything is off until you ask for it — a plugin is third-party code running
+inside the bar's own process.
+
+### RGB lighting
+
+SynapseOS already decides one colour per wallpaper: synui measures the picture
+and the bar, the dock and the icons wear it. `syn-rgb` carries the same colour
+out to whatever [OpenRGB](https://openrgb.org/) can see — the RAM, the board,
+the keyboard — so the room matches the desktop instead of being whatever it was
+set to in somebody else's software.
+
+```bash
+syn-rgb on                # follow the wallpaper's accent
+syn-rgb colour 8B00FF     # or pin one
+syn-rgb follow theme      # or follow the theme instead of the picture
+syn-rgb status            # what it thinks, and whether openrgb is there
+```
+
+It is a bridge and nothing more: read the colour this desktop already chose,
+hand it to OpenRGB, get out of the way. **The watching is systemd's** — a path
+unit fires when the measured palette changes, so there is no daemon here,
+nothing to poll and nothing running at all between one wallpaper and the next.
+
+`openrgb` is an optional dependency, and a desktop with nothing in it that glows
+should not pull in a lighting daemon — `syn-rgb` says which package is missing
+rather than failing silently. **A fresh install has this on**; on an existing
+machine it stays off until asked, because hardware currently doing what its
+owner asked is not a thing an upgrade may take over.
+
+Control panel ▸ Appearance ▸ **RGB lights** is the same switch.
 
 **Text size is desktop-wide**, not per-application: family and scale, under
 *Appearance* in the control panel, written to the one `font.state` that `synui`,
@@ -1146,7 +1251,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
-| `synpkg` | The package manager — `search`, `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
+| `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
@@ -1158,6 +1263,9 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-arsenal` | Browse and install BlackArch security tooling by category — a window by default, `--tui` in the terminal, `--enable-repo` to add the repository |
 | `syn-confine` | Run a command inside a kernel-enforced allowlist — `syn-confine --ro /usr --rw ~/project -- ./build.sh`. `--print` shows the resolved policy without running anything |
 | `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
+| `synui-plugins` | **Bar plugins** — third-party widgets for the bar, in [Omarchy](https://omarchy.org/)'s shell-plugin format. `browse` what you can install, `add <id\|git-url>`, `<id> on\|off\|toggle`, `remove`, `list` (which says why anything is refused). `synui-plugins tui` in the terminal, `synui-plugins gui` in a window. See [Bar plugins](#bar-plugins) |
+| `synui-widgets` | Desktop widgets — `<widget> on\|off\|toggle`, `all off`, `home` to put a dragged one back. `Super`+`Shift`+`A` cycles them |
+| `syn-rgb` | **The wallpaper's accent, on the hardware that has lights in it** — `on`, `off`, `status`, `devices`, `colour RRGGBB`, `follow accent\|theme\|fixed`, `brightness`, `dark`. See [RGB lighting](#rgb-lighting) |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
 | `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
 | `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
@@ -1488,7 +1596,7 @@ SPDX identifiers, per component:
 | Scope | License |
 |---|---|
 | `synapse_kmod` (kernel module) | `GPL-2.0-only` — it links the kernel |
-| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `synfiles`, `syn-settings`, `syn-disks`, `syn-edit`, `syn-confine`, `syntty`, `syn-arcade`, `vibe`, `chibi` | `GPL-2.0-or-later` |
+| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `synfiles`, `syn-settings`, `syn-disks`, `syn-edit`, `synstudio`, `syn-confine`, `syntty`, `syn-arcade`, `vibe`, `chibi` | `GPL-2.0-or-later` |
 | `synpkg` | `GPL-2.0-or-later` — it links `libalpm`, which is, so it can be nothing else |
 | `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
 | `cliamp` | `MIT`, upstream — packaged from [bjarneo/cliamp](https://github.com/bjarneo/cliamp) at a pinned tag; it is the player big screen mode drives |
@@ -1496,8 +1604,11 @@ SPDX identifiers, per component:
 | Boska, Recia, Quilon (bundled with Antiquity) | © [Indian Type Foundry](https://www.indiantypefoundry.com/), via Fontshare — their licence requires naming the faces and crediting ITF's ownership; `quickshell-antiquity/FONTS.md` is that credit |
 | `MaterialSymbolsSharp` (bundled with Antiquity) | `Apache-2.0`, © Google LLC |
 | `linux-wallpaperengine` | `GPL-3.0-or-later`, upstream — packaged from [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine) at a pinned commit |
+| `limine-mkinitcpio-hook` | `GPL-3.0`, upstream |
 | CEF / Chromium (bundled with `linux-wallpaperengine`) | `BSD-3-Clause`, © The Chromium Embedded Framework Authors and © The Chromium Authors — the renderer links `libcef.so` for web wallpapers, so it and its `.pak` data ship with the package |
 | `synapse-wallpapers` | `GPL-3.0-or-later` |
+| `commons-st-louis-night.jpg` | `CC-BY-SA-4.0`, © [Daniel Schwen](https://commons.wikimedia.org/wiki/File:Saint_Louis_night_expblend.jpg) — the Gateway Arch over the Mississippi, and what a fresh install boots onto. Shipped **byte-for-byte upstream's**: a verbatim copy owes attribution and nothing more, and re-encoding it would make it an adapted work |
+| `commons-st-louis-night-noir.jpg` | `CC-BY-SA-4.0` — SynapseOS's greyscale grade of the above, which makes it an **adapted** work: §3(b) forces the grade to CC BY-SA too and §3(a) still wants Schwen credited and the change indicated. Not a choice we got to make. Both notices ship as `/usr/share/licenses/synui/WALLPAPERS.md` |
 | `fetch` (the "About OS" tool) | `ISC`, upstream — packaged from [areofyl/fetch](https://github.com/areofyl/fetch) at a pinned commit, plus two local patches meant for upstream |
 | `limine-snapper-sync` | `GPL-3.0`, upstream ([Zesko](https://gitlab.com/Zesko/limine-snapper-sync)) |
 | GraalVM CE (linked into `limine-snapper-sync`) | `GPL-2.0-WITH-Classpath-exception-2.0`, © Oracle — it is a `native-image` build, so GraalVM's runtime is statically linked into the shipped binary rather than merely used to compile it |
@@ -1512,6 +1623,24 @@ the driver from Samsung onto the machine that will print with it, and installs
 the EULA alongside it. The Xpress M2020/M2020W needs this because it is an SPL
 device that predates driverless IPP; almost any printer made since roughly 2015
 needs no driver at all.
+
+**Omarchy is three relationships, and all three words apply somewhere.** The bar
+takes third-party widgets in [Omarchy](https://omarchy.org/)'s shell-plugin
+format (`MIT`, © David Heinemeier Hansson), and what that means for licensing
+depends on which piece you mean:
+
+- `synui/quickshell/Ui/` and `synui/quickshell/Commons/` are **ours**. They carry
+  Omarchy's *names* and their documented contract — which is not copyrightable —
+  over synui's own theme, so a widget written for their bar runs on this one and
+  looks like it belongs here. Nothing is copied; `GPL-2.0-or-later`, like the
+  rest of synui.
+- `synui/tests/plugin_load.sh` vendors **one file of theirs verbatim** as a test
+  fixture, with their copyright and permission notice inline beside it, because
+  a compatibility claim proved with a widget we wrote ourselves proves nothing.
+- Anything installed with `synui-plugins add` is **theirs**, and is fetched at
+  run time — never in this package. The installer copies the repository's
+  `LICENSE` in with the code, because MIT wants the notice in "all copies" and a
+  file put on somebody's disk is one however it got there.
 
 **Wallpaper Engine's own content is not redistributed.** `linux-wallpaperengine`
 is an independent renderer; the wallpapers, and Wallpaper Engine's `assets/`
