@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Bar Plugins
+GenericName=Widget Manager
+Comment=Browse, install and turn on widgets for the bar
+Exec=synui-plugins gui
+Icon=preferences-desktop-theme
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=plugin;widget;bar;omarchy;extension;
+StartupNotify=true
+StartupWMClass=synui-plugins
+OnlyShowIn=synui;SynapseOS;

@@ -83,6 +83,8 @@ usage: synui-plugins [list|scan]
        synui-plugins <id> [on|off|toggle]
        synui-plugins add <git-url> [name]
        synui-plugins remove <id>
+       synui-plugins tui
+       synui-plugins gui
 
   list                  what is installed, and whether each one is on
   scan                  the same, as TSV — what the bar reads
@@ -90,6 +92,10 @@ usage: synui-plugins [list|scan]
   add <git-url>         clone a plugin into ~/.config/synui/plugins and, if it
                         is hostable, turn it on
   remove <id>           delete one you installed. Only from your own directory
+  browse                what you can install, and where it comes from
+  catalogue             the same, as TSV — what the window reads
+  tui                   all of it in the terminal, with arrow keys
+  gui                   all of it in a window
 
   Plugins are directories holding a manifest.json, in Omarchy's shell-plugin
   format. Searched, in order:
@@ -283,6 +289,124 @@ fetch_subpath() {  # fetch_subpath <repo> <ref> <path> <base> <dest>
 case "${1:-list}" in
     -h|--help|help) usage ;;
     scan) scan ;;
+    catalogue)
+        # ⚠ The window's half of `browse`. Separate rather than a --tsv flag on
+        # it for the reason `scan` is separate from `list`: one is laid out for
+        # a person and the other is parsed, and a formatter that has to do both
+        # ends up doing neither well.
+        printf 'id\tname\tdescription\tinstalled\tenabled\n'
+        [ -r "$CATALOGUE" ] || exit 0
+        while IFS=$'\t' read -r id name desc repo ref path base; do
+            case "$id" in ''|'#'*) continue ;; esac
+            row=$(scan | awk -F'\t' -v i="$id" '$1==i {print $6; exit}')
+            if [ -n "$row" ]; then inst=1; en=$row; else inst=0; en=off; fi
+            printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$name" "$desc" "$inst" "$en"
+        done < "$CATALOGUE"
+        ;;
+    tui)
+        # ⚠ NEEDS A TERMINAL, AND SAYS SO. Piped or run from a launcher there is
+        # no tty to read a keypress from, and a UI that silently does nothing is
+        # worse than one that refuses — `list` is the answer for a pipe.
+        [ -t 0 ] && [ -t 1 ] || {
+            printf 'synui-plugins: tui needs a terminal — try `list`\n' >&2; exit 2; }
+
+        tui_rows=""
+        tui_load() {
+            # id \t label \t state, merged the way the window merges them: what
+            # is on disk, then what the catalogue offers and is not.
+            tui_rows=$(
+                scan | tail -n +2 | while IFS=$'\t' read -r id name desc dir entry on why; do
+                    if [ -n "$why" ]; then st="unsupported"; else st="$on"; fi
+                    printf '%s\t%s\t%s\n' "$id" "${name:-$id}" "$st"
+                done
+                if [ -r "$CATALOGUE" ]; then
+                    while IFS=$'\t' read -r id name desc repo ref path base; do
+                        case "$id" in ''|'#'*) continue ;; esac
+                        [ -n "$(installed_id "$id")" ] && continue
+                        printf '%s\t%s\t%s\n' "$id" "$name" "available"
+                    done < "$CATALOGUE"
+                fi
+            )
+        }
+
+        sel=1
+        tui_load
+        # ⛔ THE CURSOR AND THE ALTERNATE SCREEN COME BACK ON EVERY EXIT PATH,
+        # including Ctrl+C. A TUI that dies with the cursor hidden leaves the
+        # terminal it was run from unusable, and the person who has to fix it
+        # cannot see what they are typing.
+        cleanup_tui() { printf '\033[?25h\033[?1049l'; stty echo 2>/dev/null; }
+        trap 'cleanup_tui; exit 0' INT TERM
+        printf '\033[?1049h\033[?25l'
+
+        while :; do
+            n=$(printf '%s\n' "$tui_rows" | grep -c . )
+            [ "$sel" -lt 1 ] && sel=1
+            [ "$sel" -gt "$n" ] && sel=$n
+            printf '\033[H\033[2J'
+            printf '  BAR PLUGINS\n'
+            printf '  widgets for the bar, in Omarchy\047s format\n\n'
+            i=0
+            printf '%s\n' "$tui_rows" | while IFS=$'\t' read -r id name st; do
+                [ -n "$id" ] || continue
+                i=$((i + 1))
+                if [ "$i" = "$sel" ]; then mark='>'; else mark=' '; fi
+                printf '  %s %-26s %-22s %s\n' "$mark" "$id" "$name" "$st"
+            done
+            printf '\n  \047 \047 toggle/install   r remove   g refresh   q quit\n'
+
+            # One keypress. An escape sequence arrives as three bytes and the
+            # two after ESC are read without a timeout only because a bare ESC
+            # is not a key this offers.
+            IFS= read -rsn1 k 2>/dev/null || { cleanup_tui; exit 0; }
+            case "$k" in
+                $'\033') IFS= read -rsn2 -t 0.1 k2 2>/dev/null
+                        case "$k2" in
+                            '[A') sel=$((sel - 1)) ;;
+                            '[B') sel=$((sel + 1)) ;;
+                        esac ;;
+                k) sel=$((sel - 1)) ;;
+                j) sel=$((sel + 1)) ;;
+                q) cleanup_tui; exit 0 ;;
+                g) tui_load ;;
+                ' '|'')
+                    row=$(printf '%s\n' "$tui_rows" | sed -n "${sel}p")
+                    rid=$(printf '%s' "$row" | cut -f1)
+                    rst=$(printf '%s' "$row" | cut -f3)
+                    [ -n "$rid" ] || continue
+                    cleanup_tui
+                    case "$rst" in
+                        available)   "$0" add "$rid" ;;
+                        unsupported) printf '%s cannot be hosted\n' "$rid" ;;
+                        *)           "$0" "$rid" toggle ;;
+                    esac
+                    printf '\npress a key…'; IFS= read -rsn1 _ 2>/dev/null
+                    printf '\033[?1049h\033[?25l'
+                    tui_load ;;
+                r)
+                    row=$(printf '%s\n' "$tui_rows" | sed -n "${sel}p")
+                    rid=$(printf '%s' "$row" | cut -f1)
+                    [ -n "$rid" ] || continue
+                    cleanup_tui
+                    "$0" remove "$rid"
+                    printf '\npress a key…'; IFS= read -rsn1 _ 2>/dev/null
+                    printf '\033[?1049h\033[?25l'
+                    tui_load ;;
+            esac
+        done
+        ;;
+    gui)
+        command -v quickshell >/dev/null 2>&1 || {
+            printf 'synui-plugins: quickshell is not installed\n' >&2; exit 2; }
+        qml=/usr/share/synui/plugins-gui.qml
+        [ -r "$qml" ] || qml="$(dirname "$0")/../data/plugins-gui.qml"
+        [ -r "$qml" ] || { printf 'synui-plugins: %s is missing\n' "$qml" >&2; exit 1; }
+        # ⚠ QS_APP_ID, OR THE WINDOW WEARS SOMEBODY ELSE'S IDENTITY. Every one of
+        # these apps is a quickshell app that hands its whole environment to what
+        # it spawns, so a window opened from another one inherits that one's id
+        # and gets no dock entry of its own. Same call synpkg's gui makes.
+        exec env QS_APP_ID=synui-plugins quickshell -p "$qml"
+        ;;
     browse)
         [ -r "$CATALOGUE" ] || { printf 'synui-plugins: no catalogue at %s\n' \
                                         "$CATALOGUE" >&2; exit 1; }

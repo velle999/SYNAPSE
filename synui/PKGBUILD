@@ -1354,7 +1354,34 @@ pkgver=0.1.0
 #   paths are Omarchy's (theirs, with their own command) and the package's
 #   (pacman's); a remove reaching either deletes a file somebody else owns, and
 #   on the packaged one the next upgrade puts it back.
-pkgrel=469
+# 470: the plugin manager gets its other two faces. Every SynapseOS app ships a
+#   GUI and a CLI, and a TUI where it fits — synpkg, synfiles and syn-edit all
+#   do, and a tool with one face is one half the desktop cannot reach.
+#   `synui-plugins gui` is a quickshell window like synpkg's: FloatingWindow as
+#   the ROOT rather than a ShellRoot holding one, because `onClosed` is the
+#   window's signal — on a ShellRoot it matches nothing, the process outlives the
+#   window and every later launch exits 0 having drawn nothing. Reads theme.json
+#   AND palette.state, so it wears the wallpaper's accent like the bar does
+#   rather than the preset's; ⚠ `ok` and `use` both have to hold before that
+#   colour is used, which is the check the bar needed in 386.
+#   ⚠ QS_APP_ID=synui-plugins on the exec, or the window inherits the identity of
+#   whatever spawned it and gets no dock entry — every one of these apps hands
+#   its whole environment to what it starts.
+#   `synui-plugins tui` is the same list with arrow keys. ⛔ Its cleanup restores
+#   the cursor and leaves the alternate screen on EVERY exit path including
+#   SIGINT: a TUI that dies with the cursor hidden leaves the terminal unusable
+#   and the person fixing it cannot see what they type. It refuses outright
+#   without a tty rather than silently doing nothing.
+#   ⚠ `catalogue` is a SEPARATE subcommand from `browse`, not a --tsv flag on it,
+#   for the reason `scan` is separate from `list`: one is laid out for a person
+#   and the other is parsed, and a formatter doing both does neither well.
+#   Both new faces render the same two lists the window does — what is on disk
+#   and what the catalogue offers — merged by id, so a plugin cloned from a git
+#   URL and a catalogue entry are one row rather than two.
+#   The window is verified by RUNNING it headless and reading the log for
+#   "Configuration Loaded"; the TUI by driving it through a pty and reading what
+#   it drew. Neither is proven by qmllint or by `bash -n`.
+pkgrel=470
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1881,6 +1908,13 @@ package() {
     # above matches `*/` and skips it, same as the README.
     install -Dm644 data/plugins/catalogue.tsv \
         "$pkgdir/usr/share/synui/plugins/catalogue.tsv"
+    # The window. Beside the tree it manages rather than inside it: this is a
+    # standalone quickshell app like synpkg's, not part of the bar's own QML —
+    # `synui-plugins gui` execs quickshell against it.
+    install -Dm644 data/plugins-gui.qml \
+        "$pkgdir/usr/share/synui/plugins-gui.qml"
+    install -Dm644 data/synui-plugins.desktop \
+        "$pkgdir/usr/share/applications/synui-plugins.desktop"
 
     # The single writer of sounds.state AND the thing that plays a sample —
     # both jobs in one script so "is this event enabled?" has one answer. The
