@@ -436,5 +436,30 @@ else
     ok "git or Qt 6's qmllint is absent — the clone path is not checked here"
 fi
 
+# ── The window itself ───────────────────────────────────────────────────────
+#
+# ⚠ THE GUI HAD NO CHECK OF ANY KIND until it grew a category pane, and a QML
+# file that will not load is a window that draws NOTHING — `synui-plugins gui`
+# exits 0 having shown you an empty rectangle, because quickshell's refusal goes
+# to its own log and not to the terminal you typed in.
+#
+# ⛔ LINT AND NOT A LOAD. Standing the real window up needs a compositor, and a
+# load test that times out on a slower machine fails the BUILD for a reason that
+# has nothing to do with the change — this file is parsed, its types resolved
+# and its bindings checked, which is the half that catches a restructure.
+if [ -x /usr/lib/qt6/bin/qmllint ]; then
+    GUI="$(dirname "$0")/../data/plugins-gui.qml"
+    /usr/lib/qt6/bin/qmllint "$GUI" >"$TREE/qmllint.out" 2>&1
+    check "the plugins window parses and balances" "0" "$?"
+    # ⚠ WHAT THIS CATCHES IS STRUCTURE, AND SAYING SO MATTERS. qmllint cannot
+    # see Quickshell's types from here, so an unknown type is a warning and the
+    # exit code stays 0 — `NotAType { }` pasted into this file passes. A syntax
+    # error and an unbalanced brace both exit 255, and those are exactly what a
+    # layout restructure gets wrong. Do not read a pass here as "the window
+    # works"; it means the file is still a well-formed document.
+else
+    ok "Qt 6's qmllint is absent — the window is not linted here"
+fi
+
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

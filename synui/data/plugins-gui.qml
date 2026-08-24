@@ -6,7 +6,15 @@ import Quickshell
 import Quickshell.Io
 
 /*
- * Bar Plugins — the window for browsing, installing and turning on bar widgets.
+ * Plugin Manager — the window for browsing, installing and turning on bar
+ * plugins.
+ *
+ * ⚠ PLUGINS HERE, WIDGETS ON THE DESKTOP. synui already owns the word widget:
+ * `synui-widgets` manages the things that sit ON the desktop (Tuxagotchi and
+ * its neighbours). These sit IN the bar, they are somebody else's code running
+ * in the bar's process, and Omarchy — whose format and catalogue these are —
+ * calls them plugins. One word each, so a sentence about one is never about the
+ * other.
  *
  * ⚠ EVERY FACT ON SCREEN COMES FROM `synui-plugins`, the same script the bar
  * reads and the same one the command line is. Nothing here parses a manifest, or
@@ -48,7 +56,7 @@ import Quickshell.Io
 FloatingWindow {
     id: root
 
-    title: "Bar Plugins"
+    title: "Plugin Manager"
     implicitWidth: 720
     implicitHeight: 560
     color: root.cBg
@@ -116,6 +124,7 @@ FloatingWindow {
     // ── State ───────────────────────────────────────────────────────────────
     property var  rows: []          // merged: {id,name,desc,state,why,inCatalogue}
     property string query: ""       // what is typed in the search box
+    property string category: ""    // the pane's selection; "" is everything
     property bool loading: false
     property string busy: ""        // the id an action is running against
     property string outcome: ""     // what the last action did, or why it failed
@@ -139,12 +148,45 @@ FloatingWindow {
      * tested, then whatever most people starred. A list of nine hundred sorted
      * by name opens on somebody's numbered `0xdeadbeef.clock`.
      */
+    /*
+     * The left pane: every category the catalogue actually uses, counted.
+     *
+     * ⚠ DERIVED FROM `rows`, NEVER A FIXED LIST. The categories are Omarchy's,
+     * they arrive in column six of the same TSV the rows do, and the day they
+     * add one a hardcoded list here would file it under nothing and hide the
+     * plugins in it. Nine today; the pane does not know that.
+     *
+     * A row with no category is not dropped — it is collected under "Other",
+     * because a plugin the pane cannot file is still a plugin somebody has to
+     * be able to reach. Sorted by name so the pane is stable between refreshes:
+     * ordering by count would move Appearance up and down the list as the
+     * catalogue grew, and a menu whose rows change places is one you have to
+     * read every time.
+     */
+    readonly property var categories: {
+        const seen = {}
+        for (let i = 0; i < root.rows.length; i++) {
+            const r = root.rows[i]
+            const name = (r.category || "").trim() || "Other"
+            if (!seen[name]) seen[name] = { name: name, total: 0, installed: 0 }
+            seen[name].total++
+            if (r.installed) seen[name].installed++
+        }
+        const out = []
+        for (const k in seen) out.push(seen[k])
+        out.sort(function (a, b) { return a.name.localeCompare(b.name) })
+        return out
+    }
+
+    function categoryOf(r) { return (r.category || "").trim() || "Other" }
+
     readonly property var visibleRows: {
         const q = root.query.trim().toLowerCase()
         const words = (q === "") ? [] : q.split(/[\s,]+/)
         const out = []
         for (let i = 0; i < root.rows.length; i++) {
             const r = root.rows[i]
+            if (root.category !== "" && root.categoryOf(r) !== root.category) continue
             if (words.length > 0) {
                 const hay = (r.id + " " + r.name + " " + r.desc + " " +
                              (r.category || "") + " " + (r.tags || "") + " " +
@@ -299,7 +341,7 @@ FloatingWindow {
                     width: parent.width - 380
                     spacing: 3
                     Text {
-                        text: "Bar Plugins"
+                        text: "Plugin Manager"
                         color: root.cText
                         font { family: root.uiFont; pixelSize: 16; bold: true }
                     }
@@ -314,7 +356,14 @@ FloatingWindow {
                             : root.loading ? "reading…"
                             : root.query !== ""
                               ? root.visibleRows.length + " of " + root.rows.length + " match"
-                              : root.rows.length + " widget(s) for the bar, in Omarchy's format"
+                            /* ⚠ THE COUNT HAS TO FOLLOW THE PANE. Left saying
+                             * "875 plugin(s)" over a list showing sixty-three,
+                             * the header contradicts the only other thing on
+                             * screen that counts anything. */
+                            : root.category !== ""
+                              ? root.visibleRows.length + " in " + root.category
+                                + " · " + root.rows.length + " altogether"
+                              : root.rows.length + " plugin(s) for the bar, in Omarchy's format"
                         color: root.outcome !== "" ? root.cWarn : root.cDim
                         font { family: root.uiFont; pixelSize: 11 }
                     }
@@ -348,7 +397,16 @@ FloatingWindow {
                                       leftMargin: 9; rightMargin: 4
                                       verticalCenter: parent.verticalCenter }
                             text: root.query
-                            onTextChanged: root.query = text
+                            /* ⚠ A SEARCH ANSWERS ACROSS EVERY CATEGORY, so
+                             * typing clears the pane. Leaving both filters on
+                             * means somebody searching for a plugin they know
+                             * is there gets an empty list, because it is filed
+                             * under a category they are not standing in — and
+                             * nothing on screen says so. */
+                            onTextChanged: {
+                                root.query = text
+                                if (text !== "") root.category = ""
+                            }
                             color: root.cText
                             selectionColor: root.cAccent
                             selectByMouse: true
@@ -403,10 +461,178 @@ FloatingWindow {
 
             Rectangle { width: parent.width; height: 1; color: root.wash(0.10) }
 
+            /*
+             * ── The disclaimer ──────────────────────────────────────────
+             *
+             * ⚠ THIS CATALOGUE IS SOMEBODY ELSE'S DESKTOP'S. These are Omarchy
+             * community plugins and Omarchy runs on Hyprland; synui is a
+             * wlroots compositor of its own. registry.py already drops the
+             * kinds that have no host here — overlays, services, whole shells —
+             * and `synui-plugins` refuses a widget that imports
+             * Quickshell.Hyprland at install time, by name, with the import
+             * that did it.
+             *
+             * ⛔ BUT NEITHER OF THOSE IS KNOWABLE FROM A LISTING. The filter
+             * reads their catalogue's metadata and the refusal reads the
+             * source, which arrives only once it is cloned — so between the row
+             * on screen and the widget in the bar there is a gap this window
+             * cannot close, and saying so up front is the only honest thing it
+             * can do about it. A row is an offer, not a promise.
+             */
+            Rectangle {
+                id: notice
+                width: parent.width
+                height: 44
+                color: Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.10)
+
+                Rectangle {
+                    anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                    width: 2
+                    color: root.cWarn
+                }
+
+                Column {
+                    anchors { left: parent.left; leftMargin: 18
+                              right: parent.right; rightMargin: 18
+                              verticalCenter: parent.verticalCenter }
+                    spacing: 2
+                    Text {
+                        width: parent.width
+                        elide: Text.ElideRight
+                        text: "⚠ Written for Omarchy on Hyprland — not all of it runs here."
+                        color: root.cWarn
+                        font { family: root.uiFont; pixelSize: 11; bold: true }
+                    }
+                    Text {
+                        width: parent.width
+                        elide: Text.ElideRight
+                        text: "Quickshell.Hyprland is refused at install, by name. What loads can still have overlay parts that do nothing."
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: 11 }
+                    }
+                }
+            }
+
+            Rectangle { width: parent.width; height: 1; color: root.wash(0.10) }
+
+            // ── Categories, and the list beside them ────────────────────
+            Item {
+                id: body
+                width: parent.width
+                height: parent.height - 62 - 1 - notice.height - 1 - 34
+
+                /*
+                 * The category column, the same one the software window grew
+                 * and for the same reason: browsing by category and typing a
+                 * name and hoping are different needs, and a list of nine
+                 * hundred only catered for the second.
+                 *
+                 * It is driven entirely by root.categories, so nothing in here
+                 * knows what a category IS — the catalogue decides what exists,
+                 * this decides how to draw it.
+                 */
+                Rectangle {
+                    id: catPane
+                    anchors { top: parent.top; left: parent.left; bottom: parent.bottom }
+                    width: 200
+                    color: Qt.rgba(root.cPanel.r, root.cPanel.g, root.cPanel.b, 0.6)
+
+                    ListView {
+                        anchors.fill: parent
+                        anchors.topMargin: 6
+                        clip: true
+                        model: root.categories
+                        spacing: 1
+
+                        /* "All" is a row and not a clear button: the pane has to
+                         * be able to say which of its rows you are standing in,
+                         * and "none of them" is one of the answers. */
+                        header: Rectangle {
+                            readonly property bool current: root.category === ""
+                            width: ListView.view.width
+                            height: 30
+                            color: current ? root.wash(0.16)
+                                           : (allMa.containsMouse ? root.wash(0.08) : "transparent")
+                            Text {
+                                anchors { left: parent.left; leftMargin: 14
+                                          verticalCenter: parent.verticalCenter }
+                                text: "All plugins"
+                                color: root.cAccent
+                                font { family: root.uiFont; pixelSize: 12; bold: true }
+                            }
+                            Text {
+                                anchors { right: parent.right; rightMargin: 12
+                                          verticalCenter: parent.verticalCenter }
+                                text: root.rows.length
+                                color: root.cDim
+                                font { family: root.uiFont; pixelSize: 10 }
+                            }
+                            MouseArea {
+                                id: allMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.category = ""
+                            }
+                        }
+
+                        delegate: Rectangle {
+                            id: catRow
+                            required property var modelData
+                            readonly property bool current: catRow.modelData.name === root.category
+                            width: ListView.view.width
+                            height: 28
+                            color: catRow.current ? root.wash(0.16)
+                                                  : (catMa.containsMouse ? root.wash(0.08) : "transparent")
+
+                            Text {
+                                anchors { left: parent.left; leftMargin: 14
+                                          right: catCount.left; rightMargin: 8
+                                          verticalCenter: parent.verticalCenter }
+                                text: catRow.modelData.name
+                                elide: Text.ElideRight
+                                color: catRow.current ? root.cAccent : root.cText
+                                font { family: root.uiFont; pixelSize: 12 }
+                            }
+                            /* Installed over total where any are, the way the
+                             * software window counts — the number you want from
+                             * a category you have already been shopping in is
+                             * how much of it you took. */
+                            Text {
+                                id: catCount
+                                anchors { right: parent.right; rightMargin: 12
+                                          verticalCenter: parent.verticalCenter }
+                                text: catRow.modelData.installed > 0
+                                      ? catRow.modelData.installed + "/" + catRow.modelData.total
+                                      : catRow.modelData.total
+                                color: catRow.modelData.installed > 0 ? root.cAccent : root.cDim
+                                font { family: root.uiFont; pixelSize: 10 }
+                            }
+                            MouseArea {
+                                id: catMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                /* Pressing the row you are in steps back out,
+                                 * so the pane never becomes a place you can
+                                 * only leave by finding the All row. */
+                                onClicked: root.category =
+                                    catRow.current ? "" : catRow.modelData.name
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors { left: catPane.right; top: parent.top; bottom: parent.bottom }
+                    width: 1
+                    color: root.wash(0.10)
+                }
+
             // ── The list ────────────────────────────────────────────────
             ListView {
-                width: parent.width
-                height: parent.height - 62 - 1 - 34
+                anchors { top: parent.top; left: catPane.right; leftMargin: 1
+                          right: parent.right; bottom: parent.bottom }
                 clip: true
                 model: root.visibleRows
                 spacing: 0
@@ -570,6 +796,7 @@ FloatingWindow {
                     }
                 }
             }
+            }
 
             // ── Footer ──────────────────────────────────────────────────
             Rectangle {
@@ -579,7 +806,7 @@ FloatingWindow {
                 Text {
                     anchors { left: parent.left; leftMargin: 18
                               verticalCenter: parent.verticalCenter }
-                    text: "Shipped widgets, then omarchyplugins.com — a plugin runs inside the bar's own process, and everything is off until you turn it on"
+                    text: "Shipped plugins, then omarchyplugins.com — a plugin runs inside the bar's own process, and everything is off until you turn it on"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: 11 }
                 }

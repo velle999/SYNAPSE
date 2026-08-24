@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Bar Plugins
-GenericName=Widget Manager
-Comment=Browse, install and turn on widgets for the bar
+Name=Plugin Manager
+GenericName=Bar Plugins
+Comment=Browse, install and turn on plugins for the bar
 Exec=synui-plugins gui
 Icon=preferences-desktop-theme
 Terminal=false
