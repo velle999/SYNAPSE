@@ -406,6 +406,95 @@ stray=$(fp --tsv flatpak search firefox 2>/dev/null | grep -cv $'\t')
 [ "$stray" = 0 ] && ok "flatpak search --tsv writes only records to stdout" \
                  || bad "flatpak search --tsv wrote $stray non-record lines"
 
+# ── The super search: every source, one table ───────────────────────────────
+#
+# `synpkg search --all` asks the repositories, BlackArch, the AUR and Flathub
+# the same question and prints ONE table. The three sources had three different
+# TSV shapes — six columns, seven with `votes`, seven with `title` — so the
+# thing that can break is not "did it find anything" but "is what came back one
+# table". A header in the middle of the data, or a row with the wrong number of
+# fields, would have the GUI reading a description out of the size column.
+#
+# ⚠ CHECKED FOR SHAPE, NEVER FOR SPECIFIC PACKAGES. The AUR half needs the
+# network and BlackArch needs the repo enabled; neither is true in a makepkg
+# chroot, and a test that demanded them would be a test that gets disabled. The
+# flatpak stub above is what makes at least two sources deterministic.
+SUPER_HDR=$'name\tinstalled\tversion\trepo\tsize\tdescription\ttitle\tvotes\tflag'
+
+hdr=$(fp --tsv search --all firefox 2>/dev/null | head -1)
+[ "$hdr" = "$SUPER_HDR" ] && ok "search --all has the union header" \
+                          || bad "search --all header is '$hdr'"
+
+n=$(fp --tsv search --all firefox 2>/dev/null | head -1 | tsv_cols)
+[ "$n" = 9 ] && ok "search --all --tsv has 9 columns" \
+             || bad "search --all --tsv has 9 columns (got $n)"
+
+# ⚠ EXACTLY ONE HEADER. Each source used to print its own, and under --all they
+# would arrive interleaved with the rows — the failure this whole shape exists
+# to prevent, and the one a reader cannot recover from.
+hdrs=$(fp --tsv search --all firefox 2>/dev/null | grep -c "^name	installed")
+[ "$hdrs" = 1 ] && ok "search --all writes one header, not one per source" \
+                || bad "search --all wrote $hdrs headers"
+
+ragged=$(fp --tsv search --all firefox 2>/dev/null \
+         | awk -F'\t' 'NR==1 {want=NF; next} NF!=want {n++} END {print n+0}')
+[ "$ragged" = 0 ] && ok "no ragged rows in search --all --tsv" \
+                  || bad "$ragged ragged rows in search --all --tsv"
+
+# The actual ask: every result says where it came from. An empty repo column is
+# a row the GUI cannot badge and cannot dispatch an install for.
+blank=$(fp --tsv search --all firefox 2>/dev/null \
+        | awk -F'\t' 'NR>1 && $4=="" {n++} END {print n+0}')
+[ "$blank" = 0 ] && ok "every super-search row is labelled with its source" \
+                 || bad "$blank super-search rows have no source label"
+
+# ⛔ COUNTED, NEVER `| grep -q`. This file runs under `set -o pipefail`, and
+# `grep -q` exits the instant it matches — the producer then takes SIGPIPE and
+# the pipeline reports 141, which is a FAILURE on a match. It bit here for real:
+# the Flathub check passed because 18 rows fit the pipe buffer and awk was done
+# before grep left, and the repository one failed on the identical construct
+# because 239 rows did not. A count has no early exit and cannot do that.
+n=$(fp --tsv search --all firefox 2>/dev/null | awk -F'\t' '$4=="flathub"' | wc -l)
+[ "$n" -gt 0 ] && ok "search --all carries Flathub rows" \
+               || bad "search --all carried no Flathub rows"
+
+# …and so did the repositories. The check is that a repo row is THERE, not
+# which repo it is: `extra` on a stock box, plus cachyos and blackarch where
+# those are enabled, and none of the three is guaranteed in a build chroot.
+n=$(fp --tsv search --all firefox 2>/dev/null \
+    | awk -F'\t' 'NR>1 && $4!="flathub" && $4!="aur"' | wc -l)
+[ "$n" -gt 0 ] && ok "search --all carries repository rows" \
+               || bad "search --all carried no repository rows"
+
+# A Flatpak keeps its human name in `title` while `name` stays the ref, because
+# the ref is what the install command takes. Losing that in the union shape
+# would put org.mozilla.firefox on screen where Firefox should be.
+t=$(fp --tsv search --all firefox 2>/dev/null \
+    | awk -F'\t' '$1=="org.mozilla.firefox" {print $7}')
+[ "$t" = "Firefox" ] && ok "a Flathub row keeps its title in the union shape" \
+                     || bad "Flathub title in --all is '$t'"
+
+# ⚠ EVERY SOURCE FAILS ALONE. flatpak_search() returns non-zero when flatpak is
+# missing, when no remote is configured and when the appstream index was never
+# fetched — all ordinary. Letting any of them set the exit status would make
+# --all fail on a box whose repositories answered perfectly well, and a GUI
+# reading the code would throw away rows it already had. Run WITHOUT the stub,
+# so flatpak is however this machine has it.
+"$SYNPKG" --tsv search --all zzzznosuchthing >/dev/null 2>&1
+check "search --all exits 0 when a source has nothing (or is absent)" $?
+
+# The two flags ask opposite questions and saying both is a mistake, not a
+# preference — silently letting either win would answer something nobody asked.
+"$SYNPKG" --tsv search --all --installed firefox >/dev/null 2>&1
+[ $? -ne 0 ] && ok "search --all --installed is refused" \
+             || bad "search --all --installed was accepted"
+
+# And the plain search is untouched: --all is additive, so a caller that has
+# been parsing six columns since the beginning still gets six.
+n=$("$SYNPKG" --tsv search firefox | head -1 | tsv_cols)
+[ "$n" = 6 ] && ok "a plain search still has its own 6 columns" \
+             || bad "plain search --tsv has 6 columns (got $n)"
+
 # ── Category panes ──────────────────────────────────────────────────────────
 # Four sources feed ONE pane in the GUI, and the pane keys its fields by header
 # name. If any of them drifts a column the pane does not error — it draws blank

@@ -23,6 +23,41 @@
 typedef enum { OUT_HUMAN, OUT_TSV } out_mode_t;
 
 extern out_mode_t g_out;
+
+/* ── The super search: one list, every source ────────────────────────────────
+ *
+ * `synpkg search --all` asks the repositories, the AUR and Flathub the same
+ * question and prints the answers as ONE table. That cannot be done by running
+ * the three commands and concatenating them, because each has its own TSV
+ * shape: the repositories emit six columns, the AUR seven (its seventh is
+ * `votes` and its sixth `flag`), Flathub seven with a `title`. Three headers
+ * would arrive interleaved with three sets of rows, and a reader would have to
+ * know which was which.
+ *
+ * So there is one shape, and it is the UNION rather than a new invention:
+ *
+ *   name  installed  version  repo  size  description  title  votes  flag
+ *
+ * Every column already existed in one of the three; nothing had to be renamed,
+ * and `repo` was already the source label the GUI badges rows with ("core",
+ * "extra", "blackarch", "aur", "flathub"). A source fills what it has and
+ * leaves the rest empty — which is what those columns already mean everywhere
+ * else in this program.
+ *
+ * ⚠ WHEN THIS IS SET, NOTHING ELSE MAY PRINT A HEADER. cmd_search() emits it
+ * once, before the first source runs; the per-source emitters have to know to
+ * stay quiet, or a header lands in the middle of the data. That is the whole
+ * reason this is a global rather than a parameter — it has to reach
+ * aur_render() and flatpak_row(), which are statics three call levels down in
+ * ext.c and have no route to an argument.
+ */
+extern bool g_super;
+/* The unified header, once. A no-op in human mode and after the first call. */
+void sp_super_header(void);
+/* One row in that shape. Any of the trailing strings may be NULL or "". */
+void sp_super_row(const char *name, bool installed, const char *version,
+                  const char *repo, off_t size, const char *desc,
+                  const char *title, const char *votes, const char *flag);
 extern bool g_color;      /* ANSI escapes are safe on stdout */
 extern bool g_noconfirm;  /* never prompt */
 extern bool g_verbose;
@@ -207,6 +242,10 @@ int aur_build_install(char **names, size_t n);
  * collide with the AUR. See the note above the definition in ext.c. */
 bool aur_have_checkout(const char *name);
 int cmd_system(int argc, char **argv);   /* syn-update */
+/* Flathub's half of the super search, and `synpkg flatpak search`'s whole
+ * implementation — one function, so the two cannot disagree about what a
+ * Flathub result looks like. */
+int flatpak_search(const char *term);
 int cmd_flatpak(int argc, char **argv);
 int cmd_aur(int argc, char **argv);
 

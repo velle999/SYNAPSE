@@ -15,8 +15,64 @@
 
 /* ── shared row renderer ────────────────────────────────────────────────── */
 
+/* ── the super search's row shape ───────────────────────────────────────────
+ *
+ * The argument for it is in synpkg.h. What is here is the emitter, and the one
+ * thing worth pointing at is the guard: the header is written ONCE for the
+ * whole run, by whichever emitter is reached first, so the three sources can be
+ * called in any order and none of them has to know it went first.
+ */
+void sp_super_header(void)
+{
+	static bool done = false;
+	if (g_out != OUT_TSV || done)
+		return;
+	done = true;
+	tsv_row(9, "name", "installed", "version", "repo", "size", "description",
+	        "title", "votes", "flag");
+}
+
+void sp_super_row(const char *name, bool installed, const char *version,
+                  const char *repo, off_t size, const char *desc,
+                  const char *title, const char *votes, const char *flag)
+{
+	if (g_out == OUT_TSV) {
+		sp_super_header();
+		char *sz = xasprintf("%lld", (long long)size);
+		tsv_row(9, name, installed ? "1" : "0", version ? version : "",
+		        repo ? repo : "", sz, desc ? desc : "",
+		        title ? title : "", votes ? votes : "", flag ? flag : "");
+		free(sz);
+		return;
+	}
+
+	/* Human mode keeps each source looking like itself — the repo prefix IS
+	 * the label, and it is the same one `synpkg search` has always printed. */
+	printf("%s%s/%s%s%s%s", C_DIM(), repo ? repo : "?", C_RESET(),
+	       C_BOLD(), title && *title ? title : name, C_RESET());
+	if (version && *version)
+		printf(" %s%s%s", C_ACCENT(), version, C_RESET());
+	if (votes && *votes)
+		printf(" %s(%s votes)%s", C_DIM(), votes, C_RESET());
+	if (installed)
+		printf(" %s[installed]%s", C_OK(), C_RESET());
+	if (flag && *flag)
+		printf(" %s[%s]%s", C_WARN(), flag, C_RESET());
+	putchar('\n');
+	/* A Flatpak's id is not its name and is what the command line takes, so
+	 * it stays on screen under the title exactly as `flatpak search` shows it. */
+	if (title && *title && strcmp(title, name) != 0)
+		printf("    %s%s%s\n", C_DIM(), name, C_RESET());
+	if (desc && *desc)
+		printf("    %s\n", desc);
+}
+
 void emit_pkg_header(void)
 {
+	if (g_super) {
+		sp_super_header();
+		return;
+	}
 	if (g_out == OUT_TSV)
 		tsv_row(6, "name", "installed", "version", "repo", "size", "description");
 }
@@ -24,6 +80,13 @@ void emit_pkg_header(void)
 void emit_pkg(const char *name, bool installed, const char *version,
               const char *repo, off_t size, const char *desc)
 {
+	/* A repository hit carries no title, no votes and no flag — those three
+	 * belong to the other two sources — so the union row is this row with
+	 * three empty columns after it. */
+	if (g_super) {
+		sp_super_row(name, installed, version, repo, size, desc, "", "", "");
+		return;
+	}
 	if (g_out == OUT_TSV) {
 		char *sz = xasprintf("%lld", (long long)size);
 		tsv_row(6, name, installed ? "1" : "0", version ? version : "",
@@ -56,9 +119,20 @@ static bool is_installed(alpm_handle_t *h, const char *name)
 
 /* ── search ─────────────────────────────────────────────────────────────── */
 
+/* Is a repository with this name configured? The super search says so when
+ * BlackArch is not, because "no results from BlackArch" and "BlackArch was
+ * never asked" look identical and only one of them is worth acting on. */
+static bool have_repo(alpm_handle_t *h, const char *name)
+{
+	for (alpm_list_t *d = sp_syncdbs(h); d; d = d->next)
+		if (!strcmp(alpm_db_get_name(d->data), name))
+			return true;
+	return false;
+}
+
 int cmd_search(int argc, char **argv)
 {
-	bool local_only = false, aur = false;
+	bool local_only = false, aur = false, all = false;
 	alpm_list_t *needles = NULL;
 
 	for (int i = 0; i < argc; i++) {
@@ -66,14 +140,45 @@ int cmd_search(int argc, char **argv)
 			local_only = true;
 		else if (!strcmp(argv[i], "--aur"))
 			aur = true;
+		/* `--all` is the super search: every source, one table, each row
+		 * labelled by where it came from. See the note in synpkg.h. */
+		else if (!strcmp(argv[i], "--all"))
+			all = true;
 		else
 			needles = alpm_list_add(needles, argv[i]);
 	}
 	if (!needles)
 		die("search: need a search term");
 
+	/*
+	 * ⚠ --all AND --installed ARE OPPOSITES AND SAYING BOTH IS A MISTAKE.
+	 * One means "everything this machine could install" and the other "only
+	 * what it already has", and silently letting either win would answer a
+	 * question nobody asked. --all implies --aur, so the two are not a
+	 * conflict — they are the same instruction said twice.
+	 */
+	if (all && local_only)
+		die("search: --all and --installed ask opposite questions");
+	if (all) {
+		aur    = true;
+		g_super = true;
+	}
+
 	alpm_handle_t *h = sp_alpm_init(false);
 	emit_pkg_header();
+
+	/*
+	 * BlackArch is a sync db like any other, so the loop below already
+	 * searches it and already labels its rows "blackarch" — but only once the
+	 * repository has been added. Until then there is nothing to search and the
+	 * result is indistinguishable from "BlackArch has nothing like that",
+	 * which is the one failure worth naming out loud on a super search.
+	 *
+	 * A note and never a failure: a box that does not want 5000 security tools
+	 * in its database is not misconfigured.
+	 */
+	if (all && !have_repo(h, "blackarch") && g_out == OUT_HUMAN)
+		info("blackarch is not enabled — run: synpkg blackarch enable");
 
 	int hits = 0;
 	if (local_only) {
@@ -122,6 +227,29 @@ int cmd_search(int argc, char **argv)
 			     (const char *)needles->data);
 		aur_search_term(needles->data);
 	}
+
+	/*
+	 * ── Flathub, last, and never fatal ─────────────────────────────────────
+	 *
+	 * ⚠ EVERY SOURCE IN A SUPER SEARCH FAILS ALONE. flatpak_search() returns
+	 * non-zero when flatpak is not installed, when no remote is configured and
+	 * when the appstream index has never been fetched — all three ordinary on
+	 * a machine that simply does not use Flatpak. Letting any of them decide
+	 * the exit status would make `search --all` fail on a box where the
+	 * repositories answered perfectly well, and a GUI reading the exit code
+	 * would throw away rows it had already been given.
+	 *
+	 * The same rule is why the AUR half above is not checked either: it warns
+	 * on stderr when it cannot reach the network and returns, and the
+	 * repository hits are already on screen.
+	 *
+	 * Ordered fast to slow on purpose — local databases, then one AUR round
+	 * trip, then flatpak's own search — so the rows a human is most likely to
+	 * want are printed while the network halves are still working.
+	 */
+	if (all)
+		(void)flatpak_search((const char *)needles->data);
+
 	alpm_list_free(needles);
 
 	/* An empty result is not an error — a caller piping this wants exit 0 and

@@ -15,6 +15,9 @@
 #include <sys/wait.h>
 
 out_mode_t g_out       = OUT_HUMAN;
+/* See the note on the super search in synpkg.h. Off unless `search --all`
+ * turned it on, so every other command emits exactly what it always did. */
+bool       g_super     = false;
 bool       g_color     = false;
 bool       g_noconfirm = false;
 bool       g_verbose   = false;

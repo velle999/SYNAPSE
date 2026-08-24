@@ -56,7 +56,58 @@ pkgver=0.1.0
 #   and not `#!/usr/bin/env bash` — env has no PATH to find bash on, and a
 #   stub that cannot start looks exactly like an escalation that never
 #   happened.
-pkgrel=37
+# 38: `synpkg search --all` — the super search. Every source at once: the
+#   repositories, BlackArch, the AUR and Flathub, in ONE table, each row
+#   labelled with where it came from. The GUI gains an "All sources" tab on it,
+#   and every row on every page gains an icon.
+#   ⚠ IT COULD NOT BE THREE COMMANDS CONCATENATED, and that is the whole of the
+#   C change. The three sources had three TSV shapes — six columns for the
+#   repositories, seven for the AUR (whose fifth is `votes` where the others
+#   have `size`), seven for Flathub (whose seventh is `title`) — so running
+#   them in sequence would interleave three headers with three sets of rows and
+#   put vote counts in the size column. There is one shape now, and it is the
+#   UNION rather than a new invention: name, installed, version, repo, size,
+#   description, title, votes, flag. Every column already existed in one of the
+#   three, `repo` was already the source label the GUI badges with, and a
+#   source fills what it has.
+#   `g_super` is a global and not a parameter because it has to reach
+#   aur_render() and flatpak_row(), which are statics three call levels down in
+#   ext.c with no route to an argument. It also suppresses the per-source
+#   headers — cmd_search() writes the union header once, before the first
+#   source runs.
+#   ⚠ EVERY SOURCE FAILS ALONE. flatpak_search() returns non-zero when flatpak
+#   is absent, when no remote is configured and when the appstream index was
+#   never fetched — all three ordinary. Letting any of them set the exit status
+#   would make --all fail on a box whose repositories answered perfectly well,
+#   and a GUI reading the code would throw away rows it already had. Ordered
+#   fast to slow (local dbs, one AUR round trip, flatpak) so the likely answer
+#   is on screen while the network halves work. BlackArch needs no code — it is
+#   a sync db and was already searched and already labelled — but --all says so
+#   when the repo is not enabled, because "BlackArch found nothing" and
+#   "BlackArch was never asked" look identical.
+#   ⚠ THE GUI'S "All sources" STEP PASSES tab: "" DELIBERATELY. pkgRows() reads
+#   it as `tab || sourceOf(r.repo)`, so a single-source pane tags every row with
+#   its own tab; the super search must keep each row's OWN source, because that
+#   is what rowAction() dispatches on. Forcing a tab there would fire
+#   `flatpak install` at a pacman package. Search-only, too: "Browse" would mean
+#   listing four repositories at once and "Installed" already has a page per
+#   source.
+#   Icons resolve in QML through Quickshell.iconPath(), like synfiles' — the
+#   renderer already has the icon theme loaded and C would have to walk every
+#   theme directory to answer it. Two tries, because `name` is the package name
+#   for one kind of row and the flatpak ref for the other: verbatim, then the
+#   last dot-segment lower-cased so org.mozilla.firefox finds firefox. ⚠ A
+#   PACKAGE IS NOT AN APPLICATION and most have no icon at all, so the tile is
+#   always drawn and falls back to a monogram tinted by the row's source — a
+#   column that appeared for some rows and not others would read as icons being
+#   broken rather than as a library not having one.
+#   ⛔ The new tests COUNT rather than `| grep -q`: this suite runs under
+#   `set -o pipefail`, grep -q exits on the first match, the producer takes
+#   SIGPIPE and the pipeline reports 141 — a FAILURE on a match. It bit during
+#   development, and the tell is that the identical construct passed for
+#   Flathub (18 rows fit the pipe buffer) and failed for the repositories (239
+#   did not).
+pkgrel=38
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

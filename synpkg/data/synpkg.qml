@@ -286,6 +286,12 @@ FloatingWindow {
         { id: "updates",   label: "Updates",      kind: "list" },
         { id: "held",      label: "Held back",    kind: "list" },
         { id: "suggested", label: "Suggested",    kind: "list" },
+        // Above the three single-source tabs because it is the one to reach for
+        // when you do not already know WHICH source has the thing. The three
+        // stay: "search only the AUR" is a real question, and answering it from
+        // a list of four hundred rows from everywhere is not the same as asking
+        // it.
+        { id: "all",       label: "All sources",  kind: "source" },
         { id: "repo",      label: "Repositories", kind: "source" },
         { id: "aur",       label: "AUR",          kind: "source" },
         { id: "flathub",   label: "Flathub",      kind: "source" },
@@ -307,6 +313,7 @@ FloatingWindow {
         if (id === "updates")   return "everything with a newer version — repositories, the AUR, Flathub and SynapseOS's own components"
         if (id === "held")      return "updates you are deliberately not taking. Release one and it comes back on the next check"
         if (id === "suggested") return "the curated SynapseOS software list"
+        if (id === "all")       return "every source at once — the repositories, BlackArch, the AUR and Flathub. Each result says where it came from"
         if (id === "repo")      return "official Arch repositories and SynapseOS's own — signed, binary, managed by pacman"
         if (id === "aur")       return "the Arch User Repository — recipes built from source on this machine"
         if (id === "flathub")   return "sandboxed applications from Flathub, with their own runtimes"
@@ -397,6 +404,64 @@ FloatingWindow {
                  version: version || "", repo: repo || "", size: size || 0,
                  desc: desc || "", extra: extra || "", source: source,
                  ignored: ignored === true }
+    }
+
+    /*
+     * ── The icon for a row ──────────────────────────────────────────────────
+     *
+     * Resolved here rather than in C for the reason synfiles resolves its own
+     * the same way: quickshell already has the icon theme loaded, and the C
+     * side would otherwise have to walk every theme directory to answer a
+     * question the renderer is holding the answer to.
+     *
+     * ⚠ A PACKAGE IS NOT AN APPLICATION and most of them have no icon at all —
+     * a library, a font, a kernel module. So this is a CHAIN that is allowed to
+     * come up empty, and the delegate draws a monogram when it does, exactly as
+     * the dock does for an app whose .desktop names an icon nothing ships. A
+     * blank column where two thirds of the rows should be would read as icons
+     * being broken rather than as most packages not having one.
+     *
+     * Two tries, and `name` carries both cases because it is the same field for
+     * both kinds of row — a package's name IS `htop`, and a Flatpak's name IS
+     * `org.mozilla.firefox`, which by freedesktop convention is also its icon:
+     *
+     *   1. The name verbatim. Resolves `htop`, `firefox`, `kitty`, `vlc` — what
+     *      an Arch package installs its icon as — and an installed Flatpak on
+     *      its ref.
+     *   2. The last dot-segment, lower-cased, so `org.mozilla.firefox` still
+     *      finds `firefox` when the Flatpak is not installed but the native
+     *      package's icon is on disk. Lower-cased because icon theme names are
+     *      and `Boxes` would miss `boxes`.
+     *
+     * Quickshell.iconPath(name, true) returns "" rather than throwing when the
+     * theme has not got it, which is what makes a chain like this cheap.
+     */
+    function iconFor(row) {
+        const id = row.name || ""
+        if (!id) return ""
+
+        let p = Quickshell.iconPath(id, true)
+        if (p) return p
+
+        const tail = id.split(".").pop()
+        if (tail && tail !== id) {
+            p = Quickshell.iconPath(tail.toLowerCase(), true)
+            if (p) return p
+        }
+        return ""
+    }
+
+    /* The letter drawn when there is no icon, and the colour behind it.
+     *
+     * The SOURCE's hue, not a random one: a row with no icon still says where
+     * it came from, and tinting the placeholder by source makes the badge and
+     * the tile agree instead of introducing a second colour language. */
+    function iconLetter(row) {
+        const t = (row.title && row.title !== "") ? row.title : (row.name || "?")
+        /* The first letter of the last dot-segment, so org.mozilla.firefox is F
+         * and not O — the reverse-DNS prefix is the vendor, not the app. */
+        const seg = t.indexOf(".") > 0 ? t.split(".").pop() : t
+        return (seg || "?").charAt(0).toUpperCase()
     }
 
     function pkgRows(table, tab) {
@@ -845,6 +910,19 @@ FloatingWindow {
     }
 
     function searchStep(tab, term) {
+        /*
+         * ⚠ `tab` IS DELIBERATELY EMPTY FOR THE SUPER SEARCH, and it is the
+         * whole reason one pane can carry four sources.
+         *
+         * pkgRows() reads it as `tab || sourceOf(r.repo)`: a single-source pane
+         * names its tab, so every row it produces is tagged with it whatever
+         * the repo column happens to say. `search --all` returns rows from the
+         * repositories, BlackArch, the AUR and Flathub in one table, and each
+         * one has to keep its OWN source — that is what the badge reads, and
+         * more importantly it is what rowAction() dispatches on. Forcing a tab
+         * here would send `flatpak install` at a pacman package.
+         */
+        if (tab === "all")     return { kind: "pkgs", tab: "",        args: ["search", "--all", term] }
         if (tab === "aur")     return { kind: "pkgs", tab: "aur",     args: ["aur", "search", term] }
         if (tab === "flathub") return { kind: "pkgs", tab: "flathub", args: ["flatpak", "search", term] }
         return { kind: "pkgs", tab: "repo", args: ["search", term] }
@@ -1280,7 +1358,14 @@ FloatingWindow {
                         // Browse only exists where there is something to browse.
                         // Offering it on the AUR tab would be a button that can
                         // only ever produce an empty pane.
-                        model: root.hasCategories(root.section)
+                        // ⚠ ALL SOURCES IS SEARCH-ONLY. "Browse" would mean
+                        // listing four repositories at once, and "Installed"
+                        // already has a page of its own per source — offering
+                        // either here would be a button whose pane cannot say
+                        // which source it is describing.
+                        model: root.section === "all"
+                               ? [{ id: "search",    label: "Search" }]
+                               : root.hasCategories(root.section)
                                ? [{ id: "browse",    label: "Browse" },
                                   { id: "search",    label: "Search" },
                                   { id: "installed", label: "Installed" }]
@@ -1361,6 +1446,7 @@ FloatingWindow {
                             // loaded, and telling somebody to press Enter to
                             // search would be describing the other mode.
                             if (!searchBar.searching)       return "filter this list…"
+                            if (root.section === "all")     return "search everything — repos, BlackArch, AUR and Flathub — press Enter"
                             if (root.section === "repo")    return "search the repositories — press Enter"
                             if (root.section === "aur")     return "search the AUR — press Enter"
                             if (root.section === "flathub") return "search Flathub — press Enter"
@@ -1604,6 +1690,7 @@ FloatingWindow {
                                 return "Flathub has no application index yet."
                             return "Nothing to browse."
                         }
+                        if (root.section === "all")     return "Search every source at once."
                         if (root.section === "aur")     return "Search the AUR."
                         if (root.section === "flathub") return "Search Flathub."
                         return "Search the repositories."
@@ -1768,17 +1855,74 @@ FloatingWindow {
 
                     MouseArea { id: rowMa; anchors.fill: parent; hoverEnabled: true }
 
+                    /*
+                     * ── The icon, and the installed dot on top of it ────────
+                     *
+                     * The dot used to be the whole left column: 7px, accent
+                     * when installed, an outline when not. It still is, but it
+                     * now sits on the corner of the icon instead of standing
+                     * alone — one column rather than two, because a row is 52px
+                     * and a separate icon column would have cost the name and
+                     * the description the width they need.
+                     *
+                     * ⚠ THE TILE IS ALWAYS DRAWN, WITH OR WITHOUT AN ICON. A
+                     * package is not an application and most have no icon at
+                     * all; a column that appeared for some rows and not others
+                     * would make every list look ragged and would read as icons
+                     * failing to load. The monogram is the same answer the dock
+                     * gives for an app whose icon the theme has not got.
+                     */
                     Rectangle {
-                        id: dot
-                        anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                        width: 7; height: 7; radius: 4
-                        color: pkgRow.modelData.installed ? root.cAccent : "transparent"
-                        border { width: pkgRow.modelData.installed ? 0 : 1; color: root.cDim }
+                        id: iconTile
+                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                        width: 32; height: 32; radius: 6
+                        readonly property string src: root.iconFor(pkgRow.modelData)
+                        // Only behind the monogram. An icon with its own shape
+                        // and transparency sitting on a tinted square reads as
+                        // a badge rather than as the application's icon.
+                        color: iconTile.src !== "" ? "transparent"
+                             : Qt.rgba(root.sourceColor(pkgRow.modelData.repo).r,
+                                       root.sourceColor(pkgRow.modelData.repo).g,
+                                       root.sourceColor(pkgRow.modelData.repo).b, 0.14)
+
+                        Image {
+                            anchors.fill: parent
+                            source: iconTile.src
+                            visible: iconTile.src !== ""
+                            // sourceSize, or a 512px hicolor PNG is decoded at
+                            // full size for a 32px tile — once per row, on a
+                            // list that can be four hundred rows long.
+                            sourceSize { width: 32; height: 32 }
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            smooth: true
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: iconTile.src === ""
+                            text: root.iconLetter(pkgRow.modelData)
+                            color: root.sourceColor(pkgRow.modelData.repo)
+                            font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
+                        }
+
+                        // The installed dot, on the tile's bottom-right corner
+                        // with a ring of the row's own background so it reads
+                        // as ON the icon rather than as part of it.
+                        Rectangle {
+                            id: dot
+                            anchors { right: parent.right; bottom: parent.bottom
+                                      rightMargin: -2; bottomMargin: -2 }
+                            width: 11; height: 11; radius: 6
+                            visible: pkgRow.modelData.installed
+                            color: root.cAccent
+                            border { width: 2; color: root.cBg }
+                        }
                     }
 
                     Column {
                         anchors {
-                            left: dot.right; leftMargin: 12
+                            left: iconTile.right; leftMargin: 12
                             // When the button is hidden the text takes its
                             // place; anchoring to a hidden item would keep
                             // reserving the 84 px that is the whole problem.

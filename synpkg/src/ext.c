@@ -264,6 +264,11 @@ static char *flatpak_installed_ids(void)
 
 static void flatpak_row_header(void)
 {
+	/* Same reason as the AUR's: under --all the union header is already out. */
+	if (g_super) {
+		sp_super_header();
+		return;
+	}
 	tsv_row(7, "name", "installed", "version", "repo", "size", "description",
 	        "title");
 }
@@ -272,6 +277,17 @@ static void flatpak_row_header(void)
 static void flatpak_row(const char *id, bool installed, const char *version,
                         const char *origin, const char *title, const char *desc)
 {
+	/* ⚠ `origin` IS THE REMOTE NAME AND IS USUALLY "flathub", but it can be
+	 * any remote somebody added — so it is passed through rather than
+	 * hardcoded. It is what the GUI badges the row with, and a row from a
+	 * private remote claiming to be Flathub would be a label that lies. */
+	if (g_super) {
+		sp_super_row(id, installed, version,
+		             origin && *origin ? origin : "flatpak", 0,
+		             desc, title, "", "");
+		return;
+	}
+
 	if (g_out == OUT_TSV) {
 		tsv_row(7, id, installed ? "1" : "0", version ? version : "",
 		        origin && *origin ? origin : "flatpak", "0",
@@ -470,7 +486,11 @@ static int flatpak_category(const char *want)
 	return shown ? 0 : 100;
 }
 
-static int flatpak_search(const char *term)
+/* Not static any more: the super search calls it directly. Everything about
+ * it is unchanged — the remote check, the `flatpak search` invocation and the
+ * row shape — because a second copy for --all is a second thing to keep in
+ * step with flatpak's column list. */
+int flatpak_search(const char *term)
 {
 	flatpak_required();
 
@@ -1189,14 +1209,29 @@ static void aur_render(aur_pkg_t *p, void *vctx)
 	bool installed = alpm_db_get_pkg(alpm_get_localdb(ctx->h), p->name) != NULL;
 	ctx->shown++;
 
-	if (g_out == OUT_TSV) {
-		char *votes = xasprintf("%ld", p->votes);
-		tsv_row(7, p->name, installed ? "1" : "0", p->version ? p->version : "",
-		        "aur", votes, p->desc ? p->desc : "",
-		        p->outofdate ? "out-of-date" : (p->maintainer ? "" : "orphaned"));
+	char *votes = xasprintf("%ld", p->votes);
+	const char *flag = p->outofdate ? "out-of-date"
+	                                : (p->maintainer ? "" : "orphaned");
+
+	/* ⚠ THE AUR'S OWN SHAPE PUTS `votes` IN THE SIZE COLUMN, which is fine
+	 * while it is the only thing on screen and wrong the moment repository
+	 * rows are beside it: one table would have byte counts and vote counts in
+	 * the same column. The union row gives votes a column of their own and
+	 * leaves size empty, which is honest — the AUR does not report one. */
+	if (g_super) {
+		sp_super_row(p->name, installed, p->version, "aur", 0,
+		             p->desc, "", votes, flag);
 		free(votes);
 		return;
 	}
+
+	if (g_out == OUT_TSV) {
+		tsv_row(7, p->name, installed ? "1" : "0", p->version ? p->version : "",
+		        "aur", votes, p->desc ? p->desc : "", flag);
+		free(votes);
+		return;
+	}
+	free(votes);
 
 	printf("%saur/%s%s%s %s%s%s", C_DIM(), C_RESET(), C_BOLD(), p->name,
 	       C_ACCENT(), p->version ? p->version : "", C_RESET());
@@ -1229,7 +1264,10 @@ int aur_search_term(const char *term)
 	alpm_handle_t *h = sp_alpm_init(false);
 	struct aur_render_ctx ctx = { h, 0 };
 
-	if (g_out == OUT_TSV)
+	/* Suppressed under --all: cmd_search() has already written the union
+	 * header, and a second one here would arrive between the repository rows
+	 * and the AUR's. */
+	if (!g_super && g_out == OUT_TSV)
 		tsv_row(7, "name", "installed", "version", "repo", "votes",
 		        "description", "flag");
 
