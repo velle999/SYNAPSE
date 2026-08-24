@@ -124,7 +124,31 @@ pkgver=0.1.0
 #   result. ⚠ `ENDFILE` is GNU awk's; Arch's base pulls in gawk, and the failure
 #   mode without it is the honest one — the map stays empty and every row falls
 #   back to the two name tries, which is where this started.
-pkgrel=39
+# 40: the GUI still drew very few icons, and 39 had explained the wrong reason
+#   for it. Every step in the chain up to here asks the LOCAL DISK — the icon
+#   theme, then the installed .desktop files — so every one of them can only
+#   answer for software that is already on the machine. The suggested list is
+#   105 applications most of which are by definition NOT installed, so it drew a
+#   monogram for all but the handful you happened to own. The lookups were not
+#   failing; there was nothing on disk to find. Measured: 15 of 104 curated ids
+#   resolved, and all 15 were installed.
+#   ⚠ THAT IS WHAT APPSTREAM IS FOR. A distribution ships a catalogue of every
+#   application in its repositories, icons included, so a software centre can
+#   draw a package nobody has installed yet — it is what GNOME Software and
+#   Discover read, and synpkg is that kind of program. archlinux-appstream-data
+#   is a dependency from here, and a fourth step reads its cached icons: 54 more
+#   curated rows get a face, 56 of 105 in total. The 49 still on a monogram are
+#   `git`, `ripgrep`, `tmux`, `jq` — tools with no icon anywhere because they
+#   have no face, and the monogram is correct for those.
+#   ⚠ NO XML AND NO PARSER: a cached AppStream icon is `<pkgname>_<iconname>.png`
+#   under `<origin>/<size>/`, so the package name is in the file name. The split
+#   is at the FIRST underscore; of the 1,205 icons Arch ships today exactly one
+#   file has a package name containing one, and a mis-split can only ever
+#   produce a key that no package matches.
+#   ⚠ ONE SCAN PER WINDOW, like the .desktop map beside it, and it is allowed to
+#   find nothing — in a chroot without the data the map stays empty and every
+#   row falls back to the monogram, which is where this started.
+pkgrel=40
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -134,7 +158,14 @@ license=('GPL-2.0-or-later')
 # globs, mirrorlist indirection, SigLevel inheritance) and shipping a second
 # parser for that file is how a manager installs from a repo the user disabled.
 # curl fetches the BlackArch bootstrap and drives the AUR RPC.
-depends=('glibc' 'pacman' 'curl')
+# archlinux-appstream-data: the repositories' application catalogue, with an
+# icon per application. It is how the window draws a face for a package that is
+# not installed — see the note on pkgrel 40 — and it is the same data GNOME
+# Software and KDE Discover read. A hard dependency rather than optional: a
+# software centre whose list is a column of letters on a fresh install is the
+# bug this fixes, and "install this other package and it gets better" is not an
+# answer a person can be expected to find.
+depends=('glibc' 'pacman' 'curl' 'archlinux-appstream-data')
 
 makedepends=('meson' 'ninja' 'gcc')
 

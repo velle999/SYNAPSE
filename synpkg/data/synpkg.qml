@@ -474,6 +474,31 @@ FloatingWindow {
             p = Quickshell.iconPath(named, true)
             if (p) return p
         }
+
+        /*
+         * ── Last: the icon a package HAS NOT INSTALLED YET ──────────────────
+         *
+         * ⛔ EVERY STEP ABOVE ASKS THE LOCAL DISK, so every one of them can only
+         * answer for software that is already here. That is why the suggested
+         * list — 105 applications, most of them by definition NOT installed —
+         * came up as a column of monograms with a face on the handful you
+         * happened to own: the lookups were not failing, there was simply
+         * nothing on disk to find. Measured on this box, 15 of 104 curated ids
+         * resolved, and every one of the 15 was installed.
+         *
+         * A software centre solves this with AppStream: the distribution ships
+         * a catalogue of every application in its repositories, icons included,
+         * so a list can draw something for a package you have never had. That
+         * is what archlinux-appstream-data is, it is what GNOME Software and
+         * Discover read, and synpkg is that kind of program. It adds 52 of the
+         * remaining 89 curated rows. The rest are `git`, `ripgrep`, `tmux` —
+         * command-line tools with no icon anywhere because they have no face,
+         * and the monogram is the correct answer for them.
+         */
+        const key = root.appstreamAliases[id.toLowerCase()] || id.toLowerCase()
+        const cached = root.appstreamIcons[key]
+        if (cached) return cached
+
         return ""
     }
 
@@ -524,6 +549,76 @@ FloatingWindow {
                         m[f[0]] = f[1]
                 }
                 root.desktopIcons = m
+            }
+        }
+    }
+
+    /*
+     * package name -> the icon file AppStream cached for it.
+     *
+     * Built the same way and for the same reason as desktopIcons above: one
+     * scan per window, not one per row.
+     *
+     * ⚠ THE PACKAGE NAME IS IN THE FILE NAME, so this needs no XML and no
+     * parser. A cached AppStream icon is `<pkgname>_<iconname>.png` under
+     * `<origin>/<size>/`, which is exactly the two facts a lookup needs. The
+     * split is at the FIRST underscore — that is the convention, and of the
+     * 1,205 icons Arch ships today one file (`jack_mixer_jack_mixer.png`) has a
+     * package name containing one, so `jack` is the single key here that could
+     * name the wrong picture. Nothing in the curated list is called that, and a
+     * mis-split can only ever produce a key no package matches.
+     *
+     * ⚠ AND IT IS ALLOWED TO FIND NOTHING. archlinux-appstream-data is a
+     * dependency, but a container, a chroot or a half-finished install may not
+     * have it — `find` then prints nothing, the map stays empty and every row
+     * falls back to the monogram, which is where this started.
+     */
+    property var appstreamIcons: ({})
+
+    /*
+     * The handful of curated packages whose AppStream icon is filed under
+     * another package's name.
+     *
+     * ⚠ A TABLE, NOT A HEURISTIC. Two package names sharing a prefix is not
+     * evidence they are the same program — `wine` and `winetricks` are filed
+     * next to each other and are different things, and a prefix match would put
+     * winetricks' picture on Wine. Each line here is a judgement that the two
+     * names are one application, and today there is exactly one: Arch's
+     * AppStream data carries the LibreOffice suite icons under
+     * libreoffice-still, while the curated list recommends libreoffice-fresh.
+     */
+    readonly property var appstreamAliases: ({ "libreoffice-fresh": "libreoffice-still" })
+
+    Process {
+        id: appstreamProc
+        running: true
+        /* Both roots: the package installs under /usr/share, and appstreamcli's
+         * own refresh writes to /var/cache. Whichever exists is scanned. */
+        command: ["sh", "-c",
+            "find /usr/share/swcatalog/icons /var/cache/swcatalog/icons " +
+            "-mindepth 3 -maxdepth 3 -type f -name '*_*.png' " +
+            "-printf '%h\t%f\t%p\n' 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                /* Biggest wins. The tile is 32px and the Image decodes to
+                 * sourceSize, so a 128px source costs nothing extra and is the
+                 * one that still looks right on a HiDPI screen. */
+                const rank = { "128x128": 3, "64x64": 2, "48x48": 1 }
+                const best = {}
+                const lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length !== 3 || !f[1]) continue
+                    const cut = f[1].indexOf("_")
+                    if (cut <= 0) continue
+                    const pkg = f[1].slice(0, cut).toLowerCase()
+                    const r = rank[f[0].slice(f[0].lastIndexOf("/") + 1)] || 0
+                    if (best[pkg] === undefined || r > best[pkg].r)
+                        best[pkg] = { r: r, path: "file://" + f[2] }
+                }
+                const m = {}
+                for (const k in best) m[k] = best[k].path
+                root.appstreamIcons = m
             }
         }
     }

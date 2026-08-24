@@ -1488,6 +1488,64 @@ fo=$(PATH="" "$SYNPKG" --tsv flatpak updates 2>/dev/null | head -1)
     && ok "the Flatpak header survives flatpak not being installed" \
     || bad "the Flatpak header survives flatpak not being installed (got [$fo])"
 
+# ── the icon chain ──────────────────────────────────────────────────────────
+#
+# The window draws an icon per row and falls back to a monogram. That fallback
+# WORKS, which is exactly the problem: a lookup that resolves nothing looks
+# identical to a list of packages that genuinely have no icon, and it shipped
+# twice looking fine. So what is checked here is the CONTRACT the fourth step
+# rests on, not the picture.
+#
+# ⚠ NEITHER OF THESE NEEDS THE DATA PACKAGE. The first is pure drift between two
+# files in this repository; the second says nothing at all when the catalogue is
+# absent, because a makepkg chroot has no reason to carry 23MB of icons.
+
+QML=$(dirname "$0")/../data/synpkg.qml
+PKGB=$(dirname "$0")/../PKGBUILD
+
+# ⛔ THE DEPENDENCY AND THE CODE HAVE TO AGREE, IN BOTH DIRECTIONS. The QML
+# reading a path no dependency guarantees is a window that silently loses its
+# icons on a fresh install; the dependency without the code is 23MB installed
+# for nothing. Either way round is silent.
+if grep -q 'swcatalog' "$QML"; then
+    grep -q "archlinux-appstream-data" "$PKGB"
+    check "the QML reads swcatalog and the PKGBUILD depends on it" $?
+else
+    grep -q "archlinux-appstream-data" "$PKGB"
+    [ $? -ne 0 ] \
+        && ok "no swcatalog in the QML and no dependency on it" \
+        || bad "the PKGBUILD depends on archlinux-appstream-data and nothing reads it"
+fi
+
+# The naming contract the map is built on: a cached AppStream icon is
+# `<pkgname>_<iconname>.png` under `<origin>/<size>/`, which is what makes the
+# package name readable out of the file name with no XML.
+# Overridable so this can be exercised against an extracted catalogue without
+# 23MB installed on the machine running the suite.
+ICONS=${SYNPKG_SWCATALOG:-/usr/share/swcatalog/icons}
+if [ -d "$ICONS" ]; then
+    # ⚠ COUNTED, NOT `| grep -q`. This suite runs under `set -o pipefail`: grep
+    # -q exits on the first match, find takes SIGPIPE and the pipeline reports
+    # 141 — a FAILURE on a match. Same trap as the row-count tests above.
+    n=$(find "$ICONS" -mindepth 3 -maxdepth 3 -type f -name '*_*.png' 2>/dev/null | wc -l)
+    [ "$n" -gt 100 ] \
+        && ok "the AppStream catalogue is laid out as <origin>/<size>/<pkg>_<icon>.png ($n icons)" \
+        || bad "the AppStream catalogue has $n icons at <origin>/<size>/<pkg>_<icon>.png"
+
+    # And that the split actually names packages the curated list recommends —
+    # a layout that parses into keys nothing matches is the failure that looks
+    # like success.
+    hits=$(find "$ICONS" -mindepth 3 -maxdepth 3 -type f -name '*_*.png' -printf '%f\n' 2>/dev/null |
+           sed 's/_.*//' | sort -u |
+           comm -12 - <(awk -F'\t' '!/^[[:space:]]*(#|$)/ {print $2}' "$SYNPKG_CURATED" | sort -u) |
+           wc -l)
+    [ "$hits" -gt 20 ] \
+        && ok "AppStream has an icon for $hits of the curated packages" \
+        || bad "AppStream keys matched only $hits curated packages"
+else
+    ok "the AppStream catalogue is not installed here — icon coverage not checked"
+fi
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
