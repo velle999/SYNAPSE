@@ -3487,6 +3487,87 @@ static void music_title_fallback(const char *path, char *out, size_t n)
 }
 
 /*
+ * ── the PICTURE for a track, which nobody publishes ────────────────────────
+ *
+ * ⚠ CLIAMP PUBLISHES NO `mpris:artUrl` AT ALL — not an empty one, not a broken
+ * one, the key is ABSENT. Measured on this machine mid-playlist, the whole of
+ * what a playing YouTube track offers:
+ *
+ *     xesam:title "watch"   xesam:url https://www.youtube.com/watch?v=SsKT0s5J8ko
+ *     mpris:length          mpris:trackid
+ *
+ * Four keys. So the widget's cover tile had nothing to load and sat on its
+ * placeholder for every song — while the SAME video played through Firefox
+ * filled it in, because Firefox publishes the thumbnail. That difference is
+ * what made a missing field look like a broken widget, and it is the
+ * discriminating test: compare the two players' metadata, not the QML.
+ *
+ * ⚠ AND YT-DLP CANNOT SUPPLY IT — THE SAME TRAP `%(url)s` SPRINGS, ONE FIELD
+ * OVER. Under `--flat-playlist`, `%(thumbnail)s` prints the literal string
+ * `NA`, exactly as `%(url)s` does; measured on a mix, three entries, all `NA`.
+ * Asking for it properly means dropping `--flat-playlist`, which is one HTTP
+ * round trip per track and the minutes-long station start yt_enumerate() exists
+ * to avoid. So there is no thumbnail to write into the titles cache at queue
+ * time, and adding a column for one would have cached `NA` sixty times.
+ *
+ * It does not need caching. A YouTube thumbnail is a pure function of the video
+ * id — and the key IS the video id, already reduced by music_key(). So the
+ * picture is derived from it here: no network, no second cache to go stale, and
+ * no third place that knows how a YouTube URL is spelled.
+ *
+ * ⚠ `mqdefault`, AND THE CHOICE IS NOT COSMETIC. Measured, same video:
+ *
+ *     maxresdefault  1280x720   404s on older videos — measured on jNQXAC9IVRw
+ *     hqdefault       480x360   always there, 4:3 — BLACK BARS baked in
+ *     mqdefault       320x180   always there, 16:9, no bars
+ *
+ * The tile is 64px square and CROPS what it draws, so hqdefault's bars would be
+ * cropped into the picture rather than off it. And a maxres that 404s is
+ * precisely the failure MusicPlayer.qml's own header warns about: an Image that
+ * sits at Error for ever, showing nothing, which is the bug being fixed here
+ * wearing a different hat. mqdefault is the one that is always present and
+ * always the right shape — 320x180 crops to 180 square, for a tile that decodes
+ * at 128.
+ *
+ * ⚠ THE ID IS VALIDATED, NOT JUST COPIED. This string is printed as a record and
+ * handed to another program to fetch, and the key it came from was built out of
+ * somebody else's URL. A YouTube id is [A-Za-z0-9_-]; anything else means this
+ * is not the shape assumed here, and the honest answer is no picture rather
+ * than a malformed URL for a shell to chase.
+ *
+ * ⚠ ONLY YOUTUBE ANSWERS, and the two silences are deliberate. A Plex stream's
+ * art needs the server and the token that nothing here may write down
+ * ([[music_key]]'s whole reason), and a local file's art is in its tags, which
+ * nothing on this path reads. Both get "" and keep the placeholder that has
+ * always been drawn — an empty column is a real answer, not a failure.
+ */
+static void music_art(const char *keyed, char *out, size_t n)
+{
+	if (!out || !n)
+		return;
+	out[0] = '\0';
+	if (!keyed || !*keyed)
+		return;
+
+	/* ⚠ music_key()'s CANONICAL SPELLING, not a URL as it arrived. Every
+	 * YouTube key is reduced to exactly this shape before it is written or
+	 * looked up, so matching it whole is what keeps this from being a
+	 * second URL parser that can disagree with the first. */
+	static const char pfx[] = "https://www.youtube.com/watch?v=";
+	if (strncmp(keyed, pfx, sizeof(pfx) - 1) != 0)
+		return;
+
+	const char *id = keyed + sizeof(pfx) - 1;
+	if (!*id)
+		return;
+	for (const char *c = id; *c; c++)
+		if (!isalnum((unsigned char)*c) && *c != '_' && *c != '-')
+			return;
+
+	snprintf(out, n, "https://i.ytimg.com/vi/%s/mqdefault.jpg", id);
+}
+
+/*
  * ── what was playing last, so the Music tile has something to play ─────────
  *
  * ⚠ THE QUEUE DOES NOT SURVIVE THE PLAYER, AND SINCE 0.1.0-33 THE PLAYER DOES
@@ -3654,13 +3735,23 @@ static void music_read(char *state, size_t sn, char *title, size_t tn,
 
 static int big_music_status(bool rec)
 {
-	char state[32], title[256], path[512];
+	char state[32], title[256], path[512], art[512];
 	music_read(state, sizeof(state), title, sizeof(title),
 		   path, sizeof(path), NULL);
 
+	/* ⚠ DERIVED FROM `path`, WHICH music_read() HAS ALREADY KEYED — never
+	 * from cliamp's raw answer. That is what keeps a Plex token out of this
+	 * column as well as out of the last one. */
+	music_art(path, art, sizeof(art));
+
 	if (rec) {
-		rec_row(3, "state", "title", "path");
-		rec_row(3, state, title, path);
+		/* ⚠ A COLUMN IS ADDED, NEVER REORDERED. Both readers —
+		 * synui's MusicLibrary and this program's own television —
+		 * parse these rows by HEADER NAME into an object, so a new
+		 * field at the end is invisible to a shell that predates it
+		 * and present to one that wants it. */
+		rec_row(4, "state", "title", "path", "art");
+		rec_row(4, state, title, path, art);
 		return EX_OK;
 	}
 

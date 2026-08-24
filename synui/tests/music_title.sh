@@ -122,8 +122,57 @@ printf '%s\n' "$dt" | grep -q 'indexOf("?")' ||
 printf '%s\n' "$dt" | grep -q 'lastIndexOf("/")' ||
     say "displayTitle does not reduce a path to its last segment"
 
+# ── 4. the PICTURE, which cliamp does not publish either ────────────────────
+#
+# Reported the day after the title, as the widget "still not loading all the
+# way": the cover tile drew its placeholder for every song off a station.
+#
+# ⚠ NOT AN EMPTY `mpris:artUrl` — NO SUCH KEY. Measured mid-playlist, a playing
+# YouTube track's whole metadata is four fields: xesam:title, xesam:url,
+# mpris:length, mpris:trackid. And the discriminating test came with the report:
+# the SAME video played through FIREFOX fills the tile in, because Firefox
+# publishes a thumbnail. One player supplies the field, the other does not.
+#
+# Same answer as the title, down the same wire: big.c derives the picture from
+# the video id music_key() already reduced the URL to, and hands it back as a
+# column on the row MusicLibrary was fetching anyway — no second fork, and no
+# chance of art and title being drawn from different tracks.
+grep -q 'function artFor' "$lib" ||
+    say "there is no way for a surface to ask for a track's picture"
+sed -n '/property Process nameProc/,/^    }$/p' "$lib" | grep -q 'nowArt' ||
+    say "the status row's art column is never read back — the tile stays empty"
+
+# ⚠ A PURE READ, for the reason nameFor() is one: it is called from a binding.
+sed -n '/function artFor/,/^    }$/p' "$lib" | grep -q 'running = true' &&
+    say "artFor() starts a fetch — a binding that forks on every repaint"
+
+# ⚠ STAMPED AGAINST THE SAME KEY as the title, or the card can show one track's
+# name over another track's cover.
+sed -n '/function artFor/,/^    }$/p' "$lib" | grep -q 'root.nowKey' ||
+    say "artFor() is not stamped against the track it was asked about"
+
+grep -q 'MusicLibrary.artFor' "$widget" ||
+    say "the widget never asks for the picture — the cover tile stays a placeholder"
+
+# ⚠ THE PLAYER STILL WINS WHERE IT HAS ONE. Firefox, Spotify and a local library
+# publish real cover art, which is the actual cover and not a derived thumbnail.
+grep -q 'player.trackArtUrl' "$widget" ||
+    say "the widget stopped reading the art a player DOES publish"
+
+# ⛔ AND NEITHER SURFACE BUILDS THAT URL ITSELF. Deriving an i.ytimg.com address
+# in QML is a second copy of music_key()'s rule wearing a different hat — the
+# second-roster trap, and the one that keyed every YouTube track to
+# `https://www.youtube.com/watch` in the C the first time round. Ask; never
+# re-derive. Comments stripped first, as above: both files explain this rule at
+# length and a whole-file grep would be satisfied by the prose forbidding it.
+for f in "$lib" "$widget"; do
+    body=$(sed -e 's,//.*,,' -e '/^[[:space:]]*\*/d' -e '/^[[:space:]]*\/\*/d' "$f")
+    printf '%s\n' "$body" | grep -qE 'ytimg|mqdefault|hqdefault|maxresdefault' &&
+        say "$(basename "$f") builds a thumbnail URL itself — that rule is C's alone"
+done
+
 if [ "$fails" -eq 0 ]; then
-    echo "  ok  a queued track is drawn by its name on the card and in the bar"
+    echo "  ok  a queued track is drawn by its name and its cover, not by its URL"
     exit 0
 fi
 exit 1

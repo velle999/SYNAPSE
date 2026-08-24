@@ -3201,6 +3201,64 @@ check "a queued YouTube track is named from what queued it, not 'watch'" $?
 check "...and a station cliamp DOES know keeps the name it gave" $?
 rm -f "$TITLES"
 
+
+# ── the PICTURE, which cliamp does not publish either ───────────────────────
+#
+# ⚠ MEASURED: a playing YouTube track's MPRIS metadata has FOUR keys —
+# xesam:title, xesam:url, mpris:length, mpris:trackid. There is no
+# `mpris:artUrl` at all, so the widget's cover tile had nothing to load and
+# drew its placeholder for every song. The same video played through Firefox
+# filled the tile in, because Firefox publishes a thumbnail — which is what
+# made a missing field read as a broken widget.
+#
+# It is DERIVED, not fetched: a YouTube thumbnail is a pure function of the
+# video id, and the key already is the video id. yt-dlp cannot supply one
+# anyway — under `--flat-playlist`, `%(thumbnail)s` prints `NA` exactly as
+# `%(url)s` does.
+art_of() {
+    ( CLIAMP_TRACK="$1"; CLIAMP_TITLE="${2:-watch}"
+      export CLIAMP_TRACK CLIAMP_TITLE
+      music status --rec ) | awk -F'\t' 'NR==2 {print $4}'
+}
+
+music status --rec | head -1 | grep -q 'art'
+check "the records name a column for the track's picture" $?
+
+[ "$(art_of 'https://www.youtube.com/watch?v=zzzzzzzzzzz&list=RDzzzzzzzzzzz')" \
+    = 'https://i.ytimg.com/vi/zzzzzzzzzzz/mqdefault.jpg' ]
+check "a YouTube track's cover is derived from its video id" $?
+
+# ⚠ `mqdefault` AND NOTHING ELSE, and this assertion is the measurement:
+# maxresdefault 404s on older videos (an Image that sits at Error for ever,
+# showing nothing — the very bug being fixed), and hqdefault is 4:3 with BLACK
+# BARS baked in, which a square cropping tile would crop INTO the picture.
+# (Asserted on the URL that is BUILT, not on the prose above it — the comment
+# has to be free to name the sizes it rejected and why.)
+[ "$(grep -c 'i\.ytimg\.com/vi/' src/big.c)" = 1 ] &&
+    grep -q 'i\.ytimg\.com/vi/%s/mqdefault\.jpg' src/big.c
+check "...at the one size that is always present and 16:9" $?
+
+# ⚠ THE OTHER SHAPES ANSWER NOTHING, and an empty column is a real answer. A
+# Plex stream's art would need the token that must never be written down here,
+# and a local file's lives in tags nothing on this path reads. Both keep the
+# placeholder the tile has always drawn.
+[ -z "$(art_of 'http://192.168.40.153:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE')" ]
+check "a Plex stream is given no picture rather than a guessed one" $?
+
+( CLIAMP_TRACK='http://192.168.40.153:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE'
+  export CLIAMP_TRACK; music status --rec ) | grep -q SECRETVALUE
+[ $? != 0 ]
+check "...and the new column leaks no more of a token than the old ones" $?
+
+[ -z "$(art_of 'http://radio.cliamp.stream/lofi/stream' 'Lofi Stream')" ]
+check "...and a radio station is given none either" $?
+
+# ⚠ THE ID IS VALIDATED. This string is printed as a record and handed to
+# another program to fetch, and the key it comes from was built out of somebody
+# else's URL. Anything outside [A-Za-z0-9_-] means the shape assumed here does
+# not hold, and no picture is the honest answer.
+[ -z "$(art_of 'https://www.youtube.com/watch?v=not an id!')" ]
+check "...nor is a malformed video id turned into a URL to chase" $?
 [ "$(grep -c 'music_key(' src/big.c)" -ge 4 ]
 check "...as do the writers, rather than spelling the rule out again" $?
 

@@ -242,8 +242,40 @@ WidgetFrame {
      * whose host is unreachable sits at Image.Error forever showing nothing, so
      * the placeholder is what is drawn UNTIL the status says Ready — not the
      * other way round. A card with a hole in it reads as a broken widget.
+     *
+     * ── AND CLIAMP PUBLISHES NONE AT ALL ─────────────────────────────────
+     *
+     * ⚠ NOT AN EMPTY artUrl — NO `mpris:artUrl` KEY. Measured mid-playlist,
+     * the whole of what a playing YouTube track offers:
+     *
+     *     xesam:title "watch"  xesam:url …/watch?v=…  mpris:length  mpris:trackid
+     *
+     * Four keys. So this tile drew its placeholder for every song off a station
+     * — reported as the widget "still not loading all the way", and reported
+     * accurately. The discriminating test was already in the report: the SAME
+     * video played through Firefox fills the tile in, because Firefox publishes
+     * a thumbnail. One player supplies the field and the other does not; the
+     * QML was never the broken half.
+     *
+     * The answer is the one the title took, for the same reason and down the
+     * same wire: a YouTube thumbnail is a pure function of the video id, big.c
+     * already reduces a URL to that id in music_key(), and it now hands the
+     * picture back as a column on the row MusicLibrary was fetching anyway.
+     *
+     * ⛔ NOT DERIVED HERE. Building an i.ytimg.com URL in QML would be a second
+     * copy of music_key()'s rule — the mistake this file's header is about, and
+     * the one that keyed every YouTube track to `…/watch` in the C the first
+     * time. Ask; do not re-derive.
+     *
+     * ⚠ THE PLAYER STILL WINS WHERE IT HAS ONE. Firefox, Spotify and a local
+     * library all publish real art, and theirs is the actual cover rather than
+     * a derived thumbnail. The fallback is for the player that says nothing.
      */
-    readonly property string artUrl: haveAny ? String(player.trackArtUrl || "") : ""
+    readonly property string artUrl: {
+        if (!haveAny) return ""
+        const own = String(player.trackArtUrl || "")
+        return own !== "" ? own : MusicLibrary.artFor(root.wantNamed)
+    }
 
     /* ── What is playing ─────────────────────────────────────────────────────
      *

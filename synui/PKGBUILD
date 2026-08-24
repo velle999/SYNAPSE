@@ -857,7 +857,7 @@ pkgver=0.1.0
 #   loading it to press rows would drive the live desktop and start the music.
 #   ⚠ Needs syn-arcade 0.1.0-41, which stops these terminals fullscreening
 #   themselves when there is no television to fill.
-pkgrel=451
+pkgrel=452
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

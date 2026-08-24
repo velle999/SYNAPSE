@@ -404,6 +404,24 @@ QtObject {
     property string nowKey: ""
     property string nowTitle: ""
 
+    /*
+     * ⚠ AND THE PICTURE, OFF THE SAME ROW — NOT A SECOND FETCH.
+     *
+     * cliamp publishes no `mpris:artUrl` whatsoever: measured mid-playlist, a
+     * playing YouTube track offers four keys — title, url, length, trackid —
+     * and the cover tile therefore had nothing to load and drew its placeholder
+     * for every song. The same video played through FIREFOX filled it in,
+     * because Firefox publishes a thumbnail, and that difference is what made a
+     * missing field look like a broken widget.
+     *
+     * big.c derives it from the video id, which is what music_key() already
+     * reduces a YouTube URL to, and hands it back as a column on the row this
+     * Process was fetching anyway. So the art costs no extra fork, cannot
+     * disagree with the title about which track it belongs to, and — the
+     * standing rule — the key rule stays in the C where its one copy lives.
+     */
+    property string nowArt: ""
+
     property Process nameProc: Process {
         id: nameJob
 
@@ -431,6 +449,11 @@ QtObject {
                 // on every repaint. The caller falls back on its own.
                 root.nowKey = nameJob.forUrl
                 root.nowTitle = r && r.title ? r.title : ""
+                // ⚠ Empty is a real answer here too, and a common one: only a
+                // YouTube track has a picture that can be derived. A Plex
+                // stream's would need the token that is never written down and
+                // a local file's is in tags nothing on this path reads.
+                root.nowArt = r && r.art ? r.art : ""
             }
         }
     }
@@ -453,6 +476,17 @@ QtObject {
      */
     function nameFor(url) {
         return (url !== "" && url === root.nowKey) ? root.nowTitle : ""
+    }
+
+    /*
+     * The picture for that url, or "" where there is none — a PURE READ, for
+     * exactly the reason nameFor() is one: it is called from a binding, and a
+     * binding that starts a subprocess re-runs it on every repaint. Stamped
+     * against the same `nowKey`, so art and title can never be drawn from
+     * different tracks.
+     */
+    function artFor(url) {
+        return (url !== "" && url === root.nowKey) ? root.nowArt : ""
     }
 
     /*
