@@ -99,7 +99,41 @@ pkgver=0.1.0
 #   ⚠ The ISO is deliberately NOT grown by them — a live session is not where
 #   anybody sets their desktop font, and that file already argues the case
 #   against putting 130MB of fonts on every image.
-pkgrel=92
+# 93: the house desktop, shipped. A fresh install came up on Prism with the
+#   theme's own restrained glass and synui's stock dock, which is not the
+#   desktop SynapseOS is: Glass at 100 (bar and dock resolve to
+#   SYN_BAR_ALPHA_FROSTED, 0.05), see-through windows at Prism's own 0.90/0.84,
+#   a floating-pill bar, a capsule dock, the accent off the wallpaper on every
+#   theme, live backdrop ink, and St. Louis at night behind all of it.
+#   ⚠ `glass_level = 100` UNDOES 90's "never write a number here", knowingly.
+#   That check was right about the cost — an explicit level survives a theme
+#   switch, so a user who later picks Gruvbox is handed Prism's glass — and
+#   there is no way to ship a glass desktop as the default without paying it,
+#   because `auto` IS the more solid desktop. Appearance ▸ Glass ▸ Auto is the
+#   one row that hands every surface back. The check now asserts the decision
+#   is complete instead of forbidding it.
+#   ⚠ bar_opacity and dock_opacity are written out even though the level
+#   resolves to both: the bar and the widgets are quickshell and read them out
+#   of theme.state → settings.state → synuirc, and a fresh install has neither
+#   of the first two. Without the lines the strip came up at 0.72 over a dock
+#   the compositor had already drawn at 0.05.
+#   ⚠ active_opacity is PINNED and inactive_opacity is not. The window curve at
+#   level 100 is 1.00 - 0.38 = 0.62 — the floor of the curve, not a number
+#   anybody chose — and it would have overwritten 0.90 at every login. The
+#   unfocused row is derived (active - 0.06) and lands on the theme's 0.84.
+#   ⚠ The wallpaper is the COLOUR St. Louis and not the noir cut. Prism has no
+#   accent of its own worth the name; it measures the picture. A greyscale
+#   wallpaper would have booted every fresh install onto the fallback cyan.
+#   Also writes rgb.state and the syn-rgb.path user symlink, which is what
+#   `syn-rgb on` does and cannot do from a chroot — the state without the unit
+#   is a row that says On over a bridge that never runs.
+#   ⚠ synui's SYN_GLASS_PANEL_DEFAULT moves to 100 in the same breath (synui
+#   458+): it is the level a desktop that reaches Prism through the THEME
+#   MANAGER is handed, the same decision written twice, and layout_test now
+#   asserts the two files agree. It also asserts the ISO's synuirc matches this
+#   heredoc key for key — 0.2.9.2 shipped an image on the neon theme and a disk
+#   on Prism, and nothing caught it.
+pkgrel=93
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

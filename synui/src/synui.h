@@ -4632,14 +4632,24 @@ static inline bool theme_is_glass(const syn_config_t *cfg)
 /* The level a glass theme uses when nobody has set glass_level.
  *
  * ⚠ UNSET MEANS "NOBODY CHOSE A LEVEL", NEVER "NOBODY WANTED GLASS" — the theme
- * already answered the second question. syn-install writes 55 into a fresh
- * install's synuirc, so without this a desktop that reached Prism through the
- * theme manager would be the same theme with solid panels, which is exactly the
- * half-applied look this is meant to remove. Same number as syn-install's, and
- * it has to stay that way: the two are the same decision written twice because
- * one of them has to survive a synuirc that predates the key.
+ * already answered the second question. Without this a desktop that reached
+ * Prism through the theme manager would be the same theme with solid panels,
+ * which is exactly the half-applied look this is meant to remove.
+ *
+ * ⚠ IT IS THE SAME NUMBER syn-install WRITES, AND IT HAS TO STAY THAT WAY. The
+ * two are one decision written twice, because one of them has to survive a
+ * synuirc that predates the key: syn-install.sh's SYNUIRC heredoc names the
+ * house level outright for a fresh install, and this is what the SAME desktop
+ * is handed when it is reached by picking Prism in the theme manager instead.
+ * Move one without the other and the two Prisms stop matching each other.
+ *
+ * 100 since the house look went to the top of the slider (was 55). At 100 the
+ * bar and the dock resolve to SYN_BAR_ALPHA_FROSTED and the panel ladder to
+ * 0.70 of each panel's designed alpha — a desktop built on glass, drawn as
+ * glass. It reaches the three glass presets and nothing else: the eleven others
+ * are not `theme_is_glass` and never consult this.
  */
-#define SYN_GLASS_PANEL_DEFAULT 55
+#define SYN_GLASS_PANEL_DEFAULT 100
 
 /*
  * How see-through synui's own chrome is: ONE resolved answer, in the two shapes

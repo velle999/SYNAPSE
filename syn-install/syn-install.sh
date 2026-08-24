@@ -4592,35 +4592,102 @@ terminal = syntty
 # wallpaper change. A greyscale wallpaper has no colour to give and the theme's
 # own cyan stands; the journal says which is happening.
 theme = prism
-# ── Glass: AUTO, and every word of that is deliberate ────────────────────────
+# ── Glass: 100, and every number under it follows from that ──────────────────
 #
 # One slider for how much of the desktop you see through: 0 solid, 100 as clear
 # as it goes, `auto` to let the theme answer. It drives the windows, synui's own
-# panels and the bar together, each with the number that surface needs.
+# panels, the terminal, the bar and the dock together, each with the number that
+# surface needs (syn_glass_* in synui.h).
 #
-# ⚠ THIS USED TO SAY `glass_level = 55`, AND THAT IS WHY A FRESH INSTALL DID NOT
-# FOLLOW ITS THEME. A number here is an explicit answer, and an explicit answer
-# survives a theme switch: every one of the twelve non-glass themes was being
-# handed Prism's level instead of the opacities it was tuned with, for ever,
-# because the installer had written one down on the user's behalf.
+# 100 is the SynapseOS house look, and it is written down here rather than left
+# on `auto` because the number is the point: at 100 the bar and the dock resolve
+# to SYN_BAR_ALPHA_FROSTED (0.05) — the thinnest surface that is still a surface,
+# thin enough to read as a sheet of glass and thick enough for the backdrop blur
+# to have something to mask. `auto` on Prism is the theme's own answer and is a
+# different, more solid desktop.
 #
-# It was also redundant. synui already gives a GLASS theme
-# SYN_GLASS_PANEL_DEFAULT — the same 55 — when nobody has set a level, precisely
-# so a desktop that reached Prism through the theme manager is not the same
-# theme with solid panels. The two were "the same decision written twice", and
-# the copy in this file was the one that could be wrong.
+# ⚠ AN EXPLICIT NUMBER SURVIVES A THEME SWITCH, and that is the cost of saying
+# it. This line used to be `glass_level = 55` and was removed for exactly that
+# reason: a user who later picks Gruvbox or Win95 is handed Prism's glass
+# instead of the opacities that theme was tuned with, because the installer
+# wrote a number down on their behalf. The trade is being made deliberately this
+# time — the house desktop is glass at 100 and has to arrive that way — and the
+# way out is one keystroke: Appearance ▸ Glass ▸ Auto hands every surface back
+# to whatever theme is on screen.
 #
-# What changes visually on a fresh Prism install: the panels and the bar are
-# identical (both paths resolve to 55). Windows go from 0.79 to Prism's own
-# 0.90 — slightly less see-through, and 0.90 is the number the theme was
-# designed with.
-glass_level = auto
+# synui's SYN_GLASS_PANEL_DEFAULT is 100 to match. The two are the same decision
+# written twice (one of them has to survive a synuirc that predates the key), so
+# they move together or the theme manager's Prism stops matching this one's.
+glass_level = 100
+
+# On, which is also the compiled default, and written here because the three
+# lines under it only make sense next to it: with the sync on, every surface
+# takes its number from Glass above unless it is named in `glass_pinned`.
+glass_sync = on
+
+# The two strips, at the number Glass 100 resolves to anyway.
+#
+# ⚠ NOT redundant, and the reason is a process boundary. The bar and the desktop
+# widgets are quickshell (BarConfig.qml), and they read these two keys out of
+# theme.state, then settings.state, then THIS FILE. A fresh install has neither
+# of the first two — theme.state is only written when somebody PICKS a theme —
+# so without these lines the strip across the top and every widget on the
+# desktop would come up at their built-in 0.72 while the compositor's own dock,
+# which resolves the level in-process, sat at 0.05. One desktop, two amounts of
+# glass, and only the halves synui draws itself would have been right.
+#
+# Left UNPINNED on purpose: the sync recomputes both to 0.05 from the level, so
+# these agree with it rather than overriding it, and dragging Glass still moves
+# them.
+bar_opacity  = 0.05
+dock_opacity = 0.05
+
+# ── Transparency: on, at Prism's own 0.90 ────────────────────────────────────
+#
+# The master switch for see-through WINDOWS, which is a different question from
+# the chrome above — `glass_level` is the panels, the bar and the dock; this is
+# the application windows themselves. Off by default in synui, because turning
+# every window on an existing desktop translucent is not something an upgrade
+# may do. A fresh install has no desktop to preserve and Prism is built on it.
+#
+# 0.90/0.84 is the pair the theme was designed with (theme.c, both Prisms), and
+# it is PINNED because the slider would otherwise take it: syn_glass_window_alpha
+# at level 100 is 1.00 - 0.38 = 0.62, which is the floor of that curve and not a
+# number anybody chose. A pin is the mechanism for exactly this — one row off the
+# slider, the rest still following it — and the unfocused pair is deliberately
+# NOT pinned, because it is derived (active - 0.06) and lands on 0.84 by itself.
+#
+# Switching Appearance ▸ Sync all glass off and on again releases the pin and
+# hands this row back to the slider.
+transparency   = on
+active_opacity = 0.90
+glass_pinned   = active_opacity
+
+# Menus and panels ink themselves off the WINDOW behind them rather than the
+# wallpaper it covers. Already synui's compiled default; written here because a
+# desktop this see-through is the one where it shows, and a fresh install should
+# be able to read what it was given out of this file.
+scene_ink = on
+
+# ⚠ `on` AND NOT `auto`, WHICH IS A REAL DIFFERENCE HERE. Auto means "the two
+# Prisms and nothing else" — the same answer on this desktop — so the only thing
+# the explicit word changes is what happens after a theme switch: the accent
+# keeps coming off the wallpaper on whatever theme is picked next. That is the
+# ask. Appearance ▸ Wallpaper accent ▸ Auto puts it back to Prism-only.
+wallpaper_accent = on
 
 # The dock's body: `auto` is glass on a glass theme and solid elsewhere. It is
 # already synui's compiled default and is written here to be visible rather than
 # to change anything — a fresh install that wants to know what it was given
 # should be able to read it in this file.
 dock_style = auto
+
+# A capsule. The row caps at 64 and the DRAW caps it again at half the dock's
+# thickness (32 at the stock dock_height of 64), so this is "as round as it
+# goes" rather than a literal 64px arc — which is the shape a dock floating on
+# the wallpaper at 0.05 wants. Anything less reads as a rectangle that has had
+# its corners filed.
+dock_radius = 64
 
 # ⚠ WIDGET GLASS IS `on` AND NOT `auto`, AND THIS IS THE ONE THAT NEEDS SAYING.
 #
@@ -4640,6 +4707,19 @@ dock_style = auto
 # Set it back to `auto` after picking any theme from the manager and it will
 # follow along like everything else.
 widget_glass = on
+
+# The bar as a floating capsule rather than a strip welded to the screen edge:
+# rounded-ends curves the two corners facing the desktop, floating-pill also
+# lifts it off the edge and insets it from both sides so it closes into a pill
+# with wallpaper all the way round it. That is the shape a 0.05 bar wants — a
+# full-width strip at that alpha reads as a smudge along the top of the screen,
+# because there is no edge anywhere to say where the surface stops.
+#
+# ⚠ IT IS A NO-OP WITH THE CORNERS OFF. The shape is what the bar does with
+# `corner_radius` (12 by default, which is on) — set that to 0, or pick a retro
+# chrome that squares everything, and all three shapes draw the same bar. It is
+# "what shape when rounded", not a second switch.
+bar_shape = floating-pill
 # greetd launches synui after login.
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
@@ -4671,12 +4751,26 @@ master_factor   = 0.60
 float_inset     = 8
 float_gap       = 24
 
-# The SYNAPSE wallpaper synui ships in /usr/share/synui. Drawn by the
-# compositor itself (wallpaper.c), so nothing has to be autostarted to
-# paint the desktop — a swaybg here would only cover it. Super+W picks a
-# different one and records the choice in wallpaper.state, which from then
-# on overrides this line. `wallpaper = none` gives a flat colour.
-wallpaper       = default
+# St. Louis at night — Daniel Schwen's Gateway Arch photograph over the
+# Mississippi, which synui ships to /usr/share/backgrounds. Drawn by the
+# compositor itself (wallpaper.c), so nothing has to be autostarted to paint the
+# desktop — a swaybg here would only cover it. Super+W picks a different one and
+# records the choice in wallpaper.state, which from then on overrides this line.
+# `wallpaper = default` is the SYNAPSE mark in /usr/share/synui; `none` gives a
+# flat colour.
+#
+# ⚠ THE COLOUR CUT, NOT THE NOIR ONE, AND THAT IS THE WHOLE REASON TO NAME A
+# PHOTOGRAPH HERE. Prism has no accent of its own worth the name: it measures
+# the wallpaper (palette.c) and wears what it finds, live, on every wallpaper
+# change. A greyscale picture has no hue to give, so the noir cut — a real
+# wallpaper this desktop ships, and the same photograph — would boot a fresh
+# install onto the theme's FALLBACK cyan and hide the one thing that makes Prism
+# Prism. The colour cut has the arch lit sodium-orange over a blue river, so the
+# first thing a new desktop does is take a colour off its own wallpaper.
+#
+# `fill` crops to the screen rather than letterboxing it: the file is 3000x1929,
+# so `fit` would band a 16:9 monitor top and bottom.
+wallpaper       = /usr/share/backgrounds/commons-st-louis-night.jpg
 wallpaper_mode  = fill
 
 # "night drive" palette — matches kitty.conf/foot.ini and waybar style.css
@@ -4901,6 +4995,51 @@ if [ -f /home/syn/.config/fastfetch/config.jsonc ]; then
     mkdir -p "/mnt/home/$NEW_USER/.config/fastfetch"
     cp /home/syn/.config/fastfetch/config.jsonc \
        "/mnt/home/$NEW_USER/.config/fastfetch/config.jsonc"
+fi
+
+# ── The wallpaper's accent, on the hardware that has lights in it ─────────
+#
+# Prism measures the wallpaper and writes the colour to palette.state; the bar,
+# the dock and the icons wear it. syn-rgb is the bridge that carries the same
+# colour out to whatever OpenRGB can see — the RAM, the board, the keyboard —
+# so the room matches the desktop instead of being whatever somebody else's
+# software last set it to.
+#
+# ⚠ syn-rgb ITSELF SHIPS OFF, AND STAYS OFF. Its own rule is that hardware
+# currently doing what its owner asked is not a thing to take over on an
+# UPDATE, and nothing here changes that: this is a fresh install, on a machine
+# with no desktop to preserve and no lighting preference to overwrite. One
+# `syn-rgb off`, or Control panel ▸ Appearance ▸ RGB lights, turns it back off
+# for good.
+#
+# Two halves, because `syn-rgb on` does two things and neither can be done from
+# a chroot the way the command does it:
+#
+#   1. rgb.state, which is what the bridge and the control-panel row both read.
+#   2. syn-rgb.path, the USER unit that watches palette.state and runs the
+#      push. Without it the state says "on" and nothing ever follows the
+#      wallpaper. `systemctl --user enable` needs the user's own bus, which
+#      does not exist in here, so the symlink WantedBy=default.target would
+#      have made is written directly — the same file, and systemd reads it the
+#      same way at the first login.
+#
+# openrgb is an optdepend (sw_openrgb in the software list) and is usually not
+# installed. That costs nothing: syn-rgb says which package is missing and
+# exits without touching anything, the unit treats that as its ordinary answer
+# rather than a failure, and the day openrgb arrives the lights just start
+# following. Nothing here fails an install either — the whole block is
+# best-effort, exactly like the fastfetch and kitty configs above.
+mkdir -p "/mnt/home/$NEW_USER/.config/synui"
+cat > "/mnt/home/$NEW_USER/.config/synui/rgb.state" << 'RGBEOF'
+# syn-rgb — the desktop accent on the lights.
+on=yes
+RGBEOF
+if [ -f /mnt/usr/lib/systemd/user/syn-rgb.path ]; then
+    mkdir -p "/mnt/home/$NEW_USER/.config/systemd/user/default.target.wants"
+    ln -sf /usr/lib/systemd/user/syn-rgb.path \
+        "/mnt/home/$NEW_USER/.config/systemd/user/default.target.wants/syn-rgb.path"
+else
+    echo "  note: syn-rgb.path is not installed; RGB lights stay off"
 fi
 
 arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"

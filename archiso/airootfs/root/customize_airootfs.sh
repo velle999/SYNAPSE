@@ -163,4 +163,38 @@ EOF
 
 chown -R syn:syn /home/syn
 
+# ── The wallpaper's accent, on the hardware that has lights in it ────────────
+#
+# The live image autologins ROOT and the desktop runs as root, so the state and
+# the user unit go in /root — /home/syn above is the template syn-install copies
+# from, not the session. syn-install writes the same pair into the new user's
+# home, and this is here so the live desktop's Appearance ▸ RGB lights row reads
+# the same On it will read after installing.
+#
+# ⚠ syn-rgb ITSELF STILL SHIPS OFF. Its rule is about not taking over hardware
+# on an UPDATE; a live session has nothing to preserve. `syn-rgb off` turns it
+# back off, and nothing here survives a reboot anyway.
+#
+# openrgb is NOT on the ISO, and that is fine on purpose: the row is drawn
+# whether openrgb is installed or not (a toggle that vanishes with its optdepend
+# is a feature nobody finds out about), syn-rgb says which package is missing
+# and exits, and the unit treats that as its ordinary answer rather than a
+# failure. So this costs the live session one file and one symlink.
+#
+# The symlink is what `systemctl --user enable` would have written for
+# WantedBy=default.target. It cannot be run here — there is no user bus in the
+# build chroot — and systemd reads the file it would have made just the same.
+install -dm755 /root/.config/synui
+cat > /root/.config/synui/rgb.state << 'EOF'
+# syn-rgb — the desktop accent on the lights.
+on=yes
+EOF
+if [ -f /usr/lib/systemd/user/syn-rgb.path ]; then
+    install -dm755 /root/.config/systemd/user/default.target.wants
+    ln -sf /usr/lib/systemd/user/syn-rgb.path \
+        /root/.config/systemd/user/default.target.wants/syn-rgb.path
+else
+    echo "customize_airootfs.sh: syn-rgb.path missing; RGB lights stay off"
+fi
+
 echo "customize_airootfs.sh complete"

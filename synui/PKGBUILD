@@ -984,7 +984,23 @@ pkgver=0.1.0
 #   itself for a grey image — so syn_decode_jpeg() is asking libjpeg for
 #   JCS_EXT_BGRA from a grayscale source. Verified against the real decoder in a
 #   harness (3000x1929, CAIRO_FORMAT_RGB24, stride 12000), not assumed.
-pkgrel=458
+# 459: SYN_GLASS_PANEL_DEFAULT 55 -> 100 — the house glass level, for the
+#   desktops that reach Prism by PICKING it rather than by being installed.
+#   The constant's own comment has always said it is syn-install's number
+#   written twice ("one of them has to survive a synuirc that predates the
+#   key"), and syn-install 93 writes 100 into a fresh install's synuirc: the
+#   two Prisms would otherwise have looked like two different themes depending
+#   on which door you came through. syn-install's layout_test asserts the two
+#   files agree, so this cannot drift again silently.
+#   ⚠ IT REACHES THE THREE GLASS PRESETS AND NOTHING ELSE. Only theme_is_glass
+#   consults it (syn_glass_resolve's last arm), so the eleven others keep the
+#   opacities they were tuned with. On a Prism or macOS 26 desktop with no
+#   glass_level chosen, the panel ladder goes from 0.835 of each panel's
+#   designed alpha to 0.70 — glassier, which is the point, and still the
+#   ladder rather than an absolute so a dense table stays readable next to a
+#   menu. panel_glass_test reads the constant rather than the number and needs
+#   no change; the arithmetic it checks is unchanged.
+pkgrel=459
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

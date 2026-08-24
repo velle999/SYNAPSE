@@ -60,6 +60,70 @@ autostart = syn-install-gui --if-requested
 # and the four newest themes are the ones on screen.
 theme = prism
 
+# ── The rest of the house look, and it has to be spelt out HERE ──────────────
+#
+# ⚠ EVERY LINE BELOW IS ALSO IN syn-install.sh's SYNUIRC HEREDOC, AND THE TWO
+# HAVE TO SAY THE SAME THING. This file is the live session's whole config; that
+# heredoc is a fresh install's. A desktop somebody tries before installing that
+# does not look like the desktop they get afterwards is the same failure the
+# `theme = prism` line above exists to fix — it was the neon theme on the ISO
+# and Prism on disk for a whole release. Change one of these files and change
+# the other, or the ISO drifts back.
+#
+# The rationale for each number is written out once, in the installer's heredoc,
+# and deliberately not copied here — two copies of an argument drift the way two
+# copies of a config do. What follows is the summary.
+
+# Glass at 100: the bar, the dock and synui's panels resolve to
+# SYN_BAR_ALPHA_FROSTED (0.05), the thinnest surface the backdrop blur still has
+# something to mask. `auto` is the theme's own, more solid answer.
+glass_level = 100
+glass_sync  = on
+
+# The same two numbers, said outright, because the bar and the desktop widgets
+# are quickshell and read these keys out of theme.state → settings.state → this
+# file. The live session has none of the first two, so without these the strip
+# across the top comes up at its built-in 0.72 over a dock the compositor has
+# already drawn at 0.05. Unpinned: the sync recomputes both to 0.05 anyway.
+bar_opacity  = 0.05
+dock_opacity = 0.05
+
+# See-through application windows, at the 0.90/0.84 pair both Prisms were
+# designed with. Pinned, because the slider's own curve at level 100 is 0.62 —
+# the floor of that curve, and not a number anybody chose.
+transparency   = on
+active_opacity = 0.90
+glass_pinned   = active_opacity
+
+# Menus and panels ink themselves off the window behind them, not the wallpaper
+# it covers. synui's compiled default; said here because this is the desktop
+# see-through enough for it to show.
+scene_ink = on
+
+# The accent off the wallpaper on every theme, not just the two Prisms. `auto`
+# is the same answer while Prism is on screen.
+wallpaper_accent = on
+
+# The bar as a floating capsule rather than a strip welded to the screen edge —
+# a full-width bar at 0.05 has no edge anywhere to say where the surface stops.
+# A no-op with `corner_radius` at 0 or a retro chrome: this is what shape the
+# bar is WHEN it is rounded, not a second switch.
+bar_shape = floating-pill
+
+dock_style  = auto
+# As round as the dock goes. The draw caps it at half the dock's thickness (32
+# at the stock 64px), so this is a capsule rather than a literal 64px arc.
+dock_radius = 64
+
+# ⚠ `on` AND NOT `auto`, and this one is not cosmetic. `auto` means "follow the
+# theme", and the desktop widgets cannot ask what the theme is: they are
+# quickshell and they read theme.state, a file synui-apply-theme writes only
+# when somebody PICKS a theme. The live session names a theme in this file and
+# has never picked one, so theme.state does not exist and `auto` leaves the
+# widgets with nothing to follow — solid cards on a glass desktop. Same reason,
+# same answer, as the installer's heredoc.
+widget_glass = on
+
 # Window appearance
 border_width = 2
 gap = 8
@@ -74,11 +138,19 @@ master_factor = 0.60
 float_inset = 8
 float_gap = 24
 
-# The SYNAPSE wallpaper, from /usr/share/synui (shipped by synui). The live
-# session has no home directory to put one in and nothing autostarts a
-# wallpaper daemon, so without this the ISO booted onto a flat colour and
-# looked like a compositor that had failed to finish starting.
-wallpaper = default
+# St. Louis at night — Daniel Schwen's Gateway Arch photograph, which synui
+# ships to /usr/share/backgrounds. Nothing autostarts a wallpaper daemon here
+# and the live session has no home to keep a picture in, so without this line
+# the ISO booted onto a flat colour and looked like a compositor that had failed
+# to finish starting.
+#
+# ⚠ THE COLOUR CUT, NOT THE NOIR ONE. Prism has no accent of its own worth the
+# name — it measures the wallpaper and wears what it finds — and the noir cut of
+# the same photograph is greyscale, so it has no hue to give. The ISO would boot
+# onto the theme's fallback cyan and the first thing anybody saw of SynapseOS
+# would be the one case Prism is designed around failing. Same file, same mode,
+# as syn-install.sh writes for a fresh install.
+wallpaper = /usr/share/backgrounds/commons-st-louis-night.jpg
 wallpaper_mode = fill
 
 # CRT post-process off. The first thing anyone sees of SynapseOS is this

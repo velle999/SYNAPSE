@@ -782,28 +782,57 @@ check "the xkb layout, not the keymap, reaches synuirc" "yes" \
 check "the keymap is no longer fed straight to xkb" "no" \
     "$(in_code 'SYNUI_XKB="$KEYMAP"')"
 
-# ── THE GLASS DEFAULTS A FRESH INSTALL IS GIVEN ─────────────────────────────
+# ── THE DESKTOP A FRESH INSTALL IS GIVEN ────────────────────────────────────
 #
 # The synuirc this installer writes is the only thing that decides what a new
-# desktop looks like on its first boot, and one line in it was quietly deciding
-# it for ever: `glass_level = 55`.
+# desktop looks like on its first boot, and every line of it is invisible until
+# somebody installs the OS — by which point it is on every machine that shipped.
+# These checks are cheap and the failures they guard against are not.
 #
-# A NUMBER is an explicit answer, and an explicit answer survives a theme
-# switch — so every one of the twelve non-glass themes was handed Prism's level
-# instead of the opacities it was tuned with, on every machine, permanently. It
-# was redundant as well: synui gives a glass theme SYN_GLASS_PANEL_DEFAULT (the
-# same 55) when nobody has set a level, so the installer was writing down a
-# decision the compositor already makes correctly.
+# ⚠ THE glass_level CHECK USED TO ASSERT THE OPPOSITE, and the reason it flipped
+# is worth keeping. It read "a fresh install leaves glass_level on auto" and
+# forbade a number outright, because a NUMBER is an explicit answer and an
+# explicit answer survives a theme switch: `glass_level = 55` was handing Prism's
+# level to all eleven non-glass themes, permanently, on every install.
 #
-# These four checks are cheap and the failure they guard against is not: it is
-# invisible until somebody changes theme, and by then it is on every install
-# that shipped.
-glass_line=$(in_synuirc 'glass_level')
-check "a fresh install leaves glass_level on auto" "auto" "$glass_line"
-check "…and never writes a number, which would pin it off the theme" "no" \
-    "$(grep -qE '^glass_level *= *[0-9]' <<<"$(synuirc_body)" && echo yes || echo no)"
+# That cost is still real and is now being PAID rather than avoided. The house
+# desktop is glass at the top of the slider, the numbers under it (0.05 strips,
+# 0.90 windows) follow from that one level, and there is no way to ship it as a
+# default without writing it down — `auto` is a different, more solid desktop.
+# The way out for a user who picks Gruvbox is one row: Appearance ▸ Glass ▸ Auto.
+#
+# So what is asserted now is that the decision is COMPLETE and CONSISTENT, which
+# is what the old check was really protecting: the level, the surfaces that
+# follow from it, the one pin that does not, and the two other files that have to
+# say the same thing.
+check "a fresh install ships the house glass level" "100" "$(in_synuirc 'glass_level')"
+check "…with the sync on, so the surfaces follow it" "on" "$(in_synuirc 'glass_sync')"
+
+# The bar and the widgets are quickshell and read these two out of theme.state,
+# then settings.state, then synuirc. A fresh install has neither of the first
+# two, so an absent key here is a 0.72 bar over a 0.05 dock — one desktop drawn
+# at two amounts of glass, with only the half synui draws itself correct.
+check "the bar's alpha is spelt out for quickshell"  "0.05" "$(in_synuirc 'bar_opacity')"
+check "the dock's alpha is spelt out for quickshell" "0.05" "$(in_synuirc 'dock_opacity')"
+
+# See-through windows, at the pair both Prisms were tuned with. The pin is
+# load-bearing: syn_glass_window_alpha at level 100 is 1.00 - 0.38 = 0.62, the
+# FLOOR of that curve, so without it the slider quietly overwrites 0.90 at every
+# login and the desktop ships at a number nobody chose.
+check "transparency is on"                    "on"   "$(in_synuirc 'transparency')"
+check "…at Prism's own focused opacity"       "0.90" "$(in_synuirc 'active_opacity')"
+check "…and pinned, or the slider takes it"   "yes" \
+    "$(grep -qE '^glass_pinned *=.*\bactive_opacity\b' <<<"$(synuirc_body)" && echo yes || echo no)"
+# The derived row must NOT be pinned: it is active - 0.06 and lands on the
+# theme's own 0.84 by itself. Pinning it would freeze it at today's arithmetic.
+check "…while the unfocused row stays on the slider" "no" \
+    "$(grep -qE '^glass_pinned *=.*\binactive_opacity\b' <<<"$(synuirc_body)" && echo yes || echo no)"
 
 check "the dock style follows the theme" "auto" "$(in_synuirc 'dock_style')"
+check "the dock corners are a capsule"   "64"   "$(in_synuirc 'dock_radius')"
+check "the bar is a floating pill"       "floating-pill" "$(in_synuirc 'bar_shape')"
+check "menus ink off the window behind them" "on" "$(in_synuirc 'scene_ink')"
+check "the accent comes off the wallpaper"   "on" "$(in_synuirc 'wallpaper_accent')"
 
 # ⚠ `on`, NOT `auto`, and the asymmetry is the point. The widgets are
 # quickshell and read theme.state — a file synui-apply-theme writes when
@@ -814,6 +843,64 @@ check "the dock style follows the theme" "auto" "$(in_synuirc 'dock_style')"
 # the answer for exactly this case.
 check "widget glass is explicitly on, because the widgets cannot ask" "on" \
     "$(in_synuirc 'widget_glass')"
+
+# The wallpaper Prism takes its accent off. The COLOUR cut and not the noir one:
+# the theme measures the picture, a greyscale picture has no hue to give, and a
+# fresh install would boot onto the fallback cyan with the one feature that
+# makes Prism Prism doing nothing.
+check "the shipped wallpaper is the colour St. Louis" \
+    "/usr/share/backgrounds/commons-st-louis-night.jpg" "$(in_synuirc 'wallpaper')"
+check "…and it is not the greyscale cut" "no" \
+    "$(grep -qE '^wallpaper *=.*noir' <<<"$(synuirc_body)" && echo yes || echo no)"
+check "…scaled to fill" "fill" "$(in_synuirc 'wallpaper_mode')"
+
+# The wallpaper's accent on the lights: the state file AND the user unit that
+# watches palette.state. `syn-rgb on` does both and cannot be run from a chroot,
+# so writing one without the other leaves a row that says On over a bridge that
+# never runs.
+check "rgb.state is written for the new user" "yes" "$(in_code 'rgb.state')"
+check "…and syn-rgb.path is enabled with it"  "yes" \
+    "$(in_code 'default.target.wants/syn-rgb.path')"
+
+# ── THE LIVE ISO HAS TO SHOW THE SAME DESKTOP ───────────────────────────────
+#
+# A desktop somebody tries before installing that does not look like the one
+# they get afterwards is the failure `theme = prism` was added to the ISO's
+# synuirc to fix — it was the neon theme on the image and Prism on disk for a
+# whole release, and nothing caught it. Every look key is now in both files, so
+# every one of them can drift the same way.
+#
+# Skipped rather than failed when the ISO profile is not beside us: this suite
+# also runs from an installed syn-install, where archiso/ is not shipped.
+iso_synuirc=$here/../../archiso/airootfs/etc/synui/synuirc
+if [ -r "$iso_synuirc" ]; then
+    in_iso() { sed -n "s/^$1 *= *\(.*\)$/\1/p" "$iso_synuirc" | head -1; }
+    for k in theme glass_level glass_sync bar_opacity dock_opacity \
+             transparency active_opacity glass_pinned scene_ink \
+             wallpaper_accent bar_shape dock_style dock_radius widget_glass \
+             wallpaper wallpaper_mode; do
+        check "the ISO and a fresh install agree on $k" \
+            "$(in_synuirc "$k")" "$(in_iso "$k")"
+    done
+else
+    printf '  skip  the ISO synuirc is not beside this checkout\n'
+fi
+
+# ── THE COMPILED DEFAULT HAS TO MATCH THE ONE WRITTEN HERE ──────────────────
+#
+# SYN_GLASS_PANEL_DEFAULT is what a desktop is handed when it reaches Prism by
+# PICKING it in the theme manager rather than by being installed — the same
+# decision, written twice, because one copy has to survive a synuirc that
+# predates the key. Let them drift and the two ways of arriving at the house
+# theme stop looking alike.
+synui_h=$here/../../synui/src/synui.h
+if [ -r "$synui_h" ]; then
+    check "synui's glass default matches the installer's level" \
+        "$(in_synuirc 'glass_level')" \
+        "$(sed -n 's/^#define SYN_GLASS_PANEL_DEFAULT *\([0-9]*\).*/\1/p' "$synui_h" | head -1)"
+else
+    printf '  skip  synui/src/synui.h is not beside this checkout\n'
+fi
 
 # ── A SECOND KERNEL MUST BE BOOTABLE ON ALL THREE LOADERS ───────────────────
 #
