@@ -2403,10 +2403,16 @@ int ctlpanel_row_options(int row)
 /* What a bind action does, in words. An action with no entry here still lists —
  * it falls back to the action name — so a bind added to input.c and forgotten
  * here degrades to "slightly terse", not "missing from the panel". */
-static const char *action_desc(syn_server_t *s, const char *action,
-                               const char *arg)
-{
-    static const struct { const char *action, *desc; } tbl[] = {
+/*
+ * ⚠ FILE SCOPE, NOT A FUNCTION STATIC, AND THAT IS THE POINT NOW.
+ *
+ * It was a lookup table: hand it an action, get a description. It is also the
+ * ROSTER — the complete list of things this desktop can put a key on — and the
+ * palette needs to walk it, because "every action with no chord on it" is what
+ * makes unbinding a shortcut reversible. Deriving that list from anywhere else
+ * would be a second roster, and a second roster is one that goes stale.
+ */
+static const struct { const char *action, *desc; } action_tbl[] = {
         { "term",              "Terminal" },
         { "cmdbar",            "AI command bar" },
         { "ai_ask",            "Ask the AI about the window" },
@@ -2472,9 +2478,31 @@ static const char *action_desc(syn_server_t *s, const char *action,
         { "game",              "Game mode" },
         { "lock",              "Lock screen" },
         { "ai_backend",        "AI backend (GPU/CPU/off)" },
-        { "move_output",       "Move window to next output" },
-    };
+    { "move_output",       "Move window to next output" },
+};
+#define ACTION_TBL_N ((int)(sizeof action_tbl / sizeof action_tbl[0]))
 
+/*
+ * The roster, for the palette. `i` walks 0..ctlpanel_action_count(); each is a
+ * built-in action, and `desc` is the same string action_desc() would return.
+ *
+ * `spawn` and `spawn_toggle` are deliberately NOT in it and must not be: they
+ * are only meaningful as the thing they spawn, and a bare "spawn" row would be
+ * a shortcut you could bind a key to that runs nothing. Those two arrive
+ * through the APP and COMMAND rows instead, which carry the command with them.
+ */
+int ctlpanel_action_count(void) { return ACTION_TBL_N; }
+
+const char *ctlpanel_action_at(int i, const char **desc)
+{
+    if (i < 0 || i >= ACTION_TBL_N) return NULL;
+    if (desc) *desc = action_tbl[i].desc;
+    return action_tbl[i].action;
+}
+
+static const char *action_desc(syn_server_t *s, const char *action,
+                               const char *arg)
+{
     /* A spawn bind is only meaningful as the thing it spawns — for either
      * spelling of it. spawn_toggle rows read as the command too rather than as
      * "<command> (toggle)": the palette is a list of what the keys OPEN, and
@@ -2498,12 +2526,12 @@ static const char *action_desc(syn_server_t *s, const char *action,
         }
     }
 
-    for (unsigned i = 0; i < sizeof(tbl) / sizeof(tbl[0]); i++)
-        if (strcmp(action, tbl[i].action) == 0) {
+    for (int i = 0; i < ACTION_TBL_N; i++)
+        if (strcmp(action, action_tbl[i].action) == 0) {
             /* move_output takes a direction; "prev" is a different line. */
             if (strcmp(action, "move_output") == 0 && arg && strcmp(arg, "prev") == 0)
                 return "Move window to previous output";
-            return tbl[i].desc;
+            return action_tbl[i].desc;
         }
     return action;
 }
@@ -2591,7 +2619,32 @@ const char *ctlpanel_tap_key_name(uint32_t mod)
     }
 }
 
+/* Is any chord in the live table bound to this action? The tap counts: it is a
+ * key too, and an action the tap opens is not one you have lost. */
+static bool action_is_bound(syn_server_t *s, const char *action)
+{
+    if (strcmp(s->config.tap_action, action) == 0) return true;
+    for (int i = 0; i < s->config.bind_count; i++)
+        if (strcmp(s->config.binds[i].action, action) == 0) return true;
+    return false;
+}
+
 int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
+{
+    return ctlpanel_shortcuts_ex(s, out, max, false);
+}
+
+/*
+ * ⚠ `include_unbound` IS A PARAMETER AND NOT A SECOND FUNCTION, which is the
+ * whole reason this file has one shortcut list rather than two. The control
+ * panel's Shortcuts column is a READ-ONLY list of what the keys do and wants
+ * only the chords that exist; the palette is where keys are assigned and needs
+ * the actions that have none, or removing a shortcut is a one-way door. Same
+ * walk, same strings, one flag — a copy of this function with thirty extra rows
+ * in it is exactly the drift ctlpanel_shortcuts() was written to end.
+ */
+int ctlpanel_shortcuts_ex(syn_server_t *s, syn_ctl_shortcut_t *out, int max,
+                          bool include_unbound)
 {
     int n = 0;
     int saw_ws = 0, saw_movews = 0;
@@ -2664,6 +2717,40 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
         memset(&out[n], 0, sizeof(out[n]));
         snprintf(out[n].combo, sizeof(out[n].combo), "Super+Shift+1\xe2\x80\x93""9");
         snprintf(out[n].desc,  sizeof(out[n].desc),  "Move window to workspace");
+        n++;
+    }
+
+    /*
+     * ── Everything with no key on it ────────────────────────────────────────
+     *
+     * The rows that make unbinding reversible, and the reason this list is
+     * "what a key could go on" rather than "what the bind table holds".
+     *
+     * They come off the SAME roster action_desc() answers from, so an action
+     * added there is bindable from the palette with no second edit — and one
+     * that is never given a default chord in config.c is reachable for the
+     * first time, which several of them (`printers_scan`, `cascade`,
+     * `launcher_style`) never were.
+     *
+     * Bound-ness is asked per ACTION and not per chord: two chords on one
+     * action is fine and neither makes it unbound, and an action the tap opens
+     * is not one you have lost either.
+     */
+    if (!include_unbound) return n;
+
+    for (int i = 0; i < ctlpanel_action_count() && n < max; i++) {
+        const char *desc = NULL;
+        const char *action = ctlpanel_action_at(i, &desc);
+        if (!action || action_is_bound(s, action)) continue;
+
+        memset(&out[n], 0, sizeof(out[n]));
+        /* No chord, and the column says so rather than being blank: an empty
+         * cell in a list of keys reads as a row that failed to draw. */
+        snprintf(out[n].combo, sizeof(out[n].combo), "\xe2\x80\x94");
+        snprintf(out[n].desc,  sizeof(out[n].desc),  "%s", desc ? desc : action);
+        snprintf(out[n].action, sizeof(out[n].action), "%s", action);
+        out[n].rebindable = 1;
+        out[n].kind       = SYN_SC_UNBOUND;
         n++;
     }
     return n;

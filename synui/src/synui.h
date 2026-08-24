@@ -1961,6 +1961,40 @@ enum {
 #define SYN_BIND_ACTION_LEN  24
 #define SYN_BIND_ARG_LEN     104
 
+/*
+ * ── What KIND of row this is ────────────────────────────────
+ *
+ * The palette used to be a list of the bind table and nothing else, and that is
+ * how removing a shortcut became a one-way door: unbind a chord and the row it
+ * came from is simply not in the table any more, so the list it is derived from
+ * cannot show it and there is no way back short of hand-editing synuirc.
+ *
+ * The list is now "everything a key COULD be put on", of which the bind table
+ * is one quarter:
+ *
+ *   BOUND    a chord in the live table. What the palette has always listed.
+ *   UNBOUND  an action this desktop has with no key on it — including one you
+ *            just removed. This is the way back, and it is why unbinding is
+ *            safe to offer at all.
+ *   APP      an installed application, off the same .desktop scan the start
+ *            menu uses. Offered under a query only: 150 applications with no
+ *            query would bury the forty rows somebody opened this to find.
+ *   COMMAND  the query itself, as a command line. The last row when you have
+ *            typed something that is not a shortcut and not an app, so
+ *            "give me a key for `flatpak run org.foo.Bar`" is one journey
+ *            rather than a trip to synuirc.
+ *
+ * The last three all have an empty `combo` and F2 CREATES a bind rather than
+ * moving one; syn_rebind_apply() branches on exactly that. Zero is BOUND so
+ * every memset-and-fill site in ctlpanel_shortcuts() keeps its old meaning.
+ */
+typedef enum {
+    SYN_SC_BOUND = 0,
+    SYN_SC_UNBOUND,
+    SYN_SC_APP,
+    SYN_SC_COMMAND,
+} syn_sc_kind_t;
+
 typedef struct {
     char combo[48];
     char desc[64];
@@ -1991,7 +2025,16 @@ typedef struct {
     int          tap;
     uint32_t     mods;
     xkb_keysym_t sym;
+    /* syn_sc_kind_t. 0 is BOUND, so a row built the way they always were is
+     * exactly what it always was. */
+    int          kind;
 } syn_ctl_shortcut_t;
+
+/* Upper bound on the built-in action roster (action_desc()'s table in
+ * ctlpanel.c). Generous on purpose: going over it silently truncates the list
+ * of things you can put a key on, which looks like a missing feature rather
+ * than a bug — the same argument CTL_CAT_ITEMS_MAX makes. */
+#define CTL_ACTIONS_MAX  128
 
 #define CTL_SHORTCUTS_MAX  SYN_BINDS_MAX
 
@@ -2011,7 +2054,20 @@ typedef struct {
  * frame: the filter runs on every keystroke, and re-walking the bind table to
  * re-derive strings that cannot have changed since the panel opened would be
  * work done once per character typed. Reopening picks up a config reload. */
-#define KEYS_MAX        CTL_SHORTCUTS_MAX
+/* How many installed applications the query may offer at once.
+ *
+ * A cap and not a scroll: the applications are CANDIDATES, not the list — you
+ * are here for a shortcut, and a query that answers with sixty programs has
+ * stopped being a shortcut palette. Twelve is enough that a two- or three-letter
+ * prefix lands on the one you meant, and few enough that the shortcut rows above
+ * are still on screen with it. */
+#define KEYS_APP_MAX    12
+
+/* Bound chords, plus every action with no chord, plus the applications a query
+ * offers, plus the one command row. All four kinds live in a single all[] so
+ * the filter, the cursor, the draw and the pointer keep walking one list — the
+ * property the panel has always had and the reason its indices are simple. */
+#define KEYS_MAX        (CTL_SHORTCUTS_MAX + CTL_ACTIONS_MAX + KEYS_APP_MAX + 1)
 #define KEYS_ROWS       14    /* rows drawn at once; the rest scroll */
 #define KEYS_QUERY_MAX  48
 
@@ -2024,6 +2080,18 @@ typedef struct {
 
     syn_ctl_shortcut_t all[KEYS_MAX];
     int  n;
+    /* Where the query-built tail starts. all[0..n_fixed) is the snapshot taken
+     * when the panel opened — the bind table and the unbound actions, neither of
+     * which can change while it is up. all[n_fixed..n) is rebuilt by
+     * keys_filter() on every keystroke: the applications this query matches and
+     * the command row.
+     *
+     * ⚠ THE TAIL IS REBUILT, NOT FILTERED. Everything above it is filtered by
+     * keys_matches(); the applications ARE the query's answer, so filtering a
+     * list that was built from the query would be asking the same question
+     * twice — and the command row has to appear for a query that matches
+     * nothing at all, which no filter can produce. */
+    int  n_fixed;
 
     /* Row -> all[] index, under the query. Rebuilt by keys_filter() on every
      * edit, so the draw, the cursor and the pointer all walk one list. */
@@ -8133,6 +8201,13 @@ void ctlpanel_child_closed(syn_server_t *s, const char *action);
 /* The shortcuts column, rebuilt from the live bind table on every render.
  * Returns how many rows were written into out[] (at most max). */
 int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
+/* The same walk with the keyless actions on the end — see the function. */
+int  ctlpanel_shortcuts_ex(syn_server_t *s, syn_ctl_shortcut_t *out, int max,
+                           bool include_unbound);
+/* The built-in action roster, which action_desc()'s table IS. Walk 0..count();
+ * `desc` is filled with the same words the panel shows. NULL past the end. */
+int         ctlpanel_action_count(void);
+const char *ctlpanel_action_at(int i, const char **desc);
 /* The shortcuts pane's cursor, for the rebind keys and for render.c's
  * highlight. `_selected` copies the row out by value because every caller is
  * about to rewrite the bind table it was derived from. */
@@ -8192,6 +8267,10 @@ void keys_show(syn_server_t *s);
 bool        syn_rebind_capture_ignores(const syn_ctl_shortcut_t *sc,
                                        xkb_keysym_t sym);
 const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc);
+/* Take the key off a bound row. The row survives as an UNBOUND one, which is
+ * what makes offering this safe at all — see the function. */
+int         syn_rebind_unbind(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                              char *status, size_t status_n);
 int         syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
                              xkb_keysym_t sym, uint32_t mods,
                              char *status, size_t status_n);

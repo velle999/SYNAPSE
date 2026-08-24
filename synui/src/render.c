@@ -6589,7 +6589,10 @@ void synui_render_keys(syn_server_t *s)
             syn_show_text(cr, box);
         } else {
             set_ink(cr, INK_DIM, 0.9);
-            syn_show_text(cr, "_  type a key or what it does");
+            /* The three things the query now answers: a chord, a description,
+             * an application name — and anything at all, as the command row at
+             * the bottom of the list. */
+            syn_show_text(cr, "_  a key, what it does, an app, or a command");
         }
     }
 
@@ -6606,8 +6609,20 @@ void synui_render_keys(syn_server_t *s)
             cairo_fill(cr);
         }
 
+        /*
+         * The combo column. A row with a key on it wears the accent, as it
+         * always has; a row WITHOUT one is drawn as an em dash in dim ink, so
+         * the list reads as "these have keys, these could" at a glance rather
+         * than as forty accent-coloured rows of which two thirds are dashes.
+         *
+         * ⚠ The dash is INK and not a faded accent. The accent is what "this
+         * key is live" means everywhere else in this panel — the selected row's
+         * fill, the query, the title — and spending it on the rows that have no
+         * key would be the one column that says the opposite of the rest.
+         */
         cairo_set_font_size(cr, 13);
-        set_accent(cr, sel ? 1.0 : 0.95);
+        if (sc->kind == SYN_SC_BOUND) set_accent(cr, sel ? 1.0 : 0.95);
+        else                          set_ink(cr, sel ? INK_MUTED : INK_DIM, 1.0);
         cairo_move_to(cr, KEYS_COMBO_X, ry);
         syn_show_text(cr, sc->combo);
 
@@ -6674,7 +6689,21 @@ void synui_render_keys(syn_server_t *s)
     else if (k->capturing)
         foot = "Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels";
     else
-        foot = "Filter \xc2\xb7 Enter runs it \xc2\xb7 F2 rebinds \xc2\xb7 F3 moves it onto the tap \xc2\xb7 Ctrl+Shift+R resets";
+        /* Delete earns its place in the line: it is the one key here that
+         * REMOVES something, and a destructive key nobody is told about is
+         * either never used or used by accident. "gives it a key" rather than
+         * "rebinds" because most of the list has no key on it now. */
+        /* Delete earns its place in the line: it is the one key here that
+         * REMOVES something, and a destructive key nobody is told about is
+         * either never used or used by accident. "sets a key" rather than
+         * "rebinds" because most of the list has no key on it now.
+         *
+         * ⚠ AND IT HAS TO STAY UNDER THE ONE THE PANEL WAS SIZED FOR. 84
+         * characters fitted KEYS_W at font 12; this is 81. There is no eliding
+         * here — the footer is drawn with syn_show_text() and would simply run
+         * off the panel, which is why the "type a command" half of the news is
+         * in the FIND placeholder instead, where there is room for it. */
+        foot = "Filter \xc2\xb7 Enter runs \xc2\xb7 F2 sets a key \xc2\xb7 Del frees it \xc2\xb7 F3 tap \xc2\xb7 Ctrl+Shift+R resets";
     syn_show_text(cr, foot);
 
     cairo_destroy(cr);

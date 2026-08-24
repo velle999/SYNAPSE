@@ -1083,7 +1083,46 @@ pkgver=0.1.0
 #   accent and the four status colours — 6000 pairs, 450 of them on glass. Its
 #   second claim is the load-bearing one: on an OPAQUE panel every theme must
 #   come back bit-for-bit.
-pkgrel=461
+# 462: the shortcut palette (Super+/) is a hotkey MANAGER now. Three gaps, one
+#   cause: it listed the bind table, so the only rows it had were the chords
+#   that already existed.
+#   ⚠ REMOVING A SHORTCUT WAS A ONE-WAY DOOR — the reported bug. Unbind a chord
+#   and the row naming it is not in the table any more, so the list it is
+#   derived from cannot show it and the way back was to hand-edit synuirc. It
+#   only ever happened as a SIDE EFFECT (F3 takes the chord when it puts a row
+#   on the tap), which is why nobody hit it on purpose.
+#   The list is "what a key could go on" now, of which the bind table is one
+#   quarter (syn_sc_kind_t): BOUND, UNBOUND (every action with no chord),
+#   APP (the .desktop scan the start menu already does), COMMAND (the query
+#   itself). Delete frees a chord and the row STAYS as its UNBOUND self, which
+#   is the only reason offering a delete is safe; F2 on any keyless row CREATES
+#   rather than moves.
+#   Two things fall out for free. The actions that never had a default chord —
+#   printers_scan, cascade, launcher_style — are reachable for the first time.
+#   And "give this app a key" and "give this command a key" stop needing a text
+#   editor: type `firef` and F2, or type a whole command line and F2.
+#   ⚠ ctlpanel_shortcuts_ex()'s `include_unbound` IS A PARAMETER, NOT A SECOND
+#   FUNCTION. The control panel's column is read-only and wants the chords that
+#   exist; the palette assigns keys and needs the ones that do not. A copy of
+#   that walk with thirty extra rows is the drift ctlpanel_shortcuts() was
+#   written to end. action_desc()'s table moved to file scope for the same
+#   reason: it was a lookup, it is also the ROSTER, and a second roster goes
+#   stale.
+#   ⚠ AN OVER-LONG Exec= IS SKIPPED, NOT TRUNCATED. A .desktop Exec can be 255
+#   bytes against SYN_BIND_ARG_LEN; snprintf would cut it and the key would run
+#   a command line missing its tail, silently, for the few applications with
+#   long ones. A row that is not offered is honest.
+#   ⚠ Enter on a query that matches nothing now RUNS it, where it used to do
+#   nothing. That is the command row and it is the feature, not a regression —
+#   but keys_test asserted the old behaviour and now asserts the new one out
+#   loud, because it is the one change here somebody could be surprised by.
+#   ⚠ AND keys_test WAS ALREADY RED BEFORE ANY OF THIS: 7 of its 156 checks
+#   looked for a tap row reading "Start menu", and action_desc() has rendered it
+#   "Start menu (bar menu)" since start_menu_style became a setting. Stale
+#   assertions, not a code bug — fixed here as TAP_DESC, spelt once, because a
+#   test that hardcodes a setting-derived string in seven places goes stale in
+#   seven places. 189 checks green now, from 156 with 7 failing.
+pkgrel=462
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

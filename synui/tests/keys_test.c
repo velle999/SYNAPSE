@@ -89,6 +89,37 @@ void synui_child_reset_signals(void)         { }
  * process, so the row cannot just flip a flag the way the Dock row does. */
 void synui_spawn(const char *cmd)             { (void)cmd; }
 
+/*
+ * appgrid.c is not linked here — it walks every XDG data directory, which a
+ * unit test must not do: the answer would be whatever is installed on the
+ * machine running it, so a query for "Firefox" would pass on this box and fail
+ * in CI, which is worse than no test at all.
+ *
+ * So it seeds a FIXED pair instead, and that is what makes the application rows
+ * testable: one ordinary program, and one whose Exec= is deliberately longer
+ * than SYN_BIND_ARG_LEN so the "skip rather than truncate" rule has something
+ * to skip. `scanned` is set here because keys_build_tail() calls this exactly
+ * once, guarded on that flag.
+ */
+void appgrid_rescan(syn_server_t *s)
+{
+    syn_appgrid_t *g = &s->appgrid;
+    g->count = 0;
+
+    snprintf(g->apps[g->count].id,   sizeof(g->apps[0].id),   "firefox");
+    snprintf(g->apps[g->count].name, sizeof(g->apps[0].name), "Firefox");
+    snprintf(g->apps[g->count].exec, sizeof(g->apps[0].exec), "firefox");
+    g->count++;
+
+    snprintf(g->apps[g->count].id,   sizeof(g->apps[0].id),   "longexec");
+    snprintf(g->apps[g->count].name, sizeof(g->apps[0].name), "Longexec");
+    memset(g->apps[g->count].exec, 'x', SYN_BIND_ARG_LEN + 8);
+    g->apps[g->count].exec[SYN_BIND_ARG_LEN + 8] = '\0';
+    g->count++;
+
+    g->scanned = 1;
+}
+
 /* power.c is not linked here; the Screen audio row resolves `auto` through it.
  * "no battery" is the desktop answer and keeps the row's value deterministic. */
 bool power_has_battery(void)                 { return false; }
@@ -213,6 +244,20 @@ int  settings_state_has(const char *k)                { (void)k; return 0; }
  */
 static int  binds_set, binds_unbound;
 static char last_bound[64], last_unbound[64];
+/* WHAT the last bind was pointed at, not just which chord took it. The app and
+ * command rows are only correct if the ACTION and ARGUMENT that land in the
+ * table are `spawn` and the exact command line — a key bound to the right chord
+ * and the wrong command is the failure worth catching. */
+static char last_bound_action[SYN_BIND_ACTION_LEN];
+static char last_bound_arg[SYN_BIND_ARG_LEN];
+
+static void note_bound(uint32_t mods, xkb_keysym_t sym,
+                       const char *action, const char *arg)
+{
+    syn_bind_format_combo(mods, sym, last_bound, sizeof(last_bound));
+    snprintf(last_bound_action, sizeof(last_bound_action), "%s", action);
+    snprintf(last_bound_arg, sizeof(last_bound_arg), "%s", arg ? arg : "");
+}
 
 void syn_bind_format_combo(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
 {
@@ -235,6 +280,7 @@ void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
         snprintf(cfg->binds[i].action, sizeof(cfg->binds[i].action), "%s", action);
         snprintf(cfg->binds[i].arg, sizeof(cfg->binds[i].arg), "%s", arg ? arg : "");
         binds_set++;
+        note_bound(mods, sym, action, arg);
         return;
     }
     syn_bind_t *b = &cfg->binds[cfg->bind_count++];
@@ -242,7 +288,7 @@ void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
     snprintf(b->action, sizeof(b->action), "%s", action);
     snprintf(b->arg, sizeof(b->arg), "%s", arg ? arg : "");
     binds_set++;
-    syn_bind_format_combo(mods, sym, last_bound, sizeof(last_bound));
+    note_bound(mods, sym, action, arg);
 }
 
 bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym)
@@ -345,6 +391,8 @@ static void rig_init(void)
 
     renders = dispatches = 0;
     last_action[0] = last_arg[0] = '\0';
+    last_bound[0] = last_unbound[0] = '\0';
+    last_bound_action[0] = last_bound_arg[0] = '\0';
     hidden_before_dispatch = -1;
 }
 
@@ -354,6 +402,50 @@ static void type(const char *text)
 {
     for (const char *p = text; *p; p++)
         keys_key(&g_s, (xkb_keysym_t)(unsigned char)*p, 0);
+}
+
+/*
+ * What the tap row's description actually is.
+ *
+ * ⚠ SEVEN OF THESE CHECKS WERE ALREADY FAILING BEFORE THIS FILE WAS TOUCHED,
+ * all for the same reason: they looked for "Start menu", and action_desc() has
+ * rendered the tap as "Start menu (bar menu)" since start_menu_style became a
+ * setting — the row names WHICH start menu, deliberately, so the list cannot
+ * disagree with the keyboard. The assertions were never updated, so seven
+ * checks about the tap row have been asserting a string nothing produces.
+ *
+ * Spelt once here rather than seven times inline: the row's text is a function
+ * of a setting, and a test that hardcodes it in seven places goes stale in
+ * seven places.
+ */
+#define TAP_DESC "Start menu (bar menu)"
+
+/*
+ * How many rows in the view have a KEY on them — the rows the palette has
+ * always listed.
+ *
+ * The list is four kinds now (syn_sc_kind_t): the bind table, every action with
+ * no chord, the applications a query offers, and the query itself as a command.
+ * Most of the assertions below are about the first kind, and counting the whole
+ * view would make them count the other three as well — which is how "a
+ * description matches" would fail with 3 rows the moment a keyless action
+ * happened to contain the same word.
+ */
+static int view_bound(void)
+{
+    syn_keys_t *k = &g_s.keys;
+    int n = 0;
+    for (int i = 0; i < k->n_view; i++)
+        if (k->all[k->view[i]].kind == SYN_SC_BOUND) n++;
+    return n;
+}
+
+/* The kind of the last row in the view — the command row's home. */
+static int view_last_kind(void)
+{
+    syn_keys_t *k = &g_s.keys;
+    if (k->n_view <= 0) return -1;
+    return k->all[k->view[k->n_view - 1]].kind;
 }
 
 /* The description on the row the cursor is on, or "" when nothing matched. */
@@ -398,16 +490,39 @@ static void test_list_is_the_bind_table(void)
     keys_show(&g_s);
 
     /* Seven binds, less the eight collapsed into "Super+1–9" (one of which was
-     * seeded), plus the tap row and the collapsed row itself. */
-    CHECK(g_s.keys.n == 8, "every bind is listed, workspaces collapsed (got %d)",
-          g_s.keys.n);
+     * seeded), plus the tap row and the collapsed row itself. Asserted as the
+     * count of BOUND rows now rather than of the whole list: the list also
+     * carries every action with no chord on it. */
+    CHECK(view_bound() == 8, "every bind is listed, workspaces collapsed (got %d)",
+          view_bound());
     CHECK(g_s.keys.n_view == g_s.keys.n,
           "an empty query shows all of them (got %d)", g_s.keys.n_view);
+    CHECK(g_s.keys.n == g_s.keys.n_fixed,
+          "an empty query builds no tail (n %d, fixed %d)",
+          g_s.keys.n, g_s.keys.n_fixed);
+
+    /*
+     * ── And the rows with no key on them ────────────────────────────────────
+     *
+     * The half that makes removing a shortcut reversible. `term` is bound in
+     * the shipped defaults but NOT in this rig, so it stands for "an action
+     * this desktop has that no chord runs" — which before was a row that simply
+     * did not exist, and therefore a shortcut you could not create.
+     */
+    CHECK(g_s.keys.n > 8, "the keyless actions are listed too (got %d)",
+          g_s.keys.n);
+    CHECK(view_has("Terminal"),
+          "an action with no chord on it is listed, so a key can be put on it");
+    /* …and one that IS bound is not listed twice. A row for the chord and a
+     * second saying it has none would be the list arguing with itself. */
+    CHECK(view_count("Wallpaper picker") == 1,
+          "a bound action is not also offered as keyless (got %d)",
+          view_count("Wallpaper picker"));
 
     CHECK(view_has("Wallpaper picker"), "a bind's description comes from its action");
     CHECK(view_has("Keyboard shortcuts (this list)"), "the palette lists itself");
     CHECK(view_has("Switch to workspace"), "the collapsed workspace row is there");
-    CHECK(view_has("Start menu"), "the tap is listed though it is not a bind");
+    CHECK(view_has(TAP_DESC), "the tap is listed though it is not a bind");
     CHECK(view_has("Move window to previous output"),
           "an arg that changes the meaning changes the description");
     CHECK(view_has("synui-screenshot region"),
@@ -436,8 +551,14 @@ static void test_search(void)
 
     type("wallp");
     CHECK(renders > base, "an edit repaints the panel");
-    CHECK(g_s.keys.n_view == 1 && view_has("Wallpaper picker"),
-          "a description matches (got %d rows)", g_s.keys.n_view);
+    CHECK(view_bound() == 1 && view_has("Wallpaper picker"),
+          "a description matches (got %d bound rows)", view_bound());
+    /* ⚠ AND THE COMMAND ROW IS UNDER IT, ALWAYS. It is the answer to "I am
+     * typing a command, not searching", and a row that appeared only when the
+     * list was otherwise empty would vanish the moment the query brushed a
+     * shortcut — which is exactly when you are still typing. */
+    CHECK(view_last_kind() == SYN_SC_COMMAND,
+          "the command row is last (last kind %d)", view_last_kind());
 
     /* Same row, found by its key instead. */
     keys_key(&g_s, XKB_KEY_Escape, 0);
@@ -446,30 +567,37 @@ static void test_search(void)
     CHECK(g_s.keys.visible, "…and the panel is still up");
 
     type("super+w");
-    CHECK(g_s.keys.n_view == 1 && view_has("Wallpaper picker"),
-          "a combo matches (got %d rows)", g_s.keys.n_view);
+    CHECK(view_bound() == 1 && view_has("Wallpaper picker"),
+          "a combo matches (got %d bound rows)", view_bound());
 
     /* Case folds. */
     keys_key(&g_s, XKB_KEY_Escape, 0);
     type("SUPER+W");
-    CHECK(g_s.keys.n_view == 1 && view_has("Wallpaper picker"),
+    CHECK(view_bound() == 1 && view_has("Wallpaper picker"),
           "the match is case-insensitive");
 
     /* Words are ANDed, in any order. "float super" is the case that a naive
      * substring search over the concatenation would silently miss. */
     keys_key(&g_s, XKB_KEY_Escape, 0);
     type("float super");
-    CHECK(g_s.keys.n_view == 1 && view_has("Float window"),
-          "words are ANDed across both columns (got %d rows)", g_s.keys.n_view);
+    CHECK(view_bound() == 1 && view_has("Float window"),
+          "words are ANDed across both columns (got %d bound rows)", view_bound());
 
     keys_key(&g_s, XKB_KEY_Escape, 0);
     type("super float");
-    CHECK(g_s.keys.n_view == 1 && view_has("Float window"),
+    CHECK(view_bound() == 1 && view_has("Float window"),
           "…and the order does not matter");
 
     keys_key(&g_s, XKB_KEY_Escape, 0);
     type("zzzz");
-    CHECK(g_s.keys.n_view == 0, "a query that matches nothing shows nothing");
+    /* ⚠ THIS USED TO ASSERT AN EMPTY LIST, and the change is the feature: a
+     * query that matches no shortcut and no application is somebody typing a
+     * command, and the row that offers to run it is the whole point of being
+     * able to make a hotkey out of one. */
+    CHECK(view_bound() == 0, "no shortcut matches (got %d)", view_bound());
+    CHECK(g_s.keys.n_view == 1 && view_last_kind() == SYN_SC_COMMAND,
+          "…and what is left is the command row (got %d rows)", g_s.keys.n_view);
+    CHECK(view_has("Run: zzzz"), "…which quotes what was typed");
     CHECK(g_s.keys.visible, "…and does not close the panel");
 
     /* Backspace walks it back rather than closing. This is deliberate and
@@ -519,18 +647,31 @@ static void test_enter_runs_it(void)
     rig_init();
     keys_show(&g_s);
     type("switch to workspace");
-    CHECK(g_s.keys.n_view == 1, "the collapsed row is selectable");
+    CHECK(view_bound() == 1, "the collapsed row is selectable");
+    g_s.keys.selected = 0;   /* the collapsed row, above the command row */
     keys_key(&g_s, XKB_KEY_Return, 0);
     CHECK(dispatches == 0, "…but Enter on it dispatches nothing (got %d)",
           dispatches);
     CHECK(g_s.keys.visible, "…and leaves the palette up");
 
-    /* Nothing matched: Enter has no row at all. */
+    /*
+     * Nothing matched, so the only row is the command row — and Enter RUNS it.
+     *
+     * ⚠ THE OPPOSITE OF WHAT THIS USED TO ASSERT, deliberately. "Enter on an
+     * empty result does nothing" was correct when an empty result was the end
+     * of the road; typing a command and pressing Enter is now a thing the
+     * panel is FOR, and it is the same journey as typing one and pressing F2 to
+     * give it a key. Nothing else can be selected — the command row is the only
+     * row there is.
+     */
     rig_init();
     keys_show(&g_s);
     type("zzzz");
     keys_key(&g_s, XKB_KEY_Return, 0);
-    CHECK(dispatches == 0, "Enter on an empty result does nothing");
+    CHECK(dispatches == 1 && strcmp(last_action, "spawn") == 0 &&
+          strcmp(last_arg, "zzzz") == 0,
+          "Enter on the command row spawns what was typed (got %d, '%s %s')",
+          dispatches, last_action, last_arg);
 
     keys_hide(&g_s);
 }
@@ -661,7 +802,8 @@ static void test_rebind(void)
     /* The list is rebuilt from the table, so the row now shows its new key.
      * Nothing else moved. */
     CHECK(view_has("Wallpaper picker"), "the shortcut is still listed");
-    CHECK(g_s.keys.n == 8, "and the list is the same length (got %d)", g_s.keys.n);
+    CHECK(view_bound() == 8, "and the list is the same length (got %d)",
+          view_bound());
 
     keys_hide(&g_s);
 }
@@ -733,7 +875,7 @@ static void test_rebind_tap(void)
     rig_init();
     keys_show(&g_s);
 
-    CHECK(select_desc("Start menu"), "found the tap row");
+    CHECK(select_desc(TAP_DESC), "found the tap row");
     CHECK(strcmp(selected_combo(), "Super (tap)") == 0,
           "…listed with the modifier the config says (got '%s')",
           selected_combo());
@@ -753,14 +895,14 @@ static void test_rebind_tap(void)
           "…and says what it wants instead (got '%s')", g_s.keys.status);
 
     /* The modifier press every other capture throws away. */
-    CHECK(select_desc("Start menu"), "still on the tap row");
+    CHECK(select_desc(TAP_DESC), "still on the tap row");
     keys_key(&g_s, XKB_KEY_F2, 0);
     keys_key(&g_s, XKB_KEY_Alt_L, 0);
     CHECK(!g_s.keys.capturing && g_s.config.tap_mod == WLR_MODIFIER_ALT,
           "a bare modifier IS the answer on the tap row");
     CHECK(binds_set == 0 && binds_unbound == 0,
           "…and it touches no bind, because the tap is not one");
-    CHECK(select_desc("Start menu") && strcmp(selected_combo(), "Alt (tap)") == 0,
+    CHECK(select_desc(TAP_DESC) && strcmp(selected_combo(), "Alt (tap)") == 0,
           "the list is re-read, so the row shows the new key (got '%s')",
           selected_combo());
 
@@ -770,7 +912,7 @@ static void test_rebind_tap(void)
     keys_key(&g_s, XKB_KEY_Delete, 0);
     CHECK(!g_s.keys.capturing && g_s.config.tap_mod == 0,
           "Delete turns the tap off");
-    CHECK(select_desc("Start menu") && strcmp(selected_combo(), "Off") == 0,
+    CHECK(select_desc(TAP_DESC) && strcmp(selected_combo(), "Off") == 0,
           "…and the row says so (got '%s')", selected_combo());
 
     /* Still runnable with the tap off: the row has an action, and Enter on it
@@ -783,7 +925,7 @@ static void test_rebind_tap(void)
     /* And back onto the same key it already has, which is a no-op. */
     rig_init();
     keys_show(&g_s);
-    CHECK(select_desc("Start menu"), "back on the tap row");
+    CHECK(select_desc(TAP_DESC), "back on the tap row");
     keys_key(&g_s, XKB_KEY_F2, 0);
     keys_key(&g_s, XKB_KEY_Super_L, 0);
     CHECK(!g_s.keys.capturing && g_s.config.tap_mod == WLR_MODIFIER_LOGO,
@@ -810,7 +952,7 @@ static void test_tap_action(void)
     keys_show(&g_s);
     binds_set = binds_unbound = 0;
 
-    int before = g_s.keys.n;
+    int before = view_bound();
     CHECK(select_desc("Wallpaper picker"), "found a row to put on the tap");
     keys_key(&g_s, XKB_KEY_F3, 0);
     CHECK(strcmp(g_s.config.tap_action, "wallpaper") == 0 &&
@@ -837,9 +979,15 @@ static void test_tap_action(void)
      * Exactly ONE row names it now, and it is the tap: the list IS the bind
      * table, so the freed chord's row is gone from it. Two rows reading
      * "Wallpaper picker" would be the duplicate still on screen. */
-    CHECK(view_count("Wallpaper picker") == 1 && g_s.keys.n == before - 1,
-          "the row it came from is gone (%d named it, %d rows vs %d)",
-          view_count("Wallpaper picker"), g_s.keys.n, before);
+    /* ⚠ ONE ROW, AND THE KEYLESS LIST IS WHY THAT IS STILL TRUE. The freed
+     * chord's row is gone, and the action does NOT come back as a keyless one —
+     * because the tap runs it, and an action the tap opens is not one you have
+     * lost. That is what action_is_bound() asks, and getting it wrong here
+     * would show "Wallpaper picker" twice: once on the tap and once claiming to
+     * have no key. */
+    CHECK(view_count("Wallpaper picker") == 1 && view_bound() == before - 1,
+          "the row it came from is gone (%d named it, %d bound vs %d)",
+          view_count("Wallpaper picker"), view_bound(), before);
     CHECK(select_desc("Wallpaper picker") &&
           strcmp(selected_combo(), "Super (tap)") == 0,
           "the tap row now reads as the thing it opens (got '%s')",
@@ -910,7 +1058,7 @@ static void test_tap_action(void)
      * like a working assignment. */
     rig_init();
     keys_show(&g_s);
-    CHECK(select_desc("Start menu") &&
+    CHECK(select_desc(TAP_DESC) &&
           strcmp(selected_combo(), "Super (tap)") == 0, "on the tap row");
     keys_key(&g_s, XKB_KEY_F3, 0);
     CHECK(strcmp(g_s.config.tap_action, "start_menu") == 0,
@@ -1199,6 +1347,141 @@ static void test_ctlpanel_shortcut_cursor(void)
     ctlpanel_hide(&g_s);
 }
 
+/* ── Making a hotkey, and taking one away ─────────────────────
+ *
+ * The half the palette did not have. It listed the bind table, so:
+ *
+ *   * removing a shortcut removed the only row that named it, and the way back
+ *     was to hand-edit synuirc — reported as "removing hotkey from list leaves
+ *     no way to add it back";
+ *   * an action with no default chord (printers_scan, cascade, launcher_style)
+ *     could not be reached at all;
+ *   * and an application or a command line could not be given a key without
+ *     leaving the desktop for a text editor.
+ *
+ * All three are one change: the list is "what a key could go on" rather than
+ * "what the bind table holds", and F2 CREATES where there is no chord to move.
+ */
+static void test_unbind_is_reversible(void)
+{
+    printf("keys: Delete frees a key, and the row survives it\n");
+
+    rig_init();
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+
+    CHECK(select_desc("Wallpaper picker"), "found a bound row");
+    CHECK(strcmp(selected_combo(), "Super+W") == 0,
+          "…with a key on it (got '%s')", selected_combo());
+
+    keys_key(&g_s, XKB_KEY_Delete, 0);
+    CHECK(binds_unbound == 1 && strcmp(last_unbound, "super+w") == 0,
+          "Delete frees the chord (%d unbound, last '%s')",
+          binds_unbound, last_unbound);
+    CHECK(binds_set == 0, "…and binds nothing in its place (got %d)", binds_set);
+
+    /* ⚠ THE WHOLE POINT. The row is still there, with no key on it, so the
+     * shortcut can be given one again. This is what used to be impossible. */
+    CHECK(view_has("Wallpaper picker"), "the row survives the delete");
+    CHECK(select_desc("Wallpaper picker") &&
+          strcmp(selected_combo(), "\xe2\x80\x94") == 0,
+          "…as a row with no key (got '%s')", selected_combo());
+
+    /* …and F2 puts one back, which is a CREATE and not a move: there is no old
+     * chord to take away, and syn_rebind_apply() must not go looking for one. */
+    binds_set = binds_unbound = 0;
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.keys.capturing, "F2 arms a capture on a keyless row");
+    keys_key(&g_s, XKB_KEY_y, WLR_MODIFIER_LOGO);
+    CHECK(binds_set == 1 && strcmp(last_bound, "super+y") == 0,
+          "…and the chord binds it (got %d, '%s')", binds_set, last_bound);
+    CHECK(binds_unbound == 0,
+          "…without unbinding anything, because there was nothing to move "
+          "(got %d)", binds_unbound);
+    CHECK(select_desc("Wallpaper picker") &&
+          strcmp(selected_combo(), "Super+Y") == 0,
+          "…and the row wears its new key (got '%s')", selected_combo());
+
+    /* Delete on a row that has no key says so rather than doing nothing. A
+     * destructive key that is silently a no-op reads as the panel being stuck. */
+    rig_init();
+    keys_show(&g_s);
+    CHECK(select_desc("Terminal"), "found a keyless row");
+    binds_unbound = 0;
+    keys_key(&g_s, XKB_KEY_Delete, 0);
+    CHECK(binds_unbound == 0, "Delete on a keyless row unbinds nothing");
+    CHECK(strstr(g_s.keys.status, "F2") != NULL,
+          "…and says what to press instead (got '%s')", g_s.keys.status);
+
+    /* The tap has its own off switch — Delete inside its capture — and two
+     * spellings of "off" would be one too many. */
+    CHECK(select_desc(TAP_DESC), "found the tap row");
+    keys_key(&g_s, XKB_KEY_Delete, 0);
+    CHECK(strstr(g_s.keys.status, "F2") != NULL,
+          "Delete on the tap points at its own off switch (got '%s')",
+          g_s.keys.status);
+
+    keys_hide(&g_s);
+}
+
+static void test_new_from_app_and_command(void)
+{
+    printf("keys: making a hotkey from an app or a command\n");
+
+    rig_init();
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+
+    /* An installed application, off the same scan the start menu uses. Offered
+     * under a query only — a palette that opened onto every application would
+     * bury the shortcuts somebody pressed Super+/ to find. */
+    CHECK(!view_has("Firefox"), "no applications before a query is typed");
+    type("firef");
+    CHECK(view_has("Firefox"), "typing offers the application");
+    CHECK(select_desc("Firefox") &&
+          strcmp(selected_combo(), "\xe2\x80\x94") == 0,
+          "…as a row with no key (got '%s')", selected_combo());
+
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_b, WLR_MODIFIER_LOGO);
+    CHECK(binds_set == 1 && strcmp(last_bound, "super+b") == 0,
+          "F2 gives the application a key (got %d, '%s')", binds_set, last_bound);
+    CHECK(strcmp(last_bound_action, "spawn") == 0 &&
+          strcmp(last_bound_arg, "firefox") == 0,
+          "…bound to its Exec, as a spawn (got '%s %s')",
+          last_bound_action, last_bound_arg);
+    CHECK(binds_unbound == 0, "…and moves nothing (got %d)", binds_unbound);
+
+    /* ⚠ AN OVER-LONG Exec IS SKIPPED, NOT TRUNCATED. A .desktop Exec= can be
+     * 255 bytes and a bind's argument is shorter; cutting it would bind a key
+     * to a command line missing its tail, which runs the WRONG thing silently.
+     * A row that is not offered is honest. */
+    rig_init();
+    keys_show(&g_s);
+    type("longex");
+    CHECK(!view_has("Longexec"),
+          "an application whose Exec cannot fit a bind is not offered");
+
+    /* And the query itself, for anything that is neither. */
+    rig_init();
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+    type("flatpak run org.foo.Bar");
+    CHECK(view_has("Run: flatpak run org.foo.Bar"),
+          "a typed command is offered as a row");
+    CHECK(select_desc("Run: flatpak run org.foo.Bar"), "…and is selectable");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_g, WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT);
+    CHECK(binds_set == 1 && strcmp(last_bound, "super+shift+g") == 0,
+          "F2 gives the command a key (got %d, '%s')", binds_set, last_bound);
+    CHECK(strcmp(last_bound_action, "spawn") == 0 &&
+          strcmp(last_bound_arg, "flatpak run org.foo.Bar") == 0,
+          "…running exactly what was typed (got '%s %s')",
+          last_bound_action, last_bound_arg);
+
+    keys_hide(&g_s);
+}
+
 int main(void)
 {
     test_list_is_the_bind_table();
@@ -1209,6 +1492,8 @@ int main(void)
     test_rebind_refusals();
     test_rebind_tap();
     test_tap_action();
+    test_unbind_is_reversible();
+    test_new_from_app_and_command();
     test_rebind_reset();
     test_modal_contract();
     test_ctlpanel_shortcut_cursor();

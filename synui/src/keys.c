@@ -66,6 +66,26 @@ static int fold_contains(const char *hay, const char *needle, size_t nlen)
     return 0;
 }
 
+/* Every word of the query, found somewhere in one field.
+ *
+ * The same rule keys_matches() applies across the two columns, asked of one —
+ * an application has no combo column, and matching its Exec= instead would make
+ * a one-letter query offer every program whose command line contains that
+ * letter. Split out rather than inlined so "firefox web" narrows an app row
+ * exactly as it narrows a shortcut row. */
+static int field_matches(const char *field, const char *query)
+{
+    const char *w = query;
+    for (;;) {
+        while (*w == ' ') w++;
+        if (!*w) return 1;
+        const char *end = w;
+        while (*end && *end != ' ') end++;
+        if (!fold_contains(field, w, (size_t)(end - w))) return 0;
+        w = end;
+    }
+}
+
 static int keys_matches(const syn_ctl_shortcut_t *sc, const char *query)
 {
     /* Walk the query a whitespace-separated word at a time; every word has to
@@ -93,14 +113,118 @@ static int keys_matches(const syn_ctl_shortcut_t *sc, const char *query)
  * on: after a keystroke the row under it is a different shortcut, and a
  * selection that lands on whatever happens to be at index 7 is worse than one
  * that is predictably at the top of the results. */
+/*
+ * ── The query-built tail: applications, and the command row ─────────────────
+ *
+ * all[0..n_fixed) is the snapshot taken when the panel opened — the bind table
+ * and every action with no key on it, neither of which can change while it is
+ * up. This rebuilds everything after it, on every keystroke.
+ *
+ * ⚠ REBUILT AND NOT FILTERED, and the two rows are why. The applications ARE
+ * the query's answer, so running them back through keys_matches() would be
+ * asking the same question twice; and the command row has to appear for a query
+ * that matches NOTHING, which no filter over an existing list can produce.
+ *
+ * Under a query only. A palette that opened onto a hundred and fifty
+ * applications would have buried the forty rows somebody pressed Super+/ to
+ * find, and "what are my shortcuts" is what this panel is for — the
+ * applications are here so that "give this app a key" does not need a second
+ * panel, not because the panel is an app launcher.
+ */
+static void keys_build_tail(syn_server_t *s)
+{
+    syn_keys_t *k = &s->keys;
+
+    k->n = k->n_fixed;
+    if (k->query_len == 0) return;
+
+    /* The same scan the start menu and the application page use. Done once per
+     * session (appgrid.scanned), so this is a walk over memory rather than over
+     * every XDG data directory — which on a keystroke it would have to be. */
+    if (!s->appgrid.scanned) appgrid_rescan(s);
+
+    int offered = 0;
+    for (int i = 0; i < s->appgrid.count && offered < KEYS_APP_MAX &&
+                    k->n < KEYS_MAX; i++) {
+        const syn_app_entry_t *e = &s->appgrid.apps[i];
+        if (!e->exec[0]) continue;
+        /* Matched on the NAME alone. keys_matches() searches the combo column
+         * too, and an application has no combo — and matching its Exec= would
+         * make typing "s" offer every program whose command line contains one.
+         */
+        if (!field_matches(e->name, k->query)) continue;
+
+        /* Already on a key? Then it is one of the BOUND rows above and offering
+         * it again would be the same shortcut listed twice — once as the key it
+         * has and once as a thing with no key, which is a list arguing with
+         * itself. */
+        bool have = false;
+        for (int j = 0; j < k->n_fixed && !have; j++)
+            have = k->all[j].kind == SYN_SC_BOUND &&
+                   strcmp(k->all[j].arg, e->exec) == 0;
+        if (have) continue;
+
+        /* ⚠ SKIPPED, NOT TRUNCATED. A .desktop Exec= can be 255 bytes and a
+         * bind's argument is SYN_BIND_ARG_LEN; snprintf would cut it and the
+         * key would then run a command line missing its tail — silently, and
+         * only for the handful of applications with very long ones. A row that
+         * is not offered is honest; a key that runs the wrong thing is not.
+         * (The name is only text and is allowed to elide.) */
+        if (strlen(e->exec) >= SYN_BIND_ARG_LEN) continue;
+
+        syn_ctl_shortcut_t *r = &k->all[k->n];
+        memset(r, 0, sizeof(*r));
+        snprintf(r->combo, sizeof(r->combo), "\xe2\x80\x94");
+        snprintf(r->desc,  sizeof(r->desc),  "%.*s",
+                 (int)sizeof(r->desc) - 1, e->name);
+        snprintf(r->action, sizeof(r->action), "spawn");
+        /* The guard above already proved it fits; the precision is what tells
+         * the compiler so, since it cannot see through strlen(). */
+        snprintf(r->arg,    sizeof(r->arg),    "%.*s",
+                 (int)sizeof(r->arg) - 1, e->exec);
+        r->rebindable = 1;
+        r->kind       = SYN_SC_APP;
+        k->n++;
+        offered++;
+    }
+
+    /*
+     * And the query itself, as a command.
+     *
+     * ⚠ LAST, ALWAYS, AND NEVER FILTERED AWAY. It is the answer to a query that
+     * found nothing — which is exactly when somebody is typing a command line
+     * rather than searching — and a row that appeared only when the list was
+     * empty would vanish the moment the query happened to brush a shortcut.
+     * Bottom of the list is out of the way; Enter still runs whatever the
+     * cursor is on, and the cursor starts at the top.
+     */
+    if (k->n < KEYS_MAX) {
+        syn_ctl_shortcut_t *r = &k->all[k->n];
+        memset(r, 0, sizeof(*r));
+        snprintf(r->combo, sizeof(r->combo), "\xe2\x80\x94");
+        snprintf(r->desc,  sizeof(r->desc),  "Run: %s", k->query);
+        snprintf(r->action, sizeof(r->action), "spawn");
+        snprintf(r->arg,    sizeof(r->arg),    "%s", k->query);
+        r->rebindable = 1;
+        r->kind       = SYN_SC_COMMAND;
+        k->n++;
+    }
+}
+
 static void keys_filter(syn_server_t *s)
 {
     syn_keys_t *k = &s->keys;
 
+    keys_build_tail(s);
+
     k->n_view = 0;
-    for (int i = 0; i < k->n; i++)
+    /* The snapshot is filtered; the tail was BUILT from the query and passes
+     * through whole. */
+    for (int i = 0; i < k->n_fixed; i++)
         if (keys_matches(&k->all[i], k->query))
             k->view[k->n_view++] = i;
+    for (int i = k->n_fixed; i < k->n; i++)
+        k->view[k->n_view++] = i;
 
     k->selected = 0;
     k->scroll   = 0;
@@ -560,7 +684,15 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
         return 0;
     }
 
-    if (mods == sc->mods && sym == sc->sym) {
+    /* ⚠ A ROW WITH NO CHORD IS A CREATE, NOT A MOVE, and the difference is the
+     * unbind at the bottom of this function: `sc->mods/sym` are 0/NoSymbol on
+     * an UNBOUND, APP or COMMAND row, and config_unbind_combo(0, NoSymbol)
+     * would walk the table looking for a chord nobody has. Asked as a KIND
+     * rather than as `sym == NoSymbol` because that is what it means — and
+     * because the tap row has no sym either and has already been handled. */
+    const bool creating = sc->kind != SYN_SC_BOUND;
+
+    if (!creating && mods == sc->mods && sym == sc->sym) {
         snprintf(status, status_n, "Unchanged");
         return 0;
     }
@@ -587,14 +719,62 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
         snprintf(status, status_n, "Bind table is full");
         return 0;
     }
-    config_unbind_combo(&s->config, sc->mods, sc->sym);
+    if (!creating) config_unbind_combo(&s->config, sc->mods, sc->sym);
 
     binds_state_save(s);
 
     char combo[64];
     syn_bind_format_combo(mods, sym, combo, sizeof(combo));
-    wlr_log(WLR_INFO, "synui: rebound %s -> %s", sc->desc, combo);
-    snprintf(status, status_n, "Rebound to %s", combo);
+    wlr_log(WLR_INFO, "synui: %s %s -> %s",
+            creating ? "bound" : "rebound", sc->desc, combo);
+    snprintf(status, status_n, creating ? "%s is now %s" : "Rebound to %s",
+             combo, sc->desc);
+    return 1;
+}
+
+/*
+ * Take the key off a shortcut — Delete on a bound row.
+ *
+ * ⚠ THIS IS ONLY SAFE BECAUSE THE ROW SURVIVES IT. Unbinding used to happen
+ * only as a side effect — F3 takes the chord away when it puts a row on the tap
+ * — and the shortcut then vanished from the list, because the list was the bind
+ * table and the bind table no longer had it. There was no way back short of
+ * hand-editing synuirc, which is what "removing a hotkey leaves no way to add
+ * it back" was. The palette lists the keyless actions now
+ * (ctlpanel_shortcuts_ex), so what a delete produces is a row one F2 away from
+ * being bound again, and offering it outright is the smaller change.
+ *
+ * Refuses the tap: it has an off switch of its own already — Delete during its
+ * capture, which is a different question ("no modifier") asked in the place the
+ * tap's key is chosen. Two spellings of off would be one too many.
+ */
+int syn_rebind_unbind(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                      char *status, size_t status_n)
+{
+    if (!sc) { snprintf(status, status_n, "No shortcut selected"); return 0; }
+
+    if (sc->kind != SYN_SC_BOUND) {
+        snprintf(status, status_n, "That has no key on it \xe2\x80\x94 F2 gives it one");
+        return 0;
+    }
+    if (sc->tap) {
+        snprintf(status, status_n,
+                 "Press F2 on the tap and then Delete to switch it off");
+        return 0;
+    }
+    if (!sc->rebindable) {
+        snprintf(status, status_n,
+                 "That row stands for nine binds; unbind them in synuirc");
+        return 0;
+    }
+
+    config_unbind_combo(&s->config, sc->mods, sc->sym);
+    binds_state_save(s);
+
+    char combo[64];
+    syn_bind_format_combo(sc->mods, sc->sym, combo, sizeof(combo));
+    wlr_log(WLR_INFO, "synui: unbound %s (%s)", combo, sc->desc);
+    snprintf(status, status_n, "%s is free \xc2\xb7 F2 puts it back", combo);
     return 1;
 }
 
@@ -746,13 +926,43 @@ static void keys_capture_finish(syn_server_t *s, xkb_keysym_t sym, uint32_t mods
          * both the simplest way to redraw it and the only one that cannot
          * disagree with what was actually bound. Cursor and query survive it. */
         int sel = k->selected, scroll = k->scroll;
-        k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+        k->n_fixed = ctlpanel_shortcuts_ex(s, k->all, KEYS_MAX, true);
         keys_filter(s);
         k->selected = sel < k->n_view ? sel : (k->n_view ? k->n_view - 1 : 0);
         k->scroll   = scroll;
         keys_scroll_to_selection(s);
     }
 
+    synui_render_keys(s);
+}
+
+/*
+ * Delete: take the key off the selected row.
+ *
+ * Re-snapshots like a rebind does and for the same reason — the row does not
+ * disappear, it becomes the UNBOUND row for the same action, and the list has
+ * to show that or the delete would look like the shortcut being destroyed.
+ * Which is what it used to be.
+ */
+static void keys_unbind(syn_server_t *s)
+{
+    syn_keys_t *k = &s->keys;
+    const syn_ctl_shortcut_t *sel = keys_selected(s);
+    if (!sel) return;
+
+    /* By value: the re-snapshot below overwrites all[], and `sel` points into
+     * it. Same rule as every other edit in this file. */
+    syn_ctl_shortcut_t sc = *sel;
+
+    if (syn_rebind_unbind(s, &sc, k->status, sizeof(k->status))) {
+        int save_sel = k->selected, scroll = k->scroll;
+        k->n_fixed = ctlpanel_shortcuts_ex(s, k->all, KEYS_MAX, true);
+        keys_filter(s);
+        k->selected = save_sel < k->n_view ? save_sel
+                                           : (k->n_view ? k->n_view - 1 : 0);
+        k->scroll   = scroll;
+        keys_scroll_to_selection(s);
+    }
     synui_render_keys(s);
 }
 
@@ -772,7 +982,7 @@ static void keys_tap_action_set(syn_server_t *s)
 
     if (syn_rebind_set_tap_action(s, &sc, k->status, sizeof(k->status))) {
         int save_sel = k->selected, scroll = k->scroll;
-        k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+        k->n_fixed = ctlpanel_shortcuts_ex(s, k->all, KEYS_MAX, true);
         keys_filter(s);
         k->selected = save_sel < k->n_view ? save_sel
                                            : (k->n_view ? k->n_view - 1 : 0);
@@ -788,7 +998,7 @@ static void keys_reset_all(syn_server_t *s)
 
     syn_rebind_reset_all(s, k->status, sizeof(k->status));
 
-    k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+    k->n_fixed = ctlpanel_shortcuts_ex(s, k->all, KEYS_MAX, true);
     keys_filter(s);
     synui_render_keys(s);
 }
@@ -800,8 +1010,15 @@ void keys_show(syn_server_t *s)
     syn_keys_t *k = &s->keys;
 
     /* Snapshotted per open, so a `bind =` added to synuirc and reloaded shows
-     * up the next time the palette is opened rather than at the next login. */
-    k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+     * up the next time the palette is opened rather than at the next login.
+     *
+     * `true` is the keyless actions — every action with no chord on it, which
+     * is what makes Delete reversible and what puts the never-defaulted ones
+     * (printers_scan, cascade, launcher_style) within reach for the first time.
+     * The control panel's read-only column passes false; see
+     * ctlpanel_shortcuts_ex(). keys_filter() appends the query's own rows after
+     * these, so nothing here sets k->n — that is the tail's to decide. */
+    k->n_fixed = ctlpanel_shortcuts_ex(s, k->all, KEYS_MAX, true);
 
     k->query[0]  = '\0';
     k->query_len = 0;
@@ -1012,6 +1229,14 @@ int keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
      * Cannot be a letter: the box types letters. */
     case XKB_KEY_F2:
         keys_capture_begin(s);
+        return 1;
+
+    /* Delete takes the key OFF the selected row — and Backspace deliberately
+     * does not, because Backspace edits the query and a list where one of them
+     * destroys a shortcut is a list you cannot correct a typo in. */
+    case XKB_KEY_Delete:
+    case XKB_KEY_KP_Delete:
+        keys_unbind(s);
         return 1;
 
     /* F3 puts the SELECTED row on the modifier tap. Next to F2 because it is
