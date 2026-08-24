@@ -5478,6 +5478,12 @@ struct syn_output {
      * output because per-monitor wallpapers are a thing, and the desktop-wide
      * answer is folded from these — see palette_export(). */
     syn_palette_t            wp_palette;
+    /* Whether that measurement HAPPENED, which `wp_palette.ok` cannot say: it
+     * is false both for a greyscale wallpaper and for an output whose picture
+     * has never been painted. wallpaper_palette() answers the first in white
+     * and greys and the second with the theme's own accent, so it has to be
+     * able to tell them apart — see the fallback at the end of it. */
+    bool                     wp_measured;
 
     /* …and the same taken off a wallpaper synui did NOT paint.
      *

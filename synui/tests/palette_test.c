@@ -539,6 +539,107 @@ static void test_pastels_all_round_the_wheel(void)
     printf("  every pastel hue is nameable ....... ok\n");
 }
 
+/* ── 15. …and a picture with no colour gets a colourless desktop ──── */
+/*
+ * The other half of test 1, and the half that is the FEATURE. The extractor
+ * refusing is correct and says nothing about what the desktop should then draw
+ * with — for the whole life of it that was the theme's own accent, so a
+ * black-and-white photograph produced a Prism desktop in the house cyan: the
+ * one colour on screen that is nowhere in the picture.
+ *
+ * ⚠ THE TWO SURFACES ARE THE TEST, not the dark one alone. White is the answer
+ * on a dark panel and is the one colour that is NOT there on a pale one, and a
+ * fallback that ignored the surface would pass every assertion that only ever
+ * asks about Prism.
+ */
+static void test_no_hue_is_white_and_grey(void)
+{
+    syn_palette_t d, l;
+    syn_palette_monochrome(0.02, &d);   /* Prism's near-black panel */
+    syn_palette_monochrome(0.81, &l);   /* XP's beige               */
+
+    if (!d.ok || !d.monochrome || d.measured_secondary) {
+        printf("    the monochrome palette does not say what it is "
+               "(ok=%d mono=%d measured_secondary=%d)\n",
+               d.ok, d.monochrome, d.measured_secondary);
+        assert(0);
+    }
+
+    /*
+     * ⚠ ACHROMATIC TO THE BYTE, and this is the assertion that catches the one
+     * mistake worth catching. to_ui_band() clamps saturation UP to 0.45, and a
+     * grey has no hue for it to clamp — rgb_to_hsv() hands back h = 0, so
+     * banding a grey produces RED. "The wallpaper is greyscale so the desktop
+     * went crimson" is one call away, and nothing else in this file would see
+     * it, because nothing else feeds the band an achromatic colour.
+     */
+    const float *greys[] = { d.accent, d.accent_dim, d.secondary,
+                             l.accent, l.accent_dim, l.secondary };
+    const char  *names[] = { "accent", "accent_dim", "secondary",
+                             "accent (pale)", "accent_dim (pale)",
+                             "secondary (pale)" };
+    for (int i = 0; i < 6; i++) {
+        const float *c = greys[i];
+        if (c[0] != c[1] || c[1] != c[2]) {
+            printf("    %s is not a grey (%.3f %.3f %.3f) — it has been "
+                   "through to_ui_band()\n", names[i], c[0], c[1], c[2]);
+            assert(0);
+        }
+    }
+
+    /* On a dark panel the accent is white, which is what "monochrome" means to
+     * look at: the icons and the focus ring go white and the clock a grey. */
+    if (d.accent[0] < 0.99f) {
+        printf("    the accent on a dark panel is %.3f, not white\n",
+               d.accent[0]);
+        assert(0);
+    }
+
+    /* Both colours are drawn as TEXT — the glyphs and the clock — so both have
+     * to clear the target on the surface they were asked for. White does that
+     * on Prism's panel and does not exist on XP's beige, which is the whole
+     * reason the surface is an argument. */
+    struct { const syn_palette_t *p; double lum; const char *what; } cases[] = {
+        { &d, 0.02, "dark panel" }, { &l, 0.81, "pale panel" },
+    };
+    for (int i = 0; i < 2; i++) {
+        const syn_palette_t *q = cases[i].p;
+        double a = syn_contrast(q->accent[0], q->accent[1], q->accent[2],
+                                cases[i].lum);
+        double s = syn_contrast(q->secondary[0], q->secondary[1],
+                                q->secondary[2], cases[i].lum);
+        if (a < CONTRAST_TARGET || s < CONTRAST_TARGET) {
+            printf("    on a %s the accent reads %.2f:1 and the secondary "
+                   "%.2f:1 — text has to clear %.1f:1\n",
+                   cases[i].what, a, s, CONTRAST_TARGET);
+            assert(0);
+        }
+        /* Three roles, three values. The clock takes `secondary` and the icons
+         * take `accent`; a fallback that handed back one grey three times
+         * would pass every assertion above and be invisible as a palette. */
+        if (q->secondary[0] == q->accent[0] ||
+            q->accent_dim[0] == q->accent[0]) {
+            printf("    on a %s the three roles are not three greys "
+                   "(accent %.3f dim %.3f secondary %.3f)\n", cases[i].what,
+                   q->accent[0], q->accent_dim[0], q->secondary[0]);
+            assert(0);
+        }
+    }
+
+    /* And the extractor still refuses, which is what test 1 pins: these are two
+     * decisions and the second one belongs to the desktop. A greyscale image
+     * that started ANSWERING here would be the extractor inventing a colour
+     * again, one file further down. */
+    unsigned char *px = canvas();
+    for (int y = 0; y < H; y++) fill_rows(px, y, y + 1, y, y, y);
+    syn_palette_t m;
+    assert(!syn_palette_from_pixels(px, W, H, W * 4, 0.02, &m));
+    assert(!m.monochrome);   /* never the extractor's to set */
+    free(px);
+
+    printf("  no hue → white and grey ........... ok\n");
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -557,6 +658,7 @@ int main(void)
     test_dark_panel_is_legible();
     test_a_pastel_is_a_colour();
     test_pastels_all_round_the_wheel();
+    test_no_hue_is_white_and_grey();
     printf("palette_test: all ok\n");
     return 0;
 }

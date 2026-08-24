@@ -418,6 +418,11 @@ static void palette_measure(syn_output_t *o, cairo_surface_t *surf,
                             double surface_lum)
 {
     memset(&o->wp_palette, 0, sizeof(o->wp_palette));
+    /* ⚠ CLEARED FIRST, AND IT IS NOT `wp_palette.ok`. "This picture has no
+     * colour in it" and "no picture has been looked at yet" are two different
+     * answers that both leave `ok` false, and the monochrome fallback below is
+     * correct for exactly one of them — see wallpaper_palette(). */
+    o->wp_measured = false;
     if (!surf || cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) return;
     if (cairo_image_surface_get_format(surf) != CAIRO_FORMAT_ARGB32) return;
 
@@ -430,6 +435,7 @@ static void palette_measure(syn_output_t *o, cairo_surface_t *surf,
                             cairo_image_surface_get_height(surf),
                             cairo_image_surface_get_stride(surf),
                             surface_lum, &o->wp_palette);
+    o->wp_measured = true;
 }
 
 /* The desktop-wide palette: the FIRST output that measured one.
@@ -444,6 +450,9 @@ static void palette_measure(syn_output_t *o, cairo_surface_t *surf,
  */
 const syn_palette_t *wallpaper_palette(syn_server_t *s)
 {
+    /* Whether any screen's wallpaper was LOOKED AT, whatever it answered — the
+     * question the monochrome fallback at the bottom turns on. */
+    bool measured = false;
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         /* ⚠ THE LIVE ONE ANSWERS FIRST, AND IT ANSWERS EVEN WHEN IT SAYS NO.
@@ -456,12 +465,40 @@ const syn_palette_t *wallpaper_palette(syn_server_t *s)
          * "this screen's wallpaper is somebody else's", and `.ok` inside it is
          * that wallpaper's own answer. */
         if (o->wp_live_have) {
+            measured = true;
             if (o->wp_live.ok) return &o->wp_live;
             continue;
         }
+        if (o->wp_measured) measured = true;
         if (o->wp_palette.ok) return &o->wp_palette;
     }
-    return NULL;
+
+    /*
+     * Every picture on this desktop was looked at and none of them had a colour
+     * to give: a black-and-white photograph, a wallpaper too dark to name a hue
+     * off, a live scene still painting black. WHITE AND GREY, not the theme's
+     * own accent.
+     *
+     * ⚠ THE OTHER FALLBACK — the preset's cyan — IS A COLOUR FROM NOWHERE NEAR
+     * THE SCREEN, and that is what this replaced. The whole promise of the
+     * feature is that the chrome follows the picture, so the one case where the
+     * picture has no colour is the case where it must not answer in one.
+     * Monochrome is the honest reading of a grey wallpaper.
+     *
+     * ⚠ AND `measured` IS NOT `ok`. Publishing white for a desktop whose
+     * wallpaper has not been painted yet, or whose live wallpaper is a buffer
+     * synui cannot read (an external-only DMA-BUF fails SILENTLY), would turn
+     * "I could not look" into "there is nothing to see" — the theme's accent is
+     * the right answer for that one, and it is what `ok = false` still asks for.
+     *
+     * Static, and rebuilt on each call rather than cached: it is a dozen
+     * floating-point operations, it has no state of its own, and the surface it
+     * is corrected against moves with the theme.
+     */
+    if (!measured) return NULL;
+    static syn_palette_t mono;
+    syn_palette_monochrome(theme_panel_surface_lum(&s->config), &mono);
+    return &mono;
 }
 
 /*
@@ -555,14 +592,25 @@ static void palette_export(syn_server_t *s)
                "# SETTING (wallpaper_accent = auto|off|on; auto is Prism,\n"
                "# light or dark, the theme built on it) and not a property of\n"
                "# the picture.\n"
-               "# `ok` is the picture's own answer and stands either way.\n");
+               "# `ok` is whether there are colours here to draw with.\n"
+               "# `mono` is whether they came from a hue in the picture or\n"
+               "# from the ABSENCE of one: a greyscale or near-black wallpaper\n"
+               "# is answered in white and greys rather than in the theme's\n"
+               "# own accent, which is a colour from nowhere near the screen.\n");
     fprintf(f, "use=%s\n", use ? "yes" : "no");
     /* `ok=no` is published rather than the file being deleted or left stale:
-     * "this wallpaper has no colour to give" is an answer the bar has to be
-     * able to act on, and an absent file is indistinguishable from a synui too
-     * old to write one. */
+     * "no wallpaper has been measured here" is an answer the bar has to be able
+     * to act on, and an absent file is indistinguishable from a synui too old
+     * to write one.
+     *
+     * ⚠ IT NO LONGER MEANS "GREYSCALE". That case is `ok=yes mono=yes` now, and
+     * it is deliberately readable by every consumer that already gates on
+     * `ok=yes` — the bar, the widgets and the eight app windows take the
+     * monochrome palette with no change at all, which is the point: a desktop
+     * does not have two ways of drawing with the wallpaper's answer. */
     fprintf(f, "ok=%s\n", now.ok ? "yes" : "no");
     if (now.ok) {
+        fprintf(f, "mono=%s\n", now.monochrome ? "yes" : "no");
         fprintf(f, "accent=#%02X%02X%02X\n",
                 (int)lround(now.accent[0] * 255.0),
                 (int)lround(now.accent[1] * 255.0),
@@ -598,12 +646,19 @@ static void palette_export(syn_server_t *s)
      * colours from following the wallpaper. */
     theme_refresh_wallpaper_accent(s);
 
-    /* Three states and three lines, because "the desktop is not on the
-     * wallpaper's colour" has two quite different causes and the log is where
+    /* Four states and four lines, because "the desktop is not on the
+     * wallpaper's colour" has three quite different causes and the log is where
      * anybody asking why will look first. */
     if (!now.ok)
-        wlr_log(WLR_INFO, "synui: palette: the wallpaper has no usable hue — "
+        wlr_log(WLR_INFO, "synui: palette: no wallpaper measured yet — "
                           "the theme's own accent stands");
+    else if (now.monochrome)
+        wlr_log(WLR_INFO, "synui: palette: the wallpaper has no usable hue — "
+                          "monochrome, accent #%02X%02X%02X%s",
+                (int)lround(now.accent[0] * 255.0),
+                (int)lround(now.accent[1] * 255.0),
+                (int)lround(now.accent[2] * 255.0),
+                use ? "" : ", not in use (wallpaper_accent)");
     else if (!use)
         wlr_log(WLR_INFO, "synui: palette: accent #%02X%02X%02X off the "
                           "wallpaper, not in use (wallpaper_accent)",

@@ -1256,10 +1256,16 @@ void theme_refresh_wallpaper_accent(syn_server_t *s)
     const syn_palette_t *p = wp_accent_on(&s->config) ? wallpaper_palette(s) : NULL;
 
     if (!p || !p->ok) {
-        /* Back to the theme's own colour — a wallpaper switched from a
-         * photograph to a greyscale one, or the row moved to Off, must not
-         * leave the last picture's colour on the panels. Cheap: it is the same
-         * copy the theme switch does, minus the spawn.
+        /* Back to the theme's own colour — the row moved to Off, or no
+         * wallpaper has been measured on any output yet, must not leave the
+         * last picture's colour on the panels. Cheap: it is the same copy the
+         * theme switch does, minus the spawn.
+         *
+         * ⚠ A GREYSCALE WALLPAPER NO LONGER LANDS HERE. wallpaper_palette()
+         * answers a picture with no hue in white and greys, which is `ok` and
+         * takes the branch below — so switching from a photograph to a
+         * black-and-white one turns the panels monochrome rather than back to
+         * the preset's own accent.
          *
          * ⚠ A PUSHED PALETTE IS NOT THE PRESET'S. The bar's theme picker can
          * put three colours into the config (theme_apply_custom), and reloading

@@ -857,7 +857,47 @@ pkgver=0.1.0
 #   loading it to press rows would drive the live desktop and start the music.
 #   ⚠ Needs syn-arcade 0.1.0-41, which stops these terminals fullscreening
 #   themselves when there is no television to fill.
-pkgrel=452
+# 453 A WALLPAPER WITH NO COLOUR IN IT NOW ANSWERS IN WHITE AND GREY. The
+#   accent has followed the picture since 378 and has always had one answer for
+#   a picture it could not name a hue off — a greyscale photograph, or one
+#   simply too dark to match: the theme's own accent. On Prism that is the house
+#   cyan, which is the one colour on screen that is nowhere near the wallpaper,
+#   so the feature failed in exactly the direction it exists to avoid.
+#
+#   Monochrome is the honest reading of a grey picture. syn_palette_monochrome()
+#   (palette.c) builds the same three roles out of the greyscale: white for the
+#   accent — icons, focus ring, selections — #B8B8B8 for the clock's secondary
+#   and #8C8C8C for the dim, on Prism's near-black panel. It flips with the
+#   surface like every other colour here does: on XP's beige it is #333333 and a
+#   mid grey, because white is not there at all on a pale panel.
+#
+#   ⚠ THE EXTRACTOR STILL REFUSES, and that is the seam. syn_palette_from_pixels()
+#   is untouched — a greyscale image still returns false, so every guard on "do
+#   not invent a hue" keeps asserting exactly what it did. What changed is what
+#   the DESKTOP does with the refusal, which is wallpaper_palette()'s to decide,
+#   and it now has to tell two things apart that both left `ok` false: a picture
+#   with no colour in it (white and grey) and no picture measured yet (the
+#   theme's accent). That is the new `wp_measured` — an unreadable live buffer
+#   or an output that has never been painted must not read as "there is nothing
+#   to see", and an external-only DMA-BUF fails SILENTLY.
+#
+#   ⚠ NOT THROUGH to_ui_band(), AND THE FAILURE WOULD BE SPECTACULAR. The band
+#   clamps saturation UP to 0.45 and a grey has no hue to clamp — rgb_to_hsv()
+#   hands back h = 0, so a grey put through it comes out RED. "The wallpaper is
+#   greyscale so the desktop went crimson" was one call away, and no existing
+#   test would have seen it: none of them feeds the band an achromatic colour.
+#   tests/palette_test.c asserts r == g == b to the byte, on both surfaces.
+#
+#   palette.state gains `mono=yes|no` beside `ok=`, and the monochrome palette
+#   is published with `ok=yes` on purpose: every consumer already gates on that
+#   — the bar, the widgets and the eight app windows — so all of them draw with
+#   it unchanged. A second way of saying "here is what to draw with" is a second
+#   way for half the desktop to miss it, which is the 386 bug exactly.
+#   `ok=no` now means "no wallpaper measured", and the log has a line per state.
+#   tests/wallpaper_mono.sh drives both wallpapers in one run: grey and magenta,
+#   because "it went white" proves nothing without the coloured one beside it
+#   still measuring a hue.
+pkgrel=453
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

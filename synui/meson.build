@@ -1602,6 +1602,18 @@ test('wallpaper_accent', wallpaper_accent,
      depends : [synui_exe],
      timeout : 180)
 
+# `wallpaper_mono`: what the desktop draws with when the picture has NO colour
+# in it. The refusal always existed and always resolved to the theme's own
+# accent, so a black-and-white or too-dark wallpaper produced a Prism desktop in
+# the house cyan — the one colour nowhere near the screen. Two wallpapers in one
+# run, because "it went white" proves nothing without the coloured one beside it
+# still measuring a hue.
+wallpaper_mono = find_program('tests/wallpaper_mono.sh')
+test('wallpaper_mono', wallpaper_mono,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 180)
+
 # `wallpaper_accent_widgets`: WHERE the measured colours land. The accent used
 # to substitute into `magenta` alone, so the underline followed the picture
 # while every module glyph kept the preset's cyan and the clock its yellow. Two

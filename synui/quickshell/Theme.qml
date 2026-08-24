@@ -159,10 +159,19 @@ QtObject {
     // does, and this changes when the WALLPAPER does, which on a slideshow is
     // every few minutes.
     //
-    // Empty string means "no palette": either the wallpaper had no usable hue
-    // (a greyscale photograph), or synui is older than this file. Both are
-    // answered the same way — fall through to the theme's own accent — so
-    // neither needs telling apart here.
+    // Empty string means "no palette": no wallpaper has been measured on any
+    // screen yet, the switch is Off, or synui is older than this file. All are
+    // answered the same way — fall through to the theme's own accent — so none
+    // of them needs telling apart here.
+    //
+    // ⚠ A GREYSCALE WALLPAPER IS NOT ONE OF THOSE ANY MORE. A picture with no
+    // usable hue in it comes through as white and greys (`mono=yes` in the
+    // file, palette.c's syn_palette_monochrome), because the promise of the
+    // feature is that the bar follows the picture — and the theme's own accent
+    // is the one answer that is a colour from nowhere near the screen. It
+    // arrives as `ok=yes` and needs no code here: a monochrome palette is drawn
+    // with exactly like a measured one, which is the whole point of publishing
+    // it that way.
     property string wpAccent: ""
     property string wpAccentDim: ""
     property string wpSecondary: ""

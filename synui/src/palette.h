@@ -15,10 +15,13 @@
 #include <stdbool.h>
 
 typedef struct {
-    /* false = the wallpaper offered no usable hue (greyscale, or chromatic in
-     * so small a patch that taking it would repaint the desktop to match a
-     * logo). The caller keeps the theme's own accent. NOT an error: it is the
-     * honest answer for a black-and-white photograph. */
+    /* Whether there is a palette here to draw with at all. false = nothing was
+     * measured; syn_palette_from_pixels() sets it false when the wallpaper
+     * offered no usable hue (greyscale, near-black, or chromatic in so small a
+     * patch that taking it would repaint the desktop to match a logo), and that
+     * is NOT an error — it is the honest answer for a black-and-white
+     * photograph, and the caller answers it with syn_palette_monochrome()
+     * rather than with a colour the picture does not contain. */
     bool  ok;
 
     /* Every colour is sRGB 0..1, already pushed into a range an interface can
@@ -39,6 +42,14 @@ typedef struct {
      * reasonable stand-in — but a row that says where its colour came from
      * should not claim this one came from the picture. */
     bool  measured_secondary;
+
+    /* true = these colours came from the ABSENCE of a hue rather than from one:
+     * white and greys, from syn_palette_monochrome(). Never set by the
+     * extractor. The desktop draws with them exactly as it draws with a
+     * measured palette — the flag is here so a log line, a picker or a test can
+     * tell "the picture is grey" from "the picture is teal", which `ok` alone
+     * no longer says. */
+    bool  monochrome;
 } syn_palette_t;
 
 /*
@@ -57,5 +68,24 @@ typedef struct {
 bool syn_palette_from_pixels(const unsigned char *data, int w, int h,
                              int stride, double surface_lum,
                              syn_palette_t *out);
+
+/*
+ * The palette for a picture that has no colour in it: white and greys on a dark
+ * surface, deep greys on a pale one, in the same three roles.
+ *
+ * ⚠ THIS IS WHAT "NO USABLE HUE" MEANS TO A DESKTOP, and it used to mean the
+ * theme's own accent — so a black-and-white photograph, a near-black wallpaper
+ * and a Prism desktop that had never been given a picture all came up the house
+ * cyan, a colour from nowhere near the screen. Monochrome is the answer that
+ * still follows the wallpaper: a grey picture gets a grey desktop.
+ *
+ * `surface_lum` is the surface these will be drawn on, exactly as above, and it
+ * is what decides the direction — white is the accent on a dark panel and is
+ * invisible on a pale one.
+ *
+ * Fills `out` with ok = true and monochrome = true. It measures nothing and
+ * cannot fail: the answer is a function of the surface alone.
+ */
+void syn_palette_monochrome(double surface_lum, syn_palette_t *out);
 
 #endif /* SYN_PALETTE_H */

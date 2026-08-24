@@ -36,8 +36,13 @@
  * that is 70% dark sky would otherwise elect "very slightly blue black" as the
  * accent, which is a colour nothing can be drawn in. Dropping them is also what
  * lets this answer HONESTLY on a greyscale wallpaper — with nothing chromatic
- * left, `ok` is false and the theme keeps its own accent rather than being
- * handed a beige.
+ * left, `ok` is false and nothing here invents a beige.
+ *
+ * What the DESKTOP does with that refusal is syn_palette_monochrome() at the
+ * bottom of this file: white and greys, so a grey picture gets a grey desktop
+ * rather than the theme's own accent, which is a colour from nowhere near the
+ * screen. The extractor still refuses — the two are deliberately separate, so
+ * every guard on "do not invent a hue" keeps asserting exactly what it did.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -316,6 +321,79 @@ static void pale_of(const float in[3], double surface_lum, float out[3])
     correct_for_surface(shade, surface_lum, out);
 }
 
+/* accent_dim: the accent, quieter. Derived on purpose — this one IS meant to
+ * read as the same colour, for the rules and the rows you are not pointing at,
+ * so measuring a third hue would be wrong rather than just unnecessary. Toward
+ * the SURFACE rather than toward black: on a light panel "quieter" means paler,
+ * and a fixed darkening would make it louder.
+ *
+ * `toward` is the surface's own end of the scale, 0 or 1 — the caller decides
+ * it, because the measured palette and the monochrome one draw the pale/dark
+ * line in different places and one of them has to be able to say so. */
+static void derive_dim(const float accent[3], float toward, float out[3])
+{
+    for (int i = 0; i < 3; i++)
+        out[i] = accent[i] + (toward - accent[i]) * 0.45f;
+}
+
+/* ── When the picture has no colour in it ─────────────────── */
+/*
+ * The grey the monochrome accent starts from, before the corrector. Two pairs,
+ * because the whole answer flips with the surface: white is the accent on a
+ * dark panel and is not there at all on a pale one.
+ *
+ * The accent is the LOUD end and the secondary the quiet one, in both
+ * directions — on a dark panel that is white against a light grey, on a pale
+ * panel a near-black against a mid grey. Both still go through the corrector,
+ * so a surface between the two (nothing ships one) cannot produce a grey that
+ * is not legible on it.
+ */
+#define MONO_ACCENT_ON_DARK   1.00
+#define MONO_ACCENT_ON_LIGHT  0.20
+#define MONO_SECOND_ON_DARK   0.72
+#define MONO_SECOND_ON_LIGHT  0.60
+
+static void grey(double v, float out[3])
+{
+    out[0] = out[1] = out[2] = (float)v;
+}
+
+void syn_palette_monochrome(double surface_lum, syn_palette_t *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+
+    /* SURFACE_PALE and not 0.5, so this splits where correct_for_surface()
+     * splits: the base grey and the correction that finishes it must agree
+     * about which side of the line the panel is on, or a surface between the
+     * two thresholds gets a colour picked for a dark panel and then darkened
+     * for a pale one. */
+    bool pale = surface_lum > SURFACE_PALE;
+
+    float base[3], second[3];
+    grey(pale ? MONO_ACCENT_ON_LIGHT : MONO_ACCENT_ON_DARK, base);
+    grey(pale ? MONO_SECOND_ON_LIGHT : MONO_SECOND_ON_DARK, second);
+
+    /*
+     * ⚠ NOT THROUGH to_ui_band(), AND THE FAILURE IS SPECTACULAR. That band
+     * clamps saturation UP to UI_S_MIN — and a grey has no hue, so rgb_to_hsv()
+     * hands back h = 0 and saturating it produces RED. "The wallpaper is
+     * greyscale so the desktop went crimson" is one call away, and every
+     * existing test would still pass, because none of them feeds this an
+     * achromatic colour. The band exists to make a MEASURED hue usable; there
+     * is no hue here to make usable.
+     */
+    correct_for_surface(base,   surface_lum, out->accent);
+    correct_for_surface(second, surface_lum, out->secondary);
+    derive_dim(out->accent, pale ? 1.0f : 0.0f, out->accent_dim);
+
+    out->ok = true;
+    out->monochrome = true;
+    /* Nothing here was measured, and `secondary` least of all — it is a step
+     * along the same grey scale. */
+    out->measured_secondary = false;
+}
+
 bool syn_palette_from_pixels(const unsigned char *data, int w, int h,
                              int stride, double surface_lum,
                              syn_palette_t *out)
@@ -443,15 +521,10 @@ bool syn_palette_from_pixels(const unsigned char *data, int w, int h,
         out->measured_secondary = false;
     }
 
-    /* accent_dim: the accent, quieter. Derived on purpose — this one IS meant
-     * to read as the same colour, for the rules and the rows you are not
-     * pointing at, so measuring a third hue would be wrong rather than just
-     * unnecessary. Toward the surface rather than toward black: on a light
-     * panel "quieter" means paler, and a fixed darkening would make it louder.
-     */
-    float toward = surface_lum > 0.5 ? 1.0f : 0.0f;
-    for (int i = 0; i < 3; i++)
-        out->accent_dim[i] = out->accent[i] + (toward - out->accent[i]) * 0.45f;
+    /* accent_dim — see derive_dim(). 0.5 rather than SURFACE_PALE here because
+     * that is the line this side has always drawn (to_ui_band and pale_of draw
+     * it too), and no shipped theme's panel sits between the two. */
+    derive_dim(out->accent, surface_lum > 0.5 ? 1.0f : 0.0f, out->accent_dim);
 
     out->ok = true;
     return true;
