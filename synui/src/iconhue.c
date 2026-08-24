@@ -65,6 +65,14 @@
  * house icons, 0% for syn-resolve-gui — so this sits in open space. */
 #define BRAND_SHARE  0.25f
 
+/* How far the teal detail moves when the accent has no hue at all — see
+ * mono_detail_L() below. In OKLab L, because that is the axis it moves along,
+ * and 0.215 off the brand violet's own L is 25 CIE L*: the same step the
+ * monochrome palette puts between its accent (#FFFFFF) and its secondary
+ * (#B8B8B8), which is what this desktop has already decided one readable
+ * distance is when lightness is all there is. */
+#define MONO_DETAIL_GAP  0.215f
+
 /* ── colour helpers ──────────────────────────────────────── */
 
 static void rgb_to_hsl(float r, float g, float b, float *h, float *s, float *l)
@@ -136,6 +144,59 @@ static float second_hue(float accent_h, float teal_h)
      * detail moves the short way and stays recognisably itself. */
     float fwd = fmodf(teal_h - accent_h + 2.0f * (float)M_PI, 2.0f * (float)M_PI);
     return (fwd > (float)M_PI) ? accent_h - COLLIDE : accent_h + COLLIDE;
+}
+
+/* Where the teal detail should land when the accent has NO hue — the
+ * monochrome answer, and the counterpart to second_hue() above.
+ *
+ * second_hue() can step the detail off a colliding accent because there is a
+ * hue circle to step around. Greyscale has none: every pixel this file touches
+ * ends up on one axis, and the teal's own place on that axis is 6 CIE L* from
+ * the violet plate it sits on (72.2 against 66.2) — which is not a detail, it
+ * is a smudge. So in monochrome the detail gives way in LIGHTNESS, the only
+ * axis left, by the one step this desktop has already measured for the job.
+ *
+ * Up, when there is room above the plate, because the teal is already the
+ * lighter of the two and moving it the short way keeps the drawing's own
+ * light-to-dark order intact. Down is the fallback and not currently reachable
+ * — 0.709 + 0.215 fits — but the direction has to be decided somewhere, and a
+ * repaint of the house palette is exactly the kind of change that would not
+ * think to come back here. */
+static float mono_detail_L(float brand_L)
+{
+    return (brand_L + MONO_DETAIL_GAP <= 1.0f) ? brand_L + MONO_DETAIL_GAP
+                                               : brand_L - MONO_DETAIL_GAP;
+}
+
+/*
+ * How much of the detail a given pixel actually is — 1 for the teal itself,
+ * falling to 0 at the edge of its window and as its colour runs out into the
+ * body. The lift above is scaled by this, and BOTH halves of it are load-
+ * bearing, for two different failures measured on the shipped icons:
+ *
+ *   - Without the CHROMA half, the lift lands on pixels that are not the
+ *     detail at all. SECOND_WINDOW asks about hue and nothing else, and the
+ *     antialias ramp of synstudio's GREEN aperture blade crosses it on its way
+ *     into the dark opening: 27 pixels of #324e4b, #4d8a89, #54a77d. Under a
+ *     flat lift those 27 turn into a bright speckle inside the iris, in an
+ *     icon that has no teal in it anywhere. A hue nudge of the same pixels was
+ *     invisible, which is why this only shows up now — a lightness move is a
+ *     great deal louder than a hue one on a picture with no other colour left.
+ *   - Without the HUE half, the boundary is back: the mark's own ramp would
+ *     step from fully lifted to not lifted at whatever chroma the cut sat at.
+ *
+ * Together they make the lift a smooth function of how teal a pixel is, so the
+ * edge the drawing has stays the edge the recolour has. On the three icons
+ * that carry the detail (syn-settings, syn-disks, syn-arcade) 104, 48 and 129
+ * pixels are the teal exactly and weigh 1; the surrounding twenty-odd are the
+ * ramp and taper.
+ */
+static float detail_weight(float hue_off, float pix_C, float teal_C)
+{
+    if (hue_off >= SECOND_WINDOW || teal_C <= 0.0f) return 0.0f;
+    float by_hue    = 1.0f - hue_off / SECOND_WINDOW;
+    float by_chroma = fminf(1.0f, pix_C / teal_C);
+    return by_hue * by_chroma;
 }
 
 /* ── OKLab: the space the recolour actually happens in ───── */
@@ -284,10 +345,28 @@ void syn_iconhue_apply(unsigned char *data, int w, int h, int stride,
     rgb_to_hsl(accent_rgb[0], accent_rgb[1], accent_rgb[2],
                &accent_h, &accent_s, &accent_l);
 
-    /* A greyscale accent has no hue to give. Leave the icons as drawn rather
-     * than rotating the whole family to red. */
-    if (accent_s < SAT_FLOOR)
-        return;
+    /* A GREYSCALE ACCENT IS AN ANSWER, NOT AN ABSENCE.
+     *
+     * It arrives when the wallpaper accent is on and the picture has no colour
+     * in it — palette.c answers that in white and greys rather than inventing a
+     * hue (see syn_palette_monochrome), and the panels, the bar and the app
+     * windows all go monochrome with it. Until this branch existed the dock did
+     * not: the icons were left exactly as drawn, so a white-and-grey desktop
+     * had nine violet tiles in the middle of it, which is the same
+     * one-part-ignored-the-theme complaint this whole file was written for.
+     *
+     * They cannot follow the accent's hue, because it does not have one — and
+     * they must not be rotated onto it either: a grey reads as h = 0 through
+     * rgb_to_hsl, so "follow the accent" would turn the entire family RED. What
+     * follows a colourless accent is a colourless icon. Chroma goes to zero and
+     * every pixel keeps the perceived lightness it was drawn at, exactly as it
+     * does on the fourteen accents that do have a hue — the icon's internal
+     * light/dark structure is the drawing, and it is the whole of the drawing
+     * once the colour is gone.
+     *
+     * The one thing that is not just "the same icon with the colour taken out"
+     * is the teal detail; mono_detail_L() says why. */
+    const bool mono = (accent_s < SAT_FLOOR);
 
     /* Where the family is going, and how much colour it gets to carry when it
      * arrives. The chroma ratio is what makes a themed icon belong to its
@@ -313,6 +392,13 @@ void syn_iconhue_apply(unsigned char *data, int w, int h, int stride,
     const float second_ok_hue = second_hue(acc_hue, teal_ok_hue);
     const bool  teal_moves    = (second_ok_hue != teal_ok_hue);
 
+    /* On a colourless accent the detail moves along a different axis: there is
+     * no hue left to step around, so it gives way in lightness instead and
+     * second_ok_hue is never asked. Both are computed either way and the branch
+     * that does not apply is dead — they are two floats, and a conditional here
+     * would only make it harder to see that exactly one of them is used. */
+    const float teal_dL = mono ? mono_detail_L(brand_L) - teal_L : 0.0f;
+
     for (int y = 0; y < h; y++) {
         uint32_t *row = (uint32_t *)(data + (size_t)y * stride);
 
@@ -331,6 +417,29 @@ void syn_iconhue_apply(unsigned char *data, int w, int h, int stride,
             float target, chroma_scale;
             if (ss < SAT_FLOOR) {
                 continue;
+            } else if (mono) {
+                /* ⚠ MONOCHROME TAKES EVERY COLOUR IN THE ICON, not just the
+                 * two palettes the hue path knows by name.
+                 *
+                 * Below, a hue that is neither ours is left alone, because it
+                 * belongs to somebody else and its MEANING is its colour —
+                 * synstudio's three aperture blades are the additive primaries
+                 * and that is the whole point of the mark. But that rule is a
+                 * rule about hues, and it is protecting a hue from being moved
+                 * to another one. There is no other one here. Applied in
+                 * monochrome it does not preserve those colours' meaning, it
+                 * just leaves a grey icon with three coloured specks in it —
+                 * and around every teal mark, a fringe of the antialias ramp
+                 * that runs from the detail into the body through hues in
+                 * neither window. Nine grey icons with coloured crumbs on them
+                 * is not the monochrome desktop this branch exists to finish.
+                 *
+                 * What protects a third party's icon is the GATE, which is
+                 * where it has always been: syn-resolve-gui never reaches this
+                 * function at all. An icon that got this far measured 96-100%
+                 * house violet — it is ours, and all of it is ours. */
+                target = 0.0f;                  /* unused: chroma is going to 0 */
+                chroma_scale = 0.0f;
             } else if (hue_dist(hh, brand_h) <= HUE_WINDOW) {
                 target = acc_hue;
                 chroma_scale = chroma_k;
@@ -349,6 +458,15 @@ void syn_iconhue_apply(unsigned char *data, int w, int h, int stride,
 
             float pix_L, pix_C, pix_hue;
             rgb_to_oklch(r, g, b, &pix_L, &pix_C, &pix_hue);
+
+            /* The detail's step, in the one direction monochrome leaves open.
+             * Asked here rather than up in the classification because it needs
+             * the pixel's chroma, which is an OKLab fact and not an HSL one. */
+            if (mono) {
+                float wgt = detail_weight(hue_dist(hh, teal_h), pix_C, teal_C);
+                pix_L = fminf(1.0f, fmaxf(0.0f, pix_L + teal_dL * wgt));
+            }
+
             oklch_to_rgb(pix_L, pix_C * chroma_scale, target, &r, &g, &b);
 
             /* Back to premultiplied, the way cairo wants it. */

@@ -897,7 +897,54 @@ pkgver=0.1.0
 #   tests/wallpaper_mono.sh drives both wallpapers in one run: grey and magenta,
 #   because "it went white" proves nothing without the coloured one beside it
 #   still measuring a hue.
-pkgrel=453
+# 454 AND THE DOCK'S OWN ICONS GO WITH IT. 453 turned the panels, the bar, the
+#   widgets and the eight app windows white and grey on a wallpaper with no
+#   colour in it. The dock did not: our own app icons follow `panel_accent`
+#   through iconhue.c, and its answer for an accent with no hue was to leave
+#   them exactly as drawn — so a monochrome desktop had nine violet tiles in the
+#   middle of it. That is the same one-part-ignored-the-theme complaint the file
+#   was written for in 415, arriving through the one accent nobody had fed it.
+#
+#   ⚠ AND THE OBVIOUS FIX IS THE SPECTACULAR ONE. "Follow the accent" cannot be
+#   made to apply here: rgb_to_hsl() reads a grey as h = 0, so rotating the
+#   family onto a white accent turns every icon RED — the same shape as the
+#   to_ui_band() trap 453 documents, one file over. What follows a colourless
+#   accent is a colourless icon: chroma to zero, each pixel keeping the
+#   PERCEIVED lightness it was drawn at, which once the colour is gone is the
+#   whole of the drawing. The plate lands within 2 CIE L* of where it was drawn
+#   on all five family members.
+#
+#   ⚠ MONOCHROME TAKES EVERY COLOUR IN THE ICON, not just the two palettes the
+#   hue path knows by name. Leaving a foreign hue alone protects its meaning
+#   while there is another hue to move it to; in monochrome it just leaves a
+#   grey icon with coloured crumbs on it — synstudio's three aperture blades,
+#   and a fringe of antialias ramp around every teal mark. What protects a third
+#   party's icon is the GATE, where it has always been: syn-resolve-gui measures
+#   0% house violet and never reaches the transform at all.
+#
+#   ⚠ THE TEAL DETAIL HAD TO GIVE WAY ALONG A DIFFERENT AXIS. The knobs, the pad
+#   bars and the disk LED step off a colliding accent by 45 deg of OKLab hue
+#   (COLLIDE) — and greyscale has no hue circle to step around. Desaturated
+#   where it was drawn the detail lands 6 CIE L* from the violet plate: not a
+#   detail, a smudge. So it steps in LIGHTNESS, by 0.215 of OKLab L = 25 CIE L*,
+#   which is the step 453 already put between the monochrome accent (#FFFFFF)
+#   and its secondary (#B8B8B8) — this desktop's own answer for how far apart
+#   two greys have to be. Measured on the rasterized icons: the knob goes
+#   #4ec9b0 → #e6e6e6.
+#
+#   ⚠ AND THE LIFT IS WEIGHTED, BECAUSE SECOND_WINDOW ASKS ABOUT HUE ALONE.
+#   That was enough for a hue nudge and is not enough for a lightness move,
+#   which is far louder on a picture with no other colour left: the antialias
+#   ramp of synstudio's GREEN blade crosses the teal's window on its way into
+#   the dark opening — 27 pixels, in an icon with no teal in it anywhere — and a
+#   flat lift speckles the iris. detail_weight() scales it by hue distance AND
+#   chroma, so the impostors move under 4 L* while the mark moves 17.
+#
+#   `meson test -C build iconhue` — pure, no compositor, and ⛔ NOT the full
+#   `meson test`, which has re-themed the live desktop. Six new checks, the two
+#   load-bearing ones being r == g == b to the byte (the red failure above) and
+#   the dark green in the teal's hue window staying where it was drawn.
+pkgrel=454
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

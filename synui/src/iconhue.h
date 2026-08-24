@@ -66,6 +66,23 @@ bool syn_iconhue_wants(const char *icon_name, const unsigned char *data,
  * chroma over the brand violet's, so a quiet theme gets quiet icons and a vivid
  * one gets vivid ones, which is the difference between an icon that follows the
  * accent and one that merely wears its hue.
+ *
+ * ⚠ AN ACCENT WITH NO HUE IS AN ANSWER, NOT AN ABSENCE. `wallpaper_palette()`
+ * answers a picture with no colour in it in white and greys rather than
+ * inventing a hue (palette.c, syn_palette_monochrome), and the panels, the bar
+ * and every app window go monochrome with it. So do the icons: chroma goes to
+ * zero and each pixel keeps the perceived lightness it was drawn at, which in
+ * monochrome is the whole of the drawing. Note what that is NOT — it is not
+ * "leave them alone", which puts nine violet tiles in a white-and-grey dock,
+ * and it is emphatically not rotating them onto the accent, because a grey
+ * reads as h = 0 and the entire family would come out RED.
+ *
+ * Two things differ from the hue path, and only in this branch. Every colour
+ * in the icon goes, not just the two the hue path knows by name: leaving a
+ * foreign hue alone protects its meaning when there is another hue to move it
+ * to, and in monochrome it only leaves coloured crumbs on a grey icon. And the
+ * teal detail gives way in LIGHTNESS rather than hue, since there is no hue
+ * circle left to step around — see mono_detail_L() and detail_weight().
  */
 void syn_iconhue_apply(unsigned char *data, int w, int h, int stride,
                        const float accent_rgb[3]);

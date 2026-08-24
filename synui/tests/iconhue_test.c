@@ -7,7 +7,7 @@
  * says what colour the knobs were drawn.
  *
  * What is worth testing is not "it changes the colours" — a memset does that.
- * It is the six ways this can be confidently wrong:
+ * It is the nine ways this can be confidently wrong:
  *
  *   1. Repainting somebody else's icon. The content half of the gate looks
  *      sufficient right up until you measure a stock install: nordvpn-tray-blue
@@ -28,6 +28,16 @@
  *      on a yellow-green accent than it was drawn. That is what 415 shipped,
  *      every assertion below it passed, and the icons were highlighters on one
  *      theme and correct on nine.
+ *   8. Reading a COLOURLESS accent as no accent. It is the answer for a
+ *      wallpaper with no colour in it, the whole rest of the desktop goes white
+ *      and grey with it, and the two ways to get this wrong are opposites: leave
+ *      the icons as drawn and the dock is nine violet tiles on a grey desktop,
+ *      or "follow the accent" and a grey reads as h = 0 and the family turns RED.
+ *   9. Losing the teal detail the OTHER way. It cannot step off a colliding
+ *      accent in monochrome — there is no hue to step around — and desaturated
+ *      where it was drawn it is within ten CIE L* of the plate it sits on. It
+ *      steps in lightness instead, and that step has to land on the detail and
+ *      not on every dark green the hue window happens to admit.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -51,6 +61,11 @@
 #define PAPER   0xf1ecffu     /* the near-white highlight                    */
 #define BODY    0x1b1030u     /* the near-black icon body                    */
 #define RESOLVE 0x38bdf8u     /* DaVinci's sky blue — not ours to touch      */
+/* One pixel of synstudio's green aperture blade where its antialias runs into
+ * the dark opening. It sits INSIDE the teal's hue window (173.6 deg against
+ * the teal's 166.4) with none of the teal's chroma, and it is the reason the
+ * monochrome lift is weighted rather than flat. */
+#define GREENRAMP 0x324e4bu
 
 /* Accents, straight out of theme.c's presets. */
 static const float ACC_SYNAPSE[3] = { 0.00f, 0.85f, 0.75f };   /* teal!      */
@@ -60,6 +75,11 @@ static const float ACC_PRISM[3]   = { 0.000f, 0.839f, 0.898f }; /* teal too  */
 static const float ACC_NORD[3]    = { 0.533f, 0.753f, 0.816f }; /* frost      */
 static const float ACC_OLIVE[3]   = { 0.671f, 0.722f, 0.396f }; /* #ABB865    */
 static const float ACC_GREY[3]    = { 0.55f, 0.55f, 0.55f };
+
+/* The two the monochrome palette actually publishes: white on a dark panel,
+ * #333333 on a pale one — syn_palette_monochrome(), palette.c. */
+static const float ACC_MONO[3]      = { 1.00f, 1.00f, 1.00f };
+static const float ACC_MONO_PALE[3] = { 0.20f, 0.20f, 0.20f };
 
 /* A canvas in the format iconhue reads: native-endian ARGB32, premultiplied,
  * so B,G,R,A on little-endian. Same assumption icons.c makes. */
@@ -493,14 +513,139 @@ static void test_same_accent_is_stable(void)
     free(a); free(b);
 }
 
-static void test_greyscale_accent_is_a_no_op(void)
+/* ── 7. a colourless accent: the monochrome desktop ─────── */
+
+static void test_a_colourless_accent_gives_colourless_icons(void)
 {
-    /* A theme with no hue to give wants the icons as drawn, not the whole
-     * family rotated to red because 0 is where a greyscale hue reads. */
-    unsigned char *px = house_icon(), *ref = house_icon();
-    syn_iconhue_apply(px, W, H, W * 4, ACC_GREY);
-    assert(memcmp(px, ref, (size_t)W * H * 4) == 0);
-    free(px); free(ref);
+    /* An accent with no hue is an ANSWER, not an absence: it is what
+     * syn_palette_monochrome() hands back for a wallpaper with no colour in
+     * it, and the panels, the bar and every app window go white and grey with
+     * it. So do the icons — every pixel of them, including the sky blue below,
+     * which the hue path leaves alone and which monochrome cannot: a grey
+     * desktop with one blue speck in one dock icon is not a monochrome
+     * desktop. What protects somebody else's icon is the GATE, and it is still
+     * there — syn-resolve-gui never reaches this function at all.
+     *
+     * Byte equality of the three channels, not "close to grey", for the same
+     * reason palette_test.c asserts it: a near-grey is what you get when a
+     * greyscale accent is fed through a saturation floor, and the failure it
+     * hides is the family being rotated to h = 0, which is RED. */
+    unsigned char *px = house_icon();
+    put(px, 30, 30, RESOLVE, 255);
+    syn_iconhue_apply(px, W, H, W * 4, ACC_MONO);
+
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            unsigned c = straight(px, x, y);
+            assert(((c >> 16) & 0xff) == ((c >> 8) & 0xff));
+            assert(((c >>  8) & 0xff) == ( c       & 0xff));
+        }
+    free(px);
+}
+
+static void test_every_colourless_accent_gives_the_SAME_icon(void)
+{
+    /* The monochrome palette's accent is #FFFFFF on a dark panel and #333333
+     * on a pale one — same answer, different surface. The icon is a plate with
+     * its own light and dark in it and it is not drawn ON either of those, so
+     * it must not change between them: a dock icon that shifted value with the
+     * theme's surface would be the one thing in the dock that flickers when
+     * the wallpaper changes brightness. There is no hue here to follow, so
+     * there is nothing to follow but the absence of one. */
+    unsigned char *a = house_icon(), *b = house_icon(), *c = house_icon();
+    syn_iconhue_apply(a, W, H, W * 4, ACC_MONO);
+    syn_iconhue_apply(b, W, H, W * 4, ACC_MONO_PALE);
+    syn_iconhue_apply(c, W, H, W * 4, ACC_GREY);
+    assert(memcmp(a, b, (size_t)W * H * 4) == 0);
+    assert(memcmp(a, c, (size_t)W * H * 4) == 0);
+    free(a); free(b); free(c);
+}
+
+static void test_monochrome_keeps_the_drawing(void)
+{
+    /* Taking the colour out is all it may do. Once the hue is gone the
+     * light/dark ordering IS the drawing — it is the only thing left telling a
+     * body from a glyph — so if it ever came out of order there would be
+     * nothing else to read the icon by. */
+    unsigned char *px = house_icon();
+    syn_iconhue_apply(px, W, H, W * 4, ACC_MONO);
+
+    double body  = lightness(straight(px,  0,  0));   /* #1b1030 */
+    double shade = lightness(straight(px, 12, 12));   /* #7c5cd6 */
+    double plate = lightness(straight(px,  5, 16));   /* #a78bfa */
+    double paper = lightness(straight(px,  7,  7));   /* #f1ecff */
+    assert(body < shade && shade < plate && plate < paper);
+
+    /* And each one lands where it was drawn, give or take the rounding of a
+     * hex to a grey — the icon in grey, not the icon lightened. */
+    assert(fabs(plate - lightness(BRAND)) < 3.0);
+    assert(fabs(shade - lightness(SHADE)) < 3.0);
+    assert(fabs(body  - lightness(BODY))  < 3.0);
+    free(px);
+}
+
+static void test_the_detail_still_reads_in_monochrome(void)
+{
+    /* The teal knob/LED/pad bar cannot step off a colliding accent here the
+     * way it does on SYNAPSE and Prism — greyscale has no hue circle to step
+     * around. Desaturated where it was drawn it lands within TEN CIE L* of the
+     * violet plate, which is not a detail, it is a smudge; the assertion below
+     * on the DRAWN palette is what says so, and says it in a way that cannot
+     * quietly stop being true. So in monochrome it gives way in LIGHTNESS, by
+     * the step this desktop already uses between its monochrome accent and its
+     * monochrome secondary. */
+    assert(fabs(lightness(TEAL) - lightness(BRAND)) < 10.0);
+
+    unsigned char *px = house_icon();
+    syn_iconhue_apply(px, W, H, W * 4, ACC_MONO);
+
+    unsigned detail = straight(px, 20, 20);
+    unsigned plate  = straight(px,  5, 16);
+    assert(lightness(detail) - lightness(plate) > 20.0);
+    assert(delta_e(detail, plate) > 20.0);
+    free(px);
+}
+
+static void test_the_lift_lands_on_the_detail_and_not_on_a_lookalike(void)
+{
+    /* SECOND_WINDOW asks about HUE and nothing else, and that was enough while
+     * the detail's move was a hue nudge. It is not enough for a lightness move,
+     * which is far louder on a picture with no other colour left in it: the
+     * antialias ramp of synstudio's GREEN aperture blade crosses the teal's hue
+     * window on its way into the dark opening — 27 pixels, in an icon with no
+     * teal in it anywhere — and a flat lift turns them into a bright speckle
+     * inside the iris. The lift is scaled by how much of the detail a pixel
+     * actually is, chroma included, so a dark desaturated green in the window
+     * stays where it was drawn. */
+    unsigned char *px = house_icon();
+    put(px, 28, 28, GREENRAMP, 255);
+    syn_iconhue_apply(px, W, H, W * 4, ACC_MONO);
+
+    assert(fabs(lightness(straight(px, 28, 28)) - lightness(GREENRAMP)) < 5.0);
+    assert(lightness(straight(px, 20, 20)) - lightness(TEAL) > 15.0);
+    free(px);
+}
+
+static void test_monochrome_preserves_the_premultiply(void)
+{
+    /* The same round trip as the hue path, down the branch that does not use
+     * it — a corrupt surface fringes every antialiased edge, and the edges are
+     * the whole of the drawing once the colour is gone. */
+    unsigned char *px = canvas();
+    for (unsigned a = 1; a <= 255; a++)
+        put(px, (int)(a % W), (int)(a / W), TEAL, a);
+
+    syn_iconhue_apply(px, W, H, W * 4, ACC_MONO);
+
+    for (unsigned a = 1; a <= 255; a++) {
+        uint32_t v = get(px, (int)(a % W), (int)(a / W));
+        unsigned al = (v >> 24) & 0xff;
+        assert(al == a);
+        assert(((v >> 16) & 0xff) <= al);
+        assert(((v >>  8) & 0xff) <= al);
+        assert(( v        & 0xff) <= al);
+    }
+    free(px);
 }
 
 static void test_apply_survives_bad_input(void)
@@ -533,7 +678,12 @@ int main(void)
     test_fully_transparent_stays_transparent();
     test_reapplying_drifts();
     test_same_accent_is_stable();
-    test_greyscale_accent_is_a_no_op();
+    test_a_colourless_accent_gives_colourless_icons();
+    test_every_colourless_accent_gives_the_SAME_icon();
+    test_monochrome_keeps_the_drawing();
+    test_the_detail_still_reads_in_monochrome();
+    test_the_lift_lands_on_the_detail_and_not_on_a_lookalike();
+    test_monochrome_preserves_the_premultiply();
     test_apply_survives_bad_input();
     printf("iconhue_test: all ok\n");
     return 0;
