@@ -167,10 +167,13 @@ FloatingWindow {
         const seen = {}
         for (let i = 0; i < root.rows.length; i++) {
             const r = root.rows[i]
-            const name = (r.category || "").trim() || "Other"
-            if (!seen[name]) seen[name] = { name: name, total: 0, installed: 0 }
-            seen[name].total++
-            if (r.installed) seen[name].installed++
+            const names = root.categoriesOf(r)
+            for (let n = 0; n < names.length; n++) {
+                const name = names[n]
+                if (!seen[name]) seen[name] = { name: name, total: 0, installed: 0 }
+                seen[name].total++
+                if (r.installed) seen[name].installed++
+            }
         }
         const out = []
         for (const k in seen) out.push(seen[k])
@@ -178,7 +181,46 @@ FloatingWindow {
         return out
     }
 
-    function categoryOf(r) { return (r.category || "").trim() || "Other" }
+    /*
+     * ── The one category that is NOT theirs ─────────────────────────────
+     *
+     * ⚠ AN EXCEPTION TO THE RULE ABOVE, AND THE ONLY ONE — still derived, but
+     * from the TAG instead of column six. Omarchy has no Games category and
+     * files games wherever each author put them: of the plugins tagged `games`
+     * in their listing, twenty sit under Widgets, six under Other, two under
+     * Desktop, and 2048 is under Appearance. There is nothing to derive from,
+     * so browsing by category is the one way you will never find Tetris —
+     * while typing `games` finds all of them, because the tag is already in
+     * the search haystack. This puts the same answer where somebody browsing
+     * can reach it.
+     *
+     * It is still not a fixed list: the row exists only while something
+     * carries the tag, and it disappears on its own the day nothing does.
+     *
+     * ⚠ ALONGSIDE, NEVER INSTEAD. A game keeps the category the catalogue
+     * gave it, so nobody browsing Widgets loses Snake from where upstream put
+     * it. The counts down the pane therefore add up to more than the number of
+     * plugins, which is correct — and is why the "all" row counts rows rather
+     * than summing the pane.
+     */
+    readonly property var tagCategories: ({ "Games": "games" })
+
+    /* ⚠ A TAG IS A WHOLE WORD, not a substring: `tags` is a comma-separated
+     * field of somebody else's making, and matching loosely would file a
+     * hypothetical `gamestream` under Games. */
+    function hasTag(r, tag) {
+        const tags = (r.tags || "").toLowerCase().split(/[\s,]+/)
+        return tags.indexOf(tag) >= 0
+    }
+
+    /* Every category a row belongs to: the catalogue's, plus any tag-derived
+     * one. Never empty — an unfiled plugin is still a plugin. */
+    function categoriesOf(r) {
+        const out = [ (r.category || "").trim() || "Other" ]
+        for (const name in root.tagCategories)
+            if (root.hasTag(r, root.tagCategories[name])) out.push(name)
+        return out
+    }
 
     readonly property var visibleRows: {
         const q = root.query.trim().toLowerCase()
@@ -186,7 +228,7 @@ FloatingWindow {
         const out = []
         for (let i = 0; i < root.rows.length; i++) {
             const r = root.rows[i]
-            if (root.category !== "" && root.categoryOf(r) !== root.category) continue
+            if (root.category !== "" && root.categoriesOf(r).indexOf(root.category) < 0) continue
             if (words.length > 0) {
                 const hay = (r.id + " " + r.name + " " + r.desc + " " +
                              (r.category || "") + " " + (r.tags || "") + " " +
