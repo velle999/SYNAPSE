@@ -89,6 +89,22 @@ static void fontpick_push(syn_server_t *s)
     }
 }
 
+/* Somebody else changed the font: re-read font.state and repaint.
+ *
+ * The `font_refresh` bind action, which synui-apply-font(1) dispatches once the
+ * file is written — so a font picked in synfiles, syn-settings or syn-disks
+ * lands on the compositor's own panels too, instead of waiting for the next
+ * login. Lives here rather than in input.c because fontpick_push() above is
+ * where the "which caches does a font change invalidate" knowledge is, and it
+ * is static. */
+void fontpick_refresh(syn_server_t *s)
+{
+    synui_ui_font_reload();
+    fontpick_push(s);
+    wlr_log(WLR_INFO, "synui: font refreshed from font.state ('%s')",
+            syn_text_ui_font());
+}
+
 /* ── Scan ────────────────────────────────────────────────── */
 
 static int font_cmp(const void *a, const void *b)
@@ -448,13 +464,21 @@ void fontpick_push_scale(syn_server_t *s, int scale)
     synui_spawn(cmd);
 }
 
-/* Commit the highlighted family: persist it so it survives a restart, keep
- * config.ui_font in step so anything reading the config sees the same answer,
- * and push it out to the toolkits.
+/* Commit the highlighted family: push it out to the toolkits and let the script
+ * persist it.
  *
- * settings.state rather than rewriting synuirc, exactly as every other panel
- * does — it is applied after synuirc and so overrides it, and deleting it hands
- * control back to the config file. */
+ * ⚠ synui stores NOTHING here — not settings.state, not config.ui_font. The
+ * family is font.state's, the same file that already owned the text scale and
+ * that synfiles, syn-settings, syn-disks, syn-update, syn-arsenal, synpkg and
+ * the bar all read. A copy in synui's own config was a second source of truth
+ * that silently won at the next config load, so a font picked anywhere else in
+ * the suite left these panels behind.
+ *
+ * fontpick_push_system() runs synui-apply-font(1), which writes font.state
+ * LAST and then dispatches font_refresh back at us. The set_ui_font() below is
+ * only so the panels move on this frame rather than on the script's round
+ * trip; it is the same transient the highlight preview uses, and font.state
+ * remains what survives a restart. */
 static void fontpick_commit(syn_server_t *s)
 {
     int idx = s->fontpick.selected;
@@ -464,19 +488,13 @@ static void fontpick_commit(syn_server_t *s)
     fontpick_push_system(s, name);
 
     if (!name) {
-        /* The default row. CLEARED from settings.state rather than written as
-         * the literal "monospace": an absent key hands control back to synuirc,
-         * which is how every other state file in this tree behaves, whereas a
-         * written value would pin the UI font against a `ui_font =` line the
-         * user might later add. */
-        s->config.ui_font[0] = '\0';
+        /* The default row. The script writes an empty family=, which is how
+         * font.state spells "no pick" — and syn_text_set_ui_font(NULL) maps
+         * that back to the fontconfig alias. */
         syn_text_set_ui_font(NULL);
-        settings_state_clear("ui_font");
         wlr_log(WLR_INFO, "synui: fontpick: UI font reset to the default");
     } else {
-        snprintf(s->config.ui_font, sizeof(s->config.ui_font), "%s", name);
         syn_text_set_ui_font(name);
-        settings_state_set("ui_font", name);
         wlr_log(WLR_INFO, "synui: fontpick: UI font set to '%s'%s", name,
                 fontpick_row_is_mono(s, idx)
                     ? ""

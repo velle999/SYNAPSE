@@ -3815,12 +3815,6 @@ typedef struct {
     char                  cursor_theme[64];
     int                   cursor_size;
 
-    /* UI font family every compositor-drawn panel renders in (fontpick.c).
-     * Empty = "monospace", the fontconfig alias synui always drew with. Held
-     * here as well as in text.c because text.c has no server handle — this is
-     * the copy the config file and settings.state round-trip through. */
-    char                  ui_font[96];
-
     /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
      * Off by default — Super+Shift+C toggles it at runtime. */
     int   cat_start;
@@ -7495,6 +7489,7 @@ bool config_unbind(syn_config_t *cfg, const char *combo);
  * persisted picker/dock/power choices from the other). Returns false if
  * neither variable is set, in which case buf is untouched. */
 bool syn_config_path(char *buf, size_t n, const char *name);
+void synui_ui_font_reload(void);   /* re-read family= from font.state */
 
 /* Create the config dir if absent. Call before writing a *.state file. */
 void syn_config_ensure_dir(void);
@@ -8904,6 +8899,7 @@ void synui_render_fontpick(syn_server_t *s);
 void fontpick_state_read(int *size, int *scale);
 void fontpick_push_size(syn_server_t *s, int size);
 void fontpick_push_scale(syn_server_t *s, int scale);
+void fontpick_refresh(syn_server_t *s);   /* font_refresh: re-read font.state + repaint */
 
 /* ── appgrid.c (the fullscreen application grid) ─────────────
  *

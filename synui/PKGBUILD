@@ -1401,7 +1401,7 @@ pkgver=0.1.0
 #   the one thing a config reference must never leave unsaid.
 #   The wiki's new Configuration page is derived from this header and names all
 #   187 as well. If the two ever disagree, this file is right.
-pkgrel=471
+pkgrel=472
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -142,6 +142,18 @@ static void write_synuirc(const char *body)
     setenv("SYNUI_CONFIG", p, 1);
 }
 
+/* font.state, in the same scratch XDG_CONFIG_HOME. This is the file that OWNS
+ * the UI font family for the whole suite — synui keeps no copy of it. */
+static void write_font_state(const char *body)
+{
+    char p[512];
+    snprintf(p, sizeof(p), "%s/synui/font.state", g_dir);
+    FILE *f = fopen(p, "w");
+    assert(f);
+    fputs(body, f);
+    fclose(f);
+}
+
 static int feq(float a, float b) { return fabsf(a - b) < 0.0001f; }
 
 /* ── 1. The lifted chain still understands every shape ──────── */
@@ -233,19 +245,21 @@ static void test_parse_shapes(void)
  */
 static void test_defaults_have_no_side_effects(void)
 {
-    write_synuirc("ui_font = Liberation Serif\n");
+    write_font_state("family=Liberation Serif\nsize=11\nscale=100\n");
+    /* ⚠ And a `ui_font =` line in the config, which must be IGNORED — it is a
+     * retired key, and the whole point of retiring it was that this second
+     * declaration beat font.state at the next load. */
+    write_synuirc("ui_font = Comic Neue\n");
 
     syn_config_t c;
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(strcmp(c.ui_font, "Liberation Serif") == 0);
-    /* Parsed AND applied: a font in the config that text.c never hears about is
-     * a setting that does nothing until the picker is opened. */
+    /* Applied from font.state, NOT from the config line above it. */
     assert(strcmp(syn_text_ui_font(), "Liberation Serif") == 0);
 
     /* The first ask. What the control panel does on every single repaint. */
     const syn_config_t *d = synui_config_defaults();
-    assert(d->ui_font[0] == '\0');                      /* scratch says default */
+    (void)d;
     assert(strcmp(syn_text_ui_font(), "Liberation Serif") == 0);  /* live untouched */
 
     /* Repeat asks are no-ops by construction, but assert it rather than trust
@@ -253,29 +267,35 @@ static void test_defaults_have_no_side_effects(void)
     (void)synui_config_defaults();
     assert(strcmp(syn_text_ui_font(), "Liberation Serif") == 0);
 
-    /* The other half of the contract: with nothing naming a font, a load DOES
-     * put the live copy back to the default. This is what the removed line was
-     * originally there for — a reload must not leave the previous session's
-     * font applied — and it is now done from the final resolved value at the
-     * end of synui_config_load() instead of from the defaults block. */
-    write_synuirc("# nothing here\n");
+    /* The other half of the contract: with font.state gone, a load DOES put the
+     * live copy back to the fontconfig alias. A reload must not leave the
+     * previous session's font applied.
+     *
+     * ⚠ An EMPTY family= means the same thing — that is how the script spells
+     * "no pick" when it keeps the file for the sake of the scale beside it. */
+    write_font_state("family=\nsize=10\nscale=115\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(c.ui_font[0] == '\0');
     assert(strcmp(syn_text_ui_font(), "monospace") == 0);
 
-    /* And settings.state names it just as synuirc does — the picker writes
-     * there, not into synuirc. */
+    /* And a settings.state row cannot resurrect it either: the picker stopped
+     * writing one, and the key is on the obsolete list so an old file left over
+     * from before the change is discarded rather than obeyed. This is the
+     * regression that matters on an UPGRADED box — velle's settings.state
+     * still carries `ui_font = Liberation Mono` from the old design. */
     settings_state_set("ui_font", "DejaVu Sans");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(strcmp(c.ui_font, "DejaVu Sans") == 0);
-    assert(strcmp(syn_text_ui_font(), "DejaVu Sans") == 0);
-
+    assert(strcmp(syn_text_ui_font(), "monospace") == 0);
     settings_state_clear("ui_font");
+
+    /* font.state alone decides, and a later write to it is picked up by the
+     * next load — which is what `synctl dispatch font_refresh` triggers when
+     * another application in the suite changes the font. */
+    write_font_state("family=DejaVu Sans\nsize=11\nscale=100\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(strcmp(syn_text_ui_font(), "monospace") == 0);
+    assert(strcmp(syn_text_ui_font(), "DejaVu Sans") == 0);
 
     printf("  defaults pure ...... ok\n");
 }

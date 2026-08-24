@@ -1358,6 +1358,23 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * syn-arcade's `fit` calls it — and a second registry is a second thing
          * to keep in step. Cheap, and a no-op while desktop icons are off. */
         deskicons_reload(s);
+    } else if (strcmp(action, "font_refresh") == 0) {
+        /* Re-read the UI font family from font.state and repaint.
+         *
+         * ⚠ There is NO inotify watch on that file either, and it is written
+         * by synui-apply-font(1) on behalf of the WHOLE suite — synfiles,
+         * syn-settings and syn-disks all offer a font row. Until this existed
+         * synui kept its own `ui_font` copy, so a font changed from any of
+         * those moved every application on the desktop and left the
+         * compositor's own panels — dock, control panel, notifications, window
+         * titles — drawing in the previous face until the next login.
+         *
+         * The script dispatches this as its last act, after font.state is on
+         * disk, so a repaint here always reads the new family. Same shape as
+         * deskicons_refresh above, and for the same reason: a bind action is
+         * already scriptable through `synctl dispatch`, and a second registry
+         * is a second thing to keep in step. */
+        fontpick_refresh(s);
     } else if (strcmp(action, "widgets") == 0) {
         /* Super+Shift+A: the widget manager, one row per widget. It replaced a
          * blind group toggle, exactly as the filter panel replaced one — and,

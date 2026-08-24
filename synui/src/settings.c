@@ -76,6 +76,10 @@ static const char *const g_obsolete[] = {
     /* Removed with the "Super+Space opens" row: a second way to declare a
      * keybinding, which put back what the shortcuts palette rebound. */
     "super_space",
+    /* Removed with synui's own copy of the UI font family. font.state owns it
+     * for the whole suite; a copy here silently won the next config load and
+     * left these panels on a face no other application was using. */
+    "ui_font",
 };
 
 static int settings_key_obsolete(const char *key)

@@ -547,9 +547,10 @@
  *                                 COMPILED default is still `synapse`, so an
  *                                 existing machine that never picked one keeps
  *                                 the desktop it has)
- *   ui_font = Liberation Mono    (⚠ the COMPOSITOR's own panels. The desktop
- *                                 -wide font is font.state, which every
- *                                 SynapseOS app reads — this is not that)
+ *   ui_font = anything           ⛔ OBSOLETE AND IGNORED, with a line in the
+ *                                 log. There is ONE font family and it lives
+ *                                 in font.state, which every SynapseOS app
+ *                                 reads and synui-apply-font(1) writes
  *   notif_dnd = on|off           (Do Not Disturb, persisted)
  *
  * ── The CRT post-process ───────────────────────────────────
@@ -1552,23 +1553,17 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->cursor_theme[0] = '\0';
     cfg->cursor_size     = 24;
 
-    /* Empty font = "monospace", the fontconfig alias every panel drew in before
-     * the picker existed — so an untouched system looks exactly as it did.
-     *
-     * text.c is deliberately NOT touched here. This function runs against a
-     * SCRATCH config (see the header) and text.c's copy is process-global, so a
-     * syn_text_set_ui_font() on this line reaches straight past the scratch
-     * struct and repaints the live desktop. That is not hypothetical: the
-     * control panel diffs every row against synui_config_defaults() on each
-     * repaint, so the first open of the panel in a session reset the UI font to
-     * monospace while settings.state still named the chosen family — the font
-     * came back at the next login and vanished again on the next open.
-     *
-     * synui_config_load() applies cfg->ui_font once at the end instead, which
-     * still covers the reload case this used to be here for: the font is pushed
-     * from the FINAL resolved value, so a reload with nothing naming a font
-     * lands back on the default. */
-    cfg->ui_font[0] = '\0';
+    /* ⚠ NO font family is defaulted here, because synui no longer holds one —
+     * font.state does, and config_apply_ui_font() reads it at the end of a
+     * load. text.c must also stay untouched from this function for a reason
+     * worth keeping: it runs against a SCRATCH config (see the header) and
+     * text.c's copy is process-global, so a syn_text_set_ui_font() on this line
+     * reaches straight past the scratch struct and repaints the live desktop.
+     * That is not hypothetical — the control panel diffs every row against
+     * synui_config_defaults() on each repaint, so the first open of the panel
+     * in a session reset the UI font to monospace while the chosen family was
+     * still on disk: the font came back at the next login and vanished again on
+     * the next open. */
 
     cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
     cfg->cat_breed         = CAT_BREED_NEON;   /* the house cat */
@@ -1846,9 +1841,44 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val);
  * Keeping it out of config_set_defaults() and config_parse_kv() is what makes
  * those two safe to run against a scratch config; see config_set_defaults().
  */
+/* Re-read the UI font family from font.state and push it at text.c.
+ *
+ * Public because the `font_refresh` bind action needs exactly this and nothing
+ * else: synui_config_reload() would also re-apply the theme, re-tile every
+ * workspace and refresh all decorations, which is a lot of desktop to move
+ * because somebody changed a font in another window.
+ *
+ * Read here rather than in text.c because syn_config_path() is defined in THIS
+ * file, and text.c is a leaf the pure render tests link on its own. */
+void synui_ui_font_reload(void)
+{
+    char path[256];
+    if (!syn_config_path(path, sizeof(path), "font.state")) return;
+
+    FILE *f = fopen(path, "re");
+    if (!f) { syn_text_set_ui_font(NULL); return; }
+
+    char line[256], fam[128] = "";
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "family=", 7) != 0) continue;
+        snprintf(fam, sizeof(fam), "%s", line + 7);
+        fam[strcspn(fam, "\r\n")] = '\0';
+        break;
+    }
+    fclose(f);
+
+    /* An empty or absent family= is how the script spells "no pick" — it keeps
+     * the file for the sake of the scale beside it — and set_ui_font maps NULL
+     * back to the fontconfig alias. */
+    syn_text_set_ui_font(fam[0] ? fam : NULL);
+}
+
 static void config_apply_ui_font(const syn_config_t *cfg)
 {
-    syn_text_set_ui_font(cfg->ui_font[0] ? cfg->ui_font : NULL);
+    /* cfg is unused: the family is font.state's, not the config's. Kept as a
+     * parameter so this reads like the other config_apply_* helpers around it. */
+    (void)cfg;
+    synui_ui_font_reload();
 }
 
 const syn_config_t *synui_config_defaults(void)
@@ -2499,8 +2529,18 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "cursor_theme") == 0)
         strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);
-    else if (strcmp(key, "ui_font") == 0)
-        strncpy(cfg->ui_font, val, sizeof(cfg->ui_font) - 1);
+    /* OBSOLETE, and kept only to SAY SO — the same remedy super_space got, for
+     * the same disease. `ui_font =` was a second declaration site for the UI
+     * font family: font.state already held one that every other app in the
+     * suite reads, so a font set from synfiles moved the whole desktop and left
+     * synui's own panels on the old face. Pick a font in the font picker, or
+     * run synui-apply-font(1); both write the one file. */
+    else if (strcmp(key, "ui_font") == 0) {
+        (void)val;
+        wlr_log(WLR_INFO, "synui: ui_font is obsolete and ignored — the font "
+                          "family lives in font.state now (font picker, or "
+                          "synui-apply-font)");
+    }
     else if (strcmp(key, "cursor_size") == 0) {
         int px = atoi(val);
         /* Clamped, not obeyed: 0 makes wlroots fall back in ways that are

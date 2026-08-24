@@ -504,6 +504,20 @@ apply() {   # apply <family|""> <size>
     else
         state_save
     fi
+
+    # LAST, and after the file is on disk: tell the compositor to re-read it.
+    #
+    # ⚠ synui draws its own dock, control panel, notifications and window
+    # titles, and there is no inotify watch on font.state — so without this a
+    # font picked from synfiles, syn-settings or syn-disks moved every
+    # application on the desktop and left synui's panels on the old face until
+    # the next login. synui used to paper over that with its own `ui_font`
+    # config key, which is exactly the second source of truth this file exists
+    # to be instead of.
+    #
+    # Failure is fine and silent: no synui (a TTY, the installer, a nested
+    # test) means there is nothing to repaint, and the family is already saved.
+    synctl dispatch font_refresh >/dev/null 2>&1 || true
 }
 
 # ── Entry point ─────────────────────────────────────────────────────────────

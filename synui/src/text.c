@@ -124,6 +124,19 @@
  */
 static char g_ui_font[128] = "monospace";
 
+/* ⚠ There is exactly ONE font family on this desktop and it lives in
+ * ~/.config/synui/font.state, written by synui-apply-font(1) and read by the
+ * bar, synfiles, syn-settings, syn-disks, syn-update, syn-arsenal and synpkg.
+ * synui's own panels used to keep a SECOND copy in the config (`ui_font =`,
+ * mirrored into settings.state by the picker), which meant a font changed from
+ * any other window in the suite moved every application and left the
+ * compositor's own panels behind — the exact bug that moving the text SCALE
+ * into font.state was done to remove, one setting over.
+ *
+ * The file is READ in config.c, not here: this file is a leaf on the draw path
+ * (see the header) and stays free of the config helpers, so the pure render
+ * tests can link it on its own. What is below is only the cache.
+ */
 void syn_text_set_ui_font(const char *family)
 {
     if (!family || !*family) {
