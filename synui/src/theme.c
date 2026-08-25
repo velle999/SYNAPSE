@@ -1208,13 +1208,26 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
         float ba = theme_bar_alpha(&s->config);
         if (ba >= 0.0f) snprintf(alpha, sizeof(alpha), "%.2f", ba);
 
+        /* The dock's half of the same ride, added for the reason theme_dock_
+         * alpha() itself exists: the compositor resolves the dock BODY in
+         * process regardless of this file, but the desktop WIDGETS are
+         * quickshell's and had no theme-aware "auto" to fall back to at all —
+         * BarConfig.dockOpacity's declared default was a flat 0.72, matching
+         * no glass theme. theme.json gets a dockAlpha field now, the same
+         * out-of-band "-" for "this theme has no opinion", so the widgets can
+         * resolve `auto` from theme.json exactly as the bar already does,
+         * without needing theme.state — which a fresh box does not have. */
+        char dalpha[8] = "-";
+        float da = theme_dock_alpha(&s->config);
+        if (da >= 0.0f) snprintf(dalpha, sizeof(dalpha), "%.2f", da);
+
         snprintf(cmd, sizeof(cmd),
-                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d %s %s",
+                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d %s %s %s",
                  p->scheme, p->accent_r, p->accent_g, p->accent_b,
                  p->glyph_r, p->glyph_g, p->glyph_b,
                  p->base_r, p->base_g, p->base_b,
                  p->text_r, p->text_g, p->text_b,
-                 chrome_square(&s->config) ? "on" : "off", alpha);
+                 chrome_square(&s->config) ? "on" : "off", alpha, dalpha);
         synui_spawn(cmd);
 
         /* And the terminal's glass, because the alpha it should run at DEPENDS

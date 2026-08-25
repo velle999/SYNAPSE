@@ -17,13 +17,20 @@
 # Usage: synui-apply-theme <dark|light> <accent_r> <accent_g> <accent_b>
 #                          [glyph_r] [glyph_g] [glyph_b]
 #                          [base_r] [base_g] [base_b] [text_r] [text_g] [text_b]
-#                          [square_chrome] [bar_alpha]
+#                          [square_chrome] [bar_alpha] [dock_alpha]
 #
 # `bar_alpha` is 0.00..1.00, or "-"/omitted for "this theme has no opinion" —
 # which is every theme but macOS 26, whose menu bar has no background at all.
 # The out-of-band token matters: 0.00 is now a value a theme can mean, so
 # "unset" cannot be spelled as a number. Unset keeps the per-scheme default
 # below, which is what every caller before this argument existed got.
+#
+# `dock_alpha` is the same shape, one argument later, for the desktop WIDGETS
+# (theme.json's dockAlpha) — the two Prisms are currently the only theme with
+# an opinion (theme_dock_alpha() in synui.h). Unset keeps SYN_DOCK_ALPHA_
+# DEFAULT (0.72), the flat slab every other preset already drew before this
+# argument existed. It is not per-scheme the way bar_alpha's fallback is: the
+# dock's compiled default was always one number regardless of light or dark.
 #
 # `square_chrome` is on|off and is the retro chromes' rule reaching the toolkits
 # — see the GTK CSS section below for why a Win95 desktop still had rounded
@@ -51,6 +58,7 @@ br=${8:-} bg_=${9:-} bb=${10:-}
 tr=${11:-} tg=${12:-} tb=${13:-}
 square=${14:-}
 bar_alpha_arg=${15:--}
+dock_alpha_arg=${16:--}
 
 case "$scheme" in
     dark|light) ;;
@@ -579,6 +587,17 @@ case "$bar_alpha_arg" in
     *) echo "synui-apply-theme: ignoring bar_alpha '$bar_alpha_arg'" >&2 ;;
 esac
 
+# The dock's half, same validation, one constant default rather than a
+# per-scheme pair: SYN_DOCK_ALPHA_DEFAULT (synui.h) was always 0.72 whatever
+# scheme the desktop was in, so that is what "this theme has no opinion" keeps
+# here too.
+qs_dock_alpha=0.72
+case "$dock_alpha_arg" in
+    -|'') ;;
+    [01].[0-9][0-9]|[01]) qs_dock_alpha=$dock_alpha_arg ;;
+    *) echo "synui-apply-theme: ignoring dock_alpha '$dock_alpha_arg'" >&2 ;;
+esac
+
 bar_bg="rgba($bar_base,$bar_alpha)"
 menu_bg="rgba($menu_base,$menu_alpha)"
 cat > "$gen" <<CSS
@@ -621,6 +640,7 @@ cat > "$qs.tmp" <<JSON
   "glyph":      [$gr, $gg, $gb],
   "bar":        [$bar_base],
   "barAlpha":   $qs_bar_alpha,
+  "dockAlpha":  $qs_dock_alpha,
   "popup":      [$menu_base],
   "popupAlpha": $menu_alpha,
   "fg":         "$fg",

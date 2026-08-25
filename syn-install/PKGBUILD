@@ -150,7 +150,15 @@ pkgver=0.1.0
 #   the bar and the widgets are quickshell and read them out of theme.state ->
 #   settings.state -> synuirc, and a fresh install has neither of the first two.
 #   Same gap widget_glass works around, same one-line way out.
-pkgrel=94
+# 95: bar_opacity and dock_opacity above go from 0.05 to `auto`. 94's own
+#   comment explained why the number was needed and is now half wrong: the
+#   BAR's fallback already worked (theme.json's barAlpha, synui 469+), and only
+#   the DOCK's genuinely had none — BarConfig.dockOpacity's declared default
+#   was a flat 0.72 whatever theme was on screen. synui 483 gives it the same
+#   theme.json fallback the bar already had (a new dockAlpha field), so `auto`
+#   resolves correctly on the very first login and neither line needs to spell
+#   out a number that only happened to match the theme's own answer.
+pkgrel=95
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

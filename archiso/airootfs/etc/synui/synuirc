@@ -83,13 +83,21 @@ theme = prism
 glass_level = auto
 glass_sync  = on
 
-# ⚠ FOR QUICKSHELL, NOT FOR THE COMPOSITOR. The bar and the desktop widgets are
-# a separate process and read these out of theme.state → settings.state → this
-# file; the live session has none of the first two, so without them the strip
-# comes up at its built-in 0.85 over a dock synui has already drawn at 0.05.
-# Same gap widget_glass below works around, same way out.
-bar_opacity  = 0.05
-dock_opacity = 0.05
+# Auto, now that quickshell has a real one to fall back to. This USED to be a
+# hardcoded 0.05: the bar and the desktop widgets are a separate process, and
+# read these out of theme.state → settings.state → this file first — the live
+# session has none of the first two, so `auto` (an absent key) used to fall
+# past all three straight to quickshell's own compiled defaults (0.85 bar,
+# 0.72 widgets) over a dock synui had already drawn at 0.05 in-process. Fixed
+# at the source rather than papered over here: synui-apply-theme now writes
+# theme.json's barAlpha AND dockAlpha from theme_bar_alpha()/theme_dock_alpha()
+# on every login, whether or not theme.state exists — quickshell falls back to
+# THAT before its own compiled numbers, so `auto` is auto on a box that has
+# never opened the theme manager. A hardcoded 0.05 read as "chosen" in the
+# control panel besides — a row a fresh desktop has never touched should say
+# Follow the theme / Auto, not a number that happens to agree with it today.
+bar_opacity  = auto
+dock_opacity = auto
 
 # See-through application windows. No number with it: both Prisms carry
 # 0.90/0.84 in their own preset and that is what a window draws at with no glass

@@ -1495,7 +1495,24 @@ pkgver=0.1.0
 #   and a degraded install now exits 3 rather than 0 — the window only showed a
 #   message on a non-zero code, which is why it reported three dead widgets as
 #   installed and on.
-pkgrel=482
+
+# 483: `bar_opacity`/`dock_opacity = auto` are real now, and the ISO's synuirc
+#   and the installer's heredoc were switched to them from a hardcoded 0.05 —
+#   a number that read as a CHOICE in the control panel for a row nobody had
+#   touched. The bar's half already worked (theme.json's barAlpha, written on
+#   every login regardless of theme.state);
+#   the dock's did not — BarConfig.dockOpacity had no theme-aware fallback at
+#   all, just a flat compiled 0.72, so a genuinely `auto` dock_opacity would
+#   have left the desktop WIDGETS solid beside a dock the compositor already
+#   draws at Prism's 0.05 in-process. theme.c now hands synui-apply-theme
+#   theme_dock_alpha() the same way it already hands it theme_bar_alpha(); the
+#   helper writes it into theme.json's new `dockAlpha`; Theme.widgetAlpha
+#   resolves it exactly the way barAlphaAsked already resolves barAlpha —
+#   BarConfig.dockOpacity's own default moved from 0.72 to the same -1
+#   sentinel bar_opacity uses, so "unset" can be told apart from "chosen
+#   0.72" for the first time. Pinned by a new apply_theme_dock_alpha.sh,
+#   mirroring apply_theme_bar_alpha.sh.
+pkgrel=483
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

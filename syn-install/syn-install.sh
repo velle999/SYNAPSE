@@ -4628,24 +4628,26 @@ glass_sync = on
 
 # ── The two strips, for QUICKSHELL and for no other reason ───────────────────
 #
-# ⚠ NOT a glass level in disguise, and not the numbers above written out — the
-# COMPOSITOR resolves both of these from the theme now and needs neither line.
-# The bar and the desktop widgets are a separate process (quickshell,
-# BarConfig.qml), and they read these keys out of theme.state, then
-# settings.state, then this file.
+# ⚠ NOT a glass level in disguise, and not a number this has to spell out. The
+# bar and the desktop widgets are a separate process (quickshell, BarConfig.qml)
+# and read these keys out of theme.state, then settings.state, then this file.
 #
-# A fresh install has neither of the first two. theme.state is written when
-# somebody PICKS a theme and deliberately refuses to create itself otherwise, so
-# on a machine that has only ever been told `theme = prism` there is nothing for
-# the bar to read and it falls back to its own built-in 0.85 strip and 0.72
-# widgets — beside a dock the compositor has already drawn at 0.05. One desktop,
-# two amounts of glass, and only the halves synui draws itself correct.
+# A fresh install has neither of the first two, and theme.state is still only
+# written when somebody PICKS a theme from the manager — so on a box that has
+# only ever been told `theme = prism` there is none. What changed is that an
+# ABSENT key no longer means "quickshell's own compiled default" (0.85 bar,
+# 0.72 widgets, beside a dock the compositor draws at 0.05 in-process — one
+# desktop, two amounts of glass). theme.c now hands synui-apply-theme both
+# theme_bar_alpha() and theme_dock_alpha(), which writes them into theme.json
+# on every login whether or not theme.state exists, and Theme.qml falls back to
+# THAT before its own compiled numbers. So `auto` really is auto now, on the
+# very first login.
 #
-# This is the SAME gap `widget_glass = on` below works around, for the same
-# process, with the same one-line way out: set them to `auto` after picking any
-# theme from the manager and they follow along like everything else.
-bar_opacity  = 0.05
-dock_opacity = 0.05
+# Leave these on `auto`. A number here reads as a CHOICE in the control panel
+# — Bar opacity would show its figure instead of "Follow the theme" — for a
+# row nobody has actually touched.
+bar_opacity  = auto
+dock_opacity = auto
 
 # ── Transparency: on ─────────────────────────────────────────────────────────
 #

@@ -153,11 +153,19 @@ QtObject {
      */
     property bool barEnabled: true
 
-    // config.c's default and its clamp, restated for the same reason
-    // cornerRadius restates its own: a typo'd synuirc line must not hand the
-    // compositor its default and the widgets a NaN, which would paint every
-    // card fully transparent.
-    property real dockOpacity: 0.72
+    /* ── How much of the wallpaper the DOCK (and, through it, the widgets)
+     * let through ────────────────────────────────────────────────────────────
+     *
+     * NEGATIVE IS THE DEFAULT, the same sentinel and the same reasoning as
+     * barOpacity below: "nobody has chosen" is not a number this side can
+     * draw with, and 0.00 is itself a real answer — a dock with no background
+     * at all. Resolved in Theme against theme.json's own dockAlpha, which is
+     * where a theme's opinion (frosted, on the two Prisms) lives; this alone
+     * used to default to a flat 0.72 with no such fallback, which is why the
+     * desktop widgets kept a slab of a card on a glass desktop that had asked
+     * `dock_opacity = auto` — the dock body beside them, drawn in-process,
+     * had a theme-aware auto and this did not. */
+    property real dockOpacity: -1
 
     /* ── How much of the wallpaper the BAR lets through ──────────────────────
      *
@@ -312,7 +320,15 @@ QtObject {
         // is the range; the 0.20 that used to be here was a third copy of a
         // floor the compositor had already dropped, and it is what stopped the
         // widgets following the dock all the way down.
-        if (!isNaN(dn)) root.dockOpacity = Math.max(0.0, Math.min(1.0, dn))
+        //
+        // `auto` and an absent key are the same instruction as bar_opacity's
+        // below, and now resolve the same way — Theme falls through to
+        // theme.json's dockAlpha rather than to a flat compiled number, so
+        // this has to be able to say "nobody has chosen" too. Assigned on
+        // every pass for the reason bar_opacity is: the control panel drops
+        // the key from settings.state when the row returns to its default.
+        root.dockOpacity = (d === "auto" || isNaN(dn)) ? -1
+                                                       : Math.max(0.0, Math.min(1.0, dn))
 
         // The bar's own. Same pair, same order. Assigned on every pass rather
         // than only when it parses, because unlike the four above this one has

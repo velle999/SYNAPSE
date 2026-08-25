@@ -827,15 +827,18 @@ check "no window opacity is written down" "" "$(in_synuirc 'active_opacity')"
 check "…and nothing is pinned off the slider" "no" \
     "$(grep -qE '^glass_pinned' <<<"$(synuirc_body)" && echo yes || echo no)"
 
-# ⚠ THESE TWO ARE FOR QUICKSHELL, NOT THE GLASS LEVEL IN DISGUISE. The bar and
-# the desktop widgets are a separate process and read them out of theme.state,
-# then settings.state, then synuirc. A fresh install has neither of the first
-# two — theme.state is written when somebody PICKS a theme and refuses to create
-# itself otherwise — so without these the strip comes up at its built-in 0.85
-# over a dock the compositor has already drawn at 0.05 from the theme. Same gap
-# widget_glass below works around, and the same one-line way out.
-check "the bar's alpha is spelt out for quickshell"  "0.05" "$(in_synuirc 'bar_opacity')"
-check "the dock's alpha is spelt out for quickshell" "0.05" "$(in_synuirc 'dock_opacity')"
+# ⚠ THESE TWO ARE FOR QUICKSHELL, NOT THE GLASS LEVEL IN DISGUISE — and they
+# used to have to spell out a number (0.05) rather than say `auto`, because
+# the bar and the desktop widgets are a separate process that reads them out
+# of theme.state, then settings.state, then synuirc, and a fresh install has
+# neither of the first two. That is fixed at the source now: theme.c hands
+# synui-apply-theme theme_bar_alpha() AND theme_dock_alpha(), which land in
+# theme.json's barAlpha/dockAlpha on every login whether or not theme.state
+# exists, and Theme.qml falls back to THOSE before its own compiled numbers.
+# `auto` genuinely is auto on the very first login now, and a number here
+# would read as a CHOICE in the control panel for a row nobody has touched.
+check "the bar's alpha follows the theme"  "auto" "$(in_synuirc 'bar_opacity')"
+check "the dock's alpha follows the theme" "auto" "$(in_synuirc 'dock_opacity')"
 
 check "transparency is on" "on" "$(in_synuirc 'transparency')"
 

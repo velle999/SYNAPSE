@@ -1675,6 +1675,16 @@ test('apply_theme_bar_alpha', apply_theme_alpha,
      args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
      timeout : 60)
 
+# And its FOURTH: the dock alpha a theme brings with it, one positional
+# argument later, for the desktop widgets — quickshell's own process, which
+# had no theme-aware fallback for `dock_opacity = auto` at all before this and
+# fell back to a flat 0.72 beside a dock the compositor had already drawn at
+# Prism's 0.05 in-process.
+apply_theme_dock_alpha = find_program('tests/apply_theme_dock_alpha.sh')
+test('apply_theme_dock_alpha', apply_theme_dock_alpha,
+     args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
+     timeout : 60)
+
 # The two ways round src/contrast.c, which panel_contrast_test.c already covers.
 # The calendar's day numbers were a hardcoded near-white — 1.31:1 on 95's silver,
 # and a literal is not a rung, so the corrector never saw them. kitty's light

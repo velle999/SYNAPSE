@@ -1386,8 +1386,18 @@ QtObject {
      * `legibility` and popupAlphaOn(), which asks the wallpaper under THIS card
      * whether its text still reads and raises only that card only as far as it
      * has to.
+     *
+     * The user's row over the theme's own answer, the same shape as
+     * barAlphaAsked above and for the same reason: BarConfig.dockOpacity is
+     * negative exactly when nobody has an opinion in theme.state or
+     * settings.state or synuirc, and theme.json's dockAlpha is where the
+     * theme's own answer for `auto` lives (frosted on the two Prisms, 0.72 —
+     * SYN_DOCK_ALPHA_DEFAULT — everywhere else). The trailing 0.72 literal is
+     * only for a theme.json written by a synui too old to carry the key.
      */
-    readonly property real widgetAlpha: BarConfig.dockOpacity
+    readonly property real widgetAlpha:
+        BarConfig.dockOpacity >= 0 ? BarConfig.dockOpacity
+      : (p.dockAlpha !== undefined ? p.dockAlpha : 0.72)
 
     property FileView chromeFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/theme.state"
