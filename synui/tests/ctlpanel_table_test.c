@@ -412,6 +412,81 @@ static void test_every_category_named(void)
     printf("  every category named ..... ok (%d categories)\n", CTL_CAT_COUNT);
 }
 
+/* ── 2c. The sections hold together ──────────────────────────
+ *
+ * The panel is navigated by section: `.section` is what the breadcrumb names
+ * and what the row pane rules between, so a section that is wrong is a heading
+ * somebody reads and a group they cannot find their way back to.
+ *
+ * Three things can go wrong in the table and none of them fails to compile:
+ *
+ *   - A category whose FIRST row carries no `.section`. Those rows answer NULL
+ *     from ctlpanel_row_section() (the walk runs off the top of the category),
+ *     so the breadcrumb silently loses its second half for part of a category.
+ *
+ *   - The same section name twice in one category. System shipped exactly this
+ *     — "Tools" opened, four rows, then "Tools" opened again — which draws a
+ *     dividing rule inside a group and puts the identical breadcrumb on both
+ *     sides of it. Nothing about that reads as a group boundary; it reads as a
+ *     bug in the rule.
+ *
+ *   - A section broken into two runs, i.e. rows of section A, then B, then A
+ *     again. ctlpanel_row_section() walks BACKWARDS to the nearest `.section`,
+ *     so the second run answers "A" correctly and still draws as a separate
+ *     group — the row is in a group whose heading is already above something
+ *     else. Contiguity is the only thing that makes the two agree.
+ *
+ * Shortcuts is exempt from the first: its list is generated from the live bind
+ * table, so it legitimately has no rows here at all.
+ */
+static void test_sections_are_whole(void)
+{
+    int sections = 0;
+
+    for (int c = 0; c < CTL_CAT_COUNT; c++) {
+        int rows[CTL_CAT_ITEMS_MAX];
+        int n = ctlpanel_cat_items(c, rows, CTL_CAT_ITEMS_MAX);
+        if (n == 0) continue;                    /* Shortcuts */
+
+        /* The first row opens a section, or nothing in this category has a
+         * breadcrumb to sit under. */
+        if (!ctlpanel_row_starts_section(rows[0]))
+            printf("    %s: first row opens no section\n", ctlpanel_cat_name(c));
+        assert(ctlpanel_row_starts_section(rows[0]));
+
+        const char *seen[CTL_CAT_ITEMS_MAX];
+        int nseen = 0;
+
+        for (int i = 0; i < n; i++) {
+            const char *sect = ctlpanel_row_section(rows[i]);
+
+            /* Every row is IN one, first-row check above notwithstanding. */
+            assert(sect && *sect);
+
+            if (!ctlpanel_row_starts_section(rows[i])) {
+                /* A continuing row must continue the section the row before it
+                 * was in — that is what contiguous means here. */
+                assert(strcmp(sect, ctlpanel_row_section(rows[i - 1])) == 0);
+                continue;
+            }
+
+            /* An opening row: its name must be new to this category. Catches
+             * both the duplicate heading and the split run, since a second run
+             * of A has to re-open A to draw as a group. */
+            for (int j = 0; j < nseen; j++) {
+                if (strcmp(seen[j], sect) == 0)
+                    printf("    %s: section \"%s\" opens twice\n",
+                           ctlpanel_cat_name(c), sect);
+                assert(strcmp(seen[j], sect) != 0);
+            }
+            seen[nseen++] = sect;
+            sections++;
+        }
+    }
+
+    printf("  sections whole ........... ok (%d sections)\n", sections);
+}
+
 /* ── 3. The round trip, per row ──────────────────────────────
  *
  * The important one. For every row that names a config key: move it with the
@@ -1041,6 +1116,7 @@ int main(void)
     test_rgb_row_owns_no_key();
     test_no_category_overflows();
     test_every_category_named();
+    test_sections_are_whole();
     test_every_row_round_trips();
     test_every_enum_option_round_trips();
     test_auto_rung();

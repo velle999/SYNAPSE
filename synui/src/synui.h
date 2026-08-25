@@ -1656,9 +1656,16 @@ typedef enum {
     CTL_CAT_COUNT,
 } syn_ctl_cat_t;
 
-/* Rows are grouped by category here purely so the enum reads like the panel;
- * the category each one belongs to is declared in ctlpanel.c's item table, and
- * that table is what the panel walks. Order within a category is display order. */
+/* Row IDs. Grouped by category here purely so the enum reads roughly like the
+ * panel; the category each one belongs to, the SECTION it sits in and the order
+ * it is drawn in are all declared in ctlpanel.c's item table, and that table is
+ * what the panel walks.
+ *
+ * ⚠ This enum is NOT the display order and must not be read as one. New rows
+ * are appended near their relatives rather than at the exact place they appear,
+ * and the panel was regrouped without touching it (Date & time moved from
+ * Display to Desktop ▸ Clock, the dock rows split into behaviour/look/buttons).
+ * One list decides what the panel looks like, and it is ctl_items[]. */
 typedef enum {
     /* Appearance */
     CTL_ROW_THEME = 0,
@@ -1697,6 +1704,7 @@ typedef enum {
     CTL_ROW_DOCK_RADIUS,   /* the bar's own corner radius */
     CTL_ROW_WIDGET_GLASS,  /* desktop widgets take the dock's glass, or keep the HUD */
     CTL_ROW_CLOCK_FACE,    /* which dial the analog clock WIDGET draws */
+    CTL_ROW_CLOCK,         /* date & time — Desktop ▸ Clock, with the rows above */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_BAR_SHELL,     /* which QML tree synui-bar starts: SYNAPSE or Antiquity */
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza, pet */
@@ -1704,7 +1712,6 @@ typedef enum {
     CTL_ROW_DISPLAYS,
     CTL_ROW_DISPLAY_MODE,  /* extend / duplicate / built-in off */
     CTL_ROW_NIGHTLIGHT,
-    CTL_ROW_CLOCK,         /* date & time */
     /* Sound */
     CTL_ROW_DND,           /* Do Not Disturb: no toast, no chime */
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
