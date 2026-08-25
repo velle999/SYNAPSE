@@ -139,8 +139,8 @@ WidgetFrame {
             ctx.clearRect(0, 0, w, h)
 
             const cx = w / 2, cy = h / 2
-            const r  = Math.min(w, h) / 2 - 6
-            if (r <= 4) return
+            const half = Math.min(w, h) / 2
+            const neon = root.face === "neon"
 
             /*
              * ⚠ EVERY STROKE WIDTH BELOW IS AN ABSOLUTE PIXEL COUNT, and the
@@ -160,13 +160,44 @@ WidgetFrame {
              * that does not get thinner, it disappears.
              */
             const rBase = root.baseSize / 2 - 6
-            const k = r / rBase
+
+            /*
+             * ⚠ THE RIM IS 6 PIXELS AND THE NEON GLOW IS NOT.
+             *
+             * The margin between the dial and the edge of its box was a flat 6,
+             * from when the dial was a flat 148. Neon draws its outermost glow
+             * pass AT r with lineWidth px(10), so it reaches 5k BEYOND r — five
+             * pixels at the designed size, which is what the 6 was chosen to
+             * clear, and fifteen at the 420 ceiling, which it is not.
+             *
+             * What that looks like is the bug as reported: the circle comes out
+             * FLAT ON FOUR SIDES. Those are the only places a circle touches its
+             * bounding box, so they are the only places the overflow has
+             * anywhere to be cut off — the ring is whole in the diagonals and
+             * sheared at twelve, three, six and nine.
+             *
+             * Neon alone, which is why the other three faces are fine at every
+             * size: their bezel is px(2)/px(2.5), so it reaches at most 1.25k
+             * past r and is still inside the 6 at the ceiling.
+             *
+             * Two passes because the rim depends on k and k depends on r: the
+             * first sizes k off the untrimmed radius, which OVER-estimates the
+             * rim, so the second pass always leaves the glow room to spare. At
+             * the designed size both passes give r = 68 and k = 1, so the face
+             * that was drawn before is drawn to the pixel now.
+             */
+            let r = half - 6
+            let k = r / rBase
+            if (neon) {
+                r = half - Math.max(6, 5 * k + 1)
+                k = r / rBase
+            }
+            if (r <= 4) return
             function px(v) { return Math.max(1, v * k) }
 
             const ink    = root.ink
             const dim    = root.inkDim
             const accent = root.accent
-            const neon   = root.face === "neon"
 
             function stroke(a, b, width, colour, alpha, cap) {
                 ctx.beginPath()
