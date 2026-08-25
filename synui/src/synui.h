@@ -4530,6 +4530,41 @@ static inline void synui_terminal_cmd(const syn_config_t *cfg,
              names);
 }
 
+/*
+ * The command line that LAUNCHES one .desktop entry — the whole answer,
+ * including the terminal a Terminal=true entry is owed.
+ *
+ * ⚠ ONE OWNER, AND IT IS THIS. The start menu wrapped the terminal entries and
+ * the shortcut palette did not, so giving `htop` a key through the palette
+ * wrote `spawn htop` and the key then started a process with no terminal that
+ * died in the same instant — silently, and only for the entries with
+ * Terminal=true. Two callers building the same command line two ways is what
+ * that was; there is one way now and both call it.
+ *
+ * The terminal is resolved HERE and not at press time because the palette
+ * freezes what it builds into binds.state, the same as a `bind =` line typed
+ * into synuirc by hand. A `terminal` changed afterwards does not move the
+ * shortcuts already made, which is the same thing that has always been true of
+ * a hand-written bind, and answering it properly means a bind action that
+ * wraps at execution — not a second string built somewhere else.
+ *
+ * NOT synui_terminal_cmd(): that one emits a shell `for` loop ending in
+ * `exec "$t"`, which is the answer to "open a terminal" and has nowhere to put
+ * a command. This is the start menu's rule, which is the one an application
+ * row has always been launched by.
+ */
+static inline void synui_app_command(const syn_config_t *cfg,
+                                     const syn_app_entry_t *e,
+                                     char *buf, size_t n)
+{
+    if (e->terminal) {
+        const char *term = cfg->terminal[0] ? cfg->terminal : "kitty";
+        snprintf(buf, n, "%s -e %s", term, e->exec);
+    } else {
+        snprintf(buf, n, "%s", e->exec);
+    }
+}
+
 /* ── glass_level: one slider, four surfaces ───────────────
  *
  * Each of these is the level mapped onto what that surface actually needs.

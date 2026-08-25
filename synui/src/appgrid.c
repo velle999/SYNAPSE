@@ -611,17 +611,14 @@ static void appgrid_launch(syn_server_t *s, syn_app_entry_t *e)
 {
     if (!e) return;
 
+    /* Terminal=true means the entry is a command-line program and the launcher
+     * owes it a terminal. synuirc's `terminal` is the one place this desktop
+     * records which one — the same value the file manager and the desktop menu
+     * use, so all three open the same program. The rule itself is
+     * synui_app_command()'s, because the shortcut palette builds this same
+     * command line when it gives an application a key. */
     char cmd[512];
-    if (e->terminal) {
-        /* Terminal=true means the entry is a command-line program and the
-         * launcher owes it a terminal. synuirc's `terminal` is the one place
-         * this desktop records which one — the same value the file manager and
-         * the desktop menu use, so all three open the same program. */
-        const char *term = s->config.terminal[0] ? s->config.terminal : "kitty";
-        snprintf(cmd, sizeof(cmd), "%s -e %s", term, e->exec);
-    } else {
-        snprintf(cmd, sizeof(cmd), "%s", e->exec);
-    }
+    synui_app_command(&s->config, e, cmd, sizeof(cmd));
 
     /* CLOSED FIRST, and it matters for the same reason it does in the emoji
      * picker: the grid is modal and holds the keyboard, so a window that maps

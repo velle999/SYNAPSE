@@ -1629,7 +1629,7 @@ pkgver=0.1.0
 #   said "this path must stay in step with it". tests/mangohud_session.sh
 #   checks the rule and that all three agree; DISABLE_MANGOHUD=1 stays in
 #   wpengine and synstudio, so opting back in cannot re-break them.
-pkgrel=489
+pkgrel=490
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

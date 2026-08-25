@@ -154,14 +154,27 @@ static void keys_build_tail(syn_server_t *s)
          */
         if (!field_matches(e->name, k->query)) continue;
 
+        /* ⚠ THE COMMAND, NOT THE Exec=. A Terminal=true entry is a command-line
+         * program and is owed a terminal; binding `e->exec` bare wrote
+         * `spawn htop`, and the key then started a process with no terminal
+         * that died in the same instant — silently, and only for the entries
+         * with Terminal=true. synui_app_command() is the start menu's own
+         * rule, so a key made here runs exactly what clicking that row in the
+         * start menu runs, which is the only answer that cannot drift from it.
+         */
+        char cmd[512];
+        synui_app_command(&s->config, e, cmd, sizeof(cmd));
+
         /* Already on a key? Then it is one of the BOUND rows above and offering
          * it again would be the same shortcut listed twice — once as the key it
          * has and once as a thing with no key, which is a list arguing with
-         * itself. */
+         * itself. Compared against the COMMAND for the same reason it is built
+         * above: a terminal application already bound is bound to the wrapped
+         * form, and matching the bare Exec= would miss it. */
         bool have = false;
         for (int j = 0; j < k->n_fixed && !have; j++)
             have = k->all[j].kind == SYN_SC_BOUND &&
-                   strcmp(k->all[j].arg, e->exec) == 0;
+                   strcmp(k->all[j].arg, cmd) == 0;
         if (have) continue;
 
         /* ⚠ SKIPPED, NOT TRUNCATED. A .desktop Exec= can be 255 bytes and a
@@ -169,8 +182,12 @@ static void keys_build_tail(syn_server_t *s)
          * key would then run a command line missing its tail — silently, and
          * only for the handful of applications with very long ones. A row that
          * is not offered is honest; a key that runs the wrong thing is not.
-         * (The name is only text and is allowed to elide.) */
-        if (strlen(e->exec) >= SYN_BIND_ARG_LEN) continue;
+         * (The name is only text and is allowed to elide.)
+         *
+         * Measured on the WRAPPED command rather than on the Exec=, because
+         * the wrapper is part of what has to fit: `kitty -e ` is nine bytes
+         * that an entry fitting bare can be pushed over the edge by. */
+        if (strlen(cmd) >= SYN_BIND_ARG_LEN) continue;
 
         syn_ctl_shortcut_t *r = &k->all[k->n];
         memset(r, 0, sizeof(*r));
@@ -181,7 +198,7 @@ static void keys_build_tail(syn_server_t *s)
         /* The guard above already proved it fits; the precision is what tells
          * the compiler so, since it cannot see through strlen(). */
         snprintf(r->arg,    sizeof(r->arg),    "%.*s",
-                 (int)sizeof(r->arg) - 1, e->exec);
+                 (int)sizeof(r->arg) - 1, cmd);
         r->rebindable = 1;
         r->kind       = SYN_SC_APP;
         k->n++;

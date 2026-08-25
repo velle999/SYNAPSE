@@ -117,6 +117,25 @@ void appgrid_rescan(syn_server_t *s)
     g->apps[g->count].exec[SYN_BIND_ARG_LEN + 8] = '\0';
     g->count++;
 
+    /* Terminal=true: a command-line program the launcher owes a terminal. The
+     * palette bound its bare Exec=, so the key started a process with no
+     * terminal that died in the same instant. */
+    snprintf(g->apps[g->count].id,   sizeof(g->apps[0].id),   "htop");
+    snprintf(g->apps[g->count].name, sizeof(g->apps[0].name), "Htop");
+    snprintf(g->apps[g->count].exec, sizeof(g->apps[0].exec), "htop");
+    g->apps[g->count].terminal = 1;
+    g->count++;
+
+    /* Terminal=true and just short enough to fit a bind BARE. The terminal
+     * wrapper is what pushes it over, which is the whole reason the skip rule
+     * measures the COMMAND rather than the Exec=. */
+    snprintf(g->apps[g->count].id,   sizeof(g->apps[0].id),   "snugfit");
+    snprintf(g->apps[g->count].name, sizeof(g->apps[0].name), "Snugfit");
+    memset(g->apps[g->count].exec, 'y', SYN_BIND_ARG_LEN - 1);
+    g->apps[g->count].exec[SYN_BIND_ARG_LEN - 1] = '\0';
+    g->apps[g->count].terminal = 1;
+    g->count++;
+
     g->scanned = 1;
 }
 
@@ -1461,6 +1480,35 @@ static void test_new_from_app_and_command(void)
     type("longex");
     CHECK(!view_has("Longexec"),
           "an application whose Exec cannot fit a bind is not offered");
+
+    /* ⚠ A Terminal=true ENTRY IS OWED A TERMINAL. Bound bare it ran `htop`
+     * with nothing to draw into, so the key started a process that died in the
+     * same instant — nothing on screen, and no error anywhere. The command is
+     * the start menu's, wrapper and all. */
+    rig_init();
+    snprintf(g_s.config.terminal, sizeof(g_s.config.terminal), "foot");
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+    type("htop");
+    CHECK(view_has("Htop"), "a terminal application is offered like any other");
+    CHECK(select_desc("Htop"), "…and is selectable");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_t, WLR_MODIFIER_LOGO);
+    CHECK(binds_set == 1 && strcmp(last_bound, "super+t") == 0,
+          "F2 gives it a key (got %d, '%s')", binds_set, last_bound);
+    CHECK(strcmp(last_bound_action, "spawn") == 0 &&
+          strcmp(last_bound_arg, "foot -e htop") == 0,
+          "…bound THROUGH the configured terminal (got '%s %s')",
+          last_bound_action, last_bound_arg);
+
+    /* …and the wrapper counts against the bind's argument. This one fits bare
+     * and does not fit wrapped, so measuring the Exec= would offer a row whose
+     * key runs a command line with its tail cut off. */
+    rig_init();
+    keys_show(&g_s);
+    type("snugfit");
+    CHECK(!view_has("Snugfit"),
+          "an application the TERMINAL WRAPPER pushes over the limit is not offered");
 
     /* And the query itself, for anything that is neither. */
     rig_init();
