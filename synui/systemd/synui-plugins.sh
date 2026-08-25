@@ -88,6 +88,7 @@ usage() {
     cat <<EOF
 usage: synui-plugins [list|scan]
        synui-plugins <id> [on|off|toggle]
+       synui-plugins <id> [up|down]
        synui-plugins add <git-url> [name]
        synui-plugins remove <id>
        synui-plugins browse [text]
@@ -97,8 +98,10 @@ usage: synui-plugins [list|scan]
        synui-plugins gui
 
   list                  what is installed, and whether each one is on
-  scan                  the same, as TSV — what the bar reads
+  scan                  the same, as TSV — what the bar reads, IN BAR ORDER
   synui-plugins x on    turn one on
+  synui-plugins x up    move it one place earlier in the bar's row of them
+  synui-plugins x down  move it one place later
   add <id>              install one out of browse
   add <git-url>         clone a plugin into ~/.config/synui/plugins and, if it
                         is hostable, turn it on
@@ -266,7 +269,85 @@ entry_point() {  # entry_point <dir> <key>
 # is still ONE plugin: Plugins.qml pushes a widget per row and does not dedupe
 # either, so a second row is a second copy of the widget on the bar, with its
 # own timers and its own state. First wins, and DIRS decides who is first.
-scan() { scan_dirs | awk -F'\t' 'NR == 1 || !seen[$1]++'; }
+#
+# ROW ORDER IS $ORDER'S, NOT scan_dirs'. scan_dirs' own order is a directory
+# listing — effectively alphabetical by plugin folder name — and nobody chose
+# it; Plugins.qml pushes rows onto the bar in exactly the order this prints
+# them. See order_effective() below for what reorders them.
+scan() {
+    local rows header data ids
+    rows=$(scan_dirs | awk -F'\t' 'NR == 1 || !seen[$1]++')
+    header=$(printf '%s\n' "$rows" | head -1)
+    printf '%s\n' "$header"
+    data=$(printf '%s\n' "$rows" | tail -n +2)
+    [ -n "$data" ] || return 0
+    ids=$(printf '%s\n' "$data" | cut -f1 | order_effective)
+    # A join keyed on $1, the same NR==FNR shape as scan_dirs' own dedupe and
+    # catalogue_rows below: the first file (the id order) decides the OUTPUT
+    # order, the second (the TSV rows) supplies what gets printed at each id.
+    awk -F'\t' -v OFS='\t' '
+        NR == FNR { seq[++n] = $0; next }
+        { row[$1] = $0 }
+        END { for (i = 1; i <= n; i++) if (seq[i] in row) print row[seq[i]] }
+    ' <(printf '%s\n' "$ids") <(printf '%s\n' "$data")
+}
+
+# ── The bar's DISPLAY ORDER, independent of what scan_dirs happens to find ──
+#
+# $ORDER is a user's own list, one id per line, written only by order_move()
+# below. Ids in it come first, in that order; anything scan_dirs found that
+# $ORDER has never heard of — freshly installed, or written before ordering
+# existed at all — is appended after, in whatever order it arrived in on
+# stdin (scan_dirs' own order, unless a caller already reordered it). An id in
+# $ORDER that no longer exists is silently dropped: there is nothing left to
+# reorder for a plugin that was removed, and it must not leave a gap.
+#
+# No bash arrays, to match the rest of this file — the same two-file NR==FNR
+# join scan() itself now uses.
+ORDER="$CONF_HOME/synui/plugins-order.state"
+
+order_effective() {  # order_effective <<< "id\nid\n..." (current/natural order)
+    [ -r "$ORDER" ] || { cat; return; }
+    awk '
+        NR == FNR { pos[$0] = ++n; next }
+        {
+            if ($0 in pos) { at[pos[$0]] = $0 }
+            else           { rest[++r] = $0 }
+        }
+        END {
+            for (i = 1; i <= n; i++) if (i in at) print at[i]
+            for (i = 1; i <= r; i++) print rest[i]
+        }
+    ' "$ORDER" -
+}
+
+order_write() {  # order_write < list-on-stdin
+    mkdir -p "$(dirname "$ORDER")"
+    local tmp="$ORDER.tmp.$$"
+    cat > "$tmp"
+    # Through a temp file and mv, like every other state file synui writes:
+    # truncating the real one and dying mid-write loses the whole order.
+    mv "$tmp" "$ORDER"
+}
+
+# Swap <id> with its neighbour on whichever side <up|down> names, in the
+# CURRENT effective order (scan() already applies order_effective, so
+# scan_once's own id column already IS that order — nothing here recomputes
+# it a second time). A no-op at either end: idx 1 has no "up", the last row
+# has no "down", and both are simply the list handed back unchanged.
+order_move() {  # order_move <id> <up|down>
+    local id=$1 dir=$2
+    scan_once | tail -n +2 | cut -f1 | awk -v id="$id" -v dir="$dir" '
+        { a[NR] = $0; if ($0 == id) idx = NR }
+        END {
+            n = NR
+            if (idx == 0) { for (i = 1; i <= n; i++) print a[i]; exit }
+            if (dir == "up"   && idx > 1)  { t = a[idx]; a[idx] = a[idx-1]; a[idx-1] = t }
+            if (dir == "down" && idx < n)  { t = a[idx]; a[idx] = a[idx+1]; a[idx+1] = t }
+            for (i = 1; i <= n; i++) print a[i]
+        }
+    ' | order_write
+}
 
 scan_dirs() {
     local d p id name desc kinds entry why on panel svc
@@ -1104,7 +1185,9 @@ case "${1:-list}" in
             on|off) set_state "$id" "$want" ;;
             toggle) if state_on "$id"; then set_state "$id" off; want=off
                     else set_state "$id" on; want=on; fi ;;
-            *) printf 'synui-plugins: on, off or toggle — not %s\n' "$want" >&2; exit 2 ;;
+            up|down) order_move "$id" "$want" ;;
+            *) printf 'synui-plugins: on, off, toggle, up or down — not %s\n' "$want" >&2
+               exit 2 ;;
         esac
         printf '%s: %s\n' "$id" "$want"
         ;;

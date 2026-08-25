@@ -1371,6 +1371,16 @@ test('plugins', plugins_sh,
      env     : ['SYNUI_BAR=' + meson.current_source_dir() / 'quickshell'],
      timeout : 60)
 
+# The bar's own row order for plugin widgets — separate from plugins.sh's
+# refusal/enable coverage the way apply_theme_dock_alpha.sh sits beside
+# apply_theme_bar_alpha.sh: one file, one question, kept small enough that a
+# failure names exactly what broke.
+plugin_order_sh = find_program('tests/plugin_order.sh')
+test('plugin_order', plugin_order_sh,
+     args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],
+     env     : ['SYNUI_BAR=' + meson.current_source_dir() / 'quickshell'],
+     timeout : 60)
+
 # ⛔ THE MODULE A PLUGIN IMPORTS, CHECKED AS A UNIT. plugins.sh proves the
 # manager will OFFER a widget and plugin_load.sh proves one RUNS; neither says
 # anything about qs.Ui / qs.Commons themselves — and a typo in Style.qml is not

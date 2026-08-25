@@ -29,6 +29,15 @@ PopupWindow {
     property string output: ""
     property int    anchorX: 0
 
+    // The plugin section below, unlike everything above it, is NOT filtered
+    // by output — see that section's own note for why. Filtered to
+    // `unsupported === ""` here rather than in the delegate: a plugin the bar
+    // cannot host has no switch to offer, and the row's own index (used to
+    // dim the first ▲ and the last ▾) has to be an index into the list that
+    // is actually on screen, not into Plugins.all before this filter runs.
+    readonly property var hostablePlugins:
+        Plugins.all.filter(p => p.unsupported === "")
+
     // The window this menu hangs off, passed in by the bar.
     //
     // It CANNOT be discovered from here. A PopupWindow is not an Item, so it has
@@ -177,6 +186,140 @@ PopupWindow {
                         // Stays open on purpose — fitting a narrow monitor
                         // usually means turning off two or three things.
                         onClicked: BarConfig.toggle(menu.output, row.modelData.key)
+                    }
+                }
+            }
+
+            /*
+             * ── Plugin widgets ───────────────────────────────────────────────
+             *
+             * Third-party bar widgets (see Plugins.qml / synui-plugins),
+             * checked and ordered from the same menu the built-in modules
+             * above are — a plugin is a bar widget like Clock or Volume, and
+             * finding its switch meant knowing to open a whole separate
+             * Plugin Manager window for a toggle this menu already draws for
+             * everything else.
+             *
+             * ⚠ ONE LIST FOR THE WHOLE DESK, NOT PER OUTPUT. Every toggle
+             * above writes bar.json keyed on `menu.output` because a narrow
+             * monitor and a wide one reasonably disagree about which built-in
+             * modules fit; a plugin is somebody's own widget and "on for this
+             * monitor, off for that one" is not a distinction anyone has
+             * asked this menu for. `Plugins.setEnabled` writes plugins.state,
+             * which has no notion of an output at all, and every bar reads
+             * the same file — so the row here reads the SAME state and sets
+             * it the SAME way regardless of which monitor's menu is open.
+             *
+             * Filtered to `unsupported === ""`: a plugin the bar cannot host
+             * has no switch to offer here — `synui-plugins list` names the
+             * reason, and a checkbox nothing will ever draw for is worse than
+             * no row at all.
+             *
+             * Order matches the bar's own: Plugins.all is already in scan()'s
+             * order, which is the order synui-plugins <id> up/down writes —
+             * so dragging nothing, this list IS the reorder control.
+             */
+            Text {
+                visible: menu.hostablePlugins.length > 0
+                text: "Plugins"
+                color: Theme.magenta
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+                font.letterSpacing: 1
+                topPadding: 4
+                bottomPadding: 4
+            }
+
+            Repeater {
+                id: pluginRows
+                model: menu.hostablePlugins
+
+                delegate: Rectangle {
+                    id: prow
+                    required property var modelData
+                    required property int index
+
+                    width: col.width
+                    height: 22
+                    radius: Theme.radius
+                    color: prowMouse.containsMouse ? Theme.hoverBg : "transparent"
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                    Text {
+                        id: pbox
+                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                        text: prow.modelData.enabled ? "[x]" : "[ ]"
+                        color: prow.modelData.enabled ? Theme.cyan : Theme.fgDim
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                    }
+
+                    Text {
+                        anchors {
+                            left: pbox.right; leftMargin: 8
+                            right: pmoveUp.left; rightMargin: 6
+                            verticalCenter: parent.verticalCenter
+                        }
+                        text: prow.modelData.name
+                        color: prow.modelData.enabled ? Theme.popupFgOn(menu.backdrop)
+                                                       : Theme.popupFgDimOn(menu.backdrop)
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+
+                    // ▲▼ rather than a drag handle: a menu that closes on a
+                    // click outside it and re-anchors on every reopen is a bad
+                    // home for a drag gesture, and a fixed target you click
+                    // twice moves a plugin exactly as far a drag would with no
+                    // chance of missing the drop.
+                    Text {
+                        id: pmoveUp
+                        anchors { right: pmoveDown.left; rightMargin: 2
+                                  verticalCenter: parent.verticalCenter }
+                        text: "▴"
+                        color: prow.index > 0 ? Theme.popupFgOn(menu.backdrop)
+                                               : Theme.fgDim
+                        font.pixelSize: 11
+                        MouseArea {
+                            anchors { fill: parent; margins: -4 }
+                            enabled: prow.index > 0
+                            hoverEnabled: true
+                            onEntered: closeTimer.stop()
+                            onExited: closeTimer.restart()
+                            onClicked: Plugins.moveUp(prow.modelData.id)
+                        }
+                    }
+                    Text {
+                        id: pmoveDown
+                        anchors { right: parent.right; rightMargin: 6
+                                  verticalCenter: parent.verticalCenter }
+                        text: "▾"
+                        color: prow.index < pluginRows.count - 1
+                               ? Theme.popupFgOn(menu.backdrop) : Theme.fgDim
+                        font.pixelSize: 11
+                        MouseArea {
+                            anchors { fill: parent; margins: -4 }
+                            enabled: prow.index < pluginRows.count - 1
+                            hoverEnabled: true
+                            onEntered: closeTimer.stop()
+                            onExited: closeTimer.restart()
+                            onClicked: Plugins.moveDown(prow.modelData.id)
+                        }
+                    }
+
+                    MouseArea {
+                        id: prowMouse
+                        // Left of the arrows only — the arrows are their own
+                        // MouseAreas on top of this one and would otherwise
+                        // toggle the plugin AND move it on the same click.
+                        anchors { left: parent.left; right: pmoveUp.left
+                                  top: parent.top; bottom: parent.bottom }
+                        hoverEnabled: true
+                        onEntered: closeTimer.stop()
+                        onExited: closeTimer.restart()
+                        onClicked: Plugins.setEnabled(prow.modelData.id,
+                                                       !prow.modelData.enabled)
                     }
                 }
             }

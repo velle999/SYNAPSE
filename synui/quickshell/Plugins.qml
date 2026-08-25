@@ -53,6 +53,24 @@ Singleton {
     function rescan() { scanProc.running = true }
 
     /*
+     * ── Turning a plugin on or off, and reordering it ───────────────────────
+     *
+     * execDetached, never a shared Process: PostItState.qml and PluginHost.qml
+     * both carry the same note — a Process object runs ONE child at a time, so
+     * clicking two checkboxes in the bar menu before the first exits would
+     * silently drop the second (Quickshell's own `running = true` on an
+     * already-running Process is a no-op, not a queue). There is nothing here
+     * to read back either: `synui-plugins` writes plugins.state / plugins-
+     * order.state, and the FileView watches below bring the change back with
+     * no IPC, exactly like every toggle already on this menu.
+     */
+    function setEnabled(id, on) {
+        Quickshell.execDetached(["synui-plugins", id, on ? "on" : "off"])
+    }
+    function moveUp(id)   { Quickshell.execDetached(["synui-plugins", id, "up"]) }
+    function moveDown(id) { Quickshell.execDetached(["synui-plugins", id, "down"]) }
+
+    /*
      * ── Every bar on the desk, so a widget can reach its peers ──────────────
      *
      * A bar surface exists per monitor and the Variants that makes them lives
@@ -147,6 +165,18 @@ Singleton {
         /* No file is the ordinary case, not an error: it means nobody has
          * turned a plugin on. The scan above still ran and still listed what is
          * installed. */
+        onLoadFailed: {}
+    }
+
+    /* Same arrangement, for `synui-plugins <id> up|down`'s file: a rescan
+     * brings the reordered `all` (and so `active`) back with no IPC. `scan`
+     * itself does the reordering — this file only says WHEN to ask again. */
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/plugins-order.state"
+        watchChanges: true
+        onFileChanged: root.rescan()
+        // No file is the ordinary case: nobody has moved a plugin yet, and the
+        // scan's own order (install order) stands.
         onLoadFailed: {}
     }
 }

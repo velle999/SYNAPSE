@@ -1512,7 +1512,37 @@ pkgver=0.1.0
 #   sentinel bar_opacity uses, so "unset" can be told apart from "chosen
 #   0.72" for the first time. Pinned by a new apply_theme_dock_alpha.sh,
 #   mirroring apply_theme_bar_alpha.sh.
-pkgrel=483
+
+# 484: the bar's own right-click menu grew a Plugins section — a checkbox per
+#   hostable plugin, plus ▲▼ to reorder it, without opening the separate
+#   Plugin Manager window.
+#   `synui-plugins <id> up|down` is new: it writes plugins-order.state, one id
+#   per line, and scan() now reorders every row to match before Plugins.qml
+#   ever sees them — scan_dirs' own order was a directory listing (effectively
+#   alphabetical by plugin folder name) and nobody had chosen it. An id never
+#   reordered is appended after the ones that have been, in scan_dirs' own
+#   order; an id removed from disk is silently dropped rather than leaving a
+#   gap, and reinstalling it under the same id returns it to where it was.
+#   Plugins.qml gained setEnabled()/moveUp()/moveDown(), all execDetached
+#   (never a shared Process — PostItState.qml and PluginHost.qml both carry
+#   the same note: `running = true` on an already-running Process is a silent
+#   no-op, not a queue, and clicking two rows before the first exits would
+#   drop the second) — and a FileView on plugins-order.state beside the
+#   existing plugins.state one, so a reorder reaches the bar with no IPC.
+#   ⚠ ONE LIST FOR THE WHOLE DESK, NOT PER OUTPUT. Every row above it in the
+#   menu is per-monitor (bar.json, keyed on the output), but plugins.state has
+#   no notion of an output and every bar reads the same file — a plugin on for
+#   one monitor and off for another was never a distinction anyone asked this
+#   menu for, so the new rows write and read the SAME state regardless of
+#   which monitor's menu is open.
+#   ▲▼ rather than a drag handle: a popup that closes on a click outside it
+#   and re-anchors on every reopen is a bad home for a drag gesture. Refused
+#   (unhostable) plugins are not offered a row at all — nothing a checkbox
+#   here could turn on would ever draw.
+#   Pinned by a new plugin_order.sh, beside plugins.sh's own refusal/enable
+#   coverage the way apply_theme_dock_alpha.sh sits beside apply_theme_bar_
+#   alpha.sh — one file, one question.
+pkgrel=484
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
