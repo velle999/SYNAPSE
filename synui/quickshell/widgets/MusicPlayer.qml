@@ -80,6 +80,27 @@ WidgetFrame {
     // glass level is not there — the note's case exactly.
     inkOnBackdrop: true
 
+    /*
+     * ⚠ EVERYTHING BELOW DRAWS THROUGH accentInk, NOT accent.
+     *
+     * `accent` above is what this widget ASKS for; accentInk is that colour
+     * after WidgetFrame has restored it onto whatever the card is actually
+     * sitting on — same correction `ink` has always had, and the analog clock's
+     * neon face is what proved it was missing.
+     *
+     * It matters here because Theme.magenta is the WALLPAPER'S accent, and this
+     * card at a low glass level is barely there, so the accent is drawn close
+     * to the picture it was measured from. Two of these are not decoration: the
+     * artist line under the title is 9px of accent text with no outline behind
+     * it, and the progress fill is a mark whose whole job is to be visible
+     * against its own track.
+     *
+     * The washes and borders go through it too, and that is the point — one
+     * accent, corrected once. Splitting it would put a corrected glyph inside
+     * an uncorrected wash, which is the same colour disagreeing with itself on
+     * one button.
+     */
+
     homeEdgeH: "left"; homeEdgeV: "bottom"
     homeMarginX: 20
     // Clear of the visualiser when both are on, the same courtesy BigClock pays.
@@ -312,7 +333,7 @@ WidgetFrame {
                 text: Icons.mediaNote
                 font.family: Theme.iconFamily
                 font.pixelSize: 24
-                color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b,
+                color: Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b,
                                root.haveAny ? 0.85 : 0.35)
             }
 
@@ -397,7 +418,7 @@ WidgetFrame {
                 width: parent.width
                 text: root.whoText
                 visible: text !== ""
-                color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.85)
+                color: Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.85)
                 font.family: Theme.fontFamily
                 font.pixelSize: 9
                 font.letterSpacing: 0.8
@@ -462,11 +483,11 @@ WidgetFrame {
                     radius: 8
                     color: !usable ? "transparent"
                           : hover.hovered
-                            ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
+                            ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.22)
                             : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.08)
                     border.width: 1
                     border.color: usable && hover.hovered
-                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.55)
+                        ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.55)
                         : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, usable ? 0.14 : 0.06)
 
                     Text {
@@ -476,7 +497,7 @@ WidgetFrame {
                         font.pixelSize: btn.modelData.big ? 13 : 11
                         color: !btn.usable ? Qt.rgba(root.ink.r, root.ink.g,
                                                      root.ink.b, 0.25)
-                             : btn.modelData.big ? root.accent : root.ink
+                             : btn.modelData.big ? root.accentInk : root.ink
                     }
 
                     HoverHandler { id: hover; enabled: btn.usable }
@@ -520,7 +541,7 @@ WidgetFrame {
             Rectangle {
                 height: parent.height
                 radius: parent.radius
-                color: root.accent
+                color: root.accentInk
                 width: {
                     if (!root.haveProgress) return 0
                     const f = root.position / root.player.length
@@ -549,11 +570,11 @@ WidgetFrame {
             height: 20
             radius: 6
             color: chipHover.hovered || root.browsing
-                 ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.18)
+                 ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.18)
                  : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.07)
             border.width: 1
             border.color: root.browsing
-                ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.45)
+                ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.45)
                 : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.12)
 
             Text {
@@ -562,7 +583,7 @@ WidgetFrame {
                 text: Icons.mediaNote
                 font.family: Theme.iconFamily
                 font.pixelSize: 10
-                color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.9)
+                color: Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.9)
             }
 
             Text {
@@ -672,13 +693,13 @@ WidgetFrame {
                 height: sources.height
                 radius: 6
                 color: current
-                     ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.24)
+                     ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.24)
                      : srcHover.hovered
                        ? Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.13)
                        : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.06)
                 border.width: 1
                 border.color: current
-                    ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.55)
+                    ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.55)
                     : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.10)
 
                 Text {
@@ -745,7 +766,7 @@ WidgetFrame {
                 height: 26
                 radius: 5
                 color: itemHover.hovered && playable
-                     ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
+                     ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.16)
                      : "transparent"
 
                 Text {
@@ -856,11 +877,11 @@ WidgetFrame {
                 height: 22
                 radius: 6
                 color: errandHover.hovered
-                     ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.30)
-                     : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
+                     ? Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.30)
+                     : Qt.rgba(root.accentInk.r, root.accentInk.g, root.accentInk.b, 0.16)
                 border.width: 1
-                border.color: Qt.rgba(root.accent.r, root.accent.g,
-                                      root.accent.b, 0.50)
+                border.color: Qt.rgba(root.accentInk.r, root.accentInk.g,
+                                      root.accentInk.b, 0.50)
 
                 Text {
                     id: errandLabel
