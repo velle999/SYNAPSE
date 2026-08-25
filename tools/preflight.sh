@@ -216,6 +216,16 @@ pkgdeps() {
     sed -e 's/[<>=].*$//' -e '/^$/d'
 }
 
+# source= as separate entries, one per line, EXPANDED. Same subshell contract
+# as pkgdeps: the specs are written `git+$url.git#tag=v$pkgver` and the clone
+# directory makepkg creates is named from the resolved value, so a scrape reads
+# `$url` and reports a directory that never existed. (It did, on eight
+# components, the first time this check was written.)
+pkgsources() {
+    ( set +e +u; cd "$1" 2>/dev/null && . ./PKGBUILD >/dev/null 2>&1 &&
+      printf '%s\n' "${source[@]}" ) 2>/dev/null | sed '/^$/d'
+}
+
 # What a sed-scraper would have read out of the same line. Not used to decide
 # anything — used to say "a scraper would misread this", which is the shape of
 # bug 2 and the reason limine-mkinitcpio-hook bricked the updater for a day.
@@ -820,6 +830,74 @@ check_icons() {
     return 0
 }
 
+# ── leavings: a built tree must not look like an edited one ──
+#
+# ⛔ THE FAILURE THIS CATCHES IS AN UPDATE THAT NEVER ARRIVES. syn-update builds
+# in its own clone (/var/lib/synapse-src) and refuses to fetch when that clone
+# is dirty — and its dirt check is `git status --porcelain`, which counts
+# UNTRACKED files. So a component that has only ever been BUILT there looks
+# exactly like one somebody EDITED, and every later check dies with "local
+# modifications" until a human clears it by hand. Nothing was edited.
+#
+# makepkg drops two kinds of directory next to a PKGBUILD, and both need a
+# .gitignore rule in the same commit as the package:
+#
+#   <pkg>/src/        the srcdir, for any package without a tracked src/ of
+#                     its own (synui, synguard, synapd, synsh, synnet and
+#                     synapse_kmod have real ones — a blanket src/ rule would
+#                     hide those, which is why the rules are per package)
+#   <pkg>/<clone>/    makepkg's cached bare clone, for a git+ source, where
+#                     <clone> is the source's `name::` prefix or the basename
+#                     of its URL — NOT the package name. Assuming otherwise
+#                     reports three false positives on this tree.
+#
+# Hit twice: cliamp (2026-08-16) and syn-gfn (2026-08-25), the second of which
+# stopped the update checker on a laptop that had built it.
+check_leavings() {
+    local f pkg src line spec clone bad=$FINDINGS n=0
+
+    while IFS= read -r f; do
+        pkg=${f%/PKGBUILD}
+        n=$((n + 1))
+
+        # A package that TRACKS files under src/ keeps its src/; makepkg
+        # unpacks under it into src/<name>-<ver>/, which the generic rule
+        # already covers.
+        if [ -z "$(git ls-files "$pkg/src" | head -1)" ]; then
+            git check-ignore -q "$pkg/src/" || fail leavings \
+                "$pkg/src/ is not ignored — a build there dirties the tree" \
+                "makepkg creates it for every package with a source array, and" \
+                "syn-update counts untracked files as local modifications: the" \
+                "first machine to BUILD $pkg stops being able to UPDATE, with" \
+                "\"refusing to overwrite local changes\" and nothing edited." \
+                "Fix: add '$pkg/src/' to .gitignore in this commit."
+        fi
+
+        # …and the cached clone of a git+ source, whose directory is named by
+        # the source spec rather than by the package.
+        while IFS= read -r spec; do
+            case "$spec" in
+                *::git+*) clone=${spec%%::git+*} ;;
+                git+*)    clone=${spec#git+}
+                          clone=${clone%%#*}; clone=${clone%%\?*}
+                          clone=${clone##*/}; clone=${clone%.git} ;;
+                *)        continue ;;
+            esac
+            [ -n "$clone" ] || continue
+            git check-ignore -q "$pkg/$clone/" || fail leavings \
+                "$pkg/$clone/ is not ignored — makepkg caches the clone there" \
+                "SRCDEST is the PKGBUILD's own directory for a git+ source, so" \
+                "the bare clone lands beside it and untracked. Same consequence" \
+                "as src/ above: the machine that builds it cannot update again." \
+                "Fix: add '$pkg/$clone/' to .gitignore in this commit."
+        done < <(pkgsources "$pkg")
+    done < <(git ls-files '*/PKGBUILD')
+
+    [ "$FINDINGS" -eq "$bad" ] && ok leavings \
+        "$n component(s) — a build leaves nothing that looks like an edit"
+    return 0
+}
+
 # ── Run ──────────────────────────────────────────────────────
 
 case "$MODE" in
@@ -835,6 +913,7 @@ check_installer
 check_pkgver
 check_order
 check_icons
+check_leavings
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \

@@ -71,6 +71,14 @@ tepris/src/
 # is that repo at the pinned _commit, plus the two patches next to the PKGBUILD,
 # which ARE tracked — they are the whole of what SynapseOS changed.
 fetch/src/
+# The rest of the script/asset packages, for exactly the same reason. Every one
+# of these was missing when it was added, and each one is a syn-update that
+# refuses to fetch on the first machine that builds it — see tools/preflight.sh's
+# `leavings` check, which now fails the commit instead of the update.
+synapse-llama/src/
+synapse-wallpapers/src/
+vibe/src/
+syn-gfn/src/
 # Same again for cliamp (bjarneo/cliamp), pinned by tag=v$pkgver. src/ holds the
 # throwaway clone plus the GOPATH the Go build fills in. Neither was ignored
 # when cliamp became a package, so the first build in /var/lib/synapse-src left
