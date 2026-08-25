@@ -1364,6 +1364,19 @@ static int apps_table(struct row *rows, int max)
 		rows[n++] = (struct row){ "greenlight", "Greenlight",
 			greenlight_prog(), "greenlight", "app", "play",
 			true, false, true, false };
+	/* GeForce NOW, which on this desktop is a browser pointed at the
+	 * service — see syn-gfn, and the note in its own launcher for why the
+	 * Electron client is not what runs here.
+	 *
+	 * ⚠ pointer AND keys, unlike the other cloud tiles. Moonlight and
+	 * Greenlight are applications with their own controller support;
+	 * GeForce NOW is a WEB PAGE until a game starts, so choosing one takes
+	 * a cursor, and signing in the first time takes a keyboard. `full`
+	 * because a browser opens a window and a window on a television is a
+	 * titlebar and a strip of wallpaper around somebody's game. */
+	if (have("syn-gfn"))
+		rows[n++] = (struct row){ "syn-gfn", "GeForce NOW", "syn-gfn",
+			"syn-gfn", "app", "play", true, true, true, false };
 
 	/* ── media ── */
 	{
@@ -1499,6 +1512,172 @@ static int big_apps(bool rec)
 			       rows[i].full ? "   [fullscreen]" : "",
 			       rows[i].transient ? "   [ends on return]" : "");
 	}
+	return EX_OK;
+}
+
+/* ── where the caches live ───────────────────────────────────────────────── */
+
+/*
+ * $XDG_CACHE_HOME/syn-arcade/<rel>, or ~/.cache/syn-arcade/<rel>.
+ *
+ * The cache and not the config directory, and the distinction is load-bearing
+ * for the test suite as much as for tidiness: everything under here is
+ * DERIVED — headlines off the internet, servers that answered a broadcast —
+ * and deleting the lot costs a refresh and nothing else.
+ */
+static bool cache_path(char *buf, size_t n, const char *rel)
+{
+	const char *xdg = getenv("XDG_CACHE_HOME");
+	if (xdg && *xdg)
+		return snprintf(buf, n, "%s/syn-arcade/%s", xdg, rel) < (int)n;
+
+	char sub[256];
+	snprintf(sub, sizeof(sub), ".cache/syn-arcade/%s", rel);
+	return home_path(buf, n, sub);
+}
+
+/* How old the file is in seconds, or -1 if it is not there. */
+static long file_age(const char *path)
+{
+	struct stat st;
+	if (stat(path, &st) != 0)
+		return -1;
+	time_t now = time(NULL);
+	if (now < st.st_mtime)
+		return 0;		/* clock stepped backwards */
+	return (long)(now - st.st_mtime);
+}
+
+/*
+ * Print a cache file, and say whether there was one.
+ *
+ * The cache IS the record text, so this is a copy — no parse, no re-encode,
+ * and no chance of the cached form and the printed form disagreeing.
+ */
+static bool cache_print(const char *path)
+{
+	char *text = read_file(path);
+	if (!text)
+		return false;
+	fputs(text, stdout);
+	free(text);
+	return true;
+}
+
+/* Whether anything at all is allowed to touch the network.
+ *
+ * The suite sets this. Two of the commands below talk to the internet and to
+ * the local network, and a test run that did either would be a test whose
+ * result depended on the machine it ran on and on whether the building had
+ * working DNS that morning. */
+static bool net_allowed(void)
+{
+	const char *e = getenv("SYN_ARCADE_NO_NET");
+	return !(e && *e && strcmp(e, "0") != 0);
+}
+
+/* ── what was opened recently ────────────────────────────────────────────── */
+
+/*
+ * The last few tiles somebody actually pressed, newest first, one id per line.
+ *
+ * ⚠ IN THE CACHE, and it is worth saying why, because this is history rather
+ * than something derived from the network. Losing it costs the ORDER of one
+ * bar and nothing else — the tiles are all still on their own shelves, and the
+ * next thing pressed starts the list again. That is the cache's own test, and
+ * it keeps every file this binary writes under one directory the suite already
+ * redirects.
+ *
+ * ⚠ IDS, NOT ROWS. A recorded tile is looked up in the apps table when the
+ * shelf is drawn, so a tile that has gone away (the program was removed) is
+ * simply not drawn, and one that comes back returns to its place — the same
+ * arrangement plugins-order.state has, and for the same reason: a copy of the
+ * row here would be a second definition of the tile to fall out of step.
+ */
+#define RECENT_MAX 8
+
+static bool recent_path(char *buf, size_t n)
+{
+	return cache_path(buf, n, "recent");
+}
+
+/*
+ * Note a press. Rewrites the list whole with `id` at the front.
+ *
+ * ⚠ EVERY FAILURE IS SILENT, deliberately. This runs on the way to launching
+ * something, and a launcher that refuses to start a game because it could not
+ * write a history file would be a worse program than one with no history at
+ * all. The list is a convenience; the launch is the job.
+ */
+static void recent_note(const char *id)
+{
+	char path[SYN_PATH];
+	if (!id || !*id || !recent_path(path, sizeof(path)))
+		return;
+
+	char buf[1024];
+	int len = snprintf(buf, sizeof(buf), "%s\n", id);
+	if (len < 0 || (size_t)len >= sizeof(buf))
+		return;
+
+	/* The old list, minus this id wherever it used to be — pressing
+	 * something twice must move it to the front rather than list it
+	 * twice. NULL is the ordinary first run. */
+	char *old = read_file(path);
+	if (old) {
+		int kept = 1;
+		char *save = NULL;
+		for (char *ln = strtok_r(old, "\n", &save);
+		     ln && kept < RECENT_MAX; ln = strtok_r(NULL, "\n", &save)) {
+			char *t = trim(ln);
+			if (!*t || !strcmp(t, id))
+				continue;
+			int m = snprintf(buf + len, sizeof(buf) - (size_t)len,
+					 "%s\n", t);
+			if (m < 0 || (size_t)(len + m) >= sizeof(buf))
+				break;
+			len += m;
+			kept++;
+		}
+		free(old);
+	}
+
+	if (mkdir_parents(path) != 0)
+		return;
+	(void)write_file_inplace(path, buf);
+}
+
+/* `big recent` — the ids, newest first. One column, because the shell already
+ * holds every tile and needs nothing here but the order. */
+static int big_recent(bool rec)
+{
+	char path[SYN_PATH];
+	char *text = NULL;
+	if (recent_path(path, sizeof(path)))
+		text = read_file(path);
+
+	if (rec)
+		rec_row(1, "id");
+
+	int n = 0;
+	if (text) {
+		char *save = NULL;
+		for (char *ln = strtok_r(text, "\n", &save);
+		     ln && n < RECENT_MAX; ln = strtok_r(NULL, "\n", &save)) {
+			char *t = trim(ln);
+			if (!*t)
+				continue;
+			if (rec)
+				rec_row(1, t);
+			else
+				printf("%s\n", t);
+			n++;
+		}
+		free(text);
+	}
+
+	if (!rec && !n)
+		puts("(nothing opened from the television yet)");
 	return EX_OK;
 }
 
@@ -2102,8 +2281,11 @@ static int big_run(const char *id, bool wait_for_it)
 	 * cache `big media` wrote, so the shell never hands us one. */
 	if (strncmp(id, "plex-", 5) == 0 || strncmp(id, "jellyfin-", 9) == 0) {
 		char url[512];
-		if (media_url(id, url, sizeof(url)))
+		if (media_url(id, url, sizeof(url))) {
+			if (wait_for_it)
+				recent_note(id);
 			return big_open(url, wait_for_it);
+		}
 		fprintf(stderr, "syn-arcade: no media server called '%s' — "
 				"`syn-arcade big media --refresh` looks again\n", id);
 		return EX_USAGE;
@@ -2148,6 +2330,16 @@ static int big_run(const char *id, bool wait_for_it)
 		 * the shell's launch path and not to the verb. */
 		if (!wait_for_it)
 			return spawn_detached(argv);
+
+		/* ⚠ NOTED HERE AND NOT AT THE TOP OF THIS FUNCTION, which is
+		 * two guards' worth of difference. Above this point sit the
+		 * tile with no command (Desktop, which is the way OUT of big
+		 * screen mode and not an application) and the --wait-less
+		 * call, which is somebody at a prompt or a system action.
+		 * Neither is a press worth remembering, and a "recently
+		 * opened" row whose first entry is "go back to the desktop" is
+		 * a row nobody reads twice. */
+		recent_note(id);
 
 		/* The `transient` column answers BOTH halves: what gets
 		 * signalled on the way back, and what may be insisted upon if
@@ -2334,67 +2526,6 @@ static int big_open(const char *url, bool wait_for_it)
 	 * `full` column exists for — nothing about a web page fills a
 	 * television by itself. So this one is always true. */
 	return spawn_wait(argv, true, false);
-}
-
-/* ── where the caches live ───────────────────────────────────────────────── */
-
-/*
- * $XDG_CACHE_HOME/syn-arcade/<rel>, or ~/.cache/syn-arcade/<rel>.
- *
- * The cache and not the config directory, and the distinction is load-bearing
- * for the test suite as much as for tidiness: everything under here is
- * DERIVED — headlines off the internet, servers that answered a broadcast —
- * and deleting the lot costs a refresh and nothing else.
- */
-static bool cache_path(char *buf, size_t n, const char *rel)
-{
-	const char *xdg = getenv("XDG_CACHE_HOME");
-	if (xdg && *xdg)
-		return snprintf(buf, n, "%s/syn-arcade/%s", xdg, rel) < (int)n;
-
-	char sub[256];
-	snprintf(sub, sizeof(sub), ".cache/syn-arcade/%s", rel);
-	return home_path(buf, n, sub);
-}
-
-/* How old the file is in seconds, or -1 if it is not there. */
-static long file_age(const char *path)
-{
-	struct stat st;
-	if (stat(path, &st) != 0)
-		return -1;
-	time_t now = time(NULL);
-	if (now < st.st_mtime)
-		return 0;		/* clock stepped backwards */
-	return (long)(now - st.st_mtime);
-}
-
-/*
- * Print a cache file, and say whether there was one.
- *
- * The cache IS the record text, so this is a copy — no parse, no re-encode,
- * and no chance of the cached form and the printed form disagreeing.
- */
-static bool cache_print(const char *path)
-{
-	char *text = read_file(path);
-	if (!text)
-		return false;
-	fputs(text, stdout);
-	free(text);
-	return true;
-}
-
-/* Whether anything at all is allowed to touch the network.
- *
- * The suite sets this. Two of the commands below talk to the internet and to
- * the local network, and a test run that did either would be a test whose
- * result depended on the machine it ran on and on whether the building had
- * working DNS that morning. */
-static bool net_allowed(void)
-{
-	const char *e = getenv("SYN_ARCADE_NO_NET");
-	return !(e && *e && strcmp(e, "0") != 0);
 }
 
 /* ── media servers on the network ────────────────────────────────────────── */
@@ -8351,6 +8482,11 @@ int cmd_big(int argc, char **argv)
 		return big_games(rec, opt_present(rest_c, rest, "--all"));
 	if (!strcmp(sub, "apps"))
 		return big_apps(rec);
+	/* The ids of the last few tiles pressed, newest first — the Recent bar
+	 * on the shelves. Written by `run` itself, so there is no second path
+	 * that can launch something without remembering it. */
+	if (!strcmp(sub, "recent"))
+		return big_recent(rec);
 	if (!strcmp(sub, "run"))
 		return big_run(first_operand(rest_c, rest),
 			       opt_present(rest_c, rest, "--wait"));

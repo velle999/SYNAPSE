@@ -1227,6 +1227,115 @@ row=$(PATH="$GLB:$PATH" "$SA" big apps --rec | awk -F'\t' '$1 == "greenlight" { 
 check "...and Flatpak WITHOUT greenlight grows no tile" $?
 rm -f "$GLB/flatpak"
 
+# ── GeForce NOW, which is a browser pointed at a service ────────────────────
+#
+# The tile exists only where syn-gfn does, like every other launcher on the
+# play shelf — and unlike them it wants BOTH a pointer and a keyboard, because
+# it is a web page until a game starts: choosing one takes a cursor and signing
+# in takes letters. A tile that opened GeForce NOW with neither would be a page
+# somebody can look at and not use.
+GFB=$T/gfn-bin
+mkdir -p "$GFB"
+
+# ⚠ ASKED OF THE MACHINE RATHER THAN ASSUMED EITHER WAY. A build host has no
+# syn-gfn and velle's desktop has one, and a check hard-coded to either answer
+# is a check that fails on the other machine for no reason — which is how a
+# suite teaches people to ignore it.
+row=$("$SA" big apps --rec | awk -F'\t' '$1 == "syn-gfn" { print $1 }')
+if command -v syn-gfn >/dev/null 2>&1; then
+    [ "$row" = "syn-gfn" ]
+    check "the GeForce NOW tile is there, because syn-gfn is installed" $?
+else
+    [ -z "$row" ]
+    check "no syn-gfn installed grows no GeForce NOW tile" $?
+fi
+
+printf '#!/bin/sh\nexit 0\n' > "$GFB/syn-gfn"
+chmod +x "$GFB/syn-gfn"
+
+row=$(PATH="$GFB:$PATH" "$SA" big apps --rec \
+      | awk -F'\t' '$1 == "syn-gfn" { print $2 "|" $3 "|" $6 "|" $7 $8 $9 }')
+[ "$row" = "GeForce NOW|syn-gfn|play|111" ]
+check "...and with it, a play-shelf tile that takes a pointer and a keyboard" $?
+
+# ── what was opened recently ────────────────────────────────────────────────
+#
+# ⚠ RECORDED BY `run --wait` ITSELF, which is what makes it impossible to
+# launch something from the television without it being remembered. A list the
+# shell kept would miss every other way in — the `syn game` front door, a dock
+# pin, somebody at a prompt — and disagree with itself the first time one was
+# used.
+recent_ids() { PATH="$GFB:$PATH" "$SA" big recent; }
+
+"$SA" big recent --rec | head -1 | grep -q "^id$"
+check "recent --rec names its one column" $?
+
+"$SA" big recent | grep -qi "nothing opened"
+check "...and says so plainly when nothing has been" $?
+
+PATH="$GFB:$PATH" "$SA" big run syn-gfn --wait >/dev/null 2>&1
+[ "$(recent_ids)" = "syn-gfn" ]
+check "a tile press is remembered" $?
+
+# ⚠ The way OUT is not an application. `desktop` has no command — pressing it
+# closes big screen mode — and a "recently opened" row whose first entry is
+# "go back to the desktop" is a row nobody reads twice.
+"$SA" big run desktop --wait >/dev/null 2>&1
+[ "$(recent_ids)" = "syn-gfn" ]
+check "...and closing the television is not one of them" $?
+
+# ⚠ WITHOUT --wait is somebody at a prompt, or one of the system actions. It
+# opens no window and the television is not stepping aside for it, so it is not
+# a press.
+PATH="$GFB:$PATH" "$SA" big run syn-gfn >/dev/null 2>&1
+[ "$(recent_ids | wc -l)" = 1 ]
+check "...nor is a run with no --wait" $?
+
+# ⚠ A STUB FIRST, AND ON THE FRONT OF PATH. `web` is Firefox, which is
+# installed on any machine this suite is likely to run on — pressing the real
+# one opens a browser and blocks here until somebody closes it.
+printf '#!/bin/sh\nexit 0\n' > "$GFB/firefox"
+chmod +x "$GFB/firefox"
+PATH="$GFB:$PATH" "$SA" big run web --wait >/dev/null 2>&1
+[ "$(recent_ids | head -1)" = "web" ]
+check "the newest press is first" $?
+
+PATH="$GFB:$PATH" "$SA" big run syn-gfn --wait >/dev/null 2>&1
+[ "$(recent_ids | head -1)" = "syn-gfn" ] && [ "$(recent_ids | wc -l)" = 2 ]
+check "...and pressing one again MOVES it rather than listing it twice" $?
+
+# The cap. Eight is a bar's worth of tiles; the ninth press pushes the oldest
+# off rather than growing a row that scrolls forever.
+#
+# ⛔ THE LIST IS SEEDED AND ONE STUB IS PRESSED — never eight real tiles. A
+# tile id names a program that may genuinely be installed on the machine
+# running this suite, and `run --wait` LAUNCHES it and then BLOCKS until it
+# exits: pressing eight of them opened RetroArch on the developer's desktop and
+# sat there waiting for somebody to quit it. A suite that can start somebody's
+# emulator is a suite that gets run once.
+mkdir -p "$XDG_CACHE_HOME/syn-arcade"
+printf 'old-1\nold-2\nold-3\nold-4\nold-5\nold-6\nold-7\nold-8\n' \
+    > "$XDG_CACHE_HOME/syn-arcade/recent"
+
+PATH="$GFB:$PATH" "$SA" big run syn-gfn --wait >/dev/null 2>&1
+[ "$(recent_ids | wc -l)" = 8 ]
+check "the list is capped rather than growing forever" $?
+
+[ "$(recent_ids | head -1)" = "syn-gfn" ]
+check "...with the newest press at the front" $?
+
+recent_ids | grep -qx "old-8"
+[ $? = 1 ]
+check "...and the oldest pushed off the end" $?
+
+# ⚠ An id whose program has gone is KEPT, not swept: the shelf looks each one
+# up and simply does not draw what it cannot find, so reinstalling something
+# returns it to its place. A list that pruned itself would lose that.
+recent_ids | grep -qx "old-1"
+check "an id with nothing behind it is still remembered" $?
+
+rm -f "$GFB/syn-gfn" "$GFB/firefox"
+
 # ── the drawn tile glyphs ───────────────────────────────────────────────────
 #
 # An app tile is a word on a rounded rectangle, so a shelf of them is a list of
@@ -1402,6 +1511,42 @@ check "...and a full pool says so instead of doing nothing" $?
 # elsewhere, and every close aimed at a stale row lands on nothing.
 grep -q '"big", "windows", "--rec"' "$BIGQML"
 check "what is open is ASKED of synui, never remembered" $?
+
+# ── the Recent bar, and the wheel ───────────────────────────────────────────
+#
+# ⚠ ASKED OF big.c, never kept here, for exactly the reason the Running shelf
+# is: `run --wait` records a press, so every way into a tile is remembered and
+# there is no second list to disagree.
+grep -q '"big", "recent", "--rec"' "$BIGQML"
+check "the Recent bar is asked for, not remembered" $?
+
+# ⚠ A BAR, not a shelf of its own. A row of the television spent on four tiles
+# is the mistake the system switches were moved behind Start to undo, and a
+# shelf here would push Games down — the change the shelf order was rearranged
+# to make in the first place.
+grep -q 'title: "Recent", kind: "app"' "$BIGQML"
+check "...and it is a bar, so it costs no row of its own" $?
+
+# Sleep, restart and power off are actions somebody takes, not applications to
+# go back to. One of them at the front of this row after an evening's use would
+# be a power button where a game was.
+grep -q "hit.shelf !== \"system\"" "$BIGQML"
+check "...with the machine's own switches kept out of it" $?
+
+# The wheel goes through the same words the pad and the keyboard do, so it
+# reaches the Start menu and the on-screen keyboard without either knowing a
+# wheel exists.
+grep -q "WheelHandler" "$BIGQML"
+check "a mouse wheel browses the shelves" $?
+
+grep -A22 "WheelHandler" "$BIGQML" | grep -q 'shell.nav(accY > 0 ? "up" : "down")'
+check "...through nav(), like every other input" $?
+
+# ⚠ A notch is 120 units and a touchpad sends a stream of small ones. Acting on
+# every event tears through a shelf; rounding each one to a step moves nothing
+# on a fine wheel. The remainder has to be KEPT.
+grep -A22 "WheelHandler" "$BIGQML" | grep -q "accY += accY > 0 ? -notch : notch"
+check "...accumulating, so a trackpad neither flies nor stalls" $?
 
 says "$SA" big focus | grep -q "needs an app-id"
 check "big focus refuses without an app-id" $?

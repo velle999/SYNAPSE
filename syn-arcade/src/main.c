@@ -82,6 +82,8 @@ static void usage(FILE *f)
 "  big run <id>            press one of them\n"
 "       --wait             stay alive until it closes (the shell uses this to\n"
 "                          know when to come back)\n"
+"  big recent              the ids of the last few tiles pressed, newest\n"
+"                          first — `run --wait` is what records them\n"
 "  big open <url>          a web page, in whichever browser is installed\n"
 "  big windows             what is open — synui's list, not a tally kept here\n"
 "  big focus <app-id>      switch to one of them\n"

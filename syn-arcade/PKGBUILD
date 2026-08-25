@@ -994,7 +994,42 @@ pkgver=0.1.0
 #     monitor.
 #   · the Start menu's keyboard key is S, for Start. It was P, which stood for
 #     nothing and was remembered by nobody.
-pkgrel=43
+# ── 44 ──────────────────────────────────────────────────────────────────────
+#
+# Three things velle asked for from the sofa: GeForce NOW on the television, a
+# row of what was opened recently, and a mouse wheel that browses.
+#
+# · A GeForce NOW tile on the play shelf, wherever syn-gfn is installed. ⚠ It
+#   takes BOTH a pointer and a keyboard, unlike Moonlight and Greenlight beside
+#   it: those are applications with their own controller support, and this is a
+#   WEB PAGE until a game starts — choosing one takes a cursor and signing in
+#   the first time takes letters. `full`, because a browser opens a window and
+#   a window on a television is a titlebar and a strip of wallpaper around
+#   somebody's game.
+#
+# · A Recent bar, newest first, capped at eight. ⚠ RECORDED BY `big run --wait`
+#   ITSELF rather than by the shell, so there is no way into a tile that
+#   forgets to remember it, and no second list to disagree with the first. It
+#   stores IDS and looks each one up when the shelf is drawn, so a tile whose
+#   program has been removed is simply not drawn and returns to its place if it
+#   comes back — the same arrangement synui's plugin order has.
+#   ⚠ It is a BAR (kind "app"), first among Play/Media/Apps, so it costs no row
+#   of its own: a shelf here would push Games down, which is the change the
+#   shelf order was rearranged to undo, and a whole row of a television for
+#   four tiles is the mistake the system switches were moved behind Start to
+#   fix. The way out (`desktop`, which has no command) and every `run` without
+#   `--wait` are deliberately NOT presses — a "recently opened" row whose first
+#   entry is "go back to the desktop" is a row nobody reads twice.
+#
+# · A mouse wheel, mapped onto the same words the pad and the keyboard send, so
+#   it reaches the shelves, the Start menu, the media buttons and the on-screen
+#   keyboard without any of them knowing a wheel exists. ⚠ Accumulated to
+#   120-unit notches with the remainder kept: acting on every event makes a
+#   trackpad tear through fifty covers, and rounding each event to a step makes
+#   a fine wheel move nothing. And it moves the SELECTION, not a view — the
+#   shelves' position is derived from what is selected, so a scrolled view
+#   would snap back the moment anything else moved.
+pkgrel=44
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

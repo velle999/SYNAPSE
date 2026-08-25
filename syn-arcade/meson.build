@@ -111,6 +111,7 @@ install_data(
   'data/icons/heroic.svg',
   'data/icons/moonlight.svg',
   'data/icons/greenlight.svg',
+  'data/icons/syn-gfn.svg',
   'data/icons/music.svg',
   'data/icons/kodi.svg',
   'data/icons/plex.svg',

@@ -144,6 +144,56 @@ ShellRoot {
         }
     }
 
+    // ── what was opened recently ────────────────────────────────────────────
+    //
+    // Ids, newest first, straight out of big.c — which records them in `big
+    // run --wait` itself, so there is no launch path that can miss one and no
+    // list kept here to disagree with it.
+    //
+    // ⚠ THE SHELF IS BUILT BY LOOKING EACH ID UP, not by trusting the file. A
+    // tile whose program has been removed since it was pressed simply is not
+    // found and is not drawn — and when it comes back it returns to its place,
+    // because the id was never rewritten out of the list. The same arrangement
+    // synui's plugin order has, for the same reason: one definition of the
+    // tile, in the apps table, and an order that points at it.
+    //
+    // ⚠ Media servers are in it too. `big media` finds them on the network and
+    // they are tiles like any other — a Plex server pressed last night belongs
+    // on this row as much as the browser does.
+    property var recentIds: []
+
+    Process {
+        id: recentProc
+        command: [shell.bin, "big", "recent", "--rec"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = shell.parseRecords(this.text)
+                shell.recentIds = rows.map(r => r.id).filter(x => !!x)
+            }
+        }
+    }
+
+    function refreshRecent() {
+        if (!recentProc.running) recentProc.running = true
+    }
+
+    readonly property var recentApps: {
+        const pool = shell.apps.concat(shell.media)
+        const out = []
+        for (let i = 0; i < shell.recentIds.length; i++) {
+            const id = shell.recentIds[i]
+            const hit = pool.find(a => a.id === id)
+            // ⚠ NOT the system switches. `shelf = system` means "behind
+            // Start" — sleep, restart, power off — and those are actions
+            // somebody takes, not applications to go back to. One of them at
+            // the front of this row after an evening's use would be a power
+            // button where a game was.
+            if (hit && hit.shelf !== "system") out.push(hit)
+        }
+        return out
+    }
+
     // ── what is open ────────────────────────────────────────────────────────
     //
     // ⚠ ASKED, never remembered. This is `synctl clients` by way of
@@ -451,6 +501,9 @@ ShellRoot {
         // this is that moment. Anything could have opened or closed while the
         // television was out of the way.
         shell.refreshWindows()
+        // …and the thing just closed is the newest entry on the Recent bar,
+        // which big.c wrote while this was away.
+        shell.refreshRecent()
 
         // ⚠ AND THE SELECTION GOES THERE. Without this the shelf is correct
         // and useless: coming back leaves the selection wherever it was, the
@@ -768,11 +821,24 @@ ShellRoot {
         if (shell.games.length)
             out.push({ title: "Games", kind: "game", items: shell.games })
 
-        // ── one row: Play, Media, Apps ──────────────────────────────────────
+        // ── one row: Recent, Play, Media, Apps ──────────────────────────────
         //
-        // All three are `kind: "app"`, which is what marks them as a BAR — a
+        // All of them are `kind: "app"`, which is what marks them as a BAR — a
         // short shelf that shares a row and scrolls rather than claiming one.
         // See isBar() and the packer.
+        //
+        // ⚠ RECENT IS A BAR AND GOES FIRST AMONG THEM, which is what keeps it
+        // free. A shelf of its own would cost a whole row of the television
+        // for four tiles — and it would push Games down, which is the change
+        // the shelf order above was rearranged to undo. As the leftmost bar it
+        // is the first thing on that row and costs nothing.
+        //
+        // Empty until something has been pressed, and then it simply appears:
+        // the same "a shelf that can be empty is not drawn" rule Running
+        // follows, which is also why the selection is remembered by NAME.
+        if (shell.recentApps.length)
+            out.push({ title: "Recent", kind: "app", items: shell.recentApps })
+
         const play = shell.byShelf("play")
         if (play.length) out.push({ title: "Play", kind: "app", items: play })
 
@@ -3864,6 +3930,58 @@ ShellRoot {
                 id: keys
                 anchors.fill: parent
                 focus: true
+
+                // ── the wheel ───────────────────────────────────────────────
+                //
+                // Onto the same words, for the same reason the keyboard is:
+                // one implementation of what a direction does, so a wheel
+                // reaches the Start menu, the on-screen keyboard and the media
+                // buttons without any of them knowing a wheel exists.
+                //
+                // ⚠ ACCUMULATED, NOT ONE EVENT ONE STEP. A mouse notch is 120
+                // units; a touchpad sends a stream of small ones. Acting on
+                // every event would make a trackpad flick tear through fifty
+                // covers, and rounding each event to a step would make a fine
+                // wheel move nothing at all. The remainder is kept, so slow
+                // scrolling still adds up to a step.
+                //
+                // ⚠ AND IT MOVES THE SELECTION rather than scrolling the view.
+                // Nothing here is a Flickable: the shelves' y is DERIVED from
+                // which shelf is selected (see the stage's binding), so a view
+                // scrolled without the selection would snap straight back the
+                // moment anything else moved. Moving the selection scrolls the
+                // view as a consequence, which is also what the d-pad does.
+                //
+                // A tile sliding under a parked cursor then fires hover, which
+                // would fight this — shell.pointerMoved is the guard that
+                // makes it safe, and it is there because a STATIONARY MOUSE
+                // once steered this interface on its own.
+                WheelHandler {
+                    // The pixelDelta a touchpad also sends is deliberately
+                    // ignored: two sources of the same gesture would double
+                    // every step on hardware that reports both.
+                    property real accY: 0
+                    property real accX: 0
+
+                    onWheel: (event) => {
+                        const notch = 120     // one detent, in eighths of a degree
+
+                        accY += event.angleDelta.y
+                        while (Math.abs(accY) >= notch) {
+                            shell.nav(accY > 0 ? "up" : "down")
+                            accY += accY > 0 ? -notch : notch
+                        }
+
+                        // Positive x is a wheel tilted LEFT, which is the same
+                        // direction the selection goes. Most mice have no such
+                        // axis and simply never send this.
+                        accX += event.angleDelta.x
+                        while (Math.abs(accX) >= notch) {
+                            shell.nav(accX > 0 ? "left" : "right")
+                            accX += accX > 0 ? -notch : notch
+                        }
+                    }
+                }
 
                 Keys.onPressed: (event) => {
                     switch (event.key) {

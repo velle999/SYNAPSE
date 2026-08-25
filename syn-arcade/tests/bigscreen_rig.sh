@@ -225,6 +225,16 @@ chmod +x "$TMP/bin/cliamp"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/projectM-pulseaudio"
 chmod +x "$TMP/bin/projectM-pulseaudio"
 
+# ⚠ AND A SEEDED RECENT BAR, because an empty one is not drawn at all — and a
+# shelf that is not drawn cannot show whether it PACKS. Recent is a bar, first
+# among Play/Media/Apps, so it is the entry that decides whether four bars
+# still fit one row of a television or break it into two. That is the exact
+# failure the crowded launcher row above exists to catch, and adding a fourth
+# bar without rendering it would have walked straight past it.
+#
+# `lutris` and `heroic` are stubbed above, so both ids name a real tile here.
+printf 'lutris\nheroic\n' > "$TMP/cache/syn-arcade/recent"
+
 mkfifo "$TMP/nav.fifo"
 
 # Seeded caches, so the news and media shelves have something to draw without

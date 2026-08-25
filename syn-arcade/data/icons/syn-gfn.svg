@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- GeForce NOW: a game that is somewhere else. A cloud with a play mark in
+       it, drawn to this directory's rules — see README. Deliberately not
+       NVIDIA's mark: the tile launches their service through a browser, and a
+       trademark redrawn into a GPL package would say we ship their client. -->
+  <g fill="none" stroke="#cfc6ee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.5 33.5A8.5 8.5 0 0 1 13 16.7 11 11 0 0 1 34 15.2a7.5 7.5 0 0 1 1.5 18.3Z"/>
+    <path d="M20.5 19.5 30 24.5 20.5 29.5Z" stroke="#a78bfa"/>
+  </g>
+</svg>
