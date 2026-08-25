@@ -52,7 +52,7 @@ FloatingWindow {
     readonly property color panel:   "#1e1830"
     readonly property color panelHi: "#2a2142"
     readonly property color ink:     "#e8e3f5"
-    readonly property color dim:     "#9a92b8"
+    readonly property color dim:     "#c0b9d8"
     readonly property color accent:  "#a78bfa"
     readonly property color good:    "#4ec9b0"
     readonly property color bad:     "#f2777a"

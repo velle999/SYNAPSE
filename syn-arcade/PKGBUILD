@@ -1029,7 +1029,7 @@ pkgver=0.1.0
 #   a fine wheel move nothing. And it moves the SELECTION, not a view — the
 #   shelves' position is derived from what is selected, so a scrolled view
 #   would snap back the moment anything else moved.
-pkgrel=45
+pkgrel=46
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

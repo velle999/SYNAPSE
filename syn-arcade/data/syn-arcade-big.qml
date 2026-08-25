@@ -2375,7 +2375,7 @@ ShellRoot {
 
             // ── palette ─────────────────────────────────────────────────────
             readonly property color ink:    "#f2f0fa"
-            readonly property color dim:    "#a49cc4"
+            readonly property color dim:    "#c9c3e2"
             readonly property color accent: "#a78bfa"
 
             // Everything scales off the screen, so the same file is right on a
@@ -2669,9 +2669,27 @@ ShellRoot {
                 anchors { top: runningStrip.bottom; left: parent.left; right: parent.right }
                 anchors.leftMargin: win.u * 1.6
                 anchors.rightMargin: win.u * 1.6
-                height: win.u * 5.2
+
+                /*
+                 * ⚠ TALL ENOUGH FOR WHAT IS IN IT, and it used to be a flat
+                 * 5.2u. A headline is the one selection whose title runs to
+                 * TWO lines — 2.4u of bold text twice over, plus the gap and
+                 * the source line under it, is a little over 7u — and the
+                 * column inside is vertically centred, so the overflow went
+                 * half above and half below. The half below landed on the
+                 * shelf underneath and printed the article's source straight
+                 * over the word "Games".
+                 *
+                 * Bounded by maximumLineCount: 2 on the title, so this grows
+                 * by about two units and never further. The 5.2u floor is what
+                 * it has always been, which is what keeps a one-line title —
+                 * every game, every app, every action — sitting exactly where
+                 * it sits today.
+                 */
+                height: Math.max(win.u * 5.2, heroText.implicitHeight + win.u * 0.9)
 
                 Column {
+                    id: heroText
                     anchors.verticalCenter: parent.verticalCenter
                     // ⚠ Narrower than it was (0.7), and that is not a
                     // reduction. The right-hand side of this band is where the
@@ -2895,7 +2913,15 @@ ShellRoot {
                                     // into, which is more than the 3% a tile takes.
                                     clip: true
 
-                                    opacity: shell.row === shelf.shelfRow ? 1.0 : 0.45
+                                    // ⚠ A FLOOR, NOT A FADE. This says "not the
+                                    // row you are on"; it was 0.45, which took
+                                    // the secondary ink on an unfocused shelf
+                                    // down to 2.4:1 against the background —
+                                    // under every legibility bar there is, and
+                                    // on a screen being read from a sofa. The
+                                    // shelf still reads as the quieter one at
+                                    // 0.62 and its label is still a label.
+                                    opacity: shell.row === shelf.shelfRow ? 1.0 : 0.62
                                     Behavior on opacity { NumberAnimation { duration: 160 } }
 
                                     Text {
@@ -3173,6 +3199,7 @@ ShellRoot {
                                                     }
 
                                                     Text {
+                                                        id: tileTitle
                                                         width: parent.width
                                                         text: tile.modelData.name
                                                               || tile.modelData.title || ""
@@ -3185,6 +3212,25 @@ ShellRoot {
                                                         maximumLineCount: tile.headline ? 4 : 3
                                                         horizontalAlignment: tile.headline
                                                             ? Text.AlignLeft : Text.AlignHCenter
+                                                        /*
+                                                         * ⚠ LEADING, and only on
+                                                         * the headline. One or two
+                                                         * words centred under a
+                                                         * cover is a LABEL and sets
+                                                         * solid; four wrapped lines
+                                                         * of a sentence is a
+                                                         * PARAGRAPH, and at default
+                                                         * leading a paragraph of
+                                                         * bold text is a block with
+                                                         * no gaps in it. Nothing
+                                                         * else on this screen wraps
+                                                         * to four lines, which is
+                                                         * why nothing else needed
+                                                         * this.
+                                                         */
+                                                        lineHeight: tile.headline ? 1.22 : 1.0
+                                                        lineHeightMode:
+                                                            Text.ProportionalHeight
                                                     }
 
                                                     Text {
@@ -3196,6 +3242,22 @@ ShellRoot {
                                                         elide: Text.ElideRight
                                                         horizontalAlignment: tile.headline
                                                             ? Text.AlignLeft : Text.AlignHCenter
+                                                        /*
+                                                         * ⚠ ITS OWN GAP, on top of
+                                                         * the column's 0.3u. An
+                                                         * attribution is not the
+                                                         * next line of the headline
+                                                         * and must not read as one
+                                                         * — at the shared spacing
+                                                         * "CBS News" sat closer to
+                                                         * the last line of the
+                                                         * sentence than that line
+                                                         * sat to the one above it,
+                                                         * so the eye read five
+                                                         * lines of headline.
+                                                         */
+                                                        topPadding: tile.headline
+                                                                    ? win.u * 0.25 : 0
                                                     }
                                                 }
                                             }
@@ -4253,7 +4315,7 @@ ShellRoot {
                 (kwin.screen ? kwin.screen.height : 1080) / 54,
                 (kwin.screen ? kwin.screen.width  : 1920) / 96))
             readonly property color ink:    "#f2f0fa"
-            readonly property color dim:    "#a49cc4"
+            readonly property color dim:    "#c9c3e2"
             readonly property color accent: "#a78bfa"
 
             // ⚠ The keyboard's mask names the ITEM rather than being an empty
