@@ -93,10 +93,13 @@ PopupWindow {
         rect.y: BarConfig.popupY(menu.implicitHeight)
     }
 
+    // ⚠ The FIRING is guarded on where the pointer is NOW, not only on the
+    // restarts. A restart is a guess made up to 8 seconds ago; one stale guess
+    // is all it takes to shut the menu under a hand resting on it.
     Timer {
         id: closeTimer
         interval: 8000
-        onTriggered: menu.visible = false
+        onTriggered: if (!menuHover.hovered) menu.visible = false
     }
 
     /* What the wallpaper is doing under this menu. The anchor rect is relative
@@ -126,13 +129,20 @@ PopupWindow {
         Keys.onEscapePressed: menu.visible = false
         onVisibleChanged: if (visible) forceActiveFocus()
 
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-            onEntered: closeTimer.stop()
-            onExited: closeTimer.restart()
-        }
+        // ⚠ A HoverHandler, NOT a MouseArea filling the panel. Qt hands the
+        // hover enter/exit pair to exactly ONE item — the topmost under the
+        // pointer — so a panel-filling MouseArea is `exited` the moment the
+        // pointer reaches a ROW inside this menu, and every row here has its
+        // own. Worse, the enter of the next item arrives BEFORE the exit of
+        // the previous one, so the rows stopping the timer themselves could
+        // not save it: the sequence was row.stop() then panel.restart(), and
+        // the dismissal timer ran on while the pointer sat still on a row.
+        // A HoverHandler reports the whole SUBTREE, which is the question
+        // being asked: is the pointer anywhere on this menu?
+        //
+        // Measured on Qt 6.11 — see synfiles/tests/ctx_flyout_hover.qml, which
+        // drives a real pointer through the identical graph.
+        HoverHandler { id: menuHover }
 
         Column {
             id: col
@@ -193,8 +203,6 @@ PopupWindow {
                         id: rowMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        onEntered: closeTimer.stop()
-                        onExited: closeTimer.restart()
                         // Stays open on purpose — fitting a narrow monitor
                         // usually means turning off two or three things.
                         onClicked: BarConfig.toggle(menu.output, row.modelData.key)
@@ -297,8 +305,6 @@ PopupWindow {
                             anchors { fill: parent; margins: -4 }
                             enabled: prow.index > 0
                             hoverEnabled: true
-                            onEntered: closeTimer.stop()
-                            onExited: closeTimer.restart()
                             onClicked: Plugins.moveUp(prow.modelData.id)
                         }
                     }
@@ -314,8 +320,6 @@ PopupWindow {
                             anchors { fill: parent; margins: -4 }
                             enabled: prow.index < pluginRows.count - 1
                             hoverEnabled: true
-                            onEntered: closeTimer.stop()
-                            onExited: closeTimer.restart()
                             onClicked: Plugins.moveDown(prow.modelData.id)
                         }
                     }
@@ -328,8 +332,6 @@ PopupWindow {
                         anchors { left: parent.left; right: pmoveUp.left
                                   top: parent.top; bottom: parent.bottom }
                         hoverEnabled: true
-                        onEntered: closeTimer.stop()
-                        onExited: closeTimer.restart()
                         onClicked: Plugins.setEnabled(prow.modelData.id,
                                                        !prow.modelData.enabled)
                     }
@@ -359,7 +361,6 @@ PopupWindow {
                     id: doneMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onEntered: closeTimer.stop()
                     onClicked: menu.visible = false
                 }
             }

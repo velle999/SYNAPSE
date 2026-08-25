@@ -1717,6 +1717,18 @@ test('bar_shape', bar_shape,
      depends : [synui_exe],
      timeout : 180)
 
+# `popup_hover_dismiss`: the bar menu and the mixer must not dismiss themselves
+# while the pointer is resting on them. Qt gives the hover enter/exit pair to
+# exactly ONE item, so a MouseArea filling a popup is `exited` the instant the
+# pointer reaches a row or a slider INSIDE it — which armed the dismissal timer
+# with the pointer still on the popup. Static, and cheap: the real pointer path
+# through the identical hover graph is driven by
+# synfiles/tests/ctx_flyout_hover.qml.
+popup_hover_dismiss = find_program('tests/popup_hover_dismiss.sh')
+test('popup_hover_dismiss', popup_hover_dismiss,
+     args    : [meson.current_source_dir() / 'quickshell'],
+     timeout : 30)
+
 # `bar_enabled`: turning the bar off turns off THE BAR. It used to be a
 # `pkill -x quickshell`, and that process is also every desktop widget, the OSD,
 # the start menu, the mixer and the notes — so the switch cleared the desktop.

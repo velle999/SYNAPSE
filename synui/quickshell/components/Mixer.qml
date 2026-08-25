@@ -146,12 +146,16 @@ PopupWindow {
     // timer the real mechanism instead of a backstop, since a held grab does
     // not care where the pointer rests — only a click outside dismisses it —
     // and 1600ms closed the mixer on an ordinary glance away mid-adjustment.
+    // ⚠ The FIRING is guarded on where the pointer is NOW, not only on the
+    // restarts. A restart is a guess made up to 8 seconds ago; one stale guess
+    // is all it takes to close the mixer under a hand resting on a slider.
     Timer {
         id: closeTimer
         interval: 8000
         onTriggered: {
-            if (mixer.holds > 0) restart()      // still dragging
-            else                 mixer.visible = false
+            if (mixer.holds > 0)     restart()  // still dragging
+            else if (mixerHover.hovered) restart()  // still on it
+            else                     mixer.visible = false
         }
     }
 
@@ -176,13 +180,19 @@ PopupWindow {
         Keys.onEscapePressed: mixer.visible = false
         onVisibleChanged: if (visible) forceActiveFocus()
 
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton     // so the sliders above still get clicks
-            onEntered: closeTimer.stop()
-            onExited: closeTimer.restart()
-        }
+        // ⚠ A HoverHandler, NOT a MouseArea filling the panel. Qt hands the
+        // hover enter/exit pair to exactly ONE item — the topmost under the
+        // pointer — so a panel-filling MouseArea is `exited` the instant the
+        // pointer reaches a slider or a row inside this mixer, which is the
+        // only reason anyone opens it. That armed the dismissal timer while
+        // the pointer was ON the mixer; the rows below carried one-off
+        // `closeTimer.stop()` patches for the cases someone had noticed.
+        // A HoverHandler reports the whole SUBTREE instead, so there is one
+        // answer to "is the pointer on the mixer" and every child inherits it.
+        //
+        // Measured on Qt 6.11 — see synfiles/tests/ctx_flyout_hover.qml, which
+        // drives a real pointer through the identical graph.
+        HoverHandler { id: mixerHover }
 
         // ── Header ───────────────────────────────────────
         // Outside the scroller on purpose: Done has to stay reachable on a
@@ -220,7 +230,6 @@ PopupWindow {
                     id: doneMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onEntered: closeTimer.stop()
                     onClicked: mixer.visible = false
                 }
             }
@@ -303,11 +312,6 @@ PopupWindow {
                         mixer.visible = false
                         EqState.openPanel()
                     }
-
-                    // The panel-wide MouseArea loses hover to this row's own
-                    // hover-enabled children, which fires its `exited` and arms
-                    // the dismissal timer. Same fix the Done button carries.
-                    onHoveredChanged: if (hovered) closeTimer.stop()
                 }
 
                 // ── Input devices ────────────────────────

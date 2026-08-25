@@ -1560,7 +1560,7 @@ pkgver=0.1.0
 #   not a broken grab — was the whole bug. Both timers moved to 8000ms:
 #   long enough that no ordinary pause trips it, short enough to still
 #   recover if a grab really is ever refused.
-pkgrel=485
+pkgrel=486
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
