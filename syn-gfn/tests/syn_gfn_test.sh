@@ -51,6 +51,7 @@ for b in vivaldi-stable chromium chromium-browser google-chrome-stable \
 printf '%s\n' "$b"        >  "$TMP/who"
 printf '%s\n' "\$*"        >  "$TMP/argv"
 printf '%s\n' "\$MANGOHUD" >  "$TMP/mangohud"
+printf '%s\n' "\$DISABLE_MANGOHUD" > "$TMP/disable_mangohud"
 EOF
     chmod +x "$TMP/bin/$b"
 done
@@ -80,11 +81,14 @@ has  "…and the service's own URL" "$argv" "https://play.geforcenow.com"
 hasnt "no --app=: it renames the window and drops --class" "$argv" "--app="
 hasnt "no --start-fullscreen: Vivaldi core-dumps on it"    "$argv" "--start-fullscreen"
 
-# Wayland cannot take ANGLE's Vulkan backend, and the session exports
-# MANGOHUD=1 at every process — including a Chromium GPU process it kills.
+# Wayland cannot take ANGLE's Vulkan backend. MangoHud's layer is turned off
+# the way wpengine and synstudio turn it off — it segfaults Vulkan clients in
+# vkCreateDevice on AMD — and DISABLE_MANGOHUD is the half that actually holds.
 has   "ANGLE is pinned to GL"        "$argv" "--use-angle=gl"
 has   "…and Vulkan is off with it"   "$argv" "DefaultANGLEVulkan"
 check "MANGOHUD is off for the browser" "0" "$(cat "$TMP/mangohud" 2>/dev/null)"
+check "…and DISABLE_MANGOHUD is set, which is the half that beats the enable" \
+      "1" "$(cat "$TMP/disable_mangohud" 2>/dev/null)"
 
 # ── The permissions, in the profile, before the browser ever ran ────────────
 if command -v python3 >/dev/null 2>&1; then

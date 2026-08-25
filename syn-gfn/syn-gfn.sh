@@ -195,11 +195,19 @@ fi
 mkdir -p "$PROFILE" || exit 1
 seed_permissions "$PROFILE" "$URL"
 
-# ⛔ MANGOHUD=1 IS EXPORTED SESSION-WIDE ON SYNAPSEOS, and its Vulkan layer
-# takes a Chromium GPU process down at startup — SIGTRAP, a crashpad line, no
-# window. A cloud stream has no frame times of its own worth measuring anyway;
-# the numbers that matter are in the service's own overlay.
-export MANGOHUD=0
+# ⚠ THE SESSION EXPORTS MANGOHUD=1, which loads MangoHud's Vulkan layer into
+# every Vulkan client — and a browser is one. On AMD that layer segfaults the
+# client inside its own vkCreateDevice hook and on NVIDIA it never does, which
+# is how it took synui-wpengine and synstudio down on the ThinkPad while the
+# desktop stayed happy. DISABLE_MANGOHUD is the manifest's own
+# disable_environment and beats the enable; MANGOHUD=0 goes with it for the
+# OpenGL side. The same pair those two launchers set, for the same reason.
+#
+# ⚠ NOT MEASURED AS A CRASH HERE. Vivaldi starts fine under MANGOHUD=1 on this
+# NVIDIA box — the startup crash that cost an evening was --start-fullscreen,
+# below. This is the AMD class, kept off because a cloud stream has no frame
+# times of its own worth measuring: the numbers that matter are the service's.
+export DISABLE_MANGOHUD=1 MANGOHUD=0
 
 # ⚠ --class AND NOT --app. `--app=<url>` gives the cleaner window — no tab
 # strip — but Chromium derives the app_id from the URL and the profile

@@ -13,7 +13,7 @@
 # option would only produce a different failure.
 pkgname=syn-gfn
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="GeForce NOW in a browser that can hold the mouse — cloud gaming for SynapseOS"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
