@@ -1495,7 +1495,7 @@ pkgver=0.1.0
 #   and a degraded install now exits 3 rather than 0 — the window only showed a
 #   message on a non-zero code, which is why it reported three dead widgets as
 #   installed and on.
-pkgrel=481
+pkgrel=482
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1604,6 +1604,18 @@ depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 's
          # (and rar), unrar is kept because 7-Zip's rar support does not cover
          # every variant; the menu offers rar, so a fallback is not enough.
          '7zip' 'unrar'
+         # ⛔ jq is not for synui's own code — this tree deliberately has none
+         # (omarchy-weather-location.sh rewrote upstream's jq calls as a printf
+         # and a sed rather than take the dependency). It is here because synui
+         # HOSTS Omarchy bar plugins, and Omarchy's base ships jq, so plugin
+         # authors shell out to it freely. deep-thoughts prints "jq: command not
+         # found" where the thought belongs; quattro-gp's self-registration is
+         # jq-guarded inside an execDetached, so without jq its keybinding just
+         # never registers and NOTHING is logged. The plugin ABI is not only the
+         # qs.Ui types and the omarchy-* commands — it is also the binaries a
+         # plugin may assume, and jq is one of them. Rewriting each plugin is
+         # not the fix: they update from upstream. 1 MiB.
+         'jq'
          # ⚠ cava was an optdepend and the desktop's audio visualiser widget is
          # DARK without it — widgets.c says "cava is not installed, so it will
          # stay dark" and render.c draws "needs cava" where the bars belong. A
