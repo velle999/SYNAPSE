@@ -20,6 +20,18 @@ import ".."
  * a menu with no way out but the Done row — the complaint that got this fixed.
  * Toggles still leave the menu open on purpose: fitting a narrow monitor
  * usually means turning off two or three things in one visit.
+ *
+ * ⚠ IT USED TO BE 1200ms, WHICH MADE IT THE MECHANISM ANYWAY. A grab that is
+ * actually held does not care where the pointer rests — only a click outside
+ * dismisses it — but the timer does not know whether the grab succeeded, so it
+ * closed the menu itself the moment a hand came off the mouse to read it: open,
+ * glance away, gone in a bit over a second. Reported as "closes itself before I
+ * can read it" / "closes after about ten seconds" (the second being how long
+ * velle usually waited before checking back, not a real interval — confirmed
+ * live: two open/close cycles in well under 18 seconds, and nothing in the
+ * compositor log at the moment of either close). Long enough now that no
+ * ordinary pause trips it, short enough to still recover if the grab really is
+ * ever refused.
  */
 PopupWindow {
     id: menu
@@ -83,7 +95,7 @@ PopupWindow {
 
     Timer {
         id: closeTimer
-        interval: 1200
+        interval: 8000
         onTriggered: menu.visible = false
     }
 

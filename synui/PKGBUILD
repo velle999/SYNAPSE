@@ -1542,7 +1542,25 @@ pkgver=0.1.0
 #   Pinned by a new plugin_order.sh, beside plugins.sh's own refusal/enable
 #   coverage the way apply_theme_dock_alpha.sh sits beside apply_theme_bar_
 #   alpha.sh — one file, one question.
-pkgrel=484
+
+# 485: the bar's right-click menu (and the mixer popup) were closing
+#   themselves during ordinary use — open, glance away to read it, gone a
+#   bit over a second later. Both hold a real xdg_popup grab (click outside
+#   closes them; that part was fine) but each also carries a pointer-leave
+#   Timer meant only as a BACKSTOP for a refused grab. The timer does not
+#   know whether the grab succeeded, so it closed the menu itself on any
+#   ordinary pause with the pointer resting off the popup — 1200ms on
+#   BarMenu, 1600ms on Mixer, both far short of how long a person reads a
+#   menu or nudges a slider before checking back. Reported as "closes
+#   itself before I can read it," confirmed live (two open/close cycles in
+#   well under 18 seconds, nothing in the compositor log at either close),
+#   and reproduced with a real xdg_popup grab via tests/vpointer_click.c in
+#   a headless instance: the menu stayed open 15-20s with no interaction
+#   once actually grabbed, so the backstop firing on ordinary hover-away —
+#   not a broken grab — was the whole bug. Both timers moved to 8000ms:
+#   long enough that no ordinary pause trips it, short enough to still
+#   recover if a grab really is ever refused.
+pkgrel=485
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -141,9 +141,14 @@ PopupWindow {
     // what closes the mixer if the grab is ever refused, and it refuses to fire
     // mid-drag: a slider drag that wanders off the popup still holds the
     // implicit pointer grab, so "exited" arrives during a live gesture.
+    //
+    // ⚠ SAME FIX AS BarMenu (see its header): a short interval here makes the
+    // timer the real mechanism instead of a backstop, since a held grab does
+    // not care where the pointer rests — only a click outside dismisses it —
+    // and 1600ms closed the mixer on an ordinary glance away mid-adjustment.
     Timer {
         id: closeTimer
-        interval: 1600
+        interval: 8000
         onTriggered: {
             if (mixer.holds > 0) restart()      // still dragging
             else                 mixer.visible = false
