@@ -30,6 +30,20 @@
  *                                            promoted to a drag by MOTION, so a
  *                                            single jump to the far end is a
  *                                            different code path from a drag.
+ *        vpointer_click X Y scroll N [horiz]
+ *                                          — move to (X,Y) and turn a MOUSE
+ *                                            WHEEL N notches: positive is down
+ *                                            (or, with `horiz`, right).
+ *
+ * ⚠ THE WHEEL IS SENT AS DISCRETE NOTCHES, and that is the difference between
+ * testing a mouse and testing a touchpad. wl_pointer carries two shapes of the
+ * same gesture: a continuous `axis` value, which is what a finger produces, and
+ * an `axis_discrete` count of detents, which only a wheel produces. Qt turns
+ * the first into a pixelDelta and the second into an angleDelta of 120 per
+ * notch — and QML that reads angleDelta (as a shelf browsing one tile per
+ * notch must) sees NOTHING AT ALL from a continuous stream. A poke that sent
+ * only `axis` would therefore prove the opposite of what it looks like it
+ * proves: a working wheel handler would fail it, and a broken one would too.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -124,11 +138,15 @@ int main(int argc, char **argv)
     bool drag  = argc > 4 && !strcmp(argv[3], "drag");
     bool right = argc > 3 && !strcmp(argv[3], "right");
     bool moveonly = argc > 3 && !strcmp(argv[3], "move");
+    bool scroll = argc > 4 && !strcmp(argv[3], "scroll");
+    int  notches = scroll ? atoi(argv[4]) : 0;
+    bool horiz = scroll && argc > 5 && !strcmp(argv[5], "horiz");
     uint32_t btn = right ? BTN_RIGHT : BTN_LEFT;
     int tox = drag ? atoi(argv[4]) : 0;
     int toy = drag ? (argc > 5 ? atoi(argv[5]) : py) : 0;
     int clicks = 2;
     if (moveonly)          clicks = 0;
+    else if (scroll)       clicks = 0;
     else if (right)        clicks = argc > 4 ? atoi(argv[4]) : 1;
     else if (drag)         clicks = 0;
     else if (argc > 3)     clicks = atoi(argv[3]);
@@ -198,6 +216,41 @@ int main(int argc, char **argv)
         zwlr_virtual_pointer_v1_frame(ptr);
         wl_display_roundtrip(dpy);
         clicks = 0;
+    }
+
+    /*
+     * ⚠ MOVE FIRST, THEN TURN, AND THE MOVE IS ITS OWN ROUNDTRIP. The wheel
+     * goes to whatever surface has pointer focus, and focus follows MOTION —
+     * so a scroll sent in the same batch as the motion that was supposed to
+     * put the cursor over the thing being tested can be delivered to the
+     * surface the cursor was over BEFORE it. The absolute motion above has
+     * already been flushed and answered by the time this runs.
+     */
+    if (scroll) {
+        const uint32_t axis = horiz ? WL_POINTER_AXIS_HORIZONTAL_SCROLL
+                                    : WL_POINTER_AXIS_VERTICAL_SCROLL;
+        /* One detent, in the units wl_pointer carries. libinput reports 15 for
+         * a normal mouse wheel and that is what every client's arithmetic is
+         * calibrated against; the DISCRETE count beside it is the one that
+         * matters (see the header), but a value of zero here would still be a
+         * scroll of nothing to anything reading the continuous axis. */
+        const double step = 15.0;
+        int dir = notches < 0 ? -1 : 1;
+        int n = notches < 0 ? -notches : notches;
+
+        for (int i = 0; i < n; i++) {
+            zwlr_virtual_pointer_v1_axis_source(ptr,
+                                                WL_POINTER_AXIS_SOURCE_WHEEL);
+            zwlr_virtual_pointer_v1_axis_discrete(ptr, now_ms(), axis,
+                                                  step * dir, dir);
+            zwlr_virtual_pointer_v1_frame(ptr);
+            wl_display_roundtrip(dpy);
+            /* Notches arrive from a hand, not a loop. Sent back to back they
+             * are coalesced into one event by the time Qt sees them, which
+             * makes "eight notches" indistinguishable from one and hides
+             * exactly the accumulation bug this exists to catch. */
+            nanosleep(&(struct timespec){ 0, 40 * 1000 * 1000 }, NULL);
+        }
     }
 
     for (int i = 0; i < clicks; i++) {

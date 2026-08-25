@@ -36,6 +36,21 @@ static void ft_update_title(syn_view_t *v)
 {
     const char *title  = view_title(v);
     const char *app_id = view_app_id(v);
+
+    /* ⚠ THE ONE PLACE A LAUNCH CAN BE COUNTED. Both shells arrive here — xdg
+     * and xwayland — and override-redirect surfaces have already been turned
+     * away above, so this is every real window on the desktop and nothing
+     * else. Recording it in the start menu, the dock and the app grid instead
+     * would be three rules to keep in step and would still miss everything
+     * started from a terminal. See recent.c.
+     *
+     * ⚠ AND AGAIN WHEN THE APP-ID ARRIVES. A client may map before it says
+     * what it is (set_app_id is a separate request, and Java and some Electron
+     * builds send it late), which would leave a blank here and no second
+     * chance — ft_handle_app_id below is that second chance. Noting it twice
+     * is harmless: the list moves an id to the front rather than adding it
+     * again. */
+    if (app_id && *app_id) recent_apps_note(app_id);
     if (!title)  title  = "";
     if (!app_id) app_id = "";
 
@@ -113,6 +128,11 @@ static void ft_handle_app_id(struct wl_listener *listener, void *data)
     (void)data;
     syn_view_t *v = wl_container_of(listener, v, ft_app_id);
     ft_update_title(v);
+
+    /* The second chance foreign_toplevel_map's note describes: a client that
+     * mapped before it said what it was is only identifiable now. */
+    const char *app_id = view_app_id(v);
+    if (app_id && *app_id) recent_apps_note(app_id);
 }
 
 /* ── Map / unmap ─────────────────────────────────────────── */

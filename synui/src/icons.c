@@ -778,6 +778,7 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
     if (desktop_path) {
         parse_desktop_file(desktop_path, &e);
         free(desktop_path);
+        e.resolved = true;
     }
 
     /* Unresolved fields fall back to the app_id itself — a bare binary name

@@ -288,6 +288,7 @@ synui_exe = executable('synui',
     'src/crop.c',
     'src/icons.c',
     'src/iconhue.c',
+    'src/recent.c',
     'src/dock.c',
     'src/launcher.c',
     'src/record.c',
@@ -777,6 +778,20 @@ state_reload_test = executable('state_reload_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('state_reload', state_reload_test)
+
+# The desktop's recently-opened list. recent.c is linked rather than
+# reimplemented for the same reason saver_state.c is above: the format IS the
+# thing under test, and a test that wrote its own copy of it would pass while
+# the compositor read something else. config.c is NOT linked — it drags in a
+# dozen unrelated state readers — so the test stubs the two path helpers and
+# says so; the real resolution is covered by syn-arcade's bigscreen_rig.sh.
+recent_apps_test = executable('recent_apps_test',
+  ['tests/recent_apps_test.c', 'src/recent.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('recent_apps', recent_apps_test)
 
 # One slider for the whole desktop's glass, and the rows allowed to walk away
 # from it. config.c's resolution against the pin set — no compositor and no

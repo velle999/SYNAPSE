@@ -8,8 +8,14 @@
  *
  *   $ synctl workspaces
  *   $ synctl clients
+ *   $ synctl recent
  *   $ synctl dispatch ws 3
  *   $ synctl dispatch spawn foot
+ *
+ * `clients` and `recent` are the two halves of the same question and it is
+ * worth saying which is which: clients is what is OPEN, asked of the scene
+ * graph; recent is what has been opened, kept by recent.c because a window
+ * mapping is the only event every way of launching something has in common.
  *
  * Threading: the listener and every client live on the compositor's own
  * wl_event_loop, so command handlers run on the main thread, between frames,
@@ -225,6 +231,57 @@ static void cmd_clients(syn_server_t *s, ipc_buf_t *b)
     bputs(b, "]\n");
 }
 
+/*
+ * The applications this desktop has opened, newest first.
+ *
+ * ⚠ RESOLVED HERE, not stored resolved. recent.c keeps app_ids and nothing
+ * else; this is where each one becomes something drawable, through the same
+ * icon_lookup() the dock and the app grid use — so there is one answer on this
+ * desktop to "what is this application called and how is it started", and a
+ * caller of this command gets the same one they do.
+ *
+ * ⚠ AN UNRESOLVED ID IS STILL RETURNED, with `known` false. icon_lookup falls
+ * back to the app_id for both the name and the command, which is right for the
+ * dock (a running window it can label roughly) and WRONG for a launcher: an
+ * app_id is not a command, and running one would be a guess with a shell behind
+ * it. The flag is how a caller tells the difference; big screen mode draws only
+ * the ones it can actually start.
+ *
+ * `icon` is the .desktop Icon= value — a THEME NAME, not a path. Resolving it
+ * belongs to whatever is drawing, which already has an icon theme loaded and a
+ * size it wants; a path chosen here would be one guess at both.
+ */
+static void cmd_recent(syn_server_t *s, ipc_buf_t *b)
+{
+    (void)s;
+    char ids[RECENT_KEEP_MAX][RECENT_ID_MAX];
+    int n = recent_apps_load(ids, RECENT_KEEP_MAX);
+
+    bputs(b, "[");
+    for (int i = 0; i < n; i++) {
+        const syn_icon_entry_t *e = icon_lookup(ids[i]);
+        /* ⚠ e->resolved, NOT a comparison of exec against the app_id. That
+         * was the first version of this line and it is wrong for every
+         * application whose Exec is its own name — which is most of the ones
+         * on this desktop: syntty's .desktop resolved perfectly, gave a proper
+         * Name= of "Terminal", and was still reported unknown because
+         * `Exec=syntty` happens to equal the app_id. */
+        bool known = e && e->resolved;
+
+        if (i) bputs(b, ",");
+        bputs(b, "{\"app_id\":");
+        bjson_str(b, ids[i]);
+        bputs(b, ",\"name\":");
+        bjson_str(b, e ? e->display_name : ids[i]);
+        bputs(b, ",\"exec\":");
+        bjson_str(b, e ? e->exec : "");
+        bputs(b, ",\"icon\":");
+        bjson_str(b, e ? e->icon_hint : "");
+        bprintf(b, ",\"known\":%s}", known ? "true" : "false");
+    }
+    bputs(b, "]\n");
+}
+
 static void cmd_workspaces(syn_server_t *s, ipc_buf_t *b)
 {
     bputs(b, "[");
@@ -367,6 +424,10 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         return;
     }
 
+    if (strcmp(line, "recent") == 0) {
+        cmd_recent(s, out);
+        return;
+    }
     if (strcmp(line, "clients") == 0 || strcmp(line, "windows") == 0) {
         cmd_clients(s, out);
         return;
@@ -404,8 +465,9 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     }
     if (strcmp(line, "help") == 0) {
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
-                   "\"activeworkspace\",\"activewindow\",\"version\","
-                   "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");
+                   "\"activeworkspace\",\"activewindow\",\"recent\","
+                   "\"version\",\"dispatch <action> [arg]\","
+                   "\"calc <expression>\"]}\n");
         return;
     }
 

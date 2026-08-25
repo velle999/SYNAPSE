@@ -9161,6 +9161,20 @@ void crop_drag_motion(syn_server_t *s, double lx, double ly);
 void crop_drag_end(syn_server_t *s, double lx, double ly);
 void synui_render_crop(syn_server_t *s);
 
+/* ── recent.c ────────────────────────────────────────────── */
+/* The applications this desktop has opened, newest first — one app_id per
+ * line in ~/.config/synui/recent-apps. Written on the map path of every
+ * window (foreign_toplevel_map), because a window turning up is the ONE thing
+ * every way of launching something has in common; read by `synctl recent`.
+ * See recent.c's header for why the compositor owns this and not a launcher. */
+#define RECENT_ID_MAX 128
+/* How many are kept — and therefore the size of the array recent_apps_load()
+ * can fill. Twice what anything draws, so an application pushed off the end of
+ * a shelf is still remembered while it is off it. */
+#define RECENT_KEEP_MAX 16
+void recent_apps_note(const char *app_id);
+int  recent_apps_load(char out[][RECENT_ID_MAX], int max);
+
 /* ── icons.c ─────────────────────────────────────────────── */
 /* Resolved .desktop info for one app_id, cached after first lookup. Matching
  * is v1-simple: a .desktop file is only found if its basename equals the
@@ -9182,6 +9196,12 @@ typedef struct {
      * the icon is drawn exactly as it was decoded, which is every icon that is
      * not ours. Never the same pointer as icon_surface. */
     cairo_surface_t *icon_base;
+    /* Whether a .desktop file was actually found for this app_id, as opposed
+     * to the fields below it being the app_id standing in for itself. The dock
+     * does not care — it is labelling a window it can already see — but a
+     * LAUNCHER does: `exec` unresolved is an app_id, and an app_id is not a
+     * command. Anything that starts things from this entry has to check it. */
+    bool resolved;
 } syn_icon_entry_t;
 
 /* Moves whenever a cached icon_surface is replaced (retint, or a new entry
