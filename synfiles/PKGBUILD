@@ -103,7 +103,14 @@ pkgver=0.1.0
 #   "the menu closes when I go for it": gone before the pointer arrived.
 #   A 300ms grace timer (subCloseTimer) now stands in for the instant close;
 #   entering the flyout itself, or re-entering "Open with", cancels it.
-pkgrel=58
+
+# 59: 58's own fix only covered the hop FROM a menu row INTO the flyout. The
+#   flyout's own edge still closed instantly on exit — overshooting past the
+#   entry you want, or correcting back after clipping the 4px overlap band,
+#   both leave its bounds too, and read exactly like the bug 58 was supposed
+#   to fix, just one boundary further in. Its exit now gets the same 300ms
+#   grace as the row-to-flyout hop instead of an instant close.
+pkgrel=59
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

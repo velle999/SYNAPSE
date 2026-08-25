@@ -6250,15 +6250,18 @@ FloatingWindow {
 
             // Entering here cancels whatever grace period a graze over a
             // sibling row started — the pointer arrived, so it was headed
-            // here after all. Leaving the flyout sideways closes it right
-            // away: unlike the row-to-flyout hop, there is no legitimate path
-            // that leaves through here without meaning to be done with it.
+            // here after all. Leaving the flyout used to close it right
+            // away, on the claim that no legitimate path leaves through here
+            // without meaning to be done — but overshooting past the last
+            // entry, or correcting back after clipping the 4px overlap band
+            // toward a row near the top, both exit these bounds too. Same
+            // 300ms grace as the row-to-flyout hop, not an instant close.
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
                 onEntered: subCloseTimer.stop()
-                onExited: if (!containsMouse) { subCloseTimer.stop(); ctxMenu.closeSub() }
+                onExited: subCloseTimer.restart()
             }
 
             Flickable {
