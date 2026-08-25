@@ -1260,81 +1260,86 @@ check "...and with it, a play-shelf tile that takes a pointer and a keyboard" $?
 
 # ── what was opened recently ────────────────────────────────────────────────
 #
-# ⚠ RECORDED BY `run --wait` ITSELF, which is what makes it impossible to
-# launch something from the television without it being remembered. A list the
-# shell kept would miss every other way in — the `syn game` front door, a dock
-# pin, somebody at a prompt — and disagree with itself the first time one was
-# used.
-recent_ids() { PATH="$GFB:$PATH" "$SA" big recent; }
+# ⚠ ASKED OF SYNUI, and this is a rewrite of a block that tested the wrong
+# thing thoroughly. It used to press tiles and read back a file this program
+# kept, which is exactly the behaviour that had to go: a list of what was
+# launched FROM THE TELEVISION is empty on a machine somebody has been using
+# all day, and empty forever for anybody who opens big screen mode, looks at
+# it, and goes back to the desktop.
+#
+# ⛔ SYNCTL IS STUBBED, AND IT IS NOT OPTIONAL HERE. synui exports SYNUI_SOCKET
+# into every process it starts — including the shell running this suite — and
+# synctl PREFERS it over XDG_RUNTIME_DIR. The real one would answer with the
+# LIVE desktop's history, so this block would pass or fail depending on what
+# velle had open at the time, and the fixtures below would prove nothing.
+RCB=$T/recent-bin
+mkdir -p "$RCB"
 
-"$SA" big recent --rec | head -1 | grep -q "^id$"
-check "recent --rec names its one column" $?
+recent_stub() {   # recent_stub <json>
+    cat > "$RCB/synctl" <<STUB
+#!/bin/sh
+[ "\$1" = recent ] || exit 1
+printf '%s\n' '$1'
+STUB
+    chmod +x "$RCB/synctl"
+}
 
-"$SA" big recent | grep -qi "nothing opened"
+# Three applications, and the third is the one that matters: an app_id with no
+# .desktop file behind it, which synui reports with known:false because its
+# "command" would be an app_id rather than a command.
+recent_stub '[{"app_id":"fixture-writer","name":"Fixture Writer","exec":"/bin/true","icon":"accessories-text-editor","known":true},{"app_id":"retroarch","name":"RetroArch","exec":"retroarch","icon":"retroarch","known":true},{"app_id":"some-window","name":"some-window","exec":"","icon":"","known":false}]'
+
+hdr=$(PATH="$RCB:$PATH" "$SA" big recent --rec | head -1)
+
+# ⚠ THE SAME COLUMNS `big apps` EMITS, plus one on the end. A recent
+# application is a tile like any other and the shell must not need a second
+# way to draw one.
+printf '%s\n' "$hdr" | awk -F'\t' '{ exit ($1 == "id" && $2 == "name" && $10 == "iconfile" && $NF == "iconname") ? 0 : 1 }'
+check "recent --rec is a tile row, with the icon NAME on the end" $?
+
+rows=$(PATH="$RCB:$PATH" "$SA" big recent --rec | tail -n +2)
+
+[ "$(printf '%s\n' "$rows" | wc -l)" = 2 ]
+check "...and an app with no .desktop behind it is not offered as a tile" $?
+
+printf '%s\n' "$rows" | awk -F'\t' 'NR==1 { exit ($1 == "app:fixture-writer") ? 0 : 1 }'
+check "...with an id prefixed so it cannot collide with a tile of ours" $?
+
+printf '%s\n' "$rows" | awk -F'\t' 'NR==1 { exit ($6 == "recent" && $7 $8 $9 == "111") ? 0 : 1 }'
+check "...on its own shelf, taking a pointer, a keyboard and the screen" $?
+
+# ⚠ The app_id in the `icon` column, which is the identity column for every
+# tile. It is what the shell matches on to prefer a drawing of ours: RetroArch
+# opened from the desktop is still RetroArch.
+printf '%s\n' "$rows" | awk -F'\t' 'NR==2 { exit ($4 == "retroarch") ? 0 : 1 }'
+check "...and the app_id kept where a tile keeps its identity" $?
+
+printf '%s\n' "$rows" | awk -F'\t' 'NR==1 { exit ($12 == "accessories-text-editor") ? 0 : 1 }'
+check "...and the .desktop Icon= name passed through for the theme to resolve" $?
+
+recent_stub '[]'
+PATH="$RCB:$PATH" "$SA" big recent | grep -qi "nothing opened on this desktop"
 check "...and says so plainly when nothing has been" $?
 
-PATH="$GFB:$PATH" "$SA" big run syn-gfn --wait >/dev/null 2>&1
-[ "$(recent_ids)" = "syn-gfn" ]
-check "a tile press is remembered" $?
-
-# ⚠ The way OUT is not an application. `desktop` has no command — pressing it
-# closes big screen mode — and a "recently opened" row whose first entry is
-# "go back to the desktop" is a row nobody reads twice.
-"$SA" big run desktop --wait >/dev/null 2>&1
-[ "$(recent_ids)" = "syn-gfn" ]
-check "...and closing the television is not one of them" $?
-
-# ⚠ WITHOUT --wait is somebody at a prompt, or one of the system actions. It
-# opens no window and the television is not stepping aside for it, so it is not
-# a press.
-PATH="$GFB:$PATH" "$SA" big run syn-gfn >/dev/null 2>&1
-[ "$(recent_ids | wc -l)" = 1 ]
-check "...nor is a run with no --wait" $?
-
-# ⚠ A STUB FIRST, AND ON THE FRONT OF PATH. `web` is Firefox, which is
-# installed on any machine this suite is likely to run on — pressing the real
-# one opens a browser and blocks here until somebody closes it.
-printf '#!/bin/sh\nexit 0\n' > "$GFB/firefox"
-chmod +x "$GFB/firefox"
-PATH="$GFB:$PATH" "$SA" big run web --wait >/dev/null 2>&1
-[ "$(recent_ids | head -1)" = "web" ]
-check "the newest press is first" $?
-
-PATH="$GFB:$PATH" "$SA" big run syn-gfn --wait >/dev/null 2>&1
-[ "$(recent_ids | head -1)" = "syn-gfn" ] && [ "$(recent_ids | wc -l)" = 2 ]
-check "...and pressing one again MOVES it rather than listing it twice" $?
-
-# The cap. Eight is a bar's worth of tiles; the ninth press pushes the oldest
-# off rather than growing a row that scrolls forever.
+# ── running one ─────────────────────────────────────────────────────────────
 #
-# ⛔ THE LIST IS SEEDED AND ONE STUB IS PRESSED — never eight real tiles. A
-# tile id names a program that may genuinely be installed on the machine
-# running this suite, and `run --wait` LAUNCHES it and then BLOCKS until it
-# exits: pressing eight of them opened RetroArch on the developer's desktop and
-# sat there waiting for somebody to quit it. A suite that can start somebody's
-# emulator is a suite that gets run once.
-mkdir -p "$XDG_CACHE_HOME/syn-arcade"
-printf 'old-1\nold-2\nold-3\nold-4\nold-5\nold-6\nold-7\nold-8\n' \
-    > "$XDG_CACHE_HOME/syn-arcade/recent"
+# ⚠ ONLY WHAT SYNUI LISTS. An app_id that is not in the recently-opened list is
+# refused rather than run — otherwise `big run app:<anything>` would be a
+# general-purpose "run this string through a shell" verb, reachable by whatever
+# can hand the shell an id.
+recent_stub '[{"app_id":"fixture-writer","name":"Fixture Writer","exec":"touch '"$T"'/ran-it","icon":"x","known":true}]'
 
-PATH="$GFB:$PATH" "$SA" big run syn-gfn --wait >/dev/null 2>&1
-[ "$(recent_ids | wc -l)" = 8 ]
-check "the list is capped rather than growing forever" $?
+# ⚠ `says`, not a pipe. Refusing is an EX_USAGE exit, and `set -o pipefail`
+# reports that rather than grep's — so a pipeline here fails the check on the
+# very status that proves the refusal happened.
+says env PATH="$RCB:$PATH" "$SA" big run app:not-listed |
+    grep -qi "not among the recently opened"
+check "an app that is not in the list is refused, not run" $?
 
-[ "$(recent_ids | head -1)" = "syn-gfn" ]
-check "...with the newest press at the front" $?
-
-recent_ids | grep -qx "old-8"
-[ $? = 1 ]
-check "...and the oldest pushed off the end" $?
-
-# ⚠ An id whose program has gone is KEPT, not swept: the shelf looks each one
-# up and simply does not draw what it cannot find, so reinstalling something
-# returns it to its place. A list that pruned itself would lose that.
-recent_ids | grep -qx "old-1"
-check "an id with nothing behind it is still remembered" $?
-
-rm -f "$GFB/syn-gfn" "$GFB/firefox"
+rm -f "$T/ran-it"
+PATH="$RCB:$PATH" "$SA" big run app:fixture-writer --wait >/dev/null 2>&1
+[ -f "$T/ran-it" ]
+check "...and one that is runs the command synui resolved" $?
 
 # ── the drawn tile glyphs ───────────────────────────────────────────────────
 #
@@ -1514,11 +1519,28 @@ check "what is open is ASKED of synui, never remembered" $?
 
 # ── the Recent bar, and the wheel ───────────────────────────────────────────
 #
-# ⚠ ASKED OF big.c, never kept here, for exactly the reason the Running shelf
-# is: `run --wait` records a press, so every way into a tile is remembered and
-# there is no second list to disagree.
+# ⚠ ASKED OF THE COMPOSITOR, and the first version of this asked the wrong
+# thing entirely. It recorded what `big run --wait` launched, which made
+# "recently opened" mean "recently opened FROM THE TELEVISION" — empty on a
+# machine somebody had been using all day, and empty forever for anybody who
+# opened big screen mode, looked at it and went back to the desktop. synui
+# writes the list now, on the map of every window, because a window turning up
+# is the one thing every way of launching something has in common.
 grep -q '"big", "recent", "--rec"' "$BIGQML"
 check "the Recent bar is asked for, not remembered" $?
+
+grep -q '"synctl", (char \*)"recent"' "$BIGC"
+check "...and big.c asks SYNUI for it, not a file of its own" $?
+
+# ⛔ THE SECOND WRITER HAD TO GO. A note kept here as well would be a second
+# list to disagree with synui's within one launch.
+! grep -q "recent_note" "$BIGC"
+check "...with nothing recording presses on the side" $?
+
+# An application with no .desktop file cannot be started again from a tile —
+# its "command" would be an app_id, which is a guess with a shell behind it.
+grep -q "r->known" "$BIGC"
+check "...and an app it cannot start again is not drawn" $?
 
 # ⚠ A BAR, not a shelf of its own. A row of the television spent on four tiles
 # is the mistake the system switches were moved behind Start to undo, and a
@@ -1530,23 +1552,66 @@ check "...and it is a bar, so it costs no row of its own" $?
 # Sleep, restart and power off are actions somebody takes, not applications to
 # go back to. One of them at the front of this row after an evening's use would
 # be a power button where a game was.
-grep -q "hit.shelf !== \"system\"" "$BIGQML"
+grep -q 'hit.shelf === "system"' "$BIGQML"
 check "...with the machine's own switches kept out of it" $?
 
-# The wheel goes through the same words the pad and the keyboard do, so it
-# reaches the Start menu and the on-screen keyboard without either knowing a
-# wheel exists.
+# A desktop application has no drawing in this package — its picture is an
+# Icon= name that only the thing drawing it can resolve.
+grep -q "Quickshell.iconPath" "$BIGQML"
+check "...and a recent app's icon comes from the icon THEME" $?
+
+# ⚠ PREFIXED. `retroarch` is already a tile with its own exec and fullscreen
+# flag; an app_id that collided with one would make `big run` ambiguous in
+# favour of whichever branch was written first.
+grep -q 'strncmp(id, "app:", 4)' "$BIGC"
+check "a recent app is run under an id that cannot collide" $?
+
+# ── the wheel ───────────────────────────────────────────────────────────────
+#
+# ⛔ EVERY CHECK IN THIS BLOCK USED TO PASS AGAINST A HANDLER THAT NEVER RAN.
+# WheelHandler defaults acceptedDevices to PointerDevice.Mouse, and QtWayland
+# calls every pointer on every Wayland session a TOUCHPAD — so the handler
+# rejected every event a real mouse produced, silently, and six greps said it
+# was fine. The greps below are worth what they always were, which is not much
+# on their own: tests/bigscreen_rig.sh drives a REAL wheel into a nested synui
+# and compares screenshots, and that is what actually answers this.
 grep -q "WheelHandler" "$BIGQML"
 check "a mouse wheel browses the shelves" $?
 
-grep -A22 "WheelHandler" "$BIGQML" | grep -q 'shell.nav(accY > 0 ? "up" : "down")'
+grep -q "acceptedDevices: PointerDevice.AllDevices" "$BIGQML"
+check "...accepting the touchpad Wayland says every mouse is" $?
+
+# ⚠ TWO HANDLERS. `orientation` defaults to Qt.Vertical and a vertical handler
+# discards a horizontal event outright, so the sideways wheel needs its own.
+grep -q "orientation: Qt.Horizontal" "$BIGQML"
+check "...and a sideways wheel has a handler of its own" $?
+
+# ⚠ ALONG THE ROW, which is the direction the shelves actually run in. Mapping
+# the wheel to up/down moved the selection between shelves — the one direction
+# a thumb already does easily, and the one a row of fifty games does not go in.
+grep -A4 "function wheelWords" "$BIGQML" | grep -q 'return \["right", "left"\]'
+check "...and a turn of it runs ALONG the row, not between rows" $?
+
+grep -A4 "function wheelWords" "$BIGQML" | grep -q "Qt.ShiftModifier"
+check "...with shift for the rows, for the hand that has a keyboard" $?
+
+# The Start menu is a column, so there the wheel is its list.
+grep -A4 "function wheelWords" "$BIGQML" | grep -q 'shell.menuOpen)          return \["down", "up"\]'
+check "...except in the Start menu, which is a column" $?
+
+grep -A24 "function wheelTurn" "$BIGQML" | grep -q "shell.nav("
 check "...through nav(), like every other input" $?
 
 # ⚠ A notch is 120 units and a touchpad sends a stream of small ones. Acting on
 # every event tears through a shelf; rounding each one to a step moves nothing
 # on a fine wheel. The remainder has to be KEPT.
-grep -A22 "WheelHandler" "$BIGQML" | grep -q "accY += accY > 0 ? -notch : notch"
+grep -A24 "function wheelTurn" "$BIGQML" | grep -q "acc += acc > 0 ? -notch : notch"
 check "...accumulating, so a trackpad neither flies nor stalls" $?
+
+# ⚠ AND THE RIG HAS TO ACTUALLY DRIVE ONE. A rig that only renders cannot tell
+# a working wheel from a handler that is never called.
+grep -q "scroll 3" tests/bigscreen_rig.sh
+check "the rig drives a real wheel through a virtual pointer" $?
 
 says "$SA" big focus | grep -q "needs an app-id"
 check "big focus refuses without an app-id" $?

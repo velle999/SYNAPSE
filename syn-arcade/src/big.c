@@ -1579,107 +1579,165 @@ static bool net_allowed(void)
 /* ── what was opened recently ────────────────────────────────────────────── */
 
 /*
- * The last few tiles somebody actually pressed, newest first, one id per line.
+ * The applications this DESKTOP has opened, newest first.
  *
- * ⚠ IN THE CACHE, and it is worth saying why, because this is history rather
- * than something derived from the network. Losing it costs the ORDER of one
- * bar and nothing else — the tiles are all still on their own shelves, and the
- * next thing pressed starts the list again. That is the cache's own test, and
- * it keeps every file this binary writes under one directory the suite already
- * redirects.
+ * ⚠ ASKED OF SYNUI, NOT KEPT HERE, and the first version of this got that
+ * wrong. It recorded what `big run --wait` launched — which meant the Recent
+ * bar only ever knew about things pressed on the television, was empty on a
+ * machine somebody had been using all day, and stayed empty for anybody who
+ * opened big screen mode, looked at it and left. A "recently opened" row that
+ * only knows about the room it is in is not what anybody means by the words.
  *
- * ⚠ IDS, NOT ROWS. A recorded tile is looked up in the apps table when the
- * shelf is drawn, so a tile that has gone away (the program was removed) is
- * simply not drawn, and one that comes back returns to its place — the same
- * arrangement plugins-order.state has, and for the same reason: a copy of the
- * row here would be a second definition of the tile to fall out of step.
+ * The compositor is the one thing that sees every launch — the start menu, the
+ * dock, the app grid, a file manager, a terminal, or one application opening
+ * another — because all of them end with a window turning up, and synui is
+ * what windows turn up in. So synui keeps the list (its recent.c) and this
+ * asks for it, exactly as the Running shelf asks `synctl clients` rather than
+ * tallying what it launched.
+ *
+ * ⚠ AND THE ANSWER IS RESOLVED THERE TOO. synui hands back the .desktop Name,
+ * Icon and Exec through the same icon_lookup() its dock and app grid use, so
+ * there is one answer on this desktop to what an application is called — and
+ * `known` says whether a .desktop was found at all. An id with no .desktop
+ * behind it is a window this desktop cannot start again from a tile, so it is
+ * dropped rather than drawn as a tile that does nothing.
  */
+
+/* How many are DRAWN. synui keeps twice this; a television shows eight before
+ * the bar it shares a row with has nowhere left to go. */
 #define RECENT_MAX 8
 
-static bool recent_path(char *buf, size_t n)
+struct recent {
+	char app_id[128];
+	char name[128];
+	char exec[256];
+	char icon[128];		/* the .desktop Icon= — a THEME NAME, not a path */
+	bool known;
+};
+
+/*
+ * Ask synui for the list.
+ *
+ * ⚠ THE SAME FIRST-KEY SCAN windows_collect uses, and for the same reason:
+ * these objects also lead with `{"app_id":"`, and a name or an Exec line is a
+ * string this program did not write. See that function's note on why brace
+ * splitting is not safe here.
+ */
+static int recent_collect(struct recent *out, int max)
 {
-	return cache_path(buf, n, "recent");
+	char *argv[] = { (char *)"synctl", (char *)"recent", NULL };
+	char *json = run_capture(argv, 3);
+	if (!json)
+		return -1;
+
+	static const char *const head = "{\"app_id\":\"";
+	int n = 0;
+
+	for (const char *p = strstr(json, head); p && n < max; ) {
+		const char *end = strstr(p + strlen(head), head);
+
+		struct recent *r = &out[n];
+		memset(r, 0, sizeof(*r));
+		json_str(p, end, "app_id", r->app_id, sizeof(r->app_id));
+		json_str(p, end, "name", r->name, sizeof(r->name));
+		json_str(p, end, "exec", r->exec, sizeof(r->exec));
+		json_str(p, end, "icon", r->icon, sizeof(r->icon));
+		r->known = json_true(p, end, "known");
+
+		/* ⚠ Dropped HERE rather than by the shell, so that everything
+		 * reading this command gets the same list. An application with
+		 * no .desktop file cannot be started again from a tile — its
+		 * `exec` would be an app_id, which is a guess with a shell
+		 * behind it — and a tile that does nothing when pressed is
+		 * worse than a shelf one tile shorter. */
+		if (r->app_id[0] && r->known)
+			n++;
+		p = end;
+	}
+
+	free(json);
+	return n;
 }
 
 /*
- * Note a press. Rewrites the list whole with `id` at the front.
+ * Find one by app_id, so `big run app:<app_id>` has something to run.
  *
- * ⚠ EVERY FAILURE IS SILENT, deliberately. This runs on the way to launching
- * something, and a launcher that refuses to start a game because it could not
- * write a history file would be a worse program than one with no history at
- * all. The list is a convenience; the launch is the job.
+ * ⚠ THE LIST IS THE ONLY WAY IN. This deliberately does not take any app_id
+ * and look it up: what may be launched this way is what synui says was
+ * recently opened, resolved by synui, and nothing else. Anything wider would
+ * be a general-purpose "run whatever I name through a shell" verb, which is a
+ * different program with a different set of questions to answer.
  */
-static void recent_note(const char *id)
+static bool recent_find(const char *app_id, struct recent *out)
 {
-	char path[SYN_PATH];
-	if (!id || !*id || !recent_path(path, sizeof(path)))
-		return;
-
-	char buf[1024];
-	int len = snprintf(buf, sizeof(buf), "%s\n", id);
-	if (len < 0 || (size_t)len >= sizeof(buf))
-		return;
-
-	/* The old list, minus this id wherever it used to be — pressing
-	 * something twice must move it to the front rather than list it
-	 * twice. NULL is the ordinary first run. */
-	char *old = read_file(path);
-	if (old) {
-		int kept = 1;
-		char *save = NULL;
-		for (char *ln = strtok_r(old, "\n", &save);
-		     ln && kept < RECENT_MAX; ln = strtok_r(NULL, "\n", &save)) {
-			char *t = trim(ln);
-			if (!*t || !strcmp(t, id))
-				continue;
-			int m = snprintf(buf + len, sizeof(buf) - (size_t)len,
-					 "%s\n", t);
-			if (m < 0 || (size_t)(len + m) >= sizeof(buf))
-				break;
-			len += m;
-			kept++;
+	struct recent list[RECENT_MAX];
+	int n = recent_collect(list, RECENT_MAX);
+	for (int i = 0; i < n; i++) {
+		if (strcmp(list[i].app_id, app_id) == 0) {
+			*out = list[i];
+			return true;
 		}
-		free(old);
 	}
-
-	if (mkdir_parents(path) != 0)
-		return;
-	(void)write_file_inplace(path, buf);
+	return false;
 }
 
-/* `big recent` — the ids, newest first. One column, because the shell already
- * holds every tile and needs nothing here but the order. */
+/* `big recent` — the recently opened applications as TILES.
+ *
+ * ⚠ THE SAME COLUMNS `big apps` EMITS, plus one. A recent application is a
+ * tile like any other and the shell must not need a second way to draw one —
+ * the extra column is `iconname`, because these have no drawing of their own
+ * in this package: their picture is a name in the icon theme, which whatever
+ * is drawing resolves at the size it wants. `iconfile` is empty for the same
+ * reason and stays in the row so the two kinds of tile line up.
+ *
+ * ⚠ `pointer` and `keys` are BOTH set, and `full`. These are desktop
+ * applications, not games with controller support: choosing anything in one
+ * takes a cursor, typing in one takes letters, and a window on a television is
+ * a titlebar and a strip of wallpaper around whatever somebody wanted to look
+ * at. The same three answers GeForce NOW gets, for the same reasons.
+ */
 static int big_recent(bool rec)
 {
-	char path[SYN_PATH];
-	char *text = NULL;
-	if (recent_path(path, sizeof(path)))
-		text = read_file(path);
+	struct recent list[RECENT_MAX];
+	int n = recent_collect(list, RECENT_MAX);
 
-	if (rec)
-		rec_row(1, "id");
-
-	int n = 0;
-	if (text) {
-		char *save = NULL;
-		for (char *ln = strtok_r(text, "\n", &save);
-		     ln && n < RECENT_MAX; ln = strtok_r(NULL, "\n", &save)) {
-			char *t = trim(ln);
-			if (!*t)
-				continue;
-			if (rec)
-				rec_row(1, t);
-			else
-				printf("%s\n", t);
-			n++;
-		}
-		free(text);
+	if (n < 0) {
+		fputs("syn-arcade: no synui to ask — `big recent` needs a "
+		      "running compositor and synctl on PATH\n", stderr);
+		return EX_FAIL;
 	}
 
-	if (!rec && !n)
-		puts("(nothing opened from the television yet)");
+	if (rec) {
+		rec_row(12, "id", "name", "exec", "icon", "kind", "shelf",
+			"pointer", "keys", "full", "iconfile", "transient",
+			"iconname");
+		for (int i = 0; i < n; i++) {
+			/* ⚠ PREFIXED, and it is not decoration. A tile id has
+			 * to say which table it comes from: `retroarch` is
+			 * already a tile in apps_table with a fullscreen flag
+			 * and an exec of its own, and an app_id that collided
+			 * with one would make `big run` ambiguous — silently,
+			 * and in favour of whichever branch was written
+			 * first. */
+			char id[160];
+			snprintf(id, sizeof(id), "app:%s", list[i].app_id);
+			rec_row(12, id, list[i].name, list[i].exec,
+				list[i].app_id, "app", "recent",
+				"1", "1", "1", "", "0", list[i].icon);
+		}
+		return EX_OK;
+	}
+
+	if (!n) {
+		puts("(nothing opened on this desktop yet)");
+		return EX_OK;
+	}
+	for (int i = 0; i < n; i++)
+		printf("%-24s %-24s %s\n", list[i].app_id, list[i].name,
+		       list[i].exec);
 	return EX_OK;
 }
+
 
 /* ── filling the screen ──────────────────────────────────────────────────── */
 
@@ -2276,16 +2334,54 @@ static int big_run(const char *id, bool wait_for_it)
 		return EX_USAGE;
 	}
 
+	/*
+	 * A recently-opened desktop application: `app:<app_id>`, from the
+	 * Recent bar. Not in apps_table — that table is the tiles this package
+	 * knows about, and these are whatever somebody has been using.
+	 *
+	 * ⚠ THE COMMAND COMES BACK FROM SYNUI, WHICH READ IT OUT OF THE
+	 * .desktop FILE, and it is run through a shell because that is what an
+	 * Exec line IS: `env FOO=1 thing --flag "a b"` is a valid one and a
+	 * word split would mangle it. Every other branch of this function
+	 * splits on spaces precisely because its commands are literals typed
+	 * into apps_table — this one is the exception and says so. It is the
+	 * same resolution and the same shell the app grid and the dock use to
+	 * start the same application (synui's appgrid_launch), so a tile here
+	 * and an icon there do not launch things two different ways.
+	 *
+	 * ⚠ AND ONLY WHAT SYNUI LISTS. recent_find refuses an app_id that is
+	 * not in the recently-opened list, so this cannot be turned into "run
+	 * any string I name" by whatever hands it an id.
+	 */
+	if (strncmp(id, "app:", 4) == 0) {
+		struct recent r;
+		if (!recent_find(id + 4, &r)) {
+			fprintf(stderr, "syn-arcade: '%s' is not among the "
+					"recently opened applications\n", id + 4);
+			return EX_USAGE;
+		}
+		if (!r.exec[0]) {
+			fprintf(stderr, "syn-arcade: '%s' has no command to "
+					"run\n", r.name);
+			return EX_FAIL;
+		}
+
+		char *argv[] = { (char *)"sh", (char *)"-c", r.exec, NULL };
+		if (!wait_for_it)
+			return spawn_detached(argv);
+		/* Full-screen, never transient: a desktop application is not
+		 * something to kill on the way back — somebody may well have
+		 * left a browser open on purpose. */
+		return spawn_wait(argv, true, false);
+	}
+
 	/* A media server found on the network is a tile with no program behind
 	 * it — the answer is a web page. Its URL comes back out of the same
 	 * cache `big media` wrote, so the shell never hands us one. */
 	if (strncmp(id, "plex-", 5) == 0 || strncmp(id, "jellyfin-", 9) == 0) {
 		char url[512];
-		if (media_url(id, url, sizeof(url))) {
-			if (wait_for_it)
-				recent_note(id);
+		if (media_url(id, url, sizeof(url)))
 			return big_open(url, wait_for_it);
-		}
 		fprintf(stderr, "syn-arcade: no media server called '%s' — "
 				"`syn-arcade big media --refresh` looks again\n", id);
 		return EX_USAGE;
@@ -2331,15 +2427,15 @@ static int big_run(const char *id, bool wait_for_it)
 		if (!wait_for_it)
 			return spawn_detached(argv);
 
-		/* ⚠ NOTED HERE AND NOT AT THE TOP OF THIS FUNCTION, which is
-		 * two guards' worth of difference. Above this point sit the
-		 * tile with no command (Desktop, which is the way OUT of big
-		 * screen mode and not an application) and the --wait-less
-		 * call, which is somebody at a prompt or a system action.
-		 * Neither is a press worth remembering, and a "recently
-		 * opened" row whose first entry is "go back to the desktop" is
-		 * a row nobody reads twice. */
-		recent_note(id);
+		/* ⚠ NOTHING IS RECORDED HERE, and the absence is the point.
+		 * This used to note the press into a list of its own, which
+		 * made the Recent bar a record of what had been pressed on the
+		 * TELEVISION — see big_recent's header for why that is not
+		 * what the words mean. synui writes the list now, on the map
+		 * of the window this launch is about to produce, so a game
+		 * started from a tile lands in it by the same route as one
+		 * started from the desktop. A note here as well would be a
+		 * second writer of one list. */
 
 		/* The `transient` column answers BOTH halves: what gets
 		 * signalled on the way back, and what may be insisted upon if

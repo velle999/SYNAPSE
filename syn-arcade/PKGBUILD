@@ -1029,7 +1029,7 @@ pkgver=0.1.0
 #   a fine wheel move nothing. And it moves the SELECTION, not a view — the
 #   shelves' position is derived from what is selected, so a scrolled view
 #   would snap back the moment anything else moved.
-pkgrel=44
+pkgrel=45
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -1094,7 +1094,7 @@ makedepends=('meson' 'ninja' 'gcc' 'wayland' 'sdl3')
 
 optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mode'
             'wtype: big screen mode’s on-screen keyboard types through it — without it the keyboard draws and types nothing'
-            'synui: the compositor the gaming shortcuts are installed into. ⚠ `big mouse` needs a synui new enough to offer zwlr_virtual_pointer_manager_v1 (0.1.0-327 or later); it says so if not'
+            'synui: the compositor the gaming shortcuts are installed into. ⚠ `big mouse` needs a synui new enough to offer zwlr_virtual_pointer_manager_v1 (0.1.0-327 or later); it says so if not. ⚠ The Recent bar needs one new enough to answer `synctl recent` (0.1.0-489 or later) — the list of what this desktop has opened is the compositor’s, because a window mapping is the only thing every way of launching something has in common. An older synui simply draws no Recent bar'
             'firefox: the Web tile, and where a headline or a media server opens'
             'steam: the game library and Big Picture tiles in big screen mode'
             'gamescope: `syn-arcade fit` — the nested compositor that makes a low-resolution game fill the screen, and `big steam --gamescope` for a TV whose resolution is not the desktop’s'

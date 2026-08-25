@@ -146,31 +146,32 @@ ShellRoot {
 
     // ── what was opened recently ────────────────────────────────────────────
     //
-    // Ids, newest first, straight out of big.c — which records them in `big
-    // run --wait` itself, so there is no launch path that can miss one and no
-    // list kept here to disagree with it.
+    // The applications THIS DESKTOP has opened, newest first, straight out of
+    // `big recent` — which asks synui, which wrote them down when their
+    // windows mapped.
     //
-    // ⚠ THE SHELF IS BUILT BY LOOKING EACH ID UP, not by trusting the file. A
-    // tile whose program has been removed since it was pressed simply is not
-    // found and is not drawn — and when it comes back it returns to its place,
-    // because the id was never rewritten out of the list. The same arrangement
-    // synui's plugin order has, for the same reason: one definition of the
-    // tile, in the apps table, and an order that points at it.
+    // ⛔ THE FIRST VERSION OF THIS ASKED THE WRONG QUESTION. It listed what had
+    // been launched from big screen mode itself, so the bar was empty on a
+    // machine somebody had been using all day, and stayed empty for anybody
+    // who opened the television, looked at it, and went back to the desktop —
+    // which is every first visit. "Recently opened" means recently opened,
+    // not recently opened FROM HERE.
     //
-    // ⚠ Media servers are in it too. `big media` finds them on the network and
-    // they are tiles like any other — a Plex server pressed last night belongs
-    // on this row as much as the browser does.
-    property var recentIds: []
+    // ⚠ WHOLE ROWS NOW, not ids to look up. A desktop application is not in
+    // this package's apps table and never will be — there is no tile for
+    // somebody's photo editor — so the row that draws it is built where it is
+    // resolved, in the same columns `big apps` emits. The lookup below is only
+    // to PREFER a tile of ours when there is one: RetroArch opened from the
+    // desktop is still RetroArch, with the drawing and the fullscreen flag
+    // this package gives it.
+    property var recentRows: []
 
     Process {
         id: recentProc
         command: [shell.bin, "big", "recent", "--rec"]
         running: true
         stdout: StdioCollector {
-            onStreamFinished: {
-                const rows = shell.parseRecords(this.text)
-                shell.recentIds = rows.map(r => r.id).filter(x => !!x)
-            }
+            onStreamFinished: shell.recentRows = shell.parseRecords(this.text)
         }
     }
 
@@ -179,17 +180,31 @@ ShellRoot {
     }
 
     readonly property var recentApps: {
-        const pool = shell.apps.concat(shell.media)
         const out = []
-        for (let i = 0; i < shell.recentIds.length; i++) {
-            const id = shell.recentIds[i]
-            const hit = pool.find(a => a.id === id)
-            // ⚠ NOT the system switches. `shelf = system` means "behind
-            // Start" — sleep, restart, power off — and those are actions
-            // somebody takes, not applications to go back to. One of them at
-            // the front of this row after an evening's use would be a power
-            // button where a game was.
-            if (hit && hit.shelf !== "system") out.push(hit)
+        const seen = {}
+        for (let i = 0; i < shell.recentRows.length; i++) {
+            const r = shell.recentRows[i]
+            // ⚠ The `icon` column carries the app_id — the identity, the same
+            // place `big apps` puts a tile's drawing name. A tile of ours
+            // matches on either half of its own: `retroarch` is both the tile
+            // id and the app_id of the window it opens, but nothing promises
+            // that stays true for the next one added.
+            const appid = r.icon || ""
+            const hit = shell.apps.find(a => a.id === appid || a.icon === appid)
+
+            // ⚠ NOT the machine's own switches. `shelf = system` means behind
+            // Start — sleep, restart, power off — and a power button where an
+            // application was is not what anybody is reaching for. They open
+            // no window, so synui cannot list them and this cannot fire; it
+            // stays as the guard it was, because the day one of them grows a
+            // window is not the day to find out.
+            if (hit && hit.shelf === "system") continue
+
+            const row = hit || r
+            const key = row.id || appid
+            if (!key || seen[key]) continue
+            seen[key] = true
+            out.push(row)
         }
         return out
     }
@@ -2078,6 +2093,73 @@ ShellRoot {
         shell.askClose(shell.current())
     }
 
+    /*
+     * ── what a notch of the wheel MEANS ─────────────────────────────────────
+     *
+     * One place, because a wheel is not a fifth input: it is the pad's own
+     * words arriving from a mouse. Everything below turns a wheel event into
+     * left/right/up/down and hands it to nav(), so the Start menu, the media
+     * buttons and the shelves need no idea a wheel exists.
+     *
+     * ⚠ THE WHEEL RUNS ALONG THE ROW, and that is the point of it. Every shelf
+     * here is a row that continues off the right-hand edge of the television —
+     * a library of fifty games is fifty tiles sideways, not fifty rows — so the
+     * scroll somebody reaches for is the one that follows the tiles. Mapping it
+     * to up/down instead moved the selection between shelves, which is the one
+     * direction a d-pad's thumb already does easily and the one the row does
+     * not run in.
+     *
+     * SHIFT is how a wheel changes rows, for the hand that has a keyboard under
+     * it. The pad, the arrow keys and the remote all still do it with no
+     * modifier at all.
+     *
+     * ⚠ AND THE START MENU IS A COLUMN, so there the wheel is its list. This is
+     * the one context flip, and it exists because "forward" on a page of stacked
+     * rows means DOWN to everybody who has ever used one.
+     *
+     * Returns [forward, back] — forward being the direction a wheel turned
+     * TOWARDS the user goes.
+     */
+    function wheelWords(mods) {
+        if (mods & Qt.ShiftModifier) return ["down", "up"]
+        if (shell.menuOpen)          return ["down", "up"]
+        return ["right", "left"]
+    }
+
+    /*
+     * Add one wheel event to a running total and spend whole notches out of it.
+     *
+     * ⚠ THE REMAINDER IS RETURNED, NOT DROPPED, and it is why this is a
+     * function rather than four lines in the handler: a fine wheel and a
+     * touchpad both send fractions of a notch, and a version that rounded each
+     * event to a step would move a shelf on the smallest twitch while one that
+     * ignored the leftovers would never move at all on slow scrolling. The
+     * caller keeps the total, so the two handlers (vertical and sideways) each
+     * accumulate their own axis and neither can spend the other's.
+     *
+     * ⚠ Qt's angleDelta is POSITIVE AWAY FROM THE USER — scrolling down is
+     * negative — which is why `back` is the positive case here.
+     */
+    function wheelTurn(acc, delta, mods) {
+        const notch = 120          // one detent, in eighths of a degree
+        const words = shell.wheelWords(mods)
+
+        acc += delta
+        // A kinetic flick on a touchpad can arrive as one enormous delta.
+        // Sixteen tiles is already further than anybody meant to go, and
+        // whatever is left after that is thrown away rather than queued —
+        // a shelf that goes on moving after the hand has stopped is the
+        // failure this cap exists for.
+        let steps = 0
+        while (Math.abs(acc) >= notch && steps < 16) {
+            shell.nav(acc > 0 ? words[1] : words[0])
+            acc += acc > 0 ? -notch : notch
+            steps++
+        }
+        if (steps >= 16) acc = 0
+        return acc
+    }
+
     function nav(cmd) {
         if (shell.away) { shell.navAway(cmd); return }
 
@@ -3047,8 +3129,33 @@ ShellRoot {
                                                         height: win.u * 3.2
                                                         visible: String(source) !== ""
                                                                  && status !== Image.Error
+                                                        // ⚠ TWO SOURCES, in this
+                                                        // order. A tile of this
+                                                        // package's own has a drawing
+                                                        // shipped beside it and
+                                                        // `iconfile` is its path. A
+                                                        // recently-opened desktop
+                                                        // application has no drawing
+                                                        // here at all — its picture is
+                                                        // an Icon= NAME out of its
+                                                        // .desktop file, which only the
+                                                        // thing doing the drawing can
+                                                        // resolve, because resolving it
+                                                        // means knowing the icon theme
+                                                        // and the size wanted. Hence
+                                                        // `iconname` and iconPath's
+                                                        // `true`, which returns empty
+                                                        // rather than a path to nothing
+                                                        // when the theme has no such
+                                                        // icon — and an empty source is
+                                                        // the tile as it was, with its
+                                                        // name and no glyph.
                                                         source: tile.modelData.iconfile
-                                                                ? "file://" + tile.modelData.iconfile : ""
+                                                                ? "file://" + tile.modelData.iconfile
+                                                                : (tile.modelData.iconname
+                                                                   ? Quickshell.iconPath(
+                                                                        tile.modelData.iconname, true)
+                                                                   : "")
                                                         fillMode: Image.PreserveAspectFit
                                                         asynchronous: true
                                                         // Rasterised at the size drawn.
@@ -3933,10 +4040,32 @@ ShellRoot {
 
                 // ── the wheel ───────────────────────────────────────────────
                 //
-                // Onto the same words, for the same reason the keyboard is:
-                // one implementation of what a direction does, so a wheel
-                // reaches the Start menu, the on-screen keyboard and the media
+                // Onto the same words the pad and the keyboard send, for the
+                // same reason: one implementation of what a direction does, so
+                // a wheel reaches the shelves, the Start menu and the media
                 // buttons without any of them knowing a wheel exists.
+                //
+                // ⛔ acceptedDevices, AND IT IS THE WHOLE REASON THE FIRST ONE
+                // OF THESE NEVER FIRED ONCE. WheelHandler defaults
+                // acceptedDevices to PointerDevice.Mouse — and Wayland has no
+                // way to tell a client what KIND of pointer a seat has, so
+                // QtWayland calls every pointer on every Wayland session a
+                // TOUCHPAD (device name "touchpad", type 4, pointerType
+                // Finger). A default WheelHandler therefore rejects the events
+                // of a real mouse, silently, on this desktop and every other
+                // one — nothing is logged and the handler simply never runs.
+                //
+                // That is also why every OTHER wheel on this desktop works:
+                // synui's bar, the mixer and the widget buttons all use
+                // MouseArea.onWheel, which has no device filter at all. This
+                // was the one place that reached for the newer type.
+                //
+                // ⛔ AND TWO OF THEM, because `orientation` defaults to
+                // Qt.Vertical and a vertical handler DISCARDS an event whose
+                // angleDelta is horizontal — so the tilt half of the first
+                // version was dead code inside a handler that was itself dead.
+                // Both confirmed against a real wheel driven into a nested
+                // synui: tests/bigscreen_rig.sh, the `--wheel` block.
                 //
                 // ⚠ ACCUMULATED, NOT ONE EVENT ONE STEP. A mouse notch is 120
                 // units; a touchpad sends a stream of small ones. Acting on
@@ -3960,26 +4089,32 @@ ShellRoot {
                     // The pixelDelta a touchpad also sends is deliberately
                     // ignored: two sources of the same gesture would double
                     // every step on hardware that reports both.
-                    property real accY: 0
-                    property real accX: 0
+                    property real acc: 0
+                    acceptedDevices: PointerDevice.AllDevices
 
                     onWheel: (event) => {
-                        const notch = 120     // one detent, in eighths of a degree
+                        acc = shell.wheelTurn(acc, event.angleDelta.y,
+                                              event.modifiers)
+                    }
+                }
 
-                        accY += event.angleDelta.y
-                        while (Math.abs(accY) >= notch) {
-                            shell.nav(accY > 0 ? "up" : "down")
-                            accY += accY > 0 ? -notch : notch
-                        }
+                // The sideways wheel a few mice have. Its own handler, because
+                // one WheelHandler answers ONE orientation — see above.
+                WheelHandler {
+                    property real acc: 0
+                    acceptedDevices: PointerDevice.AllDevices
+                    orientation: Qt.Horizontal
 
-                        // Positive x is a wheel tilted LEFT, which is the same
-                        // direction the selection goes. Most mice have no such
-                        // axis and simply never send this.
-                        accX += event.angleDelta.x
-                        while (Math.abs(accX) >= notch) {
-                            shell.nav(accX > 0 ? "left" : "right")
-                            accX += accX > 0 ? -notch : notch
-                        }
+                    onWheel: (event) => {
+                        // ⚠ NO SIGN FLIP, and it is worth saying why there is
+                        // not one. Qt's angleDelta is positive UP on one axis
+                        // and positive LEFT on the other — the same "away from
+                        // the user" convention — so a wheel tilted right and a
+                        // wheel turned down are both NEGATIVE, and both mean
+                        // forward. Negating this to make it read naturally
+                        // sent the selection the wrong way.
+                        acc = shell.wheelTurn(acc, event.angleDelta.x,
+                                              event.modifiers)
                     }
                 }
 

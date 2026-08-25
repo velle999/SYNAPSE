@@ -37,9 +37,15 @@
 #   big run   is a sleep, so "an application is running" is true without one
 set -u
 
-REAL=${1:?usage: bigrig.sh /path/to/syn-arcade /path/to/synui /path/to/qml}
+REAL=${1:?usage: bigrig.sh /path/to/syn-arcade /path/to/synui /path/to/qml [vpointer_click]}
 SYNUI=${2:?}
 QML=${3:?}
+# ⚠ OPTIONAL, and the wheel block below is SKIPPED LOUDLY without it rather
+# than quietly passing. It is synui's tests/vpointer_click — a real pointer,
+# because a wheel is the one input here that `big nav` cannot stand in for:
+# the FIFO delivers words, and the whole question about a wheel is whether the
+# event reaches the words at all.
+VPTR=${4:-}
 
 TMP=$(mktemp -d /tmp/bigrig.XXXXXX) || exit 1
 chmod 700 "$TMP"
@@ -113,8 +119,11 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = music ]; then
             # "open cliamp", because on most machines that is what big.c
             # answers: YouTube Music plays through yt-dlp, which nobody has
             # by default, and Spotify needs an account. A fixture that said
-            # `browse` for both would screenshot the row this change exists
-            # to replace.
+            # \`browse\` for both would screenshot the row this change exists
+            # to replace. (⚠ The backticks are ESCAPED: this comment is inside
+            # an unquoted heredoc, where a bare pair of them is a command
+            # substitution — \"browse: command not found\" on every run, and a
+            # comment in the generated stub with the words eaten out of it.)
             printf 'id\tname\tcurrent\taction\tnote\n'
             printf 'plex\tPlex\t0\talbums\t\n'
             printf 'ytmusic\tYouTube%%20Music\t0\tinstall\tneeds%%20yt-dlp%%20—%%20press%%20to%%20install%%20it\n'
@@ -232,8 +241,29 @@ chmod +x "$TMP/bin/projectM-pulseaudio"
 # failure the crowded launcher row above exists to catch, and adding a fourth
 # bar without rendering it would have walked straight past it.
 #
-# `lutris` and `heroic` are stubbed above, so both ids name a real tile here.
-printf 'lutris\nheroic\n' > "$TMP/cache/syn-arcade/recent"
+# ⚠ SEEDED IN TWO HALVES NOW, and the second half is the one that is easy to
+# forget. The list synui keeps is app_ids, and `big recent` DROPS any id with
+# no .desktop file behind it — an application this desktop cannot start again
+# is not drawn as a tile that does nothing. So a seeded id whose .desktop does
+# not exist renders an EMPTY BAR, which looks exactly like a broken shelf and
+# tests nothing. The fixtures go in HOME's own applications directory, which
+# icons.c searches first, so this does not depend on what the machine running
+# the rig happens to have installed.
+mkdir -p "$TMP/synui" "$TMP/.local/share/applications"
+for f in "fixture-writer|Fixture Writer|accessories-text-editor" \
+         "fixture-paint|Fixture Paint|applications-graphics"; do
+    id=${f%%|*}; rest=${f#*|}; nm=${rest%|*}; ic=${rest##*|}
+    cat > "$TMP/.local/share/applications/$id.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=$nm
+Exec=/bin/true %U
+Icon=$ic
+DESK
+done
+# ⚠ NEWEST FIRST, which is the file's whole format — synui writes the id of
+# the window that just mapped at the top and everything else below it.
+printf 'fixture-writer\nfixture-paint\n' > "$TMP/synui/recent-apps"
 
 mkfifo "$TMP/nav.fifo"
 
@@ -464,6 +494,16 @@ export SYNUI_CONFIG="$TMP/synuirc"
 # There is no env var for a headless mode, but synui restores a saved mode per
 # connector on new_output, so seeding its outputs.conf is how the rig asks for
 # a different screen. HEADLESS-1 is what wlroots names the first one.
+# ⚠ The pixel the pointer is put on has to follow the screen, not the 16:9
+# default: a wheel poke at 640,360 on a 1024x768 rig is still on the screen and
+# still proves something, but on a taller one it lands on a different row, and
+# "the wheel moved the selection" would then be a different assertion per
+# shape. Half of whatever the screen is, always.
+# ⚠ `${SIZE:-}` and not `$SIZE`: this script runs under `set -u` and SIZE is
+# the optional argument, so naming it bare is an unbound-variable exit on every
+# ordinary run.
+SCREEN_W=${SIZE:-1280x720}; SCREEN_W=${SCREEN_W%x*}
+SCREEN_H=${SIZE:-1280x720}; SCREEN_H=${SCREEN_H#*x}
 if [ -n "${SIZE:-}" ]; then
     case $SIZE in
         *x*) : ;;
@@ -526,6 +566,68 @@ echo "shell alive"
 shot() { grim -o HEADLESS-1 "$OUT/$1.png" 2>/dev/null || grim "$OUT/$1.png"; }
 
 shot 01-main
+
+# ── the wheel, which is the one input the FIFO cannot fake ──────────────────
+#
+# ⛔ THE FIRST WHEEL SHIPPED IN 0.1.0-44 AND NEVER FIRED ONCE. It was a
+# WheelHandler, whose `acceptedDevices` defaults to PointerDevice.Mouse — and
+# QtWayland calls every pointer on every Wayland session a TOUCHPAD, because
+# Wayland has no way to tell a client what kind of pointer a seat has. So the
+# handler rejected every event a real mouse produced, silently, and six grep
+# checks in syn_arcade_test.sh all passed against code that could not run.
+#
+# That is what this block exists for. It drives an actual wl_pointer axis event
+# into the nested compositor through zwlr_virtual_pointer_v1 and compares
+# SCREENSHOTS: a wheel that does nothing produces a picture identical to the
+# one before it, which is exactly the failure a grep cannot see.
+#
+# ⚠ AND IT PUTS THE SELECTION BACK. Everything after this is a walk that counts
+# rows and columns from a known start, so a block that left the selection three
+# tiles along would break every step below it while looking like a wheel bug.
+if [ -z "$VPTR" ]; then
+    echo "rig: no vpointer_click given — SKIPPING the wheel; pass it as arg 4" >&2
+else
+    wheel_at=$(( SCREEN_W / 2 ))
+    wheel_mid=$(( SCREEN_H / 2 ))
+
+    # ⚠ Discrete notches, and `scroll` sends them as such — see the header of
+    # vpointer_click.c. A continuous axis is a TOUCHPAD gesture, which Qt turns
+    # into a pixelDelta this interface deliberately ignores.
+    "$VPTR" "$wheel_at" "$wheel_mid" scroll 3; sleep 0.8
+    shot 01e-wheel-along-the-row
+    if cmp -s "$OUT/01-main.png" "$OUT/01e-wheel-along-the-row.png"; then
+        echo "FAIL: three notches of the wheel changed NOTHING on screen" >&2
+        WHEEL_FAILED=1
+    else
+        echo "wheel: three notches moved the selection"
+    fi
+
+    # ⚠ BACK TO THE START, and the assertion is that it lands EXACTLY there.
+    # Three notches out and three back is the same tile, so the picture has to
+    # be byte-identical — which also proves the notch accumulator is not
+    # dropping or doubling steps in one direction.
+    "$VPTR" "$wheel_at" "$wheel_mid" scroll -3; sleep 0.8
+    shot 01f-wheel-back
+    if cmp -s "$OUT/01-main.png" "$OUT/01f-wheel-back.png"; then
+        echo "wheel: and three back is the same tile again"
+    else
+        echo "FAIL: the wheel does not come back to where it started" >&2
+        WHEEL_FAILED=1
+    fi
+
+    # The sideways wheel a few mice have, on its own handler because one
+    # WheelHandler answers one orientation. Positive is a tilt to the RIGHT,
+    # which has to move the same way three notches down did.
+    "$VPTR" "$wheel_at" "$wheel_mid" scroll 3 horiz; sleep 0.8
+    shot 01g-wheel-tilt
+    if cmp -s "$OUT/01e-wheel-along-the-row.png" "$OUT/01g-wheel-tilt.png"; then
+        echo "wheel: a sideways tilt goes the same way as a turn"
+    else
+        echo "FAIL: tilting the wheel right is not three tiles right" >&2
+        WHEEL_FAILED=1
+    fi
+    "$VPTR" "$wheel_at" "$wheel_mid" scroll -3 horiz; sleep 0.8
+fi
 
 # ── the library, which is what the top of the screen DRESSES ────────────────
 #
@@ -767,3 +869,12 @@ ls -la "$OUT"
 DEST=${BIGRIG_OUT:-/tmp/bigrig-out}
 mkdir -p "$DEST" && rm -f "$DEST"/*.png && cp "$OUT"/*.png "$DEST"/
 echo "copied to $DEST"
+
+# ⚠ AND AN EXIT STATUS, because the wheel block is the first thing here that
+# ASSERTS rather than renders. Everything above it is for a person to look at;
+# a failed comparison has to be something a script can see, or it is a line of
+# output in the middle of eighty that nobody reads twice.
+if [ -n "${WHEEL_FAILED:-}" ]; then
+    echo "RIG FAILED: see the wheel block" >&2
+    exit 1
+fi
