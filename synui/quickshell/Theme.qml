@@ -860,11 +860,43 @@ QtObject {
         ? Qt.color(root.wpSecondary)
         : root.yellow
 
+    /*
+     * ── The dim ink, MEASURED against the surface it lands on ──────────────
+     *
+     * ⚠ IT WAS pick("#3a4a52", "#6b7280"), A FIXED PAIR OF GREYS, and #3a4a52
+     * is 1.85:1 on the popup this desktop actually draws. That is the second
+     * line of every widget — the artist under the track, the date under the
+     * clock, "9.4 / 31.3 GiB" under the memory bar, the source under a note —
+     * at a contrast where the text is present and cannot be read.
+     *
+     * The pair was chosen against A popupBg, once, and every theme since has
+     * moved the surface out from under it. dimOf() one screen up already knew
+     * the answer and computes it — the ink at 65% — for every popup whose ink
+     * has flipped; this branch was the one case that returned the literal
+     * instead, so the same function gave two answers 3.6× apart.
+     *
+     * So it is the same 65% of the way from the surface to the ink, and it
+     * tracks whatever the theme makes those. 6.7:1 on Prism, 5.0:1 on
+     * Prism Light, and no theme has to remember to ship a grey for it.
+     *
+     * ⚠ OPAQUE, and not the ink at 65% ALPHA — which is the same colour on a
+     * popup and NOT the same thing anywhere else. fgDim also fills the muted
+     * OSD and mixer sliders, the mixer knob and the drag grip's dots, and an
+     * alpha there would let the groove show through the fill that is supposed
+     * to cover it. Blending here keeps every one of those a solid colour.
+     */
+    function mix(a, b, t) {
+        return Qt.rgba(a.r + (b.r - a.r) * t,
+                       a.g + (b.g - a.g) * t,
+                       a.b + (b.b - a.b) * t, 1)
+    }
+    readonly property color fgDim:  mix(themed("popup", 11, 11, 20, 1.0),
+                                        root.fg, 0.65)
+
     // Not themed, because these carry MEANING rather than style: green is
     // charging, red is a battery about to die. They only switch on light/dark,
     // where the pastels are unreadable on a pale bar — the same reason
     // synui-apply-theme darkens the clock's yellow for light schemes.
-    readonly property color fgDim:  pick("#3a4a52", "#6b7280")
     readonly property color blue:   pick("#4dabff", "#1d4ed8")
     readonly property color green:  pick("#a6e3a1", "#166534")
     readonly property color red:    pick("#f38ba8", "#b91c1c")
