@@ -159,7 +159,8 @@ WidgetFrame {
              * to be re-tuned. Floored at 1 device pixel: a mark thinner than
              * that does not get thinner, it disappears.
              */
-            const k = r / (root.baseSize / 2 - 6)
+            const rBase = root.baseSize / 2 - 6
+            const k = r / rBase
             function px(v) { return Math.max(1, v * k) }
 
             const ink    = root.ink
@@ -289,10 +290,31 @@ WidgetFrame {
             // their ring is at 0.70, and a hand crossing it reads as a strike
             // through whichever numeral it happens to be over.
             const minReach = root.face === "roman" ? 0.60 : 0.80
+            /*
+             * ⚠ rBase, NOT r — THE ONLY TWO WIDTHS ON THIS FACE THAT ARE A
+             * FRACTION OF THE RADIUS.
+             *
+             * Everything else handed to stroke() is an absolute count of pixels
+             * at the designed size, which is exactly what px() is for. These two
+             * were written as `r * 0.075` and `r * 0.048`, which is already the
+             * right width at any radius — and then px() multiplied them by k a
+             * second time. The hands therefore grew with the SQUARE of the dial:
+             * correct at 148px where k is 1, and at the 420px ceiling a 46px
+             * slab where 15px was meant.
+             *
+             * It reads worst on neon, which is the only face that draws a bloom
+             * under its hands. The bloom is an absolute 9 and scales linearly,
+             * so past about twice the designed size the hand became WIDER than
+             * the glow that is supposed to surround it — the glow vanished under
+             * the slab and the face stopped looking like neon at all.
+             *
+             * px(rBase * 0.075) is r * 0.075 at every size, so the fractions
+             * still mean what they say and the designed face is unchanged.
+             */
             stroke(at(ha + Math.PI, r * 0.12), at(ha, r * 0.52),
-                   r * 0.075, neon ? accent : ink, 0.95)
+                   rBase * 0.075, neon ? accent : ink, 0.95)
             stroke(at(ma + Math.PI, r * 0.14), at(ma, r * minReach),
-                   r * 0.048, neon ? accent : ink, 0.95)
+                   rBase * 0.048, neon ? accent : ink, 0.95)
 
             if (root.seconds) {
                 const sa = minutes(root.ss)
