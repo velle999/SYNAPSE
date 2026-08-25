@@ -269,6 +269,29 @@ PanelWindow {
                                                 win.glass ? win.surfaceAlpha : 1.0)
     readonly property color inkDim: Theme.dimOf(win.ink)
 
+    /*
+     * The accent, restored onto what this widget is really drawn over.
+     *
+     * ⚠ `ink` HAD A CORRECTOR AND `accent` HAD NOTHING, which is invisible on a
+     * widget whose marks are ink and total on one whose marks are the accent —
+     * the analog clock's neon face draws every stroke it has in the accent and
+     * not one in the ink, so `inkOnBackdrop` reached none of it.
+     *
+     * ⚠ ALPHA ZERO WHEN THERE IS NO CARD, and that is not a tidy-up. lumOver()
+     * answers `surface` for alpha 1, so asking it about a chrome:false widget
+     * returns the theme's popup — a surface that widget does not have. A
+     * frameless widget IS drawn on the wallpaper, and 0 is how you say so.
+     *
+     * Left off `ink` deliberately: that one has judged itself against the popup
+     * for every frameless widget since they existed, and changing which surface
+     * it asks about is a separate question with its own blast radius.
+     */
+    readonly property color accentInk: win.inkOnBackdrop
+        ? Theme.accentOn(win.backdrop,
+                         win.chrome ? (win.glass ? win.surfaceAlpha : 1.0) : 0.0,
+                         win.accent)
+        : win.accent
+
     // ── Position ─────────────────────────────────────────
     // A stored position wins over the home one, and only for a widget that has
     // one — so a widget nobody has touched keeps following its designed corner,

@@ -121,7 +121,7 @@ WidgetFrame {
         // nothing until the next second ticked over.
         readonly property string repaintKey:
             root.face + "|" + root.hh + ":" + root.mm + ":" + root.ss +
-            "|" + root.seconds + "|" + root.ink + "|" + root.accent +
+            "|" + root.seconds + "|" + root.ink + "|" + root.accentInk +
             /* ⚠ THE SIZE IS ONE OF THEM NOW. It was a constant when this list
              * was written; the corner grip changes it many times a second, and
              * every stroke width in onPaint is scaled from it. A Canvas does
@@ -197,7 +197,12 @@ WidgetFrame {
 
             const ink    = root.ink
             const dim    = root.inkDim
-            const accent = root.accent
+            /* ⚠ accentInk, NOT accent. On this face the accent IS the
+             * drawing — bezel, glow, every tick, both hands, the pin — so it
+             * is the one colour that has to survive the wallpaper behind it.
+             * WidgetFrame corrects it against that backdrop the way it already
+             * corrected `ink`, which the neon face never draws in. */
+            const accent = root.accentInk
 
             function stroke(a, b, width, colour, alpha, cap) {
                 ctx.beginPath()

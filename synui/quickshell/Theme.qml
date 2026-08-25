@@ -755,6 +755,96 @@ QtObject {
     function popupFgOn(bd) { return root.inkOn(bd, root.popupAlphaOn(bd)) }
 
     /*
+     * ── An ACCENT restored onto what it is really drawn over ────────────────
+     *
+     * inkOn() above answers "which of two inks", because an ink is allowed to
+     * be black or white. An accent is not: it is the one colour on the widget
+     * carrying a MEANING, and swapping the clock's amber for white to win a
+     * contrast argument throws the meaning away to save the legibility. So this
+     * moves the VALUE and holds the hue — the QML twin of contrast.c's
+     * syn_glass_restore(), same rule, same walk, same twelve iterations, so the
+     * two sides cannot each decide it their own way.
+     *
+     * ⚠ WHY IT WAS NEEDED. WidgetFrame.ink goes through inkOn() and
+     * WidgetFrame.accent went through nothing at all. On a widget whose marks
+     * are drawn in the ink that is invisible; the analog clock's NEON face
+     * draws its bezel, its glow, all twelve ticks, both hands and the pin in
+     * the ACCENT and nothing whatever in the ink — so `inkOnBackdrop: true`,
+     * which that widget sets precisely so it stays readable straight on the
+     * wallpaper, reached not one stroke of it. A wallpaper whose accent sits
+     * near its own luminance drew a clock the colour of the sky behind it.
+     *
+     * `goal` is the line that keeps this from repainting anything it should
+     * not: never more than the accent already earns on the theme's OWN
+     * surface, capped at AA. A palette that is low-contrast on purpose stays
+     * that way, and on a widget with a card the composite IS that surface, so
+     * the whole function is arithmetic that changes nothing.
+     *
+     * Both extremes of the backdrop, exactly as inkOn() asks them: a widget
+     * lying across a dark river and a lit bridge has to be legible on both or
+     * it is legible sometimes. Where NEITHER direction clears the goal — a
+     * backdrop that straddles the middle — the best of the three candidates
+     * wins, which is never worse than the colour that was asked for.
+     */
+    function accentOn(bd, a, base) {
+        const c = Qt.color(base)
+        if (!bd || !(bd.lumMin >= 0) || !(bd.lumMax >= 0)) return c
+
+        const own = root.lumOf(root.popupBg)
+        const s0  = root.lumOver(own, a, bd.lumMin)
+        const s1  = root.lumOver(own, a, bd.lumMax)
+
+        function worst(col) {
+            const l = root.lumOf(col)
+            return Math.min(root.lumContrast(l, s0), root.lumContrast(l, s1))
+        }
+
+        /*
+         * ⚠ NO SURFACE IN FRONT MEANS NO GOAL TO DEFER TO.
+         *
+         * The cap exists so a palette that is low-contrast on its OWN panel is
+         * not repainted merely because the panel went to glass — it is a
+         * statement about a panel. A frameless widget has no panel. The
+         * wallpaper is its surface, the accent was never judged against a popup
+         * it does not touch, and on this desktop the accent is MEASURED FROM
+         * that same wallpaper (Theme.clock is the wallpaper's secondary), so
+         * capping the ask at what it scores on the popup is deferring to a
+         * number about nothing — and it is exactly what left the reported dial
+         * at 3.0:1 and unchanged.
+         *
+         * The strokes are drawn at partial alpha on top of that (the glow ring
+         * at 0.05–0.17, the minor ticks at 0.45), so the COLOUR has to clear
+         * more than any one mark it draws does.
+         */
+        const goal = a > 0 ? Math.min(root.lumContrast(root.lumOf(c), own), 4.5)
+                           : 4.5
+        if (worst(c) >= goal) return c
+
+        // Toward white is c + (1 - c) * t and toward black is c * (1 - t).
+        // Both move every channel together, which is what holds the hue: a
+        // wallpaper's #D66318 comes back a lighter orange, not a grey.
+        function towards(up, t) {
+            return up ? Qt.rgba(c.r + (1 - c.r) * t, c.g + (1 - c.g) * t,
+                                c.b + (1 - c.b) * t, c.a)
+                      : Qt.rgba(c.r * (1 - t), c.g * (1 - t), c.b * (1 - t), c.a)
+        }
+
+        let best = c
+        for (let d = 0; d < 2; d++) {
+            const up = d === 0
+            let lo = 0, hi = 1
+            for (let i = 0; i < 12; i++) {
+                const t = (lo + hi) / 2
+                if (worst(towards(up, t)) >= goal) hi = t
+                else                               lo = t
+            }
+            const cand = towards(up, hi)
+            if (worst(cand) > worst(best)) best = cand
+        }
+        return best
+    }
+
+    /*
      * The DIM ink for the same surface — placeholder text, a menu row that is
      * off, the second line of a pair.
      *
