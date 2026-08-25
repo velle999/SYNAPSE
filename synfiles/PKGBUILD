@@ -110,7 +110,7 @@ pkgver=0.1.0
 #   both leave its bounds too, and read exactly like the bug 58 was supposed
 #   to fix, just one boundary further in. Its exit now gets the same 300ms
 #   grace as the row-to-flyout hop instead of an instant close.
-pkgrel=59
+pkgrel=60
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

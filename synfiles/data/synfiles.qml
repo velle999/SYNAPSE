@@ -5848,10 +5848,16 @@ FloatingWindow {
             // A short grace period survives that graze; only a pointer that
             // is still over neither the trigger row nor the flyout when the
             // timer fires actually meant to leave.
+            //
+            // ⚠ The FIRING is guarded, not just the restarts. Where the
+            // pointer is now is a fact worth asking at the moment of the
+            // close; a restart is only ever a guess made earlier, and one
+            // stale guess is all it takes to shut the flyout under a hand
+            // that is resting on it. See ctxSubHover for how that happened.
             Timer {
                 id: subCloseTimer
                 interval: 300
-                onTriggered: ctxMenu.closeSub()
+                onTriggered: if (!ctxSubHover.hovered) ctxMenu.closeSub()
             }
 
             visible: ctxMenu.open
@@ -6248,20 +6254,35 @@ FloatingWindow {
             y: Math.max(4, Math.min(ctxMenu.y + ctxMenu.subY - 4,
                                     parent.height - height - 4))
 
-            // Entering here cancels whatever grace period a graze over a
-            // sibling row started — the pointer arrived, so it was headed
-            // here after all. Leaving the flyout used to close it right
-            // away, on the claim that no legitimate path leaves through here
-            // without meaning to be done — but overshooting past the last
-            // entry, or correcting back after clipping the 4px overlap band
-            // toward a row near the top, both exit these bounds too. Same
-            // 300ms grace as the row-to-flyout hop, not an instant close.
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton
-                onEntered: subCloseTimer.stop()
-                onExited: subCloseTimer.restart()
+            // ⚠ A HoverHandler, NOT a hoverEnabled MouseArea filling the
+            // panel. Qt gives a hover enter/exit pair to exactly ONE item —
+            // the topmost one under the pointer — so the instant the pointer
+            // reached an ENTRY inside this flyout, the entry's own MouseArea
+            // took the hover and the panel-filling MouseArea got `exited`,
+            // restarted the grace timer, and the flyout closed 300ms later
+            // with the pointer sitting still on the entry it was aimed at.
+            // That is the whole "it closes by itself before I can get to it"
+            // report, and the 300ms grace only turned an instant close into
+            // a 300ms one. Verified with QtQuick.Test mouseMove on Qt 6.11:
+            //   MouseArea parent → ["outer:enter","row0:enter","outer:exit"]
+            //   HoverHandler     → hovered stays TRUE over every child row,
+            //                      false only when the pointer really leaves
+            // A HoverHandler reports the whole SUBTREE, which is the question
+            // actually being asked here: is the pointer anywhere on this
+            // flyout? Note the enter/exit ORDER above — entering the next row
+            // arrives BEFORE leaving the previous one, so no scheme built on
+            // per-row enter/exit pairs can be made correct either.
+            //
+            // `hovered` false is a real leave: overshooting past the last
+            // entry or correcting back after clipping the 4px overlap band
+            // both land here, so it still gets the same 300ms grace as the
+            // row-to-flyout hop rather than an instant close.
+            HoverHandler {
+                id: ctxSubHover
+                onHoveredChanged: {
+                    if (ctxSubHover.hovered) subCloseTimer.stop()
+                    else subCloseTimer.restart()
+                }
             }
 
             Flickable {

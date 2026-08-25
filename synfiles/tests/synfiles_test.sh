@@ -2217,6 +2217,34 @@ if [ -f "$QML" ]; then
         && ok "the flyout exists" \
         || bad "synfiles.qml has no Open With flyout"
 
+    # ⚠ And its hover is a HoverHandler, NOT a MouseArea filling the panel.
+    # Qt hands the hover enter/exit pair to exactly ONE item — the topmost
+    # under the pointer — so a panel-filling MouseArea is `exited` the moment
+    # the pointer reaches an ENTRY inside the flyout, because the entry's own
+    # MouseArea takes the hover. That restarted the close timer under a hand
+    # that had just ARRIVED, and the flyout went away 300ms later while the
+    # pointer sat still on it: "it closes by itself before I can get to it".
+    # tests/ctx_flyout_hover.qml drives the pointer path that proves it.
+    # ⚠ Matched in a variable, not `awk … | grep -q`: under `set -o pipefail`
+    # grep -q exits the moment it matches, awk dies of SIGPIPE, and the
+    # PIPELINE reports 141 — a passing check that reads as a failure.
+    ctxsub=$(awk '/id: ctxSub$/,/^        \}$/' "$QML")
+    case "$ctxsub" in
+        *HoverHandler*) ok "the flyout tracks hover across its whole subtree" ;;
+        *) bad "ctxSub lost its HoverHandler — hover over an entry reads as a leave" ;;
+    esac
+
+    grep -q 'onExited: subCloseTimer.restart()' "$QML" \
+        && bad "the flyout closes on a MouseArea exit an ENTRY inside it causes" \
+        || ok "no panel-filling MouseArea decides when the flyout leaves"
+
+    # The FIRING is guarded too, not only the restarts: where the pointer is
+    # now is a fact, a restart scheduled 300ms ago is only a guess, and one
+    # stale guess is all it takes to shut the flyout under a resting hand.
+    grep -q 'onTriggered: if (!ctxSubHover.hovered)' "$QML" \
+        && ok "the close timer re-checks the pointer before it closes" \
+        || bad "subCloseTimer closes without asking where the pointer is"
+
     # ── the empty-space menu ────────────────────────────────────────────────
     grep -q 'if (!ctxMenu.row)' "$QML" \
         && ok "right-clicking the empty space has its own menu" \
@@ -2533,6 +2561,40 @@ if [ -f "$QML" ] && command -v quickshell >/dev/null 2>&1; then
     fi
 else
     echo "  skip  quickshell not installed, cannot check rename extensions"
+fi
+
+# ── the Open With flyout survives a pointer resting on it ───────────────────
+#
+# The static greps above check the WIRING; this drives a real pointer path
+# through a replica of it — open the flyout, graze the row below the trigger
+# on the way across (unavoidable when the entry sits lower than the row that
+# opened it), rest on an entry for 600ms, then click.
+#
+# ⚠ Qt 6's qmltestrunner, not /usr/bin/qmltestrunner, which is Qt 5's: it
+# rejects the unversioned imports and prints the reason to a stderr the runner
+# discards, so a Qt 5 run looks exactly like a test that found nothing wrong.
+HOVER_QML="$(dirname "$0")/ctx_flyout_hover.qml"
+QMLTEST=""
+for c in /usr/lib/qt6/bin/qmltestrunner /usr/lib/qt6/bin/qmltestrunner6; do
+    [ -x "$c" ] && { QMLTEST=$c; break; }
+done
+if [ -n "$QMLTEST" ] && [ -f "$HOVER_QML" ]; then
+    hrun="$T/hoverrun"; mkdir -p "$hrun"
+    hout=$(XDG_RUNTIME_DIR="$hrun" QT_QPA_PLATFORM=offscreen \
+           timeout 60 "$QMLTEST" -input "$HOVER_QML" 2>&1)
+    hpass=$(printf '%s' "$hout" | grep -c '^PASS ' || true)
+    if printf '%s' "$hout" | grep -q '^FAIL'; then
+        bad "the Open With flyout closes under a resting pointer"
+        printf '%s\n' "$hout" | grep -A2 '^FAIL' | sed 's/^/        /' >&2
+    elif [ "$hpass" -lt 5 ]; then
+        # A Qt 5 runner, or an import error, exits without running anything.
+        bad "the flyout hover test did not run ($hpass passes)"
+        printf '%s\n' "$hout" | tail -5 | sed 's/^/        /' >&2
+    else
+        ok "the flyout stays open under a resting pointer ($hpass checks)"
+    fi
+else
+    echo "  skip  Qt 6 qmltestrunner not installed, cannot check flyout hover"
 fi
 
 unset SYNFILES_CONFIG
