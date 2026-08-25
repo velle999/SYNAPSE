@@ -30,7 +30,7 @@ pkgver=0.1.0
 # 22: the nix profile documents comp_synstudio. syn-install's config_test.sh
 #   checks that vocabulary for drift in BOTH directions — a key the installer
 #   asks about and the example never mentions is a key nobody can discover.
-pkgrel=22
+pkgrel=23
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

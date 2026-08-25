@@ -33,7 +33,7 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers syn-arcade cliamp synstudio)
+       synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -446,6 +446,15 @@ build_component syn-arcade
 # LUT-vs-engine PSNR comparison) are guarded by `have ffmpeg` and skip rather
 # than fail on a host without it.
 build_component synstudio
+
+# syn-gfn — GeForce NOW in whichever Chromium-family browser the machine has.
+# Three files and no compiler, so it has no ordering constraint of any kind;
+# it is last only because it is the newest.
+#
+# ⚠ IT DEPENDS ON NO BROWSER, deliberately. The launcher finds one at runtime
+# and names what is missing if it cannot, which is the right answer for a
+# service not everybody uses — see its PKGBUILD.
+build_component syn-gfn
 
 # Vendored, boot-critical where it is installed, and never installed by this
 # script. See build_vendored_pkg.

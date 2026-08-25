@@ -1049,6 +1049,7 @@ SEL_COMPONENTS=(
     "comp_arcade|1|1|app|syn-arcade|Arcade|pads + overlay"
     "comp_cliamp|1|1|app|cliamp|cliamp|music player"
     "comp_synstudio|1|1|app|synstudio|Studio|photo + video"
+    "comp_gfn|1|1|app|syn-gfn|GeForce NOW|cloud gaming"
     "comp_arsenal|1|1|app|syn-arsenal|Arsenal|BlackArch tools"
     "comp_chibi|1|1|app|chibi|Chibi|voice companion"
     "comp_vibe|1|1|app|vibe|Vibe|AI coding help"

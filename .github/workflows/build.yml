@@ -304,6 +304,17 @@ jobs:
         run: |
           ./syn/tests/resolve_test.sh
 
+      # syn-gfn's flags, which are the whole app: --class is what makes the
+      # window dock-pinnable (synui resolves a pin by <app_id>.desktop and runs
+      # the app_id as a command on a miss), --app= would silently take that
+      # away, --start-fullscreen core-dumps Vivaldi under Wayland, and the
+      # three site permissions have to be in the profile before a stream can
+      # raise a prompt nobody can see. Stubs every candidate browser, so it
+      # starts none.
+      - name: GeForce NOW launcher (syn-gfn)
+        run: |
+          ./syn-gfn/tests/syn_gfn_test.sh
+
       # The firewall, and whether the box can find out it has one. synnet has
       # applied a default-drop input chain at every start for a while and
       # `--status` denied it anyway — listing an nftables object needs

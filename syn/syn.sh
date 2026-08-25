@@ -24,6 +24,7 @@ Usage:
                           currently Samsung ULD (M2020/M2020W)
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
+  syn gfn                 GeForce NOW in a browser (--list-browsers, --help)
   syn install             Install SynapseOS to disk
   syn update [check|apply]  Update SynapseOS itself from git
   syn help                This help
@@ -329,6 +330,10 @@ case "${1:-help}" in
     # to go through `syn` would break if PATH were ever not what it expects.
     resolve)        shift; exec /usr/lib/syn/syn-resolve "$@" ;;
     printer)        shift; exec /usr/lib/syn/syn-printer "$@" ;;
+    # A window, like `syn ui` and `syn install` above it: a cloud stream has no
+    # terminal form to degrade to, and the launcher is the whole CLI — its
+    # flags (--browser, --profile, --list-browsers) pass straight through.
+    gfn)            shift; exec syn-gfn "$@" ;;
     install)        exec syn-install ;;
     update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;

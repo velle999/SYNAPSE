@@ -299,6 +299,11 @@ PACKAGES=(
     # mirror from `extra` like any other upstream one, and needs no network at
     # build time beyond that.
     synstudio
+    # syn-gfn — three files, no compiler, no ordering constraint, and no
+    # browser dependency: the launcher finds one at runtime and says what is
+    # missing if it cannot. On the ISO because a live session is exactly where
+    # somebody tries "does my hardware do this yet".
+    syn-gfn
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

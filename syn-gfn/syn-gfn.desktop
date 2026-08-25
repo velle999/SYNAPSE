@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Name=GeForce NOW
+GenericName=Cloud Gaming
+Comment=Stream your games over the network, in a browser that can hold the mouse
+Exec=syn-gfn
+# Our own mark and deliberately not NVIDIA's: this is a launcher for their
+# service, not their client, and shipping their logo would say otherwise. See
+# syn-gfn.svg.
+Icon=syn-gfn
+Terminal=false
+# ⛔ THE BASENAME OF THIS FILE MUST STAY syn-gfn.desktop. synui's dock resolves
+# a pinned window through a direct <app_id>.desktop lookup and does NOT read
+# StartupWMClass; on a miss it runs the app_id as a command instead. syn-gfn
+# passes --class=syn-gfn to the browser so the window's app_id is syn-gfn, and
+# these two names have to keep matching for a pinned icon to launch anything.
+StartupWMClass=syn-gfn
+# One main category only: Game and Network are both main categories in the
+# spec, and an entry carrying two of them is listed twice in a menu that
+# builds from them. This is a way to play games; that it arrives over a
+# network is not what anybody looks under.
+Categories=Game;
+Keywords=geforce;now;gfn;cloud;gaming;stream;nvidia;
+StartupNotify=true

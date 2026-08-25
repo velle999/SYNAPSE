@@ -1,0 +1,45 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-gfn — GeForce NOW as a dedicated web app.
+#
+# ⛔ NO BROWSER IN depends, AND THAT IS DELIBERATE. Nothing here needs one to
+# install, the launcher names what is missing and how to get it, and pulling a
+# whole browser into the ISO for a service not everybody uses is the wrong
+# trade. It picks the first Chromium-family browser it finds at runtime — see
+# `syn-gfn --list-browsers`.
+#
+# ⚠ FIREFOX IS NOT A FALLBACK. GeForce NOW's web client refuses Gecko outright,
+# so the browser SynapseOS does ship cannot run this and listing it as an
+# option would only produce a different failure.
+pkgname=syn-gfn
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="GeForce NOW in a browser that can hold the mouse — cloud gaming for SynapseOS"
+arch=('any')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+depends=('bash')
+# python3 writes the three site permissions (keyboard lock, pointer lock,
+# automatic fullscreen) into the profile before the first launch. Without it
+# the app still runs — the browser simply asks, and a prompt raised while the
+# page is full screen with the pointer captured is a prompt nobody can see.
+optdepends=('python: pre-grant the keyboard/pointer-lock permissions'
+            'chromium: the browser to stream in'
+            'vivaldi: the browser to stream in')
+source=('syn-gfn.sh'
+        'syn-gfn.desktop'
+        'syn-gfn.svg')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+    cd "$srcdir"
+
+    install -Dm755 syn-gfn.sh      "$pkgdir/usr/bin/syn-gfn"
+    install -Dm644 syn-gfn.desktop "$pkgdir/usr/share/applications/syn-gfn.desktop"
+
+    # Scalable only, into hicolor: the dock and the menu ask for whatever size
+    # they draw at, and hicolor is the theme every other icon theme inherits
+    # from, so the mark survives a theme switch.
+    install -Dm644 syn-gfn.svg \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/syn-gfn.svg"
+}

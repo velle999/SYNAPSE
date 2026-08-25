@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    syn-gfn — a game that is somewhere else.
+
+    ⛔ THE <svg> ROOT IS THE FIRST THING IN THIS FILE AND MUST STAY THERE.
+    gdk-pixbuf sniffs only the first 256 bytes to decide whether a file is an
+    SVG at all, so a licence header above the root makes the icon INVISIBLE to
+    GTK — blank in a GNOME menu — while Qt renders it perfectly. That is why
+    the comment you are reading is here rather than above.
+
+    SPDX-License-Identifier: GPL-2.0-or-later
+    SynapseOS Project
+
+    A cloud with a play mark cut out of it: the drawing has to read at 16px in
+    a dock, so it is one silhouette and one hole, no strokes and no gradient.
+    Deliberately NOT NVIDIA's eye or their green — this launches their service
+    in a browser, it is not their client, and wearing their mark would claim
+    otherwise.
+  -->
+  <defs>
+    <mask id="play">
+      <rect width="48" height="48" fill="#fff"/>
+      <path d="M20.5 17.5 L32 24 L20.5 30.5 Z" fill="#000"/>
+    </mask>
+  </defs>
+
+  <!-- The cloud: three lobes and a flat base, as one path so the mask cuts
+       through the whole shape rather than through whichever lobe it lands on. -->
+  <path mask="url(#play)" fill="#22d3ee"
+        d="M13.5 37 C8.25 37 4 32.9 4 27.85 C4 23.4 7.3 19.7 11.65 19 C12.5 13.35
+           17.3 9 23.1 9 C28.15 9 32.5 12.3 34 16.9 C34.5 16.8 35 16.75 35.5 16.75
+           C40.75 16.75 45 20.85 45 25.9 C45 30.95 40.75 37 35.5 37 Z"/>
+
+  <!-- A ground line, so the cloud is read as "over there" rather than as
+       weather. Same ink at half strength; it disappears first when the icon is
+       drawn small, which is the right thing to lose. -->
+  <rect x="10" y="40.5" width="28" height="3" rx="1.5" fill="#22d3ee" opacity="0.45"/>
+</svg>

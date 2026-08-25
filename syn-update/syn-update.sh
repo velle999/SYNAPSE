@@ -69,7 +69,7 @@ COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles
             syn-settings syn-disks syn-edit syntty syn-confine
             limine-mkinitcpio-hook fetch synapse-wallpapers syn-arcade cliamp
-            synstudio)
+            synstudio syn-gfn)
 
 # On the ISO but NOT updatable this way, with the reason. Reported rather than
 # skipped in silence: a component quietly frozen forever is exactly the bug

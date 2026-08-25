@@ -170,6 +170,11 @@ cliamp
 # answering before installing — and because a live session someone is testing
 # hardware from is exactly where they will want to look at a photograph.
 synstudio
+# GeForce NOW, in whichever Chromium-family browser is installed. Ships with no
+# browser dependency of its own — it names what is missing rather than dragging
+# a second browser onto the ISO beside Firefox, which the service refuses
+# anyway.
+syn-gfn
 # The settings app: displays, region, date and time, network, Bluetooth, power,
 # kernels, default applications, and where configuration lives. It was in
 # build-all.sh's component list, in syn-update's COMPONENTS and in the start

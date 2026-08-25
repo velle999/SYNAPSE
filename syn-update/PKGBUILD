@@ -43,7 +43,7 @@ pkgver=0.1.0
 #   pacman's IgnorePkg — a component is BUILT here and installed with
 #   `pacman -U`, which IgnorePkg does not gate, so an entry there would look
 #   set and do nothing.
-pkgrel=43
+pkgrel=44
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

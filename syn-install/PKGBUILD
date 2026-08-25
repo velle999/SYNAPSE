@@ -158,7 +158,7 @@ pkgver=0.1.0
 #   theme.json fallback the bar already had (a new dockAlpha field), so `auto`
 #   resolves correctly on the very first login and neither line needs to spell
 #   out a number that only happened to match the theme's own answer.
-pkgrel=95
+pkgrel=96
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
