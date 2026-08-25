@@ -5839,6 +5839,21 @@ FloatingWindow {
             property bool subOpen: false
             function closeSub() { ctxMenu.subOpen = false; ctxMenu.subItems = [] }
 
+            // Rows have no gaps, and the flyout hangs beside whichever one is
+            // further down the list than "Open with" — reaching an entry in
+            // it means moving the pointer DOWN as well as right. That path
+            // grazes the row below "Open with" for a frame, and an instant
+            // close on entering it read as "the menu closes when I go for
+            // it": the flyout vanished before the pointer ever reached it.
+            // A short grace period survives that graze; only a pointer that
+            // is still over neither the trigger row nor the flyout when the
+            // timer fires actually meant to leave.
+            Timer {
+                id: subCloseTimer
+                interval: 300
+                onTriggered: ctxMenu.closeSub()
+            }
+
             visible: ctxMenu.open
             onOpenChanged: if (!ctxMenu.open) ctxMenu.closeSub()
             onRowChanged: ctxMenu.closeSub()
@@ -6096,21 +6111,25 @@ FloatingWindow {
                                 hoverEnabled: true
                                 enabled: ctxItem.modelData.on
                                 cursorShape: Qt.PointingHandCursor
-                                // Hover is what opens and closes the flyout —
-                                // no timers, no click needed. Entering ANY
-                                // other row closes it, which is what stops the
-                                // submenu hanging over entries it has nothing
-                                // to do with; the pointer's path from this row
-                                // into the flyout goes straight right, never
-                                // through another row, so nothing has to keep
-                                // it alive on the way.
+                                // Hover is what opens and closes the flyout.
+                                // Entering ANY other row STARTS the close
+                                // grace timer (subCloseTimer, on ctxMenu) —
+                                // it is what stops the submenu hanging over
+                                // entries it has nothing to do with — but does
+                                // not close it outright: reaching a row in the
+                                // flyout that sits below "Open with" means
+                                // moving the pointer down as well as right,
+                                // which grazes the row below this one, and an
+                                // instant close there closed the flyout before
+                                // the pointer ever reached it.
                                 onEntered: {
                                     if (ctxItem.modelData.act === "submenu") {
+                                        subCloseTimer.stop()
                                         ctxMenu.subItems = ctxItem.modelData.sub
                                         ctxMenu.subY = ctxItem.mapToItem(ctxMenu, 0, 0).y
                                         ctxMenu.subOpen = true
-                                    } else {
-                                        ctxMenu.closeSub()
+                                    } else if (ctxMenu.subOpen) {
+                                        subCloseTimer.restart()
                                     }
                                 }
                                 onClicked: {
@@ -6229,13 +6248,17 @@ FloatingWindow {
             y: Math.max(4, Math.min(ctxMenu.y + ctxMenu.subY - 4,
                                     parent.height - height - 4))
 
-            // Leaving the flyout sideways closes it. Not on the parent row's
-            // exit, which fires on the way IN here.
+            // Entering here cancels whatever grace period a graze over a
+            // sibling row started — the pointer arrived, so it was headed
+            // here after all. Leaving the flyout sideways closes it right
+            // away: unlike the row-to-flyout hop, there is no legitimate path
+            // that leaves through here without meaning to be done with it.
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
-                onExited: if (!containsMouse) ctxMenu.closeSub()
+                onEntered: subCloseTimer.stop()
+                onExited: if (!containsMouse) { subCloseTimer.stop(); ctxMenu.closeSub() }
             }
 
             Flickable {

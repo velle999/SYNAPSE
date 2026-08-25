@@ -247,6 +247,12 @@ FloatingWindow {
     // keystroke, which looks exactly like the editor being slow.
     property var pending: ({ st: ({}), lines: [], spans: ({}), bufs: [] })
 
+    // A vim-modal engine starts in NORMAL, which reads as "the editor is
+    // broken" to someone who opens it and types: nothing appears. Fired once,
+    // off the FIRST frame only — after that, leaving INSERT is something the
+    // user did on purpose and no button gets to second-guess it.
+    property bool startupInsertSent: false
+
     function disp(s) {
         // decodeURIComponent THROWS on a percent sequence that is not valid
         // UTF-8, and real files are not always valid UTF-8 — a file saved on a
@@ -296,6 +302,10 @@ FloatingWindow {
             root.bufs = root.pending.bufs
             root.pending = ({ st: ({}), lines: [], spans: ({}), bufs: [] })
             root.engineUp = true
+            if (!root.startupInsertSent) {
+                root.startupInsertSent = true
+                if ((root.st.mode || "NORMAL") === "NORMAL") root.sendKeys("i")
+            }
             if (root.st.quit === "1") Qt.quit()
         }
     }
@@ -616,6 +626,26 @@ FloatingWindow {
         anchors.fill: parent
         color: root.cBg
 
+        // A DropArea has no visual footprint and takes no mouse press, only
+        // drag events, so it can sit over the whole window without stealing
+        // clicks from anything under it. Local files only — the same rule
+        // synfiles' own drop handling uses: a dragged web link is refused
+        // rather than opened as an empty file named after a URL.
+        DropArea {
+            anchors.fill: parent
+            onEntered: (drag) => { if (!drag.hasUrls) drag.accepted = false }
+            onDropped: (drop) => {
+                if (!drop.hasUrls) return
+                for (const u of drop.urls) {
+                    const s = "" + u
+                    if (s.indexOf("file://") !== 0) continue
+                    root.send("open " + encodeURIComponent(root.disp(s.substring(7))))
+                }
+                drop.accept(Qt.CopyAction)
+                editor.forceActiveFocus()
+            }
+        }
+
         // ── toolbar ─────────────────────────────────────────────────────────
         Rectangle {
             id: toolbar
@@ -879,9 +909,17 @@ FloatingWindow {
                         // Right-click INSIDE a selection keeps it — "copy
                         // these three lines" is the whole reason they are
                         // selected. Outside one it moves the caret first, the
-                        // way a left click does.
-                        if (!root.isVisual)
+                        // way a left click does — but unlike a left click this
+                        // one always opens a menu rather than continuing to
+                        // type, so it can leave INSERT first. Skipping that
+                        // made gotoPos's raw `NG N|` land in the document
+                        // ahead of the menu opening: right-click ▸ Paste read
+                        // as "pasting mouse code" because the click itself had
+                        // just typed it.
+                        if (!root.isVisual) {
+                            if (root.inserting) root.sendKeys("<Esc>")
                             root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
+                        }
                         ctxMenu.openAt(m.x, m.y)
                         return
                     }

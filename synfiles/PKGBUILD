@@ -95,7 +95,15 @@ pkgver=0.1.0
 #   them, and asserts on PASS as well as the absence of FAIL: a run that
 #   printed its marker and nothing else would satisfy a bare "no FAIL" while
 #   proving nothing. ⚠ console.log needs QT_ASSUME_STDERR_HAS_CONSOLE.
-pkgrel=57
+
+# 58: the "Open with" flyout closed before a click landed in it. Reaching an
+#   entry lower than the "Open with" row means moving the pointer down as well
+#   as right, which grazes the row below for a frame — and the hover handler
+#   closed the flyout the instant ANY other row was entered, so it read as
+#   "the menu closes when I go for it": gone before the pointer arrived.
+#   A 300ms grace timer (subCloseTimer) now stands in for the instant close;
+#   entering the flyout itself, or re-entering "Open with", cancels it.
+pkgrel=58
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
