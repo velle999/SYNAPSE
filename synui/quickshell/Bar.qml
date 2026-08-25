@@ -164,8 +164,7 @@ PanelWindow {
         const out = []
         for (let i = 0; i < pluginRow.count; i++) {
             const slot = pluginRow.itemAt(i)
-            if (slot && slot.item && slot.modelData
-                && slot.modelData.id === name) out.push(slot.item)
+            if (slot && slot.item && slot.pid === name) out.push(slot.item)
         }
         return out
     }
@@ -545,21 +544,30 @@ PanelWindow {
                      * with it — and the bar is the thing you would use to fix
                      * it.
                      *
-                     * Plugins.active is already filtered to enabled AND
+                     * Plugins.activeModel is already filtered to enabled AND
                      * hostable, so nothing here has to re-ask.
+                     *
+                     * ⚠ A ListModel OF IDS, NOT THE `active` ARRAY, and the
+                     * difference is whether a reorder RELOADS every plugin
+                     * here or moves one item. See Plugins.syncModel for the
+                     * whole argument. What it costs on this side is one
+                     * indirection: the row is looked up by id rather than
+                     * handed over, as a BINDING so a rescan that changes a
+                     * plugin's directory still reaches its slot.
                      */
                     Repeater {
                         id: pluginRow
-                        model: Plugins.active
+                        model: Plugins.activeModel
 
                         delegate: Loader {
                             id: pluginSlot
-                            required property var modelData
+                            required property string pid
+                            readonly property var row: Plugins.rowFor(pluginSlot.pid)
 
                             anchors.verticalCenter: parent ? parent.verticalCenter
                                                            : undefined
                             asynchronous: true
-                            source: Plugins.entryUrl(pluginSlot.modelData)
+                            source: Plugins.entryUrl(pluginSlot.row)
 
                             /* A widget that failed to load takes no width: a
                              * broken plugin leaving a gap in the bar would read
@@ -593,15 +601,15 @@ PanelWindow {
                                  * contract says it should.
                                  */
                                 pluginSlot.item.bar = bar
-                                pluginSlot.item.moduleName = pluginSlot.modelData.id
+                                pluginSlot.item.moduleName = pluginSlot.pid
                                 pluginSlot.item.settings =
-                                    PluginConfig.settingsFor(pluginSlot.modelData.id)
+                                    PluginConfig.settingsFor(pluginSlot.pid)
                             }
 
                             onStatusChanged: {
                                 if (pluginSlot.status === Loader.Error)
                                     console.warn("synui-bar: plugin",
-                                                 pluginSlot.modelData.id,
+                                                 pluginSlot.pid,
                                                  "failed to load from",
                                                  pluginSlot.source)
                             }
@@ -626,8 +634,7 @@ PanelWindow {
                                 function onRevisionChanged() {
                                     if (!pluginSlot.item) return
                                     pluginSlot.item.settings =
-                                        PluginConfig.settingsFor(
-                                            pluginSlot.modelData.id)
+                                        PluginConfig.settingsFor(pluginSlot.pid)
                                 }
                             }
                         }

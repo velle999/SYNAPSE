@@ -1365,6 +1365,20 @@ test('plugin_host', plugin_host_sh,
      depends : [synui_exe],
      timeout : 120)
 
+# ⛔ AND NEITHER OF THOSE SEES WHAT A REORDER COSTS. The arrows on the bar's
+# right-click menu used to spend two full scans per click — one to work out the
+# current order, one to find out what the write had done — and the second one
+# reloaded every plugin widget on every bar as a side effect. All of it silent,
+# none of it an error. plugin_reorder.sh moves a plugin over IPC and counts what
+# the bar spends doing it: one call to synui-plugins, no scan, and no widget
+# rebuilt.
+plugin_reorder_sh = find_program('tests/plugin_reorder.sh')
+test('plugin_reorder', plugin_reorder_sh,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 120)
+
 plugins_sh = find_program('tests/plugins.sh')
 test('plugins', plugins_sh,
      args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],

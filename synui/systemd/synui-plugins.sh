@@ -89,6 +89,7 @@ usage() {
 usage: synui-plugins [list|scan]
        synui-plugins <id> [on|off|toggle]
        synui-plugins <id> [up|down]
+       synui-plugins order <id> [<id>...]
        synui-plugins add <git-url> [name]
        synui-plugins remove <id>
        synui-plugins browse [text]
@@ -102,6 +103,12 @@ usage: synui-plugins [list|scan]
   synui-plugins x on    turn one on
   synui-plugins x up    move it one place earlier in the bar's row of them
   synui-plugins x down  move it one place later
+  order <id>...         set the whole row order at once, from first to last.
+                        What the bar's own right-click menu writes: it is
+                        already drawing the list, so it states the finished
+                        order rather than making this walk every plugin
+                        directory again to work out what "one place earlier"
+                        meant. A plugin left out of the list loses its place.
   add <id>              install one out of browse
   add <git-url>         clone a plugin into ~/.config/synui/plugins and, if it
                         is hostable, turn it on
@@ -717,6 +724,42 @@ clone_plugin() {  # clone_plugin <repo> <ref> <dest>
 case "${1:-list}" in
     -h|--help|help) usage ;;
     scan) scan ;;
+    order)
+        # ── The whole order at once, and WITHOUT A SCAN ─────────────────────
+        #
+        # `<id> up` has to scan: it is given one id and a direction, so it must
+        # first find out what the current order even is. That scan walks every
+        # search directory, reads every manifest and greps every entry point —
+        # a quarter of a second with a dozen installed — and the bar paid it
+        # TWICE per click on an arrow: once here, and once for the re-scan its
+        # own file-watch then triggered. That is what "reordering is slow" was.
+        #
+        # The bar already knows the answer. It is drawing the list; it knows
+        # which row moved where, because that is what the user just clicked.
+        # So it states the finished order and this only writes it — no walk, no
+        # manifest, no grep, and the file lands within a few milliseconds of
+        # the click.
+        #
+        # ⚠ THE CALLER STATES A COMPLETE ORDER, and anything it leaves out
+        # loses its place (it will be appended at the end of the next scan, as
+        # a never-ordered plugin always is). That is the difference between
+        # this and `up`/`down`, which are a MOVE within an order this script
+        # works out for itself, and it is why the two verbs coexist rather than
+        # one being written in terms of the other.
+        #
+        # No id is checked against what is installed, which `up`/`down` do
+        # check: an id in this file that no plugin answers to is already the
+        # ordinary case (see order_effective — a removed plugin keeps its line
+        # so that reinstalling it returns it to its place), so a check here
+        # would buy nothing and would cost exactly the scan this verb exists to
+        # avoid.
+        shift
+        [ $# -gt 0 ] || {
+            printf 'synui-plugins order: need at least one plugin id\n' >&2
+            printf '  usage: synui-plugins order <id> [<id>...]\n' >&2
+            exit 2; }
+        printf '%s\n' "$@" | order_write
+        ;;
     catalogue)
         # ⚠ The window's half of `browse`. Separate rather than a --tsv flag on
         # it for the reason `scan` is separate from `list`: one is laid out for

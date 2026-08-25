@@ -1560,7 +1560,47 @@ pkgver=0.1.0
 #   not a broken grab — was the whole bug. Both timers moved to 8000ms:
 #   long enough that no ordinary pause trips it, short enough to still
 #   recover if a grab really is ever refused.
-pkgrel=486
+# 487: reordering a plugin from the bar's right-click menu was slow — a click
+#   on ▲ or ▼ took about half a second to show, and flickered the whole row of
+#   plugin widgets while it did. Two full scans per click and a rebuild of
+#   every widget, for a swap of two rows the bar was already holding:
+#   `synui-plugins <id> up` had to scan (a walk of every plugin directory, a
+#   read of every manifest, a grep of every entry point) to work out what the
+#   current order even was, wrote the file, and the bar's own watch on that
+#   file then ran the WHOLE SCAN AGAIN to find out what the write had done.
+#   Three things, none of which changes what a reorder MEANS:
+#   * Plugins.move() reorders `all` in the frame of the click and tells the
+#     script the finished order, through a new `synui-plugins order <id>...`
+#     that writes the file and nothing else — 6ms against 240ms, and no
+#     read-modify-write to race a second click. `up|down` stay exactly as they
+#     were: they are a MOVE within an order the script has to work out, and
+#     the CLI has no list in hand to state. The write is coalesced (80ms) so a
+#     run of clicks is one child, not one per arrow.
+#   * The bar's plugin Repeater draws a ListModel of ids (Plugins.activeModel)
+#     rather than the `active` array. ⛔ A Repeater OVER A JS ARRAY REBUILDS
+#     EVERY DELEGATE WHEN THE ARRAY IS REASSIGNED — it has no per-entry
+#     identity, so "one widget moved" and "thirteen different widgets" look
+#     alike to it. Every scan therefore reloaded every plugin on every bar:
+#     the weather widget refetched, vitals' timer restarted, tetris forgot its
+#     board. syncModel() moves the ITEM instead, and a scan that changes
+#     nothing now costs no model operations at all — which is most of them,
+#     since every file watch asks for one.
+#   * And the bar no longer rescans on a write that only says what it is
+#     already showing. The test is the FILE against `all`, not a flag saying
+#     "that write was mine": an `up` typed in a terminal, a hand-edited file,
+#     or our own write landing after something else reordered `all` all
+#     disagree with it, and all of them still rescan.
+#   ⚠ The neighbour a row swaps with is the one the MENU shows. `all` carries
+#   plugins this bar cannot host, which the menu filters out and the bar never
+#   draws, so a plain swap with i-1 could trade places with a row nobody can
+#   see — one click, nothing moves. Unsupported rows are stepped over and keep
+#   their own place in the file.
+#   Pinned by a new tests/plugin_reorder.sh, which moves a plugin over the
+#   `plugin` IPC target (new `up`/`down` there — a headless session has
+#   nothing to click with, the same reason `toggle` is on it) and counts what
+#   the bar spends: one call to synui-plugins, no scan, no widget reloaded,
+#   and an order written from a terminal still reaching the bar.
+pkgrel=487
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

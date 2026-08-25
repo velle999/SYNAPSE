@@ -169,6 +169,24 @@ ShellRoot {
             return (PluginHost.panelFor(id) ? "panel" : "")
                  + (PluginHost.serviceFor(id) ? " service" : "")
         }
+
+        /*
+         * ── Where the plugin sits on the bar ────────────────────────────────
+         *
+         * The ▴ and ▾ on the bar's right-click menu, reachable without a
+         * pointer — the same reason `toggle` is here, and tests/plugin_reorder
+         * .sh is what needs it: a headless session has nothing to click with,
+         * and the interesting half of a reorder is what does NOT happen after
+         * it (no rescan, no plugin reloaded), which cannot be seen from
+         * outside the process at all.
+         *
+         * ⚠ NOT THE SAME THING AS `synui-plugins <id> up`. That one asks the
+         * script to work out an order and write it, and the bar finds out from
+         * the file; this is the bar's own move, which reorders the live list
+         * and states the result. Both end at the same file — see Plugins.move.
+         */
+        function up(id: string): void   { Plugins.moveUp(id) }
+        function down(id: string): void { Plugins.moveDown(id) }
     }
 
     IpcHandler {

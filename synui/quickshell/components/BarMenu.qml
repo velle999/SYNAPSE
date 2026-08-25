@@ -235,9 +235,11 @@ PopupWindow {
              * reason, and a checkbox nothing will ever draw for is worse than
              * no row at all.
              *
-             * Order matches the bar's own: Plugins.all is already in scan()'s
-             * order, which is the order synui-plugins <id> up/down writes —
-             * so dragging nothing, this list IS the reorder control.
+             * Order matches the bar's own: Plugins.all IS what the bar draws
+             * from, so this list is not a view of the row — it is the row, and
+             * moving something here moves it there in the same frame. See
+             * Plugins.move for why the script is told the answer rather than
+             * asked for it.
              */
             Text {
                 visible: menu.hostablePlugins.length > 0

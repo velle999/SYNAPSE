@@ -108,6 +108,36 @@ mk a.id
 check "…so reinstalling it returns it to its old place" \
       $'c.id\nb.id\na.id\nd.id' "$(ids)"
 
+# ── the whole order at once, which is what the bar's menu writes ───────────
+#
+# `up`/`down` are a MOVE and have to scan to find out what they are moving
+# within; `order` is the finished list, stated by a caller that already has it
+# — the bar's right-click menu is drawing the very row it just reordered. No
+# scan, so no walk of every plugin directory on every click of an arrow.
+plug order d.id a.id b.id c.id >/dev/null
+check "order sets the whole row at once"       $'d.id\na.id\nb.id\nc.id' "$(ids)"
+check "…and the file holds exactly what it was given" $'d.id\na.id\nb.id\nc.id' \
+      "$(cat "$order_file")"
+
+# An id nothing answers to is written and then ignored, exactly as a removed
+# plugin's own line already is — same rule, so a caller stating an order it
+# read a moment ago cannot lose a plugin to a race with an uninstall.
+plug order gone.id d.id a.id b.id c.id >/dev/null
+check "an id with no plugin behind it changes nothing about the row" \
+      $'d.id\na.id\nb.id\nc.id' "$(ids)"
+check "…and is kept in the file, like any other line for something absent" 1 \
+      "$(grep -c '^gone\.id$' "$order_file")"
+
+before=$(cat "$order_file")
+plug order >/dev/null 2>&1
+[ $? -ne 0 ] && ok "order with no ids fails rather than wiping the row" \
+             || bad "order with no ids returned 0"
+check "…and leaves the file exactly as it was" "$before" "$(cat "$order_file")"
+
+# Back to where the checks above left off, so what follows reads the order it
+# expects rather than this section's.
+plug order c.id b.id a.id d.id >/dev/null
+
 # ── a refused plugin cannot be reordered either ─────────────────────────────
 #
 # Same gate `on` goes through: writing an order entry for a plugin the bar
