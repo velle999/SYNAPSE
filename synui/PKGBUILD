@@ -1600,7 +1600,36 @@ pkgver=0.1.0
 #   nothing to click with, the same reason `toggle` is on it) and counts what
 #   the bar spends: one call to synui-plugins, no scan, no widget reloaded,
 #   and an order written from a terminal still reaching the bar.
-pkgrel=487
+# 488: MANGOHUD=1 IS NO LONGER EXPORTED FOR THE WHOLE SESSION (velle: "mangohud
+#   is always causing issues it seems… make that configuration smarter so it's
+#   not an issue but still there in games when it needs to be"). MangoHud's
+#   Vulkan manifest declares enable_environment MANGOHUD=1, so that one
+#   variable loaded VK_LAYER_MANGOHUD_overlay into EVERY Vulkan client in the
+#   session — a game, a browser, a video player, a QML app that touched
+#   QtMultimedia, a test. On AMD the layer segfaults the client inside its own
+#   vkCreateDevice hook and on NVIDIA it never does, so it had already taken
+#   the live wallpaper (409), synstudio (0.1.0-16) and synstudio's own test
+#   suite down on the ThinkPad while every run on the dev desktop passed, and
+#   each fix was another DISABLE_MANGOHUD=1 in another launcher. The next
+#   Vulkan client to arrive would have been the fourth.
+#   The overlay now comes from the launcher, which is the only place it can be
+#   turned on anyway — nothing can inject an overlay into a process that is
+#   already up. synui-game-run already wrapped with mangohud + gamemoderun, and
+#   everything it starts inherits the variable, so ONE wrap covers a library:
+#   `syn game steam`, `syn game -- wine foo.exe`, `syn game -- ./game.x86_64`.
+#   `syn game` is a new front door on it (syn 0.1.0-24) that supplies the `--`.
+#   ⚠ AND THE OLD BEHAVIOUR IS ONE LINE AWAY, because on a machine that has
+#   never seen the crash it is genuinely convenient: `syn game hud on` writes
+#   MANGOHUD_EVERYWHERE=1 to ~/.config/synapseos/mangohud.conf, read at the
+#   next login. The machine's own default lives in the new
+#   /etc/synapseos/mangohud.conf (shipped saying 0, in backup=), and a user's
+#   answer beats it in both directions.
+#   ⛔ THE RULE IS WRITTEN IN THREE PLACES — the ISO's profile.d and the two
+#   session paths syn-install writes — and the installer's own comment already
+#   said "this path must stay in step with it". tests/mangohud_session.sh
+#   checks the rule and that all three agree; DISABLE_MANGOHUD=1 stays in
+#   wpengine and synstudio, so opting back in cannot re-break them.
+pkgrel=488
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -1802,7 +1831,7 @@ optdepends=(# Network printers: cups does the discovery (its own dnssd backend) 
             'fprintd: unlock the lock screen with a fingerprint (lock_fingerprint)')
 # /etc/MangoHud.conf is meant to be tuned in place — keep a user's edits across
 # upgrades instead of overwriting them.
-backup=('etc/MangoHud.conf')
+backup=('etc/MangoHud.conf' 'etc/synapseos/mangohud.conf')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
 
@@ -1989,6 +2018,13 @@ package() {
     # pacman preserves a user's edits.
     install -Dm644 config/MangoHud.conf \
         "$pkgdir/etc/MangoHud.conf"
+
+    # ⚠ AND THE SWITCH THAT DECIDES WHETHER THE LAYER LOADS AT ALL, which is a
+    # different question from the file above — that one is only the overlay's
+    # look. The session reads this at login; it ships saying 0. In backup=
+    # beside MangoHud.conf so an edit survives an upgrade.
+    install -Dm644 config/mangohud-session.conf \
+        "$pkgdir/etc/synapseos/mangohud.conf"
 
     # ── The bar: quickshell ──────────────────────────────────────────────────
     #

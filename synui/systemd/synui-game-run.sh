@@ -16,11 +16,69 @@
 # Every wrapper is optional and guarded: a missing tool is dropped, not fatal, so
 # the command still launches (just without that layer).
 #
+# ⚠ AND IT IS NOW THE ONLY THING THAT TURNS THE HUD ON. The session used to
+# export MANGOHUD=1 for every process in it, which loaded MangoHud's Vulkan
+# layer into every Vulkan client whether or not it was a game — and segfaulted
+# three of them on AMD. That default is off; this wrapper (and `syn game`,
+# which is a front door onto it) is where the overlay comes from, and anything
+# it launches inherits it, so `syn game steam` covers a whole library.
+#
+# `--hud-everywhere on` puts the old session-wide behaviour back for whoever
+# asks for it; see /etc/synapseos/mangohud.conf.
+#
 # Usage: synui-game-run [--gamescope[=WxH[@R]]] [--no-hud] [--no-gamemode]
 #                       [--ensure-config] -- COMMAND [ARGS...]
+#        synui-game-run --hud-everywhere [on|off|status]
 set -u
 
 hud=1 gm=1 gamescope='' cfg_only=0
+
+# ── The session-wide switch ─────────────────────────────────────────────────
+#
+# Per USER, deliberately: /etc/synapseos/mangohud.conf is the machine's default
+# and needs root to change, and one person wanting an overlay in everything is
+# not a reason to change the machine for everybody. The session prefers the
+# user file when it exists.
+hud_everywhere() {  # hud_everywhere <on|off|status>
+    local f="${XDG_CONFIG_HOME:-$HOME/.config}/synapseos/mangohud.conf"
+    local cur=0
+    for c in "$f" /etc/synapseos/mangohud.conf; do
+        [ -r "$c" ] && { cur=$(sed -n 's/^[[:space:]]*MANGOHUD_EVERYWHERE=\([01]\).*/\1/p' "$c" | tail -1); break; }
+    done
+    [ -n "$cur" ] || cur=0
+
+    case "${1:-status}" in
+        status)
+            if [ "$cur" = 1 ]; then
+                printf 'MangoHud loads in every Vulkan client this session starts.\n'
+            else
+                printf 'MangoHud loads only in what `syn game` / synui-game-run launches.\n'
+            fi
+            printf '  change it with: syn game hud on|off\n'
+            return 0 ;;
+        on)  want=1 ;;
+        off) want=0 ;;
+        *)   printf 'synui-game-run: --hud-everywhere takes on, off or status\n' >&2
+             return 2 ;;
+    esac
+
+    mkdir -p "$(dirname "$f")" || return 1
+    # Written whole, not appended: this file has exactly one setting in it, and
+    # a second MANGOHUD_EVERYWHERE line below the first would make the answer
+    # depend on which one a reader stops at.
+    cat > "$f" <<EOF
+# Written by \`syn game hud\`. See /etc/synapseos/mangohud.conf for what this
+# does and why the default is 0.
+MANGOHUD_EVERYWHERE=$want
+EOF
+    if [ "$want" = 1 ]; then
+        printf 'MangoHud will load in every Vulkan client — from the next login.\n'
+        printf '  ⚠ on AMD that has segfaulted mpv, QtMultimedia and a test suite\n'
+    else
+        printf 'MangoHud will load only in what a game launcher starts — from the next login.\n'
+    fi
+    return 0
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -29,6 +87,8 @@ while [ $# -gt 0 ]; do
         --gamescope)     gamescope='default' ;;
         --gamescope=*)   gamescope="${1#*=}" ;;
         --ensure-config) cfg_only=1 ;;
+        --hud-everywhere)   shift; hud_everywhere "${1:-status}"; exit $? ;;
+        --hud-everywhere=*) hud_everywhere "${1#*=}"; exit $? ;;
         --)              shift; break ;;
         -h|--help)       sed -n '2,20p' "$0"; exit 0 ;;
         *)               echo "synui-game-run: unknown option '$1'" >&2; exit 2 ;;
@@ -46,8 +106,8 @@ mangohud_default() {
 # written when absent. See `man mangohud` for every option.
 #
 # This file SHADOWS /etc/MangoHud.conf completely, so it repeats the system
-# default's no_display: the session sets MANGOHUD=1 for every launcher, and the
-# overlay is meant to stay hidden until Shift_R+F12 asks for it.
+# default's no_display: the overlay is meant to stay hidden until Shift_R+F12
+# asks for it, inside the game, which is the only place that toggle can work.
 no_display
 legacy_layout=false
 fps

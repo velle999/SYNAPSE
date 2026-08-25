@@ -41,14 +41,30 @@ export XDG_CURRENT_DESKTOP=synui
 # is exactly what the ScreenCast note above warns about.
 export QT_QPA_PLATFORMTHEME=xdgdesktopportal
 
-# MangoHud's Vulkan implicit layer keys off MANGOHUD=1. It belongs here and not
-# in a launcher wrapper: a wrapper only ever covers the one launch path it wraps,
-# while the env var reaches Steam, Lutris, RetroArch and bare binaries alike. The
-# hud starts hidden (no_display in MangoHud.conf) — Shift_R+F12 toggles it live
-# inside the running game, which is the only place that toggle can work: nothing
-# can inject an overlay into a process that is already up. Vulkan only; OpenGL
-# titles still need the `mangohud` preload that synui-game-run applies.
-export MANGOHUD=1
+# MangoHud's Vulkan implicit layer keys off MANGOHUD=1, and that one variable
+# loads VK_LAYER_MANGOHUD_overlay into EVERY Vulkan client in the session — a
+# game, a browser, a video player, a QML app that touched QtMultimedia, a test.
+#
+# ⛔ SO IT IS NOT EXPORTED HERE ANY MORE. On AMD the layer segfaults the client
+# inside its own vkCreateDevice hook and on NVIDIA it never does: it took the
+# live wallpaper (synui 409), synstudio (0.1.0-16) and synstudio's own test
+# suite down on the ThinkPad while the dev desktop stayed happy, and every fix
+# was another DISABLE_MANGOHUD=1 in another launcher.
+#
+# The hud comes from the launcher instead, which is the only place an overlay
+# can be turned on anyway — nothing can inject one into a process already up:
+# `syn game steam` (the whole library inherits it), `syn game -- ./game`,
+# `syn game -- wine foo.exe`, or synui-game-run directly.
+#
+# ⚠ AND IT IS ONE LINE TO HAVE THE OLD BEHAVIOUR BACK — `syn game hud on`,
+# which is a reasonable choice on a machine that has never seen the crash.
+# /etc/synapseos/mangohud.conf carries the whole argument.
+for _mh in "${XDG_CONFIG_HOME:-$HOME/.config}/synapseos/mangohud.conf" \
+           /etc/synapseos/mangohud.conf; do
+    [ -r "$_mh" ] && { . "$_mh"; break; }
+done
+[ "${MANGOHUD_EVERYWHERE:-0}" = 1 ] && export MANGOHUD=1
+unset _mh
 # WAYLAND_DISPLAY is set by synui at runtime — do not hard-code it here
 
 # Only set SynapseOS desktop ID when synui is the active compositor;

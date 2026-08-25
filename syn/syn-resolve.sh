@@ -48,7 +48,9 @@
 #                         different Qt 5.15 builds in one process. Cheap
 #                         insurance, not a fix for a bug seen here.
 #
-# NOT DONE, deliberately: clearing MANGOHUD. profile.d exports MANGOHUD=1
+# NOT DONE, deliberately: clearing MANGOHUD. profile.d no longer exports it at
+# all (see /etc/synapseos/mangohud.conf) — but it can be switched back on, and
+# even then there is nothing to clear here. profile.d used to export MANGOHUD=1
 # session-wide and it looks like it must reach a GPU application this heavy, but
 # MangoHud's implicit layer is VULKAN-only (its layer JSON keys off MANGOHUD=1),
 # and Resolve links libGL and libOpenCL with no libvulkan anywhere under

@@ -25,6 +25,10 @@ Usage:
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
   syn gfn                 GeForce NOW in a browser (--list-browsers, --help)
+  syn game <cmd...>       Run a game with the MangoHud overlay and gamemode:
+                          syn game steam, syn game -- wine foo.exe
+  syn game hud on|off     MangoHud in every Vulkan client, or only in games
+                          (off by default; status to ask)
   syn install             Install SynapseOS to disk
   syn update [check|apply]  Update SynapseOS itself from git
   syn help                This help
@@ -334,6 +338,18 @@ case "${1:-help}" in
     # terminal form to degrade to, and the launcher is the whole CLI — its
     # flags (--browser, --profile, --list-browsers) pass straight through.
     gfn)            shift; exec syn-gfn "$@" ;;
+    # ⚠ THE FRONT DOOR FOR THE OVERLAY, and the reason the session no longer
+    # exports MANGOHUD=1 at every process. Anything started under here inherits
+    # the hud, so ONE wrap covers a whole library: `syn game steam`. A bare
+    # word is taken as the command (`syn game lutris`), so the `--` that
+    # synui-game-run wants is supplied here rather than typed every time.
+    game)           shift
+                    case "${1:-}" in
+                        hud)  shift; exec synui-game-run --hud-everywhere "${1:-status}" ;;
+                        '')   exec synui-game-run --help ;;
+                        -*)   exec synui-game-run "$@" ;;
+                        *)    exec synui-game-run -- "$@" ;;
+                    esac ;;
     install)        exec syn-install ;;
     update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;

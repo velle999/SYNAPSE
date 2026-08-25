@@ -4438,12 +4438,30 @@ export XCURSOR_SIZE=24
 # writes exactly these two exports to cursor.env. Sourced after the defaults so
 # the user's choice wins; absent on a fresh install, hence the -r test.
 [ -r "$HOME/.config/synui/cursor.env" ] && . "$HOME/.config/synui/cursor.env"
-# MangoHud's Vulkan implicit layer keys off MANGOHUD=1. A launcher wrapper only
-# ever covers the path it wraps; the env var reaches Steam, Lutris, RetroArch and
-# bare binaries alike. Hud starts hidden (no_display) — Shift_R+F12 toggles it
-# live in-game, the only place it can work: an overlay cannot be injected into a
-# process already up. Vulkan only; OpenGL needs synui-game-run's preload.
-export MANGOHUD=1
+# MangoHud's Vulkan implicit layer keys off MANGOHUD=1, and that one variable
+# loads VK_LAYER_MANGOHUD_overlay into EVERY Vulkan client in the session — a
+# game, a browser, a video player, a QML app that touched QtMultimedia, a test.
+#
+# ⛔ SO IT IS NOT EXPORTED HERE ANY MORE. On AMD the layer segfaults the client
+# inside its own vkCreateDevice hook and on NVIDIA it never does: it took the
+# live wallpaper (synui 409), synstudio (0.1.0-16) and synstudio's own test
+# suite down on the ThinkPad while the dev desktop stayed happy, and every fix
+# was another DISABLE_MANGOHUD=1 in another launcher.
+#
+# The hud comes from the launcher instead, which is the only place an overlay
+# can be turned on anyway — nothing can inject one into a process already up:
+# `syn game steam` (the whole library inherits it), `syn game -- ./game`,
+# `syn game -- wine foo.exe`, or synui-game-run directly.
+#
+# ⚠ AND IT IS ONE LINE TO HAVE THE OLD BEHAVIOUR BACK — `syn game hud on`,
+# which is a reasonable choice on a machine that has never seen the crash.
+# /etc/synapseos/mangohud.conf carries the whole argument.
+for _mh in "${XDG_CONFIG_HOME:-$HOME/.config}/synapseos/mangohud.conf" \
+           /etc/synapseos/mangohud.conf; do
+    [ -r "$_mh" ] && { . "$_mh"; break; }
+done
+[ "${MANGOHUD_EVERYWHERE:-0}" = 1 ] && export MANGOHUD=1
+unset _mh
 # The three gaming shortcuts — super+F10 (big screen mode), F11 and F12 (the
 # overlay) — live in ~/.config/synui/synuirc, and a package cannot write into a
 # user's home. Nothing ever did: `binds refresh` deliberately does nothing when
@@ -4536,8 +4554,15 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         # ...unless synui-cursor(1) / Super+Shift+P wrote a choice. See the
         # synui-session heredoc above; this path must stay in step with it.
         [ -r "$HOME/.config/synui/cursor.env" ] && . "$HOME/.config/synui/cursor.env"
-        # Vulkan overlay layer; see the synui-session heredoc above.
-        export MANGOHUD=1
+        # Vulkan overlay layer — OFF unless asked for; see the synui-session
+        # heredoc above, which carries the reasoning. This path must stay in
+        # step with it (tests/mangohud_session.sh checks that it does).
+        for _mh in "${XDG_CONFIG_HOME:-$HOME/.config}/synapseos/mangohud.conf" \
+                   /etc/synapseos/mangohud.conf; do
+            [ -r "$_mh" ] && { . "$_mh"; break; }
+        done
+        [ "${MANGOHUD_EVERYWHERE:-0}" = 1 ] && export MANGOHUD=1
+        unset _mh
         # The gaming shortcuts; see the synui-session heredoc above.
         command -v syn-arcade >/dev/null 2>&1 && \
             syn-arcade binds ensure --quiet >/dev/null 2>&1

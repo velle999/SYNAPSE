@@ -8,8 +8,16 @@
  * it speaks over a SysV message queue keyed on "mangoapp", and only the
  * separate `mangoapp` process (the gamescope/SteamOS overlay) listens on it.
  * Verified against the shipped 0.8.4 build — libMangoHud.so imports no msgget,
- * msgrcv or ftok at all, so for the MANGOHUD=1 layer this desktop uses
- * everywhere, mangohudctl is a no-op.
+ * msgrcv or ftok at all, so for the MangoHud layer this desktop loads,
+ * mangohudctl is a no-op.
+ *
+ * ⚠ AND "EVERYWHERE" IS NO LONGER TRUE OF THAT LAYER. The session stopped
+ * exporting MANGOHUD=1 for every process (it segfaulted three non-games on
+ * AMD); the overlay now arrives with the launcher — `syn game …` /
+ * synui-game-run — unless someone asks for the old behaviour with
+ * `syn game hud on`. Nothing here depends on which: this file only ever
+ * touches MANGOHUD_CONFIGFILE, which is the overlay's look and not whether it
+ * loads.
  *
  * What libMangoHud DOES do is watch its own config file (src/notify.cpp):
  *

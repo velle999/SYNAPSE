@@ -1389,6 +1389,18 @@ test('plugins', plugins_sh,
 # refusal/enable coverage the way apply_theme_dock_alpha.sh sits beside
 # apply_theme_bar_alpha.sh: one file, one question, kept small enough that a
 # failure names exactly what broke.
+# ⛔ WHETHER MANGOHUD'S LAYER LOADS IN EVERYTHING, which is a session-wide
+# decision written in three separate places — the ISO's profile.d and the two
+# session paths the installer writes. They are three texts of one rule, and the
+# old default (export MANGOHUD=1 for every process) segfaulted three non-games
+# on AMD before it was noticed. This checks the rule AND that the three agree.
+mangohud_session_sh = find_program('tests/mangohud_session.sh')
+test('mangohud_session', mangohud_session_sh,
+     args    : [meson.current_source_dir() / '../archiso/airootfs/etc/profile.d/synapseos.sh',
+                meson.current_source_dir() / '../syn-install/syn-install.sh',
+                meson.current_source_dir() / 'systemd/synui-game-run.sh'],
+     timeout : 60)
+
 plugin_order_sh = find_program('tests/plugin_order.sh')
 test('plugin_order', plugin_order_sh,
      args    : [meson.current_source_dir() / 'systemd/synui-plugins.sh'],

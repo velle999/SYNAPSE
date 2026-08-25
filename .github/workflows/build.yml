@@ -315,6 +315,16 @@ jobs:
         run: |
           ./syn-gfn/tests/syn_gfn_test.sh
 
+      # Whether MangoHud's Vulkan layer loads in EVERY client in the session.
+      # It used to, which segfaulted the live wallpaper, synstudio and
+      # synstudio's own test suite on AMD and nothing on NVIDIA — so the
+      # default is off and the rule lives in three separate texts (the ISO's
+      # profile.d and the installer's two session writers). This checks the
+      # rule and that all three agree.
+      - name: MangoHud session default (synui)
+        run: |
+          ./synui/tests/mangohud_session.sh
+
       # The firewall, and whether the box can find out it has one. synnet has
       # applied a default-drop input chain at every start for a while and
       # `--status` denied it anyway — listing an nftables object needs
