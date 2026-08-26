@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # synui-ai-backend — toggle synapd between GPU and CPU inference.
 #
-# The welcome menu's "AI Backend" row (Super+Escape) runs `synui-ai-backend
+# The welcome guide's "AI Backend" row (Super+Escape) runs `synui-ai-backend
 # toggle`. It works by writing a systemd drop-in that overrides synapd's
 # ExecStart --gpu-layers, recording the choice in /run/synapd/backend (which
 # synui reads to label the row), then restarting synapd so the model reloads
@@ -173,7 +173,7 @@ off_backend() {
     echo "synapd backend → off (stopped, sockets closed)"
 }
 
-# The welcome menu / control panel row fires this as the SESSION USER: synui
+# The welcome guide / control panel row fires this as the SESSION USER: synui
 # normally runs as root (synui.service), but under a greetd session it runs as
 # the logged-in user, who cannot write the systemd drop-in, restart synapd, or
 # write /run/synapd/backend. There is no polkit agent here to prompt, so the

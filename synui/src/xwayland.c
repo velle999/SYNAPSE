@@ -236,7 +236,6 @@ static void xw_map(struct wl_listener *listener, void *data)
         view_apply_fullscreen(s, view, 1);
 
     anim_window_open(view);      /* windows arrive, they don't just appear */
-    synui_welcome_hide(s);
 
     /* Same reason as xdg_surface_map: a window mapping under a cursor that
      * never moved must still get wl_pointer.enter. Matters more here — SDL

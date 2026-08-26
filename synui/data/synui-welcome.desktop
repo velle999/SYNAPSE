@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Welcome Guide
+GenericName=Getting Started
+Comment=Six pages on what this desktop does and which keys do it — also Super+Escape
+# A PROGRAM, unlike its neighbours here. Every other synui-*.desktop in this
+# directory is `Exec=synctl dispatch <action>` because the thing it opens is a
+# panel the compositor draws. The guide is not: it is quickshell/welcome.qml in
+# its own process, and synui-welcome(1) is what starts it — asking a running
+# instance first, so a second launch from this entry toggles rather than opening
+# a second copy.
+Exec=synui-welcome toggle
+Icon=help-about
+Terminal=false
+# The guide DOES map a surface, but it is a layer-shell one and never becomes an
+# xdg_toplevel — so a startup spinner would spin until it timed out waiting for a
+# window that is never going to arrive. Same reason as the panels' entries, by a
+# different route.
+StartupNotify=false
+Categories=System;Documentation;Core;
+Keywords=welcome;guide;help;start;tour;intro;getting started;shortcut;keys;
+# ⛔ SYNUI ONLY. The guide draws on zwlr_layer_shell_v1 and its rows dispatch
+# through `synctl`; under KDE or GNOME there is neither, so the entry would be a
+# menu item that silently does nothing. Hidden there rather than shown and dead.
+#
+# ⚠ BOTH NAMES, and that is not belt-and-braces — the desktop identity is
+# genuinely inconsistent today. A greetd login runs /usr/local/bin/synui-session,
+# which exports XDG_CURRENT_DESKTOP=synui; a display-manager login reads
+# /usr/share/wayland-sessions/synui.desktop, whose DesktopNames is SynapseOS.
+# Naming one of them hides this entry on the other login path.
+OnlyShowIn=synui;SynapseOS;

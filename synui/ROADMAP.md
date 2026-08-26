@@ -12,7 +12,8 @@ Working:
 - Tiling (master-stack), spiral (fibonacci), monocle, floating (inset grid) and
   niri (scrollable-tiling, animated) layouts; 9 workspaces
 - Keyboard bindings; basic pointer (focus / click / axis); clipboard selection
-- Cairo-rendered UI: welcome screen, AI command bar, neural overlay
+- Cairo-rendered UI: AI command bar, neural overlay, and ~30 panels
+  (the welcome screen was one of them until 497; it is quickshell now)
 - Every compositor-drawn panel takes the pointer as well as the keyboard: hover
   selects, a left click does the row's primary key, a click off the panel closes
   it, and the wheel scrolls. One contract, documented at the top of `synui.h`;
@@ -1709,3 +1710,65 @@ opened Rofi.
       Super+Escape and the `start_menu` action, which have no picture on them and
       are therefore free to be chosen. Its help line and the apps button's say so
       now; both used to claim the button followed the row.
+
+## The welcome screen is a guide (0.1.0-497)
+
+**Not a great first impression.** The welcome screen was the first thing a new
+SynapseOS desktop showed and it was a *menu*: one 513px column, nineteen labels
+and their chords, drawn in cairo by the compositor. Nothing on it said what any
+row was for, so "Neural Overlay" and "Cat Mode" arrived side by side and the only
+way to find out what either did was to press it. Its key column was a hardcoded
+`rgba(0.45, 0.45, 0.55)` — a fixed blue-grey no theme could move, under 3:1 on
+the panel this desktop actually draws. Present, and unreadable.
+
+- [x] **Six pages, with room to say what things are.** `quickshell/welcome.qml`
+      and `quickshell/welcome/`: Welcome, The keys, Make it yours, The AI,
+      Everything else, You're set. A rail down the left that doubles as the
+      contents page, a description under every row, and prose rows (`kind:
+      "note"`) for the things that are facts rather than doors — the workspace
+      keys, where the documentation lives.
+- [x] **The key chips are `Theme.fgDim`**, the ink 65% of the way from the
+      surface to the foreground, recomputed per theme. That is the secondary
+      colour the old menu could not move.
+- [x] **⚠ IT IS ITS OWN QUICKSHELL, NOT A WINDOW IN THE BAR.** A window in the
+      bar would have been less code and it would have been wrong: two bars ship
+      (`bar_shell = synapse|antiquity`) and a guide inside the SYNAPSE one simply
+      would not exist for anyone running the other — while the panel it replaces
+      was drawn by the compositor and every configuration had it. As a second
+      ENTRY POINT into the same QML tree it still gets `Theme.qml`, the picked UI
+      font and the glass namespace from `import ".."` and copies none of them.
+      It also costs nothing when closed (dismissing it quits) and does not
+      reappear every time game mode restarts the bar.
+- [x] **`synui-welcome(1)` is the launcher and the CLI** — `toggle`, `show`,
+      `hide`, `page N`. Toggling across a process boundary works because closing
+      QUITS: "closed" and "not running" are the same state, so the script asks a
+      running instance first and starts one only when nothing answers. There is
+      no pidfile and no third state.
+- [x] **`synctl binds` is new**, and it is what stops the guide inheriting the
+      old menu's worst habit. That menu carried a hand-typed chord per row and
+      said so at length — the command bar has been on Super+Space, on Super+=,
+      and back, and each move left the column naming the old one. The chords come
+      out of the live bind table now, rendered compositor-side by
+      `ctlpanel_combo_str()`, so a rebound key needs no edit anywhere.
+- [x] **It closes when a window opens, and it does that itself.**
+      `synui_main.c` used to hide the panel on the first map. The guide watches
+      `ToplevelManager` — armed 1.5s after its first frame, which lets both the
+      windows that were already open AND the login burst through. `autostart`
+      defaults to a terminal, so an unarmed rule would have made the welcome
+      screen one that flashes and leaves, which is what the old one did.
+- [x] **`welcome.state` did not move.** synui still owns the setting
+      (`welcome_at_startup` is a synuirc key with a control-panel row); the guide
+      only READS the file and asks for a change with `synctl dispatch
+      welcome_startup`. One writer, one spelling of the default.
+- [x] **`data/synui-welcome.desktop`** — "Welcome Guide" in the applications
+      menu. A panel reachable only by a chord is a panel nobody finds, and
+      Super+Escape is not a discoverable key.
+- [x] **`tests/welcome_guide.sh`** asks the PIXELS, because every way this can
+      fail is silent: a missing `qmldir` line is "Guide is not a type", an
+      uninstalled `pages.js` is every page `undefined`, and both come from a
+      package that built cleanly. Loads it on a headless synui and asserts a card
+      drew, two pages differ, the IPC answers, and a mapped toplevel closes it.
+- [x] **~480 lines of C deleted** — `synui_render_welcome()` and its table from
+      `render.c`, the arrow/click/wheel handling from `input.c`, `welcome_ui`
+      from `syn_server_t`, and the hide-on-map hooks in `synui_main.c`,
+      `xwayland.c` and `output_mgmt.c`.

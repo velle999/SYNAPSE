@@ -35,6 +35,8 @@ int main(int argc, char **argv)
             "  outputs | monitors     connected monitors\n"
             "  activeworkspace        the desktop currently on screen\n"
             "  activewindow           the focused window\n"
+            "  binds | keys           the bind table, each chord as a keyboard\n"
+            "                         says it (\"Super+Shift+C\")\n"
             "  version                compositor version\n"
             "  dispatch <action> [arg]  run any keybind action, e.g.\n"
             "                           synctl dispatch ws 3\n"

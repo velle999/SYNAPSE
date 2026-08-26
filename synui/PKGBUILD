@@ -1629,7 +1629,52 @@ pkgver=0.1.0
 #   said "this path must stay in step with it". tests/mangohud_session.sh
 #   checks the rule and that all three agree; DISABLE_MANGOHUD=1 stays in
 #   wpengine and synstudio, so opting back in cannot re-break them.
-pkgrel=496
+# 497 THE WELCOME SCREEN IS A GUIDE NOW, AND IT IS QML.
+#   What it replaces: render.c's synui_render_welcome() — a 513px column of
+#   nineteen labels and their chords, drawn in cairo by the compositor, with
+#   ~330 lines of drawing here and ~150 more of arrow/click/wheel handling in
+#   input.c. Everything wrong with it was structural:
+#   ⚠ IT WAS A LIST, NOT A GUIDE. Nineteen doors in one scroll with no room to
+#     say what any of them was for, so "Neural Overlay" and "Cat Mode" arrived
+#     side by side unexplained and the only way to find out was to press them.
+#     Someone meeting the desktop for the first time met a menu.
+#   ⚠ ITS KEY COLUMN WAS A HARDCODED rgba(0.45, 0.45, 0.55) — a fixed blue-grey
+#     no theme could move, under 3:1 on the panel this desktop actually draws.
+#     Present and unreadable, which is what "the secondary colour is too dark"
+#     was. The chip reads Theme.fgDim now: the ink 65% of the way from the
+#     surface to the foreground, recomputed per theme.
+#   The guide is quickshell/welcome.qml + welcome/: six pages (welcome, the
+#   keys, make it yours, the AI, everything else, you are set), a rail that
+#   doubles as the contents page, a description under every row, and the
+#   "Don't show again" checkbox in the footer of every page rather than
+#   stranded on the last one.
+#   ⚠ IT IS ITS OWN QUICKSHELL, NOT A WINDOW IN THE BAR, and that is the whole
+#   design. TWO BARS SHIP — `bar_shell = synapse|antiquity` — and a guide inside
+#   the SYNAPSE bar would simply not exist for anyone running the other one; the
+#   panel it replaces was drawn by the compositor, so every configuration had
+#   it. As a second ENTRY POINT into the same QML tree it still gets Theme.qml,
+#   the picked UI font and the glass namespace with `import ".."` and copies
+#   none of them. It also costs nothing when closed (dismissing it quits) and
+#   does not reappear every time game mode restarts the bar.
+#   ⚠ AND IT CLOSES ITSELF WHEN A WINDOW OPENS. synui_main.c used to hide the
+#   panel on the first map; the guide holds EXCLUSIVE keyboard focus, so one
+#   left standing over the window it just opened is a window that gets no keys.
+#   Guide.qml watches ToplevelManager and closes — armed after 700ms, or every
+#   window that was already open would close it before it drew.
+#   ⚠ THE CHORDS COME FROM `synctl binds`, which is new (ipc.c). The old menu
+#   carried a hand-typed chord per row and said so at length: the command bar
+#   has been on Super+Space, on Super+=, and back, and each move left that
+#   column naming the old one. Rendered compositor-side by ctlpanel_combo_str(),
+#   so the guide, the shortcuts palette and the control panel print a chord the
+#   same way and a rebound key needs no edit anywhere.
+#   welcome.state did NOT move: synui still owns the setting (`welcome_at_startup`
+#   is a synuirc key with a control-panel row), the guide only READS the file and
+#   asks for a change with `synctl dispatch welcome_startup`. One writer.
+#   synui-welcome(1) is the launcher and the CLI: toggle/show/hide/page N, with
+#   the toggle done by asking a running instance first and starting one only
+#   when nothing answers — closing quits, so "closed" and "not running" are the
+#   same state and there is no third one to get wrong.
+pkgrel=497
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2105,6 +2150,36 @@ package() {
         install -Dm644 "$_lib" \
             "$pkgdir/usr/share/synui/quickshell/widgets/${_lib##*/}"
     done
+    # ── The welcome guide ────────────────────────────────────────────────────
+    #
+    # A SECOND ENTRY POINT into this same tree, not a second tree:
+    # `synui-welcome` runs `quickshell -p .../quickshell/welcome.qml`, which
+    # makes this directory the shell root, so welcome/ reaches Theme.qml and the
+    # picked font with `import ".."` and copies nothing. welcome.qml itself is
+    # installed by the `quickshell/*.qml` glob above; this is the module beside
+    # it.
+    #
+    # ⚠ THE .js NEEDS ITS OWN GLOB, exactly as tuxart.js does one directory
+    # over: pages.js is the guide's entire content — every page, row, blurb and
+    # fallback chord — and without this loop the package installs, the guide
+    # starts, and `Pages.pages` is `undefined`, which draws an empty card and
+    # says nothing.
+    #
+    # ⚠ AND THE qmldir, for the third time on this page: welcome/ declares a
+    # singleton, which turns OFF implicit sibling resolution, so a tree missing
+    # the file fails with "Guide is not a type" from a package that installed
+    # cleanly.
+    for _wel in quickshell/welcome/*.qml; do
+        install -Dm644 "$_wel" \
+            "$pkgdir/usr/share/synui/quickshell/welcome/${_wel##*/}"
+    done
+    for _wjs in quickshell/welcome/*.js; do
+        install -Dm644 "$_wjs" \
+            "$pkgdir/usr/share/synui/quickshell/welcome/${_wjs##*/}"
+    done
+    install -Dm644 quickshell/welcome/qmldir \
+        "$pkgdir/usr/share/synui/quickshell/welcome/qmldir"
+
     # Tuxagotchi's voice: eleven square-wave chirps, generated by
     # tools/mkbeeps.py and committed because a package must not need python to
     # make a noise. Beside the QML that plays them for the same reason the pizza
@@ -2230,6 +2305,10 @@ package() {
         "$pkgdir/usr/bin/synui-sound"
     install -Dm755 systemd/synui-bar.sh \
         "$pkgdir/usr/bin/synui-bar"
+    # The welcome guide's launcher. Not part of synui-bar: two bars ship and the
+    # guide belongs to neither — see the header of systemd/synui-welcome.sh.
+    install -Dm755 systemd/synui-welcome.sh \
+        "$pkgdir/usr/bin/synui-welcome"
 
     # NOT /usr/bin: it takes root to do anything, it is named by exactly one
     # sudoers rule, and it is not a command to find by tab-completing. Same
@@ -2304,7 +2383,7 @@ package() {
     install -Dm644 config/xdg-desktop-portal-wlr.conf \
         "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/config"
 
-    # AI backend GPU/CPU toggle (welcome menu "AI Backend" row spawns it).
+    # AI backend GPU/CPU toggle (the welcome guide's "AI Backend" row runs it).
     install -Dm755 systemd/synui-ai-backend.sh \
         "$pkgdir/usr/bin/synui-ai-backend"
 

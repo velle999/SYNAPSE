@@ -690,6 +690,33 @@ void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
 }
 
 /*
+ * …and the same call to the WELCOME GUIDE, which is not the bar.
+ *
+ * ⚠ A SEPARATE HELPER BECAUSE IT IS A SEPARATE PROCESS. synui_bar_ipc() talks
+ * to whichever shell `bar_shell` started, and the guide is deliberately not in
+ * either of them — two bars ship, and a guide inside one would not exist for
+ * anyone running the other. synui-welcome(1) starts the guide when nothing is
+ * listening, which is the half `quickshell ipc` alone cannot do.
+ *
+ * execvp rather than spawn(): spawn() goes through `/bin/sh -c` and this
+ * interpolates an output name. Those come from the kernel rather than from a
+ * user, but a shell in the path is a shell to get wrong later, and nothing here
+ * needs one.
+ */
+void synui_welcome_ipc(syn_server_t *s, const char *fn)
+{
+    syn_output_t *o = server_focused_output(s);
+    const char *out = (o && o->wlr_output && o->wlr_output->name)
+                          ? o->wlr_output->name : "";
+    if (fork() == 0) {
+        setsid();
+        synui_child_reset_signals();
+        execlp("synui-welcome", "synui-welcome", fn, out, (char *)NULL);
+        _exit(1);
+    }
+}
+
+/*
  * What the START KEY opens: the Super tap and the `start_menu` action, which is
  * all that is bound to it. Desktop ▸ Start menu (start_menu_style) picks one of
  * the three.
@@ -1329,7 +1356,7 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "ai_backend") == 0) {
         /* Toggle synapd between GPU and CPU inference. The helper owns the
          * work (rewrite the systemd drop-in, record the backend state,
-         * restart synapd); synui just fires it. The welcome-menu "AI Backend"
+         * restart synapd); synui just fires it. The welcome guide's "AI Backend"
          * row reflects the new state the next time the menu is opened. */
         spawn("synui-ai-backend toggle");
     } else if (strcmp(action, "network") == 0) {
@@ -1337,7 +1364,7 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * UI here — synui has no text entry to type a passphrase into, so a
          * compositor-native picker would need one built first. Reaching it took
          * knowing it was buried in waybar's SYNAPSE menu; this puts it on a
-         * keybind and in the welcome menu. Configurable (network_cmd) so a box
+         * keybind and in the welcome guide. Configurable (network_cmd) so a box
          * running iwd rather than NM can point it somewhere else. */
         spawn(s->config.network_cmd);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
@@ -1420,18 +1447,28 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             wlr_output_schedule_frame(o->wlr_output);
         }
     } else if (strcmp(action, "welcome_startup") == 0) {
-        /* The menu's own "Don't show again" checkbox, bottom-right. Toggles in
-         * place and re-renders so the box visibly ticks — unlike the rows that
-         * launch something, there is nothing else to show for it. Persisted, so
+        /* The guide's "Don't show again" checkbox, bottom-left. Persisted, so
          * the choice survives the restart it is about. Note the sense: the
-         * checkbox is the opt-OUT and this field is the opt-IN, and render.c is
-         * the only place that inverts it. */
+         * checkbox is the opt-OUT and this field is the opt-IN, and
+         * quickshell/welcome/GuideState.qml is the only place that inverts it.
+         *
+         * ⚠ NOTHING IS REDRAWN HERE, AND THE BOX STILL TICKS. The guide watches
+         * welcome.state, so the write below IS the update — one writer (synui
+         * owns its own config) and one reader, rather than a compositor and a
+         * client each holding an opinion about a checkbox. */
         s->config.welcome_at_startup = !s->config.welcome_at_startup;
         welcome_state_save(&s->config);
-        synui_render_welcome(s);
     } else if (strcmp(action, "menu") == 0) {
-        if (s->welcome_ui.visible) synui_welcome_hide(s);
-        else                     synui_render_welcome(s);
+        /* Toggling is synui-welcome(1)'s job, not a flag here: closing the
+         * guide ENDS its process, so "closed" and "not running" are the same
+         * state and the script asks a running instance first, starting one only
+         * when nothing answers. A `visible` bool on this side would be a second
+         * opinion about a process this one does not own.
+         *
+         * The focused output is passed because synui is the only thing that
+         * knows it — no Wayland protocol tells a layer-shell client which
+         * monitor has focus — and it is answering a keypress it just handled. */
+        synui_welcome_ipc(s, "toggle");
     } else if (strcmp(action, "control") == 0) {
         /* Bare (Super+C) toggles the front door; with a category name it opens
          * onto that category, which is what the start menu's Settings submenu
@@ -1653,148 +1690,23 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     return true;
 }
 
-/* ── The welcome menu (Super+Escape) ─────────────────────────
+/* ── The welcome guide (Super+Escape) ───────────────────────
  *
- * The menu is drawn by synui_render_welcome() in render.c; both halves of its
- * input live here, beside each other, because they say the same thing twice —
- * a click on an item does what Enter does on it.
+ * ⚠ THERE IS NOTHING TO NAVIGATE HERE ANY MORE. The menu was compositor-drawn
+ * and this file carried both halves of its input — arrow keys, Enter, the
+ * click-off, the corner X, the wheel — roughly 150 lines that existed only
+ * because synui was the thing drawing it.
  *
- * The menu closes on Escape, on a click outside it, and on the corner X that
- * synui_render_welcome() draws — the X is pointer-only and is not one of the
- * focusable items below, since Escape is already the keyboard's way out.
+ * It is quickshell/welcome.qml now, a paged guide in its own process, and a
+ * quickshell PanelWindow takes EXCLUSIVE keyboard focus properly. So the keys
+ * are its own and synui hands them over the way it does for every other
+ * client. The `menu` action below is the whole of what is left: ask
+ * synui-welcome(1) to toggle it, naming the focused output.
  *
- * There are synui_welcome_menu_len + 1 focusable items: the rows, then the
- * "Don't show again" checkbox in the bottom-right corner, which is item
- * WELCOME_CHECK. It used to be the last row of the list; it is still reachable
- * by keyboard for that reason, and the arithmetic below is the only place that
- * knows it sits one past the end.
+ * synui still OWNS the keystroke — handle_keybinding() runs before the focused
+ * surface sees anything — so Super+Escape keeps working regardless of what has
+ * focus. It just no longer draws the result. Same trade the start menu made.
  */
-#define WELCOME_CHECK   (synui_welcome_menu_len)
-#define WELCOME_ITEMS   (synui_welcome_menu_len + 1)
-
-/* Do item `i`: the row's bind action, or toggle the checkbox. Both spellings of
- * "activate" (Enter and a left click) come through here. */
-static void welcome_activate(syn_server_t *s, int i)
-{
-    if (i < 0 || i > WELCOME_CHECK) return;
-
-    if (i == WELCOME_CHECK)
-        synui_binding_execute(s, "welcome_startup", "");
-    else
-        synui_binding_execute(s, synui_welcome_menu[i].action, "");
-}
-
-/* Welcome-menu navigation: only unmodified Up/Down/j/k, Enter, Space and
- * Escape are intercepted while the menu is shown; everything else falls through
- * to the bind table and the focused client. */
-static bool welcome_menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
-{
-    if (!s->welcome_ui.visible) return false;
-    if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
-                WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
-        return false;
-
-    switch (sym) {
-    case XKB_KEY_Up:
-    case XKB_KEY_k:
-        s->welcome_ui.selected =
-            (s->welcome_ui.selected + WELCOME_ITEMS - 1) % WELCOME_ITEMS;
-        synui_render_welcome(s);
-        return true;
-    case XKB_KEY_Down:
-    case XKB_KEY_j:
-        s->welcome_ui.selected =
-            (s->welcome_ui.selected + 1) % WELCOME_ITEMS;
-        synui_render_welcome(s);
-        return true;
-    case XKB_KEY_Return:
-    case XKB_KEY_KP_Enter:
-        welcome_activate(s, s->welcome_ui.selected);
-        return true;
-    /* Space ticks the checkbox, which is what Space does to a checkbox
-     * everywhere else. Only there: on a row it would be a second Enter, and
-     * launching a terminal by brushing the space bar is not wanted. */
-    case XKB_KEY_space:
-        if (s->welcome_ui.selected == WELCOME_CHECK) {
-            welcome_activate(s, WELCOME_CHECK);
-            return true;
-        }
-        return false;
-    case XKB_KEY_Escape:
-        synui_welcome_hide(s);
-        return true;
-    }
-    return false;
-}
-
-/* ── …and its pointer (the contract in synui.h) ──────────────
- *
- * The list never scrolls — every row is drawn, always — so there is no first-row
- * offset here and hit_row_at() answers in menu indices directly.
- */
-
-/* Which item is under the cursor, or -1. The checkbox is a loose rect rather
- * than a row, so this is two questions and not one. */
-static int welcome_item_at(syn_server_t *s, double lx, double ly)
-{
-    if (hit_spot_at(&s->welcome_ui.hit, lx, ly) == 0) return WELCOME_CHECK;
-    return hit_row_at(&s->welcome_ui.hit, lx, ly);
-}
-
-int welcome_motion(syn_server_t *s, double lx, double ly)
-{
-    if (!s->welcome_ui.visible) return 0;
-
-    int i = welcome_item_at(s, lx, ly);
-    if (i < 0 || i == s->welcome_ui.selected) return 1;
-    s->welcome_ui.selected = i;
-    synui_render_welcome(s);
-    return 1;
-}
-
-int welcome_click(syn_server_t *s, double lx, double ly, uint32_t button,
-                  uint32_t time_msec)
-{
-    (void)time_msec;
-    if (!s->welcome_ui.visible) return 0;
-
-    if (!hit_in_panel(&s->welcome_ui.hit, lx, ly)) {
-        synui_welcome_hide(s);
-        return 1;
-    }
-    if (button != BTN_LEFT) return 1;
-
-    /* The corner X — before the rows, because it sits in the header where
-     * hit_row_at() answers -1 anyway, and after the click-off test so a press
-     * on it is still swallowed rather than reaching what is underneath. */
-    if (hit_in_close(&s->welcome_ui.hit, lx, ly)) {
-        synui_welcome_hide(s);
-        return 1;
-    }
-
-    int i = welcome_item_at(s, lx, ly);
-    if (i < 0) return 1;                       /* the header, the footer hints */
-
-    /* Move the selection first: several of these actions hide the menu, and one
-     * of them (the checkbox) re-renders it — either way the selection must
-     * already be where the click was. */
-    s->welcome_ui.selected = i;
-    welcome_activate(s, i);
-    return 1;
-}
-
-int welcome_scroll(syn_server_t *s, double lx, double ly, double delta)
-{
-    (void)lx; (void)ly;
-    if (!s->welcome_ui.visible) return 0;
-    if (delta == 0) return 1;
-
-    int next = s->welcome_ui.selected + (delta > 0 ? 1 : -1);
-    if (next < 0 || next >= WELCOME_ITEMS) return 1;
-    s->welcome_ui.selected = next;
-    synui_render_welcome(s);
-    return 1;
-}
 
 /* The digit a keypad key stands for, or NoSymbol if it isn't one.
  *
@@ -2293,10 +2205,9 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
          * arrive by the ordinary focus path — synui does not have to intercept
          * them, and must not: swallowing them here is what would make it deaf. */
 
-        /* Welcome menu: intercepts only its navigation keys. */
-        for (int i = 0; i < nsyms; i++)
-            if (welcome_menu_key(s, syms[i], modifiers))
-                return;
+        /* …and none here for the welcome guide either, for exactly the same
+         * reason: it is a quickshell layer surface now, and it takes the
+         * keyboard the ordinary way. See the welcome-guide block further down. */
     }
 
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
@@ -2941,8 +2852,7 @@ void pointer_rebase(syn_server_t *s)
     X(overview, overview) \
     X(appgrid,  appgrid)  \
     X(theme,    thememgr) \
-    X(clipboard, clipboard) \
-    X(welcome,  welcome_ui)
+    X(clipboard, clipboard)
 
 /* Is any of them open? Asked where there is nothing to hand the event to but it
  * still must not reach the window underneath — a horizontal wheel, and the

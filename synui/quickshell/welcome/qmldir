@@ -1,0 +1,17 @@
+# The welcome guide, imported as `qs.welcome` by the tree's OTHER entry point:
+# welcome.qml, which synui-welcome(1) hands to `quickshell -p`.
+#
+# It is a module rather than a folder of siblings for the reason every qmldir in
+# this tree is one — a directory that declares a singleton stops resolving its
+# siblings implicitly, so every type has to be listed or the guide comes up with
+# `Guide is not a type` and nothing on screen says which file it meant.
+#
+# ⚠ NOTHING THE BAR LOADS IMPORTS THIS. Importing a QML directory module
+# instantiates every singleton in its qmldir, and the bar has no business
+# building the guide's state to draw a clock. The dependency runs one way:
+# welcome.qml imports qs.welcome, and qs.welcome imports Theme like any other
+# consumer of the palette.
+singleton GuideState 1.0 GuideState.qml
+Guide     1.0 Guide.qml
+GuideRow  1.0 GuideRow.qml
+KeyChip   1.0 KeyChip.qml

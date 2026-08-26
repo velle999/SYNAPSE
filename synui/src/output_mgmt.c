@@ -108,8 +108,6 @@ void output_layout_changed(syn_server_t *s)
     deskicons_layout(s);
     synui_render_deskicons(s);
     session_lock_arrange(s);
-    if (s->welcome_ui.visible)
-        synui_render_welcome(s);
     if (s->overlay.visible)
         synui_render_overlay(s);
     if (s->cmdbar.visible)

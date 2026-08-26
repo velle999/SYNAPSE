@@ -238,8 +238,7 @@ typedef struct {
      * panel is not in window mode. Cleared by hit_set_panel() like the rest. */
     int drag_x, drag_y, drag_w, drag_h;
     /* Loose clickable rects that are neither rows nor either of the two
-     * buttons above: the welcome menu's "Don't show again" checkbox, the emoji
-     * picker's category tabs. They are a list because the tabs are a variable
+     * buttons above: the emoji picker's category tabs. They are a list because the tabs are a variable
      * number of variable-WIDTH labels — a grid cannot describe them, and the
      * alternative was each panel keeping private x/y/w/h fields again, which is
      * the drift this file exists to stop. Written in draw order, so the index
@@ -604,15 +603,14 @@ typedef struct {
     char intent[128];
 } syn_ai_ctx_t;
 
-/* ── Welcome menu (render.c owns the table, input.c executes) ── */
-typedef struct {
-    const char *label;    /* shown in the menu */
-    const char *hint;     /* keybinding hint column */
-    const char *action;   /* bind action executed on Enter */
-} syn_welcome_entry_t;
-
-extern const syn_welcome_entry_t synui_welcome_menu[];
-extern const int                 synui_welcome_menu_len;
+/* ── The welcome guide is a CLIENT ────────────────────────
+ *
+ * There was a syn_welcome_entry_t table here — label, key hint, bind action —
+ * and render.c drew it as a nineteen-row list. The guide is
+ * quickshell/welcome.qml now: its rows live in welcome/pages.js, its chords come
+ * from `synctl binds` so a rebound key needs no edit anywhere, and synui's whole
+ * half of it is synui_welcome_ipc() in input.c. See systemd/synui-welcome.sh.
+ */
 
 /* ── Wallpaper picker (wppick.c) ─────────────────────────── */
 #define WPPICK_FOUND_MAX 64   /* images the browse scan will list */
@@ -3827,10 +3825,10 @@ typedef struct {
     int   cat_start;
     int   cat_breed;   /* cat_breed_t — which coat the desktop cat wears */
 
-    /* Show the welcome menu on login. The menu's own "Don't show again"
-     * checkbox (bottom-right) toggles this and writes welcome.state, which then
+    /* Show the welcome guide on login. The guide's own "Don't show again"
+     * checkbox (bottom-left) toggles this and writes welcome.state, which then
      * overrides the synuirc line (delete it to hand control back). Super+Escape
-     * opens the menu either way, so turning this off never strands it.
+     * opens the guide either way, so turning this off never strands it.
      * Default 1. */
     int   welcome_at_startup;
 
@@ -6394,21 +6392,6 @@ struct syn_server {
         struct wlr_scene_rect   *bg;
         struct wlr_scene_rect   *accent;
         struct wlr_scene_buffer *text_buf;
-        /* Named `visible` like every other panel's flag, because the pointer
-         * roster (SYN_PANEL_LIST in input.c) reads them all by that one name. */
-        int visible;
-        /* Highlighted item: a synui_welcome_menu index, or synui_welcome_menu_len
-         * for the "Don't show again" checkbox in the bottom-right corner, which
-         * is a focusable item and not a row of the list. */
-        int selected;
-        syn_hit_t hit;
-    } welcome_ui;
-
-    struct {
-        struct wlr_scene_tree   *tree;
-        struct wlr_scene_rect   *bg;
-        struct wlr_scene_rect   *accent;
-        struct wlr_scene_buffer *text_buf;
     } dispcfg_ui;
 
     syn_dispcfg_t   dispcfg;
@@ -7538,18 +7521,10 @@ void syn_config_ensure_dir(void);
 
 /* ── render.c ────────────────────────────────────────────── */
 void synui_ui_init(syn_server_t *s);
-void synui_render_welcome(syn_server_t *s);
-void synui_welcome_hide(syn_server_t *s);
-/* The pointer, per the panel contract above: hover selects, a left click does
- * what Enter does on that item, a click off the panel closes it, and the wheel
- * moves the selection (the menu never scrolls — every row is always drawn).
- * Defined in input.c, beside the menu's keyboard half. */
-int  welcome_motion(syn_server_t *s, double lx, double ly);
-int  welcome_click(syn_server_t *s, double lx, double ly, uint32_t button,
-                   uint32_t time_msec);
-int  welcome_scroll(syn_server_t *s, double lx, double ly, double delta);
-/* welcome.state — persists the menu's "Don't show again" checkbox across
- * restarts. Loaded from config.c (after synuirc), saved when it is toggled. */
+/* welcome.state — persists the guide's "Don't show again" checkbox across
+ * restarts. Loaded from config.c (after synuirc), saved when it is toggled.
+ * The compositor no longer DRAWS the guide (quickshell/welcome.qml does), but it
+ * still owns the setting, so this stays the single writer of the file. */
 void welcome_state_load(syn_config_t *cfg);
 void welcome_state_save(syn_config_t *cfg);
 void synui_render_cmdbar(syn_server_t *s);
@@ -8330,8 +8305,9 @@ const char *ctlpanel_action_desc(syn_server_t *s, const char *action,
 const char *ctlpanel_tap_key_name(uint32_t mod);
 /* A chord as a keyboard says it — "Super+Shift+C", "Ctrl+Alt+Delete". The
  * display half of syn_bind_format_combo(), which spells what synuirc TAKES
- * ("super+shift+c"). render.c's welcome menu reads its key column out of the
- * live bind table through this, so the menu cannot drift from the binds. */
+ * ("super+shift+c"). It is also what `synctl binds` renders each chord with, so
+ * the welcome guide, the shortcut palette and the control panel print the same
+ * chord the same way and none of them can drift from the bind table. */
 void ctlpanel_combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n);
 /* ── Shortcut palette + rebind helper (keys.c) ───────────────
  * Super+/ (and Super+?): the same list ctlpanel_shortcuts() builds, filtered as
@@ -8777,6 +8753,10 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
  * start menu and the volume mixer; quickshell's IPC goes client-ward, which is
  * the direction synui cannot go on its own. */
 void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn);
+/* …and the same call to the WELCOME GUIDE, which is not the bar and deliberately
+ * not in either shipped shell — it is its own quickshell, started by
+ * synui-welcome(1) when nothing is listening. `fn` is toggle|show|hide. */
+void synui_welcome_ipc(syn_server_t *s, const char *fn);
 /* The same call with an explicit argument instead of the focused output's name.
  * The bar's own settings are per-monitor and the compositor has no business
  * picking which monitor a control-panel row means, so the rows that drive the

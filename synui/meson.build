@@ -413,6 +413,14 @@ install_data(['data/synui-calc.desktop',
               'data/synui-sound.desktop',
               'data/synui-sounds.desktop',
               'data/synui-keys.desktop',
+              # ⚠ THE ODD ONE OUT: `Exec=synui-welcome toggle`, a program,
+              # where every other entry here dispatches a compositor panel. The
+              # welcome guide stopped being a panel at 497 — it is a second
+              # quickshell on the bar's QML tree — so there is no action for
+              # `synctl dispatch` to name. It is in this list for the reason all
+              # of them are: a thing reachable only by a chord is a thing nobody
+              # finds, and Super+Escape is not a discoverable key.
+              'data/synui-welcome.desktop',
               'data/synui-widgets.desktop',
               'data/synui-aimodel.desktop',
               'data/synui-filters.desktop',
@@ -1754,6 +1762,18 @@ test('theme_contrast', theme_contrast,
 # with the corners off.
 bar_shape = find_program('tests/bar_shape.sh')
 test('bar_shape', bar_shape,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
+# `welcome_guide`: the welcome guide is a SECOND quickshell entry point on the
+# bar's tree, and every way it can fail is silent — a qmldir line missing makes
+# "Guide is not a type", an uninstalled pages.js makes every page `undefined`,
+# and both come from a package that built cleanly. Loads it on a headless synui
+# and asks the PIXELS: did a card draw, do two pages differ, does the IPC answer,
+# and does it get out of the way when a window opens.
+welcome_guide = find_program('tests/welcome_guide.sh')
+test('welcome_guide', welcome_guide,
      args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
      depends : [synui_exe],
      timeout : 180)

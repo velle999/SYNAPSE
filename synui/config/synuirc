@@ -476,12 +476,20 @@ numlock      = on
 # cat       = off
 # cat_breed = neon
 
-# ── Welcome menu (Super+Escape) ────────────────────────────
-# Whether the menu greets you on login. Super+Escape opens it either way, so
-# turning this off never strands it. The menu's own "Don't show again" checkbox
-# (bottom-right) toggles this and writes ~/.config/synui/welcome.state, which
-# from then on overrides this line — delete that file to hand control back here.
-# Note the sense: the checkbox is ticked when this is off.
+# ── Welcome guide (Super+Escape) ───────────────────────────
+# Whether the guide greets you on login. Super+Escape opens it either way, so
+# turning this off never strands it — and so does `synui-welcome`, or the
+# "Welcome Guide" entry in the applications menu.
+#
+# The guide is six pages of what this desktop does and which keys do it. It is
+# a quickshell window (quickshell/welcome.qml) in its own process rather than a
+# panel synui draws, which is why it survives a bar shell switch: it is not in
+# either bar. See systemd/synui-welcome.sh.
+#
+# Its own "Don't show again" checkbox (bottom-left, on every page) toggles this
+# and writes ~/.config/synui/welcome.state, which from then on overrides this
+# line — delete that file to hand control back here. Note the sense: the
+# checkbox is ticked when this is off.
 welcome_at_startup = on
 
 # ── Lock screen (Super+L) ──────────────────────────────────
@@ -603,7 +611,9 @@ record_edit = off
 #   moved to Alt+Tab.
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
-# menu = the SYNAPSE OS welcome menu (default super+escape).
+# menu = the SynapseOS welcome guide (default super+escape). Asks
+# synui-welcome(1) to toggle it — the guide is a quickshell window, not a panel
+# synui draws, and closing it ends its process.
 # cmdbar = the AI command bar. Default super+space — the command bar is what
 # this desktop is for and it gets the biggest key on the keyboard.
 # The launcher itself is not an action, it is a spawn: `super+equal spawn
@@ -640,9 +650,9 @@ record_edit = off
 #   modifier pressed and released with NOTHING in between. Any other key or a
 #   mouse button in between disarms it, so the same key used as a modifier
 #   (super+e, super+drag) never opens the menu on release.
-#   `none` turns the tap off. The menu is still on super+escape's welcome page,
-#   the bar's start button and `synctl dispatch start_menu`, so switching the
-#   tap off is not switching the menu off.
+#   `none` turns the tap off. The start menu is still on the bar's start button
+#   and on `synctl dispatch start_menu` (and the welcome guide's second page
+#   names the key), so switching the tap off is not switching the menu off.
 #   Super+/ then F2 on the tap row moves it: tap the modifier you want,
 #   or Delete for none. That writes binds.state, not this file, and
 #   Ctrl+Shift+R in the same palette puts it back with every other shortcut.

@@ -2691,7 +2691,7 @@ static void key_name(xkb_keysym_t sym, char *out, size_t n)
      * the key name) — but the keycap says '='. */
     case XKB_KEY_equal:     snprintf(out, n, "=");         return;
     /* And the rest of the punctuation this desktop binds, for the same reason:
-     * the shortcuts column, the palette and the welcome menu all read "Super+/"
+     * the shortcuts column, the palette and `synctl binds` all read "Super+/"
      * on a keycap and "super+slash" in a config file, and only one of those is
      * a list of keys to press. */
     case XKB_KEY_slash:     snprintf(out, n, "/");         return;
@@ -2716,8 +2716,9 @@ static void key_name(xkb_keysym_t sym, char *out, size_t n)
  * so the panel and the config spell the same combo the same way.
  *
  * Exported (as ctlpanel_combo_str) for ctlpanel_tap_key_name()'s reason: the
- * welcome menu names the keys too, and a second spelling of "Super+Shift+C" is
- * a second one to keep in step. */
+ * shortcut palette names the keys too, and so does `synctl binds` — which is
+ * how the welcome guide gets them from outside the process. A second spelling
+ * of "Super+Shift+C" is a second one to keep in step. */
 void ctlpanel_combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
 {
     char key[64];

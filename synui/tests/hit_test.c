@@ -247,10 +247,11 @@ static void test_list_unaffected_by_cols(void)
 
 /* ── Loose rects ─────────────────────────────────────────────
  *
- * The welcome menu's corner checkbox and the emoji picker's category tabs. Two
- * things are worth pinning: that the index answered is the ORDER they were
- * added in (the emoji picker reads it straight back as a category number, so an
- * off-by-one there filters to the wrong block), and that hit_set_panel() blanks
+ * The emoji picker's category tabs (and, until it became a quickshell window,
+ * the welcome menu's corner checkbox). Two things are worth pinning: that the
+ * index answered is the ORDER they were added in (the emoji picker reads it
+ * straight back as a category number, so an off-by-one there filters to the
+ * wrong block), and that hit_set_panel() blanks
  * them — a panel that stops drawing a tab must stop answering for it, and that
  * happens by nobody doing anything.
  */
@@ -310,14 +311,19 @@ static void test_spots(void)
     CHECK(f.spots == SYN_HIT_SPOTS, "a refused spot must not grow the list");
 }
 
-/* The welcome menu (Super+Escape), with render.c's own numbers: rows on a 28px
- * pitch whose hit band starts 20px above the first text baseline, and the
- * "Don't show again" checkbox as a loose rect in the bottom-right corner.
+/* A panel of ACTION rows, with render.c's own numbers: rows on a 28px pitch
+ * whose hit band starts ~20px above the first text baseline, and a footer under
+ * the last one that is still inside the panel.
  *
- * Pinned because the menu is the one panel whose rows are ACTIONS — a click
+ * ⚠ THESE WERE THE WELCOME MENU'S NUMBERS. That panel is gone — the guide is
+ * quickshell/welcome.qml now — but the geometry it pinned is every other
+ * list-of-actions panel's too (the wallpaper picker, the power and screensaver
+ * panels, the AI model list; see the hit_set_rows calls in render.c, which all
+ * offset the band above the baseline the same way). It is kept because the
+ * property it defends is unchanged: on a panel whose rows are ACTIONS, a click
  * landing one row high does not select the wrong thing, it launches the wrong
  * thing. */
-static void test_welcome_rows(void)
+static void test_action_rows(void)
 {
     const int px = 710, py = 178, pw = 500, ph = 752;
     const int top = 128, row_h = 28, rows = 19;
@@ -427,7 +433,7 @@ int main(void)
     test_grid();
     test_list_unaffected_by_cols();
     test_spots();
-    test_welcome_rows();
+    test_action_rows();
     test_place_popup();
 
     if (failures) {

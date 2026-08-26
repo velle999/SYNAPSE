@@ -326,6 +326,47 @@ static void cmd_scene(syn_server_t *s, ipc_buf_t *b)
             frames, views, frames - views);
 }
 
+/*
+ * The BIND TABLE, as the desktop actually holds it right now.
+ *
+ * ⚠ THIS EXISTS BECAUSE EVERY OTHER LIST OF THE KEYS IS A COPY. render.c's
+ * welcome menu carried a hand-typed chord per row and said so at length — the
+ * command bar has been on Super+Space, on Super+= and back on Super+Space, and
+ * each move left that column naming the old one. The welcome guide is QML now
+ * and lives outside the compositor, so it cannot read config.binds directly;
+ * without this command its only option would be to type the strings out again
+ * and inherit the same drift, one process further away.
+ *
+ * The chord is rendered HERE, by ctlpanel_combo_str(), so the guide, the
+ * shortcuts palette and the control panel all print "Super+Shift+C" the same
+ * way. A client that reassembled it from a modifier mask would be the second
+ * spelling this is meant to prevent.
+ *
+ * `arg` is reported rather than folded in: an action can legitimately be bound
+ * several times (`control` bare and `control audio` are two rows of the control
+ * panel's world) and only the caller knows which one it means. The bare bind is
+ * the one a menu row runs, and a caller that wants it takes the first entry
+ * with an empty arg — the rule welcome_hint() applied inside the compositor.
+ */
+static void cmd_binds(syn_server_t *s, ipc_buf_t *b)
+{
+    bputs(b, "[");
+    for (int i = 0; i < s->config.bind_count; i++) {
+        const syn_bind_t *bd = &s->config.binds[i];
+        char combo[64];
+        ctlpanel_combo_str(bd->mods, bd->sym, combo, sizeof(combo));
+        if (i) bputs(b, ",");
+        bputs(b, "{\"action\":");
+        bjson_str(b, bd->action);
+        bputs(b, ",\"arg\":");
+        bjson_str(b, bd->arg);
+        bputs(b, ",\"key\":");
+        bjson_str(b, combo);
+        bputs(b, "}");
+    }
+    bputs(b, "]\n");
+}
+
 static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
 {
     bputs(b, "[");
@@ -440,6 +481,10 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         cmd_outputs(s, out);
         return;
     }
+    if (strcmp(line, "binds") == 0 || strcmp(line, "keys") == 0) {
+        cmd_binds(s, out);
+        return;
+    }
     if (strcmp(line, "scene") == 0) {
         cmd_scene(s, out);
         return;
@@ -466,7 +511,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     if (strcmp(line, "help") == 0) {
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
                    "\"activeworkspace\",\"activewindow\",\"recent\","
-                   "\"version\",\"dispatch <action> [arg]\","
+                   "\"binds\",\"version\",\"dispatch <action> [arg]\","
                    "\"calc <expression>\"]}\n");
         return;
     }

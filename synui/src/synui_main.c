@@ -788,8 +788,6 @@ static void output_destroy(struct wl_listener *listener, void *data)
 
     /* Re-home the compositor UI onto a surviving output. */
     if (!server->shutting_down && !wl_list_empty(&server->outputs)) {
-        if (server->welcome_ui.visible)
-            synui_render_welcome(server);
         if (server->overlay.visible)
             synui_render_overlay(server);
         if (server->cmdbar.visible)
@@ -940,8 +938,6 @@ static void server_new_output(struct wl_listener *listener, void *data)
     deskicons_layout(server);
     synui_render_deskicons(server);
     layout_apply(server, server_active_workspace(server));
-    if (server->welcome_ui.visible)
-        synui_render_welcome(server);
     if (server->overlay.visible)
         synui_render_overlay(server);
     if (server->cmdbar.visible)
@@ -1023,8 +1019,13 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
     if (view->fullscreen)
         view_apply_fullscreen(view->server, view, 1);
 
-    /* Hide welcome screen when first window opens */
-    synui_welcome_hide(view->server);
+    /* ⚠ NOTHING HIDES THE WELCOME GUIDE HERE ANY MORE. It used to be the
+     * compositor's own panel and this is where the first mapped window put it
+     * away. The guide is a quickshell layer surface now and closes ITSELF when
+     * a toplevel appears (Guide.qml watches ToplevelManager) — which it has to,
+     * because it holds exclusive keyboard focus and a guide left standing over
+     * a window that just opened is a window that gets no keys. Reaching across
+     * to it from here would be a second owner of the same rule. */
 
     /* The window may have appeared under a cursor that never moved; without
      * this it gets no wl_pointer.enter until the user nudges the mouse, and a
@@ -2295,7 +2296,7 @@ int synui_init(syn_server_t *s)
     if (!s->ai_disabled)
         synmon_start(s);
 
-    /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
+    /* Initialize UI scene nodes (cmdbar, overlay, the panels) */
     synui_ui_init(s);
 
     /* Clock & Time: loads clock.state and arms the panel's 1 Hz repaint timer.
@@ -2482,6 +2483,34 @@ int synui_run(syn_server_t *s)
             setsid();
             synui_child_reset_signals();
             execl("/bin/sh", "sh", "-c", s->config.autostart[i], NULL);
+            _exit(1);
+        }
+    }
+
+    /*
+     * …and the welcome guide, if this desktop still wants it.
+     *
+     * ⚠ SPAWNED, NOT ASKED. The guide is a quickshell client now, and an IPC
+     * call at login would be a call to a process that does not exist yet —
+     * nothing would answer and nothing would say so. synui-welcome(1) starts one
+     * when nothing is listening, which is exactly the case here.
+     *
+     * AFTER the autostart loop, and that ordering is the whole reason it is
+     * here rather than in synui_ui_init(): WAYLAND_DISPLAY is in the environment
+     * by this point, so the guide has a compositor to connect to. It closes
+     * itself when a toplevel appears (Guide.qml), so an autostarted terminal
+     * racing it ahead is not a problem — that is the old "hide on first window"
+     * rule, kept, on the side that owns the window now.
+     *
+     * The greeter never reaches here with this set: synui_main() zeroes
+     * welcome_at_startup for a login session, which is not a desktop.
+     */
+    if (s->config.welcome_at_startup) {
+        wlr_log(WLR_INFO, "synui: welcome guide at startup");
+        if (fork() == 0) {
+            setsid();
+            synui_child_reset_signals();
+            execlp("synui-welcome", "synui-welcome", "show", (char *)NULL);
             _exit(1);
         }
     }
@@ -2721,7 +2750,7 @@ static void usage(const char *prog) {
         "  Ctrl+Alt+Delete    Task manager\n"
         "  Super+L            Lock the screen\n"
         "  Super+E            Visual effects panel (per-filter sliders)\n"
-        "  Super+Escape       Toggle the welcome menu\n"
+        "  Super+Escape       Toggle the welcome guide\n"
         "  Super+1..9         Switch workspace\n"
         "  Super+Shift+1..9   Move window to workspace\n"
         "  Super+Tab          Next layout mode\n"
@@ -2904,7 +2933,7 @@ int main(int argc, char *argv[])
     }
     if (greeter) {
         server.greeter = 1;
-        /* The greeter is a login screen, not a desktop: no welcome menu, no
+        /* The greeter is a login screen, not a desktop: no welcome guide, no
          * dock, no autostarted apps — gated below on server.greeter. */
         server.config.welcome_at_startup = 0;
     }

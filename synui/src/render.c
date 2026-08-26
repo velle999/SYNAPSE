@@ -732,338 +732,22 @@ static void close_button_draw(cairo_t *cr, int bx, int by)
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);   /* shared cr: put it back */
 }
 
-/* ── Welcome screen ──────────────────────────────────────── */
-
-/* Menu entries: input.c navigates with Up/Down and executes the entry's
- * bind action on Enter (welcome_menu_key).
+/* ── welcome.state ───────────────────────────────────────
  *
- * ⚠ THE KEY IS A FALLBACK, NOT THE ANSWER. welcome_hint() below reads the chord
- * out of the LIVE bind table, because these strings are typed by hand and the
- * binds are not: the command bar has now been on Super+Space, on Super+= and
- * back on Super+Space, and each move left this column saying the old one — to
- * say nothing of anyone who rebinds a key in the palette. The string is what
- * the row shows when nothing is bound to its action at all. */
-const syn_welcome_entry_t synui_welcome_menu[] = {
-    { "Control Panel",    "Super+C",       "control"   },
-    /* Second, because "what are the keys" is the first question this menu
-     * exists to answer and the palette answers all of it. */
-    { "Keyboard Shortcuts", "Super+/",     "keys"      },
-    { "Terminal",         "Super+Enter",   "term"      },
-    { "AI Command Bar",   "Super+Space",   "cmdbar"    },
-    { "Neural Overlay",   "Super+A",       "overlay"   },
-    { "Display Settings", "Super+D",       "displays"  },
-    { "Wallpaper",        "Super+W",       "wallpaper" },
-    { "Appearance",       "Super+T",       "theme"     },
-    { "Power Saving",     "Super+P",       "power"     },
-    { "Screensaver",      "Super+Z",       "saver"     },
-    { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
-    /* Here and NOT in the control panel. The control panel is for settings, and
-     * a calculator has none — it was listed there when it was written, which
-     * made the one row on that panel you could not change anything from. This
-     * menu is the list of things you OPEN, which is what a calculator is. */
-    { "Calculator",       "Super+X",       "calc"      },
-    { "News",             "Super+R",       "news"      },
-    { "Network / Wi-Fi",  "Super+I",       "network"   },
-    { "Game Mode",        "Super+G",       "game"      },
-    { "Cat Mode",         "Super+Shift+C", "cat"       },
-    { "Lock Screen",      "Super+L",       "lock"      },
-    { "AI Backend",       "GPU/CPU/off",   "ai_backend"},
-    /* "Show At Startup" was a row here. It is the corner checkbox now — see
-     * the footer in synui_render_welcome(): it is the one thing on this panel
-     * that is not something you OPEN, and a list of doors reads better with the
-     * one preference taken out of it and put where a preference goes. The
-     * action it fires (welcome_startup) is unchanged. */
-    { "Quit synui",       "Super+Shift+Q", "quit"      },
-};
-const int synui_welcome_menu_len =
-    (int)(sizeof(synui_welcome_menu) / sizeof(synui_welcome_menu[0]));
-
-/* Live AI-backend label for the "AI Backend" row's hint. synui-ai-backend
- * writes "gpu", "cpu" or "off" to SYNAPD_BACKEND_STATE when it toggles synapd;
- * if the file is absent (nothing toggled yet) synapd's own default is
- * auto-detect, so show "auto". Kept tiny + best-effort — a read failure just
- * falls back. */
-static const char *synui_ai_backend_label(void)
-{
-    FILE *f = fopen(SYNAPD_BACKEND_STATE, "r");
-    if (!f) f = fopen(SYNAPD_BACKEND_STATE_LEGACY, "r");
-    if (!f) return "auto";
-    char b[16] = {0};
-    size_t n = fread(b, 1, sizeof(b) - 1, f);
-    fclose(f);
-    while (n > 0 && (b[n - 1] == '\n' || b[n - 1] == ' ')) b[--n] = 0;
-    if (strcmp(b, "gpu") == 0) return "GPU";
-    if (strcmp(b, "cpu") == 0) return "CPU";
-    if (strcmp(b, "off") == 0) return "off";
-    return "auto";
-}
-
-/*
- * The key column, from the LIVE binds — the chord the user would actually press
- * today, not the one that was true when the row was typed.
+ * ⚠ THE WELCOME MENU ITSELF IS GONE FROM THIS FILE. It was ~330 lines of
+ * cairo here — a nineteen-row list, its hit rectangles, a hand-typed chord per
+ * row and a corner checkbox — and it is quickshell/welcome.qml now: a paged
+ * guide with room to say what each row is for, drawn by a client that already
+ * owns the palette and the picked font. See systemd/synui-welcome.sh for why
+ * it is its own process rather than a window in the bar.
  *
- * First bind whose action matches and which carries no argument: an action can
- * legitimately be bound several times (`control` bare and `control audio` are
- * two rows of this table's world), and the bare one is what the menu's row
- * runs. Falls back to the entry's own string when nothing is bound, which is
- * the honest answer for a row you can only reach from here.
+ * What stays behind is the FILE, because the compositor still owns the
+ * setting: `welcome_at_startup` is a synuirc key, the control panel has a row
+ * for it, and synui is the single writer of its own config. The guide only
+ * ever reads welcome.state (GuideState.qml watches it) and asks for a change
+ * through `synctl dispatch welcome_startup`, so there is one writer and one
+ * spelling of the default.
  */
-static const char *welcome_hint(syn_server_t *s, const syn_welcome_entry_t *e,
-                                char *buf, size_t n)
-{
-    /* No bind at all, and never had one: this row toggles in place and its
-     * "hint" is the live backend instead of a key. */
-    if (strcmp(e->action, "ai_backend") == 0)
-        return synui_ai_backend_label();
-
-    for (int i = 0; i < s->config.bind_count; i++) {
-        const syn_bind_t *b = &s->config.binds[i];
-        if (strcmp(b->action, e->action) != 0 || b->arg[0]) continue;
-        ctlpanel_combo_str(b->mods, b->sym, buf, n);
-        return buf;
-    }
-    return e->hint;
-}
-
-void synui_render_welcome(syn_server_t *s)
-{
-    struct wlr_box ob;
-    get_output_box(s, &ob);
-
-    /* Height follows the menu rather than being a constant someone has to
-     * remember to bump: the rows start at WELCOME_TOP and step WELCOME_ROW_H,
-     * and the footer + version sit below them. With a hard-coded height, adding
-     * a menu entry silently pushed the footer off the bottom of the panel.
-     *
-     * Prefixed, unlike everything else local to this function: the start menu's
-     * geometry is MENU_* in synui.h now, and these are a different panel's
-     * numbers that happened to be spelled the same. */
-    /* WELCOME_FOOTER_H covers three hint lines (at y+16/+34/+52) *and* the
-     * version line, which is drawn from the bottom at ph-16 — too small a value
-     * and the two collide rather than the footer simply being cut off. */
-    const int WELCOME_TOP = 128, WELCOME_ROW_H = 28, WELCOME_FOOTER_H = 92;
-    int pw = 500;
-    int ph = WELCOME_TOP + synui_welcome_menu_len * WELCOME_ROW_H + WELCOME_FOOTER_H;
-    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
-
-    wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
-
-    /* The pointer's copy of where all that landed (hit.c). Rows only: the
-     * corner checkbox is a loose rect and is added further down, where its
-     * width is known — it is measured from its own label. */
-    hit_set_panel(&s->welcome_ui.hit, px, py, pw, ph);
-    hit_set_rows(&s->welcome_ui.hit, 30, WELCOME_TOP - 20, pw - 60,
-                 WELCOME_ROW_H, synui_welcome_menu_len);
-
-    /* The corner X. Unconditional, unlike the three windowed panels' — this one
-     * is not a setting. Escape closed this menu and nothing on it said so, so
-     * the only way out was one you had to already know; the button is that way
-     * out written down. It is pointer-only on purpose: Escape is still the
-     * keyboard's answer, and a focusable X would sit in the Up/Down ring
-     * between the rows and the checkbox for no gain. */
-    const int WELCOME_X_SZ = PANEL_CLOSE_SZ, WELCOME_X_INSET = PANEL_CLOSE_INSET;
-    const int close_x = pw - WELCOME_X_INSET - WELCOME_X_SZ;
-    const int close_y = WELCOME_X_INSET;
-    hit_set_close(&s->welcome_ui.hit, close_x, close_y,
-                  WELCOME_X_SZ, WELCOME_X_SZ);
-
-    /* Background rect */
-    float color[4];
-    panel_bg_color(s, color, 0.92f, px, py, pw, ph);
-    if (!s->welcome_ui.bg) {
-        s->welcome_ui.bg = wlr_scene_rect_create(s->welcome_ui.tree,
-                                                   pw, ph, color);
-    }
-    wlr_scene_rect_set_color(s->welcome_ui.bg, color);
-
-    /* Brand accent line at top */
-    if (!s->welcome_ui.accent) {
-        float accent[4] = { g_panel_accent[0], g_panel_accent[1],
-                        g_panel_accent[2], 1.0f };
-        s->welcome_ui.accent = wlr_scene_rect_create(s->welcome_ui.tree,
-                                                       pw, 2, accent);
-    } else {
-        wlr_scene_rect_set_color(s->welcome_ui.accent, (float[4]){
-            g_panel_accent[0], g_panel_accent[1], g_panel_accent[2], 1.0f });
-    }
-
-    /* Cairo text buffer */
-    cairo_t *cr;
-    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
-    if (!buf) return;
-    cairo_begin(cr);
-
-    /* SynapseOS dendrite emblem, top-left of the header (transparent SVG
-     * rendered straight into the panel's cairo context via librsvg, the same
-     * path icons.c uses for app icons). Best-effort: a missing/broken asset
-     * just leaves the header text as before.
-     *
-     * ⚠ WHICH COLOURWAY IS NOT A PREFERENCE, IT IS THE SURFACE'S ANSWER. The
-     * mark ships in two: #a78bfa, drawn for dark grounds, and #5b21b6 (ink),
-     * drawn for pale ones. Against a light theme's panel the purple measures
-     * about 2.4:1 and the ink about 8:1 — and on a dark panel they trade places,
-     * 7.2:1 against 2.2:1. So a single hardcoded file is washed out on half the
-     * themes we ship, whichever one it is; this panel was the purple half, and
-     * on prism-light the emblem beside the title was a smudge while every glyph
-     * around it followed the theme.
-     *
-     * SURFACE_PALE is the same threshold the ink ladder uses (contrast.h), off
-     * the same g_panel_bg the rest of this function measures — not a second
-     * opinion about what "light" means. */
-    {
-        const char *logo =
-            syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2])
-                > SURFACE_PALE
-              ? SYNUI_DATADIR "/logo-ink.svg"
-              : SYNUI_DATADIR "/logo.svg";
-        RsvgHandle *lh = rsvg_handle_new_from_file(logo, NULL);
-        if (lh) {
-            RsvgRectangle vp = { .x = 26, .y = 18, .width = 64, .height = 64 };
-            rsvg_handle_render_document(lh, cr, &vp, NULL);
-            g_object_unref(lh);
-        }
-    }
-
-    /* Title — vertically centred against the 64px emblem */
-    cairo_set_font_size(cr, 30);
-    set_accent(cr, 1.0);
-    cairo_move_to(cr, 106, 62);
-    syn_show_text(cr, "SYNAPSEOS");
-
-    /* Separator, clear of the taller emblem */
-    set_ink(cr, INK_RULE, 0.5);
-    cairo_set_line_width(cr, 1);
-    cairo_move_to(cr, 30, 96);
-    cairo_line_to(cr, pw - 30, 96);
-    cairo_stroke(cr);
-
-    /* …and the close button, in the corner the rect was recorded for above. */
-    close_button_draw(cr, close_x, close_y);
-
-    /* Selectable menu (input.c: Up/Down + Enter) */
-    cairo_set_font_size(cr, 15);
-    int y = WELCOME_TOP;
-    for (int i = 0; i < synui_welcome_menu_len; i++) {
-        int sel = (i == s->welcome_ui.selected);
-
-        if (sel) {
-            set_accent(cr, 1.0);
-            cairo_move_to(cr, 44, y);
-            syn_show_text(cr, ">");
-            set_ink(cr, INK_STRONG, 1.0);
-        } else {
-            set_ink(cr, INK_MUTED, 1.0);
-        }
-        cairo_move_to(cr, 66, y);
-        syn_show_text(cr, synui_welcome_menu[i].label);
-
-        char hintbuf[48];
-        const char *hint = welcome_hint(s, &synui_welcome_menu[i],
-                                        hintbuf, sizeof(hintbuf));
-
-        cairo_set_source_rgba(cr, sel ? 0.0 : 0.45, sel ? 0.85 : 0.45,
-                              sel ? 0.75 : 0.55, sel ? 1.0 : 1.0);
-        cairo_move_to(cr, 290, y);
-        syn_show_text(cr, hint);
-
-        y += WELCOME_ROW_H;
-    }
-
-    /* Footer hints */
-    cairo_set_font_size(cr, 12);
-    set_ink(cr, INK_DIM, 0.9);
-    cairo_move_to(cr, 44, y + 16);
-    syn_show_text(cr, "Click or Up/Down + Enter select");
-    cairo_move_to(cr, 44, y + 34);
-    syn_show_text(cr, "Super+1-9 workspaces \xc2\xb7 Super+Tab cycle layout");
-    cairo_move_to(cr, 44, y + 52);
-    syn_show_text(cr, "Super+E filters \xc2\xb7 Super+O move monitor \xc2\xb7 Super+Q close");
-
-    /* Version */
-    cairo_set_font_size(cr, 12);
-    set_ink(cr, 0.33, 0.8);
-    cairo_move_to(cr, 190, ph - 16);
-    syn_show_text(cr, SYNUI_VERSION);
-
-    /*
-     * "Don't show again", bottom-right.
-     *
-     * Phrased as the opt-OUT, so the box you tick is the thing you came here to
-     * do; the config field it writes is the opposite sense (welcome_at_startup),
-     * and this is the only place that inverts it.
-     *
-     * The box is STROKED rather than a typed "[x]", for panel_close_draw()'s
-     * reason further down this file: a "☑" is at the mercy of whatever family
-     * fontpick last applied, and a checkbox that draws as a missing-glyph box
-     * is worse than no checkbox. Two cairo lines are the same two lines in
-     * every theme at every UI font.
-     *
-     * Focusable from the keyboard too — it is the item after the last row (see
-     * welcome_menu_key), so removing it from the list cost nothing.
-     */
-    {
-        const char *cb_label = "Don't show again";
-        const int   CB_BOX   = 13;
-        const int   CB_H     = 22;
-        const int   checked  = !s->config.welcome_at_startup;
-        const int   sel      = (s->welcome_ui.selected == synui_welcome_menu_len);
-
-        cairo_set_font_size(cr, 12);
-        cairo_text_extents_t te;
-        syn_text_extents(cr, cb_label, &te);
-
-        int cb_w = CB_BOX + 8 + (int)te.x_advance;
-        int cb_x = pw - 30 - cb_w;
-        int cb_y = ph - 16 - CB_H + 5;      /* on the version's baseline */
-
-        /* The clickable rect, generous by a few pixels on every side of the
-         * drawing — a 13px box is a small target and the label is part of it. */
-        hit_add_spot(&s->welcome_ui.hit, cb_x - 6, cb_y, cb_w + 12, CB_H);
-
-        if (sel) {
-            set_accent(cr, 0.18);
-            cairo_rectangle(cr, cb_x - 6, cb_y, cb_w + 12, CB_H);
-            cairo_fill(cr);
-        }
-
-        double bx = cb_x, by = cb_y + (CB_H - CB_BOX) / 2.0;
-        cairo_set_line_width(cr, 1.5);
-        if (sel || checked) set_accent(cr, 1.0);
-        else                set_ink(cr, INK_MUTED, 1.0);
-        cairo_rectangle(cr, bx + 0.75, by + 0.75, CB_BOX - 1.5, CB_BOX - 1.5);
-        cairo_stroke(cr);
-
-        if (checked) {
-            cairo_set_line_width(cr, 2);
-            cairo_move_to(cr, bx + 3,          by + CB_BOX / 2.0);
-            cairo_line_to(cr, bx + CB_BOX / 2.4, by + CB_BOX - 4);
-            cairo_line_to(cr, bx + CB_BOX - 2.5, by + 3);
-            cairo_stroke(cr);
-        }
-
-        if (sel)           set_ink(cr, INK_STRONG, 1.0);
-        else if (checked)  set_ink(cr, INK_MUTED, 1.0);
-        else               set_ink(cr, INK_DIM, 0.9);
-        cairo_move_to(cr, cb_x + CB_BOX + 8, cb_y + CB_H - 7);
-        syn_show_text(cr, cb_label);
-    }
-
-    cairo_destroy(cr);
-    set_scene_buffer(&s->welcome_ui.text_buf, s->welcome_ui.tree, buf);
-
-    wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, true);
-    wlr_scene_node_raise_to_top(&s->welcome_ui.tree->node);
-    s->welcome_ui.visible = 1;
-}
-
-void synui_welcome_hide(syn_server_t *s)
-{
-    if (!s->welcome_ui.visible) return;
-    wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
-    s->welcome_ui.visible = 0;
-    /* Or a closed menu goes on eating clicks — the contract in synui.h. */
-    hit_clear(&s->welcome_ui.hit);
-}
 
 /* Resolve ~/.config/synui/welcome.state; false if $HOME is unset. */
 static bool welcome_state_path(char *buf, size_t n)
@@ -1739,7 +1423,7 @@ void synui_render_wppick(syn_server_t *s)
 
     /* More opaque than the 0.94 the sparser panels use: the browse list puts a
      * small-type path under every row, and at 0.94 whatever is behind the panel
-     * (the welcome menu, or the wallpaper itself) reads straight through them. */
+     * (another panel, or the wallpaper itself) reads straight through them. */
     float bg_color[4];
     panel_bg_color(s, bg_color, 0.985f, px, py, pw, ph);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -3123,8 +2807,10 @@ void synui_render_emoji(syn_server_t *s)
 /* ── The corner close button ─────────────────────────────────
  *
  * The rect-and-mode half, for the panels that only SOMETIMES have a button
- * (see syn_panel_close_t) — the drawing is close_button_draw(), up beside the
- * welcome menu, which draws one unconditionally. One drawing for all of them,
+ * (see syn_panel_close_t) — the drawing is close_button_draw(), further up this
+ * file. It was split out so the welcome menu could draw the same button without
+ * being one of the windowed panels; the guide is quickshell now and draws its
+ * own, and this is what is left. One drawing for all of them,
  * for the panel pointer contract's reason: four hand-drawn X's in four render
  * functions is four chances for the drawn button and the clickable rect to
  * disagree, and only one of them is visible.
@@ -9601,7 +9287,7 @@ void panel_chrome_sync(syn_server_t *s)
 #define PANEL_BG(n)     { &s->n##_ui.bg, NULL }
 #define PANEL_FULL(n)   { &s->n##_ui.bg, &s->n##_ui.accent }
     const struct panel_chrome panels[] = {
-        PANEL_FULL(welcome),  PANEL_FULL(cmdbar),   PANEL_FULL(overlay),
+        PANEL_FULL(cmdbar),   PANEL_FULL(overlay),
         PANEL_FULL(dispcfg),  PANEL_FULL(wppick),   PANEL_FULL(power),
         PANEL_FULL(curpick),  PANEL_FULL(fontpick), PANEL_FULL(emoji),
         PANEL_FULL(calc),     PANEL_FULL(eq),       PANEL_FULL(taskmgr),
@@ -9645,7 +9331,6 @@ void panel_chrome_sync(syn_server_t *s)
 void synui_ui_init(syn_server_t *s)
 {
     /* Create scene trees — later children render on top */
-    s->welcome_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->overlay_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dispcfg_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->wppick_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
@@ -9705,7 +9390,6 @@ void synui_ui_init(syn_server_t *s)
     s->deskicon_last_click_idx = -1;
     s->deskicon_drag.idx       = -1;
 
-    wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->overlay_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
@@ -9726,11 +9410,4 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->alttab_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
-
-    /* Render welcome screen (uses fallback 1920x1080 until output connects).
-     * Opted out of via the menu's own "Don't show again" checkbox: leave the tree
-     * empty and disabled — synui_render_welcome builds its nodes lazily, so
-     * the first Super+Escape still brings up a complete menu. */
-    if (s->config.welcome_at_startup)
-        synui_render_welcome(s);
 }

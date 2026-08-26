@@ -116,10 +116,11 @@
  * Cat mode (cat.c):
  *   cat = on|off                (default off; Super+Shift+C toggles at runtime)
  *
- * Welcome menu (render.c) — Super+Escape opens it regardless; this is only
- * whether it greets you on login. The menu's "Don't show again" checkbox
- * toggles it live (inverted — ticked means off) and writes welcome.state, which
- * then overrides this line:
+ * Welcome guide (quickshell/welcome.qml, started by synui-welcome(1)) —
+ * Super+Escape opens it regardless; this is only whether it greets you on
+ * login. The guide's "Don't show again" checkbox is the same setting inverted
+ * (ticked means off); it dispatches `welcome_startup`, which writes
+ * welcome.state, which then overrides this line:
  *   welcome_at_startup = on|off (default on)
  *   notif_dnd = on|off (default off) — Do Not Disturb: no toast, no chime.
  *     Critical urgency still gets through. Super+Shift+N toggles it and writes
@@ -295,7 +296,7 @@
  * can take audio at all:
  *   hdmi_audio = auto                    (auto|on|off)
  *
- * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
+ * Network (Super+I / the welcome guide) — nmtui in a terminal. synui has no text
  * entry to type a passphrase into, so there is nothing native to point at yet:
  *   network_cmd = foot -e nmtui
  *
@@ -1777,7 +1778,14 @@ static void config_set_defaults(syn_config_t *cfg)
     /* pkill -x, because the bar is quickshell(1) and killing the wrong
      * quickshell would take out any other shell the user runs. synui-bar is the
      * only supported way back up — it resolves which of the two QML trees
-     * bar_shell selected. */
+     * bar_shell selected.
+     *
+     * ⚠ SINCE 497 THIS ALSO TAKES THE WELCOME GUIDE, which is a second
+     * quickshell (synui-welcome). That is the wanted behaviour and not an
+     * accident of the pattern: game mode clears the desktop, and a full-screen
+     * guide over a game is the first thing that should go. It does not come
+     * back with the bar, which is also right — game_bar_start_cmd starts a bar,
+     * and nobody wants the welcome screen when they quit a game. */
     snprintf(cfg->game_bar_stop_cmd,  sizeof(cfg->game_bar_stop_cmd),
              "pkill -x quickshell");
     snprintf(cfg->game_bar_start_cmd, sizeof(cfg->game_bar_start_cmd),
