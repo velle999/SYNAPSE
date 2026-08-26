@@ -355,16 +355,39 @@ FloatingWindow {
     // time somebody used both.
     readonly property bool isVisual: (root.st.mode || "").indexOf("V") === 0
 
-    // Line and display column, 1-based, as the engine's own motions: NG goes
-    // to a line, N| to a display column. In visual mode they EXTEND, which is
-    // exactly what a drag needs and is why this is keys rather than `:N`.
-    function gotoPos(line, dcol) {
-        root.sendKeys(String(Math.max(1, line)) + "G" + String(Math.max(1, dcol)) + "|")
+    // Line and column, 1-based.
+    //
+    // ⛔ THIS WAS `NG N|` AS KEYS, AND A MOTION SENT IN INSERT MODE IS TYPED,
+    // NOT OBEYED. Clicking while typing filled the document with
+    // `1G28|1G27|1G27|viw` — the mouse's own coordinates, as text, which is
+    // unexplainable from the outside because they are characters nobody
+    // pressed. The right-click path had already been patched for it once
+    // (see onPressed below); every other mouse path had not.
+    //
+    // ⚠ ESCAPING FIRST IS NOT THE FIX EITHER. No editor throws you out of
+    // insert mode for clicking somewhere, and none puts you into it. The mode
+    // has to come out exactly as it went in, in all three of normal, insert
+    // and visual — so this is a protocol verb that moves the caret and says
+    // nothing about the mode, not a key sequence that has to know about them.
+    //
+    // It still EXTENDS a visual selection, which is what a drag needs: the
+    // engine keeps the anchor in vy/vx and reads the selection as
+    // anchor→caret, so moving the caret is extending it.
+    function gotoPos(line, col) {
+        root.send("goto " + Math.max(1, line) + " " + Math.max(1, col))
     }
 
     // Start a selection if there is not one already. `v` toggles, so sending
     // it blind would CANCEL the selection half the time.
-    function beginVisual() { if (!root.isVisual) root.sendKeys("v") }
+    //
+    // ⚠ AND IT IS A LETTER. In insert mode `v` is not "enter visual mode", it
+    // is the character v — which is how a drag that began while typing used to
+    // leave one in the document before selecting nothing.
+    function beginVisual() {
+        if (root.isVisual) return
+        if (root.inserting) root.sendKeys("<Esc>")
+        root.sendKeys("v")
+    }
 
     // The keys Shift turns into a selection. Everything here is a MOTION —
     // Shift+<motion> means "extend the selection by that motion", and the
@@ -442,7 +465,9 @@ FloatingWindow {
     // the caret inside the window it was asked for and leaves it alone.
     function scrollToLine(t) {
         const want = Math.max(0, Math.min(t, root.totalLines - 1))
-        root.sendKeys(String(want + 1) + "G")
+        // Not `NG` as keys: in insert mode the count is typed. Scrolling must
+        // not change the mode, and must not type a number into the document.
+        root.gotoPos(want + 1, 1)
         root.send("view " + want + " " + editorRows())
     }
     // The editor's row count, read through a function so this can live up here
@@ -911,11 +936,15 @@ FloatingWindow {
                         // selected. Outside one it moves the caret first, the
                         // way a left click does — but unlike a left click this
                         // one always opens a menu rather than continuing to
-                        // type, so it can leave INSERT first. Skipping that
-                        // made gotoPos's raw `NG N|` land in the document
-                        // ahead of the menu opening: right-click ▸ Paste read
+                        // type, so it can leave INSERT first.
+                        //
+                        // ⚠ THE ESCAPE IS FOR THE MENU NOW, NOT FOR THE MOVE.
+                        // It was added because gotoPos sent raw `NG N|` keys,
+                        // which insert mode typed — right-click ▸ Paste read
                         // as "pasting mouse code" because the click itself had
-                        // just typed it.
+                        // just typed it. gotoPos is a protocol verb since, and
+                        // is safe in any mode; what is left here is the menu's
+                        // own preference for acting from normal mode.
                         if (!root.isVisual) {
                             if (root.inserting) root.sendKeys("<Esc>")
                             root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
@@ -955,6 +984,13 @@ FloatingWindow {
                 onDoubleClicked: (m) => {
                     if (m.button !== Qt.LeftButton) return
                     root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
+                    // ⚠ AND THIS ONE DOES LEAVE INSERT, unlike the click that
+                    // positioned the caret above. `viw` is a selection, and a
+                    // selection is visual mode — there is no such thing as
+                    // selecting a word while still inserting. Without the
+                    // escape the three letters were simply typed, which is
+                    // the `viw` in the middle of the reported mess.
+                    if (root.inserting) root.sendKeys("<Esc>")
                     root.sendKeys("viw")
                 }
 
@@ -962,7 +998,12 @@ FloatingWindow {
                     // Three lines a notch, the usual step, expressed as KEYS
                     // so the engine's own view bookkeeping stays the only copy
                     // of where we are.
-                    root.sendKeys(w.angleDelta.y > 0 ? "3<Up>" : "3<Down>")
+                    // ⚠ NOT `3<Up>`. The arrows are fine in insert mode; the
+                    // COUNT is not — `3` is typed and only then does the
+                    // caret move. Three plain motions say the same thing in
+                    // every mode.
+                    const k = w.angleDelta.y > 0 ? "<Up>" : "<Down>"
+                    root.sendKeys(k + k + k)
                 }
 
                 Timer {

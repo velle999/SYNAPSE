@@ -36,7 +36,40 @@ pkgname=syn-edit
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=11
+# 12: A CLICK TYPED ITS OWN COORDINATES INTO THE DOCUMENT. Reported with a
+#   screenshot of a buffer reading
+#     1G28|1G27|1G27|1G27|viw1G27|1G27|1G27|viw[ ] 1G6|1G11|1G11|1G11|viw
+#   — unexplainable from the outside, because not one of those characters was
+#   pressed by anybody. They are the mouse's own coordinates: gotoPos() placed
+#   the caret by sending the keys a vim user would press, `12G34|`, which is a
+#   MOTION in normal mode and THIRTEEN LITERAL CHARACTERS in insert mode. So
+#   clicking while typing typed. `viw` is the double-click, and the stray digit
+#   before a wheel notch is `3<Up>`'s count.
+#   ⚠ THE RIGHT-CLICK PATH HAD ALREADY BEEN PATCHED FOR THIS, in 11, with an
+#   <Esc> before the move — and the fix stopped there. The left click, the drag,
+#   the double click, the wheel and the scrollbar all still spoke in keys. A bug
+#   fixed at one call site and not at the class is a bug that comes back wearing
+#   a different button.
+#   ⚠ AND ESCAPING FIRST IS NOT THE FIX EITHER. No editor throws you out of
+#   insert mode for clicking somewhere, and none puts you into it: the mode has
+#   to come out exactly as it went in, in normal, insert AND visual. So the
+#   engine gained a `goto <line> <col>` verb that moves the caret and says
+#   nothing about the mode, and the window stopped spelling positions as
+#   keystrokes. It still EXTENDS a visual selection for free, which is what a
+#   drag needs — serve.c sets the caret and the engine reads a selection as
+#   anchor→caret, so moving the caret IS extending it.
+#   The double click still leaves insert deliberately, because `viw` is a
+#   selection and there is no selecting a word while still inserting; the wheel
+#   sends three plain motions instead of a count, since the arrows are safe in
+#   insert mode and the `3` was not.
+#   ⚠ ONE TEST WAS ASSERTING THE SPELLING AND NOT THE RULE: it grepped the QML
+#   for the literal `"G")` to prove the scrollbar moves the caret before it
+#   states the top. That is load-bearing (a `view` with no caret move is a
+#   no-op) but the motion is not, so it now checks the ORDER of gotoPos and
+#   `view` and fails only when the rule is actually broken.
+#   Nine checks in syn_edit_test.sh, including the old key spelling pinned as
+#   the bug — so nobody reintroduces it thinking keys are equivalent.
+pkgrel=12
 pkgdesc="SynapseOS text editor: modal editing, syntax highlighting, in a terminal or a window"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

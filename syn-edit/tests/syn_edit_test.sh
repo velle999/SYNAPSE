@@ -802,9 +802,20 @@ if [ -f "$QML" ]; then
 
     # The scrollbar's two-message order is the subtle half — see the serve
     # tests above. A `view` with no caret move before it silently does nothing.
-    grep -q 'function scrollToLine' "$QML" && grep -q '"G")' "$QML" \
-        && ok "the scrollbar moves the caret before it states the top" \
-        || bad "the scrollbar no longer moves the caret — view alone cannot scroll"
+    # ⚠ CHECKED BY ORDER, NOT BY SPELLING. This used to grep for the literal
+    # `"G")` — the `NG` motion scrollToLine used to send — and so it failed the
+    # moment that motion became the `goto` verb, which does the same job and
+    # does not type itself into the buffer in insert mode. What is load-bearing
+    # is that the caret moves BEFORE `view` is stated; how it moves is not.
+    if body=$(sed -n '/function scrollToLine/,/^    }/p' "$QML") &&
+       printf '%s' "$body" | grep -q 'gotoPos' &&
+       [ "$(printf '%s' "$body" | grep -n 'gotoPos' | head -1 | cut -d: -f1)" \
+         -lt "$(printf '%s' "$body" | grep -n '"view "' | head -1 | cut -d: -f1)" ]
+    then
+        ok "the scrollbar moves the caret before it states the top"
+    else
+        bad "the scrollbar no longer moves the caret first — view alone cannot scroll"
+    fi
 
     grep -q 'id: ctxMenu' "$QML" \
         && ok "there is a context menu" \
@@ -1041,6 +1052,63 @@ printf 'ex 2s%%2F%%5C%%5B%%20%%5C%%5D%%2F%%5Bx%%5D%%2F\nex w %s\nquit\n' "$T/t4.
     | "$E" serve "$T/tabtask.md" >/dev/null 2>&1
 gq '^	- \[x\] tabbed$' < "$T/t4.md"
 check "the substitution ticks a tab-indented task and keeps the tab" $?
+
+# ── a click does not type its own coordinates ───────────────────────────────
+#
+# ⛔ THE WINDOW USED TO PLACE THE CARET BY SENDING KEYS. `12G34|` is a motion in
+# normal mode and thirteen literal characters in insert mode, so clicking while
+# typing filled the document with the mouse's own coordinates:
+#
+#     1G28|1G27|1G27|1G27|viw1G27|1G27|1G27|viw[ ] 1G6|1G11|1G11|1G11|viw
+#
+# — which is unexplainable from the outside, because none of those characters
+# was pressed by anybody. Reported 2026-08-26 with a screenshot of exactly that.
+#
+# ⚠ ESCAPING FIRST IS NOT THE FIX. No editor throws you out of insert mode for
+# clicking somewhere, and none puts you into it: the mode has to come out
+# exactly as it went in. So `goto` moves the caret and says nothing about the
+# mode, and these checks are as much about the MODE being untouched as about
+# the buffer being unchanged.
+printf 'abcdefghij\n' > "$T/goto.txt"
+
+printf 'goto 1 5\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	col	5$'
+check "goto moves the caret" $?
+
+printf 'goto 1 5\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	mode	NORMAL$'
+check "goto leaves NORMAL alone" $?
+
+# THE REGRESSION. Insert mode, then a click: the caret moves, the mode is still
+# INSERT, and — the whole point — the line is untouched.
+printf 'keys i\ngoto 1 5\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	mode	INSERT$'
+check "a click during INSERT stays in INSERT" $?
+
+printf 'keys i\ngoto 1 5\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	col	5$'
+check "…and still moves the caret" $?
+
+printf 'keys i\ngoto 1 5\nquit\n' | "$E" serve "$T/goto.txt" | gq '^L	1	abcdefghij$'
+check "…and types NOTHING into the line" $?
+
+# The old spelling, to show what it did — `12G34|` as keys, in insert mode, IS
+# the bug. Pinned so nobody reintroduces it thinking keys are equivalent.
+printf 'keys i\nkeys 1G5%%7C\nquit\n' | "$E" serve "$T/goto.txt" | gqv '^L	1	abcdefghij$'
+check "the old key spelling really did type into the buffer" $?
+
+# A drag: visual mode, then goto EXTENDS rather than replacing the selection.
+# That is why this sets the caret instead of calling a motion — the engine
+# reads a selection as anchor→caret, so moving the caret is extending it.
+# ⚠ sel_x0/sel_x1 are 0-BASED while `col` and `dcol` are 1-based — serve.c adds
+# the +1 for the caret and not for the selection span. Column 7 is therefore
+# sel_x1 6, and asserting 7 here fails against code that is working.
+printf 'keys v\ngoto 1 7\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	sel_x1	6$'
+check "goto extends a visual selection (a drag)" $?
+
+printf 'keys v\ngoto 1 7\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	mode	VISUAL$'
+check "…without leaving VISUAL" $?
+
+# Out of range is clamped, not crashed: a click below the last line is an
+# ordinary thing to do with a short file in a tall window.
+printf 'goto 999 999\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	line	1$'
+check "a click past the end of the file clamps" $?
 
 # ── report ──────────────────────────────────────────────────────────────────
 

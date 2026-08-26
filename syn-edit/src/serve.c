@@ -321,6 +321,43 @@ int cmd_serve(int argc, char **argv)
 				e->cy = e->cx = 0;
 				ed_clamp(e);
 			}
+		} else if (!strcmp(verb, "goto")) {
+			/* Put the caret at line/column, 1-based, WITHOUT touching the
+			 * mode.
+			 *
+			 * ⛔ THIS EXISTS BECAUSE A MOTION SENT IN INSERT MODE IS TYPED,
+			 * NOT OBEYED. The window used to place the caret by sending the
+			 * keys a vim user would press — `12G34|` — which is a motion in
+			 * normal mode and thirteen literal characters in insert mode. So
+			 * clicking while typing filled the document with `1G28|1G27|viw`,
+			 * which is what the user sees and cannot explain, because those
+			 * are not characters anybody pressed.
+			 *
+			 * The window could escape to normal and come back, and for the
+			 * right-click menu it does — but a LEFT click has to leave the
+			 * mode exactly as it found it: no editor throws you out of insert
+			 * for clicking somewhere, and no editor puts you INTO it either.
+			 * One verb that moves the caret and says nothing about the mode is
+			 * the only thing that is right in all three.
+			 *
+			 * ⚠ AND IT EXTENDS A VISUAL SELECTION, for free and on purpose.
+			 * Visual mode keeps its anchor in vy/vx and reads the selection as
+			 * anchor→caret, so moving the caret IS extending it — which is
+			 * exactly what a drag means. That is why this sets the caret
+			 * rather than calling a motion: a motion would have to know about
+			 * modes, and this does not.
+			 *
+			 * Column is a character index, matching this engine's `|`
+			 * (vim.c: `m->x = n - 1`), so the two agree about tabs — they are
+			 * equally simple rather than differently wrong. */
+			char *sp2 = strchr(rest, ' ');
+			long l = atol(rest);
+			long c = sp2 ? atol(sp2 + 1) : 1;
+			if (l < 1) l = 1;
+			if (c < 1) c = 1;
+			e->cy = (size_t)(l - 1);
+			e->cx = (size_t)(c - 1);
+			ed_clamp(e);
 		} else if (!strcmp(verb, "view")) {
 			char *sp2 = strchr(rest, ' ');
 			e->view_top = (size_t)atol(rest);
