@@ -9,7 +9,12 @@ import Quickshell.Wayland
  * waybar sets keyboard_interactivity NONE once at startup and never revises it,
  * so a GTK menu there could map, draw, and never receive a key. That was never a
  * limitation of layer-shell or of synui — a quickshell PanelWindow with
- * `focusable: true` takes EXCLUSIVE keyboard focus and arrow-navigates fine
+ * `focusable: true` is handed the keyboard and arrow-navigates fine
+ * (⚠ `focusable: true` is ON-DEMAND, not Exclusive — WlrKeyboardFocus is
+ * None=0/Exclusive=1/OnDemand=2 and it reads back 2. It works because
+ * layer.c:layer_surface_map() grants the keyboard to ANY interactivity that is
+ * not NONE, at map and nowhere else, which is precisely the waybar failure
+ * below: NONE set once at startup and never revised)
  * (verified on the live session 2026-07-22 with a real keyboard; note that
  * `wtype` gives a FALSE NEGATIVE against Qt clients, so a headless keyboard test
  * proving "zero key events" here proves nothing). With the bar already QML,

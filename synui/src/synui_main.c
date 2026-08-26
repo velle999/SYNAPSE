@@ -1023,9 +1023,10 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
      * compositor's own panel and this is where the first mapped window put it
      * away. The guide is a quickshell layer surface now and closes ITSELF when
      * a toplevel appears (Guide.qml watches ToplevelManager) — which it has to,
-     * because it holds exclusive keyboard focus and a guide left standing over
-     * a window that just opened is a window that gets no keys. Reaching across
-     * to it from here would be a second owner of the same rule. */
+     * because it is a FULL-SCREEN surface and would otherwise cover the window
+     * that just mapped, deaf, since focus_view() below hands that window the
+     * keyboard. Reaching across to it from here would be a second owner of the
+     * same rule. */
 
     /* The window may have appeared under a cursor that never moved; without
      * this it gets no wl_pointer.enter until the user nudges the mouse, and a

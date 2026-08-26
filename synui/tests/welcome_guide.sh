@@ -26,7 +26,9 @@
 #   5. IT CLOSES WHEN A WINDOW OPENS. synui_main.c used to hide the panel on the
 #      first map; the guide watches ToplevelManager and does it itself. If that
 #      Connections block is wrong — a mistyped signal is a QML warning, not an
-#      error — the guide sits on top of the window you just opened forever.
+#      error — the guide sits full-screen on top of the window you just opened,
+#      and deaf, because synui grants a layer surface the keyboard at map and has
+#      since handed it to that window.
 #
 # ⚠ WHAT IS *NOT* ASSERTED: the keyboard. `wtype` gives a FALSE NEGATIVE against
 # Qt clients — it uploads its own keymap through virtual-keyboard and Qt does not

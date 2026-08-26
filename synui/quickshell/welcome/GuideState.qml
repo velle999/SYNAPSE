@@ -134,11 +134,13 @@ QtObject {
      * through here, exactly as they did in the compositor.
      *
      * ⚠ OPENING SOMETHING CLOSES THE GUIDE, and that is not a style choice.
-     * This window holds EXCLUSIVE keyboard focus; a guide left standing over the
-     * panel it just opened is a panel that receives no keys, and the user's
-     * first act on their new desktop would be to open something that appears
-     * broken. The compositor-drawn menu could stay up because synui was drawing
-     * both and routed its own input.
+     * This window is the whole screen, so a guide left standing is a guide
+     * covering the thing it just opened — and one that has silently gone deaf,
+     * since synui grants a layer surface the keyboard at MAP and hands it to the
+     * next toplevel that appears. The user's first act on their new desktop
+     * would be to open something they then could not see or type into. The
+     * compositor-drawn menu could stay up because synui was drawing both and
+     * routing its own input.
      *
      * The AI backend row is the exception: it toggles a value this page is
      * REPORTING, so closing would hide the answer the press was asking for.

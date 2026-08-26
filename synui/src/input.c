@@ -642,9 +642,11 @@ static uint32_t now_msec(void)
  *   menu.c   compositor-drawn, because a panel synui draws is one it can hand
  *            the keyboard to. That worked, and cost a hand-rolled .desktop
  *            scanner plus a second panel to theme and maintain.
- *   the bar  quickshell takes EXCLUSIVE keyboard focus properly
- *            (PanelWindow { focusable: true }), so the original objection is
- *            simply gone and the menu lives with the bar it belongs to.
+ *   the bar  quickshell is handed the keyboard properly
+ *            (PanelWindow { focusable: true } — ON-DEMAND, and
+ *            layer_surface_map() grants it to anything not NONE), so the
+ *            original objection is simply gone and the menu lives with the bar
+ *            it belongs to.
  *
  * synui still OWNS the keystroke — handle_keybinding runs before the focused
  * surface sees anything, so Super tap keeps working regardless of what has
@@ -1697,10 +1699,11 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
  * click-off, the corner X, the wheel — roughly 150 lines that existed only
  * because synui was the thing drawing it.
  *
- * It is quickshell/welcome.qml now, a paged guide in its own process, and a
- * quickshell PanelWindow takes EXCLUSIVE keyboard focus properly. So the keys
- * are its own and synui hands them over the way it does for every other
- * client. The `menu` action below is the whole of what is left: ask
+ * It is quickshell/welcome.qml now, a paged guide in its own process, and
+ * layer_surface_map() hands a focusable layer surface the keyboard. So the keys
+ * are its own and synui gives them up the way it does for every other client —
+ * including to the next window that maps, since focus_view() notifies the new
+ * toplevel unconditionally. The `menu` action below is the whole of what is left: ask
  * synui-welcome(1) to toggle it, naming the focused output.
  *
  * synui still OWNS the keystroke — handle_keybinding() runs before the focused
@@ -2201,7 +2204,7 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         if (absorbed) return;
 
         /* No start-menu branch here any more. The menu is a layer-shell client
-         * with EXCLUSIVE keyboard focus (quickshell/StartMenu.qml), so its keys
+         * that is handed the keyboard at map (quickshell/StartMenu.qml), so its keys
          * arrive by the ordinary focus path — synui does not have to intercept
          * them, and must not: swallowing them here is what would make it deaf. */
 

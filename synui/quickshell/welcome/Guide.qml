@@ -62,9 +62,17 @@ PanelWindow {
     // paints, so the card frosts and the transparent catcher stays clear.
     WlrLayershell.namespace: "synui-glass"
 
-    // The guide is arrow-driven, so it needs the keyboard. This is the portable
-    // spelling of exclusive layer focus; `WlrLayershell.keyboardFocus` alone did
-    // not apply it.
+    // The guide is arrow-driven, so it needs the keyboard. `focusable: true` is
+    // the portable spelling; `WlrLayershell.keyboardFocus` alone did not apply
+    // it.
+    //
+    // ⚠ IT IS ON-DEMAND, NOT EXCLUSIVE. WlrKeyboardFocus is
+    // None=0/Exclusive=1/OnDemand=2 and this reads back 2. The guide gets the
+    // keyboard anyway because layer.c:layer_surface_map() grants it to any
+    // interactivity that is not NONE — at MAP and nowhere else. Which also means
+    // it LOSES the keyboard the moment a toplevel maps and focus_view() notifies
+    // it; see the ToplevelManager watch above, which is the other half of that
+    // fact rather than a workaround for it.
     focusable: true
 
     color: "transparent"
@@ -76,9 +84,12 @@ PanelWindow {
      * ── Something else opened: get out of the way ────────────────────────────
      *
      * The old menu hid itself when the first window mapped (synui_main.c), and
-     * that rule matters MORE now, not less: this surface holds EXCLUSIVE
-     * keyboard focus, so a guide left up over a window that just opened is a
-     * window that gets no keys. The user's application would come up dead.
+     * the rule is kept because this surface is the WHOLE SCREEN. A guide left up
+     * over the window that just opened covers it completely — and goes deaf
+     * while it does, because synui hands the keyboard to the new toplevel
+     * (focus_view() notifies it unconditionally) and grants it to a layer
+     * surface only at map. So it is a full-screen panel you cannot type into,
+     * sitting on top of the application you just asked for.
      *
      * ⚠ ARMED, not immediate, and the interval is not arbitrary. Two things
      * have to be let through:

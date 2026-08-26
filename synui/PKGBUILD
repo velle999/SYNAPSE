@@ -1674,7 +1674,25 @@ pkgver=0.1.0
 #   the toggle done by asking a running instance first and starting one only
 #   when nothing answers — closing quits, so "closed" and "not running" are the
 #   same state and there is no third one to get wrong.
-pkgrel=497
+# 498: the three comments that say a quickshell PanelWindow with
+#   `focusable: true` takes EXCLUSIVE keyboard focus. It does not —
+#   WlrKeyboardFocus is None=0/Exclusive=1/OnDemand=2 and it reads back 2, so it
+#   is ON-DEMAND. Measured on the live seat 2026-08-15; PostIt.qml and
+#   WidgetFrame.qml were corrected then and StartMenu.qml, input.c (×3) and
+#   synui_main.c were not.
+#   ⚠ IT WORKS ANYWAY, AND THE REASON IS THE POINT: layer_surface_map() grants
+#   the keyboard to ANY interactivity that is not NONE, at map and nowhere else.
+#   That is also the waybar failure those comments are about (NONE set once at
+#   startup and never revised) and it is still the first thing to check when a
+#   layer surface is deaf.
+#   ⛔ AND 497's WELCOME GUIDE ARGUED FROM THE WRONG FACT. Its comments said the
+#   guide must close when a window maps because it holds the keyboard and would
+#   starve that window. The opposite is true: focus_view() notifies the new
+#   toplevel unconditionally, so the GUIDE goes deaf. The behaviour is unchanged
+#   and correct — a full-screen panel covering the window you just asked for,
+#   which you cannot type into either — but the reason in the file was wrong,
+#   and a wrong reason is what gets deleted by the next person who checks it.
+pkgrel=498
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
