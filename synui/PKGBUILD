@@ -1720,7 +1720,47 @@ pkgver=0.1.0
 #   AFTER the guide, so it could see the watch failing to fire and not the guard
 #   failing to hold — it passed the whole time the guard was gone. It opens one
 #   BEFORE as well now (ok 5a), and fails without the arm.
-pkgrel=499
+# 500 LEAVING FULLSCREEN STOPPED THROWING THE WINDOW AT ANOTHER MONITOR.
+#   velle, laptop plugged into a television: "when it's unfullsized it's
+#   jumping the window back to the main display for no reason."
+#   ⛔ THE UN-FULLSCREEN PATH ASKED A QUESTION ABOUT *OPENING* A WINDOW.
+#   view_apply_fullscreen's else-branch re-derived the placement from scratch —
+#   layout_float_place → layout_restore_geometry → windows.conf. That table
+#   records where an app was WHEN IT LAST CLOSED, in ABSOLUTE layout
+#   coordinates, so it names a monitor as much as a position, and
+#   layout_restore_geometry re-homes the view onto the monitor that box's centre
+#   lands on. Right for a window that is opening. For a window that has been on
+#   screen for an hour and merely came out of fullscreen it is a teleport to
+#   wherever that app was last shut down — on a laptop, the built-in panel,
+#   which is precisely the screen the video had been moved off.
+#   view->fs_geo now records the box (and therefore the SCREEN) on the way in
+#   and the way out puts it back. Its own slot, not a fourth tenant of
+#   saved_geo: fullscreen is the one state that NESTS — a maximized or snapped
+#   window can go fullscreen and has to come back to both boxes in turn — and
+#   view_apply_maximized refuses to run at all while fullscreen, so it cannot
+#   hand its slot over the way maximize/snap/expand hand it to each other.
+#   THREE WAYS OUT, AND THEY FAILED DIFFERENTLY — tests/fullscreen_output.sh
+#   asserts all three, two headless outputs and a windows.conf seeded at the
+#   FIRST one (the seed is the trap, and it is also what makes the window
+#   hand_placed without synthetic input, the same seam move_output.sh uses):
+#     1. a FLOATED window — the reported jump, straight through
+#        layout_float_place.
+#     2. hand-placed on a FLOATING desktop — view->floating is 0 there (the
+#        DESKTOP is floating) and layout_float_arrange steps over hand-placed
+#        windows, so NOTHING resized it: it silently kept the full-output box.
+#        Same family as 436/439 — "does a LAYOUT own this window's position?"
+#     3. a TILED window — the layout still owns the box, but it does not own
+#        the SCREEN, so it is re-homed before layout_apply rather than after.
+#   layout_restore_geometry's own re-home/clamp is now the shared
+#   view_place_saved_box() it always was, one copy instead of two.
+#   AND THE LAPTOP'S SCREEN KEY WORKS: XF86Display (Fn+F7 on a ThinkPad) cycles
+#   display_mode — extend / duplicate / built-in off. `external` has existed
+#   since 376 and re-applies itself on every hotplug, but the only ways to reach
+#   it were the control panel and Super+D — a menu you have to open ON the
+#   screen you are trying to switch off. `display_mode` was also missing from
+#   ctlpanel.c's action table, so it appeared in neither the shortcut palette
+#   nor the control panel's Shortcuts column: a real action nobody could find.
+pkgrel=500
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

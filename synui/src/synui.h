@@ -5361,6 +5361,24 @@ struct syn_view {
     struct wlr_box saved_geo;
     int            saved_floating;
 
+    /* Geometry to come back to when LEAVING fullscreen, in absolute layout
+     * coordinates — so it names the monitor the window was on as much as the
+     * box it had there. width == 0 means nothing recorded.
+     *
+     * A slot of its own rather than a fourth tenant of saved_geo, because
+     * fullscreen is the one state that nests: a maximized or snapped window can
+     * go fullscreen and has to come back to BOTH boxes in turn, and
+     * view_apply_maximized refuses to run at all while fullscreen, so it cannot
+     * hand its slot over the way maximize/snap/expand hand it to each other.
+     *
+     * Without it, leaving fullscreen re-derived the placement from scratch
+     * (layout_float_place → layout_restore_geometry), and that reads
+     * windows.conf — the box the app was left at when it last CLOSED, on
+     * whichever screen that was. On a laptop plugged into a TV that is the
+     * built-in panel, so un-fullscreening a video on the TV threw the window
+     * back to the laptop screen. Reported by velle, 2026-08-25. */
+    struct wlr_box fs_geo;
+
     /* deco.c: which AXES a double-click on a border has expanded to fill the
      * usable box — SYN_EXPAND_V, SYN_EXPAND_H, or both. 0 is an ordinary
      * window.

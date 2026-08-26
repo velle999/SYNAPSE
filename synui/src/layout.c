@@ -1596,6 +1596,63 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     }
 }
 
+/* ── Putting a window back where it was ──────────────────── */
+/*
+ * Which monitor does a saved box name?
+ *
+ * A window's x/y are absolute layout coordinates, so a box says which SCREEN
+ * as much as it says where. Re-homing off the centre is what stops a window
+ * being handed back to whichever monitor happens to be focused. Returns NULL
+ * when no attached output covers that point — the monitor was unplugged, or
+ * detached by "built-in off" (a detached output is out of the layout, so this
+ * cannot resurrect one; see reference: disabled outputs stay in the layout
+ * unless removed).
+ */
+static syn_output_t *output_at_box_centre(syn_server_t *s, struct wlr_box b)
+{
+    struct wlr_output *wo = wlr_output_layout_output_at(
+        s->output_layout, b.x + b.width / 2.0, b.y + b.height / 2.0);
+    return (wo && wo->data) ? wo->data : NULL;
+}
+
+/*
+ * Put a free window back at `saved`: on the monitor that box's centre lands
+ * on, clamped to fit a screen that exists NOW.
+ *
+ * Shared by the remembered-geometry path (layout_restore_geometry) and by
+ * leaving fullscreen, which are the same question asked twice — this window
+ * had a box on a particular screen, put it back — and were answered
+ * differently until the second one started borrowing the first one's answer
+ * and moving windows between monitors with it.
+ *
+ * The clamp is not belt and braces: a box saved on a wider desk, or on a
+ * monitor since unplugged, would otherwise put the window somewhere it can
+ * never be reached.
+ */
+static void view_place_saved_box(syn_server_t *s, syn_view_t *view,
+                                 struct wlr_box saved)
+{
+    syn_output_t *o = output_at_box_centre(s, saved);
+    if (o) view->output = o;
+
+    struct wlr_box area;
+    get_view_geom(s, view, &area);
+
+    int sw = saved.width, sh = saved.height;
+    if (sw > area.width)  sw = area.width;
+    if (sh > area.height) sh = area.height;
+    if (sw < MIN_WIN) sw = MIN_WIN;
+    if (sh < MIN_WIN) sh = MIN_WIN;
+
+    int sx = saved.x, sy = saved.y;
+    if (sx + sw > area.x + area.width)  sx = area.x + area.width  - sw;
+    if (sy + sh > area.y + area.height) sy = area.y + area.height - sh;
+    if (sx < area.x) sx = area.x;
+    if (sy < area.y) sy = area.y;
+
+    view_resize(view, sx, sy, sw, sh);
+}
+
 /* ── Fullscreen ──────────────────────────────────────────── */
 /* Which monitor should a fullscreen window cover?
  *
@@ -1644,6 +1701,20 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
     if (!view->mapped) return;
 
     if (view->fullscreen) {
+        /* Remember the box — and therefore the SCREEN — to come back to,
+         * before anything below overwrites it with the output's.
+         *
+         * Guarded on fs_geo being empty rather than on the previous value of
+         * view->fullscreen, because a client can be fullscreen already when it
+         * gets here: a window that asked for fullscreen before it ever mapped
+         * arrives with the flag set (xdg_surface_map calls through once the
+         * view is mapped and placed), and a client that re-fullscreens onto a
+         * different monitor comes through a second time. Both must keep the
+         * ORIGINAL box; testing the flag would record the fullscreen one. */
+        if (view->fs_geo.width <= 0 && view->w > 0 && view->h > 0)
+            view->fs_geo = (struct wlr_box){ view->x, view->y,
+                                             view->w, view->h };
+
         /* Leaving fullscreen re-places a floating window (layout_float_place),
          * which would move it out of the zone it claims to be snapped to. */
         view->snapped = SYN_SNAP_NONE;
@@ -1662,9 +1733,50 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
          * scaling its buffer; re-applied per-commit from xw_surface_commit. */
         view_fullscreen_rescale(view);
     } else {
+        /* Back to the box it had before, on the screen it had it on. Taken and
+         * cleared in one go so a second leave (or a later fullscreen) cannot
+         * re-use a box that has already been spent.
+         *
+         * ⚠ THE OUTPUT IS THE POINT. Un-fullscreening used to re-derive the
+         * placement from scratch — layout_float_place, which asks
+         * layout_restore_geometry, which reads windows.conf and re-homes the
+         * window onto whatever monitor the box saved AT THE APP'S LAST CLOSE
+         * sits on. That is a sensible answer for a window that is opening and
+         * the wrong one for a window that has been on screen for an hour: on a
+         * laptop plugged into a TV it means leaving fullscreen throws the
+         * window onto the built-in panel, because that is where the app was
+         * last closed. velle, 2026-08-25: "when it's unfullsized it's jumping
+         * the window back to the main display for no reason."
+         *
+         * A tiled window only needs the re-home: the layout owns its box, and
+         * doing it BEFORE layout_apply is what has the tiler place it on the
+         * right screen in the first pass. */
+        struct wlr_box fsg = view->fs_geo;
+        view->fs_geo = (struct wlr_box){ 0, 0, 0, 0 };
+
+        bool have_box = fsg.width > 0 && fsg.height > 0;
+        bool free_window = view->floating ||
+                           (view->workspace &&
+                            view->workspace->layout == LAYOUT_FLOATING);
+
+        if (have_box && !free_window) {
+            syn_output_t *o = output_at_box_centre(s, fsg);
+            if (o) view->output = o;
+        }
+
         layout_apply(s, view->workspace);
-        if (view->floating)
+
+        if (have_box && free_window) {
+            /* Also covers the case layout_float_place could never reach: a
+             * hand-placed window on a floating desktop has view->floating
+             * clear, and layout_float_arrange steps over it, so nothing at all
+             * resized it and it stayed at the full output box after leaving
+             * fullscreen. */
+            view_place_saved_box(s, view, fsg);
+        } else if (!have_box && view->floating) {
             layout_float_place(s, view);
+        }
+
         view_update_decorations(view);
         /* Undo any fullscreen buffer scale now the view is back in the layout. */
         view_fullscreen_rescale(view);
@@ -1941,38 +2053,12 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
     bool free_window = view->floating || on_floating_desk;
 
     if (free_window) {
-        /* x/y are absolute layout coordinates, so they name a monitor as much
-         * as a position. Re-home the view onto the monitor the saved box's
-         * centre lands on before clamping — otherwise every window reopens on
-         * whichever monitor happened to be focused, squashed into its box. If
-         * that monitor is gone the lookup fails and the clamp below handles
-         * it. */
-        struct wlr_output *wo = wlr_output_layout_output_at(
-            s->output_layout,
-            saved.x + saved.width  / 2.0,
-            saved.y + saved.height / 2.0);
-        if (wo && wo->data)
-            view->output = wo->data;
-
-        /* Clamp back onto a monitor that exists *now*, so an entry saved on a
-         * wider desk can't open the window off-screen where it could never be
-         * reached. */
-        struct wlr_box area;
-        get_view_geom(s, view, &area);
-
-        int sw = saved.width, sh = saved.height;
-        if (sw > area.width)  sw = area.width;
-        if (sh > area.height) sh = area.height;
-        if (sw < MIN_WIN) sw = MIN_WIN;
-        if (sh < MIN_WIN) sh = MIN_WIN;
-
-        int sx = saved.x, sy = saved.y;
-        if (sx + sw > area.x + area.width)  sx = area.x + area.width  - sw;
-        if (sy + sh > area.y + area.height) sy = area.y + area.height - sh;
-        if (sx < area.x) sx = area.x;
-        if (sy < area.y) sy = area.y;
-
-        view_resize(view, sx, sy, sw, sh);
+        /* Re-home onto the monitor the saved box's centre lands on, then clamp
+         * onto a monitor that exists NOW — otherwise every window reopens on
+         * whichever monitor happened to be focused, squashed into its box, or
+         * off-screen where it could never be reached. Leaving fullscreen asks
+         * this same question, and shares the answer. */
+        view_place_saved_box(s, view, saved);
 
         /* This box is the USER's, not a default: geom_persist only ever records
          * a window that was free when it closed, which is to say one he had

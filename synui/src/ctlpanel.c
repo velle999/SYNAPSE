@@ -2591,6 +2591,7 @@ static const struct { const char *action, *desc; } action_tbl[] = {
         { "minimize_restore",  "Restore minimized window" },
         { "decorations_toggle","Titlebars on/off" },
         { "displays",          "Display settings" },
+        { "display_mode",      "Screens: extend / duplicate / built-in off" },
         { "wallpaper",         "Wallpaper picker" },
         { "wallpaper_reload",  "Reload wallpaper / config" },
         { "filters",           "Visual effects (CRT + window)" },

@@ -1216,6 +1216,17 @@ static void seed_default_binds(syn_config_t *cfg)
         { "xf86audioraisevolume", "volume up" },
         { "xf86audiolowervolume", "volume down" },
         { "xf86audiomute",        "volume mute" },
+        /* The laptop's screen key — Fn+F7 on a ThinkPad, the one with the two
+         * monitors printed on it — cycles Extend → Duplicate → Built-in off,
+         * which is what that key does on every other system and what the
+         * `display_mode` action was written to be driven by. Bare, like the
+         * volume keys above: the keymap already gives it no modifier.
+         *
+         * Until this, "switch the laptop panel off and use the TV" existed
+         * (display_mode external, and it re-applies itself on every hotplug)
+         * but could only be reached from the control panel or Super+D — a menu
+         * you have to open ON the screen you are trying to turn off. */
+        { "xf86display",          "display_mode" },
         { "super+g",         "game" },
         /* super+shift+a was left FREE when the theme manager moved to super+t,
          * explicitly for the next feature. This is it: the desktop widgets

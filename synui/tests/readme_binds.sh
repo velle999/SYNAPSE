@@ -105,6 +105,10 @@ declare -A COVERED=(
     [xf86audioraisevolume]='Volume keys;XF86AudioRaiseVolume'
     [xf86audiolowervolume]='Volume keys;LowerVolume'
     [xf86audiomute]='Volume keys;Mute'
+    # The laptop screen key. Same split as the volume and brightness keys:
+    # the README writes what is printed on the key, the wiki writes the xkb
+    # symbol, and either satisfies this.
+    [xf86display]='Display key;XF86Display'
 )
 
 # Pull the combos out of the seed table: { "super+x", "action" },

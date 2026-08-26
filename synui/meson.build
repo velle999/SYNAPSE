@@ -2057,6 +2057,19 @@ test('move_output', move_output_t,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# Leaving fullscreen: that the window comes back on the monitor it was on, and
+# at the box it had there. Two headless outputs and a windows.conf entry
+# pointing at the FIRST one, which is the trap — the un-fullscreen path used to
+# ask that table where the window goes, and the table answers with wherever the
+# app was last CLOSED. On a laptop plugged into a television that is the
+# built-in panel, so un-fullscreening a video threw it off the TV.
+fullscreen_output_t = find_program('tests/fullscreen_output.sh')
+test('fullscreen_output', fullscreen_output_t,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # Super+arrows (window_move_key): that the window MOVES rather than just
 # changing its place in a list nothing on a floating desktop reads. Same trap as
 # move_output above, reached from the other side — `v->floating` is the window's

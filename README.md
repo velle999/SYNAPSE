@@ -430,6 +430,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Ctrl`+`Print` | Screenshot every monitor at once |
 | Volume keys | Raise / lower / mute (also the USB volume knob) |
 | Brightness keys | Screen brightness up / down |
+| Display key | Cycle `display_mode` — extend / duplicate / built-in off. The laptop key with the two monitors on it (`Fn`+`F7` on a ThinkPad) |
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
@@ -949,7 +950,9 @@ than guessing.)
 
 **Screens** are one setting with three positions: `display_mode = extend |
 mirror | external`, cycled with `m` in `Super`+`D`, from Control panel ▸ Display
-▸ Screens, or `synctl dispatch display_mode [name]`. `mirror` forces the largest
+▸ Screens, or `synctl dispatch display_mode [name]` — and on a laptop, from
+the **display key** (`Fn`+`F7` on a ThinkPad), which cycles the three the way
+that key does everywhere else. `mirror` forces the largest
 resolution every screen shares — overlapping a 1080p panel and a 720p projector
 without that is not duplication, it is showing the projector a crop. `external`
 switches the built-in panel off, refuses when there is no external screen, and
