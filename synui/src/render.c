@@ -9295,17 +9295,31 @@ void panel_chrome_sync(syn_server_t *s)
         PANEL_FULL(widgets),  PANEL_FULL(sound),    PANEL_FULL(clock),
         PANEL_FULL(cal),      PANEL_FULL(ctlpanel), PANEL_FULL(keys),
         PANEL_FULL(thememgr), PANEL_FULL(bt),       PANEL_FULL(clip),
-        PANEL_FULL(alttab),
+        PANEL_FULL(alttab),   PANEL_FULL(saver),
         /* No accent rule of their own. The two menus are the desktop and dock
          * right-click menus, which is most of what "the system menus do not
          * round" was about. */
         PANEL_BG(deskmenu),   PANEL_BG(dockmenu),   PANEL_BG(crop),
         /*
-         * NOT overview. Mission control's "panel" is a full-screen dim the
-         * size of the output, so rounding it would cut a transparent notch out
-         * of each corner of the SCREEN — the desktop showing through four
-         * little bites. A background that covers everything has no corners to
-         * round.
+         * NOT overview, and NOT appgrid. Both of those "panels" are a
+         * full-screen dim the size of the output, so rounding one would cut a
+         * transparent notch out of each corner of the SCREEN — the desktop
+         * showing through four little bites. A background that covers
+         * everything has no corners to round, and nothing to frost: the blur
+         * would be sampling the very thing it is drawn over.
+         *
+         * ⚠ THAT IS THE ONLY REASON TO BE ABSENT FROM THIS LIST, and being
+         * absent for any other reason is invisible until somebody puts two
+         * panels side by side. `saver` was missing for its whole life: the
+         * screensaver settings panel came up square-cornered and with no
+         * frosted patch behind it, so at the same 0.94 alpha every other panel
+         * uses you could read the window underneath straight through it.
+         * Reported as "the screensaver screen isn't following the theme quite
+         * the same, more transparent than the rest" — which is exactly what it
+         * was, and neither half of it was a colour.
+         *
+         * tests/panel_chrome.sh diffs this list against every `*_ui.bg` in
+         * this file so the next one cannot go quiet the same way.
          */
     };
 #undef PANEL_BG

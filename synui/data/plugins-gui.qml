@@ -119,7 +119,42 @@ FloatingWindow {
     readonly property color cWarn:   root.pick("#ffd319", "#8a6d00")
     function wash(a) { return root.pick(Qt.rgba(1, 1, 1, a), Qt.rgba(0, 0, 0, a * 0.6)) }
 
-    readonly property string uiFont: "monospace"
+    // ── The UI font ─────────────────────────────────────────────────────────
+    //
+    // The same file every other window in the suite watches. This one was
+    // hardcoded to "monospace" and had nineteen literal pixelSizes, so it kept
+    // the face and the size Qt resolved at startup and ignored the desktop
+    // font entirely — a window in the middle of the settings, off on its own.
+    //
+    // Qt resolves an application's default font ONCE at startup from the
+    // platform theme and QML cannot change it afterwards, so BOTH halves have
+    // to be bindings on every Text: the family named, and the size through
+    // root.ui(). Applying either one once is how a window comes to follow the
+    // font until somebody changes it.
+    property string uiFont: ""
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+            // The scale lives in the same file because it is a property of the
+            // DESKTOP and not of this window.
+            const sc = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = sc ? parseInt(sc[1]) : 100
+        }
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
+    }
+
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
 
     // ── State ───────────────────────────────────────────────────────────────
     property var  rows: []          // merged: {id,name,desc,state,why,inCatalogue}
@@ -385,7 +420,7 @@ FloatingWindow {
                     Text {
                         text: "Plugin Manager"
                         color: root.cText
-                        font { family: root.uiFont; pixelSize: 16; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(16); bold: true }
                     }
                     Text {
                         width: parent.width
@@ -407,7 +442,7 @@ FloatingWindow {
                                 + " · " + root.rows.length + " altogether"
                               : root.rows.length + " plugin(s) for the bar, in Omarchy's format"
                         color: root.outcome !== "" ? root.cWarn : root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                 }
 
@@ -431,7 +466,7 @@ FloatingWindow {
                             visible: root.query === "" && !qIn.activeFocus
                             text: "search — try games"
                             color: root.cDim
-                            font { family: root.uiFont; pixelSize: 12 }
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
                         TextInput {
                             id: qIn
@@ -453,7 +488,7 @@ FloatingWindow {
                             selectionColor: root.cAccent
                             selectByMouse: true
                             clip: true
-                            font { family: root.uiFont; pixelSize: 12 }
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                             Keys.onEscapePressed: { root.query = ""; text = "" }
                         }
                         Text {
@@ -463,7 +498,7 @@ FloatingWindow {
                             visible: root.query !== ""
                             text: "×"
                             color: clrMa.containsMouse ? root.cText : root.cDim
-                            font { family: root.uiFont; pixelSize: 14 }
+                            font { family: root.uiFont; pixelSize: root.ui(14) }
                             MouseArea {
                                 id: clrMa
                                 anchors.fill: parent
@@ -487,7 +522,7 @@ FloatingWindow {
                             anchors.centerIn: parent
                             text: refreshBtn.running ? "…" : "Refresh"
                             color: root.cText
-                            font { family: root.uiFont; pixelSize: 12 }
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
                         MouseArea {
                             id: rfMa
@@ -543,14 +578,14 @@ FloatingWindow {
                         elide: Text.ElideRight
                         text: "⚠ Written for Omarchy on Hyprland — not all of it runs here."
                         color: root.cWarn
-                        font { family: root.uiFont; pixelSize: 11; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(11); bold: true }
                     }
                     Text {
                         width: parent.width
                         elide: Text.ElideRight
                         text: "Quickshell.Hyprland is refused at install, by name. What loads can still have overlay parts that do nothing."
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                 }
             }
@@ -600,14 +635,14 @@ FloatingWindow {
                                           verticalCenter: parent.verticalCenter }
                                 text: "All plugins"
                                 color: root.cAccent
-                                font { family: root.uiFont; pixelSize: 12; bold: true }
+                                font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
                             }
                             Text {
                                 anchors { right: parent.right; rightMargin: 12
                                           verticalCenter: parent.verticalCenter }
                                 text: root.rows.length
                                 color: root.cDim
-                                font { family: root.uiFont; pixelSize: 10 }
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
                             }
                             MouseArea {
                                 id: allMa
@@ -634,7 +669,7 @@ FloatingWindow {
                                 text: catRow.modelData.name
                                 elide: Text.ElideRight
                                 color: catRow.current ? root.cAccent : root.cText
-                                font { family: root.uiFont; pixelSize: 12 }
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
                             /* Installed over total where any are, the way the
                              * software window counts — the number you want from
@@ -648,7 +683,7 @@ FloatingWindow {
                                       ? catRow.modelData.installed + "/" + catRow.modelData.total
                                       : catRow.modelData.total
                                 color: catRow.modelData.installed > 0 ? root.cAccent : root.cDim
-                                font { family: root.uiFont; pixelSize: 10 }
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
                             }
                             MouseArea {
                                 id: catMa
@@ -717,7 +752,7 @@ FloatingWindow {
                                 elide: Text.ElideRight
                                 text: row.modelData.name || row.modelData.id
                                 color: root.cText
-                                font { family: root.uiFont; pixelSize: 13; bold: true }
+                                font { family: root.uiFont; pixelSize: root.ui(13); bold: true }
                             }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -730,7 +765,7 @@ FloatingWindow {
                                 elide: Text.ElideRight
                                 text: row.modelData.id
                                 color: root.cDim
-                                font { family: "monospace"; pixelSize: 10 }
+                                font { family: "monospace"; pixelSize: root.ui(10) }
                             }
                             Text {
                                 id: starText
@@ -739,7 +774,7 @@ FloatingWindow {
                                 text: (parseInt(row.modelData.stars || "0", 10) > 0)
                                       ? "★ " + row.modelData.stars : ""
                                 color: root.cDim
-                                font { family: root.uiFont; pixelSize: 10 }
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
                             }
                         }
                         Text {
@@ -761,7 +796,7 @@ FloatingWindow {
                                     + ((row.modelData.trust && row.modelData.trust !== "shipped")
                                        ? " · " + row.modelData.trust : "")
                             color: row.modelData.why !== "" ? root.cWarn : root.cDim
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                     }
 
@@ -790,7 +825,7 @@ FloatingWindow {
                             anchors.centerIn: parent
                             text: btn.label
                             color: row.modelData.enabled ? root.cAccent : root.cText
-                            font { family: root.uiFont; pixelSize: 12 }
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
                         MouseArea {
                             id: btnMa
@@ -819,7 +854,7 @@ FloatingWindow {
                                  row.modelData.dir.indexOf("/.config/synui/plugins/") >= 0
                         text: "remove"
                         color: rmMa.containsMouse ? root.cWarn : root.cDim
-                        font { family: root.uiFont; pixelSize: 11; underline: rmMa.containsMouse }
+                        font { family: root.uiFont; pixelSize: root.ui(11); underline: rmMa.containsMouse }
                         MouseArea {
                             id: rmMa
                             anchors.fill: parent
@@ -850,7 +885,7 @@ FloatingWindow {
                               verticalCenter: parent.verticalCenter }
                     text: "Shipped plugins, then omarchyplugins.com — a plugin runs inside the bar's own process, and everything is off until you turn it on"
                     color: root.cDim
-                    font { family: root.uiFont; pixelSize: 11 }
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
             }
         }

@@ -1760,7 +1760,38 @@ pkgver=0.1.0
 #   screen you are trying to switch off. `display_mode` was also missing from
 #   ctlpanel.c's action table, so it appeared in neither the shortcut palette
 #   nor the control panel's Shortcuts column: a real action nobody could find.
-pkgrel=500
+# 501 THE SCREENSAVER PANEL WAS THE ONE PANEL WITH NO CHROME.
+#   velle: "screensaver screen isn't following the theme quite the same, more
+#   transparent than the rest." Both halves of that are right, and neither is a
+#   colour.
+#   synui_ui_apply_chrome() walks a hand-written roster of panels, setting the
+#   theme's corner radius on each background rect and hanging a backdrop blur
+#   behind it. `saver` was not on that roster and never had been — so the
+#   screensaver settings panel came up SQUARE among rounded ones, with nothing
+#   frosted behind it, and at the 0.94 alpha every panel shares that means you
+#   read the window underneath straight through it. The alpha was never the
+#   problem; it is the same 0.94 the control panel uses.
+#   ⚠ IT IS INVISIBLE FROM INSIDE THE PANEL. Nothing fails, nothing logs, and
+#   the panel looks perfectly reasonable on its own — it only reads as wrong
+#   beside another one, which is why it survived from 352 to here.
+#   tests/panel_chrome.sh diffs the roster against every `*_ui.bg` in render.c.
+#   Two panels are legitimately absent, `overview` and `appgrid`: both are a
+#   full-screen dim the size of the output, so rounding one would cut a
+#   transparent notch out of each corner of the SCREEN and the blur would be
+#   sampling the very thing it is drawn over. That is the ONLY excuse, the test
+#   holds both of them to it (the rect must actually be ob.width × ob.height),
+#   and appgrid's exclusion is now written down instead of merely true.
+#   ALSO: the bar-plugin manager window (data/plugins-gui.qml) ignored the
+#   desktop font. uiFont was the literal "monospace" and all nineteen
+#   pixelSizes were literals, so it kept whatever Qt resolved at startup while
+#   every other window in the suite followed ~/.config/synui/font.state — one
+#   window in the middle of the settings, off on its own. It watches the file
+#   now, with the family named on every Text and every size through root.ui().
+#   ⚠ BOTH HALVES OR NEITHER: Qt resolves an application's default font ONCE at
+#   startup and QML cannot change it afterwards, so each has to be a BINDING.
+#   Three checks in tests/plugins.sh, including "no pixelSize escapes ui()" —
+#   the failure is silent, a window drawn perfectly at the wrong size.
+pkgrel=501
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

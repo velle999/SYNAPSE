@@ -527,5 +527,37 @@ else
     ok "Qt 6's qmllint is absent — the window is not linted here"
 fi
 
+# ── the window follows the DESKTOP font ────────────────────────────────────
+#
+# It did not. uiFont was the literal "monospace" and all nineteen pixelSizes
+# were literals, so this window kept whatever face and size Qt resolved at
+# startup while every other window in the suite followed
+# ~/.config/synui/font.state — one window in the middle of the settings, off on
+# its own. velle, 2026-08-25: "font size isn't system wide. it's supposed to be."
+#
+# ⚠ BOTH HALVES OR NEITHER. Qt resolves an application's default font ONCE at
+# startup and QML cannot change it afterwards, so the family has to be named on
+# every Text and the size has to go through root.ui() — applying either one
+# alone gives a window that follows the font until somebody changes it.
+if [ -f "$(dirname "$0")/../data/plugins-gui.qml" ]; then
+    GUI="$(dirname "$0")/../data/plugins-gui.qml"
+    grep -q 'font\.state' "$GUI"
+    check "the plugins window reads font.state" "0" "$?"
+
+    # A bare `pixelSize: 12` is the failure, and it is silent: the window draws
+    # perfectly, at the wrong size, next to windows at the right one.
+    bare=$(grep -c 'pixelSize:[[:space:]]*[0-9]' "$GUI" || true)
+    check "no pixelSize escapes root.ui()" "0" "$bare"
+
+    # Every font block names a family. The one allowed literal is "monospace" —
+    # a command to type is not prose — and it still takes root.ui().
+    unnamed=0
+    for ln in $(grep -n 'font {' "$GUI" | cut -d: -f1); do
+        sed -n "${ln},$((ln+2))p" "$GUI" | tr '\n' ' ' |
+            grep -qE 'root\.uiFont|family: "monospace"' || unnamed=$((unnamed + 1))
+    done
+    check "every font block names a family" "0" "$unnamed"
+fi
+
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

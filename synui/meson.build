@@ -1502,6 +1502,15 @@ test('monocle_focus', monocle_focus,
 # window opens, a strip that scrolls to whatever has the focus, and the two
 # column moves (Super+, / Super+.). Three windows on one headless output, so
 # the strip is deliberately longer than the monitor. Same client again.
+# Every panel with a background rect gets the theme's corner radius and the
+# frosted glass behind it. A hand-written roster in render.c against the set of
+# `*_ui.bg` rects in the same file — `saver` was missing from it for its whole
+# life, which is invisible from inside the panel and obvious beside another one.
+panel_chrome = find_program('tests/panel_chrome.sh')
+test('panel_chrome', panel_chrome,
+     args    : [meson.current_source_dir() / 'src/render.c'],
+     timeout : 30)
+
 # Every default bind has a row in the README's hotkey table. Pure text — no
 # compositor, no output, no client — so it runs anywhere and costs nothing.
 # It exists because the table went stale in a way only a human reading two
