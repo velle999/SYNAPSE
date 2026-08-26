@@ -251,6 +251,30 @@ Components with a large prebuilt payload (`synapse-llama`,
 and move with an ISO upgrade instead. There is a GUI at **SynapseOS Updates** in
 the start menu, distinct from **Update System**, which is Arch.
 
+**You do not have to remember to check.** A systemd *user* timer runs
+`syn-update ping` — the same check, quietly, with the answer written to a small
+file instead of a report — and the bar grows an indicator showing how many
+updates are waiting, with one click to the Updates window. It is invisible when
+the machine is current, because a row that reads "0 updates" all day is a row
+nobody reads on the day it says something else.
+
+```bash
+syn-update ping --every 6h    # 30m, 12h, 1d, 1week — systemd's own syntax
+syn-update ping --off         # stop checking
+syn-update ping               # check right now
+```
+
+⚠ **Those are two different switches, deliberately.** `ping --off` stops the
+machine *asking upstream* — it is about network traffic. Hiding the bar
+indicator is furniture, and lives with the rest of the bar's furniture: right-
+click the bar ▸ **Update notifier**, per monitor, beside the clock and the tray.
+Neither is a copy of the other.
+
+The interval is stored as a systemd drop-in under `~/.config/systemd/user`,
+never in the shipped unit — `/usr/lib` belongs to the package, and this
+particular package updates itself often enough that an interval written there
+would quietly revert.
+
 > **This did not work before 0.2.3.** `syn-install` gave every system a
 > `[synapseos]` repository pointing at `/var/cache/synapseos` — a directory
 > copied off the ISO at install time that nothing ever wrote to again. `pacman
@@ -1420,7 +1444,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
 | `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
-| `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
+| `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`, `ping` (the background check behind the bar's update indicator). Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |

@@ -43,7 +43,54 @@ pkgver=0.1.0
 #   pacman's IgnorePkg — a component is BUILT here and installed with
 #   `pacman -U`, which IgnorePkg does not gate, so an entry there would look
 #   set and do nothing.
-pkgrel=44
+# 45: AN UPDATE NOTIFIER. `syn-update ping` is `check` with the report replaced
+#   by a small file the bar's new Updates indicator reads; a systemd USER timer
+#   runs it, and `ping --every 6h` / `--on` / `--off` are the controls.
+#   ⚠ USER units, not system ones. The check reads /var/lib/synapse-src, which
+#   syn-update keeps owned by the person who runs it, and writes into their
+#   cache. A system timer would run as root against a tree it does not own —
+#   which is precisely how that tree ends up root-owned and the next
+#   interactive `check` has to ask for a password to take it back.
+#   ⛔ AND IT MUST NEVER ASK FOR ANYTHING. There is no terminal under a timer:
+#   a sudo prompt does not fail there, it HANGS, holding the service active —
+#   and systemd skips a trigger whose service is still running, so the
+#   indicator silently stops updating and nothing anywhere says why. setup_src()
+#   is the one path that can reach for sudo, so ping refuses up front when the
+#   tree is not already ours, and the unit sets SUDO_ASKPASS=/bin/false and a
+#   TimeoutStartSec as the second and third halves of that.
+#   ⚠ A REFUSAL IS WRITTEN TO THE STATE FILE, as status=error with a reason.
+#   A checker that fails silently is worse than one switched off: the bar goes
+#   on showing a stale count and implying the machine is up to date.
+#   ⛔ scan() ON ITS OWN ANSWERS THE WRONG QUESTION, and ping shipped that bug
+#   for one run: it reads $SRC/<c>/PKGBUILD, which in a checked-out tree is the
+#   revision this machine is ALREADY on, so every component compares equal and
+#   a machine six releases behind reports "0 updates" with no error anywhere.
+#   cmd_check had always pointed SRC at a temp dir of PKGBUILDs extracted at the
+#   REMOTE revision first; that is `scan_remote()` now, and it is the only way
+#   to ask.
+#   ⛔ AND `trap … RETURN` IS NOT SCOPED TO A FUNCTION without `set -T`. Moving
+#   that extraction out of cmd_check took its cleanup trap with it, where it
+#   stayed armed and fired again on the NEXT function return — `tmp` out of
+#   scope, `set -u`, dead script, after the work was done and the answer
+#   printed. It survived in cmd_check only because that returns at the very end
+#   of a run. Explicit cleanup instead.
+#   ⚠ THE INTERVAL LIVES IN A DROP-IN under ~/.config/systemd/user, never in
+#   the shipped unit: /usr/lib belongs to the package and every upgrade
+#   replaces it — and this package is the updater, so it upgrades often. An
+#   interval written there silently reverts to 6h. The drop-in also RESETS
+#   OnUnitActiveSec before setting it, because systemd's list-valued settings
+#   accumulate across drop-ins and both intervals would otherwise be live.
+#   ⚠ ON BY DEFAULT via a timers.target.wants symlink in /usr/lib, which is the
+#   only way a package can enable a USER unit: there is no session at install
+#   time and no way to enumerate the accounts there will be. `ping --off`
+#   masks it per user and an upgrade cannot undo that.
+#   The unit validates under systemd-analyze. ⚠ No Documentation= line: this
+#   distribution ships no man pages, and pointing at one is a dead reference
+#   that systemd-analyze reports and `systemctl help` fails on.
+#   tests/ping_test.sh covers the refusals, the state file, the drop-in and its
+#   reset. It deliberately does NOT fetch: a test that reached GitHub is one
+#   that fails on a train and passes for the wrong reason behind a proxy.
+pkgrel=45
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -75,14 +122,38 @@ optdepends=('quickshell: graphical updater (syn-update-gui, "SynapseOS Updates" 
             'syntty>=0.1.0-27: terminal the GUI hands the privileged build off to'
             'zenity: dialog used to report a missing quickshell')
 source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update.desktop"
-        "syn-update.svg")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        "syn-update.svg" "syn-update-ping.service" "syn-update-ping.timer")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-update.sh"     "$pkgdir/usr/bin/syn-update"
     install -Dm755 "$srcdir/syn-update-gui.sh" "$pkgdir/usr/bin/syn-update-gui"
 
     install -Dm644 "$srcdir/shell.qml" "$pkgdir/usr/share/syn-update/shell.qml"
+
+    # The background check, and the timer that runs it. USER units, not system
+    # ones: the check reads /var/lib/synapse-src, which syn-update keeps owned
+    # by the person who runs it, and writes into their cache. A system timer
+    # would be running as root against a tree it does not own — which is how
+    # that tree ends up root-owned and the next interactive `syn-update check`
+    # has to ask for a password to take it back.
+    install -Dm644 "$srcdir/syn-update-ping.service" \
+        "$pkgdir/usr/lib/systemd/user/syn-update-ping.service"
+    install -Dm644 "$srcdir/syn-update-ping.timer" \
+        "$pkgdir/usr/lib/systemd/user/syn-update-ping.timer"
+    # ⚠ ON BY DEFAULT, AND THIS SYMLINK IS THE ONLY WAY TO SAY SO FOR A USER
+    # UNIT. A package cannot `systemctl --user enable` anything: there is no
+    # user session at install time and no way to enumerate the users there will
+    # be. Dropping the link in /usr/lib/.../timers.target.wants enables it for
+    # every account, which is what `systemctl --global enable` writes and what
+    # every distro package that ships a user timer does.
+    #
+    # `syn-update ping --off` then masks it per user in the ordinary way, and a
+    # package upgrade cannot undo that — a disable writes a null link under
+    # ~/.config/systemd/user, which wins over this one.
+    install -d "$pkgdir/usr/lib/systemd/user/timers.target.wants"
+    ln -sf ../syn-update-ping.timer \
+        "$pkgdir/usr/lib/systemd/user/timers.target.wants/syn-update-ping.timer"
 
     # The menu is a freedesktop .desktop scan (quickshell's DesktopEntries), so
     # dropping the file here is all that is needed for the entry to appear.

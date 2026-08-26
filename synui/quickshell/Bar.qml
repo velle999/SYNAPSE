@@ -642,6 +642,13 @@ PanelWindow {
 
                     Recording { barScreen: bar.screen }
 
+                    // Immediately left of the tray, which is where an
+                    // indicator of this kind is looked for — and it is hidden
+                    // whenever there is nothing pending, so on a current
+                    // machine the tray is still the leftmost thing here.
+                    Updates   { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "updates") }
+
                     Tray      { barScreen: bar.screen
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: BarConfig.get(bar.outName, "tray") }

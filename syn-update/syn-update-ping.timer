@@ -1,0 +1,22 @@
+[Unit]
+Description=SynapseOS — check for updates periodically
+
+[Timer]
+# Not at the login stampede: a desktop starting up has enough to do without a
+# git fetch, and an answer three minutes late is an answer nobody is waiting on.
+OnStartupSec=3min
+# ⚠ THE SHIPPED DEFAULT, AND ONLY THE DEFAULT. `syn-update ping --every 6h`
+# writes a drop-in under ~/.config/systemd/user that overrides this — which is
+# where a user's interval has to live, because this file belongs to the package
+# and every syn-update upgrade replaces it. An interval written here would
+# silently revert, and for an updater that happens often.
+OnUnitActiveSec=6h
+# A machine that was asleep at the appointed hour still checks when it wakes,
+# rather than waiting a whole interval for the next one.
+Persistent=true
+# Ten minutes of jitter. Every SynapseOS box shares one upstream, and a fixed
+# interval from a fixed OnStartupSec means they all fetch on the same tick.
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

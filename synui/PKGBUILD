@@ -1934,7 +1934,36 @@ pkgver=0.1.0
 #   It links taskmgr.c whole rather than copying the formula; a copy would go
 #   on passing after the shipped line changed, which for a scale bug is exactly
 #   the failure mode.
-pkgrel=505
+# 506 THE BAR SHOWS WAITING UPDATES. A new module beside the tray: a count and
+#   an icon while SynapseOS updates are pending, one click to the Updates
+#   window, and nothing at all when the machine is current — a row that reads
+#   "0 updates" all day is a row that gets ignored on the day it says something
+#   else, which is why Recording and GameMode are not permanent furniture
+#   either.
+#   ⚠ IT DOES NO CHECKING OF ITS OWN, and that is the design. A git fetch per
+#   bar is a git fetch per MONITOR (this module is instantiated once per
+#   screen), running inside the shell process, where a network stall is a
+#   stalled bar. `syn-update ping` does the work from a systemd user timer and
+#   leaves the answer in ~/.cache/syn-update/pending; this reads that file, and
+#   WATCHES it rather than polling — the writer renames into place, which is
+#   what makes watching safe (a FileView on a path written in place sees it
+#   empty for a frame, and the badge would blink to nothing every time the
+#   timer fired).
+#   ⚠ TWO SWITCHES, AND THEY ARE NOT DUPLICATES. The timer is network traffic —
+#   how often the machine asks upstream, `syn-update ping --every 6h` /
+#   `--off`. This module is furniture — whether the bar shows the answer, an
+#   ordinary BarConfig key in the bar's right-click menu, per monitor, beside
+#   the tray and the clock. Neither is a copy of the other and neither belongs
+#   in the other's file.
+#   `held` is counted separately and only in the tooltip: a component the user
+#   pinned is not work waiting to be done, and putting it in the badge would
+#   make the bar insist on something nobody is going to do.
+#   ⚠ THE STATE PARSE WAS DOUBLE-ESCAPED AND FAILED SILENTLY on the first
+#   build: `\\s` in the QML source is a literal backslash in the pattern, not
+#   whitespace, so every field came back 0, `pending` was 0, and the module
+#   simply stayed hidden — a feature that looks like it was never wired up.
+#   Caught only by rendering a bar against a seeded state file and looking.
+pkgrel=506
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

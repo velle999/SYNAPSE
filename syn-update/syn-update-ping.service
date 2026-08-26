@@ -1,0 +1,25 @@
+[Unit]
+Description=SynapseOS — check for updates
+# A check is a git fetch. Without this the timer fires at login before the
+# network is up, writes status=error, and the indicator says "could not check"
+# for however long the interval is.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/syn-update ping
+# ⛔ NEVER A PASSWORD PROMPT. There is no terminal here: a sudo prompt would not
+# fail, it would HANG, holding this unit active — and systemd skips a trigger
+# whose service is still running, so the indicator would silently stop updating
+# with nothing anywhere saying why. `syn-update ping` refuses up front rather
+# than letting setup_src reach for sudo; this is the second half of that.
+Environment=SUDO_ASKPASS=/bin/false
+# A fetch that hangs on a dead network is the other way to wedge the timer.
+TimeoutStartSec=300
+
+# It reads a git tree and writes one small file in the cache. Nothing else.
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes

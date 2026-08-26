@@ -31,6 +31,7 @@ QtObject {
         "media":      true,
         "clock":      true,
         "tray":       true,
+        "updates":    true,     // syn-update's pending count
         "sysinfo":    true,     // cpu + memory
         "volume":     true,
         "netbt":      true      // network + bluetooth
@@ -43,6 +44,7 @@ QtObject {
         { key: "media",      label: "Media preview" },
         { key: "clock",      label: "Clock" },
         { key: "tray",       label: "System tray" },
+        { key: "updates",    label: "Update notifier" },
         { key: "sysinfo",    label: "CPU + memory" },
         { key: "volume",     label: "Volume" },
         { key: "netbt",      label: "Network + Bluetooth" }

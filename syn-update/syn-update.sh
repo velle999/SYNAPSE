@@ -759,6 +759,45 @@ buildable_names() {
         sed 's/^KNOWN=(//; s/).*//' | tr -s ' \t\n' ' '
 }
 
+# Scan against what upstream is OFFERING, which means reading the PKGBUILDs at
+# the REMOTE revision and not the checked-out one. Done without moving the tree,
+# so the caller stays read-only.
+#
+# ⚠ scan() ON ITS OWN ANSWERS THE WRONG QUESTION, and silently. It reads
+# $SRC/<component>/PKGBUILD, which in a checked-out tree is the revision this
+# machine is ALREADY on — so every component compares equal and the report is a
+# confident "everything is current" on a machine that is six releases behind.
+# `ping` did exactly that on its first run. Nothing errors, because nothing is
+# wrong: it is a correct answer to a question nobody asked.
+#
+# So this exists to be the only way to ask, and both callers use it.
+scan_remote() {
+    local tmp; tmp=$(mktemp -d)
+    # ⛔ NO `trap ... RETURN` HERE, which is what this was and what it cost.
+    # Bash does not scope a RETURN trap to the function that set it unless
+    # `set -T` is on: it stays armed and fires again on the NEXT function
+    # return, by which time `tmp` is out of scope and `set -u` kills the script
+    # — after its work was done, so `ping` printed its answer and then died
+    # with "tmp: unbound variable". It survived in cmd_check only because that
+    # returns at the very end of the run. Explicit cleanup instead; there is
+    # exactly one exit from this function.
+    local c
+    for c in "${COMPONENTS[@]}"; do
+        mkdir -p "$tmp/$c"
+        # `rm -rf`, not `rmdir`: the redirect creates the file BEFORE git runs,
+        # so a component that does not exist at the remote revision leaves an
+        # empty PKGBUILD behind. rmdir then fails loudly ("Directory not
+        # empty") and the empty file goes on to trip scan()'s "cannot read
+        # pkgver/pkgrel" warning — two pieces of noise for a component that is
+        # simply not there yet, which is the normal case when an older system
+        # updates to a tree that has since gained a component.
+        git -C "$SRC" show "origin/$REPO_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null ||
+            rm -rf "$tmp/$c"
+    done
+    local real="$SRC"; SRC="$tmp"; SRC_GIT="$real"; scan; SRC="$real"; SRC_GIT=""
+    rm -rf "$tmp"
+}
+
 scan() {
     CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=(); DECLINED=(); HELD=()
 
@@ -977,25 +1016,7 @@ cmd_check() {
     fi
     show_commits "$from" "$to"
 
-    # Scan against what upstream is OFFERING, which means reading the PKGBUILDs
-    # at the remote revision, not the checked-out one. Done without moving the
-    # tree so `check` stays read-only.
-    local tmp; tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' RETURN
-    local c
-    for c in "${COMPONENTS[@]}"; do
-        mkdir -p "$tmp/$c"
-        # `rm -rf`, not `rmdir`: the redirect creates the file BEFORE git runs,
-        # so a component that does not exist at the remote revision leaves an
-        # empty PKGBUILD behind. rmdir then fails loudly ("Directory not
-        # empty") and the empty file goes on to trip scan()'s "cannot read
-        # pkgver/pkgrel" warning — two pieces of noise for a component that is
-        # simply not there yet, which is the normal case when an older system
-        # updates to a tree that has since gained a component.
-        git -C "$SRC" show "origin/$REPO_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null ||
-            rm -rf "$tmp/$c"
-    done
-    local real="$SRC"; SRC="$tmp"; SRC_GIT="$real"; scan; SRC="$real"; SRC_GIT=""
+    scan_remote
 
     report
     say ""
@@ -1521,6 +1542,155 @@ cmd_status() {
     fi
 }
 
+# ── ping: the background check the tray icon reads ───────────────────────────
+#
+# A check nobody is watching, on a timer, whose whole output is a small file the
+# bar's Updates indicator reads. `check` is the same work with a report a person
+# reads; this is the same work with an answer a program reads.
+#
+# ⛔ IT MUST NEVER ASK FOR ANYTHING. It runs from a systemd user timer with no
+# terminal: a sudo prompt there does not fail, it HANGS, holding the timer's
+# service active until something kills it — and the next trigger is skipped
+# because the unit is still running, so the indicator silently stops updating
+# and nothing anywhere says why. setup_src() is the one path that can reach for
+# sudo (taking back a tree an older root-run left behind), so ping refuses up
+# front when the tree is not already ours rather than letting it try.
+PING_STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/syn-update"
+PING_STATE="$PING_STATE_DIR/pending"
+
+# The systemd user timer's name in both places it is spelled.
+PING_UNIT="syn-update-ping.timer"
+
+ping_write() {
+    # status=ok|error, then the counts, then a row per pending component.
+    # Written to a temporary and renamed: the bar polls this file and a
+    # half-written one is a half-read one — the indicator would blink to
+    # "0 updates" for a frame every time the timer fired.
+    mkdir -p "$PING_STATE_DIR" || return 1
+    local tmp="$PING_STATE.tmp"
+    {
+        printf 'checked=%s\n' "$(date +%s)"
+        printf 'status=%s\n' "$1"
+        shift
+        printf '%s\n' "$@"
+    } > "$tmp" && mv -f "$tmp" "$PING_STATE"
+}
+
+cmd_ping() {
+    # ⚠ THE REFUSAL IS THE FEATURE. Writing status=error with a reason means the
+    # indicator can say "could not check" instead of showing a stale count for
+    # ever, which is the failure this file exists to make visible.
+    if [ ! -d "$SRC/.git" ] || [ ! -w "$SRC" ]; then
+        ping_write error "reason=$SRC is not a source tree owned by $(id -un)"
+        die "$SRC is not usable without asking for a password, which a timer cannot do.
+  Run this once in a terminal:  syn-update check"
+    fi
+
+    # Everything the report would have said, computed and thrown away except
+    # for the counts. Quiet: a timer's stdout is the journal.
+    need_tools >/dev/null 2>&1 || { ping_write error "reason=missing tools"; die "missing tools"; }
+    if ! fetch_src >/dev/null 2>&1; then
+        ping_write error "reason=could not reach $REPO_URL"
+        die "could not fetch"
+    fi
+    # ⚠ scan_remote, NOT scan. See its header: a bare scan() reads the
+    # checked-out tree and reports "everything is current" on a machine that is
+    # months behind, without erroring. That is what this call did first.
+    scan_remote >/dev/null 2>&1 || true
+
+    local rows=() e
+    for e in "${CHANGED[@]}"; do
+        # shellcheck disable=SC2086
+        set -- $e
+        rows+=("update	$1	$2	$3")
+    done
+    for e in "${NEW[@]}"; do
+        # shellcheck disable=SC2086
+        set -- $e
+        rows+=("new	$1	-	$2")
+    done
+    for e in "${HELD[@]}"; do
+        # shellcheck disable=SC2086
+        set -- $e
+        rows+=("held	$1	$2	$3")
+    done
+
+    ping_write ok \
+        "rev=$(git -C "$SRC" rev-parse --short "origin/$REPO_REF" 2>/dev/null)" \
+        "updates=${#CHANGED[@]}" \
+        "new=${#NEW[@]}" \
+        "held=${#HELD[@]}" \
+        "${rows[@]}"
+
+    # A person running this by hand gets the one line they asked for.
+    say "${#CHANGED[@]} update(s), ${#NEW[@]} new, ${#HELD[@]} held — $PING_STATE"
+}
+
+# ── ping --every / --on / --off: the timer itself ────────────────────────────
+#
+# ⚠ THE INTERVAL LIVES IN A DROP-IN, NOT IN THE SHIPPED UNIT. A unit file in
+# /usr/lib belongs to the package and is replaced by every upgrade, so an
+# interval written there is one that silently reverts the next time syn-update
+# updates itself — which, for an updater, is often. The drop-in is in the
+# user's own config and survives.
+ping_dropin_dir() { printf '%s/systemd/user/%s.d' "${XDG_CONFIG_HOME:-$HOME/.config}" "$PING_UNIT"; }
+
+cmd_ping_every() {
+    local spec="$1"
+    # systemd's own time syntax, so "30m", "6h", "2d" and "1week" all work and
+    # none of them is a vocabulary invented here. Validated by systemd rather
+    # than by a regex of ours: it owns the grammar, and a regex would drift.
+    if ! systemd-analyze timespan "$spec" >/dev/null 2>&1; then
+        die "not a time systemd understands: $spec
+  Try something like 30m, 6h, 12h, 1d, 1week."
+    fi
+    local d; d=$(ping_dropin_dir)
+    mkdir -p "$d" || die "cannot write $d"
+    cat > "$d/interval.conf" <<CONF
+# Written by \`syn-update ping --every $spec\`. Delete this file to go back to
+# the shipped default.
+[Timer]
+# ⚠ BOTH, and the empty assignment first. A drop-in ADDS to a list-valued
+# setting rather than replacing it, so without the reset the shipped interval
+# and this one are both live and the timer fires on whichever comes first.
+OnUnitActiveSec=
+OnUnitActiveSec=$spec
+CONF
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user restart "$PING_UNIT" 2>/dev/null || true
+    ok "checking for updates every $spec"
+}
+
+cmd_ping_on() {
+    systemctl --user enable --now "$PING_UNIT" 2>/dev/null \
+        || die "could not enable $PING_UNIT"
+    ok "update checks on ($(ping_interval_now))"
+}
+
+cmd_ping_off() {
+    systemctl --user disable --now "$PING_UNIT" 2>/dev/null \
+        || die "could not disable $PING_UNIT"
+    ok "update checks off — the indicator keeps whatever it last saw"
+}
+
+ping_interval_now() {
+    systemctl --user show "$PING_UNIT" -p TimersMonotonic --value 2>/dev/null \
+        | grep -oE 'OnUnitActiveUSec=[^ }]+' | head -1 | cut -d= -f2 \
+        || printf 'unknown'
+}
+
+cmd_ping_status() {
+    local en; en=$(systemctl --user is-enabled "$PING_UNIT" 2>/dev/null || printf 'disabled')
+    say "timer:    $en"
+    say "interval: $(ping_interval_now)"
+    if [ -r "$PING_STATE" ]; then
+        say "state:    $PING_STATE"
+        sed 's/^/  /' "$PING_STATE"
+    else
+        say "state:    nothing checked yet"
+    fi
+}
+
 usage() {
     cat <<HELP
 syn-update $VERSION — update an installed SynapseOS from git
@@ -1550,6 +1720,20 @@ Usage:
                             Let one go again.
   syn-update ignored        What is being held back
   syn-update status         Show the source revision and installed versions
+  syn-update ping           Check quietly and write the answer where the bar's
+                            update indicator reads it. This is what the timer
+                            runs; by hand it prints one line.
+  syn-update ping --every <time>
+                            How often that timer runs — systemd's own syntax,
+                            so 30m, 6h, 12h, 1d and 1week all work. The setting
+                            is a drop-in under ~/.config/systemd/user, so a
+                            syn-update upgrade cannot revert it.
+  syn-update ping --on|--off
+                            Turn the background checking on or off. This is the
+                            CHECKING; hiding the bar indicator is a separate
+                            switch, in the bar's own menu (right-click the bar
+                            ▸ Updates), because one is about network
+                            traffic and the other is about furniture.
   syn-update help           This help
 
 Options:
@@ -1600,6 +1784,9 @@ HELP
 
 FORCE=0
 CMD=""
+# `ping` with no flag runs a check; with one it configures the timer instead.
+PING_EVERY=""
+PING_TOGGLE=""
 # Machine-readable output. Only `ignored` honours it today; every other command
 # here is a report a person reads, and claiming a flag applies where it does
 # not is worse than not having it.
@@ -1610,12 +1797,16 @@ while [ $# -gt 0 ]; do
         --tsv)          TSV=1 ;;
         --ref)          shift; REPO_REF="${1:-main}" ;;
         -h|--help|help) usage; exit 0 ;;
-        check|apply|status|ignore|unignore|ignored) CMD="$1" ;;
+        check|apply|status|ignore|unignore|ignored|ping) CMD="$1" ;;
+        --every)        shift; PING_EVERY="${1:-}" ;;
+        --on)           PING_TOGGLE=on ;;
+        --off)          PING_TOGGLE=off ;;
         # Bare words after `apply`, `ignore` or `unignore` are component names.
         # Validated below rather than here, because COMPONENTS describes the
         # revision that would RUN and setup_src has not fetched yet.
         *)  case "$CMD" in
                 apply|ignore|unignore) ;;
+                ping) die "ping takes no component names (try: syn-update ping --every 6h)" ;;
                 *) die "unknown argument: $1 (try: syn-update help)" ;;
             esac
             SELECT+=("$1") ;;
@@ -1647,4 +1838,13 @@ case "${CMD:-check}" in
     ignore)   cmd_ignore ;;
     unignore) cmd_unignore ;;
     ignored)  cmd_ignored ;;
+    ping)
+        # The flags are the whole command when they are present: `--every`
+        # configures and does not also check, because a `--every 1week` that
+        # fetched immediately would be a surprising thing for a setting to do.
+        if [ -n "$PING_EVERY" ]; then cmd_ping_every "$PING_EVERY"
+        elif [ "$PING_TOGGLE" = on ];  then cmd_ping_on
+        elif [ "$PING_TOGGLE" = off ]; then cmd_ping_off
+        else cmd_ping
+        fi ;;
 esac

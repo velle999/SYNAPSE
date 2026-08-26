@@ -64,6 +64,11 @@ QtObject {
     // fa-circle and fa-stop, from the same fa block as the media glyphs below,
     // so the recording pill sits in the same visual family as the rest of the
     // bar rather than importing a second icon style for one module.
+    // -- Updates (syn-update's ping) --
+    // nf-fa-arrow_circle_o_down. Chosen over a bare arrow so it reads as an
+    // indicator at 14px rather than as part of the module beside it.
+    readonly property string updates:    "\uF01A"
+
     readonly property string record:     "\uF111"
     readonly property string recordStop: "\uF04D"
 
