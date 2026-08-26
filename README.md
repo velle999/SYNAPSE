@@ -34,13 +34,13 @@ An Arch-based operating system with a local LLM wired into the system layer — 
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](#license)
 ![Platform](https://img.shields.io/badge/platform-x86__64-1793d1)
 
-<img src="docs/screenshots/synui-desktop.png" alt="synui — the SynapseOS compositor" width="900">
+<img src="docs/screenshots/synui-desktop.webp" alt="The SynapseOS desktop — the synui compositor on SYNAPSE Prism, its control panel over the shipped wallpaper, with the quickshell bar and the dock" width="900">
 
-<sub><i>synui, the wlroots compositor: native quickshell bar, start menu, desktop widgets and auto-hiding dock.</i></sub>
+<sub><i>synui on <b>SYNAPSE Prism</b>, the theme a fresh install boots into. The accent on the bar, the dock and the panel is measured off the wallpaper, live.</i></sub>
 
-<img src="docs/screenshots/synui-crt.png" alt="synui — amber CRT post-process filter over a fastfetch readout" width="900">
+<img src="docs/screenshots/synui-crt.webp" alt="The same SynapseOS desktop with the CRT post-process pass on: amber phosphor, scanlines, screen curvature and chromatic aberration" width="900">
 
-<sub><i>The optional CRT post-process pass, in amber phosphor.</i></sub>
+<sub><i>The same desktop with the CRT pass on (<code>Super</code>+<code>E</code>) — scanlines, curvature, chromatic aberration and an amber phosphor, applied by the compositor to everything on screen at once.</i></sub>
 </div>
 
 ---
