@@ -1021,6 +1021,25 @@ own screen back. Screen audio follows: `hdmi_audio = auto|on|off`, keyed off the
 ALSA ELD rather than the sink's name, because a GPU advertises an HDMI sink per
 pin whether or not a display is on it.
 
+**The pointer** has two settings past its speed, under *Input → Pointer*.
+`accel_profile` is libinput's acceleration **curve** — `adaptive` moves the
+cursor further the faster your hand goes, so one movement can be precise and
+the next can cross the screen; `flat` is a constant 1:1, which is what a game
+wants; `default` leaves whatever libinput picked for the device. It is a
+different question from `accel_speed`, which only scales whichever curve is
+already in use: turning the speed up never turns acceleration on.
+
+`pointer_smoothing` (`0`–`10`, off by default) is synui's own — libinput has no
+smoothing to ask for. It averages the cursor's path over the last few reports,
+for a pointer that will not hold still: a low-DPI or worn sensor whose counts
+rattle, a cheap wireless mouse, an unsteady hand. It is a **leaky bucket rather
+than an average**, so a smoothed movement arrives late but never short — every
+delta is paid out eventually, and a settle timer applies the remainder one frame
+after the reports stop. The number is a time constant, not a per-report
+fraction, so it means the same thing on a 125 Hz office mouse and a 1000 Hz
+gaming one. It reaches the **cursor only**: a game holding a locked pointer
+still reads raw motion, and a tablet stays under its stylus.
+
 **Animations** are two settings, not one, under *Windows → Animation* in the
 control panel (`Super`+`C`) or in `synuirc`. A window opening can be `off`,
 `fade` or `rise` (it glides up `anim_rise_px` into place); switching desktop can

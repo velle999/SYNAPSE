@@ -168,6 +168,15 @@ static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blu
  * words that read as config values, which is why the row leans on its help
  * line to say what "sloppy" means rather than spelling it in the value. */
 static const char *const ctl_names_focus_mode[] = { "Click", "Sloppy", "Strict" };
+/* Not a local list: these are syn_accel_profile_names title-cased, and the two
+ * must stay in step because ctl_persist writes the display name lower-cased and
+ * config.c reads it back. Spelled here anyway rather than derived, so the panel
+ * shows "Adaptive" and not "adaptive" — the same arrangement every other enum
+ * row uses. tests/ctlpanel_table_test.c walks all three and would catch a
+ * drift. */
+static const char *const ctl_names_accel_profile[] = {
+    "Default", "Flat", "Adaptive"
+};
 /* Order matches syn_anim_window_t / syn_anim_ws_t / syn_anim_curve_t. The
  * lower-cased spellings synuirc takes live in config.c beside the parser, so a
  * new style needs its display name added HERE and its word THERE. */
@@ -1051,6 +1060,20 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_ACCEL_SPEED,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer speed", NULL,
       .key = "accel_speed", .off = CFG(accel_speed), .vtype = CTL_VAL_FLOAT,
       .vmin = -1.0f, .vmax = 1.0f, .vstep = 0.1f, .apply = CTL_APPLY_INPUT },
+    /* The curve, which is the row somebody wanting "acceleration on" is
+     * actually after — Pointer speed above scales whichever curve the device is
+     * already on and can neither turn acceleration on nor off. */
+    { CTL_ROW_ACCEL_PROFILE, CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer acceleration", NULL,
+      .key = "accel_profile", .off = CFG(accel_profile), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_accel_profile), .apply = CTL_APPLY_INPUT,
+      .help = "Adaptive moves further the faster you move; Flat is 1:1. "
+              "Default is libinput's own pick for the device" },
+    { CTL_ROW_POINTER_SMOOTHING, CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer smoothing", NULL,
+      .key = "pointer_smoothing", .off = CFG(pointer_smoothing), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 10, .vstep = 1, .apply = CTL_APPLY_INPUT,
+      .help = "Steadies a shaky or noisy pointer by averaging its path. "
+              "Costs a little lag; 0 is off. Games reading raw motion are "
+              "unaffected" },
     { CTL_ROW_CURSOR_SIZE,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Cursor size", NULL,
       .key = "cursor_size", .off = CFG(cursor_size), .vtype = CTL_VAL_INT,
       .vmin = 8, .vmax = 256, .vstep = 4, .unit = "px", .apply = CTL_APPLY_CURSOR },

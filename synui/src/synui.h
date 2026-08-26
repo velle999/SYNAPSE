@@ -1806,6 +1806,8 @@ typedef enum {
     CTL_ROW_NATURAL_SCROLL,
     CTL_ROW_LEFT_HANDED,
     CTL_ROW_ACCEL_SPEED,
+    CTL_ROW_ACCEL_PROFILE,
+    CTL_ROW_POINTER_SMOOTHING,
     CTL_ROW_CURSOR_SIZE,
 
     CTL_ROW_NIGHTLIGHT_TEMP,
@@ -2545,6 +2547,34 @@ typedef enum {
  * reads them; keep in step with the enum above. Note these double as the
  * control panel's display names, folded to lower case on the way to disk. */
 extern const char *const syn_focus_mode_names[SYN_FOCUS_MODE_COUNT];
+
+/* libinput's pointer acceleration curve. See syn_config_t.accel_profile.
+ *
+ * DEFAULT is first so a zeroed config leaves every device on whatever libinput
+ * chose for it, which is what synui did before this existed — a mouse gets
+ * ADAPTIVE, a trackpoint gets its own tuning, and none of that has to be
+ * restated here to be kept.
+ *
+ * FLAT is a constant gain: the pointer moves the same distance per count no
+ * matter how fast the hand does. ADAPTIVE raises the gain with speed, which is
+ * what makes a slow deliberate movement land precisely and a fast one cross
+ * the screen. On a low-DPI mouse the adaptive curve is the one that makes
+ * small movements controllable, so it is worth being able to ask for it even
+ * where libinput already picked it — a device whose default is FLAT (some
+ * trackballs and gaming mice that report their own tuning) cannot otherwise be
+ * moved onto it. */
+typedef enum {
+    SYN_ACCEL_PROFILE_DEFAULT = 0,  /* leave the device where libinput put it */
+    SYN_ACCEL_PROFILE_FLAT,         /* constant gain, no acceleration         */
+    SYN_ACCEL_PROFILE_ADAPTIVE,     /* gain rises with speed                  */
+    SYN_ACCEL_PROFILE_COUNT,        /* keep last — the panel steps on it      */
+} syn_accel_profile_t;
+
+/* Indexed by syn_accel_profile_t. Defined in config.c beside the parser, and
+ * these double as the control panel's display names folded to lower case — see
+ * the note on syn_focus_mode_names. */
+extern const char *const syn_accel_profile_names[SYN_ACCEL_PROFILE_COUNT];
+
 /* syn_lid_action_t for an action name, or -1 if it is not one. */
 int lid_action_from_name(const char *name);
 
@@ -3764,6 +3794,23 @@ typedef struct {
     int   left_handed;
     float accel_speed;       /* -1.0 .. 1.0 */
     int   accel_speed_set;
+    int   accel_profile;     /* syn_accel_profile_t */
+
+    /* Pointer smoothing: how much of an exponential moving average is laid
+     * over the cursor's own path. 0 is off and is the default — every delta
+     * libinput reports is applied whole, which is what synui has always done.
+     *
+     * This is NOT a libinput option; libinput has no smoothing to ask for. It
+     * is applied in input.c, and only to the cursor. A client holding a locked
+     * or relative pointer (a game reading raw motion) still gets the unfiltered
+     * deltas, because smoothing a game's aim is not what somebody steadying
+     * their desktop pointer asked for.
+     *
+     * The cost is latency: the higher the number, the longer the cursor takes
+     * to finish a movement. 10 is deliberately the top of the range rather
+     * than something nearer 1.0 — past about 0.8 the pointer stops feeling
+     * attached to the hand. */
+    int   pointer_smoothing;  /* 0 (off) .. 10 */
 
     /* Background image (wallpaper.c); empty path = no wallpaper (solid
      * bg_color shows instead). Ignored when wallpaper_src == MATRIX. */
@@ -6321,6 +6368,35 @@ struct syn_server {
      * Re-armed on every motion, so it expires once the pointer has been STILL
      * for focus_delay_ms, which is the behaviour the setting describes. */
     struct wl_event_source *focus_follow_timer;
+
+    /* ── Pointer smoothing (input.c, config.pointer_smoothing) ──
+     *
+     * A low-pass filter over the cursor's own motion. `pend_x/pend_y` hold the
+     * part of everything the mouse has reported that has NOT been handed to
+     * wlr_cursor_move yet; each event emits a fraction of it and keeps the
+     * rest. Nothing is ever discarded, so the cursor's total travel still
+     * equals the hand's — the filter only spreads it over a few more events,
+     * which is what takes the jitter out of a low-DPI or shaky pointer.
+     *
+     * `flush_timer` is why the remainder is not a slow leak: with no further
+     * motion there is no next event to emit it, so the cursor would stop a
+     * fraction short of where it was put. The timer fires once the pointer has
+     * been still for one frame's worth of time and applies what is left, so a
+     * movement always lands exactly. It is re-armed on every smoothed event.
+     *
+     * `pend_dev` is the device the pending amount came from, because
+     * wlr_cursor_move maps a delta through THAT device's output mapping — a
+     * flush attributed to the wrong pointer would move the cursor by the right
+     * distance on the wrong screen. */
+    struct {
+        double pend_x, pend_y;
+        struct wlr_input_device *pend_dev;
+        struct wl_event_source  *flush_timer;
+        /* Timestamp of the last smoothed event, so the filter can work from
+         * elapsed time rather than from a per-event constant. 0 means "no
+         * stroke in progress" and makes the next event emit in full. */
+        uint32_t last_ms;
+    } psmooth;
 
     /* The output the compositor's own UI is drawn on — see
      * server_ui_output_track(). Re-derived at every click and keystroke while

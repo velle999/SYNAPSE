@@ -547,6 +547,26 @@ record_edit = off
 # natural_scroll = on
 # left_handed    = on
 # accel_speed    = 0.0         # -1.0 (slow) .. 1.0 (fast)
+#
+# accel_profile  = adaptive    # default | flat | adaptive
+#   How the pointer's speed maps to how fast you move it. `adaptive` moves it
+#   further the faster your hand goes, so one movement can be precise and the
+#   next can cross the screen; `flat` is a constant 1:1 and is what a game
+#   wants. `default` (the default) leaves whatever libinput picked for the
+#   device, which for an ordinary mouse is already adaptive. This is a separate
+#   question from accel_speed above, which only scales whichever curve is in
+#   use — turning the speed up never turns acceleration on.
+#
+# pointer_smoothing = 3        # 0 (off) .. 10
+#   Averages the cursor's path over the last few reports, for a pointer that is
+#   hard to hold still: a low-DPI or worn sensor whose counts rattle, a cheap
+#   wireless mouse, or an unsteady hand. Not a libinput option — synui does it
+#   itself, and only to the cursor, so a game holding a locked pointer still
+#   reads raw motion. The cost is latency in proportion: 2-4 takes the wobble
+#   out without the pointer feeling detached, 10 is as far as it goes. The
+#   number means the same thing on a 125 Hz mouse and a 1000 Hz one.
+#
+# Control panel ▸ Input ▸ Pointer has both, and writes settings.state.
 
 # ── Keybindings ────────────────────────────────────────────
 # bind = <mod>+<key> <action> [arg]

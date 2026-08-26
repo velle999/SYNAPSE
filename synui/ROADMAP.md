@@ -204,8 +204,16 @@ installed) but the config-broadcast path is hit by any manager client.
       Super+drag works with a pen. Full tablet-v2 is a follow-up.
 - [x] Touchpad gestures: `zwp_pointer_gestures_v1` relay (swipe/pinch/hold).
 - [x] libinput config from synuirc: `tap`, `natural_scroll`, `left_handed`,
-      `accel_speed` — applied per device where supported; unset keys leave
-      device defaults.
+      `accel_speed`, `accel_profile` — applied per device where supported;
+      unset keys leave device defaults. `accel_profile` is checked against the
+      device's own supported set, since a device can offer a speed and still
+      support only one curve.
+- [x] `pointer_smoothing` (0-10): synui's own low-pass filter over the cursor
+      path, for a low-DPI or unsteady pointer — libinput has no such option.
+      A leaky bucket rather than an average, so no travel is lost, with a
+      settle timer that applies the remainder when the pointer stops. Derived
+      from elapsed time, so one setting means the same on a 125 Hz mouse and a
+      1000 Hz one. Cursor only: relative-pointer clients still get raw motion.
 - [x] Configurable keymap: `xkb_rules/model/layout/variant/options`,
       `repeat_rate`, `repeat_delay` (empty = XKB_DEFAULT_* env / system).
 - [x] Configurable keybindings: the hardcoded bind table became data —

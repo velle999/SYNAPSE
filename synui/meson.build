@@ -1450,6 +1450,15 @@ test('deskmenu_widgets', deskmenu_widgets,
      depends : [synui_exe, synctl_exe, vpointer_click],
      timeout : 120)
 
+# `pointer_smoothing`: the filter must cost latency and NOT travel. Driven
+# through the relative motion path, which is the only one it applies to.
+pointer_smoothing = find_program('tests/pointer_smoothing.sh')
+test('pointer_smoothing', pointer_smoothing,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                vpointer_click.full_path()],
+     depends : [synui_exe, synctl_exe, vpointer_click],
+     timeout : 180)
+
 edge_expand = find_program('tests/edge_expand.sh')
 test('edge_expand', edge_expand,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

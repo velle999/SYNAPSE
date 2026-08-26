@@ -1963,7 +1963,48 @@ pkgver=0.1.0
 #   whitespace, so every field came back 0, `pending` was 0, and the module
 #   simply stayed hidden — a feature that looks like it was never wired up.
 #   Caught only by rendering a bar against a seeded state file and looking.
-pkgrel=506
+# 507 A POINTER THAT WILL NOT HOLD STILL. Two settings on Control panel ▸ Input
+#   ▸ Pointer, for a cheap 1000 DPI wireless mouse whose sensor rattles enough
+#   that the cursor never quite sits where it is put.
+#   `accel_profile = default|flat|adaptive` is libinput's acceleration CURVE,
+#   which synui had no control for at all. ⚠ IT IS NOT `accel_speed`, and that
+#   is the whole reason it had to exist: accel_speed scales whichever curve the
+#   device is already on, so turning the speed up never turns acceleration on
+#   and turning it down never turns it off — somebody asking for "acceleration"
+#   and finding only a speed slider is looking at the wrong control. Adaptive
+#   raises the gain with hand speed, which is what makes a slow movement land
+#   precisely and a fast one still cross the screen. The request is checked
+#   against `accel_get_profiles()` and not against `accel_is_available()`: a
+#   device can offer a speed and still support only one curve, and libinput
+#   answers an impossible profile with UNSUPPORTED rather than by picking
+#   something — a config line that silently does nothing.
+#   `pointer_smoothing = 0..10` is synui's own, because LIBINPUT HAS NO
+#   SMOOTHING TO ASK FOR. A low-pass filter over the cursor's path, in
+#   input.c's relative motion handler.
+#   ⚠ A LEAKY BUCKET, NOT AN AVERAGE OVER THE LAST N REPORTS. An average feels
+#   smooth and quietly eats the tail of every movement: the pointer lands a
+#   little short, every time, and the complaint that comes back is "it doesn't
+#   go where I aim" — the exact thing smoothing was turned on to fix. Here every
+#   delta goes into a pending total and each event pays out a fraction of it,
+#   so nothing is ever discarded; a settle timer applies the remainder one frame
+#   after the reports stop, because otherwise the last fraction has no event to
+#   ride out on and the bias is permanent.
+#   ⚠ THE FRACTION COMES FROM ELAPSED TIME, NOT PER EVENT. A fixed per-event
+#   fraction makes the setting mean different things on different hardware — a
+#   heavy filter on a 125 Hz office mouse and no filter at all on a 1000 Hz
+#   gaming one, on the same desktop, from the same number. Solving for a time
+#   constant (strength x 5 ms) makes one row mean one thing on both, which
+#   matters here because this machine has one of each.
+#   ⚠ THE CURSOR ONLY. The relative-pointer broadcast above it stays raw, so a
+#   game holding a locked pointer still reads unfiltered motion — filtering a
+#   player's aim from a row on the desktop's pointer page would be a symptom
+#   with no discoverable cause. Absolute devices (tablets, a VM's passed-through
+#   pointer) are exempt too: their "delta" is the distance to a position, and
+#   damping it makes the cursor trail the stylus.
+#   `synctl cursor` is new, and reports the pointer's layout position — the
+#   readback tests/pointer_smoothing.sh needs to assert the property that
+#   matters, which is that a smoothed stroke arrives LATE and never SHORT.
+pkgrel=507
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

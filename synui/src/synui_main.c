@@ -2785,6 +2785,7 @@ static void usage(const char *prog) {
         "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc; $SYNUI_CONFIG\n"
         "overrides both) — keybinds, xkb_layout/variant/options,\n"
         "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
+        "accel_profile (default|flat|adaptive), pointer_smoothing (0-10),\n"
         "terminal, autostart, gap, border_width,\n"
         "border_color_norm/focus/ai/warn (#rrggbb),\n"
         "effects on/off + effect_scanline/curvature/aberration/glitch (0..1, GLES2 only),\n"

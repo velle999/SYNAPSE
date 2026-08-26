@@ -2682,6 +2682,26 @@ static void input_apply_libinput_config(syn_server_t *s,
     if (cfg->accel_speed_set &&
         libinput_device_config_accel_is_available(li))
         libinput_device_config_accel_set_speed(li, cfg->accel_speed);
+
+    /* The curve, which is a separate question from the speed above: accel_speed
+     * scales whichever curve the device is on, so asking for a faster pointer
+     * never turns acceleration on and asking for a slower one never turns it
+     * off. DEFAULT touches nothing.
+     *
+     * The profile has to be checked against the device's own supported set
+     * rather than against accel_is_available(): a device can offer a speed and
+     * still support only one profile, and libinput answers such a request with
+     * UNSUPPORTED rather than by picking something. Asking anyway would be a
+     * config line that silently does nothing, which is the failure this reads
+     * the mask to avoid. */
+    if (cfg->accel_profile != SYN_ACCEL_PROFILE_DEFAULT) {
+        enum libinput_config_accel_profile want =
+            cfg->accel_profile == SYN_ACCEL_PROFILE_FLAT
+                ? LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT
+                : LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
+        if (libinput_device_config_accel_get_profiles(li) & want)
+            libinput_device_config_accel_set_profile(li, want);
+    }
 }
 
 /* ── Compositor-owned cursor image ───────────────────────── */
@@ -3017,13 +3037,161 @@ static bool point_is_desktop(syn_server_t *s, double lx, double ly)
     return !view && !surface;
 }
 
+/* ── Pointer smoothing ───────────────────────────────────── */
+/*
+ * A low-pass filter over the cursor's own path, for a pointer that is hard to
+ * hold still — a low-DPI or worn sensor whose counts rattle, or a hand that
+ * does. libinput has no such option, so this is synui's own.
+ *
+ * The filter is a leaky bucket, not a plain average over the last N reports.
+ * Every delta goes into `pend`, and each event pays out a fraction of whatever
+ * is standing there; the rest waits for the next one. Nothing is ever thrown
+ * away, so the cursor's total travel still equals the hand's — a smoothed
+ * pointer lands in the same place, it just takes a few more milliseconds to
+ * settle. An average would instead lose the tail of every movement, which is
+ * the shape of filter that makes a desktop feel like it is fighting you.
+ *
+ * ⚠ THE FRACTION IS DERIVED FROM ELAPSED TIME, NOT FIXED PER EVENT. A fixed
+ * fraction makes the amount of smoothing depend on the device's report rate:
+ * the same number would be a heavy filter on a 125 Hz office mouse and no
+ * filter at all on a 1000 Hz gaming one, on the same desktop, from one setting.
+ * Solving for the time constant instead means the row means the same thing on
+ * both — which is the point, since the mouse this was written for is the slow
+ * one and the other pointer on the machine is the fast one.
+ */
+
+/* Time constant in ms for a strength of 1..10: how long the cursor takes to
+ * cover ~63% of a step change. 5 ms is at the edge of perceptible; 50 ms is as
+ * far as this goes, because past it the pointer stops feeling attached. */
+static inline double psmooth_tau_ms(int strength)
+{
+    if (strength < 1)  strength = 1;
+    if (strength > 10) strength = 10;
+    return strength * 5.0;
+}
+
+/* Hand `pend` to the cursor and clear it. Used both by the per-event path and
+ * by the flush timer, so "what a settled pointer does" is written once. */
+static void psmooth_emit(syn_server_t *s, double x, double y)
+{
+    s->psmooth.pend_x -= x;
+    s->psmooth.pend_y -= y;
+    wlr_cursor_move(s->cursor, s->psmooth.pend_dev, x, y);
+}
+
+/*
+ * The pointer stopped. Apply what is left.
+ *
+ * Without this the remainder has no event to ride out on: the filter only
+ * advances when motion arrives, so a movement that ends would leave the cursor
+ * a fraction of its last step short of where it was put, every time. Small,
+ * but it is a systematic bias towards where you came from, and it is exactly
+ * the "the pointer doesn't go where I aim" complaint smoothing is supposed to
+ * fix rather than cause.
+ */
+static int psmooth_flush(void *data)
+{
+    syn_server_t *s = data;
+    if (!s->psmooth.pend_dev) return 0;
+    if (s->psmooth.pend_x == 0.0 && s->psmooth.pend_y == 0.0) return 0;
+
+    psmooth_emit(s, s->psmooth.pend_x, s->psmooth.pend_y);
+    s->cursor_x = s->cursor->x;
+    s->cursor_y = s->cursor->y;
+
+    /* The cursor moved, so everything that tracks it has to be told — the
+     * pointer focus above all. A flush that only nudged the drawn cursor would
+     * leave the seat believing the pointer is still where it was a frame ago,
+     * which is a click landing on the wrong side of a window edge. */
+    wlr_scene_node_set_position(&s->drag_icon_tree->node,
+                                (int)s->cursor->x, (int)s->cursor->y);
+    if (s->cursor_mode == SYNUI_CURSOR_MOVE)        process_cursor_move(s);
+    else if (s->cursor_mode == SYNUI_CURSOR_RESIZE) process_cursor_resize(s);
+    else pointer_update_focus(s, (uint32_t)(s->psmooth.last_ms));
+    return 0;
+}
+
+/* Re-arm the settle timer, creating it on first use like focus_follow's. */
+static void psmooth_arm(syn_server_t *s)
+{
+    if (!s->psmooth.flush_timer) {
+        struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+        s->psmooth.flush_timer =
+            wl_event_loop_add_timer(loop, psmooth_flush, s);
+        if (!s->psmooth.flush_timer) return;   /* no timer: the tail decays */
+    }
+    /* One frame at 60 Hz. Long enough that it never fires between two reports
+     * of a pointer that is still moving (even a 60 Hz device beats it), short
+     * enough that the settle is not something you can watch happen. */
+    wl_event_source_timer_update(s->psmooth.flush_timer, 16);
+}
+
+/* Put the filter back to empty WITHOUT moving the cursor. For the paths where
+ * the pending amount has stopped being meaningful rather than having arrived:
+ * the setting was turned off, or a constraint took the pointer. Dropping a
+ * sub-pixel remainder there is right — applying it would move the cursor at a
+ * moment nothing asked it to. */
+static void psmooth_reset(syn_server_t *s)
+{
+    s->psmooth.pend_x = s->psmooth.pend_y = 0.0;
+    s->psmooth.pend_dev = NULL;
+    s->psmooth.last_ms = 0;
+    if (s->psmooth.flush_timer)
+        wl_event_source_timer_update(s->psmooth.flush_timer, 0);
+}
+
+/*
+ * Run the filter over one delta, in place.
+ *
+ * Called only for relative devices with the setting on and no constraint
+ * active — see the call site for why each of those is excluded.
+ */
+static void psmooth_apply(syn_server_t *s, uint32_t time_msec,
+                          struct wlr_input_device *device,
+                          double *dx, double *dy)
+{
+    /* A delta from a different device cannot be pooled with what is pending:
+     * wlr_cursor_move maps a relative motion through the device's own output
+     * mapping, so the two halves could belong to different screens. Land the
+     * old pointer's remainder first, then start clean. */
+    if (s->psmooth.pend_dev && s->psmooth.pend_dev != device)
+        psmooth_flush(s);
+
+    s->psmooth.pend_dev = device;
+    s->psmooth.pend_x += *dx;
+    s->psmooth.pend_y += *dy;
+
+    /* Elapsed time since the last smoothed event. The first event of a stroke,
+     * a stale gap (the pointer was idle and the timer did not get to run), and
+     * a timestamp that went backwards across a wrap all take the same branch:
+     * emit everything. A new movement must not be damped by a filter whose
+     * state is older than the movement itself. */
+    uint32_t prev = s->psmooth.last_ms;
+    s->psmooth.last_ms = time_msec;
+
+    double frac = 1.0;
+    if (prev != 0 && time_msec >= prev) {
+        uint32_t dt = time_msec - prev;
+        if (dt <= 200)
+            frac = 1.0 - exp(-(double)dt / psmooth_tau_ms(s->config.pointer_smoothing));
+    }
+
+    *dx = s->psmooth.pend_x * frac;
+    *dy = s->psmooth.pend_y * frac;
+    s->psmooth.pend_x -= *dx;
+    s->psmooth.pend_y -= *dy;
+
+    psmooth_arm(s);
+}
+
 /* Shared relative-motion path: broadcast the raw delta to relative-pointer
  * clients, let an active constraint absorb (locked) or clamp (confined) the
  * move, then move the cursor and update pointer focus. */
 static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
                                    struct wlr_input_device *device,
                                    double dx, double dy,
-                                   double unaccel_dx, double unaccel_dy)
+                                   double unaccel_dx, double unaccel_dy,
+                                   bool smoothable)
 {
     notify_activity(s);
 
@@ -3041,6 +3209,25 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     if (s->cursor_mode == SYNUI_CURSOR_PASSTHROUGH &&
         constraints_apply_motion(s, &dx, &dy))
         return;   /* locked pointer: the cursor stays put */
+
+    /* Smoothing goes HERE and not above: everything before this point is the
+     * raw stream, and it has to stay raw.
+     *
+     *  - the relative-pointer broadcast is what a game reads while it holds the
+     *    pointer. Filtering a player's aim is not what somebody steadying their
+     *    desktop cursor asked for, and it would be invisible to them — the
+     *    setting is on the pointer page, the symptom is in the game.
+     *  - a constraint has already had its say. A confined pointer's delta was
+     *    just clamped to a region; re-filtering it would hand back a value that
+     *    is outside the region again.
+     *
+     * `smoothable` excludes absolute devices (tablets, and the pointer a VM
+     * hands through): their "delta" is the distance to an absolute position, so
+     * damping it makes the cursor trail the stylus instead of sitting under it. */
+    if (smoothable && s->config.pointer_smoothing > 0 && !s->active_constraint)
+        psmooth_apply(s, time_msec, device, &dx, &dy);
+    else if (s->psmooth.pend_dev)
+        psmooth_reset(s);
 
     wlr_cursor_move(s->cursor, device, dx, dy);
     s->cursor_x = s->cursor->x;
@@ -3122,7 +3309,7 @@ static void server_cursor_motion(struct wl_listener *listener, void *data)
     struct wlr_pointer_motion_event *event = data;
     process_pointer_motion(s, event->time_msec, &event->pointer->base,
                            event->delta_x, event->delta_y,
-                           event->unaccel_dx, event->unaccel_dy);
+                           event->unaccel_dx, event->unaccel_dy, true);
 }
 
 static void server_cursor_motion_absolute(struct wl_listener *listener, void *data)
@@ -3137,7 +3324,7 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
                                          event->x, event->y, &lx, &ly);
     process_pointer_motion(s, event->time_msec, &event->pointer->base,
                            lx - s->cursor->x, ly - s->cursor->y,
-                           lx - s->cursor->x, ly - s->cursor->y);
+                           lx - s->cursor->x, ly - s->cursor->y, false);
 }
 
 /* Does the seat still hold this button down — i.e. was its press forwarded to a
@@ -4141,6 +4328,12 @@ void input_reload_config(syn_server_t *s)
     syn_input_dev_t *id;
     wl_list_for_each(id, &s->input_devs, link)
         input_apply_libinput_config(s, id->dev);
+
+    /* Smoothing is synui's own filter, not a device option, so the loop above
+     * cannot reach it. Drop whatever is pending: the reload may have turned the
+     * setting off or changed its strength, and a remainder measured against the
+     * old time constant is not a movement the new one should finish. */
+    psmooth_reset(s);
 }
 
 /* ── Setup all input listeners ───────────────────────────── */

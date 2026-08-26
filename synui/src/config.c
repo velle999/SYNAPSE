@@ -396,6 +396,18 @@
  *
  * ── Pointer ────────────────────────────────────────────────
  *   accel_speed = 0.0            (-1.0 to 1.0; 0 is the driver's own)
+ *   accel_profile = default|flat|adaptive
+ *       Flat moves the pointer the same distance per count however fast the
+ *       hand goes; adaptive moves it further the faster you go, which is what
+ *       lets one movement be precise and the next cross the screen. `default`
+ *       leaves libinput's own choice for the device, which for a mouse is
+ *       already adaptive.
+ *   pointer_smoothing = 0        (0-10; 0 is off)
+ *       Averages the cursor's own path over the last few reports, so a shaky
+ *       hand or a noisy low-DPI sensor stops making the pointer wobble. Costs
+ *       latency in proportion — 2-4 steadies a mouse without the cursor
+ *       feeling detached. Clients holding a locked/relative pointer (games)
+ *       still get raw motion.
  *   natural_scroll = on|off      (unset follows libinput's device default)
  *   left_handed = on|off         (swaps the buttons; unset is the default)
  *   tap = on|off                 (tap-to-click on a touchpad)
@@ -882,6 +894,14 @@ static void config_bind(syn_config_t *cfg, const char *combo,
  * panel's own table test links config.c without linking the compositor. */
 const char *const syn_focus_mode_names[SYN_FOCUS_MODE_COUNT] = {
     "click", "sloppy", "strict",
+};
+
+/* Same contract, for the pointer acceleration curve. "default" is a word here
+ * rather than an absent key so the control panel has something to step back
+ * ONTO: a CTL_VAL_ENUM row has no "unset" notch, and leaving the device alone
+ * is a choice somebody may want to make after having asked for flat once. */
+const char *const syn_accel_profile_names[SYN_ACCEL_PROFILE_COUNT] = {
+    "default", "flat", "adaptive",
 };
 
 /*
@@ -1535,6 +1555,8 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->left_handed    = -1;
     cfg->accel_speed    = 0.0f;
     cfg->accel_speed_set = 0;
+    cfg->accel_profile  = SYN_ACCEL_PROFILE_DEFAULT;
+    cfg->pointer_smoothing = 0;
 
     /* The bundled SYNAPSE image, not an empty path. An empty one paints
      * bg_color and a desktop with no wallpaper reads as a blank screen rather
@@ -2604,6 +2626,21 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if (cfg->accel_speed < -1.0f) cfg->accel_speed = -1.0f;
         if (cfg->accel_speed >  1.0f) cfg->accel_speed =  1.0f;
         cfg->accel_speed_set = 1;
+    }
+    /* Spelled, like focus_mode, and an unknown word leaves the default alone
+     * rather than falling through to one of the two curves: a typo here would
+     * otherwise change how the pointer moves and give no reason why. */
+    else if (strcmp(key, "accel_profile") == 0) {
+        for (int i = 0; i < SYN_ACCEL_PROFILE_COUNT; i++)
+            if (strcmp(val, syn_accel_profile_names[i]) == 0) {
+                cfg->accel_profile = i;
+                break;
+            }
+    }
+    else if (strcmp(key, "pointer_smoothing") == 0) {
+        cfg->pointer_smoothing = atoi(val);
+        if (cfg->pointer_smoothing < 0)  cfg->pointer_smoothing = 0;
+        if (cfg->pointer_smoothing > 10) cfg->pointer_smoothing = 10;
     }
     /* ── Screensaver + lock appearance (saver.c / lock.c) ── */
     else if (strcmp(key, "screensaver") == 0) {

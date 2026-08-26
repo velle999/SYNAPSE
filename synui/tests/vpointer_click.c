@@ -30,6 +30,23 @@
  *                                            promoted to a drag by MOTION, so a
  *                                            single jump to the far end is a
  *                                            different code path from a drag.
+ *        vpointer_click X Y rel DX DY N [GAP_MS]
+ *                                          — put the cursor at (X,Y) with one
+ *                                            absolute motion, then send N
+ *                                            RELATIVE motions of (DX,DY).
+ *                                            This is the only mode that takes
+ *                                            the relative path, which is where
+ *                                            pointer_smoothing lives: absolute
+ *                                            motion is deliberately not
+ *                                            smoothed (a tablet must sit under
+ *                                            the stylus), so every other mode
+ *                                            here would test the wrong branch.
+ *                                            GAP_MS spaces the reports, which
+ *                                            matters because the filter works
+ *                                            from ELAPSED TIME — sending them
+ *                                            back to back is a 1000 Hz mouse
+ *                                            and spacing them 8 ms apart is a
+ *                                            125 Hz one.
  *        vpointer_click X Y scroll N [horiz]
  *                                          — move to (X,Y) and turn a MOUSE
  *                                            WHEEL N notches: positive is down
@@ -139,6 +156,14 @@ int main(int argc, char **argv)
     bool right = argc > 3 && !strcmp(argv[3], "right");
     bool moveonly = argc > 3 && !strcmp(argv[3], "move");
     bool scroll = argc > 4 && !strcmp(argv[3], "scroll");
+    bool rel   = argc > 6 && !strcmp(argv[3], "rel");
+    /* Deltas are SIGNED — they go on the wire as wl_fixed_t, not as the
+     * unsigned coordinates NEG_CHECK guards, so moving left is legal here. */
+    double rel_dx = rel ? atof(argv[4]) : 0.0;
+    double rel_dy = rel ? atof(argv[5]) : 0.0;
+    int    rel_n  = rel ? atoi(argv[6]) : 0;
+    int    rel_gap_ms = (rel && argc > 7) ? atoi(argv[7]) : 8;
+    int    rel_settle_ms = (rel && argc > 8) ? atoi(argv[8]) : 120;
     int  notches = scroll ? atoi(argv[4]) : 0;
     bool horiz = scroll && argc > 5 && !strcmp(argv[5], "horiz");
     uint32_t btn = right ? BTN_RIGHT : BTN_LEFT;
@@ -146,6 +171,7 @@ int main(int argc, char **argv)
     int toy = drag ? (argc > 5 ? atoi(argv[5]) : py) : 0;
     int clicks = 2;
     if (moveonly)          clicks = 0;
+    else if (rel)          clicks = 0;
     else if (scroll)       clicks = 0;
     else if (right)        clicks = argc > 4 ? atoi(argv[4]) : 1;
     else if (drag)         clicks = 0;
@@ -188,6 +214,35 @@ int main(int argc, char **argv)
                                             (uint32_t)out_w, (uint32_t)out_h);
     zwlr_virtual_pointer_v1_frame(ptr);
     wl_display_roundtrip(dpy);
+
+    /*
+     * Relative motion, one report at a time, exactly as a mouse produces it.
+     *
+     * Each is its own frame and its own roundtrip: coalescing them into one
+     * batch would hand the compositor a single large delta, which is the one
+     * shape a smoothing filter has nothing to do — the whole question is what
+     * it does to a STREAM of small ones.
+     */
+    if (rel) {
+        for (int i = 0; i < rel_n; i++) {
+            zwlr_virtual_pointer_v1_motion(ptr, now_ms(),
+                                           wl_fixed_from_double(rel_dx),
+                                           wl_fixed_from_double(rel_dy));
+            zwlr_virtual_pointer_v1_frame(ptr);
+            wl_display_roundtrip(dpy);
+            if (rel_gap_ms > 0)
+                nanosleep(&(struct timespec){
+                    0, (long)rel_gap_ms * 1000 * 1000 }, NULL);
+        }
+        /* Let the settle timer run. A smoothed pointer still has a fraction of
+         * the last report in hand when the reports stop, and it is applied one
+         * frame later — reading the position before that is reading a movement
+         * that has not finished, which would fail against a correct filter. */
+        if (rel_settle_ms > 0)
+            nanosleep(&(struct timespec){
+                0, (long)rel_settle_ms * 1000 * 1000 }, NULL);
+        wl_display_roundtrip(dpy);
+    }
 
     if (drag) {
         zwlr_virtual_pointer_v1_button(ptr, now_ms(), BTN_LEFT,

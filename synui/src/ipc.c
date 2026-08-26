@@ -498,6 +498,16 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         bputs(out, "}\n");
         return;
     }
+    /* Where the pointer is, in layout coordinates.
+     *
+     * Answers from s->cursor rather than from the cached cursor_x/cursor_y,
+     * because those are only written by the motion path: a cursor warped by a
+     * layout change or by a client's constraint would be reported at a stale
+     * position by the cache and at its real one by wlr_cursor. */
+    if (strcmp(line, "cursor") == 0) {
+        bprintf(out, "{\"x\":%.3f,\"y\":%.3f}\n", s->cursor->x, s->cursor->y);
+        return;
+    }
     if (strcmp(line, "activewindow") == 0) {
         if (s->focused_view && s->focused_view->mapped) json_view(out, s->focused_view);
         else                                            bputs(out, "{}");
@@ -510,9 +520,9 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     }
     if (strcmp(line, "help") == 0) {
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
-                   "\"activeworkspace\",\"activewindow\",\"recent\","
-                   "\"binds\",\"version\",\"dispatch <action> [arg]\","
-                   "\"calc <expression>\"]}\n");
+                   "\"activeworkspace\",\"activewindow\",\"cursor\","
+                   "\"recent\",\"binds\",\"version\","
+                   "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");
         return;
     }
 
