@@ -110,7 +110,35 @@ pkgver=0.1.0
 #   both leave its bounds too, and read exactly like the bug 58 was supposed
 #   to fix, just one boundary further in. Its exit now gets the same 300ms
 #   grace as the row-to-flyout hop instead of an instant close.
-pkgrel=60
+# 61: EVERY NON-IMAGE FILE WAS A BLANK SQUARE. iconFor() ends at
+#   Quickshell.iconPath(name, true), which answers "" for anything the icon
+#   theme has not got — and on SynapseOS the theme has not got ANY of it,
+#   because Qt never learns an icon theme NAME here at all.
+#   ⚠ THE CAUSE IS OUTSIDE THIS PACKAGE. Qt chooses its base platform theme
+#   from XDG_CURRENT_DESKTOP; ours says `SynapseOS` from a display manager and
+#   `synui` from greetd, and Qt knows neither, so it falls back to the generic
+#   Unix theme, which carries no icon theme. Probed with the live session's own
+#   environment: folder, text-x-generic and application-x-generic all come back
+#   empty, and start answering only under QT_QPA_PLATFORMTHEME=gtk3 or a
+#   desktop name containing GNOME. Both of those ALSO drag the Qt palette from
+#   dark to light — the bug synui 261 fixed — so neither is a fix to make for
+#   the sake of a file manager. It is recorded, not worked around.
+#   Thumbnails hid it: an image draws itself, so a folder of pictures looked
+#   right and only the archives, ISOs and scripts were missing — "previews
+#   still work but normal files are just blank now".
+#   So a file is DRAWN, exactly as a folder already is and for the second half
+#   of the same reason FolderIcon gives: it cannot go blank, it follows the
+#   palette on the next frame, and it letters the extension, which tells a
+#   .iso from a .deb better than the 27 mimetype icons Adwaita ships. Themed
+#   icons still win where a theme provides them — iconFor() is unchanged, and
+#   a .desktop launcher's own icon still takes precedence over both.
+#   ⚠ The turned corner is a shade of the PAPER, not the background. Cutting it
+#   away to root.cBg looks identical on an ordinary row and punches a
+#   desk-coloured hole in the icon on a SELECTED one. And it is LIGHTER than
+#   the paper on a dark desktop: the first draft darkened it, which on paper
+#   that is already nearly black landed on the background colour and made the
+#   corner vanish.
+pkgrel=61
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

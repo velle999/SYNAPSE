@@ -311,6 +311,19 @@ FloatingWindow {
     // loaded. The fallback chain is derivable from the mime type, which is
     // why the row carries it — "text/x-csrc" tries text-x-csrc, then
     // text-x-generic, then a blank page.
+    // The extension for the drawn file icon: upper case, four characters at
+    // most, and nothing at all for a dotfile or a name that has no extension —
+    // ".bashrc" is not a BASHRC file, and lettering it that way would be a
+    // confident lie on every dotfile in the home directory.
+    function extOf(row) {
+        const n = root.disp((row && row.name) || "")
+        const dot = n.lastIndexOf(".")
+        if (dot <= 0 || dot === n.length - 1) return ""
+        const e = n.substring(dot + 1)
+        if (e.length > 4 || !/^[A-Za-z0-9]+$/.test(e)) return ""
+        return e.toUpperCase()
+    }
+
     function iconFor(row) {
         if (row.type === "dir") return Quickshell.iconPath("folder", true)
 
@@ -5109,6 +5122,21 @@ FloatingWindow {
                     previews: pane.folderPeek[fileRow.modelData.full] || []
                 }
 
+                // Whenever the Image above has nothing to draw. Null is the
+                // case that matters — iconFor() returned "" — and Error covers
+                // a theme path that resolved and then would not decode. Not
+                // Loading: a thumbnail that is on its way should not flash a
+                // page first.
+                FileIcon {
+                    anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                    width: root.iconSize; height: root.iconSize
+                    visible: fileRow.modelData.type !== "dir"
+                             && (rowIcon.status === Image.Null
+                                 || rowIcon.status === Image.Error)
+                    dim: fileRow.modelData.missing
+                    ext: root.extOf(fileRow.modelData)
+                }
+
                 Text {
                     anchors {
                         left: rowIcon.right; leftMargin: 10
@@ -5410,6 +5438,17 @@ FloatingWindow {
                     visible: gridCell.modelData.type === "dir"
                     dim: gridCell.modelData.missing
                     previews: pane.folderPeek[gridCell.modelData.full] || []
+                }
+
+                // See the list row: the drawn sheet stands in whenever the
+                // icon theme gave the Image nothing to show.
+                FileIcon {
+                    anchors.fill: cellIconBox
+                    visible: gridCell.modelData.type !== "dir"
+                             && (cellIcon.status === Image.Null
+                                 || cellIcon.status === Image.Error)
+                    dim: gridCell.modelData.missing
+                    ext: root.extOf(gridCell.modelData)
                 }
 
                 Text {
@@ -6689,6 +6728,109 @@ FloatingWindow {
                     visible: tile.status === Image.Ready
                 }
             }
+        }
+    }
+
+    // And so is a FILE, for the same reason and one more.
+    //
+    // ⛔ EVERY NON-IMAGE FILE IN THIS WINDOW WAS A BLANK SQUARE. iconFor() ends
+    // at Quickshell.iconPath(name, true), which answers "" for an icon the
+    // theme has not got — and on SynapseOS the theme has not got ANY of them,
+    // because Qt never learns an icon theme NAME here. Qt picks its base
+    // platform theme from XDG_CURRENT_DESKTOP; ours says `SynapseOS` (or
+    // `synui`, depending on the login path), neither of which Qt knows, so it
+    // falls back to the generic Unix theme, which has no icon theme at all.
+    // Verified by probe: with the session's own environment every lookup —
+    // folder, text-x-generic, application-x-generic — comes back empty, and it
+    // only starts answering with QT_QPA_PLATFORMTHEME=gtk3 or a desktop name
+    // containing GNOME. Both of those also drag the Qt palette from dark to
+    // LIGHT, which is the bug synui 261 fixed, so neither is a fix to make from
+    // in here.
+    //
+    // Thumbnails hid it: an image file draws itself, so a folder of pictures
+    // looked perfectly normal and only the archives, ISOs and scripts were
+    // missing. That is exactly what was reported — "previews still work but
+    // normal files are just blank now".
+    //
+    // So a file is drawn, like a folder. It cannot go blank, it follows the
+    // palette on the next frame the way FolderIcon does, and it carries the
+    // extension, which tells a .iso from a .deb better than the 27 mimetype
+    // icons Adwaita ships ever could.
+    component FileIcon: Item {
+        id: fic
+        property bool dim: false
+        property string ext: ""
+        opacity: fic.dim ? 0.4 : 1.0
+
+        // A sheet has to read as lighter than the desk in the dark and darker
+        // in the light, or it is a hole rather than a page.
+        readonly property color paper: root.isLight ? Qt.darker(root.cBg, 1.10)
+                                                    : Qt.lighter(root.cBg, 2.8)
+        // The fold is the only thing that says "page" at 16px, so it is drawn
+        // as a shade of the paper rather than as an outline.
+        // ⚠ LIGHTER on a dark desktop, darker on a light one. Both directions
+        // are "a shade away from the paper", but only one of them is visible:
+        // the dark paper is already close to black, so a darker fold lands on
+        // the background colour and the corner disappears — which is what the
+        // first draft did.
+        readonly property color fold: root.isLight ? Qt.darker(fic.paper, 1.22)
+                                                   : Qt.lighter(fic.paper, 1.7)
+        // How far down the corner is turned, as a fraction of the sheet width.
+        readonly property real cut: 0.36
+
+        Rectangle {
+            id: sheet
+            anchors.fill: parent
+            anchors.leftMargin: Math.max(1, parent.width * 0.10)
+            anchors.rightMargin: Math.max(1, parent.width * 0.10)
+            radius: Math.max(1, parent.width * 0.07)
+            color: fic.paper
+            // The dog-ear below is deliberately bigger than the corner it cuts,
+            // and this is what keeps it inside the page.
+            clip: true
+
+            // The turned corner: a square rotated 45° whose lower-left edge is
+            // the line from (w - c, 0) to (w, c).
+            //
+            // ⚠ IT IS A SHADE OF THE PAPER, NOT THE BACKGROUND. Cutting the
+            // corner away to root.cBg looks identical on an ordinary row and
+            // wrong on a SELECTED one — the notch would still be desk-coloured
+            // over the highlight, a hole punched in the icon. A darker paper
+            // tone is also what a folded corner actually looks like.
+            //
+            // The geometry, so the next person does not have to re-derive it:
+            // a square of side S rotated 45° about its centre has its edges on
+            // x ± y = const, and the one facing the page sits at
+            // cx - cy - S/√2. Setting that equal to w - c and taking cy = 0
+            // gives cx = w + c(√2 - 1), which is where the x below comes from.
+            // S = 2c is simply big enough to cover the whole corner.
+            Rectangle {
+                readonly property real c: sheet.width * fic.cut
+                width: c * 2
+                height: width
+                x: sheet.width - c * 0.586
+                y: -c
+                rotation: 45
+                color: fic.fold
+            }
+        }
+
+        // The extension, in the accent, on the lower half where the fold is
+        // not. Hidden below the size where it would be two grey pixels — the
+        // sheet still says "file" on its own.
+        Text {
+            anchors.horizontalCenter: sheet.horizontalCenter
+            anchors.bottom: sheet.bottom
+            anchors.bottomMargin: Math.max(1, fic.height * 0.14)
+            width: sheet.width - 2
+            visible: fic.ext !== "" && fic.height >= 28
+            text: fic.ext
+            color: root.cAccent
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            font { family: root.uiFont
+                   pixelSize: Math.max(6, Math.round(fic.height * 0.26))
+                   bold: true }
         }
     }
 

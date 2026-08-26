@@ -2439,6 +2439,57 @@ else
     bad "synfiles.qml not found beside the tests: $QML"
 fi
 
+# ── a file with no themed icon still looks like a file ─────────────────────
+#
+# ⛔ EVERY NON-IMAGE FILE WAS A BLANK SQUARE (61). iconFor() ends at
+# Quickshell.iconPath(name, true), which answers "" for an icon the theme has
+# not got, and on SynapseOS the theme has not got any of them — Qt never learns
+# an icon theme name here, because it picks its base platform theme from
+# XDG_CURRENT_DESKTOP and ours says `SynapseOS`/`synui`, neither of which Qt
+# knows. An empty source is Image.Null, which draws nothing and reports no
+# error, so the window looked fine and the files were simply gone.
+#
+# ⚠ THIS CANNOT BE TESTED BY LOOKING AT iconFor(). It was correct before and is
+# correct now; what was missing is a fallback for when it comes back empty. The
+# check is therefore on the DELEGATES: each of the two must draw a FileIcon
+# when its Image has nothing (Null) or could not decode what it had (Error).
+# Deliberately NOT on Loading — a thumbnail on its way must not flash a page
+# first.
+if [ -f "$QML" ]; then
+    if grep -q "component FileIcon:" "$QML"; then
+        ok "there is a drawn file icon to fall back to"
+    else
+        bad "no FileIcon component — a file the icon theme cannot name draws
+        nothing at all, which is the bug 61 fixed"
+    fi
+
+    n=$(grep -c "Image.Null" "$QML")
+    if [ "$n" -ge 2 ]; then
+        ok "both delegates fall back when the icon source is empty ($n)"
+    else
+        bad "only $n delegate(s) test for Image.Null — the list and the grid
+        each need it, or one view shows blanks and the other does not"
+    fi
+
+    if grep -q "|| cellIcon.status === Image.Error" "$QML" &&
+       grep -q "|| rowIcon.status === Image.Error" "$QML"; then
+        ok "a source that will not decode falls back too"
+    else
+        bad "a delegate treats only the empty case, so a themed icon that
+        fails to decode still leaves a blank"
+    fi
+
+    # The lettering is what makes the drawn icon better than a generic page,
+    # and the one case it must NOT letter is a dotfile: ".bashrc" is not a
+    # BASHRC file.
+    if grep -q "function extOf(row)" "$QML" && grep -q "dot <= 0" "$QML"; then
+        ok "a dotfile is not lettered with its own name"
+    else
+        bad "extOf does not guard the leading dot — every dotfile would be
+        lettered with whatever follows it"
+    fi
+fi
+
 # ── the wallpaper's accent reaches this window ──────────────────────────────
 #
 # 387 gave the BAR the colour synui measures off the wallpaper, and only the
