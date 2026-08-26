@@ -103,9 +103,7 @@ sudo dd if=SynapseOS-<ver>-x86_64.iso of=/dev/sdX bs=4M status=progress oflag=sy
 Check `/dev/sdX` with `lsblk` first, and write to the **disk** (`/dev/sdb`), not
 a partition on it (`/dev/sdb1`).
 
-**Windows** — most people installing a Linux distro are still on the OS they are
-leaving, so this path is supported rather than assumed away. In **Command
-Prompt**, in the folder you downloaded to:
+**Windows** — in **Command Prompt**, in the folder you downloaded to:
 
 ```bat
 copy /b SynapseOS-<ver>-x86_64.iso.part00 + SynapseOS-<ver>-x86_64.iso.part01 SynapseOS-<ver>-x86_64.iso
@@ -1260,9 +1258,9 @@ the first Chromium-family browser it finds, in a profile of its own, with
 keyboard lock and pointer lock **pre-granted for the site** — the prompt they
 replace is raised while the page is fullscreen with the cursor captured, where
 nobody can see it. Keyboard lock is what makes `Escape` reach the game instead of
-being spent leaving fullscreen. No browser is pulled in as a dependency: GeForce
-NOW refuses Gecko, so the one SynapseOS does ship cannot run it, and dragging a
-second one onto the ISO for a service not everybody uses is the wrong trade.
+being spent leaving fullscreen. No browser is pulled in as a dependency, so if
+`--list-browsers` comes back empty, install any Chromium-family browser and it
+will be found. (GeForce NOW refuses Gecko, so Firefox cannot run it.)
 
 For a game that has no idea what a 1440p screen is, `syn-arcade fit new` builds
 the gamescope wrapper — `gamescope -w 1024 -h 768 -W 2560 -H 1440 -f -F fsr` —
