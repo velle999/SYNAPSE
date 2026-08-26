@@ -1709,6 +1709,7 @@ typedef enum {
     /* Display */
     CTL_ROW_DISPLAYS,
     CTL_ROW_DISPLAY_MODE,  /* extend / duplicate / built-in off */
+    CTL_ROW_DISPLAY_SCALE, /* the whole desktop's scale — accessibility */
     CTL_ROW_NIGHTLIGHT,
     /* Sound */
     CTL_ROW_DND,           /* Do Not Disturb: no toast, no chime */
@@ -1962,7 +1963,13 @@ enum {
 /* Sizes of one bind's action and argument. Declared here rather than down in
  * the keybinding section because syn_ctl_shortcut_t below carries a copy of
  * both, and a struct cannot use a macro defined after it. */
-#define SYN_BINDS_MAX        96
+/* ⚠ THE DEFAULTS ALONE ARE 78 OF THESE. At 96 the desktop-scale binds took the
+ * table to within a handful of full, and settings_test caught it by parsing one
+ * more and finding it dropped: over the cap, config.c logs "bind table full"
+ * and the user's line silently does nothing — a keybinding that is in synuirc,
+ * reads correctly, and is not there. Headroom is the whole point of the number,
+ * so it is a multiple of the default count rather than a round one. */
+#define SYN_BINDS_MAX        192
 #define SYN_BIND_ACTION_LEN  24
 #define SYN_BIND_ARG_LEN     104
 
@@ -7169,6 +7176,15 @@ void dispcfg_probe_edid(syn_server_t *s, syn_output_t *o);
 /* Output hotplug while the panel is open: reseed the arrangement order
  * (dropping dangling pointers) and re-render. No-op when hidden. */
 void dispcfg_outputs_changed(syn_server_t *s);
+/* The desktop's scale — the accessibility control. Applies to EVERY attached
+ * screen, because "make the desktop bigger" is one intent and growing one
+ * monitor of three has not done it. Per-monitor scale is `-`/`+` in the
+ * Displays panel, where a person is looking at one screen on purpose.
+ * ⚠ NOT font.state's `scale`, which sizes text inside the suite's own QML
+ * windows and cannot touch a cairo panel or Firefox. See dispcfg.c. */
+void  dispcfg_scale_step_all(syn_server_t *s, int dir);
+void  dispcfg_set_scale_all(syn_server_t *s, float want);
+float dispcfg_scale_now(syn_server_t *s);
 
 /* ── session.c ───────────────────────────────────────────── */
 void session_lock_setup(syn_server_t *s);        /* ext-session-lock */

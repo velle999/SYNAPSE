@@ -60,6 +60,11 @@ key_label() {
         delete)    echo 'Delete' ;;
         print)     echo 'Print' ;;
         equal)     echo '=' ;;
+        # The keys the desktop-scale binds are printed with. Without
+        # these they fell through to the default and the table had to
+        # write `minus`, which is not what is on the key.
+        minus)     echo '-' ;;
+        plus)      echo '+' ;;
         slash)     echo '/' ;;
         question)  echo '?' ;;
         comma)     echo ',' ;;
@@ -109,6 +114,10 @@ declare -A COVERED=(
     # the README writes what is printed on the key, the wiki writes the xkb
     # symbol, and either satisfies this.
     [xf86display]='Display key;XF86Display'
+    # Super+Ctrl++ IS Super+Ctrl+Shift+= on a US layout and config.c binds
+    # both spellings, because xkb hands over the SHIFTED keysym. The docs
+    # write the one a hand actually presses, as they do for Super+? above.
+    [super+ctrl+shift+plus]='`Super`+`Ctrl`+`=`'
 )
 
 # Pull the combos out of the seed table: { "super+x", "action" },

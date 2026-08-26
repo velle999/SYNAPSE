@@ -638,6 +638,224 @@ static void dispcfg_move(syn_server_t *s, int dx, int dy)
     dispcfg_rechain(s);
 }
 
+/* ── Scale ───────────────────────────────────────────────────
+ *
+ * ONE setting that makes the whole desktop bigger — the compositor's own
+ * panels, every application, the cursor, all of it, together and at full
+ * sharpness. This is the accessibility control, and it is the one every other
+ * desktop has: GNOME's Display ▸ Scale, macOS's Displays, Windows' "Scale and
+ * layout".
+ *
+ * ⚠ THE MECHANISM ALREADY WORKED. wlroots has done the scaling since the port,
+ * outputs.conf has persisted a `scale` key since output_persist.c was written,
+ * and wlr_fractional_scale_manager_v1 is created in synui_main.c so a client
+ * renders crisply at 1.25 and 1.5 rather than being drawn at 1x and stretched.
+ * What did not exist was any way for a person to SET it: no config key, no
+ * panel row, no dispatch verb. It was reachable only by installing wlr-randr
+ * and typing a command, which for the setting that decides whether the desktop
+ * is legible at all is the same as not having it.
+ *
+ * ⚠ AND IT IS NOT THE TEXT SCALE. font.state's `scale` sizes the text inside
+ * the suite's own QML windows and nothing else — it cannot touch a panel synui
+ * draws in cairo, and it cannot touch Firefox. The two settings coexist on
+ * purpose: this one is "make the desktop bigger", that one is "make the words
+ * bigger inside my apps". Somebody who wants everything larger wants this.
+ */
+
+/* The ladder, in the steps every other desktop offers. Fractional values are
+ * honest here rather than rounded to integers: a 1080p laptop panel at 2x is
+ * a 960x540 desktop, which is why 1.25 and 1.5 are the useful ones and why
+ * the fractional-scale protocol is advertised. */
+static const float SCALE_STEPS[] = {
+    0.75f, 1.00f, 1.25f, 1.50f, 1.75f, 2.00f, 2.25f, 2.50f, 3.00f,
+};
+#define SCALE_STEP_COUNT ((int)(sizeof SCALE_STEPS / sizeof SCALE_STEPS[0]))
+
+/* Floats out of a config file and floats out of wlroots do not compare equal,
+ * so the ladder is matched by nearest rather than by ==. */
+static int scale_index_of(float v)
+{
+    int best = 1;                     /* 1.00 */
+    float bestd = 1e9f;
+    for (int i = 0; i < SCALE_STEP_COUNT; i++) {
+        float d = SCALE_STEPS[i] - v;
+        if (d < 0) d = -d;
+        if (d < bestd) { bestd = d; best = i; }
+    }
+    return best;
+}
+
+/*
+ * ⛔ THE FLOOR IS A USABLE DESKTOP, NOT A NUMBER.
+ *
+ * Scale divides the logical desktop: a 1366x768 laptop at 3x is a 455x256
+ * desktop, on which the panel that would let you undo it does not fit. That is
+ * the same shape of trap as detaching the last output — a setting that can put
+ * the machine somewhere the user cannot get back from without a TTY — and it
+ * is worse here, because the person most likely to reach for a big scale is
+ * the person least able to read a 455px-wide screen to escape it.
+ *
+ * So a step is refused when it would take the output's logical size below what
+ * the compositor's own panels need. The refusal SAYS SO in the status line
+ * rather than doing nothing, because a key that silently stops working reads
+ * as broken.
+ */
+/* ⚠ THESE ARE THE SETTINGS PANELS' OWN SIZE, not a round number. The Displays
+ * panel is 990px wide (render.c) and the control panel 860; both are laid out
+ * in columns at fixed offsets, so a logical desktop narrower than the widest
+ * of them does not show a clipped panel, it shows one whose right-hand half —
+ * the values, and the key legend that says how to change them — is off the
+ * screen. Those two panels are exactly what somebody uses to undo a scale they
+ * regret, so the floor is set by them and will move when they learn to reflow.
+ * Until then, raising it here without making them narrower is how the escape
+ * hatch gets closed. */
+#define SCALE_MIN_LOGICAL_W 1010
+#define SCALE_MIN_LOGICAL_H 620
+
+static bool scale_fits(struct wlr_output *wo, float want)
+{
+    if (want <= 0.0f) return false;
+    int w = wo->width, h = wo->height;
+    if (wo->transform & WL_OUTPUT_TRANSFORM_90) { int t = w; w = h; h = t; }
+    return (float)w / want >= SCALE_MIN_LOGICAL_W &&
+           (float)h / want >= SCALE_MIN_LOGICAL_H;
+}
+
+/* Commit one output's scale. Returns false and leaves the output alone when
+ * the backend refuses it or it would not fit — the caller reports. */
+static bool dispcfg_apply_scale(syn_server_t *s, syn_output_t *o, float want)
+{
+    if (!o || o->detached) return false;
+
+    struct wlr_output_state st;
+    wlr_output_state_init(&st);
+    wlr_output_state_set_scale(&st, want);
+    if (!wlr_output_test_state(o->wlr_output, &st) ||
+        !wlr_output_commit_state(o->wlr_output, &st)) {
+        wlr_output_state_finish(&st);
+        return false;
+    }
+    wlr_output_state_finish(&st);
+    (void)s;
+    return true;
+}
+
+/*
+ * Step every attached screen, together.
+ *
+ * ⚠ EVERY SCREEN, and that is the point rather than a shortcut. "Make the
+ * desktop bigger" is one intent, and a desk with three monitors where the
+ * shortcut grew one of them has not done what was asked — it has made the desk
+ * inconsistent and left the user to find the other two. Per-monitor scale is
+ * still available, in the Displays panel, where a person is looking at one
+ * monitor at a time on purpose.
+ *
+ * The step is taken from the FOCUSED output's current scale so repeated
+ * presses walk the ladder predictably even when the screens started out
+ * disagreeing; the first press then brings them into step.
+ */
+void dispcfg_scale_step_all(syn_server_t *s, int dir)
+{
+    syn_output_t *ref = server_focused_output(s);
+    if (!ref) return;
+
+    int i = scale_index_of(ref->wlr_output->scale) + dir;
+    if (i < 0) i = 0;
+    if (i >= SCALE_STEP_COUNT) i = SCALE_STEP_COUNT - 1;
+    dispcfg_set_scale_all(s, SCALE_STEPS[i]);
+}
+
+void dispcfg_set_scale_all(syn_server_t *s, float want)
+{
+    syn_dispcfg_t *d = &s->dispcfg;
+    int done = 0, refused = 0;
+    syn_output_t *o;
+
+    wl_list_for_each(o, &s->outputs, link) {
+        if (o->detached) continue;
+        if (!scale_fits(o->wlr_output, want)) { refused++; continue; }
+        if (dispcfg_apply_scale(s, o, want)) done++;
+        else refused++;
+    }
+
+    if (!done) {
+        snprintf(d->status, sizeof(d->status),
+                 "%.0f%% needs a screen this one cannot give \xe2\x80\x94 the "
+                 "settings panels want %dx%d",
+                 (double)want * 100.0, SCALE_MIN_LOGICAL_W,
+                 SCALE_MIN_LOGICAL_H);
+        wlr_log(WLR_INFO, "synui: dispcfg: refusing scale %.2f — no screen "
+                          "can hold a %dx%d desktop", (double)want,
+                SCALE_MIN_LOGICAL_W, SCALE_MIN_LOGICAL_H);
+    } else if (refused) {
+        snprintf(d->status, sizeof(d->status),
+                 "scale %.2fx Â· %d screen(s); %d could not",
+                 (double)want, done, refused);
+    } else {
+        snprintf(d->status, sizeof(d->status), "everything at %.2fx",
+                 (double)want);
+    }
+
+    if (done) {
+        /* The logical size of every screen changed, so the layout has to be
+         * packed again before anything is laid out against it. rechain ends in
+         * output_layout_changed(), which is what re-flows the windows, the
+         * panels and the bar. */
+        dispcfg_rechain(s);
+        output_persist_save(s);
+        wlr_log(WLR_INFO, "synui: dispcfg: scale %.2f on %d output(s)",
+                (double)want, done);
+    }
+    if (s->dispcfg.visible) synui_render_dispcfg(s);
+}
+
+/* One monitor, from the Displays panel: `-` and `+` on the selected row. */
+static void dispcfg_scale_step(syn_server_t *s, int dir)
+{
+    syn_dispcfg_t *d = &s->dispcfg;
+    syn_output_t *o = selected_output(s);
+    if (!o) return;
+
+    if (o->detached) {
+        snprintf(d->status, sizeof(d->status),
+                 "%s is switched off", o->wlr_output->name);
+        synui_render_dispcfg(s);
+        return;
+    }
+
+    int i = scale_index_of(o->wlr_output->scale) + dir;
+    if (i < 0) i = 0;
+    if (i >= SCALE_STEP_COUNT) i = SCALE_STEP_COUNT - 1;
+    float want = SCALE_STEPS[i];
+
+    if (!scale_fits(o->wlr_output, want)) {
+        snprintf(d->status, sizeof(d->status),
+                 "%s: %.0f%% leaves less than %dx%d \xe2\x80\x94 this panel "
+                 "would not fit", o->wlr_output->name, (double)want * 100.0,
+                 SCALE_MIN_LOGICAL_W, SCALE_MIN_LOGICAL_H);
+        synui_render_dispcfg(s);
+        return;
+    }
+    if (!dispcfg_apply_scale(s, o, want)) {
+        snprintf(d->status, sizeof(d->status),
+                 "%s: scale rejected by backend", o->wlr_output->name);
+        synui_render_dispcfg(s);
+        return;
+    }
+
+    snprintf(d->status, sizeof(d->status), "%s â %.2fx",
+             o->wlr_output->name, (double)want);
+    dispcfg_rechain(s);
+    output_persist_save(s);
+}
+
+/* What the panel and the control panel row print. */
+float dispcfg_scale_now(syn_server_t *s)
+{
+    syn_output_t *o = server_focused_output(s);
+    return o ? o->wlr_output->scale : 1.0f;
+}
+
 static void dispcfg_rotate(syn_server_t *s, int dir)
 {
     syn_dispcfg_t *d = &s->dispcfg;
@@ -900,6 +1118,19 @@ int dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return 1;
     case XKB_KEY_m:
         dispcfg_cycle_mode(s);
+        return 1;
+    /* One monitor's scale, on the keys every zoom control uses. `equal` as
+     * well as `plus`: on a US layout `+` is Shift+= and xkb hands over the
+     * SHIFTED keysym, so a bind on one spelling stops working the moment the
+     * hand does the natural thing — the same trap the shortcut palette's
+     * Super+/ and Super+? pair exists for. */
+    case XKB_KEY_minus:
+    case XKB_KEY_underscore:
+        dispcfg_scale_step(s, -1);
+        return 1;
+    case XKB_KEY_equal:
+    case XKB_KEY_plus:
+        dispcfg_scale_step(s, +1);
         return 1;
     default:
         return 1;   /* modal: swallow other unmodified keys while open */

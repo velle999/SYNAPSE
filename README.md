@@ -381,6 +381,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`=` | App launcher (rofi, `-show drun`) |
 | `Super`+`Backspace` | Ask the AI |
 | `Super`+`A` | Neural activity overlay |
+| `Super`+`Ctrl`+`=` / `Super`+`Ctrl`+`-` | **Scale the whole desktop** — the compositor's panels, every application and the cursor together, and sharp rather than magnified |
+| `Super`+`Ctrl`+`0` | Back to 100% |
 | `Super`+`D` | Display settings — resolution, refresh, arrangement, and `m` to cycle `display_mode` (extend / mirror / external) |
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
@@ -947,6 +949,27 @@ instead of being whatever the palette said. The dock and the desktop widgets
 render through the same compositor glass. (Two wallpaper choices paint no picture
 to measure — `none` and `matrix` — so the bar keeps a solid strip there rather
 than guessing.)
+
+**Scale the whole desktop** with `Super`+`Ctrl`+`=` and `Super`+`Ctrl`+`-`
+(`Super`+`Ctrl`+`0` for 100%), from Control panel ▸ Display ▸ *Scale
+everything*, or `synctl dispatch display_scale 1.5`. It is an **output scale**,
+the same control GNOME puts under Display ▸ Scale and macOS under Displays: the
+compositor's own panels, every application and the cursor all grow **together**,
+drawn at the larger size rather than magnified, and `wp_fractional_scale_v1` is
+advertised so 125% and 150% are as sharp as 200%. It applies to every screen at
+once — growing one monitor of three has not made the desktop bigger, it has made
+the desk inconsistent — and it is remembered in `outputs.conf`. Per-monitor
+scale is `−`/`+` in `Super`+`D`.
+
+⚠ **That is a different setting from *Text scale*** under Appearance. Text
+scale sizes the words inside the suite's own windows and can reach neither a
+panel synui draws itself nor Firefox; this scales the desktop. If you want
+everything bigger, this is the one.
+
+A scale that would leave the screen narrower than the settings panels need is
+**refused, out loud** — those panels are what you would use to undo it, and the
+person most likely to want a large scale is the least able to read a tiny screen
+to escape one.
 
 **Screens** are one setting with three positions: `display_mode = extend |
 mirror | external`, cycled with `m` in `Super`+`D`, from Control panel ▸ Display

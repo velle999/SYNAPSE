@@ -1806,7 +1806,52 @@ pkgver=0.1.0
 #   BAR's thickness so it fits the strip on any desktop; a percentage meant for
 #   window text would push it out of the bar. tools/preflight.sh gates the
 #   desktop font repo-wide now and holds bar plugins to the family only.
-pkgrel=502
+# 503 THE DESKTOP SCALES. One setting makes ALL of it bigger — the
+#   compositor's own panels, every application, the cursor — together, and
+#   drawn at the larger size rather than magnified.
+#   velle, 2026-08-26: "it's for disabled, i need the entire os to scale
+#   together. however other systems handle it is fine." Other systems handle it
+#   with an OUTPUT SCALE (GNOME's Display ▸ Scale, macOS's Displays), and so
+#   does this.
+#   ⚠ THE MECHANISM WAS NEVER MISSING, WHICH IS WHY THIS LOOKED LIKE A BIG JOB
+#   AND WAS NOT. wlroots has scaled since the port; output_persist.c has read
+#   and written a `scale` key the whole time; wlr_fractional_scale_manager_v1
+#   is created in synui_main.c, so 125% and 150% are as crisp as 200% instead
+#   of being drawn at 1x and stretched. Verified before writing anything, by
+#   setting scale 2 with wlr-randr in a nested synui: the whole desktop came
+#   back at 2x and SHARP. What did not exist was any way for a person to set
+#   it — no config key, no panel row, no dispatch verb, reachable only by
+#   installing wlr-randr and typing a command, which for the setting that
+#   decides whether the desktop is legible is the same as not having it.
+#   So: `display_scale` (bare steps, `+`/`-` step, a number sets),
+#   Super+Ctrl+= / Super+Ctrl+- / Super+Ctrl+0, a Control Panel ▸ Display row
+#   "Scale everything", and `-`/`+` in Super+D for ONE monitor. The panel shows
+#   each screen's scale beside its logical size, accented when it is not 100%.
+#   ⚠ EVERY SCREEN, deliberately. "Make the desktop bigger" is one intent, and
+#   a desk where the shortcut grew one monitor of three has not done it — it
+#   has made the desk inconsistent and left the user to find the other two.
+#   ⛔ AND IT REFUSES TO CLOSE ITS OWN ESCAPE HATCH. The Displays panel is 990px
+#   wide and the control panel 860, both laid out in columns at fixed offsets,
+#   so below ~1010 logical they do not clip — they put their values and their
+#   key legend off the screen. Those two are exactly what somebody uses to undo
+#   a scale they regret, and the person most likely to reach for a large scale
+#   is the least able to read a tiny screen to escape one. A step that would go
+#   under 1010x620 is refused and SAYS SO, because a key that silently stops
+#   working reads as broken. That floor is the panels' size and moves when they
+#   learn to reflow, not before.
+#   ⚠ NOT font.state's `scale`, and the control panel now says so in both rows.
+#   That one sizes text inside the suite's own QML windows and can reach
+#   neither a cairo panel nor Firefox. Two real settings, neither a spelling of
+#   the other.
+#   ⚠ SYN_BINDS_MAX WAS 96 AND THE DEFAULTS ARE 78. The four new binds took the
+#   table to within a handful of full and settings_test caught it — over the
+#   cap config.c logs "bind table full" and a user's synuirc line silently does
+#   nothing. Raised to 192; headroom is the point of the number.
+#   tests/display_scale.sh: two headless outputs (with one, "every screen" and
+#   "the focused screen" are indistinguishable), the logical size actually
+#   shrinking by the factor rather than merely the number being recorded,
+#   outputs.conf carrying it, the refusal, and the way back.
+pkgrel=503
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

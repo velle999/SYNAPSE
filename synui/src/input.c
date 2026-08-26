@@ -1238,6 +1238,34 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         } else {
             dispcfg_cycle_mode(s);
         }
+    } else if (strcmp(action, "display_scale") == 0) {
+        /* THE ACCESSIBILITY CONTROL: one number that makes the whole desktop
+         * bigger — synui's own panels, every application, the cursor — at full
+         * sharpness rather than by magnifying pixels.
+         *
+         * `+`/`-` step the ladder, a number sets it outright
+         * (`display_scale 1.5`), and bare steps up and wraps at the top so a
+         * single bind can walk it. Applies to EVERY screen: growing one
+         * monitor of three has not made the desktop bigger, it has made the
+         * desk inconsistent. Per-monitor scale is `-`/`+` in Super+D.
+         *
+         * ⚠ NOT font.state's scale, which the control panel's Text scale row
+         * writes. That one sizes text inside the suite's own QML windows and
+         * cannot touch a cairo panel or Firefox. Both are real settings and
+         * neither is the other's spelling. */
+        if (arg && (!strcmp(arg, "+") || !strcmp(arg, "up"))) {
+            dispcfg_scale_step_all(s, +1);
+        } else if (arg && (!strcmp(arg, "-") || !strcmp(arg, "down"))) {
+            dispcfg_scale_step_all(s, -1);
+        } else if (arg && arg[0]) {
+            char *end = NULL;
+            float v = strtof(arg, &end);
+            if (end && end != arg && v > 0.0f) dispcfg_set_scale_all(s, v);
+            else wlr_log(WLR_ERROR, "synui: display_scale: not a scale '%s'",
+                         arg);
+        } else {
+            dispcfg_scale_step_all(s, +1);
+        }
     } else if (strcmp(action, "wallpaper") == 0) {
         /* Bare (Super+W, the control panel row) opens the picker. With a path
          * it sets that wallpaper outright, which is what the Antiquity theme

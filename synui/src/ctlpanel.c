@@ -1066,6 +1066,18 @@ static const struct ctl_item ctl_items[] = {
      * settle, since none of these costs anything to enter and leave. */
     { CTL_ROW_DISPLAY_MODE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE, "Screens", "displays",
       .help = "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D" },
+    /* ⚠ THE ONE THAT MAKES EVERYTHING BIGGER, and it is not the Text scale row
+     * under Appearance. That one sizes text inside the suite's own QML windows
+     * and can reach neither a panel synui draws in cairo nor Firefox; this
+     * scales the DESKTOP, so the compositor's panels, every application and
+     * the cursor all grow together and stay sharp. Somebody who wants a larger
+     * desktop wants this one, so it says so in the row and in the help.
+     * Handled by id like the row above it — setting it re-flows the layout and
+     * touches every output, which is not a field write. */
+    { CTL_ROW_DISPLAY_SCALE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE,
+      "Scale everything", "displays",
+      .help = "Every screen, every app, the cursor. Super+Ctrl+= / - , "
+              "Super+Ctrl+0 resets" },
     /* Where a MONITOR is configured, as opposed to arranged. The Displays panel
      * above owns the arrangement, scale and the mode synui drives; syn-settings'
      * display pane reads the connectors' KERNEL state beside it — EDID, the
@@ -2404,6 +2416,14 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         default:                   snprintf(buf, n, "Extend");       break;
         }
         break;
+    case CTL_ROW_DISPLAY_SCALE: {
+        /* A percentage, because that is what every other desktop's scale row
+         * says and what somebody comparing them expects to read. The stored
+         * value is wlroots' float; 1.25 is "125 %". */
+        double v = (double)dispcfg_scale_now(s) * 100.0;
+        snprintf(buf, n, "%.0f %%", v);
+        break;
+    }
     case CTL_ROW_RGB_LIGHTS:
         /* Read off rgb.state every time rather than cached, so the row is
          * right when `syn-rgb on` was typed in a terminal a moment ago. One
@@ -2592,6 +2612,7 @@ static const struct { const char *action, *desc; } action_tbl[] = {
         { "decorations_toggle","Titlebars on/off" },
         { "displays",          "Display settings" },
         { "display_mode",      "Screens: extend / duplicate / built-in off" },
+        { "display_scale",     "Scale the whole desktop (accessibility)" },
         { "wallpaper",         "Wallpaper picker" },
         { "wallpaper_reload",  "Reload wallpaper / config" },
         { "filters",           "Visual effects (CRT + window)" },
@@ -4101,6 +4122,16 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
 
 static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
 {
+    if (row == CTL_ROW_DISPLAY_SCALE) {
+        dispcfg_scale_step_all(s, dir);
+        /* dispcfg wrote the outcome — including a refusal, which this row must
+         * repeat rather than replace: "everything at 1.50x" and "1.50x would
+         * leave less than 800x500 to work with" are the two things a reader of
+         * this row needs, and only one of them is the value. */
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "%s", s->dispcfg.status);
+        return;
+    }
     if (row == CTL_ROW_DISPLAY_MODE) {
         /* Acts on the keypress, unlike the model row below. Every one of the
          * three is entered and left in a few milliseconds and none of them

@@ -1249,6 +1249,20 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
+        /* Scale the whole desktop — panels, applications, cursor, together.
+         * The accessibility control, on the chord every zoom in every
+         * application already uses, with Ctrl to keep it clear of the window
+         * management on plain Super.
+         *
+         * ⚠ BOTH SPELLINGS OF `+`. On a US layout Super+Ctrl++ is
+         * Super+Ctrl+Shift+= and xkb hands the compositor the SHIFTED keysym,
+         * so a single bind is one that mysteriously stops working the moment a
+         * hand reaches for the key it is printed on — exactly what Super+/ and
+         * Super+? are two rows for. */
+        { "super+ctrl+equal",          "display_scale +" },
+        { "super+ctrl+shift+plus",     "display_scale +" },
+        { "super+ctrl+minus",          "display_scale -" },
+        { "super+ctrl+0",              "display_scale 1.0" },
     };
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++) {
         /* Shout about a duplicate rather than shipping one. handle_keybinding

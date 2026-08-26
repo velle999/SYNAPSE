@@ -88,6 +88,12 @@ bool power_has_battery(void)                 { return false; }
 /* dispcfg.c is not linked here. The Screens row in ctlpanel.c calls into it to
  * change the arrangement; what is under test is the row, not the re-flow. */
 void dispcfg_set_mode_cfg(syn_server_t *s, int mode) { (void)s; (void)mode; }
+/* …and the Scale everything row, for the same reason. It steps every output's
+ * scale and reads back the focused one's; neither is a field write, so both go
+ * through dispcfg. 1.0 is what a desktop nobody has scaled reports. */
+void  dispcfg_scale_step_all(syn_server_t *s, int dir) { (void)s; (void)dir; }
+void  dispcfg_set_scale_all(syn_server_t *s, float w)  { (void)s; (void)w; }
+float dispcfg_scale_now(syn_server_t *s) { (void)s; return 1.0f; }
 
 
 /* fontpick.c is not linked here. The two font.state rows in ctlpanel.c reach

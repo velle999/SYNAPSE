@@ -1277,13 +1277,30 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_move_to(cr, 190, y);
         syn_show_text(cr, col);
 
-        cairo_move_to(cr, 310, y);
+        /* The scale, beside the size it divides — the column to the left is
+         * the LOGICAL resolution (wlr_output_effective_resolution already
+         * divides by this), so the two only make sense together. Accented when
+         * it is not 1, because a scaled screen is a thing the user chose and a
+         * panel that prints "100%" in the same grey as everything else is one
+         * nobody notices the setting on. */
+        if (!d->order[i]->detached) {
+            char sc[24];
+            double scv = (double)wo->scale;
+            snprintf(sc, sizeof(sc), "%.0f%%", scv * 100.0);
+            if (scv > 1.001 || scv < 0.999) set_accent(cr, 0.95);
+            else                            set_ink(cr, INK_LABEL, 1.0);
+            cairo_move_to(cr, 268, y);
+            syn_show_text(cr, sc);
+        }
+
+        set_ink(cr, sel ? INK_STRONG : INK_MUTED, 1.0);
+        cairo_move_to(cr, 340, y);
         syn_show_text(cr, transform_name(wo->transform));
 
         set_ink(cr, INK_LABEL, 1.0);
         snprintf(col, sizeof(col), "grid(%d,%d)",
                  d->order[i]->grid_x, d->order[i]->grid_y);
-        cairo_move_to(cr, 430, y);
+        cairo_move_to(cr, 448, y);
         syn_show_text(cr, col);
 
         snprintf(col, sizeof(col), "(%d,%d)", box.x, box.y);
@@ -1370,11 +1387,13 @@ void synui_render_dispcfg(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 40);
     syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
+                        "\xe2\x88\x92/+ scale this screen \xc2\xb7 "
                         "p set primary (X11/game default) \xc2\xb7 "
                         "m arrangement");
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 "
                         "d 10-bit colour (deep colour, not HDR) \xc2\xb7 "
+                        "Super+Ctrl+= scales EVERY screen \xc2\xb7 "
                         "Esc close");
 
     cairo_destroy(cr);

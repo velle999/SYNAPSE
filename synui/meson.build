@@ -1502,6 +1502,17 @@ test('monocle_focus', monocle_focus,
 # window opens, a strip that scrolls to whatever has the focus, and the two
 # column moves (Super+, / Super+.). Three windows on one headless output, so
 # the strip is deliberately longer than the monitor. Same client again.
+# The accessibility control: ONE setting that makes the whole desktop bigger —
+# the compositor's panels, every application and the cursor together. Two
+# headless outputs, because "every screen" and "the focused screen" are
+# indistinguishable with one. Also holds the refusal that stops a scale from
+# hiding the very panels used to undo it.
+display_scale_t = find_program('tests/display_scale.sh')
+test('display_scale', display_scale_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 120)
+
 # Every panel with a background rect gets the theme's corner radius and the
 # frosted glass behind it. A hand-written roster in render.c against the set of
 # `*_ui.bg` rects in the same file — `saver` was missing from it for its whole
