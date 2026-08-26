@@ -279,13 +279,14 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
 | **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
 | **`synfiles`** | The file manager, and what a folder opens in. One C binary does the work — listing, properties, search, trash, undo, archives — and three front-ends render what it prints: a quickshell window with tabs, split view, thumbnails and drag-and-drop (`synfiles gui`), an arrow-key browser in the terminal for a machine whose desktop will not start (`synfiles tui`), and the commands themselves. Delete means the XDG trash, and anything that changed files can be undone — the permanent delete is behind `--yes` and no key or click reaches it. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
-| **`syn-settings`** | The settings app. Displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, default applications, and where configuration actually lives. It reports what the system *reports* — every pane reads the real source (`localectl`, `timedatectl`, `wlr-randr`, `rfkill`, `bootctl`, `/etc/fstab`) rather than a cache of its own — and each row says **which file decided it**, so a setting that came from a fallback does not read like one you chose. The Kernel pane installs, removes and switches kernels on all three bootloaders. `syn-settings gui [pane]`, or `--rec <pane>` for the records the window parses. |
+| **`syn-settings`** | The settings app. Displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, default applications, where configuration actually lives, and **the machine's own name** — every SynapseOS install answers to `synapse`, so two of them on one network means Avahi renames one `synapse-2.local` with no say in which, and renaming used to be a `hostnamectl` one-liner rather than a row anywhere. It reports what the system *reports* — every pane reads the real source (`localectl`, `timedatectl`, `wlr-randr`, `rfkill`, `bootctl`, `/etc/fstab`) rather than a cache of its own — and each row says **which file decided it**, so a setting that came from a fallback does not read like one you chose. The Kernel pane installs, removes and switches kernels on all three bootloaders. `syn-settings gui [pane]`, or `--rec <pane>` for the records the window parses. |
 | **`syn-edit`** | The text editor. One modal engine — press `i` to insert, `Escape` to stop, `:w` to write — driving a terminal editor, a graphical window, and a scripting mode with no terminal at all: `syn-edit run -k 'ggdG'` or `-c '%s/a/b/g'` applies keys and ex commands to a file and prints the result, which is how its own test suite drives it. Syntax highlighting, and it guesses the language from the file. |
 | **`syntty`** | The terminal, and the default one. A Wayland terminal that **links no GL at all** — wl_shm, xdg-shell, xkbcommon and libc; cells become pixels on the CPU in the exact format a compositor wants. 359 KB, up in 5.8 ms, and it repaints only what changed (68× less work than a full frame at 4K). Tabs, the alternate screen, the pointer, copy and paste, a config file, the kitty keyboard and graphics protocols, and OSC 133 prompt marks that `synsh` emits at the other end. It matters on the ISO regardless of which terminal is default: a GL context is the one thing a live image cannot count on across unfamiliar hardware, and a rescue disk that cannot open a prompt cannot rescue anything. |
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
 | **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
 | **`synstudio`** | The darkroom and edit suite. Develop a photograph or cut a sequence, in one application, because both halves decide colour in the same place: `src/colour.c` is the only code that resolves a pixel, and a clip's grade is baked to a 3D LUT and handed to ffmpeg, so the still you graded and the frame that is delivered agree by construction rather than by care (the test suite renders both paths and fails under 45 dB PSNR between them). Photographs are non-destructive: edits live in a `<file>.synstudio` sidecar and the original is never written. RAW from every common camera, local adjustment masks, twelve looks, scopes computed by the engine rather than a display filter, and a `match` that fits one shot to another *through the engine* so the answer is one the stack can actually produce. Video is a text document until you export it — tracks, clips, sixty transitions, twenty-seven effects, per-clip motion and retiming, keyframed grades, a sound chain with ducking and LUFS normalisation, stabilisation, delivery presets and a render queue. The play button renders the *export* graph at 960 wide and plays that, rather than a second cheaper preview that might disagree about colour. Never links ffmpeg or libraw — subprocess and an argv array, because a pipe has no ABI. `synstudio gui`, or every one of those as a command. |
+| **`syn-gfn`** | GeForce NOW, in a browser that can hold the mouse — a launcher rather than a client, because pointer lock, keyboard lock, fullscreen, hardware video decode and WebRTC all belong to a browser engine that is already written and already tested against the service. Runs the first Chromium-family browser on the machine in a profile of its own, with keyboard and pointer lock pre-granted for the site (the permission prompt they replace is raised while the page is fullscreen with the cursor captured, where nobody can see it). No browser in `depends`. See [Gaming](#gaming). |
 | **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`, or the pad's **Guide** button) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, a browser, a terminal, music, any Plex or Jellyfin server on the network, headlines and the machine's own switches as tiles. It is drivable from a controller — including **as a mouse**, with an **on-screen keyboard**, in the browser — **steps aside for what it launches instead of closing**, and can open at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 
 ### Apps
@@ -341,6 +342,14 @@ moved into the bar shortly after. Right-clicking the bar's volume module opens a
 mixer drawn by the bar itself: output and input devices, and a slider per
 application.
 
+**The dock** is the compositor's own, and it is configurable from its right-click
+menu or Control panel ▸ Desktop: which edge it lives on, how thick it is, how far
+the icons swell under the pointer, whether it hides, and whether it is a capsule
+or a strip. It can carry a **clock** (digital, or an analog dial for a vertical
+dock, where a measured time cannot fit), an **apps button** that opens the
+application page, and a **power button** — each of which you drag to whichever
+cell you want it in.
+
 **Two shells ship**, and `bar_shell` in synuirc (or Control panel ▸ Desktop ▸
 *Bar shell*) picks between them:
 
@@ -368,7 +377,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 |---|---|
 | `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) — `tap_key = super\|ctrl\|alt\|shift\|none` moves it, or `F2` on that row in the palette |
 | `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
-| `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable; `F2` on a row moves it to another key |
+| `Super`+`/` (or `Super`+`?`) | Shortcut palette — and the hotkey manager. Not just the bindings below: every action that has **no** key yet, and your installed applications, so `F2` on a row gives one a key, moves it, or (`Delete`) takes it away and can put it back |
 | `Super`+`Return` | Open a terminal (`syntty` — see [The terminal](#the-terminal)) |
 | `Super`+`Space` | Command bar — synsh intents and output capture |
 | `Super`+`=` | App launcher (rofi, `-show drun`) |
@@ -377,7 +386,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`D` | Display settings — resolution, refresh, arrangement, and `m` to cycle `display_mode` (extend / mirror / external) |
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
-| `Super`+`T` | Theme manager — thirteen: SYNAPSE / Dark / XP / 95, **macOS 26 / Aqua / Platinum**, plus six riced palettes |
+| `Super`+`T` | Theme manager — fifteen: **Prism** and **Prism Light** (the house theme, and what a fresh install boots into), SYNAPSE / Dark / XP / 95, **macOS 26 / Aqua / Platinum**, plus six riced palettes |
 | `Super`+`Shift`+`T` | Tile this desktop — switches to the tiling layout from wherever you are and drags every dragged, snapped, floated or maximized window back into it |
 | `Super`+`Shift`+`Y` | Cascade this desktop — small overlapping cards dealt into a grid of piles, each card at most a third of the screen wide and half of it tall |
 | `Super`+`Shift`+`G` | Arrange the desktop *without* leaving the layout you are on — puts every window you have dragged back where the layout wants it. On a floating desktop that is the inset grid ("G for grid"); this is the one tidy-up that leaves a floating desktop floating |
@@ -385,8 +394,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`I` | View an image — zoom, pan, and step through the folder with the arrows; `c` crops the one you are looking at |
 | `Super`+`Shift`+`X` | Crop an image ("X for cut") — opens on your recent images from Pictures, Wallpapers and Downloads |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
-| `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch, post-it) |
-| `Super`+`Escape` | Menu |
+| `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, big clock, analog clock, music, quick-launch, post-it, Tuxagotchi) |
+| `Super`+`Escape` | Welcome guide — six pages on what this desktop does and which keys do it (see [The welcome guide](#the-welcome-guide)) |
 | `Super`+`Tab` | Cycle layout |
 | `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Switch window. By default this is **mission control** — every window on this desktop at once, and the desktops along the bottom; hold `Alt`, tap `Tab` to walk the tiles, let go to pick. `alt_tab_style = switcher` (or Control panel ▸ Windows ▸ *Alt+Tab is mission control*) puts the most-recently-used thumbnail strip back |
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
@@ -468,6 +477,34 @@ or record straight to that format with
 **Control panel ▸ Sound ▸ Record for editing**. The second skips a lossy
 generation but costs roughly 1 GB a minute against a few hundred KB for an
 ordinary take, so it is off by default and the panel row says the rate out loud.
+
+### The welcome guide
+
+`Super`+`Escape`, and it comes up on your first login. Six pages on what this
+desktop is and which keys do it — Welcome, The keys, Make it yours, The AI,
+Everything else, You're set — with a rail down the left that doubles as a
+contents page and a line under every row saying what the thing actually is.
+Arrows move, `Enter` opens, `Esc` closes.
+
+```bash
+synui-welcome              # or the "Welcome Guide" entry in the applications menu
+synui-welcome page 2       # straight to the keys
+synui-welcome hide
+```
+
+**Its key column is the live bind table**, read out of the running compositor
+over `synctl binds` — so it is right for anyone who rebound something in the
+`Super`+`/` palette, and it cannot go stale the way a hand-typed list does. The
+"Don't show again" checkbox in the corner writes `welcome_at_startup` (also a
+`synuirc` key, and a control-panel row); `Super`+`Escape` opens the guide either
+way, so turning it off never strands it.
+
+It is a [quickshell](https://quickshell.org/) window in a process of its own
+rather than a panel the compositor draws, which is what lets it work on either
+shipped bar — dismissing it ends the process, so it costs nothing while it is
+closed. It also gets out of the way on its own: open a window while it is up and
+it closes, since it is a full-screen surface and the window underneath is what
+you asked for.
 
 ### The terminal
 
@@ -646,10 +683,18 @@ bootloaders SynapseOS can install (`limine`, `systemd-boot`, GRUB), and it
 distinguishes the three states that look alike from a package list: *installed*,
 *bootable* (an entry exists and an initramfs was built), and *running*.
 
+The **System** pane names the machine. Every SynapseOS install answers to
+`synapse`, so the moment there are two of them on one network Avahi renames one
+`synapse-2.local` — with no say in which, and no promise the suffix survives a
+reboot, which is a `.local` address nobody can rely on. The row hands the name to
+`hostnamectl`, which does its own authorisation check, and validates it here
+first so a rejection can say what was wrong with what you typed.
+
 ```bash
 syn-settings gui               # or: gui time, gui kernel, gui apps …
 syn-settings --rec apps        # what that pane reads, as records
 syn-settings set xkb us intl   # one thing, from a script
+syn-settings set hostname loft # …including the machine's name
 ```
 
 ### Editing text
@@ -777,6 +822,23 @@ The CRT filters are off on a fresh install too; turn them on with `Super`+`E`.
 `Tab` on that panel is the second page: rounded corners, drop shadow, backdrop
 blur and translucency, each on a knob you turn while watching the window change.
 
+**One font family for the whole desktop.** Control panel ▸ Appearance ▸ *Text*,
+or `synui-apply-font`, and it moves everything: the compositor's own panels,
+titlebars, dock and notifications, the bar, the file manager, settings, disks,
+the updater and the software manager. There is one setting and one file
+(`~/.config/synui/font.state`) behind all of them, so a face changed from any
+window in the suite is the face every other window is already drawing in.
+
+And there is something in the picker to choose. A stock install used to carry
+Noto, DejaVu and a console face, which made "pick the font the desktop is drawn
+in" a choice between two — **fifteen families ship now**, sans, serif and mono,
+all OFL or Apache, and Studio's title lettering reads the same list.
+
+The **analog clock** widget has four faces — minimal, a railway dial, roman
+numerals, and a neon one with a glow ring — set from Control panel ▸ Desktop
+rather than by clicking it: a widget that takes clicks is one the desktop
+right-click menu cannot be opened through.
+
 ### Bar plugins
 
 The bar takes third-party widgets, in
@@ -791,6 +853,8 @@ widget written once loads on either desktop.
 
 ```bash
 synui-plugins browse                  # what you can install, and where from
+synui-plugins browse tetris           # …narrowed; every word has to match
+synui-plugins refresh                 # fetch the community list now
 synui-plugins add omarchy.spacer      # one widget, straight out of their repo
 synui-plugins tui                     # the same list, arrow keys
 synui-plugins gui                     # …or a window
@@ -801,19 +865,41 @@ A plugin is a directory with a `manifest.json` and some QML. Searched in order:
 `omarchy plugin add` is found without copying it), `~/.config/synui/plugins`,
 then `/usr/share/synui/plugins`.
 
-Of the eight bar widgets Omarchy ships, **five run**: Spacer, Active window,
-Indicators, Microphone and System update. Keyboard layout and Workspaces are
-refused because they `import Quickshell.Hyprland`, which talks to a compositor
-socket synui does not have; their Tray needs a `PopupCard` this desktop does not
-implement, and synui has its own tray.
+**`browse` reaches around nine hundred community widgets**, not just the handful
+shipped here: the catalogue at [omarchyplugins.com](https://omarchyplugins.com)
+is fetched, cached under `~/.cache/synui/plugins` and refreshed when it is a week
+old. Two dozen of them are **games** — Tetris, Snake, Minesweeper, 2048, Wordle,
+solitaire — and they get a category of their own, since that is most of what
+somebody opens a widget browser hoping to find. Everything from the registry is
+somebody else's claim about somebody else's desktop, so whether a widget can
+actually run *here* is answered at install time rather than in the listing.
 
-`qs.Ui` gives a plugin `BarWidget` and `WidgetButton`; `qs.Commons` gives it
-`Style`, `Color` and `Util` — **the same names, over SynapseOS's own theme**.
-That is deliberate rather than lazy: Omarchy is MIT, so vendoring their 23 KB
-`Style.qml` would be perfectly legal, and it carries *their* spacing scale,
+`qs.Ui` and `qs.Commons` are **implemented over SynapseOS's own theme** — the
+same 27 type names and the same contracts, drawing this desktop's font, spacing
+and ink. That is deliberate rather than lazy: Omarchy is MIT, so vendoring their
+23 KB `Style.qml` would be perfectly legal, and it carries *their* spacing scale,
 *their* font tokens and *their* palette. A widget would come out looking like a
 piece of Omarchy sitting on SynapseOS. What a widget actually asks `Style` is
 "how big is body text here" — a question this desktop already answers.
+
+That matters more than it sounds, because a QML property that does not resolve
+is not an error, it is **zero** — a widget written against a module this desktop
+did not have goes on, reports itself enabled, and draws nothing at all. Measured
+across 40 of the most-installed community widgets: **9 of 40 resolved before the
+module was filled in, 39 of 40 do now.**
+
+**A plugin is more than a button.** Half of them put their behaviour in a panel
+that opens under the bar widget, or in a background service; both are hosted,
+and the service is mounted **once per session** rather than once per monitor, so
+a widget keeping a score does not run three simulations racing over it. Of the
+eight widgets Omarchy itself ships, the ones still refused are the two that
+`import Quickshell.Hyprland` — a compositor socket synui does not have — and
+their Tray, which synui has its own of.
+
+**The bar's own right-click menu has a Plugins section**: a checkbox per plugin
+and arrows to reorder them, so the two things you do to a widget after installing
+it need no second window. `synui-plugins order` is the same thing from a
+terminal.
 
 Refusals happen **before** the bar sees the plugin, with the import named, and
 `synui-plugins <id> on` refuses too: a state file claiming a plugin is enabled
@@ -855,7 +941,7 @@ Control panel ▸ Appearance ▸ **RGB lights** is the same switch.
 closing the panel is "I am done", not "I changed my mind".
 
 **The bar can be clear.** `bar_opacity` is a setting of yours rather than one
-theme's private property — set it to `0` under any of the thirteen and the strip
+theme's private property — set it to `0` under any of the fifteen and the strip
 disappears, leaving its contents over the wallpaper. Its **ink is then measured
 off the wallpaper** underneath, so the clock stays legible over a bright picture
 instead of being whatever the palette said. The dock and the desktop widgets
@@ -990,17 +1076,30 @@ seat input device, so without that the screen blanks mid-game. Everything is
 restored on exit, including if synui itself dies. Firefox and the bundled apps
 are excluded, so going fullscreen on a video does not stop the AI.
 
-**`synui-game-run`** is the other half, for launch time — `gamemoderun`, the
-MangoHud overlay, and optionally gamescope:
+**`syn game`** is the other half, for launch time — `gamemoderun`, the MangoHud
+overlay, and optionally gamescope:
 
 ```bash
-synui-game-run -- ./game.x86_64          # or as a Steam launch option:
-synui-game-run -- %command%
+syn game ./game.x86_64                   # or as a Steam launch option:
+syn game -- %command%
+syn game steam                           # one wrap covers the whole library
 ```
+
+(`synui-game-run` is the same thing under its own name; `syn game` is the front
+door that supplies the `--`.)
 
 Every wrapper is optional and a missing tool is dropped rather than fatal.
 `gamescope` and `wine` ship on the ISO; `gamemode` is an optdepend, and
 `mangohud` arrives with `syn-arcade`. The overlay is loaded but hidden.
+
+> **The overlay comes from the launcher, and only from the launcher.** MangoHud's
+> Vulkan manifest declares `enable_environment MANGOHUD=1`, so exporting that for
+> the session — which SynapseOS used to do — loaded the layer into *every* Vulkan
+> client on the machine: a browser, a video player, any Qt application that
+> touched QtMultimedia, a test. On AMD it segfaults the client inside its own
+> device-creation hook and on NVIDIA it never does, which is a bug that follows
+> the graphics card rather than the program. `syn game hud on` puts the old
+> behaviour back for a machine that has never seen it.
 
 > `MANGOHUD=1` only hooks Vulkan. An OpenGL game needs the wrapper, which is the
 > usual reason the overlay "doesn't work".
@@ -1094,12 +1193,19 @@ syn-arcade big steam --gamescope=3840x2160@60
 ```
 
 It shows your **installed Steam library with its cover art**, sorted by what you
-played most recently; **Steam Big Picture**; whatever launchers and media players
-are actually on the machine; a **web browser**, a **terminal** and the controller
-window; **music**, with any **Plex or Jellyfin server on your network** found by
-broadcast; **headlines**; and the machine's own switches — desktop, sleep,
-restart, power off. Every tile there is one that works: nothing is listed that is
-not installed.
+played most recently; **Steam Big Picture**; **GeForce NOW** where `syn-gfn` is
+installed; whatever launchers and media players are actually on the machine; a
+**web browser**, a **terminal** and the controller window; **music**, with any
+**Plex or Jellyfin server on your network** found by broadcast; **headlines**;
+and the machine's own switches — desktop, sleep, restart, power off. Every tile
+there is one that works: nothing is listed that is not installed.
+
+A **Recent bar** runs across the top, newest first — it shares the desktop's own
+list of what has been opened, which is kept by the compositor at the one moment
+every launch has in common (a window turns up), rather than by whichever launcher
+happened to be used. And a **mouse wheel** browses: it is mapped onto the same
+words the pad and the keyboard send, so it reaches the shelves, the Start menu,
+the media buttons and the on-screen keyboard.
 
 **Music has a source**, because a television in a room full of people is as often
 a stereo as a console. The source is a setting — Control panel of its own on the
@@ -1132,6 +1238,31 @@ streamed a frame per line.
 strip of wallpaper around the edge are the whole difference between an appliance
 and somebody's computer left switched on, so launching from a tile fullscreens
 what it opened.
+
+**GeForce NOW** ships as `syn-gfn` — a launcher, and the browser is the client.
+
+```bash
+syn-gfn                      # or the GeForce NOW entry in the applications menu
+syn-gfn --list-browsers      # what it found, and which it would use
+```
+
+Not the Electron client, which cannot do either of the two things a game stream
+is, and fails silently at both: its Wayland branch hardcodes a GL implementation
+Chromium 142 removed, so the GPU process dies at launch and the software fallback
+paints 800×600 into the corner of a window it has just acknowledged is 2556×1382;
+and it binds the pointer-constraints protocol without ever calling `lock_pointer`,
+so the cursor leaves the window mid-game and lands on the next monitor.
+
+Every hard part of a cloud-gaming client — pointer lock, keyboard lock,
+fullscreen, H.264/HEVC decode, WebRTC — belongs to a browser engine that has
+already been written and already tested against this service. So `syn-gfn` runs
+the first Chromium-family browser it finds, in a profile of its own, with
+keyboard lock and pointer lock **pre-granted for the site** — the prompt they
+replace is raised while the page is fullscreen with the cursor captured, where
+nobody can see it. Keyboard lock is what makes `Escape` reach the game instead of
+being spent leaving fullscreen. No browser is pulled in as a dependency: GeForce
+NOW refuses Gecko, so the one SynapseOS does ship cannot run it, and dragging a
+second one onto the ISO for a service not everybody uses is the wrong trade.
 
 For a game that has no idea what a 1440p screen is, `syn-arcade fit new` builds
 the gamescope wrapper — `gamescope -w 1024 -h 768 -W 2560 -H 1440 -f -F fsr` —
@@ -1245,7 +1376,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 
 | Command | What it does |
 |---|---|
-| `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard/nix …`, `syn shell`, `syn ui`, `syn install` |
+| `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard/nix …`, `syn shell`, `syn ui`, `syn install`, and `syn game <cmd…>` to run something with the MangoHud overlay and gamemode (`syn game hud on` puts the overlay back in every Vulkan client) |
 | `syn nix` | The optional Nix layer — `apply`, `build`, `update`, `facts`, `edit`, `rollback`, `init`. See [Declarative user environment](#declarative-user-environment-nix) |
 | `syn resolve` | DaVinci Resolve support — `doctor` (what is missing), `setup` (OpenCL runtime + launch environment), `install`, `transcode` (footage the free edition can read), `launch`, and `gui` — the **DaVinci Doctor** window, which reads the same checks and walks you through the rest |
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
@@ -1254,7 +1385,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
-| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
+| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `synstudio` | The darkroom and edit suite — `probe`, `keys`, `get`/`set`/`reset` a photograph's sidecar, `mask`, `look`, `lut`, `render`, `match`, `histogram`, `scope`, and the `timeline …` family for video. `synstudio gui [file]` opens the window; `kind FILE` says what a file is, asked of ffmpeg rather than the extension |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
@@ -1263,10 +1394,12 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-arsenal` | Browse and install BlackArch security tooling by category — a window by default, `--tui` in the terminal, `--enable-repo` to add the repository |
 | `syn-confine` | Run a command inside a kernel-enforced allowlist — `syn-confine --ro /usr --rw ~/project -- ./build.sh`. `--print` shows the resolved policy without running anything |
 | `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
-| `synui-plugins` | **Bar plugins** — third-party widgets for the bar, in [Omarchy](https://omarchy.org/)'s shell-plugin format. `browse` what you can install, `add <id\|git-url>`, `<id> on\|off\|toggle`, `remove`, `list` (which says why anything is refused). `synui-plugins tui` in the terminal, `synui-plugins gui` in a window. See [Bar plugins](#bar-plugins) |
+| `synui-plugins` | **Bar plugins** — third-party widgets for the bar, in [Omarchy](https://omarchy.org/)'s shell-plugin format. `browse` what you can install — around nine hundred community widgets, fetched with `refresh` — `add <id\|git-url>`, `<id> on\|off\|toggle`, `order` to arrange them, `remove`, `list` (which says why anything is refused) and `check` (whether what is installed can actually draw). `synui-plugins tui` in the terminal, `synui-plugins gui` in a window. See [Bar plugins](#bar-plugins) |
 | `synui-widgets` | Desktop widgets — `<widget> on\|off\|toggle`, `all off`, `home` to put a dragged one back. `Super`+`Shift`+`A` cycles them |
 | `syn-rgb` | **The wallpaper's accent, on the hardware that has lights in it** — `on`, `off`, `status`, `devices`, `colour RRGGBB`, `follow accent\|theme\|fixed`, `brightness`, `dark`. See [RGB lighting](#rgb-lighting) |
-| `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
+| `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `recent`, `binds` (the bind table, each chord spelled the way a keyboard says it), `dispatch <action> [arg]` |
+| `synui-welcome` | The **welcome guide** — `toggle` (the default), `show`, `hide`, `page N`. Also `Super`+`Escape`, and the "Welcome Guide" entry in the applications menu. See [The welcome guide](#the-welcome-guide) |
+| `syn-gfn` | **GeForce NOW** — no arguments opens it; `--list-browsers` says what it found and which one it would use. See [Gaming](#gaming) |
 | `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
 | `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
 | `synui-ai-backend` | Switch `synapd`'s inference device — `gpu` / `cpu` / `off` / `toggle` / `status` (drives the "AI backend" row; see below) |
@@ -1292,7 +1425,7 @@ with `sudo -n`:
 |---|---|---|
 | `sudo -n systemctl reboot` · `poweroff` | `power-menu` | Start-menu Reboot / Shut Down |
 | `sudo -n systemctl stop synapd` · `start synapd` | `synapd-gamemode` | Game mode (`Super`+`G`) frees the GPU |
-| `sudo -n synui-ai-backend gpu\|cpu\|off\|toggle` | `synapd-backend` | "AI backend" row (control panel / `Super`+`Escape`) |
+| `sudo -n synui-ai-backend gpu\|cpu\|off\|toggle` | `synapd-backend` | "AI backend" row (control panel, or the welcome guide's AI page) |
 
 Anything else still prompts for a password (`%wheel ALL=(ALL:ALL) ALL`). When
 `synui` instead runs as root via `synui.service`, the `sudo -n` re-exec is a
