@@ -1791,7 +1791,22 @@ pkgver=0.1.0
 #   startup and QML cannot change it afterwards, so each has to be a BINDING.
 #   Three checks in tests/plugins.sh, including "no pixelSize escapes ui()" —
 #   the failure is silent, a window drawn perfectly at the wrong size.
-pkgrel=501
+# 502 THE UPTIME BAR PLUGIN DREW IN THE WRONG FACE. It named no font family,
+#   so it kept whatever Qt resolved at startup while every module beside it in
+#   the same strip followed the picked font — a plugin that looks foreign for
+#   no reason a plugin author could see, in the file that is also the worked
+#   EXAMPLE for writing one.
+#   ⚠ IT ASKS THE HOST, and does not read font.state itself. Bar.qml already
+#   exposes `fontFamily: Theme.fontFamily` right beside the `vertical` and
+#   `barSize` a widget reads off the bar; the plugin simply never used it. That
+#   keeps one reader of the file and costs the plugin contract nothing — the
+#   read is guarded, so an Omarchy host with no such property yields "" and the
+#   widget still loads there.
+#   ⚠ AND IT DOES NOT TAKE THE TEXT SCALE. A bar widget's size comes off the
+#   BAR's thickness so it fits the strip on any desktop; a percentage meant for
+#   window text would push it out of the bar. tools/preflight.sh gates the
+#   desktop font repo-wide now and holds bar plugins to the family only.
+pkgrel=502
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -68,6 +68,50 @@ FloatingWindow {
     readonly property string bin: Quickshell.env("SYNSTUDIO_BIN") || "synstudio"
     readonly property string scratch: "/tmp/synstudio-gui-" + Quickshell.env("USER")
 
+    // ── The UI font ─────────────────────────────────────────────────────────
+    //
+    // The same ~/.config/synui/font.state every other window in the suite
+    // watches. This one read it nowhere: not one Text named a family and all
+    // hundred-and-seven pixel sizes were literals, so the darkroom kept
+    // whatever face and size Qt resolved at startup and a font picked for the
+    // desktop reached every app except this one.
+    //
+    // ⚠ BOTH HALVES HAVE TO BE BINDINGS. Qt resolves an application's default
+    // font ONCE at startup and QML cannot change it afterwards, so naming the
+    // family on every Text is the only way the face can change while the
+    // window is open, and the size has to go through ui() for the same reason.
+    // Doing one and not the other gives a window that follows the desktop
+    // until somebody changes it.
+    //
+    // ⚠ TWO FAMILIES HERE ARE NOT THE DESKTOP'S AND MUST STAY. The literal
+    // "monospace" ones are values to read and type — a filter expression, a
+    // path — and the font PICKER draws each row in the face it names, which is
+    // the whole point of the list.
+    property string uiFont: ""
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+            // The scale lives in the same file because it is a property of the
+            // DESKTOP, not of this window.
+            const sc = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = sc ? parseInt(sc[1]) : 100
+        }
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
+    }
+
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
     property string file: Quickshell.env("SYNSTUDIO_OPEN") || ""
     property bool   dirty: false
     property string status: Quickshell.env("SYNSTUDIO_PROJECT") ? "" : "open a photograph"
@@ -3492,7 +3536,8 @@ FloatingWindow {
                                 anchors.centerIn: parent
                                 text: "→ " + root.file.replace(/^.*\//, "")
                                 color: root.cText
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
+                                font.family: root.uiFont
                             }
                         }
                     }
@@ -3502,7 +3547,8 @@ FloatingWindow {
                         visible: root.file === ""
                         text: "Open a photograph"
                         color: "#9a9a9a"
-                        font.pixelSize: 18
+                        font.pixelSize: root.ui(18)
+                        font.family: root.uiFont
                     }
 
                     // A quiet mark while a render is in flight. Not a spinner
@@ -3575,14 +3621,18 @@ FloatingWindow {
                                 anchors.margins: 6
                                 visible: root.clipLo > 0
                                 text: "▼ " + root.clipLo
-                                color: "#4d9bff"; font.pixelSize: 10
+                                color: "#4d9bff"
+                                font.pixelSize: root.ui(10)
+                                font.family: root.uiFont
                             }
                             Text {
                                 anchors.right: parent.right; anchors.bottom: parent.bottom
                                 anchors.margins: 6
                                 visible: root.clipHi > 0
                                 text: root.clipHi + " ▲"
-                                color: "#ff6b6b"; font.pixelSize: 10
+                                color: "#ff6b6b"
+                                font.pixelSize: root.ui(10)
+                                font.family: root.uiFont
                             }
                         }
 
@@ -3631,7 +3681,8 @@ FloatingWindow {
                                                 text: (tgrp.open ? "▾  " : "▸  ")
                                                       + tgrp.modelData
                                                 color: root.cText
-                                                font.pixelSize: 12
+                                                font.pixelSize: root.ui(12)
+                                                font.family: root.uiFont
                                                 font.bold: true
                                             }
                                             // What the caption says, on the
@@ -3648,7 +3699,8 @@ FloatingWindow {
                                                 text: root.thumbValue("text"
                                                           + tgrp.index + ".words")
                                                 color: root.cDim
-                                                font.pixelSize: 10
+                                                font.pixelSize: root.ui(10)
+                                                font.family: root.uiFont
                                             }
                                             MouseArea {
                                                 anchors.fill: parent
@@ -3723,7 +3775,8 @@ FloatingWindow {
                                             anchors.leftMargin: 12
                                             text: (lookGrp.open ? "▾  " : "▸  ") + "Looks"
                                             color: root.cText
-                                            font.pixelSize: 12
+                                            font.pixelSize: root.ui(12)
+                                            font.family: root.uiFont
                                             font.bold: true
                                         }
                                         MouseArea {
@@ -3750,7 +3803,8 @@ FloatingWindow {
                                                 text: lookRow.modelData.label
                                                 elide: Text.ElideRight
                                                 color: root.cText
-                                                font.pixelSize: 11
+                                                font.pixelSize: root.ui(11)
+                                                font.family: root.uiFont
                                             }
                                             MouseArea {
                                                 id: lookArea
@@ -3786,7 +3840,8 @@ FloatingWindow {
                                                 anchors.leftMargin: 12
                                                 text: (grp.open ? "▾  " : "▸  ") + grp.modelData
                                                 color: root.cText
-                                                font.pixelSize: 12
+                                                font.pixelSize: root.ui(12)
+                                                font.family: root.uiFont
                                                 font.bold: true
                                             }
                                             MouseArea {
@@ -3880,7 +3935,8 @@ FloatingWindow {
                                 visible: root.srcFile === ""
                                 text: "Open something to edit from"
                                 color: "#9a9a9a"
-                                font.pixelSize: 16
+                                font.pixelSize: root.ui(16)
+                                font.family: root.uiFont
                             }
 
                             // Its own scrub bar, with the in and out points
@@ -3968,7 +4024,7 @@ FloatingWindow {
                                       + (root.srcOut > root.srcIn
                                          ? root.timecode(root.srcOut) : "end")
                                 color: root.cDim
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
                                 font.family: "monospace"
                             }
                         }
@@ -3978,7 +4034,8 @@ FloatingWindow {
                             visible: root.proj === ""
                             text: "New project, then Add media"
                             color: "#9a9a9a"
-                            font.pixelSize: 18
+                            font.pixelSize: root.ui(18)
+                            font.family: root.uiFont
                         }
 
                         // Rendering a preview is the one wait in this window
@@ -3993,7 +4050,8 @@ FloatingWindow {
                                 anchors.centerIn: parent
                                 text: "rendering a preview…"
                                 color: "#e6e9ef"
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
                             }
                         }
 
@@ -4112,7 +4170,7 @@ FloatingWindow {
                                      > implicitWidth + 20
                             text: root.timecode(root.playhead) + "  /  " + root.timecode(root.tlDur)
                             color: root.cText
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
                             font.family: "monospace"
                         }
 
@@ -4191,7 +4249,8 @@ FloatingWindow {
                                                     anchors.topMargin: 7
                                                     text: hdr.modelData.name
                                                     color: root.cText
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: root.ui(11)
+                                                    font.family: root.uiFont
                                                     font.bold: true
                                                 }
 
@@ -4222,7 +4281,8 @@ FloatingWindow {
                                                     Text {
                                                         text: hdr.modelData.type
                                                         color: root.cDim
-                                                        font.pixelSize: 9
+                                                        font.pixelSize: root.ui(9)
+                                                        font.family: root.uiFont
                                                     }
                                                 }
 
@@ -4315,7 +4375,7 @@ FloatingWindow {
                                                     y: 1
                                                     text: root.timecode(tick.index)
                                                     color: root.cDim
-                                                    font.pixelSize: 9
+                                                    font.pixelSize: root.ui(9)
                                                     font.family: "monospace"
                                                 }
                                             }
@@ -4374,7 +4434,8 @@ FloatingWindow {
                                                     x: 12; y: 4
                                                     text: mk.modelData.text
                                                     color: mk.ink
-                                                    font.pixelSize: 9
+                                                    font.pixelSize: root.ui(9)
+                                                    font.family: root.uiFont
                                                     visible: mk.modelData.text !== ""
                                                 }
                                                 MouseArea {
@@ -4554,7 +4615,8 @@ FloatingWindow {
                                                                   : clipRect.modelData.path
                                                                         .replace(/^.*\//, "")
                                                             color: root.cText
-                                                            font.pixelSize: 10
+                                                            font.pixelSize: root.ui(10)
+                                                            font.family: root.uiFont
                                                         }
 
                                                         // Every keyframe, where it
@@ -4574,7 +4636,8 @@ FloatingWindow {
                                                                        modelData.t * root.pxPerSec - 3))
                                                                 y: 1
                                                                 text: "◆"
-                                                                font.pixelSize: 9
+                                                                font.pixelSize: root.ui(9)
+                                                                font.family: root.uiFont
                                                                 color: (clipRect.isSel
                                                                         && root.selKey === index)
                                                                        ? root.cAccent : root.cDim
@@ -4597,7 +4660,8 @@ FloatingWindow {
                                                             anchors.bottom: parent.bottom
                                                             anchors.bottomMargin: 1
                                                             text: "◨"
-                                                            font.pixelSize: 9
+                                                            font.pixelSize: root.ui(9)
+                                                            font.family: root.uiFont
                                                             color: root.cAccent
                                                         }
 
@@ -4618,7 +4682,8 @@ FloatingWindow {
                                                                        modelData.t * root.pxPerSec - 3))
                                                                 y: 11
                                                                 text: "◇"
-                                                                font.pixelSize: 8
+                                                                font.pixelSize: root.ui(8)
+                                                                font.family: root.uiFont
                                                                 color: root.cDim
                                                             }
                                                         }
@@ -4635,7 +4700,8 @@ FloatingWindow {
                                                             visible: clipRect.modelData.graded
                                                             text: "◕"
                                                             color: root.cAccent
-                                                            font.pixelSize: 11
+                                                            font.pixelSize: root.ui(11)
+                                                            font.family: root.uiFont
                                                         }
                                                         Text {
                                                             anchors.left: parent.left
@@ -4645,7 +4711,8 @@ FloatingWindow {
                                                             visible: clipRect.modelData.trans !== "none"
                                                             text: "⇥ " + clipRect.modelData.trans
                                                             color: root.cAccent
-                                                            font.pixelSize: 9
+                                                            font.pixelSize: root.ui(9)
+                                                            font.family: root.uiFont
                                                         }
 
                                                         MouseArea {
@@ -4772,7 +4839,8 @@ FloatingWindow {
                             anchors.leftMargin: 14
                             text: "Mixer"
                             color: root.cText
-                            font.pixelSize: 13
+                            font.pixelSize: root.ui(13)
+                            font.family: root.uiFont
                             font.bold: true
                         }
                         Text {
@@ -4781,7 +4849,8 @@ FloatingWindow {
                             anchors.leftMargin: 10
                             text: "levels at the playhead"
                             color: root.cDim
-                            font.pixelSize: 10
+                            font.pixelSize: root.ui(10)
+                            font.family: root.uiFont
                         }
 
                         Flickable {
@@ -4838,7 +4907,8 @@ FloatingWindow {
                             Text {
                                 text: "Voiceover"
                                 color: root.cText
-                                font.pixelSize: 13
+                                font.pixelSize: root.ui(13)
+                                font.family: root.uiFont
                                 font.bold: true
                             }
 
@@ -4847,7 +4917,8 @@ FloatingWindow {
                                 text: "Records from the playhead onto an audio "
                                       + "track, into a file beside the project."
                                 color: root.cDim
-                                font.pixelSize: 10
+                                font.pixelSize: root.ui(10)
+                                font.family: root.uiFont
                                 wrapMode: Text.WordWrap
                             }
 
@@ -4858,7 +4929,8 @@ FloatingWindow {
                             Text {
                                 text: "From"
                                 color: root.cDim
-                                font.pixelSize: 10
+                                font.pixelSize: root.ui(10)
+                                font.family: root.uiFont
                             }
 
                             Column {
@@ -4892,7 +4964,8 @@ FloatingWindow {
                                                    ? "↻ " : "") + devRow.modelData.name
                                             color: devRow.modelData.kind === "monitor"
                                                    ? root.cDim : root.cText
-                                            font.pixelSize: 11
+                                            font.pixelSize: root.ui(11)
+                                            font.family: root.uiFont
                                             elide: Text.ElideRight
                                         }
                                         MouseArea {
@@ -4914,7 +4987,8 @@ FloatingWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "roll the timeline"
                                     color: root.cDim
-                                    font.pixelSize: 10
+                                    font.pixelSize: root.ui(10)
+                                    font.family: root.uiFont
                                 }
                             }
                             Row {
@@ -4933,7 +5007,8 @@ FloatingWindow {
                                           ? "monitoring on — headphones"
                                           : "monitoring muted — speakers"
                                     color: root.cDim
-                                    font.pixelSize: 10
+                                    font.pixelSize: root.ui(10)
+                                    font.family: root.uiFont
                                     wrapMode: Text.WordWrap
                                 }
                             }
@@ -4965,7 +5040,7 @@ FloatingWindow {
                                           + "   " + root.voLevel.toFixed(0) + " dB"
                                         : "from " + root.timecode(root.playhead)
                                 color: root.voRecording ? "#e0463c" : root.cDim
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
                                 font.family: "monospace"
                             }
 
@@ -4998,7 +5073,8 @@ FloatingWindow {
                         text: root.proj === "" ? "No project yet"
                               : "Pick a clip to grade it"
                         color: root.cDim
-                        font.pixelSize: 13
+                        font.pixelSize: root.ui(13)
+                        font.family: root.uiFont
                     }
 
                     Flickable {
@@ -5028,7 +5104,8 @@ FloatingWindow {
                                           ? root.clipValue("path").replace(/^.*\//, "")
                                           : (root.clipValue("kind") || "clip")
                                     color: root.cText
-                                    font.pixelSize: 12
+                                    font.pixelSize: root.ui(12)
+                                    font.family: root.uiFont
                                     font.bold: true
                                 }
                                 Text {
@@ -5039,7 +5116,7 @@ FloatingWindow {
                                           root.timecode(parseFloat(root.clipValue("length")) || 0)
                                           + " long"
                                     color: root.cDim
-                                    font.pixelSize: 10
+                                    font.pixelSize: root.ui(10)
                                     font.family: "monospace"
                                 }
                             }
@@ -5076,7 +5153,8 @@ FloatingWindow {
                                             anchors.leftMargin: 12
                                             text: (cgrp.open ? "▾  " : "▸  ") + cgrp.modelData
                                             color: root.cText
-                                            font.pixelSize: 12
+                                            font.pixelSize: root.ui(12)
+                                            font.family: root.uiFont
                                             font.bold: true
                                         }
                                         MouseArea {
@@ -5116,7 +5194,8 @@ FloatingWindow {
                                                       + "  —  " + styleRow.modelData.label
                                                 elide: Text.ElideRight
                                                 color: root.cText
-                                                font.pixelSize: 11
+                                                font.pixelSize: root.ui(11)
+                                                font.family: root.uiFont
                                             }
                                             MouseArea {
                                                 id: styleArea
@@ -5153,7 +5232,8 @@ FloatingWindow {
                                     anchors.leftMargin: 12
                                     text: "Effects"
                                     color: root.cText
-                                    font.pixelSize: 12
+                                    font.pixelSize: root.ui(12)
+                                    font.family: root.uiFont
                                     font.bold: true
                                 }
                                 Tag {
@@ -5194,7 +5274,8 @@ FloatingWindow {
                                             text: parent.modelData.label + "   ·   "
                                                   + parent.modelData.group
                                             color: root.cText
-                                            font.pixelSize: 10
+                                            font.pixelSize: root.ui(10)
+                                            font.family: root.uiFont
                                         }
                                         MouseArea {
                                             anchors.fill: parent
@@ -5229,7 +5310,8 @@ FloatingWindow {
                                             text: (fxrow.index + 1) + ". "
                                                   + root.fxLabel(fxrow.modelData.name)
                                             color: fxrow.modelData.on ? root.cText : root.cDim
-                                            font.pixelSize: 11
+                                            font.pixelSize: root.ui(11)
+                                            font.family: root.uiFont
                                         }
                                         Row {
                                             anchors.verticalCenter: parent.verticalCenter
@@ -5286,7 +5368,8 @@ FloatingWindow {
                                     anchors.leftMargin: 12
                                     text: "Grade"
                                     color: root.cText
-                                    font.pixelSize: 12
+                                    font.pixelSize: root.ui(12)
+                                    font.family: root.uiFont
                                     font.bold: true
                                 }
                                 Row {
@@ -5329,7 +5412,8 @@ FloatingWindow {
                                             + root.timecode(root.selClipObj.keys[root.selKey].t)
                                             + " into the clip"
                                     color: root.cAccent
-                                    font.pixelSize: 10
+                                    font.pixelSize: root.ui(10)
+                                    font.family: root.uiFont
                                 }
                             }
 
@@ -5353,7 +5437,8 @@ FloatingWindow {
                                         anchors.leftMargin: 20
                                         text: (glookGrp.open ? "▾  " : "▸  ") + "Looks"
                                         color: root.cText
-                                        font.pixelSize: 11
+                                        font.pixelSize: root.ui(11)
+                                        font.family: root.uiFont
                                     }
                                     MouseArea {
                                         anchors.fill: parent
@@ -5379,7 +5464,8 @@ FloatingWindow {
                                             text: glookRow.modelData.label
                                             elide: Text.ElideRight
                                             color: root.cText
-                                            font.pixelSize: 11
+                                            font.pixelSize: root.ui(11)
+                                            font.family: root.uiFont
                                         }
                                         MouseArea {
                                             id: glookArea
@@ -5410,7 +5496,8 @@ FloatingWindow {
                                             anchors.leftMargin: 20
                                             text: (ggrp.open ? "▾  " : "▸  ") + ggrp.modelData
                                             color: root.cText
-                                            font.pixelSize: 11
+                                            font.pixelSize: root.ui(11)
+                                            font.family: root.uiFont
                                         }
                                         MouseArea {
                                             anchors.fill: parent
@@ -5450,7 +5537,8 @@ FloatingWindow {
                           ? (root.tl.w + " × " + root.tl.h + "  ·  " + root.tl.fps + " fps")
                           : (root.imgW > 0 ? root.imgW + " × " + root.imgH : "")
                     color: root.cDim
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                 }
 
                 Text {
@@ -5461,7 +5549,8 @@ FloatingWindow {
                     anchors.rightMargin: 12
                     text: root.status
                     color: root.cDim
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                     elide: Text.ElideRight
                 }
             }
@@ -5516,7 +5605,8 @@ FloatingWindow {
                                    : "drop clips to start a project")
                       : "drop a photograph to open it"
                 color: "#f2f4f8"
-                font.pixelSize: 16
+                font.pixelSize: root.ui(16)
+                font.family: root.uiFont
             }
         }
     }
@@ -5722,7 +5812,8 @@ FloatingWindow {
                 Text {
                     text: "Keys"
                     color: root.cText
-                    font.pixelSize: 13
+                    font.pixelSize: root.ui(13)
+                    font.family: root.uiFont
                     font.bold: true
                     bottomPadding: 4
                 }
@@ -5745,14 +5836,15 @@ FloatingWindow {
                             width: 150
                             text: keyRow.modelData.k
                             color: root.cAccent
-                            font.pixelSize: 11
+                            font.pixelSize: root.ui(11)
                             font.family: "monospace"
                         }
                         Text {
                             width: keyRow.width - 160
                             text: keyRow.modelData.d
                             color: root.cText
-                            font.pixelSize: 11
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
                             elide: Text.ElideRight
                         }
                     }
@@ -5769,7 +5861,8 @@ FloatingWindow {
                     text: "J shuttles back through the frame monitor — it is a "
                           + "fast scrub, not playback in reverse."
                     color: root.cDim
-                    font.pixelSize: 10
+                    font.pixelSize: root.ui(10)
+                    font.family: root.uiFont
                 }
             }
         }
@@ -5800,14 +5893,16 @@ FloatingWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "SYNAPSE Studio"
                 color: root.cText
-                font.pixelSize: 26
+                font.pixelSize: root.ui(26)
+                font.family: root.uiFont
                 font.bold: true
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "one colour engine, two ways in"
                 color: root.cDim
-                font.pixelSize: 12
+                font.pixelSize: root.ui(12)
+                font.family: root.uiFont
                 bottomPadding: 18
             }
 
@@ -5883,7 +5978,8 @@ FloatingWindow {
                     text: root.mode === "video" ? "Export the cut as"
                                                 : "Export the photograph as"
                     color: root.cText
-                    font.pixelSize: 13
+                    font.pixelSize: root.ui(13)
+                    font.family: root.uiFont
                     font.bold: true
                 }
 
@@ -5904,7 +6000,8 @@ FloatingWindow {
                         anchors.rightMargin: 8
                         verticalAlignment: TextInput.AlignVCenter
                         color: root.cText
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         clip: true
                         text: root.exportName
                         onTextChanged: root.exportName = text
@@ -5935,7 +6032,7 @@ FloatingWindow {
                             text: "." + fmtRow.modelData.ext
                             color: root.exportFmt === fmtRow.index ? root.cAccent
                                                                    : root.cText
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
                             font.family: "monospace"
                         }
                         Text {
@@ -5946,7 +6043,8 @@ FloatingWindow {
                             anchors.rightMargin: 10
                             text: fmtRow.modelData.label
                             color: root.cDim
-                            font.pixelSize: 11
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
                             elide: Text.ElideRight
                         }
                         MouseArea {
@@ -5962,7 +6060,8 @@ FloatingWindow {
                     width: parent.width
                     text: root.exportPath
                     color: root.cDim
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                     elide: Text.ElideLeft
                 }
 
@@ -6019,7 +6118,8 @@ FloatingWindow {
                     text: root.saveWhat === "new" ? "New project"
                                                   : "Save the cut as"
                     color: root.cText
-                    font.pixelSize: 13
+                    font.pixelSize: root.ui(13)
+                    font.family: root.uiFont
                     font.bold: true
                 }
 
@@ -6030,7 +6130,8 @@ FloatingWindow {
                           ? "A name for it. Everything you do to it is written as you do it."
                           : "Every edit is already on disk. This gives the cut a name of its own, and leaves a copy behind under the old one."
                     color: root.cDim
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                 }
 
                 // The name, without the extension: a .syntl is what this
@@ -6050,7 +6151,8 @@ FloatingWindow {
                         anchors.rightMargin: 8
                         verticalAlignment: TextInput.AlignVCenter
                         color: root.cText
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         clip: true
                         text: root.saveName
                         // A typed name is a DIFFERENT name, so the Replace the
@@ -6073,7 +6175,8 @@ FloatingWindow {
                     width: parent.width
                     text: root.savePath
                     color: root.cDim
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                     elide: Text.ElideLeft
                 }
 
@@ -6083,7 +6186,8 @@ FloatingWindow {
                     wrapMode: Text.WordWrap
                     text: "A project of that name is there already. Replace writes over it."
                     color: root.cBad
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                 }
 
                 Row {
@@ -6137,7 +6241,8 @@ FloatingWindow {
                 Text {
                     text: "LUT"
                     color: root.cText
-                    font.pixelSize: 14
+                    font.pixelSize: root.ui(14)
+                    font.family: root.uiFont
                     font.bold: true
                 }
                 Text {
@@ -6148,7 +6253,8 @@ FloatingWindow {
                             + "~/.config/synstudio/luts, or choose one."
                     wrapMode: Text.WordWrap
                     color: root.cDim
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                 }
 
                 Flickable {
@@ -6175,14 +6281,16 @@ FloatingWindow {
                                     anchors.left: parent.left; anchors.leftMargin: 8
                                     text: lutRow.modelData.name
                                     color: root.cText
-                                    font.pixelSize: 12
+                                    font.pixelSize: root.ui(12)
+                                    font.family: root.uiFont
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.right: parent.right; anchors.rightMargin: 8
                                     text: lutRow.modelData.dims + " · " + lutRow.modelData.size
                                     color: root.cDim
-                                    font.pixelSize: 10
+                                    font.pixelSize: root.ui(10)
+                                    font.family: root.uiFont
                                 }
                                 MouseArea {
                                     id: lutArea
@@ -6261,7 +6369,8 @@ FloatingWindow {
                         anchors.rightMargin: 10
                         text: root.pickerDir
                         color: root.cText
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         // The tail is the part that says where you are; the
                         // leading /home/velle/... is the part you can lose.
                         elide: Text.ElideLeft
@@ -6316,7 +6425,8 @@ FloatingWindow {
                             color: rowItem.modelData.kind === "dir"
                                 || rowItem.modelData.kind === "up" ? root.cAccent
                                                                    : root.cDim
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -6327,7 +6437,8 @@ FloatingWindow {
                             text: rowItem.modelData.kind === "up"
                                   ? "…" : rowItem.modelData.name
                             color: root.cText
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
                             elide: Text.ElideMiddle
                         }
                         MouseArea {
@@ -6430,7 +6541,8 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 6
             text: tc.row.label
             color: root.cText
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
         Text {
             anchors.right: parent.right; anchors.rightMargin: 12
@@ -6440,7 +6552,8 @@ FloatingWindow {
                   : tc.isSwitch ? (tc.val > 0 ? "on" : "off")
                   : (Math.round(tc.val * 100) / 100)
             color: root.cAccent
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
 
         // A switch: the whole row is the target, because a checkbox drawn at
@@ -6538,7 +6651,8 @@ FloatingWindow {
                 anchors.rightMargin: 7
                 verticalAlignment: TextInput.AlignVCenter
                 color: root.cText
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
                 clip: true
                 text: tc.row.value
                 onEditingFinished: if (text !== tc.row.value)
@@ -6590,7 +6704,8 @@ FloatingWindow {
                     anchors.top: parent.top; anchors.topMargin: 6
                     text: sl.row.label
                     color: root.cText
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                 }
                 Rectangle {
                     anchors.left: parent.left; anchors.leftMargin: 12
@@ -6608,7 +6723,8 @@ FloatingWindow {
                         text: parent.parent.shown
                         elide: Text.ElideMiddle
                         color: parent.parent.cur === "" ? root.cDim : root.cAccent
-                        font.pixelSize: 11
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -6632,7 +6748,8 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: "\u00d7"
                         color: root.cText
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -6655,7 +6772,8 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 6
             text: sl.row.label
             color: root.cText
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
         Text {
             visible: sl.row.type !== "str"
@@ -6665,7 +6783,8 @@ FloatingWindow {
             // the eye finds the handful that have been touched.
             text: sl.val === 0 ? "" : (Math.round(sl.val * 100) / 100)
             color: sl.val === 0 ? root.cDim : root.cAccent
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
 
         Rectangle {
@@ -6824,7 +6943,8 @@ FloatingWindow {
                 width: parent.width
                 text: st.label
                 color: st.isMaster ? root.cAccent : root.cText
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
                 font.bold: true
                 elide: Text.ElideRight
             }
@@ -6836,7 +6956,7 @@ FloatingWindow {
                 text: Math.abs(st.gainDb) < 0.05 ? "0.0 dB"
                       : (st.gainDb > 0 ? "+" : "") + st.gainDb.toFixed(1) + " dB"
                 color: Math.abs(st.gainDb) < 0.05 ? root.cDim : root.cAccent
-                font.pixelSize: 10
+                font.pixelSize: root.ui(10)
                 font.family: "monospace"
             }
 
@@ -6956,7 +7076,7 @@ FloatingWindow {
                       : "pan " + (st.panVal < 0 ? "L" : "R")
                            + Math.round(Math.abs(st.panVal) * 100)
                 color: Math.abs(st.panVal) < 0.005 ? root.cDim : root.cAccent
-                font.pixelSize: 9
+                font.pixelSize: root.ui(9)
                 font.family: "monospace"
             }
 
@@ -7082,8 +7202,20 @@ FloatingWindow {
         property string title: ""
         property string sub: ""
         signal clicked()
-        width: 340
-        height: 56
+
+        // ⚠ THE BOX SCALES WITH THE TEXT IT HOLDS. 340×56 was a fixed size for
+        // two lines at their default sizes, and at a text scale of 150% the
+        // title and the subtitle overlapped inside it and the subtitle ran out
+        // past the right edge — the one control on the start screen, unusable,
+        // because a size that exists ONLY to hold N lines of text is not really
+        // a size, it is a line count.
+        //
+        // The suite's rule is that ui() scales pixelSize and nothing else, and
+        // this is the documented exception to it: heights that are a stand-in
+        // for the text inside them. The width follows the widest label rather
+        // than a second guess at it, so no scale can clip the subtitle.
+        width: Math.max(340, doorSub.implicitWidth + 32)
+        height: root.ui(56)
         radius: 5
         color: doorMa.containsMouse ? root.wash(0.24) : root.wash(0.10)
         border.width: 1
@@ -7094,14 +7226,17 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 10
             text: door.title
             color: root.cText
-            font.pixelSize: 14
+            font.pixelSize: root.ui(14)
+            font.family: root.uiFont
         }
         Text {
+            id: doorSub
             anchors.left: parent.left; anchors.leftMargin: 16
             anchors.bottom: parent.bottom; anchors.bottomMargin: 10
             text: door.sub
             color: root.cDim
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
         MouseArea {
             id: doorMa
@@ -7127,7 +7262,8 @@ FloatingWindow {
             anchors.centerIn: parent
             text: tab.label
             color: tab.on ? root.cText : root.cDim
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
             font.bold: tab.on
         }
         Rectangle {
@@ -7158,7 +7294,8 @@ FloatingWindow {
             anchors.centerIn: parent
             text: tg.label
             color: tg.on ? root.cPanel : root.cDim
-            font.pixelSize: 9
+            font.pixelSize: root.ui(9)
+            font.family: root.uiFont
             font.bold: true
         }
         MouseArea { anchors.fill: parent; onClicked: tg.clicked() }
@@ -7210,7 +7347,8 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 6
             text: cc.row.label
             color: root.cText
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
         Row {
             anchors.right: parent.right; anchors.rightMargin: 12
@@ -7222,7 +7360,8 @@ FloatingWindow {
                 text: cc.row.type === "enum" ? cc.raw
                                              : (Math.round(cc.val * 100) / 100)
                 color: root.cAccent
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
             }
 
             // The diamond, on the rows the renderer can actually animate.
@@ -7236,7 +7375,8 @@ FloatingWindow {
                 visible: cc.row.anim && root.selClipObj !== null
                 text: cc.onKey ? "◆" : "◇"
                 color: cc.nkeys > 0 ? root.cAccent : root.cDim
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -5
@@ -7251,7 +7391,8 @@ FloatingWindow {
                 visible: cc.row.anim && cc.nkeys > 1
                 text: cc.curveOpen ? "▴∿" : "▾∿"
                 color: cc.curveOpen ? root.cAccent : root.cDim
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -5
@@ -7278,7 +7419,8 @@ FloatingWindow {
                 anchors.centerIn: parent
                 text: "◂  " + root.enumLabel(cc.row.key, cc.raw) + "  ▸"
                 color: root.cText
-                font.pixelSize: 10
+                font.pixelSize: root.ui(10)
+                font.family: root.uiFont
             }
             MouseArea {
                 anchors.fill: parent
@@ -7331,7 +7473,8 @@ FloatingWindow {
                         elide: Text.ElideRight
                         text: root.enumLabel(cc.row.key, parent.modelData)
                         color: parent.modelData === cc.raw ? root.cAccent : root.cText
-                        font.pixelSize: 10
+                        font.pixelSize: root.ui(10)
+                        font.family: root.uiFont
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -7371,7 +7514,8 @@ FloatingWindow {
                 anchors.rightMargin: 7
                 verticalAlignment: TextInput.AlignVCenter
                 color: root.cText
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
                 clip: true
                 text: cc.raw
                 onEditingFinished: if (text !== cc.raw) root.setClip(cc.row.key, text)
@@ -7400,7 +7544,8 @@ FloatingWindow {
                 // machine with no fontconfig says so — it reads 0.
                 text: (cc.fontOpen ? "▴ " : "▾ ") + root.fontList.length
                 color: cc.fontOpen ? root.cPanel : root.cDim
-                font.pixelSize: 9
+                font.pixelSize: root.ui(9)
+                font.family: root.uiFont
             }
             MouseArea {
                 anchors.fill: parent
@@ -7571,7 +7716,8 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: eb.modelData
                         color: root.cText
-                        font.pixelSize: 9
+                        font.pixelSize: root.ui(9)
+                        font.family: root.uiFont
                     }
                     MouseArea {
                         id: ebm
@@ -7624,7 +7770,8 @@ FloatingWindow {
                     anchors.rightMargin: 6
                     verticalAlignment: TextInput.AlignVCenter
                     color: root.cText
-                    font.pixelSize: 10
+                    font.pixelSize: root.ui(10)
+                    font.family: root.uiFont
                     clip: true
                 }
                 Text {
@@ -7635,7 +7782,8 @@ FloatingWindow {
                           ? "type to narrow the list"
                           : "no font list here — fontconfig is not installed"
                     color: root.cDim
-                    font.pixelSize: 10
+                    font.pixelSize: root.ui(10)
+                    font.family: root.uiFont
                 }
             }
 
@@ -7673,7 +7821,7 @@ FloatingWindow {
                         // spelling and nothing else, and the whole question
                         // here is what one looks like.
                         font.family: parent.modelData
-                        font.pixelSize: 11
+                        font.pixelSize: root.ui(11)
                         color: parent.modelData === cc.raw ? root.cAccent : root.cText
                     }
                     MouseArea {
@@ -7762,14 +7910,16 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 2
             text: fxc.row.label
             color: root.cText
-            font.pixelSize: 10
+            font.pixelSize: root.ui(10)
+            font.family: root.uiFont
         }
         Text {
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.top: parent.top; anchors.topMargin: 2
             text: Math.round(fxc.val * 1000) / 1000
             color: root.cAccent
-            font.pixelSize: 10
+            font.pixelSize: root.ui(10)
+            font.family: root.uiFont
         }
         Rectangle {
             id: fxtrack
@@ -7853,7 +8003,8 @@ FloatingWindow {
                     anchors.top: parent.top; anchors.topMargin: 4
                     text: grd.row.label
                     color: root.cText
-                    font.pixelSize: 11
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
                 }
                 Rectangle {
                     anchors.left: parent.left; anchors.leftMargin: 20
@@ -7871,7 +8022,8 @@ FloatingWindow {
                         text: parent.parent.shown
                         elide: Text.ElideMiddle
                         color: parent.parent.cur === "" ? root.cDim : root.cAccent
-                        font.pixelSize: 11
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -7895,7 +8047,8 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: "\u00d7"
                         color: root.cText
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -7912,7 +8065,8 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 4
             text: grd.row.label
             color: root.cText
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
         Text {
             visible: grd.row.type !== "str"
@@ -7920,7 +8074,8 @@ FloatingWindow {
             anchors.top: parent.top; anchors.topMargin: 4
             text: grd.val === 0 ? "" : (Math.round(grd.val * 100) / 100)
             color: grd.val === 0 ? root.cDim : root.cAccent
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
 
         Rectangle {
@@ -7996,7 +8151,8 @@ FloatingWindow {
             anchors.centerIn: parent
             text: btn.label
             color: btn.active ? root.cText : root.cDim
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
         }
         MouseArea {
             id: ma

@@ -1448,7 +1448,29 @@ pkgver=0.1.0
 #   preview is the SAME command the export runs, at a smaller size.
 #
 #   728 assertions, clean under ASan+UBSan+LSan.
-pkgrel=42
+# 43: THE DARKROOM IGNORED THE DESKTOP FONT. Not one Text named a family and
+#   all hundred-and-seven pixel sizes were literals, so it kept whatever face
+#   and size Qt resolved at startup while every other window in the suite
+#   followed ~/.config/synui/font.state.
+#   ⚠ BOTH HALVES HAVE TO BE BINDINGS. Qt resolves an application's default
+#   font ONCE at startup and QML cannot change it afterwards, so the family has
+#   to be named on every Text and the size has to go through ui(). Doing one
+#   and not the other gives a window that follows the desktop until somebody
+#   changes it. Ten families are NOT the desktop's and stay: the literal
+#   "monospace" ones are values to read and type, and the font PICKER draws
+#   each row in the face it names, which is the whole point of the list.
+#   ⚠ AND THE START SCREEN'S BUTTONS HAD TO GROW WITH THEIR TEXT. `Door` was a
+#   fixed 340x56 holding two lines; at 150% the title and the subtitle
+#   overlapped inside it and the subtitle ran out past the right edge — the
+#   only control on that screen, unusable. The suite's rule is that ui() scales
+#   pixelSize and nothing else, and a height that exists ONLY to hold N lines
+#   of text is the documented exception: it is not really a size, it is a line
+#   count. The width follows the widest label rather than a second guess at it,
+#   so no scale can clip it.
+#   Verified in a nested headless synui against a font.state carrying a face
+#   and a scale nothing resolves to by accident (DejaVu Serif at 150%), so
+#   "it followed the file" and "it kept its defaults" cannot be confused.
+pkgrel=43
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

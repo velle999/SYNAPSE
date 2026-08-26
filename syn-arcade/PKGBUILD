@@ -1029,7 +1029,28 @@ pkgver=0.1.0
 #   a fine wheel move nothing. And it moves the SELECTION, not a view — the
 #   shelves' position is derived from what is selected, so a scrolled view
 #   would snap back the moment anything else moved.
-pkgrel=46
+# 47: THE ARCADE WINDOW IGNORED THE DESKTOP FONT. Not one Text named a family
+#   and all fifty-nine pixel sizes were literals, so it kept whatever face and
+#   size Qt resolved at startup while every other window in the suite followed
+#   ~/.config/synui/font.state. velle, 2026-08-25: "font size isn't system
+#   wide. it's supposed to be. menus apps everywhere."
+#   ⚠ BOTH HALVES HAVE TO BE BINDINGS. Qt resolves an application's default
+#   font ONCE at startup and QML cannot change it afterwards, so naming the
+#   family on every Text is the only way the face changes while the window is
+#   open, and the size has to go through ui() for the same reason. Doing one
+#   and not the other gives a window that follows the desktop right up until
+#   somebody changes it — which looks correct at exactly the moment it is
+#   tested. The three deliberate "monospace" faces stay literal: a command to
+#   type is not prose. They still take the scale.
+#   ⚠ THE BIG SCREEN TAKES THE FAMILY AND NOT THE SCALE, deliberately. It has
+#   no pixel-size literals to wrap — every glyph on it is a multiple of `win.u`,
+#   derived from the screen it is drawn on, which is what makes it readable
+#   from a sofa on a 55" television and on a 15" laptop panel both. Multiplying
+#   that by a percentage chosen for a desk monitor would break the one
+#   relationship its layout depends on. A face is a face at any distance; a
+#   ten-foot UI's sizes are not the desktop's.
+#   tools/preflight.sh gates this repo-wide now, and names the exemption.
+pkgrel=47
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -853,6 +853,137 @@ check_icons() {
 #
 # Hit twice: cliamp (2026-08-16) and syn-gfn (2026-08-25), the second of which
 # stopped the update checker on a laptop that had built it.
+check_uifont() {
+    local f bad=$FINDINGS n=0 bare fam ln
+
+    # Every STANDALONE app window follows the desktop font. One file,
+    # ~/.config/synui/font.state, carries the family and a percent `scale`, and
+    # a window that does not read it keeps whatever face and size Qt resolved
+    # at startup — which is what "the theming missed those apps" has meant
+    # every time it has been reported. velle, 2026-08-25: "font size isn't
+    # system wide. it's supposed to be. menus apps everywhere."
+    #
+    # ⚠ BOTH HALVES OR NEITHER. Qt resolves an application's default font ONCE
+    # at startup and QML cannot change it afterwards, so the family has to be
+    # named on every Text and every size has to go through ui(). Doing one and
+    # not the other gives a window that follows the desktop until somebody
+    # changes it — which looks fixed at exactly the moment it is tested.
+    #
+    # ⚠ ONLY STANDALONE APPS. Everything under synui/quickshell*/ imports
+    # synui's Theme singleton, which reads the file on their behalf, so those
+    # legitimately mention neither. src/ and pkg/ are build leavings, and
+    # archiso/ is a filesystem image.
+    #
+    # A file with no pixelSize at all draws no text of its own and is skipped.
+    while IFS= read -r f; do
+        case "$f" in
+            synui/quickshell*|*/src/*|*/pkg/*|archiso/*|*/tests/*) continue ;;
+        esac
+        grep -q 'pixelSize' "$f" || continue
+
+        # ⚠ NAMED, NOT INFERRED. syn-install runs off the ISO, before there is
+        # a ~/.config/synui to read, and the big screen sizes every glyph off
+        # the SCREEN because it is a ten-foot UI — multiplying that by a scale
+        # chosen for a desk monitor would break the one relationship its layout
+        # depends on. Both still name the family; only the scale is excused,
+        # and each is listed so the exemption cannot spread by accident.
+        case "$f" in
+            syn-install/syn-install-gui.qml)  continue ;;
+        esac
+
+        # ⚠ A BAR PLUGIN IS NOT AN APP WINDOW, and holding it to this rule
+        # would be holding it to the wrong one. A widget draws inside the bar,
+        # so it takes its font FROM the bar — `bar.fontFamily`, alongside the
+        # bar.barSize its size already comes off — and reading font.state
+        # itself would be a second reader of a file the host has already read.
+        # It still has to name a family, which is checked below like any other.
+        case "$f" in
+            synui/data/plugins/*)
+                if grep -qE 'font\.family' "$f"; then
+                    n=$((n + 1))
+                else
+                    fail uifont "$f names no font family" \
+                        "A bar plugin takes the desktop font from its host —" \
+                        "\`bar.fontFamily\`, the same place bar.barSize comes" \
+                        "from. Naming none leaves the widget in whatever face" \
+                        "Qt resolved at startup, beside modules that followed" \
+                        "the picked font."
+                fi
+                continue ;;
+        esac
+
+        n=$((n + 1))
+        if ! grep -q 'font\.state' "$f"; then
+            fail uifont "$f reads font.state nowhere" \
+                "It keeps whatever face and size Qt resolved at startup, so a" \
+                "font picked for the desktop reaches every app but this one." \
+                "Copy the FileView + ui() block from syn-disks/data/syn-disks.qml."
+            continue
+        fi
+
+        # The size half. A bare `pixelSize: 12` is the silent failure: the
+        # window draws perfectly, at the wrong size, beside windows at the
+        # right one. syn-arcade-big is excused HERE and only here.
+        case "$f" in
+            syn-arcade/data/syn-arcade-big.qml) bare=0 ;;
+            *) bare=$(grep -cE 'pixelSize:[[:space:]]*[0-9]' "$f" || true) ;;
+        esac
+        if [ "${bare:-0}" -gt 0 ]; then
+            fail uifont "$f has $bare pixelSize literal(s) outside ui()" \
+                "Those sizes ignore font.state's scale, so this window draws" \
+                "at 100% beside windows at whatever the user chose."
+            continue
+        fi
+
+        # The family half, on every font block.
+        #
+        # ⚠ THE WINDOW IS TAKEN OVER CODE, NOT OVER LINES. The first draft read
+        # two raw lines either side and reported syn-update/shell.qml, whose
+        # size and family are three lines apart with a two-line comment between
+        # them explaining why that family is the literal "monospace". A check
+        # that fails on a file for having a comment in it is a check people
+        # learn to route around, so full-line comments and blanks are dropped
+        # from the window before it is read, and the span is widened to match.
+        # …and the window stops at the element's own braces, so a family on the
+        # NEXT Text cannot vouch for this one — a false negative is the
+        # dangerous direction for a gate, and widening the span to see past
+        # comments is exactly what would open one.
+        fam=$(awk '
+            { line[NR] = $0 }
+            END {
+                miss = 0
+                for (i = 1; i <= NR; i++) {
+                    if (line[i] !~ /font\.pixelSize:/) continue
+                    found = 0
+                    for (d = -1; d <= 1; d += 2) {
+                        for (j = i + d; j >= 1 && j <= NR; j += d) {
+                            t = line[j]
+                            sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+                            if (t == "" || t ~ /^(\/\/|\/\*|\*)/) continue
+                            if (t ~ /[{}]/) break          # element boundary
+                            if (t ~ /font\.family/) { found = 1; break }
+                        }
+                        if (found) break
+                    }
+                    # A family declared on the SAME line counts too.
+                    if (!found && line[i] ~ /font\.family/) found = 1
+                    if (!found) miss++
+                }
+                print miss
+            }' "$f")
+        if [ "$fam" -gt 0 ]; then
+            fail uifont "$f sets a size without a family $fam time(s)" \
+                "Qt cannot restyle an application's font after startup, so a" \
+                "Text that names no family keeps the startup face for ever."
+            continue
+        fi
+    done < <(git ls-files '*.qml')
+
+    [ "$FINDINGS" -eq "$bad" ] && ok uifont \
+        "$n app window(s) — every one follows the desktop font"
+    return 0
+}
+
 check_leavings() {
     local f pkg src line spec clone bad=$FINDINGS n=0
 
@@ -913,6 +1044,7 @@ check_installer
 check_pkgver
 check_order
 check_icons
+check_uifont
 check_leavings
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \

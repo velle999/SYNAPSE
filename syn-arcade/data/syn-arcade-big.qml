@@ -74,6 +74,44 @@ ShellRoot {
 
     readonly property string bin: Quickshell.env("SYNARCADE_BIN") || "syn-arcade"
 
+    // ── The UI font ─────────────────────────────────────────────────────────
+    //
+    // The family only, deliberately, and this is the one window in the suite
+    // where that is the whole answer.
+    //
+    // Every other window watches font.state for a family AND a `scale`, and
+    // wraps its pixel sizes in ui(). This one has NO pixel sizes to wrap: the
+    // big screen is a ten-foot UI and every size on it is a multiple of `win.u`,
+    // which is derived from the screen it is drawn on. That is not an oversight
+    // to correct — it is what makes the text readable from a sofa on a 55"
+    // television and on a 15" laptop panel both, and multiplying it by a
+    // percentage set for a desk monitor would break the one relationship the
+    // layout depends on. The DESKTOP's text scale is a property of the desktop.
+    //
+    // The family is different: a face is a face at any distance, and this
+    // window naming none meant it drew in whatever Qt resolved at startup while
+    // everything else on the machine followed the picked font.
+    //
+    // ⚠ IT MUST BE A BINDING. Qt resolves an application's default font once at
+    // startup and QML cannot change it afterwards, so naming the family on
+    // every Text is the only way the face changes while the window is open.
+    property string uiFont: ""
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const m = this.text().match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            shell.uiFont = m ? m[1] : ""
+        }
+        onLoadFailed: shell.uiFont = ""
+    }
+
     // Which screen. `syn-arcade big start` resolves this before we are launched
     // — from --output, or by asking synui which output has focus — because no
     // Wayland protocol tells a layer-shell client where the pointer is.
@@ -2542,6 +2580,7 @@ ShellRoot {
                         text: "SYNAPSE"
                         color: win.accent
                         font.pixelSize: win.u * 1.5
+                        font.family: shell.uiFont
                         font.letterSpacing: win.u * 0.35
                         font.bold: true
                     }
@@ -2549,6 +2588,7 @@ ShellRoot {
                         text: "big screen"
                         color: win.dim
                         font.pixelSize: win.u * 0.8
+                        font.family: shell.uiFont
                         font.letterSpacing: win.u * 0.16
                     }
                 }
@@ -2619,12 +2659,14 @@ ShellRoot {
                         text: shell.clockText
                         color: win.ink
                         font.pixelSize: win.u * 1.4
+                        font.family: shell.uiFont
                     }
                     Text {
                         anchors.right: parent.right
                         text: shell.dateText
                         color: win.dim
                         font.pixelSize: win.u * 0.8
+                        font.family: shell.uiFont
                     }
                 }
             }
@@ -2651,6 +2693,7 @@ ShellRoot {
                     anchors.centerIn: parent
                     color: win.ink
                     font.pixelSize: win.u * 0.85
+                    font.family: shell.uiFont
                     text: shell.activeApp
                           ? (shell.activeApp.name || "Something")
                             + " is still open   ·   Guide goes back to it"
@@ -2759,6 +2802,7 @@ ShellRoot {
                         }
                         color: win.ink
                         font.pixelSize: win.u * 2.4
+                        font.family: shell.uiFont
                         font.bold: true
                         elide: Text.ElideRight
                         maximumLineCount: 2
@@ -2769,6 +2813,7 @@ ShellRoot {
                         width: parent.width
                         color: win.dim
                         font.pixelSize: win.u * 0.95
+                        font.family: shell.uiFont
                         elide: Text.ElideRight
                         text: {
                             const sh = shell.shelves[shell.row]
@@ -2930,6 +2975,7 @@ ShellRoot {
                                         text: shelf.sh.title
                                         color: win.dim
                                         font.pixelSize: win.u * 0.9
+                                        font.family: shell.uiFont
                                         font.letterSpacing: win.u * 0.12
                                         font.bold: true
                                     }
@@ -3206,6 +3252,7 @@ ShellRoot {
                                                         color: win.ink
                                                         font.pixelSize: tile.headline
                                                                         ? win.u * 0.9 : win.u * 1.1
+                                                        font.family: shell.uiFont
                                                         font.bold: true
                                                         wrapMode: Text.WordWrap
                                                         elide: Text.ElideRight
@@ -3239,6 +3286,7 @@ ShellRoot {
                                                         text: tile.modelData.source || ""
                                                         color: win.dim
                                                         font.pixelSize: win.u * 0.7
+                                                        font.family: shell.uiFont
                                                         elide: Text.ElideRight
                                                         horizontalAlignment: tile.headline
                                                             ? Text.AlignLeft : Text.AlignHCenter
@@ -3377,6 +3425,7 @@ ShellRoot {
                                     text: hint.modelData.k
                                     color: win.ink
                                     font.pixelSize: win.u * 0.75
+                                    font.family: shell.uiFont
                                     font.bold: true
                                 }
                             }
@@ -3384,6 +3433,7 @@ ShellRoot {
                                 text: hint.modelData.v
                                 color: win.dim
                                 font.pixelSize: win.u * 0.85
+                                font.family: shell.uiFont
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
@@ -3532,6 +3582,7 @@ ShellRoot {
                         elide: Text.ElideRight
                         color: shell.mediaFocus ? win.ink : win.dim
                         font.pixelSize: win.u * 0.85
+                        font.family: shell.uiFont
                         text: shell.mediaArtist
                               ? shell.mediaTitle + "   ·   " + shell.mediaArtist
                               : shell.mediaTitle
@@ -3547,6 +3598,7 @@ ShellRoot {
                 text: "Reading your library…"
                 color: win.dim
                 font.pixelSize: win.u * 1.4
+                font.family: shell.uiFont
             }
 
             Text {
@@ -3557,6 +3609,7 @@ ShellRoot {
                 wrapMode: Text.WordWrap
                 color: win.dim
                 font.pixelSize: win.u * 1.2
+                font.family: shell.uiFont
                 text: "Nothing to show yet.\n\n"
                       + "Install Steam, or check `syn-arcade big` in a terminal — "
                       + "it says what it found and what it did not."
@@ -3575,6 +3628,7 @@ ShellRoot {
                     text: "Starting " + shell.launchingName + "…"
                     color: win.ink
                     font.pixelSize: win.u * 1.8
+                    font.family: shell.uiFont
                 }
             }
 
@@ -3650,6 +3704,7 @@ ShellRoot {
                             }
                             color: win.dim
                             font.pixelSize: win.u * 0.8
+                            font.family: shell.uiFont
                             font.letterSpacing: win.u * 0.12
                             font.bold: true
                             leftPadding: win.u * 0.7
@@ -3883,6 +3938,7 @@ ShellRoot {
                                         text: entry.modelData.name || ""
                                         color: entry.chosen ? win.ink : win.dim
                                         font.pixelSize: win.u * 1.0
+                                        font.family: shell.uiFont
                                         // A track title is somebody else's
                                         // text and can be any length; a switch
                                         // is one word.
@@ -3905,6 +3961,7 @@ ShellRoot {
                                             : String(entry.modelData.note || "")
                                         color: win.dim
                                         font.pixelSize: win.u * 0.75
+                                        font.family: shell.uiFont
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -3926,6 +3983,7 @@ ShellRoot {
                             bottomPadding: win.u * 0.4
                             color: win.dim
                             font.pixelSize: win.u * 0.9
+                            font.family: shell.uiFont
                             // ⚠ THE STATIONS PAGE IS EMPTY ON EVERY MACHINE ON
                             // THE DAY IT IS INSTALLED, so this is the first
                             // thing most people will read on it — and "nothing
@@ -3960,6 +4018,7 @@ ShellRoot {
                             bottomPadding: win.u * 0.4
                             color: win.dim
                             font.pixelSize: win.u * 0.9
+                            font.family: shell.uiFont
                             text: "No saved stations yet. Search finds one and "
                                   + "can keep it; a mix (list=RD…) plays on "
                                   + "like a radio station."
@@ -4012,6 +4071,7 @@ ShellRoot {
                             wrapMode: Text.WordWrap
                             color: win.ink
                             font.pixelSize: win.u * 1.7
+                            font.family: shell.uiFont
                             font.bold: true
                             text: "Close " + (shell.closing ? shell.closing.name
                                                             : "") + "?"
@@ -4023,6 +4083,7 @@ ShellRoot {
                             wrapMode: Text.WordWrap
                             color: win.dim
                             font.pixelSize: win.u * 1.0
+                            font.family: shell.uiFont
                             text: "Anything unsaved in it will be lost."
                         }
 
@@ -4051,6 +4112,7 @@ ShellRoot {
                                             text: choice.modelData.k
                                             color: win.ink
                                             font.pixelSize: win.u * 0.85
+                                            font.family: shell.uiFont
                                             font.bold: true
                                         }
                                     }
@@ -4058,6 +4120,7 @@ ShellRoot {
                                         text: choice.modelData.v
                                         color: win.dim
                                         font.pixelSize: win.u * 1.0
+                                        font.family: shell.uiFont
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -4087,6 +4150,7 @@ ShellRoot {
                     text: shell.notice
                     color: win.ink
                     font.pixelSize: win.u * 1.1
+                    font.family: shell.uiFont
                 }
             }
 
@@ -4347,6 +4411,7 @@ ShellRoot {
                     anchors.centerIn: parent
                     color: kwin.ink
                     font.pixelSize: kwin.u * 0.85
+                    font.family: shell.uiFont
                     text: {
                         const t = "Guide  ▸  big screen"
                         return keysProc.running ? t + "      Start  ▸  keyboard" : t
@@ -4407,6 +4472,7 @@ ShellRoot {
                                         color: kwin.ink
                                         font.pixelSize: cap.modelData.w > 1
                                                         ? kwin.u * 0.8 : kwin.u * 1.1
+                                        font.family: shell.uiFont
                                         font.bold: true
                                     }
 
@@ -4429,6 +4495,7 @@ ShellRoot {
                         anchors.horizontalCenter: parent.horizontalCenter
                         color: kwin.dim
                         font.pixelSize: kwin.u * 0.75
+                        font.family: shell.uiFont
                         text: "A  type      X  backspace      Y  space      "
                               + "LB/RB  layout      B  close      Guide  big screen"
                     }

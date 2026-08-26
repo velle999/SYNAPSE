@@ -57,6 +57,45 @@ FloatingWindow {
     readonly property color good:    "#4ec9b0"
     readonly property color bad:     "#f2777a"
 
+    // ── The UI font ─────────────────────────────────────────────────────────
+    //
+    // The same ~/.config/synui/font.state every other window in the suite
+    // watches. This one read it nowhere: no Text named a family and all
+    // fifty-nine pixelSizes were literals, so the window kept whatever face
+    // and size Qt resolved at startup and a desktop font change reached every
+    // app except this one.
+    //
+    // ⚠ BOTH HALVES HAVE TO BE BINDINGS. Qt resolves an application's default
+    // font ONCE at startup and QML cannot change it afterwards, so naming the
+    // family on every Text is the only way the face can change while the
+    // window is open — and the size has to go through ui() for the same
+    // reason. Doing one and not the other gives a window that follows the
+    // desktop until somebody changes it.
+    property string uiFont: ""
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+            // The scale lives in the same file because it is a property of the
+            // DESKTOP, not of this window.
+            const sc = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = sc ? parseInt(sc[1]) : 100
+        }
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
+    }
+
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
     property int tab: 0
     property string status: ""
 
@@ -610,7 +649,8 @@ FloatingWindow {
                             anchors.centerIn: parent
                             text: tabChip.modelData
                             color: root.tab === tabChip.index ? "#1b1030" : root.ink
-                            font.pixelSize: 13
+                            font.pixelSize: root.ui(13)
+                            font.family: root.uiFont
                             font.bold: root.tab === tabChip.index
                         }
                         MouseArea {
@@ -646,7 +686,8 @@ FloatingWindow {
                     Text {
                         text: "MangoHud overlay"
                         color: root.ink
-                        font.pixelSize: 16
+                        font.pixelSize: root.ui(16)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     // ⚠ "SHOW OVERLAY" WAS A PROMISE THIS WINDOW CANNOT KEEP,
@@ -668,7 +709,8 @@ FloatingWindow {
                             + "until you start one. A game that is already running picks "
                             + "the change up straight away."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -721,7 +763,8 @@ FloatingWindow {
                             + "\"Take ownership\" copies the settings now in effect into "
                             + "your own file."
                         color: root.bad
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
                     ArcButton {
@@ -743,7 +786,8 @@ FloatingWindow {
                     Text {
                         text: "Controllers"
                         color: root.ink
-                        font.pixelSize: 16
+                        font.pixelSize: root.ui(16)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     Text {
@@ -752,7 +796,8 @@ FloatingWindow {
                         text: "Nothing plugged in. Steam handles its own controller "
                             + "setup — this is for everything outside it."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -790,7 +835,8 @@ FloatingWindow {
                                         Layout.fillWidth: true
                                         text: padRow.modelData.name
                                         color: root.ink
-                                        font.pixelSize: 13
+                                        font.pixelSize: root.ui(13)
+                                        font.family: root.uiFont
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
@@ -801,7 +847,8 @@ FloatingWindow {
                                             + (padRow.modelData.rumble === "yes"
                                                ? "rumble" : "no rumble")
                                         color: root.dim
-                                        font.pixelSize: 11
+                                        font.pixelSize: root.ui(11)
+                                        font.family: root.uiFont
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -832,7 +879,8 @@ FloatingWindow {
                         text: "Calibrate measures stick drift for five seconds — let go of "
                             + "both sticks first, or it will refuse the reading."
                         color: root.dim
-                        font.pixelSize: 11
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
                 }
@@ -847,7 +895,8 @@ FloatingWindow {
                     Text {
                         text: "Controller mappings"
                         color: root.ink
-                        font.pixelSize: 16
+                        font.pixelSize: root.ui(16)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     Text {
@@ -857,7 +906,8 @@ FloatingWindow {
                             + "Press each control once and this writes the mapping; every "
                             + "SDL game reads it from the next launch."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -875,7 +925,8 @@ FloatingWindow {
                         Text {
                             text: "or paste one:"
                             color: root.dim
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
                         }
                         // The paste path stays, because somebody who already
                         // HAS a working string should not have to press
@@ -893,7 +944,8 @@ FloatingWindow {
                                 anchors.rightMargin: 8
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: root.ink
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
                                 clip: true
                                 selectByMouse: true
                                 onAccepted: if (text.trim() !== "") {
@@ -936,7 +988,8 @@ FloatingWindow {
                                 Layout.fillWidth: true
                                 text: root.wizPad || "looking for a controller…"
                                 color: root.dim
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
                                 elide: Text.ElideRight
                             }
 
@@ -947,7 +1000,8 @@ FloatingWindow {
                                 text: root.wizAsk.detail ? "Press " + root.wizAsk.detail
                                                          : "…"
                                 color: root.ink
-                                font.pixelSize: 26
+                                font.pixelSize: root.ui(26)
+                                font.family: root.uiFont
                                 font.bold: true
                                 wrapMode: Text.WordWrap
                                 horizontalAlignment: Text.AlignHCenter
@@ -957,7 +1011,8 @@ FloatingWindow {
                                 text: root.wizNote
                                 visible: root.wizNote !== ""
                                 color: root.bad
-                                font.pixelSize: 13
+                                font.pixelSize: root.ui(13)
+                                font.family: root.uiFont
                                 horizontalAlignment: Text.AlignHCenter
                             }
                             Text {
@@ -967,7 +1022,8 @@ FloatingWindow {
                                         + root.wizAsk.total
                                       : ""
                                 color: root.dim
-                                font.pixelSize: 13
+                                font.pixelSize: root.ui(13)
+                                font.family: root.uiFont
                                 horizontalAlignment: Text.AlignHCenter
                             }
 
@@ -1004,7 +1060,8 @@ FloatingWindow {
                                 // told so is a wizard nobody finishes.
                                 text: "A control this pad does not have — skip it."
                                 color: root.dim
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
+                                font.family: root.uiFont
                                 horizontalAlignment: Text.AlignHCenter
                             }
 
@@ -1055,7 +1112,8 @@ FloatingWindow {
                                         Layout.fillWidth: true
                                         text: mapRow.modelData.name
                                         color: root.ink
-                                        font.pixelSize: 13
+                                        font.pixelSize: root.ui(13)
+                                        font.family: root.uiFont
                                         elide: Text.ElideRight
                                     }
                                     Text {
@@ -1063,7 +1121,7 @@ FloatingWindow {
                                         text: mapRow.modelData.guid + "  ·  "
                                             + mapRow.modelData.bindings + " bindings"
                                         color: root.dim
-                                        font.pixelSize: 11
+                                        font.pixelSize: root.ui(11)
                                         font.family: "monospace"
                                         elide: Text.ElideRight
                                     }
@@ -1084,7 +1142,8 @@ FloatingWindow {
                         text: "No mappings added — the pads SDL already knows are working "
                             + "from its own database, and need nothing here."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
                 }
@@ -1099,7 +1158,8 @@ FloatingWindow {
                     Text {
                         text: "Gaming shortcuts"
                         color: root.ink
-                        font.pixelSize: 16
+                        font.pixelSize: root.ui(16)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     Text {
@@ -1108,7 +1168,8 @@ FloatingWindow {
                             + "running game. They are written to synuirc as ordinary bind "
                             + "lines, so the Super+/ palette can rebind them like any other."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -1176,7 +1237,8 @@ FloatingWindow {
                             : root.fitPicking ? "Which game?"
                             : "Fit a game to the screen"
                         color: root.ink
-                        font.pixelSize: 16
+                        font.pixelSize: root.ui(16)
+                        font.family: root.uiFont
                         font.bold: true
                     }
 
@@ -1192,7 +1254,8 @@ FloatingWindow {
                             + "you ask — so it is a shortcut you click, not a line you have "
                             + "to remember."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -1240,7 +1303,8 @@ FloatingWindow {
                                         Layout.fillWidth: true
                                         text: fitRow.modelData.name
                                         color: root.ink
-                                        font.pixelSize: 13
+                                        font.pixelSize: root.ui(13)
+                                        font.family: root.uiFont
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
@@ -1255,7 +1319,8 @@ FloatingWindow {
                                             + (fitRow.modelData.desktop === "yes"
                                                ? " · on the desktop" : "")
                                         color: root.dim
-                                        font.pixelSize: 11
+                                        font.pixelSize: root.ui(11)
+                                        font.family: root.uiFont
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -1288,7 +1353,8 @@ FloatingWindow {
                                  && root.fits.length === 0
                         text: "Nothing wrapped yet."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                     }
 
                     // ── the picker ────────────────────────────────────────
@@ -1299,7 +1365,8 @@ FloatingWindow {
                             + "icon come across with it — and if it already runs gamescope, "
                             + "that line is taken apart rather than wrapped again."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -1346,14 +1413,15 @@ FloatingWindow {
                                     text: appRow.modelData.name
                                         + (appRow.modelData.kind === "game" ? "" : "")
                                     color: root.ink
-                                    font.pixelSize: 12
+                                    font.pixelSize: root.ui(12)
+                                    font.family: root.uiFont
                                     elide: Text.ElideRight
                                 }
                                 Text {
                                     Layout.fillWidth: true
                                     text: appRow.modelData.exec
                                     color: root.dim
-                                    font.pixelSize: 10
+                                    font.pixelSize: root.ui(10)
                                     font.family: "monospace"
                                     elide: Text.ElideRight
                                 }
@@ -1388,7 +1456,8 @@ FloatingWindow {
                             Text {
                                 text: "Name in the menu"
                                 color: root.dim
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
+                                font.family: root.uiFont
                             }
                             ArcInput {
                                 id: fitNameField
@@ -1400,7 +1469,8 @@ FloatingWindow {
                                 Layout.topMargin: 4
                                 text: "Command"
                                 color: root.dim
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
+                                font.family: root.uiFont
                             }
                             ArcInput {
                                 id: fitExecField
@@ -1412,7 +1482,8 @@ FloatingWindow {
                                 Layout.topMargin: 4
                                 text: "Folder to run it in"
                                 color: root.dim
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
+                                font.family: root.uiFont
                             }
                             ArcInput {
                                 id: fitDirField
@@ -1432,7 +1503,8 @@ FloatingWindow {
                                 Layout.topMargin: 8
                                 text: "What the game renders at"
                                 color: root.ink
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
                                 font.bold: true
                             }
                             RowLayout {
@@ -1459,7 +1531,8 @@ FloatingWindow {
                                 Layout.topMargin: 8
                                 text: "The screen it fills"
                                 color: root.ink
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
                                 font.bold: true
                             }
                             RowLayout {
@@ -1485,7 +1558,8 @@ FloatingWindow {
                                 Layout.topMargin: 8
                                 text: "Upscaler"
                                 color: root.ink
-                                font.pixelSize: 12
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
                                 font.bold: true
                             }
                             RowLayout {
@@ -1505,7 +1579,8 @@ FloatingWindow {
                                 Text {
                                     text: "sharpness"
                                     color: root.dim
-                                    font.pixelSize: 11
+                                    font.pixelSize: root.ui(11)
+                                    font.family: root.uiFont
                                 }
                                 ArcInput {
                                     id: fitSharpField
@@ -1519,7 +1594,8 @@ FloatingWindow {
                                 Layout.topMargin: 8
                                 text: "Variables — one NAME=VALUE per line"
                                 color: root.dim
-                                font.pixelSize: 11
+                                font.pixelSize: root.ui(11)
+                                font.family: root.uiFont
                             }
                             ArcArea {
                                 id: fitEnvArea
@@ -1567,7 +1643,7 @@ FloatingWindow {
                                 Layout.fillWidth: true
                                 text: root.fitPreview()
                                 color: root.dim
-                                font.pixelSize: 10
+                                font.pixelSize: root.ui(10)
                                 font.family: "monospace"
                                 wrapMode: Text.Wrap
                             }
@@ -1641,7 +1717,8 @@ FloatingWindow {
                     Text {
                         text: "Big screen mode"
                         color: root.ink
-                        font.pixelSize: 16
+                        font.pixelSize: root.ui(16)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     Text {
@@ -1650,7 +1727,8 @@ FloatingWindow {
                             + "and the machine's own switches as tiles, drivable from a "
                             + "game controller."
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -1678,7 +1756,8 @@ FloatingWindow {
                             text: root.bigFields.running === "yes" ? "running"
                                                                    : "not running"
                             color: root.bigFields.running === "yes" ? root.good : root.dim
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
                         }
                     }
 
@@ -1697,7 +1776,8 @@ FloatingWindow {
                         Layout.topMargin: 6
                         text: "Which screen"
                         color: root.ink
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     RowLayout {
@@ -1718,7 +1798,8 @@ FloatingWindow {
                         Layout.fillWidth: true
                         text: "Opens on " + (root.bigFields.screen || "—")
                         color: root.dim
-                        font.pixelSize: 11
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
                     }
 
                     // ⚠ The music player, and the note under the chips is the
@@ -1731,7 +1812,8 @@ FloatingWindow {
                         Layout.topMargin: 8
                         text: "Music player"
                         color: root.ink
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     RowLayout {
@@ -1758,7 +1840,8 @@ FloatingWindow {
                                 : ""
                         }
                         color: root.dim
-                        font.pixelSize: 11
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
                         wrapMode: Text.WordWrap
                     }
 
@@ -1770,7 +1853,8 @@ FloatingWindow {
                         visible: root.bigSources.length > 0
                         text: "Where the music comes from"
                         color: root.ink
-                        font.pixelSize: 12
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
                         font.bold: true
                     }
                     RowLayout {
@@ -1832,7 +1916,8 @@ FloatingWindow {
                 Layout.fillWidth: true
                 text: root.status
                 color: root.status.startsWith("syn-arcade:") ? root.bad : root.good
-                font.pixelSize: 12
+                font.pixelSize: root.ui(12)
+                font.family: root.uiFont
                 elide: Text.ElideRight
                 visible: root.status !== ""
             }
@@ -1870,7 +1955,8 @@ FloatingWindow {
             anchors.centerIn: parent
             text: btn.text
             color: btn.primary ? "#1b1030" : root.ink
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
             font.bold: btn.primary
         }
 
@@ -1906,7 +1992,8 @@ FloatingWindow {
             anchors.rightMargin: 8
             verticalAlignment: TextInput.AlignVCenter
             color: root.ink
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
             clip: true
             selectByMouse: true
         }
@@ -1919,7 +2006,8 @@ FloatingWindow {
             visible: inp.text === ""
             text: fieldBox.placeholder
             color: root.dim
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
             elide: Text.ElideRight
         }
     }
@@ -1942,7 +2030,8 @@ FloatingWindow {
             anchors.fill: parent
             anchors.margins: 8
             color: root.ink
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
             wrapMode: TextEdit.NoWrap
             clip: true
             selectByMouse: true
@@ -1955,7 +2044,8 @@ FloatingWindow {
             visible: area.text === ""
             text: areaBox.placeholder
             color: root.dim
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
         }
     }
 
@@ -1980,7 +2070,8 @@ FloatingWindow {
                 anchors.centerIn: parent
                 text: chk.checked ? "✓" : ""
                 color: "#1b1030"
-                font.pixelSize: 11
+                font.pixelSize: root.ui(11)
+                font.family: root.uiFont
                 font.bold: true
             }
         }
@@ -1991,7 +2082,8 @@ FloatingWindow {
             anchors.verticalCenter: parent.verticalCenter
             text: chk.label
             color: root.ink
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
         }
         MouseArea {
             anchors.fill: parent
@@ -2016,7 +2108,8 @@ FloatingWindow {
             anchors.centerIn: parent
             text: chip.label
             color: chip.on ? "#1b1030" : root.ink
-            font.pixelSize: 11
+            font.pixelSize: root.ui(11)
+            font.family: root.uiFont
         }
         MouseArea {
             anchors.fill: parent
@@ -2037,13 +2130,15 @@ FloatingWindow {
             Layout.preferredWidth: 120
             text: parent.label
             color: root.dim
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
         }
         Text {
             Layout.fillWidth: true
             text: parent.value
             color: parent.warn ? root.bad : root.ink
-            font.pixelSize: 12
+            font.pixelSize: root.ui(12)
+            font.family: root.uiFont
             elide: Text.ElideRight
         }
     }

@@ -65,6 +65,19 @@ BarWidget {
          * anything, or asks `bar` for one. White at 0.85 is the honest simple
          * answer for an example. */
         color: Qt.rgba(1, 1, 1, 0.85)
+        /* The desktop's font, asked of the HOST — the same way barSize and
+         * vertical are, and for the same reason. Naming no family left this
+         * widget drawing in whatever face Qt resolved at startup while every
+         * module beside it in the same strip followed the picked font, which
+         * is a plugin that looks foreign for no reason a plugin author could
+         * see. Guarded, because `bar` is null until the loader has placed the
+         * widget, and empty on a host that does not offer one — an Omarchy bar
+         * has no such property and the widget must still load there. */
+        font.family: root.bar && root.bar.fontFamily ? root.bar.fontFamily : ""
+        /* ⚠ NOT root.ui(). There is no ui() here, and there should not be: a
+         * bar widget's text is sized off the BAR's thickness, so it fits the
+         * strip it is in on any desktop. A percentage meant for window text
+         * would push it out of the bar. */
         font.pixelSize: Math.max(9, Math.round(root.barSize * 0.42))
     }
 
