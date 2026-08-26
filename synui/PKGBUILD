@@ -1657,10 +1657,11 @@ pkgver=0.1.0
 #   none of them. It also costs nothing when closed (dismissing it quits) and
 #   does not reappear every time game mode restarts the bar.
 #   ⚠ AND IT CLOSES ITSELF WHEN A WINDOW OPENS. synui_main.c used to hide the
-#   panel on the first map; the guide holds EXCLUSIVE keyboard focus, so one
-#   left standing over the window it just opened is a window that gets no keys.
-#   Guide.qml watches ToplevelManager and closes — armed after 700ms, or every
-#   window that was already open would close it before it drew.
+#   panel on the first map; the guide is full-screen, so one left standing
+#   covers the window it just opened. Guide.qml watches ToplevelManager, behind
+#   a short arm — every window that was already open arrives as an insertion one
+#   event-loop turn after startup and would otherwise close it before it drew.
+#   (497 shipped that arm at 1.5s with the wrong reason attached; see 499.)
 #   ⚠ THE CHORDS COME FROM `synctl binds`, which is new (ipc.c). The old menu
 #   carried a hand-typed chord per row and said so at length: the command bar
 #   has been on Super+Space, on Super+=, and back, and each move left that
@@ -1692,7 +1693,34 @@ pkgver=0.1.0
 #   and correct — a full-screen panel covering the window you just asked for,
 #   which you cannot type into either — but the reason in the file was wrong,
 #   and a wrong reason is what gets deleted by the next person who checks it.
-pkgrel=498
+# 499 THE WELCOME GUIDE'S ARM TIMER, WITH THE RIGHT REASON ON IT.
+#   497 held the ToplevelManager watch for 1.5s and said it was for "the login
+#   burst", because `autostart` defaults to a terminal. IT DOES NOT. config.c's
+#   compiled-in `syntty` is the fallback for finding NO config file at all, and
+#   opening any synuirc zeroes the list before parsing ("Config file found —
+#   reset autostart"). Every install ships /etc/synui/synuirc, so on a real
+#   desktop nothing autostarts unless somebody asked for it. The fallback bites
+#   in exactly one place — a hermetic test rig with no synuirc — which is the
+#   trap tests/bar_radius.sh already documents.
+#   ⛔ REMOVING THE TIMER ON THAT READING BROKE IT, and the check that said it
+#   was safe was a bad control: `interval: 1` is not "no timer", it is a timer
+#   that still covers the same event-loop turn. The real behaviour, probed:
+#       PROBE completed t=0 count=0
+#       PROBE active    t=1 -> syntty
+#       PROBE insert    t=1 appId=syntty
+#   `ToplevelManager.toplevels` is EMPTY at Component.onCompleted and the
+#   windows that were ALREADY OPEN are inserted a turn later — they look exactly
+#   like new ones. Unguarded, the guide closes instantly on any desktop that is
+#   not empty, which is most of them.
+#   So the timer stays, at 400ms: slack over one event-loop turn rather than a
+#   number chosen to outlast something imaginary. Every millisecond of it is
+#   also a window in which a genuinely new window is ignored, which is the
+#   reason to keep it short.
+#   ⚠ tests/welcome_guide.sh NOW ASKS BOTH HALVES. It opened a window only
+#   AFTER the guide, so it could see the watch failing to fire and not the guard
+#   failing to hold — it passed the whole time the guard was gone. It opens one
+#   BEFORE as well now (ok 5a), and fails without the arm.
+pkgrel=499
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

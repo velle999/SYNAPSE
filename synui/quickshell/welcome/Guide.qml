@@ -91,25 +91,39 @@ PanelWindow {
      * surface only at map. So it is a full-screen panel you cannot type into,
      * sitting on top of the application you just asked for.
      *
-     * ⚠ ARMED, not immediate, and the interval is not arbitrary. Two things
-     * have to be let through:
+     * ── …and why there is a guard in front of it ─────────────────────────────
      *
-     *   · the toplevels that were ALREADY THERE. The model is populated before
-     *     this window draws, and closing on those would make the guide
-     *     invisible on any desktop that is not empty.
-     *   · THE LOGIN BURST. synui spawns the guide right after the autostart
-     *     loop, and `autostart` defaults to a terminal — so on a default box a
-     *     window maps a second or so after the guide does. The old panel was
-     *     hidden by exactly that (synui_main.c's "hide on first window") and
-     *     the welcome screen most people met was one that flashed and left.
+     * ⚠ THE WINDOWS THAT WERE ALREADY OPEN ARRIVE AS INSERTIONS, TOO. This is
+     * not a guess and it is not what it looks like: `ToplevelManager.toplevels`
+     * is EMPTY at Component.onCompleted, and the existing toplevels are then
+     * inserted one event-loop turn later. Measured on a headless rig with one
+     * window open three seconds ahead of the guide:
      *
-     * A second and a half from the guide's first frame clears both, and leaves
-     * the rule doing the job it is actually for: you clicked something on the
-     * dock while reading, so the guide gets out of the way.
+     *     PROBE completed t=0 count=0
+     *     PROBE active    t=1 -> syntty
+     *     PROBE insert    t=1 appId=syntty
+     *
+     * So an unguarded watch closes the guide instantly on any desktop that is
+     * not empty — which is most of them, and is exactly what happened when this
+     * guard was briefly removed.
+     *
+     * The interval is SLACK over that 1ms, not a measurement of anything. It is
+     * short on purpose: every millisecond of it is also a window in which a
+     * genuinely new window is ignored, and the only thing it has to outlast is
+     * one turn of the event loop.
+     *
+     * ⛔ IT IS NOT ABOUT AUTOSTART. 497 held this for 1.5s "so the login burst
+     * passes", on the belief that `autostart` defaults to a terminal. It does
+     * not: config.c's compiled-in `syntty` is the fallback for finding NO config
+     * file, and opening any synuirc zeroes the list before parsing ("Config file
+     * found — reset autostart"). Every install ships /etc/synui/synuirc, so on a
+     * real desktop nothing autostarts unless somebody asked for it. The
+     * fallback applies only in a hermetic test rig — the case
+     * tests/bar_radius.sh documents.
      */
     Timer {
         id: arm
-        interval: 1500
+        interval: 400
         running: root.visible
     }
 

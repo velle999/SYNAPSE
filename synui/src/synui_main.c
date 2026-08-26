@@ -2499,9 +2499,10 @@ int synui_run(syn_server_t *s)
      * AFTER the autostart loop, and that ordering is the whole reason it is
      * here rather than in synui_ui_init(): WAYLAND_DISPLAY is in the environment
      * by this point, so the guide has a compositor to connect to. It closes
-     * itself when a toplevel appears (Guide.qml), so an autostarted terminal
-     * racing it ahead is not a problem — that is the old "hide on first window"
-     * rule, kept, on the side that owns the window now.
+     * itself when a toplevel appears (Guide.qml) — the old "hide on first
+     * window" rule, kept, on the side that owns the window now. Anything an
+     * autostart entry opens therefore puts the guide away, exactly as it put the
+     * old panel away.
      *
      * The greeter never reaches here with this set: synui_main() zeroes
      * welcome_at_startup for a login session, which is not a desktop.

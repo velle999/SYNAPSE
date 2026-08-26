@@ -1750,12 +1750,21 @@ the panel this desktop actually draws. Present, and unreadable.
       and back, and each move left the column naming the old one. The chords come
       out of the live bind table now, rendered compositor-side by
       `ctlpanel_combo_str()`, so a rebound key needs no edit anywhere.
-- [x] **It closes when a window opens, and it does that itself.**
-      `synui_main.c` used to hide the panel on the first map. The guide watches
-      `ToplevelManager` — armed 1.5s after its first frame, which lets both the
-      windows that were already open AND the login burst through. `autostart`
-      defaults to a terminal, so an unarmed rule would have made the welcome
-      screen one that flashes and leaves, which is what the old one did.
+- [x] **It closes when a window opens, and NOT BEFORE.** `synui_main.c` used to
+      hide the panel on the first map; the guide watches `ToplevelManager`, with
+      a 400ms arm in front of it. The arm is not optional and not a style
+      choice: `ToplevelManager.toplevels` is EMPTY at `Component.onCompleted`
+      and the windows that were already open are inserted one event-loop turn
+      later, so an unguarded watch closes the guide instantly on any desktop
+      that is not empty. Probed on a headless rig — `completed t=0 count=0`,
+      `insert t=1 appId=syntty` — after removing it on a wrong reading and
+      watching exactly that happen.
+      ⚠ **It is not about autostart.** 497 held it for 1.5s "so the login burst
+      passes", on the belief that `autostart` defaults to a terminal. It does
+      not: `config.c`'s compiled-in `syntty` is the fallback for finding NO
+      config file, and opening any synuirc zeroes the list before parsing. Every
+      install ships `/etc/synui/synuirc`, so nothing autostarts unless somebody
+      asked for it — the fallback bites only in a hermetic test rig.
 - [x] **`welcome.state` did not move.** synui still owns the setting
       (`welcome_at_startup` is a synuirc key with a control-panel row); the guide
       only READS the file and asks for a change with `synctl dispatch

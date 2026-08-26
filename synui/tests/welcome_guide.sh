@@ -23,12 +23,18 @@
 #   4. IT ANSWERS ITS IPC. `page N` is what makes Super+Escape a toggle across a
 #      process boundary (synui-welcome asks a running instance before starting
 #      one), and a guide that ignores IPC would silently start a second copy.
-#   5. IT CLOSES WHEN A WINDOW OPENS. synui_main.c used to hide the panel on the
-#      first map; the guide watches ToplevelManager and does it itself. If that
-#      Connections block is wrong — a mistyped signal is a QML warning, not an
-#      error — the guide sits full-screen on top of the window you just opened,
-#      and deaf, because synui grants a layer surface the keyboard at map and has
-#      since handed it to that window.
+#   5. IT CLOSES WHEN A WINDOW OPENS, AND NOT BEFORE. synui_main.c used to hide
+#      the panel on the first map; the guide watches ToplevelManager and does it
+#      itself. Both halves are asserted, because both have failed:
+#      · if the Connections block is wrong — a mistyped signal is a QML warning,
+#        not an error — the guide sits full-screen on top of the window you just
+#        opened, and deaf, because synui grants a layer surface the keyboard at
+#        map and has since handed it to that window;
+#      · and if the guard in front of it is missing, the guide closes INSTANTLY
+#        on any desktop that is not empty. `ToplevelManager.toplevels` is empty
+#        at Component.onCompleted and the windows that were already open are
+#        inserted one event-loop turn later, so they look exactly like new ones.
+#        That is why this rig opens a window BEFORE the guide as well as after.
 #
 # ⚠ WHAT IS *NOT* ASSERTED: the keyboard. `wtype` gives a FALSE NEGATIVE against
 # Qt clients — it uploads its own keymap through virtual-keyboard and Qt does not
@@ -64,7 +70,8 @@ LOG="$TMP/synui.log"
 QSLOG="$TMP/qs.log"
 
 cleanup() {
-    [ -n "${FOOT_PID:-}" ]  && kill -9 "$FOOT_PID"  2>/dev/null
+    [ -n "${TERM1_PID:-}" ] && kill -9 "$TERM1_PID" 2>/dev/null
+    [ -n "${TERM2_PID:-}" ] && kill -9 "$TERM2_PID" 2>/dev/null
     [ -n "${QS_PID:-}" ]    && kill -9 "$QS_PID"    2>/dev/null
     [ -n "${SYNUI_PID:-}" ] && kill -9 "$SYNUI_PID" 2>/dev/null
 }
@@ -93,9 +100,13 @@ mkdir -p "$CFG"
 # checkbox, so writing it exercises that FileView.
 printf 'show_at_startup=0\n' > "$CFG/welcome.state"
 
-# A synuirc with no autostart. Writing any synuirc resets `autostart`, which
-# config.c defaults to a terminal — and a terminal mapping on its own would
-# trip assertion 5 before the test got there.
+# A synuirc with no autostart. THIS RIG IS THE ONE PLACE THE COMPILED-IN
+# DEFAULT BITES: config.c falls back to `syntty` only when it finds no config
+# file at all, and a hermetic HOME has none — on a real install /etc/synui/synuirc
+# exists and opening it zeroes the list before parsing, so nothing autostarts
+# there. Writing any synuirc here does the same, and without it a terminal would
+# map on its own and trip assertion 5 before the test got there. Same trap
+# tests/bar_radius.sh documents.
 printf 'wallpaper = none\n' > "$CFG/synuirc"
 
 "$SYNUI" >"$LOG" 2>&1 &
@@ -118,14 +129,37 @@ shot() {   # shot <name>
     grim -t ppm -o "$OUTPUT" "$TMP/$1.ppm" 2>>"$QSLOG" || fail "grim failed for $1"
 }
 
-# The desktop with nothing on it — the control every later capture is compared
-# against, so nothing here needs to know what colour anything is.
+# ── A window that is ALREADY OPEN ────────────────────────────────────────────
+#
+# Opened FIRST, and deliberately: the guide has to survive it. syntty before
+# foot — foot is what the older rigs here reach for, but it is not a SynapseOS
+# dependency, and syntty is present wherever synui is. Either will do; all this
+# needs is something that maps an xdg_toplevel.
+TERMBIN=
+for t in syntty foot kitty; do
+    command -v "$t" >/dev/null 2>&1 && { TERMBIN=$t; break; }
+done
+
+if [ -n "$TERMBIN" ]; then
+    "$TERMBIN" -e sleep 300 >/dev/null 2>&1 &
+    TERM1_PID=$!
+    sleep 3
+fi
+
+# The desktop as it is before the guide — WITH that window on it, so the pixel
+# comparisons below also say the card draws over a window rather than only over
+# the wallpaper.
 shot a-bare
 
 quickshell -p "$TREE/welcome.qml" >"$QSLOG" 2>&1 &
 QS_PID=$!
 sleep 4
-kill -0 "$QS_PID" 2>/dev/null || fail "the guide died on startup"
+# Dead already means one of two things, and the second is the likelier: it
+# failed to load at all, or it CLOSED on the window opened above — which is what
+# an unguarded ToplevelManager watch does on any desktop that is not empty.
+kill -0 "$QS_PID" 2>/dev/null \
+    || fail "the guide is gone 4s after starting — it either failed to load, or
+       closed on the window that was ALREADY open (Guide.qml's arm timer)"
 
 # 1 + 2: a type that is not a type, and a page table that is `undefined`, both
 # arrive as QML diagnostics. Matched on the Qt/QML error words rather than on
@@ -137,6 +171,13 @@ if grep -Eq 'is not a type|ReferenceError|TypeError|unavailable' "$QSLOG"; then
 fi
 echo "ok 1 - the QML tree loads with no type or reference errors"
 
+# 5a, and it has to be asked HERE — before anything else opens a window. The
+# guide is still up four seconds after starting on a desktop that already had
+# one, so the initial model population did not read as "a window just opened".
+if [ -n "$TERMBIN" ]; then
+    echo "ok 5a - a window that was ALREADY open did not close the guide"
+fi
+
 shot b-guide
 
 # 4: the IPC answers. Page 3 (0-based 2) is "Make it yours", which is a
@@ -147,21 +188,10 @@ sleep 1
 shot c-page3
 echo "ok 4 - the guide answers its IPC"
 
-# 5: a window opens and the guide gets out of the way.
-#
-# syntty FIRST, foot second. foot is what the older rigs here reach for, but it
-# is not a SynapseOS dependency and is absent on this box; syntty is the shipped
-# terminal and is present wherever synui is. Either will do — all this needs is
-# something that maps an xdg_toplevel — and with neither the assertion is
-# skipped rather than faked.
-TERMBIN=
-for t in syntty foot kitty; do
-    command -v "$t" >/dev/null 2>&1 && { TERMBIN=$t; break; }
-done
-
+# 5b: a window opens NOW, and the guide gets out of the way.
 if [ -n "$TERMBIN" ]; then
     "$TERMBIN" -e sleep 300 >/dev/null 2>&1 &
-    FOOT_PID=$!
+    TERM2_PID=$!
     sleep 4
     kill -0 "$QS_PID" 2>/dev/null && GUIDE_ALIVE=1 || GUIDE_ALIVE=0
 else
@@ -210,13 +240,13 @@ if turned < 2000:
 print(f"ok 3 - the pages render different content ({turned} px changed)")
 
 if alive == "skip":
-    print("ok 5 # SKIP no terminal (syntty/foot/kitty) installed")
+    print("ok 5b # SKIP no terminal (syntty/foot/kitty) installed")
 elif alive == "1":
     print("FAIL: a toplevel mapped and the guide is still running — "
           "Guide.qml's ToplevelManager watch did not fire")
     sys.exit(1)
 else:
-    print("ok 5 - the guide closed when a window opened")
+    print("ok 5b - the guide closed when a window opened")
 PYEOF
 
 echo "PASS"
