@@ -41,6 +41,13 @@
 #include "synui.h"
 
 #define TASKMGR_POLL_MS 1000
+/* The first re-poll after the panel opens. The sample taken on open can only
+ * prime the baselines (see taskmgr_show), so this is how long the CPU column
+ * shows dashes before it shows measurements. Short enough not to be read as a
+ * stall, long enough that the difference is over real time rather than noise:
+ * at 100 Hz a 150 ms window is 15 jiffies per core, so a process using a tenth
+ * of a core still lands on a tick. */
+#define TASKMGR_PRIME_MS 150
 
 static long page_kb(void)
 {
@@ -239,6 +246,26 @@ static bool pid_has_window(syn_server_t *s, pid_t pid)
 /* Previous poll's jiffie count for a pid, so CPU% is a delta rather than a
  * lifetime average. -1 when we have not seen this pid before (it just spawned,
  * or this is the first sample after the panel opened). */
+/*
+ * The CPU column, as one line of arithmetic — factored out so its SCALE can be
+ * tested without a compositor, a display or a live process to watch.
+ *
+ * `dj` is the process's jiffies since the last poll; `dtotal` is every core's
+ * jiffies over the same window. So the answer is percent of the WHOLE MACHINE,
+ * 0-100, which is the scale the meter at the top of the panel uses.
+ *
+ * ⚠ THE MISSING `* ncpu()` IS THE FIX, and it is invisible in a screenshot of
+ * a one-core box. That multiplier is top's convention — 100% means one core
+ * saturated — and printing it six lines under a meter that means percent of
+ * the machine made the panel read "CPU 13%" beside "synui 82.1". Both numbers
+ * were right; they answered different questions under the same word.
+ */
+double taskmgr_cpu_pct(long long dj, unsigned long long dtotal)
+{
+    if (dtotal == 0 || dj <= 0) return 0.0;
+    return 100.0 * (double)dj / (double)dtotal;
+}
+
 static long long prev_jiffies(syn_taskmgr_t *t, pid_t pid)
 {
     for (int i = 0; i < t->prev_n; i++)
@@ -324,13 +351,48 @@ void taskmgr_sample(syn_server_t *s)
         if (prev >= 0 && dtotal > 0) {
             long long dj = (long long)p->jiffies - prev;
             if (dj < 0) dj = 0;
-            p->cpu = 100.0 * (double)dj / (double)dtotal * (double)ncpu();
+            /* ⚠ PERCENT OF THE WHOLE MACHINE, THE SAME SCALE AS THE METER
+             * ABOVE THE LIST — and that is the entire point.
+             *
+             * This used to multiply by ncpu(), which is top's convention: 100%
+             * means one core saturated, so on a 12-core box the column can add
+             * up to 1200. The meter directly above it has always been percent
+             * of the machine, 0-100. Both were correct and they were printed
+             * six lines apart under the same word, so the panel read
+             * "CPU 13%" beside "synui 82.1" and looked simply wrong —
+             * reported as "percentages never seem accurate". They were
+             * accurate; they were two different questions.
+             *
+             * Two numbers labelled the same way in the same view have to be on
+             * the same scale. The meter cannot move — percent of the machine is
+             * what a CPU meter means — so the column does, and the rows now sum
+             * to roughly what the meter shows. GNOME's system monitor and
+             * Windows' task manager both do it this way, for the same reason.
+             *
+             * What is lost is "this process is pegging a core", which is real
+             * information: it is 8.3% here and 50% on a two-core laptop. The
+             * COLOUR carries it instead — see the load thresholds in render.c,
+             * which are scaled by one core's worth rather than by 100. */
+            p->cpu = taskmgr_cpu_pct(dj, dtotal);
         } else {
-            /* First sight of this pid — lifetime average (what ps prints). */
-            double life = now_jiffies - start;
-            p->cpu = life > 0 ? 100.0 * (double)p->jiffies / life : 0.0;
+            /* ⛔ NO BASELINE MEANS NO ANSWER, AND SAYING SO IS THE HONEST ONE.
+             *
+             * This used to fall back to the LIFETIME AVERAGE — total jiffies
+             * over the process's whole life, which is what ps prints. That is
+             * a different question from every other number in this panel, and
+             * it was the answer for every row on the first frame, because
+             * taskmgr_show() deliberately clears the baselines. So the panel
+             * opened sorted by "who has burned the most CPU since it started"
+             * — reliably synui, running since login — and then rearranged
+             * itself a second later into what was actually busy. The number
+             * you saw first was the one you were most likely to screenshot.
+             *
+             * -1 means "not measured yet". The first frame prints a dash, and
+             * taskmgr_show() re-polls quickly so it is filled in before it can
+             * be misread. */
+            (void)now_jiffies; (void)start;
+            p->cpu = -1.0;
         }
-        if (p->cpu < 0) p->cpu = 0;
 
         p->vram_kb    = gpu_proc_vram_kb(s, pid);
         p->has_window = pid_has_window(s, pid);
@@ -426,15 +488,31 @@ void taskmgr_show(syn_server_t *s)
     t->sel_pid  = 0;
 
     /* Drop the previous session's baselines: they are however many minutes
-     * stale, and differencing against them would print a nonsense CPU% for
-     * one poll. Starting empty makes the first sample take the lifetime-average
-     * path instead. */
+     * stale, and differencing against them would print a nonsense CPU% for one
+     * poll. This first sample therefore has nothing to difference against and
+     * measures no CPU at all — every row comes back -1 and the panel draws a
+     * dash. It is PRIMING, not a reading.
+     *
+     * ⚠ IT USED TO PRINT THE LIFETIME AVERAGE HERE INSTEAD, and that is the
+     * bug this pair of calls exists to fix. A lifetime average is a different
+     * question from the rest of the panel — "how much CPU has this burned
+     * since it started" rather than "what is it doing" — so the list opened
+     * sorted by uptime-weighted history, reliably with synui at the top, and
+     * rearranged itself into the truth a second later. The first frame is the
+     * one a person reads and screenshots.
+     *
+     * So: prime, draw dashes, and come back in TASKMGR_PRIME_MS rather than a
+     * full second, which is short enough that the dashes are barely seen and
+     * long enough to be a real measurement. ⛔ NOT a sleep: this runs on the
+     * compositor's main thread, and blocking it to make a task manager look
+     * tidy would freeze the desktop — the same trap the app grid's icon walk
+     * fell into. */
     t->prev_n = 0;
     t->prev_total = t->prev_busy = 0;
 
     taskmgr_sample(s);
     synui_render_taskmgr(s);
-    wl_event_source_timer_update(t->timer, TASKMGR_POLL_MS);
+    wl_event_source_timer_update(t->timer, TASKMGR_PRIME_MS);
 }
 
 /* Defined with the rest of the menu, below; taskmgr_hide needs it above. */

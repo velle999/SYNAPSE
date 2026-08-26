@@ -1898,7 +1898,43 @@ pkgver=0.1.0
 #   move megabytes.
 #   tests/greeter_bg.sh puts the wallpaper inside a 0700 directory ON PURPOSE —
 #   a rig using /usr/share would pass on a build that only published the path.
-pkgrel=504
+# 505 THE TASK MANAGER'S PERCENTAGES WERE TWO SCALES UNDER ONE WORD.
+#   velle: "percentages never seem accurate", with a panel reading
+#     CPU  13%  (12 cores)        and        synui   82.1
+#   ⚠ NOTHING WAS ARITHMETICALLY WRONG, which is why this survived: measured
+#   against /proc at the moment of the screenshot, synui really was using 72%
+#   of ONE CORE and the machine really was 11.7% busy. The meter is percent of
+#   the WHOLE MACHINE (0-100). The column multiplied by ncpu(), which is top's
+#   convention — 100% means one core saturated, so on this desk the column can
+#   add to 1200. Two numbers labelled the same way, six lines apart, answering
+#   different questions.
+#   The meter cannot move (percent of the machine is what a CPU meter means),
+#   so the column did: it is percent of the machine now, and the rows sum to
+#   roughly what the meter shows. GNOME's system monitor and Windows' task
+#   manager both read this way for the same reason.
+#   ⚠ WHAT THAT LOSES, THE COLOUR NOW CARRIES. "This process is pegging a core"
+#   is real information and it is 8.3 here, 50 on a two-core laptop — so a
+#   threshold on the printed number would mean something different on every
+#   machine and on a big one would never fire. render.c scales the warn/crit
+#   hues by ONE CORE'S WORTH (100/ncpu) instead of by 100.
+#   ⛔ AND THE FIRST FRAME WAS A THIRD ANSWER AGAIN. taskmgr_show() clears the
+#   baselines on purpose, so the opening sample had nothing to difference and
+#   fell back to the LIFETIME AVERAGE — total jiffies over the process's whole
+#   life, which is what ps prints and is not a rate at all. The list therefore
+#   opened sorted by "who has burned the most CPU since it started", reliably
+#   synui since login, and rearranged itself a second later into what was
+#   actually busy. The first frame is the one a person reads and screenshots.
+#   Now the priming sample measures nothing and SAYS so (-1 draws a dash), and
+#   the panel re-polls after TASKMGR_PRIME_MS = 150ms instead of a full second.
+#   ⛔ NOT a sleep: this is the compositor's main thread, and blocking it to
+#   make a task manager look tidy is how the app grid froze the desktop (457).
+#   tests/taskmgr_cpu_test.c pins the SCALE — every case names a core count,
+#   because the whole bug is a factor of ncpu and is invisible on a one-core
+#   box. Verified to fail on the old line: "all twelve cores" came back 1200%.
+#   It links taskmgr.c whole rather than copying the formula; a copy would go
+#   on passing after the shipped line changed, which for a scale bug is exactly
+#   the failure mode.
+pkgrel=505
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

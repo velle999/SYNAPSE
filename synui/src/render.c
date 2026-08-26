@@ -7605,15 +7605,34 @@ void synui_render_taskmgr(syn_server_t *s)
         syn_show_text(cr, p->name);
 
         /* Colour the CPU figure by load so a runaway process is visible in
-         * peripheral vision even when the table is sorted by something else. */
-        double load = p->cpu / 100.0;
+         * peripheral vision even when the table is sorted by something else.
+         *
+         * ⚠ MEASURED IN CORES, NOT IN THE PRINTED PERCENT. The column is
+         * percent of the WHOLE MACHINE now, so that it is on the same scale as
+         * the meter above it — which means a process pegging one core reads
+         * 8.3 on this desk and 50 on a two-core laptop. A threshold on the
+         * printed number would therefore mean something different on every
+         * machine, and on a big one would never fire at all: 90% of twelve
+         * cores is not a runaway process, it is a build.
+         *
+         * So the hue is what still carries "this one is eating a core", which
+         * is the thing the number stopped saying when the scales were
+         * reconciled. One core's worth is 100/ncpu percent. */
+        double one_core = 100.0 / (double)sysconf(_SC_NPROCESSORS_ONLN);
+        double load = (p->cpu > 0 && one_core > 0) ? p->cpu / one_core : 0.0;
         /* A busy process keeps its warning hue on every theme; an idle one is
          * ordinary secondary text, so it rides the ink ladder rather than a
          * fixed grey that only ever suited a dark panel. */
         if (load >= 0.9)      set_status(cr, STAT_CRIT, 1.0);
         else if (load >= 0.3) set_status(cr, STAT_WARN, 1.0);
         else                  set_ink(cr, INK_MUTED, 1.0);
-        snprintf(txt, sizeof(txt), "%.1f", p->cpu);
+        /* Negative is "no baseline yet" — the first frame after the panel
+         * opens, before there are two samples to difference. A dash says that;
+         * a number would be a guess, and the guess this used to print (the
+         * process's lifetime average) is what made the list open in the wrong
+         * order. */
+        if (p->cpu < 0) snprintf(txt, sizeof(txt), "\xe2\x80\x93");
+        else            snprintf(txt, sizeof(txt), "%.1f", p->cpu);
         draw_right(cr, TM_COL_CPU, ry, txt);
 
         set_ink(cr, INK_MUTED, 1.0);

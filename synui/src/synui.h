@@ -7814,6 +7814,9 @@ void gpu_sample(syn_server_t *s);
 unsigned long gpu_proc_vram_kb(syn_server_t *s, pid_t pid);
 
 /* ── Task manager (taskmgr.c) ────────────────────────────── */
+/* The CPU column's arithmetic, exposed for taskmgr_cpu_test: percent of the
+ * WHOLE MACHINE (0-100), the same scale as the panel's own CPU meter. */
+double taskmgr_cpu_pct(long long dj, unsigned long long dtotal);
 void taskmgr_init(syn_server_t *s);
 void taskmgr_finish(syn_server_t *s);
 void taskmgr_show(syn_server_t *s);

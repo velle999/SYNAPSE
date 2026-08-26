@@ -1559,6 +1559,20 @@ test('readme_binds', readme_binds,
 # to reach that. What this guards is that it is a second way to reach the SAME
 # path — not a second place that calls kill(), which would look identical in
 # use and have none of the confirmation, the pid-1 refusal or the pinned name.
+# The CPU column's scale. Not a shape check like the menu test below it: this
+# is arithmetic, and the bug was that it was RIGHT on a scale nothing else in
+# the panel used — a per-core percent printed six lines under a meter that
+# means percent of the machine. Every case names a core count, because the
+# whole bug is a factor of ncpu and is invisible on a one-core box.
+taskmgr_cpu_test = executable('taskmgr_cpu_test',
+  ['tests/taskmgr_cpu_test.c', 'src/taskmgr.c', 'src/hit.c', 'src/panel.c',
+   'src/gpu.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libm],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('taskmgr_cpu', taskmgr_cpu_test)
+
 taskmgr_menu = find_program('tests/taskmgr_menu.sh')
 test('taskmgr_menu', taskmgr_menu,
      args    : [meson.current_source_dir() / 'src/taskmgr.c',
