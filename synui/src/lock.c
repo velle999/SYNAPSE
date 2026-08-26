@@ -162,6 +162,26 @@ static const char *lock_bg_path(syn_server_t *s, struct wlr_output *wo)
     }
 }
 
+/*
+ * The one picture the LOGIN screen should show, for greeterbg.c to publish.
+ *
+ * Per-output backgrounds are the lock screen's business — a two-monitor desk
+ * locks to the two pictures it was already showing — but the greeter publishes
+ * and reads a single file, so this answers for the primary screen and the rest
+ * follow it there. Deliberately the same lock_bg_path() the lock itself uses:
+ * a second implementation of "what does DESKTOP mean" is how the two screens
+ * would drift apart again, which is the whole bug being fixed.
+ *
+ * NULL is a real answer and means black.
+ */
+const char *lock_bg_source_path(syn_server_t *s)
+{
+    syn_output_t *o = server_primary_output(s);
+    if (!o) o = server_focused_output(s);
+    if (!o || !o->wlr_output) return NULL;
+    return lock_bg_path(s, o->wlr_output);
+}
+
 /* Build one output's background buffer. NULL-safe throughout: every failure
  * path leaves pane[i].bg NULL, and the black backstop under it is what shows. */
 static void lock_bg_build_pane(syn_server_t *s, int i)

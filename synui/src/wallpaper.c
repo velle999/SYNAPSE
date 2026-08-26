@@ -1732,6 +1732,19 @@ void wallpaper_output_created(syn_output_t *o)
      * (one leaving) — the layout change that follows a disconnect repaints. */
     backdrop_export(o->server);
     palette_export(o->server);
+
+    /* And the LOGIN screen's copy of it.
+     *
+     * ⚠ HERE RATHER THAN IN output_layout_changed(), which was the first
+     * guess and does not fire at startup on a default desktop: a new output
+     * reaches dispcfg_outputs_changed(), which returns immediately when the
+     * arrangement is EXTEND and the panel is closed — so the publish never
+     * ran and the login screen stayed black, which is the bug it was added to
+     * fix. An output that has just been painted is the earliest moment the
+     * background RESOLVES, since the answer is taken from the primary screen's
+     * wallpaper, and it is the same moment on a first monitor as on a
+     * fourth. */
+    greeterbg_publish(o->server);
 }
 
 void wallpaper_output_destroy(syn_output_t *o)
@@ -1788,6 +1801,13 @@ void wallpaper_backdrop_republish(syn_server_t *s)
 
 void wallpaper_reload(syn_server_t *s)
 {
+    /* `lock_background = desktop` is the default, so a new wallpaper is a new
+     * LOGIN screen too — and the greeter cannot read this picture (a home is
+     * 0700, and the default wallpaper lives in one), so the copy it reads has
+     * to be refreshed here. Cheap: greeterbg_publish compares the source's
+     * path, size and mtime and only copies when it has actually changed. */
+    greeterbg_publish(s);
+
     if (s->wallpaper.src) {
         cairo_surface_destroy(s->wallpaper.src);
         s->wallpaper.src = NULL;

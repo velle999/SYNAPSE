@@ -7205,6 +7205,20 @@ void lock_render(syn_server_t *s);               /* repaint panes (greeter reuse
  * changes so the effect can be seen on the next lock without a restart. Cheap
  * and safe to call while unlocked: it does nothing when there is no lock up. */
 void lock_bg_invalidate(syn_server_t *s);
+/* The primary screen's lock background, resolved — NULL means black. */
+const char *lock_bg_source_path(syn_server_t *s);
+
+/* greeterbg.c — the LOGIN screen shows the LOCK screen's background.
+ *
+ * One setting, two readers: `lock_background`/`lock_image`/`lock_dim`/
+ * `lock_blur` decide both screens. They cannot simply be shared, because the
+ * greeter runs as another account and a home directory is 0700 — so the user's
+ * session publishes the resolved answer, picture and all, into
+ * /var/lib/synui/greeter/<uid>/ and the greeter reads the one belonging to the
+ * account it is about to log in. There is no `greeter_background` key and
+ * there must not be one. */
+void greeterbg_publish(syn_server_t *s);
+void greeterbg_adopt(syn_server_t *s, const char *user);
 void lock_output_destroy(syn_output_t *o);       /* drop a dying output's lock pane (output_destroy) */
 void lock_output_create(syn_output_t *o);        /* pane for an output arriving mid-lock (server_new_output) */
 

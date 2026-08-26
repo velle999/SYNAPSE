@@ -1851,7 +1851,54 @@ pkgver=0.1.0
 #   "the focused screen" are indistinguishable), the logical size actually
 #   shrinking by the factor rather than merely the number being recorded,
 #   outputs.conf carrying it, the refusal, and the way back.
-pkgrel=503
+# 504 THE LOGIN SCREEN SHOWS THE LOCK SCREEN'S BACKGROUND. velle: "login
+#   screen should be the same setting as lock screen for background." It is one
+#   setting — lock_background / lock_image / lock_dim / lock_blur — and it now
+#   decides both screens. There is NO greeter_background key and there must not
+#   be one; the published file below is a cache of an answer, not a second
+#   question.
+#   ⛔ THE REASON IT WAS NOT ALREADY IS A PERMISSION BOUNDARY, NOT AN OVERSIGHT,
+#   and that is what decides the whole design. greetd runs `synui --greeter` as
+#   the unprivileged `greeter` account, whose home is `/`:
+#     - syn_config_path() resolves to `//.config/synui/…`, so config load falls
+#       through to /etc/synui/synuirc, which carries no lock_* lines at all —
+#       which is exactly why the login screen has always been black while the
+#       lock screen showed a wallpaper;
+#     - and pointing it at the user's config would NOT help, because a home
+#       directory is 0700. Neither the synuirc nor a wallpaper under it is
+#       readable by uid 963 — and the shipped default IS
+#       ~/.config/synui/wallpaper.png.
+#   ⚠ SO THE PATH IS NOT ENOUGH; THE PICTURE IS COPIED. Publishing only the
+#   settings would work for the wallpapers in /usr/share and fail silently for
+#   every picture a user actually chose — the worst kind of bug, one that looks
+#   fixed on the developer's box.
+#   The session writes /var/lib/synui/greeter/<uid>/{background.conf,.img}; the
+#   greeter reads the directory belonging to the account it is about to log in.
+#   The root is 1777 (sticky, like /tmp) from a tmpfiles.d rule, so a session
+#   writes it with no privilege and no prompt — a background that needed
+#   authenticating is a background nobody keeps in step, and the setting would
+#   quietly become two settings again. Same shape GNOME uses for login-screen
+#   avatars (/var/lib/AccountsService/icons), for the same reason.
+#   ⚠ THE READER IS PRE-LOGIN CODE AND IS WRITTEN LIKE IT. It stats the
+#   directory and requires it to be owned by that account (sticky makes a
+#   mismatch unlikely, not impossible, and "cannot happen" is not a check); the
+#   `image` value is a BARE NAME resolved against that directory, so a doctored
+#   file cannot aim a pre-auth image decoder at a path of somebody's choosing;
+#   the copy is capped at 64 MiB and lands by rename, because a half-written
+#   JPEG is a decode failure that shows as a black login screen with nothing in
+#   any log a user will read.
+#   ⚠ THE PUBLISH HOOK WAS WRONG FIRST, and silently: output_layout_changed()
+#   looked like the obvious choke point and does NOT fire at startup on a
+#   default desktop — a new output reaches dispcfg_outputs_changed(), which
+#   returns immediately when the arrangement is EXTEND and the panel is closed.
+#   It is wallpaper_output_created() now: an output that has just been painted
+#   is the earliest moment the background resolves. Also on wallpaper_reload()
+#   (lock_background=desktop follows the wallpaper) and on a Super+Z row change.
+#   Re-copying is compared by path+size+mtime, or plugging in a monitor would
+#   move megabytes.
+#   tests/greeter_bg.sh puts the wallpaper inside a 0700 directory ON PURPOSE —
+#   a rig using /usr/share would pass on a build that only published the path.
+pkgrel=504
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2112,6 +2159,13 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synui.service"
     install -Dm644 systemd/synui-foot.service \
         "$pkgdir/usr/lib/systemd/system/synui-foot.service"
+    # Where a session publishes what its LOCK screen shows, so the LOGIN screen
+    # can show the same one. tmpfiles rather than a packaged directory: the
+    # sticky bit and root ownership have to be right at every boot, including
+    # after somebody has been in there with rm, and a directory shipped in the
+    # package is one pacman will happily leave with whatever mode it finds.
+    install -Dm644 systemd/synui-greeter-bg.conf \
+        "$pkgdir/usr/lib/tmpfiles.d/synui-greeter-bg.conf"
     install -Dm644 config/synui.desktop \
         "$pkgdir/usr/share/wayland-sessions/synui.desktop"
 

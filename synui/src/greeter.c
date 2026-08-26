@@ -274,6 +274,13 @@ void greeter_start(syn_server_t *s)
     wlr_log(WLR_INFO, "synui greeter: login for '%s', session '%s'",
             s->greetd.user, greeter_session_cmd());
 
+    /* Same pixels AND the same background. The login screen and the lock
+     * screen are one screen, so `lock_background` decides both — but the
+     * greeter runs as another account and cannot read this user's config or
+     * their home, so the answer is published by their session and read back
+     * here. BEFORE synui_lock(), which builds the background panes. */
+    greeterbg_adopt(s, s->greetd.user);
+
     /* Draw the lock panel — same pixels as the in-session lock screen. */
     synui_lock(s);
 

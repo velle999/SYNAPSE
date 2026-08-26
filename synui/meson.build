@@ -259,6 +259,7 @@ synui_exe = executable('synui',
     'src/screensaver.c',
     'src/session.c',
     'src/lock.c',
+    'src/greeterbg.c',
     'src/ai_interface.c',
     'src/secfeed.c',
     'src/synapd_mon.c',
@@ -1502,6 +1503,15 @@ test('monocle_focus', monocle_focus,
 # window opens, a strip that scrolls to whatever has the focus, and the two
 # column moves (Super+, / Super+.). Three windows on one headless output, so
 # the strip is deliberately longer than the monitor. Same client again.
+# The LOGIN screen shows the LOCK screen's background — one setting, across a
+# permission boundary the greeter cannot cross (it runs as another account and a
+# home is 0700, so the picture is copied, not named).
+greeter_bg_t = find_program('tests/greeter_bg.sh')
+test('greeter_bg', greeter_bg_t,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 120)
+
 # The accessibility control: ONE setting that makes the whole desktop bigger —
 # the compositor's panels, every application and the cursor together. Two
 # headless outputs, because "every screen" and "the focused screen" are

@@ -1058,6 +1058,13 @@ static void saver_adjust(syn_server_t *s, int dir)
 
     sv->dirty = 1;
 
+    /* The login screen is this screen, so a lock background changed here has to
+     * reach it — and it cannot be read across the permission boundary, so it is
+     * published. One call at the commit point rather than one beside each of
+     * the four lock_bg_invalidate()s above: those are the lock's own repaint,
+     * and half of them fire for rows that are not the background at all. */
+    greeterbg_publish(s);
+
     /* Name and value together must fit the status line; both are short by
      * construction (the longest value is a file name, and saver_image_label
      * cuts those to 22 characters), so the buffers are sized to make that

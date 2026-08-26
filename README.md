@@ -971,6 +971,19 @@ A scale that would leave the screen narrower than the settings panels need is
 person most likely to want a large scale is the least able to read a tiny screen
 to escape one.
 
+**The login screen is the lock screen**, background included. `lock_background`
+(`desktop` / `black` / `image`), `lock_image`, `lock_dim` and `lock_blur` decide
+both — there is no separate greeter setting to keep in step.
+
+That needs a bridge rather than a shared key, because greetd runs the greeter as
+an unprivileged account and a home directory is `0700`: it can read neither your
+`synuirc` nor a wallpaper living under it, and the shipped default wallpaper
+*is* `~/.config/synui/wallpaper.png`. So your session **publishes** what its lock
+screen would draw — the picture copied, not merely named — into
+`/var/lib/synui/greeter/<uid>/`, and the greeter reads the directory belonging to
+the account it is about to log in. Nothing there is editable; it is a cache of an
+answer, not a second question.
+
 **Screens** are one setting with three positions: `display_mode = extend |
 mirror | external`, cycled with `m` in `Super`+`D`, from Control panel ▸ Display
 ▸ Screens, or `synctl dispatch display_mode [name]` — and on a laptop, from
