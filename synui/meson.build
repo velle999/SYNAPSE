@@ -758,6 +758,18 @@ game_confine_test = executable('game_confine_test',
   build_by_default : false)
 test('game_confine', game_confine_test)
 
+# barscan reads the right BYTE for each channel. A wrong index reports a wrong
+# COLOUR rather than failing, and an unhandled format declines silently into
+# the wallpaper fallback — which is how BGR888 went unnoticed on a whole
+# monitor. Pure arithmetic over drm_fourcc's own bit layout; no compositor.
+barscan_format_test = executable('barscan_format_test',
+  ['tests/barscan_format_test.c', 'src/barscan.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('barscan_format', barscan_format_test)
+
 hit_test = executable('hit_test',
   ['tests/hit_test.c', 'src/hit.c'],
   include_directories : include_directories('src'),

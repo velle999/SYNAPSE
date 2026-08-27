@@ -108,6 +108,21 @@ static void gate(const char *what, int want)
     }
 }
 
+/* game_owns_output() asks a DIFFERENT question to game_pointer_box() and the
+ * difference is focus — see the comment on it in game.c. Worth its own check
+ * because the two read almost identically at the call site. */
+static void owns(const char *what, syn_output_t *o, int want)
+{
+    int got = game_owns_output(&srv, o);
+    if (!!got == !!want) {
+        printf("  ok    %s (%s)\n", what, got ? "covered" : "not covered");
+    } else {
+        printf("  FAIL  %s — expected %s, got %s\n", what,
+               want ? "covered" : "not covered", got ? "covered" : "not covered");
+        fails++;
+    }
+}
+
 static void lands(const char *what, double from_x, double from_y,
                   double want_x, double want_y)
 {
@@ -158,6 +173,31 @@ int main(void)
     /* An unfocused game must not have its cursor moved at all. */
     reset(); srv.focused_view = NULL;
     lands("unfocused: cursor untouched",   9999, 9999, 9999, 9999);
+
+    printf("\n WHICH SCREEN A GAME COVERS  (barscan skips it)\n");
+
+    static syn_output_t other;
+    reset();
+    owns("the game's own output", &out, 1);
+    owns("another output", &other, 0);
+    owns("no output at all", NULL, 0);
+
+    /* THE distinction: a tabbed-away game still COVERS its screen, even though
+     * it has released the pointer. barscan must keep skipping it; the pointer
+     * must come back. Getting these two the same way round is the bug this
+     * pair of assertions exists to catch. */
+    reset(); srv.focused_view = NULL;
+    owns("unfocused game still covers its screen", &out, 1);
+    gate("unfocused game has released the pointer", 0);
+
+    reset(); srv.game.active = 0;
+    owns("game mode not engaged", &out, 0);
+    reset(); srv.config.game_mode = 0;
+    owns("master switch off", &out, 0);
+    /* The confine SETTING must not reach barscan: turning off "keep the mouse
+     * on the game's screen" is about the pointer, not about what is on screen. */
+    reset(); srv.config.game_confine_pointer = 0;
+    owns("confine setting off still covers the screen", &out, 1);
 
     printf("\n%s (%d failed)\n", fails ? "FAILED" : "PASSED", fails);
     return fails ? 1 : 0;

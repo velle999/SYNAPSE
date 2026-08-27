@@ -449,6 +449,35 @@ static struct wlr_scene_node *leaf_under_shell(syn_server_t *s, int lx, int ly)
 
 /* ── Reading a leaf's luminance ──────────────────────────── */
 
+/* The byte layout of one pixel in a read-back format, or 0 for one we cannot
+ * read. Lifted out of leaf_lum_run() so it can be checked directly: a channel
+ * index that is backwards does not fail, it reports the wrong COLOUR, and the
+ * bar then inks itself confidently against it.
+ *
+ * The index is the BYTE; drm_fourcc.h names the BITS. "[23:0] B:G:R little
+ * endian" puts B in bits 23:16, which is byte 2 — the reverse of how the name
+ * reads. `ai` is -1 for a format with no alpha: opaque by construction. */
+int barscan_pixel_layout(uint32_t fmt, int *bpp,
+                         int *ri, int *gi, int *bi, int *ai)
+{
+    switch (fmt) {
+    case DRM_FORMAT_XRGB8888: *bpp = 4; *ri = 2; *gi = 1; *bi = 0; *ai = -1; break;
+    case DRM_FORMAT_ARGB8888: *bpp = 4; *ri = 2; *gi = 1; *bi = 0; *ai =  3; break;
+    case DRM_FORMAT_XBGR8888: *bpp = 4; *ri = 0; *gi = 1; *bi = 2; *ai = -1; break;
+    case DRM_FORMAT_ABGR8888: *bpp = 4; *ri = 0; *gi = 1; *bi = 2; *ai =  3; break;
+    /* The 24-bit orders, which a display can and does prefer: measured
+     * 2026-08-26 on a 2560x1440 DP output whose every read declined with
+     * 0x34324742 (BGR888). Declining is silent by design — each consumer falls
+     * back to the wallpaper — so the bar on that monitor had been inking
+     * itself for a picture nobody could see for as long as this file has
+     * existed. A fallback that works is what hides a lookup that does not. */
+    case DRM_FORMAT_BGR888:   *bpp = 3; *ri = 0; *gi = 1; *bi = 2; *ai = -1; break;
+    case DRM_FORMAT_RGB888:   *bpp = 3; *ri = 2; *gi = 1; *bi = 0; *ai = -1; break;
+    default: return 0;
+    }
+    return 1;
+}
+
 /*
  * Mean relative luminance of `n` over `want` (layout coords), split into `cells`
  * equal columns and written into `out[0..cells)`. Every cell is -1 if this node
@@ -591,21 +620,23 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     int bpp;
     /* Which byte is which, and where the ALPHA is — `ai` is -1 for the two
      * formats that have none, which is the compact way of saying "this buffer
-     * is opaque by construction". Only the 32-bit packed orders are handled;
+     * is opaque by construction". The packed 32- and 24-bit orders are handled;
      * anything else declines, for the same reason the transform above does. */
     int ri, gi, bi, ai;
-    switch (fmt) {
-    case DRM_FORMAT_XRGB8888: bpp = 4; ri = 2; gi = 1; bi = 0; ai = -1; break;
-    case DRM_FORMAT_ARGB8888: bpp = 4; ri = 2; gi = 1; bi = 0; ai =  3; break;
-    case DRM_FORMAT_XBGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; ai = -1; break;
-    case DRM_FORMAT_ABGR8888: bpp = 4; ri = 0; gi = 1; bi = 2; ai =  3; break;
-    default:
+    if (!barscan_pixel_layout(fmt, &bpp, &ri, &gi, &bi, &ai)) {
         BARSCAN_BAIL("unhandled read format 0x%08x", fmt);
         if (own) wlr_texture_destroy(tex);
         return;
     }
 
-    size_t stride = (size_t)src.width * (size_t)bpp;
+    /* ⚠ ROWS ARE 4-BYTE ALIGNED, and only a 3-byte format can notice. GL's
+     * GL_PACK_ALIGNMENT is 4 by default, so a readback pads every row up to
+     * the next multiple of 4; a stride of width*3 would then be short by up to
+     * 3 bytes per row and every row after the first would be read at a
+     * creeping offset — a picture that slides sideways as it goes down, with
+     * no error anywhere. The loop below already addresses rows by `stride` and
+     * pixels by `bpp`, so padding here is all that is needed. */
+    size_t stride = ((size_t)src.width * (size_t)bpp + 3u) & ~(size_t)3u;
     unsigned char *data = malloc(stride * (size_t)src.height);
     if (!data) {
         if (own) wlr_texture_destroy(tex);
@@ -884,6 +915,21 @@ static void scan_output(syn_server_t *s, syn_output_t *o)
 
     if (!scene_ink_on(&s->config)) return;
     if (!o->wlr_output || !o->wlr_output->enabled) return;
+
+    /* Not the screen a game is on. Nothing translucent is visible there to ink
+     * — an opaque fullscreen client covers the output, and game mode may have
+     * stopped the bar outright — so every read is a GPU readback 2.5 times a
+     * second whose answer nobody looks at. Measured on this desk it was worse
+     * than useless: all 16 columns of a 2560x1440 output declined on format
+     * every tick, logging 16 lines a scan for the length of the session.
+     *
+     * Per-OUTPUT, not a global switch: a game on one monitor says nothing
+     * about the bar on the other two, and those still have to ink themselves.
+     * Leaving the arrays at the -1 they were just cleared to is the same state
+     * `scene_ink = off` produces, so consumers already handle it — they fall
+     * back to the wallpaper, and the scan that runs after the game exits puts
+     * the real answer back. */
+    if (game_owns_output(s, o)) return;
 
     struct wlr_box ob;
     wlr_output_layout_get_box(s->output_layout, o->wlr_output, &ob);

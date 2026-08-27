@@ -8005,6 +8005,15 @@ void game_toggle(syn_server_t *s);
 /* The rectangle the pointer is being held inside for a game, or 0 for "not
  * our business". Non-zero only while game mode is engaged, the game holds
  * focus and game_confine_pointer is on. */
+/* Is a fullscreen game on this output? Unlike game_pointer_box() this does
+ * NOT require the game to hold focus — a tabbed-away game still covers the
+ * screen. For callers skipping work nobody can see (barscan). */
+int  game_owns_output(syn_server_t *s, syn_output_t *o);
+/* barscan.c — byte layout of one pixel in a read-back format; 0 if the
+ * format is one we cannot read. Exposed for tests/barscan_format_test.c. */
+int  barscan_pixel_layout(uint32_t fmt, int *bpp,
+                          int *ri, int *gi, int *bi, int *ai);
+
 int  game_pointer_box(syn_server_t *s, struct wlr_box *box);
 /* Clamp the cursor into that rectangle. Cheap and idempotent; called from
  * the pointer motion path after the cursor has already moved. */

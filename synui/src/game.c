@@ -590,6 +590,24 @@ int game_pointer_box(syn_server_t *s, struct wlr_box *box)
     return 1;
 }
 
+/* Is a fullscreen game living on this output right now?
+ *
+ * Deliberately NOT game_pointer_box()'s question. That one asks whether to
+ * hold the pointer and so requires the game to hold FOCUS — Alt-Tab is its
+ * escape hatch. This one asks whether the screen is covered by a game, which
+ * is just as true of a game the user has tabbed away from: the opaque
+ * fullscreen surface is still there, still covering everything under it. A
+ * caller that skips work because nothing on this output can be seen wants
+ * this one; a caller that changes what the USER's input does wants the other.
+ */
+int game_owns_output(syn_server_t *s, syn_output_t *o)
+{
+    if (!s || !o) return 0;
+    if (!s->config.game_mode || !s->game.active) return 0;
+    syn_view_t *v = game_find_view(s);
+    return v && v->output == o;
+}
+
 /* Pull the cursor back onto the game's screen. Called from the motion path
  * after the cursor has moved, so it clamps a position rather than a delta —
  * wlr_cursor_move maps the delta through the device's own output mapping and
