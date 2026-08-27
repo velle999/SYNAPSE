@@ -2054,7 +2054,49 @@ pkgver=0.1.0
 #   the pair. tests/barscan_format_test.c checks each channel index against
 #   drm_fourcc's own bit layout — a reversed one reports a wrong COLOUR rather
 #   than failing, which is how this went unnoticed.
-pkgrel=512
+# 513 A GAME'S LETTERBOX BARS BELONG TO THE GAME, AND A ONE-PIXEL BAR STOPS
+#   BEING LEFT THERE AT ALL. Cyberpunk 2077 lost the mouse seconds after every
+#   launch — the camera moved an inch and stuck, and only tabbing out and back
+#   freed it, for a while.
+#   ⚠ MEASURED WITH THE HAND, NOT ONLY THE CURSOR. A cursor sample cannot tell
+#   a working pointer lock from nobody touching the mouse: both read as a
+#   frozen cursor, and 510 and 512 each concluded from one. Reading the mouse's
+#   own evdev node alongside it — 643 samples with the game focused — the
+#   cursor moved on every single sample the hand moved. There was no pointer
+#   lock at any moment. That CORRECTS 512's "Cyberpunk does take a lock": the
+#   19-second hold it measured was a loading screen.
+#   ⚠ THE PICTURE WAS 2560x1438 INSIDE A 2560x1440 SCREEN. The buffer's aspect
+#   is a shade wider than the monitor's, so view_fullscreen_rescale()'s fit
+#   left a ONE PIXEL bar top and bottom. A bar belongs to no surface, so
+#   surface_at() answers NULL on it, pointer_update_focus() clears pointer
+#   focus, and the client stops receiving motion at all. Worse for an Xwayland
+#   game: Xwayland only asks for a pointer lock while its surface holds pointer
+#   focus, so a bar the cursor can reach is a lock the game can never take —
+#   and looking down parks the cursor on the bottom edge of the picture, which
+#   is exactly where that bar is. A bar nobody can see cost the whole pointer.
+#   Fixed at both ends, because a real letterbox (4:3 on a 16:9 screen) is not
+#   going away: a fit landing within 4px of the box now fills the box, a fifth
+#   of a percent of stretch nobody can see; and surface_at() answers a
+#   fullscreen client's own surface for a point on its bars, at the nearest
+#   point of its picture — the same coordinate the confine would have clamped
+#   to. Nothing else can be under them, and anything drawn above still wins the
+#   scene walk first.
+#   ⚠ THE CONSTRAINT LIFECYCLE WAS LOGGED AT WLR_DEBUG, which no shipped
+#   session prints, so "did the client ever ask for the pointer" — the first
+#   fork in every mouse-capture report — has never been answerable from the
+#   journal. At INFO now: locked vs confined, oneshot vs persistent, activation,
+#   deactivation with what it costs, and a line for a constraint that arrives
+#   while its surface holds no pointer focus.
+#   `synctl pointer` reports the live state instead of leaving it to be
+#   inferred: every constraint on file, which one is active, whether it is
+#   BOUND (an active constraint whose surface lost pointer focus is a lock that
+#   has silently stopped locking), and game mode's own confine box beside the
+#   game's drawn rectangle and its output — the gap between those two IS the
+#   bar. view_scaled_content_box() (xwayland.c) is now the one owner of a
+#   measurement that had grown three private copies.
+#   tests/game_confine_test.c gains the letterbox cases and states the drawn
+#   rectangle outright rather than building a scene to imply it.
+pkgrel=513
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

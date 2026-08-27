@@ -271,6 +271,85 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
     ime_set_focus(s, surface);
 }
 
+/* The view a scene node ultimately belongs to, or NULL for one that is not a
+ * window's (a layer surface, the wallpaper, our own chrome). */
+static syn_view_t *node_owner_view(struct wlr_scene_node *node)
+{
+    struct wlr_scene_tree *tree = node ? node->parent : NULL;
+    while (tree && !tree->node.data)
+        tree = tree->node.parent;
+    return tree ? tree->node.data : NULL;
+}
+
+/*
+ * ⚠ A FULLSCREEN CLIENT'S LETTERBOX BARS ARE THE CLIENT'S, NOT NOBODY'S.
+ *
+ * view_fullscreen_rescale() fits a sub-native surface inside the fullscreen
+ * frame and centres it, so the frame carries bars no surface is painted in.
+ * The scene knows nothing is drawn there and answers NULL, and NULL is what
+ * ends mouse capture: pointer_update_focus() clears pointer focus, the client
+ * stops receiving motion at all, and for an Xwayland game it is terminal —
+ * Xwayland only asks for a pointer lock while its surface holds pointer focus,
+ * and it deactivates the one it has when focus goes. Deactivating a ONESHOT
+ * constraint destroys it outright.
+ *
+ * Nothing else can be under those bars. They are inside one window's own
+ * fullscreen frame, that window covers its whole output, and anything drawn
+ * above it (a panel, a layer surface, a popup) is found by the scene walk and
+ * wins before this is reached. So the bars answer for the window they belong
+ * to, at the nearest point of its picture — which is the same coordinate the
+ * confine would have clamped the cursor to.
+ *
+ * Reported three times as three bugs: "the mouse drifts to another monitor",
+ * "I can't look right", "it moves an inch then sticks". 512 stopped the cursor
+ * REACHING a bar; this makes reaching one harmless, which is what a game that
+ * genuinely letterboxes (4:3 on a 16:9 screen) needs.
+ */
+static struct wlr_surface *fullscreen_bar_surface_at(
+    syn_server_t *s, double lx, double ly, struct wlr_scene_node *hit,
+    syn_view_t **view_out, double *sx, double *sy)
+{
+    /* Something IS drawn here and it belongs to another window — not a bar. */
+    syn_view_t *owner = node_owner_view(hit);
+
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link) {
+            if (!v->mapped || !v->fullscreen || !v->is_xwayland) continue;
+            if (owner && owner != v) continue;
+            if (lx < v->x || lx >= v->x + v->w ||
+                ly < v->y || ly >= v->y + v->h) continue;
+
+            struct wlr_surface *surf = view_surface(v);
+            if (!surf) continue;
+            int surf_w = surf->current.width, surf_h = surf->current.height;
+            if (surf_w <= 0 || surf_h <= 0) continue;
+
+            /* view_scaled_content_box() answers 0 for a view whose tree is not
+             * on screen, which is also how a window on another workspace is
+             * ruled out. */
+            struct wlr_box c;
+            if (!view_scaled_content_box(v, &c)) continue;
+            if (c.width <= 0 || c.height <= 0) continue;
+            /* No bars: the scene walk already had its chance at every point. */
+            if (c.width >= v->w && c.height >= v->h) continue;
+
+            /* The nearest point of the picture, in ITS coordinates. One short
+             * of the far edge: the picture's last row and column are inside
+             * it, c.x + c.width is the first column of the bar. */
+            double cx = lx < c.x ? c.x : (lx > c.x + c.width  - 1
+                                              ? c.x + c.width  - 1 : lx);
+            double cy = ly < c.y ? c.y : (ly > c.y + c.height - 1
+                                              ? c.y + c.height - 1 : ly);
+            if (sx) *sx = (cx - c.x) * (double)surf_w / c.width;
+            if (sy) *sy = (cy - c.y) * (double)surf_h / c.height;
+            if (view_out) *view_out = v;
+            return surf;
+        }
+    }
+    return NULL;
+}
+
 /* Topmost surface (of any role) under the given layout coordinates. Also
  * returns the owning toplevel view if the surface belongs to one (NULL for
  * layer surfaces, popups, and the compositor's own UI). */
@@ -281,7 +360,8 @@ struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
 
     struct wlr_scene_node *node =
         wlr_scene_node_at(&s->scene->tree.node, lx, ly, sx, sy);
-    if (!node || node->type != WLR_SCENE_NODE_BUFFER) return NULL;
+    if (!node || node->type != WLR_SCENE_NODE_BUFFER)
+        return fullscreen_bar_surface_at(s, lx, ly, node, view_out, sx, sy);
 
     /* Never the drag icon.
      *
@@ -307,14 +387,10 @@ struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
 
     struct wlr_scene_buffer *buf = wlr_scene_buffer_from_node(node);
     struct wlr_scene_surface *scene_surf = wlr_scene_surface_try_from_buffer(buf);
-    if (!scene_surf) return NULL;
+    if (!scene_surf)
+        return fullscreen_bar_surface_at(s, lx, ly, node, view_out, sx, sy);
 
-    if (view_out) {
-        struct wlr_scene_tree *tree = node->parent;
-        while (tree && !tree->node.data)
-            tree = tree->node.parent;
-        if (tree) *view_out = tree->node.data;
-    }
+    if (view_out) *view_out = node_owner_view(node);
     return scene_surf->surface;
 }
 

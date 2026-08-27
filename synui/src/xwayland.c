@@ -330,6 +330,55 @@ static void fs_place_surface(syn_view_t *v, int off_x, int off_y)
                                 base_x + off_x, base_y + off_y);
 }
 
+/* The rectangle a single-buffer client is actually DRAWN in, in layout
+ * coordinates — buffer origin plus the destination size set above, which is
+ * NOT the view box when the fit letterboxed.
+ *
+ * One owner for a probe that had grown three private copies (here, game.c,
+ * constraints.c). Answers 0 for a client with no single buffer to measure,
+ * which is the same set view_fullscreen_rescale() declines to scale.
+ */
+int view_scaled_content_box(syn_view_t *v, struct wlr_box *out)
+{
+    if (!v || !v->mapped || !v->scene_tree || !out) return 0;
+
+    struct fs_scale_probe p = {0};
+    wlr_scene_node_for_each_buffer(&v->scene_tree->node, fs_scale_count, &p);
+    if (p.count != 1 || !p.buf) return 0;
+    if (p.buf->dst_width <= 0 || p.buf->dst_height <= 0) return 0;
+
+    int lx, ly;
+    if (!wlr_scene_node_coords(&p.buf->node, &lx, &ly)) return 0;
+
+    *out = (struct wlr_box){ lx, ly, p.buf->dst_width, p.buf->dst_height };
+    return 1;
+}
+
+/*
+ * ⚠ A LETTERBOX BAR A COUPLE OF PIXELS TALL IS NOT COSMETIC. IT IS AN INPUT BUG.
+ *
+ * A bar belongs to no surface, so the moment the cursor reaches one the hit
+ * test answers nothing, pointer focus is cleared, and the client stops
+ * receiving pointer motion at all — mouse-look freezes until something hands
+ * the focus back. For an Xwayland game it is worse than that: Xwayland only
+ * asks for a pointer lock while its surface holds pointer focus, so a bar it
+ * can touch is a lock it can never take.
+ *
+ * MEASURED on Cyberpunk 2077 (2026-08-26): buffer aspect a shade wider than
+ * the monitor's, so the fit produced 2560x1438 inside a 2560x1440 screen — a
+ * ONE PIXEL bar top and bottom, invisible on screen, and the cursor sat on the
+ * bottom edge of the picture constantly because that is what looking down
+ * does. 643 samples of the hand against the cursor: not one pointer lock in
+ * three and a half minutes.
+ *
+ * So a fit that comes within a couple of pixels of the box fills the box
+ * instead. The picture stretches by at most a fifth of a percent on one axis,
+ * which no one can see; the bar it removes was costing the whole pointer.
+ * A real letterbox — a 4:3 game on a 16:9 screen — is far outside this and
+ * still letterboxes, which is why surface_at() also answers for those bars.
+ */
+#define FS_LETTERBOX_SNAP 4
+
 void view_fullscreen_rescale(syn_view_t *v)
 {
     if (!v || !v->is_xwayland || v->override_redirect || !v->mapped ||
@@ -348,6 +397,9 @@ void view_fullscreen_rescale(syn_view_t *v)
         double fx = (double)v->w / sw, fy = (double)v->h / sh;
         double scale = fx < fy ? fx : fy;
         int dw = (int)(sw * scale + 0.5), dh = (int)(sh * scale + 0.5);
+        /* Snap away a bar too thin to see — see above. */
+        if (v->w - dw <= FS_LETTERBOX_SNAP) dw = v->w;
+        if (v->h - dh <= FS_LETTERBOX_SNAP) dh = v->h;
         wlr_scene_buffer_set_dest_size(p.buf, dw, dh);
         fs_place_surface(v, (v->w - dw) / 2, (v->h - dh) / 2);
     } else {

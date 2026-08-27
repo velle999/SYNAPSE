@@ -218,7 +218,7 @@ static void constraint_destroy(struct wl_listener *listener, void *data)
     }
     wl_list_remove(&sc->destroy.link);
     wl_list_remove(&sc->set_region.link);
-    wlr_log(WLR_DEBUG, "synui: pointer constraint destroyed");
+    wlr_log(WLR_INFO, "synui: pointer constraint destroyed");
     free(sc);
 }
 
@@ -248,14 +248,32 @@ static void server_new_constraint(struct wl_listener *listener, void *data)
     sc->set_region.notify = constraint_set_region;
     wl_signal_add(&constraint->events.set_region, &sc->set_region);
 
-    wlr_log(WLR_DEBUG, "synui: new %s pointer constraint",
+    /* ⚠ LOGGED AT INFO, not DEBUG, and the whole lifecycle with it.
+     *
+     * Whether a client ever ASKED for the pointer is the first fork in every
+     * mouse-capture report, and it is unanswerable from outside: a game that
+     * never asked and a game whose lock was destroyed behave identically. Two
+     * sessions were spent inferring it from cursor samples with these lines
+     * sitting at a level no shipped session ever prints. They fire once per
+     * grab — a handful per game — so INFO costs nothing. */
+    wlr_log(WLR_INFO, "synui: new %s pointer constraint (%s)",
             constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED
-                ? "locked" : "confined");
+                ? "locked" : "confined",
+            constraint->lifetime == ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT
+                ? "oneshot" : "persistent");
 
     /* If its surface already holds pointer focus, engage immediately —
      * clients typically lock in response to a click they just received. */
-    if (s->seat->pointer_state.focused_surface == constraint->surface)
+    if (s->seat->pointer_state.focused_surface == constraint->surface) {
         constraints_focus_surface(s, constraint->surface);
+    } else {
+        /* It asked while the cursor was somewhere else — over another window,
+         * another monitor, or our own chrome. Nothing is wrong yet: the next
+         * motion that lands the pointer on the surface activates it. It stays
+         * dormant until one does, which is worth being able to see. */
+        wlr_log(WLR_INFO, "synui: pointer constraint not engaged yet — its "
+                          "surface does not hold pointer focus");
+    }
 }
 
 /* Does the keyboard-focused window own this constraint's surface?
@@ -304,6 +322,9 @@ void constraints_focus_surface(syn_server_t *s, struct wlr_surface *surface)
          * destroy handler must not treat it as still active (double warp). */
         struct wlr_pointer_constraint_v1 *old = s->active_constraint;
         s->active_constraint = NULL;
+        wlr_log(WLR_INFO, "synui: pointer constraint deactivated (%s)",
+                old->lifetime == ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT
+                    ? "oneshot — this DESTROYS it" : "persistent");
         wlr_pointer_constraint_v1_send_deactivated(old);
     }
     if (constraint) {
@@ -312,7 +333,9 @@ void constraints_focus_surface(syn_server_t *s, struct wlr_surface *surface)
         /* Before the first motion, not on it: a confinement that engages with
          * the pointer outside its region never engages at all. */
         constraint_confine_cursor(s, constraint);
-        wlr_log(WLR_DEBUG, "synui: pointer constraint activated");
+        wlr_log(WLR_INFO, "synui: %s pointer constraint activated",
+                constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED
+                    ? "locked" : "confined");
     }
 }
 

@@ -7491,6 +7491,10 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized);
 /* Scale a sub-native fullscreen X11 client up to fill its output (xwayland.c);
  * no-op for xdg, override-redirect, multi-surface or already-filling clients. */
 void view_fullscreen_rescale(syn_view_t *view);
+/* The rectangle a single-buffer client is DRAWN in, in layout coordinates —
+ * the buffer's origin and destination size, which is not the view box when a
+ * fullscreen fit letterboxed. 0 when there is no single buffer to measure. */
+int  view_scaled_content_box(syn_view_t *v, struct wlr_box *out);
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
 /* The tiling passes act on one (workspace, output) pair: the windows of ws that
  * live on o. layout_apply() runs them for every output showing ws. */
@@ -8026,6 +8030,13 @@ int  game_confine_rect(const struct wlr_box *out, const struct wlr_box *content,
  * the pointer motion path after the cursor has already moved, and from the
  * smoothing settle timer, which is the other way the cursor moves. */
 void game_confine_cursor(syn_server_t *s);
+
+/* ── Diagnostics (synctl pointer) ────────────────────────────
+ * The game view game mode would act on, and the rectangle its picture is
+ * drawn in — reported, never acted on. Silent, so a caller may poll them.
+ * game_probe_content() answers 0 when there is no single buffer to measure,
+ * which is the same "no letterboxing known" the confine path reads. */
+syn_view_t *game_probe_view(syn_server_t *s);
 
 /* ── Cat mode (cat.c) ────────────────────────────────────── */
 

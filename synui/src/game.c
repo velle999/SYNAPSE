@@ -537,47 +537,13 @@ void game_finish(syn_server_t *s)
     game_publish(s);
 }
 
-/* The single scene buffer a game draws into, if it has exactly one.
- *
- * Same shape as view_fullscreen_rescale()'s probe, and deliberately the same
- * "exactly one" rule: a client whose tree carries several buffers is one that
- * function declines to scale, so it has no letterboxing to correct for here
- * either. */
-struct game_content_probe { int count; struct wlr_scene_buffer *buf; };
-
-static void game_content_count(struct wlr_scene_buffer *b, int sx, int sy,
-                               void *data)
-{
-    (void)sx; (void)sy;
-    struct game_content_probe *p = data;
-    p->count++;
-    p->buf = b;
-}
-
-/* The rectangle the game is actually DRAWN in, in layout coordinates.
- *
- * NOT the view box. view_fullscreen_rescale() fits a sub-native surface inside
- * the fullscreen frame and centres it, so the frame carries letterbox bars that
- * belong to no surface at all — and those bars are the whole reason this
- * function exists. See game_confine_rect().
- *
- * Answers 0 when there is no single buffer to measure, which the caller reads
- * as "no letterboxing known" rather than as an error. */
-static int game_content_box(syn_view_t *v, struct wlr_box *out)
-{
-    if (!v || !v->mapped || !v->scene_tree) return 0;
-
-    struct game_content_probe p = {0};
-    wlr_scene_node_for_each_buffer(&v->scene_tree->node, game_content_count, &p);
-    if (p.count != 1 || !p.buf) return 0;
-    if (p.buf->dst_width <= 0 || p.buf->dst_height <= 0) return 0;
-
-    int lx, ly;
-    if (!wlr_scene_node_coords(&p.buf->node, &lx, &ly)) return 0;
-
-    *out = (struct wlr_box){ lx, ly, p.buf->dst_width, p.buf->dst_height };
-    return 1;
-}
+/* The rectangle the game is actually DRAWN in — NOT the view box.
+ * view_fullscreen_rescale() fits a sub-native surface inside the fullscreen
+ * frame and centres it, so the frame can carry letterbox bars that belong to
+ * no surface at all, and those bars are the whole reason game_confine_rect()
+ * exists. One owner for the measurement, in xwayland.c beside the code that
+ * sets the size it reads. */
+#define game_content_box(v, out)  view_scaled_content_box((v), (out))
 
 /*
  * Which rectangle holds the pointer: the game's own surface, clipped to the
@@ -716,3 +682,28 @@ void game_confine_cursor(syn_server_t *s)
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
 }
+
+/* ── The diagnostic probe behind `synctl pointer` ───────────
+ *
+ * Everything above decides; this only reports. It exists because the whole
+ * pointer story — does the game hold a lock, does it merely have one on file,
+ * which rectangle is holding the cursor — is invisible from outside the
+ * compositor, and the three sessions this file's comments record were each
+ * spent inferring it from a cursor sample. A cursor sample cannot tell a
+ * working lock from a game that never asked for one; this can.
+ *
+ * SILENT and cheap, because a probe is sampled in a loop: it repeats
+ * game_find_view()'s walk rather than calling it, whose one log line would
+ * otherwise print several times a second.
+ */
+syn_view_t *game_probe_view(syn_server_t *s)
+{
+    if (!s) return NULL;
+    for (int wi = 0; wi < WORKSPACE_MAX; wi++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[wi].windows, link)
+            if (game_view_is_game(s, v)) return v;
+    }
+    return NULL;
+}
+

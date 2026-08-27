@@ -62,6 +62,20 @@ void synmon_stop(syn_server_t *s)  { (void)s; }
 void synui_spawn(const char *cmd)  { (void)cmd; }
 void wlr_output_schedule_frame(struct wlr_output *o) { (void)o; }
 
+/* The rectangle the game is DRAWN in. Stubbed so a test can state a letterbox
+ * outright rather than building a scene graph to imply one; a zero box is the
+ * "nothing measurable" answer the real one gives for a client whose tree
+ * carries more than one buffer. */
+static struct wlr_box stub_content;
+
+int view_scaled_content_box(syn_view_t *v, struct wlr_box *out)
+{
+    (void)v;
+    if (stub_content.width <= 0 || stub_content.height <= 0) return 0;
+    *out = stub_content;
+    return 1;
+}
+
 /* ── Harness ───────────────────────────────────────────────── */
 
 static syn_server_t   srv;
@@ -77,6 +91,7 @@ static void reset(void)
     memset(&game, 0, sizeof game);
     memset(&out, 0, sizeof out);
     memset(&cursor, 0, sizeof cursor);
+    stub_content = (struct wlr_box){ 0, 0, 0, 0 };
 
     for (int i = 0; i < WORKSPACE_MAX; i++)
         wl_list_init(&srv.workspaces[i].windows);
@@ -195,6 +210,26 @@ int main(void)
     /* An unfocused game must not have its cursor moved at all. */
     reset(); srv.focused_view = NULL;
     lands("unfocused: cursor untouched",   9999, 9999, 9999, 9999);
+
+    printf("\n A LETTERBOX HOLDS THE POINTER, NOT THE SCREEN\n");
+
+    /* Measured on Cyberpunk 2077, 2026-08-26: the fit produced 2560x1438
+     * inside a 2560x1440 screen — a ONE PIXEL bar top and bottom. The cursor
+     * sits on the bottom edge of the picture constantly, because that is what
+     * looking down does, and one step onto the bar costs pointer focus. */
+    reset();
+    stub_content = (struct wlr_box){ 1080, 1081, 2560, 1438 };
+    lands("the bottom bar is out of reach", 2000, 3000, 2000, 2518);
+    lands("the top bar is out of reach",    2000,  200, 2000, 1081);
+    lands("the sides are still the screen's", 4000, 1800, 3639, 1800);
+    lands("inside the picture is left alone", 2000, 1800, 2000, 1800);
+
+    /* A picture wider than the screen is the client's own dest size, not ours;
+     * the confine may never follow it off the monitor. */
+    reset();
+    stub_content = (struct wlr_box){ 1000, 1000, 3000, 1600 };
+    lands("a picture overhanging the screen still clamps to it",
+                                            4000, 3000, 3639, 2519);
 
     printf("\n WHICH SCREEN A GAME COVERS  (barscan skips it)\n");
 

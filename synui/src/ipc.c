@@ -231,6 +231,139 @@ static void cmd_clients(syn_server_t *s, ipc_buf_t *b)
     bputs(b, "]\n");
 }
 
+/* Which mapped window owns a surface, or NULL. Diagnostic-only: the pointer
+ * probe below reports surfaces by the window a person can name. */
+static syn_view_t *ipc_view_of_surface(syn_server_t *s, struct wlr_surface *surf)
+{
+    if (!surf) return NULL;
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link)
+            if (v->mapped && view_surface(v) == surf) return v;
+    }
+    return NULL;
+}
+
+static void json_surface_owner(ipc_buf_t *b, syn_server_t *s,
+                               struct wlr_surface *surf)
+{
+    syn_view_t *v = ipc_view_of_surface(s, surf);
+    if (!v) { bputs(b, surf ? "\"(not a window)\"" : "null"); return; }
+    bjson_str(b, view_app_id(v));
+}
+
+static void json_constraint(ipc_buf_t *b, syn_server_t *s,
+                            struct wlr_pointer_constraint_v1 *c)
+{
+    bputs(b, "{\"type\":");
+    bjson_str(b, c->type == WLR_POINTER_CONSTRAINT_V1_LOCKED
+                     ? "locked" : "confined");
+    bputs(b, ",\"lifetime\":");
+    bjson_str(b, c->lifetime == ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT
+                     ? "oneshot" : "persistent");
+    bputs(b, ",\"surface\":");
+    json_surface_owner(b, s, c->surface);
+    bprintf(b, ",\"active\":%s",
+            s->active_constraint == c ? "true" : "false");
+    /* The region is in SURFACE coordinates and an empty one is meaningful:
+     * a confinement with nothing to confine to does not bind at all. */
+    if (pixman_region32_not_empty(&c->region)) {
+        pixman_box32_t *e = pixman_region32_extents(&c->region);
+        bprintf(b, ",\"region\":[%d,%d,%d,%d]",
+                e->x1, e->y1, e->x2 - e->x1, e->y2 - e->y1);
+    } else {
+        bputs(b, ",\"region\":null");
+    }
+    bputs(b, "}");
+}
+
+/*
+ * `synctl pointer` — who is holding the mouse, and inside what.
+ *
+ * ⚠ A CURSOR POSITION ALONE CANNOT ANSWER THIS, and three sessions were spent
+ * proving it. A frozen cursor is a working lock and a moving one is not always
+ * a broken one; a game that never asked for a lock and a game whose lock was
+ * destroyed look identical from `synctl cursor`, and so do "confined to the
+ * screen" and "confined to the game's picture". Every one of those is a
+ * different bug with a different fix, so they are reported apart here:
+ *
+ *   constraints  every constraint on file, whether or not it is active. This
+ *                is the one that says whether the CLIENT ever asked — an empty
+ *                list means no amount of work in constraints.c can help.
+ *   active       the one binding right now. `bound` is the sharper question:
+ *                a constraint only binds while its surface holds POINTER
+ *                focus, so an active constraint whose surface does not is a
+ *                lock that has silently stopped locking.
+ *   game         the compositor's own confinement, which needs no client
+ *                request and answers to game mode alone.
+ */
+static void cmd_pointer(syn_server_t *s, ipc_buf_t *b)
+{
+    struct wlr_surface *pfocus = s->seat->pointer_state.focused_surface;
+
+    bprintf(b, "{\"cursor\":[%.3f,%.3f]", s->cursor->x, s->cursor->y);
+    bprintf(b, ",\"seat_surface_xy\":[%.3f,%.3f]",
+            s->seat->pointer_state.sx, s->seat->pointer_state.sy);
+    bprintf(b, ",\"buttons\":%u", s->seat->pointer_state.button_count);
+    bprintf(b, ",\"smoothing\":%d", s->config.pointer_smoothing);
+
+    bputs(b, ",\"pointer_focus\":");
+    json_surface_owner(b, s, pfocus);
+    bputs(b, ",\"keyboard_focus\":");
+    if (s->focused_view && s->focused_view->mapped)
+        bjson_str(b, view_app_id(s->focused_view));
+    else
+        bputs(b, "null");
+
+    bputs(b, ",\"active\":");
+    if (s->active_constraint) json_constraint(b, s, s->active_constraint);
+    else                      bputs(b, "null");
+    bprintf(b, ",\"bound\":%s",
+            (s->active_constraint &&
+             pfocus == s->active_constraint->surface) ? "true" : "false");
+
+    bputs(b, ",\"constraints\":[");
+    if (s->pointer_constraints) {
+        struct wlr_pointer_constraint_v1 *c;
+        int first = 1;
+        wl_list_for_each(c, &s->pointer_constraints->constraints, link) {
+            if (!first) bputs(b, ",");
+            first = 0;
+            json_constraint(b, s, c);
+        }
+    }
+    bputs(b, "]");
+
+    /* Game mode's own confinement. `box` is what actually holds the cursor;
+     * `content` is the game's picture and `output` its screen, reported apart
+     * because the gap between them IS the letterbox bar. */
+    syn_view_t *gv = game_probe_view(s);
+    bprintf(b, ",\"game\":{\"mode\":%s,\"active\":%s,\"confine\":%s",
+            s->config.game_mode ? "true" : "false",
+            s->game.active      ? "true" : "false",
+            s->config.game_confine_pointer ? "true" : "false");
+    bputs(b, ",\"view\":");
+    if (gv) bjson_str(b, view_app_id(gv)); else bputs(b, "null");
+    bprintf(b, ",\"focused\":%s", (gv && s->focused_view == gv) ? "true" : "false");
+
+    struct wlr_box bx;
+    if (gv && gv->output) {
+        output_box_of(s, gv->output, &bx);
+        bprintf(b, ",\"output\":[%d,%d,%d,%d]", bx.x, bx.y, bx.width, bx.height);
+    } else {
+        bputs(b, ",\"output\":null");
+    }
+    if (gv && view_scaled_content_box(gv, &bx))
+        bprintf(b, ",\"content\":[%d,%d,%d,%d]", bx.x, bx.y, bx.width, bx.height);
+    else
+        bputs(b, ",\"content\":null");
+    if (game_pointer_box(s, &bx))
+        bprintf(b, ",\"box\":[%d,%d,%d,%d]", bx.x, bx.y, bx.width, bx.height);
+    else
+        bputs(b, ",\"box\":null");
+    bputs(b, "}}\n");
+}
+
 /*
  * The applications this desktop has opened, newest first.
  *
@@ -508,6 +641,10 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         bprintf(out, "{\"x\":%.3f,\"y\":%.3f}\n", s->cursor->x, s->cursor->y);
         return;
     }
+    if (strcmp(line, "pointer") == 0) {
+        cmd_pointer(s, out);
+        return;
+    }
     if (strcmp(line, "activewindow") == 0) {
         if (s->focused_view && s->focused_view->mapped) json_view(out, s->focused_view);
         else                                            bputs(out, "{}");
@@ -520,7 +657,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     }
     if (strcmp(line, "help") == 0) {
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
-                   "\"activeworkspace\",\"activewindow\",\"cursor\","
+                   "\"activeworkspace\",\"activewindow\",\"cursor\",\"pointer\","
                    "\"recent\",\"binds\",\"version\","
                    "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");
         return;
