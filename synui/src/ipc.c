@@ -645,6 +645,53 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         cmd_pointer(s, out);
         return;
     }
+    /*
+     * The keyboard layouts, and how to move between them.
+     *
+     *   synctl layout            — list them, and say which one is typing
+     *   synctl layout next|prev  — walk them
+     *   synctl layout <name|N>   — go to one by name or index
+     *
+     * The lock screen's chip is the GUI half of exactly this (Super+Space, or
+     * clicking it); a desktop with two layouts needs the same verb without
+     * locking the screen first, and a script needs it at all.
+     */
+    if (strncmp(line, "layout", 6) == 0 && (line[6] == ' ' || line[6] == '\0')) {
+        const char *arg = line[6] ? line + 7 : "";
+        while (*arg == ' ') arg++;
+
+        if (*arg) {
+            if (strcmp(arg, "next") == 0) {
+                kbd_layout_cycle(s, +1);
+            } else if (strcmp(arg, "prev") == 0) {
+                kbd_layout_cycle(s, -1);
+            } else {
+                int idx = kbd_layout_from_name(s, arg);
+                if (idx < 0) {
+                    bputs(out, "{\"error\":\"no such layout\",\"layout\":");
+                    bjson_str(out, arg);
+                    bputs(out, "}\n");
+                    return;
+                }
+                kbd_layout_set(s, idx);
+            }
+            /* The lock screen's chip is drawn, not bound — nothing repaints it
+             * on its own, and a layout changed from a script while the screen
+             * is locked is precisely when the chip must be right. */
+            if (s->nlock.active) lock_render(s);
+        }
+
+        int n = kbd_layout_count(s), act = kbd_layout_active(s);
+        bprintf(out, "{\"active\":%d,\"layouts\":[", act);
+        for (int i = 0; i < n; i++) {
+            char lab[64];
+            kbd_layout_label(s, i, lab, sizeof(lab));
+            if (i) bputs(out, ",");
+            bjson_str(out, lab);
+        }
+        bputs(out, "]}\n");
+        return;
+    }
     if (strcmp(line, "activewindow") == 0) {
         if (s->focused_view && s->focused_view->mapped) json_view(out, s->focused_view);
         else                                            bputs(out, "{}");
@@ -659,6 +706,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
                    "\"activeworkspace\",\"activewindow\",\"cursor\",\"pointer\","
                    "\"recent\",\"binds\",\"version\","
+                   "\"layout [next|prev|<name>]\","
                    "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");
         return;
     }

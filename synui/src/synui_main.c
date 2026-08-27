@@ -2331,6 +2331,16 @@ int synui_init(syn_server_t *s)
     /* org.freedesktop.ScreenSaver — lets apps inhibit idle the standard way.
      * Best-effort; no session bus just means the feature stays off. */
     screensaver_init(s);
+
+    /* What is playing, for the lock and login screens — the two screens the
+     * bar's Media module is not on. Best-effort in exactly the same way: no
+     * session bus means no media row, not an error. */
+    mpris_init(s);
+
+    /* The lock screen's weather. Reads the location file and the cached
+     * reading here (both local); goes near the network only if lock_weather is
+     * on, which it is not by default. */
+    weather_init(s);
     bt_init(s);
     notif_init(s);
     logind_init(s);
@@ -2616,6 +2626,12 @@ void synui_destroy(syn_server_t *s)
     clock_finish(s);
     dock_finish(s);
     screensaver_finish(s);
+    mpris_finish(s);
+    /* Joins the fetch thread. Its stop flag doubles as the libcurl progress
+     * callback, so a transfer in flight aborts within a poll interval rather
+     * than holding logout for the connect timeout — the lesson news.c took from
+     * the AI thread's 15s hang. */
+    weather_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */
     game_finish(s);

@@ -69,6 +69,22 @@ int lock_bg_from_name(const char *name)
     return -1;
 }
 
+/* Indexed by syn_lock_layout_t — when the lock screen shows the keyboard
+ * layout chip. Here for the same reason the two tables above are: the panel,
+ * the parser and the state file all resolve the word through one list. */
+const char *const syn_lock_layout_names[SYN_LOCK_LAYOUT_COUNT] = {
+    [SYN_LOCK_LAYOUT_AUTO] = "auto",
+    [SYN_LOCK_LAYOUT_ON]   = "on",
+    [SYN_LOCK_LAYOUT_OFF]  = "off",
+};
+
+int lock_layout_from_name(const char *name)
+{
+    for (int i = 0; i < SYN_LOCK_LAYOUT_COUNT; i++)
+        if (strcmp(name, syn_lock_layout_names[i]) == 0) return i;
+    return -1;
+}
+
 /* ── State file ──────────────────────────────────────────── */
 
 static bool saver_state_path(char *buf, size_t n)
@@ -104,6 +120,10 @@ void saver_state_save(syn_server_t *s)
     fprintf(f, "lock_dim=%d\n",   s->config.lock_bg_dim);
     fprintf(f, "lock_blur=%d\n",  s->config.lock_bg_blur);
     fprintf(f, "lock_follow=%d\n", s->config.lock_theme_follow ? 1 : 0);
+    fprintf(f, "lock_media=%d\n",  s->config.lock_media ? 1 : 0);
+    fprintf(f, "lock_weather=%d\n", s->config.lock_weather ? 1 : 0);
+    fprintf(f, "lock_weather_unit=%c\n", s->config.lock_weather_unit_f ? 'F' : 'C');
+    fprintf(f, "lock_layout=%s\n", syn_lock_layout_names[s->config.lock_layout]);
     fclose(f);
 
     s->saver.dirty = 0;
@@ -150,6 +170,17 @@ void saver_state_load(syn_config_t *cfg)
             cfg->lock_bg_blur = val < 0 ? 0 : (val > 64 ? 64 : val);
         } else if (strcmp(key, "lock_follow") == 0) {
             cfg->lock_theme_follow = val ? 1 : 0;
+        } else if (strcmp(key, "lock_media") == 0) {
+            cfg->lock_media = val ? 1 : 0;
+        } else if (strcmp(key, "lock_weather") == 0) {
+            cfg->lock_weather = val ? 1 : 0;
+        } else if (strcmp(key, "lock_weather_unit") == 0) {
+            /* A letter, not a flag: `unit=1` would be a file nobody could read
+             * and the two units are one character each. */
+            cfg->lock_weather_unit_f = (sval[0] == 'F' || sval[0] == 'f');
+        } else if (strcmp(key, "lock_layout") == 0) {
+            int l = lock_layout_from_name(sval);
+            if (l >= 0) cfg->lock_layout = l;
         }
     }
     fclose(f);

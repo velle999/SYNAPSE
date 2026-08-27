@@ -78,6 +78,9 @@ int  display_mode_from_name(const char *n)    { (void)n; return -1; }
 int  wallpaper_mode_from_name(const char *n)  { (void)n; return 0; }
 int  saver_mode_from_name(const char *n)      { (void)n; return 0; }
 int  lock_bg_from_name(const char *n)         { (void)n; return 0; }
+/* Same story: the lock screen's keyboard-layout chip has a vocabulary, and
+ * config.c resolves the word through it. saver_state.c owns the table. */
+int  lock_layout_from_name(const char *n)     { (void)n; return -1; }
 bool syn_arrange_parse(const char *s, syn_arrange_t *out)
 { (void)s; (void)out; return false; }
 

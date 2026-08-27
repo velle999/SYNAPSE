@@ -2981,6 +2981,60 @@ typedef enum {
 extern const char *const syn_lock_bg_names[SYN_LOCK_BG_COUNT];
 int lock_bg_from_name(const char *name);
 
+/* When the lock screen shows the keyboard-layout chip. AUTO is the default and
+ * means "only when there is a choice to make": one layout is not a selector,
+ * it is a label nobody needs. ON pins it visible anyway, which is what you want
+ * while setting a second layout up. */
+typedef enum {
+    SYN_LOCK_LAYOUT_AUTO = 0,
+    SYN_LOCK_LAYOUT_ON,
+    SYN_LOCK_LAYOUT_OFF,
+    SYN_LOCK_LAYOUT_COUNT,
+} syn_lock_layout_t;
+
+extern const char *const syn_lock_layout_names[SYN_LOCK_LAYOUT_COUNT];
+int lock_layout_from_name(const char *name);
+
+/* The six pictures weather.c can draw. Chosen by WMO code in wx_describe(),
+ * which picks the WORDS at the same time so the two cannot disagree. */
+typedef enum {
+    SYN_WX_SUN = 0,
+    SYN_WX_PARTLY,
+    SYN_WX_CLOUD,
+    SYN_WX_RAIN,
+    SYN_WX_SNOW,
+    SYN_WX_STORM,
+    SYN_WX_FOG,
+} syn_weather_icon_t;
+
+/* One reading, as the lock panel wants it: already in the configured unit,
+ * already rounded, already described. */
+typedef struct {
+    char               place[64];
+    char               cond[48];     /* "Partly cloudy"; "" for an unknown code */
+    syn_weather_icon_t icon;
+    int                temp;
+    char               unit;         /* 'C' or 'F' */
+    bool               stale;        /* older than a few hours — drawn dimmed */
+    long               age;          /* seconds since the reading */
+} syn_weather_now_t;
+
+/* What is playing, as the lock panel wants it. The can_* flags dim a button a
+ * player has said it will not honour rather than drawing a control that does
+ * nothing. */
+typedef struct {
+    char title[192];
+    char artist[160];
+    int  playing;
+    int  can_next, can_prev, can_play;
+} syn_mpris_now_t;
+
+/* One clickable rect on the lock panel, in PANEL coordinates. Named rather
+ * than anonymous because lock.c walks the four of them through an array of
+ * pointers, and two anonymous structs with identical members are still two
+ * incompatible types to C. */
+typedef struct { double x, y, w, h; } syn_lock_hit_t;
+
 /* Rows in the Super+Z screensaver panel. */
 typedef enum {
     SAVER_ROW_MODE = 0,
@@ -2992,6 +3046,10 @@ typedef enum {
     SAVER_ROW_LOCK_DIM,
     SAVER_ROW_LOCK_BLUR,
     SAVER_ROW_LOCK_THEME,   /* follow the desktop theme, or not */
+    SAVER_ROW_LOCK_MEDIA,   /* now-playing row + transport buttons */
+    SAVER_ROW_LOCK_WEATHER, /* the weather row — the one thing here that uses the network */
+    SAVER_ROW_LOCK_WX_UNIT, /* °C or °F */
+    SAVER_ROW_LOCK_LAYOUT,  /* the keyboard-layout chip */
     SAVER_ROW_COUNT,
 } syn_saver_row_t;
 
@@ -3896,6 +3954,35 @@ typedef struct {
      * panel_accent, so switching back to "follow" needs nothing restored. */
     int   lock_theme_follow;
     float lock_accent[4];
+
+    /* ── What else the lock/login screen carries ──────────────
+     *
+     * All three are drawn by lock.c on the same panel as the clock, and all
+     * three reach the LOGIN screen too — the login screen is that panel (see
+     * greeter.c), so a setting that only reached the in-session lock would be
+     * exactly the stranded half this tree keeps finding.
+     */
+
+    /* Now playing, with ⏮ ⏯ ⏭ under it (mpris.c). On by default: it costs a
+     * D-Bus match on a bus synui is already on, and draws nothing at all when
+     * no player is running — which is the state of most machines most of the
+     * time. */
+    int   lock_media;
+
+    /* The weather (weather.c). ⚠ OFF by default — it is the one thing on this
+     * screen that goes to the network, and on a distro that is careful about
+     * that it has to be asked for. The PLACE is not here: it is the file every
+     * weather widget on this machine already reads
+     * (~/.local/state/omarchy/settings/weather.json), written by
+     * omarchy-weather-location. */
+    int   lock_weather;
+    int   lock_weather_unit_f;   /* 0 = °C, 1 = °F; seeded from the locale */
+
+    /* The keyboard-layout chip (kbdlayout.c). AUTO shows it only when
+     * xkb_layout names more than one, which is when it stops being decoration:
+     * a wrong layout at a login prompt is indistinguishable from a wrong
+     * password, and nothing else on that screen can say so. */
+    syn_lock_layout_t lock_layout;
 
     /* Cursor theme (cursor.c). Empty name = whatever XCURSOR_THEME says, which
      * is what synui did unconditionally before this existed. The size is pinned
@@ -6136,6 +6223,25 @@ struct syn_server {
          * time, not per frame. 0 (black) until a background is built, which is
          * also the right answer when there isn't one. */
         double   bg_lum;
+
+        /* ── Where the panel's buttons ended up ────────────────
+         *
+         * The media transport and the keyboard-layout chip are the first
+         * things on this screen a MOUSE can press, and a locked screen has no
+         * client to hit-test against — lock.c draws into a flat buffer and
+         * input.c's button path does nothing but wake it. So the draw records
+         * the rects it actually used and lock_handle_button() reads them back.
+         *
+         * ⚠ PANEL COORDINATES, not layout ones. The same panel is drawn on
+         * every output, so one set of rects answers for all of them; the click
+         * is translated by whichever pane's box contains it. Storing layout
+         * coordinates would be storing the LAST pane drawn, which on a
+         * two-monitor desk is the wrong monitor half the time.
+         *
+         * A zero-width rect is a control that was not drawn (nothing playing,
+         * one layout) and therefore cannot be pressed — which is why the draw
+         * clears them all before it starts rather than leaving last frame's. */
+        syn_lock_hit_t hit_prev, hit_play, hit_next, hit_layout;
     } nlock;
 
     /* Idle inhibits held over D-Bus (org.freedesktop.ScreenSaver — screensaver.c).
@@ -6686,6 +6792,30 @@ struct syn_server {
     /* The toast Super+Tab posts, kept so the next press replaces it instead of
      * stacking a card per press. 0 until the first one. */
     uint32_t        layout_notif_id;
+
+    /* The same, for the KEYBOARD layout (the `kbd_layout` action). A separate
+     * id on purpose: the two toasts say different things and one replacing the
+     * other would make switching to Norwegian look like it retiled the
+     * screen. */
+    uint32_t        kbd_layout_notif_id;
+
+    /* Which keyboard layout the SESSION is on — the group index into the
+     * compiled keymap.
+     *
+     * ⚠ THE KEYBOARDS HOLD THE REAL STATE; this is the session's memory of it,
+     * and it exists for the two moments when no keyboard can answer:
+     *
+     *   - a keyboard ATTACHED LATER. wlr_keyboard_set_keymap resets the locked
+     *     layout to 0, exactly as it resets NumLock — so without this, plugging
+     *     an external keyboard into a laptop put that keyboard back on the
+     *     first layout while the built-in one stayed on the second, and the
+     *     letter you got depended on which keyboard you typed it on.
+     *   - a seat with no keyboard at all, which is every headless rig.
+     *
+     * Kept in step with reality by keyboard_handle_modifiers, so a switch made
+     * with xkb's own `grp:` option is reflected here too and the lock screen's
+     * chip cannot drift from the keys. */
+    int             kbd_layout;
 
     /* Clipboard history (Super+V) — see syn_clipboard_t. */
     struct {
@@ -7313,7 +7443,13 @@ void session_lock_arrange(syn_server_t *s);      /* re-place lock surfaces */
  * call it. lock_handle_key returns 1 when it consumed the key. */
 void synui_lock(syn_server_t *s);
 void synui_unlock(syn_server_t *s);
-int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint);
+int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint,
+                    uint32_t mods);
+/* A press on the lock screen, in LAYOUT coordinates. Returns 1 when it landed
+ * on one of the panel's buttons (the media transport, the layout chip); 0 means
+ * the click was nothing but the user arriving, which is all a click on this
+ * screen used to be. */
+int  lock_handle_button(syn_server_t *s, double lx, double ly, uint32_t button);
 void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
 void lock_render(syn_server_t *s);               /* repaint panes (greeter reuses) */
 
@@ -7336,6 +7472,65 @@ const char *lock_bg_source_path(syn_server_t *s);
  * there must not be one. */
 void greeterbg_publish(syn_server_t *s);
 void greeterbg_adopt(syn_server_t *s, const char *user);
+
+/* ── mpris.c — what is playing, for the screens with no bar ──
+ *
+ * The lock screen and the login screen are drawn by the compositor, so the
+ * bar's Media module is not on them and cliamp's window is not either. This is
+ * a reader and three verbs, all of it asynchronous: a media player is an
+ * ordinary desktop app and a synchronous property read against a wedged one
+ * would stall every window on the desktop. No session bus is not an error. */
+void mpris_init(syn_server_t *s);
+void mpris_finish(syn_server_t *s);
+bool mpris_now_playing(syn_mpris_now_t *out);   /* false: nothing to draw */
+void mpris_playpause(void);
+void mpris_next(void);
+void mpris_previous(void);
+
+/* ── weather.c — the lock/login screen's weather row ─────────
+ *
+ * ⚠ OFF unless lock_weather says otherwise: the only part of this screen that
+ * touches the network. The PLACE is the file every weather widget here already
+ * reads (~/.local/state/omarchy/settings/weather.json) — there is no second
+ * setting for it, on purpose. Fetching is a thread, as in news.c, so a slow DNS
+ * lookup cannot stall the event loop. */
+void weather_init(syn_server_t *s);
+void weather_finish(syn_server_t *s);
+void weather_refresh(syn_server_t *s, bool force);
+void weather_enabled_changed(syn_server_t *s);  /* lock_weather was toggled */
+bool weather_current(syn_weather_now_t *out);   /* false: never had a reading */
+void weather_draw_icon(cairo_t *cr, syn_weather_icon_t icon,
+                       double x, double y, double size);
+/* The greeter's copy of both halves, published by greeterbg.c across the same
+ * permission boundary as the background — the login screen can read neither the
+ * location file nor the cache. */
+bool weather_publish_state(char *place, size_t pn, double *lat, double *lon,
+                           int *have_coords, double *temp, int *code,
+                           long long *when, char *unit);
+void weather_adopt(const char *place, double lat, double lon, int have_coords,
+                   double temp, int code, long long when, char unit);
+
+/* ── kbdlayout.c — which layout is typing ───────────────────
+ *
+ * NOT a second keymap mechanism: input.c still compiles one keymap out of
+ * xkb_layout/variant/model/options, and this only names the groups that keymap
+ * has and moves every keyboard's locked layout between them. The KEYMAP is the
+ * count, never the config string — xkb silently drops a layout it cannot
+ * resolve, and a selector offering one the keymap does not have would print a
+ * name that does not match the keys. */
+int  kbd_layout_count(syn_server_t *s);
+void kbd_layout_label(syn_server_t *s, int idx, char *buf, size_t n);
+int  kbd_layout_active(syn_server_t *s);
+void kbd_layout_set(syn_server_t *s, int idx);
+void kbd_layout_cycle(syn_server_t *s, int dir);
+int  kbd_layout_from_name(syn_server_t *s, const char *name);
+/* Put ONE keyboard on the session's layout. Called from keyboard_apply_config
+ * after wlr_keyboard_set_keymap, which resets the locked layout to 0 — the same
+ * reset NumLock is re-applied for right beside it. */
+void kbd_layout_apply(syn_server_t *s, struct wlr_keyboard *k);
+/* Record what a keyboard's group actually is, so a switch made through xkb's
+ * own `grp:` option is not invisible to everything that reads it. */
+void kbd_layout_observe(syn_server_t *s, struct wlr_keyboard *k);
 void lock_output_destroy(syn_output_t *o);       /* drop a dying output's lock pane (output_destroy) */
 void lock_output_create(syn_output_t *o);        /* pane for an output arriving mid-lock (server_new_output) */
 

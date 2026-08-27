@@ -440,6 +440,15 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
     (void)data;
     syn_keyboard_t *kb = wl_container_of(listener, kb, modifiers);
 
+    /* Which layout the seat is on, taken from the keyboard that just changed.
+     *
+     * ⚠ FIRST, above every early return below. xkb's own `grp:` options move
+     * the group without going anywhere near kbdlayout.c, and the IME grab and
+     * the Alt+Tab commit both return early — so anywhere further down, a switch
+     * made with the configured chord would be invisible to the lock screen's
+     * chip, which would then be a label that lies about the keys. */
+    kbd_layout_observe(kb->server, kb->wlr_keyboard);
+
     /* Alt let go ends an Alt+Tab cycle and commits the window we landed on.
      *
      * This is the only place that can see it: a modifier release produces a
@@ -1107,6 +1116,38 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                     workspace_switch(s, hit->workspace->index);
                 focus_view(s, hit, view_surface(hit));
             }
+        }
+    } else if (strcmp(action, "kbd_layout") == 0) {
+        /* ⚠ NOT `layout_cycle`, which is the TILING layout. Two things on this
+         * desktop are called a layout and only one of them is a keyboard; the
+         * action names have to say which, because a bind that retiled the
+         * screen when you meant to switch to Norwegian is a bug you would blame
+         * on the wrong subsystem.
+         *
+         * `next` (or no argument) walks forwards, `prev` backwards, and a name
+         * or an index goes straight to one — the same vocabulary
+         * `synctl layout` takes, so the bind and the CLI cannot come to mean
+         * different things. */
+        if (arg && strcmp(arg, "prev") == 0) {
+            kbd_layout_cycle(s, -1);
+        } else if (arg && *arg && strcmp(arg, "next") != 0) {
+            int idx = kbd_layout_from_name(s, arg);
+            if (idx >= 0) kbd_layout_set(s, idx);
+            else wlr_log(WLR_ERROR, "synui: kbd_layout: no layout '%s' in the "
+                         "keymap — xkb_layout names %d", arg, kbd_layout_count(s));
+        } else {
+            kbd_layout_cycle(s, +1);
+        }
+        /* Say so on screen: on a desktop with nothing focused, switching layout
+         * changes no pixels at all, and a bind with no visible effect reads as
+         * a dead key. Replaces its own toast rather than stacking one per
+         * press, as layout_cycle's does. */
+        {
+            char lab[64];
+            kbd_layout_label(s, kbd_layout_active(s), lab, sizeof(lab));
+            s->kbd_layout_notif_id =
+                notif_post(s, "synui", "Keyboard layout", lab,
+                           NOTIF_URGENCY_LOW, 1200, s->kbd_layout_notif_id);
         }
     } else if (strcmp(action, "layout_cycle") == 0) {
         ws->layout = (ws->layout + 1) % SYN_LAYOUT_COUNT;
@@ -2074,9 +2115,30 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     if (s->locked) {
         if (s->nlock.active) {
             if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+                /* Media keys reach the player, not the password field.
+                 *
+                 * They are the one class of key that means the same thing on a
+                 * locked screen as on an unlocked one — a keyboard's play
+                 * button is for the music, and having it type an invisible
+                 * character into a password instead is the behaviour that made
+                 * "pause what I locked the machine on" mean unlocking it
+                 * first. Handled here rather than through bind_dispatch
+                 * because compositor binds are disabled while locked by
+                 * contract, and this must not become the exception that
+                 * re-enables them. */
+                for (int i = 0; i < nsyms; i++) {
+                    switch (syms[i]) {
+                    case XKB_KEY_XF86AudioPlay:
+                    case XKB_KEY_XF86AudioPause:
+                        mpris_playpause(); return;
+                    case XKB_KEY_XF86AudioNext:  mpris_next();      return;
+                    case XKB_KEY_XF86AudioPrev:  mpris_previous();  return;
+                    default: break;
+                    }
+                }
                 xkb_keysym_t sym = nsyms > 0 ? syms[0] : XKB_KEY_NoSymbol;
                 uint32_t cp = nsyms == 1 ? xkb_keysym_to_utf32(sym) : 0;
-                lock_handle_key(s, sym, cp);
+                lock_handle_key(s, sym, cp, modifiers);
             }
             return;                 /* swallow presses and releases alike */
         }
@@ -2493,6 +2555,13 @@ static void keyboard_apply_config(syn_server_t *s, struct wlr_keyboard *wlr_kb)
     /* After set_keymap, which is what resets the lock to begin with. */
     if (cfg->numlock)
         keyboard_lock_numlock(wlr_kb);
+
+    /* And for the same reason: set_keymap resets the locked LAYOUT to 0 too,
+     * so a keyboard plugged in after the session had switched to the second
+     * layout would arrive on the first — two keyboards on one desk typing
+     * different letters. Also the path by which the greeter's adopted keymap
+     * reaches devices that attached before it was adopted. */
+    kbd_layout_apply(s, wlr_kb);
 }
 
 static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
@@ -3543,9 +3612,22 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
     if (state == WL_POINTER_BUTTON_STATE_PRESSED)
         server_ui_output_track(s);
 
-    /* Locked: a click wakes the native lock and goes no further — no window,
-     * dock or panel underneath may be reached. */
+    /* Locked: a click may press one of the lock panel's own controls (the
+     * media transport, the keyboard-layout chip) and otherwise does nothing
+     * but wake the screen. Either way it goes no further — no window, dock or
+     * panel underneath may be reached.
+     *
+     * The wake comes FIRST: a press on a dark screen is the user arriving, and
+     * lock_handle_button declines it for exactly that reason, so the ordering
+     * is what makes the first click brighten and the second one press. */
     if (s->nlock.active) {
+        /* The press is offered to the panel BEFORE the wake, because
+         * lock_handle_button declines a click on a faded-out screen — that
+         * click is the user arriving, not a button they could see. Waking
+         * first would set bright to 1.0 and make its own guard unreachable, so
+         * the first click would press whatever happened to be under it. */
+        if (state == WL_POINTER_BUTTON_STATE_PRESSED)
+            lock_handle_button(s, s->cursor->x, s->cursor->y, button);
         lock_notify_activity(s);
         return;
     }

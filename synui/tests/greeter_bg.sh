@@ -24,6 +24,28 @@
 #   3. re-publishing an unchanged wallpaper does not re-copy it
 #   4. ⛔ the greeter refuses a directory not owned by the account logging in
 #   5. it is one setting: lock_dim and lock_blur travel with it
+#   6. ⚠ and the KEYBOARD LAYOUTS cross the same boundary
+#
+# ⚠ 6 IS THE SAME BUG WITH TEETH. The greeter falls through to
+# /etc/synui/synuirc, which carries the SYSTEM layout — so a user whose synuirc
+# says `xkb_layout = us,no` got a login prompt that could only type `us`, and a
+# password with a Norwegian character in it could not be entered at all. Unlike
+# a black background, that one locks you out of the machine.
+#
+# ⛔ SYNUI_GREETER_BG_DIR IS NOT OPTIONAL IN THIS FILE, and not only for
+# hermeticity. The real root is 1777 and keyed on the UID, so a rig that leaves
+# it unset publishes over the DEVELOPER'S OWN login-screen background — with a
+# hermetic HOME and therefore no wallpaper, which means replacing it with a
+# published "plain". The symptom is a black login screen at the next boot and
+# nothing anywhere that connects the two.
+#
+# greeterbg_publish() refuses to publish at all from an instance that does not
+# own a seat (synui_owns_seat, the same guard theme.c carries for the same
+# reason), and setting this variable is what lifts that guard — the protection
+# is of the ONE real root, and a rig that has redirected the root has no real
+# root to protect. That guard is deliberately NOT exercised here: a test that
+# proved it by running without the variable would, on the day it regressed,
+# damage the machine it was run on.
 #
 # Usage: greeter_bg.sh /path/to/synui
 # Skips (77) without a DRM render node, like every other rig here.
@@ -77,6 +99,7 @@ wallpaper = $WP
 lock_background = desktop
 lock_dim = 40
 lock_blur = 12
+xkb_layout = us,no
 EOF
 
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config"
@@ -127,6 +150,18 @@ $(cat "$PUB/background.conf")"
 grep -q '^blur = 12$' "$PUB/background.conf" || fail "lock_blur did not travel:
 $(cat "$PUB/background.conf")"
 echo "settings:  dim 40 and blur 12 travelled with the picture"
+
+# ── 3b. ⚠ and so did the KEYBOARD LAYOUTS ───────────────────────────────
+# The one line in this file that is not cosmetic: without it the login screen
+# can only type the SYSTEM layout, and a password containing a character that
+# needs the second one cannot be entered at all.
+grep -q '^xkb_layout = us,no$' "$PUB/background.conf" \
+    || fail "the keyboard layouts did not cross the boundary:
+$(cat "$PUB/background.conf")
+       The greeter reads /etc/synui/synuirc, which carries the SYSTEM layout —
+       so a password needing the second layout cannot be typed at the login
+       prompt at all."
+echo "layouts:   xkb_layout = us,no travelled too"
 
 # ── 4. an unchanged wallpaper is not re-copied ──────────────────────────
 # Publishing runs on every output layout change and every wallpaper reload, so
@@ -182,6 +217,17 @@ grep -q "dim 40, blur 12" "$GLOG" \
 $(grep 'greeter bg' "$GLOG" | tail -3)"
 echo "adopted:   the greeter took the picture, the dim and the blur"
 
+# ⚠ AND THE LAYOUTS, WHICH ARE NOT MERELY ADOPTED BUT APPLIED. Writing them into
+# the config is half the job: the keyboards were attached at backend start with
+# the keymap the config had THEN, so without input_reload_config() the chip
+# would say `no` while the keys stayed `us` — a label that lies about the exact
+# thing it is for.
+grep -q "layout 'us,no'" "$GLOG" \
+    || fail "the greeter did not adopt the published keyboard layouts:
+$(grep 'greeter bg' "$GLOG" | tail -3)"
+grep -q "synui: keyboard layout:" "$GLOG" || true   # only logged on a switch
+echo "typed:     the greeter took the layouts too"
+
 # ⚠ AND IT DID NOT PUBLISH. The greeter has no user config to publish, and
 # letting it write would let the login screen overwrite the very thing it is
 # meant to be reading.
@@ -196,4 +242,4 @@ if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG" "$GLOG"; then
 fi
 
 cleanup
-echo "greeter_bg: 5 phases passed"
+echo "greeter_bg: 6 phases passed"

@@ -2138,7 +2138,56 @@ pkgver=0.1.0
 #   kitty needs OpenGL", which stopped being its reason the day syntty became
 #   the default: syntty links no GL either. foot is a SECOND IMPLEMENTATION,
 #   and that is what it is for.
-pkgrel=516
+# 517: the LOCK AND LOGIN SCREEN grew three things: what is playing, the
+#   weather, and a keyboard-layout chip. They are one screen (greeter.c calls
+#   synui_lock), so all three reach the login prompt too — and for the layout
+#   that is the entire point.
+#   ⚠ THE LAYOUT CHIP IS THE ONE THAT FIXES A BUG RATHER THAN ADDING A FEATURE.
+#   `xkb_layout = us,no` has always compiled a two-group keymap, but nothing
+#   said which group was typing — and at a login prompt a password typed in the
+#   wrong layout is rejected exactly like a wrong password. Worse, the greeter
+#   falls through to /etc/synui/synuirc and only ever had the SYSTEM layout, so
+#   a password needing the second one could not be entered at all. The layouts
+#   now cross the same permission boundary the lock wallpaper does
+#   (greeterbg.c), and greeter.c re-applies the keymap after adopting them —
+#   writing them into the config is half the job, since the keyboards were
+#   attached with the keymap the config had at backend start.
+#   Also fixed on the way past: a keyboard attached AFTER a layout switch
+#   arrived on group 0, because wlr_keyboard_set_keymap resets the locked layout
+#   exactly as it resets NumLock — so a laptop and its external keyboard typed
+#   different letters. syn_server::kbd_layout is the session's memory of the
+#   group and keyboard_apply_config re-applies it, right beside the NumLock
+#   re-lock that is there for the same reason.
+#   mpris.c: an sd-bus CLIENT of the session's players — a reader and three
+#   verbs. Every call is async; a synchronous property read against a wedged
+#   Electron app would stall every window on the desktop. The media keys reach
+#   it while locked, so pausing what you locked the machine on no longer means
+#   unlocking it first.
+#   weather.c: OFF by default — the only part of that screen that touches the
+#   network. The PLACE is the file every weather widget here already reads
+#   (~/.local/state/omarchy/settings/weather.json), not a new setting. Fetching
+#   is a thread on the news.c pattern, and the stop flag doubles as the libcurl
+#   progress callback so logout never waits out a connect timeout.
+#   ⚠ The transport buttons and the weather icons are cairo PATHS, not glyphs:
+#   ⏮ ⏯ ⏭ and most of the weather block are not in DejaVu, and the ISO ships a
+#   small font set — a missing glyph is a button you cannot see and can still
+#   press.
+#   Four rows in Super+Z, `synctl layout [next|prev|<name>]`, and a `kbd_layout`
+#   bind action (NOT `layout_cycle`, which is the tiling layout).
+#   tests/lock_layout.sh (5 phases, incl. a layout xkb cannot resolve being
+#   refused rather than offered), tests/greeter_bg.sh phase 6, and four more
+#   assertions in tests/state_reload_test.c.
+#   ⛔ AND A LIVE-MACHINE HAZARD CLOSED ON THE WAY PAST: greeterbg_publish()
+#   wrote to /var/lib/synui/greeter/<uid> from ANY instance. That root is 1777
+#   and keyed on the uid, so every headless rig published over the real
+#   session's — with a hermetic HOME and so no wallpaper, i.e. it replaced the
+#   login-screen background with a published "plain". `meson test` starts ~20
+#   compositors; the symptom is a black login screen at the next boot and
+#   nothing connecting the two. Same shape as the nested-synui theme bug fixed
+#   in 357, and now the same guard: publish only when synui_owns_seat(), with
+#   SYNUI_GREETER_BG_DIR lifting it because a rig that has redirected the root
+#   has no real root to protect.
+pkgrel=517
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

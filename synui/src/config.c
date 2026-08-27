@@ -527,6 +527,16 @@
  *   lock_blur = 0                (0-64)
  *   lock_dim = 0                 (0-100 %)
  *   lock_accent = #00d6e5        (the ring and the caret)
+ *   lock_media = on|off          (now playing + the transport buttons; on)
+ *   lock_weather = on|off        (OFF — the only part of this screen that
+ *                                 goes to the network. The PLACE is
+ *                                 ~/.local/state/omarchy/settings/weather.json,
+ *                                 which every weather widget here reads and
+ *                                 omarchy-weather-location writes; there is no
+ *                                 second setting for it)
+ *   lock_weather_unit = auto|c|f (auto reads the locale)
+ *   lock_layout = auto|on|off    (the keyboard-layout chip; auto shows it only
+ *                                 when xkb_layout names more than one)
  *   screensaver = on|off
  *   screensaver_timeout = 300    (idle seconds before it starts)
  *   screensaver_interval = 30    (5-600; seconds per slide, where the mode has
@@ -1372,6 +1382,38 @@ void syn_config_ensure_dir(void)
 }
 
 /*
+ * °F or °C, guessed from the locale, for the lock screen's weather row.
+ *
+ * ⚠ A GUESS, and one the user overrides with `lock_weather_unit` or the Super+Z
+ * row — it is a starting value, not a decision. LC_MEASUREMENT is asked first
+ * because that is the category that actually means "which units", and a great
+ * many desktops run LANG=en_US with LC_MEASUREMENT set to something metric on
+ * purpose. Fahrenheit is used by the US, its territories, and a short list of
+ * others; everywhere else, and every locale this cannot read, is Celsius.
+ */
+static int locale_wants_fahrenheit(void)
+{
+    const char *l = getenv("LC_MEASUREMENT");
+    if (!l || !*l) l = getenv("LC_ALL");
+    if (!l || !*l) l = getenv("LANG");
+    if (!l || !*l) return 0;
+
+    /* The country is the two letters after the underscore; a locale with no
+     * territory ("C", "en") names no country and gets the majority answer. */
+    const char *us = strchr(l, '_');
+    if (!us || !us[1] || !us[2]) return 0;
+
+    static const char *const f[] = {
+        "US", "PR", "GU", "VI", "AS", "MP",   /* the US and its territories */
+        "BS", "BZ", "KY", "PW", "FM", "MH",   /* and the rest of the list */
+        "LR",
+    };
+    for (size_t i = 0; i < sizeof(f) / sizeof(f[0]); i++)
+        if (us[1] == f[i][0] && us[2] == f[i][1]) return 1;
+    return 0;
+}
+
+/*
  * Every setting's out-of-the-box value, in one place.
  *
  * Split out of synui_config_load() so it can be run against a scratch config as
@@ -1605,6 +1647,22 @@ static void config_set_defaults(syn_config_t *cfg)
      * switching to "custom" lands on the old look rather than on black. */
     cfg->lock_accent[0] = 0.45f; cfg->lock_accent[1] = 0.90f;
     cfg->lock_accent[2] = 0.85f; cfg->lock_accent[3] = 1.0f;
+
+    /* Now playing, on. It draws nothing when nothing is playing — which is
+     * most machines most of the time — and the alternative is a control that
+     * has to be found before it can be used. */
+    cfg->lock_media = 1;
+
+    /* ⚠ The weather is OFF. It is the one thing on the lock screen that goes
+     * to the network, and a security-focused distro does not start making
+     * requests because a screen locked. Turned on in synuirc or by the
+     * Super+Z row; the PLACE comes from the weather widgets' own file, never
+     * from here. */
+    cfg->lock_weather        = 0;
+    cfg->lock_weather_unit_f = locale_wants_fahrenheit();
+
+    /* Shown only when there is more than one layout to choose between. */
+    cfg->lock_layout = SYN_LOCK_LAYOUT_AUTO;
 
     /* Empty theme = inherit XCURSOR_THEME, which is exactly what synui did
      * before cursor.c existed, so an untouched system behaves identically.
@@ -2707,6 +2765,30 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     else if (strcmp(key, "lock_blur") == 0) {
         int v = atoi(val);
         cfg->lock_bg_blur = v < 0 ? 0 : (v > 64 ? 64 : v);
+    }
+    else if (strcmp(key, "lock_media") == 0)
+        cfg->lock_media = strcmp(val, "on") == 0;
+    else if (strcmp(key, "lock_weather") == 0)
+        cfg->lock_weather = strcmp(val, "on") == 0;
+    else if (strcmp(key, "lock_weather_unit") == 0) {
+        /* `auto` is the locale guess, spelled so that going back to it is
+         * possible after naming a unit — a setting you can only leave is one
+         * this tree has shipped before. */
+        if (strcmp(val, "auto") == 0)
+            cfg->lock_weather_unit_f = locale_wants_fahrenheit();
+        else if (val[0] == 'f' || val[0] == 'F')
+            cfg->lock_weather_unit_f = 1;
+        else if (val[0] == 'c' || val[0] == 'C')
+            cfg->lock_weather_unit_f = 0;
+        else
+            wlr_log(WLR_ERROR, "synui: config: lock_weather_unit '%s' is not "
+                    "c, f or auto", val);
+    }
+    else if (strcmp(key, "lock_layout") == 0) {
+        int l = lock_layout_from_name(val);
+        if (l >= 0) cfg->lock_layout = l;
+        else wlr_log(WLR_ERROR, "synui: config: lock_layout '%s' is not "
+                     "auto, on or off", val);
     }
     else if (strcmp(key, "lock_accent") == 0) {
         /* A colour here means "do not follow the theme" — naming one and then

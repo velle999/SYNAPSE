@@ -266,7 +266,22 @@ static void test_saver_state_survives_a_load(void)
                "screensaver_lock = off\n"
                "lock_background = black\n"
                "lock_dim = 10\n"
-               "lock_blur = 4\n");
+               "lock_blur = 4\n"
+               /* The three the lock screen grew: now playing, the weather and
+                * the layout chip. Same discipline — the rc says the OPPOSITE
+                * of the state file on every one, so a load that skipped the
+                * state file could not pass by accident.
+                *
+                * ⚠ lock_weather is the one that would bite hardest. It is off
+                * by default because it is the only thing on that screen that
+                * uses the network, so a reload that reset it would silently
+                * STOP a feature the user had turned on — and the symptom is a
+                * blank space, which reads as a broken fetch rather than as a
+                * lost setting. */
+               "lock_media = off\n"
+               "lock_weather = off\n"
+               "lock_weather_unit = c\n"
+               "lock_layout = off\n");
     write_file("saver.state",
                "mode=slideshow\n"
                "timeout=300\n"
@@ -275,7 +290,11 @@ static void test_saver_state_survives_a_load(void)
                "lock_bg=desktop\n"
                "lock_dim=70\n"
                "lock_blur=24\n"
-               "lock_follow=0\n");
+               "lock_follow=0\n"
+               "lock_media=1\n"
+               "lock_weather=1\n"
+               "lock_weather_unit=F\n"
+               "lock_layout=on\n");
 
     syn_config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
@@ -295,6 +314,10 @@ static void test_saver_state_survives_a_load(void)
     assert(cfg.lock_bg_dim == 70);
     assert(cfg.lock_bg_blur == 24);
     assert(cfg.lock_theme_follow == 0);
+    assert(cfg.lock_media == 1);
+    assert(cfg.lock_weather == 1);
+    assert(cfg.lock_weather_unit_f == 1);
+    assert(cfg.lock_layout == SYN_LOCK_LAYOUT_ON);
 
     printf("  saver.state survives a load .... ok\n");
 }

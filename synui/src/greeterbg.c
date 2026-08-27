@@ -154,6 +154,30 @@ void greeterbg_publish(syn_server_t *s)
      * overwrite the very thing it is supposed to be reading. */
     if (s->greeter) return;
 
+    /* ⛔ AND NEVER FROM A NESTED OR HEADLESS INSTANCE, for the reason theme.c
+     * carries the same guard: the publish root is 1777 and keyed on the UID, so
+     * every test compositor writes to the REAL one. `meson test` starts ~20 of
+     * them, each with a hermetic HOME and therefore no wallpaper — so a test
+     * run replaced velle's login-screen background with a published "plain",
+     * silently, and the only symptom is a black login screen at the next boot.
+     * (Found exactly that way, 2026-08-27, publishing over a real install from
+     * a probe.)
+     *
+     * synui_owns_seat() is `s->session != NULL`, which wlr_backend_autocreate
+     * fills in only for the DRM backend — so the session that actually owns the
+     * screen is the one that publishes, and nothing else does.
+     *
+     * ⚠ SYNUI_GREETER_BG_DIR LIFTS IT, and that is the whole seam rather than a
+     * hole in it: the guard exists to protect the ONE real root, and a rig that
+     * has redirected the root has no real root to protect. The same variable
+     * greeterbg_dir() already reads, so there is one thing to set and not
+     * two. */
+    if (!synui_owns_seat(s) && !getenv("SYNUI_GREETER_BG_DIR")) {
+        wlr_log(WLR_DEBUG, "synui: greeter bg: no seat (headless/nested) — "
+                "not publishing over the real session's");
+        return;
+    }
+
     uid_t uid = getuid();
     if (uid < 1000) return;         /* not a human login account */
 
@@ -221,6 +245,61 @@ void greeterbg_publish(syn_server_t *s)
         "blur = %d\n",
         have_img ? "background.img" : "",
         s->config.lock_bg_dim, s->config.lock_bg_blur);
+
+    /*
+     * ── The keyboard layouts ────────────────────────────────────────────
+     *
+     * ⚠ THE ONE THING ON THIS SCREEN THAT MUST CROSS THE BOUNDARY, and the
+     * reason is not cosmetic. The greeter falls back to /etc/synui/synuirc,
+     * which carries the SYSTEM layout — so a user whose synuirc says
+     * `xkb_layout = us,no` got a login prompt that could only type `us`, and
+     * a password with a Norwegian character in it could not be entered at all.
+     * The chip would have had nothing to offer either: one layout is not a
+     * selector.
+     *
+     * The variant and options ride along because they are one keymap with the
+     * layout, not three settings: `us,no` with `grp:win_space_toggle` and the
+     * same list without it are different keyboards.
+     */
+    if (s->config.xkb_layout[0])
+        fprintf(f, "xkb_layout = %s\n", s->config.xkb_layout);
+    if (s->config.xkb_variant[0])
+        fprintf(f, "xkb_variant = %s\n", s->config.xkb_variant);
+    if (s->config.xkb_options[0])
+        fprintf(f, "xkb_options = %s\n", s->config.xkb_options);
+    if (s->config.xkb_model[0])
+        fprintf(f, "xkb_model = %s\n", s->config.xkb_model);
+    fprintf(f, "lock_layout = %s\n", syn_lock_layout_names[s->config.lock_layout]);
+
+    /*
+     * ── The weather ─────────────────────────────────────────────────────
+     *
+     * Both halves, for the same reason the background is copied rather than
+     * pointed at: the greeter can read neither
+     * ~/.local/state/omarchy/settings/weather.json (the place) nor
+     * ~/.config/synui/weather.cache (the last reading). The place is what lets
+     * the login screen refresh on its own; the reading is what lets it draw
+     * something in the first frame instead of a gap that fills in a second
+     * later — or, on a machine whose network is not up yet at the login prompt,
+     * at all.
+     */
+    fprintf(f, "lock_media = %s\n", s->config.lock_media ? "on" : "off");
+    fprintf(f, "lock_weather = %s\n", s->config.lock_weather ? "on" : "off");
+    if (s->config.lock_weather) {
+        char place[64] = "";
+        double lat = 0, lon = 0, temp = 0;
+        int have_coords = 0, code = 0;
+        long long when = 0;
+        char unit = 'C';
+        if (weather_publish_state(place, sizeof(place), &lat, &lon,
+                                  &have_coords, &temp, &code, &when, &unit)) {
+            fprintf(f, "wx_place = %s\n", place);
+            if (have_coords)
+                fprintf(f, "wx_coords = %.4f %.4f\n", lat, lon);
+            if (when > 0)
+                fprintf(f, "wx_reading = %.1f %d %lld %c\n", temp, code, when, unit);
+        }
+    }
     fclose(f);
     if (rename(tmp, conf) != 0) unlink(tmp);
 
@@ -264,11 +343,92 @@ void greeterbg_adopt(syn_server_t *s, const char *user)
     FILE *f = fopen(conf, "re");
     if (!f) return;
 
+    /* The published weather, collected across the loop and handed to weather.c
+     * in one call at the end — the place, the coordinates and the reading are
+     * three lines of one answer, and seeding them one at a time would leave a
+     * window where the greeter knew a temperature but not where it was from. */
+    char   wx_place[64] = "";
+    double wx_lat = 0, wx_lon = 0, wx_temp = 0;
+    int    wx_have = 0, wx_code = 0;
+    long long wx_when = 0;
+    char   wx_unit = 'C';
+
     char line[512], image[256] = "";
     int dim = -1, blur = -1;
     while (fgets(line, sizeof(line), f)) {
         char v[256];
         int n;
+
+        /* ── The keymap ──
+         *
+         * Adopted BEFORE synui_lock() draws anything, and greeter.c calls
+         * input_reload_config() straight after so the keyboards attached at
+         * backend start pick the new keymap up. Without that second half the
+         * config would say `us,no` and the keys would still be `us`: the
+         * keymap is compiled per keyboard, once, when the device appears.
+         *
+         * ⚠ Trusted exactly as far as the picture is, and no further — the
+         * directory is owned by the account being logged in (checked above),
+         * and an xkb layout name that does not resolve makes a keymap that
+         * fails to compile, which keyboard_apply_config already falls back
+         * from. There is no path here that ends anywhere but "the default
+         * keymap". */
+        if (sscanf(line, " xkb_layout = %255[^\n]", v) == 1) {
+            v[strcspn(v, "\r")] = '\0';
+            snprintf(s->config.xkb_layout, sizeof(s->config.xkb_layout), "%s", v);
+            continue;
+        }
+        if (sscanf(line, " xkb_variant = %255[^\n]", v) == 1) {
+            v[strcspn(v, "\r")] = '\0';
+            snprintf(s->config.xkb_variant, sizeof(s->config.xkb_variant), "%s", v);
+            continue;
+        }
+        if (sscanf(line, " xkb_options = %255[^\n]", v) == 1) {
+            v[strcspn(v, "\r")] = '\0';
+            snprintf(s->config.xkb_options, sizeof(s->config.xkb_options), "%s", v);
+            continue;
+        }
+        if (sscanf(line, " xkb_model = %255[^\n]", v) == 1) {
+            v[strcspn(v, "\r")] = '\0';
+            snprintf(s->config.xkb_model, sizeof(s->config.xkb_model), "%s", v);
+            continue;
+        }
+        if (sscanf(line, " lock_layout = %255[^\n]", v) == 1) {
+            v[strcspn(v, " \r")] = '\0';
+            int l = lock_layout_from_name(v);
+            if (l >= 0) s->config.lock_layout = l;
+            continue;
+        }
+
+        /* ── The rest of the panel ── */
+        if (sscanf(line, " lock_media = %255[^\n]", v) == 1) {
+            s->config.lock_media = (strncmp(v, "on", 2) == 0);
+            continue;
+        }
+        if (sscanf(line, " lock_weather = %255[^\n]", v) == 1) {
+            s->config.lock_weather = (strncmp(v, "on", 2) == 0);
+            continue;
+        }
+        if (sscanf(line, " wx_place = %255[^\n]", v) == 1) {
+            v[strcspn(v, "\r")] = '\0';
+            snprintf(wx_place, sizeof(wx_place), "%s", v);
+            continue;
+        }
+        {
+            double la, lo, tp;
+            int cd;
+            long long wh;
+            char un;
+            if (sscanf(line, " wx_coords = %lf %lf", &la, &lo) == 2) {
+                wx_lat = la; wx_lon = lo; wx_have = 1;
+                continue;
+            }
+            if (sscanf(line, " wx_reading = %lf %d %lld %c", &tp, &cd, &wh, &un) == 4) {
+                wx_temp = tp; wx_code = cd; wx_when = wh; wx_unit = un;
+                continue;
+            }
+        }
+
         if (sscanf(line, " image = %255[^\n]", v) == 1) {
             /* A bare name, resolved against the directory it came from. The
              * published file never carries an absolute path, so a doctored one
@@ -301,8 +461,13 @@ void greeterbg_adopt(syn_server_t *s, const char *user)
     if (dim  >= 0 && dim  <= 100) s->config.lock_bg_dim  = dim;
     if (blur >= 0 && blur <= 64)  s->config.lock_bg_blur = blur;
 
+    if (wx_place[0] || wx_have || wx_when > 0)
+        weather_adopt(wx_place, wx_lat, wx_lon, wx_have, wx_temp, wx_code,
+                      wx_when, wx_unit);
+
     wlr_log(WLR_INFO, "synui: greeter bg: showing %s's lock background "
-                      "(%s, dim %d, blur %d)", user,
+                      "(%s, dim %d, blur %d), layout '%s'", user,
             image[0] ? "picture" : "plain",
-            s->config.lock_bg_dim, s->config.lock_bg_blur);
+            s->config.lock_bg_dim, s->config.lock_bg_blur,
+            s->config.xkb_layout[0] ? s->config.xkb_layout : "system default");
 }

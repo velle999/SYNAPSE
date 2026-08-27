@@ -353,6 +353,23 @@ workspace_5_intent = media and entertainment
 # xkb_options  = ctrl:nocaps
 # xkb_model    =
 # xkb_rules    =
+#
+# A COMMA-SEPARATED xkb_layout is a keyboard with more than one layout on it:
+#
+#   xkb_layout = us,no
+#
+# That has always compiled; what is new is being able to see and change which
+# one is typing. The lock and login screens grow a chip that says so (Super+
+# Space, or click it — see lock_layout below); on the desktop it is
+# `synctl layout next` or a `kbd_layout` bind. The chip is the one that
+# matters: at a login prompt a wrong layout is indistinguishable from a wrong
+# password.
+#
+# ⚠ THE LOGIN SCREEN LEARNS YOUR LAYOUTS FROM YOUR LAST SESSION. It runs as
+# another account and cannot read this file, so your session publishes the list
+# the same way it publishes the lock wallpaper. A brand-new install logs in
+# once on the system default before the login screen knows about the second
+# layout.
 repeat_rate  = 25
 repeat_delay = 600
 # Lock NumLock on as each keyboard is attached, so the numpad types digits
@@ -512,6 +529,50 @@ welcome_at_startup = on
 # Your password always works regardless — five rejected swipes retire the
 # reader for that lock rather than locking you out.
 lock_fingerprint = on
+
+# ── What else the lock screen carries ──────────────────────
+#
+# All three are drawn on the LOGIN screen too. The login screen IS the lock
+# screen (one panel, drawn by the compositor), so anything here reaches both —
+# and for the keyboard layout that is the entire point.
+#
+# Now playing, with ⏮ ⏯ ⏭ under it. Reads MPRIS off the session bus, so it is
+# the same player the bar's media module and playerctl talk to. Draws nothing
+# at all when nothing is playing, which is most of the time; the media keys on
+# a keyboard reach it too, so pausing what you locked the machine on no longer
+# means unlocking it first.
+lock_media = on
+#
+# ⚠ THE WEATHER IS THE ONE THING ON THIS SCREEN THAT USES THE NETWORK, so it
+# is off until asked for. On, it fetches from Open-Meteo (no account, no key)
+# every twenty minutes and caches the last reading, which is what a locked
+# screen shows in its first frame and what a machine with no network keeps
+# showing — dimmed, and labelled with its age, rather than pretending to be
+# current.
+#
+# THE PLACE IS NOT SET HERE. There is one location on this machine and it lives
+# in the file every weather widget already reads:
+#
+#     omarchy-weather-location --set "Oslo" 59.9139,10.7522
+#     omarchy-weather-location                # what it is now
+#
+# With nothing set, the city is detected from the IP the first time — the same
+# call, to the same host, that command makes when you ask it with no arguments.
+lock_weather = off
+lock_weather_unit = auto            # auto reads the locale; or c / f
+#
+# The keyboard-layout chip, top right of the panel. `auto` shows it only when
+# xkb_layout names more than one layout — one layout is a label, not a chooser.
+# Click it, or press Super+Space, to walk them.
+#
+# ⚠ THIS IS WHY IT MATTERS ON THE LOGIN SCREEN. A password typed in the wrong
+# layout is rejected exactly like a wrong password, and nothing else on that
+# screen can tell you which one happened. On the desktop the same walk is
+# `synctl layout next`, or a bind:
+#
+#     xkb_layout = us,no
+#     bind = super+shift+space kbd_layout next
+lock_layout = auto
 
 # ── Screen recording (Super+Shift+R) ───────────────────────
 # Whether a recording captures sound as well. On means the default sink's

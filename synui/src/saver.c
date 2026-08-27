@@ -842,6 +842,10 @@ static const char *saver_row_label(int row)
     case SAVER_ROW_LOCK_DIM:   return "Lock dim";
     case SAVER_ROW_LOCK_BLUR:  return "Lock blur";
     case SAVER_ROW_LOCK_THEME: return "Lock colours";
+    case SAVER_ROW_LOCK_MEDIA: return "Now playing";
+    case SAVER_ROW_LOCK_WEATHER: return "Weather";
+    case SAVER_ROW_LOCK_WX_UNIT: return "Temperature in";
+    case SAVER_ROW_LOCK_LAYOUT: return "Keyboard layout";
     default:                   return "?";
     }
 }
@@ -950,6 +954,30 @@ int saver_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
     case SAVER_ROW_LOCK_THEME:
         snprintf(value, vn, "%s", c->lock_theme_follow ? "follow theme" : "custom");
         return 0;
+    case SAVER_ROW_LOCK_MEDIA:
+        snprintf(value, vn, "%s", c->lock_media ? "on" : "off");
+        return !c->lock_media;
+    case SAVER_ROW_LOCK_WEATHER:
+        /* The value says what turning it on COSTS, because this is the only
+         * row in the panel that makes the machine talk to the internet and a
+         * bare "off" would not say so. */
+        snprintf(value, vn, "%s", c->lock_weather ? "on" : "off (no network use)");
+        return !c->lock_weather;
+    case SAVER_ROW_LOCK_WX_UNIT:
+        snprintf(value, vn, "%s", c->lock_weather_unit_f ? "\xc2\xb0F" : "\xc2\xb0C");
+        return !c->lock_weather;
+    case SAVER_ROW_LOCK_LAYOUT: {
+        int n = kbd_layout_count(s);
+        /* AUTO is not a state, it is a rule — so the row says what the rule
+         * currently RESOLVES to. "auto" alone on a one-layout machine reads as
+         * a chip that should be there and is not. */
+        if (c->lock_layout == SYN_LOCK_LAYOUT_AUTO)
+            snprintf(value, vn, "auto (%s)", n > 1 ? "shown" : "hidden");
+        else
+            snprintf(value, vn, "%s", syn_lock_layout_names[c->lock_layout]);
+        return c->lock_layout == SYN_LOCK_LAYOUT_OFF ||
+               (c->lock_layout == SYN_LOCK_LAYOUT_AUTO && n <= 1);
+    }
     default:
         snprintf(value, vn, "?");
         return 1;
@@ -1052,6 +1080,35 @@ static void saver_adjust(syn_server_t *s, int dir)
     case SAVER_ROW_LOCK_THEME:
         c->lock_theme_follow = !c->lock_theme_follow;
         break;
+    case SAVER_ROW_LOCK_MEDIA:
+        c->lock_media = !c->lock_media;
+        break;
+    case SAVER_ROW_LOCK_WEATHER:
+        c->lock_weather = !c->lock_weather;
+        /* Turning it on asks for a reading NOW rather than at the next
+         * twenty-minute tick: a row that answers "off → on" with a blank
+         * weather line for the rest of the hour reads as a row that did
+         * nothing. */
+        weather_enabled_changed(s);
+        if (c->lock_weather)
+            note = "Weather: on \xc2\xb7 fetching\xe2\x80\xa6";
+        break;
+    case SAVER_ROW_LOCK_WX_UNIT:
+        c->lock_weather_unit_f = !c->lock_weather_unit_f;
+        /* The cached reading is in the OTHER unit now, so re-ask rather than
+         * convert here — weather.c converts what it has on the way past, and
+         * this keeps one conversion in one place. */
+        weather_refresh(s, true);
+        break;
+    case SAVER_ROW_LOCK_LAYOUT: {
+        int next = (c->lock_layout + dir) % SYN_LOCK_LAYOUT_COUNT;
+        if (next < 0) next += SYN_LOCK_LAYOUT_COUNT;
+        c->lock_layout = next;
+        if (next != SYN_LOCK_LAYOUT_OFF && kbd_layout_count(s) <= 1)
+            note = "Keyboard layout: one layout \xc2\xb7 add to xkb_layout "
+                   "(e.g. us,no) for a chooser";
+        break;
+    }
     default:
         return;
     }

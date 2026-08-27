@@ -52,9 +52,33 @@
 
 /* Panel drawn on each output, centred. Fixed-size (not the whole output) so a
  * redraw allocates a ~kB buffer, not a full framebuffer, 30 times a second
- * while it fades. */
+ * while it fades.
+ *
+ * ── Three bands, and why the middle one is measured from its own top ────────
+ *
+ * The panel grew a HEADER (the weather, and the keyboard-layout chip) and a
+ * FOOTER (what is playing, with its transport buttons) around the clock/date/
+ * password block that was all it used to be. Rather than renumber every y in
+ * lock_draw_panel — twenty-odd literals, each of which is a chance to move
+ * something by four pixels and not notice — the core is drawn through a
+ * cairo_translate of LOCK_HEAD_H and every one of those literals means exactly
+ * what it always meant.
+ *
+ * The bands are FIXED, including when their contents are absent. A panel that
+ * shrank when the music stopped would move the clock on screen every time a
+ * track ended, and the background luminance under it (nlock.bg_lum) is measured
+ * once per lock against this rect — a panel that changed size would be inking
+ * itself against a measurement of somewhere else. */
+#define LOCK_HEAD_H     60       /* weather · keyboard layout */
+#define LOCK_CORE_H     360      /* clock · date · password — unchanged */
+#define LOCK_FOOT_H     120      /* now playing · ⏮ ⏯ ⏭ */
 #define LOCK_PANEL_W    720
-#define LOCK_PANEL_H    360
+#define LOCK_PANEL_H    (LOCK_HEAD_H + LOCK_CORE_H + LOCK_FOOT_H)
+
+/* The transport buttons: three circles on the footer's centre line. */
+#define LOCK_BTN_R      17.0
+#define LOCK_BTN_GAP    64.0
+#define LOCK_BTN_CY     88.0     /* within the footer band */
 
 /* Hold bright this long after the last input, then ease to black. "A few
  * seconds", as asked. */
@@ -378,10 +402,317 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     }
 }
 
-/* One panel: the clock, the date, and the password dots — everything scaled by
- * `bright`, so at bright 0 the buffer is empty (transparent over the black
- * backstop) and the screen is dark. */
-static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
+/* ── The header: weather, and the layout chip ────────────────
+ *
+ * Both sit above the clock, both are drawn on the LOGIN screen too (it is this
+ * panel — see greeter.c), and both are the reason the panel grew a header band.
+ */
+
+/* Cut `in` to fit `max` px at the current font, ending in an ellipsis. Measured
+ * through syn_text_extents, which is the same fallback syn_show_text draws
+ * with — measuring through cairo's own extents would be measuring a different
+ * string than the one that appears (see text.c). */
+static void lock_elide(cairo_t *cr, const char *in, double max,
+                       char *out, size_t n)
+{
+    snprintf(out, n, "%s", in);
+
+    cairo_text_extents_t te;
+    syn_text_extents(cr, out, &te);
+    if (te.x_advance <= max) return;
+
+    size_t len = strlen(out);
+    while (len > 0) {
+        /* Back off a whole code point at a time: half a UTF-8 sequence draws as
+         * a replacement glyph, which reads as a broken title rather than a cut
+         * one. */
+        do { len--; } while (len > 0 && ((unsigned char)out[len] & 0xC0) == 0x80);
+        char probe[256];
+        snprintf(probe, sizeof(probe), "%.*s\xe2\x80\xa6", (int)len, out);
+        syn_text_extents(cr, probe, &te);
+        if (te.x_advance <= max) { snprintf(out, n, "%s", probe); return; }
+    }
+    out[0] = '\0';
+}
+
+/* Is the keyboard-layout chip on this screen at all? AUTO — the default — says
+ * yes only when there is a choice to make: one layout is not a selector. */
+static bool lock_layout_shown(syn_server_t *s)
+{
+    switch (s->config.lock_layout) {
+    case SYN_LOCK_LAYOUT_OFF: return false;
+    case SYN_LOCK_LAYOUT_ON:  return true;
+    default:                  return kbd_layout_count(s) > 1;
+    }
+}
+
+static void lock_draw_weather(syn_server_t *s, cairo_t *cr, double a)
+{
+    if (!s->config.lock_weather) return;
+
+    syn_weather_now_t w;
+    if (!weather_current(&w)) return;      /* never had a reading: draw nothing */
+
+    /* A stale reading is drawn dimmer AND labelled with its age. Showing an
+     * eight-hour-old temperature as if it were the current one is worse than
+     * showing nothing — the whole value of the row is that it is now. */
+    double lvl = w.stale ? 0.42 : 0.80;
+
+    cairo_save(cr);
+    lock_set_ink(s, cr, lvl, a);
+    weather_draw_icon(cr, w.icon, 18, 14, 32);
+    cairo_restore(cr);
+
+    char temp[16];
+    snprintf(temp, sizeof(temp), "%d\xc2\xb0%c", w.temp, w.unit);
+
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 26);
+    lock_set_ink(s, cr, w.stale ? 0.55 : 0.92, a);
+    cairo_move_to(cr, 58, 42);
+    syn_show_text(cr, temp);
+
+    cairo_text_extents_t te;
+    syn_text_extents(cr, temp, &te);
+    double x = 58 + te.x_advance + 12;
+
+    /* The condition over the place, small, so the temperature stays the thing
+     * you read from across the room. */
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 13);
+    lock_set_ink(s, cr, lvl, a);
+
+    char line[96];
+    if (w.cond[0]) {
+        lock_elide(cr, w.cond, 250, line, sizeof(line));
+        cairo_move_to(cr, x, 31);
+        syn_show_text(cr, line);
+    }
+
+    if (w.stale) {
+        /* Hours, because anything this row calls stale is hours old by
+         * definition, and "217 minutes ago" is not a thing anyone reads. */
+        long hours = w.age / 3600;
+        snprintf(line, sizeof(line), "%s%s%ldh ago", w.place,
+                 w.place[0] ? " \xc2\xb7 " : "", hours < 1 ? 1 : hours);
+    } else {
+        snprintf(line, sizeof(line), "%s", w.place);
+    }
+    if (line[0]) {
+        char cut[96];
+        lock_elide(cr, line, 250, cut, sizeof(cut));
+        lock_set_ink(s, cr, w.stale ? 0.42 : 0.58, a);
+        cairo_move_to(cr, x, 48);
+        syn_show_text(cr, cut);
+    }
+}
+
+/*
+ * The keyboard-layout chip: which layout the password is being typed in.
+ *
+ * ⚠ THIS IS THE ONE CONTROL ON THIS SCREEN THAT PREVENTS A MYSTERY. A wrong
+ * layout at a login prompt is indistinguishable from a wrong password — you
+ * type it, it is rejected, and nothing anywhere says the `y` you pressed went
+ * in as a `z`. Everything else here is convenience; this is the fix for a bug
+ * people diagnose as a broken account.
+ *
+ * A BUTTON IS ITS OWN LABEL (see the house rule): the chip says `US`, not
+ * "Keyboard: US", and it does not print the chord that also works. The chevron
+ * is drawn only when there is somewhere to go.
+ */
+static void lock_draw_layout_chip(syn_server_t *s, cairo_t *cr, double a)
+{
+    if (!lock_layout_shown(s)) return;
+
+    char lab[64];
+    kbd_layout_label(s, kbd_layout_active(s), lab, sizeof(lab));
+    if (!lab[0]) return;
+
+    /* `us` reads as a word on a chip; `us(dvorak)` does not, and uppercasing a
+     * variant name makes it longer and no clearer. */
+    if (!strchr(lab, '(') && strlen(lab) <= 4)
+        for (char *c = lab; *c; c++)
+            if (*c >= 'a' && *c <= 'z') *c -= 32;
+
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 15);
+
+    char cut[64];
+    lock_elide(cr, lab, 150, cut, sizeof(cut));
+    cairo_text_extents_t te;
+    syn_text_extents(cr, cut, &te);
+
+    bool many = kbd_layout_count(s) > 1;
+    double pad  = 12;
+    double chev = many ? 16 : 0;
+    double w = te.x_advance + pad * 2 + chev;
+    double h = 30;
+    double x = LOCK_PANEL_W - 18 - w;
+    double y = 13;
+
+    /* Recorded for the mouse. The rect is generous on purpose — a 30px chip is
+     * a small target on a 4K panel, and this one is pressed by someone who has
+     * just discovered their password is going in wrong. */
+    s->nlock.hit_layout.x = x - 6;
+    s->nlock.hit_layout.y = y - 6;
+    s->nlock.hit_layout.w = w + 12;
+    s->nlock.hit_layout.h = h + 12;
+
+    cairo_rounded_rect(cr, x, y, w, h, 8);
+    lock_set_ink(s, cr, 0.16, a);
+    cairo_fill_preserve(cr);
+    lock_set_accent(s, cr, 0.55 * a);
+    cairo_set_line_width(cr, 1.2);
+    cairo_stroke(cr);
+
+    lock_set_ink(s, cr, 0.88, a);
+    cairo_move_to(cr, x + pad, y + 21);
+    syn_show_text(cr, cut);
+
+    if (many) {
+        /* A chevron drawn as a path, not a glyph: ▾ is in DejaVu but the ISO
+         * ships a small font set and text.c's fallback would answer with
+         * whatever fontconfig had, which is a different arrow per machine. */
+        double ax = x + pad + te.x_advance + 8, ay = y + h / 2 - 2;
+        cairo_move_to(cr, ax, ay);
+        cairo_line_to(cr, ax + 8, ay);
+        cairo_line_to(cr, ax + 4, ay + 5);
+        cairo_close_path(cr);
+        lock_set_accent(s, cr, 0.9 * a);
+        cairo_fill(cr);
+    }
+}
+
+/* ── The footer: what is playing ─────────────────────────────
+ *
+ * The transport glyphs are cairo PATHS, not characters. ⏮ ⏯ ⏭ (U+23EE/EF/ED)
+ * are not in DejaVu, so on a box without a symbol font they would draw as
+ * whatever fontconfig found or as nothing at all — and "nothing at all" is a
+ * button you cannot see but can still press. Three paths are twenty lines and
+ * look the same on every machine, including the ISO.
+ */
+
+/* A filled right-pointing triangle whose bounding box is (x, y, w, h). */
+static void lock_tri(cairo_t *cr, double x, double y, double w, double h)
+{
+    cairo_move_to(cr, x, y);
+    cairo_line_to(cr, x + w, y + h / 2);
+    cairo_line_to(cr, x, y + h);
+    cairo_close_path(cr);
+}
+
+/* One transport button: a ring with a symbol in it, centred on (cx, cy).
+ * `kind` is -1 previous, 0 play/pause, +1 next. Returns nothing — the caller
+ * records the hit rect, because the caller is the one that knows which rect. */
+static void lock_draw_button(syn_server_t *s, cairo_t *cr, double cx, double cy,
+                             int kind, bool playing, bool live, double a)
+{
+    /* A control the player has said it will not honour is drawn faint rather
+     * than hidden: a transport that gained and lost buttons per track would
+     * move the two that remained. */
+    double ink = live ? 0.90 : 0.30;
+
+    cairo_new_path(cr);
+    cairo_arc(cr, cx, cy, LOCK_BTN_R, 0, 2 * 3.14159265);
+    lock_set_ink(s, cr, 0.14, a);
+    cairo_fill_preserve(cr);
+    lock_set_accent(s, cr, (live ? 0.6 : 0.2) * a);
+    cairo_set_line_width(cr, 1.3);
+    cairo_stroke(cr);
+
+    lock_set_ink(s, cr, ink, a);
+    cairo_new_path(cr);
+
+    if (kind == 0) {
+        if (playing) {
+            /* Pause: two bars. */
+            cairo_rectangle(cr, cx - 5.5, cy - 7, 4, 14);
+            cairo_rectangle(cr, cx + 1.5, cy - 7, 4, 14);
+        } else {
+            /* Play, nudged right by a pixel — a triangle centred on its
+             * bounding box reads as sitting left of centre. */
+            lock_tri(cr, cx - 4, cy - 7, 12, 14);
+        }
+        cairo_fill(cr);
+        return;
+    }
+
+    /* Previous and next are the same shape mirrored, so they are drawn once
+     * under a flip rather than twice with the signs edited by hand — the second
+     * copy is where the two would drift apart. */
+    cairo_save(cr);
+    cairo_translate(cr, cx, cy);
+    if (kind < 0) cairo_scale(cr, -1, 1);
+    lock_tri(cr, -7, -7, 7, 14);
+    lock_tri(cr,  0, -7, 7, 14);
+    cairo_rectangle(cr, 7, -7, 3, 14);
+    cairo_fill(cr);
+    cairo_restore(cr);
+}
+
+static void lock_draw_media(syn_server_t *s, cairo_t *cr, double a)
+{
+    if (!s->config.lock_media) return;
+
+    syn_mpris_now_t n;
+    if (!mpris_now_playing(&n)) return;    /* nothing on the bus: draw nothing */
+
+    double cx = LOCK_PANEL_W / 2.0;
+    cairo_text_extents_t te;
+    char cut[256];
+
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 17);
+    lock_set_ink(s, cr, 0.86, a);
+    lock_elide(cr, n.title[0] ? n.title : "\xe2\x99\xaa", LOCK_PANEL_W - 90,
+               cut, sizeof(cut));
+    syn_text_extents(cr, cut, &te);
+    cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 30);
+    syn_show_text(cr, cut);
+
+    if (n.artist[0]) {
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                               CAIRO_FONT_WEIGHT_NORMAL);
+        cairo_set_font_size(cr, 14);
+        lock_set_ink(s, cr, 0.58, a);
+        lock_elide(cr, n.artist, LOCK_PANEL_W - 90, cut, sizeof(cut));
+        syn_text_extents(cr, cut, &te);
+        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 52);
+        syn_show_text(cr, cut);
+    }
+
+    lock_draw_button(s, cr, cx - LOCK_BTN_GAP, LOCK_BTN_CY, -1, n.playing,
+                     n.can_prev, a);
+    lock_draw_button(s, cr, cx, LOCK_BTN_CY, 0, n.playing, n.can_play, a);
+    lock_draw_button(s, cr, cx + LOCK_BTN_GAP, LOCK_BTN_CY, +1, n.playing,
+                     n.can_next, a);
+
+    /* PANEL coordinates, so the footer's own offset goes back in — the caller
+     * translated the context, but the hit test has no context to translate. */
+    const double top = LOCK_HEAD_H + LOCK_CORE_H;
+    syn_lock_hit_t *r[3] = {
+        &s->nlock.hit_prev, &s->nlock.hit_play, &s->nlock.hit_next,
+    };
+    for (int i = 0; i < 3; i++) {
+        r[i]->x = cx + (i - 1) * LOCK_BTN_GAP - LOCK_BTN_R - 4;
+        r[i]->y = top + LOCK_BTN_CY - LOCK_BTN_R - 4;
+        r[i]->w = LOCK_BTN_R * 2 + 8;
+        r[i]->h = LOCK_BTN_R * 2 + 8;
+    }
+}
+
+/* The CORE band: the clock, the date, and the password dots — everything scaled
+ * by `bright`, so at bright 0 the buffer is empty (transparent over the black
+ * backstop) and the screen is dark.
+ *
+ * Drawn through a translate of LOCK_HEAD_H by lock_draw_panel below, which is
+ * why every y here is still the number it was before the panel grew a header:
+ * this band's coordinates are its own. */
+static void lock_draw_core(syn_server_t *s, cairo_t *cr)
 {
     double a = s->nlock.bright;
     if (a <= 0.004) return;      /* faded out: leave it transparent */
@@ -492,6 +823,40 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 312);
         syn_show_text(cr, s->nlock.fp_msg);
     }
+}
+
+/* The whole panel: header, core, footer.
+ *
+ * The hit rects are cleared FIRST and written only by the code that actually
+ * draws a control. That ordering is the whole of the mouse's correctness: a
+ * rect left over from the frame where something was playing is a button that
+ * cannot be seen and can still be pressed, and "the track that ended is still
+ * skippable" is exactly the class of bug a stale rect produces.
+ */
+static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
+{
+    memset(&s->nlock.hit_prev,   0, sizeof(s->nlock.hit_prev));
+    memset(&s->nlock.hit_play,   0, sizeof(s->nlock.hit_play));
+    memset(&s->nlock.hit_next,   0, sizeof(s->nlock.hit_next));
+    memset(&s->nlock.hit_layout, 0, sizeof(s->nlock.hit_layout));
+
+    double a = s->nlock.bright;
+    if (a <= 0.004) return;      /* faded out: leave it transparent, and unclickable */
+
+    cairo_save(cr);
+    lock_draw_weather(s, cr, a);
+    lock_draw_layout_chip(s, cr, a);
+    cairo_restore(cr);
+
+    cairo_save(cr);
+    cairo_translate(cr, 0, LOCK_HEAD_H);
+    lock_draw_core(s, cr);
+    cairo_restore(cr);
+
+    cairo_save(cr);
+    cairo_translate(cr, 0, LOCK_HEAD_H + LOCK_CORE_H);
+    lock_draw_media(s, cr, a);
+    cairo_restore(cr);
 }
 
 /* Render every pane. Panels are created lazily here so synui_lock() need only
@@ -1043,11 +1408,34 @@ static void greeter_user_backspace(syn_server_t *s)
     s->greetd.user[len] = 0;
 }
 
-int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
+int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint,
+                    uint32_t mods)
 {
     if (!s->nlock.active) return 0;
 
     lock_notify_activity(s);        /* any key brightens the screen */
+
+    /*
+     * Super+Space walks the keyboard layouts.
+     *
+     * ⚠ ABOVE the busy check, and above everything else here, because it is the
+     * one key on this screen you press BECAUSE the screen is not behaving:
+     * a rejected password typed in the wrong layout is the case this exists
+     * for, and it must work while "Checking…" is up and while a rejection is
+     * on screen.
+     *
+     * ⚠ AND IT IS NOT A BIND. Compositor bindings are disabled while locked by
+     * contract (see keyboard_handle_key), so Super+Space here does not reach
+     * the cmdbar it opens on the desktop — the chord is free on this screen and
+     * means only this. Nothing is swallowed from a client either: while locked,
+     * no key reaches one.
+     */
+    if (sym == XKB_KEY_space && (mods & WLR_MODIFIER_LOGO)) {
+        kbd_layout_cycle(s, +1);
+        lock_render(s);
+        return 1;
+    }
+
     if (s->nlock.busy) return 1;    /* a check is in flight: swallow, do nothing */
 
     /* Tab moves focus between the greeter's username and password fields. The
@@ -1107,6 +1495,68 @@ int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
         }
         return 1;
     }
+}
+
+/* ── Pointer ─────────────────────────────────────────────── */
+
+static bool lock_hit(const syn_lock_hit_t *r, double x, double y)
+{
+    /* A zero-width rect is a control that was not drawn this frame. Tested
+     * explicitly rather than left to the comparisons: (0,0,0,0) contains
+     * nothing, but a rect that happened to start at the origin would, and the
+     * intent here is "not drawn", not "an empty box at the corner". */
+    if (r->w <= 0 || r->h <= 0) return false;
+    return x >= r->x && x < r->x + r->w && y >= r->y && y < r->y + r->h;
+}
+
+/*
+ * A press while locked, in LAYOUT coordinates.
+ *
+ * The lock screen has no client to hit-test against — it is a flat buffer the
+ * compositor drew — so the draw records where it put its controls and this
+ * reads them back. Returns 1 when the press did something; 0 means it was
+ * nothing but the user arriving, which is all a click on this screen has ever
+ * been, and input.c goes on to treat it that way.
+ *
+ * ⚠ THE PANE IS FOUND BY GEOMETRY, NOT BY THE LAST ONE DRAWN. Every output
+ * shows the same panel, so the rects are in PANEL coordinates and the press has
+ * to be translated by the box of whichever output it landed on. Trusting the
+ * last pane rendered would be right on one monitor and wrong on the other.
+ */
+int lock_handle_button(syn_server_t *s, double lx, double ly, uint32_t button)
+{
+    if (!s->nlock.active) return 0;
+    if (button != BTN_LEFT) return 0;
+
+    /* A dark screen has no buttons on it. The first click is what brings the
+     * panel back — pressing a control you cannot see is not a thing anyone
+     * meant to do, and the fade is the only reason it would be invisible. */
+    if (s->nlock.bright <= 0.5) return 0;
+
+    for (int i = 0; i < s->nlock.npane; i++) {
+        struct wlr_output *o = s->nlock.pane[i].output;
+        if (!o) continue;
+
+        struct wlr_box box;
+        wlr_output_layout_get_box(s->output_layout, o, &box);
+        if (box.width <= 0 || box.height <= 0) continue;
+
+        double px = box.x + (box.width  - LOCK_PANEL_W) / 2.0;
+        double py = box.y + (box.height - LOCK_PANEL_H) / 2.0;
+        double x = lx - px, y = ly - py;
+        if (x < 0 || y < 0 || x >= LOCK_PANEL_W || y >= LOCK_PANEL_H) continue;
+
+        if (lock_hit(&s->nlock.hit_prev, x, y))   { mpris_previous();  return 1; }
+        if (lock_hit(&s->nlock.hit_play, x, y))   { mpris_playpause(); return 1; }
+        if (lock_hit(&s->nlock.hit_next, x, y))   { mpris_next();      return 1; }
+        if (lock_hit(&s->nlock.hit_layout, x, y)) {
+            kbd_layout_cycle(s, +1);
+            lock_render(s);
+            return 1;
+        }
+        break;                          /* the press was on this pane's panel */
+    }
+    return 0;
 }
 
 /* ── Lock / unlock ───────────────────────────────────────── */
@@ -1171,6 +1621,12 @@ void synui_lock(syn_server_t *s)
      * known and before lock_render draws over it — a decode plus a blur per
      * output, which is why it is not on any timer. */
     lock_bg_invalidate(s);
+
+    /* Nudge the weather, if it is on and what we have is old. Not forced: the
+     * cached reading is what the first frame draws either way, and a machine
+     * locked and unlocked six times in a minute has no business making six
+     * requests. No-op while lock_weather is off, which is the default. */
+    weather_refresh(s, false);
 
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
     s->nlock.t_clock = wl_event_loop_add_timer(loop, lock_clock_cb, s);

@@ -1069,6 +1069,13 @@ screen would draw — the picture copied, not merely named — into
 the account it is about to log in. Nothing there is editable; it is a cache of an
 answer, not a second question.
 
+Your **keyboard layouts** cross that same bridge, and that half is not cosmetic:
+the greeter falls back to `/etc/synui/synuirc`, which carries only the *system*
+layout, so a password needing your second layout could not be typed at the login
+prompt at all. The published list is applied to the keyboards, not merely
+recorded — the devices were attached before it was read, and a chip that named a
+layout the keys were not on would be worse than no chip.
+
 **Screens** are one setting with three positions: `display_mode = extend |
 mirror | external`, cycled with `m` in `Super`+`D`, from Control panel ▸ Display
 ▸ Screens, or `synctl dispatch display_mode [name]` — and on a laptop, from
@@ -1191,6 +1198,13 @@ lock_background      = desktop     # or black, or a path to an image
 lock_dim             = 55          # percent
 lock_blur            = 16          # pixels
 lock_accent          = #00e5ff     # naming one stops it following the theme
+
+lock_media           = on          # now playing, with ⏮ ⏯ ⏭
+lock_weather         = off         # ⚠ the only part of this screen that uses
+                                   #   the network
+lock_weather_unit    = auto        # auto reads the locale; or c / f
+lock_layout          = auto        # the keyboard-layout chip; auto = only when
+                                   #   xkb_layout names more than one
 ```
 
 The lock screen defaults to your **desktop wallpaper, blurred and dimmed**, and
@@ -1203,6 +1217,63 @@ same wallpapers `Super`+`W` browses (`~/Pictures`, `~/Pictures/Wallpapers`,
 rather than locking to a black screen. A pick in the panel writes
 `~/.config/synui/saver.state`, which overrides those keys the same way
 `wallpaper.state` does; delete it to hand control back to `synuirc`.
+
+#### What is playing, the weather, and which keyboard you are on
+
+Three things sit on that panel besides the clock, and because the login screen
+*is* the lock screen, all three are on the login screen too.
+
+**Now playing** reads MPRIS off the session bus, so it is the same player the
+bar's media module and `playerctl` talk to. Title, artist, and ⏮ ⏯ ⏭ — click
+them, or use the media keys on your keyboard, which reach the player while the
+screen is locked instead of typing invisible characters into the password. It
+draws nothing at all when nothing is playing. `lock_media = off` removes it.
+
+**The weather** is off until you ask for it: it is the one thing on this screen
+that goes to the network. On, it asks Open-Meteo (no account, no key) every
+twenty minutes and caches the answer, so a locked screen shows a temperature in
+its first frame rather than a gap that fills in a second later — and a machine
+with no network keeps showing the last reading, dimmed and labelled with its
+age rather than pretending to be current.
+
+There is **one location on this machine** and it is not set here. It is the
+file every weather widget already reads:
+
+```bash
+omarchy-weather-location --set "Oslo" 59.9139,10.7522
+omarchy-weather-location                      # what it is now
+```
+
+With nothing set, the city is detected from your IP the first time.
+
+**The keyboard-layout chip**, top right, says which layout is typing. This one
+is a fix rather than a feature:
+
+> A password typed in the wrong layout is rejected **exactly like a wrong
+> password**, and until now nothing on the login screen could say which had
+> happened. Worse, the login screen only ever had the *system* layout — so if
+> your password needed the second one, it could not be typed there at all.
+
+`xkb_layout = us,no` gives you two; click the chip or press `Super`+`Space` to
+walk them. It appears only when there is more than one (`lock_layout = on`
+pins it visible anyway, which is what you want while setting a second one up).
+On the desktop the same walk is `synctl layout next`, or a bind:
+
+```ini
+xkb_layout = us,no
+bind = super+shift+space kbd_layout next      # ⚠ not layout_cycle — that tiles
+```
+
+```bash
+synctl layout            # what there is, and which one is active
+synctl layout next       # walk them
+synctl layout no         # or go straight to one, by name or index
+```
+
+> Your session **publishes** your layouts for the login screen the same way it
+> publishes the lock wallpaper — the greeter runs as another account and can
+> read neither your config nor your home. A brand-new install therefore logs in
+> once on the system layout before the login screen knows about the second one.
 
 ### Gaming
 

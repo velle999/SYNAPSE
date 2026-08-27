@@ -28,10 +28,14 @@ libinput  = dependency('libinput')
 # sound.c watches udev so a device being plugged in can make a noise. Already
 # installed as a wlroots dependency, so this adds no package to the ISO.
 libudev   = dependency('libudev')
-# screensaver.c: sd-bus, to own org.freedesktop.ScreenSaver
+# screensaver.c: sd-bus, to own org.freedesktop.ScreenSaver; mpris.c is the
+# other side of the same library — a CLIENT of the players on the session bus,
+# so the lock and login screens can say what is playing and stop it.
 libsystemd = dependency('libsystemd')
 libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
-libcurl   = dependency('libcurl')  # news.c fetches the feeds (on its own thread)
+libcurl   = dependency('libcurl')  # news.c fetches the feeds, weather.c the
+                                  # forecast — both on their own threads, so a
+                                  # slow host never stalls the event loop
 # dispcfg.c parses the connector EDID for HDR/colorimetry, which wlroots reads
 # with this same library but does not re-export. Already installed as a wlroots
 # dependency, so this adds no new package to the ISO.
@@ -260,6 +264,9 @@ synui_exe = executable('synui',
     'src/session.c',
     'src/lock.c',
     'src/greeterbg.c',
+    'src/mpris.c',
+    'src/weather.c',
+    'src/kbdlayout.c',
     'src/ai_interface.c',
     'src/secfeed.c',
     'src/synapd_mon.c',
@@ -1556,6 +1563,18 @@ greeter_bg_t = find_program('tests/greeter_bg.sh')
 test('greeter_bg', greeter_bg_t,
      args    : [synui_exe.full_path()],
      depends : [synui_exe],
+     timeout : 120)
+
+# The keyboard-layout selector, which exists for the LOGIN screen: a password
+# typed in the wrong layout is rejected exactly like a wrong password, and
+# nothing on that screen could say which had happened. The rig drives the CLI
+# half (`synctl layout`) and pins the two things a selector can get wrong —
+# offering a layout the KEYMAP does not have, and losing the group when no
+# keyboard is on the seat, which is what a keyboard plugged in later adopts.
+lock_layout_t = find_program('tests/lock_layout.sh')
+test('lock_layout', lock_layout_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
      timeout : 120)
 
 # The accessibility control: ONE setting that makes the whole desktop bigger —

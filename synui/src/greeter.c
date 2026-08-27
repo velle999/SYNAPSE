@@ -281,6 +281,15 @@ void greeter_start(syn_server_t *s)
      * here. BEFORE synui_lock(), which builds the background panes. */
     greeterbg_adopt(s, s->greetd.user);
 
+    /* ⚠ ADOPTING A LAYOUT IS NOT APPLYING ONE. greeterbg_adopt writes
+     * xkb_layout/variant/options into the config, and the keyboards were
+     * attached back at wlr_backend_start with the keymap the config had THEN —
+     * the system default. Without this call the login screen would show a chip
+     * saying `no` while the keys stayed `us`, which is worse than showing
+     * nothing: it would be a label that lies about the very thing it exists to
+     * tell the truth about. */
+    input_reload_config(s);
+
     /* Draw the lock panel — same pixels as the in-session lock screen. */
     synui_lock(s);
 
