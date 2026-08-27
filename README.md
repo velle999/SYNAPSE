@@ -641,9 +641,15 @@ ISO, Run with Wine, Set as Wallpaper — because both file managers read the sam
 is, when it was last changed, how big it is, and where a symlink points. The
 type is its real name, "Tar archive (gzip-compressed)" rather than
 `application/x-compressed-tar`: that string is shared-mime-info's own, so it
-matches what every other file manager on the machine calls the same file. A
-folder gets no size line, because the number `stat` gives for one is the size
-of the directory entry and not of what is in it.
+matches what every other file manager on the machine calls the same file.
+
+A **folder is measured**, not reported. `stat` gives the size of the directory
+entry — a few hundred bytes for a tree holding an ISO — so the panel runs the
+same walk Properties does and leads with what the folder **costs on disk**,
+with what it contains, and in how many files, underneath. The walk starts when
+the panel appears rather than when the pointer arrives, so crossing a grid of
+folders costs nothing; it stops when the panel goes, and a finished answer is
+remembered until the listing is next re-read.
 
 **Properties** (`Alt`+`Enter`) is a panel over `synfiles info`, so the dialog and
 the command print the same list by construction — including **resolution** for

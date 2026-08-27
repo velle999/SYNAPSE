@@ -330,7 +330,10 @@ FloatingWindow {
     Timer {
         id: tipDelay
         interval: 500
-        onTriggered: root.tipRow = root.tipWant
+        onTriggered: {
+            root.tipRow = root.tipWant
+            root.startTipSize(root.tipRow)
+        }
     }
 
     function askInfo(row, pt) {
@@ -350,7 +353,10 @@ FloatingWindow {
     function dropInfo(row) {
         const f = row ? row.full : ""
         if (root.tipWant && root.tipWant.full === f) { root.tipWant = null; tipDelay.stop() }
-        if (root.tipRow && root.tipRow.full === f) root.tipRow = null
+        if (root.tipRow && root.tipRow.full === f) {
+            root.tipRow = null
+            root.stopTipSize()
+        }
     }
 
     // ⛔ AND A SCROLL TAKES IT DOWN, because the panel is anchored to a place
@@ -367,6 +373,78 @@ FloatingWindow {
         root.tipWant = null
         root.tipRow = null
         tipDelay.stop()
+        root.stopTipSize()
+    }
+
+    // ── How big a FOLDER is, for the panel ──────────────────────────────────
+    //
+    // ⛔ st_size FOR A DIRECTORY IS THE SIZE OF THE DIRECTORY ENTRY. It is the
+    // number that reads "890 B" for a tree holding an ISO, which is why the
+    // first cut of this panel showed no size line for a folder at all. The
+    // real answer is a walk, and `synfiles du` is the walk — the same one
+    // Properties runs.
+    //
+    // ⚠ ITS OWN PROCESS, NOT duProc. Properties owns that one and stops it when
+    // it closes; sharing would mean a hover killing the walk behind an open
+    // Properties panel, and an open Properties panel stealing the hover's. Two
+    // panels asking two questions are two walks.
+    //
+    // ⚠ AND IT STARTS WHEN THE PANEL APPEARS, not when the pointer arrives.
+    // The delay is what makes crossing a grid of folders cost nothing: a walk
+    // per icon brushed past would be a process per icon.
+    property var tipDu: null        // {bytes, disk, files, dirs, done}
+    property string tipDuFor: ""    // the path it is about, encoded
+
+    // Answers already paid for. Hovering the same folder twice is common —
+    // reading a list means going back — and a second walk of a large tree is
+    // seconds spent to reproduce a number that is already on screen.
+    //
+    // ⚠ Cleared whenever a pane re-reads its listing, which is where the
+    // window goes back to the truth anyway. Between refreshes a size can go
+    // stale; a tooltip that is a refresh out of date is a better trade than
+    // one that re-walks /home every time the pointer crosses it.
+    property var tipSizes: ({})
+
+    Process {
+        id: tipDuProc
+        // SplitParser, not StdioCollector: `du` prints a RUNNING total and a
+        // collector fires once at the end, which would leave the row saying
+        // "measuring" for the whole walk and then jump to the answer.
+        stdout: SplitParser {
+            onRead: (line) => {
+                const f = line.split("\t")
+                if (f.length < 5 || f[0] === "bytes") return   // header
+                const t = { bytes: parseInt(f[0]) || 0, disk: parseInt(f[1]) || 0,
+                            files: parseInt(f[2]) || 0, dirs: parseInt(f[3]) || 0,
+                            done: f[4] === "1" }
+                root.tipDu = t
+                // Only a FINISHED walk is worth keeping. A running total
+                // cached would come back later as a confident wrong answer.
+                if (t.done && root.tipDuFor !== "") {
+                    const c = root.tipSizes
+                    c[root.tipDuFor] = t
+                    root.tipSizes = c
+                }
+            }
+        }
+    }
+
+    function startTipSize(row) {
+        root.stopTipSize()
+        if (!row || row.type !== "dir" || row.missing) return
+        root.tipDuFor = row.full
+        const seen = root.tipSizes[row.full]
+        if (seen) { root.tipDu = seen; return }
+        tipDuProc.command = [root.bin, "--rec", "du", root.disp(row.full)]
+        tipDuProc.running = true
+    }
+
+    // A walk of a large tree must not outlive the panel that asked for it, and
+    // must not land its records in the next folder's row.
+    function stopTipSize() {
+        tipDuProc.running = false
+        root.tipDu = null
+        root.tipDuFor = ""
     }
 
     // What to call the type. The engine's description when there is one; the
@@ -1324,6 +1402,13 @@ FloatingWindow {
     function fmtCount(n) {
         // Thousands separators: "375360 files" is a number nobody reads.
         return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+    }
+
+    // "1 folder", "18 folders". Written once because both the hover panel and
+    // the Properties dialog count the same things, and "1 files in 1 folders"
+    // is the kind of wrong that makes a careful number look careless.
+    function fmtMany(n, noun) {
+        return root.fmtCount(n) + " " + noun + (n === 1 ? "" : "s")
     }
 
     function openProperties() {
@@ -3310,9 +3395,18 @@ FloatingWindow {
                                     // with a trailing … so a number that is
                                     // still growing is never mistaken for the
                                     // answer.
-                                    return root.fmtSize(t.bytes, false)
-                                         + "  (" + root.fmtCount(t.files) + " files in "
-                                         + root.fmtCount(t.dirs) + " folders)"
+                                    // ⚠ THE DISK FIGURE IS THE ONE THAT COSTS
+                                    // YOU SOMETHING. A tree of small files
+                                    // takes far more room than it contains,
+                                    // and that difference is a reason people
+                                    // open this dialog; showing only the
+                                    // apparent size answered the wrong
+                                    // question by a factor of six on a
+                                    // source tree.
+                                    return root.fmtSize(t.disk, false) + " on disk"
+                                         + "  (" + root.fmtSize(t.bytes, false) + " in "
+                                         + root.fmtMany(t.files, "file") + ", "
+                                         + root.fmtMany(t.dirs, "folder") + ")"
                                          + (t.done ? "" : " …")
                                 }
                                 color: root.cText
@@ -4045,13 +4139,26 @@ FloatingWindow {
                         if (!r) return []
                         const out = [{ k: "Type", v: root.tipType(r) },
                                      { k: "Modified", v: root.fmtTime(r.mtime) }]
-                        // ⚠ NO SIZE FOR A FOLDER. The number stat gives is the
-                        // size of the directory ENTRY — "890 B" for a tree
-                        // holding an ISO — which the Properties dialog already
-                        // has to explain in a parenthesis. A line that has to
-                        // be explained does not belong on a tooltip.
-                        if (r.type !== "dir")
+                        // ⛔ A FOLDER'S SIZE IS A WALK, NOT A stat. st_size for
+                        // a directory is the size of the directory ENTRY —
+                        // "890 B" for a tree holding an ISO. What is worth
+                        // showing is what it COSTS, so the disk figure leads
+                        // and the apparent one follows it: a tree of small
+                        // files takes far more room than it contains, and that
+                        // difference is the whole reason to ask.
+                        if (r.type === "dir") {
+                            const t = root.tipDu
+                            out.push({ k: "Size", v: t === null ? "measuring…"
+                                : root.fmtSize(t.disk, false) + " on disk"
+                                  + (t.done ? "" : " …") })
+                            if (t !== null)
+                                out.push({ k: "Contents",
+                                           v: root.fmtSize(t.bytes, false) + " in "
+                                              + root.fmtMany(t.files, "file") + ", "
+                                              + root.fmtMany(t.dirs, "folder") })
+                        } else {
                             out.push({ k: "Size", v: root.fmtSize(r.size, false) })
+                        }
                         if (r.link === "1" && r.target && r.target !== "")
                             out.push({ k: "Links to", v: root.disp(r.target) })
                         return out.filter(e => e.v !== "")
@@ -4085,7 +4192,10 @@ FloatingWindow {
             Text {
                 id: tipLabelW
                 visible: false
-                text: "Modified"
+                // The longest label there is. Measured rather than guessed,
+                // because root.ui() is a SCALE and a constant can only ever be
+                // right at one of them.
+                text: "Contents"
                 font { family: root.uiFont; pixelSize: root.ui(11) }
             }
         }
@@ -4392,6 +4502,12 @@ FloatingWindow {
             if (!t) return
             pane.loading = true
             root.statusLine = ""
+            // ⚠ THE MEASURED FOLDER SIZES GO WITH IT. A reload is this window
+            // going back to the truth — after a copy, a delete, or F5 — and a
+            // size measured before one of those is a confident wrong number.
+            // Re-measuring on navigation is the price of never showing one.
+            root.tipSizes = ({})
+            root.hideInfo()
 
             if (t.view === "about") {
                 listProc.command = [root.bin, "--rec", "about"]

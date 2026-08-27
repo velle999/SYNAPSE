@@ -2673,6 +2673,23 @@ printf '<mime-type type="text/plain"><comment>Fixture text</comment></mime-type>
     && ok "…and a type it has never heard of is described by its own name" \
     || bad "a missing description is not falling back to the mime type"
 
+# ── what a folder costs on disk ─────────────────────────────────────────────
+#
+# `du --rec` reports bytes AND disk, and they are different numbers: disk is
+# st_blocks * 512, what the tree costs on THIS filesystem. A directory of tiny
+# files costs a block each, so the two diverge by any factor you like — which
+# is why the hover panel and the Properties dialog lead with the disk figure.
+DUD="$T/dudisk"; mkdir -p "$DUD/sub"
+for i in 1 2 3 4 5 6 7 8 9 10; do printf 'x' > "$DUD/sub/f$i"; done
+du_col() { "$SYNFILES" --rec du "$DUD" | awk -F'\t' 'END {print $'"$1"'}'; }
+[ "$(du_col 1)" = 10 ] && ok "du counts the bytes a tree contains" \
+                       || bad "du says the tree holds $(du_col 1) bytes, expected 10"
+[ "$(du_col 2)" -gt "$(du_col 1)" ] \
+    && ok "…and separately what it costs on disk, which is more" \
+    || bad "disk ($(du_col 2)) is not above bytes ($(du_col 1)) for ten one-byte files"
+[ "$(du_col 3)" = 10 ] && ok "…and how many files that was" \
+                       || bad "du counted $(du_col 3) files, expected 10"
+
 # ── the hover panel ─────────────────────────────────────────────────────────
 #
 # Static checks on the wiring; tests/item_hover_info.qml drives the pointer.
@@ -2714,6 +2731,52 @@ if [ -f "$QML" ]; then
     sed -n '/id: tipDelay/,/^    }/p' "$QML" | grep -qE 'interval: [1-9][0-9][0-9]' \
         && ok "the panel waits before it appears" \
         || bad "the hover panel has no delay — crossing the grid would strobe"
+
+    # ── a folder's size is a WALK ────────────────────────────────────────────
+    #
+    # ⛔ st_size FOR A DIRECTORY IS THE SIZE OF THE DIRECTORY ENTRY — "890 B"
+    # for a tree holding an ISO. The panel's Size row for a folder has to come
+    # from `du`, and showing r.size there instead would be a plausible number
+    # that is wrong by any factor you like.
+    sed -n '/function startTipSize/,/^    }/p' "$QML" > "$T/tipdu"
+    grep -q '"du"' "$T/tipdu" \
+        && ok "a folder's size on the panel comes from the walk" \
+        || bad "the panel is reporting a directory entry's own size again"
+
+    # ⚠ ITS OWN PROCESS. Properties owns duProc and stops it when it closes:
+    # sharing means a hover killing the walk behind an open Properties panel,
+    # and an open Properties panel stealing the hover's.
+    grep -q 'duProc.running' "$T/tipdu" \
+        && bad "the hover panel drives Properties' walk — the two will fight" \
+        || ok "the hover panel walks in a process of its own"
+
+    # ⛔ AND THE WALK STOPS WITH THE PANEL. A du over a big tree runs for
+    # seconds after the panel is gone otherwise, and its records land in
+    # whatever the pointer reached next.
+    for f in hideInfo dropInfo; do
+        sed -n "/function $f/,/^    }/p" "$QML" | grep -q 'stopTipSize' \
+            && ok "$f() stops the folder walk" \
+            || bad "$f() leaves a du running with no panel to report to"
+    done
+
+    # ⚠ AND A RELOAD THROWS THE MEASURED SIZES AWAY. A size cached across a
+    # copy, a delete or an F5 is a confident wrong number.
+    sed -n '/^        function reload()/,/^        }/p' "$QML" > "$T/tipreload"
+    grep -q 'root.tipSizes = ({})' "$T/tipreload" \
+        && ok "measured folder sizes go when the listing is re-read" \
+        || bad "a measured size can outlive the folder it measured"
+
+    # ⚠ THE DISK FIGURE LEADS. A tree of small files takes far more room than
+    # it contains, and that difference is the reason to ask at all.
+    grep -q 'root.fmtSize(t.disk, false) + " on disk"' "$QML" \
+        && ok "the panel leads with what the folder costs on disk" \
+        || bad "the folder size no longer says what it costs on disk"
+
+    # ⚠ "1 files in 1 folders" is the kind of wrong that makes a careful number
+    # look careless. Both counters go through fmtMany, which is where the s is.
+    n=$(grep -c 'fmtCount(t\.\(files\|dirs\))' "$QML" || true)
+    [ "$n" = 0 ] && ok "both places that count files and folders pluralise" \
+                 || bad "$n counter(s) print a bare number and a fixed plural"
 fi
 
 # ── the hover panel, with a real pointer ────────────────────────────────────

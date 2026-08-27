@@ -179,7 +179,31 @@ pkgver=0.1.0
 #   folds into the handler that is already there.
 #   Nineteen checks in synfiles_test.sh, ten of them driving a real pointer
 #   through tests/item_hover_info.qml. 368 pass.
-pkgrel=62
+# 63: A FOLDER'S SIZE ON THE HOVER PANEL, WHICH 62 LEFT OUT. It showed Type
+#   and Modified for a folder and no size at all, because st_size for a
+#   directory is the size of the directory ENTRY — the number that reads
+#   "890 B" for a tree holding an ISO — and a line that has to be explained
+#   does not belong on a tooltip. The real answer is a walk, and `synfiles du`
+#   is the walk Properties already runs.
+#   ⚠ THE DISK FIGURE LEADS: "1.0 MiB on disk", with what it CONTAINS on the
+#   Contents line under it. A tree of small files costs a block each and takes
+#   far more room than it holds, and that difference is the reason to ask —
+#   Properties had been showing only the apparent size, which answers the wrong
+#   question by a factor of six on a source tree. It leads with disk now too.
+#   ⚠ ITS OWN PROCESS, NOT duProc. Properties owns that one and stops it when
+#   it closes; sharing would mean a hover killing the walk behind an open
+#   Properties panel, and an open panel stealing the hover's.
+#   ⚠ AND THE WALK STARTS WHEN THE PANEL APPEARS, not when the pointer arrives.
+#   The half-second delay is what makes crossing a grid of folders cost
+#   nothing; a walk per icon brushed past would be a process per icon. It stops
+#   with the panel, or its records land in whatever the pointer reached next.
+#   Finished answers are cached per path, and ⚠ THROWN AWAY ON EVERY RELOAD —
+#   after a copy, a delete or F5 a cached size is a confident wrong number, and
+#   re-measuring on navigation is the price of never showing one.
+#   ⚠ "1 files in 1 folders" — both counters go through one fmtMany() now.
+#   Nine checks in synfiles_test.sh, three of them on `du`'s own two numbers.
+#   377 pass.
+pkgrel=63
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
