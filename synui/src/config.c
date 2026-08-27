@@ -321,6 +321,12 @@
  *   game_mode = on|off                 (default on)
  *   game_suspend_ai = on|off           (default on — stop synapd while gaming)
  *   game_inhibit_idle = on|off         (default on — no dim/blank/lock)
+ *   game_leave_grace = 6000            (ms; 0 = leave the moment a game goes)
+ *       How long the fullscreen client may be ABSENT before game mode believes
+ *       the game has exited. A game that is starting up unmaps one fullscreen
+ *       surface and maps the next with nothing fullscreen in between, and
+ *       reading that gap as an exit flipped game mode three times in six
+ *       seconds on Cyberpunk 2077 — killing and restarting the bar each time.
  *   game_drop_effects = on|off         (default on — restores DIRECT SCANOUT)
  *       The post-process pass renders the scene offscreen and forces whole-
  *       output damage every frame, so a fullscreen game never reaches direct
@@ -1806,6 +1812,11 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->game_mode         = 1;
     cfg->game_suspend_ai   = 1;
     cfg->game_inhibit_idle = 1;
+    /* Long enough to cover a resolution change or a loading screen, short
+     * enough that quitting a game gives the desktop back without a wait worth
+     * noticing. Six seconds covers the worst measured gap (Cyberpunk 2077's
+     * startup, ~3s) with room over it. */
+    cfg->game_leave_grace_ms = 6000;
     snprintf(cfg->game_ai_stop_cmd,  sizeof(cfg->game_ai_stop_cmd),
              "sudo -n systemctl stop synapd.socket synapd.service");
     snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd),
@@ -3131,6 +3142,10 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->game_suspend_ai = strcmp(val, "on") == 0;
     else if (strcmp(key, "game_inhibit_idle") == 0)
         cfg->game_inhibit_idle = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_leave_grace") == 0) {
+        int ms = atoi(val);
+        cfg->game_leave_grace_ms = ms < 0 ? 0 : ms > 60000 ? 60000 : ms;
+    }
     else if (strcmp(key, "game_ai_stop_cmd") == 0)
         snprintf(cfg->game_ai_stop_cmd, sizeof(cfg->game_ai_stop_cmd), "%s", val);
     else if (strcmp(key, "game_ai_start_cmd") == 0)

@@ -191,6 +191,51 @@ else
 fi
 
 echo ""
+echo "=== leaving is deferred, entering is not ==="
+#
+# A game does not present as one continuous fullscreen window. Setting up a
+# swapchain, changing resolution or crossing a loading screen unmaps the
+# fullscreen surface and maps the next one, and between the two there is NO
+# fullscreen client — so game_find_view() answers NULL and the naive reading is
+# "the game exited". Measured on Cyberpunk 2077 (steam_app_1091500), that read
+# flipped game mode ON/OFF three times in six seconds at startup.
+#
+# Every flip is real work undone and redone: synapd stopped and started, the
+# wallpaper engine stopped and started, and `pkill -x quickshell` racing
+# `synui-bar` — which is how a desktop comes out of a game with two shells or
+# none. It also costs the game its pointer: a bar restarting mid-game maps
+# layer surfaces that take pointer focus, and losing focus DESTROYS a oneshot
+# pointer constraint.
+#
+# So the asymmetry is the fix: a game appearing is evidence and acts at once, a
+# game disappearing is a guess until the gap has outlasted the grace.
+reeval=$(body game_reevaluate "$game")
+[ -n "$reeval" ] || { echo "  FAIL  could not extract game_reevaluate"; exit 1; }
+
+check "entering is immediate" "1" \
+      "$(printf '%s\n' "$reeval" | grep -c 'game_enter(s, v)')"
+check "leaving on absence goes through the grace" "1" \
+      "$(printf '%s\n' "$reeval" | grep -c 'game_leave_arm(s)')"
+# A game found again must call off the pending leave, or the grace merely
+# delays the flap instead of absorbing it.
+check "a game found again cancels the pending leave" "1" \
+      "$(printf '%s\n' "$reeval" | grep -q 'game_leave_cancel(s)' && echo 1 || echo 0)"
+# The timer asks again rather than trusting the answer that armed it: a game
+# that came back and went away during the wait must not be judged on the older
+# question.
+fire=$(body game_leave_fire "$game")
+check "the grace re-checks before acting" "1" \
+      "$(printf '%s\n' "$fire" | grep -c 'game_find_view(s)')"
+# An event source outlives the loop it was added to, and game_finish runs as
+# the compositor tears that loop down.
+check "shutdown removes the grace timer" "1" \
+      "$(printf '%s\n' "$finish" | grep -c 'wl_event_source_remove(s->game.leave_timer)')"
+check "the grace has a default" "1" \
+      "$(grep -c 'cfg->game_leave_grace_ms = 6000;' "$config")"
+check "the grace is settable" "1" \
+      "$(grep -c '"game_leave_grace"' "$config")"
+
+echo ""
 echo "=== games open on the main screen unless told otherwise ==="
 # Anchored at the defaults function's indent: the `primary` arm of the parser
 # assigns the same constant, so an unanchored match counts two and would go on

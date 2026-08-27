@@ -332,8 +332,14 @@ static void game_enter(syn_server_t *s, syn_view_t *v)
     game_publish(s);
 }
 
+static void game_leave_cancel(syn_server_t *s);
+
 static void game_leave(syn_server_t *s)
 {
+    /* However this was reached — the grace expiring, the master switch, or
+     * shutdown — the pending leave has happened and must not fire again. */
+    game_leave_cancel(s);
+
     s->game.active = 0;
     s->game.app[0] = '\0';
     wlr_log(WLR_INFO, "synui: game: OFF");
@@ -382,29 +388,92 @@ static void game_leave(syn_server_t *s)
     game_publish(s);
 }
 
+/* ── Leaving is deferred, entering is not ─────────────────────
+ *
+ * See syn_game_t.leave_timer. A game appearing is evidence; a game
+ * disappearing is only a guess until the gap has lasted longer than the
+ * gaps a running game makes on its own.
+ */
+static void game_leave_cancel(syn_server_t *s)
+{
+    if (!s->game.leave_timer) return;
+    wl_event_source_timer_update(s->game.leave_timer, 0);
+}
+
+/* The grace ran out. Ask again rather than trusting the answer that armed it:
+ * a game that came back and went away again during the wait would otherwise be
+ * left in whichever state the older question found. */
+static int game_leave_fire(void *data)
+{
+    syn_server_t *s = data;
+    if (!s->game.active) return 0;
+    if (s->game.forced > 0) return 0;
+    if (s->config.game_mode && s->game.forced == 0 && game_find_view(s)) {
+        /* Still there. Nothing to do — the timer is one-shot and disarmed. */
+        wlr_log(WLR_DEBUG, "synui: game: grace expired but a game is up");
+        return 0;
+    }
+    wlr_log(WLR_INFO, "synui: game: no game for %d ms — leaving",
+            s->config.game_leave_grace_ms);
+    game_leave(s);
+    return 0;
+}
+
+static void game_leave_arm(syn_server_t *s)
+{
+    if (s->config.game_leave_grace_ms <= 0) { game_leave(s); return; }
+
+    if (!s->game.leave_timer) {
+        struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+        s->game.leave_timer = wl_event_loop_add_timer(loop, game_leave_fire, s);
+        /* No timer means no grace, and that is the old behaviour rather than a
+         * game mode that never turns off. */
+        if (!s->game.leave_timer) { game_leave(s); return; }
+    }
+    wl_event_source_timer_update(s->game.leave_timer,
+                                 s->config.game_leave_grace_ms);
+    wlr_log(WLR_DEBUG, "synui: game: no game right now — holding for %d ms",
+            s->config.game_leave_grace_ms);
+}
+
 /* The single decision point. Cheap and idempotent, so it is safe to call from
  * every fullscreen change, map, and unmap. */
 void game_reevaluate(syn_server_t *s)
 {
     if (!s->config.game_mode) {
+        /* The master switch is not a gap in the evidence: it is the user (or
+         * the control panel) saying no. Off now, no grace. */
+        game_leave_cancel(s);
         if (s->game.active) game_leave(s);
         return;
     }
 
     int want;
+    int forced = 0;
     syn_view_t *v = NULL;
     if (s->game.forced > 0) {
-        want = 1;                       /* Super+G forced it on */
+        want = 1; forced = 1;           /* Super+G forced it on */
     } else if (s->game.forced < 0) {
-        want = 0;                       /* Super+G forced it off */
+        want = 0; forced = 1;           /* Super+G forced it off */
     } else {
         v = game_find_view(s);
         want = (v != NULL);
     }
 
-    if (want == s->game.active) return;
-    if (want) game_enter(s, v);
-    else      game_leave(s);
+    if (want) {
+        /* A game is up, so whatever gap was being waited out is over. This
+         * runs even when game mode is already active — that IS the common
+         * case, and it is the whole point: the next fullscreen surface
+         * arriving cancels the leave the previous one's unmap armed. */
+        game_leave_cancel(s);
+        if (!s->game.active) game_enter(s, v);
+        return;
+    }
+
+    if (!s->game.active) return;
+    /* Super+G forced off is a decision, not an absence — it takes effect now. */
+    if (forced) { game_leave_cancel(s); game_leave(s); return; }
+    game_leave_arm(s);
 }
 
 /* Super+G. Cycles auto → forced-on → forced-off → auto, so a user can both
@@ -430,6 +499,13 @@ void game_toggle(syn_server_t *s)
  * that exits (or crashes) mid-game leaves the box with no AI and no clue why. */
 void game_finish(syn_server_t *s)
 {
+    /* The event loop is going away with the compositor, so the grace timer has
+     * to go first: a source left behind outlives the loop it was added to. */
+    if (s->game.leave_timer) {
+        wl_event_source_remove(s->game.leave_timer);
+        s->game.leave_timer = NULL;
+    }
+
     if (s->game.ai_suspended) {
         synui_spawn(s->config.game_ai_start_cmd);
         s->game.ai_suspended = 0;

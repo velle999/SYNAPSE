@@ -733,6 +733,20 @@ clipbox_test = executable('clipbox_test',
   build_by_default : false)
 test('clipbox', clipbox_test)
 
+# A confined pointer stays in the surface AND can reach its edges. Both are
+# one wlroots contract: wlr_region_confine() confines a MOVEMENT, so a pointer
+# already outside the region has no ray to clip and the call answers false.
+# Passing the delta through on that answer is a confinement that does nothing
+# in the only case it exists for. Pure arithmetic over a struct constraint and
+# a pixman region — no compositor, same as hit_test.
+pointer_confine_test = executable('pointer_confine_test',
+  ['tests/pointer_confine_test.c', 'src/constraints.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('pointer_confine', pointer_confine_test)
+
 hit_test = executable('hit_test',
   ['tests/hit_test.c', 'src/hit.c'],
   include_directories : include_directories('src'),

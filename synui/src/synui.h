@@ -2650,6 +2650,30 @@ typedef struct {
     int  kmod_quieted;
     int  effects_saved;  /* what config.effects was before we dropped it */
     char app[64];       /* app_id that triggered it (for the log) */
+
+    /* The grace timer that keeps game mode on across a gap in the evidence.
+     *
+     * A game does not present as one continuous fullscreen window. Setting up
+     * a swapchain, choosing a resolution or crossing a loading screen unmaps
+     * the fullscreen surface and maps another, and between the two there is no
+     * fullscreen client at all — so game_find_view() answers NULL and the
+     * naive reading is "the game exited". Measured on Cyberpunk 2077
+     * (steam_app_1091500), that reading flipped game mode ON/OFF three times
+     * in six seconds at startup.
+     *
+     * Every flip is a real action with a real cost: synapd is stopped and
+     * started, the wallpaper engine is stopped and started, and — the one that
+     * hurts — the bar is killed with `pkill -x quickshell` and restarted with
+     * `synui-bar`. Those two race, so the desktop can come out of a game with
+     * two shells or none, and the layer surfaces of a bar that restarts while
+     * the game is up take pointer focus off it, which drops the game's pointer
+     * constraint (a oneshot constraint is DESTROYED by that, and the game
+     * never gets the pointer back).
+     *
+     * So leaving is deferred and entering is not: a game appearing is
+     * unambiguous, a game disappearing is only a guess until the gap has gone
+     * on long enough to be an exit. NULL when nothing is pending. */
+    struct wl_event_source *leave_timer;
 } syn_game_t;
 
 /* ── GPU telemetry (gpu.c) ───────────────────────────────── */
@@ -4277,6 +4301,10 @@ typedef struct {
     int   game_mode;            /* master switch, default 1 */
     int   game_suspend_ai;      /* stop synapd while a game runs, default 1 */
     int   game_inhibit_idle;    /* hold off dim/blank/lock, default 1 */
+    /* How long a game may be absent before game mode believes it. See
+     * syn_game_t.leave_timer for what a flip costs. Default 6000 ms; 0 turns
+     * the grace off and restores the immediate leave. */
+    int   game_leave_grace_ms;
     char  game_exclude[GAME_EXCLUDE_MAX][64];
     int   game_exclude_count;
     /* Wayland-NATIVE clients that are game wrappers, and so count as games

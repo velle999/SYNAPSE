@@ -2004,7 +2004,7 @@ pkgver=0.1.0
 #   `synctl cursor` is new, and reports the pointer's layout position — the
 #   readback tests/pointer_smoothing.sh needs to assert the property that
 #   matters, which is that a smoothed stroke arrives LATE and never SHORT.
-pkgrel=507
+pkgrel=508
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

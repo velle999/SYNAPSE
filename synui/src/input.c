@@ -2832,6 +2832,28 @@ static void pointer_rebase_handler(void *data)
      * would only re-send motion against the grab surface — skip the churn. */
     if (s->seat->pointer_state.button_count > 0) return;
 
+    /*
+     * A CONSTRAINED POINTER IS NOT REBASED. The cursor did not move — that is
+     * the entire premise of this function — so a surface appearing over it is
+     * the scene changing, not the user pointing somewhere else, and a game
+     * that holds the pointer must not lose it to one.
+     *
+     * It did. Game mode restarts the bar (`game_stop_bar`), every layer
+     * surface it maps lands here, and pointer_update_focus() then hands focus
+     * to whatever is now topmost — which deactivates the game's constraint.
+     * For a ONESHOT constraint that is not a pause: sending deactivated
+     * DESTROYS it, so the game never gets the pointer back and the mouse walks
+     * out of it for the rest of the session.
+     *
+     * Only while the constraint's surface still holds pointer focus and is
+     * still mapped, so an unmapped or backgrounded client cannot pin the
+     * pointer to itself for ever.
+     */
+    if (s->active_constraint &&
+        s->active_constraint->surface->mapped &&
+        s->seat->pointer_state.focused_surface == s->active_constraint->surface)
+        return;
+
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     pointer_update_focus(s, (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000));
@@ -3787,6 +3809,12 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
          * replays that offset to keep motion in its coordinate space for as
          * long as the grab lasts. */
         if (surface && s->seat->pointer_state.button_count == 0) {
+            /* An offset and not a scale, which is right for every surface
+             * synui does not resize the buffer of — i.e. all of them but a
+             * sub-native fullscreen X11 game (view_fullscreen_rescale). Inside
+             * one of those the surface counts in different units from the
+             * layout, so this replays a drag slightly compressed; the same
+             * space mismatch constraints.c documents at length. */
             s->ptr_grab_off_x = s->cursor->x - sx;
             s->ptr_grab_off_y = s->cursor->y - sy;
         }
