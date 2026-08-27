@@ -2199,6 +2199,23 @@ pkgver=0.1.0
 #   menu (per monitor), `synui-widgets weather`, row 10 of Super+Shift+A.
 #   QuickLaunch hops below the card when both are on, as the pet does for the
 #   monitor. tests/weather_surfaces.sh (5 phases; it never touches the network).
+# 520: the update notifier drew its own FAILURE in ordinary bar ink.
+#   Updates.qml asked for `pal.yellow` for its error state. `yellow` is a THEME
+#   property; the per-strip palette a bar module reads is a different object
+#   with its own vocabulary, and it has never had that key — its warm slot is
+#   `orange`. So the binding evaluated to undefined on the errored branch, and
+#   only there, which is why it shipped.
+#   ⚠ AND UNDEFINED DOES NOT BLANK A QML PROPERTY, IT LEAVES THE OLD VALUE. The
+#   badge kept BarModule's own `pal.glyph`/`pal.fg`, so "the update check is
+#   failing" was drawn exactly like "an update is waiting" — right in every way
+#   except the one thing the colour existed to say. The only trace was
+#   `Unable to assign [undefined] to QColor` in a log, once per monitor.
+#   `orange` rather than `clock` (what Battery/Cpu/Memory use for their warm
+#   tier): `clock` collapses to plain ink on a clear bar, and this badge is a
+#   bare "!" with no number beside it, so its colour carries the whole message.
+#   tests/bar_palette_keys.sh checks every `pal.<key>` in the bar against both
+#   palette literals — the error state needs a machine whose update check is
+#   failing, so no pixel test can reach it and the guard is mechanical instead.
 #   mpris.c: an sd-bus CLIENT of the session's players — a reader and three
 #   verbs. Every call is async; a synchronous property read against a wedged
 #   Electron app would stall every window on the desktop. The media keys reach
@@ -2228,7 +2245,7 @@ pkgver=0.1.0
 #   in 357, and now the same guard: publish only when synui_owns_seat(), with
 #   SYNUI_GREETER_BG_DIR lifting it because a rig that has redirected the root
 #   has no real root to protect.
-pkgrel=519
+pkgrel=520
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

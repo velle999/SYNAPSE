@@ -1577,6 +1577,20 @@ test('lock_layout', lock_layout_t,
      depends : [synui_exe, synctl_exe],
      timeout : 120)
 
+# `bar_palette_keys`: every `pal.<key>` a bar module reads is one the palette
+# actually defines. Updates.qml asked for `pal.yellow` — a THEME property, never
+# a key of the per-strip object the modules read — on its error branch alone, so
+# nothing exercised it. ⚠ An undefined assignment does not blank a QML property,
+# it leaves the previous value: the errored badge was drawn in ordinary bar ink,
+# identical to the working state, with `Unable to assign [undefined] to QColor`
+# in a log per monitor as the only trace. Unreachable by any pixel test (it needs
+# a machine whose update check is failing), so the guard is mechanical. Reads
+# files only — no compositor, no GPU, never skips.
+bar_palette_keys_t = find_program('tests/bar_palette_keys.sh')
+test('bar_palette_keys', bar_palette_keys_t,
+     args    : [meson.current_source_dir() / 'quickshell'],
+     timeout : 30)
+
 # `weather_surfaces`: one fetch, three surfaces, and the FILE between them. The
 # lock screen, the bar module and the desktop widget all show the weather and
 # none of them fetches it — src/weather.c publishes weather.state and everything

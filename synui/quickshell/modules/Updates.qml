@@ -51,11 +51,38 @@ BarModule {
     icon: Icons.updates
     text: root.errored ? "!" : String(root.pending)
 
-    // Ordinary bar ink when there is something to install; the warning hue only
-    // when the check itself failed, because "there are updates" is not a
-    // problem and colouring it like one trains people to ignore the colour.
-    iconColor: root.errored ? root.pal.yellow : root.pal.fg
-    textColor: root.errored ? root.pal.yellow : root.pal.fg
+    /*
+     * Ordinary bar ink when there is something to install; the warning hue only
+     * when the check itself failed, because "there are updates" is not a
+     * problem and colouring it like one trains people to ignore the colour.
+     *
+     * ⚠ THIS ASKED FOR `pal.yellow`, WHICH THE BAR PALETTE HAS NEVER HAD.
+     *
+     * `yellow` is a Theme property; the per-strip palette these modules read is
+     * a different object with its own vocabulary, and its warm slot is
+     * `orange`. The binding therefore evaluated to undefined on the errored
+     * branch — `Unable to assign [undefined] to QColor`, once per module per
+     * monitor, in a log nobody reads.
+     *
+     * ⚠ AND THE FAILURE MODE IS THE QUIET ONE. A refused assignment does not
+     * blank the property, it LEAVES THE PREVIOUS VALUE STANDING — BarModule's
+     * own defaults, `pal.glyph` and `pal.fg`. So the errored badge was drawn in
+     * ordinary bar ink: not missing, not obviously wrong, simply identical to
+     * the working state. Which is exactly what the paragraph above says must
+     * never happen — the colour IS the message here, and a machine whose update
+     * check was failing looked like a machine with an update waiting.
+     *
+     * ⚠ AND `orange` RATHER THAN `clock`, which is what the three sibling
+     * modules use for their warm tier. `clock` collapses to plain ink on a
+     * clear bar, where it would be the same colour as the ordinary state — and
+     * this badge is a bare "!" with no number beside it, so its colour carries
+     * the entire message. `orange` is defined with a real hue in BOTH palette
+     * branches, which makes it the only slot that still says "warning" over a
+     * wallpaper. (Battery, Cpu and Memory have the same weakness on a clear
+     * bar; they get away with it because they print a number too.)
+     */
+    iconColor: root.errored ? root.pal.orange : root.pal.fg
+    textColor: root.errored ? root.pal.orange : root.pal.fg
 
     tooltipText: {
         if (root.errored)
