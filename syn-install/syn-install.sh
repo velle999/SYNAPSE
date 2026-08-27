@@ -1412,6 +1412,64 @@ pacman_conf_enable_candy() {  # pacman_conf_enable_candy <pacman.conf>
     grep -q '^ILoveCandy' "$_pcc_file"
 }
 
+pam_faillock_configure() {  # pam_faillock_configure <system-auth> <faillock.conf>
+    _pfc_auth=$1
+    _pfc_conf=$2
+    [ -f "$_pfc_auth" ] && [ -f "$_pfc_conf" ] || return 1
+
+    # ⚠ pam_faillock counts a failed PAM CONVERSATION as a wrong password, not
+    # only a wrong password. Anything that runs sudo with no controlling tty
+    # and no askpass — a task runner, a CI shell, an editor's agent — cannot
+    # prompt at all, so pam_unix logs "auth could not identify password" and a
+    # failure is recorded against the user who never typed anything. Three of
+    # those and the account is locked.
+    #
+    # ⚠ And the lock is on the ACCOUNT, not on sudo. greetd and synui-lock both
+    # reach this same stack (see synui's /etc/pam.d/synui-lock, which includes
+    # login deliberately), so what the user actually meets is a LOGIN SCREEN
+    # REJECTING A CORRECT PASSWORD, with nothing on it to say why.
+    #
+    # pambase ships this line as `required`, which does not short-circuit: an
+    # attempt against an ALREADY-locked account still falls through to
+    # pam_unix and then to `[default=die] pam_faillock authfail`, which
+    # appends a NEW failure record carrying a fresh timestamp. Every retry
+    # pushes unlock_time forward, so the lockout never ages out and only a
+    # reboot ends it — the tallies live on tmpfs under /run/faillock. A user
+    # who keeps trying keeps themselves locked out, which is precisely what a
+    # locked-out user does.
+    #
+    # `requisite` aborts the stack the moment preauth reports the lock, so
+    # nothing further is recorded and the window genuinely expires. pambase's
+    # own comment directly beneath the line names requisite as the supported
+    # alternative; the visible trade is that a locked account is TOLD it is
+    # locked instead of being asked for a password that cannot work.
+    sed -i -E \
+        's/^(auth[[:space:]]+)required([[:space:]]+pam_faillock\.so[[:space:]]+preauth[[:space:]]*)$/\1requisite\2/' \
+        "$_pfc_auth"
+
+    # The thresholds, written out rather than left to the compiled defaults, so
+    # the numbers are readable on the machine they govern. deny was effectively
+    # 3 — three typos at the lock screen took the seat — and 5 still stops
+    # guessing. Appended only once: a second run must not stack another block.
+    if ! grep -qE '^[[:space:]]*deny[[:space:]]*=' "$_pfc_conf"; then
+        cat >> "$_pfc_conf" << 'SYN_FAILLOCK'
+
+# ── SynapseOS ───────────────────────────────────────────────────────────────
+# unlock_time is the one that matters, and it was always 600. It only ever
+# behaved as "until the next reboot" because system-auth's preauth line was
+# `required` and every retry rewrote the tally; that line is `requisite` now
+# and this expires on its own. The tally files stay under /run/faillock —
+# tmpfs — so a reboot still clears them, which is why rebooting "fixed" it.
+deny = 5
+fail_interval = 900
+unlock_time = 600
+SYN_FAILLOCK
+    fi
+
+    grep -qE '^auth[[:space:]]+requisite[[:space:]]+pam_faillock\.so[[:space:]]+preauth' "$_pfc_auth" \
+        && grep -qE '^[[:space:]]*deny[[:space:]]*=' "$_pfc_conf"
+}
+
 # Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
 # pure decision functions above and stops HERE, before the root check, the
 # EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
@@ -4241,6 +4299,18 @@ done
 # mode as well as bad syntax, so it covers the 0644 case too.
 arch-chroot /mnt visudo -c >/dev/null \
     || die "sudoers ruleset is invalid after writing the drop-ins — refusing to ship a system that cannot sudo"
+
+# Make the account lockout expire instead of ratcheting — see
+# pam_faillock_configure() above the test seam for what `required` was doing.
+# Run on the host against the target's files rather than inside the chroot
+# block above: it is a decision function with a test, and the chroot heredoc is
+# quoted so it cannot call one.
+#
+# A failure warns rather than dies. Not applying this leaves pambase's stock
+# behaviour, which is a working system that locks too eagerly — bad, but not a
+# reason to abandon an otherwise complete install.
+pam_faillock_configure /mnt/etc/pam.d/system-auth /mnt/etc/security/faillock.conf \
+    || warn "Could not relax pam_faillock in /etc/pam.d/system-auth (a tty-less sudo could still lock the account until reboot)."
 
 # useradd runs outside the masked bash -c block: if it fails, nothing
 # after it can produce a bootable login, so fail loudly and stop.

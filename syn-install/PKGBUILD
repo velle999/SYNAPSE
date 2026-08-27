@@ -158,7 +158,50 @@ pkgver=0.1.0
 #   theme.json fallback the bar already had (a new dockAlpha field), so `auto`
 #   resolves correctly on the very first login and neither line needs to spell
 #   out a number that only happened to match the theme's own answer.
-pkgrel=97
+# 98: a tty-less sudo could lock the account until the next reboot.
+#   pam_faillock counts a failed PAM CONVERSATION as a wrong password, and a
+#   sudo with no controlling tty and no askpass cannot prompt at all — pam_unix
+#   logs "auth could not identify password" and a failure is recorded against a
+#   user who never typed anything. Three of those and the account is locked.
+#   ⚠ The lock is on the ACCOUNT, not on sudo. greetd and synui-lock reach this
+#   same stack — synui's own /etc/pam.d/synui-lock includes login deliberately,
+#   on the grounds that a lock weaker than the login behind it is not a lock —
+#   so what it looks like from the chair is a LOGIN SCREEN REJECTING A CORRECT
+#   PASSWORD, with nothing on it to say why. Twice on this machine
+#   (2026-08-21 12:51, 2026-08-26 18:34), both ending in a reboot.
+#   Both ended in a reboot because nothing else cleared it. pambase ships
+#   `auth required pam_faillock.so preauth`, and `required` does not
+#   short-circuit: a retry against an ALREADY-locked account still falls
+#   through to pam_unix and then to `[default=die] pam_faillock authfail`,
+#   which appends a NEW failure record carrying a fresh timestamp. Every
+#   attempt pushed unlock_time forward, so the 600s never elapsed and only a
+#   reboot ended it — the tallies live on tmpfs under /run/faillock. Retrying
+#   was the thing keeping it locked, which is what a locked-out person does.
+#   `requisite` aborts the stack the moment preauth reports the lock, so
+#   nothing further is written and the window expires on its own. pambase's own
+#   comment on the line below it names requisite as the supported alternative;
+#   the visible trade is that a locked account is TOLD so rather than asked for
+#   a password that cannot work.
+#   deny/fail_interval/unlock_time go into faillock.conf explicitly (5/900/600)
+#   instead of staying implicit, because those numbers govern the machine and
+#   should be readable on it. deny was effectively 3 — three typos at the lock
+#   screen took the seat.
+#   ⚠ pam_faillock_configure() sits ABOVE the test seam and reports whether the
+#   stack READS requisite afterwards, not whether sed ran. Both files belong to
+#   other packages — system-auth to pambase, faillock.conf to pam — and
+#   upstream rewords them; an anchor that has moved makes sed match nothing,
+#   change nothing and exit 0, which is a default that silently did not apply
+#   on every install until somebody looks. Same shape as
+#   pacman_conf_enable_candy() and candy_test.sh.
+#   ⚠ tests/faillock_test.sh asserts authfail and authsucc are NOT caught by
+#   that regex. A greedy match there would stop failures being counted at all
+#   and stop a success clearing the tally — a lockout that never happens and
+#   one that never ends, from one careless character.
+#   ⚠ Existing machines are NOT touched. Both files are pacman BACKUP files, so
+#   an installed system carries its own copies forward and syn-update has no
+#   business rewriting either. This is the fresh-install default only; an
+#   existing box needs the one-line sed by hand.
+pkgrel=98
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
