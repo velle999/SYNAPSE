@@ -2158,6 +2158,19 @@ pkgver=0.1.0
 #   different letters. syn_server::kbd_layout is the session's memory of the
 #   group and keyboard_apply_config re-applies it, right beside the NumLock
 #   re-lock that is there for the same reason.
+# 518: the lock/login panel's header is re-laid-out. The WEATHER is centred over
+#   the clock instead of sitting in the top-left corner, and the KEYBOARD-LAYOUT
+#   CHIP moves out of the header entirely to sit centred under the password
+#   entry — which is where the eye already is when the thing it answers happens.
+#   A chip in a header corner is furthest from the dots on a screen whose whole
+#   point is that you look at it AFTER a rejection.
+#   ⚠ The weather block is MEASURED BEFORE ANY OF IT IS DRAWN. Its left edge is
+#   a function of its own width, so `-4°C` and `102°F · Thunderstorms` would
+#   otherwise pin the icon to one spot and let the text run off to the side —
+#   a block that drifts with the weather rather than one that is centred.
+#   The core band is 40px taller to hold the chip below the fingerprint row, and
+#   the chip's hit rect gains the band's offset the way the transport buttons'
+#   already did: the caller translates the context, the mouse has none.
 #   mpris.c: an sd-bus CLIENT of the session's players — a reader and three
 #   verbs. Every call is async; a synchronous property read against a wedged
 #   Electron app would stall every window on the desktop. The media keys reach
@@ -2187,7 +2200,7 @@ pkgver=0.1.0
 #   in 357, and now the same guard: publish only when synui_owns_seat(), with
 #   SYNUI_GREETER_BG_DIR lifting it because a rig that has redirected the root
 #   has no real root to protect.
-pkgrel=517
+pkgrel=518
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

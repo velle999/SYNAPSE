@@ -1246,8 +1246,9 @@ omarchy-weather-location                      # what it is now
 
 With nothing set, the city is detected from your IP the first time.
 
-**The keyboard-layout chip**, top right, says which layout is typing. This one
-is a fix rather than a feature:
+**The keyboard-layout chip**, centred just below the password entry, says which
+layout is typing — under the entry because that is where you are looking when
+the thing it answers happens. This one is a fix rather than a feature:
 
 > A password typed in the wrong layout is rejected **exactly like a wrong
 > password**, and until now nothing on the login screen could say which had

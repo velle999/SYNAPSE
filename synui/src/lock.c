@@ -56,9 +56,9 @@
  *
  * ── Three bands, and why the middle one is measured from its own top ────────
  *
- * The panel grew a HEADER (the weather, and the keyboard-layout chip) and a
- * FOOTER (what is playing, with its transport buttons) around the clock/date/
- * password block that was all it used to be. Rather than renumber every y in
+ * The panel grew a HEADER (the weather, centred over the clock) and a FOOTER
+ * (what is playing, with its transport buttons) around the clock/date/password
+ * block that was all it used to be. Rather than renumber every y in
  * lock_draw_panel — twenty-odd literals, each of which is a chance to move
  * something by four pixels and not notice — the core is drawn through a
  * cairo_translate of LOCK_HEAD_H and every one of those literals means exactly
@@ -69,11 +69,18 @@
  * track ended, and the background luminance under it (nlock.bg_lum) is measured
  * once per lock against this rect — a panel that changed size would be inking
  * itself against a measurement of somewhere else. */
-#define LOCK_HEAD_H     60       /* weather · keyboard layout */
-#define LOCK_CORE_H     360      /* clock · date · password — unchanged */
+#define LOCK_HEAD_H     60       /* the weather, centred over the clock */
+#define LOCK_CORE_H     400      /* clock · date · password · keyboard layout */
 #define LOCK_FOOT_H     120      /* now playing · ⏮ ⏯ ⏭ */
 #define LOCK_PANEL_W    720
 #define LOCK_PANEL_H    (LOCK_HEAD_H + LOCK_CORE_H + LOCK_FOOT_H)
+
+/* The keyboard-layout chip's top, within the CORE band — under the password
+ * dots and under the fingerprint row, which is why the core band is 40px taller
+ * than the clock/date/password block on its own needs. It sits below the entry
+ * because that is where it is read: you look at it after typing, when what you
+ * typed came back rejected. */
+#define LOCK_KBD_Y      352
 
 /* The transport buttons: three circles on the footer's centre line. */
 #define LOCK_BTN_R      17.0
@@ -402,10 +409,11 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     }
 }
 
-/* ── The header: weather, and the layout chip ────────────────
+/* ── The header: the weather ─────────────────────────────────
  *
- * Both sit above the clock, both are drawn on the LOGIN screen too (it is this
- * panel — see greeter.c), and both are the reason the panel grew a header band.
+ * Centred over the clock, and drawn on the LOGIN screen too (it is this panel —
+ * see greeter.c). It is the reason the panel grew a header band; the layout
+ * chip that used to share this band now sits under the entry, in the core.
  */
 
 /* Cut `in` to fit `max` px at the current font, ending in an ellipsis. Measured
@@ -446,6 +454,16 @@ static bool lock_layout_shown(syn_server_t *s)
     }
 }
 
+/* CENTRED on the panel, over the clock: icon, temperature, and the condition
+ * over the place beside it.
+ *
+ * ⚠ NOTHING IS DRAWN UNTIL EVERYTHING IS MEASURED, because the block's left
+ * edge is a function of its own width. `-4°C` and `102°F · Thunderstorms` are
+ * different widths, and a block laid out left-to-right from a fixed origin
+ * would centre neither — it would put the icon in the same place and let the
+ * text run off toward one side, which reads as a block that drifts with the
+ * weather.
+ */
 static void lock_draw_weather(syn_server_t *s, cairo_t *cr, double a)
 {
     if (!s->config.lock_weather) return;
@@ -458,38 +476,25 @@ static void lock_draw_weather(syn_server_t *s, cairo_t *cr, double a)
      * showing nothing — the whole value of the row is that it is now. */
     double lvl = w.stale ? 0.42 : 0.80;
 
-    cairo_save(cr);
-    lock_set_ink(s, cr, lvl, a);
-    weather_draw_icon(cr, w.icon, 18, 14, 32);
-    cairo_restore(cr);
-
     char temp[16];
     snprintf(temp, sizeof(temp), "%d\xc2\xb0%c", w.temp, w.unit);
 
+    cairo_text_extents_t te;
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
                            CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 26);
-    lock_set_ink(s, cr, w.stale ? 0.55 : 0.92, a);
-    cairo_move_to(cr, 58, 42);
-    syn_show_text(cr, temp);
-
-    cairo_text_extents_t te;
     syn_text_extents(cr, temp, &te);
-    double x = 58 + te.x_advance + 12;
+    double w_temp = te.x_advance;
 
     /* The condition over the place, small, so the temperature stays the thing
-     * you read from across the room. */
+     * you read from across the room. Elided at the font they are DRAWN at —
+     * lock_elide measures through the current one. */
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
                            CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 13);
-    lock_set_ink(s, cr, lvl, a);
 
-    char line[96];
-    if (w.cond[0]) {
-        lock_elide(cr, w.cond, 250, line, sizeof(line));
-        cairo_move_to(cr, x, 31);
-        syn_show_text(cr, line);
-    }
+    char cond[96] = "", place[96] = "", line[96];
+    if (w.cond[0]) lock_elide(cr, w.cond, 250, cond, sizeof(cond));
 
     if (w.stale) {
         /* Hours, because anything this row calls stale is hours old by
@@ -500,12 +505,44 @@ static void lock_draw_weather(syn_server_t *s, cairo_t *cr, double a)
     } else {
         snprintf(line, sizeof(line), "%s", w.place);
     }
-    if (line[0]) {
-        char cut[96];
-        lock_elide(cr, line, 250, cut, sizeof(cut));
+    if (line[0]) lock_elide(cr, line, 250, place, sizeof(place));
+
+    double w_text = 0;
+    if (cond[0])  { syn_text_extents(cr, cond,  &te); w_text = te.x_advance; }
+    if (place[0]) { syn_text_extents(cr, place, &te);
+                    if (te.x_advance > w_text) w_text = te.x_advance; }
+
+    /* icon (32) + 8, the temperature, then the text column if there is one —
+     * a reading with neither a condition nor a place must not centre itself
+     * around the gap where they would have been. */
+    double bw = 40 + w_temp + (w_text > 0 ? 12 + w_text : 0);
+    double x0 = LOCK_PANEL_W / 2.0 - bw / 2;
+
+    cairo_save(cr);
+    lock_set_ink(s, cr, lvl, a);
+    weather_draw_icon(cr, w.icon, x0, 14, 32);
+    cairo_restore(cr);
+
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 26);
+    lock_set_ink(s, cr, w.stale ? 0.55 : 0.92, a);
+    cairo_move_to(cr, x0 + 40, 42);
+    syn_show_text(cr, temp);
+
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 13);
+    double tx = x0 + 40 + w_temp + 12;
+    if (cond[0]) {
+        lock_set_ink(s, cr, lvl, a);
+        cairo_move_to(cr, tx, 31);
+        syn_show_text(cr, cond);
+    }
+    if (place[0]) {
         lock_set_ink(s, cr, w.stale ? 0.42 : 0.58, a);
-        cairo_move_to(cr, x, 48);
-        syn_show_text(cr, cut);
+        cairo_move_to(cr, tx, 48);
+        syn_show_text(cr, place);
     }
 }
 
@@ -517,6 +554,12 @@ static void lock_draw_weather(syn_server_t *s, cairo_t *cr, double a)
  * type it, it is rejected, and nothing anywhere says the `y` you pressed went
  * in as a `z`. Everything else here is convenience; this is the fix for a bug
  * people diagnose as a broken account.
+ *
+ * ⚠ DRAWN IN THE CORE BAND, not the header: centred under the entry, which is
+ * where the eye already is when the thing it answers happens. Off in a header
+ * corner it was furthest from the dots on a screen whose whole point is that
+ * you look at it AFTER a rejection. The hit rect is still in PANEL coordinates
+ * — the caller translated the context, the mouse has no context to translate.
  *
  * A BUTTON IS ITS OWN LABEL (see the house rule): the chip says `US`, not
  * "Keyboard: US", and it does not print the chord that also works. The chevron
@@ -550,14 +593,16 @@ static void lock_draw_layout_chip(syn_server_t *s, cairo_t *cr, double a)
     double chev = many ? 16 : 0;
     double w = te.x_advance + pad * 2 + chev;
     double h = 30;
-    double x = LOCK_PANEL_W - 18 - w;
-    double y = 13;
+    double x = LOCK_PANEL_W / 2.0 - w / 2;   /* centred, like everything here */
+    double y = LOCK_KBD_Y;
 
-    /* Recorded for the mouse. The rect is generous on purpose — a 30px chip is
-     * a small target on a 4K panel, and this one is pressed by someone who has
-     * just discovered their password is going in wrong. */
+    /* Recorded for the mouse, with the core band's own offset put back — same
+     * reason lock_draw_media adds its footer offset back in. The rect is
+     * generous on purpose: a 30px chip is a small target on a 4K panel, and
+     * this one is pressed by someone who has just discovered their password is
+     * going in wrong. */
     s->nlock.hit_layout.x = x - 6;
-    s->nlock.hit_layout.y = y - 6;
+    s->nlock.hit_layout.y = LOCK_HEAD_H + y - 6;
     s->nlock.hit_layout.w = w + 12;
     s->nlock.hit_layout.h = h + 12;
 
@@ -845,12 +890,15 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
 
     cairo_save(cr);
     lock_draw_weather(s, cr, a);
-    lock_draw_layout_chip(s, cr, a);
     cairo_restore(cr);
 
     cairo_save(cr);
     cairo_translate(cr, 0, LOCK_HEAD_H);
     lock_draw_core(s, cr);
+    /* AFTER the core, and outside it: lock_draw_core returns early on the
+     * greeter's two-field block, and the chip is on that screen for the reason
+     * it exists at all. */
+    lock_draw_layout_chip(s, cr, a);
     cairo_restore(cr);
 
     cairo_save(cr);

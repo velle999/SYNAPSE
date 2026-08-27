@@ -561,9 +561,9 @@ lock_media = on
 lock_weather = off
 lock_weather_unit = auto            # auto reads the locale; or c / f
 #
-# The keyboard-layout chip, top right of the panel. `auto` shows it only when
-# xkb_layout names more than one layout — one layout is a label, not a chooser.
-# Click it, or press Super+Space, to walk them.
+# The keyboard-layout chip, centred under the password entry. `auto` shows it
+# only when xkb_layout names more than one layout — one layout is a label, not a
+# chooser. Click it, or press Super+Space, to walk them.
 #
 # ⚠ THIS IS WHY IT MATTERS ON THE LOGIN SCREEN. A password typed in the wrong
 # layout is rejected exactly like a wrong password, and nothing else on that
