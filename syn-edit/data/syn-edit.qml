@@ -293,7 +293,11 @@ FloatingWindow {
                                          tok: root.disp(f[4] || "") })
         } else if (tag === "B") {
             root.pending.bufs.push({ idx: parseInt(f[1]), name: root.disp(f[2] || ""),
-                                     modified: f[3] === "1", current: f[4] === "1" })
+                                     modified: f[3] === "1", current: f[4] === "1",
+                                     // Whether it has a PATH, from the engine —
+                                     // never by matching the "[No Name]" label,
+                                     // which is a message and not a fact.
+                                     named: f[5] === "1" })
         } else if (tag === "E") {
             // Every frame answers exactly one command and carries its serial,
             // INCLUDING the scan frame dropped below — an ack that skipped it
@@ -328,6 +332,25 @@ FloatingWindow {
                 for (const c of held) root.send(c)
             }
             if (root.st.quit === "1") { Qt.quit(); return }
+
+            // The verdict on a pending "save and close" — see saveAndClose().
+            // Not modified any more and no error: the write happened, so the
+            // close follows. Otherwise the message the engine just wrote is
+            // the answer, and it is left on screen.
+            if (root.closeSerial >= 0 && root.acked >= root.closeSerial) {
+                const idx = root.closeIdx
+                const wrote = root.st.modified !== "1" && root.st.msgerr !== "1"
+                root.closeSerial = -1
+                root.closeIdx = -1
+                if (wrote) root.doClose(idx, false)
+            }
+
+            // A question is about the list it was asked of. If that list
+            // changed underneath it — something else closed, something opened
+            // — the index it holds no longer names the same document, so the
+            // question goes rather than being answered about the wrong file.
+            if (root.askClose !== null && root.bufs.length !== root.askCount)
+                root.askClose = null
 
             /* ⛔ NORMAL IS NOT A RESTING STATE IN THIS WINDOW. The engine is
              * modal and this window is not, so every path that ends in normal
@@ -589,9 +612,19 @@ FloatingWindow {
     // name is edited by the editor — one undo stack, one set of keys, and no
     // text-editing item in a window whose whole architecture is that it owns
     // no text.
-    function saveNow() {
-        if (root.named) root.send("save")
-        else            root.saveAs()
+    // ⚠ THE ANSWER CAN BE PASSED IN, and the sidebar does pass it. `root.named`
+    // is the CURRENT buffer's, read off the last frame — and "save and close"
+    // has just asked for a different buffer, whose frame has not arrived. It
+    // would branch on the wrong document, and on an unnamed one that means
+    // opening a name prompt for a file nobody was closing.
+    //
+    // This is also the ONE place in the window a bare `save` is sent, which is
+    // pinned in the suite: a bare save on a buffer with no name is the dead end
+    // saveAs() exists to clear.
+    function saveNow(named) {
+        if (named === undefined) named = root.named
+        if (named) root.send("save")
+        else       root.saveAs()
     }
 
     // Pick the FOLDER with the pointer, type only the basename. The browser is
@@ -600,6 +633,73 @@ FloatingWindow {
     function saveAs() {
         if (root.haveFiles) browser.showSave()
         else                root.promptWrite(root.saveDir() + "/")
+    }
+
+    // ── The sidebar ─────────────────────────────────────────────────────────
+    //
+    // Width while a drag is in progress. Zero means "not dragging", and the
+    // panel then follows the width the engine remembers.
+    property int dragW: 0
+
+    // ── Closing a document ──────────────────────────────────────────────────
+    //
+    // ⛔ THE WINDOW COULD NOT CLOSE ONE AT ALL until now: it opened buffers
+    // and switched between them, and the list only ever grew. `:bd` was the
+    // only way out of a window that exists so nobody has to know `:bd`.
+    //
+    // ⚠ AND `:bd` REFUSES ON A MODIFIED BUFFER — "unsaved changes (:bd! to
+    // discard)" — which is right in a terminal and a dead end in a window.
+    // The same shape as the Save button that could refuse but not ask. So the
+    // window asks, and both ways out are offered.
+    property var askClose: null     // the row a question is being asked about
+    property int askCount: 0        // how many documents there were when it was
+    property int closeIdx: -1       // the one a save is running for
+    property int closeSerial: -1    // the frame whose answer decides it
+
+    // ⛔ NEVER THE LAST ONE. `:bd` on a single buffer sets quit, so an ✕ on the
+    // only row would close the WINDOW — which is not what an ✕ on a row means
+    // anywhere else, and is a whole session lost to a stray click. The button
+    // hides itself on the last document too; this is the RULE, that is the
+    // presentation of it, and only one of the two can be relied on.
+    function doClose(idx, force) {
+        if (root.bufs.length <= 1) return
+        root.send("buf " + idx)
+        root.sendEx(force ? "bd!" : "bd")
+        editor.forceActiveFocus()
+    }
+
+    function closeBuffer(b) {
+        if (root.bufs.length <= 1) return
+        if (b.modified) {
+            root.askClose = b
+            root.askCount = root.bufs.length
+            return
+        }
+        root.doClose(b.idx, false)
+    }
+
+    function discardAndClose() {
+        const b = root.askClose
+        root.askClose = null
+        if (b) root.doClose(b.idx, true)
+    }
+
+    // ⚠ THE CLOSE CANNOT SIMPLY BE SENT AFTER THE SAVE. A write can fail —
+    // a read-only file, a full disk — and `bd` behind a failed save refuses
+    // with ITS message, which overwrites the write error with "unsaved
+    // changes". The user would be told the wrong thing about the wrong
+    // problem, and clicking again would say it again.
+    //
+    // So the save's own frame is the verdict, found by the serial it carries.
+    function saveAndClose() {
+        const b = root.askClose
+        root.askClose = null
+        if (!b) return
+        root.send("buf " + b.idx)
+        root.saveNow(b.named)
+        root.closeIdx = b.idx
+        root.closeSerial = root.sent    // the serial that save will answer with
+        editor.forceActiveFocus()
     }
 
     // ── A button is not a keystroke ─────────────────────────────────────────
@@ -763,7 +863,12 @@ FloatingWindow {
         // ── toolbar ─────────────────────────────────────────────────────────
         Rectangle {
             id: toolbar
-            anchors { top: parent.top; left: parent.left; right: parent.right }
+            // ⚠ LEFT OF THIS IS THE SIDEBAR, top to bottom. The toolbar, the
+            // tabs, the text and the status bar are one COLUMN beside it
+            // rather than four full-width bands with the sidebar tucked into
+            // the middle two — which is what put a document list under a
+            // toolbar that did not act on it.
+            anchors { top: parent.top; left: sidebar.right; right: parent.right }
             height: Math.round(root.ui(38))
             color: root.cPanel
 
@@ -796,6 +901,14 @@ FloatingWindow {
                     ToolButton { label: "Documents"; tip: "show or hide the list"
                                  active: root.st.tree === "1"
                                  onTriggered: root.send("set tree!") }
+                    // The tab strip says the same thing the sidebar says, and
+                    // which of the two anybody wants is a matter of taste — so
+                    // it is a switch rather than a decision made here. It had
+                    // never had one: `:set tabbar!` was the only control, in a
+                    // window that exists so nobody has to type that.
+                    ToolButton { label: "Tabs"; tip: "show or hide the tab strip"
+                                 active: root.st.tabbar === "1"
+                                 onTriggered: root.send("set tabbar!") }
                     ToolButton { label: "About"; tip: "version and licence"
                                  onTriggered: aboutPane.visible = !aboutPane.visible }
                 }
@@ -840,7 +953,7 @@ FloatingWindow {
         // ── document tabs ───────────────────────────────────────────────────
         Rectangle {
             id: tabstrip
-            anchors { top: toolbar.bottom; left: parent.left; right: parent.right }
+            anchors { top: toolbar.bottom; left: sidebar.right; right: parent.right }
             height: root.st.tabbar === "1" && root.bufs.length > 1
                     ? Math.round(root.ui(30)) : 0
             visible: height > 0
@@ -878,70 +991,316 @@ FloatingWindow {
                         color: root.cDim; opacity: 0.25 }
         }
 
-        // ── sidebar: Documents ──────────────────────────────────────────────
+        // ── the sidebar: a document list, not a tree ────────────────────────
+        //
+        // Full height and down the left, with a header of its own — the shape
+        // every notes and document application on this desktop uses, and the
+        // one velle asked for. It replaces a strip wedged between a toolbar
+        // that did not act on it and a status bar about a different pane.
+        //
+        // A row is a CARD rather than a line of text: the name is what you
+        // look for, the folder is what tells two files of the same name apart,
+        // and neither fits on one line at this width. The current one carries
+        // an accent bar rather than only a tint, because a tint is the first
+        // thing a pale theme loses.
         Rectangle {
             id: sidebar
-            anchors { top: tabstrip.bottom; bottom: statusbar.top; left: parent.left }
-            // Capped as a FRACTION as well as an absolute. A flat 200px is
-            // most of a narrow window: at 350px wide it left ~120px of
-            // editor, which is less than the gutter plus any usable number of
-            // columns, so the pane the sidebar exists to list became
+            anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+
+            // Capped as a FRACTION as well as an absolute. A fixed width is
+            // most of a narrow window: at 350px wide a 200px panel left ~120px
+            // of editor, less than the gutter plus any usable number of
+            // columns, so the pane the list exists to point AT became
             // unreadable to make room for the list.
+            //
+            // ⚠ The floor is applied BEFORE the fraction, and then the
+            // fraction wins — otherwise a very narrow window gets a sidebar
+            // wider than itself and the editor disappears entirely.
+            readonly property int want: root.dragW > 0
+                                        ? root.dragW
+                                        : parseInt(root.st.treewidth || "230")
             width: root.st.tree === "1"
-                   ? Math.min(Math.round(root.ui(200)), Math.round(parent.width * 0.4))
+                   ? Math.min(Math.max(sidebar.want, root.ui(150)),
+                              Math.round(shell.width * 0.45))
                    : 0
             visible: width > 0
             clip: true
-            color: Qt.rgba(root.cPanel.r, root.cPanel.g, root.cPanel.b, 0.45)
+            color: Qt.rgba(root.cPanel.r, root.cPanel.g, root.cPanel.b, 0.55)
 
-            Column {
-                anchors { fill: parent; margins: 8 }
-                spacing: 2
+            // The header lines up with the toolbar across the divider, so the
+            // two panes read as one window rather than two stacked at
+            // different heights.
+            Item {
+                id: sideHead
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: toolbar.height
 
                 Text {
+                    anchors { left: parent.left; leftMargin: 14
+                              verticalCenter: parent.verticalCenter }
                     text: "DOCUMENTS"
                     font.family: root.uiFont
                     font.pixelSize: root.ui(10)
-                    font.letterSpacing: 1
+                    font.letterSpacing: 1.2
+                    font.bold: true
                     color: root.cDim
-                    bottomPadding: 6
                 }
+                Text {
+                    anchors { right: parent.right; rightMargin: 14
+                              verticalCenter: parent.verticalCenter }
+                    text: root.bufs.length
+                    font.family: root.uiFont
+                    font.pixelSize: root.ui(10)
+                    color: root.cDim
+                }
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1
+                            color: root.cDim; opacity: 0.35 }
+            }
 
-                Repeater {
-                    model: root.bufs
+            // A ListView rather than a Column, because MAXBUF is 64 and a
+            // Column of 64 rows in a 300px panel simply runs off the bottom
+            // with no way to reach the rest.
+            ListView {
+                id: sideList
+                anchors { top: sideHead.bottom; left: parent.left; right: parent.right
+                          bottom: closeAsk.visible ? closeAsk.top : parent.bottom
+                          topMargin: 6; bottomMargin: 6 }
+                clip: true
+                spacing: 3
+                model: root.bufs
+                boundsBehavior: Flickable.StopAtBounds
+
+                delegate: Rectangle {
+                    id: card
+                    required property var modelData
+                    // max(0, …): a row narrower than its own margins would go
+                    // NEGATIVE, and a negative width does not clip — it paints
+                    // outside the panel it is supposed to be inside.
+                    width: Math.max(0, sideList.width - 12)
+                    x: 6
+                    height: Math.round(root.ui(44))
+                    radius: 6
+                    color: card.modelData.current ? root.wash(0.16)
+                         : cardMa.containsMouse ? root.wash(0.07) : "transparent"
+
+                    // ⚠ THE BAR, NOT ONLY THE TINT. wash() is the accent at
+                    // 16% over the panel, and on a pale theme that is a
+                    // difference of a few percent in luminance — legible on
+                    // the dark preset and invisible on Prism. A solid bar is
+                    // the same shape on both.
                     Rectangle {
-                        required property var modelData
-                        // max(0, …): the sidebar is capped against the window
-                        // now, and a row narrower than its own margins would
-                        // go negative — which does not clip, it paints out.
-                        width: Math.max(0, sidebar.width - 16)
-                        height: Math.round(root.ui(26))
-                        radius: 4
-                        color: modelData.current ? root.wash(0.18)
-                             : sideMa.containsMouse ? root.wash(0.08) : "transparent"
+                        anchors { left: parent.left; top: parent.top; bottom: parent.bottom
+                                  topMargin: 6; bottomMargin: 6 }
+                        width: 3
+                        radius: 2
+                        color: root.cAccent
+                        visible: card.modelData.current
+                    }
+
+                    Column {
+                        anchors { left: parent.left; leftMargin: 14
+                                  right: cardClose.left; rightMargin: 6
+                                  verticalCenter: parent.verticalCenter }
+                        spacing: 1
 
                         Text {
-                            anchors { left: parent.left; leftMargin: 8
-                                      right: parent.right; rightMargin: 8
-                                      verticalCenter: parent.verticalCenter }
-                            text: (modelData.name.replace(/^.*\//, "") || "[No Name]")
-                                  + (modelData.modified ? "  •" : "")
+                            width: parent.width
+                            // ElideMiddle keeps BOTH ends of a long name, and
+                            // the ends are what tell "config.old.json" from
+                            // "config.new.json".
                             elide: Text.ElideMiddle
+                            text: (card.modelData.name.replace(/^.*\//, "") || "[No Name]")
                             font.family: root.uiFont
                             font.pixelSize: root.ui(12)
-                            color: modelData.current ? root.cText : root.cDim
+                            font.bold: card.modelData.current
+                            color: root.cText
+                        }
+                        Text {
+                            width: parent.width
+                            // ElideLeft: the END of a path is what disambiguates
+                            // it, and the beginning is /home/somebody over and
+                            // over. ~ for the home directory, the way every
+                            // other window in the suite writes it.
+                            elide: Text.ElideLeft
+                            text: {
+                                if (!card.modelData.named) return "not saved yet"
+                                const home = Quickshell.env("HOME") || ""
+                                let d = card.modelData.name.replace(/\/[^/]*$/, "")
+                                if (d === "") d = "/"
+                                if (home !== "" && d.indexOf(home) === 0)
+                                    d = "~" + d.substring(home.length)
+                                return d
+                            }
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(10)
+                            color: root.cDim
+                        }
+                    }
+
+                    // Unsaved, as a dot — the same mark the tab strip and the
+                    // status bar use, so one glance answers it in all three.
+                    Rectangle {
+                        anchors { right: parent.right; rightMargin: 12
+                                  verticalCenter: parent.verticalCenter }
+                        width: 7; height: 7; radius: 4
+                        color: root.cWarn
+                        visible: card.modelData.modified && !cardClose.visible
+                    }
+
+                    // ⛔ CLOSING A DOCUMENT HAD NO CONTROL AT ALL. The window
+                    // could open buffers and switch between them and never let
+                    // one go — the list only ever grew, and `:bd` was the only
+                    // way out of a window whose whole point is not needing to
+                    // know that.
+                    //
+                    // Hidden on the last one: `:bd` on a single buffer sets
+                    // quit, and a stray click closing the whole window is not
+                    // what an × on a row means anywhere else.
+                    Rectangle {
+                        id: cardClose
+                        anchors { right: parent.right; rightMargin: 8
+                                  verticalCenter: parent.verticalCenter }
+                        width: Math.round(root.ui(18)); height: width
+                        radius: 4
+                        visible: root.bufs.length > 1
+                                 && (cardMa.containsMouse || cardCloseMa.containsMouse)
+                        color: cardCloseMa.containsMouse ? root.wash(0.3) : "transparent"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✕"
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(10)
+                            color: root.cText
                         }
                         MouseArea {
-                            id: sideMa
+                            id: cardCloseMa
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: root.send("buf " + modelData.idx)
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.closeBuffer(card.modelData)
+                        }
+                    }
+
+                    MouseArea {
+                        id: cardMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        // Below the close button, which is a child of this
+                        // rectangle and therefore ON TOP of a fill-anchored
+                        // MouseArea only because it declares its own.
+                        z: -1
+                        onClicked: {
+                            root.send("buf " + card.modelData.idx)
+                            editor.forceActiveFocus()
                         }
                     }
                 }
             }
-            Rectangle { anchors.right: parent.right; height: parent.height; width: 1
-                        color: root.cDim; opacity: 0.25 }
+
+            // ── closing something with unsaved changes ──────────────────────
+            //
+            // ⛔ A REFUSAL IS NOT AN ANSWER. `:bd` on a modified buffer says
+            // "unsaved changes (:bd! to discard)", which is correct in a
+            // terminal and a dead end in a window — the same shape as the
+            // Save button that could refuse but not ask (see saveNow above).
+            // So the window asks, and both ways out are here.
+            Rectangle {
+                id: closeAsk
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: askCol.implicitHeight + 16
+                visible: root.askClose !== null
+                color: root.cPanel
+
+                Rectangle { anchors.top: parent.top; width: parent.width; height: 1
+                            color: root.cWarn; opacity: 0.6 }
+
+                Column {
+                    id: askCol
+                    anchors { left: parent.left; right: parent.right; top: parent.top
+                              margins: 8 }
+                    spacing: 6
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: root.askClose
+                              ? (root.askClose.name.replace(/^.*\//, "") || "[No Name]")
+                                + " has unsaved changes."
+                              : ""
+                        font.family: root.uiFont
+                        font.pixelSize: root.ui(11)
+                        color: root.cText
+                    }
+                    // ⚠ A Flow, NOT A Row. Three buttons do not fit across a
+                    // sidebar at its floor width, and a Row does not wrap — it
+                    // runs off the edge, and the one that goes is Cancel: the
+                    // answer somebody reaching for this question most often
+                    // wants, and the only one that is not destructive.
+                    Flow {
+                        width: parent.width
+                        spacing: 4
+                        // Save is offered only when there is somewhere to save
+                        // TO. On a buffer that has never been named it would
+                        // open the file browser mid-question, which is a second
+                        // question on top of the first.
+                        ToolButton {
+                            label: "Save & close"
+                            tip: "write it, then close it"
+                            centered: false
+                            visible: root.askClose !== null && root.askClose.named
+                            onTriggered: root.saveAndClose()
+                        }
+                        ToolButton { label: "Discard"; centered: false
+                                     tip: "close it and lose the changes"
+                                     onTriggered: root.discardAndClose() }
+                        ToolButton { label: "Cancel"; centered: false
+                                     tip: "keep it open"
+                                     onTriggered: root.askClose = null }
+                    }
+                }
+            }
+
+            // ── the splitter ────────────────────────────────────────────────
+            //
+            // ⚠ preventStealing, or the window itself takes the drag: this
+            // grip is inside no Flickable, and the toplevel will happily start
+            // a window move from a press it was handed.
+            //
+            // The width is followed LIVE from a local property and written to
+            // the engine ONCE, on release — a `set` per pixel of travel is a
+            // frame per pixel and a settings file rewritten a hundred times to
+            // answer one drag.
+            MouseArea {
+                id: sideGrip
+                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                width: 7
+                hoverEnabled: true
+                cursorShape: Qt.SizeHorCursor
+                preventStealing: true
+
+                onPressed: root.dragW = sidebar.width
+                onPositionChanged: (m) => {
+                    if (!sideGrip.pressed) return
+                    // Read in the WINDOW's coordinates. The grip moves with the
+                    // edge it is dragging, so a delta measured inside it chases
+                    // its own tail and the panel accelerates away from the
+                    // pointer.
+                    root.dragW = Math.max(root.ui(150),
+                                          Math.round(sideGrip.mapToItem(shell, m.x, 0).x))
+                }
+                onReleased: {
+                    if (root.dragW > 0) root.send("set treewidth=" + sidebar.width)
+                    root.dragW = 0
+                }
+                onCanceled: root.dragW = 0
+
+                Rectangle {
+                    anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                    width: 1
+                    color: sideGrip.containsMouse || sideGrip.pressed ? root.cAccent : root.cDim
+                    opacity: sideGrip.containsMouse || sideGrip.pressed ? 0.9 : 0.25
+                }
+            }
         }
 
         // ── the editor ──────────────────────────────────────────────────────
@@ -1361,7 +1720,7 @@ FloatingWindow {
         // ── status bar ──────────────────────────────────────────────────────
         Rectangle {
             id: statusbar
-            anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+            anchors { bottom: parent.bottom; left: sidebar.right; right: parent.right }
             height: Math.round(root.ui(26)) + msgline.height
             color: root.cPanel
 
@@ -2283,6 +2642,14 @@ FloatingWindow {
         property string label: ""
         property string tip: ""
         property bool active: false
+        // ⛔ SET THIS false INSIDE A Flow OR A Column. A positioner REFUSES to
+        // lay out a child that carries anchors — "Cannot specify anchors for
+        // items inside Flow" — and the child then contributes NOTHING to the
+        // positioner's implicit height. The unsaved-changes question rendered
+        // its sentence and no buttons at all, in a bar sized to fit them: not
+        // a clipped button, an invisible one. A Row happens to survive it,
+        // which is why every existing caller does.
+        property bool centered: true
         signal triggered()
 
         width: tbText.implicitWidth + 18
@@ -2290,7 +2657,8 @@ FloatingWindow {
         radius: 4
         color: tb.active ? root.wash(0.3)
              : tbMa.containsMouse ? root.wash(0.16) : "transparent"
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        anchors.verticalCenter: tb.centered && parent ? parent.verticalCenter
+                                                      : undefined
 
         Text {
             id: tbText

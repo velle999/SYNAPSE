@@ -51,6 +51,11 @@ static const odef OPTS[] = {
 	{ "hlsearch",   "hls", O_BOOL, OFF(hlsearch),   0, 1,   1 },
 	{ "tabbar",     "",    O_BOOL, OFF(showtabs),   0, 1,   1 },
 	{ "tree",       "",    O_BOOL, OFF(tree),       0, 1,   1 },
+	/* The sidebar's width in PIXELS, dragged rather than typed — the GUI's
+	 * `set` writes it down (see serve.c), so a panel sized once stays sized.
+	 * The floor is not cosmetic: a panel narrower than its own two-line rows
+	 * shows a file name elided to nothing, which reads as an empty list. */
+	{ "treewidth",  "",    O_INT,  OFF(tree_width), 150, 480, 230 },
 	{ "text_scale", "",    O_INT,  OFF(text_scale), 75, 175, 100 },
 };
 

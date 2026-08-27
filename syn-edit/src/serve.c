@@ -20,7 +20,7 @@
  * bytes that are not valid UTF-8.
  *
  *   S  field value          one fact about the editor's state
- *   B  index name modified  a buffer in the list
+ *   B  index name modified current named   a buffer in the list
  *   L  lineno text          one visible line
  *   H  lineno start len tok one highlight span within a visible line
  *   E  serial               end of frame — the window repaints on this
@@ -126,8 +126,15 @@ static void emit_frame(ed_t *e, unsigned long serial)
 	for (size_t i = 0; i < e->nbuf; i++) {
 		char idx[32];
 		snprintf(idx, sizeof idx, "%zu", i + 1);
-		rec_row(5, "B", idx, buf_name(e->buf[i]),
-		        e->buf[i]->modified ? "1" : "0", i == e->cur ? "1" : "0");
+		/* ⚠ THE LAST FIELD IS "HAS A PATH", and it is here for the same
+		 * reason the `named` state row is: buf_name() answers "[No Name]"
+		 * for a buffer that has never been written, and a window that
+		 * string-matched for it would break the day that placeholder is
+		 * reworded — or treat a real file called "[No Name]" as unnamed.
+		 * The sidebar needs it to know whether Close can offer to save. */
+		rec_row(6, "B", idx, buf_name(e->buf[i]),
+		        e->buf[i]->modified ? "1" : "0", i == e->cur ? "1" : "0",
+		        (e->buf[i]->path && *e->buf[i]->path) ? "1" : "0");
 	}
 
 	/* lines and their spans */
@@ -189,6 +196,7 @@ static void emit_frame(ed_t *e, unsigned long serial)
 	s_row("number", e->o.number ? "1" : "0");
 	s_row("tabbar", e->o.showtabs ? "1" : "0");
 	s_row("tree", e->o.tree ? "1" : "0");
+	s_num("treewidth", (size_t)e->o.tree_width);
 	s_num("text_scale", (size_t)e->o.text_scale);
 	s_row("msg", e->msg);
 	s_row("msgerr", e->msg_err ? "1" : "0");
@@ -547,8 +555,25 @@ int cmd_serve(int argc, char **argv)
 			 * and says nothing about it. */
 			char cmd[512];
 			snprintf(cmd, sizeof cmd, "set %s", rest);
-			if (ed_ex(e, cmd) && !e->msg_err)
+			if (ed_ex(e, cmd) && !e->msg_err) {
 				e->msg[0] = '\0';
+				/* ⚠ AND IT IS WRITTEN DOWN, which `:set` in the terminal
+				 * is NOT. That difference is the point: `:set` is a typed
+				 * command and vim's answer for one is "this session", but
+				 * a panel that was closed with a button, or a sidebar that
+				 * was dragged to a width, is a preference — and a window
+				 * that forgets it on every launch is a window that has to
+				 * be rearranged every morning.
+				 *
+				 * A failure to write still leaves the option APPLIED for
+				 * this session, so it speaks rather than being silent:
+				 * a read-only home would otherwise look like a button
+				 * that works until you close the window. */
+				char *err = NULL;
+				if (!opts_save(&e->o, &err))
+					ed_message(e, true, "%s", err ? err : "could not save settings");
+				free(err);
+			}
 		} else if (!strcmp(verb, "buf")) {
 			size_t i = (size_t)atol(rest);
 			if (i >= 1 && i <= e->nbuf) {

@@ -241,7 +241,8 @@ typedef struct {
 	bool wrap;
 	bool hlsearch;
 	bool showtabs;      /* GUI: draw the tab bar */
-	bool tree;          /* GUI: draw the file sidebar */
+	bool tree;          /* GUI: draw the document sidebar */
+	int  tree_width;    /* GUI: how wide it is, in points before scaling */
 	int  text_scale;    /* GUI only, 75..175 */
 } opts_t;
 

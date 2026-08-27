@@ -894,6 +894,72 @@ if [ -f "$QML" ]; then
         && ok "the window holds its first writes until the engine can take them" \
         || bad "send() writes before the engine is up — those writes are dropped"
 
+    # ── the layout ──────────────────────────────────────────────────────────
+    #
+    # ⛔ THE SIDEBAR IS FULL HEIGHT AND EVERYTHING ELSE IS A COLUMN BESIDE IT.
+    # It used to be a strip wedged between a toolbar that did not act on it and
+    # a status bar about a different pane. Anchoring is the whole of that
+    # layout, and a wrong anchor does not error — it draws a window that is
+    # merely arranged badly, which no test notices and nobody reports.
+    for pane in toolbar tabstrip statusbar; do
+        sed -n "/id: $pane\$/,/^            [A-Za-z]/p" "$T/qml_code" > "$T/pane"
+        grep -q 'left: sidebar.right' "$T/pane" \
+            && ok "the $pane starts where the sidebar ends" \
+            || bad "the $pane spans the sidebar again — the list is back in a band"
+    done
+    sed -n '/id: sidebar$/,/color: Qt.rgba/p' "$T/qml_code" > "$T/side"
+    grep -q 'top: parent.top; bottom: parent.bottom; left: parent.left' "$T/side" \
+        && ok "the sidebar runs the full height of the window" \
+        || bad "the sidebar no longer runs top to bottom"
+
+    # A ListView, not a Column: MAXBUF is 64 and a Column of 64 rows in a 300px
+    # panel runs off the bottom with no way to reach the rest.
+    grep -q 'id: sideList' "$T/qml_code" && grep -q 'ListView' "$T/qml_code" \
+        && ok "the document list scrolls" \
+        || bad "the document list is not a view — a long one cannot be reached"
+
+    # ⛔ AND CLOSING THE LAST DOCUMENT IS GUARDED IN THE FUNCTION, not only by
+    # hiding the button. `:bd` on a single buffer sets quit (pinned above), so
+    # the difference between the two is a stray click and a lost session.
+    sed -n '/function doClose(/,/^    }/p' "$T/qml_code" > "$T/doclose"
+    grep -q 'root.bufs.length <= 1' "$T/doclose" \
+        && ok "closing the last document is refused in the code, not just hidden" \
+        || bad "doClose no longer guards the last document — an ✕ closes the window"
+
+    # ⚠ AND THE TAB STRIP HAS A SWITCH. It says the same thing the sidebar
+    # says, and which of the two anybody wants is taste — but its only control
+    # was `:set tabbar!`, typed, in a window that exists so nobody has to.
+    grep -q 'set tabbar!' "$T/qml_code" \
+        && ok "the tab strip can be turned off from the toolbar" \
+        || bad "the tab strip has no control but a typed :set again"
+
+    # The question, and both ways out of it.
+    for f in closeBuffer discardAndClose saveAndClose; do
+        grep -q "function $f" "$T/qml_code" \
+            && ok "there is a $f()" \
+            || bad "syn-edit.qml lost $f() — a modified document cannot be closed"
+    done
+
+    # ⚠ THE SAVE'S OWN FRAME IS THE VERDICT. Sending the close straight after
+    # the save means a failed write is answered with bd's "unsaved changes",
+    # which is the wrong message about the wrong problem.
+    sed -n '/function saveAndClose/,/^    }/p' "$T/qml_code" > "$T/sac"
+    grep -q 'closeSerial' "$T/sac" \
+        && ok "save-and-close waits for the write to be answered" \
+        || bad "save-and-close fires the close blind — a failed write reports the wrong error"
+
+    # ⛔ A POSITIONER REFUSES TO LAY OUT AN ANCHORED CHILD, and the child then
+    # adds NOTHING to the positioner's height. The unsaved-changes question
+    # rendered its sentence and no buttons in a bar sized to fit them — not a
+    # clipped button, an invisible one.
+    grep -q 'property bool centered' "$T/qml_code" \
+        && ok "ToolButton can drop its anchor for a Flow or a Column" \
+        || bad "ToolButton always anchors — inside a positioner it vanishes"
+    sed -n '/id: askCol/,/^                }/p' "$T/qml_code" > "$T/ask"
+    n=$(grep -c 'centered: false' "$T/ask" || true)
+    [ "$n" = 3 ] && ok "…and all three answers to the question do" \
+                 || bad "$n of 3 buttons in the close question set centered: false"
+
     # ⛔ THE RULE THAT MAKES THE WINDOW MODELESS. Every path that ends in
     # NORMAL — an undo, a search finishing, a file opening, the engine's own
     # first frame — is answered by one `gui insert` in the frame handler. Take
@@ -1350,6 +1416,71 @@ check "…and a pasted newline does not run the command" $?
 # the QML and not to serve.c would otherwise be a button that does nothing.
 printf 'gui nonesuch\nquit\n' | "$E" serve "$T/mless.txt" | gq '^S	msgerr	1$'
 check "an unknown gui verb is an error, not a silent no-op" $?
+
+# ── the document sidebar ────────────────────────────────────────────────────
+#
+# The window grew a document list down the left with a header of its own, rows
+# that can be closed, and a width you drag. Three of those need the engine to
+# say something it did not say before, and all three are silent if they stop.
+
+# ⚠ THE SIXTH FIELD OF A B RECORD IS "HAS A PATH". The sidebar needs it to know
+# whether Close can offer to save, and it must NOT be answered by matching the
+# "[No Name]" label — that is a message, it can be reworded, and a real file
+# could be called that. Same reason the `named` state row exists.
+printf 'x\n' > "$T/side.txt"
+printf 'quit\n' | "$E" serve "$T/side.txt" | gq '^B	1	.*	0	1	1$'
+check "a B record says the buffer has a path" $?
+
+printf 'new\nquit\n' | "$E" serve "$T/side.txt" | gq '^B	2	%5BNo%20Name%5D	0	1	0$'
+check "…and says when it does not" $?
+
+# Closing. `:bd` is what the ✕ on a row runs, and its refusal on a modified
+# buffer is what the window has to ask about rather than pass on.
+printf 'b\n' > "$T/side2.txt"
+printf 'ex bd\nquit\n' | "$E" serve "$T/side.txt" "$T/side2.txt" | gq '^S	lines	1$'
+check "bd closes a document" $?
+
+printf 'keys iz\nex bd\nquit\n' | "$E" serve "$T/side.txt" "$T/side2.txt" |
+    gq '^S	msgerr	1$'
+check "…and refuses one with unsaved changes" $?
+
+printf 'keys iz\nex bd!\nquit\n' | "$E" serve "$T/side.txt" "$T/side2.txt" |
+    gq '^S	file	.*side2.txt$'
+check "…which bd! overrides — what Discard sends" $?
+
+# ⛔ THE LAST DOCUMENT IS NOT CLOSEABLE, and the engine is the reason: bd on a
+# single buffer sets quit. The window guards it in doClose() as well as by
+# hiding the button, and this is what it is guarding against.
+printf 'ex bd\nquit\n' | "$E" serve "$T/side.txt" | gq '^S	quit	1$'
+check "bd on the only document would close the whole editor" $?
+
+# The width the splitter drags.
+"$E" config set treewidth 300 >/dev/null
+[ "$("$E" config get treewidth)" = 300 ]
+check "treewidth round-trips" $?
+
+"$E" config set treewidth 9 >/dev/null
+[ "$("$E" config get treewidth)" = 150 ]
+check "…and is clamped to a width the rows still fit in" $?
+"$E" config reset >/dev/null
+
+printf 'quit\n' | "$E" serve "$T/side.txt" | gq '^S	treewidth	230$'
+check "the frame carries it, so the window does not guess" $?
+
+# ⛔ THE WINDOW'S `set` IS WRITTEN DOWN AND A TYPED `:set` IS NOT. A panel
+# closed with a button and a sidebar dragged to a width are PREFERENCES; a
+# window that forgets them on every launch has to be rearranged every morning.
+# A typed :set is vim's, and vim's answer is "this session".
+rm -f "$SYN_EDIT_CONFIG"
+printf 'set treewidth=310\nquit\n' | "$E" serve "$T/side.txt" >/dev/null
+grep -q '^treewidth = 310$' "$SYN_EDIT_CONFIG" 2>/dev/null
+check "the window's set writes the setting down" $?
+
+rm -f "$SYN_EDIT_CONFIG"
+printf 'ex set treewidth=310\nquit\n' | "$E" serve "$T/side.txt" >/dev/null
+[ ! -f "$SYN_EDIT_CONFIG" ]
+check "…and a typed :set does not" $?
+rm -f "$SYN_EDIT_CONFIG"
 
 # ── report ──────────────────────────────────────────────────────────────────
 

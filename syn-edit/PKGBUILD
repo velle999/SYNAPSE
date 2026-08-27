@@ -122,7 +122,56 @@ pkgver=0.1.0
 #   `grep -q` makes `strip | grep` FAIL EXACTLY WHEN IT MATCHES.
 #   Forty-one checks in syn_edit_test.sh, the old spellings pinned as the
 #   bug. 352 pass.
-pkgrel=13
+# 14: THE WINDOW GOT THE LAYOUT IT WAS ASKED FOR — a document list down the
+#   left, full height, with a header of its own, and the toolbar, tabs, text
+#   and status bar as ONE COLUMN beside it. The list used to be a strip wedged
+#   between a toolbar that did not act on it and a status bar about a
+#   different pane.
+#   A row is a CARD, not a line of text: the NAME is what you look for and the
+#   FOLDER is what tells `config.json` in one project from `config.json` in
+#   another, and neither fits on one line at this width. The current one
+#   carries an accent BAR rather than only a tint — ⚠ wash() is the accent at
+#   16% over the panel, which on a pale theme is a few percent of luminance:
+#   legible on the dark preset and invisible on Prism. A solid bar is the same
+#   shape on both.
+#   ⛔ AND THE WINDOW COULD NOT CLOSE A DOCUMENT AT ALL. It opened buffers and
+#   switched between them and never let one go — the list only ever grew, and
+#   `:bd` was the only way out of a window that exists so nobody has to know
+#   `:bd`. Every row has an ✕ now.
+#   ⚠ `:bd` REFUSES ON A MODIFIED BUFFER — "unsaved changes (:bd! to discard)"
+#   — which is right in a terminal and a dead end in a window, the same shape
+#   as the Save button that could refuse but not ask (see 0.1.0-9). So the
+#   window asks: save and close, discard, or cancel.
+#   ⚠ AND THE CLOSE CANNOT SIMPLY BE SENT AFTER THE SAVE. A write can fail, and
+#   `bd` behind a failed save refuses with ITS message — overwriting
+#   "Permission denied" with "unsaved changes", which is the wrong thing about
+#   the wrong problem. The save's own frame is the verdict, found by the serial
+#   it carries (13's bookkeeping, earning its keep).
+#   ⛔ CLOSING THE LAST DOCUMENT IS REFUSED IN doClose(), not only by hiding the
+#   button: `:bd` on a single buffer sets quit, so the difference between the
+#   two is a stray click and a whole session.
+#   ⚠ A POSITIONER REFUSES TO LAY OUT AN ANCHORED CHILD, and the child then
+#   contributes NOTHING to the positioner's implicit height. The question
+#   rendered its sentence and NO BUTTONS, in a bar sized to fit them — not a
+#   clipped button, an invisible one. ToolButton gained `centered: false` for
+#   use inside a Flow or a Column; every existing caller is a Row, which
+#   happens to survive it.
+#   The tab strip got a toolbar switch too — it says the same thing the
+#   sidebar now says, and its only control had been a typed `:set tabbar!` in a
+#   window that exists so nobody has to type that.
+#   The panel's edge drags, and `treewidth` is a new option so a panel sized
+#   once stays sized. ⚠ THE WINDOW'S `set` IS WRITTEN DOWN NOW AND A TYPED
+#   `:set` IS NOT: a panel closed with a button and a sidebar dragged to a
+#   width are preferences, and a window that forgets them on every launch has
+#   to be rearranged every morning. A typed :set is vim's, and vim's answer is
+#   "this session".
+#   The B record gained a sixth field, "has a path" — the sidebar needs it to
+#   know whether Close can offer to save, and matching the "[No Name]" label
+#   would be matching a message.
+#   Twenty-four checks in syn_edit_test.sh, including the layout's anchors:
+#   a wrong one does not error, it just draws a window arranged badly, which
+#   nothing notices and nobody reports. 376 pass.
+pkgrel=14
 pkgdesc="SynapseOS text editor: modal in a terminal, modeless in a window, syntax highlighting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
