@@ -201,7 +201,27 @@ pkgver=0.1.0
 #   an installed system carries its own copies forward and syn-update has no
 #   business rewriting either. This is the fresh-install default only; an
 #   existing box needs the one-line sed by hand.
-pkgrel=98
+# 99: the drop-in that lets game mode quiet synapse_kmod is verified like the
+#   rest of them. 79 wrote /etc/sudoers.d/zz-synui-kmod-events and did not add
+#   it to either verify loop below the chroot block, so for twenty releases the
+#   one check standing between a fresh install and a game mode that cannot
+#   quiet the module did not look at it. The loops exist BECAUSE that block is
+#   masked and has failed silently twice; a name missing from them is that same
+#   hole one layer down, and the failure is quiet in exactly the same way —
+#   synui's spawn is fire-and-forget, so the whole trace is one "a password is
+#   required" line per toggle in the journal.
+#   ⚠ tests/sudoers_test.sh SCRAPES the script and asserts the written list and
+#   the two verified lists are one list, rather than restating the names a
+#   third time — a third copy is the same bug again. It also asserts every
+#   NOPASSWD name sorts after 'wheel' (sudo takes the LAST match, and
+#   /etc/sudoers.d/wheel is the blanket rule with no NOPASSWD) and that every
+#   drop-in is chmod 440, which visudo -c fails the whole ruleset over.
+#   Verified to FAIL when the name is taken back out of the loops.
+#   ⚠ Existing machines are NOT fixed by this. The drop-in is written by the
+#   INSTALLER, so a box installed before 79 never had it and syn-update does
+#   not add installer-written files; it needs writing by hand, with visudo -c
+#   before and after.
+pkgrel=99
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

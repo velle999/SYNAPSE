@@ -4285,13 +4285,20 @@ SYN_CHROOT
 # Both shipped a system where every sudo -n caller — all of them
 # fire-and-forget — failed with nothing written anywhere. A missing file here
 # is not cosmetic, so check for it rather than trusting that the block ran.
-for f in zz-power-menu zz-synapd-gamemode zz-synapd-backend wheel; do
+#
+# ⚠ zz-synui-kmod-events was written by the block above but was NOT on this
+# list, which is the same hole one layer down: the file could go missing and
+# the install would still call itself verified. It is the quieter of game
+# mode's two halves — without it synui's `sudo -n ... synui-kmod-events off`
+# fails, game mode carries on, and the only trace is a "a password is required"
+# line per toggle in the journal. Checked now for the same reason as the rest.
+for f in zz-power-menu zz-synapd-gamemode zz-synapd-backend zz-synui-kmod-events wheel; do
     [ -s "/mnt/etc/sudoers.d/$f" ] \
         || die "sudoers drop-in /etc/sudoers.d/$f was not written — privileged desktop actions (game mode, reboot, AI backend) would silently do nothing"
 done
 # Order matters as much as presence: sudo takes the LAST match, so every
 # NOPASSWD file must sort after 'wheel'. Catch a rename that undoes that.
-for f in zz-power-menu zz-synapd-gamemode zz-synapd-backend; do
+for f in zz-power-menu zz-synapd-gamemode zz-synapd-backend zz-synui-kmod-events; do
     [ "$(printf '%s\nwheel\n' "$f" | sort | tail -n1)" = "$f" ] \
         || die "sudoers drop-in '$f' sorts before 'wheel' — the blanket wheel rule would override it"
 done
