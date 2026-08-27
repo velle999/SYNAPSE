@@ -226,6 +226,241 @@ static void emit_frame(ed_t *e, unsigned long serial)
 	fflush(stdout);
 }
 
+/* ── the modeless verbs the window drives ───────────────────────────────────
+ *
+ * ⛔ THE GRAPHICAL FRONT-END IS NOT MODAL AND THE ENGINE IS. Everything below
+ * exists so that those two facts are reconciled in ONE place.
+ *
+ * The window used to send vim's keys for everything, which meant Backspace at
+ * the start of line 2 was `h` — a motion that stops at column 0 and has never
+ * joined a line — and Ctrl+V was `<C-v>`, a block selection, so Paste had
+ * never once put the clipboard into the document. Neither is a bug in vim.c:
+ * both are the correct NORMAL-mode answers, given to a window that had quietly
+ * left INSERT. Every mouse gesture left it: a double click sent `<Esc>viw`, a
+ * right click sent `<Esc>`, and nothing ever sent the window back.
+ *
+ * The fix is not to teach the window about modes — that is the same second
+ * editor this file's header refuses. It is to give the window operations that
+ * do not HAVE a mode: each verb below states what the mode is when it returns,
+ * so no caller has to know what it was on the way in. Exactly why `goto`
+ * exists further down, and exactly why it is a verb rather than a key.
+ *
+ * ⚠ THE TERMINAL FRONT-END IS UNTOUCHED, deliberately. tui.c hands raw keys
+ * to ed_key() and is fully modal: `syn-edit` in a terminal is vim, and none of
+ * this is reachable from it.
+ */
+
+/* INSERT, with the caret at y/x and NOT wherever the mode change would have
+ * put it.
+ *
+ * ⚠ THE ORDER IS LOAD-BEARING. `i` is sent first and the caret is placed
+ * after, because ed_clamp() allows column == line length only in INSERT: set
+ * the caret while still in NORMAL and the end of a line silently becomes the
+ * character before it, which is a paste that lands one place short.
+ *
+ * It goes through `i` rather than assigning e->mode so that start_insert()
+ * opens the undo group. Assigning the mode gives every typed character its own
+ * undo step, which is an undo that appears not to work. */
+static void gui_insert_at(ed_t *e, size_t y, size_t x)
+{
+	if (e->mode != M_NORMAL)
+		ed_keys(e, "<Esc>");
+	if (e->mode == M_NORMAL)
+		ed_keys(e, "i");
+	e->cy = y;
+	e->cx = x;
+	ed_clamp(e);
+}
+
+/* The selection, as a range the buffer primitives will take.
+ *
+ * `erase` also deletes it and leaves the caret in the hole. The undo group is
+ * the CALLER's: a cut is one step, and a paste over a selection is one step
+ * rather than a delete the user has to undo twice.
+ *
+ * reg 0 means "do not copy it anywhere", which is what a Backspace over a
+ * selection wants — it is a deletion, not a cut, and it must not quietly
+ * replace the clipboard. */
+static bool sel_take(ed_t *e, int reg, bool erase)
+{
+	size_t y0, x0, y1, x1;
+	if (!ed_selection(e, &y0, &x0, &y1, &x1))
+		return false;
+
+	buf_t *b = ed_buf(e);
+	/* Charwise selections are INCLUSIVE of the character under the caret and
+	 * range_text/range_delete take x1 exclusive. Linewise ignores the columns
+	 * and takes y1 inclusive, so it is left alone. */
+	bool lw = (e->mode != M_VISUAL);
+	if (!lw) {
+		size_t l1 = buf_linelen(b, y1);
+		x1 = x1 + 1 > l1 ? l1 : x1 + 1;
+	}
+
+	char *text = range_text(e, y0, x0, y1, x1, lw);
+	if (reg)
+		reg_set(e, reg, text, lw);
+	free(text);
+
+	if (!erase)
+		return true;
+
+	/* Out of visual BEFORE the buffer changes: ed_clamp reads the mode, and a
+	 * selection whose anchor is on a line that no longer exists is a crash
+	 * waiting for the next frame to draw it. */
+	e->mode = M_NORMAL;
+	range_delete(e, y0, x0, y1, x1, lw);
+	if (y0 >= b->n)
+		y0 = b->n - 1;
+	e->cy = y0;
+	e->cx = lw ? 0 : x0;
+	return true;
+}
+
+/* Ctrl+C. The MODE IS NOT TOUCHED, which is the whole point: everywhere else
+ * on the desktop a copy leaves what you copied still selected, and the engine
+ * has no way to say "selected" other than being in visual mode. `"+y` would
+ * have dropped it.
+ *
+ * With nothing selected the line is the unit — the same answer the context
+ * menu has always given, and better than a Ctrl+C that does nothing. */
+static void gui_copy(ed_t *e)
+{
+	if (sel_take(e, '+', false)) {
+		ed_message(e, false, "copied");
+		return;
+	}
+	char *text = range_text(e, e->cy, 0, e->cy, 0, true);
+	reg_set(e, '+', text, true);
+	free(text);
+	ed_message(e, false, "copied this line");
+}
+
+/* Ctrl+X, and with nothing selected the line, to match Copy. */
+static void gui_cut(ed_t *e)
+{
+	buf_t *b = ed_buf(e);
+	buf_group_begin(b);
+	if (!sel_take(e, '+', true)) {
+		char *text = range_text(e, e->cy, 0, e->cy, 0, true);
+		reg_set(e, '+', text, true);
+		free(text);
+		range_delete(e, e->cy, 0, e->cy, 0, true);
+		if (e->cy >= b->n)
+			e->cy = b->n - 1;
+		e->cx = 0;
+	}
+	buf_group_end(b);
+	gui_insert_at(e, e->cy, e->cx);
+}
+
+/* Ctrl+V. Not `"+p`: put is vim's, which means it lands AFTER the caret, it
+ * takes a whole line when the register happens to be linewise, and it leaves
+ * the caret on the last character pasted rather than after it. A window's
+ * paste puts the text where the caret is and leaves the caret at the end of
+ * it, so this inserts rather than puts. */
+static void gui_paste(ed_t *e)
+{
+	const reg_t *r = reg_get(e, '+');
+	if (!r || !r->text || !*r->text) {
+		ed_message(e, true, "the clipboard is empty");
+		if (e->mode != M_CMDLINE)
+			gui_insert_at(e, e->cy, e->cx);
+		return;
+	}
+	/* Copied out first: inserting rewrites the buffer the register may have
+	 * been read from, and reg_get hands back a pointer into e->regs. */
+	char *text = xstrdup(r->text);
+
+	/* Find and Replace put the caret on the ENGINE's command line, and that
+	 * is where a paste has to land — pasting a search term into the document
+	 * behind an open prompt is the same class of mistake as the mouse
+	 * coordinates that used to be typed into it.
+	 *
+	 * Control bytes are dropped rather than escaped: a newline would submit
+	 * the command, which is a pasted pattern running a substitution nobody
+	 * finished typing. */
+	if (e->mode == M_CMDLINE) {
+		for (char *q = text; *q && e->ncmd + 1 < sizeof e->cmd; q++)
+			if ((unsigned char)*q >= 0x20 && (unsigned char)*q != 0x7f)
+				e->cmd[e->ncmd++] = *q;
+		e->cmd[e->ncmd] = '\0';
+		free(text);
+		return;
+	}
+
+	buf_t *b = ed_buf(e);
+	buf_group_begin(b);
+	sel_take(e, 0, true);           /* replacing a selection is ONE step */
+	size_t ey = e->cy, ex = e->cx;
+	if (ex > buf_linelen(b, ey))
+		ex = buf_linelen(b, ey);
+	insert_text_at(e, ey, ex, text, &ey, &ex);
+	buf_group_end(b);
+	free(text);
+
+	gui_insert_at(e, ey, ex);
+}
+
+/* Typing, Backspace or Delete with a selection: the selection goes and the
+ * key that follows is an ordinary insert. Sent as its own command so that the
+ * window does not have to know whether Backspace means "delete the selection"
+ * or "join these two lines" — the engine already knows which it is. */
+static void gui_delsel(ed_t *e)
+{
+	buf_t *b = ed_buf(e);
+	buf_group_begin(b);
+	sel_take(e, 0, true);
+	buf_group_end(b);
+	gui_insert_at(e, e->cy, e->cx);
+}
+
+/* Shift+arrow and the mouse both mean "start selecting HERE".
+ *
+ * ⚠ NOT `<Esc>v`. Leaving insert moves the caret one column left (vim's rule,
+ * see leave_insert), so a selection begun while typing anchored itself one
+ * character to the left of the caret the user could see — off by one, every
+ * time, and only at the moment a drag starts. */
+static void gui_visual(ed_t *e)
+{
+	if (e->mode == M_VISUAL || e->mode == M_VISUAL_LINE
+	                        || e->mode == M_VISUAL_BLOCK)
+		return;
+	size_t y = e->cy, x = e->cx;
+	if (e->mode != M_NORMAL)
+		ed_keys(e, "<Esc>");
+	e->mode = M_NORMAL;
+	e->cy = y;
+	e->cx = x;
+	ed_clamp(e);            /* the anchor has to be ON a character */
+	e->mode = M_VISUAL;
+	e->vy = e->cy;
+	e->vx = e->cx;
+}
+
+static void gui_verb(ed_t *e, const char *op)
+{
+	if (!strcmp(op, "insert")) {
+		/* Drops a selection WITHOUT deleting it — this is what Escape and a
+		 * plain arrow key mean in a window, and what the window sends when a
+		 * frame reports NORMAL, which in a modeless window is never a state
+		 * anybody asked to be in. */
+		gui_insert_at(e, e->cy, e->cx);
+	} else if (!strcmp(op, "visual")) {
+		gui_visual(e);
+	} else if (!strcmp(op, "delsel")) {
+		gui_delsel(e);
+	} else if (!strcmp(op, "copy")) {
+		gui_copy(e);
+	} else if (!strcmp(op, "cut")) {
+		gui_cut(e);
+	} else if (!strcmp(op, "paste")) {
+		gui_paste(e);
+	} else {
+		ed_message(e, true, "unknown gui request: %s", op);
+	}
+}
+
 int cmd_serve(int argc, char **argv)
 {
 	ed_t *e = ed_new();
@@ -358,6 +593,8 @@ int cmd_serve(int argc, char **argv)
 			e->cy = (size_t)(l - 1);
 			e->cx = (size_t)(c - 1);
 			ed_clamp(e);
+		} else if (!strcmp(verb, "gui")) {
+			gui_verb(e, rest);
 		} else if (!strcmp(verb, "view")) {
 			char *sp2 = strchr(rest, ' ');
 			e->view_top = (size_t)atol(rest);

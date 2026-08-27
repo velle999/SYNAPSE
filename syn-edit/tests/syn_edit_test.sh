@@ -821,10 +821,87 @@ if [ -f "$QML" ]; then
         && ok "there is a context menu" \
         || bad "syn-edit.qml lost its context menu"
 
-    # Copy means the DESKTOP clipboard, which is the + register.
-    grep -q '"+y' "$QML" \
-        && ok "Copy yanks to the desktop clipboard register" \
-        || bad "the context menu no longer copies to the + register"
+    # ⚠ CODE ONLY, NEVER COMMENTS. The prose in this file names the key
+    # sequences it stopped sending — `"+y`, `"+p`, `<Esc>viw` — so a grep over
+    # the whole file matches the explanation of a bug as readily as the bug,
+    # and every check below would pass on a window that had lost the lot.
+    #
+    # ⚠ INTO A FILE, not down a pipe. `set -o pipefail` is on, and `grep -q`
+    # closes the pipe the moment it matches — the sed feeding it takes a
+    # SIGPIPE, and the pipeline's status is that, so every check written as
+    # `strip | grep -q` FAILS EXACTLY WHEN IT MATCHES.
+    sed -e 's,^[[:space:]]*//.*,,' -e 's,^[[:space:]]*[*][^/]*,,' "$QML" > "$T/qml_code"
+
+    # ⛔ CUT, COPY AND PASTE ARE VERBS, NOT REGISTER KEYS. `"+y`, `"+d` and
+    # `"+p` are normal-mode commands, so every one of them needed the window to
+    # leave INSERT first — which is what disarmed Backspace and Ctrl+V for
+    # every key pressed afterwards. And `"+p` is vim's PUT: after the caret,
+    # a whole line when the register happens to be linewise, caret left ON the
+    # last character rather than past it. None of that is what Paste means in
+    # a window.
+    n=$(grep -cE '"\\?"[+*]' "$T/qml_code" || true)
+    [ "$n" = 0 ] && ok "the clipboard entries are protocol verbs, not register keys" \
+                 || bad "$n clipboard register key sequence(s) back in the QML"
+
+    for v in "gui copy" "gui cut" "gui paste" "gui insert" "gui visual" "gui delsel"; do
+        grep -q "\"$v\"" "$T/qml_code" \
+            && ok "the window sends \`$v\`" \
+            || bad "the window no longer sends \`$v\` — that operation is gone"
+    done
+
+    # Copy means the DESKTOP clipboard, and the engine is where the + register
+    # is reached. Checked in serve.c rather than the QML, because that is where
+    # it moved to.
+    grep -q "reg_set(e, '+'" "$(dirname "$0")/../src/serve.c" \
+        && ok "Copy still yanks to the desktop clipboard register" \
+        || bad "gui_copy no longer writes the + register"
+
+    # ⛔ NO Ctrl-<letter> FUNNEL. keyName() used to turn every Ctrl+letter into
+    # the engine's `<C-x>` notation, which is why Ctrl+V had never pasted:
+    # `<C-v>` is a BLOCK SELECTION. In insert mode it is worse — a control
+    # BYTE, written into the document.
+    grep -q 'String.fromCharCode(97' "$T/qml_code" \
+        && bad "the Ctrl+letter funnel is back — Ctrl+V is a block selection again" \
+        || ok "no Ctrl+letter reaches the engine's key table"
+
+    # ⛔ AND NO WINDOW SHORTCUT MAY BE SENT AS ONE EITHER. Removing the funnel
+    # is not enough on its own — a `sendKeys("<C-v>")` written by hand is the
+    # same block selection by another route. The one control key this window
+    # still sends is redo, which is not a shortcut: it IS the engine's redo,
+    # run from a window that has no other name for it.
+    n=$(grep -o '<C-[a-z]>' "$T/qml_code" | sort -u | tr '\n' ' ')
+    [ "$n" = "<C-r> " ] \
+        && ok "the only vim control key the window still sends is redo" \
+        || bad "vim control keys back in the QML: $n"
+
+    # The shortcuts every other program on the desktop has. A missing one here
+    # is a key that silently does nothing.
+    for pair in C:guiCopy X:guiCut V:guiPaste A:selectAll Z:undo Y:redo; do
+        grep -q "Qt.Key_${pair%%:*}.*${pair##*:}" "$T/qml_code" \
+            && ok "Ctrl+${pair%%:*} is wired to ${pair##*:}()" \
+            || bad "Ctrl+${pair%%:*} does nothing — ${pair##*:}() is not reached"
+    done
+
+    # ⛔ AND NOTHING MAY BE WRITTEN BEFORE THE ENGINE'S FIRST FRAME. A Process
+    # write made before the process spawns is dropped in silence, and the
+    # window makes several `view` calls that early — so `sent` sat five ahead
+    # of `acked` for the life of the window and the check above never trusted a
+    # frame again. Held in an outbox until the first frame proves the pipe is
+    # live. This one is invisible from outside: the window works, and one guard
+    # inside it has quietly stopped guarding.
+    sed -n '/function send(s)/,/^    }/p' "$T/qml_code" > "$T/sendfn"
+    grep -q 'root.engineUp' "$T/sendfn" && grep -q 'outbox' "$T/sendfn" \
+        && ok "the window holds its first writes until the engine can take them" \
+        || bad "send() writes before the engine is up — those writes are dropped"
+
+    # ⛔ THE RULE THAT MAKES THE WINDOW MODELESS. Every path that ends in
+    # NORMAL — an undo, a search finishing, a file opening, the engine's own
+    # first frame — is answered by one `gui insert` in the frame handler. Take
+    # it out and the window is modal again, silently, one gesture at a time.
+    sed -n '/tag === "E"/,/^        }/p' "$T/qml_code" > "$T/eframe"
+    grep -q 'guiInsert()' "$T/eframe" \
+        && ok "a frame reporting NORMAL puts the window back into INSERT" \
+        || bad "NORMAL is a resting state again — Backspace and Ctrl+V will stop working"
 
     # The Open dialogue lists with synfiles rather than reading a directory
     # itself, and falls back to :e when synfiles is not installed.
@@ -885,6 +962,23 @@ if [ -f "$QML" ]; then
     grep -q 'actKeys(m.keys)' "$QML" \
         && ok "...and so does every context-menu entry" \
         || bad "the context menu sends raw keys again"
+
+    # ⛔ NO MOUSE GESTURE MAY ESCAPE TO NORMAL. This is the bug itself: a
+    # double click sent `<Esc>viw` and a right click sent `<Esc>`, and nothing
+    # ever sent the window back — so after one of either, Backspace was `h` and
+    # would not join a line, and Ctrl+V was a block selection.
+    #
+    # actKeys() and promptWrite() are the two that legitimately escape, and
+    # both are checked above; the assertion here is that the POINTER paths do
+    # not. Counted rather than named, so a new one has to be looked at.
+    n=$(sed -n '/id: textMa/,/^            }/p' "$T/qml_code" | grep -c '<Esc>' || true)
+    [ "$n" = 0 ] && ok "no mouse gesture drops the window out of INSERT" \
+                 || bad "$n mouse path(s) escape to NORMAL — Backspace stops joining lines"
+
+    sed -n '/onDoubleClicked/,/^                }/p' "$T/qml_code" > "$T/dclick"
+    grep -q 'beginVisual' "$T/dclick" \
+        && ok "a double click selects through the engine's visual mode" \
+        || bad "the double click no longer starts a selection the mode-safe way"
 
     # The POINTER paths are deliberately NOT converted: a click, a drag, the
     # wheel and the scrollbar send motions, and making those leave insert mode
@@ -1109,6 +1203,153 @@ check "…without leaving VISUAL" $?
 # ordinary thing to do with a short file in a tall window.
 printf 'goto 999 999\nquit\n' | "$E" serve "$T/goto.txt" | gq '^S	line	1$'
 check "a click past the end of the file clamps" $?
+
+# ── the window has no modes ─────────────────────────────────────────────────
+#
+# ⛔ TWO SYMPTOMS, ONE BUG, AND THE ENGINE WAS RIGHT ABOUT BOTH OF THEM.
+# Reported 2026-08-27: Ctrl+Shift+V would not paste, and Backspace at the start
+# of line 2 would not join it onto line 1 — the arrow keys had to be used to
+# get there instead.
+#
+# Neither is a defect in vim.c. In NORMAL mode Backspace IS `h`, a motion that
+# stops dead at column 0 and has never joined a line, and Ctrl+V IS `<C-v>`, a
+# block selection. Both are the correct answers to a window that had silently
+# left INSERT — which every mouse gesture did: a double click sent `<Esc>viw`,
+# a right click sent `<Esc>`, and nothing ever sent the window back.
+#
+# The window is modeless now. These pin the verbs that make it so; the checks
+# on the QML further up pin that the window actually uses them.
+printf 'line one\nline two\nline three\n' > "$T/mless.txt"
+
+# The resting state. `gui insert` is what the window sends whenever a frame
+# reports NORMAL, and it must reach INSERT from every mode there is.
+printf 'gui insert\nquit\n' | "$E" serve "$T/mless.txt" | gq '^S	mode	INSERT$'
+check "gui insert reaches INSERT from NORMAL" $?
+
+printf 'keys v\ngui insert\nquit\n' | "$E" serve "$T/mless.txt" | gq '^S	mode	INSERT$'
+check "…and from VISUAL" $?
+
+# ⚠ AND IT DROPS THE SELECTION WITHOUT DELETING IT. This is Escape, and a
+# window whose Escape ate the selected text would be a window nobody could use.
+printf 'keys vll\ngui insert\nquit\n' | "$E" serve "$T/mless.txt" |
+    gq '^L	1	line%20one$'
+check "…leaving the selected text alone — Escape is not a delete" $?
+
+# THE REPORTED BUG, end to end: double-click a word on line 2, then Backspace
+# until the lines join. The double click is `gui visual` + `iw`, and the
+# Backspace that follows must be an INSERT backspace.
+printf 'gui insert\ngoto 2 1\ngui visual\nkeys iw\ngui delsel\nkeys <BS>\nquit\n' |
+    "$E" serve "$T/mless.txt" | gq '^L	1	line%20one%20two$'
+check "Backspace joins line 2 onto line 1 after a double click" $?
+
+# The same thing the old way, to show what was actually happening. `<Esc>viw`
+# then Backspace is `h`: it moves the caret and changes nothing.
+printf 'keys i\ngoto 2 1\nkeys <Esc>\nkeys viw\nkeys <BS>\nquit\n' |
+    "$E" serve "$T/mless.txt" | gqv '^L	1	line%20one%20two$'
+check "…and the old <Esc>viw spelling really did leave Backspace as a motion" $?
+
+# `gui visual` anchors AT the caret. `<Esc>v` did not: leaving insert moves the
+# caret one column left, so a selection begun while typing was off by one every
+# time — and only at the moment a drag started, which is why nobody caught it.
+printf 'gui insert\ngoto 1 5\ngui visual\nquit\n' | "$E" serve "$T/mless.txt" |
+    gq '^S	sel_x0	4$'
+check "gui visual anchors at the caret, not one column left of it" $?
+
+printf 'keys i\ngoto 1 5\nkeys <Esc>\nkeys v\nquit\n' | "$E" serve "$T/mless.txt" |
+    gqv '^S	sel_x0	4$'
+check "…which the old <Esc>v spelling got wrong" $?
+
+# Typing over a selection replaces it. The window sends `gui delsel` and then
+# the key, so the engine decides what Backspace means rather than the QML.
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui delsel\nkeys X\nquit\n' |
+    "$E" serve "$T/mless.txt" | gq '^L	1	X%20one$'
+check "typing over a selection replaces it" $?
+
+printf 'gui insert\ngui delsel\nquit\n' | "$E" serve "$T/mless.txt" |
+    gq '^L	1	line%20one$'
+check "…and gui delsel with nothing selected changes nothing" $?
+
+# ── cut, copy and paste ─────────────────────────────────────────────────────
+#
+# ⚠ RUN WITH AN EMPTY PATH, ON PURPOSE. The + register IS the desktop
+# clipboard: vim.c shells out to wl-copy and wl-paste to reach it, and have_cmd
+# needs PATH to find them. With no PATH neither is found, the documented
+# fallback makes + an ordinary private register, and the verbs are exercised
+# without a test suite overwriting the clipboard of whoever ran it.
+CLIP="env PATH= $E"
+
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui copy\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^S	mode	VISUAL$'
+check "Copy leaves the selection selected, the way every other program does" $?
+
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui cut\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^L	1	%20one$'
+check "Cut takes the selection out" $?
+
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui cut\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^S	mode	INSERT$'
+check "…and leaves the window able to type again" $?
+
+# ⚠ AT THE END OF THE LINE, which is the case a mode change silently gets
+# wrong: NORMAL clamps the caret to the last CHARACTER, so a paste that entered
+# insert mode after placing the caret would land one column short. `line two`
+# is eight characters, so column 9 is the end of it.
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui cut\ngoto 2 9\ngui paste\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^L	2	line%20twoline$'
+check "Paste puts it back where the caret is" $?
+
+# ⚠ WHERE THE CARET LANDS IS THE HALF THAT `"+p` GOT WRONG. Put is vim's: it
+# goes AFTER the caret and leaves it on the last character pasted. A window's
+# paste leaves the caret past the end of what it just inserted, or typing on
+# does not continue from where you are looking.
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui cut\ngoto 2 9\ngui paste\nkeys Z\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^L	2	line%20twolineZ$'
+check "…with the caret after it, so typing carries straight on" $?
+
+# Pasting over a selection replaces it, and is ONE undo step rather than a
+# delete the user has to undo twice.
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui copy\ngoto 2 1\ngui visual\nkeys iw\ngui paste\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^L	2	line%20two$'
+check "Paste over a selection replaces it" $?
+
+printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui copy\ngoto 2 1\ngui visual\nkeys iw\ngui paste\nkeys <Esc>\nkeys u\nquit\n' |
+    $CLIP serve "$T/mless.txt" | gq '^L	2	line%20two$'
+check "…and undoes in one step" $?
+
+# With nothing selected the line is the unit, which is what a menu entry with
+# nothing selected has to pick anyway — better than a Copy that does nothing.
+printf 'gui insert\ngoto 2 1\ngui cut\nquit\n' | $CLIP serve "$T/mless.txt" |
+    gq '^S	lines	2$'
+check "Cut with no selection takes the line" $?
+
+# An empty clipboard must not leave the window somewhere it cannot type.
+printf 'gui insert\ngui paste\nquit\n' | $CLIP serve "$T/mless.txt" |
+    gq '^S	mode	INSERT$'
+check "an empty clipboard still leaves the window in INSERT" $?
+
+# Find and Replace put the caret on the ENGINE's command line, and that is
+# where a paste has to land — pasting a search term into the document behind an
+# open prompt is the same mistake as the mouse coordinates that used to be
+# typed into it.
+printf 'keys "+yy\nkeys <Esc>\nkeys /\ngui paste\nquit\n' | $CLIP serve "$T/mless.txt" |
+    gq '^S	cmdline	/line%20one$'
+check "Paste with a prompt open goes into the prompt" $?
+
+printf 'keys "+yy\nkeys <Esc>\nkeys /\ngui paste\nquit\n' | $CLIP serve "$T/mless.txt" |
+    gq '^S	mode	COMMAND$'
+check "…and does not drag the window out of it" $?
+
+# ⚠ AND THE NEWLINE A LINEWISE YANK CARRIES IS DROPPED, not typed. A newline on
+# the command line SUBMITS it — a pasted pattern would run a substitution
+# nobody had finished writing.
+printf 'keys "+yy\nkeys <Esc>\nkeys /\ngui paste\nquit\n' | $CLIP serve "$T/mless.txt" |
+    gq '^S	lines	3$'
+check "…and a pasted newline does not run the command" $?
+
+# An unknown gui op is reported rather than silently ignored — a verb added to
+# the QML and not to serve.c would otherwise be a button that does nothing.
+printf 'gui nonesuch\nquit\n' | "$E" serve "$T/mless.txt" | gq '^S	msgerr	1$'
+check "an unknown gui verb is an error, not a silent no-op" $?
 
 # ── report ──────────────────────────────────────────────────────────────────
 

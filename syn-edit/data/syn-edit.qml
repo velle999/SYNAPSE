@@ -247,11 +247,26 @@ FloatingWindow {
     // keystroke, which looks exactly like the editor being slow.
     property var pending: ({ st: ({}), lines: [], spans: ({}), bufs: [] })
 
-    // A vim-modal engine starts in NORMAL, which reads as "the editor is
-    // broken" to someone who opens it and types: nothing appears. Fired once,
-    // off the FIRST frame only — after that, leaving INSERT is something the
-    // user did on purpose and no button gets to second-guess it.
-    property bool startupInsertSent: false
+    // ── Is the window looking at an up-to-date answer? ─────────────────────
+    //
+    // Every command is answered by exactly one frame, and every frame carries
+    // the serial of the command that produced it. So `sent === acked` means
+    // there is nothing in flight and the last frame is current.
+    //
+    // ⚠ THIS EXISTS BECAUSE A SELECTION IS A FRAME BEHIND. Shift+Right and
+    // then a letter, typed as fast as anybody types, asks "is something
+    // selected?" before the frame that says so has arrived — and a false
+    // answer there is a typed character that did not replace the selection it
+    // looked like it was replacing. While a command is in flight, what the
+    // window ASKED FOR is the better answer than what it last saw, so `hasSel`
+    // reads selHint instead. Nothing sets selHint optimistically true unless
+    // the window has just asked for a selection, so the answer can only ever
+    // err towards "yes" — and `gui delsel` with nothing selected is a no-op.
+    property int sent: 0
+    property int acked: 0
+    property bool selHint: false
+    readonly property bool hasSel: root.sent === root.acked ? root.isVisual
+                                                            : root.selHint
 
     function disp(s) {
         // decodeURIComponent THROWS on a percent sequence that is not valid
@@ -280,6 +295,11 @@ FloatingWindow {
             root.pending.bufs.push({ idx: parseInt(f[1]), name: root.disp(f[2] || ""),
                                      modified: f[3] === "1", current: f[4] === "1" })
         } else if (tag === "E") {
+            // Every frame answers exactly one command and carries its serial,
+            // INCLUDING the scan frame dropped below — an ack that skipped it
+            // would leave the window permanently believing it was a command
+            // behind, and `hasSel` would never trust a frame again.
+            root.acked = parseInt(f[1])
             /* ⚠ A SCAN'S FRAME MUST NOT BE DRAWN. It is the whole buffer — the
              * renderer would lay out every line of the file for one frame, and
              * on a large file that is a visible stall for a panel that is only
@@ -302,11 +322,31 @@ FloatingWindow {
             root.bufs = root.pending.bufs
             root.pending = ({ st: ({}), lines: [], spans: ({}), bufs: [] })
             root.engineUp = true
-            if (!root.startupInsertSent) {
-                root.startupInsertSent = true
-                if ((root.st.mode || "NORMAL") === "NORMAL") root.sendKeys("i")
+            if (root.outbox.length > 0) {
+                const held = root.outbox
+                root.outbox = []
+                for (const c of held) root.send(c)
             }
-            if (root.st.quit === "1") Qt.quit()
+            if (root.st.quit === "1") { Qt.quit(); return }
+
+            /* ⛔ NORMAL IS NOT A RESTING STATE IN THIS WINDOW. The engine is
+             * modal and this window is not, so every path that ends in normal
+             * mode — the editor's own first frame, an undo, a search
+             * finishing, a file opening, a task being ticked — used to leave
+             * it there, and the next key pressed was a vim command rather than
+             * a character. That is one bug with a dozen call sites, and the
+             * two that were reported are both of them: NORMAL-mode Backspace
+             * is `h`, a motion that stops at column 0 and cannot join a line,
+             * and Ctrl+V is `<C-v>`, a block selection.
+             *
+             * Answering it HERE rather than at each of those call sites is
+             * what makes the rule hold for the ones added later.
+             *
+             * ⚠ Not a loop: `gui insert` always ends in INSERT, so the frame
+             * it produces does not ask again. A SELECTION is visual mode and
+             * is left alone, and so is the engine's command line — those are
+             * states the user asked to be in. */
+            if ((root.st.mode || "NORMAL") === "NORMAL") root.guiInsert()
         }
     }
 
@@ -329,9 +369,54 @@ FloatingWindow {
         onExited: Qt.quit()
     }
 
-    function send(s) { eng.write(s + "\n") }
+    // ⛔ NOTHING MAY BE WRITTEN BEFORE THE ENGINE'S FIRST FRAME. A Process
+    // write made before the process has actually spawned is DROPPED, in
+    // silence — and the window makes several: `view 0 <rows>` on completion,
+    // and one more each time the layout settles on a row count. Five of them
+    // went nowhere, which left `sent` five ahead of `acked` for the whole life
+    // of the window and `hasSel` above permanently reading the hint instead of
+    // the frame. It only ever worked because a later onRowsChanged said the
+    // same thing again, after the process was up.
+    //
+    // Held until the first frame proves the pipe is live, then flushed in
+    // order. The engine emits that frame before it reads anything, so the wait
+    // is bounded by the fork and not by anything the user does.
+    property var outbox: []
+    function send(s) {
+        if (!root.engineUp) { root.outbox.push(s); return }
+        root.sent++
+        eng.write(s + "\n")
+    }
     function sendKeys(k) { root.send("keys " + encodeURIComponent(k)) }
     function sendEx(c)   { root.send("ex " + encodeURIComponent(c)) }
+
+    // ── The modeless verbs ──────────────────────────────────────────────────
+    //
+    // ⛔ THE WINDOW HAS NO MODES AND THE ENGINE DOES. These are the whole of
+    // the translation, and each one is a PROTOCOL VERB rather than a key
+    // sequence for the reason gotoPos is (see below, and serve.c): a key
+    // sequence has to know which mode it will be read in, and the window has
+    // spent its whole life not knowing. The verb states the mode it leaves
+    // behind instead, so no caller here has to think about it.
+    //
+    // selHint is set alongside each one because the answer will not be in a
+    // frame for another round trip — see `hasSel` above.
+    function guiInsert() { root.selHint = false; root.send("gui insert") }
+    function guiDelsel() { root.selHint = false; root.send("gui delsel") }
+    function guiVisual() { root.selHint = true;  root.send("gui visual") }
+    function guiCut()    { root.selHint = false; root.send("gui cut") }
+    function guiPaste()  { root.selHint = false; root.send("gui paste") }
+    // Copy alone does NOT touch the selection, here or in the engine: every
+    // other program on the desktop leaves what you copied still selected.
+    function guiCopy()   { root.send("gui copy") }
+
+    // Select All, Undo and Redo stay the engine's own commands — there is no
+    // undo stack in this file and there is not going to be one. actKeys()
+    // leaves insert first; the frame that comes back reports NORMAL, and the
+    // rule in onRecord puts the window back into INSERT.
+    function selectAll() { root.selHint = true;  root.actKeys("ggVG") }
+    function undo()      { root.selHint = false; root.actKeys("u") }
+    function redo()      { root.selHint = false; root.actKeys("<C-r>") }
 
     // The file browser needs a directory reader, and synfiles is it. Probed
     // rather than assumed: it is an optdepend, and `sh -c 'command -v …'` can
@@ -377,16 +462,18 @@ FloatingWindow {
         root.send("goto " + Math.max(1, line) + " " + Math.max(1, col))
     }
 
-    // Start a selection if there is not one already. `v` toggles, so sending
-    // it blind would CANCEL the selection half the time.
+    // Start a selection if there is not one already.
     //
-    // ⚠ AND IT IS A LETTER. In insert mode `v` is not "enter visual mode", it
-    // is the character v — which is how a drag that began while typing used to
-    // leave one in the document before selecting nothing.
+    // ⛔ THIS WAS `<Esc>v` AND BOTH HALVES WERE WRONG. `v` is a letter in
+    // insert mode, so a drag begun while typing left one in the document and
+    // then selected nothing — and the `<Esc>` that was added to stop it moves
+    // the caret one column LEFT (vim's rule, see leave_insert), so the
+    // selection anchored one character to the left of the caret the user could
+    // see. `gui visual` enters visual from whatever mode it finds and leaves
+    // the caret exactly where it is.
     function beginVisual() {
-        if (root.isVisual) return
-        if (root.inserting) root.sendKeys("<Esc>")
-        root.sendKeys("v")
+        if (root.hasSel) return
+        root.guiVisual()
     }
 
     // The keys Shift turns into a selection. Everything here is a MOTION —
@@ -412,10 +499,7 @@ FloatingWindow {
     // deliberately no table of "what this key does" here: that table is
     // vim.c, and a second one would be a second editor.
     function keyName(event) {
-        const k = event.key
-        const mod = event.modifiers
-
-        switch (k) {
+        switch (event.key) {
         case Qt.Key_Escape:    return "<Esc>"
         case Qt.Key_Return:
         case Qt.Key_Enter:     return "<CR>"
@@ -433,10 +517,15 @@ FloatingWindow {
         case Qt.Key_Insert:    return "<Insert>"
         }
 
-        // Ctrl-<letter> is the control code, which is what the engine and a
-        // terminal both mean by it.
-        if ((mod & Qt.ControlModifier) && k >= Qt.Key_A && k <= Qt.Key_Z)
-            return "<C-" + String.fromCharCode(97 + k - Qt.Key_A) + ">"
+        // ⛔ NO Ctrl-<letter> BRANCH. This used to return "<C-v>", "<C-a>" and
+        // the rest, which is what a terminal means by them — and it is why
+        // Ctrl+V had never pasted in this window: `<C-v>` is a BLOCK
+        // SELECTION. A modeless window has no mode for a vim control key to
+        // run in, so Ctrl is answered as a GUI shortcut before anything gets
+        // here (see Keys.onPressed) and never reaches the engine's key table.
+        //
+        // Letting one through would be worse than useless: in insert mode a
+        // control code is a BYTE, written into the document.
 
         // A bare modifier press has no text and must not be forwarded, or
         // holding Shift to type a capital sends a stray key first.
@@ -735,12 +824,12 @@ FloatingWindow {
                                  onTriggered: root.saveAs() }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
-                    ToolButton { label: "Undo"; tip: "u";                   onTriggered: root.actKeys("u") }
-                    ToolButton { label: "Redo"; tip: "Ctrl-R";              onTriggered: root.actKeys("<C-r>") }
+                    ToolButton { label: "Undo"; tip: "Ctrl+Z";       onTriggered: root.undo() }
+                    ToolButton { label: "Redo"; tip: "Ctrl+Shift+Z"; onTriggered: root.redo() }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
-                    ToolButton { label: "Find"; tip: "/";                   onTriggered: root.actKeys("/") }
-                    ToolButton { label: "Replace"; tip: ":%s/…/…/g";        onTriggered: root.actKeys(":%s/") }
+                    ToolButton { label: "Find"; tip: "Ctrl+F";       onTriggered: root.actKeys("/") }
+                    ToolButton { label: "Replace"; tip: "Ctrl+R";    onTriggered: root.actKeys(":%s/") }
                 }
             }
 
@@ -876,38 +965,105 @@ FloatingWindow {
             onRowsChanged: root.send("view " + root.top + " " + rows)
             Component.onCompleted: root.send("view 0 " + rows)
 
+            // ── Keys, in a window that has no modes ────────────────────
+            //
+            // ⛔ EVERY KEY IS ANSWERED AS A GUI KEY FIRST, and only what is
+            // left over reaches the engine's key table — which this window now
+            // guarantees is always reached in INSERT.
+            //
+            // The two symptoms this was written for were one bug. Ctrl+V had
+            // never pasted, because `<C-v>` is a block selection; and
+            // Backspace at the start of line 2 did nothing, because NORMAL
+            // Backspace is `h`, a motion that stops dead at column 0. Both are
+            // correct vim, and neither is what this window means — it had
+            // silently left INSERT, which every mouse gesture used to do.
+            //
+            // ⚠ THE TERMINAL FRONT-END IS UNTOUCHED AND STILL FULLY MODAL.
+            // `syn-edit` in a terminal is vim; none of this is reachable from
+            // it, and tui.c hands raw keys straight to the engine.
             Keys.onPressed: (event) => {
-                // Shift+<motion> selects. This is the one meaning the window
-                // adds that the engine's key table does not have — and it adds
-                // it by pressing `v` first, not by keeping a selection of its
-                // own. In INSERT mode it deliberately does NOT: `v` is a
-                // letter there, and an editor that jumped out of insert mode
-                // because Shift was held would be worse than one that just
-                // moves the caret.
-                // Ctrl+S saves. The engine has no such binding — it is a
-                // window convention, and the same kind of translation as
-                // Shift+Arrow below: it runs the editor's own write, it does
-                // not implement one.
-                if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S
-                    && !root.inCmd) {
-                    root.saveNow()
+                const mod = event.modifiers
+                const k = event.key
+                const ctrl = (mod & Qt.ControlModifier) !== 0
+
+                // Find and Replace put the caret on the ENGINE's command line,
+                // and it owns every key until it is done — Escape included.
+                // The frame it leaves behind reports NORMAL, which is what
+                // puts the window back into INSERT; there is no second copy of
+                // that rule here.
+                if (root.inCmd) {
+                    // ⚠ EXCEPT PASTE. Pasting a search term is the ordinary
+                    // reason to have a Find box open at all, and the engine
+                    // knows to put it on the command line rather than in the
+                    // document (see gui_paste in serve.c).
+                    if (ctrl && k === Qt.Key_V) { root.guiPaste(); event.accepted = true; return }
+                    const c = root.keyName(event)
+                    if (c !== "") { root.sendKeys(c); event.accepted = true }
+                    return
+                }
+
+                if (ctrl) {
+                    event.accepted = true
+                    switch (k) {
+                    case Qt.Key_S: root.saveNow();   return
+                    case Qt.Key_C: root.guiCopy();   return
+                    case Qt.Key_X: root.guiCut();    return
+                    // Ctrl+Shift+V arrives here too, and means the same thing:
+                    // this window pastes plain text and has nothing else to
+                    // offer, so the two are not worth telling apart.
+                    case Qt.Key_V: root.guiPaste();  return
+                    case Qt.Key_A: root.selectAll(); return
+                    case Qt.Key_Z: (mod & Qt.ShiftModifier) ? root.redo() : root.undo(); return
+                    case Qt.Key_Y: root.redo();      return
+                    // Find and Replace open the engine's own command line
+                    // prefilled, exactly as the toolbar buttons do — the
+                    // typing is the editor's, not a text field written here.
+                    case Qt.Key_F: root.actKeys("/");     return
+                    case Qt.Key_R: root.actKeys(":%s/");  return
+                    case Qt.Key_N: root.send("new");      return
+                    case Qt.Key_O: browser.show();        return
+                    }
+                    // ⛔ EVERY OTHER Ctrl COMBINATION IS SWALLOWED, not passed
+                    // on. It used to become `<C-x>` — a vim command, in a
+                    // window with no mode to run one in, and in insert mode a
+                    // control BYTE written into the document.
+                    return
+                }
+
+                if (k === Qt.Key_Escape) {
+                    // Escape drops the selection and nothing else. It does NOT
+                    // go back to NORMAL: there is no normal mode to go back to
+                    // in this window, and an Escape that quietly disarmed
+                    // Backspace and Ctrl+V is the bug this file was rewritten
+                    // for.
+                    root.guiInsert()
                     event.accepted = true
                     return
                 }
 
-                const motion = root.motionKey(event.key)
-                if (motion !== "" && (event.modifiers & Qt.ShiftModifier)
-                    && !root.inserting && !root.inCmd) {
-                    root.beginVisual()
+                const motion = root.motionKey(k)
+                if (motion !== "") {
+                    // Shift+<motion> extends a selection, a plain motion
+                    // collapses one — which is what they do in every other
+                    // editor, and neither is a selection kept in this file.
+                    // The engine's visual mode IS the selection.
+                    if (mod & Qt.ShiftModifier)   root.beginVisual()
+                    else if (root.hasSel)         root.guiInsert()
                     root.sendKeys(motion)
                     event.accepted = true
                     return
                 }
-                const k = root.keyName(event)
-                if (k !== "") {
-                    root.sendKeys(k)
-                    event.accepted = true
-                }
+
+                const key = root.keyName(event)
+                if (key === "") return
+                // Typing, Backspace or Delete over a selection replaces it.
+                // Told to the engine as its own command so that the window
+                // never has to decide whether Backspace here means "delete
+                // what is selected" or "join these two lines" — one of those
+                // answers is a selection model living in this file.
+                if (root.hasSel) root.guiDelsel()
+                root.sendKeys(key)
+                event.accepted = true
             }
 
             MouseArea {
@@ -934,30 +1090,25 @@ FloatingWindow {
                         // Right-click INSIDE a selection keeps it — "copy
                         // these three lines" is the whole reason they are
                         // selected. Outside one it moves the caret first, the
-                        // way a left click does — but unlike a left click this
-                        // one always opens a menu rather than continuing to
-                        // type, so it can leave INSERT first.
+                        // way a left click does.
                         //
-                        // ⚠ THE ESCAPE IS FOR THE MENU NOW, NOT FOR THE MOVE.
-                        // It was added because gotoPos sent raw `NG N|` keys,
-                        // which insert mode typed — right-click ▸ Paste read
-                        // as "pasting mouse code" because the click itself had
-                        // just typed it. gotoPos is a protocol verb since, and
-                        // is safe in any mode; what is left here is the menu's
-                        // own preference for acting from normal mode.
-                        if (!root.isVisual) {
-                            if (root.inserting) root.sendKeys("<Esc>")
+                        // ⛔ AND IT NO LONGER ESCAPES TO NORMAL FIRST. The
+                        // escape was here because the menu's entries were vim
+                        // keys and needed a mode to run in — a right click
+                        // therefore disarmed Backspace and Ctrl+V for every
+                        // key pressed after it. The entries are protocol verbs
+                        // now, so the mode is nobody's business here.
+                        if (!root.hasSel)
                             root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
-                        }
                         ctxMenu.openAt(m.x, m.y)
                         return
                     }
                     // A fresh click drops any selection: press, drag, release
-                    // is one gesture and it starts from nothing. Only when
-                    // there IS one — <Esc> in normal mode is harmless, but in
-                    // INSERT it would throw the user out of insert mode for
-                    // clicking somewhere, which no editor does.
-                    if (root.isVisual) root.sendKeys("<Esc>")
+                    // is one gesture and it starts from nothing. It drops it
+                    // without DELETING it, and without leaving insert — the
+                    // caret does not move either, because gotoPos below is
+                    // what moves it.
+                    if (root.hasSel) root.guiInsert()
                     root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
                     textMa.dragging = true
                 }
@@ -984,14 +1135,16 @@ FloatingWindow {
                 onDoubleClicked: (m) => {
                     if (m.button !== Qt.LeftButton) return
                     root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
-                    // ⚠ AND THIS ONE DOES LEAVE INSERT, unlike the click that
-                    // positioned the caret above. `viw` is a selection, and a
-                    // selection is visual mode — there is no such thing as
-                    // selecting a word while still inserting. Without the
-                    // escape the three letters were simply typed, which is
-                    // the `viw` in the middle of the reported mess.
-                    if (root.inserting) root.sendKeys("<Esc>")
-                    root.sendKeys("viw")
+                    // ⛔ THIS WAS `<Esc>viw` AND IT IS HALF THE BUG REPORT.
+                    // The escape left the window in NORMAL and nothing ever
+                    // put it back — so after one double click, Backspace was
+                    // `h` and would not join line 2 to line 1, and Ctrl+V was
+                    // a block selection. `gui visual` enters visual from
+                    // whatever mode it finds and leaves the caret alone; `iw`
+                    // is then the engine's own idea of a word, read in the
+                    // mode where it is a text object rather than typed.
+                    root.beginVisual()
+                    root.sendKeys("iw")
                 }
 
                 onWheel: (w) => {
@@ -1113,10 +1266,16 @@ FloatingWindow {
                 visible: !root.inCmd && root.lines.length > 0
                 x: root.gutterW + (root.curDcol - 1) * root.charW
                 y: (root.curLine - root.top - 1) * root.lineH
-                width: root.inserting ? Math.max(2, Math.round(root.charW / 8)) : root.charW
+                // A BAR while typing and a BLOCK otherwise, which is the
+                // convention every editor shares — and here it is the only
+                // thing on screen that tells overwrite apart from insert.
+                // ⚠ Not root.inserting: that is true in REPLACE too, so
+                // overwrite drew the caret of the mode it is not.
+                width: root.st.mode === "INSERT" ? Math.max(2, Math.round(root.charW / 8))
+                                                 : root.charW
                 height: root.lineH
                 color: root.cAccent
-                opacity: editor.activeFocus ? (root.inserting ? 0.9 : 0.45) : 0.25
+                opacity: editor.activeFocus ? (root.st.mode === "INSERT" ? 0.9 : 0.45) : 0.25
             }
         }
 
@@ -1212,16 +1371,32 @@ FloatingWindow {
                 height: Math.round(root.ui(26))
                 spacing: 0
 
+                // ⚠ THE WINDOW'S WORDS, NOT THE ENGINE'S. This front-end is
+                // modeless, so "INSERT" is not news and "VISUAL" is not what
+                // anything else on the desktop calls a selection. The two
+                // states worth a chip are the ones that change what a key
+                // does: something is selected, or typing overwrites.
+                //
+                // NORMAL is still shown as itself if it ever appears. It
+                // should not — onRecord puts the window straight back into
+                // INSERT — and a chip that hid it would hide the return of
+                // exactly the bug this was written for.
                 Rectangle {
+                    readonly property string label: {
+                        const m = root.st.mode || "INSERT"
+                        if (m === "REPLACE") return "OVERWRITE"
+                        if (m.indexOf("V") === 0) return "SELECT"
+                        return m
+                    }
                     width: modeText.implicitWidth + 20
                     height: parent.height
-                    color: root.inserting ? root.cGood
+                    color: root.st.mode === "INSERT" ? root.cGood
                          : (root.st.mode || "").indexOf("V") === 0 ? root.cWarn
                          : root.cAccent
                     Text {
                         id: modeText
                         anchors.centerIn: parent
-                        text: root.st.mode || "NORMAL"
+                        text: parent.label
                         font.family: root.uiFont
                         font.pixelSize: root.ui(11)
                         font.bold: true
@@ -1301,16 +1476,23 @@ FloatingWindow {
 
         // ── the context menu ────────────────────────────────────────────────
         //
-        // Every entry is a KEY SEQUENCE, and that is the whole design of it:
-        // Copy is `"+y`, not a copy implemented here. The + register is the
-        // desktop clipboard already (vim.c shells out to wl-copy/wl-paste), so
-        // Copy in this menu means what Copy means everywhere else on the
-        // desktop — while still being the editor's own yank, with its own idea
-        // of what a line is.
+        // Nothing here is implemented in this file: an entry is either a
+        // protocol verb or the engine's own keys. The clipboard is the
+        // desktop's, because the + register is (vim.c shells out to
+        // wl-copy/wl-paste), so Copy here means what Copy means everywhere
+        // else while still being the editor's own yank.
         //
-        // With no selection the line is the unit, which is what vim does and
-        // what a menu with nothing selected has to pick anyway: `"+yy` beats a
-        // greyed-out Copy.
+        // ⛔ CUT, COPY AND PASTE ARE NO LONGER `"+d`, `"+y` AND `"+p`. Those
+        // are normal-mode keys, so every one of them needed the right-click to
+        // escape out of insert first — which is what left the window in a mode
+        // where Backspace could not join a line. And `"+p` is vim's PUT: it
+        // lands after the caret, takes a whole line whenever the register
+        // happens to be linewise, and leaves the caret on the last character
+        // rather than after it, none of which is what Paste means in a window.
+        //
+        // With no selection Cut and Copy take the line, which is what a menu
+        // with nothing selected has to pick anyway — better than a greyed-out
+        // entry.
         MouseArea {
             anchors.fill: parent
             visible: ctxMenu.open
@@ -1347,16 +1529,18 @@ FloatingWindow {
 
                 Repeater {
                     model: {
-                        const sel = root.isVisual
+                        const sel = root.hasSel
                         return [
-                            { label: "Cut",   keys: sel ? "\"+d" : "\"+dd", hint: sel ? "" : "line" },
-                            { label: "Copy",  keys: sel ? "\"+y" : "\"+yy", hint: sel ? "" : "line" },
-                            { label: "Paste", keys: "\"+p", hint: "" },
+                            { label: sel ? "Cut" : "Cut line",
+                              keys: "", act: "cut", hint: "Ctrl+X" },
+                            { label: sel ? "Copy" : "Copy line",
+                              keys: "", act: "copy", hint: "Ctrl+C" },
+                            { label: "Paste", keys: "", act: "paste", hint: "Ctrl+V" },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Select All", keys: "ggVG", hint: "" },
+                            { label: "Select All", keys: "", act: "selectall", hint: "Ctrl+A" },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Undo", keys: "u", hint: "u" },
-                            { label: "Redo", keys: "<C-r>", hint: "Ctrl+R" },
+                            { label: "Undo", keys: "", act: "undo", hint: "Ctrl+Z" },
+                            { label: "Redo", keys: "", act: "redo", hint: "Ctrl+Shift+Z" },
                             { label: "-", keys: "", hint: "" },
                             // Task list. `o- [ ] ` deliberately LEAVES the
                             // engine in INSERT with the caret after the bracket:
@@ -1372,8 +1556,8 @@ FloatingWindow {
                               keys: "", act: "tasktoggle", hint: "",
                               off: root.taskAtCaret() === null },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Find…", keys: "/", hint: "/" },
-                            { label: "Replace…", keys: ":%s/", hint: "" },
+                            { label: "Find…", keys: "/", hint: "Ctrl+F" },
+                            { label: "Replace…", keys: ":%s/", hint: "Ctrl+R" },
                             { label: "-", keys: "", hint: "" },
                             { label: "Open…", keys: "", act: "open", hint: "" },
                             { label: "Save", keys: "", act: "save", hint: "Ctrl+S" },
@@ -1430,7 +1614,13 @@ FloatingWindow {
                                     editor.forceActiveFocus()
                                     const m = ctxItem.modelData
                                     if (m.off)                   return
-                                    if (m.act === "open")        browser.show()
+                                    if (m.act === "cut")         root.guiCut()
+                                    else if (m.act === "copy")   root.guiCopy()
+                                    else if (m.act === "paste")  root.guiPaste()
+                                    else if (m.act === "selectall") root.selectAll()
+                                    else if (m.act === "undo")   root.undo()
+                                    else if (m.act === "redo")   root.redo()
+                                    else if (m.act === "open")   browser.show()
                                     else if (m.act === "save")   root.saveNow()
                                     else if (m.act === "saveas") root.saveAs()
                                     else if (m.act === "tasks")  tasksPanel.show()

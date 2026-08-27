@@ -315,7 +315,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
 | **`synfiles`** | The file manager, and what a folder opens in. One C binary does the work — listing, properties, search, trash, undo, archives — and three front-ends render what it prints: a quickshell window with tabs, split view, thumbnails and drag-and-drop (`synfiles gui`), an arrow-key browser in the terminal for a machine whose desktop will not start (`synfiles tui`), and the commands themselves. Delete means the XDG trash, and anything that changed files can be undone — the permanent delete is behind `--yes` and no key or click reaches it. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
 | **`syn-settings`** | The settings app. Displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, default applications, where configuration actually lives, and **the machine's own name** — every SynapseOS install answers to `synapse`, so two of them on one network means Avahi renames one `synapse-2.local` with no say in which, and renaming used to be a `hostnamectl` one-liner rather than a row anywhere. It reports what the system *reports* — every pane reads the real source (`localectl`, `timedatectl`, `wlr-randr`, `rfkill`, `bootctl`, `/etc/fstab`) rather than a cache of its own — and each row says **which file decided it**, so a setting that came from a fallback does not read like one you chose. The Kernel pane installs, removes and switches kernels on all three bootloaders. `syn-settings gui [pane]`, or `--rec <pane>` for the records the window parses. |
-| **`syn-edit`** | The text editor. One modal engine — press `i` to insert, `Escape` to stop, `:w` to write — driving a terminal editor, a graphical window, and a scripting mode with no terminal at all: `syn-edit run -k 'ggdG'` or `-c '%s/a/b/g'` applies keys and ex commands to a file and prints the result, which is how its own test suite drives it. Syntax highlighting, and it guesses the language from the file. |
+| **`syn-edit`** | The text editor. One engine behind a terminal editor, a graphical window, and a scripting mode with no terminal at all: `syn-edit run -k 'ggdG'` or `-c '%s/a/b/g'` applies keys and ex commands to a file and prints the result, which is how its own test suite drives it. The engine is modal — `i` to insert, `Escape` to stop, `:w` to write — and the **window is not**: it never leaves insert, `Ctrl`+`C`/`X`/`V` are the clipboard, `Ctrl`+`Z` and `Ctrl`+`Shift`+`Z` undo and redo, `Ctrl`+`A` selects all, `Ctrl`+`F` and `Ctrl`+`R` find and replace, typing over a selection replaces it, and Backspace at the start of a line joins it onto the one above. The terminal editor stays fully modal. Syntax highlighting, and it guesses the language from the file. |
 | **`syntty`** | The terminal, and the default one. A Wayland terminal that **links no GL at all** — wl_shm, xdg-shell, xkbcommon and libc; cells become pixels on the CPU in the exact format a compositor wants. 359 KB, up in 5.8 ms, and it repaints only what changed (68× less work than a full frame at 4K). Tabs, the alternate screen, the pointer, copy and paste, a config file, the kitty keyboard and graphics protocols, and OSC 133 prompt marks that `synsh` emits at the other end. It matters on the ISO regardless of which terminal is default: a GL context is the one thing a live image cannot count on across unfamiliar hardware, and a rescue disk that cannot open a prompt cannot rescue anything. |
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
 | **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
@@ -737,9 +737,8 @@ syn-settings set hostname loft # …including the machine's name
 
 ### Editing text
 
-**`syn-edit`** is the editor: one modal engine — `i` to insert, `Escape` to
-stop, `:w` to write, `:q` to quit — behind three front ends. A terminal editor,
-a graphical window, and a scripting mode with no terminal at all:
+**`syn-edit`** is the editor: one engine behind three front ends. A terminal
+editor, a graphical window, and a scripting mode with no terminal at all:
 
 ```bash
 syn-edit notes.md                        # the terminal editor
@@ -751,6 +750,26 @@ syn-edit ex -c '%s/foo/bar/g' -w *.c     # ex commands, written back
 The third one is not a convenience — it is how the editor's own test suite
 drives it, which is why the keys the window sends and the keys a script sends
 cannot mean different things.
+
+The engine is modal — `i` to insert, `Escape` to stop, `:w` to write, `:q` to
+quit — and the terminal editor is the engine with a screen attached. **The
+window is not modal.** It stays in insert, and the keys are the ones every
+other program on the desktop uses:
+
+| Key | What it does in the window |
+|---|---|
+| `Ctrl`+`C` / `Ctrl`+`X` / `Ctrl`+`V` | Copy, cut, paste — the desktop clipboard, and the line when nothing is selected |
+| `Ctrl`+`Z` / `Ctrl`+`Shift`+`Z` | Undo, redo — `Ctrl`+`Y` redoes as well |
+| `Ctrl`+`A` | Select all |
+| `Ctrl`+`F` / `Ctrl`+`R` | Find, replace |
+| `Ctrl`+`S` / `Ctrl`+`O` / `Ctrl`+`N` | Save, open, new |
+| `Shift`+arrows, click and drag, double click | Select |
+| `Escape` | Drop the selection |
+
+Typing with something selected replaces it, and Backspace at the start of a
+line joins it onto the one above. Every one of those is the engine's own
+operation with its own undo — the window holds no text, no selection and no
+undo stack of its own.
 
 ### Photographs and video
 
