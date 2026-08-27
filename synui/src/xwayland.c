@@ -185,6 +185,12 @@ static void xw_map(struct wl_listener *listener, void *data)
         return;
     }
 
+    /* A window that is mapping is not iconified, whatever it was before. This
+     * pairs with the self-minimise xw_unmap() records below: without it a game
+     * that restored itself would come back still flagged minimised, which is
+     * how Alt+Tab and the dock decide whether to offer to restore it. */
+    view->minimized = 0;
+
     /* Managed toplevel: join the active workspace and tile/float it. The client
      * surface lives inside a per-view frame alongside its borders + titlebar. */
     struct wlr_scene_tree *frame = view_frame_create(view, s->window_tree);
@@ -256,6 +262,27 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     /* Before mapped clears — the geometry is only meaningful while the window
      * is still the thing the user just sized. */
     geom_persist_save(view);
+
+    /* ⚠ AN EXCLUSIVE-FULLSCREEN X11 WINDOW UNMAPS ITSELF EVERY TIME IT LOSES
+     * FOCUS. That is what iconify IS in X11, and Cyberpunk 2077 does it on
+     * every Alt-Tab — one `X11 window mapped` line per focus flip, measured.
+     *
+     * The view leaves its workspace list a few lines down (the lists hold only
+     * mapped views, and 56 call sites across the tree rely on that), so from
+     * everything that lists windows the game has simply CEASED TO EXIST: no
+     * dock entry, no Alt+Tab tile, nothing in `synctl clients`. The only way
+     * back is through Steam, which is what "it does not come back when I
+     * Alt-Tab out" means.
+     *
+     * Recording it as minimised is what lets the switcher tell "gone" from
+     * "iconified" and offer it back — alttab_candidates() reaches for these
+     * through s->xw_views, the one list an unmapped X11 view is still on.
+     * Restricted to a fullscreen window: that is the shape that minimises
+     * itself, and it keeps a client that merely closes a window (Steam to its
+     * tray) behaving exactly as before. */
+    if (!view->override_redirect && view->fullscreen && view->xsurface)
+        view->minimized = 1;
+
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     /* A game exiting is an unmap, not an un-fullscreen — without this, game
@@ -496,7 +523,14 @@ static void xw_destroy(struct wl_listener *listener, void *data)
      * up to and dereference. */
     view_frame_destroy(view);
 
+    /* Ask before the view leaves s->xw_views: game mode counts an unmapped but
+     * still-alive fullscreen X11 window as the game merely minimised (see
+     * game_minimized_view), so a game that has actually QUIT is only told apart
+     * from one that Alt-Tabbed away here, when its window is destroyed. Without
+     * this, quitting a game left game mode engaged until something else
+     * happened to re-ask. */
     wl_list_remove(&view->xw_link);
+    if (!s->shutting_down) game_reevaluate(s);
     wl_list_remove(&view->associate.link);
     wl_list_remove(&view->dissociate.link);
     wl_list_remove(&view->destroy.link);

@@ -388,6 +388,48 @@ static void game_leave(syn_server_t *s)
     game_publish(s);
 }
 
+/*
+ * ⚠ A GAME THAT HAS MINIMISED ITSELF IS STILL A GAME.
+ *
+ * An exclusive-fullscreen X11 title unmaps its window every time it loses
+ * focus. Cyberpunk 2077 does it on every single Alt-Tab — measured 2026-08-26,
+ * one `X11 window mapped` line in the journal for every focus flip. xw_unmap()
+ * takes the view out of its workspace list with it, so game_find_view()
+ * answers NULL, the grace timer runs out, and game mode LEAVES: synapd
+ * restarts, kmod events come back, and the bar is relaunched — a whole desktop
+ * rebuilt because somebody looked at their browser for six seconds. Tabbing
+ * back re-enters game mode and tears it all down again. Twice in three and a
+ * half minutes on the measured session, which is what "it does not come back
+ * when I Alt-Tab out" looks like from the inside.
+ *
+ * The window has not gone anywhere; only its buffer has. So while game mode is
+ * ALREADY engaged, an unmapped-but-alive fullscreen X11 view counts as the
+ * game still being there.
+ *
+ * ⚠ Deliberately NOT an entry condition — a window nobody can see must never
+ * turn game mode on, so this answers NULL unless game mode is already active.
+ * And deliberately keyed on the X surface still existing: a game that really
+ * quit stops counting the moment its window is destroyed, which is why
+ * xw_destroy() asks again. s->xw_views is the only list an unmapped X11 view
+ * is still on.
+ */
+syn_view_t *game_minimized_view(syn_server_t *s)
+{
+    if (!s->game.active) return NULL;
+
+    syn_view_t *v;
+    wl_list_for_each(v, &s->xw_views, xw_link) {
+        if (v->mapped || v->override_redirect) continue;
+        if (!v->xsurface || !v->fullscreen) continue;
+        /* The same exclusion list a mapped game answers to — an app the user
+         * has named as not-a-game does not become one by minimising. */
+        const char *aid = view_app_id(v);
+        if (aid && *aid && game_excluded(&s->config, aid)) continue;
+        return v;
+    }
+    return NULL;
+}
+
 /* ── Leaving is deferred, entering is not ─────────────────────
  *
  * See syn_game_t.leave_timer. A game appearing is evidence; a game
@@ -408,7 +450,8 @@ static int game_leave_fire(void *data)
     syn_server_t *s = data;
     if (!s->game.active) return 0;
     if (s->game.forced > 0) return 0;
-    if (s->config.game_mode && s->game.forced == 0 && game_find_view(s)) {
+    if (s->config.game_mode && s->game.forced == 0 &&
+        (game_find_view(s) || game_minimized_view(s))) {
         /* Still there. Nothing to do — the timer is one-shot and disarmed. */
         wlr_log(WLR_DEBUG, "synui: game: grace expired but a game is up");
         return 0;
@@ -457,6 +500,9 @@ void game_reevaluate(syn_server_t *s)
         want = 0; forced = 1;           /* Super+G forced it off */
     } else {
         v = game_find_view(s);
+        /* Answers only while game mode is already engaged, so a minimised
+         * window can keep game mode on but can never turn it on. */
+        if (!v) v = game_minimized_view(s);
         want = (v != NULL);
     }
 

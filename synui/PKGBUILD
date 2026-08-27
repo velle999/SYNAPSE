@@ -2096,7 +2096,42 @@ pkgver=0.1.0
 #   measurement that had grown three private copies.
 #   tests/game_confine_test.c gains the letterbox cases and states the drawn
 #   rectangle outright rather than building a scene to imply it.
-pkgrel=513
+# 514 ALT-TAB OUT OF A GAME AND IT IS STILL THERE. An exclusive-fullscreen X11
+#   title UNMAPS its window every time it loses focus — that is what iconify is
+#   in X11, and Cyberpunk 2077 does it on every single Alt-Tab: one
+#   `X11 window mapped` line in the journal per focus flip, measured.
+#   ⚠ TWO THINGS FALL OFF THE DESK WHEN IT DOES.
+#   The view leaves its workspace list (those lists hold only mapped views, and
+#   56 call sites across the tree rely on that), so from everything that lists
+#   windows the game has ceased to exist — no dock entry, no Alt+Tab tile,
+#   nothing in `synctl clients`. Steam is the only route back, which is what
+#   "it does not come back when I Alt-Tab out" means. xw_unmap() now RECORDS
+#   the unmap of a live fullscreen window as a minimise, and
+#   alttab_candidates() reaches for those through s->xw_views — the one list an
+#   unmapped X11 view is still on — on the same terms as any other minimised
+#   window. alttab_reveal() then asks the client to restore (WM_STATE, activate,
+#   restack) rather than trying to focus a surface that is not mapped, and
+#   xw_map() clears the flag when the window really comes back. ⚠ The flag is
+#   deliberately NOT cleared at the moment of asking: a client that ignores the
+#   restore has to stay reachable, and unreachable-for-good is the bug.
+#   And game_find_view() answered NULL for the same reason, so the 508 grace
+#   timer ran out and game mode LEFT: synapd restarted, kmod events restored,
+#   THE BAR RELAUNCHED — a whole desktop rebuilt because somebody looked at
+#   their browser for six seconds, then torn down again on the way back. Twice
+#   in three and a half minutes on the measured session. game_minimized_view()
+#   counts an unmapped-but-alive fullscreen X11 view as the game still being
+#   there. ⚠ Never an ENTRY condition — a window nobody can see keeps game mode
+#   on but must not turn it on — and keyed on the X surface still existing, so
+#   a game that really quit stops counting; xw_destroy() asks again for exactly
+#   that, which it never used to do at all.
+#   ⚠ CONSEQUENCE, deliberate: the bar now stays down while a game sits
+#   minimised, the same as it already did for a game merely tabbed away and
+#   still mapped. Game mode has always been about a game RUNNING rather than
+#   focused; the six-second restore-then-kill was the accident.
+#   Restricted to fullscreen windows throughout, so a client that merely closes
+#   a window (Steam to its tray) behaves exactly as before.
+#   tests/game_confine_test.c: 7 more assertions on the minimise lookup.
+pkgrel=514
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

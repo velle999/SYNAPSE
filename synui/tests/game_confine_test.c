@@ -95,6 +95,7 @@ static void reset(void)
 
     for (int i = 0; i < WORKSPACE_MAX; i++)
         wl_list_init(&srv.workspaces[i].windows);
+    wl_list_init(&srv.xw_views);
 
     game.mapped      = 1;
     game.fullscreen  = 1;
@@ -108,6 +109,21 @@ static void reset(void)
     srv.config.game_mode            = 1;
     srv.config.game_confine_pointer = 1;
     stub_app_id = "steam_app_1091500";
+}
+
+/* The self-minimise lookup: is a game that unmapped itself still a game?
+ * `srv.xw_views` is the list an unmapped X11 view is still on, so the harness
+ * puts the view on it the way xw_map() would. */
+static void mini(const char *what, int want)
+{
+    syn_view_t *got = game_minimized_view(&srv);
+    if (!!got == !!want) {
+        printf("  ok    %s (%s)\n", what, got ? "still a game" : "gone");
+    } else {
+        printf("  FAIL  %s — expected %s, got %s\n", what,
+               want ? "still a game" : "gone", got ? "still a game" : "gone");
+        fails++;
+    }
 }
 
 static void gate(const char *what, int want)
@@ -210,6 +226,55 @@ int main(void)
     /* An unfocused game must not have its cursor moved at all. */
     reset(); srv.focused_view = NULL;
     lands("unfocused: cursor untouched",   9999, 9999, 9999, 9999);
+
+    printf("\n A GAME THAT MINIMISED ITSELF  (Alt-Tab out of an X11 game)\n");
+
+    /* An exclusive-fullscreen X11 title unmaps its window on every focus loss.
+     * The view leaves its workspace list with it, so without this the grace
+     * timer runs out and game mode tears the desktop down and rebuilds it —
+     * on every Alt-Tab. */
+    reset(); game.mapped = 0;
+             game.xsurface = (struct wlr_xwayland_surface *)&game;
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("unmapped, client alive", 1);
+
+    /* ⚠ Never an ENTRY condition. A window nobody can see must not turn game
+     * mode on — only keep it on. */
+    reset(); game.mapped = 0; srv.game.active = 0;
+             game.xsurface = (struct wlr_xwayland_surface *)&game;
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("game mode not engaged", 0);
+
+    /* A game that really QUIT: xw_destroy takes the view off xw_views and asks
+     * again, and the surface is gone before that. */
+    reset(); game.mapped = 0; game.xsurface = NULL;
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("window destroyed", 0);
+
+    reset(); game.mapped = 0; game.fullscreen = 0;
+             game.xsurface = (struct wlr_xwayland_surface *)&game;
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("not fullscreen", 0);
+
+    reset(); game.mapped = 0;
+             game.xsurface = (struct wlr_xwayland_surface *)&game;
+             game.override_redirect = 1;
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("override-redirect", 0);
+
+    reset(); game.mapped = 0;
+             game.xsurface = (struct wlr_xwayland_surface *)&game;
+             stub_app_id = "firefox";
+             srv.config.game_exclude_count = 1;
+             snprintf(srv.config.game_exclude[0],
+                      sizeof srv.config.game_exclude[0], "firefox");
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("an excluded app_id", 0);
+
+    /* A mapped game is the normal path's business, not this one's. */
+    reset(); game.xsurface = (struct wlr_xwayland_surface *)&game;
+             wl_list_insert(&srv.xw_views, &game.xw_link);
+                                              mini("still mapped", 0);
 
     printf("\n A LETTERBOX HOLDS THE POINTER, NOT THE SCREEN\n");
 

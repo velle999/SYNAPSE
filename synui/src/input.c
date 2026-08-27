@@ -496,6 +496,30 @@ static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
         }
     }
 
+    /* ⚠ AND THE WINDOWS THAT ARE NOT ON A WORKSPACE LIST AT ALL.
+     *
+     * A fullscreen X11 game unmaps itself whenever it loses focus (xw_unmap
+     * explains why), and an unmapped view is off its workspace list — so the
+     * loop above cannot see the very window the user is trying to get back to.
+     * Alt-Tab out of Cyberpunk 2077 and it is in no switcher at all; Steam is
+     * the only route back.
+     *
+     * s->xw_views is the one list that still holds it. Offered on the same
+     * terms as any other minimised window (alt_tab_minimized, on by default),
+     * and alttab_reveal() asks the client to restore rather than trying to
+     * focus a surface that is not mapped. */
+    if (s->config.alt_tab_minimized && n < max) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->xw_views, xw_link) {
+            if (n >= max) break;
+            if (v->mapped || v->override_redirect) continue;
+            if (!v->minimized || !v->xsurface) continue;
+            if (!v->workspace) continue;
+            if (v->workspace->index < lo || v->workspace->index >= hi) continue;
+            out[n++] = v;
+        }
+    }
+
     /* Insertion sort by focus_seq, newest first. n is a handful of windows, and
      * this keeps the "never focused" ones (seq 0) at the back where they
      * belong. */
@@ -536,6 +560,24 @@ static void alttab_reveal(syn_server_t *s, syn_view_t *v)
      * disabled and the window minimized-in-fact on arrival. */
     if (v->workspace && v->workspace->index != s->active_workspace)
         workspace_switch(s, v->workspace->index);
+
+    /* An X11 window that minimised itself is UNMAPPED: there is no buffer to
+     * raise and no surface to hand the keyboard to. All that can be done is
+     * tell the client it is no longer iconified and that it is active, which
+     * is what makes Wine map it again; xw_map() takes over from there.
+     *
+     * ⚠ The minimised flag is deliberately NOT cleared here — xw_map() clears
+     * it when the window really comes back. Clearing it now would drop the
+     * window out of alttab_candidates() the moment a client ignored the
+     * restore, and unreachable-for-good is the bug this is fixing. */
+    if (!v->mapped) {
+        if (v->is_xwayland && v->xsurface) {
+            view_set_minimized(v, 0);
+            wlr_xwayland_surface_activate(v->xsurface, true);
+            wlr_xwayland_surface_restack(v->xsurface, NULL, XCB_STACK_MODE_ABOVE);
+        }
+        return;
+    }
 
     /* Raises and focuses on its own once the workspace is visible; the
      * focus_view below is then a no-op. */

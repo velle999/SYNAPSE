@@ -8037,6 +8037,11 @@ void game_confine_cursor(syn_server_t *s);
  * game_probe_content() answers 0 when there is no single buffer to measure,
  * which is the same "no letterboxing known" the confine path reads. */
 syn_view_t *game_probe_view(syn_server_t *s);
+/* The game that has MINIMISED ITSELF — an unmapped but still-alive fullscreen
+ * X11 view. Answers NULL unless game mode is already engaged: a window nobody
+ * can see keeps game mode on, but must never turn it on. Exposed for
+ * tests/game_confine_test.c. */
+syn_view_t *game_minimized_view(syn_server_t *s);
 
 /* ── Cat mode (cat.c) ────────────────────────────────────── */
 
