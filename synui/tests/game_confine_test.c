@@ -137,6 +137,28 @@ static void lands(const char *what, double from_x, double from_y,
     }
 }
 
+/* game_confine_rect() is the geometry on its own: which rectangle holds the
+ * pointer, given the screen and whatever the game is actually drawn in. */
+static void rect(const char *what, struct wlr_box content,
+                 int wx, int wy, int ww, int wh)
+{
+    struct wlr_box o = { 1080, 1080, 2560, 1440 };
+    struct wlr_box got;
+    if (!game_confine_rect(&o, &content, &got)) {
+        printf("  FAIL  %s — declined outright\n", what);
+        fails++;
+        return;
+    }
+    if (got.x == wx && got.y == wy && got.width == ww && got.height == wh) {
+        printf("  ok    %s (%d,%d %dx%d)\n", what,
+               got.x, got.y, got.width, got.height);
+    } else {
+        printf("  FAIL  %s — expected (%d,%d %dx%d), got (%d,%d %dx%d)\n",
+               what, wx, wy, ww, wh, got.x, got.y, got.width, got.height);
+        fails++;
+    }
+}
+
 int main(void)
 {
     printf("game_confine_test\n\n THE GATE\n");
@@ -198,6 +220,31 @@ int main(void)
      * on the game's screen" is about the pointer, not about what is on screen. */
     reset(); srv.config.game_confine_pointer = 0;
     owns("confine setting off still covers the screen", &out, 1);
+
+    printf("\n THE LETTERBOX  (the surface, not the screen)\n");
+
+    /* Nothing measurable: the old behaviour, and the only safe default. */
+    rect("no content box falls back to the screen",
+         (struct wlr_box){ 0, 0, 0, 0 },            1080, 1080, 2560, 1440);
+    /* A game that fills its output is the case where both answers agree. */
+    rect("a game filling its screen is unchanged",
+         (struct wlr_box){ 1080, 1080, 2560, 1440 }, 1080, 1080, 2560, 1440);
+
+    /* THE BUG. A sub-native game centred by view_fullscreen_rescale leaves a
+     * bar top and bottom; the pointer must not be able to reach one, because
+     * there is no surface there and losing pointer focus destroys a oneshot
+     * lock outright — mouse-look dead for the session. */
+    rect("a letterboxed game confines to its own picture",
+         (struct wlr_box){ 1080, 1092, 2560, 1416 }, 1080, 1092, 2560, 1416);
+    rect("pillarboxed the same way",
+         (struct wlr_box){ 1160, 1080, 2400, 1440 }, 1160, 1080, 2400, 1440);
+
+    /* A client picks its own buffer dest size. The escape hatch is worth
+     * nothing if the confine can follow one off the screen. */
+    rect("content larger than the screen is clipped to it",
+         (struct wlr_box){ 1000, 1000, 3000, 1600 }, 1080, 1080, 2560, 1440);
+    rect("content entirely off the screen falls back",
+         (struct wlr_box){ 100, 100, 200, 200 },     1080, 1080, 2560, 1440);
 
     printf("\n%s (%d failed)\n", fails ? "FAILED" : "PASSED", fails);
     return fails ? 1 : 0;

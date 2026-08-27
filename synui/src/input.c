@@ -3130,6 +3130,16 @@ static int psmooth_flush(void *data)
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
 
+    /* The same clamp the motion path applies, for the same reason. This timer
+     * is the OTHER way the cursor moves: it fires after the last motion event,
+     * so nothing downstream would clamp what it emits, and a game's confinement
+     * would leak by exactly the filter's remainder every time the pointer came
+     * to rest against an edge. Before pointer_update_focus() below, so focus is
+     * computed at the position the cursor actually ends up in. */
+    game_confine_cursor(s);
+    s->cursor_x = s->cursor->x;
+    s->cursor_y = s->cursor->y;
+
     /* The cursor moved, so everything that tracks it has to be told — the
      * pointer focus above all. A flush that only nudged the drawn cursor would
      * leave the seat believing the pointer is still where it was a frame ago,

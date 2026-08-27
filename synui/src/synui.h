@@ -8015,8 +8015,16 @@ int  barscan_pixel_layout(uint32_t fmt, int *bpp,
                           int *ri, int *gi, int *bi, int *ai);
 
 int  game_pointer_box(syn_server_t *s, struct wlr_box *box);
+/* Pure geometry behind it: the game's drawn rectangle clipped to its screen,
+ * falling back to the screen when `content` is a zero box. Confining to the
+ * SURFACE rather than the output is what stops a pointer reaching a letterbox
+ * bar, where the loss of pointer focus destroys a oneshot lock outright.
+ * Exposed for tests/game_confine_test.c. */
+int  game_confine_rect(const struct wlr_box *out, const struct wlr_box *content,
+                       struct wlr_box *dst);
 /* Clamp the cursor into that rectangle. Cheap and idempotent; called from
- * the pointer motion path after the cursor has already moved. */
+ * the pointer motion path after the cursor has already moved, and from the
+ * smoothing settle timer, which is the other way the cursor moves. */
 void game_confine_cursor(syn_server_t *s);
 
 /* ── Cat mode (cat.c) ────────────────────────────────────── */

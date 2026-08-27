@@ -258,6 +258,18 @@ static void server_new_constraint(struct wl_listener *listener, void *data)
         constraints_focus_surface(s, constraint->surface);
 }
 
+/* Does the keyboard-focused window own this constraint's surface?
+ *
+ * Deliberately the keyboard focus and not the pointer's: the pointer's is what
+ * has just been lost, and losing it is exactly the event that must not be read
+ * as the user leaving the window. */
+static int constraint_surface_holds_focus(syn_server_t *s,
+                                          struct wlr_pointer_constraint_v1 *c)
+{
+    if (!c || !s->focused_view || !s->focused_view->mapped) return 0;
+    return view_surface(s->focused_view) == c->surface;
+}
+
 void constraints_focus_surface(syn_server_t *s, struct wlr_surface *surface)
 {
     if (!s->pointer_constraints) return;
@@ -269,6 +281,25 @@ void constraints_focus_surface(syn_server_t *s, struct wlr_surface *surface)
     if (s->active_constraint == constraint) return;
 
     if (s->active_constraint) {
+        /* ⚠ AN INCIDENTAL LOSS OF POINTER FOCUS MUST NOT END A LOCK.
+         *
+         * Deactivating a ONESHOT constraint DESTROYS it: the client has to ask
+         * again, and a game that asked once at startup never does. Pointer
+         * focus, though, is cleared by anything the cursor can reach that is
+         * not a surface — a border, the grab ring, a letterbox bar inside a
+         * fullscreen game's own frame. None of those are the user choosing a
+         * different window, and treating them as such ended mouse-look for the
+         * rest of the session (measured on Cyberpunk 2077; see
+         * game_confine_rect(), which stops the cursor reaching the bar in the
+         * first place — this is the second lock on the same door).
+         *
+         * The test is the KEYBOARD focus, which moves only when the user moves
+         * it. While the constrained surface still owns that, the constraint
+         * stays: Alt-Tab remains the escape hatch, and a real focus change to
+         * another window still falls through and deactivates. */
+        if (!constraint && constraint_surface_holds_focus(s, s->active_constraint))
+            return;
+
         /* Clear first: deactivating a oneshot constraint destroys it, and the
          * destroy handler must not treat it as still active (double warp). */
         struct wlr_pointer_constraint_v1 *old = s->active_constraint;

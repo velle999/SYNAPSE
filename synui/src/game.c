@@ -537,6 +537,94 @@ void game_finish(syn_server_t *s)
     game_publish(s);
 }
 
+/* The single scene buffer a game draws into, if it has exactly one.
+ *
+ * Same shape as view_fullscreen_rescale()'s probe, and deliberately the same
+ * "exactly one" rule: a client whose tree carries several buffers is one that
+ * function declines to scale, so it has no letterboxing to correct for here
+ * either. */
+struct game_content_probe { int count; struct wlr_scene_buffer *buf; };
+
+static void game_content_count(struct wlr_scene_buffer *b, int sx, int sy,
+                               void *data)
+{
+    (void)sx; (void)sy;
+    struct game_content_probe *p = data;
+    p->count++;
+    p->buf = b;
+}
+
+/* The rectangle the game is actually DRAWN in, in layout coordinates.
+ *
+ * NOT the view box. view_fullscreen_rescale() fits a sub-native surface inside
+ * the fullscreen frame and centres it, so the frame carries letterbox bars that
+ * belong to no surface at all — and those bars are the whole reason this
+ * function exists. See game_confine_rect().
+ *
+ * Answers 0 when there is no single buffer to measure, which the caller reads
+ * as "no letterboxing known" rather than as an error. */
+static int game_content_box(syn_view_t *v, struct wlr_box *out)
+{
+    if (!v || !v->mapped || !v->scene_tree) return 0;
+
+    struct game_content_probe p = {0};
+    wlr_scene_node_for_each_buffer(&v->scene_tree->node, game_content_count, &p);
+    if (p.count != 1 || !p.buf) return 0;
+    if (p.buf->dst_width <= 0 || p.buf->dst_height <= 0) return 0;
+
+    int lx, ly;
+    if (!wlr_scene_node_coords(&p.buf->node, &lx, &ly)) return 0;
+
+    *out = (struct wlr_box){ lx, ly, p.buf->dst_width, p.buf->dst_height };
+    return 1;
+}
+
+/*
+ * Which rectangle holds the pointer: the game's own surface, clipped to the
+ * screen it is on.
+ *
+ * ⚠ THE SURFACE, NOT THE OUTPUT — AND THE LETTERBOX BARS ARE THE REASON.
+ *
+ * 510 clamped to the output so the bars stayed reachable. That was backwards.
+ * The bars belong to no surface, so a pointer that reaches one makes
+ * surface_at() answer NULL; pointer_update_focus() then clears pointer focus
+ * and calls constraints_focus_surface(s, NULL), which deactivates the game's
+ * pointer lock — and deactivating a ONESHOT constraint DESTROYS it. The client
+ * has to ask again, and a game that asked once at startup never does, so
+ * mouse-look is dead for the rest of the session.
+ *
+ * Measured on Cyberpunk 2077 (steam_app_1091500, 2026-08-26): the lock held the
+ * cursor still at one point for 19 s, released the instant the pointer crossed
+ * into a bar, and the cursor free-roamed the screen from then on, pinning at
+ * the old output clamp's corner. Reported as three different bugs — "drifts to
+ * another monitor", "can't move right", "moves a few inches then releases" —
+ * which are one bug seen at three moments.
+ *
+ * A game that fills its output exactly gets the same rectangle either way.
+ *
+ * `content` may be a zero box, meaning nothing could be measured; the output is
+ * then the best answer available and the old behaviour is what happens. The
+ * intersection is not paranoia: a client sets its own buffer dest size, and an
+ * escape hatch is worth nothing if the confine can follow it off the screen.
+ */
+int game_confine_rect(const struct wlr_box *out, const struct wlr_box *content,
+                      struct wlr_box *dst)
+{
+    if (!out || !dst || out->width <= 0 || out->height <= 0) return 0;
+
+    if (content && content->width > 0 && content->height > 0) {
+        struct wlr_box hit;
+        if (wlr_box_intersection(&hit, content, out) &&
+            hit.width > 0 && hit.height > 0) {
+            *dst = hit;
+            return 1;
+        }
+    }
+
+    *dst = *out;
+    return 1;
+}
+
 /* ── Keeping the pointer on the game's screen ───────────────
  *
  * A fullscreen game on a multi-monitor desk is supposed to capture the mouse,
@@ -576,18 +664,15 @@ int game_pointer_box(syn_server_t *s, struct wlr_box *box)
     /* The escape hatch, and the whole reason this is safe to default on. */
     if (s->focused_view != v) return 0;
 
-    /* The game's OUTPUT, not the window box: a letterboxed sub-native game is
-     * centred inside a larger frame (view_fullscreen_rescale), and confining
-     * to the window would leave the black bars unreachable — which is a
-     * cursor that stops before the edge of the screen, the complaint this
-     * exists to remove. */
     if (!v->output) return 0;
 
     struct wlr_box ob;
     output_box_of(s, v->output, &ob);
     if (ob.width <= 0 || ob.height <= 0) return 0;
-    *box = ob;
-    return 1;
+
+    struct wlr_box cb;
+    if (!game_content_box(v, &cb)) cb = (struct wlr_box){ 0, 0, 0, 0 };
+    return game_confine_rect(&ob, &cb, box);
 }
 
 /* Is a fullscreen game living on this output right now?
@@ -619,8 +704,10 @@ void game_confine_cursor(syn_server_t *s)
     if (!game_pointer_box(s, &b)) return;
 
     double x = s->cursor->x, y = s->cursor->y;
-    /* width - 1, not width: the first column of the NEXT output is
-     * box.x + box.width, and a cursor parked exactly there has already left. */
+    /* width - 1, not width: box.x + box.width is the first column OUTSIDE the
+     * rectangle — the next output when this is a screen, the letterbox bar when
+     * it is the game's surface — and a cursor parked exactly there has already
+     * left the thing it is meant to be held inside. */
     double cx = x < b.x ? b.x : (x > b.x + b.width  - 1 ? b.x + b.width  - 1 : x);
     double cy = y < b.y ? b.y : (y > b.y + b.height - 1 ? b.y + b.height - 1 : y);
     if (cx == x && cy == y) return;

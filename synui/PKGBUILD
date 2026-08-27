@@ -2054,7 +2054,7 @@ pkgver=0.1.0
 #   the pair. tests/barscan_format_test.c checks each channel index against
 #   drm_fourcc's own bit layout — a reversed one reports a wrong COLOUR rather
 #   than failing, which is how this went unnoticed.
-pkgrel=511
+pkgrel=512
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
