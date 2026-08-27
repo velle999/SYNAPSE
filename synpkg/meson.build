@@ -28,6 +28,7 @@ sources = files(
   'src/progress.c',
   'src/alpmctx.c',
   'src/query.c',
+  'src/provides.c',
   'src/trans.c',
   'src/curated.c',
   'src/news.c',

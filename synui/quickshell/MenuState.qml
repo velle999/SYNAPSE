@@ -170,4 +170,127 @@ QtObject {
             onStreamFinished: root.synpkgPresent = this.text.trim() === "synpkg"
         }
     }
+
+    // ── What a search could INSTALL ──────────────────────────────────────
+    //
+    // Type a name nothing on this machine answers to and the menu goes on to
+    // offer the packages that would provide it — the launcher behaviour krunner
+    // has, and the reason is the same one that put a search box here at all: a
+    // person who types "inkscape" and gets an empty list has been told nothing.
+    // "It is not installed, and here is what to install" is an answer.
+    //
+    // The lookup is `synpkg provides`, which is ranked, capped and repository-
+    // local precisely so it can be asked while somebody types (see
+    // synpkg/src/provides.c). Everything wider than that — the AUR, Flathub —
+    // is a network round trip and lives behind the "search every source" row
+    // the menu draws last, not behind a keystroke.
+    //
+    // THE STATE IS HERE RATHER THAN IN THE WINDOW for the same reason `search`
+    // and `page` are: StartMenu.qml is instantiated once per monitor, and three
+    // monitors must not mean three synpkg processes answering the same
+    // question. The visible window asks (wantPackages) and every window reads
+    // the one answer.
+    property string pkgTerm:    ""   // the term pkgResults answers
+    property var    pkgResults: []   // [{ name, version, repo, desc, match }]
+
+    // What has been asked for and not yet answered. Also the debounce's
+    // subject: the timer restarts on every keystroke, so a term is only ever
+    // looked up once typing has stopped.
+    property string pkgWanted:  ""
+    // The term the running lookup was started for. On root rather than on the
+    // Process because a `property Process` exposes the DECLARED type: an ad-hoc
+    // property added inside the object is invisible through the handle — QML
+    // resolves it to undefined at run time, and the linter says so.
+    //
+    // (⚠ that sentence cannot begin with the linter's name: a comment line
+    // starting "// qmllint " is parsed as a lint DIRECTIVE, and every word of
+    // it comes back as an unknown category.)
+    property string pkgRunning: ""
+
+    function wantPackages(term) {
+        if (term === root.pkgWanted) return
+        root.pkgWanted = term
+        // Drop an answer to a DIFFERENT question the moment the question
+        // changes. Leaving it would put the packages for "gim" under a search
+        // now reading "gimpp" — a list that is wrong rather than merely late,
+        // and the menu has no way to say which term a row came from.
+        if (term !== root.pkgTerm) {
+            root.pkgTerm    = ""
+            root.pkgResults = []
+        }
+        pkgDebounce.restart()
+    }
+
+    function forgetPackages() {
+        root.pkgWanted  = ""
+        root.pkgTerm    = ""
+        root.pkgResults = []
+        pkgDebounce.stop()
+    }
+
+    property Timer pkgDebounce: Timer {
+        // Long enough that a word typed at speed costs ONE lookup, short enough
+        // that stopping to look at the list does not feel like waiting for it.
+        // `provides` itself takes ~0.4s on a warm database, nearly all of it
+        // loading ALPM, so the two together are about half a second after the
+        // last keystroke.
+        interval: 300
+        onTriggered: {
+            if (root.pkgWanted === "" || !root.synpkgPresent) return
+            root.pkgRunning = root.pkgWanted
+            // ⚠ Assigning `command` to a RUNNING Process queues it rather than
+            // replacing it, so a still-running lookup for an older term has to
+            // be stopped first — otherwise the stale one finishes, the queued
+            // one starts, and the results arrive in the wrong order.
+            root.pkgProbe.running = false
+            root.pkgProbe.command = ["synpkg", "--tsv", "provides",
+                                     root.pkgWanted, "--limit", "6"]
+            root.pkgProbe.running = true
+        }
+    }
+
+    property Process pkgProbe: Process {
+        // No `command` here: it is written by the debounce, which is also the
+        // only thing that starts this. Compared against pkgWanted on the way
+        // out — a lookup that lands after the search has moved on is an answer
+        // to a question nobody is asking any more.
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                const lines = this.text.split("\n")
+
+                // BY HEADER NAME, never by position — the rule every synpkg
+                // consumer follows, because a column added in the middle of a
+                // TSV shape is otherwise a silent re-labelling of every field
+                // after it. `provides` carries a seventh column the other
+                // package listings do not (`match`), which is exactly the kind
+                // of difference that breaks positional parsing.
+                const head = (lines[0] || "").split("\t")
+                const col = {}
+                for (let i = 0; i < head.length; i++) col[head[i]] = i
+                if (col.name === undefined) return   // not a listing at all
+
+                for (let i = 1; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < head.length) continue
+                    // Already on the machine. The menu is a place to LAUNCH
+                    // things, and offering to install what is installed is a
+                    // lie — a package with no .desktop file simply has nothing
+                    // to show here, which is the same answer as before.
+                    if (f[col.installed] === "1") continue
+                    out.push({
+                        name:    f[col.name],
+                        version: f[col.version],
+                        repo:    f[col.repo],
+                        desc:    f[col.description],
+                        match:   f[col.match]
+                    })
+                }
+
+                if (root.pkgRunning !== root.pkgWanted) return
+                root.pkgTerm    = root.pkgRunning
+                root.pkgResults = out
+            }
+        }
+    }
 }

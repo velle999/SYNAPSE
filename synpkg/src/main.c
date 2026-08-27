@@ -26,6 +26,11 @@ static void usage(FILE *out)
 "    --aur                 append AUR results to the repository ones\n"
 "    --installed           search only what is already installed\n"
 "  info <package>...       show everything known about a package\n"
+"  provides <term>         what to install to get a program called <term>,\n"
+"                          best match first. What the start menu and the\n"
+"                          command bar ask when a name matches nothing that\n"
+"                          is installed. Repositories only, so it answers at\n"
+"                          typing speed; --limit N caps the list\n"
 "  install <package>...    install from the repositories, falling back to the\n"
 "                          AUR for a name no repository carries (--no-aur\n"
 "                          to refuse rather than build from source)\n"
@@ -73,9 +78,9 @@ static void usage(FILE *out)
 "\n"
 "Front-ends\n"
 "  tui                     browse in the terminal\n"
-"  gui [tab]               open the graphical browser, optionally on one tab\n"
+"  gui [tab] [--search T]  open the graphical browser, optionally on one tab\n"
 "                          (updates, suggested, repo, aur, flathub, arsenal,\n"
-"                           system, about)\n"
+"                           system, about) and already searching for T\n"
 "  about                   version, licence, and which sources are enabled\n"
 "\n"
 "Options\n"
@@ -109,8 +114,29 @@ static int cmd_gui(int argc, char **argv)
 	 * of its own, so the tab travels in the environment. An unknown name is
 	 * ignored by the QML rather than refused here: this is a convenience, and
 	 * failing to open the window over a typo is a poor trade. */
-	if (argc > 0 && *argv[0])
-		setenv("SYNPKG_SECTION", argv[0], 1);
+	/*
+	 * `synpkg gui [tab] [--search <term>]`.
+	 *
+	 * --search is what synui's start menu and command bar hand over when they
+	 * have run out of local answers: `provides` asks the repositories only,
+	 * because it runs while somebody types, and the row that ends its list
+	 * means "now ask everywhere" — the AUR and Flathub included. Handing the
+	 * term over rather than making the user type it again is the whole point
+	 * of that row.
+	 *
+	 * Both travel in the ENVIRONMENT because this function execs quickshell,
+	 * which takes no arguments of its own. See data/synpkg.qml, which reads
+	 * SYNPKG_SECTION and SYNPKG_QUERY at startup.
+	 */
+	for (int i = 0; i < argc; i++) {
+		if (!strcmp(argv[i], "--search")) {
+			if (++i >= argc)
+				die("gui: --search needs a term");
+			setenv("SYNPKG_QUERY", argv[i], 1);
+		} else if (*argv[i]) {
+			setenv("SYNPKG_SECTION", argv[i], 1);
+		}
+	}
 
 	/* The window's Wayland app_id, which is how the dock, the taskbar and
 	 * every other window-to-application mapping finds out WHAT this window
@@ -182,6 +208,7 @@ int main(int argc, char **argv)
 
 	if (!strcmp(cmd, "search"))    return cmd_search(rest_argc, rest);
 	if (!strcmp(cmd, "info"))      return cmd_info(rest_argc, rest);
+	if (!strcmp(cmd, "provides"))  return cmd_provides(rest_argc, rest);
 	if (!strcmp(cmd, "install"))   return cmd_install(rest_argc, rest);
 	if (!strcmp(cmd, "remove"))    return cmd_remove(rest_argc, rest);
 	if (!strcmp(cmd, "upgrade"))   return cmd_upgrade(rest_argc, rest);

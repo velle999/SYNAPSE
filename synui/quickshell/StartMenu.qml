@@ -93,6 +93,39 @@ PanelWindow {
 
     onVisibleChanged: if (visible) keys.forceActiveFocus()
 
+    /*
+     * ── "nothing installed matches" ──────────────────────────────────────
+     *
+     * The term this window wants packages looked up for, or "" for none. A
+     * property with a change handler rather than a call buried in a binding:
+     * the lookup forks a process, and a side effect inside a binding runs
+     * again every time anything the binding touches changes, which for `rows`
+     * is every keystroke AND every arriving answer.
+     *
+     * Guarded on `visible` because StartMenu is instantiated once per monitor
+     * and MenuState.search is shared: without it, three screens would mean
+     * three synpkg processes racing to answer the same question. Only one
+     * window is ever visible (see the binding at the top of this file).
+     *
+     * Two characters is the floor. One matches most of the repositories, and
+     * `provides` refuses it anyway — asking is just a fork to be told so.
+     */
+    readonly property string wantPkgTerm:
+        (root.visible && MenuState.synpkgPresent
+         && MenuState.search.length >= 2 && rowModel.localHits.length === 0)
+            ? MenuState.search : ""
+
+    onWantPkgTermChanged: {
+        if (root.wantPkgTerm === "") MenuState.forgetPackages()
+        else                         MenuState.wantPackages(root.wantPkgTerm)
+    }
+
+    // Whether this window draws the install section at all. Same condition
+    // minus the length floor: the "search every source" row is offered for a
+    // one-character search too, because it is a link and not a lookup.
+    readonly property bool offerPackages:
+        root.visible && MenuState.synpkgPresent && MenuState.search !== ""
+
     // Everywhere that is not the menu. Press to dismiss — press rather than
     // click, so the menu is gone by the time the button comes back up and a
     // press-drag-release never leaves it hanging around; and every button, since
@@ -174,6 +207,7 @@ PanelWindow {
         //   { kind: "action", label, action, arg? } -> synctl dispatch <action> [arg]
         //   { kind: "exec",   label, argv }   -> run argv directly
         //   { kind: "app",    label, entry }  -> entry.execute()
+        //   { kind: "install", label, pkg }   -> offer to install it (search only)
         QtObject {
             id: rowModel
 
@@ -540,23 +574,82 @@ PanelWindow {
                 return p
             }
 
+            // What the search matches ON THIS MACHINE. Kept separate from
+            // `rows` below because two other things key off "the search found
+            // nothing installed" — whether to offer packages, and whether to
+            // go and look for any — and neither may depend on `rows`, which
+            // would then depend on them: a binding loop, and QML breaks those
+            // by dropping one silently rather than by complaining.
+            //
+            // Empty whenever the box is empty, so nothing downstream has to
+            // ask twice whether a search is happening.
+            readonly property var localHits: {
+                const q = MenuState.search.toLowerCase()
+                if (q === "") return []
+
+                // Search reaches EVERY page. Searching only the page you are
+                // looking at would make the submenus a place things can hide,
+                // which is the one thing they must not be. Page rows drop out:
+                // they launch nothing, and "Games" matching "gam" ahead of the
+                // games is not an answer to the question.
+                const hits = []
+                for (const key in rowModel.pages)
+                    for (const r of rowModel.pages[key]) {
+                        if (r.kind === "header" || r.kind === "page") continue
+                        if (r.label.toLowerCase().indexOf(q) >= 0) hits.push(r)
+                    }
+                hits.sort((a, b) => a.label.localeCompare(b.label))
+                return hits
+            }
+
             // What the list shows right now.
             readonly property var rows: {
                 const q = MenuState.search.toLowerCase()
 
                 if (q !== "") {
-                    // Search reaches EVERY page. Searching only the page you are
-                    // looking at would make the submenus a place things can
-                    // hide, which is the one thing they must not be. Page rows
-                    // drop out: they launch nothing, and "Games" matching "gam"
-                    // ahead of the games is not an answer to the question.
-                    const hits = []
-                    for (const key in rowModel.pages)
-                        for (const r of rowModel.pages[key]) {
-                            if (r.kind === "header" || r.kind === "page") continue
-                            if (r.label.toLowerCase().indexOf(q) >= 0) hits.push(r)
-                        }
-                    hits.sort((a, b) => a.label.localeCompare(b.label))
+                    const hits = rowModel.localHits.slice()
+                    if (hits.length > 0 || !root.offerPackages) return hits
+
+                    /*
+                     * Nothing installed matches — so answer the question the
+                     * empty list does not.
+                     *
+                     * A start menu that shrugs at "inkscape" has told the
+                     * person typing it precisely nothing: they cannot tell a
+                     * misspelling from a missing package from a menu that
+                     * hides things. Both rows below are answers. The first is
+                     * what to install to get it (MenuState asks `synpkg
+                     * provides`, debounced — see there); the second is the
+                     * wider search, on the sources that are too slow to ask
+                     * while somebody types.
+                     *
+                     * ⚠ ONLY WHEN THE LOCAL LIST IS EMPTY. Appending "you
+                     * could also install…" under a search that already found
+                     * the application would be a menu arguing with itself, and
+                     * the row it pushed down is the row that was wanted.
+                     */
+                    if (MenuState.pkgTerm === MenuState.search
+                        && MenuState.pkgResults.length > 0) {
+                        hits.push({ kind: "header", label: "AVAILABLE TO INSTALL" })
+                        for (const p of MenuState.pkgResults)
+                            hits.push({
+                                kind:  "install",
+                                pkg:   p.name,
+                                label: p.desc ? p.name + " — " + p.desc : p.name
+                            })
+                    }
+
+                    // Last, and present even when `provides` found nothing:
+                    // this row is the reason an empty search is never a dead
+                    // end. The repositories are not everything, and the AUR and
+                    // Flathub are exactly where the answer is when they have
+                    // come up empty.
+                    hits.push({
+                        kind:  "exec",
+                        label: "Search every source for “" + MenuState.search + "”…",
+                        argv:  ["synpkg", "gui", "all",
+                                "--search", MenuState.search]
+                    })
                     return hits
                 }
 
@@ -647,6 +740,29 @@ PanelWindow {
                 // away from being an injection — the exact hazard synui-cursor
                 // had to defend against for theme names.
                 Quickshell.execDetached(row.argv)
+                break
+            case "install":
+                /*
+                 * A TERMINAL, and a deliberately un-automated one.
+                 *
+                 * `synpkg install` asks before it does anything and
+                 * authenticates through polkit; both of those need somewhere to
+                 * ask, and the terminal is it. That is the opposite of the rule
+                 * a GUI front-end follows — a button that shells out to synpkg
+                 * must pass --noconfirm or it silently installs nothing — and
+                 * the difference is the point: a button is a decision already
+                 * taken, whereas this row was reached by typing four letters
+                 * into a search box and pressing Return. Installing a package
+                 * off the back of that without asking would be indefensible.
+                 * --hold keeps the output after it finishes, the same as every
+                 * other terminal row on this menu.
+                 *
+                 * `pkg` is a package NAME out of synpkg's own TSV, and it goes
+                 * through argv, so there is no shell for it to be anything else
+                 * in.
+                 */
+                Quickshell.execDetached(["syntty", "--hold", "-e",
+                                         "synpkg", "install", row.pkg])
                 break
             case "app":
                 /*
@@ -893,8 +1009,14 @@ PanelWindow {
                         verticalCenter: parent.verticalCenter
                     }
                     elide: Text.ElideRight
+                    // The "+" marks a row that will FETCH something rather
+                    // than start something already here. It is the one kind of
+                    // row on this menu that costs a download and a password,
+                    // and the section header scrolls out of sight the moment
+                    // there is more than a screenful.
                     text: rowItem.modelData.kind === "page" ? rowItem.modelData.label + "  ▸"
                         : rowItem.modelData.kind === "back" ? "◂  Back"
+                        : rowItem.modelData.kind === "install" ? "+  " + rowItem.modelData.label
                                                             : rowItem.modelData.label
                     color: rowItem.header ? Theme.magenta : Theme.popupFgOn(panel.backdrop)
                     opacity: rowItem.header ? 1.0 : (rowItem.current ? 1.0 : 0.82)

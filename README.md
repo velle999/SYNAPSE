@@ -243,6 +243,19 @@ enable-flathub` and `synpkg arsenal enable-repo`, or the buttons the GUI offers
 where it says they are off. `synpkg about` reports which sources are actually
 wired up on your machine.
 
+You do not have to open it to find something. Type a name into the **start
+menu**, or into the command bar, and if nothing installed answers to it the
+repositories are asked instead: the menu lists what would provide it, and the
+command bar puts the best match one `Return` away. That lookup is local and
+ranked so it keeps up with typing — the AUR and Flathub are a network round
+trip and are not asked on a keystroke. The last row of either list opens the
+Software Manager on **All sources** with the term already in the box, which is
+where the wider question gets answered.
+
+A one-key install is only offered for a package actually *named* after what you
+typed. Something whose description merely mentions the word is listed, never
+armed.
+
 `syn-update` clones the project to `/var/lib/synapse-src` and rebuilds only the
 components whose `pkgver`/`pkgrel` moved, using `makepkg` — so it needs
 `base-devel`, and components are compiled on the target rather than downloaded.
@@ -1462,7 +1475,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
-| `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
+| `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `provides` (what to install to get a program of that name, best match first), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab] [--search T]` opens the window, on that tab, already searching |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`, `ping` (the background check behind the bar's update indicator). Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |

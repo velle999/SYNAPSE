@@ -547,6 +547,13 @@ typedef struct {
     char  out[CMDBAR_OUT_LINES][CMDBAR_OUT_COLS];
     int   out_lines;
     int   out_more;     /* lines produced beyond the ones we kept */
+
+    /* A package `synpkg provides` offered for a name this machine has nothing
+     * called — see cmdbar_submit(). Non-empty means the NEXT Return installs
+     * it instead of asking anything, which is why every key that edits the
+     * line clears it: an offer that outlived the words it was made about
+     * would install the wrong thing on a keystroke. */
+    char  offer_pkg[64];
     /* Pointer geometry, written by synui_render_cmdbar(). Rect only — see
      * there. */
     syn_hit_t hit;

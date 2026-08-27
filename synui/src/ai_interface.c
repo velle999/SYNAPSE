@@ -34,6 +34,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include <time.h>
 #include <pthread.h>
 #include <signal.h>
@@ -502,6 +503,20 @@ void cmdbar_key(syn_server_t *s, uint32_t keysym)
 #define CMDCAP_BUF_MAX    (16 * 1024)
 #define CMDCAP_SHOW_SECS  10
 
+/* What the captured bytes ARE, and therefore what happens to them at EOF.
+ *
+ * OUTPUT is the original case: whatever a command printed, split to rows and
+ * shown under the line that produced it. PROVIDES is a `synpkg provides`
+ * listing — a TSV table nobody wants to read raw, which is parsed into an
+ * offer instead (see cmdbar_provides_done). The two also differ on the EMPTY
+ * case: a command that printed nothing leaves the bar as it was, whereas a
+ * lookup that found nothing still owes the question an answer and hands it to
+ * the model. */
+typedef enum {
+    CMDCAP_OUTPUT = 0,
+    CMDCAP_PROVIDES,
+} syn_cmdcap_kind_t;
+
 typedef struct {
     syn_server_t           *s;
     struct wl_list          link;       /* s->cmdcaps */
@@ -511,6 +526,12 @@ typedef struct {
     time_t                  started;
     size_t                  len;
     bool                    capped;     /* buf full: still drain, stop storing */
+    syn_cmdcap_kind_t       kind;
+    /* The line this capture was started for. `gen` says "a newer command has
+     * been submitted"; this says "the words have been edited since", which
+     * nothing bumps a generation for and which matters just as much: an answer
+     * about `gimp` must not land on a bar now reading `gimpp`. */
+    char                    line[CMDBAR_MAX_INPUT];
     char                    buf[CMDCAP_BUF_MAX];
 } syn_cmdcap_t;
 
@@ -609,18 +630,42 @@ void cmdcap_stop_all(syn_server_t *s)
         cmdcap_free(c);
 }
 
+static void cmdbar_provides_done(syn_cmdcap_t *c);
+static void cmdbar_ask_ai(syn_server_t *s);
+
 /* EOF (or error): the child is done writing. Take the bar only if this is still
  * the newest command, the bar is still up, and the answer is still fresh. */
 static void cmdcap_finish(syn_cmdcap_t *c)
 {
     syn_server_t *s = c->s;
     bool fresh = (time(NULL) - c->started) <= CMDCAP_SHOW_SECS;
+    bool mine  = c->gen == s->cmdcap_gen && s->cmdbar.visible && fresh;
 
     wlr_log(WLR_DEBUG,
             "cmdbar: capture EOF: %zu bytes, gen %u/%u, visible %d, fresh %d",
             c->len, c->gen, s->cmdcap_gen, s->cmdbar.visible, (int)fresh);
 
-    if (c->gen == s->cmdcap_gen && s->cmdbar.visible && fresh && c->len) {
+    if (c->kind == CMDCAP_PROVIDES) {
+        /* ⚠ ONE EXTRA TEST, and only here: the words must not have been edited
+         * since. A generation says "something newer was SUBMITTED", and typing
+         * submits nothing — so the older rule cannot tell that a lookup for
+         * `gimp` is landing on a bar that now reads `gimpp`. That does not
+         * matter for captured output, which is shown as output and is
+         * self-evidently about the line that produced it, but it matters
+         * enormously here: this answer arms a Return key.
+         *
+         * Run even on ZERO BYTES, which is what a missing synpkg looks like
+         * (execvp fails, the child _exits, the pipe EOFs empty). The line was
+         * submitted and something has to answer it — cmdbar_provides_done
+         * hands an empty listing straight to the model, which is where it was
+         * going before any of this existed. */
+        if (mine && !strcmp(c->line, s->cmdbar.input))
+            cmdbar_provides_done(c);
+        cmdcap_free(c);
+        return;
+    }
+
+    if (mine && c->len) {
         cmdcap_to_bar(c);
         synui_render_cmdbar(s);
     }
@@ -664,8 +709,8 @@ static int cmdcap_readable(int fd, uint32_t mask, void *data)
  * and a line with an apostrophe in it — "what's running" — either breaks or,
  * worse, doesn't.
  */
-static bool cmdcap_spawn(syn_server_t *s, const char *path,
-                         const char *const argv[])
+static bool cmdcap_spawn_kind(syn_server_t *s, syn_cmdcap_kind_t kind,
+                              const char *path, const char *const argv[])
 {
     int pfd[2];
     /* O_CLOEXEC: this pipe must not leak into the *next* CMD: child, which
@@ -705,6 +750,8 @@ static bool cmdcap_spawn(syn_server_t *s, const char *path,
     c->fd      = pfd[0];
     c->gen     = ++s->cmdcap_gen;
     c->started = time(NULL);
+    c->kind    = kind;
+    snprintf(c->line, sizeof c->line, "%s", s->cmdbar.input);
     wl_list_insert(&s->cmdcaps, &c->link);
 
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
@@ -712,6 +759,12 @@ static bool cmdcap_spawn(syn_server_t *s, const char *path,
                                   cmdcap_readable, c);
     if (!c->src) { cmdcap_free(c); return false; }
     return true;
+}
+
+static bool cmdcap_spawn(syn_server_t *s, const char *path,
+                         const char *const argv[])
+{
+    return cmdcap_spawn_kind(s, CMDCAP_OUTPUT, path, argv);
 }
 
 /* A shell command line, captured the same way. This is the CMD: path: what the
@@ -983,6 +1036,250 @@ static bool cmdbar_launch_term(const char *line)
     return true;
 }
 
+/*
+ * ── "that is not installed — shall I fetch it?" ───────────────────────────
+ *
+ * A name typed at a command bar that no program on $PATH answers to used to go
+ * to the model, which took some thirty seconds to reply that the program is not
+ * installed — a true answer, arrived at the slowest way available, from the one
+ * component on the system that cannot install anything. The repositories can
+ * answer it in a third of a second and can act on it.
+ *
+ * This is the same lookup the start menu does when a search matches nothing
+ * installed (`synpkg provides` — ranked, capped, local: see
+ * synpkg/src/provides.c), reached from the other door.
+ */
+
+/* Is this line a program NAME rather than a question, and if so what is the
+ * name? Anything that reaches here has already failed cmdbar_is_launch(), so
+ * "there is no such program" is established; the question left is whether the
+ * user was naming one.
+ *
+ * Two shapes are accepted and nothing else:
+ *   - one bare word:            gimp
+ *   - a word, then arguments:   gimp photo.png     htop -d 5
+ *
+ * "how do i install gimp" is neither, and must not be: it is a question for the
+ * model, and looking it up would offer to install a package called `how`. The
+ * discriminator is that ARGUMENTS look like arguments — they start with a dash
+ * or a slash or a tilde, or they carry a dot, or they are a number — whereas
+ * the words of an English sentence do not. It errs toward the model: a line
+ * this refuses is answered exactly as it was before.
+ */
+static bool cmdbar_lookup_word(const char *line, char *out, size_t outsz)
+{
+    while (*line == ' ' || *line == '\t') line++;
+    if (*line == '?')                 /* the AI prefix idiom; never a name */
+        return false;
+
+    size_t n = 0;
+    while (line[n] && line[n] != ' ' && line[n] != '\t') n++;
+
+    /* A single letter is not worth a lookup, and `provides` refuses it anyway.
+     * A word too long for the buffer is not a package name either. */
+    if (n < 2 || n >= outsz)
+        return false;
+
+    /* Package-name shape. A word containing '/' is a path, and cmdbar_is_launch
+     * has already established that the path does not exist — no repository
+     * carries a package called /usr/bin/anything. */
+    if (!isalnum((unsigned char)line[0]))
+        return false;
+    for (size_t i = 0; i < n; i++) {
+        char c = line[i];
+        if (!isalnum((unsigned char)c) && !strchr("._+-@", c))
+            return false;
+    }
+
+    for (const char *rest = line + n;;) {
+        while (*rest == ' ' || *rest == '\t') rest++;
+        if (!*rest)
+            break;
+        size_t m = 0;
+        while (rest[m] && rest[m] != ' ' && rest[m] != '\t') m++;
+
+        bool digits = true;
+        for (size_t i = 0; i < m; i++)
+            if (!isdigit((unsigned char)rest[i])) { digits = false; break; }
+
+        bool argish = rest[0] == '-' || rest[0] == '/' || rest[0] == '~' ||
+                      memchr(rest, '.', m) != NULL || digits;
+        if (!argish)
+            return false;
+        rest += m;
+    }
+
+    memcpy(out, line, n);
+    out[n] = '\0';
+    return true;
+}
+
+/* Arch's legal package-name set. Checked because this string is about to be
+ * pasted into a shell line for the terminal that runs the install — it comes
+ * from synpkg's own TSV and so is not hostile, but a name is validated where it
+ * is USED as one rather than trusted because of where it came from. */
+static bool pkgname_ok(const char *s)
+{
+    if (!*s)
+        return false;
+    for (; *s; s++)
+        if (!isalnum((unsigned char)*s) && !strchr("@._+-", *s))
+            return false;
+    return true;
+}
+
+/* One field of a tab-separated row, by INDEX, copied out and NUL-terminated.
+ * Returns false for a row too short to have that field — which is how a
+ * truncated capture is spotted rather than mistaken for empty columns. */
+static bool tsv_field(const char *row, size_t len, int idx, char *out, size_t outsz)
+{
+    const char *p = row, *end = row + len;
+    for (int i = 0; i < idx; i++) {
+        while (p < end && *p != '\t') p++;
+        if (p == end)
+            return false;
+        p++;
+    }
+    const char *q = p;
+    while (q < end && *q != '\t') q++;
+    size_t n = (size_t)(q - p);
+    if (n >= outsz)
+        n = outsz - 1;
+    memcpy(out, p, n);
+    out[n] = '\0';
+    return true;
+}
+
+/* Where a named column sits in a `--tsv` header row, or -1.
+ *
+ * BY NAME, never by position — the rule every synpkg consumer follows. This
+ * listing carries a seventh column the other package listings do not (`match`),
+ * which is exactly the kind of difference that turns positional parsing into a
+ * silent re-labelling of every field after it. */
+static int tsv_col(const char *head, size_t len, const char *want)
+{
+    size_t wl = strlen(want);
+    const char *p = head, *end = head + len;
+    for (int idx = 0;; idx++) {
+        const char *q = p;
+        while (q < end && *q != '\t') q++;
+        if ((size_t)(q - p) == wl && !memcmp(p, want, wl))
+            return idx;
+        if (q == end)
+            return -1;
+        p = q + 1;
+    }
+}
+
+/*
+ * The lookup landed. Turn it into an offer, or give up and ask the model.
+ *
+ * WHAT THE USER SEES: the response line names ONE package — the top-ranked one
+ * — with its repository and version, and says Return will install it. The rows
+ * beneath list the runners-up, so the answer to "no, the other one" is to type
+ * that name rather than to go somewhere else. Nothing is installed by anything
+ * that happens here; arming a key is as far as it goes, and the terminal that
+ * eventually runs `synpkg install` asks again before it does anything.
+ */
+static void cmdbar_provides_done(syn_cmdcap_t *c)
+{
+    syn_server_t *s   = c->s;
+    syn_cmdbar_t *bar = &s->cmdbar;
+
+    bar->out_lines  = 0;
+    bar->out_more   = 0;
+    bar->offer_pkg[0] = '\0';
+
+    /* Split the capture into rows. The header is row 0; a capture with no
+     * newline at all is not a listing. */
+    const char *rows[CMDBAR_OUT_LINES + 2];
+    size_t      lens[CMDBAR_OUT_LINES + 2];
+    size_t      nrows = 0, start = 0;
+    for (size_t i = 0; i <= c->len && nrows < sizeof rows / sizeof *rows; i++) {
+        if (i < c->len && c->buf[i] != '\n')
+            continue;
+        if (i > start) { rows[nrows] = c->buf + start; lens[nrows] = i - start; nrows++; }
+        start = i + 1;
+    }
+
+    int c_name = -1, c_ver = -1, c_repo = -1, c_desc = -1, c_inst = -1, c_match = -1;
+    if (nrows) {
+        c_name  = tsv_col(rows[0], lens[0], "name");
+        c_ver   = tsv_col(rows[0], lens[0], "version");
+        c_repo  = tsv_col(rows[0], lens[0], "repo");
+        c_desc  = tsv_col(rows[0], lens[0], "description");
+        c_inst  = tsv_col(rows[0], lens[0], "installed");
+        c_match = tsv_col(rows[0], lens[0], "match");
+    }
+    if (c_name < 0 || c_inst < 0 || c_match < 0) {
+        /* No listing, an empty one, or a synpkg too old to have this verb.
+         * Every one of those means "the repositories did not answer", and the
+         * question goes where it always went. */
+        cmdbar_ask_ai(s);
+        return;
+    }
+
+    for (size_t i = 1; i < nrows; i++) {
+        char name[64], inst[8], match[24], ver[64], repo[32], desc[CMDBAR_OUT_COLS];
+
+        if (!tsv_field(rows[i], lens[i], c_name,  name,  sizeof name)  ||
+            !tsv_field(rows[i], lens[i], c_inst,  inst,  sizeof inst)  ||
+            !tsv_field(rows[i], lens[i], c_match, match, sizeof match))
+            continue;
+        if (!pkgname_ok(name))
+            continue;
+        /* Already here. It cannot be what the user was trying to run — that is
+         * how this code was reached — so it is not an answer. */
+        if (!strcmp(inst, "1"))
+            continue;
+        /* ⚠ A DESCRIPTION-ONLY MATCH IS NOT AN OFFER. `provides` ranks a
+         * package whose blurb merely mentions the word below every package
+         * actually NAMED after it, and putting one of those a single Return
+         * away would be arming a key on a guess. The model gets those. */
+        if (!strcmp(match, "description"))
+            continue;
+
+        if (!tsv_field(rows[i], lens[i], c_ver,  ver,  sizeof ver))  ver[0]  = '\0';
+        if (!tsv_field(rows[i], lens[i], c_repo, repo, sizeof repo)) repo[0] = '\0';
+        if (c_desc < 0 || !tsv_field(rows[i], lens[i], c_desc, desc, sizeof desc))
+            desc[0] = '\0';
+
+        if (!bar->offer_pkg[0]) {
+            snprintf(bar->offer_pkg, sizeof bar->offer_pkg, "%s", name);
+            snprintf(bar->response, sizeof bar->response,
+                     "not installed — Return installs %s/%s %s", repo, name, ver);
+            if (desc[0] && bar->out_lines < CMDBAR_OUT_LINES)
+                snprintf(bar->out[bar->out_lines++], CMDBAR_OUT_COLS, "  %s", desc);
+        } else if (bar->out_lines < CMDBAR_OUT_LINES - 1) {
+            /* Runners-up. One line short of the cap on purpose: the last row
+             * belongs to the wider search below, and losing THAT to a list of
+             * near-misses would leave the bar with no way out of them. */
+            snprintf(bar->out[bar->out_lines++], CMDBAR_OUT_COLS,
+                     "  or %s — %s", name, desc);
+        }
+    }
+
+    if (!bar->offer_pkg[0]) {
+        cmdbar_ask_ai(s);
+        return;
+    }
+
+    /* The repositories are not every source, and `provides` deliberately asks
+     * no other: the AUR is a network round trip and Flathub is a 48MB index.
+     * Naming the command that DOES ask them keeps that a choice rather than a
+     * limit nobody is told about. */
+    if (bar->out_lines < CMDBAR_OUT_LINES) {
+        char word[64];
+        if (cmdbar_lookup_word(bar->input, word, sizeof word))
+            snprintf(bar->out[bar->out_lines++], CMDBAR_OUT_COLS,
+                     "  every source: synpkg gui all --search %s", word);
+    }
+
+    wlr_log(WLR_INFO, "cmdbar: offering to install %s for '%s'",
+            bar->offer_pkg, bar->input);
+    synui_render_cmdbar(s);
+}
+
 void cmdbar_submit(syn_server_t *s)
 {
     syn_cmdbar_t *bar = &s->cmdbar;
@@ -1037,8 +1334,22 @@ void cmdbar_submit(syn_server_t *s)
         return;
     }
 
+    cmdbar_ask_ai(s);
+}
+
+/*
+ * Hand the line to the model. The tail of cmdbar_submit() until the
+ * not-installed lookup needed a second way in: that lookup is asynchronous, so
+ * the decision "the repositories cannot help, ask the model" is taken in a pipe
+ * handler some hundreds of milliseconds after the Return that started it.
+ */
+static void cmdbar_ask_ai(syn_server_t *s)
+{
+    syn_cmdbar_t *bar = &s->cmdbar;
+
     bar->waiting = 1;
     strncpy(bar->response, "⟳ thinking…", sizeof(bar->response) - 1);
+    synui_render_cmdbar(s);
 
     /* Build prompt with compositor context. focused_window is only present when
      * the bar was opened with Super+Backspace (cmdbar_ask_window), which is what

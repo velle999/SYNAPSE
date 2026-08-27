@@ -328,11 +328,31 @@ FloatingWindow {
     // back to Updates rather than opening a blank window on a section that
     // does not exist.
     property string section: {
+        // A term to open on (SYNPKG_QUERY, below) has to arrive somewhere it
+        // can be searched. It comes from a launcher that ran out of local
+        // answers, so All sources is the tab it means — and naming a section
+        // as well is how you ask for that term on THAT source.
         const want = Quickshell.env("SYNPKG_SECTION") || ""
         for (const s of root.sections)
             if (s.id === want) return want
-        return "updates"
+        return root.openQuery !== "" ? "all" : "updates"
     }
+
+    /*
+     * `SYNPKG_QUERY=<term> synpkg gui` opens already searching for it.
+     *
+     * This is the far end of the escape hatch synui's start menu and command
+     * bar offer: both look a typed name up with `synpkg provides`, which asks
+     * the local repositories only because it runs on a keystroke's budget, and
+     * both end their list with a row that means "now ask EVERYWHERE" — the
+     * AUR and Flathub included, which is a network round trip and a 48MB
+     * appstream scan and has no business happening while somebody types.
+     *
+     * In the environment rather than as an argument for the same reason
+     * SYNPKG_SECTION is: `synpkg gui` execs quickshell, which takes no
+     * arguments of its own.
+     */
+    readonly property string openQuery: Quickshell.env("SYNPKG_QUERY") || ""
     property string mode: "browse"    // source tabs: browse | search | installed
     property string busy: ""          // package currently being (un)installed
     property string statusLine: ""
@@ -1188,7 +1208,18 @@ FloatingWindow {
     // the same rule every later tab does. `synpkg gui aur` starting in Browse —
     // a mode the AUR does not have — would show an empty pane with no
     // explanation until something else was clicked.
-    Component.onCompleted: showSection(root.section)
+    Component.onCompleted: {
+        showSection(root.section)
+        if (root.openQuery !== "") {
+            // AFTER showSection, which sets the mode and calls reload(): a
+            // search issued first would have its rows replaced by the browse
+            // load landing behind it, and the window would open on a category
+            // pane with the term sitting unused in the box.
+            searchInput.text = root.openQuery
+            root.mode = "search"
+            root.doSearch(root.openQuery)
+        }
+    }
 
     // ── Layout ──────────────────────────────────────────────────────────────
     Rectangle {

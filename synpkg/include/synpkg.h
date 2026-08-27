@@ -151,6 +151,16 @@ void emit_pkg(const char *name, bool installed, const char *version,
               const char *repo, off_t size, const char *desc);
 void emit_pkg_header(void);
 
+/* ── provides.c ─────────────────────────────────────────────────────────────
+ * The launcher's question: one word was typed where a program name belonged
+ * and nothing on this machine answers to it — what would installing look like?
+ * Ranked, capped, and every row carries a seventh `match` column saying which
+ * tier it matched at (exact / provides / prefix / name / description), so a
+ * front-end can decide how confident to be before putting an install one
+ * keystroke away. Local databases only; the header is printed even on a miss
+ * and "nothing matched" rides the exit status as 100. */
+int cmd_provides(int argc, char **argv);
+
 /* ── trans.c ────────────────────────────────────────────────────────────── */
 int cmd_install(int argc, char **argv);
 int cmd_remove(int argc, char **argv);
