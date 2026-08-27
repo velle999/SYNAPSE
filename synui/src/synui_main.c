@@ -2338,7 +2338,7 @@ int synui_init(syn_server_t *s)
     mpris_init(s);
 
     /* The lock screen's weather. Reads the location file and the cached
-     * reading here (both local); goes near the network only if lock_weather is
+     * reading here (both local); goes near the network only if weather is
      * on, which it is not by default. */
     weather_init(s);
     bt_init(s);

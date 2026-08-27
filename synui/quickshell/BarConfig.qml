@@ -32,6 +32,12 @@ QtObject {
         "clock":      true,
         "tray":       true,
         "updates":    true,     // syn-update's pending count
+        /* On, but the module hides itself until there is a reading — and there
+         * is none until `synctl weather on`, because the weather is the only
+         * part of this desktop that goes to the network. So a default of true
+         * changes nothing on any machine that has not asked for it, and means
+         * nobody has to find TWO switches on the machine that has. */
+        "weather":    true,
         "sysinfo":    true,     // cpu + memory
         "volume":     true,
         "netbt":      true      // network + bluetooth
@@ -45,6 +51,7 @@ QtObject {
         { key: "clock",      label: "Clock" },
         { key: "tray",       label: "System tray" },
         { key: "updates",    label: "Update notifier" },
+        { key: "weather",    label: "Weather" },
         { key: "sysinfo",    label: "CPU + memory" },
         { key: "volume",     label: "Volume" },
         { key: "netbt",      label: "Network + Bluetooth" }

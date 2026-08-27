@@ -649,6 +649,20 @@ PanelWindow {
                     Updates   { barScreen: bar.screen
                                 barVisible: BarConfig.get(bar.outName, "updates") }
 
+                    /* Left of the update badge and the tray, with the rest of
+                     * the readouts rather than with the indicators: a
+                     * temperature is a number you read, not a thing that wants
+                     * you. Like Updates it is invisible when there is nothing
+                     * to say, so a bar with the weather off is unchanged.
+                     *
+                     * ⚠ This is modules/Weather.qml. There is a
+                     * widgets/Weather.qml too — the desktop card — and the two
+                     * are only unambiguous because this file imports "modules"
+                     * and shell.qml imports "widgets", neither importing both.
+                     */
+                    Weather   { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "weather") }
+
                     Tray      { barScreen: bar.screen
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: BarConfig.get(bar.outName, "tray") }

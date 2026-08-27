@@ -14,11 +14,11 @@
  *     ~/.local/state/omarchy/settings/weather.json
  *
  * — so setting your city once sets it for the bar widget, the radar plugin and
- * this. A `lock_weather_city` key would have been a second place to say the
+ * this. A `weather_city` key would have been a second place to say the
  * same thing and a guaranteed way for the two to disagree.
  *
  * ⚠ OFF BY DEFAULT. This is the only part of the lock screen that touches the
- * network, on a distro that is careful about that; `lock_weather = on` (or the
+ * network, on a distro that is careful about that; `weather = on` (or the
  * Super+Z row) is a deliberate act. Nothing here runs, and no name is resolved,
  * until it is turned on.
  *
@@ -109,7 +109,7 @@ static struct {
     char    place[64];
     double  lat, lon;
     int     have_coords;
-    int     unit_f;              /* resolved from cfg->lock_weather_unit */
+    int     unit_f;              /* resolved from cfg->weather_unit */
 
     /* The reading. `when` is 0 until there has ever been one. */
     double  temp;
@@ -238,27 +238,94 @@ static void wx_read_location(void)
     }
 }
 
-/* ── The cache ───────────────────────────────────────────── */
+/* ── The published reading ───────────────────────────────── */
+
+/* Defined with the WMO table further down — declared here because the file it
+ * writes is now read by the bar, and the reader needs the word and the picture
+ * rather than the number they both come from. */
+static void wx_describe(int code, const char **text, syn_weather_icon_t *icon);
+
+/* The icon as a NAME, for the state file. A number would be this enum's order
+ * written down in a second place: inserting a value would silently re-point
+ * every reader, and the reader here is QML in another process that is upgraded
+ * at the same moment but has no way to notice. Names cannot drift that way. */
+static const char *wx_icon_name(syn_weather_icon_t icon)
+{
+    switch (icon) {
+    case SYN_WX_SUN:    return "sun";
+    case SYN_WX_PARTLY: return "partly";
+    case SYN_WX_CLOUD:  return "cloud";
+    case SYN_WX_FOG:    return "fog";
+    case SYN_WX_RAIN:   return "rain";
+    case SYN_WX_SNOW:   return "snow";
+    case SYN_WX_STORM:  return "storm";
+    }
+    return "cloud";
+}
 
 static bool wx_cache_path(char *buf, size_t n)
 {
-    return syn_config_path(buf, n, "weather.cache");
+    return syn_config_path(buf, n, "weather.state");
 }
 
+/*
+ * ⚠ THIS FILE IS READ BY THE BAR, which is what makes the rename below matter.
+ *
+ * It began as a private cache — the reason a lock screen draws a temperature in
+ * its first frame rather than a gap that fills in a second later. It is now
+ * also the ONLY thing the bar module and the desktop widget ever read: neither
+ * fetches, for the reason Updates.qml gives at length — a fetch in the bar is a
+ * fetch per MONITOR, inside the shell process, where a stalled connect is a
+ * stalled desktop. The compositor is the single fetcher and this is where it
+ * puts the answer, so the name says `state` like every other published one.
+ *
+ * ⚠ WRITTEN TEMP+RENAME. A FileView with watchChanges on a path being rewritten
+ * in place sees it empty for a frame, and the bar's temperature would blink to
+ * nothing every twenty minutes. Rename is atomic; a reader gets the old bytes or
+ * the new ones and never a half file.
+ *
+ * `cond` and `icon` are DERIVED HERE and not left to the reader, because
+ * wx_describe() is the one table that maps a WMO code to a word and a picture.
+ * A second copy of it in QML is how a sun ends up drawn over the word "Snow".
+ */
 static void wx_cache_save(void)
 {
-    char path[512];
+    char path[512], tmp[600];
     if (!wx_cache_path(path, sizeof(path))) return;
     syn_config_ensure_dir();
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
 
-    FILE *f = fopen(path, "we");
+    FILE *f = fopen(tmp, "we");
     if (!f) return;
+
+    const char *cond = "";
+    syn_weather_icon_t icon = SYN_WX_CLOUD;
+    wx_describe(wx.code, &cond, &icon);
+
     fprintf(f, "place=%s\n", wx.place);
     fprintf(f, "temp=%.1f\n", wx.temp);
     fprintf(f, "code=%d\n", wx.code);
     fprintf(f, "unit=%c\n", wx.unit_f ? 'F' : 'C');
     fprintf(f, "when=%lld\n", (long long)wx.when);
-    fclose(f);
+    fprintf(f, "cond=%s\n", cond);
+    fprintf(f, "icon=%s\n", wx_icon_name(icon));
+    /* The reader has to agree with the lock screen about what "old" means, and
+     * a threshold compiled into two places is a threshold that drifts. */
+    fprintf(f, "stale_after=%d\n", WX_STALE_SEC);
+    if (fclose(f) != 0) { unlink(tmp); return; }
+
+    if (rename(tmp, path) != 0) unlink(tmp);
+}
+
+/* Turning the weather off removes the published reading rather than leaving the
+ * last one behind. The bar module and the widget are invisible with no file, so
+ * "off" clears them the way it clears the lock screen — a temperature that
+ * stayed on the bar after the feature was switched off would be the desktop
+ * insisting on a fact nobody asked it to keep checking. */
+static void wx_cache_clear(void)
+{
+    char path[512];
+    if (wx_cache_path(path, sizeof(path))) unlink(path);
 }
 
 static void wx_cache_load(void)
@@ -561,18 +628,18 @@ static int wx_readable(int fd, uint32_t mask, void *data)
 void weather_refresh(syn_server_t *s, bool force)
 {
     if (!wx.running) return;
-    if (!s->config.lock_weather) return;
+    if (!s->config.weather) return;
 
     if (!force && wx.when && time(NULL) - wx.when < WX_REFRESH_SEC) return;
 
     pthread_mutex_lock(&wx.lock);
     /* ⚠ THE UNIT IS RE-READ HERE, not only at init. The Super+Z row writes
-     * cfg->lock_weather_unit_f and asks for a refresh; without this the request
+     * cfg->weather_unit_f and asks for a refresh; without this the request
      * would go out asking for the unit that was configured at STARTUP, and
      * switching to °F would answer with a Celsius number labelled °F — a
      * plausible wrong temperature, which is the worst kind. Under the lock,
      * because the fetch thread reads it. */
-    wx.unit_f = s->config.lock_weather_unit_f;
+    wx.unit_f = s->config.weather_unit_f;
     atomic_store(&wx.want, 1);
     pthread_cond_signal(&wx.cv);
     pthread_mutex_unlock(&wx.lock);
@@ -808,7 +875,7 @@ void weather_init(syn_server_t *s)
     memset(&wx, 0, sizeof(wx));
     wx.server  = s;
     wx.pipe[0] = wx.pipe[1] = -1;
-    wx.unit_f  = s->config.lock_weather_unit_f;
+    wx.unit_f  = s->config.weather_unit_f;
 
     /* ⚠ THE MUTEX IS CREATED FIRST, ahead of every failure path below.
      * weather_current() and weather_publish_state() take it, and they are
@@ -824,7 +891,7 @@ void weather_init(syn_server_t *s)
      * having them loaded is what lets turning the row on in Super+Z draw
      * something at once instead of after the first fetch. Nothing goes near the
      * network until weather_refresh(), which returns immediately while
-     * lock_weather is off. */
+     * weather is off. */
     wx_read_location();
     wx_cache_load();
 
@@ -853,22 +920,23 @@ void weather_init(syn_server_t *s)
     }
     wx.running = 1;
 
-    if (s->config.lock_weather) {
+    if (s->config.weather) {
         weather_refresh(s, false);
         wl_event_source_timer_update(wx.timer, WX_REFRESH_SEC * 1000);
     }
 }
 
-/* Called when lock_weather is turned on at runtime (the Super+Z row), so the
+/* Called when weather is turned on at runtime (the Super+Z row), so the
  * timer starts and a reading is asked for straight away. */
 void weather_enabled_changed(syn_server_t *s)
 {
     if (!wx.running) return;
-    if (s->config.lock_weather) {
+    if (s->config.weather) {
         weather_refresh(s, true);
         if (wx.timer) wl_event_source_timer_update(wx.timer, WX_REFRESH_SEC * 1000);
     } else if (wx.timer) {
         wl_event_source_timer_update(wx.timer, 0);   /* disarm */
+        wx_cache_clear();
     }
 }
 

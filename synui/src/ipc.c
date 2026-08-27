@@ -692,6 +692,61 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         bputs(out, "]}\n");
         return;
     }
+    /*
+     * The weather.
+     *
+     *   synctl weather              — the reading, or {"on":false}
+     *   synctl weather on|off       — the NETWORK switch, for every surface
+     *   synctl weather refresh      — ask now instead of at the next tick
+     *
+     * ⚠ ONE SWITCH, THREE SURFACES. The lock screen, the bar module and the
+     * desktop widget all draw the same reading from the same fetch; `off` is
+     * the machine not talking to Open-Meteo at all, which is the only part of
+     * any of this that leaves the box. Whether a given surface SHOWS what has
+     * been fetched is that surface's own furniture switch — the bar's
+     * right-click menu, `synui-widgets weather`, the Super+Z row — exactly the
+     * split Updates.qml documents between its timer and its module.
+     */
+    if (strncmp(line, "weather", 7) == 0 && (line[7] == ' ' || line[7] == '\0')) {
+        const char *arg = line[7] ? line + 8 : "";
+        while (*arg == ' ') arg++;
+
+        if (strcmp(arg, "on") == 0 || strcmp(arg, "off") == 0) {
+            bool on = arg[1] == 'n';
+            if (on != (bool)s->config.weather) {
+                s->config.weather = on;
+                weather_enabled_changed(s);
+                saver_state_save(s);      /* the Super+Z row's file: one owner */
+            }
+        } else if (strcmp(arg, "refresh") == 0) {
+            if (!s->config.weather) {
+                bputs(out, "{\"error\":\"weather is off\"}\n");
+                return;
+            }
+            weather_refresh(s, true);
+        } else if (*arg) {
+            bputs(out, "{\"error\":\"usage: weather [on|off|refresh]\"}\n");
+            return;
+        }
+
+        syn_weather_now_t w;
+        if (!s->config.weather || !weather_current(&w)) {
+            /* "on but nothing yet" and "off" are different answers: the first
+             * is a machine that has been asked and has not been told, which is
+             * every machine for the first seconds after it is switched on. */
+            bprintf(out, "{\"on\":%s,\"have\":false}\n",
+                    s->config.weather ? "true" : "false");
+            return;
+        }
+        bprintf(out, "{\"on\":true,\"have\":true,\"temp\":%d,\"unit\":\"%c\","
+                     "\"age\":%ld,\"stale\":%s,\"cond\":",
+                w.temp, w.unit, (long)w.age, w.stale ? "true" : "false");
+        bjson_str(out, w.cond);
+        bputs(out, ",\"place\":");
+        bjson_str(out, w.place);
+        bputs(out, "}\n");
+        return;
+    }
     if (strcmp(line, "activewindow") == 0) {
         if (s->focused_view && s->focused_view->mapped) json_view(out, s->focused_view);
         else                                            bputs(out, "{}");
@@ -707,6 +762,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
                    "\"activeworkspace\",\"activewindow\",\"cursor\",\"pointer\","
                    "\"recent\",\"binds\",\"version\","
                    "\"layout [next|prev|<name>]\","
+                   "\"weather [on|off|refresh]\","
                    "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");
         return;
     }

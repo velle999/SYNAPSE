@@ -2171,6 +2171,34 @@ pkgver=0.1.0
 #   The core band is 40px taller to hold the chip below the fingerprint row, and
 #   the chip's hit rect gains the band's offset the way the transport buttons'
 #   already did: the caller translates the context, the mouse has none.
+# 519: THE WEATHER LEAVES THE LOCK SCREEN. The engine 517 added for the lock and
+#   login screens now feeds two more surfaces: a bar module (the temperature,
+#   invisible until there is a reading) and a desktop widget (the same reading
+#   with the condition, the place and its age around it).
+#   ⚠ NEITHER OF THEM FETCHES ANYTHING, and that is the design. A bar module is
+#   instantiated once per MONITOR, inside the shell process — three bars would
+#   be three requests, and a connect stalling behind a captive portal would be a
+#   stalled desktop. src/weather.c stays the only fetcher and publishes
+#   ~/.config/synui/weather.state; WeatherState.qml watches it. Same arrangement
+#   as Updates.qml and `syn-update ping`, for the same reasons.
+#   ⚠ THE FILE IS WRITTEN TEMP+RENAME NOW. A FileView watching a path rewritten
+#   in place sees it empty for a frame, so the bar's temperature would blink to
+#   nothing every twenty minutes. It also carries `cond`, `icon` and
+#   `stale_after` — all DERIVED by the compositor, because wx_describe() is the
+#   one table mapping a WMO code to a word and a picture, and a second copy of
+#   it in QML is how a sun ends up drawn over the word "Snow". `stale_after`
+#   crossing the boundary is what stops the bar and the lock screen disagreeing
+#   about whether a reading is old.
+#   `lock_weather` is `weather` (and `lock_weather_unit` is `weather_unit`): the
+#   key is the NETWORK switch for three surfaces now and the old name would be a
+#   lie. Both spellings are read, in synuirc and in saver.state, so no machine
+#   that ever turned the weather on loses it — only the new one is documented.
+#   Turning it OFF removes the published reading, so a temperature does not stay
+#   on the bar after the feature was switched off.
+#   `synctl weather [on|off|refresh]`, a `weather` row in the bar's right-click
+#   menu (per monitor), `synui-widgets weather`, row 10 of Super+Shift+A.
+#   QuickLaunch hops below the card when both are on, as the pet does for the
+#   monitor. tests/weather_surfaces.sh (5 phases; it never touches the network).
 #   mpris.c: an sd-bus CLIENT of the session's players — a reader and three
 #   verbs. Every call is async; a synchronous property read against a wedged
 #   Electron app would stall every window on the desktop. The media keys reach
@@ -2200,7 +2228,7 @@ pkgver=0.1.0
 #   in 357, and now the same guard: publish only when synui_owns_seat(), with
 #   SYNUI_GREETER_BG_DIR lifting it because a rig that has redirected the root
 #   has no real root to protect.
-pkgrel=518
+pkgrel=519
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -284,8 +284,8 @@ void greeterbg_publish(syn_server_t *s)
      * at all.
      */
     fprintf(f, "lock_media = %s\n", s->config.lock_media ? "on" : "off");
-    fprintf(f, "lock_weather = %s\n", s->config.lock_weather ? "on" : "off");
-    if (s->config.lock_weather) {
+    fprintf(f, "weather = %s\n", s->config.weather ? "on" : "off");
+    if (s->config.weather) {
         char place[64] = "";
         double lat = 0, lon = 0, temp = 0;
         int have_coords = 0, code = 0;
@@ -405,8 +405,8 @@ void greeterbg_adopt(syn_server_t *s, const char *user)
             s->config.lock_media = (strncmp(v, "on", 2) == 0);
             continue;
         }
-        if (sscanf(line, " lock_weather = %255[^\n]", v) == 1) {
-            s->config.lock_weather = (strncmp(v, "on", 2) == 0);
+        if (sscanf(line, " weather = %255[^\n]", v) == 1) {
+            s->config.weather = (strncmp(v, "on", 2) == 0);
             continue;
         }
         if (sscanf(line, " wx_place = %255[^\n]", v) == 1) {

@@ -28,6 +28,7 @@ QtObject {
     property bool tux:        false
     property bool analog:     false
     property bool music:      false
+    property bool weather:    false
 
     // Desktop widgets live on ONE screen. A clock and a system monitor
     // duplicated onto three monitors is noise, not a rice — so they follow the
@@ -54,6 +55,7 @@ QtObject {
         root.tux        = false
         root.analog     = false
         root.music      = false
+        root.weather    = false
     }
 
     function parse(text) {
@@ -75,6 +77,7 @@ QtObject {
             case "tux":        root.tux        = on; break
             case "analog":     root.analog     = on; break
             case "music":      root.music      = on; break
+            case "weather":    root.weather    = on; break
             }
         }
     }

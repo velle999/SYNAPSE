@@ -466,7 +466,7 @@ static bool lock_layout_shown(syn_server_t *s)
  */
 static void lock_draw_weather(syn_server_t *s, cairo_t *cr, double a)
 {
-    if (!s->config.lock_weather) return;
+    if (!s->config.weather) return;
 
     syn_weather_now_t w;
     if (!weather_current(&w)) return;      /* never had a reading: draw nothing */
@@ -1673,7 +1673,7 @@ void synui_lock(syn_server_t *s)
     /* Nudge the weather, if it is on and what we have is old. Not forced: the
      * cached reading is what the first frame draws either way, and a machine
      * locked and unlocked six times in a minute has no business making six
-     * requests. No-op while lock_weather is off, which is the default. */
+     * requests. No-op while weather is off, which is the default. */
     weather_refresh(s, false);
 
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);

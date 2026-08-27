@@ -1577,6 +1577,23 @@ test('lock_layout', lock_layout_t,
      depends : [synui_exe, synctl_exe],
      timeout : 120)
 
+# `weather_surfaces`: one fetch, three surfaces, and the FILE between them. The
+# lock screen, the bar module and the desktop widget all show the weather and
+# none of them fetches it — src/weather.c publishes weather.state and everything
+# else reads it. A file seam breaks silently, so this pins the two halves that
+# have no other symptom: switching the weather OFF removes the published
+# reading (a temperature left on the bar afterwards is the desktop insisting on
+# a fact nobody asked it to keep checking), and `stale_after` crosses the
+# process boundary rather than being hardcoded on both sides. Never touches the
+# network: the readings are written by hand into the same file the fetch thread
+# writes, which is the whole point of there being one.
+weather_surfaces_t = find_program('tests/weather_surfaces.sh')
+test('weather_surfaces', weather_surfaces_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe, synctl_exe],
+     timeout : 180)
+
 # The accessibility control: ONE setting that makes the whole desktop bigger —
 # the compositor's panels, every application and the cursor together. Two
 # headless outputs, because "every screen" and "the focused screen" are

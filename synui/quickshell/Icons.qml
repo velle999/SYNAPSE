@@ -18,6 +18,9 @@ import QtQuick
  * "Symbols Nerd Font Mono" family (ttf-nerd-fonts-symbols-mono).
  */
 QtObject {
+    // Named so weatherFor() below can reach the glyphs beside it.
+    id: root
+
     // -- System --
     readonly property string cpu:    "\uF4BC"
     readonly property string memory: "\uF2DB"
@@ -68,6 +71,42 @@ QtObject {
     // nf-fa-arrow_circle_o_down. Chosen over a bare arrow so it reads as an
     // indicator at 14px rather than as part of the module beside it.
     readonly property string updates:    "\uF01A"
+
+    /* -- Weather --
+     *
+     * The nf-weather block, one glyph per icon NAME weather.c publishes — so
+     * the picture on the bar and the one the lock screen draws in cairo come
+     * from the same WMO table, one process apart. `weatherFor` is the only
+     * place a name is turned into a glyph.
+     *
+     * ⚠ Escapes, like every other glyph here: a literal PUA character does not
+     * survive being written into a file, and this is exactly the block where
+     * that failed silently before — see the header of this file. All seven were
+     * checked against SymbolsNerdFontMono-Regular.ttf with
+     * `fc-query --format %{charset}` rather than by eye.
+     */
+    readonly property string wxSun:    "\uE30D"   // nf-weather-day_sunny
+    readonly property string wxPartly: "\uE302"   // nf-weather-day_cloudy
+    readonly property string wxCloud:  "\uE312"   // nf-weather-cloudy
+    readonly property string wxFog:    "\uE313"   // nf-weather-fog
+    readonly property string wxRain:   "\uE318"   // nf-weather-rain
+    readonly property string wxSnow:   "\uE31A"   // nf-weather-snow
+    readonly property string wxStorm:  "\uE31D"   // nf-weather-thunderstorm
+
+    function weatherFor(name) {
+        switch (name) {
+        case "sun":    return root.wxSun
+        case "partly": return root.wxPartly
+        case "fog":    return root.wxFog
+        case "rain":   return root.wxRain
+        case "snow":   return root.wxSnow
+        case "storm":  return root.wxStorm
+        }
+        // Including a name from a newer compositor than this QML: a cloud is
+        // the honest answer to "some weather", and a blank would collapse an
+        // icon-and-text module to a bare number.
+        return root.wxCloud
+    }
 
     readonly property string record:     "\uF111"
     readonly property string recordStop: "\uF04D"

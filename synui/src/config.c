@@ -528,13 +528,13 @@
  *   lock_dim = 0                 (0-100 %)
  *   lock_accent = #00d6e5        (the ring and the caret)
  *   lock_media = on|off          (now playing + the transport buttons; on)
- *   lock_weather = on|off        (OFF — the only part of this screen that
+ *   weather = on|off        (OFF — the only part of this screen that
  *                                 goes to the network. The PLACE is
  *                                 ~/.local/state/omarchy/settings/weather.json,
  *                                 which every weather widget here reads and
  *                                 omarchy-weather-location writes; there is no
  *                                 second setting for it)
- *   lock_weather_unit = auto|c|f (auto reads the locale)
+ *   weather_unit = auto|c|f (auto reads the locale)
  *   lock_layout = auto|on|off    (the keyboard-layout chip; auto shows it only
  *                                 when xkb_layout names more than one)
  *   screensaver = on|off
@@ -1384,7 +1384,7 @@ void syn_config_ensure_dir(void)
 /*
  * °F or °C, guessed from the locale, for the lock screen's weather row.
  *
- * ⚠ A GUESS, and one the user overrides with `lock_weather_unit` or the Super+Z
+ * ⚠ A GUESS, and one the user overrides with `weather_unit` or the Super+Z
  * row — it is a starting value, not a decision. LC_MEASUREMENT is asked first
  * because that is the category that actually means "which units", and a great
  * many desktops run LANG=en_US with LC_MEASUREMENT set to something metric on
@@ -1658,8 +1658,8 @@ static void config_set_defaults(syn_config_t *cfg)
      * requests because a screen locked. Turned on in synuirc or by the
      * Super+Z row; the PLACE comes from the weather widgets' own file, never
      * from here. */
-    cfg->lock_weather        = 0;
-    cfg->lock_weather_unit_f = locale_wants_fahrenheit();
+    cfg->weather        = 0;
+    cfg->weather_unit_f = locale_wants_fahrenheit();
 
     /* Shown only when there is more than one layout to choose between. */
     cfg->lock_layout = SYN_LOCK_LAYOUT_AUTO;
@@ -2768,21 +2768,27 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "lock_media") == 0)
         cfg->lock_media = strcmp(val, "on") == 0;
-    else if (strcmp(key, "lock_weather") == 0)
-        cfg->lock_weather = strcmp(val, "on") == 0;
-    else if (strcmp(key, "lock_weather_unit") == 0) {
+    /* `lock_weather` was this key's name while the lock screen was the only
+     * thing that showed the weather. It reads the bar module and the desktop
+     * widget now, so the name would be a lie — but a config that still says the
+     * old one must not silently stop fetching, so both spellings are read and
+     * only the new one is documented. */
+    else if (strcmp(key, "weather") == 0 || strcmp(key, "lock_weather") == 0)
+        cfg->weather = strcmp(val, "on") == 0;
+    else if (strcmp(key, "weather_unit") == 0 ||
+             strcmp(key, "lock_weather_unit") == 0) {
         /* `auto` is the locale guess, spelled so that going back to it is
          * possible after naming a unit — a setting you can only leave is one
          * this tree has shipped before. */
         if (strcmp(val, "auto") == 0)
-            cfg->lock_weather_unit_f = locale_wants_fahrenheit();
+            cfg->weather_unit_f = locale_wants_fahrenheit();
         else if (val[0] == 'f' || val[0] == 'F')
-            cfg->lock_weather_unit_f = 1;
+            cfg->weather_unit_f = 1;
         else if (val[0] == 'c' || val[0] == 'C')
-            cfg->lock_weather_unit_f = 0;
+            cfg->weather_unit_f = 0;
         else
-            wlr_log(WLR_ERROR, "synui: config: lock_weather_unit '%s' is not "
-                    "c, f or auto", val);
+            wlr_log(WLR_ERROR, "synui: config: %s '%s' is not "
+                    "c, f or auto", key, val);
     }
     else if (strcmp(key, "lock_layout") == 0) {
         int l = lock_layout_from_name(val);

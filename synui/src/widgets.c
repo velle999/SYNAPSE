@@ -48,6 +48,7 @@ const char *widget_row_name(int row)
     case WIDGET_ROW_TUX:        return "tux";
     case WIDGET_ROW_ANALOG:     return "analog";
     case WIDGET_ROW_MUSIC:      return "music";
+    case WIDGET_ROW_WEATHER:    return "weather";
     default:                    return NULL;
     }
 }
@@ -65,6 +66,7 @@ const char *widget_row_label(int row)
     case WIDGET_ROW_TUX:        return "Tuxagotchi";
     case WIDGET_ROW_ANALOG:     return "Analog clock";
     case WIDGET_ROW_MUSIC:      return "Music player";
+    case WIDGET_ROW_WEATHER:    return "Weather";
     default:                    return "?";
     }
 }

@@ -23,7 +23,7 @@ STATE="$CONF_HOME/synui/widgets.state"
 # Where a dragged widget's corner is remembered. NOT written here — see `home`.
 POS="$CONF_HOME/synui/widgets.pos"
 
-WIDGETS="visualizer sysmon clock launcher postit pizza tux analog music"
+WIDGETS="visualizer sysmon clock launcher postit pizza tux analog music weather"
 
 usage() {
     cat <<EOF
@@ -58,6 +58,16 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
                                     on whatever is making the noise (MPRIS) —
                                     cliamp, Spotify, mpv, a browser tab — not on
                                     one chosen player
+  synui-widgets weather on          the temperature, the condition and where
+                                    it was measured. ⚠ NEEDS THE WEATHER
+                                    SWITCHED ON — `synctl weather on` — which is
+                                    a separate thing on purpose: that one is the
+                                    machine talking to the network, and this one
+                                    is only whether the desktop draws what it
+                                    already fetched. The same reading is on the
+                                    lock screen and, as a temperature, on the
+                                    bar. Set the place once with
+                                    `omarchy-weather-location --set "Oslo"`
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
@@ -72,6 +82,11 @@ home; the command above sends all of them.
 The music widget is empty until something is playing; that is not a fault, it
 is a desktop with nothing making a noise on it. It needs no extra package — it
 reads MPRIS, which every media player on Linux publishes.
+
+The weather widget draws "No reading yet" until `synctl weather on` — nothing
+here fetches anything. The compositor does the network on a thread of its own,
+twenty minutes apart, and every surface that shows the weather reads the one
+answer it publishes.
 
 The visualiser needs cava (an optdepend); without it that widget stays dark
 however this file is set. Tuxagotchi needs pw-play or paplay to make a sound;

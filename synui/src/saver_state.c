@@ -121,8 +121,8 @@ void saver_state_save(syn_server_t *s)
     fprintf(f, "lock_blur=%d\n",  s->config.lock_bg_blur);
     fprintf(f, "lock_follow=%d\n", s->config.lock_theme_follow ? 1 : 0);
     fprintf(f, "lock_media=%d\n",  s->config.lock_media ? 1 : 0);
-    fprintf(f, "lock_weather=%d\n", s->config.lock_weather ? 1 : 0);
-    fprintf(f, "lock_weather_unit=%c\n", s->config.lock_weather_unit_f ? 'F' : 'C');
+    fprintf(f, "weather=%d\n", s->config.weather ? 1 : 0);
+    fprintf(f, "weather_unit=%c\n", s->config.weather_unit_f ? 'F' : 'C');
     fprintf(f, "lock_layout=%s\n", syn_lock_layout_names[s->config.lock_layout]);
     fclose(f);
 
@@ -172,12 +172,18 @@ void saver_state_load(syn_config_t *cfg)
             cfg->lock_theme_follow = val ? 1 : 0;
         } else if (strcmp(key, "lock_media") == 0) {
             cfg->lock_media = val ? 1 : 0;
-        } else if (strcmp(key, "lock_weather") == 0) {
-            cfg->lock_weather = val ? 1 : 0;
-        } else if (strcmp(key, "lock_weather_unit") == 0) {
+        /* `lock_weather` is what this row wrote until the bar module and the
+         * desktop widget started reading the same engine. Every machine that
+         * ever turned the weather on has the old spelling on disk, and the file
+         * is rewritten with the new one the next time the panel saves. */
+        } else if (strcmp(key, "weather") == 0 ||
+                   strcmp(key, "lock_weather") == 0) {
+            cfg->weather = val ? 1 : 0;
+        } else if (strcmp(key, "weather_unit") == 0 ||
+                   strcmp(key, "lock_weather_unit") == 0) {
             /* A letter, not a flag: `unit=1` would be a file nobody could read
              * and the two units are one character each. */
-            cfg->lock_weather_unit_f = (sval[0] == 'F' || sval[0] == 'f');
+            cfg->weather_unit_f = (sval[0] == 'F' || sval[0] == 'f');
         } else if (strcmp(key, "lock_layout") == 0) {
             int l = lock_layout_from_name(sval);
             if (l >= 0) cfg->lock_layout = l;

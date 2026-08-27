@@ -272,15 +272,22 @@ static void test_saver_state_survives_a_load(void)
                 * of the state file on every one, so a load that skipped the
                 * state file could not pass by accident.
                 *
-                * ⚠ lock_weather is the one that would bite hardest. It is off
-                * by default because it is the only thing on that screen that
-                * uses the network, so a reload that reset it would silently
-                * STOP a feature the user had turned on — and the symptom is a
-                * blank space, which reads as a broken fetch rather than as a
-                * lost setting. */
+                * ⚠ weather is the one that would bite hardest. It is off by
+                * default because it is the only thing on this desktop that uses
+                * the network, so a reload that reset it would silently STOP a
+                * feature the user had turned on — and the symptom is a blank
+                * space, which reads as a broken fetch rather than as a lost
+                * setting.
+                *
+                * ⚠ THE TWO FILES DELIBERATELY SPELL IT DIFFERENTLY. This one
+                * uses `weather`, the documented name; saver.state below uses
+                * `lock_weather`, what every machine has on disk from before the
+                * bar module and the desktop widget joined the lock screen on
+                * the same engine. Both have to be read, and this is the only
+                * place that says so. */
                "lock_media = off\n"
-               "lock_weather = off\n"
-               "lock_weather_unit = c\n"
+               "weather = off\n"
+               "weather_unit = c\n"
                "lock_layout = off\n");
     write_file("saver.state",
                "mode=slideshow\n"
@@ -315,11 +322,20 @@ static void test_saver_state_survives_a_load(void)
     assert(cfg.lock_bg_blur == 24);
     assert(cfg.lock_theme_follow == 0);
     assert(cfg.lock_media == 1);
-    assert(cfg.lock_weather == 1);
-    assert(cfg.lock_weather_unit_f == 1);
+    /* ⚠ THE FILE ABOVE STILL SAYS `lock_weather`, AND THAT IS THE ASSERTION.
+     * The key is `weather` now — it is the network switch for the bar module
+     * and the desktop widget as well as the lock screen, so the old name would
+     * be a lie. But every machine that ever turned the weather on has the old
+     * spelling written into this exact file by the Super+Z row, and a rename
+     * that silently switched the weather off for all of them would look like
+     * the feature breaking rather than like a key changing name. Both are read;
+     * the file is rewritten with the new one the next time the panel saves. */
+    assert(cfg.weather == 1);
+    assert(cfg.weather_unit_f == 1);
     assert(cfg.lock_layout == SYN_LOCK_LAYOUT_ON);
 
     printf("  saver.state survives a load .... ok\n");
+    printf("    (including `lock_weather`, the pre-519 spelling)\n");
 }
 
 /* ── 5. Out-of-range values are refused, not clamped silently into nonsense ──

@@ -900,6 +900,7 @@ synui-cursor install ~/Downloads/some-theme.tar.gz   # then: synui-cursor set <n
 synui-sound install ~/Downloads/some-sounds.tar.gz   # then: synui-sound all on
 synui-widgets sysmon on                              # desktop widgets, off by default
 synui-widgets postit on                              # a note on the desktop; click it to write
+synui-widgets weather on                             # needs `synctl weather on` first
 ```
 
 Event sounds ship **silent** and the desktop widgets ship **off** — an upgrade
@@ -919,6 +920,13 @@ And there is something in the picker to choose. A stock install used to carry
 Noto, DejaVu and a console face, which made "pick the font the desktop is drawn
 in" a choice between two — **fifteen families ship now**, sans, serif and mono,
 all OFL or Apache, and Studio's title lettering reads the same list.
+
+The **weather** widget is the desktop half of the reading the lock screen and
+the bar already show — temperature, condition, place, and how long ago it was
+true. It needs `synctl weather on` as well, because that switch is the machine
+talking to the network and this one is only whether the desktop draws what has
+already been fetched; until then the card says so and names the command. See
+[The lock screen](#what-is-playing-the-weather-and-which-keyboard-you-are-on).
 
 The **analog clock** widget has four faces — minimal, a railway dial, roman
 numerals, and a neon one with a glow ring — set from Control panel ▸ Desktop
@@ -1200,9 +1208,10 @@ lock_blur            = 16          # pixels
 lock_accent          = #00e5ff     # naming one stops it following the theme
 
 lock_media           = on          # now playing, with ⏮ ⏯ ⏭
-lock_weather         = off         # ⚠ the only part of this screen that uses
-                                   #   the network
-lock_weather_unit    = auto        # auto reads the locale; or c / f
+weather              = off         # ⚠ the only part of this desktop that uses
+                                   #   the network. Feeds the lock screen, the
+                                   #   bar and the desktop widget alike
+weather_unit         = auto        # auto reads the locale; or c / f
 lock_layout          = auto        # the keyboard-layout chip; auto = only when
                                    #   xkb_layout names more than one
 ```
@@ -1229,12 +1238,36 @@ them, or use the media keys on your keyboard, which reach the player while the
 screen is locked instead of typing invisible characters into the password. It
 draws nothing at all when nothing is playing. `lock_media = off` removes it.
 
-**The weather** is off until you ask for it: it is the one thing on this screen
+**The weather** is off until you ask for it: it is the one thing on this desktop
 that goes to the network. On, it asks Open-Meteo (no account, no key) every
 twenty minutes and caches the answer, so a locked screen shows a temperature in
 its first frame rather than a gap that fills in a second later — and a machine
 with no network keeps showing the last reading, dimmed and labelled with its
 age rather than pretending to be current.
+
+The same reading is on **the bar** and on **the desktop**, and none of the three
+fetches anything:
+
+```bash
+synctl weather on                  # the NETWORK switch, once, for all of them
+synctl weather                     # what it last knew, as JSON
+synctl weather refresh             # ask now instead of at the next tick
+synui-widgets weather on           # the desktop card
+```
+
+The compositor does the fetch on a thread of its own and publishes the answer to
+`~/.config/synui/weather.state`; the bar module and the desktop widget read that
+file and nothing else. That is deliberate — a bar module is instantiated once
+per **monitor**, inside the shell process, so a fetch there would be one request
+per screen and a connect stalling behind a captive portal would be a stalled
+desktop. It is the arrangement the update notifier already has.
+
+So there are two kinds of switch and they are not duplicates of each other:
+`synctl weather on|off` is **network**, and the bar's right-click menu, the
+Super+Z row and `synui-widgets weather` are **furniture** — whether a given
+surface draws what has already been fetched. With the weather off there is
+nothing to draw, so the bar and the desktop are untouched on a machine that
+never asks.
 
 There is **one location on this machine** and it is not set here. It is the
 file every weather widget already reads:
@@ -1609,6 +1642,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
 | `synui-plugins` | **Bar plugins** — third-party widgets for the bar, in [Omarchy](https://omarchy.org/)'s shell-plugin format. `browse` what you can install — around nine hundred community widgets, fetched with `refresh` — `add <id\|git-url>`, `<id> on\|off\|toggle`, `order` to arrange them, `remove`, `list` (which says why anything is refused) and `check` (whether what is installed can actually draw). `synui-plugins tui` in the terminal, `synui-plugins gui` in a window. See [Bar plugins](#bar-plugins) |
 | `synui-widgets` | Desktop widgets — `<widget> on\|off\|toggle`, `all off`, `home` to put a dragged one back. `Super`+`Shift`+`A` cycles them |
+| `synctl weather` | The weather the lock screen, the bar and the desktop widget all share — `on\|off` is the network switch, `refresh` asks now, no argument prints what it last knew |
 | `syn-rgb` | **The wallpaper's accent, on the hardware that has lights in it** — `on`, `off`, `status`, `devices`, `colour RRGGBB`, `follow accent\|theme\|fixed`, `brightness`, `dark`. See [RGB lighting](#rgb-lighting) |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `recent`, `binds` (the bind table, each chord spelled the way a keyboard says it), `dispatch <action> [arg]` |
 | `synui-welcome` | The **welcome guide** — `toggle` (the default), `show`, `hide`, `page N`. Also `Super`+`Escape`, and the "Welcome Guide" entry in the applications menu. See [The welcome guide](#the-welcome-guide) |

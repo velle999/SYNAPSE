@@ -45,9 +45,16 @@ WidgetFrame {
      */
     inkOnBackdrop: true
 
+    /* The weather card shares this corner and sits above, so this hops below
+     * it when both are on — the same arrangement the pet has with the monitor,
+     * and only while nobody has dragged either: WidgetFrame stops applying home
+     * margins the moment there is a stored position. */
+    readonly property int weatherClearance: 118
+
     homeEdgeH: "left"; homeEdgeV: "top"
     homeMarginX: 20
     homeMarginY: Theme.barHeight + 60
+               + (WidgetState.weather ? weatherClearance : 0)
 
     cardWidth: 224
     bodyHeight: col.implicitHeight

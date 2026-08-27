@@ -543,12 +543,28 @@ lock_fingerprint = on
 # means unlocking it first.
 lock_media = on
 #
-# ⚠ THE WEATHER IS THE ONE THING ON THIS SCREEN THAT USES THE NETWORK, so it
+# ⚠ THE WEATHER IS THE ONE THING ON THIS DESKTOP THAT USES THE NETWORK, so it
 # is off until asked for. On, it fetches from Open-Meteo (no account, no key)
 # every twenty minutes and caches the last reading, which is what a locked
 # screen shows in its first frame and what a machine with no network keeps
 # showing — dimmed, and labelled with its age, rather than pretending to be
 # current.
+#
+# ⚠ THIS KEY IS THE NETWORK SWITCH FOR THREE SURFACES, not just this one, which
+# is why it lost its `lock_` prefix (the old spelling is still read). The same
+# reading is on the bar and on the desktop:
+#
+#     synctl weather on|off|refresh   this switch, as a verb
+#     synui-widgets weather on        the desktop card
+#     the bar's right-click menu      the bar's temperature, per monitor
+#
+# The compositor is the only thing that fetches; it publishes the answer to
+# ~/.config/synui/weather.state and every surface reads that. A fetch in the bar
+# would be one request per MONITOR inside the shell process, where a stalled
+# connect is a stalled desktop — the same reason the update notifier reads a
+# file a timer writes. So the switches are two kinds and not duplicates: this
+# one is whether the machine ASKS, and the three above are whether a given
+# surface DRAWS what came back.
 #
 # THE PLACE IS NOT SET HERE. There is one location on this machine and it lives
 # in the file every weather widget already reads:
@@ -558,8 +574,8 @@ lock_media = on
 #
 # With nothing set, the city is detected from the IP the first time — the same
 # call, to the same host, that command makes when you ask it with no arguments.
-lock_weather = off
-lock_weather_unit = auto            # auto reads the locale; or c / f
+weather = off
+weather_unit = auto                 # auto reads the locale; or c / f
 #
 # The keyboard-layout chip, centred under the password entry. `auto` shows it
 # only when xkb_layout names more than one layout — one layout is a label, not a

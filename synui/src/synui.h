@@ -1416,6 +1416,7 @@ typedef enum {
     WIDGET_ROW_TUX,
     WIDGET_ROW_ANALOG,
     WIDGET_ROW_MUSIC,
+    WIDGET_ROW_WEATHER,
     WIDGET_ROW_COUNT,
 } syn_widget_row_t;
 
@@ -3047,8 +3048,8 @@ typedef enum {
     SAVER_ROW_LOCK_BLUR,
     SAVER_ROW_LOCK_THEME,   /* follow the desktop theme, or not */
     SAVER_ROW_LOCK_MEDIA,   /* now-playing row + transport buttons */
-    SAVER_ROW_LOCK_WEATHER, /* the weather row — the one thing here that uses the network */
-    SAVER_ROW_LOCK_WX_UNIT, /* °C or °F */
+    SAVER_ROW_WEATHER, /* the weather row — the one thing here that uses the network */
+    SAVER_ROW_WX_UNIT, /* °C or °F */
     SAVER_ROW_LOCK_LAYOUT,  /* the keyboard-layout chip */
     SAVER_ROW_COUNT,
 } syn_saver_row_t;
@@ -3975,8 +3976,8 @@ typedef struct {
      * weather widget on this machine already reads
      * (~/.local/state/omarchy/settings/weather.json), written by
      * omarchy-weather-location. */
-    int   lock_weather;
-    int   lock_weather_unit_f;   /* 0 = °C, 1 = °F; seeded from the locale */
+    int   weather;
+    int   weather_unit_f;   /* 0 = °C, 1 = °F; seeded from the locale */
 
     /* The keyboard-layout chip (kbdlayout.c). AUTO shows it only when
      * xkb_layout names more than one, which is when it stops being decoration:
@@ -7489,7 +7490,7 @@ void mpris_previous(void);
 
 /* ── weather.c — the lock/login screen's weather row ─────────
  *
- * ⚠ OFF unless lock_weather says otherwise: the only part of this screen that
+ * ⚠ OFF unless weather says otherwise: the only part of this screen that
  * touches the network. The PLACE is the file every weather widget here already
  * reads (~/.local/state/omarchy/settings/weather.json) — there is no second
  * setting for it, on purpose. Fetching is a thread, as in news.c, so a slow DNS
@@ -7497,7 +7498,7 @@ void mpris_previous(void);
 void weather_init(syn_server_t *s);
 void weather_finish(syn_server_t *s);
 void weather_refresh(syn_server_t *s, bool force);
-void weather_enabled_changed(syn_server_t *s);  /* lock_weather was toggled */
+void weather_enabled_changed(syn_server_t *s);  /* weather was toggled */
 bool weather_current(syn_weather_now_t *out);   /* false: never had a reading */
 void weather_draw_icon(cairo_t *cr, syn_weather_icon_t icon,
                        double x, double y, double size);
