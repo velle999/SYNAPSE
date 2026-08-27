@@ -138,7 +138,48 @@ pkgver=0.1.0
 #   the paper on a dark desktop: the first draft darkened it, which on paper
 #   that is already nearly black landed on the background colour and made the
 #   corner vanish.
-pkgrel=61
+# 62: HOVERING OVER A FILE SAYS WHAT IT IS. Asked for after seeing Kylin's
+#   file manager do it: rest the pointer on a file or a folder and a panel
+#   gives the name in full, the type, when it changed, its size, and where a
+#   symlink points. The icon view is the one that needed it — a cell is an icon
+#   and a name elided to fit, and everything else about the file was in the
+#   other view or behind Properties.
+#   ⚠ THE TYPE IS ITS REAL NAME: "Tar archive (gzip-compressed)", not
+#   `application/x-compressed-tar`. shared-mime-info ships one XML file per
+#   type whose FIRST <comment> is the untranslated one, and mime.c reads it —
+#   the same database every other file manager on the machine reads, so a file
+#   is called the same thing here as it is anywhere else. A table written in
+#   the QML would have been a second, worse copy of something already
+#   installed.
+#   ⚠ CACHED, AND ONLY THE HEAD OF THE FILE IS READ. A listing asks about the
+#   same handful of types over and over — a folder of photographs has two —
+#   and text/plain.xml is 25 KB of translations with the answer on line four.
+#   /usr/bin lists in 87ms.
+#   ⚠ AND THE DESCRIPTION TRAVELS ON THE ROW, a tenth column, rather than being
+#   looked up when something wants to show it: a front-end that asked per item
+#   would be a process per hover.
+#   ⛔ THE TYPE BECOMES PART OF A PATH, so it is validated before it is used —
+#   one slash, no "..", nothing outside a small character set. It comes from
+#   globs2 today; a "type" of "../../etc/passwd" would be read off disk the day
+#   one of those comes from somewhere else.
+#   ⚠ `info`'s desc is PERCENT-ENCODED and its `mime` beside it is not. A type
+#   name is one token; a description holds spaces and parentheses and, in a
+#   localised database, any byte at all.
+#   ⛔ AND A SCROLL TAKES THE PANEL DOWN. It is anchored to a place on SCREEN,
+#   so the list slides out from under it. ⚠ A test written with a full-row
+#   scroll PASSED AGAINST NO GUARD AT ALL — the item under the pointer changes,
+#   Qt sends an exit, and the panel closes by itself. Only a SMALL scroll, one
+#   that keeps the same item under the pointer, discriminates; the qmltest
+#   scrolls ten pixels.
+#   ⚠ AND THE PANEL LIVES AT THE WINDOW LEVEL, not inside a pane: parented to
+#   the row it describes it is clipped by the view — at the bottom of a list
+#   that is a two-pixel sliver — and cut off at the pane's edge in split view.
+#   ⚠ A SECOND onPressed ON AN EXISTING MouseArea IS "Property value set
+#   multiple times" — qmllint passes and quickshell refuses to LOAD. The hide
+#   folds into the handler that is already there.
+#   Nineteen checks in synfiles_test.sh, ten of them driving a real pointer
+#   through tests/item_hover_info.qml. 368 pass.
+pkgrel=62
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -307,6 +307,78 @@ FloatingWindow {
         return Qt.formatDateTime(d, "yyyy-MM-dd hh:mm")
     }
 
+    // ── What a thing IS, when the pointer rests on it ───────────────────────
+    //
+    // The grid shows an icon and an elided name and nothing else: the type,
+    // the date and the size are all in the LIST view or behind Properties, and
+    // "what is this and when did I last touch it" is the question people ask
+    // of an icon most often. So the pointer answers it.
+    //
+    // ⚠ THE DESCRIPTION IS THE ENGINE'S, not a table written here. "Plain text
+    // document" comes from shared-mime-info's own per-type XML (mime.c), which
+    // is the same string every other file manager on this desktop shows —
+    // a mapping written in QML would be a second, worse copy of a database
+    // that is already installed.
+    property var tipRow: null       // shown
+    property var tipWant: null      // hovered, still inside the delay
+    property real tipX: 0
+    property real tipY: 0
+
+    // ⚠ A DELAY, not an instant panel. Moving the pointer ACROSS a grid passes
+    // over a dozen icons, and a tooltip on each is a strobe — the reason every
+    // toolkit waits before showing one.
+    Timer {
+        id: tipDelay
+        interval: 500
+        onTriggered: root.tipRow = root.tipWant
+    }
+
+    function askInfo(row, pt) {
+        // Not while something is being dragged: the panel would sit under the
+        // drag ghost describing whatever the pointer happened to pass over.
+        if (root.dragging || !row) return
+        root.tipWant = row
+        root.tipX = pt.x
+        root.tipY = pt.y
+        tipDelay.restart()
+    }
+
+    // ⚠ MATCHED BY PATH, NOT BY IDENTITY. A refresh rebuilds every row object,
+    // so the row a delegate hands back on the way out can be a different
+    // object describing the same file — and an identity test would leave the
+    // panel on screen with nothing under it.
+    function dropInfo(row) {
+        const f = row ? row.full : ""
+        if (root.tipWant && root.tipWant.full === f) { root.tipWant = null; tipDelay.stop() }
+        if (root.tipRow && root.tipRow.full === f) root.tipRow = null
+    }
+
+    // ⛔ AND A SCROLL TAKES IT DOWN, because the panel is anchored to a place
+    // on SCREEN and the list moves out from under it. A scroll of a whole row
+    // gets away with it — the item under the pointer changes, Qt sends an exit
+    // and dropInfo runs — but a small one keeps the SAME item under the
+    // pointer, so nothing is entered and nothing is exited and the panel would
+    // simply stay where it was. Every view calls this when its content moves,
+    // and every press calls it too.
+    //
+    // ⚠ tests/item_hover_info.qml scrolls by TEN PIXELS for exactly that
+    // reason: written with a full row it passed against no guard at all.
+    function hideInfo() {
+        root.tipWant = null
+        root.tipRow = null
+        tipDelay.stop()
+    }
+
+    // What to call the type. The engine's description when there is one; the
+    // mime type when there is not, which is still an answer.
+    function tipType(row) {
+        if (!row) return ""
+        if (row.missing) return "missing — the file it points at is gone"
+        if (row.desc && row.desc !== "") return root.disp(row.desc)
+        if (row.type === "dir") return "Folder"
+        return row.mime && row.mime !== "" ? row.mime : row.type
+    }
+
     // The icon theme is resolved here, not in C: quickshell already has it
     // loaded. The fallback chain is derivable from the mime type, which is
     // why the row carries it — "text/x-csrc" tries text-x-csrc, then
@@ -3179,7 +3251,8 @@ FloatingWindow {
                                     text: {
                                         const k = propRow.modelData.key
                                         const v = propRow.modelData.value
-                                        if (k === "path" || k === "name" || k === "target")
+                                        if (k === "path" || k === "name"
+                                            || k === "target" || k === "desc")
                                             return root.disp(v)
                                         if (k === "size") {
                                             // For a DIRECTORY this is the size
@@ -3924,6 +3997,98 @@ FloatingWindow {
                 }
             }
         }
+
+        // ── The hover panel ─────────────────────────────────────────────────
+        //
+        // ⚠ AT THE WINDOW LEVEL, not inside a pane. A panel parented to the
+        // row it describes is clipped by the view the row is in — at the
+        // bottom of a list that is a two-pixel sliver — and in split view it
+        // would be cut off at the pane's edge as well. The delegates map their
+        // pointer into scene coordinates (`mapToItem(null, …)`), which is what
+        // this item's parent already uses because it fills the window.
+        Rectangle {
+            id: tipPanel
+            visible: root.tipRow !== null
+            z: 400
+            width: Math.min(tipCol.implicitWidth + 20, root.width - 16)
+            height: tipCol.implicitHeight + 16
+            // Below and to the right of the pointer, the way a tooltip sits
+            // everywhere — then pushed back inside the window, because near
+            // the right or bottom edge the natural place is off-screen.
+            x: Math.max(8, Math.min(root.tipX + 14, root.width - width - 8))
+            y: root.tipY + 22 + height > root.height - 8
+               ? Math.max(8, root.tipY - 12 - height)
+               : root.tipY + 22
+            radius: 5
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.35) }
+
+            Column {
+                id: tipCol
+                anchors { left: parent.left; top: parent.top; margins: 10 }
+                spacing: 3
+
+                Text {
+                    width: Math.min(implicitWidth, root.width - 60)
+                    elide: Text.ElideMiddle
+                    // The full name, because the grid's own label is elided to
+                    // the cell — "…xectl" in a screenshot is exactly the case
+                    // somebody hovers to resolve.
+                    text: root.tipRow ? root.rowLabel(root.tipRow) : ""
+                    color: root.cText
+                    font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
+                }
+
+                Repeater {
+                    model: {
+                        const r = root.tipRow
+                        if (!r) return []
+                        const out = [{ k: "Type", v: root.tipType(r) },
+                                     { k: "Modified", v: root.fmtTime(r.mtime) }]
+                        // ⚠ NO SIZE FOR A FOLDER. The number stat gives is the
+                        // size of the directory ENTRY — "890 B" for a tree
+                        // holding an ISO — which the Properties dialog already
+                        // has to explain in a parenthesis. A line that has to
+                        // be explained does not belong on a tooltip.
+                        if (r.type !== "dir")
+                            out.push({ k: "Size", v: root.fmtSize(r.size, false) })
+                        if (r.link === "1" && r.target && r.target !== "")
+                            out.push({ k: "Links to", v: root.disp(r.target) })
+                        return out.filter(e => e.v !== "")
+                    }
+                    delegate: Row {
+                        id: tipLine
+                        required property var modelData
+                        spacing: 6
+                        Text {
+                            width: tipLabelW.width
+                            horizontalAlignment: Text.AlignRight
+                            text: tipLine.modelData.k
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
+                        }
+                        Text {
+                            width: Math.min(implicitWidth, root.width - 120)
+                            elide: Text.ElideMiddle
+                            text: tipLine.modelData.v
+                            color: root.cText
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
+                        }
+                    }
+                }
+            }
+
+            // The label column's width, measured once off the longest label
+            // rather than by letting each Row size its own — otherwise the
+            // values do not line up and the panel reads as three unrelated
+            // sentences.
+            Text {
+                id: tipLabelW
+                visible: false
+                text: "Modified"
+                font { family: root.uiFont; pixelSize: root.ui(11) }
+            }
+        }
     }
 
     // ── A pane ──────────────────────────────────────────────────────────────
@@ -4148,6 +4313,7 @@ FloatingWindow {
                             type: r.type, size: parseInt(r.size || "0"),
                             mtime: parseInt(r.mtime || "0"), mime: r.mime,
                             link: r.link, target: r.target, mode: r.mode,
+                            desc: r.desc || "",
                             missing: false
                         }))
                         pane.setTab({ rows: rows })
@@ -4196,6 +4362,11 @@ FloatingWindow {
                             mtime: parseInt(r.mtime || "0"), mime: r.mime,
                             link: r.link, target: r.target, mode: r.mode,
                             icon: r.icon || "",
+                            // The type's human name, from shared-mime-info's
+                            // own description — carried on the ROW rather than
+                            // looked up when something wants to show it, which
+                            // would be a process per hover.
+                            desc: r.desc || "",
                             missing: false
                         }))
                     }
@@ -5056,6 +5227,10 @@ FloatingWindow {
             // but Escape still has to close a dialog.
             focus: pane.isActive && !fileGrid.visible
 
+            // The panel is anchored to a place on screen; scrolling slides the
+            // list out from under it. See root.hideInfo().
+            onContentYChanged: root.hideInfo()
+
             // Shortcuts a file manager is expected to have. Delete goes to
             // the TRASH — the permanent one is a separate command behind a
             // separate flag, and no key reaches it.
@@ -5272,6 +5447,17 @@ FloatingWindow {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     enabled: !fileRow.isRenaming
+
+                    // The hover panel. Scene coordinates, because the panel
+                    // lives at the window level so it is not clipped by this
+                    // view — see tipPanel.
+                    onContainsMouseChanged: {
+                        if (rowMa.containsMouse)
+                            root.askInfo(fileRow.modelData,
+                                         rowMa.mapToItem(null, rowMa.mouseX, rowMa.mouseY))
+                        else
+                            root.dropInfo(fileRow.modelData)
+                    }
                     // A Flickable STEALS the mouse grab from its own
                     // delegates once the pointer moves past Qt's
                     // start-drag distance — that is how a list scrolls by
@@ -5312,6 +5498,7 @@ FloatingWindow {
                         // click, so claiming the pane in onClicked left every
                         // drag out of the inactive half reading the other
                         // pane's selection.
+                        root.hideInfo()
                         pane.claim()
                         rowMa.pressX = mouse.x
                         rowMa.pressY = mouse.y
@@ -5373,6 +5560,11 @@ FloatingWindow {
             cellHeight: root.compactView ? Math.max(22, root.iconSize + 8)
                                          : root.iconSize + 46
             focus: pane.isActive && fileGrid.visible
+
+            // See the note on the list — and X as well, because the compact
+            // layout flows into columns and scrolls sideways.
+            onContentYChanged: root.hideInfo()
+            onContentXChanged: root.hideInfo()
 
             Keys.onPressed: (event) => pane.handleKey(event)
 
@@ -5553,6 +5745,16 @@ FloatingWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+                    // The hover panel — the view this matters most in, since a
+                    // cell shows an icon and an elided name and nothing else.
+                    onContainsMouseChanged: {
+                        if (cellMa.containsMouse)
+                            root.askInfo(gridCell.modelData,
+                                         cellMa.mapToItem(null, cellMa.mouseX, cellMa.mouseY))
+                        else
+                            root.dropInfo(gridCell.modelData)
+                    }
                     // A Flickable STEALS the mouse grab from its own
                     // delegates once the pointer moves past Qt's
                     // start-drag distance — that is how a list scrolls by
@@ -5567,6 +5769,7 @@ FloatingWindow {
                     property real pressX: 0
                     property real pressY: 0
                     onPressed: (mouse) => {
+                        root.hideInfo()
                         pane.claim()
                         cellMa.pressX = mouse.x
                         cellMa.pressY = mouse.y

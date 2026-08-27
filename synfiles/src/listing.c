@@ -92,8 +92,8 @@ static int entry_cmp(const void *va, const void *vb)
 
 static void emit_header(void)
 {
-	rec_row(9, "name", "type", "size", "mtime", "mode", "link", "target", "mime",
-	        "icon");
+	rec_row(10, "name", "type", "size", "mtime", "mode", "link", "target", "mime",
+	        "icon", "desc");
 }
 
 static void emit_entry(const sf_entry_t *e)
@@ -107,8 +107,14 @@ static void emit_entry(const sf_entry_t *e)
 		char *mtime = xasprintf("%lld", (long long)e->mtime);
 		char *mode = xasprintf("%04o", (unsigned)(e->mode & 07777));
 		char *icon = e->icon ? pct_encode(e->icon, true) : xstrdup("");
-		rec_row(9, name, e->type, size, mtime, mode,
-		        e->is_link ? "1" : "0", target, mime, icon);
+		/* ⚠ The DESCRIPTION travels with the row rather than being looked
+		 * up when something wants to show it. A front-end that asked per
+		 * item would be a process per hover; mime_desc caches, so the whole
+		 * listing costs one read per distinct type. */
+		char *desc = pct_encode(mime_desc(mime), false);
+		rec_row(10, name, e->type, size, mtime, mode,
+		        e->is_link ? "1" : "0", target, mime, icon, desc);
+		free(desc);
 		free(icon);
 		free(size);
 		free(mtime);
@@ -429,6 +435,15 @@ int cmd_info(int argc, char **argv)
 	const char *mime = mime_for(base ? base + 1 : path, is_dir);
 	kv("type", broken ? "broken" : kind_of(tst.st_mode));
 	kv("mime", mime);
+	/* ⚠ ENCODED, unlike `mime` beside it. A type name is one token with no
+	 * spaces; a DESCRIPTION is "Tar archive (gzip-compressed)", and in a
+	 * localised database it is any byte at all. Every field a reader has to
+	 * decode is encoded — that is the rule the whole record format rests on,
+	 * and the exceptions above are exceptions only because they cannot break
+	 * it. */
+	char *edesc = pct_encode(mime_desc(mime), false);
+	kv("desc", edesc);
+	free(edesc);
 	kv("icon", icon_for(mime, is_dir));
 
 	char *n;

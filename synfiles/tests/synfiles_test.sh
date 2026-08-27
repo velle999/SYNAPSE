@@ -64,11 +64,12 @@ n=$("$SYNFILES" --rec list "$D" | wc -l)
 
 # A tab inside a filename shifts every later column of a naive TSV row, and
 # the damage is invisible — the row still parses, it just describes something
-# else. Every record must have exactly 9 fields (the 9th is a .desktop
-# launcher's own Icon=, empty for everything else).
+# else. Every record must have exactly 10 fields (the 9th is a .desktop
+# launcher's own Icon=, empty for everything else; the 10th is the type's
+# human description).
 widths=$("$SYNFILES" --rec list "$D" | awk -F'\t' '{print NF}' | sort -u | tr '\n' ' ')
-[ "$widths" = "9 " ] && ok "every record has 9 fields" \
-                     || bad "field counts seen: $widths (a tab in a name shifted columns?)"
+[ "$widths" = "10 " ] && ok "every record has 10 fields" \
+                      || bad "field counts seen: $widths (a tab in a name shifted columns?)"
 
 # Nothing may reach stdout that is not a record.
 stray=$("$SYNFILES" --rec list "$D" | grep -cv $'\t')
@@ -376,7 +377,7 @@ head -c 6 "$R/a.png" > "$R/trunc.png"
 # the whole reason mime.c matches globs instead of sniffing, so the column
 # count is asserted here as well as in the field-count test above.
 c=$("$SYNFILES" --rec list "$R" | awk -F'\t' 'NR==2 {print NF}')
-[ "$c" = 9 ] && ok "list gained no resolution column" || bad "list rows now have $c fields"
+[ "$c" = 10 ] && ok "list gained no resolution column" || bad "list rows now have $c fields"
 
 # ── video: delegated, and only for video ────────────────────────────────────
 # A fake ffprobe on PATH, the same shape as the fake lsblk further down: the
@@ -2621,6 +2622,127 @@ fi
 # on the way across (unavoidable when the entry sits lower than the row that
 # opened it), rest on an entry for 600ms, then click.
 #
+# ── the type's human name ───────────────────────────────────────────────────
+#
+# "Plain text document", not "text/plain". Read from shared-mime-info's own
+# per-type XML, which is the same string every other file manager on this
+# desktop shows — a table written in a front-end would be a second, worse copy
+# of a database that is already installed.
+DESCD="$T/desc"; mkdir -p "$DESCD"
+printf 'x' > "$DESCD/a.txt"
+printf 'x' > "$DESCD/b.png"
+mkdir -p "$DESCD/sub"
+
+desc_of() {  # desc_of <name>
+    "$SYNFILES" --rec list "$DESCD" |
+        awk -F'\t' -v n="$1" 'NR>1 && $1==n {print $10}'
+}
+[ "$(desc_of a.txt)" = "Plain%20text%20document" ] \
+    && ok "a listing says what a type IS, not just its mime name" \
+    || bad "the description column is '$(desc_of a.txt)'"
+
+[ "$(desc_of sub)" = "Folder" ] \
+    && ok "…for a folder too" \
+    || bad "a folder's description is '$(desc_of sub)'"
+
+"$SYNFILES" --rec info "$DESCD/b.png" | grep -q '^desc	PNG%20image$'
+check "info carries it as well, encoded like every other field with a space" $?
+
+# ⚠ AND IT IS PERCENT-ENCODED LIKE EVERY OTHER FIELD. Descriptions hold spaces
+# and parentheses, and in a localised database any byte at all — a raw space is
+# harmless in a TSV and a raw TAB is the bug the field-count test exists for,
+# so the encoding is asserted rather than assumed from one of them.
+raw=$("$SYNFILES" --rec list "$DESCD" | awk -F'\t' 'NR>1 {print $10}' | grep -c ' ' || true)
+[ "$raw" = 0 ] && ok "the description column is percent-encoded like the rest" \
+              || bad "$raw description(s) carry a raw space"
+
+# ⛔ THE TYPE BECOMES PART OF A PATH. It comes from globs2 today, and a "type"
+# of "../../etc/passwd" would be read off disk the day it comes from somewhere
+# else. Pointed at a fixture directory that holds nothing, the answer is the
+# type's own name — never a file from outside it.
+MIMED="$T/mimedb"; mkdir -p "$MIMED/text"
+printf '<mime-type type="text/plain"><comment>Fixture text</comment></mime-type>\n' \
+    > "$MIMED/text/plain.xml"
+[ "$(SYNFILES_MIMEDIR="$MIMED" "$SYNFILES" --rec list "$DESCD" |
+     awk -F'\t' 'NR>1 && $1=="a.txt" {print $10}')" = "Fixture%20text" ] \
+    && ok "the description database is the one it was pointed at" \
+    || bad "SYNFILES_MIMEDIR is ignored — the test cannot pin this"
+
+[ "$(SYNFILES_MIMEDIR="$MIMED" "$SYNFILES" --rec list "$DESCD" |
+     awk -F'\t' 'NR>1 && $1=="b.png" {print $10}')" = "image%2Fpng" ] \
+    && ok "…and a type it has never heard of is described by its own name" \
+    || bad "a missing description is not falling back to the mime type"
+
+# ── the hover panel ─────────────────────────────────────────────────────────
+#
+# Static checks on the wiring; tests/item_hover_info.qml drives the pointer.
+if [ -f "$QML" ]; then
+    # ⚠ AT THE WINDOW LEVEL, NOT INSIDE A PANE. A panel parented to the row it
+    # describes is clipped by the view that row is in — at the bottom of a list
+    # that is a two-pixel sliver — and in split view it is cut off at the
+    # pane's edge as well.
+    tipline=$(grep -n 'id: tipPanel' "$QML" | head -1 | cut -d: -f1)
+    paneline=$(grep -n '^    component Pane:' "$QML" | head -1 | cut -d: -f1)
+    if [ -n "$tipline" ] && [ -n "$paneline" ] && [ "$tipline" -lt "$paneline" ]; then
+        ok "the hover panel is a window-level item, not a child of a row"
+    else
+        bad "the hover panel moved inside the pane — a view will clip it"
+    fi
+
+    # Both views ask, and both let go. One of the two being wired is the shape
+    # this arrives in: the grid is where it matters and the list is where it
+    # gets forgotten.
+    for ma in rowMa cellMa; do
+        blk=$(sed -n "/id: $ma\$/,/^                }/p" "$QML")
+        if printf '%s' "$blk" | grep -q 'root.askInfo' &&
+           printf '%s' "$blk" | grep -q 'root.dropInfo'; then
+            ok "$ma raises and drops the hover panel"
+        else
+            bad "$ma no longer drives the hover panel"
+        fi
+    done
+
+    # ⛔ AND EVERY VIEW TAKES IT DOWN WHEN ITS CONTENT MOVES. The panel is
+    # anchored to a place on SCREEN; a small scroll keeps the same item under
+    # the pointer, so nothing is entered or exited and nothing else would ever
+    # close it. tests/item_hover_info.qml scrolls ten pixels for that reason.
+    n=$(grep -c 'onContentYChanged: root.hideInfo()' "$QML" || true)
+    [ "$n" = 2 ] && ok "both views take the panel down when they scroll" \
+                 || bad "$n of 2 views hide the panel on a scroll"
+
+    # A delay, or crossing the grid strobes.
+    sed -n '/id: tipDelay/,/^    }/p' "$QML" | grep -qE 'interval: [1-9][0-9][0-9]' \
+        && ok "the panel waits before it appears" \
+        || bad "the hover panel has no delay — crossing the grid would strobe"
+fi
+
+# ── the hover panel, with a real pointer ────────────────────────────────────
+#
+# ⚠ Qt 6's qmltestrunner, not /usr/bin/qmltestrunner, which is Qt 5's: it
+# rejects the unversioned imports and prints the reason to a stderr the runner
+# discards, so a Qt 5 run looks exactly like a test that found nothing wrong.
+HOVER2_QML="$(dirname "$0")/item_hover_info.qml"
+for c in /usr/lib/qt6/bin/qmltestrunner /usr/lib/qt6/bin/qmltestrunner6; do
+    [ -x "$c" ] && { QMLTEST2=$c; break; }
+done
+if [ -n "${QMLTEST2:-}" ] && [ -f "$HOVER2_QML" ]; then
+    h2run="$T/hoverrun2"; mkdir -p "$h2run"
+    h2out=$(XDG_RUNTIME_DIR="$h2run" QT_QPA_PLATFORM=offscreen \
+            timeout 90 "$QMLTEST2" -input "$HOVER2_QML" 2>&1)
+    h2pass=$(printf '%s' "$h2out" | grep -c '^PASS ' || true)
+    if printf '%s' "$h2out" | grep -q '^FAIL'; then
+        bad "the hover panel misbehaves under a real pointer"
+        printf '%s\n' "$h2out" | grep -A2 '^FAIL' | sed 's/^/        /' >&2
+    elif [ "$h2pass" -lt 8 ]; then
+        bad "the hover panel test did not run ($h2pass passes)"
+        printf '%s\n' "$h2out" | tail -5 | sed 's/^/        /' >&2
+    else
+        ok "the hover panel waits, follows and lets go ($h2pass checks)"
+    fi
+else
+    echo "  skip  Qt 6 qmltestrunner not installed, cannot check the hover panel"
+fi
+
 # ⚠ Qt 6's qmltestrunner, not /usr/bin/qmltestrunner, which is Qt 5's: it
 # rejects the unversioned imports and prints the reason to a stderr the runner
 # discards, so a Qt 5 run looks exactly like a test that found nothing wrong.

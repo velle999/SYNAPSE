@@ -108,6 +108,9 @@ const char *mime_for(const char *name, bool is_dir);
  * Resolving it to a file on disk is the front-end's job: quickshell already
  * has the icon theme loaded and C would be re-implementing the lookup. */
 const char *icon_for(const char *mime, bool is_dir);
+/* The type's human name — "Plain text document" for "text/plain". Read from
+ * shared-mime-info's per-type XML and cached; falls back to the type itself. */
+const char *mime_desc(const char *mime);
 
 /* ── listing.c ──────────────────────────────────────────────────────────── */
 

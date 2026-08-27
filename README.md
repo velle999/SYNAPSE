@@ -629,6 +629,14 @@ The right-click menu inherits synui's own service menus — Extract, Crop, Mount
 ISO, Run with Wine, Set as Wallpaper — because both file managers read the same
 `kio/servicemenus` files. Write a helper once and it appears in both.
 
+**Resting the pointer** on a file or a folder — in either view — says what it
+is, when it was last changed, how big it is, and where a symlink points. The
+type is its real name, "Tar archive (gzip-compressed)" rather than
+`application/x-compressed-tar`: that string is shared-mime-info's own, so it
+matches what every other file manager on the machine calls the same file. A
+folder gets no size line, because the number `stat` gives for one is the size
+of the directory entry and not of what is in it.
+
 **Properties** (`Alt`+`Enter`) is a panel over `synfiles info`, so the dialog and
 the command print the same list by construction — including **resolution** for
 images and video. Images, MP4 and MOV are read in-tree by their magic bytes, not
