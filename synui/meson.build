@@ -747,6 +747,17 @@ pointer_confine_test = executable('pointer_confine_test',
   build_by_default : false)
 test('pointer_confine', pointer_confine_test)
 
+# Game mode holds the pointer on the game's screen when the CLIENT never asks
+# for a constraint — which, measured, is every game so far. Drives the real
+# gate and clamp out of game.c against stubs; no compositor.
+game_confine_test = executable('game_confine_test',
+  ['tests/game_confine_test.c', 'src/game.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('game_confine', game_confine_test)
+
 hit_test = executable('hit_test',
   ['tests/hit_test.c', 'src/hit.c'],
   include_directories : include_directories('src'),

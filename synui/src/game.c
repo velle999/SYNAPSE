@@ -536,3 +536,78 @@ void game_finish(syn_server_t *s)
     s->game.active = 0;
     game_publish(s);
 }
+
+/* ── Keeping the pointer on the game's screen ───────────────
+ *
+ * A fullscreen game on a multi-monitor desk is supposed to capture the mouse,
+ * and on Wayland that is the client's job: Wine/Xwayland asks for a
+ * zwp_locked_pointer or zwp_confined_pointer and constraints.c honours it.
+ *
+ * MEASURED 2026-08-26, Cyberpunk 2077 under proton-cachyos, three outputs:
+ * across 16010 samples in 59 s with steam_app_1091500 holding focus, the
+ * cursor ranged over x 0..3639, y 75..2602 — every one of the three monitors.
+ * The request never arrives, so there is nothing for constraints.c to honour
+ * and no amount of fixing it there can help. (Once the pointer is off the
+ * game, Steam and the game then trade focus back and forth — 34 flips in
+ * three minutes — which is the "can't even keep the window focused" half of
+ * the same report.)
+ *
+ * So the compositor answers for itself. Game mode already knows a fullscreen
+ * game is running and which output it is on; that is enough to hold the
+ * pointer there without asking the client for permission, which is what
+ * gamescope does and what every user means by "game mode".
+ *
+ * Only while the game HOLDS FOCUS. Alt-Tab, or any bind that moves focus,
+ * frees the pointer immediately and clicking back into the game takes it
+ * again — so the mouse can never be stuck on one monitor with no way out,
+ * which matters most on the desk this was measured on (three screens, a
+ * terminal on one of them).
+ *
+ * Answers 0 when the pointer is nobody's business but the user's; otherwise
+ * fills `box` with the layout rectangle to hold it inside. */
+int game_pointer_box(syn_server_t *s, struct wlr_box *box)
+{
+    if (!s || !box) return 0;
+    if (!s->config.game_mode || !s->config.game_confine_pointer) return 0;
+    if (!s->game.active) return 0;
+
+    syn_view_t *v = game_find_view(s);
+    if (!v) return 0;
+    /* The escape hatch, and the whole reason this is safe to default on. */
+    if (s->focused_view != v) return 0;
+
+    /* The game's OUTPUT, not the window box: a letterboxed sub-native game is
+     * centred inside a larger frame (view_fullscreen_rescale), and confining
+     * to the window would leave the black bars unreachable — which is a
+     * cursor that stops before the edge of the screen, the complaint this
+     * exists to remove. */
+    if (!v->output) return 0;
+
+    struct wlr_box ob;
+    output_box_of(s, v->output, &ob);
+    if (ob.width <= 0 || ob.height <= 0) return 0;
+    *box = ob;
+    return 1;
+}
+
+/* Pull the cursor back onto the game's screen. Called from the motion path
+ * after the cursor has moved, so it clamps a position rather than a delta —
+ * wlr_cursor_move maps the delta through the device's own output mapping and
+ * does not promise to apply it verbatim, so clamping the delta beforehand
+ * would be clamping a number the cursor never used. */
+void game_confine_cursor(syn_server_t *s)
+{
+    struct wlr_box b;
+    if (!game_pointer_box(s, &b)) return;
+
+    double x = s->cursor->x, y = s->cursor->y;
+    /* width - 1, not width: the first column of the NEXT output is
+     * box.x + box.width, and a cursor parked exactly there has already left. */
+    double cx = x < b.x ? b.x : (x > b.x + b.width  - 1 ? b.x + b.width  - 1 : x);
+    double cy = y < b.y ? b.y : (y > b.y + b.height - 1 ? b.y + b.height - 1 : y);
+    if (cx == x && cy == y) return;
+
+    wlr_cursor_warp_closest(s->cursor, NULL, cx, cy);
+    s->cursor_x = s->cursor->x;
+    s->cursor_y = s->cursor->y;
+}

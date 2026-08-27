@@ -333,6 +333,11 @@
  *       scanout while it is on. Dropping it for the game is invisible.
  *   game_pause_wallpaper = on|off      (default on — stop wallpaperengine)
  *   game_stop_bar = on|off             (default OFF — ~400 MB, visible restart)
+ *   game_confine_pointer = on|off      (default ON — keeps the mouse in the game)
+ *       A fullscreen game is meant to capture the pointer by asking for a
+ *       zwp_locked_pointer; measured on Cyberpunk 2077 the request never
+ *       arrives, so the cursor wanders onto the other monitors mid-play.
+ *       Held only while the game has focus — Alt-Tab always frees it.
  *   game_quiet_kmod = on|off           (default OFF — near-zero saving)
  *   game_exclude = firefox chibi tepris nexus-chat foot
  *       Space-separated app_ids that are NOT games; REPLACES the built-in list.
@@ -1828,6 +1833,10 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->game_drop_effects    = 1;
     cfg->game_pause_wallpaper = 1;
     cfg->game_stop_bar        = 0;
+    /* On: a fullscreen game that does not ask for a pointer constraint —
+     * which is every one measured so far — otherwise leaks the mouse onto
+     * the next monitor mid-play. Focus is the release, so it cannot trap. */
+    cfg->game_confine_pointer = 1;
     cfg->game_quiet_kmod      = 0;
     snprintf(cfg->game_wp_stop_cmd,  sizeof(cfg->game_wp_stop_cmd),
              "synui-wpengine off all");
@@ -3156,6 +3165,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->game_pause_wallpaper = strcmp(val, "on") == 0;
     else if (strcmp(key, "game_stop_bar") == 0)
         cfg->game_stop_bar = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_confine_pointer") == 0)
+        cfg->game_confine_pointer = strcmp(val, "on") == 0;
     else if (strcmp(key, "game_quiet_kmod") == 0)
         cfg->game_quiet_kmod = strcmp(val, "on") == 0;
     else if (strcmp(key, "game_wp_stop_cmd") == 0)

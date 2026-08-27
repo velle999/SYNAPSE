@@ -2004,7 +2004,31 @@ pkgver=0.1.0
 #   `synctl cursor` is new, and reports the pointer's layout position — the
 #   readback tests/pointer_smoothing.sh needs to assert the property that
 #   matters, which is that a smoothed stroke arrives LATE and never SHORT.
-pkgrel=509
+# 510 THE MOUSE STAYS IN THE GAME. A fullscreen game now keeps the pointer on
+#   its own monitor, and the setting for it is Control panel ▸ Power ▸ "Keep the
+#   mouse on the game's screen" (`game_confine_pointer = on|off`, default ON).
+#   Capturing the pointer is normally the CLIENT's job: a game asks for a
+#   zwp_locked_pointer or zwp_confined_pointer and constraints.c honours it.
+#   Measured on Cyberpunk 2077 under proton-cachyos across three outputs, the
+#   request never arrives — 16010 cursor samples over 59 s with the game holding
+#   focus ranged over x 0..3639, y 75..2602, which is all three monitors. There
+#   was nothing for constraints.c to honour, so no amount of work there could
+#   have helped; game mode already knows which output the game is on and answers
+#   for itself instead.
+#   ⚠ HELD ONLY WHILE THE GAME HAS FOCUS. Alt-Tab, or any bind that moves focus,
+#   frees the pointer at once and clicking back into the game takes it again —
+#   the mouse can never end up stuck on one screen with no way off it. That is
+#   also why this is safe to default on.
+#   ⚠ The clamp is to the game's OUTPUT, not its window: a sub-native game is
+#   letterboxed inside a larger frame by view_fullscreen_rescale(), and confining
+#   to the window would stop the cursor short of the edge of the screen.
+#   Two constraint bugs found alongside it, both able to drop a lock that a
+#   better-behaved client HAD asked for: panel_pointer_claim_cursor() cleared
+#   pointer focus without telling constraints.c, leaving active_constraint naming
+#   a surface that no longer held focus (the same shape 508 guarded
+#   pointer_rebase against); it now says so. tests/game_confine_test.c drives the
+#   real gate and clamp against stubs — 18 assertions, no compositor.
+pkgrel=510
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

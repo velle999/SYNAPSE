@@ -1849,6 +1849,7 @@ typedef enum {
     CTL_ROW_GAME_DROP_EFFECTS,
     CTL_ROW_GAME_PAUSE_WALLPAPER,
     CTL_ROW_GAME_STOP_BAR,
+    CTL_ROW_GAME_CONFINE_POINTER,
     CTL_ROW_GAME_QUIET_KMOD,
 
     CTL_ROW_AI_LAYOUT,
@@ -4355,6 +4356,11 @@ typedef struct {
      * on exit is visible. Off by default for that reason — turn it on if the
      * memory matters more than a second of missing bar when you alt-tab out. */
     int   game_stop_bar;        /* default 0 */
+    /* Hold the pointer on the game's monitor while the game has focus.
+     * Default 1: measured on Cyberpunk 2077 the client never asks for a
+     * pointer constraint at all, so without this the mouse walks off a
+     * fullscreen game onto the next screen. See game_pointer_box(). */
+    int   game_confine_pointer; /* default 1 */
     /* Honest expectation: near-zero. The probes still trap; events_enabled only
      * skips event construction, and a desktop sits around 50 syscalls/sec. It
      * also stops synguard seeing events while it applies, so it is off unless
@@ -7996,6 +8002,13 @@ syn_output_t *game_output_for(syn_server_t *s, syn_view_t *view);
 void game_reevaluate(syn_server_t *s);
 /* Super+G — cycle auto → forced-on → forced-off → auto. */
 void game_toggle(syn_server_t *s);
+/* The rectangle the pointer is being held inside for a game, or 0 for "not
+ * our business". Non-zero only while game mode is engaged, the game holds
+ * focus and game_confine_pointer is on. */
+int  game_pointer_box(syn_server_t *s, struct wlr_box *box);
+/* Clamp the cursor into that rectangle. Cheap and idempotent; called from
+ * the pointer motion path after the cursor has already moved. */
+void game_confine_cursor(syn_server_t *s);
 
 /* ── Cat mode (cat.c) ────────────────────────────────────── */
 

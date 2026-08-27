@@ -3008,8 +3008,17 @@ static void panel_pointer_claim_cursor(syn_server_t *s)
 {
     if (s->seat->pointer_state.button_count > 0) return;
 
-    if (s->seat->pointer_state.focused_surface)
+    if (s->seat->pointer_state.focused_surface) {
         wlr_seat_pointer_notify_clear_focus(s->seat);
+        /* Focus is where a constraint lives or dies, so constraints.c has to
+         * hear about it from HERE too. This function returns before
+         * pointer_update_focus() ever runs, so without this call
+         * s->active_constraint is left naming a surface that no longer holds
+         * pointer focus — constraints_apply_motion() then bails on its own
+         * focus check and a locked pointer silently stops being locked. Same
+         * shape as the pointer_rebase() case guarded above. */
+        constraints_focus_surface(s, NULL);
+    }
 
     /* Also drops any resize arrow a titlebar edge was holding when the panel
      * opened — deco_hover_update() is below the early return too, so nothing
@@ -3254,6 +3263,13 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     wlr_cursor_move(s->cursor, device, dx, dy);
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
+
+    /* A fullscreen game keeps the pointer on its own screen. This is NOT a
+     * client constraint and deliberately does not go through constraints.c:
+     * the games measured here never ask for one, so there is nothing to
+     * honour and the compositor decides instead. Idempotent, and a no-op the
+     * moment the game loses focus. */
+    game_confine_cursor(s);
 
     /* An in-flight DnD icon rides the cursor (tree is empty otherwise). */
     wlr_scene_node_set_position(&s->drag_icon_tree->node,
