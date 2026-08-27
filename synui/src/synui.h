@@ -8042,6 +8042,14 @@ syn_view_t *game_probe_view(syn_server_t *s);
  * can see keeps game mode on, but must never turn it on. Exposed for
  * tests/game_confine_test.c. */
 syn_view_t *game_minimized_view(syn_server_t *s);
+/* Which point of a fullscreen window's PICTURE answers for a point in its BOX.
+ * Ownership is the box alone — a fullscreen window owns every pixel of it,
+ * letterbox bar or edge the scene walk declined; the picture only decides which
+ * of its own points answers. 0 when the point is outside the box. Exposed for
+ * tests/game_confine_test.c. */
+int game_fullscreen_owns_point(const struct wlr_box *box,
+                               const struct wlr_box *content,
+                               double lx, double ly, double *cx, double *cy);
 
 /* ── Cat mode (cat.c) ────────────────────────────────────── */
 

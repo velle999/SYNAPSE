@@ -637,6 +637,45 @@ int game_confine_rect(const struct wlr_box *out, const struct wlr_box *content,
     return 1;
 }
 
+/*
+ * Which point of a fullscreen window's PICTURE answers for a point in its BOX.
+ *
+ * The box is what the window covers; the picture is what is drawn in it, and
+ * view_fullscreen_rescale() lets the two differ — a sub-native surface is
+ * fitted and centred, leaving letterbox bars nothing is painted in. The scene
+ * answers NULL in a bar, and NULL ends mouse capture.
+ *
+ * ⚠ AND THE TWO DIFFER EVEN WHEN THEY DO NOT. A picture that fills its frame
+ * still lost pointer focus on its last column and last row — measured on
+ * Cyberpunk 2077 filling DP-3 exactly, x 3639 and y 2519 and nowhere else,
+ * fourteen times in twelve seconds. Those are the two lines game_confine_cursor()
+ * parks the cursor on. So ownership is decided by the BOX alone: a fullscreen
+ * window owns every pixel of it, and the picture only decides WHICH of its own
+ * points answers.
+ *
+ * Answers 0 when the point is outside the box — someone else's problem — and
+ * otherwise fills cx/cy with a point that is inside the picture.
+ */
+int game_fullscreen_owns_point(const struct wlr_box *box,
+                               const struct wlr_box *content,
+                               double lx, double ly, double *cx, double *cy)
+{
+    if (!box || !content || !cx || !cy) return 0;
+    if (box->width <= 0 || box->height <= 0) return 0;
+    if (content->width <= 0 || content->height <= 0) return 0;
+
+    if (lx < box->x || lx >= box->x + box->width ||
+        ly < box->y || ly >= box->y + box->height) return 0;
+
+    /* One short of the far edge, the same reckoning game_confine_cursor() uses:
+     * c.x + c.width is the first column OUTSIDE the picture. */
+    const double rx = content->x + content->width  - 1;
+    const double by = content->y + content->height - 1;
+    *cx = lx < content->x ? content->x : (lx > rx ? rx : lx);
+    *cy = ly < content->y ? content->y : (ly > by ? by : ly);
+    return 1;
+}
+
 /* ── Keeping the pointer on the game's screen ───────────────
  *
  * A fullscreen game on a multi-monitor desk is supposed to capture the mouse,

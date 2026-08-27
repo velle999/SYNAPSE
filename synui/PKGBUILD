@@ -2131,7 +2131,7 @@ pkgver=0.1.0
 #   Restricted to fullscreen windows throughout, so a client that merely closes
 #   a window (Steam to its tray) behaves exactly as before.
 #   tests/game_confine_test.c: 7 more assertions on the minimise lookup.
-pkgrel=514
+pkgrel=515
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

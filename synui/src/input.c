@@ -282,7 +282,7 @@ static syn_view_t *node_owner_view(struct wlr_scene_node *node)
 }
 
 /*
- * ⚠ A FULLSCREEN CLIENT'S LETTERBOX BARS ARE THE CLIENT'S, NOT NOBODY'S.
+ * ⚠ EVERY PIXEL OF A FULLSCREEN CLIENT'S BOX IS THE CLIENT'S, NOT NOBODY'S.
  *
  * view_fullscreen_rescale() fits a sub-native surface inside the fullscreen
  * frame and centres it, so the frame carries bars no surface is painted in.
@@ -331,16 +331,37 @@ static struct wlr_surface *fullscreen_bar_surface_at(
             struct wlr_box c;
             if (!view_scaled_content_box(v, &c)) continue;
             if (c.width <= 0 || c.height <= 0) continue;
-            /* No bars: the scene walk already had its chance at every point. */
-            if (c.width >= v->w && c.height >= v->h) continue;
+            /* ⚠ NOT ONLY WHEN THERE ARE BARS.
+             *
+             * This skipped a picture that fills its frame, reasoning that with
+             * no bars the scene walk had already answered for every point of
+             * it. It has not.
+             *
+             * MEASURED 2026-08-26, Cyberpunk 2077 filling DP-3 exactly —
+             * content 1080,1080 2560x1440, the whole output, so this early-out
+             * declined it. Pointer focus dropped to NULL at x 3639 and at
+             * y 2519 and at no other coordinate: fourteen flips in twelve
+             * seconds, every one of them on one of those two lines. They are
+             * the output's last column and last row, which is precisely where
+             * game_confine_cursor() parks the cursor every time the user
+             * pushes against the edge — during mouse-look, constantly. Each
+             * flip clears pointer focus, and Xwayland only holds a pointer
+             * lock while its surface has it.
+             *
+             * So the rule is the wider one the comment above already argues:
+             * a fullscreen window owns every pixel of its own box for input,
+             * whether the pixel is a letterbox bar or an edge the scene walk
+             * declined. The clamp below answers with the nearest point of the
+             * picture, which for a picture that fills the frame is the pixel
+             * asked about.
+             */
 
-            /* The nearest point of the picture, in ITS coordinates. One short
-             * of the far edge: the picture's last row and column are inside
-             * it, c.x + c.width is the first column of the bar. */
-            double cx = lx < c.x ? c.x : (lx > c.x + c.width  - 1
-                                              ? c.x + c.width  - 1 : lx);
-            double cy = ly < c.y ? c.y : (ly > c.y + c.height - 1
-                                              ? c.y + c.height - 1 : ly);
+            /* The nearest point of the picture, in ITS coordinates — the
+             * point itself when it is already inside one. game.c owns the
+             * reckoning so a test can hold it still. */
+            struct wlr_box vb = { v->x, v->y, v->w, v->h };
+            double cx, cy;
+            if (!game_fullscreen_owns_point(&vb, &c, lx, ly, &cx, &cy)) continue;
             if (sx) *sx = (cx - c.x) * (double)surf_w / c.width;
             if (sy) *sy = (cy - c.y) * (double)surf_h / c.height;
             if (view_out) *view_out = v;

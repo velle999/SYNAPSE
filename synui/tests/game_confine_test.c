@@ -190,6 +190,22 @@ static void rect(const char *what, struct wlr_box content,
     }
 }
 
+
+/* Which point of the picture answers for a point in the box — and whether the
+ * window answers for it AT ALL, which is the whole regression below. */
+static void owns_pt(const char *what, struct wlr_box box, struct wlr_box content,
+                    double lx, double ly, int want, double wx, double wy)
+{
+    double cx = -1, cy = -1;
+    int got = game_fullscreen_owns_point(&box, &content, lx, ly, &cx, &cy);
+    int ok = (got == want) && (!want || (cx == wx && cy == wy));
+    printf("  %s %-58s", ok ? "ok  " : "FAIL", what);
+    if (ok) printf("\n");
+    else    printf(" got %d (%.0f,%.0f) want %d (%.0f,%.0f)\n",
+                   got, cx, cy, want, wx, wy);
+    if (!ok) fails++;
+}
+
 int main(void)
 {
     printf("game_confine_test\n\n THE GATE\n");
@@ -345,6 +361,42 @@ int main(void)
          (struct wlr_box){ 1000, 1000, 3000, 1600 }, 1080, 1080, 2560, 1440);
     rect("content entirely off the screen falls back",
          (struct wlr_box){ 100, 100, 200, 200 },     1080, 1080, 2560, 1440);
+
+    printf("\n WHO OWNS THE PIXEL  (the box, not the picture)\n");
+
+    /* THE REGRESSION, measured 2026-08-26 on Cyberpunk 2077 filling DP-3.
+     * The picture covers the frame exactly, so the old code declined the point
+     * on the reasoning that the scene walk must already have answered for it.
+     * It had not: pointer focus dropped to NULL on x 3639 and y 2519 — the
+     * output's last column and last row, which are the two lines the confine
+     * parks the cursor on — and each drop cost the game its pointer lock. */
+    {
+        struct wlr_box full = { 1080, 1080, 2560, 1440 };
+        owns_pt("the last column of a filling picture is the window's",
+                full, full, 3639, 1700, 1, 3639, 1700);
+        owns_pt("the last row of a filling picture is the window's",
+                full, full, 2000, 2519, 1, 2000, 2519);
+        owns_pt("so is the far corner",
+                full, full, 3639, 2519, 1, 3639, 2519);
+        owns_pt("and the near corner, which never broke",
+                full, full, 1080, 1080, 1, 1080, 1080);
+        /* Ownership stops at the box: the next output is not ours to answer for. */
+        owns_pt("one past the last column belongs to nobody here",
+                full, full, 3640, 1700, 0, 0, 0);
+        owns_pt("one past the last row likewise",
+                full, full, 2000, 2520, 0, 0, 0);
+
+        /* A letterboxed picture still answers with the nearest painted point —
+         * the behaviour 513 added, which this must not have cost. */
+        struct wlr_box bar = { 1080, 1092, 2560, 1416 };
+        owns_pt("a point in the top bar answers at the picture's top row",
+                full, bar, 2000, 1080, 1, 2000, 1092);
+        owns_pt("a point in the bottom bar answers at its last row",
+                full, bar, 2000, 2519, 1, 2000, 2507);
+        owns_pt("a pillarbox answers at the picture's edge column",
+                full, (struct wlr_box){ 1160, 1080, 2400, 1440 },
+                1080, 1700, 1, 1160, 1700);
+    }
 
     printf("\n%s (%d failed)\n", fails ? "FAILED" : "PASSED", fails);
     return fails ? 1 : 0;
