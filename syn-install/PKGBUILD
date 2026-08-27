@@ -221,7 +221,31 @@ pkgver=0.1.0
 #   INSTALLER, so a box installed before 79 never had it and syn-update does
 #   not add installer-written files; it needs writing by hand, with visudo -c
 #   before and after.
-pkgrel=99
+# 100: A FRESH INSTALL CARRIED THREE TERMINALS AND OPENED ONE OF THEM. kitty
+#   was pacstrapped in the base set from the days it was the default; syntty
+#   replaced it as the default in synui 359 and as a hard dependency shortly
+#   after, and this list went on carrying 65 MiB that nothing opens, nothing
+#   names, and no fresh synuirc mentions.
+#   ⛔ AND ON THE ISO IT WAS WORSE THAN DEAD WEIGHT: kitty needs a working
+#   OpenGL context, which is the one thing a live image cannot count on — an
+#   unfamiliar GPU, a driver that did not load, a VM with no acceleration. The
+#   comment beside it there still read "kitty stays the default terminal",
+#   which had not been true for a hundred and fifty releases.
+#   Two ship now. syntty is the default and links no GL at all; foot stays as
+#   the rescue, and ⚠ THE REASON IT STAYS CHANGED — it used to be "kitty needs
+#   OpenGL and foot does not", which stopped being the point the day syntty
+#   became the default, because syntty does not either. What foot is now is a
+#   SECOND IMPLEMENTATION: 793 KiB of somebody else's code, so a bug that stops
+#   syntty opening still leaves a way to get a prompt and fix it.
+#   ⚠ kitty's CONFIG IS STILL WRITTEN, deliberately. It is one `synpkg install
+#   kitty` away, and a terminal somebody chooses to add should land on the same
+#   palette as the two that shipped rather than on kitty's own defaults.
+#   ⚠ AND EVERY FALLBACK CHAIN STILL NAMES IT. A box installed before this has
+#   kitty and no syntty; a chain that dropped the name would leave it with no
+#   terminal at all.
+#   Seven checks in layout_test.sh, against BOTH lists — the installer's and
+#   the ISO's are independent collectors and have drifted before.
+pkgrel=100
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -598,8 +598,16 @@ syntty -e htop               # run one command; what every launcher emits
 syntty --hold -e ./build.sh  # keep the output on screen after it exits
 ```
 
-`kitty` is still installable and still works — nothing in SynapseOS opens it any
-more, which is also why `synpkg remove kitty` succeeds now.
+`kitty` is **not installed any more**. It was, from the days it was the
+default, and a fresh box ended up with three terminals and opened one of them —
+65 MiB of the three that nothing names and no fresh `synuirc` mentions. It is an
+optdepend now: `synpkg install kitty` puts it back, it still works, and every
+terminal fallback chain in the system still names it, so an install that
+predates this keeps behaving exactly as it did.
+
+What ships is **two**: `syntty`, the default, and `foot`, which earns its place
+by being somebody else's code — 793 KiB of a second implementation, so a bug
+that stops `syntty` opening still leaves a way to get a prompt and fix it.
 
 ### Files
 

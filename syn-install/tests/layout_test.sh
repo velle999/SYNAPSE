@@ -268,6 +268,38 @@ check "an existing swap is not re-made by default" "yes" \
 check "cleanup turns the swap back off" "yes" \
     "$(in_code 'swapoff "$PART_SWAP"')"
 
+# ── terminals ──
+#
+# ⛔ THREE TERMINALS ON A FRESH INSTALL, AND IT OPENED ONE OF THEM. kitty was
+# pacstrapped here from the days it was the default; syntty replaced it as the
+# default in synui 359 and as a hard dependency shortly after, and the base set
+# kept carrying 65 MiB that nothing opens and no fresh synuirc names. Two ship
+# now — syntty (a synui dependency, installed with it) and foot — and kitty is
+# an optdepend somebody adds on purpose.
+#
+# Asserted in BOTH lists, because they are two independent collectors and the
+# ISO's has drifted from the installer's before.
+check "kitty is not in the base set"  "yes" \
+    "$(grep -q 'linux-headers kitty' <<<"$codetext" && echo no || echo yes)"
+check "foot still is"                 "yes"      "$(in_code 'linux-headers foot \')"
+check "kitty is not on the ISO"       "yes" \
+    "$(grep -qx 'kitty' "$here/../../archiso/packages.x86_64" && echo no || echo yes)"
+check "foot is on the ISO"            "yes" \
+    "$(grep -qx 'foot' "$here/../../archiso/packages.x86_64" && echo yes || echo no)"
+check "and so is syntty"              "yes" \
+    "$(grep -qx 'syntty' "$here/../../archiso/packages.x86_64" && echo yes || echo no)"
+# ⚠ AND kitty's CONFIG IS STILL WRITTEN, deliberately: it is one command away
+# with `synpkg install kitty`, and a terminal somebody chooses to add should
+# land on the same palette as the two that shipped rather than on kitty's own
+# defaults. Pinned so that "kitty is gone" does not later take this with it.
+check "the kitty palette is still written for an opt-in install" "yes" \
+    "$(in_code '.config/kitty/kitty.conf')"
+# ⚠ AND EVERY FALLBACK CHAIN STILL NAMES IT. A box installed before this has
+# kitty and no syntty; a chain that dropped the name would leave it with no
+# terminal at all.
+check "synui's terminal chain still names kitty" "yes" \
+    "$(grep -q '"syntty", "kitty", "foot"' "$here/../../synsh/src/intents.c" && echo yes || echo no)"
+
 # ── zram ──
 # Unconditional, on every layout, because ERASE and ALONGSIDE have nowhere to
 # put a partition. The package has to be installed AND the config written AND

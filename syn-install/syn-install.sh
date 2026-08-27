@@ -2496,9 +2496,26 @@ fi
 # together, and a security-focused OS that cannot tell you whether its packages
 # have known CVEs until you first install a tool is telling on itself. lynis
 # reads the skip-test profile synapse_kmod ships at /etc/lynis/custom.prf.
+#
+# ⛔ TWO TERMINALS, NOT THREE, AND kitty IS THE ONE THAT WENT. It was pacstrapped
+# here from the days it was the default; syntty replaced it as the default in
+# synui 359 and as a hard dependency shortly after, so a fresh install carried
+# 65 MiB of terminal that nothing opens, nothing names, and every fresh synuirc
+# ignores. The two that stay each answer something:
+#
+#   syntty  the default. Links no GL at all, so it opens on an unfamiliar GPU,
+#           an unloaded driver or a VM with no acceleration
+#   foot    the rescue, and it earns that by being a SECOND IMPLEMENTATION —
+#           793 KiB of somebody else's code, so a bug that stops syntty opening
+#           still leaves a way to get a prompt and fix it
+#
+# kitty is not gone, it is OPT-IN: `synpkg install kitty` puts it back, synui
+# lists it as an optdepend, and every terminal chain in the suite still names it
+# so an install that predates this keeps working exactly as it did.
+#
 # (No inline comments below — the list is one backslash-continued command.)
 pacstrap /mnt \
-    base linux linux-firmware linux-headers kitty foot \
+    base linux linux-firmware linux-headers foot \
     grub efibootmgr os-prober ntfs-3g \
     $FS_PKGS $SNAP_PKGS \
     networkmanager wireless-regdb iw openssh sudo \
@@ -4956,6 +4973,12 @@ fi
 
 # kitty terminal — "night drive" palette (matches synuirc border colors).
 #
+# ⚠ WRITTEN EVEN THOUGH kitty IS NO LONGER INSTALLED. It is an optdepend now,
+# and `synpkg install kitty` is one command — this is what makes the terminal
+# somebody chooses to add land on the same palette as the two that shipped,
+# rather than on kitty's own defaults with no way to tell it was ever
+# considered. One 40-line file, written once, costs nothing.
+#
 # dynamic_background_opacity is NOT optional here. kitty's documentation is
 # explicit that the option cannot be turned on by reloading the config, and that
 # a background_opacity change on reload only takes effect if dynamic opacity was
@@ -5027,11 +5050,14 @@ url_color                #05d9e8
 KITTYEOF
 
 # foot, same palette — kept as the rescue terminal, not as a second default.
-# kitty is GPU-accelerated and needs working OpenGL; foot renders on the CPU and
-# works anywhere, which matters on a VM falling back to llvmpipe. It is 793 KiB
-# against kitty's 65 MiB, so carrying it is what makes synui's
-# `kitty || foot || alacritty || xterm` chain an actual rescue rather than a
-# decorative one. Themed to match so the fallback does not look broken.
+#
+# ⚠ THE REASON CHANGED WHEN kitty CAME OFF THE BASE SET. It used to be "kitty
+# needs OpenGL and foot does not", which stopped being the point the day the
+# default became syntty — syntty links no GL either. What foot is now is a
+# SECOND IMPLEMENTATION: 793 KiB of somebody else's code, so a bug that stops
+# syntty opening still leaves a way to get a prompt and fix it. That is what
+# makes synui's `syntty || kitty || foot || …` chain an actual rescue rather
+# than a decorative one. Themed to match so the fallback does not look broken.
 mkdir -p "/mnt/home/$NEW_USER/.config/foot"
 cat > "/mnt/home/$NEW_USER/.config/foot/foot.ini" << 'FOOTEOF'
 [main]

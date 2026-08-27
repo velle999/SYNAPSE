@@ -303,8 +303,9 @@ ShellRoot {
     // ── The privileged half ─────────────────────────────────────────────────
     //
     // ⚠ syntty --hold, and both halves matter. syntty is the terminal that
-    // ships in every install profile (kitty is an optdepend a Minimal box does
-    // not have), and --hold keeps the window open after the run so the build
+    // ships in every install profile — it is a hard dependency of synui, where
+    // kitty and foot are optdepends and kitty is not installed at all — and
+    // --hold keeps the window open after the run so the build
     // log survives the thing that produced it. A four-gigabyte build that fails
     // and then vanishes is a build nobody can report a bug against.
     //

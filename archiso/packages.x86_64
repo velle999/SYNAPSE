@@ -109,18 +109,25 @@ synpkg
 # fetch falls through ID_LIKE to fastfetch's Arch logo, which is a perfectly
 # good logo and the wrong distro's.
 fetch
+# foot — the rescue terminal, and the reason it is here is that it is a SECOND
+# IMPLEMENTATION. 793 KiB of somebody else's code, so a bug that stops syntty
+# opening still leaves a way to get a prompt on a live image and fix it.
 foot
-kitty
-# syntty — our own terminal, alongside them rather than instead of them.
+# syntty — our own terminal, and the default.
 #
-# It is 359 KB and links no GL at all: no EGL, no libLLVM, no gallium, which is
-# 188 MB of what a fresh kitty maps and most of the 230 ms it spends before it
-# can run `true`. syntty's first frame is under 6 ms on the machine this is
-# built on.
+# It is 359 KB and links no GL at all: no EGL, no libLLVM, no gallium. A GL
+# context is the one thing a live image cannot count on — an unfamiliar GPU, a
+# driver that did not load, a VM with no acceleration — and a rescue disk that
+# cannot open a prompt cannot rescue anything.
 #
-# kitty stays the default terminal — synui's `terminal =` still names it, and
-# nothing here changes that. Two terminals on the image is a few hundred KB and
-# means the one that needs a GPU is not the only way to get a prompt.
+# ⛔ kitty IS NOT ON THIS LIST ANY MORE. It was, from the days it was the
+# default, and the comment here still said so long after synui 359 made syntty
+# the default and a hard dependency: 65 MiB of terminal that nothing opens,
+# nothing names, and no fresh synuirc mentions — on the one image where the
+# thing it needs, working OpenGL, is least likely to be there. It is an
+# optdepend now, and `synpkg install kitty` puts it back on an installed
+# system; every terminal chain in the suite still names it, so a box that
+# predates this keeps working exactly as it did.
 syntty
 # Application launcher on Super+=. rofi 2.0.0 merged lbonn's Wayland port
 # into mainline, so this is the plain `rofi` package (it Provides/Replaces

@@ -30,7 +30,11 @@ pkgver=0.1.0
 # 22: the nix profile documents comp_synstudio. syn-install's config_test.sh
 #   checks that vocabulary for drift in BOTH directions — a key the installer
 #   asks about and the example never mentions is a key nobody can discover.
-pkgrel=24
+# 25: a comment in resolve.qml said kitty is "an optdepend a Minimal box does
+#   not have". It is an optdepend NO box has now — it came off the base set and
+#   the ISO in syn-install 100 — and the sentence was the reason syntty is the
+#   terminal this window spawns, so it had to say something true.
+pkgrel=25
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
