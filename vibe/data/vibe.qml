@@ -295,136 +295,154 @@ FloatingWindow {
             height: 40
             color: root.cPanel
 
+            // ⚠ BOUND ON THE RIGHT, and elided. Anchored to the left alone it
+            // keeps its full width at every window size, so shrinking the
+            // window slides the model name straight under the controls — two
+            // strings drawn in the same pixels, both unreadable.
             Text {
-                anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                anchors { left: parent.left; leftMargin: 14
+                          right: ctrls.left; rightMargin: 12
+                          verticalCenter: parent.verticalCenter }
                 text: root.modelName
+                elide: Text.ElideRight
                 color: root.cText
                 font.pixelSize: root.ui(13)
                 font.family: "monospace"
             }
-            // ⚠ HIDDEN, NOT GREYED, where the box cannot do it. A microphone
-            // that cannot be pressed is a question the user has to go and
-            // answer somewhere else; no microphone is a window that never
-            // raised it.
-            // ⛔ THE LOUDEST CONTROL IN THE WINDOW, and it looks it while it is
-            // on. Armed, this leaves a microphone open until it is turned off.
-            Text {
-                id: wakeBtn
-                visible: root.canHear !== "no"
-                anchors { right: micBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                text: root.waking ? "◉ answering to its name" : "wake"
-                color: root.waking ? root.cBad : root.cDim
-                font.family: root.uiFont || "sans-serif"
-                font.pixelSize: root.ui(12)
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.send("wake " + (root.waking ? "off" : "on"))
-                }
-            }
 
-            Text {
-                id: micBtn
-                visible: root.canHear !== "no"
-                anchors { right: readBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                text: root.listening ? "◉ listening" : "🎤"
-                color: root.listening ? root.cWarn : root.cDim
-                font.family: root.uiFont || "sans-serif"
-                font.pixelSize: root.ui(13)
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: if (!root.listening) root.send("listen")
-                }
-            }
+            // The right-hand controls, laid out rather than chained. A Row
+            // drops the ones that are hidden and closes the gap itself, which
+            // is the whole reason the name above can anchor to its left edge:
+            // there is one edge to anchor to whatever this box can do.
+            Row {
+                id: ctrls
+                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                spacing: 12
 
-            Text {
-                id: readBtn
-                visible: root.canSpeak !== "no"
-                anchors { right: pill.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                text: root.reading ? "🔊" : "🔇"
-                color: root.reading ? root.cAccent : root.cDim
-                font.family: root.uiFont || "sans-serif"
-                font.pixelSize: root.ui(13)
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    // Left click turns reading on and off; while it is talking,
-                    // any click shuts it up first — the button you reach for
-                    // when a long answer starts reading itself is this one.
-                    onClicked: {
-                        root.send("hush")
-                        root.send("speak " + (root.reading ? "off" : "on"))
+                // ⚠ HIDDEN, NOT GREYED, where the box cannot do it. A microphone
+                // that cannot be pressed is a question the user has to go and
+                // answer somewhere else; no microphone is a window that never
+                // raised it.
+                // ⛔ THE LOUDEST CONTROL IN THE WINDOW, and it looks it while it is
+                // on. Armed, this leaves a microphone open until it is turned off.
+                Text {
+                    id: wakeBtn
+                    visible: root.canHear !== "no"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.waking ? "◉ answering to its name" : "wake"
+                    color: root.waking ? root.cBad : root.cDim
+                    font.family: root.uiFont || "sans-serif"
+                    font.pixelSize: root.ui(12)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.send("wake " + (root.waking ? "off" : "on"))
                     }
                 }
-            }
 
-            Rectangle {       // the cloud/local tell, in a word and a colour
-                id: pill
-                anchors { right: modeBtn.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                width: tag.implicitWidth + 14; height: 20; radius: 10
-                color: root.cloud ? Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.22)
-                                  : Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.18)
                 Text {
-                    id: tag
-                    anchors.centerIn: parent
-                    text: root.cloud ? "cloud" : "local"
-                    color: root.cloud ? root.cWarn : root.cAccent
+                    id: micBtn
+                    visible: root.canHear !== "no"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.listening ? "◉ listening" : "🎤"
+                    color: root.listening ? root.cWarn : root.cDim
                     font.family: root.uiFont || "sans-serif"
-                    font.pixelSize: root.ui(11)
+                    font.pixelSize: root.ui(13)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (!root.listening) root.send("listen")
+                    }
                 }
-            }
-            Text {
-                id: modeBtn
-                anchors { right: menuBtn.left; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                text: root.mode + (root.mode === "auto" && root.turnMode !== ""
-                                   ? " · " + root.turnMode : "") + " ▾"
-                color: root.cAccent
-                font.family: root.uiFont || "sans-serif"
-                font.pixelSize: root.ui(12)
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: modeMenu.open()
-                }
-                Menu {
-                    id: modeMenu
-                    Repeater {
-                        model: [["auto",  "Auto — picks per message"],
-                                ["ask",   "Ask — answers, touches nothing"],
-                                ["agent", "Agent — answers and does it"],
-                                ["plan",  "Plan — looks, and writes the steps"]]
-                        MenuItem {
-                            id: mrow
-                            required property var modelData
-                            text: mrow.modelData[1]
-                            onTriggered: root.send("mode " + mrow.modelData[0])
+
+                Text {
+                    id: readBtn
+                    visible: root.canSpeak !== "no"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.reading ? "🔊" : "🔇"
+                    color: root.reading ? root.cAccent : root.cDim
+                    font.family: root.uiFont || "sans-serif"
+                    font.pixelSize: root.ui(13)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        // Left click turns reading on and off; while it is talking,
+                        // any click shuts it up first — the button you reach for
+                        // when a long answer starts reading itself is this one.
+                        onClicked: {
+                            root.send("hush")
+                            root.send("speak " + (root.reading ? "off" : "on"))
                         }
                     }
                 }
-            }
 
-            Text {
-                id: menuBtn
-                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                text: "backend ▾"
-                color: root.cDim
-                font.family: root.uiFont || "sans-serif"
-                font.pixelSize: root.ui(12)
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: backends.open()
+                Rectangle {       // the cloud/local tell, in a word and a colour
+                    id: pill
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: tag.implicitWidth + 14; height: 20; radius: 10
+                    color: root.cloud ? Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.22)
+                                      : Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.18)
+                    Text {
+                        id: tag
+                        anchors.centerIn: parent
+                        text: root.cloud ? "cloud" : "local"
+                        color: root.cloud ? root.cWarn : root.cAccent
+                        font.family: root.uiFont || "sans-serif"
+                        font.pixelSize: root.ui(11)
+                    }
                 }
-                Menu {
-                    id: backends
-                    Repeater {
-                        model: ["synapd", "ollama", "anthropic", "openai"]
-                        MenuItem {
-                            id: pick
-                            required property string modelData
-                            text: pick.modelData
-                            onTriggered: root.send("provider " + pick.modelData)
+                Text {
+                    id: modeBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.mode + (root.mode === "auto" && root.turnMode !== ""
+                                       ? " · " + root.turnMode : "") + " ▾"
+                    color: root.cAccent
+                    font.family: root.uiFont || "sans-serif"
+                    font.pixelSize: root.ui(12)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: modeMenu.open()
+                    }
+                    Menu {
+                        id: modeMenu
+                        Repeater {
+                            model: [["auto",  "Auto — picks per message"],
+                                    ["ask",   "Ask — answers, touches nothing"],
+                                    ["agent", "Agent — answers and does it"],
+                                    ["plan",  "Plan — looks, and writes the steps"]]
+                            MenuItem {
+                                id: mrow
+                                required property var modelData
+                                text: mrow.modelData[1]
+                                onTriggered: root.send("mode " + mrow.modelData[0])
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    id: menuBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "backend ▾"
+                    color: root.cDim
+                    font.family: root.uiFont || "sans-serif"
+                    font.pixelSize: root.ui(12)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backends.open()
+                    }
+                    Menu {
+                        id: backends
+                        Repeater {
+                            model: ["synapd", "ollama", "anthropic", "openai"]
+                            MenuItem {
+                                id: pick
+                                required property string modelData
+                                text: pick.modelData
+                                onTriggered: root.send("provider " + pick.modelData)
+                            }
                         }
                     }
                 }
@@ -522,7 +540,12 @@ FloatingWindow {
         Rectangle {            // the input
             id: ask
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-            height: Math.min(140, Math.max(46, input.implicitHeight + 18))
+            // ⚠ EVERY INSET IS PART OF THE HEIGHT. The frame insets 7 and the
+            // scroller 8 more, top and bottom — 30 in all — so a strip built to
+            // the text's height plus anything less than that clips the line
+            // being typed, top and bottom, from the very first character.
+            readonly property int chrome: 7 * 2 + 8 * 2
+            height: Math.min(160, input.implicitHeight + ask.chrome)
             color: root.cPanel
 
             Rectangle {
@@ -532,36 +555,52 @@ FloatingWindow {
                 border.width: 1
                 border.color: input.activeFocus ? root.cAccent : root.cLine
 
-                TextArea {
-                    id: input
-                    anchors { fill: parent; margins: 6 }
-                    wrapMode: TextEdit.Wrap
-                    color: root.cText
-                    placeholderText: root.busy ? "thinking…" : "Ask, or say what you want done"
-                    placeholderTextColor: root.cDim
-                    font.family: root.uiFont || "sans-serif"
-                    font.pixelSize: root.ui(13)
-                    background: null
-                    focus: true
+                // Past the cap the strip stops growing, so what is being typed
+                // has to be able to move: without this the caret walks off the
+                // bottom edge and the user is typing where they cannot see.
+                //
+                // ⚠ `TextArea.flickable`, NOT a TextArea parented to one. The
+                // attached form is what sizes the editor to the viewport and
+                // keeps the cursor in view as it is typed; a plain child scrolls
+                // nowhere and takes its width from its own content, which loses
+                // the wrap.
+                Flickable {
+                    id: scroller
+                    anchors { fill: parent; margins: 8 }
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    // Enter sends, Shift+Enter is a newline. The other way round
-                    // is how a chat box comes to eat half-written questions.
-                    //
-                    // ⚠ THE NAMED HANDLERS, NOT `Keys.onPressed`. A TextArea is
-                    // a TextEdit and takes Return for itself; a generic
-                    // onPressed attached to one never sees it, which reads as
-                    // an Enter key that does nothing while every other key
-                    // types fine.
-                    Keys.onReturnPressed: (e) => input.submit(e)
-                    Keys.onEnterPressed: (e) => input.submit(e)
+                    TextArea.flickable: TextArea {
+                        id: input
+                        padding: 0
+                        wrapMode: TextEdit.Wrap
+                        color: root.cText
+                        placeholderText: root.busy ? "thinking…" : "Ask, or say what you want done"
+                        placeholderTextColor: root.cDim
+                        font.family: root.uiFont || "sans-serif"
+                        font.pixelSize: root.ui(13)
+                        background: null
+                        focus: true
 
-                    function submit(e) {
-                        if (e.modifiers & Qt.ShiftModifier) { e.accepted = false; return }
-                        e.accepted = true
-                        const t = input.text.trim()
-                        if (t === "" || root.busy) return
-                        root.send("ask " + encodeURIComponent(t))
-                        input.text = ""
+                        // Enter sends, Shift+Enter is a newline. The other way round
+                        // is how a chat box comes to eat half-written questions.
+                        //
+                        // ⚠ THE NAMED HANDLERS, NOT `Keys.onPressed`. A TextArea is
+                        // a TextEdit and takes Return for itself; a generic
+                        // onPressed attached to one never sees it, which reads as
+                        // an Enter key that does nothing while every other key
+                        // types fine.
+                        Keys.onReturnPressed: (e) => input.submit(e)
+                        Keys.onEnterPressed: (e) => input.submit(e)
+
+                        function submit(e) {
+                            if (e.modifiers & Qt.ShiftModifier) { e.accepted = false; return }
+                            e.accepted = true
+                            const t = input.text.trim()
+                            if (t === "" || root.busy) return
+                            root.send("ask " + encodeURIComponent(t))
+                            input.text = ""
+                        }
                     }
                 }
             }
