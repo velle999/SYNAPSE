@@ -110,6 +110,20 @@ reading it back, and only a value that comes back byte for byte counts as
 stored. Believing the exit status would mean telling somebody their key was
 saved and having no key at all.
 
+⛔ **A local model will describe a tool instead of using it.** "I'll use the
+`desktop_open` tool", "please confirm if you'd like me to proceed", and — the
+one that reads as a lie — a `Tool result:` it wrote itself and then answered
+from. None of them run anything, and all three end the turn looking like
+success. Vibe treats a turn that talks about a tool as a turn that has not
+happened yet: it re-asks once, saying that only the block runs and that the
+confirmation is not the model's to ask for. The rules are in the prompt too,
+and a `<tool_call>` still counts when the model wraps it in a JSON code fence
+or never closes the tag.
+
+⚠ `/no_think` goes to a **Qwen and nothing else**. It is one model family's
+control token; every other model reads it as the first two words of the
+question.
+
 ## Features
 
 - Agentic tool-call loop: reads files, writes files, edits files, runs bash commands, globs, greps

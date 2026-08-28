@@ -129,7 +129,24 @@ def tool_protocol_text(tool_schemas: list[dict]) -> str:
         "You cannot call tools through an API. To use a tool, emit EXACTLY:",
         '<tool_call>{"name": "<tool>", "arguments": {<args>}}</tool_call>',
         "Emit the block and nothing after it; the result comes back as "
-        "'Tool result:' and you continue. Available tools:",
+        "'Tool result:' and you continue.",
+        "",
+        # ⛔ THE THREE WAYS A SMALL MODEL AVOIDS ACTING, said in advance. Every
+        # one of them was produced by the shipped local model for "open
+        # downloads", and every one of them ran nothing while reading as
+        # success: it announced the tool it was about to use, it asked to be
+        # allowed to use it, and it wrote its own 'Tool result:' and answered
+        # from the fiction. The rule they all break is the same one.
+        "⚠ THE BLOCK IS THE ACTION, AND TEXT IS NOT. Naming a tool, saying you "
+        "will use one, or describing what it would return does nothing at all.",
+        "- Do not ask permission. The tools that need it are stopped and "
+        "confirmed for you; asking merely ends your turn without acting.",
+        "- Never write 'Tool result:' yourself. Only the real result is true, "
+        "and it arrives after your block, never inside it.",
+        "- To OPEN a folder for the user, that is desktop_open. list_dir reads "
+        "the names and opens nothing.",
+        "",
+        "Available tools:",
         "",
     ]
     for schema in tool_schemas:
@@ -293,8 +310,13 @@ def _render_tool_calls(content: str, msg: dict) -> str:
 # or it greps for the speed of light. One line at the point of asking fixes
 # both, and it states BOTH branches deliberately — a reminder that only pushed
 # toward tools is how "answer the question" becomes a grep.
+# ⚠ THIS RIDES ON THE LAST USER TURN, which is why it is worth its tokens: on
+# a 7B the system block is thousands of tokens behind by message ten, and this
+# is the sentence directly before the answer. It says what to do and, because
+# announcing a tool is the failure that costs a whole turn, what not to.
 _TOOL_NUDGE = ("\n\n(If this needs a file, a command, or something on this "
-               "machine, emit a <tool_call> block now. If it is general "
+               "machine, emit the <tool_call> block now, as your whole reply "
+               "— do not announce it and do not ask first. If it is general "
                "knowledge or writing, just answer it.)")
 
 

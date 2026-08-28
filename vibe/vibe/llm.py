@@ -10,7 +10,7 @@ from typing import Iterator
 import vibe.config as cfg
 from vibe import cloud, modes
 from . import synapd_client
-from .tools import TOOL_SCHEMAS, execute_tool
+from .tools import TOOL_MAP, TOOL_SCHEMAS, execute_tool
 
 
 SYSTEM_PROMPT = """\
@@ -322,9 +322,35 @@ class VibeModel:
         self._messages = system + kept
 
     def _user_content(self, text: str) -> str:
-        """Prepend Qwen3 thinking-mode directive to user messages."""
-        directive = "" if cfg.THINKING else "/no_think "
-        return directive + text
+        """Prepend Qwen3's thinking-mode directive — TO A QWEN, AND NOTHING ELSE.
+
+        ⚠ `/no_think` IS ONE MODEL FAMILY'S SYNTAX, NOT A SETTING. Qwen3 reads
+        it as a control token and drops its chain of thought; every other model
+        reads it as the first two words the user said. SynapseOS ships a
+        Mistral, so for a year the model was asked to `/no_think open
+        downloads` — a line that begins with a command it has never heard, on
+        the one turn the instruction has to be understood."""
+        if cfg.THINKING or not self._is_qwen():
+            return text
+        return "/no_think " + text
+
+    def _is_qwen(self) -> bool:
+        """Whether the model actually answering is a Qwen3.
+
+        The name comes from whichever backend is live: synapd reports the
+        loaded model in status(), and the local backends are configured by
+        name. An unknown backend answers no, which is the safe way round — a
+        missing directive costs a little thinking, an unwanted one is noise in
+        the prompt."""
+        if cfg.BACKEND == "synapd":
+            name = self._synapd_model
+        elif cfg.BACKEND == "ollama":
+            name = cfg.OLLAMA_MODEL
+        elif cfg.BACKEND == "llama_cpp":
+            name = str(cfg.MODEL_PATH)
+        else:
+            name = ""
+        return "qwen" in name.lower()
 
     def summarize(self, user_text: str) -> Iterator[str]:
         """
@@ -435,6 +461,10 @@ class VibeModel:
         self._think_filter = _ThinkFilter()
 
         _autopush_remaining = 2  # max automatic nudges per user turn
+        # A separate budget from _autopush_remaining on purpose: a turn that
+        # narrated a tool and a turn that narrated code are different failures,
+        # and one must not spend the other's retry.
+        _toolpush_remaining = 1  # one re-ask for a turn that talked about a tool
         _force_tool = False      # force tool_choice="required" on next call
         _no_tools = False        # disable tools entirely (for code-block retries)
         _original_user_text = user_text  # saved for clean retry
@@ -597,6 +627,47 @@ class VibeModel:
                 # (the model wrote code but auto-save couldn't find a filename)
                 _has_code_block = bool(re.search(r"```\w*\s*\n.{100,}?```", _visible, re.DOTALL))
 
+                # ── The turn that talked about a tool instead of calling one ──
+                #
+                # ⛔ THE RETRY BELOW IS CODE-SHAPED AND THIS ONE IS NOT. That
+                # one asks for a fenced code block WITH THE TOOLS TURNED OFF,
+                # which is right for "write me tetris" and is the worst
+                # possible answer to "open downloads": the one thing the turn
+                # needed was a tool call, and the retry removes the tools.
+                #
+                # A small local model fails this turn in three ways, and all
+                # three are the same failure — text where an action belonged:
+                # it announces the tool ("I'll use the `desktop_open` tool"),
+                # it asks to be allowed to use it, or it WRITES THE TOOL RESULT
+                # ITSELF and answers from the fiction. The last one is the
+                # dangerous one: a folder listing that was never read, reported
+                # as fact. None of them ran anything, so the honest reading of
+                # all three is that the turn has not happened yet.
+                if (_toolpush_remaining > 0 and self._turn_tools
+                        and self.active_mode == modes.AGENT
+                        and not _has_code_block and _TOOL_STALL_RE.search(_visible)):
+                    _toolpush_remaining -= 1
+                    yield "\x00RETRY\x00"
+                    self._messages.append({
+                        "role": "user",
+                        "content": self._user_content(
+                            f"{_original_user_text}\n\n"
+                            "You have not done that yet — you described it. "
+                            "Text does nothing on this machine: only a "
+                            "<tool_call> block runs, and its result comes back "
+                            "to you afterwards. Do not ask permission (the "
+                            "confirmation is not yours to ask for) and do not "
+                            "write a tool result yourself. Emit the block now, "
+                            "as your entire reply:\n"
+                            '<tool_call>{"name": "<tool>", "arguments": '
+                            "{<args>}}</tool_call>"
+                        ),
+                    })
+                    self._think_filter = _ThinkFilter()
+                    _force_tool = True
+                    _no_tools = False
+                    continue
+
                 _is_stall = (
                     not _has_code_block
                     and (
@@ -612,8 +683,8 @@ class VibeModel:
                     self._reset_system()
                     self._messages.append({
                         "role": "user",
-                        "content": (
-                            f"/no_think {_original_user_text}\n\n"
+                        "content": self._user_content(
+                            f"{_original_user_text}\n\n"
                             "Output the COMPLETE code in a fenced code block. "
                             "Put a filename comment on the first line of the code:\n"
                             "```python\n# file: program.py\n"
@@ -857,6 +928,33 @@ _STALL_RE = re.compile(
 )
 
 
+# A turn that TALKED ABOUT a tool instead of emitting one. Narration, a
+# request for permission, or — the one that reads as the assistant lying — a
+# "Tool result:" the model wrote itself and then answered from.
+#
+# ⚠ THE PHRASES ARE THE MODEL'S OWN, taken from what the shipped local model
+# actually produced for "open downloads": "I'll use the `desktop_open` tool",
+# "Please confirm if you'd like me to proceed", "**Tool result:** [...]".
+# ⚠ A BACKTICKED TOOL NAME IS THE STRONGEST SIGNAL, and the names come from
+# TOOL_MAP rather than from a list written out here — a second copy would stop
+# matching the day a tool is added. Backticks are what keep it from firing on
+# prose about somebody's bash history.
+_TOOL_STALL_RE = re.compile(
+    r"(?i)"
+    r"\*{0,2}tool result\*{0,2}\s*:"                    # it forged the result
+    r"|\b(?:i(?:'ll| will| am going to| can)|let me|shall i|would you like me"
+    r"|please confirm|say the word)\b[\s\S]{0,80}\b(?:tool|call|use|open|run)\b"
+    r"|`(?:" + "|".join(TOOL_MAP) + r")`"
+    r"|\btool_call\b"                                    # described the block
+    # ⛔ AND THE ONE WITH NO TELL AT ALL: an answer that reports what is on
+    # this machine, written without reading it. A turn that really listed a
+    # folder has a tool call and never reaches this test, so a listing here is
+    # invented by construction.
+    r"|\b(?:here (?:are|is)|these are)\b[\s\S]{0,40}"
+    r"\b(?:files|folders|contents|directory|folder)\b"
+)
+
+
 # Matches fenced code blocks (closed with ```)
 _CODE_BLOCK_CLOSED_RE = re.compile(r"```(\w+)?\s*\n([\s\S]+?)```")
 # Matches unclosed code blocks (model ran out of tokens before closing)
@@ -923,6 +1021,13 @@ def _auto_save_code_blocks(text: str) -> list[tuple[str, str]]:
     Tries closed blocks first, then falls back to unclosed blocks
     (model ran out of tokens before closing with ```).
     """
+    # ⛔ A TOOL CALL IS NOT CODE, however it was fenced. Models wrap the block
+    # in ```json, and a truncated one parses as neither — which used to land in
+    # the user's working directory as `program.json`, a file nobody asked for
+    # whose contents are a failed attempt to open their Downloads folder.
+    if "<tool_call>" in text:
+        return []
+
     # Try closed blocks first; if none found, try unclosed
     matches = list(_CODE_BLOCK_CLOSED_RE.finditer(text))
     if not matches:
@@ -1024,14 +1129,76 @@ def _clean_tool_args(args: dict) -> dict:
     return args
 
 
+def _json_object_at(text: str, start: int) -> str | None:
+    """The one complete JSON object beginning at or after `start`, or None.
+
+    ⚠ BRACE COUNTING, NOT A REGEX, and it stops at the first balanced object —
+    everything the model wrote afterwards (a closing fence, a paragraph about
+    what it just did, a second invented turn) is not part of the call."""
+    i = text.find("{", start)
+    if i < 0:
+        return None
+    depth, in_str, esc = 0, False, False
+    for j in range(i, len(text)):
+        c = text[j]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]
+    return None
+
+
+def _unclosed_tool_calls(text: str) -> list[str]:
+    """The JSON of every <tool_call> that was never closed.
+
+    ⛔ A MISSING `</tool_call>` IS THE COMMON CASE ON A SMALL LOCAL MODEL, not
+    a corner one. It opens the tag inside a ```json fence and closes the fence
+    instead, or the token budget runs out mid-block. The call it wrote is
+    complete and correct; only the punctuation after it is missing, and
+    throwing the whole turn away for that is how "open downloads" answered with
+    a paragraph about opening downloads.
+    """
+    out = []
+    for m in re.finditer(r"<tool_call>", text):
+        rest = text[m.end():]
+        if "</tool_call>" in rest:
+            continue                      # closed — the strict pass has it
+        obj = _json_object_at(rest, 0)
+        if obj:
+            out.append(obj)
+    return out
+
+
 def _parse_text_tool_calls(text: str) -> list[dict]:
     """Extract Qwen3-style <tool_call>...</tool_call> blocks from assistant text."""
     calls = []
-    for i, m in enumerate(_TOOL_CALL_RE.finditer(text)):
+    blocks = [m.group(1) for m in _TOOL_CALL_RE.finditer(text)]
+    blocks += _unclosed_tool_calls(text)
+    for i, block in enumerate(blocks):
+        # A fenced block is still a block: models wrap the JSON in ```json.
+        block = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", block.strip())
         try:
-            data = json.loads(m.group(1))
+            data = json.loads(block)
         except json.JSONDecodeError:
-            continue
+            obj = _json_object_at(block, 0)
+            if obj is None:
+                continue
+            try:
+                data = json.loads(obj)
+            except json.JSONDecodeError:
+                continue
         if not isinstance(data, dict):
             continue
         calls.append({

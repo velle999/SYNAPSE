@@ -216,9 +216,13 @@ check("an unknown template falls back to a plain transcript, with no markers",
 # block, which for Mistral is thousands of tokens behind the question.
 withtools = sc.flatten_messages(MSGS, TOOL_SCHEMAS, "[INST]")
 check("the tool reminder lands on the last turn, once",
-      withtools.count("emit a <tool_call> block now") == 1)
+      withtools.count("emit the <tool_call> block now") == 1)
 check("…and states BOTH branches, so it cannot push a fact question into a grep",
       "just answer it" in withtools)
+# ⚠ THE SENTENCE CLOSEST TO THE QUESTION IS THE ONE A 7B FOLLOWS, so the ban on
+# announcing a tool rides here too, not only in the system block far above.
+check("…and forbids announcing a tool instead of emitting one",
+      "do not announce it and do not ask first" in withtools)
 
 # The guard that does not depend on getting any of the above right.
 check("a reply that starts writing the user's turn is cut",
@@ -229,6 +233,84 @@ check("…in every family's markers",
       and sc.trim_hallucinated_turn("C.\nUser: x") == "C.")
 check("…and leaves an ordinary reply alone",
       sc.trim_hallucinated_turn("Just an answer.") == "Just an answer.")
+
+
+# ── 4b. the turn that TALKED ABOUT a tool instead of calling one ────────────
+#
+# ⛔ THE FAILURE THIS IS FOR IS THE WHOLE OF "open downloads did nothing". The
+# resolution was fixed and the window shows errors now, and the folder still
+# did not open two turns in eight — because the model never emitted a call. It
+# announced one ("I'll use the `desktop_open` tool"), it asked to be allowed to
+# use one, or it wrote its own "Tool result:" and answered from the fiction.
+# All three are text where an action belonged, and all three read as success.
+from vibe import llm as _llm
+
+# The block, however the model punctuated it. A missing </tool_call> is the
+# common case, not a corner one: it opens the tag inside a ```json fence and
+# closes the fence instead.
+_CALL = '{"name": "desktop_open", "arguments": {"target": "downloads"}}'
+for label, text in [
+    ("closed", f"<tool_call>{_CALL}</tool_call>"),
+    ("fenced and never closed", f"Here:\n```json\n<tool_call>\n{_CALL}\n```\nDone."),
+    ("cut off after the object", f"<tool_call>{_CALL}"),
+]:
+    got = _llm._parse_text_tool_calls(text)
+    check(f"a {label} tool call is read",
+          len(got) == 1 and got[0]["function"]["name"] == "desktop_open", str(got))
+
+check("a brace inside a string does not end the block early",
+      _llm._parse_text_tool_calls(
+          '<tool_call>{"name": "bash", "arguments": {"command": "echo }"}}'
+      )[0]["function"]["arguments"].endswith('}"}'))
+# ⛔ AND A TRUNCATED ONE IS NOT A FILE. A fenced tool call that parses as
+# neither used to be auto-saved as code: `program.json`, in the user's working
+# directory, containing a failed attempt to open their Downloads folder.
+check("a fenced tool call is never mistaken for code to save",
+      _llm._auto_save_code_blocks(
+          '```json\n<tool_call>\n{"name": "desktop_open", "arguments": {\n```') == [])
+check("…and an ordinary code block still is",
+      [p for p, _ in _llm._auto_save_code_blocks(
+          "```python\n# file: hello.py\nprint('hi')\n```")] == ["hello.py"])
+check("prose that merely mentions the tag is not a call",
+      _llm._parse_text_tool_calls("emit a <tool_call> block when you need one") == [])
+
+# What a stalled turn looks like — every string here was produced by the
+# shipped local model for "open downloads".
+for said in ("Understood. I'll use the `desktop_open` tool. Please confirm if "
+             "you'd like me to proceed.",
+             '**Tool result:** ["Documents", "Downloads"]  It is open now.',
+             "Here are the files and folders in your Downloads directory:"):
+    check(f"a turn that only talks is caught: {said[:34]!r}",
+          bool(_llm._TOOL_STALL_RE.search(said)))
+for said in ("The speed of light is 299,792,458 m/s.",
+             "Dune was written by Frank Herbert.",
+             "Opened /home/velle/Downloads in synfiles."):
+    check(f"…and an ordinary answer is not: {said[:28]!r}",
+          not _llm._TOOL_STALL_RE.search(said))
+
+# ⚠ `/no_think` IS QWEN'S SYNTAX AND NOTHING ELSE'S. SynapseOS ships a Mistral,
+# which reads it as the first two words the user said.
+_m = VibeModel.__new__(VibeModel)
+_m._synapd_model = "Mistral Nemo Instruct 2407"
+import vibe.config as _cfg
+_was, _cfg.BACKEND, _cfg.THINKING = (_cfg.BACKEND, "synapd", False)
+check("a Mistral is asked the question and nothing else",
+      _m._user_content("open downloads") == "open downloads")
+_m._synapd_model = "Qwen3 8B"
+check("…and a Qwen still gets its directive",
+      _m._user_content("open downloads") == "/no_think open downloads")
+_cfg.BACKEND = _was
+
+# The rules the model reads. Announcing a tool costs a whole turn, so the
+# protocol says so before it happens rather than after.
+_proto = sc.tool_protocol_text(TOOL_SCHEMAS)
+check("the protocol says text is not an action", "TEXT IS NOT" in _proto)
+check("…that permission is not the model's to ask for",
+      "Do not ask permission" in _proto)
+check("…that it may never write a tool result itself",
+      "Never write 'Tool result:'" in _proto)
+check("…and that opening a folder is desktop_open, not list_dir",
+      "desktop_open" in _proto and "opens nothing" in _proto)
 
 
 # ── 5. Ask / Agent / Plan, and the automatic choice ─────────────────────────
