@@ -52,13 +52,40 @@ static persist_entry_t table[OUTPUT_PERSIST_MAX];
 static int table_count  = 0;
 static int table_loaded = 0;
 
+/*
+ * Set by output_persist_adopt_file() and read in preference to everything
+ * else. The greeter is the only caller: it runs as another account, cannot
+ * read the user's ~/.config, and is handed a copy of their outputs.conf that
+ * their own session published. See greeterbg.c.
+ */
+static char adopted_path[512];
+
 static void outputs_path(char *buf, size_t len)
 {
     buf[0] = '\0';
+    if (adopted_path[0]) { snprintf(buf, len, "%s", adopted_path); return; }
+
     const char *env = getenv("SYNUI_OUTPUTS");
     if (env && env[0]) { snprintf(buf, len, "%s", env); return; }
 
     syn_config_path(buf, len, "outputs.conf");
+}
+
+/*
+ * Read the layout from `path` from now on, and forget whatever was loaded.
+ *
+ * ⛔ THE FORGETTING IS THE POINT. table_load() is a once-per-process cache, and
+ * by the time the greeter knows whose login screen it is drawing, every output
+ * already exists and the table has already been loaded — empty, because the
+ * greeter's own HOME is `/`. Setting the path without dropping that answer
+ * would change nothing at all.
+ */
+void output_persist_adopt_file(const char *path)
+{
+    if (!path || !*path) return;
+    snprintf(adopted_path, sizeof(adopted_path), "%s", path);
+    table_count  = 0;
+    table_loaded = 0;
 }
 
 static persist_entry_t *table_find(const char *name)

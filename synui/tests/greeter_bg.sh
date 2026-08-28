@@ -102,6 +102,17 @@ lock_blur = 12
 xkb_layout = us,no
 EOF
 
+# ⚠ THE MONITOR LAYOUT LIVES BESIDE THE synuirc, and is just as unreadable to
+# the greeter — same 0700 home. Seeded with a connector name the headless
+# backend will not produce, on purpose: this half of the test is about the FILE
+# crossing the boundary, and an entry that matched would make the compositor
+# move a screen mid-test for no reason. The greeter phase below proves the
+# reading end.
+cat > "$TMP/home/.config/synui/outputs.conf" <<'EOF'
+# synui output layout — one line per connector, as output_persist_save writes it.
+output DP-9 enabled=1 width=2560 height=1440 refresh=59951 transform=0 scale=1.000000 grid_x=1 grid_y=0 x=1080 y=0 primary=1 deep_color=0
+EOF
+
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config"
 export SYNUI_CONFIG="$TMP/home/.config/synui/synuirc"
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
@@ -163,6 +174,23 @@ $(cat "$PUB/background.conf")
        prompt at all."
 echo "layouts:   xkb_layout = us,no travelled too"
 
+# ── 3c. ⚠ AND SO DID THE MONITOR ARRANGEMENT ────────────────────────────
+# velle, 2026-08-28: "match lock screen mon layout to desktop […] there's no
+# way to set it so just have it be set by desktop setting."
+#
+# Which screen is left of which, their modes, scales, rotations and which one
+# is primary all live in ~/.config/synui/outputs.conf. The greeter's home is
+# `/`, so it found nothing and fell back to wlr_output_layout_add_auto() —
+# stacking the screens in connector order, which on a desk with a portrait
+# panel beside two landscape ones is nothing like the desktop.
+[ -f "$PUB/outputs.conf" ] || fail "the monitor layout was not published. The
+       login screen has no way to learn how the desktop arranges the screens,
+       so it invents its own — and there is no setting to correct it with."
+cmp -s "$TMP/home/.config/synui/outputs.conf" "$PUB/outputs.conf" \
+    || fail "the published outputs.conf is not the user's:
+$(cat "$PUB/outputs.conf")"
+echo "monitors:  outputs.conf crossed the boundary byte for byte"
+
 # ── 4. an unchanged wallpaper is not re-copied ──────────────────────────
 # Publishing runs on every output layout change and every wallpaper reload, so
 # a copy per call would mean megabytes moved every time a monitor is plugged in.
@@ -197,6 +225,22 @@ else
     # which the greeter phase below exercises for real.
 fi
 
+# ⚠ NOW MAKE THE PUBLISHED LAYOUT NAME A SCREEN THAT IS ACTUALLY THERE. The
+# session's copy names DP-9 deliberately (see the seed above), which proves the
+# file crosses the boundary and nothing about the reading end — an entry that
+# matches nothing applies to nothing. Rewriting it here for HEADLESS-1 is what
+# makes the greeter phase below exercise the apply.
+#
+# ⚠ POSITION ONLY, no mode: the point is where the screen sits, and asking a
+# headless output for a mode it does not have would fail this for a reason that
+# has nothing to do with the layout.
+# width/height/scale left at 0 so no mode or scale change is attempted: the
+# point is WHERE the screen sits, and asking a headless output for a mode it
+# does not have would fail this for a reason unrelated to the layout.
+cat > "$PUB/outputs.conf" <<'EOF'
+output HEADLESS-1 enabled=1 width=0 height=0 refresh=0 transform=0 scale=0.000000 grid_x=0 grid_y=0 x=1234 y=567 primary=1 deep_color=0
+EOF
+
 # The greeter reads the publishing user's own directory and adopts it.
 export SYNUI_GREETER_USER="$(id -un)"
 GLOG="$TMP/greeter.log"
@@ -227,6 +271,31 @@ grep -q "layout 'us,no'" "$GLOG" \
 $(grep 'greeter bg' "$GLOG" | tail -3)"
 grep -q "synui: keyboard layout:" "$GLOG" || true   # only logged on a switch
 echo "typed:     the greeter took the layouts too"
+
+# ⚠ AND THE MONITOR LAYOUT, WHICH IS ALSO ADOPTED-THEN-APPLIED. Every output
+# was created back at wlr_backend_start and placed by add_auto(), because at
+# that point the greeter had no outputs.conf to read. Pointing output_persist
+# at the published copy changes nothing on its own — the entries have to be
+# re-applied to outputs that already exist, before synui_lock() builds a pane
+# per output against their boxes.
+grep -q "greeter bg: monitor layout from $SYNUI_GREETER_USER's desktop" "$GLOG" \
+    || fail "the greeter did not adopt the published monitor layout:
+$(grep 'greeter bg' "$GLOG" | tail -3)
+       Without it the login screen arranges the screens its own way, and there
+       is no setting anywhere to make it agree with the desktop."
+echo "arranged:  the greeter took the desktop's monitor layout"
+
+# ⛔ AND IT APPLIED IT. Adopting is choosing which file to parse; the screens
+# only move when the entries are re-applied to outputs that already exist. A
+# test that stopped at the log line above would pass on a build that read the
+# file and did nothing with it — which is precisely the bug this half fixes.
+grep -q "greeter: placed 1 monitor(s) the way the desktop has them" "$GLOG" \
+    || fail "the greeter adopted the layout but never applied it:
+$(grep -iE 'greeter|monitor' "$GLOG" | tail -5)
+       Every output was placed by add_auto() at backend start, before the
+       greeter knew whose login this is. Pointing output_persist at the
+       published file changes nothing unless the entries are re-applied."
+echo "applied:   and moved the screen to where the desktop has it"
 
 # ⚠ AND IT DID NOT PUBLISH. The greeter has no user config to publish, and
 # letting it write would let the login screen overwrite the very thing it is

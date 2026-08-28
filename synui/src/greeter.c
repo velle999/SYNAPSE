@@ -290,6 +290,27 @@ void greeter_start(syn_server_t *s)
      * tell the truth about. */
     input_reload_config(s);
 
+    /*
+     * ⚠ AND NEITHER IS ADOPTING A MONITOR LAYOUT. Same shape as the keymap
+     * above, and the same reason: every output was created back at
+     * wlr_backend_start and placed by wlr_output_layout_add_auto(), because at
+     * that point this process had no outputs.conf to read — the greeter's home
+     * is `/`. greeterbg_adopt() has just pointed output_persist at the copy
+     * the user's session published, so this is where it takes effect.
+     *
+     * ⛔ BEFORE synui_lock(), which builds one background pane per output and
+     * positions the panel from each output's layout box. Applying afterwards
+     * would move the screens out from under panes already placed against the
+     * old arrangement.
+     */
+    syn_output_t *o;
+    int placed = 0;
+    wl_list_for_each(o, &s->outputs, link)
+        if (output_persist_apply(s, o)) placed++;
+    if (placed)
+        wlr_log(WLR_INFO, "synui greeter: placed %d monitor(s) the way the "
+                          "desktop has them", placed);
+
     /* Draw the lock panel — same pixels as the in-session lock screen. */
     synui_lock(s);
 

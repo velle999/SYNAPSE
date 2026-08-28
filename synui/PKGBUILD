@@ -2512,7 +2512,7 @@ pkgver=0.1.0
 #   bar's microphone indicator watches the same one — one fact, two surfaces.
 #   ⚠ It draws "Listening", not "On". "On" describes a setting; what is true is
 #   that a device is open right now, and the status line says so both ways.
-pkgrel=534
+pkgrel=535
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

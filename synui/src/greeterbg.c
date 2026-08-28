@@ -228,6 +228,33 @@ void greeterbg_publish(syn_server_t *s)
     }
     if (!have_img) unlink(img);
 
+    /*
+     * ── The monitor layout ──────────────────────────────────────────────
+     *
+     * ⛔ THE LOGIN SCREEN LAID THE MONITORS OUT DIFFERENTLY FROM THE DESKTOP,
+     * and there was no way to tell it not to. The arrangement — which screen
+     * is left of which, their modes, scales, rotations and which is primary —
+     * lives in ~/.config/synui/outputs.conf, and the greeter runs as an
+     * account whose home is `/`: it found nothing, fell back to
+     * wlr_output_layout_add_auto(), and stacked the screens in whatever order
+     * the connectors happened to come up. A portrait panel beside two
+     * landscape ones is where that stops being subtle.
+     *
+     * ⚠ COPIED, NOT POINTED AT — the same reason the picture is. A home
+     * directory is 0700; a path published without the bytes behind it works
+     * only for files the greeter could already read, which is none of them.
+     *
+     * ⚠ AND IT IS NOT A SETTING. Same contract as the background above: this
+     * is a cache of the desktop's answer, refreshed on every layout change
+     * (output_layout_changed calls output_persist_save and then this, in that
+     * order). There is no greeter_outputs key and there must not be one.
+     */
+    char outsrc[512], outdst[512];
+    snprintf(outdst, sizeof(outdst), "%s/outputs.conf", dir);
+    syn_config_path(outsrc, sizeof(outsrc), "outputs.conf");
+    if (!outsrc[0] || !greeterbg_copy(outsrc, outdst))
+        unlink(outdst);
+
     char tmp[512];
     snprintf(tmp, sizeof(tmp), "%s.tmp", conf);
     FILE *f = fopen(tmp, "we");
@@ -336,6 +363,24 @@ void greeterbg_adopt(syn_server_t *s, const char *user)
                            "%s (uid %u) — ignoring it", dir, user,
                 (unsigned)pw->pw_uid);
         return;
+    }
+
+    /*
+     * The monitor layout their session published. Adopted BEFORE the loop
+     * below, because it is not a config key — output_persist.c owns the
+     * parsing and this only says which file to parse. greeter.c re-applies it
+     * to the outputs that already exist; see the note there.
+     *
+     * ⚠ NOT AN ERROR WHEN ABSENT. A user who has never rearranged their
+     * screens has no outputs.conf, and auto-placement is then the right answer
+     * on both screens — which is exactly the case where the two already agree.
+     */
+    char outconf[512];
+    snprintf(outconf, sizeof(outconf), "%s/outputs.conf", dir);
+    if (access(outconf, R_OK) == 0) {
+        output_persist_adopt_file(outconf);
+        wlr_log(WLR_INFO, "synui: greeter bg: monitor layout from %s's desktop",
+                user);
     }
 
     char conf[512];

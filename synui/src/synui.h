@@ -7451,6 +7451,10 @@ struct wlr_output_layout_output *output_persist_apply(syn_server_t *s,
  * to disk, merged with saved entries for disconnected outputs. Called from
  * output_layout_changed() after any real apply. */
 void output_persist_save(syn_server_t *s);
+/* Read the saved layout from THIS file from now on, discarding anything
+ * already loaded. Only the greeter calls it: it cannot read the user's
+ * ~/.config, so their session publishes a copy for it. See greeterbg.c. */
+void output_persist_adopt_file(const char *path);
 
 /* ── dispcfg.c ───────────────────────────────────────────── */
 void dispcfg_show(syn_server_t *s);
