@@ -114,6 +114,59 @@ case "$out" in
     *) bad "unhelpful refusal: $out" ;;
 esac
 
+# ── 6. `apply` refreshing the badge can never break `apply` ─────────────────
+#
+# ⚠ THE BADGE DOES NOT CLEAR ITSELF. The bar reads the state file and nothing
+# else — deliberately, so no bar ever does a git fetch — so until `apply` wrote
+# it, a machine that had just been updated by hand went on showing "3 updates"
+# until the six-hourly timer next fired. That reads exactly like an updater
+# that did not update anything, which is what it was reported as.
+#
+# ⛔ AND IT MUST NEVER BE FATAL. It runs at the END of a successful build, after
+# packages are installed and the manifest is saved. A failure to rewrite an
+# indicator's cache turning a completed update into a red error would be far
+# worse than a stale badge, which the next timer tick corrects anyway. So the
+# hardest case is checked here: the same unusable tree that makes `ping` refuse
+# outright must make this return quietly.
+# A LOCAL git repository standing in for GitHub. `apply` against a tree with no
+# components takes the "nothing to build" path, which is deliberately BEFORE the
+# sudo keep-alive and before build-all.sh — so the whole thing runs with no
+# network, no password and no build, and still reaches the refresh.
+if command -v git >/dev/null 2>&1; then
+    remote="$T/remote"
+    mkdir -p "$remote"
+    (
+        cd "$remote" || exit 1
+        git init -q -b main .
+        git config user.email t@t; git config user.name t
+        echo "not a component" > README.md
+        git add -A && git commit -qm "empty tree"
+    ) >/dev/null 2>&1
+
+    # Created up front: setup_src reaches for sudo to make a source directory
+    # it does not own, and refuses outright when it cannot ask — which is the
+    # right behaviour and not what this phase is about.
+    mkdir -p "$T/src"
+
+    rm -f "$state"
+    out=$(SYN_UPDATE_REPO="$remote" SYN_UPDATE_SRC="$T/src" \
+          bash "$E" apply 2>&1); rc=$?
+    check "apply against an empty tree succeeds" "0" "$rc"
+    if [ -f "$state" ]; then
+        ok "…and it REWROTE the badge's state file"
+        grep -q '^updates=0$' "$state" 2>/dev/null \
+            && ok "…saying nothing is pending, which is what just became true" \
+            || bad "the refreshed state does not read updates=0:
+$(cat "$state" 2>/dev/null)"
+    else
+        bad "apply left no state file — the bar would go on showing whatever it
+        last saw until the six-hourly timer fired, which reads as an updater
+        that did not update anything"
+    fi
+else
+    ok "(skipped the apply-refresh phase: no git)"
+fi
+
 echo ""
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

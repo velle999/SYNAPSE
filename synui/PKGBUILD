@@ -2216,6 +2216,50 @@ pkgver=0.1.0
 #   tests/bar_palette_keys.sh checks every `pal.<key>` in the bar against both
 #   palette literals — the error state needs a machine whose update check is
 #   failing, so no pixel test can reach it and the guard is mechanical instead.
+# 521: a right-click menu for a bar module, and a battery that can be TESTED.
+#   components/ModuleMenu.qml is the second menu shape: BarMenu is the bar's own
+#   per-monitor furniture switches, this is a short list of ACTIONS belonging to
+#   whatever module was right-clicked. A component and not a popup written
+#   inside a module, because everything that makes a popup dismiss correctly
+#   here was learned the hard way — the grab, the long backstop timer, the
+#   HoverHandler that must not be a MouseArea, the anchor window that cannot be
+#   discovered from inside a PopupWindow — and a second copy would be a menu
+#   that dismisses correctly until the day it does not.
+#   Updates.qml takes it: Open Updates, Check now (with when it last did),
+#   Apply in a terminal (greyed with nothing pending), Held back (with a count).
+#   Every row runs a COMMAND, as Network and Bluetooth already right-click into
+#   nmtui and bluetoothctl; apply goes through `syntty --hold` because it is a
+#   long sudo build that has to be able to ask for a password.
+#   ⚠ AND THE ANCHOR IS MAPPED, NOT `root.x`. A module's own x is its position
+#   inside the bar's Row while a PopupWindow anchors against the bar WINDOW, so
+#   the menu opened at the far left of the screen — every row present, every row
+#   working, only WHERE was wrong. tests/bar_module_menu.sh pins it, and two
+#   earlier versions of that rig PASSED on the bug: one right-clicked the
+#   centred clock (whose module declines the button, so the click fell through
+#   to the bar's own menu, which IS anchored on the pointer) and the next found
+#   the compositor's "◢ SYNAPSE" corner, which is not a bar module at all.
+#   ⛔ AND THE BATTERY IS TESTABLE AT LAST. This box is a desktop, so every
+#   laptop-only path in the shell is unreachable on the only machine anybody
+#   looks at it from — and both surfaces that draw a battery hide themselves
+#   when there is none, which makes "correctly hidden" and "broken" identical.
+#   tests/mock_upower.py is a fake org.freedesktop.UPower on a PRIVATE bus
+#   (DBUS_SYSTEM_BUS_ADDRESS; it refuses to start without it, so the real system
+#   bus can never be taken). tests/battery_surfaces.sh runs the shell against a
+#   laptop-shaped and a desktop-shaped one and requires the bar module and the
+#   monitor's BAT row to appear only for the first. The control is a desktop
+#   UPower with this machine's own measured numbers rather than a MISSING
+#   service — otherwise it would pass on modules keyed to the service existing
+#   rather than to the device being a battery.
+#   ⚠ Both new rigs, and weather_surfaces, run quickshell under dbus-run-session
+#   now: the bar reads the LIVE session bus otherwise, so MPRIS put whatever the
+#   real desktop was playing into the frames being compared — a track title
+#   changing between two shots is 1800px of diff and can carry an assertion on
+#   its own. And a private session bus activates xdg-document-portal, which
+#   fuse-mounts $XDG_RUNTIME_DIR/doc and outlives every process the rig started;
+#   unmounted in cleanup or every run leaks both the mount and its directory.
+#   weather_surfaces waits for the repaint instead of sleeping through it — it
+#   flaked once under a parallel `meson test` and passed alone every time, which
+#   is the signature of a timed guess rather than a wrong result.
 #   mpris.c: an sd-bus CLIENT of the session's players — a reader and three
 #   verbs. Every call is async; a synchronous property read against a wedged
 #   Electron app would stall every window on the desktop. The media keys reach
@@ -2245,7 +2289,7 @@ pkgver=0.1.0
 #   in 357, and now the same guard: publish only when synui_owns_seat(), with
 #   SYNUI_GREETER_BG_DIR lifting it because a rig that has redirected the root
 #   has no real root to protect.
-pkgrel=520
+pkgrel=521
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

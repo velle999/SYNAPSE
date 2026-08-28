@@ -51,7 +51,7 @@ if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
     echo "SKIP: no DRM render node (/dev/dri/renderD*)."
     exit 77
 fi
-for t in quickshell grim; do
+for t in quickshell grim dbus-run-session; do
     command -v "$t" >/dev/null 2>&1 || { echo "SKIP: $t not installed."; exit 77; }
 done
 python3 -c 'import PIL' >/dev/null 2>&1 \
@@ -64,9 +64,23 @@ chmod 700 "$TMP"
 LOG="$TMP/synui.log"
 QSLOG="$TMP/shell.log"
 
+# ⚠ A PRIVATE SESSION BUS ACTIVATES xdg-document-portal, WHICH FUSE-MOUNTS
+# $XDG_RUNTIME_DIR/doc. The mount outlives every process this script started, so
+# `rm -rf` on the temporary directory fails on it — leaving both the mount and
+# the directory behind, once per run, for ever. Unmounted explicitly before the
+# remove; `|| true` throughout because a run that never got that far has nothing
+# to unmount and that is not a failure.
+unmount_portals() {
+    for d in "$TMP"/*/doc "$TMP"/doc; do
+        [ -d "$d" ] || continue
+        fusermount3 -u "$d" 2>/dev/null || fusermount -u "$d" 2>/dev/null || true
+    done
+}
+
 cleanup() {
     [ -n "${QS_PID:-}" ]    && kill -9 "$QS_PID"    2>/dev/null
     [ -n "${SYNUI_PID:-}" ] && kill -9 "$SYNUI_PID" 2>/dev/null
+    unmount_portals
     rm -rf "$TMP"
 }
 trap cleanup INT TERM EXIT
@@ -189,7 +203,12 @@ ok "off removed the published reading"
 # file below between the write and the screenshot — an `empty` frame with a
 # temperature in it, or a `stale` one refreshed to now. Nothing in phases 4 and
 # 5 is about fetching. The surfaces read a file; this writes the file.
-quickshell -p "$TREE/shell.qml" >"$QSLOG" 2>&1 &
+# ⚠ dbus-run-session: THE BAR READS THE LIVE SESSION BUS OTHERWISE. MPRIS is on
+# it, so the Media module shows whatever the real desktop is playing — and a
+# track title that changes between two of the frames below lands inside the bar
+# probe and could carry that assertion on its own. It also keeps the tray and
+# the notification daemon out of the picture.
+dbus-run-session -- quickshell -p "$TREE/shell.qml" >"$QSLOG" 2>&1 &
 QS_PID=$!
 sleep 5
 kill -0 "$QS_PID" 2>/dev/null || fail "the shell died on startup"
@@ -207,6 +226,39 @@ shoot() {
     grim -t ppm -o "$OUTPUT" "$TMP/$1.ppm" 2>>"$QSLOG" || fail "grim failed ($1)"
 }
 
+# ⚠ WAIT FOR THE REPAINT, DO NOT SLEEP THROUGH IT. This was three fixed 1.5s
+# settles, and it failed once in a parallel `meson test` run and passed on its
+# own every time — the signature of a timed guess rather than a wrong result.
+# The whole point of these frames is that a file change reaches the screen, so
+# waiting for exactly that is both the honest wait and the fast one: it returns
+# as soon as the card differs from the frame before it.
+#
+# It does NOT fail when the change never comes. The assertions below are what
+# report that, with pixel counts and a name — a timeout here would say
+# "wait_repaint failed" and leave the reader to work out which frame.
+wait_repaint() {                # wait_repaint <before.ppm> <after-name>
+    i=0
+    while [ $i -lt 24 ]; do
+        shoot "$2"
+        if python3 - "$TMP/$1.ppm" "$TMP/$2.ppm" <<'ENDPY'
+import sys
+from PIL import Image
+a, b = (Image.open(p).convert('RGB') for p in sys.argv[1:3])
+# The card only: the bar carries a clock whose minute can tick mid-test.
+box = (20, 46, 236, 196)
+ca, cb = a.crop(box).load(), b.crop(box).load()
+n = sum(1 for y in range(150) for x in range(216)
+        if any(abs(ca[x, y][i] - cb[x, y][i]) > 6 for i in range(3)))
+sys.exit(0 if n > 200 else 1)
+ENDPY
+        then
+            return 0
+        fi
+        sleep 0.25; i=$((i + 1))
+    done
+    return 0
+}
+
 # EMPTY: no file at all. The card says so; the bar module is not there.
 rm -f "$WX"
 sleep 1.5
@@ -215,14 +267,12 @@ shoot empty
 # FRESH: a reading from a moment ago.
 NOW=$(date +%s)
 seed 12.0 "$NOW"
-sleep 1.5
-shoot fresh
+wait_repaint empty fresh
 
 # STALE: the SAME reading, four hours old. Everything on screen is in the same
 # place; only how it is drawn may differ — which is the point.
 seed 12.0 "$((NOW - 4 * 3600))"
-sleep 1.5
-shoot stale
+wait_repaint fresh stale
 
 python3 - "$TMP/empty.ppm" "$TMP/fresh.ppm" "$TMP/stale.ppm" <<'ENDPY' || exit 1
 import sys

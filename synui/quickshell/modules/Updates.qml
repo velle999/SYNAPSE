@@ -95,13 +95,8 @@ BarModule {
         if (root.held > 0)     bits.push(root.held + " held back")
         let t = "SynapseOS updates: " + bits.join(", ")
         if (root.rev !== "") t += "\nupstream at " + root.rev
-        if (root.checkedAt > 0) {
-            const mins = Math.floor((Date.now() / 1000 - root.checkedAt) / 60)
-            t += "\nchecked " + (mins < 1 ? "just now"
-                               : mins < 60 ? mins + " min ago"
-                               : Math.floor(mins / 60) + "h ago")
-        }
-        return t + "\nClick to open Updates"
+        if (root.checkedAt > 0) t += "\nchecked " + root.ago(root.checkedAt)
+        return t + "\nClick to open Updates \xc2\xb7 right-click for more"
     }
 
     // The window that actually installs them. `syn-update-gui` and not
@@ -110,9 +105,97 @@ BarModule {
     // output is how a machine ends up rebuilding itself in silence.
     onClicked: updatesWindow.running = true
 
+    /*
+     * ── Right-click: the updater's own options ──────────────────────────────
+     *
+     * ⚠ THE MODULE HAS TO CLAIM THE BUTTON. BarModule declines right-click by
+     * default so it falls through to the bar underneath, which opens the
+     * per-monitor menu — that is right for a readout like the CPU, and wrong
+     * for anything with actions of its own.
+     *
+     * Every row runs a COMMAND rather than doing the thing here. Network and
+     * Bluetooth already right-click into nmtui and bluetoothctl, and the reason
+     * generalises: a bar module that reimplemented "check for updates" would be
+     * a second implementation of the thing the timer does, in the process where
+     * a network stall is a stalled bar.
+     *
+     * ⚠ AND APPLY GOES THROUGH A TERMINAL. It is a long sudo build that has to
+     * be able to ask for a password, and a bar click with nowhere to type is
+     * how a machine ends up wedged on an invisible prompt.
+     */
+    acceptsRight: true
+    /* ⚠ MAPPED, NOT `root.x`. A module's own x is its position inside the bar's
+     * Row, and the popup anchors against the bar WINDOW — so `root.x` put the
+     * menu a few pixels from the left edge of the screen, under the launcher,
+     * however far right the module actually was. It looked like the menu opened
+     * in the wrong place rather than like a coordinate in the wrong space.
+     * mapToItem(null, …) is the same translation Theme.barPaletteSpanOn does,
+     * and for the same reason. */
+    onRightClicked: menu.openAt(root.mapToItem(null, root.width / 2, 0).x)
+
+    ModuleMenu {
+        id: menu
+        // A PopupWindow cannot find its own window — see ModuleMenu.barWindow.
+        barWindow: root.QsWindow.window
+        title: "Updates"
+
+        rows: [
+            { key: "open",  label: "Open Updates" },
+            { key: "check", label: "Check now",
+              detail: root.checkedAt > 0 ? root.sinceChecked : "" },
+            { key: "apply", label: "Apply in a terminal",
+              // Nothing to build is not a reason to hide the row — a greyed
+              // row still says the command exists — but it is a reason not to
+              // start a sudo build that would print "nothing to build".
+              enabled: root.pending > 0 },
+            { key: "held",  label: "Held back",
+              detail: String(root.held), enabled: root.held > 0 }
+        ]
+
+        onTriggered: (key) => {
+            if (key === "open")       updatesWindow.running = true
+            else if (key === "check") checkNow.running = true
+            else if (key === "apply") applyTerm.running = true
+            else if (key === "held")  heldTerm.running = true
+        }
+    }
+
+    // "18 min ago", for the Check row's right-hand side. Shares the tooltip's
+    // arithmetic through one function rather than two copies of the same
+    // three-branch formatter.
+    readonly property string sinceChecked: root.ago(root.checkedAt)
+
+    function ago(when) {
+        if (!when || when <= 0) return ""
+        const mins = Math.floor((Date.now() / 1000 - when) / 60)
+        return mins < 1 ? "just now"
+             : mins < 60 ? mins + " min ago"
+             : Math.floor(mins / 60) + "h ago"
+    }
+
     Process {
         id: updatesWindow
         command: ["syn-update-gui"]
+    }
+
+    // Writes the state file this module reads, so the badge corrects itself a
+    // second or two later with nothing else asked of it.
+    Process {
+        id: checkNow
+        command: ["syn-update", "ping"]
+    }
+
+    // ⚠ `--hold`, so the terminal stays after the build to show what happened.
+    // A window that closed on completion would take the log with it, and the
+    // log is the entire reason applying belongs in a terminal.
+    Process {
+        id: applyTerm
+        command: ["syntty", "--hold", "-e", "syn-update", "apply"]
+    }
+
+    Process {
+        id: heldTerm
+        command: ["syntty", "--hold", "-e", "syn-update", "ignored"]
     }
 
     /* ── The state file ──────────────────────────────────────────────────────

@@ -1120,6 +1120,10 @@ cmd_apply() {
     if [ ${#names[@]} -eq 0 ]; then
         say ""
         ok "nothing to build"
+        # Nothing was built, but the badge may still be showing a count that
+        # this run has just resolved — the tree moved, and what it was counting
+        # was the tree being behind.
+        ping_refresh_quietly
         # ⚠ THE TREE MOVED ANYWAY. checkout_remote() ran above, so this machine
         # now has the new source even though no package changed — and saying
         # nothing about that is how "the updater did nothing" gets reported
@@ -1232,6 +1236,10 @@ cmd_apply() {
     # the no-file reading and the file it would have written say the same thing
     # until something actually changes.
     save_manifest
+
+    # The bar's badge is a file, and this is the command that just made it
+    # wrong. See ping_refresh_quietly.
+    ping_refresh_quietly
 
     say ""
     ok "updated to $(git -C "$SRC" rev-parse --short HEAD)"
@@ -1593,9 +1601,23 @@ cmd_ping() {
         ping_write error "reason=could not reach $REPO_URL"
         die "could not fetch"
     fi
+    ping_scan_and_write
+
+    # A person running this by hand gets the one line they asked for.
+    say "${#CHANGED[@]} update(s), ${#NEW[@]} new, ${#HELD[@]} held — $PING_STATE"
+}
+
+# The half of `ping` that looks and writes, without the guard and the die()s —
+# so `apply` can leave the indicator telling the truth when it finishes.
+#
+# ⚠ IT IS A SEPARATE FUNCTION RATHER THAN A SECOND COPY IN cmd_apply, and the
+# reason is the scan_remote note below: the difference between scan and
+# scan_remote is invisible in the output and wrong only on a machine that is
+# behind, which is precisely the machine nobody tests on.
+ping_scan_and_write() {
     # ⚠ scan_remote, NOT scan. See its header: a bare scan() reads the
     # checked-out tree and reports "everything is current" on a machine that is
-    # months behind, without erroring. That is what this call did first.
+    # months behind, without erroring. That is what ping did first.
     scan_remote >/dev/null 2>&1 || true
 
     local rows=() e
@@ -1621,9 +1643,21 @@ cmd_ping() {
         "new=${#NEW[@]}" \
         "held=${#HELD[@]}" \
         "${rows[@]}"
+}
 
-    # A person running this by hand gets the one line they asked for.
-    say "${#CHANGED[@]} update(s), ${#NEW[@]} new, ${#HELD[@]} held — $PING_STATE"
+# ⚠ THE BADGE DOES NOT CLEAR ITSELF. The bar reads the ping state file and
+# nothing else — deliberately, so no bar ever does a git fetch — and until this
+# existed `apply` did not write it. So a machine that had just been updated by
+# hand went on showing "3 updates" until the six-hourly timer next fired, which
+# reads exactly like an updater that did not update anything.
+#
+# Quiet and never fatal: this runs after a successful build, and a failure to
+# rewrite an indicator's cache must not turn a completed update into an error.
+# The next timer tick corrects whatever this could not.
+ping_refresh_quietly() {
+    [ -d "$SRC/.git" ] && [ -w "$SRC" ] || return 0
+    fetch_src >/dev/null 2>&1 || return 0
+    ping_scan_and_write >/dev/null 2>&1 || return 0
 }
 
 # ── ping --every / --on / --off: the timer itself ────────────────────────────

@@ -1577,6 +1577,42 @@ test('lock_layout', lock_layout_t,
      depends : [synui_exe, synctl_exe],
      timeout : 120)
 
+# `battery_surfaces`: the battery shows on a laptop and hides on a desktop.
+# ⛔ THE DEV BOX HAS NO BATTERY, so every laptop-only path in the shell is
+# unreachable on the only machine anybody looks at it from — and both surfaces
+# that draw a battery hide themselves when there is none, which makes "correctly
+# hidden" and "broken" identical from a chair. tests/mock_upower.py is a fake
+# org.freedesktop.UPower on a PRIVATE bus; the real system bus is never touched
+# and the mock refuses to start without DBUS_SYSTEM_BUS_ADDRESS. The control is
+# a DESKTOP-shaped UPower with this machine's own measured numbers, not a
+# missing service — otherwise it would pass on modules keyed to the service
+# existing rather than to the device being a battery.
+battery_surfaces_t = find_program('tests/battery_surfaces.sh')
+test('battery_surfaces', battery_surfaces_t,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell',
+                meson.current_source_dir() / 'tests'],
+     depends : [synui_exe],
+     timeout : 180)
+
+# `bar_module_menu`: a module's right-click menu opens UNDER THE MODULE. The
+# menu anchored on `root.x` — a module's position inside the bar's Row — while
+# a PopupWindow anchors against the bar WINDOW, so it opened at the far left of
+# the screen with every row present and working. Only WHERE was wrong, which no
+# load test and no "did a menu appear" check can see.
+# ⚠ Two earlier versions of this rig passed on the bug: one right-clicked the
+# centred CLOCK (whose module declines the button, so the click fell through to
+# the bar's own menu, which IS anchored on the pointer), the next found the
+# compositor's "◢ SYNAPSE" corner, which is not a bar module and no setting
+# hides. Every other module is switched off so the badge is the only one left.
+bar_module_menu_t = find_program('tests/bar_module_menu.sh')
+test('bar_module_menu', bar_module_menu_t,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell',
+                vpointer_click.full_path()],
+     depends : [synui_exe, vpointer_click],
+     timeout : 120)
+
 # `bar_palette_keys`: every `pal.<key>` a bar module reads is one the palette
 # actually defines. Updates.qml asked for `pal.yellow` — a THEME property, never
 # a key of the per-strip object the modules read — on its error branch alone, so

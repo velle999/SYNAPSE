@@ -90,7 +90,28 @@ pkgver=0.1.0
 #   tests/ping_test.sh covers the refusals, the state file, the drop-in and its
 #   reset. It deliberately does NOT fetch: a test that reached GitHub is one
 #   that fails on a train and passes for the wrong reason behind a proxy.
-pkgrel=45
+# 46: THE BADGE DID NOT CLEAR AFTER AN UPDATE.
+#   The bar reads the ping state file and nothing else — deliberately, so that
+#   no bar ever does a git fetch — and `apply` never wrote it. So a machine
+#   that had just been updated by hand went on showing "3 updates" until the
+#   six-hourly timer next fired, which reads exactly like an updater that did
+#   not update anything. Reported as the notifier "not dismissing".
+#   `apply` now refreshes it on both of its ending paths: after a successful
+#   build, and on "nothing to build" (where the tree still moved, and what the
+#   badge was counting was the tree being behind).
+#   ⛔ QUIET AND NEVER FATAL. It runs after packages are installed and the
+#   manifest is saved; a failure to rewrite an indicator's cache turning a
+#   completed update into a red error would be far worse than a stale badge,
+#   which the next timer tick corrects anyway.
+#   The compute-and-write half of `ping` is now ping_scan_and_write() and is
+#   called from both, rather than copied — the scan/scan_remote distinction is
+#   invisible in the output and wrong only on a machine that is behind, which
+#   is precisely the machine nobody tests on.
+#   ping_test.sh gains a phase that runs a REAL `apply` against a local git
+#   repository standing in for GitHub: an empty tree takes the "nothing to
+#   build" path, which is before the sudo keep-alive and before build-all.sh,
+#   so it needs no network, no password and no build and still reaches this.
+pkgrel=46
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -283,6 +283,17 @@ indicator is furniture, and lives with the rest of the bar's furniture: right-
 click the bar ▸ **Update notifier**, per monitor, beside the clock and the tray.
 Neither is a copy of the other.
 
+**Right-click the indicator** for the things you would otherwise open a terminal
+to do: **Open Updates**, **Check now** (with how long ago the last check was),
+**Apply in a terminal**, and **Held back** with the count of packages you have
+told `synpkg` to ignore. A row that has nothing to act on is greyed rather than
+hidden, so the menu is the same shape every time you open it.
+
+**`syn-update apply` clears the indicator itself.** It re-checks upstream on its
+way out and rewrites the pending count, so the badge goes away when the machine
+is current instead of waiting for the next timer tick to notice the work you
+just did.
+
 The interval is stored as a systemd drop-in under `~/.config/systemd/user`,
 never in the shipped unit — `/usr/lib` belongs to the package, and this
 particular package updates itself often enough that an interval written there
