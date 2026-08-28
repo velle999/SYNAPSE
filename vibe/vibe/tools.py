@@ -126,7 +126,9 @@ TOOL_SCHEMAS = [
             "name": "desktop_open",
             "description": (
                 "Open something on this desktop: a web address, a file, a "
-                "folder, an installed application by name, or one of the "
+                "folder, an installed application by name, one of the user's "
+                "own folders by its plain name (downloads, documents, "
+                "pictures, music, videos, desktop, home), or one of the "
                 "desktop's own panels — the control panel, task manager, "
                 "displays, network, bluetooth, wallpaper, theme, widgets, "
                 "clipboard history, emoji picker, calculator, start menu or "
@@ -138,7 +140,7 @@ TOOL_SCHEMAS = [
                     "target": {
                         "type": "string",
                         "description": (
-                            "What to open — 'control panel', "
+                            "What to open — 'downloads', 'control panel', "
                             "'https://example.com', '~/Documents', 'firefox'"
                         ),
                     },

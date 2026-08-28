@@ -60,6 +60,11 @@ how the bar and the dock are moved (bar_edge, dock_edge).
   edit_file with a similar string.
 - Anything that writes asks the user first. Say what you are about to do in one \
   short line when a confirmation is coming, so the question is not a surprise.
+- READ WHAT THE TOOL ANSWERED. A result starting with "Error:" means IT DID NOT \
+HAPPEN. Say so, quote the error, and either try a different target or ask — \
+never report a folder as opened, a file as written or a setting as changed \
+merely because you asked for it. A wrong answer the user can see is \
+recoverable; a failure reported as a success is not.
 - Be concise. Lead with the answer or the action.
 
 ## Writing code

@@ -73,6 +73,38 @@ PANELS = {
     "screen recorder": "record",
 }
 
+# The user's own folders, by the words somebody actually says for them. The
+# value is an **xdg-user-dir key, never a path**: where "Downloads" lives is
+# localized and configurable, so a hardcoded ~/Downloads is a guess that is
+# wrong on any machine not set up in English.
+#
+# ⚠ THIS TABLE EXISTS BECAUSE "open downloads" REACHED NONE OF THE BRANCHES
+# BELOW. Lowercase `downloads` is not a panel, not a URL, not an existing
+# relative path (the folder is `Downloads`), and not an installed application —
+# so the tool returned an error for the single most ordinary thing anyone would
+# ask it to open.
+_DIR_WORDS = {
+    "download": "DOWNLOAD",   "downloads": "DOWNLOAD",
+    "document": "DOCUMENTS",  "documents": "DOCUMENTS", "docs": "DOCUMENTS",
+    "picture": "PICTURES",    "pictures": "PICTURES",
+    "photo": "PICTURES",      "photos": "PICTURES",     "images": "PICTURES",
+    "music": "MUSIC",         "songs": "MUSIC",
+    "video": "VIDEOS",        "videos": "VIDEOS",       "movies": "VIDEOS",
+    "desktop": "DESKTOP",
+    "public": "PUBLICSHARE",
+    "templates": "TEMPLATES",
+    "home": "HOME",           "home folder": "HOME",    "my files": "HOME",
+    "file manager": "HOME",   "files": "HOME",
+}
+
+# What each key is called when xdg-user-dir cannot say — the freedesktop
+# defaults, matched case-insensitively against $HOME's real children.
+_DIR_DEFAULTS = {
+    "DOWNLOAD": "Downloads", "DOCUMENTS": "Documents", "PICTURES": "Pictures",
+    "MUSIC": "Music", "VIDEOS": "Videos", "DESKTOP": "Desktop",
+    "PUBLICSHARE": "Public", "TEMPLATES": "Templates",
+}
+
 # The synuirc keys desktop_setting may write, and what each accepts. A closed
 # list, because this writes the file that decides whether the session comes up
 # at all: a typo'd key is ignored by config.c, but a typo'd VALUE for a real key
@@ -172,6 +204,66 @@ def _desktop_entry(name: str) -> list | None:
     return argv or None
 
 
+def _user_dir(key: str) -> Path | None:
+    """Where one XDG user directory actually is, or None if it is not there.
+
+    ⛔ `xdg-user-dir DOWNLOAD` PRINTS $HOME WHEN THERE IS NO user-dirs.dirs,
+    and it exits 0 doing it. A fresh SynapseOS install has no user-dirs.dirs at
+    all, so taking that answer at face value opens the home folder and reports
+    it as Downloads — the same failure as before, wearing a success message.
+    An answer equal to $HOME is therefore treated as NO answer, and the
+    fallback is a case-insensitive look at $HOME's own children, which is where
+    `~/Downloads` is on exactly the boxes xdg-user-dir gives up on.
+    """
+    home = Path.home()
+    if key == "HOME":
+        return home
+    if shutil.which("xdg-user-dir"):
+        try:
+            out = _run(["xdg-user-dir", key], timeout=5).stdout.strip()
+        except Exception:
+            out = ""
+        if out:
+            cand = Path(out).expanduser()
+            if cand != home and cand.is_dir():
+                return cand
+    want = _DIR_DEFAULTS.get(key, key.title()).lower()
+    try:
+        for child in home.iterdir():
+            if child.name.lower() == want and child.is_dir():
+                return child
+    except OSError:
+        pass
+    return None
+
+
+def _folder_key(text: str) -> str | None:
+    """The xdg-user-dir key somebody meant, from the words they used.
+
+    People say "my downloads", "the downloads folder" and "downloads" for one
+    place. Stripping the filler is what makes those one target rather than
+    three misses."""
+    k = text.lower().strip(" ?.")
+    k = re.sub(r"^(?:open\s+|my\s+|the\s+)+", "", k)
+    k = re.sub(r"\s+(?:folder|directory|dir)$", "", k).strip()
+    return _DIR_WORDS.get(k)
+
+
+def _open_dir(p: Path) -> str:
+    """Hand a directory to this desktop's file manager.
+
+    ⚠ synfiles FIRST — this desktop ships its own file manager, and a list that
+    starts at thunar opens whatever else happens to be installed."""
+    for mgr in ("synfiles", "thunar", "nautilus", "dolphin", "nemo", "pcmanfm"):
+        if shutil.which(mgr):
+            _spawn([mgr, str(p)])
+            return f"Opened {p} in {mgr}."
+    if shutil.which("xdg-open"):
+        _spawn(["xdg-open", str(p)])
+        return f"Opened {p}."
+    return f"Error: no file manager is installed to open {p} with"
+
+
 def desktop_open(target: str) -> str:
     """Open a URL, a path, one of this desktop's panels, or an app by name."""
     t = (target or "").strip()
@@ -188,6 +280,21 @@ def desktop_open(target: str) -> str:
             return f"Error: synctl refused `{PANELS[key]}`: {r.stderr.strip()}"
         return f"Opened the {key}."
 
+    # One of the user's own folders, by the words people use for it. Before
+    # the app lookup on purpose: "open desktop" means the Desktop folder, and
+    # left to the .desktop scan below it substring-matched an entry whose Name
+    # merely contained the word and launched that instead.
+    fkey = _folder_key(t)
+    if fkey:
+        d = _user_dir(fkey)
+        if d is not None:
+            return _open_dir(d)
+        # Say the folder is missing rather than falling through to a wrong
+        # app — but only for words that mean nothing else. "music" is also a
+        # player, so an absent ~/Music should still reach the app lookup.
+        if fkey in ("DOWNLOAD", "DOCUMENTS", "HOME"):
+            return f"Error: this account has no {fkey.lower()} folder"
+
     # A web address.
     if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t) or re.match(
             r"^[\w.-]+\.[a-z]{2,}(/|$)", t):
@@ -197,15 +304,18 @@ def desktop_open(target: str) -> str:
         _spawn(["xdg-open", url])
         return f"Opened {url} in the default browser."
 
-    # A path. ⚠ synfiles FIRST — this desktop ships its own file manager, and a
-    # list that starts at thunar opens whatever else happens to be installed.
+    # A path.
+    #
+    # ⚠ MADE ABSOLUTE BEFORE IT IS HANDED OVER. A relative name is resolved
+    # against vibe's cwd, which is whatever launched the engine — the bar, a
+    # shell, `/`. Passing it on unresolved means the check and the child
+    # disagree about which directory that is, and the file manager opens
+    # nothing while this reports success.
     p = Path(t).expanduser()
     if p.exists():
+        p = Path(os.path.abspath(p))
         if p.is_dir():
-            for mgr in ("synfiles", "thunar", "nautilus", "dolphin", "nemo", "pcmanfm"):
-                if shutil.which(mgr):
-                    _spawn([mgr, str(p)])
-                    return f"Opened {p} in {mgr}."
+            return _open_dir(p)
         if shutil.which("xdg-open"):
             _spawn(["xdg-open", str(p)])
             return f"Opened {p}."

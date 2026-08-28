@@ -13,7 +13,8 @@ own is still the terminal REPL, and both are the same assistant — one
 conversation loop, one tool set, one set of confirmations.
 
 **It can act on the desktop.** Alongside reading and writing files and running
-commands, it can open a URL, a folder, an application or one of the desktop's
+commands, it can open a URL, a folder — including your own by their plain
+names, "downloads", "pictures", "home" — an application or one of the desktop's
 own panels (`desktop_open`), run any of the compositor's actions
 (`desktop_action`), and change a desktop setting and apply it live —
 `bar_edge`, `dock_edge`, the theme, the wallpaper (`desktop_setting`). Anything

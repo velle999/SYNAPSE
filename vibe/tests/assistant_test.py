@@ -16,6 +16,7 @@ Four questions, and none of them needs a model, a GPU or a network:
 
 Usage: assistant_test.py            (from the vibe source tree)
 """
+import pathlib
 import io
 import os
 import sys
@@ -70,6 +71,57 @@ check("an action this compositor lacks is refused, not run", bad.startswith("Err
 
 bad = execute_tool("desktop_open", {"target": "no-such-thing-anywhere"})
 check("opening something that does not exist says so", bad.startswith("Error:"), bad)
+
+# ⛔ "open downloads" — the most ordinary request there is — resolved to
+# NOTHING: lowercase `downloads` is not a panel, not a URL, not an existing
+# relative path (the folder is `Downloads`) and not an installed app. It is
+# tested by RESOLUTION, not by launching: _spawn is stubbed so the check is
+# which path was chosen, on a machine that may have no file manager at all.
+from vibe import desktop as _desk
+
+_spawned = []
+_real_spawn = _desk._spawn
+_desk._spawn = lambda argv: _spawned.append(argv)
+try:
+    home = str(pathlib.Path.home())
+    for phrase in ("downloads", "Downloads", "my downloads",
+                   "the downloads folder", "Downloads folder"):
+        _spawned.clear()
+        out = _desk.desktop_open(phrase)
+        got = _spawned[0][-1] if _spawned else out
+        check(f"'{phrase}' finds the real Downloads folder",
+              bool(_spawned) and got.lower().endswith("downloads")
+              and got.startswith(home), out)
+
+    # ⛔ AND IT IS ABSOLUTE. A relative name handed to the file manager is
+    # resolved against the CHILD's cwd, so the existence check and the thing
+    # actually opened can disagree — and this reports success either way.
+    _spawned.clear()
+    _desk.desktop_open("downloads")
+    check("…and hands over an absolute path",
+          bool(_spawned) and os.path.isabs(_spawned[0][-1]),
+          _spawned)
+
+    # "open desktop" is the Desktop FOLDER. Before the folder table it reached
+    # the .desktop scan, which substring-matched an unrelated entry's Name and
+    # launched whatever that was.
+    _spawned.clear()
+    out = _desk.desktop_open("desktop")
+    check("'desktop' opens the folder, not a substring-matched .desktop entry",
+          bool(_spawned) and _spawned[0][-1].lower().endswith("desktop"), out)
+
+    # A panel still wins over everything: the table is consulted first.
+    check("a panel name is still a panel",
+          not _desk.desktop_open("control panel").startswith("Error: nothing here"))
+finally:
+    _desk._spawn = _real_spawn
+
+# ⛔ xdg-user-dir PRINTS $HOME AND EXITS 0 when there is no user-dirs.dirs, so
+# an answer equal to $HOME must count as no answer — otherwise a fresh install
+# opens the home folder and calls it Downloads.
+_d = _desk._user_dir("DOWNLOAD")
+check("a user dir is never silently $HOME",
+      _d is None or _d != pathlib.Path.home(), _d)
 
 # move_file's one destructive mistake: landing on a file that was already there.
 import tempfile

@@ -182,6 +182,18 @@ FloatingWindow {
     // The turns on screen. `kind` is who is speaking: me, it, tool, note, bad.
     ListModel { id: log }
 
+    // A tool result is whatever the tool returned — a grep over a big file is
+    // thousands of lines, and pasting all of it into the transcript buries the
+    // reply that follows. The head of it is the part that says whether it
+    // worked.
+    function clip(text) {
+        var lines = text.split("\n")
+        var head = lines.slice(0, 6).join("\n")
+        if (head.length > 400) head = head.substring(0, 400) + "…"
+        if (lines.length > 6) head += "\n… (" + (lines.length - 6) + " more lines)"
+        return head
+    }
+
     function say(kind, text) {
         log.append({ kind: kind, text: text })
         chat.positionViewAtEnd()
@@ -239,7 +251,15 @@ FloatingWindow {
         } else if (tag === "T") {
             root.append(a)
         } else if (tag === "X") {
+            // ⛔ TWO RECORDS, TWO DIFFERENT FIELDS. The engine sends the CALL
+            // as ("X", name, "…") and the RESULT as ("X", "", result) — so a
+            // branch reading only `a` shows every call and DROPS every result,
+            // errors included. That is how `Error: nothing here is called
+            // 'downloads'` became a window that said the folder was open: the
+            // one line saying otherwise was never drawn.
             if (a !== "") root.say("tool", a + "…")
+            else if (b !== "") root.say(b.indexOf("Error") === 0 ? "bad" : "tool",
+                                        root.clip(b))
         } else if (tag === "C") {
             root.pendingId = a
             root.pendingTool = b
