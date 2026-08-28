@@ -5905,6 +5905,29 @@ struct syn_output {
      * wallpaper-engine, an external client painting over the top of us. */
     double                   wp_top_lum;
     /*
+     * ⛔ THE SAME STRIP, COLUMN BY COLUMN — AND THE REASON IT IS NOT
+     * wp_lum_grid's TOP ROW.
+     *
+     * wp_top_lum is one number for the whole strip, which is the right band of
+     * picture and the wrong resolution: the bar asks per MODULE now, and a
+     * module wants the columns it personally covers. The consumer used to fold
+     * wp_lum_grid's top row for that — and a grid row is SYN_LUM_ROWS deep,
+     * which on this box's 1440 is 160 pixels standing in for a bar 34 tall.
+     *
+     * Four fifths of that cell is picture the bar is not on. Where a wallpaper
+     * changes vertically inside it — a dark canopy over lit leaves, which is
+     * most photographs — the cell describes a backdrop the bar is nowhere near:
+     * measured 0.29 for a column whose top 34 rows are 0.08, which is the
+     * difference between "dark ink reads here" and "only white does". The
+     * modules over that column came out BLACK on a black bar while their
+     * neighbours came out white.
+     *
+     * So: the same rows wp_top_lum measures, on the same edge, binned into the
+     * same SYN_LUM_COLS the grid and bar_strip_lum use. -1 on the same
+     * "genuinely unknowable" terms as wp_top_lum.
+     */
+    double                   wp_strip_lum[SYN_LUM_COLS];
+    /*
      * The same measurement for the REST of the desktop: a SYN_LUM_COLS x
      * SYN_LUM_ROWS grid of mean relative luminances over this output's
      * wallpaper, row-major, each cell -1 on the same "genuinely unknowable"
@@ -6006,6 +6029,11 @@ struct syn_output {
      */
     double                   wp_live_lum_grid[SYN_LUM_CELLS];
     double                   wp_live_top_lum;
+    /* …and the strip per column, for the same reason wp_strip_lum exists: a
+     * live wallpaper is a picture like any other and its top 34 rows are not
+     * its top 160 either. Filled in the same breath as the two above, so the
+     * three can never describe different frames. */
+    double                   wp_live_strip_lum[SYN_LUM_COLS];
     bool                     wp_live_lum_have;
     /* The engine paints black for a second or two while it loads its scene, so
      * the first read is usually "no usable hue". Retried a few times rather
@@ -8015,6 +8043,12 @@ void wallpaper_accent_refresh(syn_server_t *s);
  * decided in one place rather than six. */
 const double *wallpaper_lum_grid(const syn_output_t *o);
 double wallpaper_strip_lum(const syn_output_t *o);
+/* The bar's strip, column by column — SYN_LUM_COLS entries, the same columns
+ * the grid and bar_strip_lum use. This and not wallpaper_lum_grid()'s top row
+ * is what a bar MODULE asks: a grid row is SYN_LUM_ROWS deep and the bar is 34
+ * logical pixels, so the row answers for four times more picture than the bar
+ * is standing on. See wp_strip_lum. */
+const double *wallpaper_strip_cols(const syn_output_t *o);
 void wallpaper_live_appeared(syn_output_t *o);
 void wallpaper_live_gone(syn_output_t *o);
 /* Drop the settle timer. For output teardown. */

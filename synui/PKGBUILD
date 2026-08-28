@@ -2327,7 +2327,51 @@ pkgver=0.1.0
 #   tests/syn_rgb.sh: +7 assertions, and both halves are asked for BY NAME
 #   (SYN_RGB_SDK), because on a developer's own box a server is listening and the
 #   no-server path would otherwise quietly stop being covered.
-pkgrel=522
+# 523: HALF THE BAR STOPPED INVERTING. The weather and the volume in white, the
+#   CPU meter, the Bluetooth glyph and the network glyph in BLACK, side by side
+#   on one strip — identical code reading identical properties, one of them
+#   backwards.
+#   Nothing was wrong with the ink rule. What was wrong was the picture it was
+#   asked about. The bar decides per MODULE (Theme.qml barPaletteAt), and for a
+#   column no window covers, the only per-column answer it had was
+#   wp_lum_grid's TOP ROW. A grid row is SYN_LUM_ROWS deep — a ninth of the
+#   screen, 160 pixels on this box, standing in for a bar 34 logical pixels
+#   tall. Four fifths of that cell is picture the bar is not on.
+#   ⛔ AND ON A PHOTOGRAPH THAT IS NOT A ROUNDING ERROR. Measured off the
+#   screenshot this came from — a dark canopy along the top edge over lit leaves
+#   below it — the cell read 0.29 for a column whose top 34 rows read 0.08, and
+#   those two numbers are on opposite sides of the flip: dark ink clears 5.3:1
+#   on the first and 2:1 on the second. The modules over that column inked for a
+#   backdrop they were nowhere near.
+#   ⚠ THE WHOLE-BAR ANSWER WAS RIGHT THE WHOLE TIME, which is what made it read
+#   as an inversion bug rather than a measurement one: `bar_ink` has always been
+#   taken off the strip's own rows (wallpaper_strip_lum), so every module with
+#   no per-column answer of its own — and the clock, whose span straddles two
+#   disagreeing columns and vetoes — came out correctly white beside them.
+#   wp_strip_lum[SYN_LUM_COLS]: the same rows wp_top_lum measures, on the same
+#   edge, binned into the same columns as the grid, for the painted wallpaper
+#   and for a live one. Published as `wp_strip.<output>`, and it is what
+#   `bar_strip.<output>`'s -1 columns now fall back to — in Theme.qml's
+#   barStripAt() and in barscan.c, which was compositing see-through windows
+#   against the same wrong cell. The grid row stays as the last resort, for a
+#   backdrop.state written by a synui that does not publish the new one.
+#   ⚠ A SECOND CASE IN THE SAME FUNCTION, reasoned rather than seen: a span with
+#   a safe ink of its own returned `scrim: false` and decided against the
+#   UNSCRIMMED wallpaper, while the bar had already laid its wash across the
+#   whole width. On a scrimmed bar a cell at 0.29 reads 0.12 under a 34% black
+#   wash — dark ink 2:1, white 8.5:1 — so that span could be handed exactly the
+#   wrong direction. The scrim is composited into the span's luminance now
+#   (lumOver, the one the popups walk their alpha with) and carried in the
+#   palette it returns. Only the scrim: a clear bar's own barAlphaAsked is
+#   ignored on purpose, because at or under barThinAlpha it is too thin to
+#   carry its own ink and so too thin to decide anybody else's.
+#   tests/bar_strip_band.sh, two phases over a wallpaper that is dark for
+#   exactly the rows the bar covers and bright underneath: the published
+#   measurement (the strip and the cell must disagree, and disagree onto
+#   opposite inks), then the bar on screen (no pixel of the strip may be
+#   #1D1D1F). Against the old Theme.qml that second phase finds 361px of it,
+#   every one in the right half.
+pkgrel=523
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

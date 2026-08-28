@@ -37,6 +37,7 @@ int barscan_pixel_layout(uint32_t fmt, int *bpp,
  * reached — the layout table is pure — but the linker wants them. */
 const double *wallpaper_lum_grid(const syn_output_t *o) { (void)o; return 0; }
 double wallpaper_strip_lum(const syn_output_t *o) { (void)o; return -1.0; }
+const double *wallpaper_strip_cols(const syn_output_t *o) { (void)o; return 0; }
 void wallpaper_backdrop_republish(syn_server_t *s) { (void)s; }
 int game_owns_output(syn_server_t *s, syn_output_t *o) { (void)s; (void)o; return 0; }
 

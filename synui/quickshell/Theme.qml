@@ -292,11 +292,25 @@ QtObject {
                 if (cols.length === root.lumCols) bs[bm[1]] = cols
             }
             root.barStrips = bs
+
+            // And the WALLPAPER's own answer for that strip, column by column —
+            // what a column of the row above falls back to. Absent from an older
+            // synui's backdrop.state, and an empty map sends barStripAt() back to
+            // the grid's top row, which is exactly what it read before this
+            // existed. See wpStrips.
+            const ws = {}
+            const wre = /^\s*wp_strip\.(\S+)\s*=\s*([-0-9.,]+)\s*$/gm
+            let wm
+            while ((wm = wre.exec(t)) !== null) {
+                const cols = wm[2].split(",").map(parseFloat)
+                if (cols.length === root.lumCols) ws[wm[1]] = cols
+            }
+            root.wpStrips = ws
         }
         onLoadFailed: {
             root.barInk = ""; root.barInkBest = ""; root.lumGrids = ({})
             root.barInks = ({}); root.barInkBests = ({}); root.barStrips = ({})
-            root.sceneGrids = ({})
+            root.sceneGrids = ({}); root.wpStrips = ({})
         }
     }
 
@@ -358,6 +372,24 @@ QtObject {
      * resolves it per column, which is the only place the two grids meet.
      */
     property var barStrips: ({})
+
+    /*
+     * output name → lumCols luminances of the WALLPAPER across the bar's strip.
+     *
+     * ⛔ THE ROW barStrips FALLS BACK TO, AND IT IS NOT THE GRID'S TOP ROW.
+     * That is what it used to be, and a grid row is `lumRows` deep — a ninth of
+     * the screen, 160 pixels on this box, standing in for a bar 34 tall. Four
+     * fifths of that cell is picture the bar is not on, and on any photograph
+     * that changes vertically inside it the cell describes a backdrop that is
+     * not there: 0.29 for a cell whose top 34 rows measure 0.08. The modules
+     * over that column inked for the bright reading and came out BLACK on a
+     * black bar, next to neighbours that came out white — one bar, two
+     * directions, identical code either side.
+     *
+     * Empty from a synui that does not publish it, and barStripAt() then reads
+     * the grid row exactly as it did before.
+     */
+    property var wpStrips: ({})
 
     // Contrast of a fixed ink against a backdrop luminance, WCAG. The ink
     // luminances are the same two constants contrast.h names, so the C side and
@@ -1143,8 +1175,9 @@ QtObject {
         if (!screen || screen.width <= 0) return out
 
         const strip = root.barStrips[screen.name]
+        const wp    = root.wpStrips[screen.name]
         const grid  = root.lumGrids[screen.name]
-        if (!strip && !grid) return out
+        if (!strip && !wp && !grid) return out
 
         const c0 = Math.max(0, Math.min(root.lumCols - 1,
                             Math.floor(x / screen.width * root.lumCols)))
@@ -1158,6 +1191,16 @@ QtObject {
             // there, it is the correct measurement.
             const s = strip ? strip[c] : -1
             if (s >= 0) { out.push(s); continue }
+            // The wallpaper's own answer for THIS strip: the rows the bar
+            // covers, on the edge it is on, measured in C beside the ink the
+            // whole bar uses. Already edge-aware, so there is no row to choose.
+            const p = wp ? wp[c] : -1
+            if (p >= 0) { out.push(p); continue }
+            // ⚠ THE GRID ROW IS THE LAST RESORT AND NOT THE ANSWER — it is a
+            // ninth of the screen deep where the bar is 34 pixels, and reading
+            // it is how a module came to ink itself for lit leaves the bar was
+            // nowhere near. Kept for a backdrop.state written by a synui with no
+            // wp_strip row in it, where a coarse answer beats none.
             // Row 0 of the grid is the top of the output. A bottom bar wants the
             // LAST row, for the same reason wallpaper.c measures the strip on
             // the edge the bar is actually on.
@@ -1191,11 +1234,42 @@ QtObject {
         const cells = root.barStripAt(screen, x, w)
         if (cells.length === 0) return base
 
+        /*
+         * ⛔ THE SCRIM IS PART OF THE BACKDROP, AND A SPAN ASKED WITHOUT IT IS
+         * ASKING ABOUT A PICTURE THAT IS NOT ON THE SCREEN.
+         *
+         * barStripAt() answers with the WALLPAPER, or with the window over it.
+         * On a scrimmed bar that is not what a glyph lands on: what it lands on
+         * is that, dimmed a third by the wash the bar has already laid across
+         * its whole width. And a third is not a rounding error near the flip —
+         * a cell at 0.29 says "dark ink is the safe one here" and measures 0.07
+         * once the scrim is down, where dark ink is 2:1 and white is 8:1.
+         *
+         * That is a bar with its right-hand modules in BLACK on a black strip
+         * while its left-hand ones are white: identical code, identical
+         * properties, one of them asked about the wallpaper it could see and the
+         * other about the wallpaper it was standing on. Every span over the
+         * bright end of the picture came out backwards.
+         *
+         * The scrim is the bar's own black or white at scrimAlpha, so it
+         * composites like any other surface — the same lumOver() a popup walks
+         * its alpha with.
+         *
+         * ⚠ Only the SCRIM, deliberately. A clear bar that is not scrimmed still
+         * paints barAlphaAsked of its own colour, and that is ignored here for
+         * the reason clearBar exists at all: at or under barThinAlpha the
+         * surface is too thin to carry its own ink, so it is too thin to decide
+         * anybody else's. The scrim is the case where the bar dims the picture
+         * on purpose, which is exactly when it may no longer be asked about it.
+         */
+        const wash = base.scrim ? (base.inkOnDark ? 0 : 1) : -1
+
         let ink = null, best = null
         for (let i = 0; i < cells.length; i++) {
-            const l = cells[i]
+            let l = cells[i]
             if (!(l >= 0)) return base      // one unmeasured column and the span
                                             // has no better answer than the bar's
+            if (wash >= 0) l = root.lumOver(wash, root.scrimAlpha, l)
             const cd = root.lumContrast(root.inkDarkLum,  l)
             const cl = root.lumContrast(root.inkLightLum, l)
             const one = (cd < 4.5 && cl < 4.5) ? "" : (cd >= cl ? "dark" : "light")
@@ -1216,12 +1290,15 @@ QtObject {
          * dimmed, which is the unreadable case the scrim exists to prevent —
          * a span with no SAFE ink defers to the bar's own answer entirely.
          *
-         * The one exception is where the bar has already laid its scrim: the
-         * dimming is on screen over this span too, so following the span's own
-         * `best` under it is strictly better than following the whole bar's.
+         * Where the bar HAS already laid its scrim, the dimming is on screen
+         * over this span too — so both answers above were measured through it,
+         * and both are handed back still wearing it. ⛔ Never `false` here: that
+         * said "no scrim" to a module standing on one, and it is what drew the
+         * ink for the wallpaper while the wash the bar had laid over it was
+         * doing the opposite.
          */
         if (ink !== "")
-            return root.barPaletteInked(base, ink === "light", false)
+            return root.barPaletteInked(base, ink === "light", base.scrim)
         if (base.scrim && best !== "")
             return root.barPaletteInked(base, best === "light", true)
         return base

@@ -778,12 +778,16 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
     bool bottom = s->config.bar_edge == SYN_BAR_EDGE_BOTTOM;
     int top = bottom ? ob->y + ob->height - strip : ob->y;
 
-    /* The wallpaper row the strip lies in — its own edge, so a see-through
-     * window under a bottom bar is composited over the bottom of the picture
-     * and not the top of it. Coarser than wp_top_lum, which measures the strip
-     * itself, and per COLUMN, which wp_top_lum is not: the same cell the
-     * consumer falls back to for this column. */
-    int wp_row = bottom ? SYN_LUM_ROWS - 1 : 0;
+    /* The wallpaper under the strip, per column — wallpaper_strip_cols(), which
+     * is the strip's OWN rows on the strip's own edge, and the same row the
+     * consumer falls back to for a column nothing covers.
+     *
+     * ⛔ IT USED TO BE THE GRID ROW THE STRIP LIES IN, and that was the right
+     * columns of the wrong band: a grid row is a ninth of the screen against a
+     * bar 34 pixels tall, so a see-through window over lit leaves was
+     * composited against a cell that had averaged in the dark canopy below
+     * them. Same measurement the bar's own ink is decided from now. */
+    const double *wp_strip = wallpaper_strip_cols(o);
 
     for (int c = 0; c < BARSCAN_COLS; c++) {
         int x0 = ob->x + (int)((int64_t)ob->width * c       / BARSCAN_COLS);
@@ -815,7 +819,7 @@ static void scan_strip(syn_server_t *s, syn_output_t *o,
         }
 
         struct wlr_box want = { x0, top, x1 - x0, strip };
-        double back = wp_cell(o, wp_row, c);
+        double back = wp_strip[c];
         /* The strip's own, folded — live-aware for the same reason wp_cell is. */
         if (!(back >= 0.0)) back = wallpaper_strip_lum(o);
 

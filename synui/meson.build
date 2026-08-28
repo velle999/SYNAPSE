@@ -2153,6 +2153,19 @@ test('bar_backdrop', bar_backdrop,
      depends : [synui_exe],
      timeout : 180)
 
+# …and that a bar MODULE is asked about the same strip. bar_backdrop pins the
+# whole bar's answer, which was never wrong; this pins the per-column one, which
+# fell back to a grid row a ninth of the screen deep for a bar 34 pixels tall.
+# Over a wallpaper that is dark for exactly those rows and bright underneath,
+# the two readings land on opposite inks — and the modules over that column came
+# out black on a black bar beside neighbours that came out white (pkgrel 522).
+# Phase 1 is the published measurement, phase 2 is the bar on screen.
+bar_strip_band = find_program('tests/bar_strip_band.sh')
+test('bar_strip_band', bar_strip_band,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # The fibonacci layout (layout_spiral): five windows laid out by BOTH tilers,
 # asserting the spiral's smallest window beats master-stack's — the claim the
 # layout exists to make — plus the no-overlap invariant its remainder

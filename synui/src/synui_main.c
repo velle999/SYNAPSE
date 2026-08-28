@@ -844,6 +844,10 @@ static void server_new_output(struct wl_listener *listener, void *data)
     for (int i = 0; i < SYN_LUM_CELLS; i++) output->wp_live_lum_grid[i] = -1.0;
     for (int i = 0; i < SYN_LUM_CELLS; i++)     output->scene_lum[i]   = -1.0;
     for (int i = 0; i < SYN_LUM_COLS; i++)  output->bar_strip_lum[i]   = -1.0;
+    /* The bar's own strip, per column, on the same terms — the wallpaper's
+     * answer for it and the live wallpaper's. */
+    for (int i = 0; i < SYN_LUM_COLS; i++)  output->wp_strip_lum[i]      = -1.0;
+    for (int i = 0; i < SYN_LUM_COLS; i++)  output->wp_live_strip_lum[i] = -1.0;
 
     /* Seed the dispcfg grid cell from connection order — one row, in the
      * order outputs were plugged in — matching wlr_output_layout_add_auto's

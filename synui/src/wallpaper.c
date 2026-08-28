@@ -402,6 +402,74 @@ static double strip_luminance(cairo_surface_t *dst, int rows, syn_bar_edge_t edg
                               cairo_image_surface_get_stride(dst), rows, edge);
 }
 
+/*
+ * The SAME strip, binned into SYN_LUM_COLS columns.
+ *
+ * ⛔ THIS EXISTS BECAUSE A GRID ROW IS THE WRONG BAND OF PICTURE. The bar asks
+ * per module, and the only per-column answer it had was wp_lum_grid's top row —
+ * SYN_LUM_ROWS deep, which is 160 pixels of a 1440 screen standing in for a bar
+ * 34 tall. Four fifths of that cell is picture the bar is not on, and on any
+ * photograph that changes vertically inside it the cell describes a backdrop
+ * that is not there: a column measuring 0.29 over its full 160 rows whose top
+ * 34 are 0.08. The modules over it inked for the bright reading and came out
+ * black on a black bar, beside neighbours that came out white.
+ *
+ * Same rows, same edge, same arithmetic as strip_luminance_px() — the two must
+ * agree cell for cell with each other and with what barscan.c composites a
+ * window over, or the fallback would splice two different questions together.
+ */
+static void strip_luminance_cols_px(const unsigned char *data, int w, int h,
+                                    int stride, int rows, syn_bar_edge_t edge,
+                                    double cols[SYN_LUM_COLS])
+{
+    for (int c = 0; c < SYN_LUM_COLS; c++) cols[c] = -1.0;
+    if (!data || w <= 0 || h <= 0 || rows <= 0) return;
+    if (rows > h) rows = h;
+
+    int y0 = edge == SYN_BAR_EDGE_BOTTOM ? h - rows : 0;
+
+    double sum[SYN_LUM_COLS] = { 0.0 };
+    long   n[SYN_LUM_COLS]   = { 0 };
+
+    for (int y = y0; y < y0 + rows; y++) {
+        const unsigned char *row = data + (size_t)y * stride;
+        for (int x = 0; x < w; x++) {
+            int c = (int)((long)x * SYN_LUM_COLS / w);
+            if (c >= SYN_LUM_COLS) c = SYN_LUM_COLS - 1;
+            const unsigned char *px = row + (size_t)x * 4;
+            sum[c] += 0.2126 * syn_srgb_lut(px[2]) +
+                      0.7152 * syn_srgb_lut(px[1]) +
+                      0.0722 * syn_srgb_lut(px[0]);
+            n[c]++;
+        }
+    }
+    for (int c = 0; c < SYN_LUM_COLS; c++)
+        if (n[c] > 0) cols[c] = sum[c] / (double)n[c];
+}
+
+static void strip_luminance_cols(cairo_surface_t *dst, int rows,
+                                 syn_bar_edge_t edge, double cols[SYN_LUM_COLS])
+{
+    for (int c = 0; c < SYN_LUM_COLS; c++) cols[c] = -1.0;
+    if (cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) return;
+    if (cairo_image_surface_get_format(dst) != CAIRO_FORMAT_ARGB32) return;
+
+    cairo_surface_flush(dst);
+    strip_luminance_cols_px(cairo_image_surface_get_data(dst),
+                            cairo_image_surface_get_width(dst),
+                            cairo_image_surface_get_height(dst),
+                            cairo_image_surface_get_stride(dst), rows, edge,
+                            cols);
+}
+
+/* Every column of a strip set to one number — the wallpaper choices that paint
+ * something known but statistically flat (a solid colour, the matrix rain), for
+ * the same reason grid_fill() exists for the grid. */
+static void strip_fill(double cols[SYN_LUM_COLS], double lum)
+{
+    for (int c = 0; c < SYN_LUM_COLS; c++) cols[c] = lum;
+}
+
 /* Fold every output's answer into one and publish it. ONE value, because the
  * bar's palette is a QML singleton shared by every screen — see the comment on
  * syn_ink_combine(), which is where two monitors that disagree become "none".
@@ -524,6 +592,11 @@ const double *wallpaper_lum_grid(const syn_output_t *o)
 double wallpaper_strip_lum(const syn_output_t *o)
 {
     return o->wp_live_lum_have ? o->wp_live_top_lum : o->wp_top_lum;
+}
+
+const double *wallpaper_strip_cols(const syn_output_t *o)
+{
+    return o->wp_live_lum_have ? o->wp_live_strip_lum : o->wp_strip_lum;
 }
 
 /* Publish it, for the bar and the widgets — the same contract backdrop.state
@@ -1001,6 +1074,8 @@ static void live_lum_measure(syn_output_t *o, const unsigned char *data,
     if (rows < 1) rows = 1;
     o->wp_live_top_lum = strip_luminance_px(data, w, h, stride, rows,
                                             o->server->config.bar_edge);
+    strip_luminance_cols_px(data, w, h, stride, rows,
+                            o->server->config.bar_edge, o->wp_live_strip_lum);
     o->wp_live_lum_have = true;
 }
 
@@ -1313,7 +1388,7 @@ static void backdrop_export(syn_server_t *s)
      * and one bar strip of SYN_LUM_COLS, six characters a cell ("-1.00," is the
      * longest), times the four monitors this is sized for, plus room for the
      * key names. */
-    char grids[(SYN_LUM_CELLS * 2 + SYN_LUM_COLS) * 6 * 4 + 2048];
+    char grids[(SYN_LUM_CELLS * 2 + SYN_LUM_COLS * 2) * 6 * 4 + 2048];
     size_t gl = 0;
     grids[0] = '\0';
     wl_list_for_each(o, &s->outputs, link) {
@@ -1423,6 +1498,43 @@ static void backdrop_export(syn_server_t *s)
         if (gl + 2 < sizeof(grids)) { grids[gl++] = '\n'; grids[gl] = '\0'; }
     }
 
+    /*
+     * …and the WALLPAPER's own answer for that same strip, column by column.
+     *
+     * ⛔ THIS IS THE ROW THE FALLBACK ABOVE FALLS BACK TO, and until it existed
+     * the fallback was wp_lum_grid's TOP ROW — the right columns of the wrong
+     * band. A grid row is SYN_LUM_ROWS deep: 160 pixels of a 1440 screen
+     * answering for a bar 34 tall, four fifths of it picture the bar is not on.
+     * On a photograph that changes vertically inside that cell the two readings
+     * are nothing alike — 0.29 for the cell against 0.08 for the strip itself —
+     * and a module that took the cell's answer inked for a backdrop nobody
+     * could see. It came out black on a black bar with its neighbours white.
+     *
+     * Same columns, same edge, same rows as bar_ink's own measurement, so the
+     * bar can fold this with bar_strip.<output> column for column: -1 there
+     * means "nothing covers this column", and THIS is what answers for it.
+     *
+     * Emitted unconditionally for every output, -1 included, for the same
+     * reason bar_strip is: a bar whose row is missing cannot tell "not
+     * measurable" from "this synui does not publish that", and the two want
+     * opposite behaviour — the second has to fall back to the grid row it
+     * always used.
+     */
+    wl_list_for_each(o, &s->outputs, link) {
+        int used = snprintf(grids + gl, sizeof(grids) - gl, "wp_strip.%s=",
+                            o->wlr_output->name);
+        if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+        gl += (size_t)used;
+        const double *cols = wallpaper_strip_cols(o);
+        for (int i = 0; i < SYN_LUM_COLS && gl + 8 < sizeof(grids); i++) {
+            used = snprintf(grids + gl, sizeof(grids) - gl, "%s%.2f",
+                            i ? "," : "", cols[i]);
+            if (used < 0 || (size_t)used >= sizeof(grids) - gl) break;
+            gl += (size_t)used;
+        }
+        if (gl + 2 < sizeof(grids)) { grids[gl++] = '\n'; grids[gl] = '\0'; }
+    }
+
     /* Written only on a CHANGE. Every relayout repaints, and the bar watches
      * this path — rewriting an identical file would have it reload and repaint
      * itself for each of them. All three values are compared: the safe ink can
@@ -1466,10 +1578,19 @@ static void backdrop_export(syn_server_t *s)
                "# what is actually on screen there — the window a menu opened\n"
                "# over, or one under an auto-hiding bar. -1 IN THESE TWO MEANS\n"
                "# NOTHING COVERS THAT CELL, which is the ordinary case and not\n"
-               "# a failure: take grid.<output>'s matching cell for it.\n"
-               "# Both are all -1 while `scene_ink` is off.\n",
+               "# a failure: take wp_strip.<output>'s matching column for it.\n"
+               "# Both are all -1 while `scene_ink` is off.\n"
+               "#\n"
+               "# wp_strip.<output> is the WALLPAPER's own answer for that same\n"
+               "# strip: %d luminances across the %d logical rows the bar\n"
+               "# covers, on the edge it is on. It is what bar_strip.<output>\n"
+               "# falls back to, and it is NOT grid.<output>'s top row — a grid\n"
+               "# row is a ninth of the screen and the bar is 34 pixels, so that\n"
+               "# row answers for four times the picture the bar is standing on.\n"
+               "# -1 means the wallpaper could not be measured.\n",
             SYN_LUM_COLS, SYN_LUM_ROWS,
-            SYN_LUM_COLS, SYN_LUM_ROWS, SYN_LUM_COLS);
+            SYN_LUM_COLS, SYN_LUM_ROWS, SYN_LUM_COLS,
+            SYN_LUM_COLS, SYN_BAR_STRIP_LOGICAL);
     fprintf(f, "bar_ink=%s\n", syn_ink_name(ink));
     fprintf(f, "bar_ink_best=%s\n", syn_ink_name(best));
     fputs(grids, f);
@@ -1605,6 +1726,9 @@ static void paint_output(syn_output_t *o)
      * branch below that answers one of them answers both, so a panel can never
      * be reading the previous wallpaper's backdrop while the bar is not. */
     grid_clear(o->wp_lum_grid);
+    /* …and the strip's own columns, which every branch below answers with the
+     * other two for that same reason. */
+    strip_fill(o->wp_strip_lum, -1.0);
 
     syn_wallpaper_src_t src;
     const char *path;
@@ -1629,6 +1753,7 @@ static void paint_output(syn_output_t *o)
          * bar would wear as a flash of its opaque background. */
         o->wp_top_lum = solid_backdrop_lum();
         grid_fill(o->wp_lum_grid, o->wp_top_lum);
+        strip_fill(o->wp_strip_lum, o->wp_top_lum);
         return;
     }
 
@@ -1646,6 +1771,7 @@ static void paint_output(syn_output_t *o)
         if (src != SYN_WP_SRC_WPENGINE) {
             o->wp_top_lum = solid_backdrop_lum();
             grid_fill(o->wp_lum_grid, o->wp_top_lum);
+            strip_fill(o->wp_strip_lum, o->wp_top_lum);
         }
         return;
     }
@@ -1677,6 +1803,11 @@ static void paint_output(syn_output_t *o)
     if (rows < 1) rows = 1;
     o->wp_top_lum = strip_luminance(cairo_get_target(cr), rows,
                                     s->config.bar_edge);
+    /* …and the same rows per column, which is what a bar MODULE reads. Off the
+     * same buffer in the same breath, so the strip's two answers can never
+     * describe different frames. */
+    strip_luminance_cols(cairo_get_target(cr), rows, s->config.bar_edge,
+                         o->wp_strip_lum);
 
     /* And the rest of the screen, for every surface that is not the bar. Off
      * the same finished buffer and in the same breath as the strip: two walks
@@ -1770,6 +1901,9 @@ void wallpaper_relayout(syn_server_t *s)
 void wallpaper_backdrop_measured(syn_output_t *o, double lum)
 {
     o->wp_top_lum = lum;
+    /* The rain's strip is flat across the screen for the reason spelt out for
+     * the grid below, so its columns are that one answer too. */
+    strip_fill(o->wp_strip_lum, lum);
     /*
      * The rain gets the strip's answer for every cell, which is a stand-in
      * everywhere else in this file but is very nearly exact here: the matrix
