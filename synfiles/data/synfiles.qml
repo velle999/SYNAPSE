@@ -1270,6 +1270,89 @@ FloatingWindow {
         }
     }
 
+    // ── Making the ones nothing has made ────────────────────────────────────
+    //
+    // ⛔ THE CACHE WAS ONLY EVER READ. previewFor() looks in ~/.cache/thumbnails
+    // and shows whatever it finds, so a video Dolphin had already thumbnailed
+    // appeared for free — and on a desktop where synfiles is the only file
+    // manager, nothing ever put one there. A folder of films drew a row of
+    // identical film-strip glyphs, permanently. `synfiles thumb` makes them now
+    // (see thumb.c); this decides WHEN.
+    //
+    // ⛔ DRIVEN BY THE DELEGATE, WHICH IS WHAT MAKES IT BOUNDED. A list only
+    // builds delegates for rows on screen, so asking from there is already
+    // "only the videos you are looking at" — no separate visibility test, and
+    // a folder of 500 films decodes the dozen in view rather than all of them.
+    //
+    // ⛔ ONE AT A TIME. Decoding video is the most expensive thing this program
+    // ever causes to happen, and N of them at once on a shared GPU box is how
+    // a file manager becomes the reason the desktop stutters.
+    property var thumbQueue: []
+    property bool thumbBusy: false
+    // Asked for once per session, whatever the scroll does. Delegates are
+    // recycled, so without this every pass over the same row re-queues it — and
+    // a video ffmpeg cannot read would be retried for ever.
+    property var thumbAsked: ({})
+    // A queue is a work list, not a backlog: past this, the rows scrolled by
+    // faster than they can be decoded and the oldest requests are no longer
+    // what anybody is looking at.
+    readonly property int thumbQueueMax: 24
+
+    Process {
+        id: thumbMakeProc
+        property string hash: ""
+        onExited: {
+            // ⚠ THE INDEX, NOT THE FILE, IS WHAT THE DELEGATE READS. thumbUri()
+            // answers from thumbIndex so a miss costs no failed Image load, so
+            // writing the PNG changes nothing on screen until the index knows.
+            if (thumbMakeProc.hash !== "") {
+                const idx = ({ normal: root.thumbIndex.normal,
+                               large: ({}) })
+                for (const k in root.thumbIndex.large) idx.large[k] = true
+                idx.large[thumbMakeProc.hash] = true
+                root.thumbIndex = idx
+            }
+            root.thumbBusy = false
+            root.pumpThumbs()
+        }
+    }
+
+    function wantsThumb(row) {
+        return root.thumbs && row && row.type === "file" && row.full
+            && row.mime && row.mime.indexOf("video/") === 0
+            && !root.thumbUri(row, "large") && !root.thumbUri(row, "normal")
+    }
+
+    function askThumb(row) {
+        if (!root.wantsThumb(row)) return
+        const hash = Qt.md5("file://" + row.full)
+        if (root.thumbAsked[hash]) return
+        if (root.thumbQueue.length >= root.thumbQueueMax) return
+        root.thumbAsked[hash] = true
+        // ⚠ THE DECODED PATH IN argv, ENCODED IN THE URI. `full` is
+        // percent-encoded because the --rec protocol needs it; a filesystem
+        // path in argv is real bytes, so a film with a space in its name is
+        // "not found" if the encoded form is handed over. disp() is what every
+        // other call to the binary in this file uses, for the same reason.
+        root.thumbQueue.push({ path: root.disp(row.full), hash: hash })
+        root.pumpThumbs()
+    }
+
+    function pumpThumbs() {
+        if (root.thumbBusy || root.thumbQueue.length === 0) return
+        const job = root.thumbQueue.shift()
+        root.thumbBusy = true
+        thumbMakeProc.hash = job.hash
+        thumbMakeProc.command = [root.bin, "thumb", "--size=large", job.path]
+        thumbMakeProc.running = true
+    }
+
+    // Leaving a folder abandons its queue: those rows are gone, and the films
+    // in the folder just opened are what the user is waiting on.
+    function dropThumbQueue() {
+        root.thumbQueue = []
+    }
+
     function scanThumbs() {
         thumbScanProc.size = "normal"
         thumbScanProc.command = [root.bin, "--rec", "list",
@@ -4353,6 +4436,10 @@ FloatingWindow {
         function go(pathEnc, view) {
             // The last operation's outcome is about the folder being left.
             root.opOutcome = ""
+            // …and so is anything still queued to be thumbnailed. Those rows
+            // are gone; the films in the folder being opened are what somebody
+            // is now waiting to see.
+            root.dropThumbQueue()
             pane.setTab({ path: pathEnc, view: view || "dir", filter: "", rows: [] })
             // Same argument as switching tabs: these names are about the folder
             // being left behind.
@@ -5432,9 +5519,16 @@ FloatingWindow {
                     // A corrupt or unreadable image is the only way to get
                     // here now; the icon is the answer.
                     onStatusChanged: if (status === Image.Error) rowIcon.failed = true
+                    // A video with nothing in the cache asks for one. This is
+                    // the ONLY trigger, and being in a delegate is what bounds
+                    // it to the rows on screen — see askThumb().
+                    Component.onCompleted: root.askThumb(fileRow.modelData)
                     Connections {
                         target: fileRow
-                        function onModelDataChanged() { rowIcon.failed = false }
+                        function onModelDataChanged() {
+                            rowIcon.failed = false
+                            root.askThumb(fileRow.modelData)
+                        }
                     }
                 }
 
@@ -5768,9 +5862,15 @@ FloatingWindow {
                     source: cellIcon.failed ? root.iconFor(gridCell.modelData)
                                             : root.previewFor(gridCell.modelData)
                     onStatusChanged: if (status === Image.Error) cellIcon.failed = true
+                    // As in the list row: the only place a thumbnail is asked
+                    // for, so only what is on screen is ever decoded.
+                    Component.onCompleted: root.askThumb(gridCell.modelData)
                     Connections {
                         target: gridCell
-                        function onModelDataChanged() { cellIcon.failed = false }
+                        function onModelDataChanged() {
+                            cellIcon.failed = false
+                            root.askThumb(gridCell.modelData)
+                        }
                     }
                 }
 

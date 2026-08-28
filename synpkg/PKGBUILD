@@ -148,7 +148,7 @@ pkgver=0.1.0
 #   ⚠ ONE SCAN PER WINDOW, like the .desktop map beside it, and it is allowed to
 #   find nothing — in a chroot without the data the map stays empty and every
 #   row falls back to the monogram, which is where this started.
-pkgrel=42
+pkgrel=43
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

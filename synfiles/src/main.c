@@ -31,6 +31,9 @@ static void usage(FILE *f)
 "                          search a tree; never follows symlinks\n"
 "  peek [dir] [--limit=N]  a few previewable files inside each subfolder,\n"
 "                          for drawing them on the folder icon\n"
+"  thumb <video>...        a preview frame, into the shared thumbnail cache\n"
+"       --size=normal|large  128px or 256px (default large)\n"
+"       --force            remake one that is already current\n"
 "  actions <path>...       Open With entries and service menus that apply\n"
 "  action <desktop> [id] -- <path>...\n"
 "                          run one of them\n"
@@ -176,6 +179,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "tui"))     return cmd_tui(rest_argc, rest);
 	if (!strcmp(cmd, "find"))    return cmd_find(rest_argc, rest);
 	if (!strcmp(cmd, "peek"))    return cmd_peek(rest_argc, rest);
+	if (!strcmp(cmd, "thumb"))   return cmd_thumb(rest_argc, rest);
 	if (!strcmp(cmd, "places"))  return cmd_places(rest_argc, rest);
 	if (!strcmp(cmd, "recent"))  return cmd_recent(rest_argc, rest);
 	if (!strcmp(cmd, "volumes")) return cmd_volumes(rest_argc, rest);

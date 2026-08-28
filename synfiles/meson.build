@@ -21,6 +21,7 @@ sources = files(
   'src/resolution.c',
   'src/find.c',
   'src/peek.c',
+  'src/thumb.c',
   'src/places.c',
   'src/recent.c',
   'src/volumes.c',

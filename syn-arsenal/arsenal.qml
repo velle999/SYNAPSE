@@ -249,6 +249,24 @@ FloatingWindow {
         readonly property bool vert: sb.orientation === Qt.Vertical
 
         policy: ScrollBar.AsNeeded
+        /*
+         * ⛔ NOTHING TO SCROLL MEANS NO SCROLLBAR AT ALL. AsNeeded hides the
+         * handle by fading its OPACITY, and a custom contentItem replaces the
+         * binding that does it — so a bar styled to be visible at rest became
+         * visible at rest everywhere, a full-length handle that cannot move
+         * sitting on every short list on the desktop. velle, 2026-08-28:
+         * "if there's nothing to scroll the scrollbar should autohide. i don't
+         * need the fucking scrollbars literally everywhere when they can't even
+         * do anything."
+         *
+         * `size` is the fraction of the content the view can show: 1.0 means it
+         * all fits. Visible at rest is for the case where there IS more — that
+         * is the whole point of it — and is clutter in every other case.
+         */
+        readonly property bool needed:
+            sb.policy === ScrollBar.AlwaysOn ||
+            (sb.policy === ScrollBar.AsNeeded && sb.size < 1.0)
+        visible: sb.needed
         padding: root.ui(2)
         implicitWidth:  sb.vert ? root.ui(11) : root.ui(48)
         implicitHeight: sb.vert ? root.ui(48) : root.ui(11)

@@ -174,6 +174,18 @@ int cmd_find(int argc, char **argv);
  * screen. Bounded, one level deep, and nothing is opened or read. */
 int cmd_peek(int argc, char **argv);
 
+/* ── thumb.c ────────────────────────────────────────────────────────────────
+ * A preview frame for a video, written into the shared freedesktop cache so
+ * every other file manager gets it too. See thumb.c for why it is that cache
+ * and not a private one. */
+int   cmd_thumb(int argc, char **argv);
+/* Where a file's thumbnail lives — $XDG_CACHE_HOME/thumbnails/<size>/<md5>.png.
+ * malloc'd; the file need not exist. */
+char *thumb_cache_path(const char *abs_path, bool large);
+/* Make one, or return the existing entry when it is still current. malloc'd
+ * path, or NULL with *why set to a sentence for the caller to print. */
+char *thumb_make(const char *path, bool large, bool force, const char **why);
+
 /* ── places.c ───────────────────────────────────────────────────────────────
  * Pinned folders live in ~/.local/share/user-places.xbel — DOLPHIN'S OWN FILE,
  * on purpose. Reading the format that is already populated means a user's

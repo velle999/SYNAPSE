@@ -203,7 +203,7 @@ pkgver=0.1.0
 #   ⚠ "1 files in 1 folders" — both counters go through one fmtMany() now.
 #   Nine checks in synfiles_test.sh, three of them on `du`'s own two numbers.
 #   377 pass.
-pkgrel=65
+pkgrel=66
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -234,11 +234,18 @@ optdepends=('quickshell: the graphical browser (synfiles gui)'
             'avahi: find network shares announced over mDNS'
             'smbclient: find Windows shares over NetBIOS, and list what a server offers'
             'udisks2: mount removable media without root'
-            # Images are read in-tree, by magic bytes; so are MP4 and MOV,
-            # which carry their size in a track header. Matroska, WebM and AVI
-            # do not, and ffprobe is what already knows how to ask. Without it
-            # those simply show no resolution row.
-            'ffmpeg: the resolution of Matroska, WebM and AVI video'
+            # Two jobs, one package. Images are read in-tree, by magic bytes;
+            # so are MP4 and MOV, which carry their size in a track header.
+            # Matroska, WebM and AVI do not, and ffprobe is what already knows
+            # how to ask — without it those show no resolution row.
+            #
+            # It is ALSO the thumbnailer: `synfiles thumb` takes a frame out of
+            # a video and writes it to the shared cache (thumb.c). Without
+            # ffmpeg a film keeps its generic icon unless something else on the
+            # machine has already thumbnailed it — which is what synfiles did
+            # for its whole life until now, so this is a feature going missing
+            # rather than anything breaking.
+            'ffmpeg: video thumbnails, and the resolution of Matroska/WebM/AVI'
             # Adds "Open in Disks" to a drive's right-click menu. Probed for at
             # startup, so without it the entry is simply absent rather than
             # present and dead.

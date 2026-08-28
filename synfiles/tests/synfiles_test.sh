@@ -2850,6 +2850,90 @@ else
     echo "  skip  Qt 6 qmltestrunner not installed, cannot check flyout hover"
 fi
 
+# ── video thumbnails ────────────────────────────────────────────────────────
+#
+# ⛔ THE HASH IS A CONTRACT WITH EVERY OTHER FILE MANAGER, and with this
+# program's own GUI, which computes it independently with Qt.md5(). If the two
+# ever disagree the cache still fills up — with entries nothing can find. So
+# the check is against `md5sum`, the third opinion, rather than against
+# ourselves.
+if command -v ffmpeg >/dev/null 2>&1 && command -v md5sum >/dev/null 2>&1; then
+    VT="$T/thumbs"
+    mkdir -p "$VT"
+    export XDG_CACHE_HOME="$VT/cache"
+
+    ffmpeg -v error -y -f lavfi -i "testsrc=size=160x120:rate=10:duration=3" \
+        -pix_fmt yuv420p "$VT/clip.mp4" >/dev/null 2>&1
+
+    out=$("$SYNFILES" thumb "$VT/clip.mp4" 2>&1)
+    check "thumb makes a thumbnail for a video" $?
+
+    want=$(printf 'file://%s' "$VT/clip.mp4" | md5sum | cut -d' ' -f1)
+    [ "$(basename "${out%.png}")" = "$want" ]
+    check "…named by the MD5 of its URI, the way the spec says" $?
+
+    [ "$out" = "$XDG_CACHE_HOME/thumbnails/large/$want.png" ]
+    check "…in \$XDG_CACHE_HOME/thumbnails/large" $?
+
+    [ -s "$out" ] && head -c 8 "$out" | od -An -tx1 | grep -q "89 50 4e 47"
+    check "…and it is a PNG with something in it" $?
+
+    # ⛔ 0600: a thumbnail can show the contents of a file whose own permissions
+    # are stricter than the cache directory's.
+    [ "$(stat -c%a "$out")" = "600" ]
+    check "…readable only by its owner" $?
+
+    # ⛔ Thumb::MTime IS WHAT MAKES STALENESS DETECTABLE. Without it the entry is
+    # a picture with no way to know the film has been re-encoded since.
+    mtime=$(stat -c%Y "$VT/clip.mp4")
+    grep -aq "Thumb::MTime" "$out" && grep -aq "$mtime" "$out"
+    check "…recording the source's mtime, as the spec requires" $?
+
+    grep -aq "Thumb::URI" "$out"
+    check "…and the URI it was made from" $?
+
+    # Idempotent: a second call must not decode the film again.
+    cp "$out" "$VT/first.png"
+    "$SYNFILES" thumb "$VT/clip.mp4" >/dev/null 2>&1
+    cmp -s "$out" "$VT/first.png"
+    check "asking twice does not remake it" $?
+
+    # …but a film that has changed must be noticed. Touching it is enough:
+    # the test is the RECORDED mtime against the file's, not the PNG's own.
+    touch "$VT/clip.mp4"
+    "$SYNFILES" thumb "$VT/clip.mp4" >/dev/null 2>&1
+    grep -aq "$(stat -c%Y "$VT/clip.mp4")" "$out"
+    check "…but a film that changed is thumbnailed again" $?
+
+    # ⚠ THE NAME GOES THROUGH argv AND THROUGH A URI, and the two want
+    # different things. A space is a space in argv and %20 in the URI; getting
+    # that backwards is a file-not-found or a hash nothing agrees with.
+    cp "$VT/clip.mp4" "$VT/a film with spaces.mp4"
+    out2=$("$SYNFILES" thumb "$VT/a film with spaces.mp4" 2>&1)
+    check "a name with spaces is thumbnailed" $?
+    want2=$(printf 'file://%s' "$VT/a%20film%20with%20spaces.mp4" | md5sum | cut -d' ' -f1)
+    [ "$(basename "${out2%.png}")" = "$want2" ]
+    check "…and hashed from the PERCENT-ENCODED uri" $?
+
+    # Not a video, and not a file: both are refusals, not crashes.
+    echo hello > "$VT/notes.txt"
+    "$SYNFILES" thumb "$VT/notes.txt" >/dev/null 2>&1
+    [ $? -ne 0 ]
+    check "a text file is refused, not thumbnailed" $?
+    "$SYNFILES" thumb "$VT/nothing-here.mp4" >/dev/null 2>&1
+    [ $? -ne 0 ]
+    check "…and so is a file that is not there" $?
+
+    # normal is the other size the spec defines, and a different directory.
+    out3=$("$SYNFILES" thumb --size=normal "$VT/clip.mp4" 2>&1)
+    case "$out3" in */thumbnails/normal/*) true ;; *) false ;; esac
+    check "--size=normal writes the 128px entry instead" $?
+
+    unset XDG_CACHE_HOME
+else
+    echo "  skip  ffmpeg or md5sum not installed, cannot check video thumbnails"
+fi
+
 unset SYNFILES_CONFIG
 
 echo

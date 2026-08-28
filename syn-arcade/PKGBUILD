@@ -1050,7 +1050,7 @@ pkgver=0.1.0
 #   relationship its layout depends on. A face is a face at any distance; a
 #   ten-foot UI's sizes are not the desktop's.
 #   tools/preflight.sh gates this repo-wide now, and names the exemption.
-pkgrel=48
+pkgrel=49
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
