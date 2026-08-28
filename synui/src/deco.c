@@ -508,8 +508,9 @@ static void titlebar_render(syn_view_t *view)
         if (centred) {
             cairo_text_extents_t te;
             syn_text_extents(cr, title, &te);
-            if (te.x_advance < text_right - text_x)
-                text_x += (text_right - text_x - te.x_advance) / 2.0;
+            /* Centred on the WINDOW, with text_x/text_right as clamps rather
+             * than the frame — see chrome_caption_x() in synui.h. */
+            text_x = chrome_caption_x(w, text_x, text_right, te.x_advance);
 
             /* Platinum clears a plaque of plain face grey behind the title, so
              * the racing stripes stop at the text instead of running under it.

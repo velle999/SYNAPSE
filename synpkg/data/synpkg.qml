@@ -2,6 +2,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
@@ -178,6 +179,39 @@ FloatingWindow {
     property string uiFont: ""
     property int textScale: 100
     function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
+    /*
+     * ⛔ A LIST OF EVERY PACKAGE ON THE SYSTEM WITH NO SCROLLBAR. Thousands of
+     * rows, and nothing on screen saying how far down they went or any way to
+     * get there but a wheel — which is the complaint this exists to answer.
+     *
+     * Same component, same reasoning, as the assistant's window: visible at
+     * rest, because `active` is true in every state except the one where
+     * somebody is deciding whether there is more to see. AsNeeded, so a short
+     * list draws no furniture. Pinned by preflight's `scrollbar` gate.
+     */
+    component SynScrollBar: ScrollBar {
+        id: sb
+        policy: ScrollBar.AsNeeded
+        implicitWidth: root.ui(11)
+        padding: root.ui(2)
+
+        contentItem: Rectangle {
+            implicitWidth: root.ui(7)
+            radius: width / 2
+            color: sb.pressed ? root.cAccent : sb.hovered ? root.cText : root.cDim
+            opacity: sb.pressed || sb.hovered ? 1.0 : 0.5
+            Behavior on color   { ColorAnimation  { duration: 90 } }
+            Behavior on opacity { NumberAnimation { duration: 90 } }
+        }
+
+        background: Rectangle {
+            radius: width / 2
+            color: Qt.rgba(root.cText.r, root.cText.g, root.cText.b, 0.08)
+            opacity: sb.hovered || sb.pressed ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
+    }
 
     FileView {
         path: Quickshell.env("HOME") + "/.config/synui/font.state"
@@ -1470,6 +1504,7 @@ FloatingWindow {
                     anchors.fill: parent
                     anchors.topMargin: 6
                     clip: true
+                    ScrollBar.vertical: SynScrollBar {}
                     model: root.categories
                     spacing: 1
 
@@ -1671,6 +1706,7 @@ FloatingWindow {
             Flickable {
                 anchors.fill: parent
                 anchors.margins: 18
+                ScrollBar.vertical: SynScrollBar {}
                 visible: root.section === "about"
                 contentHeight: aboutCol.implicitHeight
                 clip: true
@@ -2028,6 +2064,7 @@ FloatingWindow {
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
                 anchors.bottomMargin: 10
+                ScrollBar.vertical: SynScrollBar {}
                 // ⚠ AND ONLY WHEN IT HAS ROWS. This ListView is declared after
                 // the empty-state block above and covers exactly the same area,
                 // so it is the topmost item there — and a Flickable takes the

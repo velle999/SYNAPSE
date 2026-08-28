@@ -156,6 +156,47 @@ FloatingWindow {
     readonly property color cLine:  pick(Qt.rgba(1, 1, 1, 0.07), Qt.rgba(0, 0, 0, 0.07))
     readonly property color cMine:  Qt.rgba(cAccent.r, cAccent.g, cAccent.b, 0.14)
 
+    /*
+     * ⛔ ONE SCROLLBAR, USED BY EVERY SCROLLING VIEW IN THIS WINDOW.
+     *
+     * The default ScrollBar is a hairline that fades to nothing when the view
+     * is still, which on a dark chat window is indistinguishable from having no
+     * scrollbar at all — which is how this window shipped without one. A view
+     * that scrolls has to SAY it scrolls even when nobody is touching it: the
+     * handle is the only thing on screen that says there is more above, how
+     * much more, and where in it you are.
+     *
+     * ⚠ VISIBLE AT REST, not only while active. `active` is true while the
+     * flickable moves or the bar is hovered — every state except the one where
+     * a reader is deciding whether there is anything to scroll to.
+     *
+     * ⚠ AsNeeded, so a conversation shorter than the window has no bar. A rule
+     * that every view scrolls is not a rule that every view draws furniture it
+     * does not need.
+     */
+    component SynScrollBar: ScrollBar {
+        id: sb
+        policy: ScrollBar.AsNeeded
+        implicitWidth: root.ui(11)
+        padding: root.ui(2)
+
+        contentItem: Rectangle {
+            implicitWidth: root.ui(7)
+            radius: width / 2
+            color: sb.pressed ? root.cAccent : sb.hovered ? root.cText : root.cDim
+            opacity: sb.pressed || sb.hovered ? 1.0 : 0.5
+            Behavior on color   { ColorAnimation  { duration: 90 } }
+            Behavior on opacity { NumberAnimation { duration: 90 } }
+        }
+
+        background: Rectangle {
+            radius: width / 2
+            color: root.cLine
+            opacity: sb.hovered || sb.pressed ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
+    }
+
     // ── Engine state ────────────────────────────────────────────────────────
     property string backend: "…"
     property string modelName: ""
@@ -206,21 +247,40 @@ FloatingWindow {
         return head
     }
 
+    // ⛔ FOLLOW THE TAIL ONLY WHEN THE READER IS AT IT. Jumping to the end on
+    // every record is right while the answer is being watched and wrong the
+    // moment somebody scrolls up to re-read something: a streaming reply would
+    // yank them back to the bottom several times a second, which is a scrollbar
+    // that cannot be used. Anchored at the bottom, it follows; scrolled away,
+    // it stays put and the bar shows the new content arriving below.
+    readonly property int followSlack: 24
+
+    function atTail() {
+        return chat.contentHeight <= chat.height ||
+               chat.contentY >= chat.contentHeight - chat.height - root.followSlack
+    }
+
+    function follow() {
+        if (root.atTail()) chat.positionViewAtEnd()
+    }
+
     function say(kind, text) {
+        const tail = root.atTail()
         log.append({ kind: kind, text: text })
-        chat.positionViewAtEnd()
+        if (tail) chat.positionViewAtEnd()
     }
 
     // The assistant's reply arrives token by token, so the last turn GROWS
     // rather than a new one being appended per chunk — otherwise a paragraph
     // is fifty rows in the list and the scroll position fights the reader.
     function append(text) {
+        const tail = root.atTail()
         if (log.count > 0 && log.get(log.count - 1).kind === "it") {
             log.setProperty(log.count - 1, "text", log.get(log.count - 1).text + text)
         } else {
             log.append({ kind: "it", text: text })
         }
-        chat.positionViewAtEnd()
+        if (tail) chat.positionViewAtEnd()
     }
 
     // ── The wire ────────────────────────────────────────────────────────────
@@ -495,6 +555,13 @@ FloatingWindow {
             clip: true
             spacing: 8
             model: log
+
+            // ⛔ A WINDOW THAT SCROLLS SHOWS THAT IT SCROLLS. A wheel and a
+            // drag are not a substitute: without a bar there is nothing saying
+            // there is anything above the top of the view, no way to see how
+            // far back it goes, and no way to get there in one gesture.
+            // The rule is pinned by preflight's `scrollbar` gate.
+            ScrollBar.vertical: SynScrollBar {}
             delegate: Item {
                 id: turn
                 required property string kind
@@ -608,6 +675,10 @@ FloatingWindow {
                     anchors { fill: parent; margins: 8 }
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
+
+                    // The input wraps and grows past its box on a long question,
+                    // so it scrolls too — and says so, same as the conversation.
+                    ScrollBar.vertical: SynScrollBar {}
 
                     TextArea.flickable: TextArea {
                         id: input

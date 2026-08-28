@@ -254,6 +254,47 @@ int main(void)
     test_narrow_window();
     test_slot_bounds();
     test_square_and_radius();
+    /*
+     * ⛔ THE CAPTION IS CENTRED ON THE WINDOW, NOT ON THE GAP BESIDE THE
+     * BUTTONS. Centring inside [lo, hi] puts the title off the centreline by
+     * half the controls' width — ~40px on a 420-wide window, which is exactly
+     * near enough to read as sloppy rather than as a choice.
+     */
+    {
+        const int w = 420, th = 30;
+        const double lo = SYN_TITLEBAR_BTNS * th + 8;   /* past the traffic lights */
+        const double hi = w - 8;
+
+        /* A caption that fits sits on the window's own centreline. */
+        double adv = 120;
+        double x = chrome_caption_x(w, lo, hi, adv);
+        CHECK(x + adv / 2.0 == w / 2.0,
+              "caption centre %.1f, window centre %d", x + adv / 2.0, w / 2);
+        CHECK(x >= lo, "caption at %.1f runs under the buttons (lo %.1f)", x, lo);
+
+        /* Wide enough that the true centre would overlap the buttons: it is
+         * pushed clear of them rather than drawn underneath. */
+        adv = hi - lo - 4;
+        x = chrome_caption_x(w, lo, hi, adv);
+        CHECK(x >= lo, "wide caption at %.1f is under the buttons", x);
+        CHECK(x + adv <= hi, "wide caption ends at %.1f, past hi %.1f", x + adv, hi);
+
+        /* Too wide to centre at all: left at lo for the caller to clip, which
+         * is how a long title has always degraded. */
+        x = chrome_caption_x(w, lo, hi, hi - lo + 50);
+        CHECK(x == lo, "overlong caption starts at %.1f, expected lo %.1f", x, lo);
+
+        /* Platinum has buttons on BOTH sides, so the window centre is already
+         * inside its bounds and nothing should move. */
+        const double plo = th + 6, phi = w - 2 * th - 6;
+        adv = 100;
+        x = chrome_caption_x(w, plo, phi, adv);
+        CHECK(x + adv / 2.0 == w / 2.0,
+              "platinum caption centre %.1f, window centre %d",
+              x + adv / 2.0, w / 2);
+    }
+
+
 
     if (failures) {
         fprintf(stderr, "chrome_layout_test: %d failure(s)\n", failures);

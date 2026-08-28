@@ -5302,6 +5302,33 @@ static inline int chrome_btn_x(const syn_config_t *cfg, int tb_w, int th, int i)
     }
 }
 
+/*
+ * Where a centred caption starts, given the bar width and the bounds the chrome
+ * leaves clear of its buttons.
+ *
+ * ⛔ CENTRED IN THE WINDOW, NOT IN THE GAP. The Mac chromes used to centre the
+ * title inside [lo, hi] — the space left over to the RIGHT of the traffic
+ * lights — which shifts it off the window's centreline by half the width of the
+ * controls. On a 420-wide window that is ~40px, and it reads as what it is: a
+ * title that is nearly centred. velle, 2026-08-28: "the assistant title bar
+ * title isn't centered for some reason, slop."
+ *
+ * So the bounds are CLAMPS, not the frame: centre on `w`, then refuse to run
+ * under the buttons or past the far edge. A caption too wide to fit is left at
+ * `lo` and clipped by the caller, exactly as before.
+ *
+ * static inline in the header so chrome_layout_test can pin it without a
+ * cairo surface — same arrangement as chrome_btn_x() above.
+ */
+static inline double chrome_caption_x(int w, double lo, double hi, double advance)
+{
+    if (advance >= hi - lo) return lo;
+    double want = (w - advance) / 2.0;
+    if (want + advance > hi) want = hi - advance;
+    if (want < lo) want = lo;
+    return want;
+}
+
 /* The button at titlebar-local x, or DECO_TITLEBAR for the bar itself.
  *
  * Walked BACKWARDS, because that is paint order reversed: the slots overlap on
