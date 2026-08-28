@@ -447,6 +447,10 @@ class VibeModel:
         # thousands of tokens behind the question and a 7B has stopped
         # following it.
         text_for_model = user_text + modes.PROMPT.get(self.active_mode, "")
+        # ⚠ ONLY WHEN THE LINE IS ABOUT THIS MACHINE. An ASK turn with no tools
+        # asked about a real folder invented its contents; see modes._ASK_NO_INVENT.
+        if self.active_mode == modes.ASK:
+            text_for_model += modes.ask_addendum(user_text)
 
         self._messages.append({
             "role": "user",
@@ -676,7 +680,17 @@ class VibeModel:
                         or _STALL_RE.search(_visible)
                     )
                 )
-                if _autopush_remaining > 0 and _is_stall:
+                # ⛔ THIS RETRY IS CODE-SHAPED, SO IT BELONGS TO AGENT ALONE.
+                # It answers a stall by demanding a complete fenced program
+                # with the tools off, which is right for "write me tetris" and
+                # is nonsense in the other two modes. ASK exists to answer and
+                # touch nothing; PLAN exists to write steps. Worse, `_is_stall`
+                # fires on any reply under 30 characters, so the correct ASK
+                # answer to a question about this machine — "I need to look."
+                # — was read as a stall and retried into a Python file the user
+                # never asked for. Measured 2 of 3 turns.
+                if (_autopush_remaining > 0 and _is_stall
+                        and self.active_mode == modes.AGENT):
                     _autopush_remaining -= 1
                     # Signal to UI that we're retrying
                     yield "\x00RETRY\x00"

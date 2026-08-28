@@ -668,14 +668,26 @@ def grep(pattern: str, path: str | None = None, file_glob: str | None = None) ->
 
 
 def list_dir(path: str | None = None) -> str:
+    """List a directory, and SAY WHICH ONE.
+
+    ⛔ THE HEADER IS NOT DECORATION. This used to return bare names, so the
+    only thing the model could hand to desktop_open on the next turn was a bare
+    name — which resolves against vibe's cwd, not against the folder the user
+    was just shown, and misses. Naming the absolute directory once at the top
+    is what makes "open notes.txt" answerable, and it costs one line against
+    the model's context rather than a path on every row.
+    """
     p = Path(path).expanduser() if path else Path.cwd()
     if not p.exists():
         return f"Error: path not found: {path}"
     if not p.is_dir():
         return f"Error: not a directory: {path}"
     try:
+        p = Path(os.path.abspath(p))
+        # A listing is a context the next turn inherits — see desktop.note_dir.
+        desktop.note_dir(p)
         entries = sorted(p.iterdir(), key=lambda x: (x.is_file(), x.name))
-        lines = []
+        lines = [f"{p}:"]
         for e in entries:
             try:
                 if e.is_dir():
@@ -685,7 +697,7 @@ def list_dir(path: str | None = None) -> str:
                     lines.append(f"  {e.name}  ({size:,} bytes)")
             except OSError:
                 lines.append(f"  {e.name}  [unreadable]")
-        return "\n".join(lines) or "(empty directory)"
+        return "\n".join(lines) if len(lines) > 1 else f"{p}: (empty directory)"
     except PermissionError:
         return f"Error: permission denied: {path}"
     except Exception as e:

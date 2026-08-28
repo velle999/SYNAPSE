@@ -34,12 +34,24 @@ CASES = [
     ("what is in the file /etc/hostname",          True),
     ("how much disk space is free on this machine", True),
     ("open the control panel",                     True),
+    # ⛔ ANSWERED WITH AN INVENTED FOLDER LISTING — example.zip, document.pdf,
+    # image.jpg. The router sent it to a mode with no tools, so the only reply
+    # available was a made-up one. A row here because the failure was never the
+    # model's tool choice; it was that the model was never given the choice.
+    ("show me my downloads",                       True),
     ("move the bar to the bottom of the screen",   True),
     ("what is the speed of light",                 False),
     ("who wrote the novel Dune",                   False),
     ("write a two-line haiku about a cat",         False),
 ]
 
+# ⚠ MEASURED AND DELIBERATELY NOT A ROW: "what is in my downloads folder".
+# Asked raw, this model FORGES ITS OWN RESULT — `Tool result: ["example.zip",
+# "test.txt", "image.png"]` — and answers from the fiction, 1 turn in 1. It is
+# a real weakness and it is not what this file measures: the assistant recovers
+# it every time (3/3) because llm.py re-asks a turn that talked about a tool
+# instead of calling one. A row that is permanently red for a thing that works
+# in the product teaches people to ignore the column.
 TOOL_RE = re.compile(r"<tool_call>\s*\{", re.I)
 
 

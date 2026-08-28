@@ -618,5 +618,109 @@ line = rec.getvalue().rstrip("\n")
 check("a record is ONE line whatever is in the field", "\n" not in line)
 check("…and its fields are still two", len(line.split("\t")) == 2, line)
 
+# ── 8. a filename is not a web address ──────────────────────────────────────
+#
+# ⛔ REPORTED AS "IT TRIED A WEBSITE WITH THE FILENAME". desktop_open asked
+# "does this look like a domain" BEFORE it asked "does this exist", and the
+# test for a domain was `word dot word` — which `document.pdf` passes. So a
+# file the assistant had just listed for the user was opened as
+# https://document.pdf in a browser.
+#
+# ⚠ THE TWO SETS OVERLAP AND THE FILE EXTENSION WINS: .zip, .mov, .sh and .py
+# are all real TLDs. On a desktop assistant those name files.
+from vibe.desktop import _looks_like_host
+
+for name in ("document.pdf", "report.zip", "notes.txt", "clip.mov",
+             "photo.jpeg", "archive.tar.gz", "build.sh", "script.py"):
+    check(f"'{name}' is a file, not a web address", not _looks_like_host(name))
+for host in ("example.com", "claude.ai", "www.anything.internal",
+             "github.com/velle999/SYNAPSE"):
+    check(f"'{host}' is still a web address", _looks_like_host(host))
+
+# The routing order itself: something that EXISTS can never be a guess.
+_spawned = []
+_desk._spawn = lambda argv: _spawned.append(argv)
+try:
+    with tempfile.TemporaryDirectory() as td:
+        real = pathlib.Path(td) / "document.pdf"
+        real.write_text("not a website")
+
+        _spawned.clear()
+        _desk.desktop_open(str(real))
+        check("a real file named like a domain opens as a FILE",
+              bool(_spawned) and _spawned[0][-1] == str(real), _spawned)
+
+        # ⛔ A LISTING IS A CONTEXT THE NEXT LINE INHERITS. Shown a folder, the
+        # user says "open document.pdf" — a BARE name, because that is how the
+        # listing read. Without the note it resolves against vibe's cwd and
+        # misses; with it, it is the file they were just looking at.
+        _desk.note_dir(td)
+        _spawned.clear()
+        out = _desk.desktop_open("document.pdf")
+        check("…and a bare name from the last listing finds it",
+              bool(_spawned) and _spawned[0][-1] == str(real), out)
+
+        # It rescues an error; it must never shadow a real answer.
+        _spawned.clear()
+        _desk.desktop_open("downloads")
+        check("…and the folder table still wins over the last listing",
+              bool(_spawned) and _spawned[0][-1].lower().endswith("downloads"),
+              _spawned)
+
+    _desk._last_dir = None
+    _spawned.clear()
+    out = _desk.desktop_open("document.pdf")
+    check("with nothing listed, a bare filename is an error, not a browser",
+          not _spawned and out.startswith("Error:"), out)
+finally:
+    _desk._spawn = _real_spawn
+    _desk._last_dir = None
+
+
+# ── 9. list_dir says WHICH directory ────────────────────────────────────────
+#
+# It returned bare names, so the only thing the model could hand back on the
+# next turn was a bare name — and a bare name resolves against vibe's cwd, not
+# against the folder the user was just shown.
+with tempfile.TemporaryDirectory() as td:
+    (pathlib.Path(td) / "a.txt").write_text("x")
+    out = execute_tool("list_dir", {"path": td})
+    check("a listing names the absolute directory it listed",
+          out.splitlines()[0] == f"{td}:", out.splitlines()[:1])
+    check("…and still lists the entries", "a.txt" in out, out)
+    check("…and records it for the next turn", _desk._last_dir == pathlib.Path(td),
+          _desk._last_dir)
+_desk._last_dir = None
+
+
+# ── 10. a question about THIS machine never lands in a mode with no tools ───
+#
+# ⛔ THE WORST ANSWER THIS ASSISTANT CAN GIVE, AND THE ROUTER MADE IT THE ONLY
+# ONE AVAILABLE. "show me my downloads" matched no machine word, so AUTO sent
+# it to ASK, which has no tools — and the model, asked for the contents of a
+# real folder with no way to look, invented them: example.zip, document.pdf,
+# image.jpg, correct in shape and wrong in every entry.
+for line in ("show me my downloads", "what is in my downloads folder",
+             "list my downloads", "what files are in my downloads",
+             "open my downloads", "show me my desktop folder",
+             "what is on this machine"):
+    check(f"'{line}' reaches a mode that can look",
+          modes.route(line) != modes.ASK, modes.route(line))
+
+# ⚠ AND THE OTHER DIRECTION, which is the half a broad rule breaks. These need
+# no tools and must not grow any.
+for line in ("what is the speed of light", "who wrote the novel Dune",
+             "write me a haiku about a cat", "explain what a pdf is",
+             "write me an email about the build failing"):
+    check(f"'{line}' still answers without tools",
+          modes.route(line) == modes.ASK, modes.route(line))
+
+# The one line ASK gets when the question is about this machine, and only then.
+check("an ASK turn about this machine is told it cannot see it",
+      "cannot see this computer" in modes.ask_addendum("show me my downloads"))
+check("…and a question about the world is not",
+      modes.ask_addendum("what is the speed of light") == "")
+
+
 print(f"\n{npass} passed, {nfail} failed")
 sys.exit(1 if nfail else 0)

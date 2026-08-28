@@ -97,6 +97,76 @@ _DIR_WORDS = {
     "file manager": "HOME",   "files": "HOME",
 }
 
+# ⛔ WHAT SEPARATES A HOSTNAME FROM A FILENAME, because a regex for "word dot
+# word" cannot: `document.pdf` matched it, and desktop_open sent the user's own
+# file to https://document.pdf in a browser. Reported 2026-08-28 as "I tried
+# telling it to open a file it listed and it tried a website with the filename".
+#
+# ⚠ THE TWO SETS OVERLAP ON PURPOSE AND THE FILE EXTENSION WINS. `.zip`, `.mov`,
+# `.sh` and `.py` are all real TLDs now. On a desktop assistant "open report.zip"
+# means the archive essentially every time, so an overlap resolves to the file.
+_TLDS = frozenset("""
+com net org io dev app co uk edu gov mil info biz me tv us ca de fr jp au nl
+ru ch it es se no fi pl br in cn xyz ai online site tech store blog cloud
+page live news wiki gg fm to ly sh cc
+""".split())
+
+_FILE_EXTS = frozenset("""
+pdf txt md rst log conf cfg ini json xml yaml yml toml csv tsv
+png jpg jpeg gif svg webp bmp ico tiff heic
+mp3 mp4 mkv avi mov wav flac ogg opus webm m4a m4v
+zip tar gz bz2 xz 7z rar zst iso img
+doc docx xls xlsx ppt pptx odt ods odp epub
+sh py js ts jsx tsx html htm css c h cpp hpp rs go rb pl lua java kt
+deb rpm pkg exe msi appimage desktop gguf bin so torrent
+""".split())
+
+
+def _looks_like_host(t: str) -> bool:
+    """Whether a scheme-less string is a web address rather than a filename.
+
+    ⚠ CALLED ONLY AFTER THE PATH CHECK, so anything that exists on disk has
+    already won. This decides the leftovers, where the string names nothing
+    real and the choice is between a browser and an error."""
+    host = t.split("/", 1)[0]
+    if "." not in host or host.startswith(".") or host.endswith("."):
+        return False
+    last = host.rsplit(".", 1)[1].lower()
+    if not last.isalpha():
+        return False
+    # An explicit www. is somebody saying "web", whatever follows it.
+    if host.lower().startswith("www."):
+        return True
+    # A path component after the host is a shape filenames do not have.
+    if "/" in t:
+        return last in _TLDS
+    if last in _FILE_EXTS:
+        return False
+    return last in _TLDS
+
+
+# ⚠ THE LAST DIRECTORY THE ASSISTANT SHOWED THE USER. "open the third one" and
+# "open notes.txt" arrive as a BARE NAME with no directory, because that is how
+# the listing above them read. Without this the name resolves against vibe's
+# cwd — whatever launched the engine — and misses.
+#
+# It is only ever consulted AFTER every other branch has failed, so it can turn
+# an error into the right file and can never override a real path, a panel or
+# an app.
+_last_dir: Path | None = None
+
+
+def note_dir(p) -> None:
+    """Remember a directory the user has just been shown."""
+    global _last_dir
+    try:
+        d = Path(p)
+        if d.is_dir():
+            _last_dir = d
+    except (OSError, TypeError, ValueError):
+        pass
+
+
 # What each key is called when xdg-user-dir cannot say — the freedesktop
 # defaults, matched case-insensitively against $HOME's real children.
 _DIR_DEFAULTS = {
@@ -254,6 +324,7 @@ def _open_dir(p: Path) -> str:
 
     ⚠ synfiles FIRST — this desktop ships its own file manager, and a list that
     starts at thunar opens whatever else happens to be installed."""
+    note_dir(p)
     for mgr in ("synfiles", "thunar", "nautilus", "dolphin", "nemo", "pcmanfm"):
         if shutil.which(mgr):
             _spawn([mgr, str(p)])
@@ -269,6 +340,15 @@ def desktop_open(target: str) -> str:
     t = (target or "").strip()
     if not t:
         return "Error: nothing to open"
+
+    # An explicit scheme is somebody saying "web", and is the one form that
+    # cannot also be a filename, a panel or an app. It goes first for that
+    # reason and needs none of the guessing below.
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t):
+        if not shutil.which("xdg-open"):
+            return "Error: xdg-open is not installed"
+        _spawn(["xdg-open", t])
+        return f"Opened {t} in the default browser."
 
     # A panel of this desktop's own, by the words a person uses for it.
     key = t.lower().strip(" ?.")
@@ -295,16 +375,13 @@ def desktop_open(target: str) -> str:
         if fkey in ("DOWNLOAD", "DOCUMENTS", "HOME"):
             return f"Error: this account has no {fkey.lower()} folder"
 
-    # A web address.
-    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t) or re.match(
-            r"^[\w.-]+\.[a-z]{2,}(/|$)", t):
-        url = t if "://" in t else f"https://{t}"
-        if not shutil.which("xdg-open"):
-            return "Error: xdg-open is not installed"
-        _spawn(["xdg-open", url])
-        return f"Opened {url} in the default browser."
-
     # A path.
+    #
+    # ⛔ BEFORE THE WEB ADDRESS CHECK, WHICH IS THE WAY ROUND THIS WAS NOT.
+    # A thing that exists on this disk is that thing. The old order asked
+    # "does it look like a domain" first, and `document.pdf` looks exactly
+    # like one, so a file the assistant had just listed was opened as
+    # https://document.pdf. Nothing that exists can be a guess.
     #
     # ⚠ MADE ABSOLUTE BEFORE IT IS HANDED OVER. A relative name is resolved
     # against vibe's cwd, which is whatever launched the engine — the bar, a
@@ -320,6 +397,32 @@ def desktop_open(target: str) -> str:
             _spawn(["xdg-open", str(p)])
             return f"Opened {p}."
         return f"Error: nothing to open {p} with"
+
+    # A bare name from the listing the user is looking at.
+    #
+    # ⚠ A LISTING IS A CONTEXT, AND THE NEXT LINE INHERITS IT. Somebody shown
+    # the contents of ~/Downloads says "open notes.txt", not the full path, and
+    # the model repeats the name it was given. Consulted only here, after every
+    # branch that could match something real, so it can rescue an error and can
+    # never shadow one.
+    if _last_dir is not None and "/" not in t:
+        cand = _last_dir / t
+        if cand.exists():
+            cand = Path(os.path.abspath(cand))
+            if cand.is_dir():
+                return _open_dir(cand)
+            if shutil.which("xdg-open"):
+                _spawn(["xdg-open", str(cand)])
+                return f"Opened {cand}."
+
+    # A web address — one with a scheme, or a string that is shaped like a host
+    # and is not shaped like a filename. See _looks_like_host.
+    if _looks_like_host(t):
+        url = f"https://{t}"
+        if not shutil.which("xdg-open"):
+            return "Error: xdg-open is not installed"
+        _spawn(["xdg-open", url])
+        return f"Opened {url} in the default browser."
 
     # An application, by .desktop id or by name.
     argv = _desktop_entry(t)

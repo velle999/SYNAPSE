@@ -33,6 +33,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 import re
 
+from vibe import desktop as _desktop
+
 ASK = "ask"
 AGENT = "agent"
 PLAN = "plan"
@@ -76,11 +78,36 @@ _MACHINE_RE = re.compile(
     r"\b(file|files|folder|directory|dir|disk|drive|"
     r"install|uninstall|remove|update|upgrade|package|"
     r"open|launch|start|run|close|kill|"
+    # ⚠ SHOWING IS DOING. "show me my downloads" is a request to open or list
+    # something real, not a question — and with no verb here it fell through to
+    # ASK, whose only way to answer was to make the contents up.
+    r"show|list|display|view|browse|find|"
     r"bar|dock|wallpaper|theme|panel|window|workspace|monitor|screen|"
     r"setting|settings|config|configure|"
     r"service|daemon|systemd|log|logs|journal|process|"
     r"git|commit|branch|build|compile|test|tests|"
     r"write|create|make|edit|change|move|rename|delete|fix|refactor)\b",
+    re.I)
+
+# ⛔ NAMES SOMETHING ON *THIS* MACHINE, which is a narrower question than
+# _MACHINE_RE asks and is the one that gets to veto the question form below.
+#
+# "show me my downloads" and "what is in my downloads folder" both routed to
+# ASK, which has no tools — so the model, asked for the contents of a real
+# folder with no way to look, INVENTED THEM: example.zip, document.pdf,
+# image.jpg, presented as fact with no tell. Reported 2026-08-28. A listing
+# nobody read is the worst answer this assistant can give, and it was the
+# router that made it the only one available.
+#
+# ⚠ THE FOLDER WORDS COME FROM desktop._DIR_WORDS, not from a copy here. A
+# second list is a list that stops matching the day a folder is added to the
+# other one.
+_THIS_MACHINE_RE = re.compile(
+    r"(^|\s)(/|~/|\./)|"                                   # a path
+    r"\b(?:my|this|the)\s+(?:machine|computer|box|system|pc|laptop|desktop)\b|"
+    r"\b(?:installed|running|on this (?:machine|box|system|computer))\b|"
+    r"\b(?:" + "|".join(sorted((re.escape(w) for w in _desktop._DIR_WORDS),
+                               key=len, reverse=True)) + r")\b",
     re.I)
 
 # Plainly a question about the world, or a piece of writing. Checked BEFORE the
@@ -119,7 +146,13 @@ def route(text: str, shell_class: str = "") -> str:
     # ⚠ ORDER MATTERS HERE. "write me an email about the build failing" carries
     # `write` and `build`, and it is writing, not a task. The question form and
     # the compose verbs win over the machine words for that reason.
-    if _ASK_RE.search(t) and not re.search(r"(^|\s)(/|~/|\./)", t):
+    # ⛔ THE QUESTION FORM DOES NOT WIN OVER A QUESTION ABOUT THIS MACHINE.
+    # "what is in my downloads folder" is the question form and it is not a
+    # question about the world; sending it to ASK leaves the model no way to
+    # answer except to invent the folder's contents, which is what it did.
+    # A false AGENT still just answers — see this module's opening note — so
+    # the veto is cheap and the failure it prevents is not.
+    if _ASK_RE.search(t) and not _THIS_MACHINE_RE.search(t):
         return ASK
     # A line the shell recognises as a command is answered by RUNNING it —
     # deterministic, instant, and with no model in the path to invent what the
@@ -133,7 +166,11 @@ def route(text: str, shell_class: str = "") -> str:
     if shell_class in ("shell", "builtin"):
         return SHELL
 
-    if _MACHINE_RE.search(t):
+    # ⚠ _THIS_MACHINE_RE ROUTES AS WELL AS VETOES, or the evidence is used
+    # once and ignored once: "what is on this machine" was strong enough to
+    # stop the question form winning above, then fell past the machine WORDS
+    # here — which do not include "machine" — and landed back in ASK anyway.
+    if _MACHINE_RE.search(t) or _THIS_MACHINE_RE.search(t):
         return AGENT
     return ASK
 
@@ -180,3 +217,31 @@ PROMPT = {
     ),
     AGENT: "",
 }
+
+
+# ── The one line ASK needs when the question is about THIS machine ──────────
+#
+# ⛔ A PARAGRAPH IN THE MODE PROMPT DID NOT HOLD, AND THIS IS WHY IT IS SEPARATE.
+# Asked to show a real folder with no way to look, the model wrote
+# example.zip / document.pdf / image.jpg — and, told at length not to invent,
+# switched to "Your Downloads folder is empty". Both are machine facts it could
+# not have. The rule was there; it was six sentences deep in text that rides on
+# EVERY ask turn, including "what is the speed of light", which needs none of it.
+#
+# So it fires only when the line actually names this machine. That keeps it two
+# sentences long and puts it directly against the question — the same reason
+# the tool reminder rides on the last user turn rather than in the system block.
+#
+# ⚠ IT NAMES THE FAILURE INSTEAD OF FORBIDDING A CATEGORY. "Do not invent" left
+# "empty" available, because saying a folder is empty does not feel like
+# inventing a listing. Saying which two answers are both wrong is what closes it.
+_ASK_NO_INVENT = (
+    "\n\nYou cannot see this computer this turn. You do not know what is in "
+    "that folder — not its files, and not whether it is empty. Do not name a "
+    "file, a count or a path. Say you need to look, in one line."
+)
+
+
+def ask_addendum(text: str) -> str:
+    """The extra line an ASK turn needs, or "" — see _ASK_NO_INVENT."""
+    return _ASK_NO_INVENT if _THIS_MACHINE_RE.search(text or "") else ""
