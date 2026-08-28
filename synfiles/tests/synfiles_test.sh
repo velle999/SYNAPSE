@@ -21,6 +21,23 @@ SYNFILES=${1:-./build/synfiles}
 [ -x "$SYNFILES" ] || { echo "not executable: $SYNFILES" >&2; exit 1; }
 SYNFILES=$(readlink -f "$SYNFILES")
 
+# ⛔ A STALE BINARY FAILS AS THOUGH THE CODE WERE BROKEN. Run by hand this
+# script tests whatever is sitting in build/, and nothing rebuilds it: a
+# directory eight days behind src/ produced seven failures that read exactly
+# like a regression in the hover panel's `desc` column — the column was present
+# in the source and in the shipped package, and absent only from the artefact
+# under test. An hour can go into a bug that is a timestamp.
+#
+# ⚠ A WARNING, NOT A REFUSAL. Bisecting deliberately runs an older binary
+# against a newer suite, and a hard failure would make that impossible. Say it
+# loudly, once, and carry on.
+_newest=$(cd "$(dirname "$0")/.." && ls -t src/*.c src/*.h include/*.h 2>/dev/null | head -1)
+if [ -n "$_newest" ] && [ "$(dirname "$0")/../$_newest" -nt "$SYNFILES" ]; then
+    printf '\n  ⚠ STALE BINARY: %s is older than %s.\n' \
+        "${SYNFILES##*/}" "$_newest" >&2
+    printf '    Failures below may be the build, not the code. Rebuild first.\n\n' >&2
+fi
+
 pass=0 fail=0
 ok()   { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }

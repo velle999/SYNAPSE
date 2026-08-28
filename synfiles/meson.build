@@ -35,7 +35,7 @@ sources = files(
   'src/archive.c',
 )
 
-executable('synfiles', sources,
+synfiles_exe = executable('synfiles', sources,
   include_directories: include_directories('include', '.'),
   install: true)
 
@@ -74,7 +74,15 @@ test('netscan', find_program('tests/netscan_test.sh'),
      workdir: meson.current_source_dir(),
      timeout: 120)
 
+# ⛔ `depends:` OR THE SUITE TESTS WHATEVER WAS BUILT LAST. Without it the test
+# names a PATH, and a path is not a dependency — nothing here told meson the
+# binary had to exist, let alone be current. A build directory eight days stale
+# produced seven failures that read exactly like a regression in the hover
+# panel's `desc` column: the column was there in the source and in the shipped
+# package, and missing only from the artefact the test happened to run.
+# The script re-checks this itself, for the same reason, when run by hand.
 test('synfiles', find_program('tests/synfiles_test.sh'),
      args: [meson.current_build_dir() / 'synfiles'],
+     depends: synfiles_exe,
      workdir: meson.current_source_dir(),
      timeout: 300)
