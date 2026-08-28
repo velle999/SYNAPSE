@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 import vibe.config as cfg
+from vibe import cloud
 from . import synapd_client
 from .tools import TOOL_SCHEMAS, execute_tool
 
@@ -63,7 +64,13 @@ _MAX_TOOL_LOOPS = 25
 class VibeModel:
     # Tools that change the system. These pass through confirm_tool (if set)
     # before running; read-only tools (read_file/glob/grep/list_dir) never do.
-    _CONFIRM_TOOLS = {"bash", "write_file", "edit_file"}
+    # ⚠ THE LINE IS "DOES IT WRITE", not "is it dangerous". desktop_open is
+    # here by its absence and that is the decision: opening a folder, a URL or
+    # the control panel changes nothing, and a confirmation on it would train
+    # the user to press Enter without reading — which is what makes the
+    # confirmations that matter stop working.
+    _CONFIRM_TOOLS = {"bash", "write_file", "edit_file",
+                      "desktop_action", "desktop_setting", "move_file"}
 
     def __init__(self, verbose: bool = False):
         self._messages: list[dict] = []
@@ -79,6 +86,8 @@ class VibeModel:
             self._init_ollama()
         elif cfg.BACKEND == "synapd":
             self._init_synapd()
+        elif cfg.BACKEND in ("anthropic", "openai"):
+            self._init_cloud()
         else:
             self._init_llama_cpp(verbose)
 
@@ -109,6 +118,21 @@ class VibeModel:
             raise RuntimeError(
                 f"Ollama not reachable at {cfg.OLLAMA_HOST}: {e}\n"
                 "Make sure ollama is running: ollama serve"
+            )
+
+    def _init_cloud(self):
+        """A key, and nothing else.
+
+        ⚠ DELIBERATELY NOT A REACHABILITY CHECK. The local backends ping because
+        a dead synapd or a stopped ollama is a thing the user can fix before
+        typing; a cloud provider is reachable or not at the moment of the
+        request, and a probe at startup only buys a second request to be
+        rate-limited by. What CAN be known now is whether there is a key, and
+        that is the mistake worth catching before a window opens."""
+        if not cfg.api_key(cfg.BACKEND):
+            raise RuntimeError(
+                f"no {cfg.BACKEND} key — write one with `vibe key {cfg.BACKEND}`, "
+                f"or go back to the local model with `vibe provider synapd`"
             )
 
     def _gate(self, name: str, args: dict) -> bool:
@@ -162,6 +186,8 @@ class VibeModel:
             self._init_ollama()
         elif cfg.BACKEND == "synapd":
             self._init_synapd()
+        elif cfg.BACKEND in ("anthropic", "openai"):
+            self._init_cloud()
         else:
             self._init_llama_cpp(verbose)
         self._reset_system()
@@ -182,6 +208,10 @@ class VibeModel:
             return cfg.OLLAMA_CTX
         if cfg.BACKEND == "synapd":
             return cfg.SYNAPD_CTX
+        if cfg.BACKEND == "anthropic":
+            return cfg.ANTHROPIC_CTX
+        if cfg.BACKEND == "openai":
+            return cfg.OPENAI_CTX
         return cfg.N_CTX
 
     def _prune_messages(self):
@@ -261,6 +291,19 @@ class VibeModel:
                     result = json.loads(resp.read())
                 content = result["choices"][0]["message"].get("content", "")
                 yield content
+            except Exception as e:
+                yield f"[summarization failed: {e}]"
+        elif cfg.BACKEND in ("anthropic", "openai"):
+            # The same call the loop makes, with the tools left off — a
+            # summary is text and a tool call in one would be noise.
+            try:
+                gen = (cloud.anthropic_stream(msgs, None)
+                       if cfg.BACKEND == "anthropic"
+                       else cloud.openai_stream(msgs, None))
+                for chunk in gen:
+                    part = chunk["choices"][0].get("delta", {}).get("content")
+                    if part:
+                        yield part
             except Exception as e:
                 yield f"[summarization failed: {e}]"
         elif cfg.BACKEND == "synapd":
@@ -557,6 +600,13 @@ class VibeModel:
             )
         if cfg.BACKEND == "synapd":
             return self._synapd_stream(no_tools=no_tools)
+        if cfg.BACKEND == "anthropic":
+            return cloud.anthropic_stream(
+                self._messages, None if no_tools else TOOL_SCHEMAS)
+        if cfg.BACKEND == "openai":
+            return cloud.openai_stream(
+                self._messages, None if no_tools else TOOL_SCHEMAS,
+                tool_choice=tool_choice)
         kwargs = dict(
             messages=self._messages,
             temperature=cfg.TEMPERATURE,

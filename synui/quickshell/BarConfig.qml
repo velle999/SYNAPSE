@@ -38,6 +38,11 @@ QtObject {
          * changes nothing on any machine that has not asked for it, and means
          * nobody has to find TWO switches on the machine that has. */
         "weather":    true,
+        /* The assistant button. On by default, and the module hides itself
+         * where vibe is not installed — so a desktop without it is unchanged
+         * and nobody has to find two switches on the one that has it. Same
+         * shape as the weather row above. */
+        "assistant":  true,
         "sysinfo":    true,     // cpu + memory
         "volume":     true,
         "netbt":      true      // network + bluetooth
@@ -52,6 +57,7 @@ QtObject {
         { key: "tray",       label: "System tray" },
         { key: "updates",    label: "Update notifier" },
         { key: "weather",    label: "Weather" },
+        { key: "assistant",  label: "Assistant" },
         { key: "sysinfo",    label: "CPU + memory" },
         { key: "volume",     label: "Volume" },
         { key: "netbt",      label: "Network + Bluetooth" }

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Assistant
+GenericName=AI assistant
+Comment=Ask, or say what you want done
+Exec=vibe gui
+Icon=vibe
+Terminal=false
+Categories=Utility;System;
+Keywords=ai;assistant;chat;claude;llm;
+StartupWMClass=vibe

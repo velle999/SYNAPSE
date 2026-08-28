@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-# Backend: "llama_cpp", "ollama", or "synapd".
+# Backend: "llama_cpp", "ollama", "synapd", "anthropic" or "openai".
 # Env overrides let a packaged launcher pick the backend without patching this
 # file (SynapseOS ships /usr/bin/vibe exporting VIBE_BACKEND=synapd); the plain
 # upstream default stays neutral.
@@ -18,6 +18,63 @@ SYNAPD_CTX = 8192           # synapd's context window (match synapd.conf)
 SYNAPD_TIMEOUT = 600        # seconds — single-shot codegen can take a while
 # synapd is single-shot with no streaming; MAX_TOKENS is clamped to the wire's
 # 15-bit budget field (32767) and again to synapd's context window.
+
+# ── The paid cloud backends ──────────────────────────────────────────────────
+#
+# ⛔ A KEY IS NEVER A CONFIG VALUE HERE. It lives in its own file, one provider
+# per file, mode 0600, and is read at the moment it is used — so a config file
+# that gets copied into a bug report, a dotfile repo or a screenshot carries no
+# credential. The env vars are honoured because that is how a shell session
+# hands one in, and they win over the file for the same reason.
+#
+#   ~/.config/synui/ai/anthropic.key     ANTHROPIC_API_KEY
+#   ~/.config/synui/ai/openai.key        OPENAI_API_KEY
+#
+# `vibe key <provider>` writes one; `vibe provider <name>` switches.
+KEY_DIR = Path(
+    os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+) / "synui" / "ai"
+
+# Anthropic. claude-opus-5 is the default because it is the model this desktop
+# is asked about by name; sonnet-5 and haiku-4-5 are the other two anybody sets.
+ANTHROPIC_MODEL = os.environ.get("VIBE_ANTHROPIC_MODEL", "claude-opus-5")
+ANTHROPIC_MAX_TOKENS = int(os.environ.get("VIBE_ANTHROPIC_MAX_TOKENS", "16000"))
+ANTHROPIC_TIMEOUT = 600
+# Adaptive thinking, summarised so the window has something to show while a hard
+# question is being thought about. ⚠ `budget_tokens` is REJECTED on this model
+# family — adaptive is the whole of the control, and `effort` is the dial.
+ANTHROPIC_EFFORT = os.environ.get("VIBE_ANTHROPIC_EFFORT", "high")
+
+# OpenAI, over its own chat-completions endpoint — the same wire shape the
+# ollama backend already speaks, which is why it needs no second client.
+OPENAI_HOST = os.environ.get("VIBE_OPENAI_HOST", "https://api.openai.com")
+OPENAI_MODEL = os.environ.get("VIBE_OPENAI_MODEL", "gpt-4o")
+OPENAI_CTX = 128000
+OPENAI_TIMEOUT = 600
+
+# The context window each cloud model can hold, for the usage bar.
+ANTHROPIC_CTX = 200000
+
+
+def key_path(provider: str) -> Path:
+    return KEY_DIR / f"{provider}.key"
+
+
+def api_key(provider: str) -> str:
+    """The key for `provider`, or "" — env first, then the key file.
+
+    ⚠ Returns "" rather than raising. "no key" is an ordinary state on a
+    desktop whose default backend is local, and the caller that needs one says
+    so in its own words."""
+    env = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+    v = os.environ.get(env.get(provider, ""), "").strip()
+    if v:
+        return v
+    try:
+        return key_path(provider).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
 
 # Paths (llama_cpp backend)
 ROOT_DIR = Path(__file__).parent.parent

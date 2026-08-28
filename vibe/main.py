@@ -207,8 +207,115 @@ def _confirm_tool(name: str, args: dict) -> bool:
     return ans in ("", "y", "yes")
 
 
+# ── The verbs that are not the REPL ─────────────────────────────────────────
+#
+# ⚠ CHECKED BEFORE ANYTHING IS BUILT. `vibe serve` must not print a welcome
+# banner down the pipe its window is parsing, and `vibe key` must work on a
+# desktop whose backend cannot start — which is exactly the desktop somebody is
+# on when they are writing their first key.
+def _verb_serve(argv) -> int:
+    from vibe.serve import main as serve_main
+    return serve_main()
+
+
+def _verb_gui(argv) -> int:
+    """The chat window: quickshell, driving `vibe serve`."""
+    import shutil
+    if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
+        print_error("no display — `vibe gui` needs a graphical session "
+                    "(plain `vibe` is the terminal assistant)")
+        return 1
+    if not shutil.which("quickshell"):
+        print_error("quickshell is not installed — synpkg install quickshell")
+        return 1
+
+    # The window's Wayland app_id. Without it quickshell names every window
+    # org.quickshell, which is the generic icon in the dock AND the reason the
+    # dock cannot resolve a .desktop for it — see syn-edit's cmd_gui, where the
+    # same omission merged two apps into one dock entry.
+    os.environ["QS_APP_ID"] = "vibe"
+
+    here = Path(__file__).resolve().parent
+    for cand in (Path("/usr/share/vibe/vibe.qml"), here / "data" / "vibe.qml"):
+        if cand.is_file():
+            os.execvp("quickshell", ["quickshell", "-p", str(cand)])
+    print_error("vibe.qml is missing — the package did not install its window")
+    return 1
+
+
+def _verb_provider(argv) -> int:
+    """Persist the backend choice for the next start.
+
+    Written to the launcher's own env file rather than into config.py: the
+    package's config is read-only at runtime, and a setting that needs root to
+    change is not a setting."""
+    known = ("synapd", "ollama", "llama_cpp", "anthropic", "openai")
+    if not argv:
+        print_info(f"backend: {cfg.BACKEND}   (choices: {', '.join(known)})")
+        return 0
+    name = argv[0]
+    if name not in known:
+        print_error(f"no such backend: {name} (try {', '.join(known)})")
+        return 1
+    envf = cfg.KEY_DIR.parent / "vibe.env"
+    try:
+        envf.parent.mkdir(parents=True, exist_ok=True)
+        envf.write_text(f"VIBE_BACKEND={name}\n", encoding="utf-8")
+    except OSError as e:
+        print_error(f"cannot write {envf}: {e}")
+        return 1
+    print_info(f"backend is {name} — it applies to the next `vibe`")
+    return 0
+
+
+def _verb_key(argv) -> int:
+    """Store one provider's API key, 0600, in its own file."""
+    if not argv:
+        for prov in ("anthropic", "openai"):
+            have = "set" if cfg.api_key(prov) else "not set"
+            print_info(f"{prov}: {have}   ({cfg.key_path(prov)})")
+        return 0
+    prov = argv[0]
+    if prov not in ("anthropic", "openai"):
+        print_error("which provider? anthropic or openai")
+        return 1
+    key = argv[1] if len(argv) > 1 else ""
+    if not key:
+        import getpass
+        # ⚠ Prompted rather than taken from the command line where possible: an
+        # argument is in the shell history and in `ps` for as long as this runs.
+        key = getpass.getpass(f"{prov} API key (not echoed): ").strip()
+    if not key:
+        print_error("no key given")
+        return 1
+    path = cfg.key_path(prov)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        os.umask(0o077)
+        path.write_text(key + "\n", encoding="utf-8")
+        os.chmod(path, 0o600)
+    except OSError as e:
+        print_error(f"cannot write {path}: {e}")
+        return 1
+    print_info(f"stored in {path} (0600)")
+    return 0
+
+
+_VERBS = {
+    "serve": _verb_serve,
+    "gui": _verb_gui,
+    "provider": _verb_provider,
+    "key": _verb_key,
+}
+
+
 def main():
     global _gate_enabled
+
+    argv = sys.argv[1:]
+    if argv and argv[0] in _VERBS:
+        sys.exit(_VERBS[argv[0]](argv[1:]))
+
     verbose = "--verbose" in sys.argv
     if "--yolo" in sys.argv:
         _gate_enabled = False

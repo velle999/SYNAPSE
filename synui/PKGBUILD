@@ -2421,7 +2421,28 @@ pkgver=0.1.0
 #   the count, got two identical menus and passed against the bug). Against the
 #   old StartMenu the short page reads as the wallpaper and the long one as
 #   glass, which is the report.
-pkgrel=524
+# 525: an AI button on the bar, and the assistant behind it.
+#   modules/Assistant.qml — a speech bubble left of the readouts that opens
+#   `vibe gui`, the chat window vibe now ships. It is a thing you press rather
+#   than a thing you read, which is why it sits with the launcher's kind and not
+#   among the meters.
+#   ⚠ THE BUTTON OWNS THE WINDOW'S PROCESS, and that is what makes it a toggle
+#   rather than a launcher: quickshell gives a client no way to raise another
+#   client's window, so a click that only spawned would open a second chat
+#   window every time somebody pressed it looking for the one already on screen.
+#   The cost is that a bar reload closes the assistant, which is the right trade
+#   for a chat box and the wrong one for a document — said out loud in the file.
+#   ⛔ `running = true` on an already-running Process is a SILENT NO-OP, so the
+#   click asks which way it is going rather than assuming.
+#   ⚠ THE GLYPH IS A SPEECH BUBBLE AND NOT A ROBOT. F544 (robot) and F5DC
+#   (brain) are the obvious icons for this and NEITHER IS IN Symbols Nerd Font
+#   Mono, which is the only icon font the ISO ships — a missing glyph is a
+#   button you cannot see and can still press. Checked against the font rather
+#   than assumed, the same way the transport buttons were.
+#   Hidden where vibe is not installed, so a desktop without it is unchanged;
+#   BarConfig gains an `assistant` row so it can be switched off per monitor
+#   like every other module.
+pkgrel=525
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

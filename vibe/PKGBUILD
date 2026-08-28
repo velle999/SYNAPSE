@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -27,6 +27,13 @@ depends=(
 optdepends=(
     'ollama: alternative backend (run with VIBE_BACKEND=ollama)'
     'python-llama-cpp: direct-GGUF backend (run with VIBE_BACKEND=llama_cpp)'
+    'quickshell: the chat window (vibe gui), and the bar button that opens it'
+    'synsh: answers everyday requests itself, without a model'
+    # ⚠ The OFFICIAL SDK, and an optdepend because it is not in the repos. A
+    # desktop whose backend is the local one must not carry it, and Claude is
+    # not reachable through an OpenAI-compatible shim without losing adaptive
+    # thinking, the tool-use blocks and the refusal stop reason.
+    'python-anthropic: the Claude cloud backend (vibe provider anthropic)'
 )
 
 # Built from the local working tree (the synapd backend is not upstream yet) via
@@ -53,6 +60,13 @@ package() {
     # installed /usr/... path, so tracebacks are right and no $pkgdir leaks into
     # the shipped files. (A python minor bump just recompiles in memory; no break.)
     python -m compileall -q -s "$pkgdir" -p / "$pkgdir/usr/lib/vibe/app" || true
+
+    # The chat window's QML, and the .desktop that puts it in the start menu
+    # and gives the dock an icon to resolve. ⚠ The app_id `vibe` in main.py's
+    # gui verb and the file name here have to agree — the dock keys on app_id,
+    # and on a miss it runs the app_id AS A COMMAND.
+    install -Dm644 data/vibe.qml     "$pkgdir/usr/share/vibe/vibe.qml"
+    install -Dm644 data/vibe.desktop "$pkgdir/usr/share/applications/vibe.desktop"
 
     # Launcher → /usr/bin/vibe. Defaults VIBE_BACKEND=synapd and puts the app on
     # PYTHONPATH. Installed to /usr/bin (NOT ~/.local/bin) so the synui session

@@ -663,6 +663,13 @@ PanelWindow {
                     Weather   { barScreen: bar.screen
                                 barVisible: BarConfig.get(bar.outName, "weather") }
 
+                    /* The assistant, left of the tray and the readouts: it
+                     * is a thing you press rather than a thing you read, and
+                     * the two kinds do not interleave well. It hides itself
+                     * where vibe is not installed. */
+                    Assistant { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "assistant") }
+
                     Tray      { barScreen: bar.screen
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: BarConfig.get(bar.outName, "tray") }

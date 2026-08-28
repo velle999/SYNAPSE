@@ -72,6 +72,12 @@ QtObject {
     // indicator at 14px rather than as part of the module beside it.
     readonly property string updates:    "\uF01A"
 
+    // The assistant. ⚠ A SPEECH BUBBLE AND NOT A ROBOT: F544 (robot) and
+    // F5DC (brain) are the obvious glyphs for this and NEITHER IS IN
+    // Symbols Nerd Font Mono, which is the only icon font the ISO ships.
+    // A missing glyph is a button you cannot see and can still press.
+    readonly property string assistant:  "\uF075"
+
     /* -- Weather --
      *
      * The nf-weather block, one glyph per icon NAME weather.c publishes — so

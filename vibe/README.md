@@ -4,6 +4,42 @@ A local AI coding assistant. Runs entirely on your machine — no API keys, no c
 
 Supports two backends: **ollama** (recommended, easy model management) and **llama-cpp** (direct GGUF, full CUDA control).
 
+## On SynapseOS
+
+`vibe` is the desktop assistant as well as the coding one. The bar has a speech
+bubble on it (Assistant); pressing it opens the chat window, and pressing it
+again closes it. `vibe gui` opens the same window from anywhere, `vibe` on its
+own is still the terminal REPL, and both are the same assistant — one
+conversation loop, one tool set, one set of confirmations.
+
+**It can act on the desktop.** Alongside reading and writing files and running
+commands, it can open a URL, a folder, an application or one of the desktop's
+own panels (`desktop_open`), run any of the compositor's actions
+(`desktop_action`), and change a desktop setting and apply it live —
+`bar_edge`, `dock_edge`, the theme, the wallpaper (`desktop_setting`). Anything
+that WRITES asks first, and anything that only opens something does not.
+
+**Everyday requests never reach a model.** "what time is it", "open youtube",
+"is firefox installed" are answered by `synsh`, which already answers them from
+a table in milliseconds. synsh is asked whether it claims a line — the list
+lives there, not here, so an intent added to synsh reaches this with nothing
+here edited.
+
+**The backend is switchable, including to a paid one.**
+
+```bash
+vibe provider            # what it is now
+vibe provider anthropic  # or synapd (local, the default), ollama, openai
+vibe key anthropic       # prompts, and stores it 0600 in ~/.config/synui/ai/
+```
+
+The local backend is `synapd`, the model already resident on the GPU — no
+second model and no extra VRAM. `anthropic` uses the official SDK
+(`python-anthropic`, an optdepend) with adaptive thinking and the tool-use
+blocks; `openai` speaks its chat-completions endpoint. A key is never written
+into a config file: it lives in its own file, one provider per file, mode 0600,
+and the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) wins over it.
+
 ## Features
 
 - Agentic tool-call loop: reads files, writes files, edits files, runs bash commands, globs, greps

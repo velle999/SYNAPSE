@@ -4,6 +4,8 @@ import subprocess
 import re
 from pathlib import Path
 
+from vibe import desktop
+
 
 # ── Tool definitions (OpenAI function-calling schema) ──────────────────────────
 
@@ -110,6 +112,99 @@ TOOL_SCHEMAS = [
                     "path": {"type": "string", "description": "Directory to list (default: cwd)"},
                 },
                 "required": [],
+            },
+        },
+    },
+    # ── The desktop ─────────────────────────────────────────────────────────
+    #
+    # ⚠ DESCRIBED BY WHAT THEY COST, not only by what they do. The model reads
+    # these descriptions and nothing else, so "asks first" belongs in the text:
+    # it is what stops the assistant announcing a change it has not made yet.
+    {
+        "type": "function",
+        "function": {
+            "name": "desktop_open",
+            "description": (
+                "Open something on this desktop: a web address, a file, a "
+                "folder, an installed application by name, or one of the "
+                "desktop's own panels — the control panel, task manager, "
+                "displays, network, bluetooth, wallpaper, theme, widgets, "
+                "clipboard history, emoji picker, calculator, start menu or "
+                "keyboard shortcuts. Runs immediately; it changes nothing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "description": (
+                            "What to open — 'control panel', "
+                            "'https://example.com', '~/Documents', 'firefox'"
+                        ),
+                    },
+                },
+                "required": ["target"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "desktop_action",
+            "description": (
+                "Run one of the compositor's own actions by name (the same "
+                "verbs its keyboard shortcuts use): screenshot, lock, "
+                "fullscreen_toggle, float_toggle, ws, movews, close, "
+                "night_light, and others. The user is asked before it runs. "
+                "Prefer desktop_open for anything that is just opening a panel."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "description": "The action name"},
+                    "arg": {"type": "string", "description": "Its argument, if it takes one"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "desktop_setting",
+            "description": (
+                "Change one desktop setting and apply it to the running "
+                "session: bar_edge (top/bottom — this is how the bar is "
+                "moved), dock_edge (bottom/top/left/right — how the dock is "
+                "moved), bar and dock (on/off), bar_shell, theme, wallpaper, "
+                "wallpaper_mode, terminal, animation_ms. The user is asked "
+                "before it is written."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "The setting's name"},
+                    "value": {"type": "string", "description": "Its new value"},
+                },
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "move_file",
+            "description": (
+                "Move or rename a file or folder. Refuses to overwrite an "
+                "existing destination. The user is asked before it runs."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string", "description": "What to move"},
+                    "dest": {"type": "string", "description": "Where to move it"},
+                },
+                "required": ["source", "dest"],
             },
         },
     },
@@ -605,6 +700,10 @@ TOOL_MAP = {
     "glob": lambda args: glob(**args),
     "grep": lambda args: grep(**args),
     "list_dir": lambda args: list_dir(**args),
+    "desktop_open": lambda args: desktop.desktop_open(**args),
+    "desktop_action": lambda args: desktop.desktop_action(**args),
+    "desktop_setting": lambda args: desktop.desktop_setting(**args),
+    "move_file": lambda args: desktop.move_file(**args),
 }
 
 
