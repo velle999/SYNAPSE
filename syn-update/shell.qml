@@ -518,33 +518,59 @@ ShellRoot {
                     color: root.cPanel
                     radius: 8
                     border.color: root.cLine
+                    clip: true
 
-                    Column {
-                        anchors.fill: parent
+                    /*
+                     * ⛔ THE ROWS USED TO ESCAPE THIS BOX. The height is capped
+                     * — Math.min(…) — but the Column inside was neither clipped
+                     * nor scrollable, so past the cap the rows carried on
+                     * drawing OUTSIDE the card, over whatever sat beneath it.
+                     * Seven pending updates put syn-arcade on top of the "moves
+                     * with an ISO upgrade" heading below it. velle, 2026-08-28:
+                     * "update overflow is just escaping the box instead of
+                     * scrolling."
+                     *
+                     * A capped height is a promise that the content stops
+                     * there, and only a clipped, scrolling view keeps it.
+                     *
+                     * ⚠ THE HEADING IS NOT IN THE LIST. A label that scrolls
+                     * away stops labelling anything, so it is anchored and the
+                     * rows scroll under it.
+                     */
+                    Text {
+                        id: rebuildHead
+                        anchors { top: parent.top; left: parent.left; right: parent.right }
                         anchors.margins: 12
-                        spacing: 4
+                        text: "Components to rebuild"
+                        color: root.cDim; font.family: root.uiFont
+                        font.pixelSize: root.ui(11); font.bold: true
+                    }
 
-                        Text {
-                            text: "Components to rebuild"
-                            color: root.cDim; font.family: root.uiFont
-                            font.pixelSize: root.ui(11); font.bold: true
+                    ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
+                        anchors {
+                            top: rebuildHead.bottom; topMargin: 4
+                            left: parent.left; leftMargin: 12
+                            right: parent.right; rightMargin: 12
+                            bottom: parent.bottom; bottomMargin: 12
                         }
-                        Repeater {
-                            model: root.updates
-                            Row {
-                                spacing: 10
-                                Text {
-                                    text: modelData.name; color: root.cText
-                                    font.pixelSize: root.ui(13); font.family: "monospace"
-                                    // A column, not a font size: widths are not
-                                    // scaled anywhere in the suite.
-                                    width: 170
-                                }
-                                Text {
-                                    text: modelData.from + "  →  " + modelData.to
-                                    color: root.cAccent
-                                    font.pixelSize: root.ui(13); font.family: "monospace"
-                                }
+                        clip: true
+                        spacing: 4
+                        model: root.updates
+                        delegate: Row {
+                            spacing: 10
+                            Text {
+                                text: modelData.name; color: root.cText
+                                font.pixelSize: root.ui(13); font.family: "monospace"
+                                // A column, not a font size: widths are not
+                                // scaled anywhere in the suite.
+                                width: 170
+                            }
+                            Text {
+                                text: modelData.from + "  →  " + modelData.to
+                                color: root.cAccent
+                                font.pixelSize: root.ui(13); font.family: "monospace"
                             }
                         }
                     }
@@ -562,31 +588,42 @@ ShellRoot {
                     color: root.cPanel
                     radius: 8
                     border.color: root.cLine
+                    clip: true
 
-                    Column {
-                        anchors.fill: parent
+                    // Capped, clipped and scrolling, for the reason the card
+                    // above carries in full.
+                    Text {
+                        id: freshHead
+                        anchors { top: parent.top; left: parent.left; right: parent.right }
                         anchors.margins: 12
-                        spacing: 4
+                        text: "New components to install"
+                        color: root.cDim; font.family: root.uiFont
+                        font.pixelSize: root.ui(11); font.bold: true
+                    }
 
-                        Text {
-                            text: "New components to install"
-                            color: root.cDim; font.family: root.uiFont
-                            font.pixelSize: root.ui(11); font.bold: true
+                    ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
+                        anchors {
+                            top: freshHead.bottom; topMargin: 4
+                            left: parent.left; leftMargin: 12
+                            right: parent.right; rightMargin: 12
+                            bottom: parent.bottom; bottomMargin: 12
                         }
-                        Repeater {
-                            model: root.fresh
-                            Row {
-                                spacing: 10
-                                Text {
-                                    text: modelData.name; color: root.cText
-                                    font.pixelSize: root.ui(13); font.family: "monospace"
-                                    width: 170
-                                }
-                                Text {
-                                    text: modelData.to + "   (not installed here)"
-                                    color: root.cAccent
-                                    font.pixelSize: root.ui(13); font.family: "monospace"
-                                }
+                        clip: true
+                        spacing: 4
+                        model: root.fresh
+                        delegate: Row {
+                            spacing: 10
+                            Text {
+                                text: modelData.name; color: root.cText
+                                font.pixelSize: root.ui(13); font.family: "monospace"
+                                width: 170
+                            }
+                            Text {
+                                text: modelData.to + "   (not installed here)"
+                                color: root.cAccent
+                                font.pixelSize: root.ui(13); font.family: "monospace"
                             }
                         }
                     }
@@ -649,23 +686,36 @@ ShellRoot {
                     color: "transparent"
                     radius: 8
                     border.color: root.cLine
+                    clip: true
 
-                    Column {
-                        anchors.fill: parent
+                    // Capped, clipped and scrolling, for the reason the
+                    // "Components to rebuild" card carries in full. This is the
+                    // heading the overflowing rows were landing on top of.
+                    Text {
+                        id: blockedHead
+                        anchors { top: parent.top; left: parent.left; right: parent.right }
                         anchors.margins: 10
-                        spacing: 3
-                        Text {
-                            text: "Not updated this way — these move with an ISO upgrade"
-                            color: root.cWarn; font.family: root.uiFont
-                            font.pixelSize: root.ui(11); font.bold: true
+                        text: "Not updated this way — these move with an ISO upgrade"
+                        color: root.cWarn; font.family: root.uiFont
+                        font.pixelSize: root.ui(11); font.bold: true
+                    }
+
+                    ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
+                        anchors {
+                            top: blockedHead.bottom; topMargin: 3
+                            left: parent.left; leftMargin: 10
+                            right: parent.right; rightMargin: 10
+                            bottom: parent.bottom; bottomMargin: 10
                         }
-                        Repeater {
-                            model: root.blocked
-                            Text {
-                                text: "• " + modelData.name
-                                color: root.cDim; font.family: root.uiFont
-                                font.pixelSize: root.ui(11)
-                            }
+                        clip: true
+                        spacing: 3
+                        model: root.blocked
+                        delegate: Text {
+                            text: "• " + modelData.name
+                            color: root.cDim; font.family: root.uiFont
+                            font.pixelSize: root.ui(11)
                         }
                     }
                 }
