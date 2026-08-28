@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#
+# synapse-nvidia-nodes — make /dev/nvidia0 and /dev/nvidiactl exist, now.
+#
+# WHY THIS EXISTS
+#
+# synapd probes for a CUDA device the moment it starts. If /dev/nvidia0 and
+# /dev/nvidiactl are not there yet, CUDA reports "no CUDA-capable device is
+# detected", synapd loads the whole model into system RAM and runs it on four
+# CPU threads for the rest of the boot. Nothing recovers: the probe happens
+# once, at load. On 2026-08-28 that was 13.9 GB resident, 22 minutes of CPU
+# for three requests, and an assistant that read as hung.
+#
+# ⛔ THE NODES DO NOT APPEAR ON THEIR OWN, AND THREE THINGS EACH LOOK LIKE THEY
+# CREATE THEM. Measured on this box, boot of 2026-08-28:
+#
+#   1. udev. nvidia-utils ships 60-nvidia.rules, which runs nvidia-modprobe on
+#      the GPU's `add|bind` — but guarded by TEST!="/dev/nvidia-uvm". Its own
+#      modules-load.d/nvidia-utils.conf inserts nvidia_uvm at 12:32:25.44,
+#      which CREATES /dev/nvidia-uvm, which makes that test false. The rule
+#      never fires. nvidia-utils disables its own rule on every boot.
+#
+#   2. nvidia-persistenced. It self-heals by dlopen()ing libnvidia-cfg, which
+#      execs the setuid nvidia-modprobe. synapd's own hardening drop-in sets
+#      NoNewPrivileges=true on it, which voids setuid — so it failed at
+#      12:32:28.27 with "Failed to query NVIDIA devices", and the unit that
+#      Wants= it never noticed, because a Wants= failure is not an error.
+#
+#   3. nvidia-modprobe -c0 -u, run as root by synapd-setup.service. ⚠ IT EXITS
+#      0 AND CREATES NOTHING. Measured: it ran at 12:32:28.31 and the nodes did
+#      not exist until 12:32:31.29. Do not read its exit status as success at
+#      making device nodes — see the note in synapd-setup.service.
+#
+# What actually created them at 12:32:31.29 was the greeter, the first GL
+# client on the card. synapd is ordered Before=display-manager.service on
+# purpose, so it is structurally guaranteed to lose that race — by 1.7s on the
+# boot this was measured on.
+#
+# So this does it explicitly instead of hoping, which is the whole point: it is
+# the same mknod the driver documents in /proc/driver/nvidia/params, done by a
+# root process that runs before synapd and says what it did.
+#
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set -u
+
+log() { echo "nvidia-nodes: $*"; }
+
+# The driver is not loaded at all — nothing to make nodes for, and synapd's own
+# CPU path is the correct answer on a box with no NVIDIA card. Not an error, and
+# deliberately silent: most SynapseOS installs have no NVIDIA GPU and a warning
+# on every one of their boots is how real warnings stop being read.
+#
+# ⚠ THE MODULE BEING LOADED WITH NO GPU DIRECTORY IS A DIFFERENT THING and does
+# get said out loud. It means the driver is present but has not enumerated the
+# card — the exact state in which everything downstream still "succeeds" and
+# synapd ends up on the CPU. The unit runs nvidia-modprobe before this, so by
+# here a card that is going to appear has appeared.
+if [ ! -d /proc/driver/nvidia/gpus ]; then
+    if [ -d /sys/module/nvidia ]; then
+        log "driver loaded but no GPU enumerated — CPU-only inference this boot"
+    fi
+    exit 0
+fi
+
+# Ownership and permissions come from the driver, never from a guess here.
+# DeviceFileMode is DECIMAL in this file (438 = 0666); feeding it to chmod as
+# if it were octal would publish the nodes at 0666's neighbour and be wrong in
+# a way nothing would report.
+params=/proc/driver/nvidia/params
+dev_uid=$(sed -n 's/^DeviceFileUID: *//p'  "$params" 2>/dev/null); dev_uid=${dev_uid:-0}
+dev_gid=$(sed -n 's/^DeviceFileGID: *//p'  "$params" 2>/dev/null); dev_gid=${dev_gid:-0}
+dev_mode=$(sed -n 's/^DeviceFileMode: *//p' "$params" 2>/dev/null); dev_mode=${dev_mode:-438}
+mode_octal=$(printf '%04o' "$dev_mode" 2>/dev/null) || mode_octal=0666
+
+# ⚠ THE MAJOR IS READ, NOT ASSUMED. It is 195 today and has been for years, but
+# it is allocated dynamically and /proc/devices is where the kernel says so.
+major=$(awk '$2 == "nvidia-frontend" || $2 == "nvidia" { print $1; exit }' /proc/devices)
+if [ -z "$major" ]; then
+    log "no nvidia major in /proc/devices — driver not ready, leaving it alone"
+    exit 0
+fi
+
+made=0
+failed=0
+
+make_node() {
+    local path=$1 minor=$2
+    # Already correct? Say nothing. This script runs on every boot and the
+    # normal case is that it has nothing to do.
+    if [ -c "$path" ]; then
+        return 0
+    fi
+    if [ -e "$path" ]; then
+        log "$path exists and is not a character device — refusing to replace it"
+        failed=1
+        return 1
+    fi
+    if mknod -m "$mode_octal" "$path" c "$major" "$minor" 2>/dev/null &&
+       chown "$dev_uid:$dev_gid" "$path" 2>/dev/null; then
+        log "created $path (c $major:$minor mode $mode_octal)"
+        made=1
+        return 0
+    fi
+    log "FAILED to create $path (c $major:$minor) — synapd will run on the CPU"
+    failed=1
+    return 1
+}
+
+# /dev/nvidiactl is minor 255 and is what libcuda opens first; without it the
+# per-GPU nodes are useless, so it is made whether or not a GPU node is missing.
+make_node /dev/nvidiactl 255
+
+# One node per GPU the driver actually enumerated, at the minor IT reports —
+# not the position in the directory listing, which is not the same thing on a
+# box with an excluded or second card.
+for info in /proc/driver/nvidia/gpus/*/information; do
+    [ -r "$info" ] || continue
+    minor=$(sed -n 's/^Device Minor:[[:space:]]*//p' "$info" | tr -d '[:space:]')
+    case "$minor" in
+        ''|*[!0-9]*) log "unreadable Device Minor in $info — skipped"; failed=1; continue ;;
+    esac
+    make_node "/dev/nvidia$minor" "$minor"
+done
+
+# ⛔ SAY WHETHER IT WORKED. The bug this script exists for was invisible for a
+# boot precisely because every step in the chain reported success, so the one
+# thing this must not do is fall back quietly.
+if [ "$failed" = 1 ]; then
+    log "some device nodes are missing — expect CPU-only inference"
+elif [ "$made" = 1 ]; then
+    log "device nodes ready before synapd probes for CUDA"
+fi
+
+# Never fail the boot over this: synapd runs on the CPU without a GPU and that
+# is a degraded desktop, not a broken one. The journal above is the report.
+exit 0

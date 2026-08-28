@@ -131,6 +131,14 @@ install_data('systemd/synapse-drm-watch',
   install_dir: '/usr/lib/synapd',
   install_mode: 'rwxr-xr-x')
 
+# Creates /dev/nvidiactl and /dev/nvidia* before synapd probes for CUDA. Same
+# install_mode reasoning as the sleep hooks: installed 0644 it is not an error
+# anywhere, systemd simply reports it as not executable and synapd goes back to
+# running a 12B model on four CPU threads.
+install_data('systemd/synapse-nvidia-nodes',
+  install_dir: '/usr/lib/synapd',
+  install_mode: 'rwxr-xr-x')
+
 install_data('systemd/synapd.service',
   install_dir: '/usr/lib/systemd/system')
 install_data('systemd/synapse-drm-watch.service',

@@ -211,8 +211,39 @@ static int detect_gpu_layers(const char *model_path, off_t model_bytes) {
     }
 
     if (!gpu) {
-        syn_log(LOG_WARNING, "inference: libllama has no usable GPU backend — "
-                          "running on CPU. Install synapse-llama-cuda for GPU offload.");
+        /*
+         * ⛔ TWO DIFFERENT FAULTS END UP HERE AND THEY HAVE OPPOSITE FIXES.
+         * This used to answer both with "Install synapse-llama-cuda", which on
+         * 2026-08-28 was printed on a box where synapse-llama-cuda WAS
+         * installed and CUDA had said, three lines earlier, "no CUDA-capable
+         * device is detected". The message sent the reader to the package
+         * manager for a problem that was two missing device nodes.
+         *
+         * A GPU backend that was compiled in registers itself even when it
+         * enumerates nothing, so the registration is what tells the two apart:
+         * no registration means the wrong libllama, a registration with zero
+         * devices means the library is fine and the driver did not answer.
+         */
+        const char *gpu_reg = NULL;
+        for (size_t i = 0, n = ggml_backend_reg_count(); i < n; i++) {
+            ggml_backend_reg_t reg = ggml_backend_reg_get(i);
+            const char *name = ggml_backend_reg_name(reg);
+            if (name && strcmp(name, "CPU") != 0) {
+                gpu_reg = name;
+                break;
+            }
+        }
+
+        if (gpu_reg) {
+            syn_log(LOG_WARNING, "inference: %s backend is present but reports NO "
+                    "DEVICE — running on CPU. The library is fine; the driver did "
+                    "not answer. Check that /dev/nvidiactl and /dev/nvidia0 exist "
+                    "(synapd-setup.service makes them) and that this process may "
+                    "open them.", gpu_reg);
+        } else {
+            syn_log(LOG_WARNING, "inference: libllama has no GPU backend compiled in "
+                    "— running on CPU. Install synapse-llama-cuda for GPU offload.");
+        }
         return 0;
     }
 

@@ -21,7 +21,15 @@ Documentation=https://github.com/velle999/SYNAPSE
 # this unit — only the daemon does (Requires=synapd-setup.service). Do NOT add
 # synapd.socket back here.
 Before=synapd.service
-After=nvidia-persistenced.service
+# ⛔ BEFORE persistenced, NOT AFTER — this reversed on 2026-08-28. The old
+# ordering waited on nvidia-persistenced to create /dev/nvidia*, and on
+# 2026-08-10 synapd started shipping a hardening drop-in for that unit whose
+# NoNewPrivileges=true voids the setuid nvidia-modprobe it creates them WITH.
+# It has failed on every boot since ("Failed to query NVIDIA devices"), a
+# Wants= failure is not an error, and synapd fell to CPU for the whole session.
+# We create the nodes ourselves now (see ExecStart below), so persistenced runs
+# AFTER us and finds them already there — which is what its drop-in claims.
+Before=nvidia-persistenced.service
 Wants=nvidia-persistenced.service
 
 [Service]
@@ -40,9 +48,18 @@ User=root
 # starts before any other CUDA client and NoNewPrivileges=true voids that setuid,
 # so it lost the race on every boot.
 #
-# What actually creates them is **nvidia-persistenced** (After= above, Type=forking,
-# so ordering is real). VERIFIED: with it stopped and both nodes deleted, starting
-# it recreates them immediately.
+# ⛔ THIS USED TO SAY nvidia-persistenced CREATES THEM, AND IT NO LONGER DOES.
+# That was verified by hand — stop it, delete both nodes, start it, they come
+# back — and it was true at the time. It creates them by dlopen()ing
+# libnvidia-cfg, which execs the SETUID nvidia-modprobe. On 2026-08-10 synapd
+# began shipping a hardening drop-in for that unit setting NoNewPrivileges=true,
+# which voids setuid. persistenced has failed on every boot since. The check
+# that passed was run on a live desktop, where the nodes existed because the
+# GREETER had made them minutes earlier — a working fallback hiding the broken
+# lookup, and the reason this went a fortnight without a symptom anyone traced.
+#
+# So it is no longer anybody else's job: synapse-nvidia-nodes below does the
+# mknod itself, and persistenced is ordered AFTER us so it benefits too.
 #
 # nvidia-modprobe below is NOT what creates them and cannot be. When the module is
 # already loaded it does `access("/sys/module/nvidia/initstate")` and exits 0 —
@@ -50,6 +67,16 @@ User=root
 # where the module is not loaded at all, where it does load it. Do not mistake
 # its exit status for success at making device nodes.
 ExecStart=-/usr/bin/nvidia-modprobe -c0 -u
+
+# ⛔ AND THIS IS WHAT ACTUALLY CREATES THEM. Everything above is a no-op or a
+# unit that cannot help; measured on the 2026-08-28 boot, /dev/nvidia0 and
+# /dev/nvidiactl did not exist until 12:32:31.29 — 1.7s AFTER synapd had
+# already probed for CUDA, found nothing, and loaded 7 GiB of weights into
+# system RAM for the rest of the session. The script does the mknod the driver
+# documents in /proc/driver/nvidia/params, and says in the journal whether it
+# worked. Not `-` prefixed: it handles its own failures and always exits 0, so
+# a non-zero here would be a real bug worth failing on.
+ExecStart=/usr/lib/synapd/synapse-nvidia-nodes
 
 # scheduler.c would otherwise modprobe this itself, which is what CAP_SYS_MODULE
 # was for. Losing it is non-fatal: scheduler_init() falls back to userspace-only.
