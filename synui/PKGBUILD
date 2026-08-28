@@ -2494,7 +2494,25 @@ pkgver=0.1.0
 #   monitor, and on a second monitor there is no child at all. A file every bar
 #   watches says the same thing on all of them — and an engine that exits
 #   clears it, so a crash cannot leave a bar claiming a microphone is open.
-pkgrel=529
+# 530: the speech switches reach the control panel.
+#   Sound ▸ Speech gains two rows: "Screen reader" (syn-speak) and "Answer to
+#   its name" (vibe's wake word). Until now the keys, a state file and a CLI
+#   were the only surfaces, which is a poor place to leave the two settings an
+#   accessibility user needs FIRST — the person who wants a screen reader is
+#   the person who cannot read the terminal to start one.
+#   ⛔ BOTH ARE `.external` ROWS and dispatch by ROW before the generic toggle
+#   flip. An external row names no config field, so ctl_get/ctl_put would read
+#   the top of syn_config_t as its value and write a bool back over whatever is
+#   declared first — a plausible number and a silent corruption. Same trap the
+#   RGB row documents; same answer.
+#   ⚠ THE WAKE ROW READS `assistant.state`, NOT systemd. The unit can be active
+#   with its listener failing to open the device, and what matters to somebody
+#   looking at this row is whether a MICROPHONE IS OPEN. The engine writes that
+#   file when the loop is really running and clears it on the way out, and the
+#   bar's microphone indicator watches the same one — one fact, two surfaces.
+#   ⚠ It draws "Listening", not "On". "On" describes a setting; what is true is
+#   that a device is open right now, and the status line says so both ways.
+pkgrel=530
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

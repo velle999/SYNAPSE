@@ -1144,6 +1144,26 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  "Equalizer", "equalizer",
       .help = "10-band system equalizer. Adds an output device while it is on" },
 
+    /* ── Speech ────────────────────────────────────────────────────────
+     *
+     * Both are switches on a program synui does not own — syn-speak(1) and
+     * vibe(1) — for the same reason the RGB row is: the speech stack lives in
+     * chibi and vibe, and a compositor that grew its own would be a third
+     * voice on the machine. Drawn whether those are installed or not, because
+     * a switch that vanishes with its optdepend is a feature nobody can find
+     * out about; the command says which package is missing, which is something
+     * a person can act on.
+     *
+     * ⛔ THE SECOND ROW OPENS A MICROPHONE. It says so in its help line, the
+     * bar shows a microphone for as long as it is on, and it is off until
+     * somebody presses it. */
+    { CTL_ROW_SCREEN_READER, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Screen reader", NULL,
+      .vtype = CTL_VAL_BOOL, .external = true, .section = "Speech",
+      .help = "Speak the focused window as focus moves. Super+Shift+U toggles it" },
+    { CTL_ROW_WAKE_WORD,    CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Answer to its name", NULL,
+      .vtype = CTL_VAL_BOOL, .external = true,
+      .help = "Listen for \"Synapse\" and answer out loud. Holds the microphone open" },
+
     { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record audio", NULL,
       .section = "Recording" },
     { CTL_ROW_RECORD_EDIT,  CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record for editing", NULL,
@@ -2240,6 +2260,80 @@ static void synrgb_toggle(syn_server_t *s)
     ctlpanel_repaint(s);
 }
 
+/* ---- the two speech rows -------------------------------------------------
+ *
+ * Same shape as the RGB bridge above and for the same reasons: the tools own
+ * the state and the hardware, this reads their state to draw the row and runs
+ * the command to change it.
+ */
+static int speak_is_on(void)
+{
+    char path[256];
+    syn_config_path(path, sizeof(path), "speak.state");
+    if (!path[0]) return 0;
+    FILE *f = fopen(path, "re");
+    if (!f) return 0;   /* no file is the shipped state: off */
+    char line[256];
+    int on = 0;
+    while (fgets(line, sizeof(line), f)) {
+        char v[32];
+        if (sscanf(line, "on=%31s", v) == 1)
+            on = (strcmp(v, "yes") == 0);
+    }
+    fclose(f);
+    return on;
+}
+
+/* ⚠ READ OFF THE FILE THE ENGINE PUBLISHES, not off systemd. `vibe wake` is a
+ * user unit, but the thing that matters to somebody looking at this row is
+ * whether a microphone is OPEN — and a unit can be active with its listener
+ * failing to open the device. The engine writes `wake = on` when the loop is
+ * actually running and clears it on the way out, which is the same file the
+ * bar's microphone indicator watches. One fact, one source, two surfaces. */
+static int wake_is_on(void)
+{
+    char path[256];
+    syn_config_path(path, sizeof(path), "assistant.state");
+    if (!path[0]) return 0;
+    FILE *f = fopen(path, "re");
+    if (!f) return 0;
+    char line[256];
+    int on = 0;
+    while (fgets(line, sizeof(line), f)) {
+        char v[32];
+        if (sscanf(line, "wake = %31s", v) == 1 ||
+            sscanf(line, "wake=%31s", v) == 1)
+            on = (strcmp(v, "on") == 0);
+    }
+    fclose(f);
+    return on;
+}
+
+static void speak_toggle(syn_server_t *s)
+{
+    int on = speak_is_on();
+    /* Through the command, never by writing the file: `syn-speak on` also
+     * starts the announcer, and a row that flipped a key would leave the
+     * desktop silent — which reads as the switch not working. */
+    synui_spawn("syn-speak toggle");
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             on ? "Screen reader: off" : "Screen reader: on");
+    ctlpanel_repaint(s);
+}
+
+static void wake_toggle(syn_server_t *s)
+{
+    int on = wake_is_on();
+    synui_spawn(on ? "vibe wake off" : "vibe wake on");
+    /* ⚠ The status line SAYS the microphone, both ways. This is the one row in
+     * the panel whose "on" leaves a device open, and a person who pressed it by
+     * accident should be told what they just did in the same breath. */
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             on ? "No longer listening \xc2\xb7 the microphone is closed"
+                : "Listening for \"Synapse\" \xc2\xb7 the microphone is open");
+    ctlpanel_repaint(s);
+}
+
 /* Event sounds, summarised the same way. Unlike the widgets this state IS
  * mirrored in syn_server_t (sound.c caches it to skip a fork per event), so the
  * summary is read from the cache — refreshed first, because the panel is one of
@@ -2450,6 +2544,15 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         snprintf(buf, n, "%.0f %%", v);
         break;
     }
+    case CTL_ROW_SCREEN_READER:
+        snprintf(buf, n, "%s", speak_is_on() ? "On" : "Off");
+        break;
+    case CTL_ROW_WAKE_WORD:
+        /* ⚠ "Listening" rather than "On". The word is the disclosure: a row
+         * that said On beside "Answer to its name" is describing a setting,
+         * and what is true is that a microphone is open right now. */
+        snprintf(buf, n, "%s", wake_is_on() ? "Listening" : "Off");
+        break;
     case CTL_ROW_RGB_LIGHTS:
         /* Read off rgb.state every time rather than cached, so the row is
          * right when `syn-rgb on` was typed in a terminal a moment ago. One
@@ -3568,7 +3671,9 @@ static void ctlpanel_activate(syn_server_t *s)
      * and write a bool over whatever field is declared first. A plausible
      * number and a silent corruption, which is the pair the `external` flag
      * exists to prevent. */
-    if (row == CTL_ROW_RGB_LIGHTS) { synrgb_toggle(s); return; }
+    if (row == CTL_ROW_RGB_LIGHTS)    { synrgb_toggle(s); return; }
+    if (row == CTL_ROW_SCREEN_READER) { speak_toggle(s);  return; }
+    if (row == CTL_ROW_WAKE_WORD)     { wake_toggle(s);   return; }
 
     /* A table-driven TOGGLE: flip it generically. Checked before the bespoke
      * switch below so that a row which names a config field never needs a case
@@ -4124,7 +4229,9 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
      * ROW rather than by the flag: `external` says only "the value is not in
      * the config struct", and sending a lighting toggle to the font stepper
      * would move the desktop's text size. */
-    if (row == CTL_ROW_RGB_LIGHTS) { synrgb_toggle(s); return 1; }
+    if (row == CTL_ROW_RGB_LIGHTS)    { synrgb_toggle(s); return 1; }
+    if (row == CTL_ROW_SCREEN_READER) { speak_toggle(s);  return 1; }
+    if (row == CTL_ROW_WAKE_WORD)     { wake_toggle(s);   return 1; }
     if (it->external) return ctlpanel_adjust_font(s, row, dir);
 
     if (!ctl_adjust(s, it, dir)) {

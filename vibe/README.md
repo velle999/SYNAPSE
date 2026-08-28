@@ -73,6 +73,10 @@ model, no log and no disk. Only a line that wakes it becomes a request, and then
 it goes wherever your backend goes. On a cloud backend it says so out loud when
 you arm it.
 
+It is a user service (`vibe wake on`, or **Control panel ▸ Sound ▸ Answer to
+its name**) rather than something the chat window owns — a hands-free assistant
+you have to be hands-on to start is not one.
+
 While it is on **the bar says so**: the assistant button turns into a microphone
 in the warning colour. That is deliberate — the chat window can be closed or on
 another workspace, and a disclosure nobody is looking at is not one.

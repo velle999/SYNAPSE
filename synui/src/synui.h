@@ -1786,6 +1786,8 @@ typedef enum {
     CTL_ROW_SCENE_INK,         /* does it read the windows or the wallpaper  */
     CTL_ROW_WP_ACCENT,         /* accent off the wallpaper, or out of the theme */
     CTL_ROW_RGB_LIGHTS,        /* and the RGB hardware wears it too          */
+    CTL_ROW_SCREEN_READER,     /* syn-speak: the focused window, out loud     */
+    CTL_ROW_WAKE_WORD,         /* vibe: the assistant answers to its name     */
     CTL_ROW_INACTIVE_OPACITY,
 
     CTL_ROW_SHADOW,

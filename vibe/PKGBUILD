@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=11
+pkgrel=12
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -73,6 +73,12 @@ package() {
     # and on a miss it runs the app_id AS A COMMAND.
     install -Dm644 data/vibe.qml     "$pkgdir/usr/share/vibe/vibe.qml"
     install -Dm644 data/vibe.desktop "$pkgdir/usr/share/applications/vibe.desktop"
+
+    # The hands-free listener, as a user unit. ⛔ Shipped, never enabled: it
+    # holds a microphone open, and an update that started it would be the worst
+    # possible version of this feature. `vibe wake on` is the opt-in.
+    install -Dm644 systemd/vibe-wake.service \
+        "$pkgdir/usr/lib/systemd/user/vibe-wake.service"
 
     # Launcher → /usr/bin/vibe. Defaults VIBE_BACKEND=synapd and puts the app on
     # PYTHONPATH. Installed to /usr/bin (NOT ~/.local/bin) so the synui session

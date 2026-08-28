@@ -22,7 +22,8 @@ tarball="$stage.tar.gz"
 # Only what package() reads: the entry point, the package, the launcher, and
 # the chat window's QML. requirements.txt, setup.sh and the dev launcher are
 # deliberately not shipped.
-for p in main.py vibe packaging/vibe-launcher.sh data/vibe.qml data/vibe.desktop; do
+for p in main.py vibe packaging/vibe-launcher.sh data/vibe.qml data/vibe.desktop \
+         systemd/vibe-wake.service; do
     [ -e "$p" ] || { echo "mktarball: missing $p" >&2; exit 1; }
 done
 
@@ -30,10 +31,11 @@ done
 # what caused the nested src/vibe-0.1.0/src/vibe-0.1.0/... recursion elsewhere.
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/$stage/packaging" "$tmp/$stage/data"
+mkdir -p "$tmp/$stage/packaging" "$tmp/$stage/data" "$tmp/$stage/systemd"
 cp -a main.py vibe "$tmp/$stage/"
 cp -a packaging/vibe-launcher.sh "$tmp/$stage/packaging/"
 cp -a data/vibe.qml data/vibe.desktop "$tmp/$stage/data/"
+cp -a systemd/vibe-wake.service "$tmp/$stage/systemd/"
 
 # Build-host droppings and runtime session state must never reach a package.
 rm -rf "$tmp/$stage/vibe/__pycache__" "$tmp/$stage/.vibe"

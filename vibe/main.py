@@ -356,8 +356,64 @@ def _verb_voice(argv) -> int:
     return 2
 
 
+def _verb_wake(argv) -> int:
+    """Answer to its name, with or without a window open.
+
+    ⛔ THE LISTENER CANNOT LIVE ONLY IN THE CHAT WINDOW. "Answer to its name" is
+    a thing you want when you are not at the machine — and `vibe serve` exists
+    only while the window is open, so a wake switch that depended on it would be
+    a hands-free assistant you had to be hands-on to start. So it is a user
+    service, the same shape syn-rgb uses for the same reason.
+    """
+    import subprocess
+    sub = argv[0] if argv else "status"
+    unit = "vibe-wake.service"
+
+    if sub == "run":
+        # The service's own entry point: a server with no stdin, listening.
+        from vibe.serve import Server, Wire
+        srv = Server(Wire(sys.stderr))   # no protocol consumer; records are log
+        srv.speaking = True              # nobody is looking at a window
+        srv.set_wake(True)
+        if srv._wake is None or not srv._wake.running:
+            print_error("could not start listening — see the log")
+            return 3
+        try:
+            while srv._wake.running:
+                srv._wake._thread.join(timeout=3600)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            srv.set_wake(False)
+        return 0
+
+    if sub in ("on", "off"):
+        act = "enable" if sub == "on" else "disable"
+        r = subprocess.run(["systemctl", "--user", act, "--now", unit],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print_error(f"systemctl {act} {unit}: {r.stderr.strip()}")
+            return 1
+        if sub == "on":
+            print_info("listening for its name. The bar shows a microphone "
+                       "while it is on.")
+        else:
+            print_info("no longer listening")
+        return 0
+
+    if sub == "status":
+        r = subprocess.run(["systemctl", "--user", "is-active", unit],
+                           capture_output=True, text=True)
+        print((r.stdout or "").strip() or "unknown")
+        return 0
+
+    print_error(f"unknown: vibe wake {sub}  (on | off | status)")
+    return 2
+
+
 _VERBS = {
     "serve": _verb_serve,
+    "wake": _verb_wake,
     "voice": _verb_voice,
     "gui": _verb_gui,
     "provider": _verb_provider,

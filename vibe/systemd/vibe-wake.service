@@ -1,0 +1,26 @@
+[Unit]
+# The assistant, listening for its name.
+#
+# ⛔ NOT ENABLED BY ANYTHING. It is turned on by a person — Control panel ▸
+# Sound ▸ Answer to its name, or `vibe wake on` — because it holds a microphone
+# open for as long as it runs. An update must never start this.
+Description=SynapseOS assistant — answer to its name
+Documentation=man:vibe(1)
+# The desktop has to be up: the answer is spoken, and the bar's microphone
+# indicator is a file this writes under the session's config directory.
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/vibe wake run
+# ⚠ Restarted, but not forever. A microphone that cannot be opened — unplugged,
+# taken by something else — should be reported once and left alone, not retried
+# into the journal every second for the rest of the session.
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=120
+
+[Install]
+WantedBy=graphical-session.target
