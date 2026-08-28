@@ -86,7 +86,29 @@ pkgver=0.1.0
 #   `syn-rgb on` typed in a terminal moves it. ⛔ And it is drawn whether
 #   openrgb is installed or not — a control that vanishes with its optdepend is
 #   a feature nobody finds out about — saying which package to install instead.
-pkgrel=33
+# 34: the speech pane — the second door onto the two switches an
+#   accessibility user needs first.
+#   synui's control panel got them in synui 530; this is the other door, and it
+#   is the one that matters on a machine installed with KDE or GNOME, where
+#   synui's panel is not there at all. Screen reader, "Answer to its name", the
+#   voice and dictation engines this box actually has, speech rate and volume,
+#   and the wake words.
+#   ⚠ IT REIMPLEMENTS NOTHING. syn-speak(1) owns the announcer and vibe(1) owns
+#   the listener; this reads their state files and runs their commands. The AI
+#   pane's rule, for the same reason.
+#   ⛔ THE WAKE ROW READS assistant.state, NOT `systemctl is-active`. A unit can
+#   be active with its listener failing to open the device, and the question
+#   this row answers is whether a MICROPHONE IS OPEN. synui's bar indicator and
+#   its control panel row read the same file — one fact, three surfaces.
+#   ⛔ AND A DEAD BUTTON WAS FOUND BY TESTING THE ROW'S OWN ADVICE. `wake-words`
+#   is the one value in this app that legally contains commas, and set()'s
+#   generic sane_value() gate rejects a comma before any key is looked at — so
+#   the row offered a comma-separated list and refused every comma. Lifted
+#   above the gate with a validator of its own (letters, commas, spaces);
+#   loosening sane_value would have weakened it for the thirty keys that DO
+#   exec. The test now sets each key to the value its own help text suggests,
+#   which is the check that would have caught it.
+pkgrel=34
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

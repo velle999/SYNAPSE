@@ -87,7 +87,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai; do
+for pane in display region network bluetooth power kernel apps time ai speech; do
     check_actions "$pane"
 done
 
@@ -1646,6 +1646,55 @@ if "$BIN" -n set rgb maybe >/dev/null 2>&1; then
 else
     ok "anything but on or off is refused"
 fi
+
+# ── Speech ──────────────────────────────────────────────────────────────────
+#
+# ⛔ EVERY ACTION THIS PANE EMITS MUST HAVE A VERB, and the check above only
+# proves the verb NAME is one the GUI knows. It cannot tell whether `set
+# <that key>` actually works — and the first version of this pane failed
+# exactly there in a way no vocabulary check could see: `wake-words` is the one
+# value in this app that legally contains commas, and set()'s generic
+# sane_value() gate rejects a comma before any key is looked at. The row
+# offered a comma-separated list and refused every comma. So each key is
+# exercised with the value its own help text suggests.
+out=$("$BIN" --rec speech)
+case $out in
+    *"Screen reader"*) ok "the Speech pane offers the screen reader" ;;
+    *) bad "no screen reader row" ;;
+esac
+case $out in
+    *"Answer to its name"*) ok "…and the wake word" ;;
+    *) bad "no wake word row" ;;
+esac
+# ⚠ The disclosure is part of the row, not a nicety: this is the one switch in
+# the app whose "on" leaves a device open.
+case $out in
+    *"MICROPHONE OPEN"*) ok "…and says that it holds the microphone open" ;;
+    *) bad "the wake row does not disclose the microphone" ;;
+esac
+
+for pair in "screen-reader:maybe" "wake-word:maybe" "speech-rate:9999" \
+            "speech-rate:abc" "speech-volume:200" "wake-words:,,,"; do
+    k=${pair%%:*}; v=${pair#*:}
+    if "$BIN" -n set "$k" "$v" >/dev/null 2>&1; then
+        bad "set $k $v was accepted"
+    else
+        ok "set $k $v is refused"
+    fi
+done
+
+# …and the values the rows themselves suggest are ACCEPTED. This is the half
+# that catches a gate refusing its own advertised input.
+tmpcfg=$(mktemp -d)
+for pair in "speech-rate:175" "speech-volume:100" "wake-words:synapse,computer"; do
+    k=${pair%%:*}; v=${pair#*:}
+    if XDG_CONFIG_HOME="$tmpcfg" "$BIN" -n set "$k" "$v" >/dev/null 2>&1; then
+        ok "set $k $v is accepted"
+    else
+        bad "set $k $v was REFUSED — the row advertises a value its verb rejects"
+    fi
+done
+rm -rf "$tmpcfg"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"

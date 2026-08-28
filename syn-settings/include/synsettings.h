@@ -208,6 +208,7 @@ int pane_apps(void);
  * bar, the lock screen and the desktop widget write it. See src/time.c. */
 int pane_time(void);
 int pane_ai(void);
+int pane_speech(void);
 
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *

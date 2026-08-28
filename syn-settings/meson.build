@@ -32,6 +32,7 @@ sources = files(
   'src/apps.c',
   'src/time.c',
   'src/ai.c',
+  'src/speech.c',
 )
 
 executable('syn-settings', sources,

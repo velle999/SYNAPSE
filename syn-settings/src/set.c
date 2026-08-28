@@ -44,6 +44,51 @@ static int sane_value(const char *v)
 	return 1;
 }
 
+/* The names the assistant answers to.
+ *
+ * Written here rather than handed to a tool, because there is no verb for it:
+ * vibe's matcher reads wake.state directly. ⚠ Refused EMPTY — a wake.state with
+ * no words in it is an assistant that cannot be woken at all, and the file
+ * being present is exactly what stops the matcher falling back to its built-in
+ * pair. "Delete the file" is the way back, and the message says so.
+ *
+ * Its own validator, because this is the one value in this app that legally
+ * contains commas and spaces. Letters only otherwise: a wake word is something
+ * a person SAYS, so punctuation in it could never be matched against a
+ * transcription anyway.
+ */
+static int set_wake_words(const char *val)
+{
+	int any = 0;
+	for (const char *p = val; *p; p++) {
+		if (*p == ',' || *p == ' ')
+			continue;
+		if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')))
+			return refuse("a wake word is letters only, "
+			              "separated by commas");
+		any = 1;
+	}
+	if (!any)
+		return refuse("wake-words needs at least one word "
+		              "(delete ~/.config/synui/wake.state to go back to "
+		              "the default)");
+
+	char cfg[384], path[512], body[512];
+	config_home(cfg, sizeof cfg);
+	if (!cfg[0])
+		return refuse("cannot find the config directory");
+	snprintf(path, sizeof path, "%s/synui/wake.state", cfg);
+	snprintf(body, sizeof body,
+	         "# The names the assistant answers to. Comma separated.\n"
+	         "words = %s\n", val);
+	ensure_parent(path);
+	if (write_atomic(path, body) != 0)
+		return refuse("could not write wake.state");
+	printf("wake words: %s\n", val);
+	return 0;
+}
+
+
 int do_set(int argc, char **argv)
 {
 	/* Before the argument count and before the general value filter, because
@@ -57,6 +102,20 @@ int do_set(int argc, char **argv)
 
 	const char *key = argv[0];
 	const char *val = argv[1];
+
+	/* ⛔ BEFORE sane_value(), AND ONLY THIS KEY. The generic gate rejects a
+	 * comma, because almost every value here is handed to an external command
+	 * and a comma is one of the characters that guard exists for. `wake-words`
+	 * is a COMMA-SEPARATED LIST that reaches no command at all — it is written
+	 * to a file this function writes itself — so the gate refuses every legal
+	 * input for it and the row advertises a control that cannot be used.
+	 *
+	 * That is the dead-button failure in a new disguise, found by trying the
+	 * exact value the row's own help text suggests. Loosening sane_value()
+	 * instead would weaken the guard for the thirty keys that DO exec.
+	 */
+	if (!strcmp(key, "wake-words"))
+		return set_wake_words(val);
 
 	if (!sane_value(val))
 		return refuse("value rejected: letters, digits, . _ - / + only, "
@@ -162,6 +221,57 @@ int do_set(int argc, char **argv)
 			return refuse("synui-ai-backend is not installed "
 			              "(it ships with the synui package)");
 		char *a[] = { (char *)"synui-ai-backend", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	/* ── Speech ────────────────────────────────────────────────────────
+	 *
+	 * ⛔ EVERY ONE OF THESE HAS A ROW IN speech.c THAT NAMES IT. A pane that
+	 * emits an action token with no verb here draws a control that does
+	 * nothing when pressed — the dead-button failure this app has had before.
+	 * If a row is added there, a case belongs here in the same commit.
+	 *
+	 * All of them go through the owning tool rather than writing the state
+	 * file: `syn-speak on` also starts the announcer, `vibe wake on` also
+	 * enables the user unit, and `syn-speak rate` speaks a sample so the
+	 * number means something. A settings app that wrote the key and stopped
+	 * would leave a desktop that is silent while its switch says On. */
+	if (!strcmp(key, "screen-reader")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("screen-reader takes on or off");
+		if (!have_cmd("syn-speak"))
+			return refuse("syn-speak is not installed "
+			              "(it ships with the synui package)");
+		char *a[] = { (char *)"syn-speak", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "wake-word")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("wake-word takes on or off");
+		if (!have_cmd("vibe"))
+			return refuse("vibe is not installed \xc2\xb7 synpkg install vibe");
+		/* ⚠ `on` here OPENS A MICROPHONE and keeps it open. vibe prints what
+		 * it has done; this does not add a second sentence, because the one
+		 * place that should describe it is the one that owns it. */
+		char *a[] = { (char *)"vibe", (char *)"wake", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "speech-rate") || !strcmp(key, "speech-volume")) {
+		char *end = NULL;
+		long n = strtol(val, &end, 10);
+		if (!*val || (end && *end))
+			return refuse("that is not a number");
+		int rate = !strcmp(key, "speech-rate");
+		if (rate ? (n < 80 || n > 450) : (n < 0 || n > 100))
+			return refuse(rate ? "speech-rate takes 80 to 450"
+			                   : "speech-volume takes 0 to 100");
+		if (!have_cmd("syn-speak"))
+			return refuse("syn-speak is not installed "
+			              "(it ships with the synui package)");
+		char *a[] = { (char *)"syn-speak",
+		              (char *)(rate ? "rate" : "volume"), (char *)val, NULL };
 		return run_or_show(a);
 	}
 
