@@ -83,6 +83,21 @@ speak_stop() {
 speak() {   # speak TEXT
     local text=$1 voice rate vol amp
     [ -n "$text" ] || return 0
+
+    # ⛔ ONE VOICE ON THE MACHINE. The assistant already owns a speech stack —
+    # chibi's piper, with espeak-ng behind it — and `vibe voice say` is its
+    # front door. Speaking through it means the screen reader and the assistant
+    # sound like the same desktop, and there is one place where "which engine
+    # is available" is worked out. espeak-ng below is what is left when vibe is
+    # not installed, not a second opinion.
+    if have vibe; then
+        speak_stop
+        mkdir -p "$RUN"
+        setsid vibe voice say "$text" >/dev/null 2>&1 < /dev/null &
+        printf '%s\n' "$!" > "$RUN/pid"
+        return 0
+    fi
+
     have "$TTS" || { warn "$TTS is not installed — synpkg install espeak-ng"; return 3; }
 
     voice=$(getval voice "$(getval lang en)")

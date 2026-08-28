@@ -214,7 +214,58 @@ check("agent gets all of them",
       len(modes.tools_for(modes.AGENT, TOOL_SCHEMAS)) == len(TOOL_SCHEMAS))
 
 
-# ── 6. the wire ─────────────────────────────────────────────────────────────
+# ── 6. the voice, and the pipe it must not write into ───────────────────────
+#
+# ⛔ THE TRAP THIS SECTION EXISTS FOR: chibi's voice modules print to stdout
+# ("[TTS] Found piper Python module"), and vibe serve's stdout IS the window's
+# protocol pipe. One banner is not a cosmetic problem — the window parses every
+# line as a TSV record, and the tag a banner happens to start with decides what
+# it does with it.
+from vibe import voice as voicemod
+
+vstat = voicemod.shared().status()
+check("the voice reports what this box can do without loading it",
+      set(vstat) == {"speak", "listen", "chibi"}, str(vstat))
+check("…and every answer is a word, not a crash",
+      all(isinstance(x, str) and x for x in vstat.values()), str(vstat))
+
+# ⚠ Asked of the SHARED instance and asked twice: two Voice objects would be
+# two piper models resident, and the second load is the one that is slow.
+check("the voice is one object per process",
+      voicemod.shared() is voicemod.shared())
+
+if vstat["listen"] == "no":
+    check("a box that cannot hear says what is missing, in a sentence",
+          "install" in voicemod.shared().why_deaf().lower())
+else:
+    check("a box that CAN hear still has an answer for why it might not",
+          bool(voicemod.shared().why_deaf()))
+
+# The guard itself: anything chibi prints must land on stderr.
+import contextlib
+buf_out, buf_err = io.StringIO(), io.StringIO()
+with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+    with voicemod._quiet():
+        print("a banner chibi would print")
+check("chibi's chatter is redirected off stdout", buf_out.getvalue() == "",
+      repr(buf_out.getvalue()))
+check("…and onto stderr, where it is still readable",
+      "banner" in buf_err.getvalue())
+
+# And end to end: the protocol survives the voice commands.
+out = io.StringIO()
+vs = serve.Server(serve.Wire(out))
+vs.serve(io.StringIO("state\nspeak on\nspeak off\nhush\nquit\n"))
+lines = [l for l in out.getvalue().splitlines()]
+malformed = [l for l in lines if not l or l[0] not in "SUKTCXAEMV" or l[1:2] != "\t"]
+check("every record the voice path emits is well formed", not malformed,
+      str(malformed[:2]))
+check("…and the window is told whether it may offer a microphone",
+      any(l.startswith("V\tlisten\t") for l in lines))
+check("…and whether reading aloud is on", any(l == "V\treading\tyes" for l in lines))
+
+
+# ── 7. the wire ─────────────────────────────────────────────────────────────
 #
 # Tabs and newlines ARE the record separators, so an answer containing them has
 # to survive as data. A shell transcript contains both, every time.

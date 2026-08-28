@@ -22,6 +22,7 @@ quotes can contain bytes that are not valid UTF-8.
 
   S  key value           one fact about the engine's state
   M  mode                 the mode this turn actually ran in
+  V  key value            what the voice can do, and what it heard
   U  text                the line being answered, echoed
   K  text                synsh answered this one; no model was involved
   T  text                a chunk of the assistant's reply
@@ -34,6 +35,9 @@ Commands:
 
   ask TEXT               answer this
   mode auto|ask|agent|plan   how it should behave
+  speak on|off           read the answers aloud
+  listen                 take one spoken line and answer it
+  hush                   stop talking, now
   confirm ID yes|no      allow or refuse the tool waiting under ID
   reset                  forget the conversation
   provider NAME          switch backend, for this process
@@ -55,7 +59,7 @@ import sys
 import threading
 
 import vibe.config as cfg
-from vibe import keywords, modes
+from vibe import keywords, modes, voice as voicemod
 
 
 # ── the wire ────────────────────────────────────────────────────────────────
@@ -126,6 +130,9 @@ class Server:
         self._ids = itertools.count(1)
         self._stop = threading.Event()
         self.mode = modes.AUTO
+        self.speaking = False           # read answers aloud
+        self._voice = None
+        self._said = ""                 # what has already been spoken this turn
 
     # ── state ───────────────────────────────────────────────────────────
     def emit_state(self):
@@ -134,6 +141,12 @@ class Server:
         self.wire.rec("S", "cloud", "yes" if cfg.BACKEND in ("anthropic", "openai") else "no")
         self.wire.rec("S", "keywords", "yes" if keywords.available() else "no")
         self.wire.rec("S", "mode", self.mode)
+        # ⚠ ASKED WITHOUT LOADING THE ENGINES. status() reports what is
+        # installed; building piper to answer "is piper there" would cost a
+        # second of model loading every time the window opens.
+        for k, v in voicemod.shared().status().items():
+            self.wire.rec("V", k, v)
+        self.wire.rec("V", "reading", "yes" if self.speaking else "no")
         self.wire.rec("S", "ready", "yes" if self.model else "no")
 
     def model_label(self) -> str:
@@ -210,6 +223,7 @@ class Server:
             answered = keywords.answer(text)
             if answered is not None:
                 self.wire.rec("K", answered)
+                self._said += answered
                 return
 
             if not self.ensure_model():
@@ -238,9 +252,20 @@ class Server:
                     continue
                 if piece:
                     self.wire.rec("T", piece)
+                    self._said += piece
         except Exception as e:
             self.wire.rec("A", f"{type(e).__name__}: {e}")
         finally:
+            # ⚠ SPOKEN AT THE END, NOT PER TOKEN. The reply arrives in
+            # twenty-character chunks and a sentence handed to piper in
+            # twenty-character pieces is twenty overlapping utterances. The
+            # whole answer, once, when there is one.
+            if self.speaking and self._said.strip():
+                try:
+                    voicemod.shared().speak(self._said)
+                except Exception:
+                    pass
+            self._said = ""
             self.wire.rec("E", serial)
 
     # ── commands ────────────────────────────────────────────────────────
@@ -265,6 +290,20 @@ class Server:
                 self.model.reset()
             self.wire.rec("S", "reset", "yes")
             return True
+        if verb == "speak":
+            self.speaking = rest.strip() == "on"
+            if not self.speaking:
+                voicemod.shared().stop()
+            self.wire.rec("V", "reading", "yes" if self.speaking else "no")
+            return True
+        if verb == "hush":
+            voicemod.shared().stop()
+            return True
+        if verb == "listen":
+            # On its own thread: capture runs for seconds and the reader must
+            # stay live, exactly as it must for a confirmation.
+            threading.Thread(target=self._listen_turn, daemon=True).start()
+            return True
         if verb == "mode":
             self.set_mode(dec(rest).strip())
             return True
@@ -276,6 +315,22 @@ class Server:
             return True
         self.wire.rec("A", f"unknown command: {verb}")
         return True
+
+    def _listen_turn(self):
+        """Hear one line, show it, and answer it."""
+        self.wire.rec("V", "listening", "yes")
+        try:
+            text, err = voicemod.shared().listen()
+        finally:
+            self.wire.rec("V", "listening", "no")
+        if err:
+            self.wire.rec("A", err)
+            return
+        # ⚠ ECHOED AS A HEARD LINE BEFORE IT IS ANSWERED. Speech recognition
+        # gets words wrong, and an assistant that answers a misheard question
+        # without showing what it heard is impossible to argue with.
+        self.wire.rec("V", "heard", text)
+        self._run_turn(text)
 
     def set_mode(self, name: str):
         if name not in modes.MODES:

@@ -41,6 +41,17 @@ already has, not a second call to the model: asking the model which mode to use
 costs a whole round trip before the first token, and it is wrong in exactly the
 cases that matter.
 
+**It speaks and it listens.** The 🔊 button reads answers aloud; the 🎤 button
+takes one spoken line, shows you what it heard, and answers it. On the command
+line that is `vibe voice say …`, `vibe voice listen`, `vibe voice status`.
+
+⛔ Neither half is implemented here. chibi already ships a working voice stack —
+piper for speech, faster-whisper for hearing, both with their models — and it
+carries a year of things only learned by using it. vibe imports chibi's rather
+than growing a second one, so there is one voice on the machine; `syn-speak`,
+the desktop's screen reader, speaks through the same door. Without chibi,
+speech falls back to espeak-ng and dictation says what is missing.
+
 **The backend is switchable, including to a paid one.**
 
 ```bash

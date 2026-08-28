@@ -301,8 +301,45 @@ def _verb_key(argv) -> int:
     return 0
 
 
+def _verb_voice(argv) -> int:
+    """Speech in and out, on the command line.
+
+    The same stack the chat window uses, so `syn-speak`, the screen reader and
+    the assistant all say things in one voice rather than three."""
+    from vibe.voice import shared
+    v = shared()
+    sub = argv[0] if argv else "status"
+    if sub == "say":
+        text = " ".join(argv[1:])
+        if not text:
+            print_error("say what?")
+            return 1
+        engine = v.speak(text)
+        if not engine:
+            print_error("nothing on this box can speak — synpkg install espeak-ng")
+            return 3
+        return 0
+    if sub == "listen":
+        text, err = v.listen()
+        if err:
+            print_error(err)
+            return 3
+        print(text)
+        return 0
+    if sub == "stop":
+        v.stop()
+        return 0
+    if sub == "status":
+        for k, val in v.status().items():
+            print(f"{k}\t{val}")
+        return 0
+    print_error(f"unknown: vibe voice {sub}  (say | listen | stop | status)")
+    return 2
+
+
 _VERBS = {
     "serve": _verb_serve,
+    "voice": _verb_voice,
     "gui": _verb_gui,
     "provider": _verb_provider,
     "key": _verb_key,

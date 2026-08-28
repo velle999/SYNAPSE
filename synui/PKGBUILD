@@ -2454,7 +2454,22 @@ pkgver=0.1.0
 #   that survives the correction: F544 and F5DC are Nerd Font PRIVATE USE AREA
 #   codepoints, so no other family can cover them however many are installed.
 #   Reported by velle, who reads these notes.
-pkgrel=526
+# 527: syn-speak ships, and the desktop has one voice.
+#   `syn-speak` — the desktop out loud: it speaks the focused window as focus
+#   moves, the highlighted text, or any line handed to it. Written in 525 and
+#   left INERT in the tree (not installed, not wired to anything); installed
+#   now.
+#   ⛔ IT DOES NOT OWN A SPEECH ENGINE. It speaks through `vibe voice say`
+#   where vibe is installed, which is chibi's piper — so the screen reader and
+#   the assistant are the same voice and there is one place that works out
+#   which engine this box has. espeak-ng is what is left when vibe is absent,
+#   not a second opinion.
+#   ⚠ IT IS AN ANNOUNCER, NOT A FULL SCREEN READER, and says so in its own
+#   header. Reading every widget under the cursor needs AT-SPI support in each
+#   toolkit; Orca remains the answer for that. What this does is the half that
+#   is useful today and honest: what has FOCUS, and what is asked for.
+#   ⚠ NOT ON A KEYBIND YET — `syn-speak on` from a terminal or the assistant.
+pkgrel=527
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2824,6 +2839,10 @@ package() {
     # what its owner asked is not a thing to take over on an update. `syn-rgb
     # on` is the whole opt-in.
     install -Dm755 tools/syn-rgb "$pkgdir/usr/bin/syn-rgb"
+    # The desktop, out loud. ⚠ Speaks through `vibe voice say` where vibe is
+    # installed, so the screen reader and the assistant are one voice; espeak-ng
+    # is the fallback, not a second engine.
+    install -Dm755 tools/syn-speak "$pkgdir/usr/bin/syn-speak"
     install -Dm644 systemd/syn-rgb.service \
         "$pkgdir/usr/lib/systemd/user/syn-rgb.service"
     install -Dm644 systemd/syn-rgb.path \

@@ -167,6 +167,13 @@ FloatingWindow {
     // saying which way it went, which is the only thing that makes an
     // automatic choice reviewable rather than mysterious.
     property string turnMode: ""
+    // What this box can do with a voice, reported by the engine rather than
+    // probed here — the window must not load piper to find out whether piper
+    // is installed.
+    property string canSpeak: "no"
+    property string canHear: "no"
+    property bool   reading: false
+    property bool   listening: false
     property string pendingId: ""
     property string pendingTool: ""
     property string pendingArgs: ""
@@ -212,6 +219,12 @@ FloatingWindow {
             else if (a === "mode")     root.mode = b
             else if (a === "reset")    log.clear()
             root.firstRecord = true
+        } else if (tag === "V") {
+            if (a === "speak")          root.canSpeak = b
+            else if (a === "listen")    root.canHear = b
+            else if (a === "reading")   root.reading = (b === "yes")
+            else if (a === "listening") root.listening = (b === "yes")
+            else if (a === "heard")     root.say("me", b)
         } else if (tag === "M") {
             root.turnMode = a
         } else if (tag === "U") {
@@ -287,7 +300,48 @@ FloatingWindow {
                 font.pixelSize: root.ui(13)
                 font.family: "monospace"
             }
+            // ⚠ HIDDEN, NOT GREYED, where the box cannot do it. A microphone
+            // that cannot be pressed is a question the user has to go and
+            // answer somewhere else; no microphone is a window that never
+            // raised it.
+            Text {
+                id: micBtn
+                visible: root.canHear !== "no"
+                anchors { right: readBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                text: root.listening ? "◉ listening" : "🎤"
+                color: root.listening ? root.cWarn : root.cDim
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(13)
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (!root.listening) root.send("listen")
+                }
+            }
+
+            Text {
+                id: readBtn
+                visible: root.canSpeak !== "no"
+                anchors { right: pill.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                text: root.reading ? "🔊" : "🔇"
+                color: root.reading ? root.cAccent : root.cDim
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(13)
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    // Left click turns reading on and off; while it is talking,
+                    // any click shuts it up first — the button you reach for
+                    // when a long answer starts reading itself is this one.
+                    onClicked: {
+                        root.send("hush")
+                        root.send("speak " + (root.reading ? "off" : "on"))
+                    }
+                }
+            }
+
             Rectangle {       // the cloud/local tell, in a word and a colour
+                id: pill
                 anchors { right: modeBtn.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
                 width: tag.implicitWidth + 14; height: 20; radius: 10
                 color: root.cloud ? Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.22)
