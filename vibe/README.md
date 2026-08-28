@@ -25,6 +25,22 @@ a table in milliseconds. synsh is asked whether it claims a line — the list
 lives there, not here, so an intent added to synsh reaches this with nothing
 here edited.
 
+**Ask, Agent, Plan — picked for you, or chosen by hand.**
+
+| mode | what it does |
+|---|---|
+| **Ask** | answers, and touches nothing — no tools at all |
+| **Agent** | answers and does it, asking before anything is written |
+| **Plan** | looks around with read-only tools and writes out the steps instead of taking them |
+| **Auto** | the default: picks one of the three per message |
+
+Auto is not a fourth behaviour — it resolves to one of the three and then acts
+exactly as if you had chosen it. The header shows which (`auto · plan`), so a
+routed turn is reviewable. The picker is a router over evidence the process
+already has, not a second call to the model: asking the model which mode to use
+costs a whole round trip before the first token, and it is wrong in exactly the
+cases that matter.
+
 **The backend is switchable, including to a paid one.**
 
 ```bash

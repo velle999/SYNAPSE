@@ -20,7 +20,16 @@ pkgver=0.1.0
 #   an invitation; it now says advisory.
 #   Found by an outside review of the repo (GPT-5, via velle). The finding was
 #   real and correctly sized.
-pkgrel=43
+# 44: the default model named a file nothing ever creates.
+#   SYNAPD_DEFAULT_MODEL and the shipped synapd.conf both said
+#   synapse-7b-q4_k_m.gguf. syn-model — the downloader the installer runs —
+#   writes synapse.gguf. So on a FRESH INSTALL synapd looked for a model that
+#   was not there and came up in "no model loaded, shell-assist mode only",
+#   with the reason in the journal and nowhere else.
+#   ⚠ INVISIBLE ON ANY BOX THAT HAS EVER PICKED A MODEL BY HAND, because
+#   /var/lib/synapd/model.selected outranks the config — which is why it
+#   survived this long on the machine it was written on.
+pkgrel=44
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

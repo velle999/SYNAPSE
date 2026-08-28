@@ -21,6 +21,7 @@ the same reason twice over: an answer can contain tabs, and a file the model
 quotes can contain bytes that are not valid UTF-8.
 
   S  key value           one fact about the engine's state
+  M  mode                 the mode this turn actually ran in
   U  text                the line being answered, echoed
   K  text                synsh answered this one; no model was involved
   T  text                a chunk of the assistant's reply
@@ -32,6 +33,7 @@ quotes can contain bytes that are not valid UTF-8.
 Commands:
 
   ask TEXT               answer this
+  mode auto|ask|agent|plan   how it should behave
   confirm ID yes|no      allow or refuse the tool waiting under ID
   reset                  forget the conversation
   provider NAME          switch backend, for this process
@@ -53,7 +55,7 @@ import sys
 import threading
 
 import vibe.config as cfg
-from vibe import keywords
+from vibe import keywords, modes
 
 
 # ── the wire ────────────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ class Server:
         self._pending: dict[str, dict] = {}
         self._ids = itertools.count(1)
         self._stop = threading.Event()
+        self.mode = modes.AUTO
 
     # ── state ───────────────────────────────────────────────────────────
     def emit_state(self):
@@ -130,6 +133,7 @@ class Server:
         self.wire.rec("S", "model", self.model_label())
         self.wire.rec("S", "cloud", "yes" if cfg.BACKEND in ("anthropic", "openai") else "no")
         self.wire.rec("S", "keywords", "yes" if keywords.available() else "no")
+        self.wire.rec("S", "mode", self.mode)
         self.wire.rec("S", "ready", "yes" if self.model else "no")
 
     def model_label(self) -> str:
@@ -155,6 +159,7 @@ class Server:
             from vibe.llm import VibeModel
             self.model = VibeModel(verbose=False)
             self.model.confirm_tool = self._confirm
+            self.model.mode = self.mode
         except Exception as e:
             self.wire.rec("A", str(e))
             return False
@@ -210,6 +215,13 @@ class Server:
             if not self.ensure_model():
                 return
 
+            self.model.mode = self.mode
+            # ⚠ ANNOUNCED BEFORE THE ANSWER, not after. On AUTO the mode is a
+            # decision the user did not make, and a window that showed it only
+            # once the reply had finished would be explaining a choice whose
+            # consequences had already scrolled past.
+            self.wire.rec("M", modes.resolve(self.mode, text))
+
             for piece in self.model.chat(text):
                 if self._stop.is_set():
                     return
@@ -253,6 +265,9 @@ class Server:
                 self.model.reset()
             self.wire.rec("S", "reset", "yes")
             return True
+        if verb == "mode":
+            self.set_mode(dec(rest).strip())
+            return True
         if verb == "provider":
             self.set_provider(dec(rest).strip())
             return True
@@ -261,6 +276,19 @@ class Server:
             return True
         self.wire.rec("A", f"unknown command: {verb}")
         return True
+
+    def set_mode(self, name: str):
+        if name not in modes.MODES:
+            self.wire.rec("A", f"no such mode: {name} (try {', '.join(modes.MODES)})")
+            return
+        self.mode = name
+        if self.model:
+            self.model.mode = name
+        # ⚠ THE CONVERSATION IS KEPT. A mode is how the assistant behaves on
+        # the next turn, not who it is — switching to Plan to think about what
+        # was just discussed is the whole point, and dropping the history would
+        # make that impossible.
+        self.wire.rec("S", "mode", name)
 
     def set_provider(self, name: str):
         known = ("synapd", "ollama", "llama_cpp", "anthropic", "openai")

@@ -179,7 +179,42 @@ check("…and leaves an ordinary reply alone",
       sc.trim_hallucinated_turn("Just an answer.") == "Just an answer.")
 
 
-# ── 5. the wire ─────────────────────────────────────────────────────────────
+# ── 5. Ask / Agent / Plan, and the automatic choice ─────────────────────────
+from vibe import modes
+
+for text, want in (
+        ("what is the speed of light",             modes.ASK),
+        ("who wrote the novel Dune",               modes.ASK),
+        ("write me a haiku about a cat",           modes.ASK),
+        # ⚠ CARRIES `write` AND `build`, and is still writing. The compose
+        # verbs have to beat the machine words or every email becomes a task.
+        ("write me an email about the build failing", modes.ASK),
+        ("list the files in /etc/synapd",          modes.AGENT),
+        ("move the bar to the bottom",             modes.AGENT),
+        ("what is in ~/Downloads",                 modes.AGENT),
+        ("how would you add dark mode to this app", modes.PLAN),
+        ("plan a migration to postgres",           modes.PLAN)):
+    check(f"auto routes {text[:34]!r} to {want}", modes.route(text) == want,
+          modes.route(text))
+
+check("a mode chosen by hand is honoured, not routed",
+      modes.resolve(modes.ASK, "list the files in /etc") == modes.ASK)
+check("…and AUTO is never the answer to which mode ran",
+      modes.route("anything at all") in (modes.ASK, modes.AGENT, modes.PLAN))
+
+# ⛔ PLAN'S SAFETY IS ITS TOOL LIST. If a tool that writes ever reaches it, the
+# mode whose whole promise is "looks, and writes the steps instead of taking
+# them" can take them.
+plan_tools = {t["function"]["name"] for t in modes.tools_for(modes.PLAN, TOOL_SCHEMAS)}
+check("plan gets only read-only tools", plan_tools <= modes.READ_ONLY_TOOLS, plan_tools)
+check("…and none of them is behind the confirmation gate",
+      not (plan_tools & VibeModel._CONFIRM_TOOLS))
+check("ask gets no tools at all", modes.tools_for(modes.ASK, TOOL_SCHEMAS) is None)
+check("agent gets all of them",
+      len(modes.tools_for(modes.AGENT, TOOL_SCHEMAS)) == len(TOOL_SCHEMAS))
+
+
+# ── 6. the wire ─────────────────────────────────────────────────────────────
 #
 # Tabs and newlines ARE the record separators, so an answer containing them has
 # to survive as data. A shell transcript contains both, every time.

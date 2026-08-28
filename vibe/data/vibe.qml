@@ -161,6 +161,12 @@ FloatingWindow {
     property string modelName: ""
     property bool   cloud: false
     property bool   busy: false
+    property string mode: "auto"
+    // What AUTO actually chose for the turn being answered. Shown beside the
+    // selector so a routed turn is legible: "auto · plan" is the assistant
+    // saying which way it went, which is the only thing that makes an
+    // automatic choice reviewable rather than mysterious.
+    property string turnMode: ""
     property string pendingId: ""
     property string pendingTool: ""
     property string pendingArgs: ""
@@ -203,8 +209,11 @@ FloatingWindow {
             if (a === "backend")  root.backend = b
             else if (a === "model")    root.modelName = b
             else if (a === "cloud")    root.cloud = (b === "yes")
+            else if (a === "mode")     root.mode = b
             else if (a === "reset")    log.clear()
             root.firstRecord = true
+        } else if (tag === "M") {
+            root.turnMode = a
         } else if (tag === "U") {
             root.say("me", a)
             root.busy = true
@@ -279,7 +288,7 @@ FloatingWindow {
                 font.family: "monospace"
             }
             Rectangle {       // the cloud/local tell, in a word and a colour
-                anchors { right: menuBtn.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                anchors { right: modeBtn.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
                 width: tag.implicitWidth + 14; height: 20; radius: 10
                 color: root.cloud ? Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.22)
                                   : Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.18)
@@ -292,6 +301,36 @@ FloatingWindow {
                     font.pixelSize: root.ui(11)
                 }
             }
+            Text {
+                id: modeBtn
+                anchors { right: menuBtn.left; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                text: root.mode + (root.mode === "auto" && root.turnMode !== ""
+                                   ? " · " + root.turnMode : "") + " ▾"
+                color: root.cAccent
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(12)
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: modeMenu.open()
+                }
+                Menu {
+                    id: modeMenu
+                    Repeater {
+                        model: [["auto",  "Auto — picks per message"],
+                                ["ask",   "Ask — answers, touches nothing"],
+                                ["agent", "Agent — answers and does it"],
+                                ["plan",  "Plan — looks, and writes the steps"]]
+                        MenuItem {
+                            id: mrow
+                            required property var modelData
+                            text: mrow.modelData[1]
+                            onTriggered: root.send("mode " + mrow.modelData[0])
+                        }
+                    }
+                }
+            }
+
             Text {
                 id: menuBtn
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }

@@ -31,7 +31,13 @@
 #ifndef SYNAPD_MODEL_DIR
 #define SYNAPD_MODEL_DIR      "/var/lib/synapd/models"
 #endif
-#define SYNAPD_DEFAULT_MODEL  SYNAPD_MODEL_DIR "/synapse-7b-q4_k_m.gguf"
+/* ⛔ THE NAME syn-model ACTUALLY WRITES. This was "synapse-7b-q4_k_m.gguf" —
+ * a file nothing in the distro has ever created. syn-model downloads
+ * synapse.gguf, so on a fresh install synapd looked for a model that was not
+ * there and came up with "no model loaded — running in shell-assist mode
+ * only". It is not noticed on a box that has ever picked a model by hand,
+ * because /var/lib/synapd/model.selected then outranks this. */
+#define SYNAPD_DEFAULT_MODEL  SYNAPD_MODEL_DIR "/synapse.gguf"
 /* The model last chosen at RUNTIME, as a bare filename — see
  * synapd_selected_{save,load}(). Kept beside the models rather than under /etc
  * because the daemon writes it as its own unprivileged user; a drop-in would

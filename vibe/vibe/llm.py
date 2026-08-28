@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 import vibe.config as cfg
-from vibe import cloud
+from vibe import cloud, modes
 from . import synapd_client
 from .tools import TOOL_SCHEMAS, execute_tool
 
@@ -116,6 +116,12 @@ class VibeModel:
         self._verbose = verbose
         self._synapd_fmt = ""
         self._synapd_model = ""
+        # Ask / Agent / Plan, or AUTO — see modes.py. Per-TURN: `_turn_tools`
+        # is what this turn may reach for, and AUTO resolves to a real mode
+        # before it is set.
+        self.mode = modes.AUTO
+        self._turn_tools = TOOL_SCHEMAS
+        self.active_mode = modes.AGENT
         # Optional gate: a callable (name, args) -> bool. The REPL sets it to an
         # interactive y/N prompt; left None (e.g. non-interactive/embedded use)
         # every tool runs unattended, preserving the old behaviour.
@@ -395,9 +401,25 @@ class VibeModel:
           - "\\x00TOOL_START\\x00{name}\\x00{json_args}\\x00"  — tool about to run
           - "\\x00TOOL_END\\x00{result}\\x00"                 — tool result
         """
+        # ── Which mode this turn runs in ────────────────────────────────
+        #
+        # ⚠ RESOLVED PER TURN, not per session. AUTO is the default and it
+        # routes each line on its own: the same conversation can answer a
+        # question with no tools and then act on the next line. A mode chosen
+        # by hand is honoured verbatim and routes nothing.
+        self.active_mode = modes.resolve(self.mode, user_text)
+        self._turn_tools = modes.tools_for(self.active_mode, TOOL_SCHEMAS)
+
+        # The mode's instruction rides on the USER turn rather than the system
+        # block, for the reason the tool reminder does: on a Mistral the system
+        # block is folded into the FIRST user turn, so by message ten it is
+        # thousands of tokens behind the question and a 7B has stopped
+        # following it.
+        text_for_model = user_text + modes.PROMPT.get(self.active_mode, "")
+
         self._messages.append({
             "role": "user",
-            "content": self._user_content(user_text),
+            "content": self._user_content(text_for_model),
         })
 
         # Prune before sending to avoid context overflow
@@ -658,10 +680,10 @@ class VibeModel:
             return self._synapd_stream(no_tools=no_tools)
         if cfg.BACKEND == "anthropic":
             return cloud.anthropic_stream(
-                self._messages, None if no_tools else TOOL_SCHEMAS)
+                self._messages, None if no_tools else self._turn_tools)
         if cfg.BACKEND == "openai":
             return cloud.openai_stream(
-                self._messages, None if no_tools else TOOL_SCHEMAS,
+                self._messages, None if no_tools else self._turn_tools,
                 tool_choice=tool_choice)
         kwargs = dict(
             messages=self._messages,
@@ -673,8 +695,8 @@ class VibeModel:
             max_tokens=cfg.MAX_TOKENS,
             stream=True,
         )
-        if not no_tools:
-            kwargs["tools"] = TOOL_SCHEMAS
+        if not no_tools and self._turn_tools:
+            kwargs["tools"] = self._turn_tools
             kwargs["tool_choice"] = tool_choice
         return self._llm.create_chat_completion(**kwargs)
 
@@ -705,8 +727,8 @@ class VibeModel:
                 "num_gpu": cfg.OLLAMA_NUM_GPU,
             },
         }
-        if not no_tools:
-            body["tools"] = TOOL_SCHEMAS
+        if not no_tools and self._turn_tools:
+            body["tools"] = self._turn_tools
             body["tool_choice"] = tool_choice
         payload = json.dumps(body).encode()
         req = urllib.request.Request(
@@ -781,7 +803,7 @@ class VibeModel:
         """
         prompt = synapd_client.flatten_messages(
             self._messages,
-            None if no_tools else TOOL_SCHEMAS,
+            None if no_tools else self._turn_tools,
             self._synapd_fmt,
         )
         text = synapd_client.query(

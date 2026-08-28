@@ -30,6 +30,7 @@ _MAGIC = 0x53594E41          # "SYNA"
 _VER = 1
 _MSG_QUERY = 0x01
 _MSG_STATUS = 0x06
+_MSG_RELOAD = 0x07
 _MSG_ERROR = 0xFF
 
 SYN_QF_RAW = 0x8000
@@ -181,6 +182,31 @@ def status(socket_path: str = DEFAULT_SOCKET, host: str = "",
     for m in re.finditer(r'(\w+)=("([^"]*)"|\S+)', body):
         out[m.group(1)] = m.group(3) if m.group(3) is not None else m.group(2)
     return out
+
+
+def reload_model(name: str, socket_path: str = DEFAULT_SOCKET, host: str = "",
+                 port: int = DEFAULT_PORT, timeout: float = 30.0) -> str:
+    """Ask synapd to load a different model, by bare filename.
+
+    ⚠ NO PRIVILEGE IS NEEDED AND NONE IS TAKEN. synapd resolves the name inside
+    its own model directory and remembers the choice itself, in
+    /var/lib/synapd/model.selected, only after the load succeeds — which is why
+    switching a model is a socket message and not a sudoers rule. A name that
+    escapes the directory is refused by the daemon, not by this.
+    """
+    payload = name.encode() + b"\0"
+    s = _connect(socket_path, host, port, timeout)
+    try:
+        s.sendall(_HDR.pack(_MAGIC, _VER, _MSG_RELOAD, 0, len(payload), 1,
+                            os.getpid(), 0) + payload)
+        head = _recv_exact(s, _HDR.size)
+        _, _, mt, _, plen, _, _, _ = _HDR.unpack(head)
+        body = _recv_exact(s, plen).decode("utf-8", "replace") if plen else ""
+    finally:
+        s.close()
+    if mt == _MSG_ERROR:
+        raise SynapdError(f"synapd refused the switch: {body}")
+    return body
 
 
 # ── The turn markers, per family ────────────────────────────────────────────
