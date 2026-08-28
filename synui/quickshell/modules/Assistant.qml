@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "../components"
 import ".."
@@ -23,11 +24,26 @@ import ".."
 BarModule {
     id: root
 
-    icon: Icons.assistant
-    iconColor: root.active ? root.pal.accent : root.pal.glyph
-    active: chat.running
-    tooltipText: chat.running ? "Assistant — click to close"
-                              : "Assistant — ask, or say what you want done"
+    /* ⛔ AND IT SHOWS WHEN THE MICROPHONE IS OPEN. The assistant can be armed
+     * to answer to its name, and that leaves a microphone listening for as long
+     * as it is on — with the chat window closed, minimised or on another
+     * workspace. A disclosure that lives only in a window nobody is looking at
+     * is not one, so the engine writes the state and the bar wears it: the
+     * glyph turns to a microphone and takes the warning colour.
+     *
+     * ⚠ The file is the interface, not an IPC call — the engine is a child of
+     * this button on this monitor, and on a second monitor there is no child at
+     * all. A file every bar watches says the same thing on all of them. */
+    readonly property bool listening: assistantState.wake === "on"
+
+    icon: root.listening ? Icons.mic : Icons.assistant
+    iconColor: root.listening ? root.pal.red
+                              : (root.active ? root.pal.accent : root.pal.glyph)
+    active: chat.running || root.listening
+    tooltipText: root.listening
+        ? "Assistant is LISTENING for its name — click to open it and stop"
+        : (chat.running ? "Assistant — click to close"
+                        : "Assistant — ask, or say what you want done")
 
     // Hidden where vibe is not installed, rather than drawn as a button that
     // reports a missing package when pressed. An optdepend that is absent is
@@ -41,6 +57,23 @@ BarModule {
     Process {
         id: chat
         command: ["vibe", "gui"]
+    }
+
+    QtObject {
+        id: assistantState
+        property string wake: "off"
+    }
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/assistant.state"
+        watchChanges: true
+        printErrors: false      // absent until the assistant has run once
+        onFileChanged: reload()
+        onLoaded: {
+            const m = this.text().match(/^\s*wake\s*=\s*(\S+)\s*$/m)
+            assistantState.wake = m ? m[1] : "off"
+        }
+        onLoadFailed: assistantState.wake = "off"
     }
 
     Process {

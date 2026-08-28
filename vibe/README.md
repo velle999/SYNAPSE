@@ -62,6 +62,26 @@ than growing a second one, so there is one voice on the machine; `syn-speak`,
 the desktop's screen reader, speaks through the same door. Without chibi,
 speech falls back to espeak-ng and dictation says what is missing.
 
+**It can answer to its name.** Turn on *wake* and say "Synapse, what's the
+weather" — or "computer", which whisper transcribes correctly every time where a
+product name is a coin toss.
+
+⛔ It ships off, and it is the most serious switch here: armed, it leaves a
+microphone open. Every utterance is transcribed **locally** by the model already
+on disk, and a line that does not name the assistant is dropped — it reaches no
+model, no log and no disk. Only a line that wakes it becomes a request, and then
+it goes wherever your backend goes. On a cloud backend it says so out loud when
+you arm it.
+
+While it is on **the bar says so**: the assistant button turns into a microphone
+in the warning colour. That is deliberate — the chat window can be closed or on
+another workspace, and a disclosure nobody is looking at is not one.
+
+A follow-up inside 22 seconds needs no name, and the window closes after four
+turns that never name it. That last part is the whole defence against a room
+with a television in it: a person says the name again now and then; a broadcast
+holding a conversation with itself never does. The design is chibi's.
+
 **The backend is switchable, including to a paid one.**
 
 ```bash

@@ -37,6 +37,7 @@ Commands:
   mode auto|ask|agent|plan   how it should behave
   speak on|off           read the answers aloud
   listen                 take one spoken line and answer it
+  wake on|off            answer to its name, hands-free
   hush                   stop talking, now
   confirm ID yes|no      allow or refuse the tool waiting under ID
   reset                  forget the conversation
@@ -55,11 +56,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 import itertools
 import json
+import os
 import sys
 import threading
+from pathlib import Path
 
 import vibe.config as cfg
-from vibe import keywords, modes, voice as voicemod
+from vibe import keywords, modes, voice as voicemod, wake as wakemod
 
 
 # ── the wire ────────────────────────────────────────────────────────────────
@@ -133,6 +136,8 @@ class Server:
         self.speaking = False           # read answers aloud
         self._voice = None
         self._said = ""                 # what has already been spoken this turn
+        self._wake = None
+        self._facts = {}
 
     # ── state ───────────────────────────────────────────────────────────
     def emit_state(self):
@@ -147,6 +152,7 @@ class Server:
         for k, v in voicemod.shared().status().items():
             self.wire.rec("V", k, v)
         self.wire.rec("V", "reading", "yes" if self.speaking else "no")
+        self.wire.rec("V", "wake", "on" if (self._wake and self._wake.running) else "off")
         self.wire.rec("S", "ready", "yes" if self.model else "no")
 
     def model_label(self) -> str:
@@ -311,6 +317,9 @@ class Server:
         if verb == "hush":
             voicemod.shared().stop()
             return True
+        if verb == "wake":
+            self.set_wake(rest.strip() == "on")
+            return True
         if verb == "listen":
             # On its own thread: capture runs for seconds and the reader must
             # stay live, exactly as it must for a confirmation.
@@ -356,6 +365,74 @@ class Server:
         self.wire.rec("X", "", out if rc == 0 else f"{out}\n(exit {rc})")
         self._said += out if rc == 0 else f"exit status {rc}"
 
+    # ⛔ THE DESKTOP HAS TO SAY SO, NOT JUST THE WINDOW. The chat window can be
+    # closed, minimised, or on another workspace while the microphone stays
+    # open — so the state goes in a file the BAR watches, and the bar's
+    # assistant button changes while it is listening. A window nobody is
+    # looking at is not a disclosure.
+    _STATE = (Path(os.environ.get("XDG_CONFIG_HOME") or
+                   (Path.home() / ".config")) / "synui" / "assistant.state")
+
+    def _publish(self, **facts):
+        try:
+            self._STATE.parent.mkdir(parents=True, exist_ok=True)
+            self._facts.update(facts)
+            body = "".join(f"{k} = {v}\n" for k, v in sorted(self._facts.items()))
+            tmp = self._STATE.with_suffix(".tmp")
+            tmp.write_text("# Written by `vibe serve`. The bar reads it.\n" + body,
+                           encoding="utf-8")
+            os.replace(tmp, self._STATE)
+        except OSError:
+            # A desktop whose config dir is unwritable still gets an assistant;
+            # it just gets no bar indicator, and that is not worth failing over.
+            pass
+
+    def set_wake(self, on: bool):
+        """Arm or disarm the hands-free listener.
+
+        ⛔ THE LOUDEST THING THIS PROGRAM DOES, and it announces itself both
+        ways. A microphone that is open without the desktop saying so is not a
+        feature; the V record is what puts the indicator on the bar and in the
+        window, and it is emitted before the loop starts and after it stops.
+        """
+        if self._wake is None:
+            self._wake = wakemod.Listener(
+                voicemod.shared(),
+                on_line=self._wake_line,
+                on_state=self._wake_state)
+        if on:
+            # ⚠ A CLOUD BACKEND MEANS THE ROOM GOES TO SOMEBODY ELSE'S
+            # COMPUTER. The transcription is local either way, but a line that
+            # WAKES it becomes a request, and on a paid backend that request
+            # leaves the machine. Saying so once is the least this can do.
+            if cfg.BACKEND in ("anthropic", "openai"):
+                self.wire.rec("A", f"wake is on, and the backend is {cfg.BACKEND} — "
+                                   f"anything it hears you say to it goes to them. "
+                                   f"`provider synapd` keeps it on this machine.")
+            err = self._wake.start()
+            if err:
+                self.wire.rec("A", err)
+                self.wire.rec("V", "wake", "off")
+        else:
+            self._wake.stop()
+
+    def _wake_state(self, key: str, value: str):
+        self.wire.rec("V", key, value)
+        if key == "wake":
+            self._publish(wake=value)
+
+    def _wake_line(self, text: str):
+        """A line that named the assistant. Answer it, out loud."""
+        # ⚠ SPEAKING IS TURNED ON FOR A SPOKEN TURN, whatever the button says.
+        # Somebody talking to the room is not looking at the window, and an
+        # answer that only appears in text is no answer at all.
+        was = self.speaking
+        self.speaking = True
+        try:
+            self._run_turn(text)
+        finally:
+            self.speaking = was
+
     def _listen_turn(self):
         """Hear one line, show it, and answer it."""
         self.wire.rec("V", "listening", "yes")
@@ -400,13 +477,41 @@ class Server:
         self.emit_state()
 
     def serve(self, stream=None):
+        self._publish(wake="off")
         self.emit_state()
         stream = stream or sys.stdin
-        for line in stream:
-            if not self.command(line):
-                break
+        try:
+            for line in stream:
+                if not self.command(line):
+                    break
+        finally:
+            # ⛔ CLEARED ON THE WAY OUT, whatever the way out was. A bar left
+            # saying "listening" by an engine that has exited is worse than no
+            # indicator: it is a false one, and the next person to see it has
+            # no way to turn it off.
+            if self._wake is not None:
+                self._wake.stop()
+            self._publish(wake="off")
 
 
 def main() -> int:
-    Server().serve()
+    """Serve, with the protocol pipe held privately.
+
+    ⛔ THE WIRE TAKES THE REAL STDOUT AND EVERYTHING ELSE GETS STDERR, and this
+    is the only version of this guard that actually holds. The first one wrapped
+    each call into chibi's voice stack in a redirect_stdout block — which works
+    for a call that prints while it runs, and does nothing at all for chibi's
+    capture loop, which prints "[Voice] Capturing audio via arecord …" from a
+    BACKGROUND THREAD seconds later. redirect_stdout is a process-wide
+    swap for the duration of a block; a thread that outlives the block prints
+    into the real stream, and the real stream is the window's protocol.
+
+    It leaked exactly once, in testing, the first time the wake word armed a
+    capture. Doing it here instead means no library on any thread can reach the
+    pipe: the only writer is Wire, which was handed the descriptor before it
+    stopped being reachable by anybody else.
+    """
+    real = sys.stdout
+    sys.stdout = sys.stderr
+    Server(Wire(real)).serve()
     return 0

@@ -269,6 +269,72 @@ check("…and a refusal runs nothing",
       "would-not-run" not in out.getvalue() or "not run" in out.getvalue())
 
 
+# ── 5c. the wake word ───────────────────────────────────────────────────────
+#
+# ⛔ THE SWITCH THAT LEAVES A MICROPHONE OPEN. Its correctness is not "does it
+# hear the name" — it is that a room with a television in it does not hold a
+# conversation with the assistant, and that the desktop says when it is on.
+from vibe import wake as wakemod
+
+for t in ("Synapse what is the time", "sinaps hello", "cynaps open files",
+          "computor what time is it", "ask synapse about it"):
+    check(f"{t[:26]!r} wakes it", wakemod.names_it(t))
+
+# ⚠ MEASURED, NOT GUESSED. A fuzzy pass over every word at 0.8 — the obvious
+# implementation — wakes on "compute" (.933), "computers" (.941), "commuter"
+# (.875) and "snaps" (.833). Restricting it to the FIRST word and requiring six
+# characters is what makes 0.75 safe, and 0.75 is what catches "sinaps" (.769),
+# which is what whisper-tiny actually produces.
+for t in ("the synopsis of the film", "I need to compute the average",
+          "snaps of the party were great", "the commuter rail is delayed",
+          "collapse the window", "we should discuss synergy",
+          "what is the weather"):
+    check(f"{t[:26]!r} does not", not wakemod.names_it(t))
+
+check("the name is taken off the front before the question is asked",
+      wakemod.strip_name("Synapse, what is the time") == "what is the time")
+check("…but not out of the middle, where it is the subject",
+      wakemod.strip_name("ask synapse about it") == "ask synapse about it")
+
+# ⛔ THE TELEVISION DEFENCE. A window that stayed open for anything that spoke
+# would let a broadcast talk to the assistant all evening. It closes after a few
+# turns that never name it — a human says the name again now and then.
+g = wakemod.Gate(window=10, cap=2)
+t0 = 1000.0
+check("the name opens the window", g.accept("synapse hello", now=t0))
+check("…a follow-up needs no name", g.accept("and the weather", now=t0 + 1))
+check("…and a second", g.accept("and after that", now=t0 + 2))
+check("…but the third unaddressed turn closes it",
+      not g.accept("and then", now=t0 + 3))
+check("…and the name opens it again", g.accept("synapse again", now=t0 + 4))
+check("a line after the window has expired is ignored",
+      not wakemod.Gate(window=1, cap=4).accept("no name here", now=t0))
+
+# The disclosure. A bar left claiming a microphone is open by an engine that has
+# exited is worse than no indicator — it is a false one nobody can turn off.
+import tempfile, pathlib
+cfgdir = tempfile.mkdtemp()
+old_env = os.environ.get("XDG_CONFIG_HOME")
+os.environ["XDG_CONFIG_HOME"] = cfgdir
+import importlib
+import vibe.serve as _sv
+importlib.reload(_sv)
+try:
+    o = io.StringIO()
+    _sv.Server(_sv.Wire(o)).serve(io.StringIO("quit\n"))
+    statefile = pathlib.Path(cfgdir) / "synui" / "assistant.state"
+    check("the engine publishes its wake state where the bar can see it",
+          statefile.exists())
+    check("…and leaves it OFF when it exits",
+          "wake = off" in statefile.read_text())
+finally:
+    if old_env is None:
+        os.environ.pop("XDG_CONFIG_HOME", None)
+    else:
+        os.environ["XDG_CONFIG_HOME"] = old_env
+    importlib.reload(_sv)
+
+
 # ── 6. the voice, and the pipe it must not write into ───────────────────────
 #
 # ⛔ THE TRAP THIS SECTION EXISTS FOR: chibi's voice modules print to stdout

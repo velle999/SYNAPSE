@@ -174,6 +174,7 @@ FloatingWindow {
     property string canHear: "no"
     property bool   reading: false
     property bool   listening: false
+    property bool   waking: false
     property string pendingId: ""
     property string pendingTool: ""
     property string pendingArgs: ""
@@ -224,6 +225,7 @@ FloatingWindow {
             else if (a === "listen")    root.canHear = b
             else if (a === "reading")   root.reading = (b === "yes")
             else if (a === "listening") root.listening = (b === "yes")
+            else if (a === "wake")      root.waking = (b === "on")
             else if (a === "heard")     root.say("me", b)
         } else if (tag === "M") {
             root.turnMode = a
@@ -304,6 +306,23 @@ FloatingWindow {
             // that cannot be pressed is a question the user has to go and
             // answer somewhere else; no microphone is a window that never
             // raised it.
+            // ⛔ THE LOUDEST CONTROL IN THE WINDOW, and it looks it while it is
+            // on. Armed, this leaves a microphone open until it is turned off.
+            Text {
+                id: wakeBtn
+                visible: root.canHear !== "no"
+                anchors { right: micBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                text: root.waking ? "◉ answering to its name" : "wake"
+                color: root.waking ? root.cBad : root.cDim
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(12)
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.send("wake " + (root.waking ? "off" : "on"))
+                }
+            }
+
             Text {
                 id: micBtn
                 visible: root.canHear !== "no"

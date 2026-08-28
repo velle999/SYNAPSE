@@ -2482,7 +2482,19 @@ pkgver=0.1.0
 #   chibi, and a compositor that grew its own would be a third voice on the
 #   machine. A box without them spawns a command that is not there, which costs
 #   a log line and nothing else.
-pkgrel=528
+# 529: the bar says when the microphone is open.
+#   The assistant can be armed to answer to its name, and that leaves a
+#   microphone listening until it is turned off — with the chat window closed,
+#   minimised, or on another workspace. modules/Assistant.qml watches
+#   ~/.config/synui/assistant.state and, while wake is on, the button becomes a
+#   MICROPHONE in the warning colour with a tooltip that says so.
+#   ⛔ A DISCLOSURE THAT LIVES ONLY IN A WINDOW NOBODY IS LOOKING AT IS NOT ONE.
+#   That is the whole reason this is in the bar rather than in the assistant.
+#   ⚠ A FILE AND NOT AN IPC CALL: the engine is a child of this button on ONE
+#   monitor, and on a second monitor there is no child at all. A file every bar
+#   watches says the same thing on all of them — and an engine that exits
+#   clears it, so a crash cannot leave a bar claiming a microphone is open.
+pkgrel=529
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
