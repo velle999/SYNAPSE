@@ -292,6 +292,88 @@ static double lum_premult_over(double src, double scale, double alpha,
 
 /* ── Scene-graph geometry ────────────────────────────────── */
 
+/*
+ * ⛔ A SCENE BUFFER'S PIXELS OUTLIVE ITS `buffer`, AND EVERYTHING SYNUI DRAWS
+ * FOR ITSELF IS IN THAT STATE.
+ *
+ * wlroots uploads a buffer that is NOT a client's to a texture the moment it is
+ * set, and then lets the buffer go: `scene_buffer->buffer` reads NULL from then
+ * on, and the pixels live in the private `texture`, at the private
+ * `buffer_width`/`buffer_height`. A client's buffer is kept, because the client
+ * may replace it; a cairo buffer synui painted once is not.
+ *
+ * This file asked `sb->buffer` for both the size and the pixels, so every
+ * surface synui draws for itself was ZERO BY ZERO and unreadable — never hit by
+ * leaf_at(), and declined by the read below even if it had been.
+ *
+ * ⚠ THE ONE THAT SHOWS IS THE TITLEBAR, and the comment on leaf_lum_run() had
+ * it backwards for as long as it has been there: a decoration is not a rect. The
+ * BORDER is a rect, and it is clipped out over the content; the TITLEBAR is a
+ * cairo buffer. So a window under an auto-hiding bar was measured as nothing at
+ * all whenever its title sat in the strip, and the bar inked itself off a
+ * wallpaper that window was covering. Hiding the titlebars "fixed" it, because
+ * that moves the client's own surface — which is a client buffer, and kept —
+ * into the strip.
+ *
+ * ⚠ `WLR_PRIVATE` is wlroots' own name for that section and is reached
+ * deliberately. There is no public accessor, and the alternative is a second
+ * bookkeeping map from node to buffer for surfaces synui already owns. A
+ * wlroots that moves these fields fails to COMPILE, which is the failure mode
+ * to want: the one this replaces was silent for the life of the file.
+ */
+static void scene_buffer_pixel_size(const struct wlr_scene_buffer *b,
+                                    int *w, int *h)
+{
+    if (b->buffer) { *w = b->buffer->width; *h = b->buffer->height; }
+    else           { *w = b->WLR_PRIVATE.buffer_width;
+                     *h = b->WLR_PRIVATE.buffer_height; }
+}
+
+/* The texture to read those pixels out of, or NULL. BORROWED in both of the
+ * cases that answer — see the note on wlr_client_buffer_get() below — so
+ * `*own` says whether the caller has to destroy it. */
+static struct wlr_texture *scene_buffer_texture(struct wlr_renderer *r,
+                                                const struct wlr_scene_buffer *b,
+                                                bool *own)
+{
+    *own = false;
+    if (!b->buffer) return b->WLR_PRIVATE.texture;
+    struct wlr_client_buffer *cb = wlr_client_buffer_get(b->buffer);
+    if (cb && cb->texture) return cb->texture;
+    struct wlr_texture *tex = wlr_texture_from_buffer(r, b->buffer);
+    *own = tex != NULL;
+    return tex;
+}
+
+/*
+ * How big a scene buffer is ON SCREEN.
+ *
+ * ⚠ `dst_width`/`dst_height` ARE ZERO UNTIL SOMEBODY SETS THEM, AND ZERO MEANS
+ * "the buffer's own size" — not "no size". wlroots' own scene reads it exactly
+ * that way (scene_node_get_size), and render.c's set_scene_buffer() never sets
+ * a dest size because it has no reason to: a cairo buffer is created at the
+ * size it is drawn at.
+ *
+ * A 90° transform swaps the axes, the same way wlroots does. The read path
+ * declines any transform but NORMAL anyway; this is here so the two agree about
+ * what the node covers rather than differing by an axis.
+ */
+static void scene_buffer_size(const struct wlr_scene_buffer *b, int *w, int *h)
+{
+    int bw, bh;
+    scene_buffer_pixel_size(b, &bw, &bh);
+    if (b->dst_width > 0 && b->dst_height > 0) {
+        *w = b->dst_width;
+        *h = b->dst_height;
+    } else if (b->transform & WL_OUTPUT_TRANSFORM_90) {
+        *w = bh;
+        *h = bw;
+    } else {
+        *w = bw;
+        *h = bh;
+    }
+}
+
 /* The layout-space box of a LEAF node, or false for a node with no area this
  * file can reason about (a tree, a shadow, a blur — none of which is a backdrop
  * anything can be read against). */
@@ -308,8 +390,14 @@ static bool leaf_box(struct wlr_scene_node *n, struct wlr_box *out)
     }
     case WLR_SCENE_NODE_BUFFER: {
         struct wlr_scene_buffer *b = wl_container_of(n, b, node);
-        if (!b->buffer) return false;
-        *out = (struct wlr_box){ lx, ly, b->dst_width, b->dst_height };
+        /* ⚠ NOT `!b->buffer` — see scene_buffer_pixel_size(). A node whose
+         * buffer has been uploaded and released still draws, and still covers
+         * what is behind it. Neither a buffer nor a texture is a node that
+         * genuinely has nothing on it. */
+        if (!b->buffer && !b->WLR_PRIVATE.texture) return false;
+        int w, h;
+        scene_buffer_size(b, &w, &h);
+        *out = (struct wlr_box){ lx, ly, w, h };
         return true;
     }
     default:
@@ -558,8 +646,17 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     }
 
     struct wlr_scene_buffer *sb = wl_container_of(n, sb, node);
-    if (!sb->buffer) { BARSCAN_BAIL("scene buffer has no buffer"); return; }
-    if (sb->dst_width <= 0 || sb->dst_height <= 0) { BARSCAN_BAIL("dst %dx%d", sb->dst_width, sb->dst_height); return; }
+    /* ⚠ NOT `!sb->buffer`, and NOT `dst_width <= 0` — see
+     * scene_buffer_pixel_size(). A released buffer still has its texture and
+     * still draws, and a zero dest size means "the buffer's own". Between them
+     * those two tests turned every surface synui draws for itself into a hole
+     * in this measurement. */
+    int bw, bh;
+    scene_buffer_pixel_size(sb, &bw, &bh);
+    if (bw <= 0 || bh <= 0) { BARSCAN_BAIL("buffer %dx%d", bw, bh); return; }
+    int dw, dh;
+    scene_buffer_size(sb, &dw, &dh);
+    if (dw <= 0 || dh <= 0) { BARSCAN_BAIL("dst %dx%d", dw, dh); return; }
 
     /*
      * ⚠ A ROTATED OR FLIPPED BUFFER IS DECLINED RATHER THAN GUESSED AT.
@@ -571,10 +668,10 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     if (sb->transform != WL_OUTPUT_TRANSFORM_NORMAL) { BARSCAN_BAIL("transform %d", (int)sb->transform); return; }
 
     /* Layout rect → buffer pixels. dst_width/height is what the node occupies
-     * on screen; buffer->width/height is what it is stored at, and a scaled
+     * on screen; the buffer's own size is what it is stored at, and a scaled
      * client (or an HiDPI one) makes those differ. */
-    double sx = (double)sb->buffer->width  / (double)sb->dst_width;
-    double sy = (double)sb->buffer->height / (double)sb->dst_height;
+    double sx = (double)bw / (double)dw;
+    double sy = (double)bh / (double)dh;
 
     struct wlr_box src = {
         .x      = (int)floor((hit.x - box.x) * sx),
@@ -584,10 +681,8 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
     };
     if (src.x < 0) src.x = 0;
     if (src.y < 0) src.y = 0;
-    if (src.x + src.width  > sb->buffer->width)
-        src.width  = sb->buffer->width  - src.x;
-    if (src.y + src.height > sb->buffer->height)
-        src.height = sb->buffer->height - src.y;
+    if (src.x + src.width  > bw) src.width  = bw - src.x;
+    if (src.y + src.height > bh) src.height = bh - src.y;
     if (src.width <= 0 || src.height <= 0) { BARSCAN_BAIL("src box empty after clamp"); return; }
 
     /*
@@ -601,19 +696,14 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
      * for it is wlr_client_buffer_get(). Measured: 320 declined reads and a bar
      * strip of -1 across the board, which reads exactly like "no window here".
      *
-     * That texture is BORROWED and must not be destroyed — hence `own`. The
-     * import path stays for the buffers that are not a client's: synui's own
-     * cairo scene buffers, where wlr_texture_from_buffer is the right call and
-     * the texture is ours to free.
+     * That texture is BORROWED and must not be destroyed — hence `own`. So is
+     * the one a RELEASED buffer left behind, which is the ordinary state of
+     * everything synui draws for itself; the import path is left for a buffer
+     * that is neither, where wlr_texture_from_buffer is the right call and the
+     * texture is ours to free. scene_buffer_texture() picks between the three.
      */
-    struct wlr_texture *tex = NULL;
     bool own = false;
-    struct wlr_client_buffer *cb = wlr_client_buffer_get(sb->buffer);
-    if (cb) tex = cb->texture;
-    if (!tex) {
-        tex = wlr_texture_from_buffer(s->renderer, sb->buffer);
-        own = tex != NULL;
-    }
+    struct wlr_texture *tex = scene_buffer_texture(s->renderer, sb, &own);
     if (!tex) { BARSCAN_BAIL("no texture for this buffer"); return; }
 
     uint32_t fmt = wlr_texture_preferred_read_format(tex);
@@ -701,8 +791,7 @@ static void leaf_lum_run(syn_server_t *s, struct wlr_scene_node *n,
         wlr_log(WLR_INFO,
                 "synui: barscan: %s col %d read buf %dx%d dst %dx%d scale "
                 "%.3fx%.3f src %d,%d %dx%d node %d,%d %dx%d opacity %.2f",
-                g_dbg_out, g_dbg_col, sb->buffer->width, sb->buffer->height,
-                sb->dst_width, sb->dst_height, sx, sy,
+                g_dbg_out, g_dbg_col, bw, bh, dw, dh, sx, sy,
                 src.x, src.y, src.width, src.height,
                 box.x, box.y, box.width, box.height, sb->opacity);
 

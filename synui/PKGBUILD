@@ -2371,7 +2371,57 @@ pkgver=0.1.0
 #   opposite inks), then the bar on screen (no pixel of the strip may be
 #   #1D1D1F). Against the old Theme.qml that second phase finds 361px of it,
 #   every one in the right half.
-pkgrel=523
+# 524: two things the bar and its menu were measuring wrong, and a scene node
+#   nobody could see.
+#   ⛔ A SCENE BUFFER'S PIXELS OUTLIVE ITS `buffer`, AND EVERY SURFACE SYNUI
+#   DRAWS FOR ITSELF IS IN THAT STATE. wlroots uploads a buffer that is not a
+#   client's to a texture the moment it is set and then lets the buffer go:
+#   `scene_buffer->buffer` reads NULL from then on and the pixels live in the
+#   private `texture`, sized by `buffer_width`/`buffer_height`. barscan.c asked
+#   `sb->buffer` for both the geometry and the pixels, so every one of synui's
+#   own scene buffers was ZERO BY ZERO — never hit by leaf_at(), and declined by
+#   the read even if it had been.
+#   The one that shows is the TITLEBAR, and leaf_lum_run()'s own comment had it
+#   backwards for as long as it has existed: a decoration is not a rect. The
+#   BORDER is a rect, and it is clipped out over the content; the titlebar is a
+#   cairo buffer. So a window under an auto-hiding bar was measured as nothing
+#   at all whenever its title sat in the strip, and the bar inked itself off a
+#   wallpaper that window was covering. Hiding titlebars "fixed" it, because
+#   that moves the client's own surface — a client buffer, and kept — into the
+#   strip, which is why only a DECORATED window ever showed it.
+#   ⚠ tests/bar_scene_strip.sh has been failing three assertions since it was
+#   written, and they are the three that describe exactly this. They pass now.
+#   ⚠ `WLR_PRIVATE` is reached deliberately: there is no public accessor, and
+#   the alternative is a second map from node to buffer for surfaces synui
+#   already owns. A wlroots that moves those fields fails to COMPILE, which is
+#   the failure mode to want — the one it replaces was silent for the life of
+#   the file.
+#   ⛔ AND THE START MENU'S MATERIAL WAS DECIDED BY WHICHEVER PAGE WAS OPEN.
+#   `Accessories` opened clear, with the desktop clock legible through it;
+#   `Internet`, four rows longer, opened as frosted glass. Same menu, same
+#   corner, seconds apart. The panel corrects its own alpha against what is
+#   behind it (Theme.alphaWalkOn) and asked that question about the box it
+#   happened to occupy — and the luminance grid is a ninth of the screen deep,
+#   so the answer moves in STEPS as a page grows. Measured off the report's
+#   screenshots: the clear pages end at y=181, 229 and 277 and the frosted ones
+#   at 325, 583 and 1423 — the flip is the panel crossing from grid row 1 into
+#   row 2.
+#   A page is not a material. StartMenu.qml asks once now, about the strip from
+#   the bar to the far edge, which is where that panel lives whatever is open.
+#   ⚠ It can only ever make the menu MORE opaque: the walk takes the worst cell
+#   it is given and a larger region has the same worst cell or a worse one.
+#   ⚠ AND THE "MENUS FOLLOW THE BAR" RULE WAS NEVER BROKEN — measured, not
+#   assumed: at `bar_opacity = 1.00` the menu comes up at #0B0B14 with no
+#   wallpaper in it at all, because popupAlpha resolves to barAlphaAsked and the
+#   correction has nothing left to walk. What varied was only the corrected end
+#   of that range, which is where a clear bar leaves it.
+#   tests/menu_surface_pages.sh: two runs of one compositor each, differing only
+#   in how many CATEGORIES the menu has to list (⚠ not how many apps — two
+#   hundred entries in Utility is one row, and a first draft of that file varied
+#   the count, got two identical menus and passed against the bug). Against the
+#   old StartMenu the short page reads as the wallpaper and the long one as
+#   glass, which is the report.
+pkgrel=524
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

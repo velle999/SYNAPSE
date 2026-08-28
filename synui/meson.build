@@ -2166,6 +2166,18 @@ test('bar_strip_band', bar_strip_band,
      depends : [synui_exe],
      timeout : 180)
 
+# …and the same question asked of the START MENU, which is the one surface on
+# this desktop that changes SIZE as you use it. It corrected its alpha against
+# the box it happened to occupy, and the luminance grid is a ninth of the screen
+# deep — so a submenu four rows longer than its neighbour crossed a grid row and
+# opened as frosted glass beside one that opened clear. Two runs, one compositor
+# each, differing only in how many categories the menu has to list (pkgrel 524).
+menu_surface_pages = find_program('tests/menu_surface_pages.sh')
+test('menu_surface_pages', menu_surface_pages,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # The fibonacci layout (layout_spiral): five windows laid out by BOTH tilers,
 # asserting the spiral's smallest window beats master-stack's — the claim the
 # layout exists to make — plus the no-overlap invariant its remainder

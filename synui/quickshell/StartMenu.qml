@@ -171,13 +171,45 @@ PanelWindow {
                 Math.min(root.screen.height - Theme.barHeight - 16,
                          searchBox.height + list.contentHeight + 4))
 
-        /* What the wallpaper is doing under THIS menu, at the size and place it
-         * ended up. A property rather than a call inside the colour binding so
-         * both the surface and the ink re-resolve from one evaluation, and so
-         * the dependencies (the panel's own geometry, the screen, the published
-         * grid) are declared in one place. */
+        /*
+         * ── What the wallpaper is doing under this menu ──────────────────────
+         *
+         * ⛔ THE COLUMN THE MENU CAN OCCUPY, AND NOT THE PAGE'S OWN HEIGHT.
+         *
+         * This is one surface that changes size as you walk it: the root page
+         * is half the screen, `Games` fills it, `Graphics` is five rows. Asked
+         * about the box it happens to occupy, the correction below answers a
+         * different question on every page — and the answer is a STEP, because
+         * the grid is a ninth of the screen deep. Measured on the desktop this
+         * was reported from: `Accessories` ends at y=277 and reads clear;
+         * `Internet`, four rows longer, ends at 325, crosses into the next grid
+         * row, and reads frosted. Same menu, same place, same wallpaper, two
+         * looks — and a page is not something anybody thinks of as changing
+         * what the menu is made of.
+         *
+         * So the question is asked once, about the strip from the bar to the
+         * far edge, which is where this panel lives whatever page is open. The
+         * answer stops depending on the page and starts depending only on the
+         * wallpaper and the screen, which is what a surface's material should
+         * depend on.
+         *
+         * ⚠ IT CAN ONLY EVER MAKE THE MENU MORE OPAQUE, never less: the walk
+         * takes the worst cell it is given, and a bigger region has the same
+         * worst cell or a worse one. Nothing here can make a menu less readable
+         * than the page-sized question made it.
+         *
+         * A property rather than a call inside the colour binding so both the
+         * surface and the ink re-resolve from one evaluation, and so the
+         * dependencies (the screen, the bar's edge, the published grid) are
+         * declared in one place.
+         */
+        readonly property real spanHeight: root.screen.height - Theme.barHeight - 16
+        readonly property real spanY: BarConfig.atBottom
+            ? root.screen.height - Theme.barHeight - panel.spanHeight
+            : Theme.barHeight
         readonly property var backdrop:
-            Theme.backdropFor(root.screen, panel.x, panel.y, panel.width, panel.height)
+            Theme.backdropFor(root.screen, panel.x, panel.spanY,
+                              panel.width, panel.spanHeight)
 
         color: Theme.popupBgOn(panel.backdrop)
         border.color: Theme.magenta
