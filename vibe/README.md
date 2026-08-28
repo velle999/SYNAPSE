@@ -26,6 +26,31 @@ a table in milliseconds. synsh is asked whether it claims a line — the list
 lives there, not here, so an intent added to synsh reaches this with nothing
 here edited.
 
+**Neither do plain desktop requests.** "open downloads", "what's in my
+documents", "lock the screen", "move the bar to the bottom" — the assistant
+resolves the folder, the panel or the verb and does it. No model is loaded, no
+tokens are generated, and the answer is the tool's own words. The header says
+`auto · direct` when that is what happened.
+
+```bash
+vibe intents                       # what it answers directly
+vibe intents "open my downloads"   # what a line would do — and does nothing
+```
+
+It covers opening (a folder by its plain name, an app, a panel, a path, a URL),
+reading a folder, the compositor's verbs by the phrases people use for them,
+and the bar and dock settings. Anything that writes still asks first: the line
+is *does it write*, and it does not move because a model was not involved.
+
+⚠ **It claims whole lines and nothing else.** `open`, `run`, `list` and `lock`
+are all real programs and real English, so "how do I open my downloads from a
+script" is not "open downloads" and goes to the model, where it belongs. A verb
+that matches but names nothing real on this machine is handed on too — nothing
+is answered on a guess.
+
+⚠ **Ask and Plan do not act.** In Ask you asked for an answer; in Plan you asked
+what *would* be done. Auto and Agent carry a request out.
+
 **Ask, Agent, Plan — picked for you, or chosen by hand.**
 
 | mode | what it does |
@@ -114,11 +139,15 @@ saved and having no key at all.
 `desktop_open` tool", "please confirm if you'd like me to proceed", and — the
 one that reads as a lie — a `Tool result:` it wrote itself and then answered
 from. None of them run anything, and all three end the turn looking like
-success. Vibe treats a turn that talks about a tool as a turn that has not
-happened yet: it re-asks once, saying that only the block runs and that the
-confirmation is not the model's to ask for. The rules are in the prompt too,
-and a `<tool_call>` still counts when the model wraps it in a JSON code fence
-or never closes the tag.
+success. Measured on "open downloads", with the folder already resolving
+correctly: **2 runs in 8** reached the file manager.
+
+That is why the ordinary desktop requests no longer go through a model at all
+(above). For the ones that still do, vibe treats a turn that talks about a tool
+as a turn that has not happened yet: it re-asks once, saying that only the block
+runs and that the confirmation is not the model's to ask for. The rules are in
+the prompt too, and a `<tool_call>` still counts when the model wraps it in a
+JSON code fence or never closes the tag.
 
 ⚠ `/no_think` goes to a **Qwen and nothing else**. It is one model family's
 control token; every other model reads it as the first two words of the
@@ -274,6 +303,9 @@ vibe-code/
 ├── main.py          # REPL entry point, slash command handling
 ├── vibe/
 │   ├── config.py    # Backend selection, model paths, generation params
+│   ├── intents.py   # Desktop requests answered directly — no model in the path
+│   ├── modes.py     # Ask / Agent / Plan, and the routing between them
+│   ├── desktop.py   # desktop_open / desktop_action / desktop_setting
 │   ├── llm.py       # VibeModel — agentic loop, ollama + llama-cpp backends
 │   ├── tools.py     # Tool schemas + implementations (read, write, edit, bash, glob, grep, ls)
 │   ├── system.py    # System commands (gpu, ps, services, file manager, etc.)

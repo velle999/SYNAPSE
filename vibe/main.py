@@ -12,7 +12,9 @@ from rich.panel import Panel
 from rich import box
 
 import vibe.config as cfg
+from vibe import intents as _intents
 from vibe.llm import VibeModel
+from vibe.tools import execute_tool
 from vibe.ui import (
     get_input,
     print_welcome,
@@ -20,6 +22,7 @@ from vibe.ui import (
     stream_response,
     print_error,
     print_info,
+    print_tool_result,
     console,
 )
 from vibe.system import (
@@ -190,8 +193,13 @@ def _confirm_tool(name: str, args: dict) -> bool:
         return True
     if name == "bash":
         detail = args.get("command", "")
-    else:  # write_file / edit_file
+    elif "path" in args:                       # write_file / edit_file
         detail = args.get("path", "")
+    else:
+        # ⚠ desktop_action and desktop_setting name neither, and a gate that
+        # showed a blank line would be asking the user to approve a verb
+        # without saying which one — which is the same as not asking.
+        detail = " ".join(f"{k}={v}" for k, v in args.items())
     console.print(f"  [yellow]⚠ about to run[/] [bold]{name}[/] [dim]{detail}[/]")
     try:
         ans = console.input(
@@ -438,8 +446,41 @@ def _verb_wake(argv) -> int:
     return 2
 
 
+def _verb_intents(argv) -> int:
+    """`vibe intents [line]` — what the assistant does without a model.
+
+    ⚠ THE CLI HALF OF A THING THE WINDOW DOES SILENTLY. A layer that decides
+    whether a model is consulted at all has to be inspectable, or the only way
+    to find out why a line was answered strangely is to read the source. With
+    a line it reports the rule and the call and RUNS NOTHING; with no argument
+    it lists what it knows.
+    """
+    from vibe import intents
+
+    if not argv:
+        console.print("[bold]Answered directly, with no model:[/]")
+        for row in intents.describe():
+            console.print(f"  {row}")
+        console.print("\n[dim]vibe intents \"open my downloads\"  "
+                      "— says what a line would do, and does nothing[/]")
+        return 0
+
+    line = " ".join(argv)
+    hit = intents.match(line)
+    if hit is None:
+        console.print(f"[dim]no direct match — `{line}` goes to the model[/]")
+        return 70
+    if hit.answer:
+        console.print(f"[bold]{hit.why}[/] → {hit.answer}")
+        return 0
+    gate = " (asks first)" if hit.confirm else ""
+    console.print(f"[bold]{hit.why}[/] → {hit.tool}({hit.args}){gate}")
+    return 0
+
+
 _VERBS = {
     "serve": _verb_serve,
+    "intents": _verb_intents,
     "wake": _verb_wake,
     "voice": _verb_voice,
     "gui": _verb_gui,
@@ -567,6 +608,23 @@ def main():
                 _handle_set(rest)
             else:
                 print_error(f"Unknown command: {cmd}. Type /help for commands.")
+            continue
+
+        # ── A plain desktop request is carried out, not described ────
+        #
+        # ⚠ THE SAME LAYER THE WINDOW USES, and it is here so that the two
+        # cannot answer the same line differently. In the REPL the model is
+        # already resident, so this buys accuracy rather than the cold-start
+        # time it saves in the window — and accuracy was the reason: the local
+        # model emitted the call for "open downloads" in 2 runs out of 8.
+        _hit = _intents.match(text)
+        if _hit is not None:
+            if _hit.answer:
+                console.print(_hit.answer)
+            elif _hit.confirm and not _confirm_tool(_hit.tool, _hit.args):
+                print_info("not done")
+            else:
+                print_tool_result(execute_tool(_hit.tool, dict(_hit.args)), _hit.tool)
             continue
 
         # ── Chat ─────────────────────────────────────────────────────

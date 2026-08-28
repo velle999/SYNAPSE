@@ -47,7 +47,23 @@ AUTO = "auto"
 # guessing what running it would say.
 SHELL = "shell"
 
+# ⚠ DIRECT IS THE OTHER ROUTE THAT IS NOT A MODE, and it is the one that runs
+# most often. A line that plainly names a desktop action — "open downloads",
+# "what is in my documents", "lock the screen" — is carried out by
+# `intents.match()` with no model in the path at all. See intents.py for why:
+# the local model was measured emitting the tool call for "open downloads" in
+# 2 runs out of 8, and a desktop request that works three times in ten is not
+# a feature. Named here so the routes have one home; it is claimed in serve.py
+# before a model is ever built.
+DIRECT = "direct"
+
 MODES = (AUTO, ASK, AGENT, PLAN)
+
+# ⛔ WHICH MODES LET THE DIRECT LAYER ANSWER. AUTO and AGENT do; ASK and PLAN
+# do not, and that is not a safety rule but a plain reading of what they were
+# picked for. Somebody in ASK asked for an answer and nothing else; somebody in
+# PLAN asked what WOULD be done, and doing it is the one reply that cannot be.
+DIRECT_MODES = frozenset({AUTO, AGENT})
 
 # What each mode is allowed to reach for. PLAN's list is the whole of what
 # makes it safe: it can look at anything and change nothing, so a plan can be
@@ -55,6 +71,7 @@ MODES = (AUTO, ASK, AGENT, PLAN)
 READ_ONLY_TOOLS = frozenset({"read_file", "glob", "grep", "list_dir", "desktop_open"})
 
 DESCRIPTION_SHELL = "runs it, once you say so"
+DESCRIPTION_DIRECT = "does it, with no model involved"
 
 DESCRIPTION = {
     ASK:   "answers, and touches nothing",
@@ -175,8 +192,19 @@ def route(text: str, shell_class: str = "") -> str:
     return ASK
 
 
+def direct_allowed(mode: str) -> bool:
+    """Whether this mode lets a plain desktop request be carried out directly."""
+    return (mode or AUTO) in DIRECT_MODES
+
+
 def resolve(mode: str, text: str, shell_class: str = "") -> str:
-    """The mode to actually run this turn."""
+    """The mode to actually run this turn.
+
+    ⚠ THE DIRECT ROUTE IS NOT DECIDED HERE. It is claimed before this is
+    called, because claiming it means having already resolved the folder or the
+    panel the line names — and a router that returned DIRECT would make its
+    caller do that lookup a second time to find out WHAT to do. See serve.py.
+    """
     if mode in (AUTO, "", None):
         return route(text, shell_class)
     # ⚠ A HAND-PICKED MODE STILL HONOURS `!`. Somebody in Ask mode who types a

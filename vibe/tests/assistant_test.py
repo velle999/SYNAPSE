@@ -722,5 +722,153 @@ check("…and a question about the world is not",
       modes.ask_addendum("what is the speed of light") == "")
 
 
+# ── 6. the direct layer: the model is not asked, so it cannot decline ───────
+#
+# ⛔ THIS IS THE SECTION THAT REPLACES A MEASUREMENT OF THE MODEL. "open
+# downloads" was measured at 2 successful runs in 8 with the resolution already
+# correct — the local Mistral announced the tool, or asked permission for a
+# tool that never asks, or wrote its own `Tool result:` and answered from the
+# fiction. A row that is 2/8 is not a row to tune; it is a request that should
+# never have been put to a model. These assertions are deterministic because
+# the thing they test is.
+from vibe import intents, desktop
+
+# The phrasings people actually use for the one request that failed. Every one
+# of them must resolve to the SAME folder — that is the whole claim.
+_downloads = desktop.dir_target("downloads")
+if _downloads is None:
+    print("  note  this account has no Downloads folder — the open path is untested")
+else:
+    for line in ("open downloads", "open my downloads", "open the downloads folder",
+                 "show me my downloads", "go to downloads", "take me to my downloads",
+                 "launch my downloads folder", "pop open downloads",
+                 "hey synapse, could you open my downloads please",
+                 "Open Downloads!", "open downloads please"):
+        hit = intents.match(line)
+        check(f"'{line}' opens the folder itself",
+              hit is not None and hit.tool == "desktop_open"
+              and desktop.dir_target(hit.args.get("target", "")) == _downloads,
+              repr(hit))
+
+    # ⚠ AND THE READING FORMS GO TO A READ, not to an open and not to a model.
+    # This is the request that used to be answered with an invented listing.
+    for line in ("what is in my downloads", "what's in downloads",
+                 "list my downloads", "show me what is in my downloads folder",
+                 "contents of downloads", "what files are in my downloads"):
+        hit = intents.match(line)
+        check(f"'{line}' reads the folder",
+              hit is not None and hit.tool == "list_dir"
+              and hit.args.get("path") == str(_downloads), repr(hit))
+
+# ⛔ THE HALF THAT A GENEROUS VERB LIST BREAKS. None of these may be claimed:
+# the layer answers the requests it is certain of and gets out of the way, and
+# a false claim does something nobody asked for, which is worse than a slow turn.
+for line in ("who wrote the novel Dune", "what is the speed of light",
+             "write me a haiku about my downloads folder",
+             "how do I open my downloads from a script",
+             "explain what the downloads folder is for",
+             "open a pull request", "show me the code",
+             "what is in this function", "list the packages I have installed",
+             "?open downloads", "!ls ~/Downloads"):
+    check(f"'{line}' is left to the assistant", intents.match(line) is None,
+          repr(intents.match(line)))
+
+# ⚠ RESOLVE, THEN CLAIM. A verb that matched but names nothing real must fall
+# through — that is what lets the verb list be as broad as it is.
+check("an open of something that does not exist is not claimed",
+      intents.match("open zzznotathing") is None)
+
+# ⛔ CASE SURVIVES THE NORMALISER. The line is where the target comes from, and
+# a target is a real name on a real disk — lowercasing the whole line turns
+# `open ~/Downloads` into a path that does not exist, so the most precisely
+# typed request is the one that breaks.
+check("normalising keeps the case of a path",
+      "Downloads" in intents.normalise("please open ~/Downloads"))
+_cased = intents.match("open ~/Downloads")
+check("…and a capitalised path still opens",
+      _cased is not None and _cased.args.get("target") == "~/Downloads", repr(_cased))
+check("…while a table lookup is still case-insensitive",
+      intents.match("LOCK THE SCREEN") is not None)
+
+# ⛔ A NAKED WORD IS NOT A PATH HERE. vibe's working directory is whatever
+# launched it — in the REPL, the project you pointed it at — so "start the
+# tests" would resolve `tests` against it and open a file manager on the test
+# directory, having been asked to run something.
+_here = pathlib.Path(__file__).resolve().parent
+_cwd = os.getcwd()
+os.chdir(_here.parent)
+try:
+    check("a bare relative name is not opened by the direct layer",
+          intents.match("start the tests") is None, repr(intents.match("start the tests")))
+    check("…but a path written as one still is",
+          intents.match("open ./tests") is not None)
+    # …and the model's own tool is unchanged: it passes what it resolved.
+    check("…and the tool itself still takes a bare relative path",
+          desktop.resolve_open("tests") is not None)
+finally:
+    os.chdir(_cwd)
+
+# The confirmation policy does not change because the model left the path.
+_writes = intents.match("move the bar to the bottom")
+check("a setting still asks first", _writes is not None and _writes.confirm)
+_lock = intents.match("lock the screen")
+check("a compositor verb still asks first", _lock is not None and _lock.confirm)
+_open = intents.match("open downloads")
+check("…and opening a folder still does not",
+      _open is not None and not _open.confirm)
+
+# ⚠ A VALUE THE SETTING CANNOT TAKE IS ANSWERED, not confirmed and refused.
+_bad = intents.match("put the bar on the left")
+check("an impossible setting is answered in a sentence",
+      _bad is not None and _bad.tool == "" and "top" in _bad.answer, repr(_bad))
+
+# ⛔ ASK AND PLAN DO NOT ACT. Somebody in Ask mode asked for an answer; somebody
+# in Plan asked what WOULD be done, and doing it is the one reply that cannot be.
+check("Ask mode does not carry out a desktop request",
+      not modes.direct_allowed(modes.ASK))
+check("Plan mode does not either", not modes.direct_allowed(modes.PLAN))
+check("Auto and Agent do", modes.direct_allowed(modes.AUTO)
+      and modes.direct_allowed(modes.AGENT))
+
+# ⚠ EVERY PHRASE IN THE ACTION TABLE NAMES A VERB THIS COMPOSITOR HAS, and the
+# list of verbs comes from `synctl binds` rather than from a copy. Vacuous
+# where synui is not running, which is the honest answer there.
+_known = set(desktop.dispatch_actions())
+if _known:
+    _unknown = sorted({a for a in intents.ACTIONS.values() if a not in _known})
+    check("every phrase maps to a verb this build dispatches", not _unknown,
+          ", ".join(_unknown))
+else:
+    print("  note  synctl is not answering — the action table is untested here")
+
+# ⚠ TWO WORDS MINIMUM. `lock`, `record` and `screenshot` are real programs, and
+# a one-word phrase in this table would take a line the shell route should have.
+check("no action phrase is a single word",
+      all(len(k.split()) >= 2 for k in intents.ACTIONS))
+
+# ⛔ AND IT MUST NOT LOAD A MODEL. The whole point of the layer on a box whose
+# GPU the compositor shares: a direct turn touches neither the weights nor the
+# tokeniser. `vibe.llm` is imported by this test file, so the check is that the
+# ENGINE does not build one — ensure_model() is what costs the seconds.
+_out = io.StringIO()
+_eng = serve.Server(serve.Wire(_out))
+_spawned = []
+_real_spawn = desktop._spawn
+desktop._spawn = lambda argv: _spawned.append(argv)
+try:
+    if _downloads is not None:
+        _eng._run_turn("open downloads")
+        _eng._turn = None
+finally:
+    desktop._spawn = _real_spawn
+if _downloads is not None:
+    check("a direct turn actually reaches the file manager",
+          bool(_spawned) and str(_downloads) in " ".join(_spawned[-1]),
+          repr(_spawned))
+    check("…and no model was built to do it", _eng.model is None)
+    check("…and the window is told which route answered",
+          "\tdirect" in _out.getvalue(), _out.getvalue()[:200])
+
+
 print(f"\n{npass} passed, {nfail} failed")
 sys.exit(1 if nfail else 0)

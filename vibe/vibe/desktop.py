@@ -29,6 +29,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections import namedtuple
 from pathlib import Path
 
 # The desktop's own panels, by the words somebody would say for them. The value
@@ -335,30 +336,56 @@ def _open_dir(p: Path) -> str:
     return f"Error: no file manager is installed to open {p} with"
 
 
-def desktop_open(target: str) -> str:
-    """Open a URL, a path, one of this desktop's panels, or an app by name."""
+# What resolving a target came to: a kind, and whatever acting on that kind
+# needs. Splitting the LOOKUP from the DOING is what lets the direct layer ask
+# "would this open something real?" without opening it — see intents.py.
+#
+# ⛔ ONE CHAIN, TWO CALLERS. The alternative was a `can_open()` repeating these
+# branches in the same order, and a copy stops agreeing with the original the
+# first time either is edited. What it would disagree about is whether the
+# assistant answers a line itself or hands it to the model, which is the whole
+# of the decision — so the probe and the act are the same walk down the list.
+Resolved = namedtuple("Resolved", "kind value label")
+
+
+# A string that is asking to be read as a path rather than as a word: rooted,
+# home-relative, or explicitly here. See `bare_relative` on resolve_open.
+_PATHISH_RE = re.compile(r"^[/~.]|/")
+
+
+def resolve_open(target: str, bare_relative: bool = True) -> Resolved | None:
+    """What `target` names, WITHOUT touching it. None when it names nothing.
+
+    `kind` is one of url, panel, dir, file, app, cmd, error.
+
+    ⚠ `error` IS AN ANSWER AND `None` IS NOT. "this account has no downloads
+    folder" is a fact about the machine and the last word on the request; None
+    means the string matched nothing here, which is the only case where asking
+    a model is better than answering.
+
+    ⛔ `bare_relative=False` REFUSES A NAKED WORD THAT HAPPENS TO BE A FOLDER
+    HERE, and the direct layer passes it. vibe's working directory is whatever
+    launched the engine — in the REPL that is the project you pointed it at —
+    so "start the tests" resolves `tests` against it and opens a file manager
+    on the test directory, having been asked to run something. A word is only a
+    path when it is written as one; a path the user actually typed (`~/x`,
+    `./x`, `/x`, `a/b`) still resolves, and a name from the listing they are
+    looking at is rescued below, against an absolute directory.
+    """
     t = (target or "").strip()
     if not t:
-        return "Error: nothing to open"
+        return None
 
     # An explicit scheme is somebody saying "web", and is the one form that
     # cannot also be a filename, a panel or an app. It goes first for that
     # reason and needs none of the guessing below.
     if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t):
-        if not shutil.which("xdg-open"):
-            return "Error: xdg-open is not installed"
-        _spawn(["xdg-open", t])
-        return f"Opened {t} in the default browser."
+        return Resolved("url", t, t)
 
     # A panel of this desktop's own, by the words a person uses for it.
     key = t.lower().strip(" ?.")
     if key in PANELS:
-        if not shutil.which("synctl"):
-            return "Error: synctl is not installed — is this a synui session?"
-        r = _run(["synctl", "dispatch", PANELS[key]])
-        if r.returncode != 0:
-            return f"Error: synctl refused `{PANELS[key]}`: {r.stderr.strip()}"
-        return f"Opened the {key}."
+        return Resolved("panel", PANELS[key], f"the {key}")
 
     # One of the user's own folders, by the words people use for it. Before
     # the app lookup on purpose: "open desktop" means the Desktop folder, and
@@ -368,12 +395,13 @@ def desktop_open(target: str) -> str:
     if fkey:
         d = _user_dir(fkey)
         if d is not None:
-            return _open_dir(d)
+            return Resolved("dir", d, str(d))
         # Say the folder is missing rather than falling through to a wrong
         # app — but only for words that mean nothing else. "music" is also a
         # player, so an absent ~/Music should still reach the app lookup.
         if fkey in ("DOWNLOAD", "DOCUMENTS", "HOME"):
-            return f"Error: this account has no {fkey.lower()} folder"
+            return Resolved(
+                "error", f"Error: this account has no {fkey.lower()} folder", t)
 
     # A path.
     #
@@ -383,20 +411,14 @@ def desktop_open(target: str) -> str:
     # like one, so a file the assistant had just listed was opened as
     # https://document.pdf. Nothing that exists can be a guess.
     #
-    # ⚠ MADE ABSOLUTE BEFORE IT IS HANDED OVER. A relative name is resolved
+    # ⚠ MADE ABSOLUTE HERE, not by the caller. A relative name is resolved
     # against vibe's cwd, which is whatever launched the engine — the bar, a
-    # shell, `/`. Passing it on unresolved means the check and the child
-    # disagree about which directory that is, and the file manager opens
-    # nothing while this reports success.
+    # shell, `/`. Resolving it here means the check and the child cannot
+    # disagree about which directory that is.
     p = Path(t).expanduser()
-    if p.exists():
+    if p.exists() and (bare_relative or _PATHISH_RE.search(t)):
         p = Path(os.path.abspath(p))
-        if p.is_dir():
-            return _open_dir(p)
-        if shutil.which("xdg-open"):
-            _spawn(["xdg-open", str(p)])
-            return f"Opened {p}."
-        return f"Error: nothing to open {p} with"
+        return Resolved("dir" if p.is_dir() else "file", p, str(p))
 
     # A bare name from the listing the user is looking at.
     #
@@ -409,32 +431,71 @@ def desktop_open(target: str) -> str:
         cand = _last_dir / t
         if cand.exists():
             cand = Path(os.path.abspath(cand))
-            if cand.is_dir():
-                return _open_dir(cand)
-            if shutil.which("xdg-open"):
-                _spawn(["xdg-open", str(cand)])
-                return f"Opened {cand}."
+            return Resolved("dir" if cand.is_dir() else "file", cand, str(cand))
 
     # A web address — one with a scheme, or a string that is shaped like a host
     # and is not shaped like a filename. See _looks_like_host.
     if _looks_like_host(t):
-        url = f"https://{t}"
-        if not shutil.which("xdg-open"):
-            return "Error: xdg-open is not installed"
-        _spawn(["xdg-open", url])
-        return f"Opened {url} in the default browser."
+        return Resolved("url", f"https://{t}", f"https://{t}")
 
     # An application, by .desktop id or by name.
     argv = _desktop_entry(t)
     if argv:
-        _spawn(argv)
-        return f"Launched {t} ({' '.join(argv)})."
+        return Resolved("app", argv, t)
     if shutil.which(t.split()[0]):
-        _spawn(t.split())
-        return f"Ran {t}."
+        return Resolved("cmd", t.split(), t)
 
-    return (f"Error: nothing here is called '{t}' — not a panel, a path, "
-            f"a URL, or an installed application")
+    return None
+
+
+def dir_target(text: str, bare_relative: bool = True) -> Path | None:
+    """The directory somebody named, or None — for listing rather than opening.
+
+    ⚠ THE SAME LOOKUP AS OPENING, deliberately: "what is in my downloads" and
+    "open my downloads" have to agree about which folder that is, or the
+    assistant lists one place and opens another.
+    """
+    r = resolve_open(text, bare_relative=bare_relative)
+    return r.value if (r is not None and r.kind == "dir") else None
+
+
+def desktop_open(target: str) -> str:
+    """Open a URL, a path, one of this desktop's panels, or an app by name."""
+    r = resolve_open(target)
+    if r is None:
+        t = (target or "").strip()
+        if not t:
+            return "Error: nothing to open"
+        return (f"Error: nothing here is called '{t}' — not a panel, a path, "
+                f"a URL, or an installed application")
+
+    if r.kind == "error":
+        return r.value
+    if r.kind == "url":
+        if not shutil.which("xdg-open"):
+            return "Error: xdg-open is not installed"
+        _spawn(["xdg-open", r.value])
+        return f"Opened {r.value} in the default browser."
+    if r.kind == "panel":
+        if not shutil.which("synctl"):
+            return "Error: synctl is not installed — is this a synui session?"
+        rc = _run(["synctl", "dispatch", r.value])
+        if rc.returncode != 0:
+            return f"Error: synctl refused `{r.value}`: {rc.stderr.strip()}"
+        return f"Opened {r.label}."
+    if r.kind == "dir":
+        return _open_dir(r.value)
+    if r.kind == "file":
+        if shutil.which("xdg-open"):
+            _spawn(["xdg-open", str(r.value)])
+            return f"Opened {r.value}."
+        return f"Error: nothing to open {r.value} with"
+    if r.kind == "app":
+        _spawn(r.value)
+        return f"Launched {r.label} ({' '.join(r.value)})."
+    _spawn(r.value)
+    return f"Ran {r.label}."
+
 
 
 # ── the compositor's own verbs ──────────────────────────────────────────────

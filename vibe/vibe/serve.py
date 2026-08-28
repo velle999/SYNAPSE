@@ -62,7 +62,7 @@ import threading
 from pathlib import Path
 
 import vibe.config as cfg
-from vibe import keywords, modes, voice as voicemod, wake as wakemod
+from vibe import intents, keywords, modes, tools, voice as voicemod, wake as wakemod
 
 
 # ── the wire ────────────────────────────────────────────────────────────────
@@ -232,6 +232,21 @@ class Server:
                 self._said += answered
                 return
 
+            # ── Is it a desktop request? Then DO it ─────────────────────────
+            #
+            # ⛔ BEFORE `ensure_model()`, WHICH IS THE POINT. "open downloads"
+            # now costs a resolved path and a spawn: no model is loaded, no
+            # tokens are generated, and on a box whose GPU the compositor is
+            # sharing, the seconds of loading and the stutter that came with
+            # them do not happen at all for the requests people make most.
+            # See intents.py for the measurement that made this necessary.
+            if modes.direct_allowed(self.mode):
+                hit = intents.match(text)
+                if hit is not None:
+                    self.wire.rec("M", modes.DIRECT)
+                    self._run_direct(hit)
+                    return
+
             # ── Is it a command? Then run it, rather than describe it ───────
             #
             # Asked of synsh, whose classifier knows this shell's builtins and
@@ -336,6 +351,35 @@ class Server:
             return True
         self.wire.rec("A", f"unknown command: {verb}")
         return True
+
+    def _run_direct(self, hit):
+        """Carry out a desktop request the words plainly named. No model.
+
+        ⚠ THE CONFIRMATION POLICY IS UNCHANGED AND IS NOT RELAXED HERE. The
+        line has always been DOES IT WRITE, not "was a model involved" — so
+        opening a folder still goes through without asking and changing a
+        setting still asks, through the same gate the model's own calls use.
+        Certainty about what was meant is not permission to do more.
+
+        ⚠ THE ANSWER IS SENT AS A TOOL RECORD, not as assistant text. Nothing
+        composed it, so nothing should render as though something had — and it
+        is what makes an `Error:` show as an error in the window rather than as
+        a sentence claiming success.
+        """
+        if hit.answer:
+            self.wire.rec("K", hit.answer)
+            self._said += hit.answer
+            return
+        self.wire.rec("X", hit.tool, "…")
+        if hit.confirm and not self._confirm(hit.tool, hit.args):
+            self.wire.rec("X", "", "not done")
+            return
+        try:
+            result = tools.execute_tool(hit.tool, dict(hit.args))
+        except Exception as e:
+            result = f"Error: {type(e).__name__}: {e}"
+        self.wire.rec("X", "", result)
+        self._said += result
 
     def _run_shell(self, line: str):
         """Run a line the shell recognised, once the user allows it.
