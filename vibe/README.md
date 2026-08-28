@@ -97,9 +97,17 @@ vibe key anthropic       # prompts, and stores it 0600 in ~/.config/synui/ai/
 The local backend is `synapd`, the model already resident on the GPU — no
 second model and no extra VRAM. `anthropic` uses the official SDK
 (`python-anthropic`, an optdepend) with adaptive thinking and the tool-use
-blocks; `openai` speaks its chat-completions endpoint. A key is never written
-into a config file: it lives in its own file, one provider per file, mode 0600,
-and the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) wins over it.
+blocks; `openai` speaks its chat-completions endpoint. A key goes into the **system
+keyring** where a desktop has one, and into `~/.config/synui/ai/<provider>.key`
+at 0600 where it does not. The environment (`ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`) beats both, for a single run. `vibe key <provider> --forget`
+removes it from everywhere.
+
+⛔ `secret-tool` **exits 0 when there is no keyring running** — it prints its
+complaint to stderr and returns success. Every write is therefore verified by
+reading it back, and only a value that comes back byte for byte counts as
+stored. Believing the exit status would mean telling somebody their key was
+saved and having no key at all.
 
 ## Features
 

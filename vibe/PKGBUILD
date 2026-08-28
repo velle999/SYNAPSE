@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=12
+pkgrel=13
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -28,6 +28,7 @@ optdepends=(
     'ollama: alternative backend (run with VIBE_BACKEND=ollama)'
     'python-llama-cpp: direct-GGUF backend (run with VIBE_BACKEND=llama_cpp)'
     'quickshell: the chat window (vibe gui), and the bar button that opens it'
+    'libsecret: store cloud API keys in the keyring instead of a file'
     # ⚠ NOT a dependency. It is where the voice stack lives — piper and
     # faster-whisper with their models — and vibe imports it rather than
     # shipping a second copy. Without it, speech falls back to espeak-ng and

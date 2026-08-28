@@ -269,35 +269,62 @@ def _verb_provider(argv) -> int:
 
 
 def _verb_key(argv) -> int:
-    """Store one provider's API key, 0600, in its own file."""
+    """Store one provider's API key — in the keyring where there is one.
+
+        vibe key                      where each key lives
+        vibe key anthropic            prompt, not echoed
+        vibe key anthropic -          read it from stdin (for a script)
+        vibe key anthropic --forget   remove it from everywhere
+    """
+    from vibe import secrets
     if not argv:
         for prov in ("anthropic", "openai"):
-            have = "set" if cfg.api_key(prov) else "not set"
-            print_info(f"{prov}: {have}   ({cfg.key_path(prov)})")
+            w = secrets.where(prov)
+            detail = f"  ({cfg.key_path(prov)})" if w == "file" else ""
+            print_info(f"{prov}: {w}{detail}")
         return 0
     prov = argv[0]
     if prov not in ("anthropic", "openai"):
         print_error("which provider? anthropic or openai")
         return 1
-    key = argv[1] if len(argv) > 1 else ""
-    if not key:
+
+    arg = argv[1] if len(argv) > 1 else ""
+    if arg == "--forget":
+        secrets.clear(prov)
+        print_info(f"{prov}: removed")
+        return 0
+
+    if arg == "-":
+        # The scripting path, and the one that keeps the key out of `ps`.
+        key = sys.stdin.readline().strip()
+    elif arg:
+        # ⚠ SAID OUT LOUD RATHER THAN REFUSED. A key given as an argument is in
+        # the shell history and in the process table for as long as this runs,
+        # and somebody who has just done it should be told while there is still
+        # time to rotate it. Refusing outright would only push people to
+        # `echo | vibe key … -`, which is the same exposure with more steps.
+        print_error(f"warning: a key on the command line is in your shell "
+                    f"history and was visible in `ps`. "
+                    f"`vibe key {prov}` prompts instead, and "
+                    f"`vibe key {prov} -` reads stdin.")
+        key = arg
+    else:
         import getpass
-        # ⚠ Prompted rather than taken from the command line where possible: an
-        # argument is in the shell history and in `ps` for as long as this runs.
         key = getpass.getpass(f"{prov} API key (not echoed): ").strip()
+
     if not key:
         print_error("no key given")
         return 1
-    path = cfg.key_path(prov)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        os.umask(0o077)
-        path.write_text(key + "\n", encoding="utf-8")
-        os.chmod(path, 0o600)
+        where = secrets.put(prov, key)
     except OSError as e:
-        print_error(f"cannot write {path}: {e}")
+        print_error(f"cannot store the key: {e}")
         return 1
-    print_info(f"stored in {path} (0600)")
+    if where == "keyring":
+        print_info("stored in the keyring")
+    else:
+        print_info(f"stored in {cfg.key_path(prov)} (0600) \u2014 "
+                   f"no keyring is running, so it is a file")
     return 0
 
 

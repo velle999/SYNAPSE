@@ -61,19 +61,17 @@ def key_path(provider: str) -> Path:
 
 
 def api_key(provider: str) -> str:
-    """The key for `provider`, or "" — env first, then the key file.
+    """The key for `provider`, or "" — environment, keyring, then the file.
 
     ⚠ Returns "" rather than raising. "no key" is an ordinary state on a
     desktop whose default backend is local, and the caller that needs one says
-    so in its own words."""
-    env = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
-    v = os.environ.get(env.get(provider, ""), "").strip()
-    if v:
-        return v
-    try:
-        return key_path(provider).read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+    so in its own words.
+
+    ⚠ The lookup itself lives in vibe/secrets.py, and the import is INSIDE the
+    function: config is imported by everything, secrets imports config, and at
+    module scope that is a cycle."""
+    from vibe import secrets
+    return secrets.get(provider)
 
 
 # Paths (llama_cpp backend)

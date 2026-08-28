@@ -335,6 +335,91 @@ finally:
     importlib.reload(_sv)
 
 
+# ── 5d. where an API key lives ──────────────────────────────────────────────
+#
+# CodeQL alert #15 (py/clear-text-storage-sensitive-data) is about the file this
+# falls back to. The file is not the interesting part — it is mode 0600 under
+# the user's own home, which is what ~/.aws/credentials, ~/.docker/config.json
+# and ~/.config/gh/hosts.yml all are, and an attacker who can read it can also
+# read this process's memory. What IS interesting is everything around it, and
+# two of those were real bugs.
+import stat as _stat
+import subprocess as _sp
+import tempfile as _tf
+
+_keycfg = _tf.mkdtemp()
+_old_cfg = os.environ.get("XDG_CONFIG_HOME")
+os.environ["XDG_CONFIG_HOME"] = _keycfg
+import importlib
+import vibe.config as _cfg
+importlib.reload(_cfg)
+from vibe import secrets as _sec
+importlib.reload(_sec)
+
+try:
+    # ⛔ THE ONE THAT WOULD HAVE LOST A KEY. `secret-tool` prints "The name is
+    # not activatable" to stderr and EXITS 0 when no keyring is running — so a
+    # store that went nowhere is indistinguishable from one that worked, if you
+    # believe the status. Every write is verified by reading it back, and this
+    # is that assertion: a secret-tool that succeeds and stores nothing must
+    # make put() fall through to the file, not report success.
+    _fake = _tf.mkdtemp()
+    with open(os.path.join(_fake, "secret-tool"), "w") as f:
+        f.write("#!/bin/sh\n"
+                "echo 'secret-tool: The name is not activatable' >&2\n"
+                "exit 0\n")
+    os.chmod(os.path.join(_fake, "secret-tool"), 0o755)
+    _path_was = os.environ["PATH"]
+    os.environ["PATH"] = _fake + ":" + _path_was
+    try:
+        where = _sec.put("openai", "sk-liar")
+        check("a secret-tool that exits 0 and stores nothing is not believed",
+              where == "file", where)
+        check("…and the key is still retrievable afterwards",
+              _sec.get("openai") == "sk-liar")
+    finally:
+        os.environ["PATH"] = _path_was
+    _sec.clear("openai")
+
+    # ⛔ THE SECOND REAL BUG. write_text() onto an existing path does not change
+    # its mode, so a key file left 0644 by an older version or a restored backup
+    # took the new key in the clear and was chmod'd a moment later.
+    kp = _cfg.key_path("anthropic")
+    kp.parent.mkdir(parents=True, exist_ok=True)
+    kp.write_text("stale\n")
+    os.chmod(kp, 0o644)
+    _sec.file_put("anthropic", "sk-fresh")
+    mode = _stat.S_IMODE(kp.stat().st_mode)
+    check("a key written over a 0644 file ends up 0600", mode == 0o600, oct(mode))
+    check("…and it is the new key", _sec.file_get("anthropic") == "sk-fresh")
+
+    # …and no process-global side effect to get there. The previous version set
+    # umask(0o077) and never put it back.
+    before = os.umask(0o022); os.umask(before)
+    _sec.file_put("anthropic", "sk-again")
+    after = os.umask(0o022); os.umask(after)
+    check("writing a key does not change the process umask", before == after,
+          f"{oct(before)} -> {oct(after)}")
+
+    # The order. An environment variable is this run only and must win.
+    os.environ["ANTHROPIC_API_KEY"] = "sk-from-env"
+    check("the environment beats the file", _sec.get("anthropic") == "sk-from-env")
+    check("…and `where` says so", _sec.where("anthropic") == "environment")
+    del os.environ["ANTHROPIC_API_KEY"]
+    check("without it, the file answers", _sec.get("anthropic") == "sk-again")
+
+    _sec.clear("anthropic")
+    check("clearing removes it everywhere", _sec.where("anthropic") == "not set")
+    check("…and takes the file with it", not kp.exists())
+finally:
+    if _old_cfg is None:
+        os.environ.pop("XDG_CONFIG_HOME", None)
+    else:
+        os.environ["XDG_CONFIG_HOME"] = _old_cfg
+    importlib.reload(_cfg)
+    importlib.reload(_sec)
+
+
 # ── 6. the voice, and the pipe it must not write into ───────────────────────
 #
 # ⛔ THE TRAP THIS SECTION EXISTS FOR: chibi's voice modules print to stdout
