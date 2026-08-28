@@ -1404,6 +1404,16 @@ static void backdrop_export(syn_server_t *s)
     }
 
     /*
+     * ⛔ WHERE THE INKS END AND THE MEASUREMENTS BEGIN, and the reason the two
+     * are told apart at all: everything above is a DECISION and everything
+     * below is a READING. The file has to be rewritten whenever either moves —
+     * a popup reads the cells, not the bar's answer — but the LOG is a record
+     * of decisions, and logging it on a reading turned a line worth seeing into
+     * 480 identical ones a minute. See the log at the bottom of this function.
+     */
+    const size_t ink_len = gl;
+
+    /*
      * The grid, as the text the shell reads it back as. Built before the
      * change test below because it is PART of that test: the two bar inks can
      * sit perfectly still across a wallpaper change that moves every cell — a
@@ -1543,6 +1553,9 @@ static void backdrop_export(syn_server_t *s)
      * grid can move while both inks hold still. */
     static syn_ink_t last = -1, last_best = -1;
     static char last_grids[sizeof(grids)] = "";
+    /* The LOG's own memory, which is not the file's — see the bottom of this
+     * function for why they must not be the same test. */
+    static syn_ink_t last_logged = -1, last_logged_best = -1;
     if (ink == last && best == last_best && strcmp(grids, last_grids) == 0)
         return;
 
@@ -1607,6 +1620,37 @@ static void backdrop_export(syn_server_t *s)
     last = ink;
     last_best = best;
     snprintf(last_grids, sizeof(last_grids), "%s", grids);
+
+    /*
+     * ⛔ THE FILE IS WRITTEN ON EVERY CHANGE; THE LOG IS NOT.
+     *
+     * `scene.<output>` is measured off what is actually on screen, so it moves
+     * whenever anything does — a clock's minute, a cursor, a video. That is a
+     * real change and the bar must have it, so the write above is right to
+     * happen. Logging it was not: four INFO lines every time, at the scan's
+     * 400 ms, is **480 lines a minute for the length of the session**, every one
+     * of them saying what the one before it said. Measured on this desk it was
+     * ~3100 journal lines a minute together with barscan's own trace, against a
+     * journal already 4 GB on disk.
+     *
+     * So the log fires on the INK — the decision — and stays quiet while only
+     * the readings underneath it move. A line here now means the bar changed
+     * how it draws, which is the only reason anybody greps for it.
+     *
+     * ⚠ THE PER-OUTPUT INKS ARE PART OF THAT TEST, not just the fold. A screen
+     * flipping dark while another flips light leaves the fold on NONE both
+     * times, and that is exactly the case the per-output pairs exist for.
+     */
+    static char last_inks[sizeof(grids)] = "";
+    bool ink_moved = ink != last_logged || best != last_logged_best ||
+                     strncmp(grids, last_inks, ink_len) != 0 ||
+                     last_inks[ink_len] != '\0';
+    if (!ink_moved) return;
+    last_logged = ink;
+    last_logged_best = best;
+    memcpy(last_inks, grids, ink_len);
+    last_inks[ink_len] = '\0';
+
     /* ⚠ THE FOLDED ANSWER IS NOT WHAT THE BAR DRAWS ANY MORE, so the per-output
      * pairs are logged beside it. A three-monitor desktop reads "none" here and
      * still has a clear bar on two of them, and a line that showed only the fold

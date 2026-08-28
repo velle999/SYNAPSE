@@ -57,9 +57,31 @@ static void llama_log_capture(enum ggml_log_level level, const char *text,
                               void *user) {
     (void)user;
 
-    /* Unchanged routing first. llama emits partial lines (progress dots), so
-     * this must be a raw write and not a syn_log() line per fragment. */
-    if (text) fputs(text, stderr);
+    /*
+     * ⛔ DEBUG DOES NOT REACH stderr, AND THAT IS THE WHOLE OF THIS BLOCK.
+     *
+     * This used to forward every level, on the reasoning that systemd captures
+     * stderr and the full llama log is worth more than the one line kept
+     * below. That is true of the LOAD, which is what it was written against.
+     * It is not true of generation: ggml's CUDA backend logs
+     * "CUDA Graph id N reused" at DEBUG **per token**, so a single answer
+     * writes thousands of identical lines through journald — measured here at
+     * 7162 lines in ten minutes, against a journal already 4 GB on disk. The
+     * model's own throughput pays for every one of them.
+     *
+     * Everything INFO and above still goes through untouched, so the model
+     * card, the tensor counts, the offload summary and every warning read
+     * exactly as before. Only the per-token trace is dropped.
+     *
+     * ⚠ CONT IS A CONTINUATION OF WHATEVER CAME BEFORE IT, not a level of its
+     * own — llama emits progress as a line at INFO followed by dots at CONT.
+     * Dropping a DEBUG line while letting its dots through would leave
+     * fragments attached to an unrelated line above, so a CONT inherits the
+     * decision made for the line it continues.
+     */
+    static enum ggml_log_level last_real = GGML_LOG_LEVEL_INFO;
+    if (level != GGML_LOG_LEVEL_CONT) last_real = level;
+    if (text && last_real != GGML_LOG_LEVEL_DEBUG) fputs(text, stderr);
 
     if (level != GGML_LOG_LEVEL_ERROR || !text) return;
 

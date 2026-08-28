@@ -1010,10 +1010,83 @@ static void window_move_key(syn_server_t *s, syn_view_t *v, int dx, int dy)
         view_resize(v, v->x, v->y, v->w, v->h);
 }
 
+/*
+ * ⛔ "OPEN THE TASK MANAGER" IS NOT "TOGGLE THE TASK MANAGER", and until this
+ * table existed there was no way to say the first one.
+ *
+ * Every panel below is reached by ONE action that toggles, which is exactly
+ * right for the key that opens it — Ctrl+Alt+Del is a switch and a second
+ * press should put it away. It is exactly wrong for anything acting on a
+ * sentence. The assistant resolves "open the task manager" to
+ * `synctl dispatch taskmgr`, and if the panel was already up that CLOSES it
+ * and reports "Opened the task manager." — a request that did the opposite of
+ * what it said and then claimed it had not. Reported 2026-08-28.
+ *
+ * ⚠ A NEW VERB, NOT A NEW ARGUMENT. `arg` is already spoken for on half of
+ * these — `control <category>`, `theme <preset|#rrggbb…>`, `wallpaper <path>`
+ * — so "show" as an argument would be ambiguous with a category or a preset
+ * actually called that. `show`/`hide` take the PANEL as their argument
+ * instead, which leaves every existing action and every bound key untouched.
+ *
+ * ⚠ THE NAMES ARE THE DISPATCH NAMES, not the C prefixes. `control` is
+ * ctlpanel, `displays` is dispcfg, `bluetooth` is bt, `wallpaper` is wppick —
+ * the caller says what it means to open, and this is the one place that has to
+ * know the two vocabularies differ.
+ */
+struct syn_panel_verb {
+    const char *name;
+    void (*show)(syn_server_t *);
+    void (*hide)(syn_server_t *);
+};
+
+static const struct syn_panel_verb SYN_PANEL_VERBS[] = {
+    { "taskmgr",   taskmgr_show,   taskmgr_hide   },
+    { "control",   ctlpanel_show,  ctlpanel_hide  },
+    { "calc",      calc_show,      calc_hide      },
+    { "clipboard", clipboard_show, clipboard_hide },
+    { "emoji",     emoji_show,     emoji_hide     },
+    { "news",      news_show,      news_hide      },
+    { "keys",      keys_show,      keys_hide      },
+    { "clock",     clock_show,     clock_hide     },
+    { "calendar",  calendar_show,  calendar_hide  },
+    { "displays",  dispcfg_show,   dispcfg_hide   },
+    { "bluetooth", bt_show,        bt_hide        },
+    { "sounds",    sound_show,     sound_hide     },
+    { "filters",   filters_show,   filters_hide   },
+    { "theme",     theme_show,     theme_hide     },
+    { "widgets",   widgets_show,   widgets_hide   },
+    { "wallpaper", wppick_show,    wppick_hide    },
+    { "aimodel",   aimodel_show,   aimodel_hide   },
+    { "power",     power_show,     power_hide     },
+    { "saver",     saver_show,     saver_hide     },
+    { "eq",        eq_show,        eq_hide        },
+    { "overview",  overview_show,  overview_hide  },
+    { "appgrid",   appgrid_show,   appgrid_hide   },
+};
+
+/* True when `arg` named a panel this build has. A name it does not know is a
+ * refusal, not a silent no-op: synctl reports it and the caller can say so. */
+static bool panel_verb(syn_server_t *s, const char *arg, bool show)
+{
+    if (!arg || !*arg) return false;
+    for (size_t i = 0; i < sizeof(SYN_PANEL_VERBS) / sizeof(*SYN_PANEL_VERBS); i++) {
+        if (strcmp(arg, SYN_PANEL_VERBS[i].name) != 0) continue;
+        if (show) SYN_PANEL_VERBS[i].show(s);
+        else      SYN_PANEL_VERBS[i].hide(s);
+        return true;
+    }
+    return false;
+}
+
 /* Execute a bind action (see config.c for the names and defaults). */
 bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     syn_workspace_t *ws = server_active_workspace(s);
+
+    /* ⚠ BEFORE THE CHAIN, because these two are the only actions whose
+     * argument is another action's name. See SYN_PANEL_VERBS above. */
+    if (strcmp(action, "show") == 0 || strcmp(action, "hide") == 0)
+        return panel_verb(s, arg, action[0] == 's');
 
     if (strcmp(action, "spawn") == 0) {
         spawn(arg);

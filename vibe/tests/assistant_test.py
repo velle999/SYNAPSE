@@ -1009,5 +1009,48 @@ check("…and system.py holds no roster of its own",
               for v in vars(system).values()))
 
 
+# ── 14. opening a panel is not toggling one ─────────────────────────────────
+#
+# ⛔ "OPEN THE TASK MANAGER" WITH IT ALREADY OPEN CLOSED IT, and said it had
+# opened it. Every panel synui draws is one toggling action, which is right for
+# the key and wrong for a sentence. `show` is asked for first.
+_calls = []
+_real_run = desktop._run
+
+
+class _Reply:
+    def __init__(self, out): self.stdout, self.stderr, self.returncode = out, "", 0
+
+
+try:
+    desktop._run = lambda argv, **k: (_calls.append(argv), _Reply('{"ok":true}'))[1]
+    check("a panel is asked to SHOW, not to toggle",
+          desktop._dispatch_panel("taskmgr") is None and
+          _calls[0] == ["synctl", "dispatch", "show", "taskmgr"], repr(_calls))
+    check("…and one call is enough when it works", len(_calls) == 1, repr(_calls))
+
+    # ⚠ AN OLDER synui HAS NO `show`, and refuses it the same way it refuses a
+    # typo — so the retry is what keeps this working across the upgrade.
+    _calls.clear()
+    _seq = ['{"error":"unknown action","action":"show"}', '{"ok":true}']
+    desktop._run = lambda argv, **k: (_calls.append(argv), _Reply(_seq[len(_calls) - 1]))[1]
+    check("…a compositor without the verb falls back to the action",
+          desktop._dispatch_panel("taskmgr") is None and len(_calls) == 2 and
+          _calls[1] == ["synctl", "dispatch", "taskmgr"], repr(_calls))
+
+    # ⛔ synctl EXITS 0 WHEN IT REFUSES — the reply is the answer, never the
+    # status. A returncode check here reported a typo'd panel as opened.
+    _calls.clear()
+    desktop._run = lambda argv, **k: (_calls.append(argv),
+                                      _Reply('{"error":"unknown action"}'))[1]
+    _bad = desktop._dispatch_panel("not_a_panel")
+    check("a refused panel is an error, though synctl exited 0",
+          _bad is not None and _bad.startswith("Error:"), repr(_bad))
+    check("…and it was not claimed as opened after two tries", len(_calls) == 2,
+          repr(_calls))
+finally:
+    desktop._run = _real_run
+
+
 print(f"\n{npass} passed, {nfail} failed")
 sys.exit(1 if nfail else 0)

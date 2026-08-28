@@ -512,6 +512,42 @@ def dir_target(text: str, bare_relative: bool = True) -> Path | None:
     return r.value if (r is not None and r.kind == "dir") else None
 
 
+# ⛔ `synctl dispatch <panel>` IS A TOGGLE, AND "OPEN" IS NOT.
+#
+# Every panel synui draws is reached by one action that toggles — right for the
+# key that opens it, since a second press should put it away, and wrong for a
+# sentence. "Open the task manager" with the panel already up CLOSED it and
+# reported "Opened the task manager.": the request did the opposite of what it
+# said and then denied it. synui grew `show`/`hide` verbs that take the panel
+# as their argument; this asks for `show` and keeps the toggle as the fallback.
+#
+# ⛔ AND synctl EXITS 0 WHEN IT REFUSES. An unknown action answers
+# `{"error":"unknown action",…}` on stdout with status 0, so the returncode
+# check this replaced could not see a refusal — a typo'd panel name read as a
+# panel that opened. The REPLY is the answer, not the exit status; that is also
+# what makes the fallback below detectable rather than a guess.
+def _dispatch_panel(action: str) -> str | None:
+    """Open a panel — really open it. None when it is up, an Error line if not.
+
+    ⚠ THE FALLBACK IS FOR AN OLDER COMPOSITOR, not for a bad panel name. A
+    synui without the verbs refuses `show` itself, which is the case this
+    retries; a name that synui does not know refuses the second call too and is
+    reported. It is also the right answer for the entries in PANELS that are
+    not panels at all — `network` runs nmtui, `record` starts a recording —
+    which have nothing to show and correctly fall through to their own action.
+    """
+    for argv in (["synctl", "dispatch", "show", action],
+                 ["synctl", "dispatch", action]):
+        try:
+            out = _run(argv).stdout.strip()
+        except Exception as e:
+            return f"Error: {' '.join(argv)} failed: {e}"
+        if '"error"' not in out:
+            return None
+    return (f"Error: this compositor has no `{action}` panel "
+            f"— it answered {out or 'nothing'}")
+
+
 def desktop_open(target: str) -> str:
     """Open a URL, a path, one of this desktop's panels, or an app by name."""
     r = resolve_open(target)
@@ -532,10 +568,8 @@ def desktop_open(target: str) -> str:
     if r.kind == "panel":
         if not shutil.which("synctl"):
             return "Error: synctl is not installed — is this a synui session?"
-        rc = _run(["synctl", "dispatch", r.value])
-        if rc.returncode != 0:
-            return f"Error: synctl refused `{r.value}`: {rc.stderr.strip()}"
-        return f"Opened {r.label}."
+        err = _dispatch_panel(r.value)
+        return err if err else f"Opened {r.label}."
     if r.kind == "dir":
         return _open_dir(r.value)
     if r.kind == "file":
