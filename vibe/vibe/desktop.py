@@ -202,16 +202,46 @@ def _run(argv: list, timeout: int = 15) -> subprocess.CompletedProcess:
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
 
 
-def _spawn(argv: list) -> None:
-    """Detached, and with both pipes on /dev/null.
+# How long a spawned program is given to fail. A program that is going to
+# reject its arguments has done so long before this; one that is going to put a
+# window up has not finished doing it and does not need to have.
+_SETTLE = 0.4
+
+
+def _spawn(argv: list) -> str | None:
+    """Detached, with both pipes on /dev/null. None when it is running.
 
     ⚠ NOT INHERITED PIPES. When vibe is driven by the chat window its stdout is
     a pipe the window reads; a child that inherits it keeps that pipe open after
     vibe exits, and the window then waits for an engine that is gone. Worse, the
     child takes a SIGPIPE when the window does close — an app launched from here
-    would die a second later for no visible reason."""
-    subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     stdin=subprocess.DEVNULL, start_new_session=True)
+    would die a second later for no visible reason.
+
+    ⛔ AND IT STAYS LONG ENOUGH TO SEE THE CHILD DIE. `Popen` succeeds for
+    anything that EXECS, which includes a program that prints a usage message
+    and exits two milliseconds later — so every caller here reported "Opened
+    your Downloads folder" for a child that was already gone, with its
+    complaint on /dev/null. **A launcher with no failure path is not a launcher
+    that never fails; it is one that cannot tell you when it did.**
+
+    ⚠ EXIT 0 IS ALSO SUCCESS, and quickly. `xdg-open` hands the file to
+    whatever owns it and returns immediately — treating a fast exit as failure
+    would swap this bug for its mirror image.
+    """
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        return f"Error: could not run {argv[0]}: {e}"
+    try:
+        rc = p.wait(timeout=_SETTLE)
+    except subprocess.TimeoutExpired:
+        return None
+    if rc == 0:
+        return None
+    return (f"Error: `{' '.join(argv)}` exited with status {rc} "
+            f"without opening anything")
 
 
 def dispatch_actions() -> list:
@@ -320,19 +350,42 @@ def _folder_key(text: str) -> str | None:
     return _DIR_WORDS.get(k)
 
 
+# ⛔ EACH FILE MANAGER BRINGS ITS OWN ARGV, and synfiles is the reason.
+# `synfiles <dir>` is not a way to run synfiles: it is a verb CLI — `list`,
+# `info`, `tui`, `gui` — and handed a bare path it answers `unknown command
+# '/home/velle/Downloads'`, prints its usage, and exits 2. Every other name
+# below does take the path directly, which is exactly what made one shared
+# `[mgr, path]` look correct: it was right five times out of six, and wrong for
+# the only file manager this desktop actually ships. Putting synfiles first
+# then turned a working open into a silent no-op.
+_FILE_MANAGERS = (
+    ("synfiles", lambda p: ["synfiles", "gui", str(p)]),
+    ("thunar",   lambda p: ["thunar", str(p)]),
+    ("nautilus", lambda p: ["nautilus", str(p)]),
+    ("dolphin",  lambda p: ["dolphin", str(p)]),
+    ("nemo",     lambda p: ["nemo", str(p)]),
+    ("pcmanfm",  lambda p: ["pcmanfm", str(p)]),
+)
+
+
 def _open_dir(p: Path) -> str:
     """Hand a directory to this desktop's file manager.
 
     ⚠ synfiles FIRST — this desktop ships its own file manager, and a list that
-    starts at thunar opens whatever else happens to be installed."""
+    starts at thunar opens whatever else happens to be installed.
+
+    ⚠ A MANAGER THAT FAILS IS NOT FALLEN PAST. Trying thunar because synfiles
+    exited 2 would put a window up and leave the fault in place for the next
+    release to inherit — the whole shape of a fallback that works hiding a
+    lookup that does not."""
     note_dir(p)
-    for mgr in ("synfiles", "thunar", "nautilus", "dolphin", "nemo", "pcmanfm"):
+    for mgr, argv in _FILE_MANAGERS:
         if shutil.which(mgr):
-            _spawn([mgr, str(p)])
-            return f"Opened {p} in {mgr}."
+            err = _spawn(argv(p))
+            return err if err else f"Opened {p} in {mgr}."
     if shutil.which("xdg-open"):
-        _spawn(["xdg-open", str(p)])
-        return f"Opened {p}."
+        err = _spawn(["xdg-open", str(p)])
+        return err if err else f"Opened {p}."
     return f"Error: no file manager is installed to open {p} with"
 
 
@@ -474,8 +527,8 @@ def desktop_open(target: str) -> str:
     if r.kind == "url":
         if not shutil.which("xdg-open"):
             return "Error: xdg-open is not installed"
-        _spawn(["xdg-open", r.value])
-        return f"Opened {r.value} in the default browser."
+        err = _spawn(["xdg-open", r.value])
+        return err if err else f"Opened {r.value} in the default browser."
     if r.kind == "panel":
         if not shutil.which("synctl"):
             return "Error: synctl is not installed — is this a synui session?"
@@ -487,14 +540,14 @@ def desktop_open(target: str) -> str:
         return _open_dir(r.value)
     if r.kind == "file":
         if shutil.which("xdg-open"):
-            _spawn(["xdg-open", str(r.value)])
-            return f"Opened {r.value}."
+            err = _spawn(["xdg-open", str(r.value)])
+            return err if err else f"Opened {r.value}."
         return f"Error: nothing to open {r.value} with"
     if r.kind == "app":
-        _spawn(r.value)
-        return f"Launched {r.label} ({' '.join(r.value)})."
-    _spawn(r.value)
-    return f"Ran {r.label}."
+        err = _spawn(r.value)
+        return err if err else f"Launched {r.label} ({' '.join(r.value)})."
+    err = _spawn(r.value)
+    return err if err else f"Ran {r.label}."
 
 
 

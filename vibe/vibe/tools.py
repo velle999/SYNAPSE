@@ -4,7 +4,7 @@ import subprocess
 import re
 from pathlib import Path
 
-from vibe import desktop
+from vibe import desktop, system
 
 
 # ── Tool definitions (OpenAI function-calling schema) ──────────────────────────
@@ -113,6 +113,22 @@ TOOL_SCHEMAS = [
                 },
                 "required": [],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_info",
+            "description": (
+                "What this computer actually is, read off this machine: "
+                "operating system, kernel, motherboard, CPU, memory, graphics "
+                "cards, drives and uptime. Use it for ANY question about this "
+                "machine's specifications, hardware or capacity — you have no "
+                "other way to know them, and a spec you state without calling "
+                "this is one you invented. Takes no arguments and changes "
+                "nothing."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
     # ── The desktop ─────────────────────────────────────────────────────────
@@ -714,6 +730,7 @@ TOOL_MAP = {
     "glob": lambda args: glob(**args),
     "grep": lambda args: grep(**args),
     "list_dir": lambda args: list_dir(**args),
+    "system_info": lambda args: system.machine_facts(),
     "desktop_open": lambda args: desktop.desktop_open(**args),
     "desktop_action": lambda args: desktop.desktop_action(**args),
     "desktop_setting": lambda args: desktop.desktop_setting(**args),

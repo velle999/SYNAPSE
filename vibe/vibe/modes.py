@@ -68,7 +68,8 @@ DIRECT_MODES = frozenset({AUTO, AGENT})
 # What each mode is allowed to reach for. PLAN's list is the whole of what
 # makes it safe: it can look at anything and change nothing, so a plan can be
 # read before any of it happens.
-READ_ONLY_TOOLS = frozenset({"read_file", "glob", "grep", "list_dir", "desktop_open"})
+READ_ONLY_TOOLS = frozenset({"read_file", "glob", "grep", "list_dir",
+                            "desktop_open", "system_info"})
 
 DESCRIPTION_SHELL = "runs it, once you say so"
 DESCRIPTION_DIRECT = "does it, with no model involved"
@@ -102,6 +103,13 @@ _MACHINE_RE = re.compile(
     r"bar|dock|wallpaper|theme|panel|window|workspace|monitor|screen|"
     r"setting|settings|config|configure|"
     r"service|daemon|systemd|log|logs|journal|process|"
+    # ⚠ WHAT THE MACHINE IS, not only what is on it. "pc stats?" carried none
+    # of the words above, routed to ASK, and was answered with a spec sheet for
+    # a computer that does not exist. intents.py claims most of these outright
+    # now; these are here so the ones it does not still reach a mode that has
+    # `system_info` rather than a mode that has to guess.
+    r"stats|statistics|specs|spec|specifications|hardware|"
+    r"cpu|processor|gpu|ram|vram|uptime|motherboard|"
     r"git|commit|branch|build|compile|test|tests|"
     r"write|create|make|edit|change|move|rename|delete|fix|refactor)\b",
     re.I)
@@ -122,6 +130,13 @@ _MACHINE_RE = re.compile(
 _THIS_MACHINE_RE = re.compile(
     r"(^|\s)(/|~/|\./)|"                                   # a path
     r"\b(?:my|this|the)\s+(?:machine|computer|box|system|pc|laptop|desktop)\b|"
+    # ⚠ AND WHAT IT IS MADE OF. "what are my specs" is the question form, so
+    # without a veto here it goes to ASK — which is exactly how the assistant
+    # came to describe an i7-9700K that is not in this machine.
+    r"\b(?:my|this|the)\s+(?:specs|spec|specifications|stats|statistics|"
+    r"hardware|cpu|processor|gpu|ram|vram|motherboard)\b|"
+    r"\b(?:pc|system|computer|machine|hardware)\s+"
+    r"(?:stats|statistics|specs|spec|specifications)\b|"
     r"\b(?:installed|running|on this (?:machine|box|system|computer))\b|"
     r"\b(?:" + "|".join(sorted((re.escape(w) for w in _desktop._DIR_WORDS),
                                key=len, reverse=True)) + r")\b",

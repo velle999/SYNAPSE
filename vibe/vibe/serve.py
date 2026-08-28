@@ -85,6 +85,19 @@ def enc(v) -> str:
 
 
 def dec(v: str) -> str:
+    # ⛔ `%00` IS enc()'s EMPTY FIELD, NOT A NUL CHARACTER. Decoded as one, an
+    # empty field arrives on the far side as "\u0000" — which is not `""`.
+    # That is what broke the window's tool records a second time: the engine
+    # sends a tool CALL as ("X", name, "…") and its RESULT as ("X", "",
+    # result), and the QML tells them apart by asking whether the name is
+    # empty. It never was, so every result took the call's branch and rendered
+    # as a bare "…" — errors included, again.
+    #
+    # ⚠ enc AND dec ARE INVERSES OR THEY ARE NOTHING. The sentinel stays — a
+    # field that encoded to "" would be at the mercy of anything that trims a
+    # line — so the round trip is closed here, and in the QML's dec() to match.
+    if v == "%00":
+        return ""
     if "%" not in v:
         return v
     out = bytearray()

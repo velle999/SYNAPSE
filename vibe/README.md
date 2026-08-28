@@ -15,7 +15,8 @@ conversation loop, one tool set, one set of confirmations.
 **It can act on the desktop.** Alongside reading and writing files and running
 commands, it can open a URL, a folder — including your own by their plain
 names, "downloads", "pictures", "home" — an application or one of the desktop's
-own panels (`desktop_open`), run any of the compositor's actions
+own panels (`desktop_open`), report what this machine actually is
+(`system_info`), run any of the compositor's actions
 (`desktop_action`), and change a desktop setting and apply it live —
 `bar_edge`, `dock_edge`, the theme, the wallpaper (`desktop_setting`). Anything
 that WRITES asks first, and anything that only opens something does not.
@@ -39,8 +40,16 @@ vibe intents "open my downloads"   # what a line would do — and does nothing
 
 It covers opening (a folder by its plain name, an app, a panel, a path, a URL),
 reading a folder, the compositor's verbs by the phrases people use for them,
-and the bar and dock settings. Anything that writes still asks first: the line
-is *does it write*, and it does not move because a model was not involved.
+the bar and dock settings, and what this machine is. Anything that writes still
+asks first: the line is *does it write*, and it does not move because a model
+was not involved.
+
+**And it never guesses at the hardware.** "pc stats", "what are my specs",
+"how much ram do i have" are read off this machine — /proc, the DMI tables,
+`lspci`, `nvidia-smi` — and a field that cannot be read is left out rather than
+filled in (`system_info`). It is the same rule as the folder listing: a
+question this machine can answer and a model cannot is not a question to put
+to a model.
 
 ⚠ **It claims whole lines and nothing else.** `open`, `run`, `list` and `lock`
 are all real programs and real English, so "how do I open my downloads from a
@@ -156,6 +165,7 @@ question.
 ## Features
 
 - Agentic tool-call loop: reads files, writes files, edits files, runs bash commands, globs, greps
+- Reports what this machine actually is — CPU, memory, GPUs, drives — read off the machine, never guessed
 - System control: GPU stats, process management, systemd services, network info
 - Qwen3/Qwen3.5 thinking mode (chain-of-thought reasoning, toggleable at runtime)
 - Streaming output with Rich UI
@@ -308,7 +318,7 @@ vibe-code/
 │   ├── desktop.py   # desktop_open / desktop_action / desktop_setting
 │   ├── llm.py       # VibeModel — agentic loop, ollama + llama-cpp backends
 │   ├── tools.py     # Tool schemas + implementations (read, write, edit, bash, glob, grep, ls)
-│   ├── system.py    # System commands (gpu, ps, services, file manager, etc.)
+│   ├── system.py    # What this machine is — CPU, memory, GPUs, drives, uptime
 │   └── ui.py        # Rich console UI, prompt_toolkit session, streaming renderer
 ├── setup.sh         # llama-cpp setup script
 ├── vibe.sh          # Launch wrapper

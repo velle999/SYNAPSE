@@ -17,6 +17,7 @@ Four questions, and none of them needs a model, a GPU or a network:
 Usage: assistant_test.py            (from the vibe source tree)
 """
 import pathlib
+import inspect
 import io
 import os
 import sys
@@ -609,8 +610,16 @@ check("…and whether reading aloud is on", any(l == "V\treading\tyes" for l in 
 #
 # Tabs and newlines ARE the record separators, so an answer containing them has
 # to survive as data. A shell transcript contains both, every time.
+# ⛔ AND THE EMPTY STRING IS NOT A NUL. This line used to read
+# `== (s or "\x00")` — it asserted the bug. enc("") is the sentinel "%00", a
+# plain percent-decode makes that a NUL character, and the window tells a tool
+# CALL from its RESULT by asking whether the name field is empty. It never was,
+# so every tool result rendered as the call's "…" and every tool ERROR was
+# dropped — with a green test saying the wire was fine.
 for s in ("plain", "a\tb", "one\ntwo", "100%", "é ☃", "", "a\\b\"c"):
-    check(f"the wire round-trips {s!r}", serve.dec(serve.enc(s)) == (s or "\x00"))
+    check(f"the wire round-trips {s!r}", serve.dec(serve.enc(s)) == s)
+check("…and an empty field arrives EMPTY, not as a NUL",
+      serve.dec(serve.enc("")) == "" and serve.enc("") == "%00")
 
 rec = io.StringIO()
 serve.Wire(rec).rec("T", "col1\tcol2\nline2")
@@ -868,6 +877,136 @@ if _downloads is not None:
     check("…and no model was built to do it", _eng.model is None)
     check("…and the window is told which route answered",
           "\tdirect" in _out.getvalue(), _out.getvalue()[:200])
+
+
+# ── 12. the launcher, and whether it can fail ───────────────────────────────
+#
+# ⛔ THE ARGV, NOT JUST THE PATH. The check above asks whether the folder's path
+# reached the file manager, and `['synfiles', '/home/velle/Downloads']` passes
+# it — while synfiles answers `unknown command`, prints its usage and exits 2.
+# synfiles is a VERB CLI: its window is `gui`. Every other manager in the list
+# takes a bare path, which is what made one shared argv look right for years.
+_fm = dict(desktop._FILE_MANAGERS)
+check("synfiles is asked for its GUI, not handed a bare path",
+      _fm["synfiles"](pathlib.Path("/tmp/x")) == ["synfiles", "gui", "/tmp/x"],
+      repr(_fm["synfiles"](pathlib.Path("/tmp/x"))))
+check("…and the managers that DO take a bare path still get one",
+      _fm["thunar"](pathlib.Path("/tmp/x")) == ["thunar", "/tmp/x"])
+check("…and synfiles is still first", desktop._FILE_MANAGERS[0][0] == "synfiles")
+
+# ⛔ A LAUNCHER THAT CANNOT FAIL CANNOT SAY IT WORKED. Popen succeeds for
+# anything that execs, so a program that rejects its arguments and exits two
+# milliseconds later was reported as "Opened your Downloads folder" with its
+# complaint on /dev/null. That is the whole reason the wrong argv above
+# survived: nothing in the path could contradict it.
+check("a child that exits non-zero is reported, not claimed",
+      (desktop._spawn(["sh", "-c", "exit 2"]) or "").startswith("Error:"),
+      repr(desktop._spawn(["sh", "-c", "exit 2"])))
+check("…a program that is not there is too",
+      (desktop._spawn(["definitely-not-a-program-xyz"]) or "").startswith("Error:"))
+check("…a child still running is a success", desktop._spawn(["sleep", "5"]) is None)
+# ⚠ xdg-open HANDS OFF AND RETURNS. A fast exit 0 is the normal shape of a
+# successful launch, not a failure — treating it as one swaps this bug for its
+# mirror image.
+check("…and so is one that did its job and exited", desktop._spawn(["true"]) is None)
+
+_err = desktop._open_dir.__globals__["_spawn"]
+try:
+    desktop._open_dir.__globals__["_spawn"] = lambda argv: "Error: exited with status 2"
+    check("a file manager that died does not report an open folder",
+          desktop._open_dir(pathlib.Path("/tmp")).startswith("Error:"))
+finally:
+    desktop._open_dir.__globals__["_spawn"] = _err
+
+
+# ── 13. what this machine is ────────────────────────────────────────────────
+#
+# ⛔ ASKED "pc stats?", THE ASSISTANT INVENTED A SPEC SHEET — an i7-9700K with
+# 16 GB and a GTX 1650, on a Ryzen 5 5600X with 32 GB and an RTX 3060. Not one
+# field was right and nothing marked it a guess. The turn had routed to ASK,
+# which has no tools, so the only answer available was a plausible one.
+from vibe import system
+
+_facts = system.machine_facts()
+check("the machine answers with facts about itself", bool(_facts) and
+      not _facts.startswith("Error:"), _facts[:120])
+# ⚠ COMPARED AGAINST THE KERNEL'S OWN COPY, because "it returned some text" is
+# what the invented answer also did. The CPU line has to be the one in
+# /proc/cpuinfo or it is prose again.
+_cpuinfo = pathlib.Path("/proc/cpuinfo").read_text()
+_model = ""
+for _l in _cpuinfo.splitlines():
+    if _l.startswith("model name"):
+        _model = _l.split(":", 1)[1].strip()
+        break
+if _model:
+    check("…and the CPU it names is the one in /proc/cpuinfo",
+          _model in _facts, f"{_model!r} not in {_facts[:200]!r}")
+check("…and no field is stated that could not be read",
+      all(l.split(": ", 1)[1].strip() for l in _facts.splitlines() if ": " in l))
+# btrfs subvolumes are one filesystem; five rows for one 235 GB disk reads as
+# five drives.
+check("…and one filesystem is listed once",
+      len(system.disks()) == len({d.split(":")[0] for d in system.disks()}))
+
+check("system_info is a tool the model can reach", "system_info" in TOOL_MAP)
+check("…described in the schemas it is shown",
+      any(s["function"]["name"] == "system_info" for s in TOOL_SCHEMAS))
+check("…and it changes nothing, so it does not ask",
+      "system_info" not in VibeModel._CONFIRM_TOOLS)
+check("…and Plan mode may still use it", "system_info" in modes.READ_ONLY_TOOLS)
+
+for _line in ("pc stats?", "pc stats", "system specs", "specs", "hardware",
+              "computer stats", "what are my specs", "what cpu do i have",
+              "how much ram do i have", "what machine is this",
+              "show me my system specs", "what's my graphics card"):
+    _h = intents.match(_line)
+    check(f"{_line!r} is answered from the machine, not from a model",
+          _h is not None and _h.tool == "system_info",
+          repr(_h))
+
+# ⛔ AND NOT A QUESTION ABOUT THE WORLD. "what is a gpu" is a thing to explain,
+# not this machine's graphics card; a direct layer that claimed it would answer
+# a question nobody asked with a hardware listing.
+for _line in ("what is a gpu", "explain how cpu caches work",
+              "how much ram does a raspberry pi have", "write a spec for the parser",
+              "how do i check my specs from a script",
+              "what are the specs of the new macbook", "?pc stats"):
+    _h = intents.match(_line)
+    check(f"{_line!r} is left to the assistant",
+          _h is None or _h.tool != "system_info", repr(_h))
+
+# The router is the second line of defence: a phrasing the table above misses
+# must still reach a mode that HAS system_info rather than one that must guess.
+for _line in ("pc stats?", "what are my specs", "how much ram do i have",
+              "system specs"):
+    check(f"{_line!r} routes somewhere with tools", modes.route(_line) != modes.ASK,
+          modes.route(_line))
+for _line in ("who wrote Dune", "what is the speed of light", "what is a gpu",
+              "write a poem about a cpu"):
+    check(f"…while {_line!r} still just gets an answer",
+          modes.route(_line) == modes.ASK, modes.route(_line))
+
+# ⛔ ONE FILE-MANAGER LIST, TWO FRONT ENDS. system.py carried a second one —
+# thunar first, no synfiles — for the REPL's `/files`, so the terminal and the
+# chat window opened different programs for the same request, and only one of
+# them was ever fixed. `/files` calls desktop.py now.
+_seen = []
+_real = desktop._open_dir
+try:
+    desktop._open_dir = lambda p: _seen.append(p) or "ok"
+    system.open_file_manager("/tmp")
+finally:
+    desktop._open_dir = _real
+check("the REPL's /files uses the assistant's file-manager list", bool(_seen),
+      repr(_seen))
+# ⚠ THE ROSTER, NOT THE PROSE. The docstring names synfiles precisely to say
+# why the code must not — so the check is that no VALUE in this module is a
+# list of file managers.
+check("…and system.py holds no roster of its own",
+      not any(isinstance(v, (list, tuple)) and
+              any("thunar" in str(x) or "pcmanfm" in str(x) for x in v)
+              for v in vars(system).values()))
 
 
 print(f"\n{npass} passed, {nfail} failed")

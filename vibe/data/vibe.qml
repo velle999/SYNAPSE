@@ -186,11 +186,23 @@ FloatingWindow {
     // thousands of lines, and pasting all of it into the transcript buries the
     // reply that follows. The head of it is the part that says whether it
     // worked.
+    // ⚠ SIX LINES CUT THE ANSWER IN HALF. The budget was set for a directory
+    // listing, where the first few rows are a sample and the rest is more of
+    // the same. A machine's specifications are not a sample — clipped at six,
+    // "pc stats" showed the CPU and the memory and hid every drive behind
+    // "… (6 more lines)", which is a chat window keeping the answer from the
+    // person who asked for it. A screenful, and anything genuinely long is
+    // still cut rather than allowed to take the window.
+    readonly property int clipLines: 16
+    readonly property int clipChars: 1200
+
     function clip(text) {
         var lines = text.split("\n")
-        var head = lines.slice(0, 6).join("\n")
-        if (head.length > 400) head = head.substring(0, 400) + "…"
-        if (lines.length > 6) head += "\n… (" + (lines.length - 6) + " more lines)"
+        var head = lines.slice(0, root.clipLines).join("\n")
+        if (head.length > root.clipChars)
+            head = head.substring(0, root.clipChars) + "…"
+        if (lines.length > root.clipLines)
+            head += "\n… (" + (lines.length - root.clipLines) + " more lines)"
         return head
     }
 
@@ -213,6 +225,13 @@ FloatingWindow {
 
     // ── The wire ────────────────────────────────────────────────────────────
     function dec(s) {
+        // ⛔ "%00" IS THE ENGINE'S EMPTY FIELD, and decodeURIComponent turns it
+        // into a NUL CHARACTER, which is not "". The X branch below tells a
+        // tool CALL from its RESULT by asking whether the name is empty — so
+        // without this line it never is, every result renders as the call's
+        // "…", and the tool output is dropped exactly as it was before that
+        // branch was written. Mirrors dec() in serve.py.
+        if (s === "%00") return ""
         if (s.indexOf("%") < 0) return s
         try { return decodeURIComponent(s) } catch (e) { return s }
     }

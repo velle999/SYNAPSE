@@ -344,6 +344,62 @@ def _match_setting(line: str) -> Intent | None:
     return None
 
 
+# ── 5. what this machine is ─────────────────────────────────────────────────
+#
+# ⛔ THE OTHER QUESTION A MODEL CANNOT ANSWER AND WILL ANSWER ANYWAY. Asked
+# "pc stats?", the assistant produced a spec sheet — i7-9700K, 16 GB DDR4,
+# GTX 1650, 512 GB NVMe — for a machine that is a Ryzen 5 5600X with 32 GB and
+# an RTX 3060. It is the same fault as the invented directory listing above,
+# with the same cause: the router sent it to a mode with no tools, and the only
+# answer available to a model with no way to look is a plausible one.
+#
+# ⚠ THE NARROW QUESTIONS COME HERE TOO. "how much ram do i have" is answered by
+# the same reading of the same machine, so it is claimed rather than left to a
+# model that would have to guess — the answer simply contains more than was
+# asked, which is the right way round for a fact.
+_FACTS_THING = r"(?:pc|system|computer|machine|hardware|box|laptop|rig)"
+_FACTS_WORD = (r"(?:stats|statistics|specs|spec|specifications|info|"
+               r"information|details)")
+_FACTS_PART = r"(?:cpu|processor|gpu|graphics card|graphics|ram|memory|"    \
+              r"motherboard|mainboard|board|kernel|uptime|disk space|"      \
+              r"disks|drives|storage)"
+
+_FACTS_RES = tuple(re.compile(p, re.I) for p in (
+    # "pc stats", "system specs", "hardware info"
+    rf"^{_FACTS_THING}\s+{_FACTS_WORD}$",
+    # "specs", "hardware", "system info" on their own
+    # ⚠ "stats" ALONE IS A WHOLE LINE HERE BECAUSE normalise() MAKES ONE.
+    # `computer` is an address word — "hey computer" — so _ADDRESS_RE strips it
+    # and "computer stats" reaches this table as "stats".
+    rf"^(?:specs|specifications|hardware|stats|statistics)$",
+    rf"^{_FACTS_THING}$",
+    # "what are my pc specs", "what's the system info", "what are my specs"
+    rf"^what(?:'?s| is| are)?\s+(?:my|the|this)\s+(?:{_FACTS_THING}\s+)?"
+    rf"{_FACTS_WORD}$",
+    # "show me my specs", "tell me my pc stats", "list my system specs"
+    rf"^(?:show|tell|give|list)\s+me\s+(?:my|the|this)\s+"
+    rf"(?:{_FACTS_THING}\s+)?{_FACTS_WORD}$",
+    # "what machine is this", "what computer is this"
+    rf"^what\s+{_FACTS_THING}\s+(?:is\s+this|am\s+i\s+(?:on|using|running))$",
+    # "tell me about this machine", "what is this machine"
+    rf"^(?:tell me about|what(?:'?s| is)?)\s+this\s+{_FACTS_THING}$",
+    # "what cpu do i have", "how much ram do i have", "what gpu is in this pc"
+    rf"^what\s+{_FACTS_PART}\s+(?:do i have|is this|have i got|"
+    rf"am i (?:running|using)|is in (?:this|my) {_FACTS_THING})$",
+    rf"^how much\s+{_FACTS_PART}\s+(?:do i have|have i got|is there|"
+    rf"does this {_FACTS_THING} have)$",
+    # "what is my cpu", "what's my graphics card"
+    rf"^what(?:'?s| is| are)?\s+my\s+{_FACTS_PART}$",
+))
+
+
+def _match_facts(line: str) -> Intent | None:
+    for rx in _FACTS_RES:
+        if rx.match(line):
+            return Intent("system_info", why="stats")
+    return None
+
+
 # ── the one entry point ─────────────────────────────────────────────────────
 #
 # ⚠ ORDER IS MEANING. The listing forms are tried before the opening ones
@@ -351,7 +407,7 @@ def _match_setting(line: str) -> Intent | None:
 # and reading a folder is the narrower reading of it. Settings and compositor
 # verbs go before the general open, so "show the dock" is a dock that comes
 # back rather than a search for something called "dock".
-_RULES = (_match_list, _match_action, _match_setting, _match_open)
+_RULES = (_match_facts, _match_list, _match_action, _match_setting, _match_open)
 
 
 def match(text: str) -> Intent | None:
@@ -394,4 +450,6 @@ def describe() -> list[str]:
         f"{len(ACTIONS)} phrases for the compositor's own verbs "
         "(lock the screen, take a screenshot, …) — asks first",
         "move the bar to the bottom / turn the dock off — asks first",
+        "pc stats / what are my specs / how much ram do i have "
+        "— reads the hardware, does not guess",
     ]
