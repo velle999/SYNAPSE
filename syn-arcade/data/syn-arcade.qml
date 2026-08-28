@@ -29,6 +29,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import QtQuick.Controls
 
 FloatingWindow {
     id: root
@@ -95,6 +96,56 @@ FloatingWindow {
 
     property int textScale: 100
     function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
+    /*
+     * ⛔ A VIEW THAT SCROLLS SHOWS THAT IT SCROLLS. Without a bar there is
+     * nothing on screen saying there is anything past the edge of the view,
+     * nothing saying how much, and no way to cross a long list in one gesture.
+     * velle, 2026-08-28: "you keep making windows without scrollbars and thats
+     * dumb."
+     *
+     * ⚠ VISIBLE AT REST, which is why this exists rather than a bare ScrollBar:
+     * Qt's default fades the handle out unless `active` — true while the view
+     * moves or the bar is hovered, and false in exactly the state where
+     * somebody is deciding whether there is more to see.
+     *
+     * ⚠ AsNeeded, so a view shorter than its window draws no furniture.
+     *
+     * ⚠ ORIENTATION-AWARE: attached as `ScrollBar.horizontal` it has to be
+     * short and wide, not a vertical handle lying on its side.
+     *
+     * ⚠ INLINE, because this app carries its own palette — as every window here
+     * does — and a scrollbar belongs with the colours it is drawn against.
+     * There is no QML module shared across these packages to put it in.
+     * Pinned by preflight's `scrollbar` gate.
+     */
+    component SynScrollBar: ScrollBar {
+        id: sb
+        readonly property bool vert: sb.orientation === Qt.Vertical
+
+        policy: ScrollBar.AsNeeded
+        padding: root.ui(2)
+        implicitWidth:  sb.vert ? root.ui(11) : root.ui(48)
+        implicitHeight: sb.vert ? root.ui(48) : root.ui(11)
+
+        contentItem: Rectangle {
+            implicitWidth:  sb.vert ? root.ui(7) : root.ui(32)
+            implicitHeight: sb.vert ? root.ui(32) : root.ui(7)
+            radius: Math.min(width, height) / 2
+            color: sb.pressed ? root.accent : sb.hovered ? root.ink : root.dim
+            opacity: sb.pressed || sb.hovered ? 1.0 : 0.5
+            Behavior on color   { ColorAnimation  { duration: 90 } }
+            Behavior on opacity { NumberAnimation { duration: 90 } }
+        }
+
+        background: Rectangle {
+            radius: Math.min(width, height) / 2
+            color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.08)
+            opacity: sb.hovered || sb.pressed ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
+    }
+
 
     property int tab: 0
     property string status: ""
@@ -802,6 +853,8 @@ FloatingWindow {
                     }
 
                     ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -1085,6 +1138,8 @@ FloatingWindow {
                     }
 
                     ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
                         visible: !root.wizOn
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1276,6 +1331,8 @@ FloatingWindow {
                     }
 
                     ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
                         visible: !root.fitEditing && !root.fitPicking
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1386,6 +1443,8 @@ FloatingWindow {
                     }
 
                     ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
                         visible: root.fitPicking
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1439,6 +1498,8 @@ FloatingWindow {
 
                     // ── the editor ────────────────────────────────────────
                     Flickable {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        ScrollBar.vertical: SynScrollBar {}
                         id: fitFlick
                         visible: root.fitEditing
                         Layout.fillWidth: true

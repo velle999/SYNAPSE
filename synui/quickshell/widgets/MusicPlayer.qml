@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Services.Mpris
 import ".."
+import QtQuick.Controls
 
 /*
  * The music widget — a source, a library, what is playing, and the buttons.
@@ -649,6 +650,15 @@ WidgetFrame {
          * before it is reported as the picker killing the music.
          */
         ListView {
+            /*
+             * ⚠ NO SCROLLBAR ON THIS ONE, and it is the exception rather than
+             * an oversight. It is a 24px-tall strip of source pills scrolling
+             * SIDEWAYS: a horizontal bar would be half the height of the thing
+             * it describes, and the strip already scrolls the current source
+             * into frame by itself (showCurrent, below) so there is nothing to
+             * go looking for. The track list further down is the view in this
+             * widget that needed one, and has one.
+             */
             id: sources
             anchors { left: parent.left; right: parent.right; top: parent.top }
             height: 24
@@ -726,6 +736,8 @@ WidgetFrame {
          * THIS source arrives.
          */
         ListView {
+            // A view that scrolls says so — see SynScrollBar.qml.
+            ScrollBar.vertical: SynScrollBar {}
             id: items
             anchors {
                 left: parent.left; right: parent.right

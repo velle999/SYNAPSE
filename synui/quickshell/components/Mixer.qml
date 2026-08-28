@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Services.Pipewire
 import ".."
+import QtQuick.Controls
 
 /*
  * The mixer the volume module's tooltip has been promising.
@@ -236,6 +237,8 @@ PopupWindow {
         }
 
         Flickable {
+            // A view that scrolls says so — see SynScrollBar.qml.
+            ScrollBar.vertical: SynScrollBar {}
             id: body
             anchors {
                 left: parent.left; right: parent.right

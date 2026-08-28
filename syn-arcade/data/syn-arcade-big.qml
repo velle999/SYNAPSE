@@ -68,6 +68,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import QtQuick.Controls
 
 ShellRoot {
     id: shell
@@ -2416,6 +2417,50 @@ ShellRoot {
             readonly property color dim:    "#c9c3e2"
             readonly property color accent: "#a78bfa"
 
+            /*
+             * ⛔ A VIEW THAT SCROLLS SHOWS THAT IT SCROLLS — on the ten-foot UI
+             * too. This screen is driven from a gamepad most of the time, which
+             * is why it had none, but it is the same window on a 15" laptop
+             * panel with a mouse (see `u` below) and it carries seven
+             * MouseAreas and five WheelHandlers already. A wheel that works and
+             * says nothing is the case this rule is about.
+             *
+             * ⚠ SIZED IN `u`, NOT PIXELS, like every other size in this file.
+             * A scrollbar 11px wide is a scrollbar nobody can hit from a sofa,
+             * and it would be the one piece of this window that did not scale
+             * with the screen.
+             *
+             * ⚠ ORIENTATION-AWARE: the game shelf is a HORIZONTAL ListView, so
+             * the same component has to be able to lie down.
+             * Pinned by preflight's `scrollbar` gate.
+             */
+            component SynScrollBar: ScrollBar {
+                id: sb
+                readonly property bool vert: sb.orientation === Qt.Vertical
+
+                policy: ScrollBar.AsNeeded
+                padding: win.u * 0.08
+                implicitWidth:  sb.vert ? win.u * 0.42 : win.u * 2.0
+                implicitHeight: sb.vert ? win.u * 2.0 : win.u * 0.42
+
+                contentItem: Rectangle {
+                    implicitWidth:  sb.vert ? win.u * 0.26 : win.u * 1.4
+                    implicitHeight: sb.vert ? win.u * 1.4 : win.u * 0.26
+                    radius: Math.min(width, height) / 2
+                    color: sb.pressed ? win.accent : sb.hovered ? win.ink : win.dim
+                    opacity: sb.pressed || sb.hovered ? 1.0 : 0.5
+                    Behavior on color   { ColorAnimation  { duration: 90 } }
+                    Behavior on opacity { NumberAnimation { duration: 90 } }
+                }
+
+                background: Rectangle {
+                    radius: Math.min(width, height) / 2
+                    color: Qt.rgba(win.ink.r, win.ink.g, win.ink.b, 0.10)
+                    opacity: sb.hovered || sb.pressed ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+            }
+
             // Everything scales off the screen, so the same file is right on a
             // 1080p television and a 4K one. A fixed pixel size is what makes
             // a desktop UI unreadable on a TV in the first place.
@@ -2981,6 +3026,9 @@ ShellRoot {
                                     }
 
                                     ListView {
+                                        // ⚠ HORIZONTAL: this shelf scrolls
+                                        // sideways, so the bar lies down too.
+                                        ScrollBar.horizontal: SynScrollBar {}
                                         id: strip
                                         anchors.top: label.bottom
                                         anchors.topMargin: win.u * 0.6
@@ -3722,6 +3770,8 @@ ShellRoot {
                         // scrolls; the panel is still only as tall as what it
                         // has to draw.
                         ListView {
+                            // A view that scrolls says so — see SynScrollBar above.
+                            ScrollBar.vertical: SynScrollBar {}
                             id: menuList
                             width: menuCol.width
                             height: Math.min(contentHeight,

@@ -19,6 +19,7 @@ singleton WeatherState 1.0 WeatherState.qml
 singleton Plugins 1.0 Plugins.qml
 singleton PluginHost 1.0 PluginHost.qml
 singleton PluginConfig 1.0 PluginConfig.qml
+SynScrollBar 1.0 SynScrollBar.qml
 Bar 1.0 Bar.qml
 PluginMount 1.0 PluginMount.qml
 PostItFile 1.0 PostItFile.qml

@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import ".."
+import QtQuick.Controls
 
 /*
  * Where a post-it is actually typed into.
@@ -175,6 +176,8 @@ PanelWindow {
         }
 
         Flickable {
+            // A view that scrolls says so — see SynScrollBar.qml.
+            ScrollBar.vertical: SynScrollBar {}
             id: scroll
             anchors {
                 top: head.bottom; topMargin: 8

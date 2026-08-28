@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import QtQuick.Controls
 
 /*
  * The SYNAPSE start menu.
@@ -997,6 +998,8 @@ PanelWindow {
 
         // ── Rows ─────────────────────────────────────────
         ListView {
+            // A view that scrolls says so — see SynScrollBar.qml.
+            ScrollBar.vertical: SynScrollBar {}
             id: list
             anchors {
                 top: searchBox.bottom; left: parent.left

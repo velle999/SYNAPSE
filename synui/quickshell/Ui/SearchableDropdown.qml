@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import ".."
 
 /*
  * SearchableDropdown — a Dropdown with a filter box in the popup, for lists too
@@ -210,6 +211,8 @@ Item {
                     }
 
                     ListView {
+                        // A view that scrolls says so — see SynScrollBar.qml.
+                        ScrollBar.vertical: SynScrollBar {}
                         id: optionList
                         width: parent.width
                         height: Math.min(root.filtered.length, 8) * root.popupRowHeight

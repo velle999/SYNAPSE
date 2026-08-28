@@ -2970,6 +2970,7 @@ FloatingWindow {
                 z: 160
 
                 Flickable {
+                    id: menuFlick
                     anchors { fill: parent; margins: 4 }
                     contentHeight: menuCol.implicitHeight
                     clip: true
@@ -3087,6 +3088,16 @@ FloatingWindow {
                                 }
                             }
                         }
+                    }
+                }
+
+                // A view that scrolls says so. VScroll hides itself when
+                // everything fits, so a short menu draws no furniture.
+                VScroll {
+                    flick: menuFlick
+                    anchors {
+                        top: menuFlick.top; bottom: menuFlick.bottom
+                        right: menuFlick.right; rightMargin: 1
                     }
                 }
             }
@@ -3302,6 +3313,7 @@ FloatingWindow {
                 }
 
                 Flickable {
+                    id: propFlick
                     anchors {
                         top: propTitle.bottom; topMargin: 10
                         left: parent.left; right: parent.right; bottom: parent.bottom
@@ -3414,6 +3426,16 @@ FloatingWindow {
                                 wrapMode: Text.WrapAnywhere
                             }
                         }
+                    }
+                }
+
+                // A view that scrolls says so. VScroll hides itself when
+                // everything fits, so a short menu draws no furniture.
+                VScroll {
+                    flick: propFlick
+                    anchors {
+                        top: propFlick.top; bottom: propFlick.bottom
+                        right: propFlick.right; rightMargin: 1
                     }
                 }
             }
@@ -5139,6 +5161,7 @@ FloatingWindow {
         // shared-mime-info, xdg-open — and when one is missing the feature
         // is silently EMPTY rather than broken. This says which.
         Flickable {
+            id: aboutFlick
             anchors {
                 top: tabStrip.bottom; left: parent.left
                 right: parent.right; bottom: parent.bottom
@@ -5256,6 +5279,16 @@ FloatingWindow {
                         }
                     }
                 }
+            }
+        }
+
+        // A view that scrolls says so. VScroll hides itself when
+        // everything fits, so a short menu draws no furniture.
+        VScroll {
+            flick: aboutFlick
+            anchors {
+                top: aboutFlick.top; bottom: aboutFlick.bottom
+                right: aboutFlick.right; rightMargin: 1
             }
         }
 

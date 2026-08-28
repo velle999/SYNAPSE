@@ -997,42 +997,22 @@ check_scrollbar() {
     # screen saying there is anything past the edge of the view, nothing saying
     # how much, nothing saying where in it you are, and no way to cross it in
     # one gesture — which on a list of every package on the system is the
-    # difference between a window and a chore. The audit that prompted this
-    # found 24 shipped QML files with a scrolling view and TWO with a scrollbar.
+    # difference between a window and a chore.
     #
     # ⚠ THE RULE IS PER FILE, NOT PER VIEW. A file may hold a scroller that
-    # genuinely cannot overflow — a Flickable used purely to clip — and
-    # counting those would make the gate a nuisance rather than a rule. One bar
-    # somewhere in a file whose views scroll is the evidence that whoever wrote
-    # it thought about it; the KNOWN table below carries the ones nobody has yet.
+    # cannot overflow — a Flickable used purely to clip — and counting those
+    # would make this a nuisance rather than a rule. One bar in a file whose
+    # views scroll is the evidence that whoever wrote it thought about it.
+    #
+    # ⚠ A HAND-ROLLED BAR COUNTS. synfiles predates the shared type and carries
+    # its own VScroll/HScroll — a full implementation with a draggable handle,
+    # click-to-page, and hiding itself when everything fits. Grepping for the
+    # Controls type alone called that file a gap and it was not; a rule that
+    # cannot see a correct implementation teaches people to satisfy the grep.
     #
     # ⚠ ScrollBar NEEDS `import QtQuick.Controls`. synpkg had a ListView of
     # thousands of rows and no such import at all — the type was not merely
     # unused, it was unavailable, which is how this goes unnoticed.
-    #
-    # Resolving a line in KNOWN means DELETING it, exactly as with the
-    # unregistered-component table above. The list only shrinks.
-    local KNOWN="
-syn-arcade/data/syn-arcade-big.qml
-syn-arcade/data/syn-arcade.qml
-syn-arsenal/arsenal.qml
-syn-disks/data/syn-disks.qml
-syn-install/syn-install-gui.qml
-syn-settings/data/syn-settings.qml
-syn-update/shell.qml
-synfiles/data/synfiles.qml
-synui/data/plugins-gui.qml
-synui/quickshell-antiquity/popups/AppLauncher.qml
-synui/quickshell-antiquity/popups/SettingsWindow.qml
-synui/quickshell-antiquity/sidebarPopups/FavoriteAppsMenu.qml
-synui/quickshell-antiquity/sidebarPopups/ThemingMenu.qml
-synui/quickshell/StartMenu.qml
-synui/quickshell/Ui/SearchableDropdown.qml
-synui/quickshell/components/Mixer.qml
-synui/quickshell/welcome/Guide.qml
-synui/quickshell/widgets/MusicPlayer.qml
-synui/quickshell/widgets/PostItEditor.qml
-"
 
     while IFS= read -r f; do
         # Build leavings, the ISO image, and test fixtures are not app windows.
@@ -1040,32 +1020,25 @@ synui/quickshell/widgets/PostItEditor.qml
             */src/*|*/pkg/*|archiso/*|*/tests/*) continue ;;
         esac
 
-        # ⚠ `|| true` ON BOTH, because this script runs under `set -e` and
-        # grep exits 1 when it matches nothing — which here is the ordinary
-        # case, not an error. Without it the gate took the whole preflight down
-        # silently at the first QML file with no scrolling view in it: every
-        # check after this one simply stopped running, and the run still ended
-        # without saying so.
+        # ⚠ `|| true` ON BOTH, because this script runs under `set -e` and grep
+        # exits 1 when it matches nothing — which here is the ordinary case,
+        # not an error. Without it this gate took the whole preflight down at
+        # the first QML file with no scrolling view in it, and every check
+        # after it silently stopped running.
         views=$(grep -cE '^[[:space:]]*(ListView|GridView|TableView|Flickable|ScrollView)[[:space:]]*\{' "$f" || true)
         [ "${views:-0}" -gt 0 ] || continue
         n=$((n + 1))
 
-        if grep -q 'ScrollBar' "$f"; then continue; fi
+        if grep -qE 'ScrollBar|VScroll|HScroll' "$f"; then continue; fi
 
-        case "$KNOWN" in
-            *"
-$f
-"*) continue ;;
-        esac
-
-        fail scrollbar "$f has $views scrolling view(s) and no ScrollBar" \
+        fail scrollbar "$f has $views scrolling view(s) and no scrollbar" \
             "A wheel does not tell a reader there is more, how much more, or" \
-            "where in it they are. Add one, or add the file to this gate's" \
-            "KNOWN table with a reason if it genuinely cannot overflow."
+            "where in it they are. Attach one — SynScrollBar in the synui and" \
+            "antiquity trees, an inline component elsewhere."
     done < <(git ls-files '*.qml')
 
     [ "$FINDINGS" -eq "$bad" ] && ok scrollbar \
-        "$n scrolling window(s) — every new one has a scrollbar"
+        "$n scrolling window(s) — every one has a scrollbar"
     return 0
 }
 

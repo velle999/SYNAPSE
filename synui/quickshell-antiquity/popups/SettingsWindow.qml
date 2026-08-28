@@ -242,6 +242,8 @@ FloatingWindow {
                     }
                 }
                 ScrollView {
+                    // A view that scrolls says so — see ../SynScrollBar.qml.
+                    ScrollBar.vertical: SynScrollBar {}
                     anchors.top: titlebar.bottom
                     height: parent.height
                     width: parent.width
@@ -597,6 +599,8 @@ FloatingWindow {
                     }
                 }
                 ListView {
+                    // A view that scrolls says so — see ../SynScrollBar.qml.
+                    ScrollBar.vertical: SynScrollBar {}
                     anchors.top: titlebarWidgets.bottom
                     height: parent.height
                     width: parent.width
@@ -685,6 +689,8 @@ FloatingWindow {
                                 }
                             }
                             GridView {
+                                // A view that scrolls says so — see ../SynScrollBar.qml.
+                                ScrollBar.vertical: SynScrollBar {}
                                 anchors.top: widgetBoxTitlebar.bottom
                                 height: parent.height
                                 width: parent.width

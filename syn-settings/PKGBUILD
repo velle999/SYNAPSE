@@ -108,7 +108,7 @@ pkgver=0.1.0
 #   loosening sane_value would have weakened it for the thirty keys that DO
 #   exec. The test now sets each key to the value its own help text suggests,
 #   which is the check that would have caught it.
-pkgrel=34
+pkgrel=35
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

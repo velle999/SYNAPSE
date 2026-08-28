@@ -186,6 +186,8 @@ PanelWindow {
                             height: implicitHeight * scale
                         }
                         ListView {
+                            // A view that scrolls says so — see ../SynScrollBar.qml.
+                            ScrollBar.vertical: SynScrollBar {}
                             id: appsView
                             model: root.currentApps
 

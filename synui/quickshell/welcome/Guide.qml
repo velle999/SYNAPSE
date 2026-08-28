@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import ".."
+import QtQuick.Controls
 
 /*
  * The SynapseOS welcome guide.
@@ -308,6 +309,8 @@ PanelWindow {
             // menu's fixed height used to have, where Shut Down sat off the
             // bottom edge and could only be arrowed into blind.
             ListView {
+                // A view that scrolls says so — see SynScrollBar.qml.
+                ScrollBar.vertical: SynScrollBar {}
                 id: list
                 anchors { left: parent.left; right: parent.right
                           top: head.bottom; bottom: parent.bottom

@@ -101,6 +101,8 @@ PanelWindow {
                     height: implicitHeight * scale
                 }
                 GridView {
+                    // A view that scrolls says so — see ../SynScrollBar.qml.
+                    ScrollBar.vertical: SynScrollBar {}
                     id: iconGrid
                     property int columnAmount: 4
                     property int margin: 4
