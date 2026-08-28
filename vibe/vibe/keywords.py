@@ -61,6 +61,55 @@ def run(line: str) -> str:
     return out or err or "(done)"
 
 
+def classify(line: str) -> str:
+    """What synsh thinks this line IS: shell, builtin, ai, hybrid, or "".
+
+    ⚠ ASKED OF SYNSH, NOT REIMPLEMENTED — `synsh --classify`, added for this.
+    classify_input() knows this shell's builtins, its operators, and that a
+    leading `!` forces shell and `?` forces the model. A second copy of that
+    judgement in Python would disagree with the real one the first time either
+    changed, and the disagreement would show as the assistant running something
+    synsh would not have.
+
+    "" when synsh is absent or too old to answer, which every caller reads as
+    "no opinion".
+    """
+    line = (line or "").strip()
+    if not line or not available():
+        return ""
+    try:
+        r = subprocess.run(["synsh", "--classify", line],
+                           capture_output=True, text=True, timeout=_CHECK_TIMEOUT)
+    except Exception:
+        return ""
+    out = (r.stdout or "").strip()
+    return out if out in ("shell", "builtin", "ai", "hybrid") else ""
+
+
+def run_shell(line: str) -> tuple[str, int]:
+    """Run a line as the user's own shell command, through synsh.
+
+    ⛔ NOT THROUGH vibe's `bash` TOOL. That one runs inside syn-confine's
+    Landlock sandbox because it executes commands the MODEL proposed — it
+    cannot read $HOME, by design. A line the user typed themselves is not that:
+    confining `ls ~` into a denial would make the shell route useless and would
+    be answering a question nobody asked. The user typed it and confirmed it;
+    it is their shell.
+
+    synsh and not /bin/sh, because synsh owns the builtins, the pipelines and
+    the rc this desktop's shell actually has.
+    """
+    try:
+        r = subprocess.run(["synsh", "-c", line, "--no-ai", "--no-color"],
+                           capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        return "(the command was still running after two minutes and was stopped)", 124
+    except Exception as e:
+        return f"(could not run it: {e})", 1
+    out = (r.stdout or "") + (r.stderr or "")
+    return out.rstrip() or "(no output)", r.returncode
+
+
 def answer(line: str) -> str | None:
     """synsh's answer for this line, or None if it does not claim it."""
     return run(line) if claims(line) else None

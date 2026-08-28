@@ -192,6 +192,11 @@ case ${1:-status} in
     watch)  watch_loop ;;
     on)     setval on yes;  unit_do enable
             speak "Speech is on" ;;
+    toggle) # One key for both directions — a screen reader that needs two
+            # different chords to start and stop is one you cannot turn off
+            # while it is talking over you.
+            if [ "$(getval on no)" = "yes" ]; then exec "$0" off
+            else exec "$0" on; fi ;;
     off)    setval on no;   unit_do disable
             # ⚠ STOPPED, not left to finish. "Off" said by a voice that then
             # keeps talking about the next window is not off.
@@ -215,7 +220,7 @@ case ${1:-status} in
     -h|--help|help)
             say "syn-speak — the desktop, out loud"
             say ""
-            say "  syn-speak on | off        announce the focused window, or stop"
+            say "  syn-speak on|off|toggle   announce the focused window, or stop"
             say "  syn-speak say TEXT        speak a line"
             say "  syn-speak window          speak the focused window"
             say "  syn-speak selection       speak the highlighted text"

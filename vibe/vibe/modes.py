@@ -38,12 +38,21 @@ AGENT = "agent"
 PLAN = "plan"
 AUTO = "auto"
 
+# ⚠ SHELL IS A ROUTE, NOT A MODE. AUTO can resolve to it and the user cannot
+# select it, because "behave like a shell from now on" is not a thing anybody
+# wants a chat box to do — `synsh` is right there for that. It is here so a
+# line that IS a command is answered by running it rather than by a model
+# guessing what running it would say.
+SHELL = "shell"
+
 MODES = (AUTO, ASK, AGENT, PLAN)
 
 # What each mode is allowed to reach for. PLAN's list is the whole of what
 # makes it safe: it can look at anything and change nothing, so a plan can be
 # read before any of it happens.
 READ_ONLY_TOOLS = frozenset({"read_file", "glob", "grep", "list_dir", "desktop_open"})
+
+DESCRIPTION_SHELL = "runs it, once you say so"
 
 DESCRIPTION = {
     ASK:   "answers, and touches nothing",
@@ -84,11 +93,27 @@ _ASK_RE = re.compile(
     r"letter|reply|message|note))\b", re.I)
 
 
-def route(text: str) -> str:
-    """Which mode this line wants. Never AUTO — this is what AUTO resolves to."""
+def route(text: str, shell_class: str = "") -> str:
+    """Which mode this line wants. Never AUTO — this is what AUTO resolves to.
+
+    `shell_class` is synsh's own answer for the line (keywords.classify): the
+    assistant asks the shell what a line is rather than growing a second
+    opinion about it. Empty means synsh had none, which is also what an older
+    synsh says.
+    """
     t = (text or "").strip()
     if not t:
         return ASK
+
+    # ⛔ SYNSH'S EXPLICIT PREFIXES WIN OVER EVERYTHING, including the plan and
+    # question words below. `!` means shell and `?` means ask, in the shell
+    # this desktop ships — a chat box that ignored them would be teaching a
+    # second set of the same two characters.
+    if t[0] == "!":
+        return SHELL
+    if t[0] == "?":
+        return ASK
+
     if _PLAN_RE.search(t):
         return PLAN
     # ⚠ ORDER MATTERS HERE. "write me an email about the build failing" carries
@@ -96,19 +121,38 @@ def route(text: str) -> str:
     # the compose verbs win over the machine words for that reason.
     if _ASK_RE.search(t) and not re.search(r"(^|\s)(/|~/|\./)", t):
         return ASK
+    # A line the shell recognises as a command is answered by RUNNING it —
+    # deterministic, instant, and with no model in the path to invent what the
+    # output might have been. It still asks first; see serve.py.
+    #
+    # ⚠ AFTER the question and compose forms, never before. synsh answers
+    # "make me a sandwich" with `shell`, because `make` is a real program —
+    # the same trap that makes "play music" hijack `play music.wav`. The
+    # confirmation is what makes that survivable, and putting the English
+    # forms first is what keeps it rare.
+    if shell_class in ("shell", "builtin"):
+        return SHELL
+
     if _MACHINE_RE.search(t):
         return AGENT
     return ASK
 
 
-def resolve(mode: str, text: str) -> str:
+def resolve(mode: str, text: str, shell_class: str = "") -> str:
     """The mode to actually run this turn."""
-    return route(text) if mode in (AUTO, "", None) else mode
+    if mode in (AUTO, "", None):
+        return route(text, shell_class)
+    # ⚠ A HAND-PICKED MODE STILL HONOURS `!`. Somebody in Ask mode who types a
+    # command with a bang meant the command; refusing it because a menu says
+    # "Ask" would be the menu arguing with the keyboard.
+    if (text or "").strip()[:1] == "!":
+        return SHELL
+    return mode
 
 
 def tools_for(mode: str, all_schemas: list) -> list | None:
     """The tools a mode may use. None means the model is told of none at all."""
-    if mode == ASK:
+    if mode in (ASK, SHELL):
         return None
     if mode == PLAN:
         return [s for s in all_schemas

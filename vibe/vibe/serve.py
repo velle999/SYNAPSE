@@ -226,6 +226,18 @@ class Server:
                 self._said += answered
                 return
 
+            # ── Is it a command? Then run it, rather than describe it ───────
+            #
+            # Asked of synsh, whose classifier knows this shell's builtins and
+            # operators. An older synsh answers "" and nothing below fires,
+            # which is the behaviour before this existed.
+            shell_class = keywords.classify(text)
+            active = modes.resolve(self.mode, text, shell_class)
+            if active == modes.SHELL:
+                self.wire.rec("M", modes.SHELL)
+                self._run_shell(text)
+                return
+
             if not self.ensure_model():
                 return
 
@@ -234,7 +246,7 @@ class Server:
             # decision the user did not make, and a window that showed it only
             # once the reply had finished would be explaining a choice whose
             # consequences had already scrolled past.
-            self.wire.rec("M", modes.resolve(self.mode, text))
+            self.wire.rec("M", active)
 
             for piece in self.model.chat(text):
                 if self._stop.is_set():
@@ -315,6 +327,34 @@ class Server:
             return True
         self.wire.rec("A", f"unknown command: {verb}")
         return True
+
+    def _run_shell(self, line: str):
+        """Run a line the shell recognised, once the user allows it.
+
+        ⛔ IT ALWAYS ASKS, and that is what makes the route safe enough to be
+        automatic. synsh answers "make me a sandwich" with `shell`, because
+        `make` is a real program — the same trap that makes "play music"
+        hijack `play music.wav`. No classifier gets that right from the words
+        alone, so the answer is not a better classifier: it is showing the
+        command and waiting. A refusal costs one keypress; a wrong guess run
+        silently costs whatever the command did.
+        """
+        # Strip synsh's own force-shell prefix before running it — `!` is an
+        # instruction to this router, not part of the command.
+        cmd = line.lstrip()
+        if cmd[:1] == "!":
+            cmd = cmd[1:].lstrip()
+        if not cmd:
+            return
+        if not self._confirm("run", {"command": cmd}):
+            self.wire.rec("X", "", "not run")
+            return
+        out, rc = keywords.run_shell(cmd)
+        # The output is the answer. Sent as a tool record rather than as
+        # assistant text, so the window renders it monospaced and nobody reads
+        # a directory listing as something a model said.
+        self.wire.rec("X", "", out if rc == 0 else f"{out}\n(exit {rc})")
+        self._said += out if rc == 0 else f"exit status {rc}"
 
     def _listen_turn(self):
         """Hear one line, show it, and answer it."""

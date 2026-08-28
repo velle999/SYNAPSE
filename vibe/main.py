@@ -326,6 +326,25 @@ def _verb_voice(argv) -> int:
             return 3
         print(text)
         return 0
+    if sub == "type":
+        # Dictation into whatever has focus. This is the keybind's verb.
+        import shutil, subprocess
+        if not shutil.which("wtype"):
+            print_error("wtype is not installed — synpkg install wtype")
+            return 3
+        text, err = v.listen()
+        if err:
+            print_error(err)
+            return 3
+        if not text:
+            return 0
+        # ⚠ ONE wtype CALL for the whole string. Each invocation creates a
+        # virtual keyboard and destroys it on exit, and on a seat whose only
+        # keyboard is that one the client loses focus in between — so a second
+        # call lands nowhere. It costs nothing here and it is the difference
+        # between dictation working and dictation working once.
+        subprocess.run(["wtype", "--", text])
+        return 0
     if sub == "stop":
         v.stop()
         return 0
@@ -333,7 +352,7 @@ def _verb_voice(argv) -> int:
         for k, val in v.status().items():
             print(f"{k}\t{val}")
         return 0
-    print_error(f"unknown: vibe voice {sub}  (say | listen | stop | status)")
+    print_error(f"unknown: vibe voice {sub}  (say | listen | type | stop | status)")
     return 2
 
 

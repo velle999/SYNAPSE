@@ -41,6 +41,16 @@ already has, not a second call to the model: asking the model which mode to use
 costs a whole round trip before the first token, and it is wrong in exactly the
 cases that matter.
 
+**It is also a shell.** Type `ls -la` and it runs it — no model in the path, no
+guess at what the output might have been. Whether a line is a command is
+`synsh`'s judgement (`synsh --classify`), not a second opinion grown here, and
+synsh's own prefixes work: `!` forces a command, `?` forces a question.
+
+⛔ It always asks first. synsh calls "make me a sandwich" a command, because
+`make` is a real program — no classifier gets that right from the words alone.
+The answer is not a better classifier; it is showing you the command and
+waiting.
+
 **It speaks and it listens.** The 🔊 button reads answers aloud; the 🎤 button
 takes one spoken line, shows you what it heard, and answers it. On the command
 line that is `vibe voice say …`, `vibe voice listen`, `vibe voice status`.

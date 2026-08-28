@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=9
+pkgrel=10
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -34,7 +34,7 @@ optdepends=(
     # dictation says what is missing.
     'chibi: the voice — reads answers aloud, and takes dictation'
     'espeak-ng: the fallback voice, where chibi is not installed'
-    'synsh: answers everyday requests itself, without a model'
+    'synsh: answers everyday requests itself, classifies a line as a command,\n            and runs the ones you confirm'
     # ⚠ The OFFICIAL SDK, and an optdepend because it is not in the repos. A
     # desktop whose backend is the local one must not carry it, and Claude is
     # not reachable through an OpenAI-compatible shim without losing adaptive

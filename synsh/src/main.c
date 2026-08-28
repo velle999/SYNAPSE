@@ -99,6 +99,9 @@ static void usage(const char *prog) {
         "  --intent-check LINE\n"
         "                 Exit 0 if LINE is an intent synsh answers itself,\n"
         "                 %d if it is not. Runs nothing, prints nothing.\n"
+        "  --classify LINE\n"
+        "                 Print what LINE is — shell, builtin, ai, hybrid — and\n"
+        "                 exit 0. Runs nothing.\n"
         "  --toolinfo     Print the tools resolved from $PATH (for AI prompts)\n"
         "  --no-ai        Disable AI translation (pure shell mode)\n"
         "  --no-confirm   Run AI-suggested commands without confirmation\n"
@@ -303,6 +306,7 @@ int main(int argc, char *argv[]) {
         {"no-color",    no_argument,       0, 0},
         {"intent",      no_argument,       0, 0},
         {"intent-check", required_argument, 0, 0},
+        {"classify",    required_argument, 0, 0},
         {"toolinfo",    no_argument,       0, 0},
         {"verbose",    no_argument,       0, 'v'},
         {"version",    no_argument,       0, 'V'},
@@ -324,6 +328,30 @@ int main(int argc, char *argv[]) {
                 cmd_intents = 1;
             else if (strcmp(long_opts[longidx].name, "intent-check") == 0)
                 intent_check = optarg;
+            else if (strcmp(long_opts[longidx].name, "classify") == 0) {
+                /*
+                 * What synsh thinks a line IS, for a caller that has to route
+                 * it — the assistant, deciding whether `ls -la` is a request
+                 * or a command.
+                 *
+                 * ⚠ EXPOSED RATHER THAN REIMPLEMENTED. classify_input() knows
+                 * this shell's builtins, its operators, and the difference
+                 * between `make` the program and "make me a sandwich"; a
+                 * second copy of that judgement in another language would
+                 * disagree with this one the first time either changed.
+                 *
+                 * Prints and exits 0 whatever the answer, unlike
+                 * --intent-check: a classification always succeeds, and the
+                 * ANSWER is the output, not the status.
+                 */
+                switch (classify_input(optarg)) {
+                case INPUT_BUILTIN: puts("builtin"); break;
+                case INPUT_AI:      puts("ai");      break;
+                case INPUT_HYBRID:  puts("hybrid");  break;
+                default:            puts("shell");   break;
+                }
+                return 0;
+            }
             else if (strcmp(long_opts[longidx].name, "toolinfo") == 0) {
                 /* Before init: this resolves $PATH and nothing else, and the
                  * caller (synui's command bar, building its prompt) is on an

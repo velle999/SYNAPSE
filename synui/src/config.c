@@ -994,6 +994,28 @@ static void seed_default_binds(syn_config_t *cfg)
 {
     static const struct { const char *combo, *action; } defaults[] = {
         { "super+return",    "term" },
+        /* ── The desktop out loud, and back in ───────────────────────────
+         *
+         * Three keys, because a screen reader that can only be reached from a
+         * terminal is not one: the person who needs it is the person who
+         * cannot read the terminal to start it.
+         *
+         * ⚠ ONE CHORD TOGGLES, rather than a pair. A reader talking over you
+         * has to be stoppable by the key you just pressed, not by remembering
+         * a different one.
+         *
+         * Super+Shift+U — announce the focused window as focus moves, or stop.
+         * Super+U       — speak whatever is highlighted right now.
+         * Super+Shift+V — dictate: listen once, and type it where the cursor
+         *                 is. V for voice; Super+V is the clipboard.
+         *
+         * All three spawn rather than dispatch, deliberately: the speech stack
+         * lives in vibe and chibi, and a compositor that grew its own would be
+         * a third voice on the machine. A box without them spawns a command
+         * that is not there, which costs a log line and nothing else. */
+        { "super+shift+u",   "spawn syn-speak toggle" },
+        { "super+u",         "spawn syn-speak selection" },
+        { "super+shift+v",   "spawn vibe voice type" },
         /* The AI command bar. It had this key, lost it to rofi for a while, and
          * has it back: the command bar is the thing this desktop is FOR, and
          * the biggest key on the keyboard is where it belongs.

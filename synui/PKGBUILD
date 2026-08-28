@@ -2469,7 +2469,20 @@ pkgver=0.1.0
 #   toolkit; Orca remains the answer for that. What this does is the half that
 #   is useful today and honest: what has FOCUS, and what is asked for.
 #   ⚠ NOT ON A KEYBIND YET — `syn-speak on` from a terminal or the assistant.
-pkgrel=527
+# 528: the voice gets keys, because a screen reader you can only start from a
+#   terminal is not one — the person who needs it is the person who cannot read
+#   the terminal to start it.
+#     Super+Shift+U   announce the focused window as focus moves, or stop
+#     Super+U         speak whatever is highlighted
+#     Super+Shift+V   dictate: listen once, type it where the cursor is
+#   ⚠ ONE CHORD TOGGLES the reader rather than a pair. A reader talking over
+#   you has to be stoppable with the key you just pressed, not with a different
+#   one you have to remember while it talks.
+#   ⚠ All three SPAWN rather than dispatch: the speech stack lives in vibe and
+#   chibi, and a compositor that grew its own would be a third voice on the
+#   machine. A box without them spawns a command that is not there, which costs
+#   a log line and nothing else.
+pkgrel=528
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

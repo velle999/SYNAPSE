@@ -214,6 +214,61 @@ check("agent gets all of them",
       len(modes.tools_for(modes.AGENT, TOOL_SCHEMAS)) == len(TOOL_SCHEMAS))
 
 
+# ── 5b. the shell route ─────────────────────────────────────────────────────
+#
+# A line that IS a command is answered by running it, not by a model guessing
+# what running it would have said. The judgement is synsh's — `synsh
+# --classify` — because a second copy of it in Python would disagree with the
+# real shell the first time either changed.
+if keywords.available() and keywords.classify("ls -la"):
+    check("synsh calls a command a command", keywords.classify("ls -la") == "shell")
+    check("…a builtin a builtin", keywords.classify("cd /tmp") == "builtin")
+    check("…and a question a question",
+          keywords.classify("what is the speed of light") == "ai")
+else:
+    print("  note  this synsh has no --classify — the shell route is untested here")
+
+# ⛔ SYNSH'S OWN PREFIXES WIN OVER EVERY OTHER RULE. `!` forces shell and `?`
+# forces the model, in the shell this desktop ships; a chat box that ignored
+# them would be teaching a second set of the same two characters.
+check("a `!` line is the shell, whatever else it looks like",
+      modes.route("!what is the speed of light", "ai") == modes.SHELL)
+check("a `?` line is a question, even when synsh calls it a command",
+      modes.route("?ls -la", "shell") == modes.ASK)
+check("…and `!` beats a mode chosen by hand",
+      modes.resolve(modes.ASK, "!ls", "shell") == modes.SHELL)
+check("a hand-picked mode is otherwise still honoured",
+      modes.resolve(modes.ASK, "ls -la", "shell") == modes.ASK)
+
+# ⚠ THE ENGLISH FORMS COME FIRST. synsh answers "make me a sandwich" with
+# `shell`, because `make` is a real program — the same trap that makes "play
+# music" hijack `play music.wav`. What makes that survivable is the
+# confirmation, and what makes it rare is this ordering.
+check("a question is not run as a command just because synsh could",
+      modes.route("what is make", "shell") == modes.ASK)
+check("SHELL gets no tools — nothing is asked of a model on that path",
+      modes.tools_for(modes.SHELL, TOOL_SCHEMAS) is None)
+check("…and SHELL is not selectable by hand", modes.SHELL not in modes.MODES)
+
+# ⛔ AND IT ALWAYS ASKS. This is the assertion the whole route rests on: no
+# classifier gets "make me a sandwich" right from the words, so the answer is
+# not a better classifier, it is showing the command and waiting.
+out = io.StringIO()
+sh = serve.Server(serve.Wire(out))
+t = threading.Thread(target=sh._run_shell, args=("echo would-not-run",), daemon=True)
+t.start()
+for _ in range(60):
+    if sh._pending:
+        break
+    time.sleep(0.05)
+check("a shell line is not run until it is allowed", bool(sh._pending))
+cid = next(iter(sh._pending), "")
+sh.command(f"confirm {cid} no")
+t.join(timeout=5)
+check("…and a refusal runs nothing",
+      "would-not-run" not in out.getvalue() or "not run" in out.getvalue())
+
+
 # ── 6. the voice, and the pipe it must not write into ───────────────────────
 #
 # ⛔ THE TRAP THIS SECTION EXISTS FOR: chibi's voice modules print to stdout
