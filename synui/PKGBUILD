@@ -2289,7 +2289,45 @@ pkgver=0.1.0
 #   in 357, and now the same guard: publish only when synui_owns_seat(), with
 #   SYNUI_GREETER_BG_DIR lifting it because a rig that has redirected the root
 #   has no real root to protect.
-pkgrel=521
+# 522: THE LIGHTS FOLLOWED THE WALLPAPER ON THE RAM AND NOTHING ELSE. Changing
+#   wallpapers moved the two Corsair DIMMs and left the board and the keyboard on
+#   whatever colour they happened to be holding, for the rest of the session.
+#   The MAP is the bug. syn-rgb caches `index<TAB>mode<TAB>name` because a
+#   listing with no SDK server up is a full 8.6s bus probe — and that cache can
+#   only ever be SMALLER than the truth, in the one direction that is silent. A
+#   device that has GONE fails the whole openrgb call, and that failure is what
+#   rebuilds the map; a device that has ARRIVED fails nothing at all, because the
+#   push still succeeds on every device the map does know. Nothing ever asked
+#   again.
+#   ⛔ AND AT LOGIN THE MAP IS ALWAYS BUILT SHORT. Measured from the SDK server's
+#   start: no devices at all at 0.3s, the two i2c DIMMs at 0.6s, and the USB
+#   mainboard and the G512 only at 7.8s — while syn-rgb.service runs about a
+#   second after the server. So the map cached at login named the RAM, and every
+#   push for the rest of the session pushed the RAM. `syn-rgb apply` by hand
+#   hours later looked perfect, which is the same tell as 437: the push works,
+#   what it is pushing TO is wrong.
+#   ⚠ "Wait until the count stops changing" answers the wrong question — it is
+#   perfectly still at two for those seven seconds. The only thing on this
+#   machine that knows how many devices it has is the map from the last time they
+#   were all counted, so a listing SHORTER than the map is not believed until it
+#   has been asked again. Bounded, and what it finds at the end of the wait is
+#   the answer: a device really unplugged has to be let go of, or the map would
+#   only ever grow. With no map at all — the first run ever — it waits for a long
+#   quiet instead, which is the one case where paying ten seconds once is right.
+#   ⚠ THE WAIT IS THE SDK SERVER'S PROBLEM ALONE. With no server, openrgb
+#   enumerates the bus itself before it prints a word — that IS the 8.6 seconds —
+#   so a short listing cannot happen there and nothing waits. The partial answer
+#   belongs to the server: it serves the controllers it has registered so far and
+#   says nothing about the ones it is still looking for.
+#   With a server up a listing is a socket round-trip, 0.03s against a 1s push,
+#   so the map is re-read on EVERY push now and the cache can no longer hide
+#   anything. A mode set by hand survives that — merged by index and name — and
+#   `syn-rgb on` no longer deletes the map, because it STARTS the server, which
+#   is the worst possible moment to throw away the only record of the bus.
+#   tests/syn_rgb.sh: +7 assertions, and both halves are asked for BY NAME
+#   (SYN_RGB_SDK), because on a developer's own box a server is listening and the
+#   no-server path would otherwise quietly stop being covered.
+pkgrel=522
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

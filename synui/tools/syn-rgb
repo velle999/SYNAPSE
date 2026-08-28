@@ -151,21 +151,33 @@ wanted_colour() {
 # that one device.
 MAP=$CFG/rgb.devices
 
+# ⚠ The SDK server's port. It is only an OPTIMISATION for the push — see
+# syn-rgb-server.service — but it is a correctness question for the listing:
+# with a server up, `--list-devices` is a socket round-trip (0.03s measured
+# here) rather than the 8.6s bus probe the cache below exists to avoid. Cheap
+# enough that a cached answer stops being worth what it can hide.
+SDK_PORT=${SYN_RGB_SDK_PORT:-6742}
+
+# yes|no|auto. Asking is pure bash, so it costs nothing, and a refused
+# connection is an answer rather than an error.
+SDK=${SYN_RGB_SDK:-auto}
+sdk_server_up() {
+    case $SDK in
+        yes) return 0 ;;
+        no)  return 1 ;;
+    esac
+    (exec 3<>"/dev/tcp/127.0.0.1/$SDK_PORT") 2>/dev/null
+}
+
 # The map: `index<TAB>mode<TAB>name`, one line per device, and a plain file so
 # somebody who wants their keyboard on a different mode can say so with an
 # editor.
 #
-# ⚠ CACHED, because `--list-devices` is a full bus probe — 8.6 seconds measured
-# here — and a push that had to enumerate first would pay it twice. Every path
-# that can notice the map is wrong rebuilds it: a push that fails, `syn-rgb on`,
-# and `syn-rgb devices`.
-map_build() {   # map_build [LISTING] — parse a listing, or fetch one
-    local out=${1:-} tmp
-    have_openrgb || return 1
-    [ -n "$out" ] || out=$("$RGB" --list-devices 2>/dev/null) || return 1
-    mkdir -p "$CFG"
-    tmp=$MAP.tmp.$$
-    printf '%s\n' "$out" | awk '
+# ⚠ CACHED, because `--list-devices` is a full bus probe with no server up —
+# 8.6 seconds measured here — and a push that had to enumerate first would pay
+# it twice.
+map_parse() {   # map_parse — a listing on stdin, map lines on stdout
+    awk '
         /^[0-9]+:[ ]/ {
             idx = $0; sub(/:.*/, "", idx)
             name = $0; sub(/^[0-9]+:[ ]*/, "", name)
@@ -182,13 +194,118 @@ map_build() {   # map_build [LISTING] — parse a listing, or fetch one
                    name
             seen = 1
         }
-    ' > "$tmp" 2>/dev/null
-    if [ -s "$tmp" ]; then
-        mv "$tmp" "$MAP"
-        return 0
-    fi
+    ' 2>/dev/null
+}
+
+map_count() {   # map_count FILE — how many devices it names
+    [ -s "$1" ] || { printf 0; return; }
+    awk 'BEGIN { n = 0 } /^[[:space:]]*(#|$)/ { next } { n++ } END { print n }' "$1"
+}
+
+# ⚠ The mode is the one thing in this file a HUMAN may have set, so a rebuild
+# keeps it: a device still at the same index under the same name keeps whatever
+# mode the map already gave it, and only devices that came or went change.
+map_merge() {   # map_merge NEWFILE — the merged map on stdout
+    awk -F'\t' -v old="$MAP" '
+        BEGIN {
+            while ((getline line < old) > 0) {
+                if (line ~ /^[[:space:]]*(#|$)/) continue
+                if (split(line, f, "\t") >= 3) keep[f[1] "\t" f[3]] = f[2]
+            }
+        }
+        { k = $1 "\t" $3; print $1 "\t" (k in keep ? keep[k] : $2) "\t" $3 }
+    ' "$1"
+}
+
+# ⛔ A LISTING TAKEN WHILE OPENRGB IS STILL ENUMERATING IS A SHORT LISTING, AND
+# IT LOOKS EXACTLY LIKE A COMPLETE ONE.
+#
+# Measured on velle's box, from the SDK server's start: nothing at 0.3s, the two
+# i2c DIMMs at 0.6s, and the USB mainboard and the keyboard only at 7.8s. The
+# count then sits perfectly still at two for those seven seconds, so "wait until
+# it stops changing" answers the wrong question. syn-rgb.service runs about a
+# second after the server at login, so the map it cached named the RAM and
+# nothing else — and every push after that pushed the RAM and nothing else, and
+# SUCCEEDED, so nothing ever rebuilt it. The board and the keyboard held
+# whatever colour they happened to have for the rest of the session. That is the
+# "only the RAM follows the wallpaper and the rest are stuck".
+#
+# The only thing on this machine that knows how many devices it has is the map
+# from the last time they were all counted, so a listing shorter than the map is
+# not believed until it has been asked again. With nothing to compare against —
+# the first run ever — the wait is for a long quiet instead, which is the one
+# case where paying ten seconds once is the right trade.
+MAP_SETTLE_MAX=${SYN_RGB_SETTLE_MAX:-20}      # seconds, the whole wait
+MAP_SETTLE_QUIET=${SYN_RGB_SETTLE_QUIET:-9}   # ...of no new device, with no map
+
+map_settle() {   # map_settle FILE — grow FILE until the bus has all of it
+    local best=$1 ref n try=0 quiet=0 said=0 tmp
+    # ⚠ ONLY A SERVER CAN HAND OUT A SHORT LISTING. With no server, openrgb
+    # enumerates the bus itself before it prints a word — that IS the 8.6
+    # seconds — so what it says is everything there is, and there is nothing
+    # here to wait for. The partial answer is the SDK server's alone: it serves
+    # the controllers it has registered SO FAR, and says nothing about the ones
+    # it is still looking for.
+    sdk_server_up || return 0
+    ref=$(map_count "$MAP")
+    n=$(map_count "$best")
+    tmp=$best.probe
+    while [ "$try" -lt "$MAP_SETTLE_MAX" ]; do
+        if [ "$ref" -gt 0 ]; then
+            [ "$n" -lt "$ref" ] || break
+        else
+            [ "$quiet" -lt "$MAP_SETTLE_QUIET" ] || break
+        fi
+        [ "$said" -eq 1 ] || {
+            warn "the bus is still enumerating; waiting for the rest of the devices"
+            said=1
+        }
+        sleep 1
+        try=$((try + 1))
+        "$RGB" --list-devices 2>/dev/null | map_parse > "$tmp"
+        if [ "$(map_count "$tmp")" -gt "$n" ]; then
+            mv "$tmp" "$best"
+            n=$(map_count "$best")
+            quiet=0
+        else
+            quiet=$((quiet + 1))
+        fi
+    done
     rm -f "$tmp"
-    return 1
+}
+
+map_build() {   # map_build [LISTING] — parse a listing, or fetch and settle one
+    local out=${1:-} given=1 tmp rc=1
+    have_openrgb || return 1
+    mkdir -p "$CFG"
+    tmp=$MAP.tmp.$$
+    if [ -z "$out" ]; then
+        given=0
+        out=$("$RGB" --list-devices 2>/dev/null) || return 1
+    fi
+    printf '%s\n' "$out" | map_parse > "$tmp"
+    # ⚠ A listing somebody ASKED for is not second-guessed. `syn-rgb devices` is
+    # a person looking at their hardware and being shown the same answer this
+    # parses; the wait above is for the machine deciding on its own at login.
+    [ "$given" -eq 1 ] || map_settle "$tmp"
+    if [ -s "$tmp" ]; then
+        map_merge "$tmp" > "$tmp.m" && mv "$tmp.m" "$MAP" && rc=0
+    fi
+    rm -f "$tmp" "$tmp.m"
+    return "$rc"
+}
+
+# ⛔ THE CACHE CAN ONLY EVER BE SMALLER THAN THE TRUTH, AND ONLY THE SMALL SIDE
+# IS SILENT. A device that has GONE fails the whole openrgb call, and that
+# failure is what rebuilds the map. A device that has ARRIVED fails nothing at
+# all: the push still succeeds on every device the map does know about, so
+# nothing ever asks again. That was the half of "the hardware changed under us"
+# this program could not see, and at login it is the half that always happens.
+#
+# So when a listing is cheap, take one. Every push, and never mind the cache.
+map_refresh() {
+    sdk_server_up || return 0
+    map_build || true
 }
 
 # One invocation, one bus probe, every device in it — `--device` can be given
@@ -234,6 +351,7 @@ push() {   # push RRGGBB
         return "$rc"
     fi
 
+    map_refresh
     push_mapped "$hex" && return 0
     # No map yet, or a device came or went since it was built.
     map_build && push_mapped "$hex" && return 0
@@ -312,10 +430,12 @@ unit_do() {   # unit_do enable|disable
 
 case ${1:-status} in
     apply)  cmd_apply ;;
-    # ⚠ The map is dropped rather than kept: `syn-rgb on` after plugging
-    # something in is the natural place to notice new hardware, and the
-    # apply below rebuilds it.
-    on)     setval on yes;  unit_do enable;  rm -f "$MAP";  cmd_apply ;;
+    # ⚠ The map is KEPT rather than dropped, and the apply below refreshes it.
+    # It is the only record of how many devices this machine has, and `on` is
+    # the worst possible moment to throw that away: it STARTS the SDK server,
+    # and a listing taken in the seconds after that names the fast half of the
+    # bus and nothing else. See map_settle.
+    on)     setval on yes;  unit_do enable;  cmd_apply ;;
     off)    setval on no;   unit_do disable
             # Left as they are rather than blanked: turning the bridge off is
             # saying "stop following", not "turn my lights off". `syn-rgb dark`

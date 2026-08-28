@@ -987,8 +987,13 @@ test('syncalc', find_program('tests/syncalc.sh'), args : [syn_calc])
 # test puts a stub `openrgb` on the path that writes down what it was asked
 # for, because a test that changed the colour of the machine running it is not
 # one anybody would run twice.
+#
+# ⚠ Two of its assertions are SLOW on purpose (pkgrel 522): the wait for a bus
+# that is still enumerating is defined in whole seconds of real time, so there
+# is nothing in them to speed up. ~9s.
 test('synrgb', find_program('tests/syn_rgb.sh'),
-     args : [meson.current_source_dir() / 'tools' / 'syn-rgb'])
+     args : [meson.current_source_dir() / 'tools' / 'syn-rgb'],
+     timeout : 60)
 
 # And that a BURST of wallpapers does not kill the watch (pkgrel 437). A
 # path-triggered service that trips systemd's default 5-in-10s start limit

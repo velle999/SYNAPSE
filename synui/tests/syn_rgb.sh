@@ -34,7 +34,16 @@ case "$*" in
         # Static its own controller runs.
         printf '0: Stub DRAM\n  Modes: [Direct] Custom '"'"'Color Shift'"'"'\n\n'
         printf '1: Stub Mainboard\n  Modes: [Direct] Off Static Breathing\n\n'
-        [ -z "${RGBGONE:-}" ] || printf '2: Stub Keyboard\n  Modes: [Direct] Static\n\n'
+        # A third device that is absent (RGBGONE unset), present (RGBGONE=1),
+        # or LATE: RGBLATE=N holds it back until the Nth listing, which is what
+        # the SDK server does at login — it answers with the controllers it has
+        # registered so far and says nothing about the ones still coming.
+        if [ -n "${RGBGONE:-}" ]; then
+            n=$(wc -l < "$RGBLIST")
+            if [ -z "${RGBLATE:-}" ] || [ "$n" -ge "${RGBLATE:-0}" ]; then
+                printf '2: Stub Keyboard\n  Modes: [Direct] Static\n\n'
+            fi
+        fi
         exit 0 ;;
 esac
 echo "openrgb $*" >> "$RGBLOG"
@@ -67,6 +76,15 @@ export XDG_CONFIG_HOME=$TMP/cfg
 export SYN_RGB_BIN=$TMP/bin/openrgb
 export RGBLOG=$TMP/log
 export RGBLIST=$TMP/listlog
+# ⛔ PINNED, because the answer to "is an OpenRGB SDK server listening" decides
+# which of two paths syn-rgb takes, and on a developer's own desktop that
+# answer is yes — the tests would then quietly stop covering the machine
+# without one. Each half is asked for by name below.
+export SYN_RGB_SDK=no
+# The settle wait is in whole seconds of real time on the hardware. Nothing
+# here is worth six of them.
+export SYN_RGB_SETTLE_MAX=5
+export SYN_RGB_SETTLE_QUIET=2
 PAL=$TMP/cfg/synui/palette.state
 
 pass=0; fail=0
@@ -152,6 +170,69 @@ before=$(probes)
 "$SCRIPT" apply >/dev/null                # and now that device is not there
 check "a device that went away rebuilds the map" "$((before + 1))" "$(probes)"
 check "and the colour still lands on what is left" \
+      "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF" \
+      "$(tail -1 "$RGBLOG")"
+
+# ---- a device that ARRIVED --------------------------------------------------
+#
+# ⛔ THIS IS THE ONE THE CACHE COULD NOT SEE, AND IT IS THE ONE THAT HAPPENS AT
+# EVERY LOGIN. A device that has GONE fails the whole openrgb call, and the test
+# above is that failure rebuilding the map. A device that has ARRIVED fails
+# nothing: the push still succeeds on every device the map does know, so nothing
+# ever asks again.
+#
+# On velle's box the SDK server has the two i2c DIMMs 0.6s after it starts and
+# the USB mainboard and keyboard only at 7.8s — and syn-rgb.service runs about a
+# second in. So the map cached at login named the RAM, every push after it
+# pushed the RAM, and the board and the keyboard sat on whatever colour they
+# happened to be holding until the next reboot. It read as the lights being
+# stuck, with the RAM alone still following the wallpaper.
+: > "$RGBLOG"
+RGBGONE=1 "$SCRIPT" apply >/dev/null
+check "with no server the cached map stands" \
+      "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF" \
+      "$(tail -1 "$RGBLOG")"
+
+# ⚠ And with one up, the listing is a socket round-trip — 0.03s measured
+# against 8.6 for the bus probe — so it is taken every push and the cache stops
+# being able to hide anything.
+: > "$RGBLOG"
+SYN_RGB_SDK=yes RGBGONE=1 "$SCRIPT" apply >/dev/null
+check "a device that arrived is picked up" \
+      "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF -d 2 -m static -c 3355FF" \
+      "$(tail -1 "$RGBLOG")"
+
+# ⚠ The mode is the one thing in that file a HUMAN may have set, and a refresh
+# on every push would otherwise mean a hand edit lasted exactly one wallpaper.
+sed -i 's/^2\tstatic\t/2\tdirect\t/' "$TMP/cfg/synui/rgb.devices"
+: > "$RGBLOG"
+SYN_RGB_SDK=yes RGBGONE=1 "$SCRIPT" apply >/dev/null
+check "and a mode set by hand survives the refresh" \
+      "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF -d 2 -m direct -c 3355FF" \
+      "$(tail -1 "$RGBLOG")"
+sed -i 's/^2\tdirect\t/2\tstatic\t/' "$TMP/cfg/synui/rgb.devices"
+
+# ⛔ AND A SHORT LISTING IS NOT BELIEVED. The count sits perfectly still at two
+# for the seven seconds between the DIMMs and the USB devices, so "wait until it
+# stops changing" answers the wrong question — the only thing that knows how
+# many devices this machine has is the map from the last time they were all
+# counted. A listing with fewer than that is asked again.
+: > "$RGBLOG"; : > "$RGBLIST"
+SYN_RGB_SDK=yes RGBGONE=1 RGBLATE=2 "$SCRIPT" apply 2>/dev/null >/dev/null
+check "a listing taken mid-enumeration does not shrink the map" "3" \
+      "$(grep -c . "$TMP/cfg/synui/rgb.devices")"
+check "and the device it was missing still gets its colour" \
+      "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF -d 2 -m static -c 3355FF" \
+      "$(tail -1 "$RGBLOG")"
+
+# ⚠ ...but a device that is REALLY gone has to be let go of, or the map would
+# only ever grow and every push after an unplug would fail. The wait is bounded,
+# and what it finds at the end of it is the answer.
+: > "$RGBLOG"; : > "$RGBLIST"
+SYN_RGB_SDK=yes "$SCRIPT" apply 2>/dev/null >/dev/null
+check "a device that stayed away is dropped" "2" \
+      "$(grep -c . "$TMP/cfg/synui/rgb.devices")"
+check "and the colour lands on what is left" \
       "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF" \
       "$(tail -1 "$RGBLOG")"
 
