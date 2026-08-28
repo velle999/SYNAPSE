@@ -2436,13 +2436,25 @@ pkgver=0.1.0
 #   click asks which way it is going rather than assuming.
 #   ⚠ THE GLYPH IS A SPEECH BUBBLE AND NOT A ROBOT. F544 (robot) and F5DC
 #   (brain) are the obvious icons for this and NEITHER IS IN Symbols Nerd Font
-#   Mono, which is the only icon font the ISO ships — a missing glyph is a
-#   button you cannot see and can still press. Checked against the font rather
-#   than assumed, the same way the transport buttons were.
+#   Mono — the font Icons.qml's codepoints come from and the one synui depends
+#   on. Nothing else covers them: they are Nerd Font Private Use Area
+#   codepoints, so a box with a dozen other families installed still draws them
+#   as nothing. Checked against the font rather than assumed, the same way the
+#   transport buttons were. (⚠ An earlier version of this note said Nerd Font
+#   Symbols was the only font the ISO ships. It is not — terminus-font,
+#   ttf-dejavu and noto-fonts are all on it. The glyph choice was right; the
+#   reason given for it was overstated.)
 #   Hidden where vibe is not installed, so a desktop without it is unchanged;
 #   BarConfig gains an `assistant` row so it can be switched off per monitor
 #   like every other module.
-pkgrel=525
+# 526: the assistant glyph's note was overstated, and is corrected in place.
+#   525 said Symbols Nerd Font Mono was "the only icon font the ISO ships". It
+#   is not — terminus-font, ttf-dejavu and noto-fonts are all on it, and this
+#   box has a dozen more. The GLYPH CHOICE WAS STILL RIGHT and for a reason
+#   that survives the correction: F544 and F5DC are Nerd Font PRIVATE USE AREA
+#   codepoints, so no other family can cover them however many are installed.
+#   Reported by velle, who reads these notes.
+pkgrel=526
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

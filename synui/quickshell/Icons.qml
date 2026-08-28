@@ -74,8 +74,11 @@ QtObject {
 
     // The assistant. ⚠ A SPEECH BUBBLE AND NOT A ROBOT: F544 (robot) and
     // F5DC (brain) are the obvious glyphs for this and NEITHER IS IN
-    // Symbols Nerd Font Mono, which is the only icon font the ISO ships.
-    // A missing glyph is a button you cannot see and can still press.
+    // Symbols Nerd Font Mono — which is the font THIS FILE's codepoints come
+    // from, and the one synui depends on. Nothing else can cover them either:
+    // they are Nerd Font Private Use Area codepoints, so a box with a dozen
+    // other families installed still draws them as nothing. A missing glyph is
+    // a button you cannot see and can still press.
     readonly property string assistant:  "\uF075"
 
     /* -- Weather --

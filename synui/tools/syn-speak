@@ -1,0 +1,213 @@
+#!/bin/bash
+# syn-speak — the desktop, out loud.
+#
+# What is on screen is unreadable to somebody who cannot see it, and every part
+# of this desktop that says something says it in pixels. This is the other
+# channel: the focused window, the selection, a notification, or any line handed
+# to it, spoken.
+#
+# ⚠ IT IS A SPEECH TOOL AND AN ANNOUNCER, NOT A FULL SCREEN READER. A real
+# screen reader walks the accessibility tree and reads every widget under the
+# cursor; that needs AT-SPI support in each toolkit and is a project of its own.
+# What this does is the part that is both useful today and honest: it speaks
+# what has FOCUS when focus moves, and it speaks whatever it is asked to. Orca
+# remains the answer for the full tree, and this does not pretend otherwise.
+#
+# ⛔ NOTHING SPEAKS UNTIL ASKED. `syn-speak on` is the opt-in, and it is per
+# user. A desktop that started talking after an update would be the worst
+# possible version of this feature.
+#
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+set -u
+
+CFG=${XDG_CONFIG_HOME:-$HOME/.config}/synui
+STATE=$CFG/speak.state
+RUN=${XDG_RUNTIME_DIR:-/tmp}/syn-speak
+# Looked up by NAME on PATH — ⚠ `espeak-ng … || echo missing` cannot tell "not
+# installed" from "ran and failed", and those want opposite answers.
+TTS=${SYN_SPEAK_BIN:-espeak-ng}
+SYNCTL=${SYN_SPEAK_SYNCTL:-synctl}
+
+say()  { printf '%s\n' "$*"; }
+warn() { printf 'syn-speak: %s\n' "$*" >&2; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# ---- the state file ------------------------------------------------------
+#
+# key=value, the same shape every other synui state file uses, so it greps and
+# a human can fix it with an editor.
+getval() {   # getval KEY DEFAULT
+    local k=$1 d=$2 v=
+    [ -r "$STATE" ] || { printf '%s' "$d"; return; }
+    v=$(sed -n "s/^[[:space:]]*$k[[:space:]]*=[[:space:]]*//p" "$STATE" | tail -1)
+    # ⛔ No comment stripping. A voice name can contain anything, and a `%%#*`
+    # here is what emptied every colour in syn-rgb's state reader — the same
+    # file shape, the same mistake available. A whole-line comment never
+    # reaches this: the key anchor does not match one.
+    v=${v%"${v##*[![:space:]]}"}
+    [ -n "$v" ] || v=$d
+    printf '%s' "$v"
+}
+
+setval() {   # setval KEY VALUE
+    local k=$1 v=$2 tmp
+    mkdir -p "$CFG"
+    [ -f "$STATE" ] || printf '# syn-speak — the desktop, out loud.\n' > "$STATE"
+    tmp=$STATE.tmp.$$
+    if grep -q "^[[:space:]]*$k[[:space:]]*=" "$STATE" 2>/dev/null; then
+        sed "s|^[[:space:]]*$k[[:space:]]*=.*|$k=$v|" "$STATE" > "$tmp"
+    else
+        cat "$STATE" > "$tmp"
+        printf '%s=%s\n' "$k" "$v" >> "$tmp"
+    fi
+    mv "$tmp" "$STATE"
+}
+
+# ---- speaking ------------------------------------------------------------
+
+# ⚠ ONE VOICE AT A TIME. Two announcements overlapping is not twice the
+# information, it is none: the words interleave and neither is intelligible.
+# So a new utterance STOPS the one in progress, which is also what makes the
+# announcer usable — moving quickly between windows should leave you hearing
+# the one you landed on, not a queue of the ones you passed.
+speak_stop() {
+    [ -f "$RUN/pid" ] || return 0
+    local p; p=$(cat "$RUN/pid" 2>/dev/null)
+    case $p in ''|*[!0-9]*) return 0 ;; esac
+    kill "$p" 2>/dev/null
+    rm -f "$RUN/pid"
+}
+
+speak() {   # speak TEXT
+    local text=$1 voice rate vol amp
+    [ -n "$text" ] || return 0
+    have "$TTS" || { warn "$TTS is not installed — synpkg install espeak-ng"; return 3; }
+
+    voice=$(getval voice "$(getval lang en)")
+    rate=$(getval rate 175)
+    vol=$(getval volume 100)
+    # espeak-ng's amplitude is 0..200 and the setting is a percentage, which is
+    # the number a person means by "volume". Clamped rather than trusted: an
+    # out-of-range amplitude is refused by espeak and the utterance is silently
+    # lost, which reads as the tool not working at all.
+    amp=$(( vol * 2 ))
+    [ "$amp" -lt 0 ]   && amp=0
+    [ "$amp" -gt 200 ] && amp=200
+
+    speak_stop
+    mkdir -p "$RUN"
+    # Detached, output discarded: a caller may be a keybind with nowhere for
+    # espeak's chatter to go, and a blocked write would leave the key stuck.
+    setsid "$TTS" -v "$voice" -s "$rate" -a "$amp" -- "$text" \
+        >/dev/null 2>&1 < /dev/null &
+    printf '%s\n' "$!" > "$RUN/pid"
+}
+
+# ---- what there is to say ------------------------------------------------
+
+# The focused window, as a sentence. Title first: it is what changed and what
+# identifies the window; the application is the fallback for a window that has
+# no title of its own, which is common enough on dialogs.
+window_line() {
+    have "$SYNCTL" || return 1
+    "$SYNCTL" activewindow 2>/dev/null | python3 -c '
+import json, sys
+try:
+    w = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+if not isinstance(w, dict):
+    sys.exit(1)
+title = (w.get("title") or "").strip()
+app   = (w.get("app_id") or "").strip()
+if title and app and title.lower() != app.lower():
+    print(f"{title}, {app}")
+else:
+    print(title or app)
+' 2>/dev/null
+}
+
+selection_text() {
+    # The PRIMARY selection first — on a Wayland desktop that is what "the text
+    # I just highlighted" means, and the clipboard is what was deliberately
+    # copied. Both are worth speaking and they are different questions.
+    if have wl-paste; then
+        wl-paste --primary --no-newline 2>/dev/null && return 0
+        wl-paste --no-newline 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+# ---- the announcer -------------------------------------------------------
+#
+# ⚠ A POLL, AND DELIBERATELY SO. synui has no "focus changed" event a shell can
+# subscribe to, and adding one to the compositor for this would be a protocol
+# for a feature that ships off. Half a second is under the threshold at which a
+# window switch feels unannounced, and one synctl call at that rate costs
+# nothing measurable — it is the same shape barscan.c settled on for the same
+# reason.
+watch_loop() {
+    local last="" now
+    while :; do
+        [ "$(getval on no)" = "yes" ] || return 0
+        now=$(window_line)
+        if [ -n "$now" ] && [ "$now" != "$last" ]; then
+            last=$now
+            speak "$now"
+        fi
+        sleep "$(getval interval 0.5)"
+    done
+}
+
+unit_do() {   # unit_do enable|disable
+    command -v systemctl >/dev/null 2>&1 || return 0
+    systemctl --user "$1" --now syn-speak.service >/dev/null 2>&1 || true
+}
+
+case ${1:-status} in
+    say)    shift; speak "$*" ;;
+    window) speak "$(window_line)" ;;
+    selection)
+            t=$(selection_text) || t=""
+            if [ -n "$t" ]; then speak "$t"
+            else speak "nothing selected"; fi ;;
+    stop)   speak_stop ;;
+    watch)  watch_loop ;;
+    on)     setval on yes;  unit_do enable
+            speak "Speech is on" ;;
+    off)    setval on no;   unit_do disable
+            # ⚠ STOPPED, not left to finish. "Off" said by a voice that then
+            # keeps talking about the next window is not off.
+            speak_stop
+            say "off" ;;
+    voice)  [ $# -ge 2 ] || { warn "voice wants a name — see \`$TTS --voices\`"; exit 2; }
+            setval voice "$2"; speak "This is the $2 voice" ;;
+    rate)   [ $# -ge 2 ] || { warn "rate wants words per minute (80-450)"; exit 2; }
+            setval rate "$2"; speak "Speaking at $2 words per minute" ;;
+    volume) [ $# -ge 2 ] || { warn "volume wants 0 to 100"; exit 2; }
+            setval volume "$2"; speak "Volume $2" ;;
+    voices) have "$TTS" || { warn "$TTS is not installed"; exit 3; }
+            "$TTS" --voices ;;
+    status)
+            printf 'on\t%s\n'       "$(getval on no)"
+            printf 'voice\t%s\n'    "$(getval voice en)"
+            printf 'rate\t%s\n'     "$(getval rate 175)"
+            printf 'volume\t%s\n'   "$(getval volume 100)"
+            printf 'engine\t%s\n'   "$(have "$TTS" && printf yes || printf no)"
+            printf 'window\t%s\n'   "$(window_line || printf '-')" ;;
+    -h|--help|help)
+            say "syn-speak — the desktop, out loud"
+            say ""
+            say "  syn-speak on | off        announce the focused window, or stop"
+            say "  syn-speak say TEXT        speak a line"
+            say "  syn-speak window          speak the focused window"
+            say "  syn-speak selection       speak the highlighted text"
+            say "  syn-speak stop            silence what is being said"
+            say "  syn-speak voice NAME      \`syn-speak voices\` lists them"
+            say "  syn-speak rate 80..450    words per minute"
+            say "  syn-speak volume 0..100"
+            say "  syn-speak status          what it would do" ;;
+    *)      warn "unknown command: $1  (try syn-speak help)"; exit 2 ;;
+esac

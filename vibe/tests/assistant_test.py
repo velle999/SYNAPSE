@@ -129,7 +129,57 @@ check("…and the C record carries the tool and its arguments",
       "\tbash\t" in out.getvalue() and "echo" in out.getvalue())
 
 
-# ── 4. the wire ─────────────────────────────────────────────────────────────
+# ── 4. the prompt is in the model's own template ────────────────────────────
+#
+# ⛔ THE BUG THIS IS FOR REACHED THE USER. This client emitted
+# `<|system|>/<|user|>/<|assistant|>` at every model regardless, and SynapseOS
+# ships a MISTRAL — which has never seen those tokens. It does not error: the
+# model reads the lot as prose, keeps writing, and invents turn markers of its
+# own. What appeared in the chat window was `◁user▷` and `◁assistant▷` wrapped
+# around answers to questions nobody had typed.
+from vibe import synapd_client as sc
+
+MSGS = [{"role": "system", "content": "SYS"},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "yo"},
+        {"role": "user", "content": "and now"}]
+
+inst = sc.flatten_messages(MSGS, None, "[INST]")
+check("a Mistral prompt uses [INST]", "[INST]" in inst and "<|user|>" not in inst, inst[:80])
+# ⚠ Mistral has NO system role — v0.2's own template rejects one outright, so
+# the system prompt has to ride into the first user turn.
+check("…with the system prompt folded into the first user turn",
+      inst.startswith("[INST] SYS") and inst.count("SYS") == 1, inst[:60])
+check("…and its assistant turns close with </s>", "yo</s>" in inst, inst[:120])
+
+chatml = sc.flatten_messages(MSGS, None, "<|im_start|>user")
+check("a ChatML prompt uses <|im_start|>",
+      "<|im_start|>system" in chatml and chatml.endswith("<|im_start|>assistant\n"))
+
+plain = sc.flatten_messages(MSGS, None, "a-template-nobody-knows")
+check("an unknown template falls back to a plain transcript, with no markers",
+      "User: hi" in plain and "<|" not in plain and "[INST]" not in plain)
+
+# The nudge rides on the LAST user turn only — the tool rules live in the system
+# block, which for Mistral is thousands of tokens behind the question.
+withtools = sc.flatten_messages(MSGS, TOOL_SCHEMAS, "[INST]")
+check("the tool reminder lands on the last turn, once",
+      withtools.count("emit a <tool_call> block now") == 1)
+check("…and states BOTH branches, so it cannot push a fact question into a grep",
+      "just answer it" in withtools)
+
+# The guard that does not depend on getting any of the above right.
+check("a reply that starts writing the user's turn is cut",
+      sc.trim_hallucinated_turn("Answer.\n◁user▷ next?") == "Answer.")
+check("…in every family's markers",
+      sc.trim_hallucinated_turn("A.<|im_start|>user") == "A."
+      and sc.trim_hallucinated_turn("B.[INST] x") == "B."
+      and sc.trim_hallucinated_turn("C.\nUser: x") == "C.")
+check("…and leaves an ordinary reply alone",
+      sc.trim_hallucinated_turn("Just an answer.") == "Just an answer.")
+
+
+# ── 5. the wire ─────────────────────────────────────────────────────────────
 #
 # Tabs and newlines ARE the record separators, so an answer containing them has
 # to survive as data. A shell transcript contains both, every time.
