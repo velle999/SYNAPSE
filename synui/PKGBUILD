@@ -2512,7 +2512,7 @@ pkgver=0.1.0
 #   bar's microphone indicator watches the same one — one fact, two surfaces.
 #   ⚠ It draws "Listening", not "On". "On" describes a setting; what is true is
 #   that a device is open right now, and the status line says so both ways.
-pkgrel=537
+pkgrel=538
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2611,7 +2611,30 @@ license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0' 'CC-BY-SA-4.0')
          # hard dependency for four months after it stopped being the default,
          # which made 65 MiB un-removable — `synpkg remove kitty` was refused
          # with "synui: requires kitty" for a terminal nothing opens by default.
-depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'syntty' 'rofi' 'cairo'
+# ⛔ THE ICON THEMES ARE A DEPENDENCY, NOT A NICETY, and until now they were
+# neither — not here and not in the ISO's package list. Every synui-*.desktop
+# this package ships names a STANDARD freedesktop icon (office-calendar,
+# preferences-system-bluetooth, utilities-terminal …), and a standard name is
+# only a name: something has to provide the file. On the machine SynapseOS is
+# built on, KDE and GTK applications had dragged both themes in years ago, so
+# the menu looked right and nothing said it was borrowing. On a clean install —
+# velle's ThinkPad, 2026-08-28 — the apps menu is missing calendar, bluetooth
+# and the rest, with no error anywhere.
+#
+# Counted rather than guessed: of the icon names these entries use, 22 come from
+# breeze-icons and 15 from adwaita-icon-theme-legacy. Neither covers both sets,
+# so both are named. adwaita-icon-theme-legacy also pulls hicolor-icon-theme,
+# which is where this package installs its OWN icons.
+#
+# ⚠ THE `legacy` ONE, NOT adwaita-icon-theme ALONE. Adwaita dropped the full-
+# colour legacy names in its move to symbolic-only; utilities-terminal and
+# media-eject resolve out of AdwaitaLegacy on this machine and nowhere else.
+#
+# Same reasoning as synfiles' shared-mime-info: it is a base package on any
+# desktop, depending on it costs nothing, and it removes a whole class of "why
+# is half the menu blank".
+depends=('breeze-icons' 'adwaita-icon-theme-legacy'
+         'wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'syntty' 'rofi' 'cairo'
          # dbus: synui_run() execs dbus-update-activation-environment before the
          # autostarts, without which D-Bus-activated GUI services get no display.
          # Always present transitively, named here because we exec its binary.

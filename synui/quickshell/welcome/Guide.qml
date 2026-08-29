@@ -390,6 +390,14 @@ PanelWindow {
                                   ? Theme.cyan : Theme.fgDim
 
                     Canvas {
+                        // ⛔ NAMED SO THE Connections BELOW CAN REACH IT.
+                        // `Connections` is a QtObject, not an Item: it has no
+                        // `parent`, so `parent.requestPaint()` threw
+                        // "ReferenceError: parent is not defined" on every
+                        // palette change — and, being a warning rather than an
+                        // error, took the whole guide down to a surface that
+                        // never finished drawing.
+                        id: tickCanvas
                         anchors.fill: parent
                         visible: !GuideState.atStartup
                         onPaint: {
@@ -407,7 +415,7 @@ PanelWindow {
                         // re-run onPaint because a colour binding changed.
                         Connections {
                             target: Theme
-                            function onCyanChanged() { parent.requestPaint() }
+                            function onCyanChanged() { tickCanvas.requestPaint() }
                         }
                     }
                 }
@@ -507,6 +515,7 @@ PanelWindow {
                        : "transparent"
             }
             Canvas {
+                id: closeCanvas          // see tickCanvas: Connections has no `parent`
                 anchors.fill: parent
                 onPaint: {
                     const ctx = getContext("2d")
@@ -521,7 +530,7 @@ PanelWindow {
                 }
                 Connections {
                     target: Theme
-                    function onFgChanged() { parent.requestPaint() }
+                    function onFgChanged() { closeCanvas.requestPaint() }
                 }
             }
         }

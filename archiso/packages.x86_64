@@ -358,3 +358,13 @@ nix
 # what keeps the hardening index a signal rather than a constant.
 arch-audit
 lynis
+
+# ⛔ THE MENU'S ICONS. synui's .desktop entries name standard freedesktop icons;
+# a standard name still needs a package to provide the file, and neither theme
+# was on this list. The live ISO showed the same half-blank apps menu a clean
+# install does — invisible on the build machine, where other software had
+# dragged both in. 22 of the names come from breeze-icons and 15 from
+# adwaita-icon-theme-legacy, so both are needed. synui depends on them too;
+# they are here so the LIVE session has them before anything is installed.
+breeze-icons
+adwaita-icon-theme-legacy
