@@ -264,7 +264,35 @@ PanelWindow {
      * non-glass card the surface is 1.0 and the theme's ink is the right ink by
      * construction. Glass is where the question exists.
      */
-    readonly property real surfaceAlpha: Theme.widgetAlphaOn(win.backdrop)
+    /*
+     * ⛔ THE CARD'S ALPHA IS THE SCREEN'S ANSWER, NOT THIS WIDGET'S SPOT.
+     *
+     * alphaWalkOn() raises a surface's alpha until its text clears AA on what
+     * is behind it. Asked per widget, that is a different answer per POSITION —
+     * so three post-it notes on one desktop drew three different cards: the two
+     * over a lit skyline were walked up into solid frosted panels, the one over
+     * flat dark sky needed no correction and stayed at `widgetAlpha`, which on
+     * a clear dock is no card at all. Identical widgets, side by side, one of
+     * them apparently missing. velle, 2026-08-28: "the post it isn't all
+     * following the same rule there, glass blur is preferred look here."
+     *
+     * ⚠ THE INK STILL FOLLOWS THE SPOT, and that is not an inconsistency — it
+     * is the whole feature. The correction has two halves and they answer
+     * different questions: how PRESENT the card is, which is furniture and must
+     * match across a desktop, and what COLOUR the writing is, which must match
+     * the few hundred pixels actually behind those words. A note over a bright
+     * corner still gets dark ink; it just gets the same card as its neighbours.
+     *
+     * ⚠ AND THE INK IS STILL JUDGED AGAINST THE ALPHA THE CARD REALLY PAINTS
+     * AT — `ink` below reads surfaceAlpha, so the two cannot come apart, which
+     * was the reason they were one number to begin with.
+     */
+    readonly property var screenBackdrop: (win.inkOnBackdrop && win.screenData)
+        ? Theme.backdropFor(win.screenData, 0, 0,
+                            win.screenData.width, win.screenData.height)
+        : null
+
+    readonly property real surfaceAlpha: Theme.widgetAlphaOn(win.screenBackdrop)
     readonly property color ink:    Theme.inkOn(win.backdrop,
                                                 win.glass ? win.surfaceAlpha : 1.0)
     readonly property color inkDim: Theme.dimOf(win.ink)

@@ -239,5 +239,32 @@ else:
 sys.exit(1 if fails else 0)
 ENDPY
 
+# ── the card is the same on every note, wherever it sits ────────────────────
+#
+# ⛔ STRUCTURAL, BECAUSE THE PIXEL VERSION NEEDS TWO NOTES OVER DIFFERENT
+# WALLPAPER. alphaWalkOn() raises a surface's alpha until its text clears AA on
+# what is behind it; asked per WIDGET that is a different answer per position,
+# and three notes on one desktop drew three different cards — two walked up into
+# frosted panels over a lit skyline, one left at `widgetAlpha` over flat dark
+# sky, which on a clear dock is no card at all. Identical widgets, one of them
+# apparently missing.
+#
+# ⚠ THE INK MUST STILL FOLLOW THE SPOT — that is what everything above this line
+# tests, and it is the whole reason the note asks for a backdrop. The two halves
+# answer different questions: how present the CARD is (furniture, and it has to
+# match across a desktop) and what colour the WRITING is (which has to match the
+# few hundred pixels behind those words).
+FRAME="$(dirname "$0")/../quickshell/widgets/WidgetFrame.qml"
+if [ -f "$FRAME" ]; then
+    grep -q 'surfaceAlpha: Theme.widgetAlphaOn(win.screenBackdrop)' "$FRAME" \
+        || fail "the card's alpha is not taken from the SCREEN's backdrop.
+       Per-widget, alphaWalkOn gives a different answer per position and two
+       identical notes draw different cards — one of them with no card at all."
+    grep -q 'Theme.inkOn(win.backdrop' "$FRAME" \
+        || fail "the ink is no longer taken from the widget's OWN backdrop —
+       which is the feature everything above this line is testing."
+    ok "the card follows the screen, the ink follows the spot"
+fi
+
 echo
 echo "postit_ink: PASS"

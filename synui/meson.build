@@ -769,6 +769,17 @@ test('game_confine', game_confine_test)
 # COLOUR rather than failing, and an unhandled format declines silently into
 # the wallpaper fallback — which is how BGR888 went unnoticed on a whole
 # monitor. Pure arithmetic over drm_fourcc's own bit layout; no compositor.
+# ⛔ THE PARSER THIS BOX CANNOT OTHERWISE EXERCISE. The VRAM column reads DRM
+# fdinfo, and this machine's NVIDIA driver publishes none of those keys — so
+# without fixtures the parser would ship having never seen its own input.
+gpu_fdinfo_test = executable('gpu_fdinfo_test',
+  ['tests/gpu_fdinfo_test.c', 'src/gpu.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('gpu_fdinfo', gpu_fdinfo_test)
+
 barscan_format_test = executable('barscan_format_test',
   ['tests/barscan_format_test.c', 'src/barscan.c', 'src/contrast.c'],
   include_directories : include_directories('src'),
