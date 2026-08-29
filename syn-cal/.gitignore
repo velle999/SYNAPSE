@@ -1,0 +1,2 @@
+# meson's build tree. `meson setup build && meson test -C build` recreates it.
+build/
