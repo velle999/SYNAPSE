@@ -147,9 +147,9 @@ int main(int argc, char **argv)
 	rlist_free(&rl);
 
 	bool conflict = false;
-	char *ne = NULL;
+	char *ne = NULL, *nh = NULL;
 	ok_("an If-Match upload with the right ETag succeeds",
-	    href && r->put(r, href, e1b, strlen(e1b), etag, &ne, &conflict, &err) && !conflict);
+	    href && r->put(r, href, e1b, strlen(e1b), etag, &ne, &nh, &conflict, &err) && !conflict);
 	free(err); err = NULL; free(ne); ne = NULL;
 
 	ok_("the change comes down", sync_run(r, &o, &st, &err) && st.pulled_changed == 1);
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
 	conflict = false;
 	ok_("a stale If-Match is refused with a conflict",
 	    href && r->put(r, href, e1b, strlen(e1b), "\"definitely-not-the-etag\"",
-	                   &ne, &conflict, &err) && conflict);
+	                   &ne, &nh, &conflict, &err) && conflict);
 	free(err); err = NULL; free(ne); ne = NULL;
 
 	/* delete, upward */

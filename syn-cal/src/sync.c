@@ -135,7 +135,7 @@ static bool push(remote_t *r, const sync_opts_t *o, index_t *ix,
 	}
 
 	char *href = href_in ? xstrdup(href_in) : r->href_for(r, uid);
-	char *new_etag = NULL, *e = NULL;
+	char *new_etag = NULL, *new_href = NULL, *e = NULL;
 	bool conflict = false;
 
 	if (o->dry_run) {
@@ -143,10 +143,10 @@ static bool push(remote_t *r, const sync_opts_t *o, index_t *ix,
 		return true;
 	}
 
-	if (!r->put(r, href, data, len, etag, &new_etag, &conflict, &e)) {
+	if (!r->put(r, href, data, len, etag, &new_etag, &new_href, &conflict, &e)) {
 		st->errors++;
 		warn("cannot upload %s: %s", uid, e ? e : "no reason given");
-		free(e); free(data); free(href); free(new_etag);
+		free(e); free(data); free(href); free(new_etag); free(new_href);
 		return true;
 	}
 
@@ -159,18 +159,23 @@ static bool push(remote_t *r, const sync_opts_t *o, index_t *ix,
 		 * file exists to avoid. */
 		info("%s changed on the server while we were uploading; left for the next run", uid);
 		st->conflicts++;
-		free(data); free(href); free(new_etag);
+		free(data); free(href); free(new_etag); free(new_href);
 		return true;
 	}
 
 	char *hash = content_hash(data, len);
 	/* A server may answer a PUT without an ETag. Recording an empty one would
 	 * claim knowledge we do not have, so the entry is stored with no etag and
-	 * the next listing supplies it. */
-	idx_set(ix, uid, href, new_etag, hash);
+	 * the next listing supplies it.
+	 *
+	 * ⚠ AND THE href IS THE SERVER'S, IF IT NAMED ONE. Recording the guess
+	 * instead means the next listing finds an item the index has never heard
+	 * of, pulls it down as new, and uploads the local copy again — a duplicate
+	 * per sync, for ever. */
+	idx_set(ix, uid, new_href ? new_href : href, new_etag, hash);
 	free(hash);
 
-	free(data); free(href); free(new_etag);
+	free(data); free(href); free(new_etag); free(new_href);
 	return true;
 }
 

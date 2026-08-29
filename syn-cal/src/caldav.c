@@ -177,7 +177,9 @@ static bool propfind(const char *url, const http_auth_t *auth, const char *depth
 
 /* ── discovery ──────────────────────────────────────────────────────────── */
 
-static void colls_add(caldav_colls_t *c, caldav_coll_t v)
+/* Shared with graph.c: both backends discover calendars and answer in the same
+ * shape, so the account code and the CLI have one kind of answer to handle. */
+void colls_add_public(caldav_colls_t *c, caldav_coll_t v)
 {
 	if (c->n == c->cap) {
 		c->cap = c->cap ? c->cap * 2 : 8;
@@ -227,7 +229,7 @@ static bool list_collections(const char *home, const http_auth_t *auth,
 			v.events = !said || dav_has(&x, r, ".//c:comp[@name='VEVENT']");
 			v.todos  = !said || dav_has(&x, r, ".//c:comp[@name='VTODO']");
 			if (!v.name) v.name = xstrdup(href);
-			colls_add(out, v);
+			colls_add_public(out, v);
 			free(href);
 		}
 	}
@@ -363,10 +365,14 @@ static char *dav_get(remote_t *r, const char *href, size_t *len, char **etag, ch
 }
 
 static bool dav_put(remote_t *r, const char *href, const void *data, size_t len,
-                    const char *if_match, char **new_etag, bool *conflict, char **err)
+                    const char *if_match, char **new_etag, char **new_href,
+                    bool *conflict, char **err)
 {
 	dav_ctx_t *d = r->ctx;
 	*conflict = false;
+	/* CalDAV lets the client choose the path, so the href the engine used is
+	 * the href the event has. Nothing to report back. */
+	*new_href = NULL;
 	char *url = url_resolve(d->url, href);
 
 	/* ⛔ ALWAYS CONDITIONAL. If-Match when we believe a version exists,

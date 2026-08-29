@@ -72,11 +72,13 @@ static char *f_get(remote_t *r, const char *href, size_t *len, char **etag, char
 }
 
 static bool f_put(remote_t *r, const char *href, const void *data, size_t len,
-                  const char *if_match, char **new_etag, bool *conflict, char **err)
+                  const char *if_match, char **new_etag, char **new_href,
+                  bool *conflict, char **err)
 {
 	(void)err;
 	fake_t *f = r->ctx;
 	*conflict = false;
+	*new_href = NULL;          /* this fake lets the client choose, like CalDAV */
 
 	if (f->fail_put_once && strcmp(f->fail_put_once, href) == 0) {
 		free(f->fail_put_once); f->fail_put_once = NULL;

@@ -27,7 +27,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV accounts, two-way sync"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

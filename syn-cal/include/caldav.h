@@ -19,6 +19,7 @@ typedef struct {
 
 typedef struct { caldav_coll_t *e; size_t n, cap; } caldav_colls_t;
 void caldav_colls_free(caldav_colls_t *c);
+void colls_add_public(caldav_colls_t *c, caldav_coll_t v);
 
 /* From whatever the user typed to the list of their calendars.
  *

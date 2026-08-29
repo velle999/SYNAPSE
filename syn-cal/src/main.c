@@ -14,6 +14,7 @@
 #include "caldav.h"
 #include "config.h"
 #include "event.h"
+#include "graph.h"
 #include "oauth.h"
 #include "sync.h"
 
@@ -378,7 +379,12 @@ static int cmd_discover(const char *name)
 	if (!auth_for(&a, e, &auth, &err)) { warn("%s", err); free(err); accounts_free(&a); return 1; }
 
 	caldav_colls_t colls;
-	bool ok = caldav_discover(e->url, &auth, &colls, &err);
+	/* One kind of answer either way — see graph_discover. The account's kind is
+	 * what decides, not the URL, because a Microsoft account has no URL of its
+	 * own to look at. */
+	bool ok = (e->kind == ACC_MICROSOFT)
+	        ? graph_discover(&auth, &colls, &err)
+	        : caldav_discover(e->url, &auth, &colls, &err);
 	auth_free(&auth);
 	if (!ok) {
 		warn("%s", err ? err : "nothing found");
@@ -476,18 +482,6 @@ static int cmd_calendars(const char *name)
 
 static int sync_account(accounts_t *a, account_t *e, conflict_t policy, bool dry, sync_stats_t *tot)
 {
-	/* ⛔ BEFORE THE CREDENTIALS, NOT AFTER. Microsoft removed CalDAV; Outlook
-	 * and 365 calendars are only reachable through Graph, which is a different
-	 * backend and is not built yet. Checked here because auth_for would
-	 * otherwise fail first and say "not signed in" — advice that leads nowhere,
-	 * since signing in would not have helped either. */
-	if (e->kind == ACC_MICROSOFT) {
-		warn("'%s' is a Microsoft account, and Microsoft removed CalDAV support.\n"
-		     "         Syncing it needs the Graph backend, which is not built yet.",
-		     e->name);
-		return 1;
-	}
-
 	http_auth_t auth;
 	char *err = NULL;
 	if (!auth_for(a, e, &auth, &err)) { warn("%s", err); free(err); return 1; }
@@ -497,7 +491,12 @@ static int sync_account(accounts_t *a, account_t *e, conflict_t policy, bool dry
 		if (!e->cals[i].enabled) continue;
 		const char *label = e->cals[i].name ? e->cals[i].name : e->cals[i].url;
 
-		remote_t *r = caldav_remote(e->cals[i].url, &auth);
+		/* ⛔ THE BACKEND FOLLOWS THE ACCOUNT, NOT THE URL. Microsoft removed
+		 * CalDAV; a Graph calendar URL handed to the CalDAV client answers 404
+		 * to PROPFIND, which reads as "my account is broken". */
+		remote_t *r = (e->kind == ACC_MICROSOFT)
+		            ? graph_remote(e->cals[i].url, &auth)
+		            : caldav_remote(e->cals[i].url, &auth);
 		sync_opts_t o = { e->name, label, policy, dry };
 		sync_stats_t st;
 		char *serr = NULL;
@@ -530,7 +529,8 @@ static int sync_account(accounts_t *a, account_t *e, conflict_t policy, bool dry
 				putchar('\n');
 			}
 		}
-		caldav_remote_free(r);
+		if (e->kind == ACC_MICROSOFT) graph_remote_free(r);
+		else caldav_remote_free(r);
 	}
 	auth_free(&auth);
 	return bad;

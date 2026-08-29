@@ -214,15 +214,21 @@ check "…and is described as signed in, not as having a password" $?
 "$S" account add-microsoft work365 --client-id abc >/dev/null
 check "add-microsoft succeeds" $?
 
-# ⛔ AND SYNCING IT SAYS WHY. Microsoft removed CalDAV; falling through to the
-# CalDAV client would 404 against a URL the user never typed. The message must
-# also not be "not signed in", which is advice that leads nowhere — signing in
-# would not have helped either.
+# ⛔ AND IT ASKS FOR CREDENTIALS, NOT FOR A BACKEND. Graph is built now, so an
+# unsigned-in Microsoft account must fail on the sign-in — the honest reason —
+# rather than on anything about CalDAV. The account has no token here, and
+# nothing in this suite talks to Microsoft.
 out=$("$S" sync work365 2>&1)
 [ $? -ne 0 ]
-check "syncing a Microsoft account fails" $?
-echo "$out" | grep -q "Graph backend"
-check "…naming Graph as what is missing, not the credentials" $?
+check "syncing a Microsoft account with no token fails" $?
+echo "$out" | grep -q "not signed in"
+check "…because it is not signed in, which is the actual reason" $?
+
+# The backend is chosen by the ACCOUNT KIND, not by the URL — a Graph calendar
+# URL handed to the CalDAV client answers 404 to PROPFIND, which reads as "my
+# account is broken".
+grep -q "e->kind == ACC_MICROSOFT" "$(dirname "$0")/../src/main.c"
+check "…and the backend follows the account kind" $?
 
 # ⛔ AND A FAILED SYNC MUST NOT CLAIM SUCCESS. "Already up to date" after an
 # error is the most reassuring possible way to say nothing happened.

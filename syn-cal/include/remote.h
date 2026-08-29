@@ -37,12 +37,21 @@ typedef struct remote {
 	bool (*list)(struct remote *r, remote_list_t *out, char **err);
 	char *(*get)(struct remote *r, const char *href, size_t *len,
 	             char **etag, char **err);
+	/* ⚠ `new_href` IS AN OUT-PARAMETER BECAUSE NOT EVERY SERVER LETS THE CLIENT
+	 * CHOOSE. CalDAV does — the client PUTs to a path it picked, and this stays
+	 * NULL. Microsoft Graph does not: a create is a POST to the collection and
+	 * the id comes back in the answer. Without this the engine would record the
+	 * href it GUESSED, find nothing there on the next run, and upload the event
+	 * a second time, for ever. */
 	bool (*put)(struct remote *r, const char *href, const void *data, size_t len,
-	            const char *if_match, char **new_etag, bool *conflict, char **err);
+	            const char *if_match, char **new_etag, char **new_href,
+	            bool *conflict, char **err);
 	bool (*del)(struct remote *r, const char *href, const char *if_match,
 	            bool *conflict, char **err);
 	/* Where a new event should live. CalDAV lets the client choose, and the
-	 * convention every server understands is <collection>/<uid>.ics. */
+	 * convention every server understands is <collection>/<uid>.ics. A backend
+	 * that assigns its own ids returns NULL and answers through put's
+	 * `new_href` instead. */
 	char *(*href_for)(struct remote *r, const char *uid);
 	void *ctx;
 } remote_t;
