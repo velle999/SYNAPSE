@@ -13,7 +13,9 @@
  * protocol is line-based rather than one byte, child → parent only:
  *
  *     A\n          authenticated — unlock
- *     F\n          this attempt failed; a retry is allowed
+ *     F\n          a finger was presented and did not match; retry allowed
+ *     T\n          nobody presented one before pam_fprintd gave up; retry, and
+ *                 do NOT spend the lock's failure budget on it
  *     U\n          no fingerprint auth on this machine; do not retry
  *     M<text>\n    show <text> under the clock
  *
@@ -60,6 +62,8 @@
 
 #define _GNU_SOURCE
 #include <pwd.h>
+#include <stdbool.h>
+#include <time.h>
 #include <security/pam_appl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,6 +71,15 @@
 #include <unistd.h>
 
 #define FP_PAM_SERVICE "synui-lock-fprint"
+
+/*
+ * An attempt that lasted at least this long ended because pam_fprintd stopped
+ * waiting, not because a finger was rejected: a real swipe is answered in well
+ * under a second, and pam_fprintd's own default patience is 30. Deliberately
+ * below that so a shortened timeout still reads as a timeout, and far above any
+ * plausible match so a genuine rejection never does.
+ */
+#define FP_IDLE_SECS 10
 
 /* Where Linux-PAM looks for a service: /etc/pam.d, and since 1.6 the vendor
  * fallback /usr/lib/pam.d. Both, because the package installs to the first and
@@ -188,7 +201,28 @@ int main(void)
         return 1;
     }
 
+    /*
+     * ⛔ TIMED OUT IS NOT REJECTED, AND THE LOCK COUNTS THEM DIFFERENTLY.
+     *
+     * pam_fprintd gives up waiting after a while and returns PAM_AUTH_ERR —
+     * the SAME code as a finger that did not match. lock.c allows five
+     * rejections before it stops offering the reader for the rest of the lock,
+     * which is right for a wet fingertip and catastrophic for a timeout: a
+     * laptop left locked and untouched burns the whole budget on nobody being
+     * there. Five timeouts plus the 3s backoff is about two and a half
+     * minutes, after which the reader is silently gone. Walk away from a
+     * locked ThinkPad, come back, and there is no fingerprint prompt — while
+     * locking it and swiping straight away works every time. Reported as
+     * "it's only there sometimes right now for some reason".
+     *
+     * The two are told apart by HOW LONG the attempt took, not by the message
+     * text — pam_fprintd's wording is translated and has changed across
+     * releases, and a retry policy keyed on a string is a retry policy that
+     * breaks in another language.
+     */
+    time_t began = time(NULL);
     rc = pam_authenticate(pamh, 0);
+    bool waited = (time(NULL) - began) >= FP_IDLE_SECS;
 
     /* Honour account expiry and faillock exactly as the password path does. A
      * finger must not open an account a password would be refused for. */
@@ -212,7 +246,9 @@ int main(void)
         emit("U\n", 2);
         return 1;
     default:                         /* PAM_AUTH_ERR, PAM_MAXTRIES, … */
-        emit("F\n", 2);
+        /* T: nobody presented a finger. Same "try again" as F, but it does not
+         * spend the lock's patience — see FP_IDLE_SECS above. */
+        emit(waited ? "T\n" : "F\n", 2);
         return 1;
     }
 }

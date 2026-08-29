@@ -261,6 +261,7 @@ FloatingWindow {
         { id: "apps",      label: "Default Apps", blurb: "what opens each kind of file — and whether anybody actually chose it" },
         { id: "kernel",    label: "Kernel",   blurb: "every kernel on offer, which are installed, and which one you booted" },
         { id: "ai",        label: "AI",       blurb: "the backend switch, the units that can restart it behind your back, and which model is on disk" },
+        { id: "fprint",    label: "Fingerprint", blurb: "the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is" },
         { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"
@@ -1182,7 +1183,8 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice"]
+                    visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice",
+                              "enroll", "forget"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
@@ -1201,6 +1203,36 @@ FloatingWindow {
                         else if (v === "probe")
                             root.runWrite(["probe", arg], "re-probing " + arg + "…")
                     }
+                }
+
+                /*
+                 * ⛔ A VERB THE QML DOES NOT KNOW IS A DEAD BUTTON — the row
+                 * highlights, the strip opens, and nothing happens. `enroll`
+                 * and `forget` are added here, to the exclusion list above, and
+                 * to the test's allowlist, because all three are the contract.
+                 *
+                 * Enrolment TALKS while it runs: fprintd-enroll prints a line
+                 * per swipe, and run_progress() folds them into the work panel,
+                 * so this is one of the few writes where the panel is the point
+                 * rather than reassurance.
+                 */
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "enroll")
+                    label: root.selValue === "enrolled" ? "Enrol again…" : "Enrol…"
+                    onGo: root.runWrite(["enroll", root.actionArgFor(root.selAction, "enroll")],
+                                        "rest your finger on the reader…",
+                                        "lift and rest it again each time it asks; "
+                                        + "several passes are needed")
+                }
+
+                // ⚠ ALL OF THEM. fprintd removes a user's prints together —
+                // there is no per-finger delete — so the button says so rather
+                // than looking like it acts on the selected row.
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "forget")
+                    label: "Forget all fingerprints"
+                    onGo: root.runWrite(["forget", "all"],
+                                        "removing every fingerprint…")
                 }
 
                 // An interface: up or down. Wired included — a desktop whose

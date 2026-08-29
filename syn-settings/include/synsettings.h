@@ -198,6 +198,12 @@ int pane_power(void);
 int pane_system(void);
 int pane_network(void);
 int pane_bluetooth(void);
+/* ── fprint.c ──
+ * The fingerprint reader: what fprintd sees, what is enrolled, and enrolling.
+ * ⚠ Untested against real hardware on the build box — see the file header. */
+int pane_fprint(void);
+int cmd_enroll(const char *finger);
+int cmd_forget(const char *what);
 int pane_kernel(void);
 
 /* Which application opens what, and — the part that matters — which layer

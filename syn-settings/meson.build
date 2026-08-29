@@ -24,6 +24,7 @@ sources = files(
   'src/set.c',
   'src/network.c',
   'src/bluetooth.c',
+  'src/fprint.c',
   'src/probe.c',
   'src/kernel.c',
   'src/mode.c',

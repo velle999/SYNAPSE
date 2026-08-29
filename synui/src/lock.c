@@ -1282,6 +1282,24 @@ static int lock_fprint_line(syn_server_t *s, const char *line)
         lock_render(s);
         return 1;
 
+    case 'T':
+        /*
+         * ⛔ NOBODY WAS THERE, SO NOTHING WAS SPENT. pam_fprintd gives up
+         * waiting and reports the same PAM code as a rejected finger, and
+         * counting those against the budget below is what made the reader
+         * disappear from a lock left alone for a couple of minutes — five
+         * timeouts and a 3s backoff is all it took. The helper tells the two
+         * apart by how long the attempt ran; see synui-lock-fprint.c.
+         *
+         * ⚠ AND THE MESSAGE STAYS. Whatever the reader last asked for is still
+         * true — it is still waiting for a finger — so clearing it here would
+         * blank the prompt every thirty seconds for no reason the user could
+         * see.
+         */
+        lock_fprint_stop(s);
+        s->nlock.fp_retry_ms = lock_now_ms() + LOCK_FP_RETRY_MS;
+        return 1;
+
     case 'F':
     default:
         s->nlock.fp_fails++;

@@ -74,7 +74,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|unavailable:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|unavailable:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -87,7 +87,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai speech; do
+for pane in display region network bluetooth power kernel apps time ai speech fprint; do
     check_actions "$pane"
 done
 
@@ -1310,6 +1310,55 @@ esac
 # BINDINGS on every Text. A bare `font.pixelSize: 13` or a literal family is the
 # regression, and it fails silently — the window just stops moving with the
 # desktop, which is how syn-arsenal and synpkg behaved until 2026-08-11.
+# ── the fingerprint pane ────────────────────────────────────────────────────
+#
+# ⛔ THIS BOX HAS NO READER AND NO fprintd, which is exactly why these are here.
+# The generic "every verb the reader emits appears in the QML" check can only
+# see what this machine's pane actually printed — one `unavailable:` row — so it
+# proves nothing about `enroll:` and `forget:`, the two verbs that only appear
+# in front of hardware. A dead button would ship unnoticed on the developer's
+# desktop and be found by the one person with a ThinkPad.
+QML="$(dirname "$0")/../data/syn-settings.qml"
+if [ -f "$QML" ]; then
+    grep -q 'actionHas(root.selAction, "enroll")' "$QML" \
+        || bad "the QML has no button for the enroll verb — the row would
+       highlight, the strip would open, and nothing would happen"
+    grep -q 'actionHas(root.selAction, "forget")' "$QML" \
+        || bad "the QML has no button for the forget verb"
+    # ⚠ THE SECOND EDIT PEOPLE FORGET. A verb missing from this list draws
+    # "Apply" as well as its own button, and Apply builds a command for a verb
+    # it does not understand.
+    grep -qE '"enroll", *"forget"' "$QML" \
+        || bad "enroll/forget are not in applyBtn's exclusion list — the row
+       would draw a second, meaningless Apply button beside the real one"
+    ok "the fingerprint verbs have buttons and are excluded from Apply"
+fi
+
+# The argument is an allowlist, not a passthrough: it becomes an argv element.
+#
+# ⚠ `|| rc=$?` ON EVERY ONE. This suite runs under `set -euo pipefail`, and a
+# refusal is a NON-ZERO exit — which is the thing being asserted. Written as a
+# bare call these three killed the script at the first one, silently: the run
+# stopped mid-file, printed no failure, and `| tail` handed back tail's own
+# status so it still looked green.
+refuses() {   # <description> <expected-status> <args...>
+    local desc=$1 want=$2 rc=0
+    shift 2
+    "$BIN" "$@" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq "$want" ]; then ok "$desc"; else
+        bad "$desc (exit $rc, wanted $want)"
+    fi
+}
+
+refuses "enroll refuses a finger fprintd does not know" 2 enroll not-a-finger
+refuses "enroll with no finger is refused"              2 enroll ""
+
+# ⛔ `forget <finger>` MUST NOT LOOK LIKE IT WORKS. fprintd removes a user's
+# prints together, so a per-finger spelling would be a command that silently
+# destroys nine more than it names.
+refuses "forget refuses a single finger, which it cannot do" 2 \
+        forget right-index-finger
+
 QML="$(dirname "$0")/../data/syn-settings.qml"
 if [ -f "$QML" ]; then
     grep -q 'config/synui/font.state' "$QML" \

@@ -46,6 +46,7 @@ static void usage(void)
 "  --rec network     interfaces, radios, and whether a firewall is up\n"
 "  --rec bluetooth   adapter, radio blocks, and what is paired\n"
 "  --rec kernel      every kernel on offer, which are installed, which runs\n"
+"  --rec fprint      the fingerprint reader, and which fingers are enrolled\n"
 "  --rec apps        the default application for each role, and WHICH file\n"
 "                    decided it — a choice and a fallback read the same\n"
 "                    everywhere else\n"
@@ -70,6 +71,9 @@ static void usage(void)
 "                            example of each: time-format, date-format\n"
 "  mode <connector> <mode>   set one, e.g. DP-3 2560x1440@144 (wlr-randr)\n"
 "  pkg install|remove <k>    add or remove a kernel, through synpkg\n"
+"  enroll <finger>           enrol a fingerprint (fprintd's token, e.g.\n"
+"                            right-index-finger); asks for several swipes\n"
+"  forget all                remove every fingerprint for this account\n"
 "  boot <kernel> [--loader <name>] --confirm\n"
 "                            make an installed kernel BOOTABLE: grub-mkconfig,\n"
 "                            kernel-install, or limine-mkinitcpio-hook,\n"
@@ -178,6 +182,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "modes")) return do_modes(rest_argc, rest);
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
+	if (!strcmp(cmd, "enroll")) return cmd_enroll(rest_argc > 0 ? rest[0] : NULL);
+	if (!strcmp(cmd, "forget")) return cmd_forget(rest_argc > 0 ? rest[0] : NULL);
 	if (!strcmp(cmd, "apps"))  return do_apps(rest_argc, rest);
 	if (!strcmp(cmd, "choices")) return do_choices(rest_argc, rest);
 	if (!strcmp(cmd, "boot"))  return do_boot(rest_argc, rest);
@@ -197,6 +203,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "apps"))      return pane_apps();
 		if (!strcmp(pane, "ai"))        return pane_ai();
 		if (!strcmp(pane, "speech"))    return pane_speech();
+		if (!strcmp(pane, "fprint"))    return pane_fprint();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);
 		return 2;
 	}
