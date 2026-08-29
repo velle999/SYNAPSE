@@ -1,0 +1,13 @@
+# ⚠ NOT SECRETS. A desktop application is a public OAuth client: whatever id it
+# is issued ships in the binary on every machine that installs it, and Google
+# and Microsoft both document that. PKCE is what makes that safe — see
+# src/oauth.c. They are build options rather than constants so a downstream
+# rebuild can substitute its own project instead of borrowing SynapseOS's.
+#
+# ⛔ EMPTY IS A SUPPORTED VALUE, NOT AN OVERSIGHT. A build with no id compiled
+# in falls back to demanding --client-id, which is what a rebuild that has not
+# registered anything should do — refuse, and say where to get one.
+option('google_client_id', type: 'string', value: '',
+       description: 'OAuth client id for `syn-cal account add-google` (public, not a secret)')
+option('microsoft_client_id', type: 'string', value: '',
+       description: 'OAuth client id for `syn-cal account add-microsoft` (public, not a secret)')

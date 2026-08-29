@@ -31,8 +31,8 @@ static void usage(FILE *f)
 "\n"
 "  syn-cal accounts                     what is set up\n"
 "  syn-cal account add <name> <url>     add a CalDAV account\n"
-"  syn-cal account add-google <name> --client-id ID\n"
-"  syn-cal account add-microsoft <name> --client-id ID\n"
+"  syn-cal account add-google <name>    add a Google account\n"
+"  syn-cal account add-microsoft <name> add a Microsoft 365 account\n"
 "  syn-cal account show <name>          its settings, and where its secret is\n"
 "  syn-cal account remove <name>        forget it, and its password\n"
 "  syn-cal login <name> [--user U]      sign in: a password prompt, or the\n"
@@ -51,6 +51,8 @@ static void usage(FILE *f)
 "  syn-cal week                         the next seven days\n"
 "  syn-cal events <name> <calendar>     the raw store, one calendar\n"
 "\n"
+"  --client-id ID   with account add-google/add-microsoft: use your own\n"
+"                   OAuth project instead of the one this build ships\n"
 "  --rec        one record per line, for a front end\n"
 "  --dry-run    with sync: decide everything, change nothing\n"
 "  --conflict=keep-both|remote|local    default keep-both, which loses nothing\n"
@@ -260,10 +262,31 @@ static int cmd_account_add(const char *name, const char *url, const char *user)
  * the account never has to be told its own email address. */
 #define GOOGLE_CALDAV "https://apidata.googleusercontent.com/caldav/v2/"
 
+/* The client id this build ships for a provider, or NULL if it ships none.
+ *
+ * ⚠ A PUBLIC CLIENT ID IS NOT A CREDENTIAL. Asking every person who installs a
+ * calendar to open a cloud console and register an application is not a
+ * security measure — it is the setup step that stops them using the calendar.
+ * Google and Microsoft both class a desktop application as a public client
+ * precisely so one id can ship to everyone, and PKCE is what makes an
+ * intercepted redirect worthless without the verifier. --client-id stays, for
+ * anyone who would rather their calendar traffic went through their own
+ * project than through SynapseOS's. */
+static const char *builtin_client_id(acc_kind_t kind)
+{
+	const char *id = kind == ACC_GOOGLE ? SYNCAL_GOOGLE_CLIENT_ID
+	                                    : SYNCAL_MICROSOFT_CLIENT_ID;
+	return id && *id ? id : NULL;
+}
+
 static int cmd_account_add_oauth(const char *name, acc_kind_t kind, const char *client_id)
 {
+	if (!client_id || !*client_id) client_id = builtin_client_id(kind);
 	if (!client_id || !*client_id) {
-		warn("this needs an OAuth client id, which only you can create.\n"
+		/* Only a rebuild that compiled no id in reaches this. It is still the
+		 * right answer for that build — but it is no longer what a person who
+		 * installed the distribution is asked to do. */
+		warn("this build ships no OAuth client id, so it needs one of yours.\n"
 		     "\n"
 		     "  %s: register an application of type 'Desktop app'.\n"
 		     "  There is no client SECRET to copy — a desktop application cannot keep\n"

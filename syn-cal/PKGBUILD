@@ -34,7 +34,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=8
+pkgrel=9
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -88,9 +88,29 @@ optdepends=('quickshell: the graphical window (syn-cal gui)'
 source=("syn-cal-0.1.0.tar.gz")
 sha256sums=('SKIP')
 
+# ── The OAuth client ids SynapseOS ships ────────────────────────────────────
+#
+# ⚠ PUBLIC, NOT SECRET. Google and Microsoft both class a desktop application as
+# a public client: its id ships in the binary on every machine, and PKCE is what
+# keeps an intercepted redirect worthless. Extracting these from the package is
+# expected and buys nothing.
+#
+# ⛔ THEY LIVE HERE, NOT IN meson_options.txt. A build from source with these
+# empty refuses `account add-google` and says where to register — which is the
+# right answer for a rebuild that is not SynapseOS. Only this package speaks for
+# the SynapseOS project, so only this package ships its project's ids.
+#
+# Google is the SynapseOS Cloud project 'synapseos-507023'. Microsoft is still
+# empty, so `account add-microsoft` continues to ask for --client-id until an
+# Azure app registration exists.
+_google_client_id='38371099927-5hgfu4tfpk5c1kbcpu48vs48mrf33qqk.apps.googleusercontent.com'
+_microsoft_client_id=''
+
 build() {
     cd "$srcdir/syn-cal-0.1.0"
-    meson setup build --prefix=/usr --buildtype=release
+    meson setup build --prefix=/usr --buildtype=release \
+        -Dgoogle_client_id="$_google_client_id" \
+        -Dmicrosoft_client_id="$_microsoft_client_id"
     meson compile -C build
 }
 

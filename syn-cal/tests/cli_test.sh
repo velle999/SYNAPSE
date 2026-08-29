@@ -191,20 +191,36 @@ rm -rf "$SYNCAL_HOME/work/Home"
 
 # ── the OAuth kinds, without needing an account anywhere ────────────────────
 
-"$S" account add-google gmail >/dev/null 2>&1
-[ $? -eq 2 ]
-check "add-google without a client id is refused" $?
-
-# ⛔ CAPTURED FIRST, NOT PIPED. `set -o pipefail` is on, and syn-cal exits 2
-# here on purpose — so `syn-cal ... | grep -q` reports 2 whether or not grep
-# matched, and the check fails for a command that did exactly the right thing.
-# See [[reference_pipefail_grep_q_sigpipe]]; this is the same trap.
-out=$("$S" account add-google gmail 2>&1)
-echo "$out" | grep -q "console.cloud.google.com"
-check "…and says where to get one" $?
+# ⚠ BOTH ANSWERS ARE CORRECT, AND WHICH ONE IS RIGHT IS A BUILD OPTION. A build
+# with google_client_id set must add the account with no flag at all — that is
+# the whole point of shipping an id. A build without one must still refuse and
+# say where to get one. Asserting only the refusal would turn the fix into a
+# test failure the day the id lands.
+#
+# ⛔ CAPTURED FIRST, NOT PIPED. `set -o pipefail` is on, and syn-cal exits 2 in
+# the no-id case on purpose — so `syn-cal ... | grep -q` reports 2 whether or
+# not grep matched, and the check fails for a command that did exactly the
+# right thing. See [[reference_pipefail_grep_q_sigpipe]]; this is the same trap.
+out=$("$S" account add-google gmail 2>&1); rc=$?
+if [ "$rc" -eq 0 ]; then
+	check "add-google needs no flag when this build ships an id" 0
+	grep -q "googleusercontent.com" "$SYNCAL_HOME/accounts.conf"
+	check "…and the shipped id was recorded" $?
+	"$S" account remove gmail >/dev/null
+else
+	[ "$rc" -eq 2 ]
+	check "add-google without a client id is refused" $?
+	echo "$out" | grep -q "console.cloud.google.com"
+	check "…and says where to get one" $?
+fi
 
 "$S" account add-google gmail --client-id 123.apps.googleusercontent.com >/dev/null
-check "add-google with one succeeds" $?
+check "add-google with an explicit id succeeds" $?
+
+# ⚠ THE OVERRIDE MUST WIN. A --client-id that is silently replaced by the
+# shipped one sends somebody's calendar through the wrong project.
+grep -q "client_id = 123.apps.googleusercontent.com" "$SYNCAL_HOME/accounts.conf"
+check "…and an explicit id beats the shipped one" $?
 
 # ⚠ AN OAUTH ACCOUNT HAS NO PASSWORD. Describing its token as one is a wrong
 # instruction as much as a wrong word: it sends people to `login --user`.

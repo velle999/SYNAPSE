@@ -14,6 +14,10 @@ conf = configuration_data()
 conf.set_quoted('SYNCAL_VERSION', meson.project_version())
 conf.set_quoted('SYNCAL_DATADIR',
                 get_option('prefix') / get_option('datadir') / 'syn-cal')
+# The shipped OAuth client ids. See meson_options.txt for why these are neither
+# secret nor mandatory.
+conf.set_quoted('SYNCAL_GOOGLE_CLIENT_ID', get_option('google_client_id'))
+conf.set_quoted('SYNCAL_MICROSOFT_CLIENT_ID', get_option('microsoft_client_id'))
 configure_file(output: 'config.h', configuration: conf)
 add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', language: 'c')
 
