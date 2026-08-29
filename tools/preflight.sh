@@ -1087,6 +1087,60 @@ check_leavings() {
     return 0
 }
 
+# ⛔ THE SOURCE TARBALL IS AN ALLOWLIST, AND WHAT IT OMITS IS SILENT. build-all.sh
+# names the files it collects; anything else is simply absent from the tarball
+# makepkg unpacks. A component therefore builds perfectly in its own tree and
+# fails inside makepkg, on a machine that is mid-update, with an error naming
+# something the developer never touched.
+#
+# meson_options.txt is the one that bites: meson.build calls get_option() for an
+# option the tarball no longer defines, and `meson setup` stops with
+# `Unknown option`. syn-cal shipped an OAuth client id that way and every
+# installed machine's syn-update died on it.
+check_tarball() {
+    local c f bad=$FINDINGS n=0
+    for f in meson_options.txt meson.options; do
+        grep -q "name/$f" build-all.sh || continue
+        n=$((n + 1))
+    done
+    if [ "$n" -eq 0 ]; then
+        fail tarball \
+            "build-all.sh collects no meson options file" \
+            "A component with meson_options.txt builds in its tree and fails" \
+            "inside makepkg with \"Unknown option\", mid-update." \
+            "Fix: add it to the dirs list in build_component()."
+        return 0
+    fi
+
+    n=0
+    while IFS= read -r c; do
+        c=$(dirname "$c")
+        n=$((n + 1))
+        # A meson.build that reads a custom option needs the file that defines
+        # it to travel too. get_option() also serves the builtins (prefix,
+        # datadir…), which need no options file — so the test is the FILE's
+        # presence, not the call's.
+        # ⚠ ONE FILE AT A TIME. `git ls-files --error-unmatch a b` fails when
+        # EITHER path is untracked, so asking about both at once reports every
+        # component that has one of them and not the other — which is all of
+        # them, since a project writes one name or the other, never both.
+        for f in meson_options.txt meson.options; do
+            [ -f "$c/$f" ] || continue
+            git ls-files --error-unmatch "$c/$f" >/dev/null 2>&1 || fail tarball \
+                "$c/$f is not tracked by git" \
+                "build-all.sh tars the working tree, so it builds here. But" \
+                "syn-update rebuilds from a fresh clone, where the file does not" \
+                "exist and meson stops on \"Unknown option\" — on somebody else's" \
+                "machine, mid-update." \
+                "Fix: git add it in this commit."
+        done
+    done < <(git ls-files '*/meson.build')
+
+    [ "$FINDINGS" -eq "$bad" ] && ok tarball \
+        "$n meson component(s) — every options file reaches the tarball"
+    return 0
+}
+
 # ── Run ──────────────────────────────────────────────────────
 
 case "$MODE" in
@@ -1105,6 +1159,7 @@ check_icons
 check_uifont
 check_scrollbar
 check_leavings
+check_tarball
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \

@@ -137,6 +137,14 @@ build_component() {
     [ -d "$name/src" ]     && dirs+=("$name/src/")
     [ -d "$name/include" ] && dirs+=("$name/include/")
     [ -f "$name/meson.build" ] && dirs+=("$name/meson.build")
+    # ⛔ THE OPTIONS FILE TRAVELS WITH meson.build. This list is an allowlist, so
+    # a file it does not name is simply absent from the tarball — and a
+    # meson.build calling get_option() for an option nothing defines fails at
+    # `meson setup` inside makepkg, long after the tree it was tested in built
+    # fine. syn-cal shipped a client id that way and the update died on
+    # `Unknown option`. preflight.sh gates this now.
+    [ -f "$name/meson_options.txt" ] && dirs+=("$name/meson_options.txt")
+    [ -f "$name/meson.options" ]     && dirs+=("$name/meson.options")
     [ -d "$name/data" ]    && dirs+=("$name/data/")
     [ -d "$name/config" ]  && dirs+=("$name/config/")
     [ -d "$name/systemd" ] && dirs+=("$name/systemd/")
