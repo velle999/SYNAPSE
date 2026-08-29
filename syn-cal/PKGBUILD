@@ -27,7 +27,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV accounts, two-way sync"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -48,6 +48,12 @@ depends+=('libxml2')
 
 # libsecret keeps the passwords and the OAuth tokens. glib2 comes with it.
 depends+=('libsecret' 'glib2')
+
+# json-c reads the token responses. They are untrusted input off a network, and
+# hand-rolling JSON string unescaping is where that goes wrong: a token holding
+# a backslash is unremarkable, a naive reader truncates it, and the result is an
+# authentication failure that looks like a revoked grant.
+depends+=('json-c')
 
 makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
 

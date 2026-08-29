@@ -21,6 +21,15 @@ typedef struct {
 	acc_kind_t kind;
 	char *url;              /* server or collection URL, as entered */
 	char *user;
+	/* ⚠ NOT A SECRET, DESPITE THE NAME. A desktop application is a public
+	 * client: whatever client id it is issued ships in the binary on every
+	 * machine that installs it. Google and Microsoft both say so, which is why
+	 * PKCE exists. It lives in accounts.conf with the URL. */
+	char *client_id;
+	/* When the access token stops working, as unix time. Also not a secret, and
+	 * keeping it out of the keyring means the expiry can be read without
+	 * unlocking anything. 0 means "never had one". */
+	long token_expiry;
 	acc_cal_t *cals;
 	size_t ncals;
 	bool insecure;          /* a lab server only; never written by the GUI */

@@ -18,6 +18,8 @@ add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', lang
 libcurl   = dependency('libcurl')
 libxml    = dependency('libxml-2.0')
 libsecret = dependency('libsecret-1')
+glib      = dependency('glib-2.0')
+jsonc     = dependency('json-c')
 
 engine = files(
   'src/util.c',
@@ -30,11 +32,11 @@ inc = include_directories('include')
 
 # The network half. Kept out of `engine` so the algorithm's tests still build
 # and run on a machine with neither library — see the note above.
-net = files('src/http.c', 'src/caldav.c', 'src/account.c')
+net = files('src/http.c', 'src/caldav.c', 'src/account.c', 'src/oauth.c')
 
 syncal_exe = executable('syn-cal', ['src/main.c'] + engine + net,
                         include_directories: inc,
-                        dependencies: [libcurl, libxml, libsecret],
+                        dependencies: [libcurl, libxml, libsecret, glib, jsonc],
                         install: true)
 
 foreach t : ['ics', 'store', 'sync']
@@ -45,8 +47,17 @@ endforeach
 
 caldav_test = executable('caldav_test', ['tests/caldav_test.c'] + engine + net,
                          include_directories: inc,
-                         dependencies: [libcurl, libxml, libsecret],
+                         dependencies: [libcurl, libxml, libsecret, glib, jsonc],
                          build_by_default: false)
+oauth_test = executable('oauth_test', ['tests/oauth_test.c'] + engine + net,
+                        include_directories: inc,
+                        dependencies: [libcurl, libxml, libsecret, glib, jsonc],
+                        build_by_default: false)
+test('oauth', find_program('tests/oauth_test.sh'),
+     args: [oauth_test.full_path()],
+     depends: oauth_test,
+     timeout: 90)
+
 test('cli', find_program('tests/cli_test.sh'),
      args: [syncal_exe.full_path()],
      depends: syncal_exe,

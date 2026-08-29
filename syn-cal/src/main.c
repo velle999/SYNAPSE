@@ -12,11 +12,13 @@
 #define _GNU_SOURCE
 #include "account.h"
 #include "caldav.h"
+#include "oauth.h"
 #include "sync.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 static void usage(FILE *f)
@@ -26,9 +28,12 @@ static void usage(FILE *f)
 "\n"
 "  syn-cal accounts                     what is set up\n"
 "  syn-cal account add <name> <url>     add a CalDAV account\n"
+"  syn-cal account add-google <name> --client-id ID\n"
+"  syn-cal account add-microsoft <name> --client-id ID\n"
 "  syn-cal account show <name>          its settings, and where its secret is\n"
 "  syn-cal account remove <name>        forget it, and its password\n"
-"  syn-cal login <name> [--user U]      set the password (prompted, never echoed)\n"
+"  syn-cal login <name> [--user U]      sign in: a password prompt, or the\n"
+"                                       browser for Google and Microsoft\n"
 "  syn-cal logout <name>                forget just the password\n"
 "  syn-cal discover <name>              ask the server which calendars exist\n"
 "  syn-cal calendars <name>             list them, and which are switched on\n"
@@ -86,9 +91,63 @@ static char *prompt_secret(const char *label)
 	return line;
 }
 
+/* ── OAuth ──────────────────────────────────────────────────────────────── */
+
+static const oauth_provider_t *provider_for(acc_kind_t k)
+{
+	if (k == ACC_GOOGLE) return oauth_google();
+	if (k == ACC_MICROSOFT) return oauth_microsoft();
+	return NULL;
+}
+
+static void store_tokens(accounts_t *a, account_t *e, oauth_tokens_t *t)
+{
+	char *err = NULL;
+	if (t->refresh_token && !secret_store(e->name, "refresh_token", t->refresh_token, &err))
+		warn("%s", err ? err : "the refresh token could not be stored");
+	free(err); err = NULL;
+	if (!secret_store(e->name, "access_token", t->access_token, &err))
+		warn("%s", err ? err : "the access token could not be stored");
+	free(err);
+
+	/* ⚠ SIXTY SECONDS EARLY. A token that expires while a sync is halfway
+	 * through fails partway, and the clocks involved are not the same clock. */
+	e->token_expiry = (long)time(NULL) + (t->expires_in > 60 ? t->expires_in - 60 : 0);
+	accounts_save(a);
+}
+
+/* Swap the refresh token for a fresh access token, and write both down. */
+static bool renew(accounts_t *a, account_t *e, char **err)
+{
+	const oauth_provider_t *p = provider_for(e->kind);
+	if (!p) { if (err) *err = xstrdup("that account kind does not use OAuth"); return false; }
+	if (!e->client_id) {
+		if (err) *err = xasprintf("'%s' has no OAuth client id — see: syn-cal account add-%s --help",
+		                          e->name, acc_kind_name(e->kind));
+		return false;
+	}
+
+	char *refresh = secret_fetch(e->name, "refresh_token", NULL);
+	if (!refresh) {
+		if (err) *err = xasprintf("'%s' is not signed in — run: syn-cal login %s", e->name, e->name);
+		return false;
+	}
+
+	oauth_tokens_t t;
+	memset(&t, 0, sizeof t);
+	bool ok = oauth_refresh(p, e->client_id, refresh, &t, err);
+	memset(refresh, 0, strlen(refresh));
+	free(refresh);
+	if (!ok) return false;
+
+	store_tokens(a, e, &t);
+	oauth_tokens_free(&t);
+	return true;
+}
+
 /* ── auth for an account ────────────────────────────────────────────────── */
 
-static bool auth_for(account_t *acc, http_auth_t *out, char **err)
+static bool auth_for(accounts_t *a, account_t *acc, http_auth_t *out, char **err)
 {
 	memset(out, 0, sizeof *out);
 	out->timeout_s = 30;
@@ -105,9 +164,18 @@ static bool auth_for(account_t *acc, http_auth_t *out, char **err)
 		return true;
 	}
 
+	/* ⚠ RENEWED BEFORE IT IS USED, not after a request has already failed. An
+	 * expired bearer answers 401 on every call of a sync, and a sync that
+	 * half-fails is harder to reason about than one that never started. */
+	if (acc->token_expiry && (long)time(NULL) >= acc->token_expiry) {
+		info("the access token for '%s' has expired; renewing", acc->name);
+		if (!renew(a, acc, err)) return false;
+	}
+
 	out->bearer = secret_fetch(acc->name, "access_token", NULL);
 	if (!out->bearer) {
-		if (err) *err = xasprintf("'%s' is not signed in yet", acc->name);
+		if (err) *err = xasprintf("'%s' is not signed in — run: syn-cal login %s",
+		                          acc->name, acc->name);
 		return false;
 	}
 	return true;
@@ -150,8 +218,10 @@ static int cmd_accounts(void)
 			size_t on = 0;
 			for (size_t c = 0; c < e->ncals; c++) if (e->cals[c].enabled) on++;
 			printf("%-14s %-9s %s\n", e->name, acc_kind_name(e->kind), e->url ? e->url : "");
-			printf("               %zu of %zu calendars on, password %s\n", on, e->ncals,
-			       secret_where(e->name, e->kind == ACC_CALDAV ? "password" : "access_token"));
+			bool oauth = e->kind != ACC_CALDAV;
+			printf("               %zu of %zu calendars on, %s %s\n", on, e->ncals,
+			       oauth ? "signed in:" : "password",
+			       secret_where(e->name, oauth ? "access_token" : "password"));
 		}
 	}
 	accounts_free(&a);
@@ -174,6 +244,44 @@ static int cmd_account_add(const char *name, const char *url, const char *user)
 
 	if (g_out != OUT_REC)
 		printf("Added '%s'.\n\n  syn-cal login %s\n  syn-cal discover %s\n", name, name, name);
+	return 0;
+}
+
+/* Google's CalDAV root. Discovery walks from here with the bearer token, so
+ * the account never has to be told its own email address. */
+#define GOOGLE_CALDAV "https://apidata.googleusercontent.com/caldav/v2/"
+
+static int cmd_account_add_oauth(const char *name, acc_kind_t kind, const char *client_id)
+{
+	if (!client_id || !*client_id) {
+		warn("this needs an OAuth client id, which only you can create.\n"
+		     "\n"
+		     "  %s: register an application of type 'Desktop app'.\n"
+		     "  There is no client SECRET to copy — a desktop application cannot keep\n"
+		     "  one, which is why this uses PKCE.\n"
+		     "\n"
+		     "  syn-cal account add-%s %s --client-id <the id>",
+		     kind == ACC_GOOGLE
+		       ? "https://console.cloud.google.com/apis/credentials — enable the Calendar API"
+		       : "https://portal.azure.com — App registrations, and grant Calendars.ReadWrite",
+		     acc_kind_name(kind), name);
+		return 2;
+	}
+
+	accounts_t a;
+	accounts_load(&a);
+	if (accounts_find(&a, name)) { warn("there is already an account called '%s'", name); accounts_free(&a); return 1; }
+
+	account_t *e = accounts_add(&a, name);
+	e->kind = kind;
+	e->client_id = xstrdup(client_id);
+	if (kind == ACC_GOOGLE) e->url = xstrdup(GOOGLE_CALDAV);
+	bool ok = accounts_save(&a);
+	accounts_free(&a);
+	if (!ok) { warn("could not write accounts.conf"); return 1; }
+
+	if (g_out != OUT_REC)
+		printf("Added '%s'.\n\n  syn-cal login %s\n", name, name);
 	return 0;
 }
 
@@ -201,6 +309,31 @@ static int cmd_login(const char *name, const char *user)
 	accounts_load(&a);
 	account_t *e = accounts_find(&a, name);
 	if (!e) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
+
+	const oauth_provider_t *p = provider_for(e->kind);
+	if (p) {
+		/* ⚠ THE BROWSER, NOT A PASSWORD PROMPT. Google and Microsoft both
+		 * refuse a password from a program, and asking for one anyway is how
+		 * an application teaches people to type their password into things. */
+		oauth_tokens_t t;
+		char *err = NULL;
+		bool ok = oauth_authorise(p, e->client_id, isatty(STDERR_FILENO), 0, &t, &err);
+		if (!ok) {
+			warn("%s", err ? err : "sign-in did not complete");
+			free(err);
+			accounts_free(&a);
+			return 1;
+		}
+		if (!t.refresh_token)
+			warn("the provider returned no refresh token, so this will need signing in "
+			     "again when it expires");
+		store_tokens(&a, e, &t);
+		oauth_tokens_free(&t);
+		if (g_out != OUT_REC)
+			printf("Signed in. Token: %s\n", secret_where(name, "access_token"));
+		accounts_free(&a);
+		return 0;
+	}
 
 	if (user) { free(e->user); e->user = xstrdup(user); accounts_save(&a); }
 	if (!e->user) {
@@ -235,7 +368,7 @@ static int cmd_discover(const char *name)
 
 	http_auth_t auth;
 	char *err = NULL;
-	if (!auth_for(e, &auth, &err)) { warn("%s", err); free(err); accounts_free(&a); return 1; }
+	if (!auth_for(&a, e, &auth, &err)) { warn("%s", err); free(err); accounts_free(&a); return 1; }
 
 	caldav_colls_t colls;
 	bool ok = caldav_discover(e->url, &auth, &colls, &err);
@@ -334,11 +467,23 @@ static int cmd_calendars(const char *name)
 	return 0;
 }
 
-static int sync_account(account_t *e, conflict_t policy, bool dry, sync_stats_t *tot)
+static int sync_account(accounts_t *a, account_t *e, conflict_t policy, bool dry, sync_stats_t *tot)
 {
+	/* ⛔ BEFORE THE CREDENTIALS, NOT AFTER. Microsoft removed CalDAV; Outlook
+	 * and 365 calendars are only reachable through Graph, which is a different
+	 * backend and is not built yet. Checked here because auth_for would
+	 * otherwise fail first and say "not signed in" — advice that leads nowhere,
+	 * since signing in would not have helped either. */
+	if (e->kind == ACC_MICROSOFT) {
+		warn("'%s' is a Microsoft account, and Microsoft removed CalDAV support.\n"
+		     "         Syncing it needs the Graph backend, which is not built yet.",
+		     e->name);
+		return 1;
+	}
+
 	http_auth_t auth;
 	char *err = NULL;
-	if (!auth_for(e, &auth, &err)) { warn("%s", err); free(err); return 1; }
+	if (!auth_for(a, e, &auth, &err)) { warn("%s", err); free(err); return 1; }
 
 	int bad = 0;
 	for (size_t i = 0; i < e->ncals; i++) {
@@ -402,7 +547,7 @@ static int cmd_sync(const char *only, conflict_t policy, bool dry)
 	for (size_t i = 0; i < a.n; i++) {
 		if (only && strcmp(a.e[i].name, only) != 0) continue;
 		ran++;
-		bad |= sync_account(&a.e[i], policy, dry, &tot);
+		bad |= sync_account(&a, &a.e[i], policy, dry, &tot);
 	}
 
 	if (only && ran == 0) { warn("no account called '%s'", only); accounts_free(&a); return 1; }
@@ -410,6 +555,10 @@ static int cmd_sync(const char *only, conflict_t policy, bool dry)
 	if (g_out != OUT_REC) {
 		unsigned moved = tot.pulled_new + tot.pulled_changed + tot.pushed_new + tot.pushed_changed;
 		if (dry) printf("Dry run: %u event%s would move.\n", moved, moved == 1 ? "" : "s");
+		/* ⛔ NOT AFTER A FAILURE. "Already up to date" is the most reassuring
+		 * possible way to say nothing happened, and saying it when an account
+		 * could not be reached is how a calendar quietly stops updating. */
+		else if (bad) printf("Some calendars did not sync — see the messages above.\n");
 		else if (!moved && !tot.conflicts && !tot.pulled_deleted && !tot.pushed_deleted)
 			printf("Already up to date.\n");
 		if (tot.conflicts)
@@ -456,6 +605,7 @@ static int cmd_events(const char *name, const char *cal)
 int main(int argc, char **argv)
 {
 	const char *user = NULL;
+	const char *client_id = NULL;
 	conflict_t policy = CONFLICT_KEEP_BOTH;
 	bool dry = false;
 
@@ -471,6 +621,8 @@ int main(int argc, char **argv)
 		if (!strcmp(v, "--version")) { printf("syn-cal %s\n", SYNCAL_VERSION); return 0; }
 		if (!strncmp(v, "--user=", 7)) { user = v + 7; continue; }
 		if (!strcmp(v, "--user") && i + 1 < argc) { user = argv[++i]; continue; }
+		if (!strncmp(v, "--client-id=", 12)) { client_id = v + 12; continue; }
+		if (!strcmp(v, "--client-id") && i + 1 < argc) { client_id = argv[++i]; continue; }
 		if (!strncmp(v, "--conflict=", 11)) {
 			const char *c = v + 11;
 			if (!strcmp(c, "keep-both")) policy = CONFLICT_KEEP_BOTH;
@@ -492,6 +644,10 @@ int main(int argc, char **argv)
 	if (!strcmp(c, "accounts"))                       rc = cmd_accounts();
 	else if (!strcmp(c, "account") && n >= 2) {
 		if (!strcmp(pos[1], "add") && n >= 4)         rc = cmd_account_add(pos[2], pos[3], user);
+		else if (!strcmp(pos[1], "add-google") && n >= 3)
+			rc = cmd_account_add_oauth(pos[2], ACC_GOOGLE, client_id);
+		else if (!strcmp(pos[1], "add-microsoft") && n >= 3)
+			rc = cmd_account_add_oauth(pos[2], ACC_MICROSOFT, client_id);
 		else if (!strcmp(pos[1], "remove") && n >= 3) rc = cmd_account_remove(pos[2]);
 		else if (!strcmp(pos[1], "show") && n >= 3)   rc = cmd_calendars(pos[2]);
 		else { warn("usage: syn-cal account add|remove|show ..."); rc = 2; }

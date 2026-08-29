@@ -144,6 +144,49 @@ check "syncing an account that does not exist fails" $?
 [ $? -ne 0 ]
 check "enabling a calendar that does not exist fails" $?
 
+# ── the OAuth kinds, without needing an account anywhere ────────────────────
+
+"$S" account add-google gmail >/dev/null 2>&1
+[ $? -eq 2 ]
+check "add-google without a client id is refused" $?
+
+# ⛔ CAPTURED FIRST, NOT PIPED. `set -o pipefail` is on, and syn-cal exits 2
+# here on purpose — so `syn-cal ... | grep -q` reports 2 whether or not grep
+# matched, and the check fails for a command that did exactly the right thing.
+# See [[reference_pipefail_grep_q_sigpipe]]; this is the same trap.
+out=$("$S" account add-google gmail 2>&1)
+echo "$out" | grep -q "console.cloud.google.com"
+check "…and says where to get one" $?
+
+"$S" account add-google gmail --client-id 123.apps.googleusercontent.com >/dev/null
+check "add-google with one succeeds" $?
+
+# ⚠ AN OAUTH ACCOUNT HAS NO PASSWORD. Describing its token as one is a wrong
+# instruction as much as a wrong word: it sends people to `login --user`.
+"$S" accounts | grep -q "signed in:"
+check "…and is described as signed in, not as having a password" $?
+
+"$S" account add-microsoft work365 --client-id abc >/dev/null
+check "add-microsoft succeeds" $?
+
+# ⛔ AND SYNCING IT SAYS WHY. Microsoft removed CalDAV; falling through to the
+# CalDAV client would 404 against a URL the user never typed. The message must
+# also not be "not signed in", which is advice that leads nowhere — signing in
+# would not have helped either.
+out=$("$S" sync work365 2>&1)
+[ $? -ne 0 ]
+check "syncing a Microsoft account fails" $?
+echo "$out" | grep -q "Graph backend"
+check "…naming Graph as what is missing, not the credentials" $?
+
+# ⛔ AND A FAILED SYNC MUST NOT CLAIM SUCCESS. "Already up to date" after an
+# error is the most reassuring possible way to say nothing happened.
+! echo "$out" | grep -q "Already up to date"
+check "…and does not report 'Already up to date'" $?
+
+"$S" account remove gmail >/dev/null
+"$S" account remove work365 >/dev/null
+
 "$S" account remove work >/dev/null
 [ ! -f "$T/store/state/secret.work.password" ]
 check "removing an account takes its stored password with it" $?
