@@ -270,7 +270,24 @@ WidgetFrame {
                 ctx.font = "600 " + Math.round(r * 0.15) + "px " + Theme.fontFamily
                 ctx.textAlign = "center"
                 ctx.textBaseline = "middle"
-                ctx.fillStyle = Qt.rgba(ink.r, ink.g, ink.b, 0.85)
+                /*
+                 * The numerals carry the accent. This is the only face with
+                 * numbers on it, so it is the only place the change applies —
+                 * the other three mark their hours with ticks, and those are
+                 * already ink on purpose so the hands can be read against them.
+                 *
+                 * ⚠ accentInk, NOT accent, for the reason given where it is
+                 * bound above: this is drawn over the wallpaper, and accentInk
+                 * is the accent already corrected against that backdrop.
+                 *
+                 * ⚠ AND 0.95, NOT THE 0.85 THE INK USED. accentOn() corrects
+                 * the colour to a contrast ratio AT FULL ALPHA; drawing it
+                 * thinner blends it back toward the background and gives away
+                 * some of what the correction just bought. These are the
+                 * smallest marks on the dial — r * 0.15 — and small text needs
+                 * more of that ratio, not less.
+                 */
+                ctx.fillStyle = Qt.rgba(accent.r, accent.g, accent.b, 0.95)
                 /*
                  * ⚠ 0.70, NOT 0.80. The numerals are CENTRED on this radius and
                  * they are not all the same width: "IIII" and "VIII" are four

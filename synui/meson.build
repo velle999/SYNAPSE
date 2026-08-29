@@ -1604,6 +1604,16 @@ test('lock_layout', lock_layout_t,
 # a DESKTOP-shaped UPower with this machine's own measured numbers, not a
 # missing service — otherwise it would pass on modules keyed to the service
 # existing rather than to the device being a battery.
+# `analog_face`: the analog clock's numerals carry the accent, and the other
+# three faces' hour marks do not. Source-level, because the thing it guards is a
+# choice of colour SOURCE — accentInk against the wallpaper rather than the raw
+# accent — and that is visible in the file and invisible in a screenshot taken
+# over a backdrop where the two happen to agree.
+analog_face_t = find_program('tests/analog_face.sh')
+test('analog_face', analog_face_t,
+     args    : [meson.current_source_dir() / 'quickshell'],
+     timeout : 60)
+
 battery_surfaces_t = find_program('tests/battery_surfaces.sh')
 test('battery_surfaces', battery_surfaces_t,
      args    : [synui_exe.full_path(),
