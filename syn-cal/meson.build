@@ -15,8 +15,9 @@ conf.set_quoted('SYNCAL_VERSION', meson.project_version())
 configure_file(output: 'config.h', configuration: conf)
 add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', language: 'c')
 
-libcurl = dependency('libcurl')
-libxml  = dependency('libxml-2.0')
+libcurl   = dependency('libcurl')
+libxml    = dependency('libxml-2.0')
+libsecret = dependency('libsecret-1')
 
 engine = files(
   'src/util.c',
@@ -29,7 +30,12 @@ inc = include_directories('include')
 
 # The network half. Kept out of `engine` so the algorithm's tests still build
 # and run on a machine with neither library — see the note above.
-net = files('src/http.c', 'src/caldav.c')
+net = files('src/http.c', 'src/caldav.c', 'src/account.c')
+
+syncal_exe = executable('syn-cal', ['src/main.c'] + engine + net,
+                        include_directories: inc,
+                        dependencies: [libcurl, libxml, libsecret],
+                        install: true)
 
 foreach t : ['ics', 'store', 'sync']
   exe = executable(t + '_test', ['tests/' + t + '_test.c'] + engine,
@@ -39,8 +45,13 @@ endforeach
 
 caldav_test = executable('caldav_test', ['tests/caldav_test.c'] + engine + net,
                          include_directories: inc,
-                         dependencies: [libcurl, libxml],
+                         dependencies: [libcurl, libxml, libsecret],
                          build_by_default: false)
+test('cli', find_program('tests/cli_test.sh'),
+     args: [syncal_exe.full_path()],
+     depends: syncal_exe,
+     timeout: 120)
+
 test('caldav', find_program('tests/caldav_test.sh'),
      args: [caldav_test.full_path()],
      depends: caldav_test,

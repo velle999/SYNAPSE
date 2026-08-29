@@ -1040,6 +1040,7 @@ SEL_COMPONENTS=(
     "comp_synsettings|1|1|core|syn-settings|Settings|system settings"
     "comp_syndisks|1|1|core|syn-disks|Disks|disks + format"
     "comp_synedit|1|1|core|syn-edit|Editor|the text editor"
+    "comp_syncal|1|1|core|syn-cal|Calendar|calendar + sync"
     "comp_synupdate|1|1|core|syn-update|Updates|receives fixes"
     "comp_syn|1|1|core|syn|syn|top-level CLI"
     "comp_synmodel|1|1|core|syn-model|Models|fetch AI models"

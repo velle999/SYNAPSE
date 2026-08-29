@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
+       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
 for _c in "${ONLY[@]}"; do
@@ -405,6 +405,19 @@ build_component syn-settings
 # matters here more than anywhere else in this script, because this is the one
 # component whose tests run as part of a build that also calls pacman.
 build_component syn-disks
+
+# syn-cal — the calendar and schedule planner. meson C, no front-end yet.
+#
+# ⚠ Its check() starts a Radicale on a loopback port and syncs against it. That
+# is deliberate and it is the only way the CalDAV half is worth anything: the
+# in-memory remote proves the algorithm agrees with itself, and a real server is
+# what found that a percent-encoded UID in an href is refused 403 where the same
+# event under a plain name is accepted 201. The suites skip where radicale is
+# absent, so a build host without it still builds the component.
+#
+# ⚠ DBUS is pointed at a dead socket by the tests, so libsecret cannot write
+# into the build user's real login keyring.
+build_component syn-cal
 
 # syn-edit — the text editor. Same shape again: meson C plus a quickshell
 # front-end, built from a source tarball the generic collector above assembles

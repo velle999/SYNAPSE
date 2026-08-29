@@ -29,6 +29,8 @@ Usage:
                           syn game steam, syn game -- wine foo.exe
   syn game hud on|off     MangoHud in every Vulkan client, or only in games
                           (off by default; status to ask)
+  syn cal [cmd...]        Calendars: sync with no arguments, or pass through
+                          (syn cal accounts, syn cal discover work)
   syn install             Install SynapseOS to disk
   syn update [check|apply]  Update SynapseOS itself from git
   syn help                This help
@@ -350,6 +352,10 @@ case "${1:-help}" in
                         -*)   exec synui-game-run "$@" ;;
                         *)    exec synui-game-run -- "$@" ;;
                     esac ;;
+    # A straight pass-through, like `syn update`. With no arguments it syncs,
+    # because that is what somebody typing `syn cal` on a machine with accounts
+    # set up wants — the same reasoning as `syn pkg` opening the browser.
+    cal)            shift; [ $# -eq 0 ] && exec syn-cal sync; exec syn-cal "$@" ;;
     install)        exec syn-install ;;
     update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;

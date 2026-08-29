@@ -154,6 +154,7 @@ synfiles
 # from /sys/class/block, so it works in a rescue boot with nothing running;
 # everything that changes something is delegated to udisks2, smartmontools or
 # polkit. Formatting anything on the disk holding / is refused outright.
+syn-cal
 syn-disks
 syn-edit
 syn-confine

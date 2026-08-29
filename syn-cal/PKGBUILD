@@ -1,0 +1,91 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-cal — the SynapseOS calendar and schedule planner.
+#
+# Two-way sync with CalDAV accounts — Nextcloud, Fastmail, iCloud, Radicale,
+# Baikal, and Google, which is CalDAV behind OAuth. The store is a vdir: one
+# .ics per event in a folder per calendar, the layout vdirsyncer and khal
+# already write, so the data is readable by anything that can read a folder.
+#
+# ⚠ THE HALF THAT CAN LOSE DATA IS THE HALF WITH THE TESTS. Two-way sync fails
+# combinatorially — both sides changed, one deleted while the other edited, a
+# precondition landing between the listing and the upload — and the rule the
+# engine exists to obey is that an edit is never lost without saying so. When
+# both sides changed the same event, BOTH are kept: the server's version keeps
+# the UID and the local one is re-filed under a UID derived from it. "Last
+# writer wins" is data loss with a reassuring name.
+#
+# ⛔ NO PASSWORD OR TOKEN IS IN accounts.conf. They go to the keyring through
+# libsecret, and every store is READ BACK before it is called a success: on a
+# machine with no keyring daemon the whole stack reports success and stores
+# nothing. Where there is genuinely no keyring the fallback is a 0600 file and
+# the user is told, in those words — a silent fallback is the same lie one step
+# later.
+pkgname=syn-cal
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS calendar and schedule planner: CalDAV accounts, two-way sync"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+depends=('glibc')
+
+# curl for the transport. Writing HTTPS by hand is not a thing anyone should do
+# and TLS least of all; this is the one dependency that is not a judgement call.
+depends+=('curl')
+
+# libxml2 parses the multistatus bodies CalDAV answers with. It looks regular
+# enough to tempt a strstr, and then a namespace prefix that is D: on one server
+# and d: on the next silently returns the wrong path — after which the client
+# writes an event over something else. It is untrusted input off a network, so
+# it gets a real parser. Nothing is added by this: libical already needs it.
+depends+=('libxml2')
+
+# libsecret keeps the passwords and the OAuth tokens. glib2 comes with it.
+depends+=('libsecret' 'glib2')
+
+makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
+
+# ⚠ radicale IS A TEST DEPENDENCY AND A REAL ONE. The in-memory remote proves
+# the sync algorithm and nothing else — it answers exactly what the client
+# expects, which is the one thing a real server will not do. Testing against
+# Radicale is what found that a percent-encoded UID in an href is refused 403 by
+# a real stack while the same event under a plain name is accepted 201. Without
+# it those suites skip, and the component still builds.
+checkdepends=('radicale')
+
+optdepends=('gnome-keyring: somewhere to keep passwords that is not a file'
+            'kwallet: the same, on a KDE session'
+            'radicale: a CalDAV server of your own to sync against')
+
+source=("syn-cal-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syn-cal-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syn-cal-0.1.0"
+    # ⚠ Every suite runs against a scratch store under a mktemp -d that the
+    # test removes, pointed at by SYNCAL_HOME — a calendar's tests that could
+    # reach the real store would be the most dangerous file in this component.
+    # The two that talk to a server start their own Radicale on a loopback port
+    # with its own storage, and skip rather than fail where radicale is absent:
+    # a suite that goes red on a healthy machine is one people learn to ignore.
+    # DBUS is pointed at a dead socket so libsecret cannot write into the
+    # builder's real login keyring.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syn-cal-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

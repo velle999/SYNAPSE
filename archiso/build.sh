@@ -254,6 +254,13 @@ PACKAGES=(
     # exactly when somebody needs to see what disks a machine has. Builds
     # offline: meson and libc.
     syn-disks
+    # syn-cal — the calendar. Must be ON the ISO for the same reason syn-disks
+    # must: syn-install names it in SEL_CORE, and a package the installer asks
+    # for but the local repo does not carry fails the install at pacman. It has
+    # no use in the live session — a calendar with no account is an empty
+    # folder — but the installer's list is what decides this, not usefulness.
+    # Builds offline: meson, libc, curl, libxml2, libsecret.
+    syn-cal
     # syn-edit — the text editor. Must be ON the ISO for the same reason
     # syn-disks must: syn-install names it in SEL_CORE, and a package the
     # installer asks for but the local repo does not carry fails the install at

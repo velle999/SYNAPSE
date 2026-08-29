@@ -112,6 +112,7 @@
     synsettings = true;
     syndisks   = true;
     synedit    = true;
+    syncal     = true;   # the calendar and schedule planner
     synupdate  = true;   # WITHOUT THIS the machine can never receive a fix
     syn        = true;   # the top-level `syn` CLI
     synmodel   = true;   # `syn model download`
