@@ -202,6 +202,14 @@ int pane_bluetooth(void);
  * The fingerprint reader: what fprintd sees, what is enrolled, and enrolling.
  * ⚠ Untested against real hardware on the build box — see the file header. */
 int pane_fprint(void);
+
+/* ── assistant.c ──
+ * Which service the assistant talks to, and its API key. Drives `vibe`; never
+ * reads a key's value, and never takes one in argv. */
+int pane_assistant(void);
+int assistant_choices(void);
+int assistant_set_backend(const char *id);
+int assistant_key(const char *provider);
 int cmd_enroll(const char *finger);
 int cmd_forget(const char *what);
 int pane_kernel(void);

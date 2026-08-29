@@ -121,6 +121,9 @@ int do_set(int argc, char **argv)
 		return refuse("value rejected: letters, digits, . _ - / + only, "
 		              "and it may not begin with '-'");
 
+	if (!strcmp(key, "assistant-backend"))
+		return assistant_set_backend(argc > 1 ? argv[1] : NULL);
+
 	if (!strcmp(key, "keymap")) {
 		char *a[] = { (char *)"localectl", (char *)"set-keymap",
 		              (char *)val, NULL };

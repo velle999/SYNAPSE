@@ -394,6 +394,11 @@ int do_choices(int argc, char **argv)
 		return 0;
 	}
 
+	/* Lives in assistant.c, which owns the list and asks vibe which is
+	 * current — one place that knows the backends, not two. */
+	if (!strcmp(key, "assistant-backend"))
+		return assistant_choices();
+
 	if (!strcmp(key, "date-format")) {
 		char cur[64];
 		clock_get("date", "iso", cur, sizeof cur);

@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=22
+pkgrel=23
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -74,6 +74,13 @@ package() {
     # and on a miss it runs the app_id AS A COMMAND.
     install -Dm644 data/vibe.qml     "$pkgdir/usr/share/vibe/vibe.qml"
     install -Dm644 data/vibe.desktop "$pkgdir/usr/share/applications/vibe.desktop"
+
+    # ⛔ AND THE ICON THE ENTRY ABOVE HAS ALWAYS NAMED. vibe.desktop has said
+    # `Icon=vibe` since the assistant got a window and nothing ever shipped a
+    # `vibe` icon, so the dock, the start menu and the GNOME app grid all drew
+    # whatever they use for an application that has none.
+    install -Dm644 data/vibe.svg \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/vibe.svg"
 
     # The hands-free listener, as a user unit. ⛔ Shipped, never enabled: it
     # holds a microphone open, and an update that started it would be the worst

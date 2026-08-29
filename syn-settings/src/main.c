@@ -47,6 +47,7 @@ static void usage(void)
 "  --rec bluetooth   adapter, radio blocks, and what is paired\n"
 "  --rec kernel      every kernel on offer, which are installed, which runs\n"
 "  --rec fprint      the fingerprint reader, and which fingers are enrolled\n"
+"  --rec assistant   which service the assistant talks to, and its API key\n"
 "  --rec apps        the default application for each role, and WHICH file\n"
 "                    decided it — a choice and a fallback read the same\n"
 "                    everywhere else\n"
@@ -184,6 +185,9 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
 	if (!strcmp(cmd, "enroll")) return cmd_enroll(rest_argc > 0 ? rest[0] : NULL);
 	if (!strcmp(cmd, "forget")) return cmd_forget(rest_argc > 0 ? rest[0] : NULL);
+	/* The key comes in SYN_SETTINGS_SECRET, never in argv — see assistant.c. */
+	if (!strcmp(cmd, "assistant-key"))
+		return assistant_key(rest_argc > 0 ? rest[0] : NULL);
 	if (!strcmp(cmd, "apps"))  return do_apps(rest_argc, rest);
 	if (!strcmp(cmd, "choices")) return do_choices(rest_argc, rest);
 	if (!strcmp(cmd, "boot"))  return do_boot(rest_argc, rest);
@@ -204,6 +208,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "ai"))        return pane_ai();
 		if (!strcmp(pane, "speech"))    return pane_speech();
 		if (!strcmp(pane, "fprint"))    return pane_fprint();
+		if (!strcmp(pane, "assistant")) return pane_assistant();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);
 		return 2;
 	}

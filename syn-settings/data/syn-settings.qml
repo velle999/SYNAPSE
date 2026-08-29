@@ -261,6 +261,7 @@ FloatingWindow {
         { id: "apps",      label: "Default Apps", blurb: "what opens each kind of file — and whether anybody actually chose it" },
         { id: "kernel",    label: "Kernel",   blurb: "every kernel on offer, which are installed, and which one you booted" },
         { id: "ai",        label: "AI",       blurb: "the backend switch, the units that can restart it behind your back, and which model is on disk" },
+        { id: "assistant", label: "Assistant", blurb: "which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key" },
         { id: "fprint",    label: "Fingerprint", blurb: "the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is" },
         { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
@@ -438,7 +439,17 @@ FloatingWindow {
         // later cannot silently shift what the editor edits.
         const vi = root.cols.indexOf("value")
         root.selValue = vi >= 0 && vi < r.length ? r[vi] : (r[1] || "")
-        editField.text = root.selValue
+        /*
+         * ⛔ A SECRET FIELD STARTS EMPTY. Every other row seeds the editor with
+         * its current value so an edit is a correction rather than a retype —
+         * but a key row's `value` is where the key LIVES ("keyring", "file"),
+         * never the key itself, and seeding it would put that word in the box
+         * and then store it AS the key on the next Save.
+         *
+         * ⚠ It is also what makes an empty box mean "remove": the field can
+         * only be empty deliberately.
+         */
+        editField.text = root.actionHas(a, "secret") ? "" : root.selValue
 
         root.appList = []
         if (root.actionHas(a, "app")) {
@@ -574,6 +585,10 @@ FloatingWindow {
             root.applying = false
             root.workOpen = false
             workDelay.stop()
+            // ⛔ THE SECRET DIES WITH THE CHILD. This Process object outlives
+            // every write in this window, so a key left on its environment
+            // would be handed to the next unrelated command the pane runs.
+            root.clearSecret()
             // A non-zero exit ALWAYS leaves something on screen. This was once
             // gated on the status line being empty — which it never was, since
             // runWrite() had just put the note there — so a write could fail
@@ -589,6 +604,23 @@ FloatingWindow {
     // `note` is the short label — it is what the status bar and the panel title
     // say. `detail` is the paragraph the panel adds underneath, for the writes
     // where "this takes minutes" is the thing worth knowing.
+    /*
+     * ⛔ A CREDENTIAL NEVER GOES IN argv. /proc/<pid>/cmdline is world-readable
+     * and /proc/<pid>/environ is 0400, so an API key crosses into the helper in
+     * the environment — which reads it once and unsets it (see assistant.c).
+     * Written as its own function rather than an argument to runWrite() so
+     * there is no path where a caller passes a secret and forgets the flag.
+     *
+     * ⚠ AND IT IS CLEARED FROM THE ENVIRONMENT AFTERWARDS. writeProc is one
+     * long-lived object reused for every write in this window; leaving the key
+     * on it would hand it to the next unrelated command this pane runs.
+     */
+    function runSecretWrite(args, secret, note) {
+        if (root.applying) return
+        writeProc.environment = ({ "SYN_SETTINGS_SECRET": secret })
+        root.runWrite(args, note)
+    }
+
     function runWrite(args, note, detail) {
         if (root.applying) return
         root.applying = true
@@ -606,6 +638,10 @@ FloatingWindow {
         writeProc.command = [root.bin].concat(args)
         writeProc.running = true
     }
+
+    // Belt and braces for the above: whatever the last write was, the next one
+    // starts with nothing of the previous one's secret on it.
+    function clearSecret() { writeProc.environment = ({}) }
 
     // ── Changing boot configuration ─────────────────────────────────────────
     //
@@ -1159,6 +1195,7 @@ FloatingWindow {
                           verticalCenter: parent.verticalCenter }
                 width: 220; height: 26; radius: 4
                 visible: root.actionHas(root.selAction, "set")
+                      || root.actionHas(root.selAction, "secret")
                 color: root.cBg
                 border { width: 1; color: editField.activeFocus ? root.cAccent : root.wash(0.25) }
                 clip: true
@@ -1167,6 +1204,11 @@ FloatingWindow {
                     id: editField
                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                     verticalAlignment: TextInput.AlignVCenter
+                    // ⚠ MASKED FOR A KEY, and not merely as manners: this
+                    // window is the thing people screenshot when they ask for
+                    // help with it.
+                    echoMode: root.actionHas(root.selAction, "secret")
+                              ? TextInput.Password : TextInput.Normal
                     color: root.cText
                     font { family: root.uiFont; pixelSize: root.ui(12) }
                     selectByMouse: true
@@ -1184,7 +1226,7 @@ FloatingWindow {
                 SettingsButton {
                     id: applyBtn
                     visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice",
-                              "enroll", "forget"]
+                              "enroll", "forget", "secret"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
@@ -1233,6 +1275,31 @@ FloatingWindow {
                     label: "Forget all fingerprints"
                     onGo: root.runWrite(["forget", "all"],
                                         "removing every fingerprint…")
+                }
+
+                /*
+                 * An API key. The field above it is masked and the value never
+                 * becomes an argument — runSecretWrite() puts it in the
+                 * environment, which is owner-readable where argv is not.
+                 *
+                 * ⚠ AN EMPTY BOX MEANS FORGET, and the label says which it is
+                 * about to do rather than leaving you to find out. Clearing a
+                 * key is the same gesture as changing one, so it is the same
+                 * button: a separate "Remove" beside a field you have just
+                 * emptied is two ways to say one thing.
+                 */
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "secret")
+                    label: editField.text === "" ? "Remove key" : "Save key"
+                    onGo: {
+                        const prov = root.actionArgFor(root.selAction, "secret")
+                        root.runSecretWrite(["assistant-key", prov],
+                                            editField.text,
+                                            editField.text === ""
+                                                ? "removing the " + prov + " key…"
+                                                : "storing the " + prov + " key…")
+                        editField.text = ""
+                    }
                 }
 
                 // An interface: up or down. Wired included — a desktop whose

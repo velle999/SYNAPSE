@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- ⚠ EVERY COMMENT IN THIS FILE LIVES INSIDE <svg>, and has to. gdk-pixbuf
+       identifies an image by SNIFFING ITS FIRST 256 BYTES for a format
+       signature, and librsvg's signature is the literal "<svg". A header
+       comment above the root pushes it past byte 256 and the file stops being
+       an SVG as far as GTK is concerned — a blank square in the GNOME app grid,
+       with no parse error and no warning. Invisible on synui and KDE, because
+       Qt parses the XML properly instead of sniffing it. preflight's `icons`
+       gate measures the offset; see the same note in syn-settings.svg.
+
+       ⛔ AND UNTIL NOW THERE WAS NO FILE HERE AT ALL. vibe.desktop has said
+       `Icon=vibe` since the assistant got a window, and nothing ever shipped a
+       `vibe` icon — so the dock, the start menu and the app grid all fell back
+       to whatever generic they use for an application with no icon. The gate
+       could not catch it either: it checks the SVGs it FINDS, so an icon that
+       does not exist is an icon it never looks at.
+
+       The mark is a SPEECH BUBBLE because that is what the bar button already
+       is (Assistant.qml, Nerd Font F075) — the same thing in two places should
+       look like the same thing. The purple is the family's, not this app's:
+       every SynapseOS icon is #a78bfa on #1b1030 and they are told apart by
+       their shape, not their hue. -->
+
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cd6"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="6" y="6" width="36" height="36" rx="7" fill="url(#plate)"/>
+
+  <!-- The bubble, with its tail on the lower left the way the glyph draws it.
+       Filled rather than stroked: at 16px — which is the size the dock and the
+       start menu actually render — a 2px outline closes up into a blob, and a
+       solid shape stays a shape all the way down. -->
+  <path d="M14 13 H34 a4 4 0 0 1 4 4 V27 a4 4 0 0 1 -4 4 H23
+           l-6.5 6 V31 H14 a4 4 0 0 1 -4 -4 V17 a4 4 0 0 1 4 -4 Z"
+        fill="#1b1030"/>
+
+  <!-- Three dots: the assistant thinking, and the one detail that survives
+       being shrunk. Teal is the family's highlight — the same #4ec9b0 the
+       settings icon uses for the live end of each slider. -->
+  <g fill="#4ec9b0">
+    <circle cx="17.5" cy="22" r="2.1"/>
+    <circle cx="24"   cy="22" r="2.1"/>
+    <circle cx="30.5" cy="22" r="2.1"/>
+  </g>
+</svg>

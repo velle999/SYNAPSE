@@ -15,6 +15,26 @@ fails=0
 
 ok()   { printf '  ok   %s\n' "$1"; }
 bad()  { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
+
+# Assert that a command REFUSES, with the status it should refuse with.
+#
+# ⚠ `|| rc=$?` IS THE WHOLE POINT. This suite runs under `set -euo pipefail`,
+# and a refusal is a non-zero exit — the very thing being asserted. Written as a
+# bare call it kills the run at the first check, silently: the script stops
+# mid-file, prints no failure, and a `| tail` hands back tail's own status so it
+# still looks green.
+#
+# ⚠ AND IT LIVES HERE, beside ok/bad, not beside its first caller. Defined
+# further down it is simply "command not found" for everything above it — which
+# under `set -e` is the same silent early exit wearing a different hat.
+refuses() {   # <description> <expected-status> <args...>
+    local desc=$1 want=$2 rc=0
+    shift 2
+    "$BIN" "$@" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq "$want" ]; then ok "$desc"; else
+        bad "$desc (exit $rc, wanted $want)"
+    fi
+}
 # Named, not silent: a check that does not apply on this machine has to say so,
 # or a suite that quietly stopped covering something still prints all green.
 skip() { printf '  --   %s\n' "$1"; }
@@ -74,7 +94,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|unavailable:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -87,7 +107,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai speech fprint; do
+for pane in display region network bluetooth power kernel apps time ai speech fprint assistant; do
     check_actions "$pane"
 done
 
@@ -493,10 +513,26 @@ printf 'menuentry x {}\n' > "$bootfx/multi/boot/grub/grub.cfg"
 # The pure kernel-install layout. This entry names neither "vmlinuz" nor the
 # package — only the kernel RELEASE — so matching on the image filename cannot
 # find it at all. It is why the release is carried alongside.
-run_rel=$(cat /usr/lib/modules/*/pkgbase >/dev/null 2>&1 && \
-          for d in /usr/lib/modules/*/; do
-              [ -f "$d/pkgbase" ] && [ "$(cat "$d/pkgbase")" = linux ] && basename "$d"
-          done | head -1)
+# ⛔ THIS ASSIGNMENT USED TO KILL THE SUITE, SILENTLY, ON HALF THE MACHINES IT
+# RAN ON. The loop's last command was `[ "$(cat pkgbase)" = linux ]`, so its
+# exit status is the status of the LAST directory examined — and under
+# `pipefail` a failing left-hand side fails the whole pipeline, which fails the
+# command substitution, which under `set -e` ends the script on an assignment.
+#
+# It depends entirely on what /usr/lib/modules happens to be sorted like: with
+# only `linux` installed the last iteration passes and nothing is wrong. Install
+# linux-cachyos beside it — 7.1.8-1-cachyos sorts after 7.1.11-arch1-1 — and the
+# last iteration is the one that does not match, the run stops HERE, and the
+# ~120 checks below it simply never happen. No failure, no message: the suite
+# prints everything above this line and exits 0 through a `| tail`.
+#
+# `continue` rather than `&&` so no iteration ends on a false test, and a
+# trailing `|| true` because the answer being empty is a legitimate state.
+run_rel=$(for d in /usr/lib/modules/*/; do
+              [ -f "$d/pkgbase" ] || continue
+              [ "$(cat "$d/pkgbase")" = linux ] || continue
+              basename "$d"
+          done | head -1) || true
 if [ -n "${run_rel:-}" ]; then
     printf 'title SynapseOS\nlinux /b153/%s/linux\ninitrd /b153/%s/initrd\n' \
         "$run_rel" "$run_rel" > "$bootfx/bls/boot/loader/entries/b153-$run_rel.conf"
@@ -1310,6 +1346,51 @@ esac
 # BINDINGS on every Text. A bare `font.pixelSize: 13` or a literal family is the
 # regression, and it fails silently — the window just stops moving with the
 # desktop, which is how syn-arsenal and synpkg behaved until 2026-08-11.
+# ── the assistant's backend and its API key ─────────────────────────────────
+#
+# `vibe provider` and `vibe key` have worked from a terminal for a while; this
+# is the half that makes them reachable. velle, 2026-08-28: "add gui setup for
+# cloud backends".
+QMLA="$(dirname "$0")/../data/syn-settings.qml"
+if [ -f "$QMLA" ]; then
+    grep -q 'actionHas(root.selAction, "secret")' "$QMLA" \
+        || bad "the QML has no button for the secret verb — the key row would
+       highlight and nothing would happen"
+
+    # ⛔ THE KEY MUST NOT REACH argv. /proc/<pid>/cmdline is world-readable;
+    # /proc/<pid>/environ is 0400. A `set`-style write would put a live API key
+    # where every account on the machine can read it.
+    grep -q 'SYN_SETTINGS_SECRET' "$QMLA" \
+        || bad "the key is not passed in the environment — if it went through
+       runWrite() it would be an argv element, and world-readable while it ran"
+    grep -q 'runSecretWrite(\["assistant-key"' "$QMLA" \
+        || bad "the key button does not use runSecretWrite()"
+
+    # ⛔ AND IT MUST NOT BE ON SCREEN, in a window people screenshot to ask for
+    # help with it.
+    grep -q 'TextInput.Password' "$QMLA" \
+        || bad "the key field is not masked"
+
+    # ⛔ NOR PREFILLED. A key row's `value` is where the key LIVES — "keyring",
+    # "file" — never the key. Seeded into the box, the next Save stores that
+    # word AS the key.
+    grep -q 'actionHas(a, "secret") ? "" : root.selValue' "$QMLA" \
+        || bad "the secret field is prefilled from the row's value — which is
+       the word 'keyring', and Save would store it as the key"
+
+    grep -qE '"enroll", *"forget", *"secret"' "$QMLA" \
+        || bad "secret is not in applyBtn's exclusion list — the row would draw
+       a meaningless second Apply beside Save key"
+    ok "the key field is masked, empty, and never passed in argv"
+fi
+
+# The provider list is vibe's, and a name it does not know is a dead button.
+refuses "assistant-backend refuses a provider vibe does not know" 2 \
+        set assistant-backend not-a-provider
+refuses "assistant-key refuses a provider that takes no key" 2 \
+        assistant-key synapd
+refuses "assistant-key with no provider is refused" 2 assistant-key
+
 # ── the fingerprint pane ────────────────────────────────────────────────────
 #
 # ⛔ THIS BOX HAS NO READER AND NO fprintd, which is exactly why these are here.
@@ -1336,20 +1417,6 @@ fi
 
 # The argument is an allowlist, not a passthrough: it becomes an argv element.
 #
-# ⚠ `|| rc=$?` ON EVERY ONE. This suite runs under `set -euo pipefail`, and a
-# refusal is a NON-ZERO exit — which is the thing being asserted. Written as a
-# bare call these three killed the script at the first one, silently: the run
-# stopped mid-file, printed no failure, and `| tail` handed back tail's own
-# status so it still looked green.
-refuses() {   # <description> <expected-status> <args...>
-    local desc=$1 want=$2 rc=0
-    shift 2
-    "$BIN" "$@" >/dev/null 2>&1 || rc=$?
-    if [ "$rc" -eq "$want" ]; then ok "$desc"; else
-        bad "$desc (exit $rc, wanted $want)"
-    fi
-}
-
 refuses "enroll refuses a finger fprintd does not know" 2 enroll not-a-finger
 refuses "enroll with no finger is refused"              2 enroll ""
 

@@ -22,8 +22,12 @@ tarball="$stage.tar.gz"
 # Only what package() reads: the entry point, the package, the launcher, and
 # the chat window's QML. requirements.txt, setup.sh and the dev launcher are
 # deliberately not shipped.
+# ⚠ TWO LISTS, AND BOTH. This one refuses to build a tarball that is missing a
+# file; the cp below is what actually puts it in. Adding to one and not the
+# other ships a package that builds cleanly and is missing the file — which is
+# how a .desktop came to name an icon for months that was never in the tarball.
 for p in main.py vibe packaging/vibe-launcher.sh data/vibe.qml data/vibe.desktop \
-         systemd/vibe-wake.service; do
+         data/vibe.svg systemd/vibe-wake.service; do
     [ -e "$p" ] || { echo "mktarball: missing $p" >&2; exit 1; }
 done
 
@@ -34,7 +38,7 @@ trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/$stage/packaging" "$tmp/$stage/data" "$tmp/$stage/systemd"
 cp -a main.py vibe "$tmp/$stage/"
 cp -a packaging/vibe-launcher.sh "$tmp/$stage/packaging/"
-cp -a data/vibe.qml data/vibe.desktop "$tmp/$stage/data/"
+cp -a data/vibe.qml data/vibe.desktop data/vibe.svg "$tmp/$stage/data/"
 cp -a systemd/vibe-wake.service "$tmp/$stage/systemd/"
 
 # Build-host droppings and runtime session state must never reach a package.
