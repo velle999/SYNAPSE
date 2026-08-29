@@ -20,6 +20,7 @@ libxml    = dependency('libxml-2.0')
 libsecret = dependency('libsecret-1')
 glib      = dependency('glib-2.0')
 jsonc     = dependency('json-c')
+libical   = dependency('libical')
 
 engine = files(
   'src/util.c',
@@ -32,11 +33,11 @@ inc = include_directories('include')
 
 # The network half. Kept out of `engine` so the algorithm's tests still build
 # and run on a machine with neither library — see the note above.
-net = files('src/http.c', 'src/caldav.c', 'src/account.c', 'src/oauth.c')
+net = files('src/http.c', 'src/caldav.c', 'src/account.c', 'src/oauth.c', 'src/event.c')
 
 syncal_exe = executable('syn-cal', ['src/main.c'] + engine + net,
                         include_directories: inc,
-                        dependencies: [libcurl, libxml, libsecret, glib, jsonc],
+                        dependencies: [libcurl, libxml, libsecret, glib, jsonc, libical],
                         install: true)
 
 foreach t : ['ics', 'store', 'sync']
@@ -47,12 +48,18 @@ endforeach
 
 caldav_test = executable('caldav_test', ['tests/caldav_test.c'] + engine + net,
                          include_directories: inc,
-                         dependencies: [libcurl, libxml, libsecret, glib, jsonc],
+                         dependencies: [libcurl, libxml, libsecret, glib, jsonc, libical],
                          build_by_default: false)
 oauth_test = executable('oauth_test', ['tests/oauth_test.c'] + engine + net,
                         include_directories: inc,
-                        dependencies: [libcurl, libxml, libsecret, glib, jsonc],
+                        dependencies: [libcurl, libxml, libsecret, glib, jsonc, libical],
                         build_by_default: false)
+event_test = executable('event_test', ['tests/event_test.c'] + engine + net,
+                        include_directories: inc,
+                        dependencies: [libcurl, libxml, libsecret, glib, jsonc, libical],
+                        build_by_default: false)
+test('event', event_test, timeout: 60)
+
 test('oauth', find_program('tests/oauth_test.sh'),
      args: [oauth_test.full_path()],
      depends: oauth_test,

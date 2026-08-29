@@ -27,7 +27,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV accounts, two-way sync"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -54,6 +54,14 @@ depends+=('libsecret' 'glib2')
 # a backslash is unremarkable, a naive reader truncates it, and the result is an
 # authentication failure that looks like a revoked grant.
 depends+=('json-c')
+
+# libical expands the recurrence rules and resolves the time zones. This is the
+# one dependency that replaces code nobody should write: an RRULE can say "the
+# last weekday of every second month, except these four dates", and a weekly
+# 09:00 London meeting is 08:00 UTC through the summer and 09:00 through the
+# winter — an expander that carries one offset through is wrong for six months
+# at a time, and right whenever anybody checks it in July.
+depends+=('libical')
 
 makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
 

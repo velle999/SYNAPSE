@@ -12,6 +12,7 @@
 #define _GNU_SOURCE
 #include "account.h"
 #include "caldav.h"
+#include "event.h"
 #include "oauth.h"
 #include "sync.h"
 
@@ -40,7 +41,10 @@ static void usage(FILE *f)
 "  syn-cal enable <name> <calendar>     sync this one\n"
 "  syn-cal disable <name> <calendar>    stop syncing it\n"
 "  syn-cal sync [name]                  sync everything, or one account\n"
-"  syn-cal events <name> <calendar>     what is in the local store\n"
+"  syn-cal agenda [--days N]            what is coming up, across every calendar\n"
+"  syn-cal today                        just today\n"
+"  syn-cal week                         the next seven days\n"
+"  syn-cal events <name> <calendar>     the raw store, one calendar\n"
 "\n"
 "  --rec        one record per line, for a front end\n"
 "  --dry-run    with sync: decide everything, change nothing\n"
@@ -578,7 +582,7 @@ static int cmd_events(const char *name, const char *cal)
 	if (g_out == OUT_REC) rec_header("uid\tkind\tstart\tsummary");
 	for (size_t i = 0; i < l.n; i++) {
 		size_t len = 0;
-		char *data = local_read(name, cal, l.e[i].uid, &len);
+		char *data = read_file(l.e[i].path, &len);
 		if (!data) continue;
 		char *u = ics_unfold(data, len);
 		char *sum = ics_prop(u, "SUMMARY");
@@ -600,12 +604,90 @@ static int cmd_events(const char *name, const char *cal)
 	return 0;
 }
 
+/* ── the agenda ─────────────────────────────────────────────────────────── */
+
+static int cmd_agenda(int days)
+{
+	/* From the start of today in LOCAL time, not from this instant: somebody
+	 * asking at 4pm what is on wants the whole day, including the 9am they
+	 * missed. */
+	time_t now = time(NULL);
+	struct tm lt;
+	localtime_r(&now, &lt);
+	lt.tm_hour = lt.tm_min = lt.tm_sec = 0;
+	time_t from = mktime(&lt);
+	time_t to = from + (time_t)days * 86400;
+
+	events_t l;
+	char *err = NULL;
+	if (!agenda_range(from, to, &l, &err)) {
+		warn("%s", err ? err : "could not read the calendars");
+		free(err);
+		return 1;
+	}
+
+	if (g_out == OUT_REC) {
+		rec_header("start	end	all_day	recurring	account	calendar	summary	location	uid");
+		for (size_t i = 0; i < l.n; i++) {
+			event_t *e = &l.e[i];
+			char *sum = pct_encode(e->summary ? e->summary : "", false);
+			char *loc = pct_encode(e->location ? e->location : "", false);
+			char *acc = pct_encode(e->account ? e->account : "", false);
+			char *cal = pct_encode(e->calendar ? e->calendar : "", false);
+			char *uid = pct_encode(e->uid ? e->uid : "", false);
+			rec_row("%ld	%ld	%d	%d	%s	%s	%s	%s	%s",
+			        (long)e->start, (long)e->end, e->all_day, e->recurring,
+			        acc, cal, sum, loc, uid);
+			free(sum); free(loc); free(acc); free(cal); free(uid);
+		}
+		events_free(&l);
+		return 0;
+	}
+
+	if (l.n == 0) {
+		printf("Nothing in the next %d day%s.\n", days, days == 1 ? "" : "s");
+		events_free(&l);
+		return 0;
+	}
+
+	char lastday[16] = "";
+	for (size_t i = 0; i < l.n; i++) {
+		event_t *e = &l.e[i];
+		struct tm st;
+		localtime_r(&e->start, &st);
+
+		char day[16];
+		strftime(day, sizeof day, "%Y-%m-%d", &st);
+		if (strcmp(day, lastday) != 0) {
+			char head[64];
+			strftime(head, sizeof head, "%A %e %B", &st);
+			printf("%s%s\n", i ? "\n" : "", head);
+			snprintf(lastday, sizeof lastday, "%s", day);
+		}
+
+		if (e->all_day) {
+			printf("  all day   %s", e->summary ? e->summary : "(no summary)");
+		} else {
+			char t[8];
+			strftime(t, sizeof t, "%H:%M", &st);
+			printf("  %s     %s", t, e->summary ? e->summary : "(no summary)");
+		}
+		if (e->location && *e->location) printf("  — %s", e->location);
+		if (e->cancelled) printf("  (cancelled)");
+		putchar('\n');
+	}
+
+	events_free(&l);
+	return 0;
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(int argc, char **argv)
 {
 	const char *user = NULL;
 	const char *client_id = NULL;
+	int days = 7;
 	conflict_t policy = CONFLICT_KEEP_BOTH;
 	bool dry = false;
 
@@ -621,6 +703,7 @@ int main(int argc, char **argv)
 		if (!strcmp(v, "--version")) { printf("syn-cal %s\n", SYNCAL_VERSION); return 0; }
 		if (!strncmp(v, "--user=", 7)) { user = v + 7; continue; }
 		if (!strcmp(v, "--user") && i + 1 < argc) { user = argv[++i]; continue; }
+		if (!strncmp(v, "--days=", 7)) { days = atoi(v + 7); if (days < 1) days = 1; continue; }
 		if (!strncmp(v, "--client-id=", 12)) { client_id = v + 12; continue; }
 		if (!strcmp(v, "--client-id") && i + 1 < argc) { client_id = argv[++i]; continue; }
 		if (!strncmp(v, "--conflict=", 11)) {
@@ -660,6 +743,9 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "disable") && n >= 3)         rc = cmd_set_enabled(pos[1], pos[2], false);
 	else if (!strcmp(c, "sync"))                      rc = cmd_sync(n >= 2 ? pos[1] : NULL, policy, dry);
 	else if (!strcmp(c, "events") && n >= 3)          rc = cmd_events(pos[1], pos[2]);
+	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days);
+	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1);
+	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7);
 	else { warn("unknown command '%s'", c); usage(stderr); rc = 2; }
 
 	http_global_cleanup();

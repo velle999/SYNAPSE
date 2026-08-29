@@ -117,11 +117,16 @@ static bool pull(remote_t *r, const sync_opts_t *o, index_t *ix,
  * upwards — and a signature that could report one would invite a caller to
  * abandon the run over a single unreachable event. */
 static bool push(remote_t *r, const sync_opts_t *o, index_t *ix,
-                 const char *uid, const char *href_in, const char *etag,
-                 sync_stats_t *st)
+                 const char *uid, const char *path, const char *href_in,
+                 const char *etag, sync_stats_t *st)
 {
+	/* ⚠ READ BY THE PATH THE SCAN FOUND, not by one rebuilt from the UID. They
+	 * differ for any file that arrived from outside this program, and
+	 * reconstructing the name turns such an event into a permanent silent
+	 * skip — it lists, and it never uploads. */
 	size_t len = 0;
-	char *data = local_read(o->account, o->collection, uid, &len);
+	char *data = path ? read_file(path, &len)
+	                  : local_read(o->account, o->collection, uid, &len);
 	if (!data) {
 		/* Vanished between the scan and now — somebody deleted it while we
 		 * were talking to the server. Not an error; the next run sees it. */
@@ -250,14 +255,15 @@ bool sync_run(remote_t *r, const sync_opts_t *o, sync_stats_t *st, char **err)
 		if (remote_moved && local_moved) {
 			st->conflicts++;
 			if (o->on_conflict == CONFLICT_LOCAL_WINS) {
-				ok = push(r, o, &ix, known->uid, href, known->etag, st);
+				ok = push(r, o, &ix, known->uid, lo ? lo->path : NULL, href, known->etag, st);
 				continue;
 			}
 			if (o->on_conflict == CONFLICT_KEEP_BOTH && !o->dry_run) {
 				/* Re-file the local edit under a new identity BEFORE the
 				 * server's version overwrites the file it is sitting in. */
 				size_t len = 0;
-				char *mine = local_read(o->account, o->collection, known->uid, &len);
+				char *mine = lo->path ? read_file(lo->path, &len)
+				                      : local_read(o->account, o->collection, known->uid, &len);
 				if (mine) {
 					char *nuid = conflict_uid(known->uid);
 					size_t nlen = 0;
@@ -275,7 +281,7 @@ bool sync_run(remote_t *r, const sync_opts_t *o, sync_stats_t *st, char **err)
 		}
 
 		if (remote_moved) { ok = pull(r, o, &ix, href, etag, st, err); st->pulled_changed++; continue; }
-		if (local_moved)  { ok = push(r, o, &ix, known->uid, href, known->etag, st); st->pushed_changed++; continue; }
+		if (local_moved)  { ok = push(r, o, &ix, known->uid, lo ? lo->path : NULL, href, known->etag, st); st->pushed_changed++; continue; }
 		/* Neither moved. */
 	}
 
@@ -286,7 +292,7 @@ bool sync_run(remote_t *r, const sync_opts_t *o, sync_stats_t *st, char **err)
 		idx_entry_t *known = idx_find(&ix, uid);
 
 		if (!known) {                      /* new here */
-			ok = push(r, o, &ix, uid, NULL, NULL, st);
+			ok = push(r, o, &ix, uid, local.e[i].path, NULL, NULL, st);
 			st->pushed_new++;
 			continue;
 		}
@@ -304,7 +310,7 @@ bool sync_run(remote_t *r, const sync_opts_t *o, sync_stats_t *st, char **err)
 			 * item, which is what "undelete" looks like over CalDAV. */
 			info("%s was deleted on the server and edited here; putting it back", uid);
 			idx_remove(&ix, uid);
-			ok = push(r, o, &ix, uid, NULL, NULL, st);
+			ok = push(r, o, &ix, uid, local.e[i].path, NULL, NULL, st);
 			st->conflicts++;
 		}
 	}

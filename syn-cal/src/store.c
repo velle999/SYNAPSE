@@ -187,12 +187,12 @@ void local_init(local_list_t *l) { l->e = NULL; l->n = l->cap = 0; }
 
 void local_free(local_list_t *l)
 {
-	for (size_t i = 0; i < l->n; i++) { free(l->e[i].uid); free(l->e[i].hash); }
+	for (size_t i = 0; i < l->n; i++) { free(l->e[i].uid); free(l->e[i].hash); free(l->e[i].path); }
 	free(l->e);
 	local_init(l);
 }
 
-static void local_add(local_list_t *l, const char *uid, const char *hash)
+static void local_add(local_list_t *l, const char *uid, const char *hash, const char *path)
 {
 	if (l->n == l->cap) {
 		l->cap = l->cap ? l->cap * 2 : 16;
@@ -200,6 +200,7 @@ static void local_add(local_list_t *l, const char *uid, const char *hash)
 	}
 	l->e[l->n].uid = xstrdup(uid);
 	l->e[l->n].hash = xstrdup(hash);
+	l->e[l->n].path = xstrdup(path);
 	l->n++;
 }
 
@@ -237,7 +238,7 @@ bool local_scan(const char *account, const char *coll, local_list_t *out)
 			char *uid = ics_uid(data, len);
 			if (uid) {
 				char *hash = content_hash(data, len);
-				local_add(out, uid, hash);
+				local_add(out, uid, hash, path);
 				free(hash);
 				free(uid);
 			} else {

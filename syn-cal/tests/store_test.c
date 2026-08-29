@@ -103,6 +103,29 @@ int main(void)
 	local_scan("acct", "cal", &l);
 	ok_("a hand-dropped .ics is found by the UID INSIDE it, not its filename",
 	    l.n == 3 && local_find(&l, "simple@example.org") != NULL);
+
+	/* ⛔ AND IT CAN BE READ. Finding it was never the hard half. Every consumer
+	 * used to rebuild the canonical <uid>.ics path from the UID, which for a
+	 * file that arrived from outside this program names something that is not
+	 * there — so the event listed and nothing could open it. Silently: the
+	 * agenda simply had a hole in it, and sync skipped the event for ever.
+	 * The scan hands back the path it actually walked. */
+	{
+		local_item_t *dropped = NULL;
+		for (size_t i = 0; i < l.n; i++)
+			if (strstr(l.e[i].path, "whatever-i-called-it")) dropped = &l.e[i];
+		ok_("…and the scan reports the path it was actually found at", dropped != NULL);
+
+		size_t dlen = 0;
+		char *back2 = dropped ? read_file(dropped->path, &dlen) : NULL;
+		ok_("…which opens, and holds the event", back2 && dlen == strlen(EV1));
+		free(back2);
+
+		/* The canonical name for that UID exists too — it is a different file,
+		 * and this is exactly the confusion that caused the bug. */
+		ok_("…and is NOT the canonical name for its UID",
+		    dropped && !strstr(dropped->path, "simple%40example.org"));
+	}
 	local_free(&l);
 
 	/* ── deletion ───────────────────────────────────────────────────────── */

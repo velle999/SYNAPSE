@@ -29,7 +29,13 @@ void idx_set(index_t *ix, const char *uid, const char *href,
 void idx_remove(index_t *ix, const char *uid);
 
 /* What is on disk right now. */
-typedef struct { char *uid; char *hash; } local_item_t;
+/* ⛔ THE PATH IS PART OF THE ANSWER. scan() finds an event by the UID INSIDE
+ * the file, which is right — a vdir is a public format and a file may have been
+ * dropped in by hand or restored from a backup under any name. But that means
+ * the filename and the UID need not agree, and a consumer that reconstructs the
+ * canonical name from the UID then fails to open a file the scan just read.
+ * It fails SILENTLY: the event lists, and nothing can read it. */
+typedef struct { char *uid; char *hash; char *path; } local_item_t;
 typedef struct { local_item_t *e; size_t n, cap; } local_list_t;
 
 void local_init(local_list_t *l);

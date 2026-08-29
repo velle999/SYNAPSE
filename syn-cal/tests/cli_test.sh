@@ -144,6 +144,51 @@ check "syncing an account that does not exist fails" $?
 [ $? -ne 0 ]
 check "enabling a calendar that does not exist fails" $?
 
+# ── the agenda reads the store, expands rules, and groups by day ────────────
+
+# ⛔ NAMED NOTHING LIKE ITS UID, deliberately. A vdir is a public format and a
+# file may have been restored from a backup or written by khal; every consumer
+# used to rebuild <uid>.ics from the UID and miss it, which showed up as an
+# agenda with a silent hole in it.
+python3 - "$SYNCAL_HOME" <<'PY'
+import sys, os, datetime
+root = sys.argv[1]
+d = os.path.join(root, "work", "Home"); os.makedirs(d, exist_ok=True)
+now = datetime.datetime.now(datetime.timezone.utc)
+def ics(uid, off, summ, extra=""):
+    s = (now + datetime.timedelta(hours=off)).strftime("%Y%m%dT%H%M%SZ")
+    e = (now + datetime.timedelta(hours=off + 1)).strftime("%Y%m%dT%H%M%SZ")
+    return (f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:{uid}\r\n"
+            f"DTSTAMP:20260101T000000Z\r\nDTSTART:{s}\r\nDTEND:{e}\r\n"
+            f"SUMMARY:{summ}\r\n{extra}END:VEVENT\r\nEND:VCALENDAR\r\n")
+open(os.path.join(d, "not-the-uid.ics"), "w").write(
+    ics("agenda-1@x", 3, "Coffee with Sam", "LOCATION:The kitchen\r\n"))
+open(os.path.join(d, "series.ics"), "w").write(
+    ics("agenda-2@x", 27, "Standup", "RRULE:FREQ=DAILY;COUNT=3\r\n"))
+PY
+
+rows=$("$S" --rec agenda --days=4 | tail -n +2 | wc -l)
+[ "$rows" = 4 ]
+check "agenda expands a one-off plus three of a daily rule" $?
+
+"$S" --rec agenda --days=4 | grep -q "Coffee%20with%20Sam"
+check "…with the summary percent-encoded for a front end" $?
+
+"$S" --rec agenda --days=4 | grep -q "The%20kitchen"
+check "…and the location" $?
+
+# ⛔ THE FILE NAMED not-the-uid.ics IS THE ONE THAT WAS BROKEN.
+"$S" --rec agenda --days=4 | grep -q "agenda-1%40x"
+check "…including an event whose filename does not match its UID" $?
+
+[ "$("$S" --rec agenda --days=4 | tail -n +2 | awk -F'\t' '$4==1' | wc -l)" = 3 ]
+check "…and only the rule's instances are marked recurring" $?
+
+"$S" agenda --days=4 | grep -qE "^[A-Z][a-z]+day"
+check "the human agenda groups by day" $?
+
+rm -rf "$SYNCAL_HOME/work/Home"
+
 # ── the OAuth kinds, without needing an account anywhere ────────────────────
 
 "$S" account add-google gmail >/dev/null 2>&1
