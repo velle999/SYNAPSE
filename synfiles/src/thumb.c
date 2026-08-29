@@ -299,12 +299,30 @@ static bool png_add_thumb_text(const char *png, const char *uri, long mtime)
 		free(ihdr); fclose(in); return false;
 	}
 
-	char *tmp = NULL;
-	if (asprintf(&tmp, "%s.txt.tmp", png) < 0) {
-		free(ihdr); fclose(in); return false;
+	/* ⛔ AN UNGUESSABLE NAME, AND THE MODE SET ON THE DESCRIPTOR. This used to
+	 * be `<png>.txt.tmp` opened with fopen — a name anyone who can write in the
+	 * cache directory can work out in advance and pre-create as a symlink, and
+	 * a mode of 0666 & ~umask on a file that is about to become the thumbnail.
+	 * mkstemp answers both: O_EXCL against a name that is already there, six
+	 * unguessable characters, and 0600 from the moment it exists. */
+	char *tmp = xasprintf("%s.XXXXXX", png);
+	int tfd = mkstemp(tmp);
+	if (tfd < 0) { free(tmp); free(ihdr); fclose(in); return false; }
+
+	/* Explicit rather than inherited from mkstemp: the freedesktop spec asks
+	 * for 0600 because a thumbnail can reveal the contents of a file whose own
+	 * permissions are stricter than the cache directory's, and a security
+	 * property that is only true because of another call's default is one that
+	 * a later edit removes without noticing. fchmod, so there is no second
+	 * lookup of a name that was just resolved. */
+	if (fchmod(tfd, 0600) != 0) {
+		close(tfd); unlink(tmp); free(tmp); free(ihdr); fclose(in); return false;
 	}
-	FILE *out = fopen(tmp, "wb");
-	if (!out) { free(tmp); free(ihdr); fclose(in); return false; }
+
+	FILE *out = fdopen(tfd, "wb");
+	if (!out) {
+		close(tfd); unlink(tmp); free(tmp); free(ihdr); fclose(in); return false;
+	}
 
 	char mt[32];
 	snprintf(mt, sizeof(mt), "%ld", mtime);
@@ -463,12 +481,22 @@ char *thumb_make(const char *path, bool large, bool force, const char **why)
 	}
 	free(dir);
 
-	char *tmp = NULL;
-	if (asprintf(&tmp, "%s.%d.tmp", out, (int)getpid()) < 0) {
-		if (why) *why = "out of memory";
-		free(abs); free(out);
+	/* ⛔ NOT `<out>.<pid>.tmp`. A pid is four or five digits and the rest of the
+	 * name is derivable from the file being thumbnailed, so the whole path
+	 * could be worked out in advance — and ffmpeg is then told to write to it
+	 * with -y, which follows a symlink left in its place. mkstemp creates the
+	 * file itself, with O_EXCL, before anything else can be there. */
+	char *tmp = xasprintf("%s.XXXXXX", out);
+	int seed = mkstemp(tmp);
+	if (seed < 0) {
+		if (why) *why = "cannot create a temporary file in the cache";
+		free(tmp); free(abs); free(out);
 		return NULL;
 	}
+	/* ffmpeg reopens it by name; the descriptor was only ever how the name got
+	 * claimed. O_TRUNC on an existing file leaves its mode alone, so it is
+	 * still 0600 when ffmpeg is finished with it. */
+	close(seed);
 
 	double dur = video_duration(abs);
 	char ss[32];
@@ -496,9 +524,9 @@ char *thumb_make(const char *path, bool large, bool force, const char **why)
 		(char *)"-frames:v", (char *)"1",
 		(char *)"-vf", scale,
 		/* ⚠ THE FORMAT IS NAMED, NOT INFERRED. ffmpeg picks its muxer from the
-		 * output's extension, and the temp file this writes ends in ".tmp" —
-		 * "Unable to choose an output format", every time, for a command that
-		 * is correct in every other respect. */
+		 * output's extension, and this writes to a temporary name ending in six
+		 * random characters — "Unable to choose an output format", every time,
+		 * for a command that is correct in every other respect. */
 		(char *)"-f", (char *)"image2", (char *)"-c:v", (char *)"png",
 		tmp, NULL
 	};
@@ -509,17 +537,26 @@ char *thumb_make(const char *path, bool large, bool force, const char **why)
 	/* Did ffmpeg actually write a frame? An exit status of 0 is not enough on
 	 * its own — a stream with no video track leaves an empty file behind.
 	 *
-	 * `tmp` is a name this process invented — the target plus its own pid —
-	 * inside a 0700 directory it created, and the only use after the check is
-	 * unlink() of that same name. Nothing opens or trusts it. */
+	 * ⛔ ASKED THROUGH A DESCRIPTOR, NOT THE NAME. This was stat(tmp) followed
+	 * by chmod, rename and unlink of that same name — four separate lookups of
+	 * one path, each of which can land on a different file from the one that
+	 * was measured. CodeQL alerts #16-#19 are all that one stat. O_NOFOLLOW
+	 * refuses a symlink outright, and fstat then describes the file this
+	 * process is actually holding rather than whatever the name means now. */
+	int fd = open(tmp, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
 	struct stat ts;
-	int wrote = stat(tmp, &ts);   /* toctou-ok: only unlink()ed after this */
-	if (status != 0 || wrote != 0 || ts.st_size == 0) {
+	if (status != 0 || fd < 0 || fstat(fd, &ts) != 0 ||
+	    !S_ISREG(ts.st_mode) || ts.st_size == 0) {
 		if (why) *why = "ffmpeg could not read a frame";
+		if (fd >= 0) close(fd);
 		unlink(tmp);
 		free(tmp); free(abs); free(out);
 		return NULL;
 	}
+	/* Nothing below reads the bytes, and png_add_thumb_text renames a new file
+	 * over this name — holding the descriptor open would only mean holding the
+	 * inode that is about to be replaced. */
+	close(fd);
 
 	char *uri = thumb_uri(abs);
 	if (!uri || !png_add_thumb_text(tmp, uri, (long)st.st_mtime)) {
@@ -530,9 +567,11 @@ char *thumb_make(const char *path, bool large, bool force, const char **why)
 	}
 	free(uri);
 
-	/* The spec asks for 0600: a thumbnail can reveal the contents of a file
-	 * whose own permissions are stricter than the cache directory's. */
-	if (chmod(tmp, 0600) != 0 || rename(tmp, out) != 0) {
+	/* ⚠ NO chmod HERE ANY MORE. It used to set 0600 on a name that had already
+	 * been stat()ed above, which is the same check-then-use again; the mode is
+	 * now set by png_add_thumb_text on its own descriptor, and rename carries
+	 * it over. One less lookup of a path this process does not control. */
+	if (rename(tmp, out) != 0) {
 		if (why) *why = "cannot install the thumbnail";
 		unlink(tmp);
 		free(tmp); free(abs); free(out);

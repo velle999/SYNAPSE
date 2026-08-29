@@ -21,6 +21,12 @@ SYNFILES=${1:-./build/synfiles}
 [ -x "$SYNFILES" ] || { echo "not executable: $SYNFILES" >&2; exit 1; }
 SYNFILES=$(readlink -f "$SYNFILES")
 
+# The source tree, for the handful of checks that assert a shape in the code
+# rather than a behaviour. Derived from this script's own location so it is the
+# same whether meson runs it (workdir: the source dir) or somebody runs it by
+# hand from anywhere else.
+SRC_DIR=$(cd "$(dirname "$0")/.." && pwd)
+
 # ⛔ A STALE BINARY FAILS AS THOUGH THE CODE WERE BROKEN. Run by hand this
 # script tests whatever is sitting in build/, and nothing rebuilds it: a
 # directory eight days behind src/ produced seven failures that read exactly
@@ -2928,6 +2934,43 @@ if command -v ffmpeg >/dev/null 2>&1 && command -v md5sum >/dev/null 2>&1; then
     out3=$("$SYNFILES" thumb --size=normal "$VT/clip.mp4" 2>&1)
     case "$out3" in */thumbnails/normal/*) true ;; *) false ;; esac
     check "--size=normal writes the 128px entry instead" $?
+
+    # ⛔ NOTHING BUT THUMBNAILS SURVIVES. Both the ffmpeg output and the PNG
+    # rewrite go through a temporary file beside the target, and every failure
+    # path has to remove its own. A leaked temp is not merely untidy: these are
+    # named unguessably now precisely so nobody can plant one, and a leftover is
+    # the evidence that a cleanup branch was missed.
+    leftovers=$(find "$XDG_CACHE_HOME/thumbnails" -type f ! -name '*.png' | wc -l)
+    [ "$leftovers" = 0 ]
+    check "no temporary files are left in the thumbnail cache" $?
+
+    # ⛔ THE NAME IS NOT DERIVABLE FROM THE OUTPUT. It used to be built from the
+    # output path plus getpid() — four digits of entropy beside a path anyone
+    # can compute — and ffmpeg is handed it with -y, which follows a symlink
+    # left in its place. mkstemp is what makes the name unguessable.
+    #
+    # ⚠ ASSERTED ON CALLS, NOT ON THE OLD FORMAT STRING. The first version of
+    # this grepped for ".%d.tmp" and ".txt.tmp" and failed on the COMMENT that
+    # explains why they are gone — a source-shape check reads the prose too, so
+    # it has to name something that only ever appears in code.
+    ! grep -q 'getpid()' "$SRC_DIR/src/thumb.c"
+    check "no thumbnail temp name is built from the pid" $?
+
+    grep -q 'mkstemp(' "$SRC_DIR/src/thumb.c"
+    check "…they come from mkstemp instead" $?
+
+    # An unwritable cache directory must be a refusal, not a crash — the branch
+    # where mkstemp itself fails. Skipped as root, who is not stopped by 0500.
+    if [ "$(id -u)" != 0 ]; then
+        chmod 500 "$XDG_CACHE_HOME/thumbnails/large"
+        "$SYNFILES" thumb --force "$VT/clip.mp4" >/dev/null 2>&1
+        rc=$?
+        chmod 700 "$XDG_CACHE_HOME/thumbnails/large"
+        [ "$rc" -ne 0 ] && [ "$rc" -lt 128 ]
+        check "a cache directory it cannot write to is refused, not a crash" $?
+    else
+        echo "  skip  running as root, cannot test an unwritable cache"
+    fi
 
     unset XDG_CACHE_HOME
 else
