@@ -12,6 +12,7 @@
 #define _GNU_SOURCE
 #include "account.h"
 #include "caldav.h"
+#include "config.h"
 #include "event.h"
 #include "oauth.h"
 #include "sync.h"
@@ -41,6 +42,7 @@ static void usage(FILE *f)
 "  syn-cal enable <name> <calendar>     sync this one\n"
 "  syn-cal disable <name> <calendar>    stop syncing it\n"
 "  syn-cal sync [name]                  sync everything, or one account\n"
+"  syn-cal gui                          the window\n"
 "  syn-cal agenda [--days N]            what is coming up, across every calendar\n"
 "  syn-cal today                        just today\n"
 "  syn-cal week                         the next seven days\n"
@@ -681,6 +683,42 @@ static int cmd_agenda(int days)
 	return 0;
 }
 
+/* ── the window ─────────────────────────────────────────────────────────── */
+
+/* quickshell rendering data/syn-cal.qml in a separate process, for the same
+ * reason synfiles, synpkg and syn-disks do it that way: the binary stays usable
+ * over SSH, and the window consumes exactly the records any other consumer
+ * would. */
+static int cmd_gui(void)
+{
+	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
+		die("no display — syn-cal gui needs a graphical session");
+
+	/* ⚠ CHECKED BEFORE exec, so the message names what is missing. execvp
+	 * failing leaves "could not start quickshell", which is true and useless. */
+	if (access("/usr/bin/quickshell", X_OK) != 0 &&
+	    access("/usr/local/bin/quickshell", X_OK) != 0)
+		die("quickshell is not installed — synpkg install quickshell");
+
+	/* ⛔ THE WINDOW'S WAYLAND app_id, AND OVERWRITTEN RATHER THAN MERELY SET.
+	 * Without it quickshell names every one of its windows "org.quickshell",
+	 * which is the generic icon in the dock and the reason the dock cannot find
+	 * a .desktop for the window. An INHERITED value is the real accident: these
+	 * apps hand their whole environment to what they spawn, so a calendar
+	 * opened from another quickshell app would otherwise take that app's
+	 * identity and have no dock entry of its own. */
+	setenv("QS_APP_ID", "syn-cal", 1);
+
+	const char *qml = SYNCAL_DATADIR "/syn-cal.qml";
+	if (access(qml, R_OK) != 0 && access("data/syn-cal.qml", R_OK) == 0)
+		qml = "data/syn-cal.qml";
+
+	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
+	execvp(child[0], child);
+	die("could not start quickshell");
+	return 1;
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(int argc, char **argv)
@@ -743,6 +781,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "disable") && n >= 3)         rc = cmd_set_enabled(pos[1], pos[2], false);
 	else if (!strcmp(c, "sync"))                      rc = cmd_sync(n >= 2 ? pos[1] : NULL, policy, dry);
 	else if (!strcmp(c, "events") && n >= 3)          rc = cmd_events(pos[1], pos[2]);
+	else if (!strcmp(c, "gui"))                       rc = cmd_gui();
 	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7);

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar
+GenericName=Calendar and schedule planner
+Comment=Your calendars, synced both ways with Google, Nextcloud, Fastmail and iCloud
+Exec=syn-cal gui
+Icon=syn-cal
+Terminal=false
+Categories=Office;Calendar;
+Keywords=calendar;schedule;agenda;appointment;meeting;caldav;
+StartupNotify=true
+StartupWMClass=syn-cal

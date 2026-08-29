@@ -12,6 +12,8 @@ project('syn-cal', 'c',
 cc = meson.get_compiler('c')
 conf = configuration_data()
 conf.set_quoted('SYNCAL_VERSION', meson.project_version())
+conf.set_quoted('SYNCAL_DATADIR',
+                get_option('prefix') / get_option('datadir') / 'syn-cal')
 configure_file(output: 'config.h', configuration: conf)
 add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', language: 'c')
 
@@ -29,7 +31,7 @@ engine = files(
   'src/sync.c',
 )
 
-inc = include_directories('include')
+inc = include_directories('include', '.')
 
 # The network half. Kept out of `engine` so the algorithm's tests still build
 # and run on a machine with neither library — see the note above.
@@ -65,6 +67,10 @@ test('oauth', find_program('tests/oauth_test.sh'),
      depends: oauth_test,
      timeout: 90)
 
+test('qml', find_program('tests/qml_test.sh'),
+     args: [meson.current_source_dir() / 'data/syn-cal.qml'],
+     timeout: 60)
+
 test('cli', find_program('tests/cli_test.sh'),
      args: [syncal_exe.full_path()],
      depends: syncal_exe,
@@ -74,3 +80,12 @@ test('caldav', find_program('tests/caldav_test.sh'),
      args: [caldav_test.full_path()],
      depends: caldav_test,
      timeout: 120)
+
+install_data('data/syn-cal.qml', install_dir: get_option('datadir') / 'syn-cal')
+install_data('data/syn-cal.desktop',
+             install_dir: get_option('datadir') / 'applications')
+
+# ⚠ SCALABLE ONLY. Qt renders the SVG at whatever size the dock asks for, and a
+# set of PNGs is a set of things to forget to regenerate.
+install_data('data/syn-cal.svg',
+             install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')

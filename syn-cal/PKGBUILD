@@ -27,7 +27,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=3
+pkgrel=5
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV accounts, two-way sync"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -73,7 +73,8 @@ makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
 # it those suites skip, and the component still builds.
 checkdepends=('radicale')
 
-optdepends=('gnome-keyring: somewhere to keep passwords that is not a file'
+optdepends=('quickshell: the graphical window (syn-cal gui)'
+            'gnome-keyring: somewhere to keep passwords that is not a file'
             'kwallet: the same, on a KDE session'
             'radicale: a CalDAV server of your own to sync against')
 

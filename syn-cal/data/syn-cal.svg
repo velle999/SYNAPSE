@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- ⚠ EVERY COMMENT IN THIS FILE LIVES INSIDE <svg>, and has to. gdk-pixbuf
+       identifies an image by SNIFFING ITS FIRST 256 BYTES for a format
+       signature, and librsvg's signature is the literal "<svg". A header
+       comment above the root pushes it past byte 256 and the file stops being
+       an SVG as far as GTK is concerned — a blank square in the GNOME app grid,
+       with no parse error and no warning. Invisible on synui and KDE, because
+       Qt parses the XML properly instead of sniffing it. preflight's `icons`
+       gate measures the offset; the same note is in vibe.svg and
+       syn-settings.svg.
+
+       The purple is the family's, not this app's: every SynapseOS icon is
+       #a78bfa on #1b1030 and they are told apart by their shape. -->
+
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cd6"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="6" y="6" width="36" height="36" rx="7" fill="url(#plate)"/>
+
+  <!-- The pad, with its two rings above. Filled rather than stroked: at 16px —
+       which is the size the dock and the start menu actually render — a 2px
+       outline closes up into a blob, and a solid shape stays a shape. -->
+  <path d="M13 16 H35 a3 3 0 0 1 3 3 V35 a3 3 0 0 1 -3 3 H13 a3 3 0 0 1 -3 -3
+           V19 a3 3 0 0 1 3 -3 Z" fill="#1b1030"/>
+  <rect x="10" y="16" width="28" height="6" rx="3" fill="#1b1030"/>
+  <rect x="16" y="9" width="3.6" height="8" rx="1.8" fill="#1b1030"/>
+  <rect x="28.4" y="9" width="3.6" height="8" rx="1.8" fill="#1b1030"/>
+
+  <!-- Today, marked. The one detail that survives being shrunk, and teal is the
+       family's highlight — the same #4ec9b0 the settings icon uses. -->
+  <g fill="#4ec9b0">
+    <rect x="14" y="26" width="5" height="5" rx="1.4" opacity=".45"/>
+    <rect x="21.5" y="26" width="5" height="5" rx="1.4"/>
+    <rect x="29" y="26" width="5" height="5" rx="1.4" opacity=".45"/>
+  </g>
+</svg>
