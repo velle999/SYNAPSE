@@ -214,7 +214,41 @@ F12, F11, Esc or Del at power-on). Secure Boot must be off, or SynapseOS enrolle
 EOF
 fi
 
+# ── The signature ───────────────────────────────────────────────────────────
+#
+# ⛔ A CHECKSUM BESIDE THE DOWNLOAD PROVES THE DOWNLOAD WAS NOT TRUNCATED, AND
+# NOTHING ELSE. It lives in the same GitHub release as the ISO, so anyone able
+# to alter one can alter the other in the same breath. The signature is the only
+# artefact here that says WHO built this, and it is only worth anything if the
+# public key reaches people by a different road than the ISO does — which is
+# what soslinux.org is for. See archiso/README.md.
+#
+# ⚠ THE .asc IS UPLOADED WHOLE-ISO, not per part. Users reassemble first (the
+# site's "Reassemble and verify" section), so the signature is over the thing
+# they end up with; the parts checksum is what covers the download itself.
+assets=("$iso".part[0-9]* "$iso.parts.sha256" "$iso.sha256" "$iso.b2sum")
+
+if [[ -f "$iso.asc" ]]; then
+    # ⛔ VERIFIED BEFORE IT IS PUBLISHED. Uploading a signature nobody checked
+    # is how a release ends up shipping one that cannot verify — and the person
+    # who finds out is a stranger who was doing the right thing.
+    echo "verifying the signature ..."
+    gpg --verify "$iso.asc" "$iso" \
+        || { echo "publish-release: $iso.asc does NOT verify against $iso — refusing" >&2; exit 1; }
+    assets+=("$iso.asc")
+    echo "  signature ok"
+else
+    # Loud, and not a failure: a test build is a legitimate thing to publish.
+    # Silence here is what let every release so far go out unsigned without
+    # anybody deciding to.
+    echo >&2
+    echo "publish-release: WARNING — no $iso.asc, this release will be UNSIGNED." >&2
+    echo "  Users can check the download is intact and nothing more." >&2
+    echo "  Build with: SYNAPSE_SIGNING_KEY=<fingerprint> sudo -E ./build.sh --sign" >&2
+    echo >&2
+fi
+
 gh release create "v$ver" \
     --title "SynapseOS $ver" \
     --notes-file "$notes" \
-    "$iso".part[0-9]* "$iso.parts.sha256" "$iso.sha256" "$iso.b2sum"
+    "${assets[@]}"

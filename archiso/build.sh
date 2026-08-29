@@ -38,7 +38,9 @@
 #                   synapd. Restoring GPU should not cost a full ISO build.
 #   --no-clean      Skip cleaning previous build artifacts
 #   --jobs N        Parallel build jobs (default: nproc)
-#   --sign          GPG-sign the ISO
+#   --sign          GPG-sign the ISO. Needs SYNAPSE_SIGNING_KEY=<fingerprint>
+#                   and `sudo -E`, or the variable does not survive into the
+#                   build. See "Signing a release" in README.md.
 #   --help          This help
 #
 # Requirements:
@@ -1440,10 +1442,47 @@ ISO_FILE=$(ls -t "${OUT_DIR}"/*.iso 2>/dev/null | head -1)
 ok "ISO built: ${ISO_FILE}"
 
 # ── Sign ──────────────────────────────────────────────────────
+#
+# ⛔ AS THE INVOKING USER, NOT AS ROOT. mkarchiso needs root, so this whole
+# script runs under sudo — and a bare `gpg` here reads ROOT's keyring, which on
+# any sane machine holds no release key at all. It would have failed with
+# "no default secret key" on the one machine it was written for, and on a box
+# where root DID have a key it would quietly sign with the wrong one.
+#
+# ⚠ THE KEY IS NAMED, NEVER DEFAULTED. `gpg --detach-sign` with no -u picks the
+# first usable secret key, which is whatever the developer happens to have —
+# and a release signed with somebody's personal identity instead of the release
+# key is not a thing you can quietly undo afterwards. SYNAPSE_SIGNING_KEY says
+# which, and its absence is an error rather than a guess.
 if [[ "$SIGN" == "true" ]]; then
     step "Signing ISO"
-    gpg --detach-sign --armor "${ISO_FILE}"
-    ok "Signed: ${ISO_FILE}.asc"
+
+    if [[ -z "${SYNAPSE_SIGNING_KEY:-}" ]]; then
+        err "--sign needs SYNAPSE_SIGNING_KEY set to the release key's fingerprint.
+     Signing with whatever key gpg picks first is how a release ends up
+     carrying somebody's personal identity. See archiso/README.md."
+    fi
+
+    # Root's HOME is /root; the key lives in the invoking user's keyring.
+    _sign_as=(); _sign_home="${HOME}"
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        _sign_as=(sudo -u "${SUDO_USER}" -H --)
+        _sign_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
+    fi
+
+    "${_sign_as[@]}" gpg --detach-sign --armor --yes \
+        --local-user "${SYNAPSE_SIGNING_KEY}" "${ISO_FILE}" \
+        || err "signing failed — is ${SYNAPSE_SIGNING_KEY} in ${SUDO_USER:-$USER}'s keyring?"
+
+    # ⛔ VERIFIED IMMEDIATELY, against the file that will actually ship. gpg
+    # exits 0 on plenty of things that are not a good signature over this ISO,
+    # and an unverifiable .asc published beside a download is worse than none:
+    # it invites people to run a check that cannot pass.
+    "${_sign_as[@]}" gpg --verify "${ISO_FILE}.asc" "${ISO_FILE}" \
+        || err "the signature just written does not verify against ${ISO_FILE}"
+
+    chown "${SUDO_USER:-$USER}" "${ISO_FILE}.asc" 2>/dev/null || true
+    ok "Signed and verified: ${ISO_FILE}.asc  (key ${SYNAPSE_SIGNING_KEY})"
 fi
 
 # ── Checksums ─────────────────────────────────────────────────
