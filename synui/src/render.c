@@ -5539,7 +5539,12 @@ void synui_render_calendar(syn_server_t *s)
     struct wlr_box ob;
     server_usable_box(s, &ob);
 
-    const int pw = 336, ph = 322;
+    /* ⚠ THE HEIGHT INCLUDES THE FOOTER LIST, or the events draw off the bottom
+     * of the popup and the keys line goes with them. CAL_FOOTER_ROWS is the
+     * only number that decides how tall this is; changing it moves the panel
+     * and the list together, which is the point of it being a define. */
+    const int pw = 336;
+    const int ph = 322 + (CAL_FOOTER_ROWS + 1) * 15;
     const int cell_w = 44, grid_x = 14, grid_y = 66, cell_h = 34;
     const int gap = 4;   /* breathing room between the bar and the popup */
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + gap;
@@ -5652,6 +5657,84 @@ void synui_render_calendar(syn_server_t *s)
         set_ink(cr, is_sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, cx + (day < 10 ? 16 : 12), cy + 18);
         syn_show_text(cr, ds);
+
+        /* ⚠ A DOT, NOT A COUNT. The grid cell is 44 wide and already carries a
+         * number; a second number in it is unreadable at a glance and the
+         * question this view answers is "which days have anything", not "how
+         * many". The count is in the footer, for the day that is selected.
+         *
+         * On the selected cell the dot sits on the accent wash and takes the
+         * same strong ink as the number, for the reason above it: a literal
+         * would be right on one theme. */
+        if (day >= 1 && day <= 31 && cal->busy[day]) {
+            /* ⚠ set_accent, NOT AN INK POSITION. The ink ladder runs between
+             * the panel and its text; the accent is a separate colour with its
+             * own contrast correction, and it is what marks a day as different
+             * from its neighbours. On the SELECTED cell the accent is already
+             * the background, so the dot takes the strongest ink instead or it
+             * disappears into the wash it is drawn on. */
+            if (is_sel) set_ink(cr, INK_STRONG, 1.0);
+            else        set_accent(cr, 1.0);
+            cairo_arc(cr, cx + cell_w / 2.0, cy + 25.0, 2.0, 0, 2 * M_PI);
+            cairo_fill(cr);
+        }
+    }
+
+    /* ── What is on, on the selected day ────────────────────────────────
+     *
+     * The events come from syn-cal and arrive asynchronously; see calevents.c.
+     * Three lines, because that is what fits without the popup becoming a
+     * second window — the rest is one keystroke away in `syn-cal agenda`, and a
+     * panel that grows without limit is a panel that eventually covers the
+     * thing it is hanging from.
+     *
+     * ⚠ THE THREE STATES ARE DIFFERENT AND SAY SO. "Nothing on" and "still
+     * loading" and "syn-cal is not installed" all look like an empty list, and
+     * telling somebody their day is free when the answer has not arrived is the
+     * one of the three that matters. */
+    {
+        const syn_cal_event_t *day_ev[CAL_FOOTER_ROWS];
+        int nd = calevents_for_day(cal, cal->sel, day_ev, CAL_FOOTER_ROWS);
+        int total = 0;
+        for (int i = 0; i < cal->nev; i++) if (cal->ev[i].day == cal->sel) total++;
+
+        int ey = grid_y + 12 + 6 * cell_h + 16;
+        cairo_set_font_size(cr, 11);
+
+        if (cal->loading) {
+            set_ink(cr, INK_DIM, 0.9);
+            cairo_move_to(cr, 14, ey);
+            syn_show_text(cr, "loading\xe2\x80\xa6");
+        } else if (cal->loaded_year != cal->year || cal->loaded_mon != cal->mon) {
+            /* Nothing has been asked for this month yet — which is not the same
+             * as nothing being on it. */
+            set_ink(cr, INK_DIM, 0.9);
+            cairo_move_to(cr, 14, ey);
+            syn_show_text(cr, "\xe2\x80\x94");
+        } else if (total == 0) {
+            set_ink(cr, INK_DIM, 0.9);
+            cairo_move_to(cr, 14, ey);
+            syn_show_text(cr, "nothing on");
+        } else {
+            for (int i = 0; i < nd; i++) {
+                char line[128];
+                if (day_ev[i]->all_day)
+                    snprintf(line, sizeof line, "all day  %s", day_ev[i]->summary);
+                else
+                    snprintf(line, sizeof line, "%02d:%02d    %s",
+                             day_ev[i]->hour, day_ev[i]->min, day_ev[i]->summary);
+                set_ink(cr, INK_BODY, 1.0);
+                cairo_move_to(cr, 14, ey + i * 15);
+                syn_show_text(cr, line);
+            }
+            if (total > nd) {
+                char more[48];
+                snprintf(more, sizeof more, "+%d more", total - nd);
+                set_ink(cr, INK_DIM, 0.9);
+                cairo_move_to(cr, 14, ey + nd * 15);
+                syn_show_text(cr, more);
+            }
+        }
     }
 
     cairo_set_font_size(cr, 11);

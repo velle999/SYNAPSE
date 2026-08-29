@@ -67,6 +67,8 @@ test('oauth', find_program('tests/oauth_test.sh'),
      depends: oauth_test,
      timeout: 90)
 
+test('contract', find_program('tests/contract_test.sh'), timeout: 60)
+
 test('qml', find_program('tests/qml_test.sh'),
      args: [meson.current_source_dir() / 'data/syn-cal.qml'],
      timeout: 60)

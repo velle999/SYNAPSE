@@ -43,7 +43,8 @@ static void usage(FILE *f)
 "  syn-cal disable <name> <calendar>    stop syncing it\n"
 "  syn-cal sync [name]                  sync everything, or one account\n"
 "  syn-cal gui                          the window\n"
-"  syn-cal agenda [--days N]            what is coming up, across every calendar\n"
+"  syn-cal agenda [--days N] [--from YYYY-MM-DD]\n"
+"                                       what is on, across every calendar\n"
 "  syn-cal today                        just today\n"
 "  syn-cal week                         the next seven days\n"
 "  syn-cal events <name> <calendar>     the raw store, one calendar\n"
@@ -608,16 +609,36 @@ static int cmd_events(const char *name, const char *cal)
 
 /* ── the agenda ─────────────────────────────────────────────────────────── */
 
-static int cmd_agenda(int days)
+static int cmd_agenda(int days, const char *from_date)
 {
-	/* From the start of today in LOCAL time, not from this instant: somebody
+	/* From the start of a day in LOCAL time, not from this instant: somebody
 	 * asking at 4pm what is on wants the whole day, including the 9am they
 	 * missed. */
 	time_t now = time(NULL);
 	struct tm lt;
 	localtime_r(&now, &lt);
+
+	if (from_date) {
+		/* ⚠ THE FIELDS NOT PARSED ARE LEFT AS TODAY'S, then overwritten. tm has
+		 * members mktime reads that scanf never sets — tm_isdst above all, and
+		 * getting that wrong moves the whole range by an hour across a clock
+		 * change. Starting from a localtime_r of now means every one of them is
+		 * already a coherent value for this machine. */
+		int y = 0, m = 0, d = 0;
+		if (sscanf(from_date, "%d-%d-%d", &y, &m, &d) != 3 ||
+		    m < 1 || m > 12 || d < 1 || d > 31) {
+			warn("--from wants a date like 2026-09-01");
+			return 2;
+		}
+		lt.tm_year = y - 1900;
+		lt.tm_mon = m - 1;
+		lt.tm_mday = d;
+		lt.tm_isdst = -1;          /* let mktime work out the offset for THAT day */
+	}
+
 	lt.tm_hour = lt.tm_min = lt.tm_sec = 0;
 	time_t from = mktime(&lt);
+	if (from == (time_t)-1) { warn("--from: that is not a date this machine can represent"); return 2; }
 	time_t to = from + (time_t)days * 86400;
 
 	events_t l;
@@ -629,7 +650,7 @@ static int cmd_agenda(int days)
 	}
 
 	if (g_out == OUT_REC) {
-		rec_header("start	end	all_day	recurring	account	calendar	summary	location	uid");
+		rec_header("start\tend\tall_day\trecurring\taccount\tcalendar\tsummary\tlocation\tuid");
 		for (size_t i = 0; i < l.n; i++) {
 			event_t *e = &l.e[i];
 			char *sum = pct_encode(e->summary ? e->summary : "", false);
@@ -637,7 +658,7 @@ static int cmd_agenda(int days)
 			char *acc = pct_encode(e->account ? e->account : "", false);
 			char *cal = pct_encode(e->calendar ? e->calendar : "", false);
 			char *uid = pct_encode(e->uid ? e->uid : "", false);
-			rec_row("%ld	%ld	%d	%d	%s	%s	%s	%s	%s",
+			rec_row("%ld\t%ld\t%d\t%d\t%s\t%s\t%s\t%s\t%s",
 			        (long)e->start, (long)e->end, e->all_day, e->recurring,
 			        acc, cal, sum, loc, uid);
 			free(sum); free(loc); free(acc); free(cal); free(uid);
@@ -726,6 +747,7 @@ int main(int argc, char **argv)
 	const char *user = NULL;
 	const char *client_id = NULL;
 	int days = 7;
+	const char *from_date = NULL;
 	conflict_t policy = CONFLICT_KEEP_BOTH;
 	bool dry = false;
 
@@ -742,6 +764,7 @@ int main(int argc, char **argv)
 		if (!strncmp(v, "--user=", 7)) { user = v + 7; continue; }
 		if (!strcmp(v, "--user") && i + 1 < argc) { user = argv[++i]; continue; }
 		if (!strncmp(v, "--days=", 7)) { days = atoi(v + 7); if (days < 1) days = 1; continue; }
+		if (!strncmp(v, "--from=", 7)) { from_date = v + 7; continue; }
 		if (!strncmp(v, "--client-id=", 12)) { client_id = v + 12; continue; }
 		if (!strcmp(v, "--client-id") && i + 1 < argc) { client_id = argv[++i]; continue; }
 		if (!strncmp(v, "--conflict=", 11)) {
@@ -782,9 +805,9 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "sync"))                      rc = cmd_sync(n >= 2 ? pos[1] : NULL, policy, dry);
 	else if (!strcmp(c, "events") && n >= 3)          rc = cmd_events(pos[1], pos[2]);
 	else if (!strcmp(c, "gui"))                       rc = cmd_gui();
-	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days);
-	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1);
-	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7);
+	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days, from_date);
+	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
+	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);
 	else { warn("unknown command '%s'", c); usage(stderr); rc = 2; }
 
 	http_global_cleanup();

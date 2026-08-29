@@ -1535,11 +1535,40 @@ typedef struct {
     syn_hit_t hit;
 } syn_clock_t;
 
+/* One occurrence, as syn-cal reported it. Fixed-size and copied rather than
+ * pointed at: this lives in the server struct, is rewritten wholesale on every
+ * month change, and a compositor is the wrong place to be freeing a list on a
+ * path that can be re-entered by a held-down arrow key. */
+#define CAL_EVENTS_MAX 128
+/* How many of a day's events the popup lists. Three, because that is what fits
+ * without the calendar becoming a second window — and a panel that grows with
+ * its content eventually covers the bar it hangs from. The renderer derives the
+ * panel height from this, so the two cannot disagree. */
+#define CAL_FOOTER_ROWS 3
+typedef struct {
+    time_t start;
+    int day;        /* 1-31 in the LOADED month, or 0 for one that fell outside */
+    int hour, min;  /* local, already resolved — see calevents.c */
+    int all_day;
+    char summary[80];
+} syn_cal_event_t;
+
 typedef struct {
     int visible;
     int year;
     int mon;   /* 0-11 */
     int sel;   /* selected day, 1-based */
+
+    /* What is on, from `syn-cal --rec agenda`. Fetched asynchronously; see
+     * calevents.c for why that is not optional. `loaded_*` is the month the
+     * events actually describe, which is not always the month on screen —
+     * stepping faster than syn-cal answers is ordinary. */
+    syn_cal_event_t ev[CAL_EVENTS_MAX];
+    int nev;
+    int loaded_year, loaded_mon;
+    int loading;
+    unsigned char busy[32];   /* [day] non-zero when that day has something */
+
     /* Pointer geometry, written by synui_render_calendar(). The row band spans
      * all seven day columns; clock.c splits it back up. */
     syn_hit_t hit;
@@ -8480,6 +8509,12 @@ int  calendar_scroll(syn_server_t *s, double lx, double ly, double delta);
 int  calendar_days_in_month(int year, int mon);
 int  calendar_first_weekday(int year, int mon);
 void synui_render_calendar(syn_server_t *s);
+
+/* calevents.c — the calendar panel's events, fetched without blocking. */
+void calevents_fetch(syn_server_t *s, int year, int mon);
+void calevents_cancel(void);
+int  calevents_for_day(const syn_cal_t *cal, int day,
+                       const syn_cal_event_t **out, int max);
 
 /* ── CRT filter panel (filters.c) ────────────────────────── */
 void filters_show(syn_server_t *s);

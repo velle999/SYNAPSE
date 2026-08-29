@@ -493,12 +493,20 @@ void calendar_show(syn_server_t *s)
     cal->year    = tm.tm_year + 1900;
     cal->mon     = tm.tm_mon;
     cal->sel     = tm.tm_mday;
+    /* ⚠ ASKED FOR BEFORE THE DRAW, AND THE DRAW DOES NOT WAIT. calevents_fetch
+     * spawns and returns; the panel appears now, with the events arriving a few
+     * milliseconds later and a second render behind them. Blocking here would
+     * freeze every window on the machine for as long as syn-cal took. */
+    calevents_fetch(s, cal->year, cal->mon);
     synui_render_calendar(s);
 }
 
 void calendar_hide(syn_server_t *s)
 {
     s->cal.visible = 0;
+    /* Nothing is waiting for the answer any more, and a read left armed on a
+     * closed panel is a wl_event_source that outlives its reason. */
+    calevents_cancel();
     synui_render_calendar(s);
 }
 
@@ -508,6 +516,10 @@ void calendar_toggle(syn_server_t *s)
     else                calendar_show(s);
 }
 
+/* ⚠ cal_step_month TAKES THE STRUCT, NOT THE SERVER, so it cannot fetch. Its
+ * callers do — see cal_after_move(), which every key and click path goes
+ * through. Adding the fetch here would mean giving this function the server
+ * for one line and letting two other paths forget to call it. */
 static void cal_step_month(syn_cal_t *cal, int delta)
 {
     cal->mon += delta;
@@ -525,6 +537,17 @@ static void cal_step_day(syn_cal_t *cal, int delta)
     if (cal->sel < 1)    { cal_step_month(cal, -1);
                            cal->sel = calendar_days_in_month(cal->year, cal->mon); }
     else if (cal->sel > dim) { cal_step_month(cal, +1); cal->sel = 1; }
+}
+
+/* One place for "the view moved": ask for the new month's events if it is a
+ * different month, and redraw. Every key and pointer path below ends here, so
+ * there is no way to move the calendar and forget one half of it. */
+static void cal_after_move(syn_server_t *s)
+{
+    syn_cal_t *cal = &s->cal;
+    if (cal->loaded_year != cal->year || cal->loaded_mon != cal->mon)
+        calevents_fetch(s, cal->year, cal->mon);
+    synui_render_calendar(s);
 }
 
 /* ── Calendar pointer ────────────────────────────────────────
@@ -599,7 +622,7 @@ int calendar_scroll(syn_server_t *s, double lx, double ly, double delta)
     /* The wheel is the month, not the day: a calendar's one long axis is the
      * months, and Page Up/Down (which the footer names) already mean that. */
     cal_step_month(cal, delta > 0 ? 1 : -1);
-    synui_render_calendar(s);
+    cal_after_move(s);
     return 1;
 }
 
@@ -629,7 +652,10 @@ int calendar_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     default:
         return 1;
     }
-    synui_render_calendar(s);
+    /* ⚠ THE ARROW KEYS CROSS MONTHS TOO. cal_step_day rolls into the next month
+     * at the end of this one, so this path is not "only the day changed" — and
+     * cal_after_move asks again only when the month actually moved. */
+    cal_after_move(s);
     return 1;
 }
 
