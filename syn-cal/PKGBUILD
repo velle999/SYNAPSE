@@ -3,9 +3,16 @@
 # syn-cal — the SynapseOS calendar and schedule planner.
 #
 # Two-way sync with CalDAV accounts — Nextcloud, Fastmail, iCloud, Radicale,
-# Baikal, and Google, which is CalDAV behind OAuth. The store is a vdir: one
-# .ics per event in a folder per calendar, the layout vdirsyncer and khal
-# already write, so the data is readable by anything that can read a folder.
+# Baikal — with Google through OAuth and Microsoft 365 through Graph. A window
+# (syn-cal gui), a terminal view (syn-cal tui) and a command line, all over one
+# core. The store is a vdir: one .ics per event in a folder per calendar, the
+# layout vdirsyncer and khal already write, so the data is readable by anything
+# that can read a folder.
+#
+# ⛔ MICROSOFT IS READ-ONLY FOR REPEATING EVENTS, on purpose. An RRULE flattened
+# on the way out replaces a series on somebody's work calendar with a single
+# occurrence and neither side reports anything wrong, so editing one locally is
+# REFUSED and the local file is left alone.
 #
 # ⚠ THE HALF THAT CAN LOSE DATA IS THE HALF WITH THE TESTS. Two-way sync fails
 # combinatorially — both sides changed, one deleted while the other edited, a
@@ -27,8 +34,8 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=7
-pkgdesc="SynapseOS calendar and schedule planner: CalDAV accounts, two-way sync"
+pkgrel=8
+pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')

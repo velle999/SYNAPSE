@@ -35,7 +35,7 @@ inc = include_directories('include', '.')
 
 # The network half. Kept out of `engine` so the algorithm's tests still build
 # and run on a machine with neither library — see the note above.
-net = files('src/http.c', 'src/caldav.c', 'src/account.c', 'src/oauth.c', 'src/event.c', 'src/graph.c')
+net = files('src/http.c', 'src/caldav.c', 'src/account.c', 'src/oauth.c', 'src/event.c', 'src/graph.c', 'src/tui.c')
 
 syncal_exe = executable('syn-cal', ['src/main.c'] + engine + net,
                         include_directories: inc,
@@ -74,6 +74,11 @@ test('oauth', find_program('tests/oauth_test.sh'),
      timeout: 90)
 
 test('contract', find_program('tests/contract_test.sh'), timeout: 60)
+
+test('tui', find_program('tests/tui_test.sh'),
+     args: [syncal_exe.full_path()],
+     depends: syncal_exe,
+     timeout: 60)
 
 test('qml', find_program('tests/qml_test.sh'),
      args: [meson.current_source_dir() / 'data/syn-cal.qml'],

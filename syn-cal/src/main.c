@@ -44,6 +44,7 @@ static void usage(FILE *f)
 "  syn-cal disable <name> <calendar>    stop syncing it\n"
 "  syn-cal sync [name]                  sync everything, or one account\n"
 "  syn-cal gui                          the window\n"
+"  syn-cal tui                          the month, in this terminal\n"
 "  syn-cal agenda [--days N] [--from YYYY-MM-DD]\n"
 "                                       what is on, across every calendar\n"
 "  syn-cal today                        just today\n"
@@ -805,6 +806,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "sync"))                      rc = cmd_sync(n >= 2 ? pos[1] : NULL, policy, dry);
 	else if (!strcmp(c, "events") && n >= 3)          rc = cmd_events(pos[1], pos[2]);
 	else if (!strcmp(c, "gui"))                       rc = cmd_gui();
+	else if (!strcmp(c, "tui"))                       rc = cmd_tui();
 	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days, from_date);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);

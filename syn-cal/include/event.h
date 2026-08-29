@@ -34,4 +34,7 @@ bool event_expand(const char *ics, size_t len, time_t from, time_t to,
 /* …and out of every enabled calendar of every account. */
 bool agenda_range(time_t from, time_t to, events_t *out, char **err);
 
+/* tui.c */
+int cmd_tui(void);
+
 #endif /* SYNCAL_EVENT_H */
