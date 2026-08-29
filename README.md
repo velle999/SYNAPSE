@@ -123,6 +123,34 @@ file, or let **PowerShell** do it:
 `True` means the join is good. (`Get-FileHash` prints uppercase hex where
 `sha256sum` writes lowercase — same bytes, hence the `.ToUpper()`.)
 
+### Check who built it
+
+The checksum proves the download is not corrupt. It does not prove where the
+image came from — it is published in the same GitHub release as the ISO, so
+anything that could alter one could alter the other. The signature answers that,
+and the key to check it against is served from **soslinux.org** rather than from
+the release, so the two arrive by different roads.
+
+```bash
+curl -O https://soslinux.org/synapseos-release-key.asc
+gpg --import synapseos-release-key.asc
+
+gpg --verify SynapseOS-<ver>-x86_64.iso.asc SynapseOS-<ver>-x86_64.iso
+```
+
+A good signature names the key it matched. Check that fingerprint against:
+
+```
+6548 9EF5 C20D 0BD9 4211  472B ED33 6DB7 952B 609E
+```
+
+GnuPG will also say the key is *not certified with a trusted signature*. That is
+expected, not a failure: it means you have not told GnuPG you trust this key,
+only that the signature matches it. Comparing the fingerprint is what closes
+that gap.
+
+Releases from **0.2.9.5** onward are signed; earlier ones are not.
+
 Then write it, with **[Rufus](https://rufus.ie/)** (pick the ISO, START, and
 choose **DD Image mode** when asked — this is a hybrid image, and ISO mode
 rebuilds boot files it has no reason to get right),
@@ -339,7 +367,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 
 | App | What it does |
 |---|---|
-| **`vibe`** | Local AI coding assistant — an agentic read/write/edit/bash/grep loop. Reuses the model already resident in `synapd` (no second model, no extra VRAM), and confirms before destructive tools. `vibe` in a terminal; `VIBE_BACKEND=ollama` to swap backends. |
+| **`vibe`** | The desktop assistant — a chat window (`vibe gui`, or the bar's speech bubble) and a terminal REPL (`vibe`), one conversation loop between them. Opens folders, panels and applications, changes settings and applies them live, reads and edits files, answers questions about this machine, and runs shell commands inside `syn-confine`. Anything that *writes* asks first; plain desktop requests never reach a model at all. Reuses the model resident in `synapd` (no second model, no extra VRAM), or Ollama, llama.cpp, Claude or OpenAI — `vibe provider <name>`. Speaks and takes dictation (`vibe voice`), and answers to its name (`vibe wake on`, off by default). |
 | **`chibi`** | Voice-interactive AI companion with a security-sentinel aspect over `synguard`'s verdict feed. See the [Chibi wiki page](https://github.com/velle999/SYNAPSE/wiki/Chibi). |
 | **`cliamp`** | A terminal music player in the shape of Winamp ([bjarneo/cliamp](https://github.com/bjarneo/cliamp), MIT, upstream) — and the player big screen mode *drives* rather than launches: it streams its own FFT bands, which is what the visualizer draws. |
 | **`nexus-chat`**, **`tepris`** | Bundled web apps (Firefox app-mode packages). |
