@@ -110,16 +110,31 @@ static bool f_del(remote_t *r, const char *href, const char *if_match,
 	return true;
 }
 
+/* ⚠ THE SAME NAMING THE REAL CLIENT USES. A fake that addressed items by the
+ * percent-encoded UID would have kept passing after the live test found that a
+ * %2F in an href is refused by real servers — the fake would have been
+ * modelling the bug rather than the protocol. */
 static char *f_href_for(remote_t *r, const char *uid)
 {
 	(void)r;
-	char *enc = pct_encode(uid, false);
-	char *h = xasprintf("/cal/%s.ics", enc);
-	free(enc);
+	char *name = ics_safe_name(uid);
+	char *h = xasprintf("/cal/%s.ics", name);
+	free(name);
 	return h;
 }
 
 /* ── fixtures ───────────────────────────────────────────────────────────── */
+
+/* The href the engine will choose for a UID, so assertions name it the same way
+ * the code does rather than restating the rule and drifting from it. */
+static char *href_of(const char *uid)
+{
+	static char buf[256];
+	char *name = ics_safe_name(uid);
+	snprintf(buf, sizeof buf, "/cal/%s.ics", name);
+	free(name);
+	return buf;
+}
 
 static char *ev(const char *uid, const char *summary)
 {
@@ -182,7 +197,7 @@ int main(void)
 	char *e2 = ev("two@x", "Dentist");
 	local_write("a", "c", "two@x", e2, strlen(e2));
 	run(&f, CONFLICT_KEEP_BOTH, &st);
-	ok_("a new local event reaches the server", fake_get(&f, "/cal/two%40x.ics") != NULL);
+	ok_("a new local event reaches the server", fake_get(&f, href_of("two@x")) != NULL);
 	ok_("…and is counted as pushed", st.pushed_new == 1);
 
 	/* ── down: the server changed it ────────────────────────────────────── */
@@ -199,7 +214,7 @@ int main(void)
 	local_write("a", "c", "two@x", e2b, strlen(e2b));
 	run(&f, CONFLICT_KEEP_BOTH, &st);
 	ok_("a local edit reaches the server",
-	    strstr(fake_get(&f, "/cal/two%40x.ics")->data, "Dentist rescheduled") != NULL);
+	    strstr(fake_get(&f, href_of("two@x"))->data, "Dentist rescheduled") != NULL);
 	ok_("…counted as a change", st.pushed_changed == 1);
 
 	/* ── both changed: keep both, lose nothing ──────────────────────────── */
@@ -249,11 +264,11 @@ int main(void)
 	char *e3 = ev("three@x", "Gone soon");
 	local_write("a", "c", "three@x", e3, strlen(e3));
 	run(&f, CONFLICT_KEEP_BOTH, &st);
-	ok_("a third event syncs up", fake_get(&f, "/cal/three%40x.ics") != NULL);
+	ok_("a third event syncs up", fake_get(&f, href_of("three@x")) != NULL);
 
 	local_delete("a", "c", "three@x");
 	run(&f, CONFLICT_KEEP_BOTH, &st);
-	ok_("deleting it here deletes it there", fake_get(&f, "/cal/three%40x.ics") == NULL);
+	ok_("deleting it here deletes it there", fake_get(&f, href_of("three@x")) == NULL);
 	ok_("…counted as a pushed deletion", st.pushed_deleted == 1);
 
 	char *e4 = ev("four@x", "Server will drop this");
@@ -285,11 +300,11 @@ int main(void)
 	char *e6 = ev("six@x", "original");
 	local_write("a", "c", "six@x", e6, strlen(e6));
 	run(&f, CONFLICT_KEEP_BOTH, &st);
-	fake_get(&f, "/cal/six%40x.ics")->gone = true;
+	fake_get(&f, href_of("six@x"))->gone = true;
 	char *e6b = ev("six@x", "edited here");
 	local_write("a", "c", "six@x", e6b, strlen(e6b));
 	run(&f, CONFLICT_KEEP_BOTH, &st);
-	fake_item_t *back = fake_get(&f, "/cal/six%40x.ics");
+	fake_item_t *back = fake_get(&f, href_of("six@x"));
 	ok_("deleted there but edited here: it is put back on the server",
 	    back && strstr(back->data, "edited here") != NULL);
 
@@ -299,7 +314,7 @@ int main(void)
 	run(&f, CONFLICT_KEEP_BOTH, &st);
 	char *e7b = ev("seven@x", "v2 from here");
 	local_write("a", "c", "seven@x", e7b, strlen(e7b));
-	f.fail_put_once = xstrdup("/cal/seven%40x.ics");
+	f.fail_put_once = xstrdup(href_of("seven@x"));
 	run(&f, CONFLICT_KEEP_BOTH, &st);
 	ok_("a 412 is counted as a conflict, not an error", st.conflicts >= 1 && st.errors == 0);
 	s = local_summary("seven@x");
@@ -309,7 +324,7 @@ int main(void)
 	/* The next run must resolve it rather than looping. */
 	run(&f, CONFLICT_KEEP_BOTH, &st);
 	ok_("…and the next run pushes it",
-	    strstr(fake_get(&f, "/cal/seven%40x.ics")->data, "v2 from here") != NULL);
+	    strstr(fake_get(&f, href_of("seven@x"))->data, "v2 from here") != NULL);
 
 	/* ── dry run decides everything and changes nothing ─────────────────── */
 	char *e8 = ev("eight@x", "not really");
@@ -322,7 +337,7 @@ int main(void)
 		free(err);
 	}
 	ok_("a dry run reports what it would push", st.pushed_new == 1);
-	ok_("…and pushes nothing", fake_get(&f, "/cal/eight%40x.ics") == NULL);
+	ok_("…and pushes nothing", fake_get(&f, href_of("eight@x")) == NULL);
 
 	printf("\n%d/%d passed\n", total - fails, total);
 	free(e1); free(e1b); free(e2); free(e2b); free(e3); free(e4);

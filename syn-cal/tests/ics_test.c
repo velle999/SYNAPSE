@@ -130,6 +130,57 @@ int main(void)
 	}
 	free(re);
 
+	/* ── the href name: safe, stable, unique ────────────────────────────── */
+	/*
+	 * ⛔ THE LIVE TEST FOUND THIS. The first version addressed items by the
+	 * percent-encoded UID; a real server decodes %2F before routing, sees a path
+	 * traversal and answers 403 where the same event under a plain name answers
+	 * 201. These three properties are what replaced it, and all three matter.
+	 */
+	char *n1 = ics_safe_name("weird/uid+with spaces@x");
+	total++;
+	{
+		bool clean = true;
+		for (const char *c = n1; *c; c++)
+			if (!((*c >= 'A' && *c <= 'Z') || (*c >= 'a' && *c <= 'z') ||
+			      (*c >= '0' && *c <= '9') || *c == '-' || *c == '_' || *c == '.'))
+				clean = false;
+		if (clean && n1[0] != '.' && n1[0] != '-') printf("  ok    a hostile UID reduces to a safe name\n");
+		else { printf("  FAIL  unsafe name [%s]\n", n1); fails++; }
+	}
+
+	char *n2 = ics_safe_name("weird/uid+with spaces@x");
+	eq("…the same UID always gives the same name", n1, n2);
+	free(n2);
+
+	/* ⛔ AND TWO UIDS THAT REDUCE TO THE SAME TEXT STILL DIFFER. Without the
+	 * hash of the whole original, "meeting/1" and "meeting:1" would both become
+	 * "meeting-1" and one event would overwrite the other on the server. */
+	char *a = ics_safe_name("meeting/1");
+	char *b = ics_safe_name("meeting:1");
+	total++;
+	if (strcmp(a, b) != 0) printf("  ok    …and two UIDs that reduce alike still differ\n");
+	else { printf("  FAIL  [%s] collides for meeting/1 and meeting:1\n", a); fails++; }
+	free(a); free(b);
+
+	/* A UID that is nothing but punctuation still has to produce a filename. */
+	char *only = ics_safe_name("///");
+	total++;
+	if (only && only[0] && only[0] != '-' && only[0] != '.')
+		printf("  ok    …a UID of pure punctuation still names something\n");
+	else { printf("  FAIL  [%s] is not a usable name\n", only ? only : "(null)"); fails++; }
+	free(only);
+
+	/* Long enough to matter: filesystems stop at 255 bytes and so do servers. */
+	char longuid[600];
+	memset(longuid, 'x', sizeof longuid - 1);
+	longuid[sizeof longuid - 1] = '\0';
+	char *ln = ics_safe_name(longuid);
+	total++;
+	if (strlen(ln) < 120) printf("  ok    …and a 600-character UID is capped\n");
+	else { printf("  FAIL  name is %zu characters\n", strlen(ln)); fails++; }
+	free(ln); free(n1);
+
 	/* ── the hash answers "did this change", and only that ──────────────── */
 
 	char *h1 = content_hash("abc", 3);

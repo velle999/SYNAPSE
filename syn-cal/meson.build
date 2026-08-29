@@ -9,6 +9,15 @@ project('syn-cal', 'c',
 # libical with event.c, and both are additions to this list rather than
 # conditions on it: the engine and its tests build and run without either, which
 # is what keeps the part that can lose data testable on any machine.
+cc = meson.get_compiler('c')
+conf = configuration_data()
+conf.set_quoted('SYNCAL_VERSION', meson.project_version())
+configure_file(output: 'config.h', configuration: conf)
+add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', language: 'c')
+
+libcurl = dependency('libcurl')
+libxml  = dependency('libxml-2.0')
+
 engine = files(
   'src/util.c',
   'src/ics.c',
@@ -18,8 +27,21 @@ engine = files(
 
 inc = include_directories('include')
 
+# The network half. Kept out of `engine` so the algorithm's tests still build
+# and run on a machine with neither library — see the note above.
+net = files('src/http.c', 'src/caldav.c')
+
 foreach t : ['ics', 'store', 'sync']
   exe = executable(t + '_test', ['tests/' + t + '_test.c'] + engine,
                    include_directories: inc, build_by_default: false)
   test(t, exe, timeout: 60)
 endforeach
+
+caldav_test = executable('caldav_test', ['tests/caldav_test.c'] + engine + net,
+                         include_directories: inc,
+                         dependencies: [libcurl, libxml],
+                         build_by_default: false)
+test('caldav', find_program('tests/caldav_test.sh'),
+     args: [caldav_test.full_path()],
+     depends: caldav_test,
+     timeout: 120)

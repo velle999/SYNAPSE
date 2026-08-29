@@ -173,3 +173,48 @@ char *ics_replace_uid(const char *data, size_t len, const char *uid, size_t *out
 	if (!out.b) out.b = xstrdup("");
 	return out.b;
 }
+
+/* A filename-safe, stable, unique name for an event.
+ *
+ * ⛔ THE href IS NOT THE UID, AND MUST NOT BE DERIVED FROM IT NAIVELY. CalDAV
+ * never required the two to match — the href is the server's address for the
+ * resource, the UID is the event's identity — and treating them as one thing
+ * breaks on the UIDs real providers issue. Percent-encoding is not a way out:
+ * a `%2F` in a path is decoded before routing by most servers, which then see a
+ * path traversal and refuse it. Measured against Radicale: `%2F` in the href
+ * answers 403 where the identical event under a plain name answers 201.
+ *
+ * So the UID is reduced to characters no server or filesystem can object to,
+ * and a hash of the WHOLE original is appended. The hash is what makes it
+ * safe to be lossy:
+ *
+ *   stable   the same UID always produces the same name, so a re-sync finds
+ *            the event it already uploaded instead of creating a second one
+ *   unique   two UIDs that reduce to the same text still differ, so
+ *            "meeting/1" and "meeting:1" cannot collide
+ */
+char *ics_safe_name(const char *uid)
+{
+	buf_t out;
+	buf_init(&out);
+
+	size_t kept = 0;
+	for (const unsigned char *p = (const unsigned char *)uid; *p && kept < 80; p++) {
+		bool safe = (*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+		            (*p >= '0' && *p <= '9') || *p == '-' || *p == '_' || *p == '.';
+		char c = safe ? (char)*p : '-';
+		/* A leading dot would make it a hidden file in the vdir, and a run of
+		 * dashes is noise. */
+		if (c == '-' && (out.len == 0 || out.b[out.len - 1] == '-')) continue;
+		if (c == '.' && out.len == 0) continue;
+		buf_add(&out, &c, 1);
+		kept++;
+	}
+	while (out.len && out.b[out.len - 1] == '-') out.b[--out.len] = '\0';
+
+	char *hash = content_hash(uid, strlen(uid));
+	char *name = out.len ? xasprintf("%s-%s", out.b, hash) : xasprintf("event-%s", hash);
+	free(hash);
+	buf_free(&out);
+	return name;
+}

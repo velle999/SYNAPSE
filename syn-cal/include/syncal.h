@@ -115,5 +115,8 @@ char *ics_prop(const char *unfolded, const char *name);
 char *ics_uid(const char *data, size_t len);
 char *ics_kind(const char *data, size_t len);
 char *ics_replace_uid(const char *data, size_t len, const char *uid, size_t *out_len);
+/* A filename-safe, stable, unique name for an event. See ics.c: the href a
+ * server is given is NOT the UID, and cannot be. */
+char *ics_safe_name(const char *uid);
 
 #endif /* SYNCAL_H */
