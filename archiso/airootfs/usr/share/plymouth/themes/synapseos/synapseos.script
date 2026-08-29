@@ -1,20 +1,181 @@
-# SynapseOS Plymouth splash — the dendrite logo centred on the theme's
-# near-black background (#0a0a12). Kept deliberately static: the script
-# language is limited and a boot splash must never be the thing that breaks,
-# so no animation/Math calls that could error out mid-boot.
+# SynapseOS Plymouth splash — the dendrite logo, and what the machine is doing.
+#
+# ⛔ TWO REPORTS, ONE FILE. velle, 2026-08-28: "iso boot logo was stretched wide
+# on 1440, and on real hardware takes quite a while to start up all while
+# showing no loading information […] it might make people nervous wondering
+# what it's doing."
+#
+#   1. The logo was drawn at its NATIVE 512x512 wherever it landed. On a 1440p
+#      panel that is a small square in the middle of a large screen — and on a
+#      framebuffer whose aspect does not match the panel it is a small square
+#      that the MONITOR then stretches along with everything else. It is sized
+#      off the window now, so it is the same size relative to the screen at
+#      every resolution, and its own proportions are preserved by construction
+#      (one scale factor, both axes).
+#
+#      ⚠ THE FRAMEBUFFER'S OWN ASPECT IS NOT THIS FILE'S TO FIX. Nothing drawn
+#      here can undo a 4:3 mode being stretched across a 16:9 panel; that is
+#      what the `kms` hook in archiso.conf is for, and it is the other half of
+#      the same report.
+#
+#   2. It said nothing at all for the length of a boot. systemd sends its unit
+#      status to plymouth whenever plymouth is running and the kernel is
+#      `quiet` — nothing was listening, so it went nowhere. There is a status
+#      line under the logo now and a progress bar under that.
+#
+# ⚠ EVERY CALL BELOW IS ONE THE SHIPPED script.so ACTUALLY HAS. Checked against
+# the module in the ISO's own work tree rather than against documentation:
+# Image.Scale(w,h) and Image.Text(t,r,g,b) are both defined there, and
+# Math.Clamp/Min/Max are the arithmetic available. A splash that calls something
+# missing does not degrade — it dies, and takes the boot's only user-visible
+# feedback with it. There is no plymouth on the machine this was written on, so
+# the list of what exists was read out of the binary, not assumed.
+#
+# ⚠ AND IT STAYS DEFENSIVE. No loops, no recursion, no division by anything
+# that could be zero. The original file's warning still stands: a boot splash
+# must never be the thing that breaks.
 
 Window.SetBackgroundTopColor(0.039, 0.039, 0.070);
 Window.SetBackgroundBottomColor(0.039, 0.039, 0.070);
 
-logo.image  = Image("logo.png");
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+# ── The logo ────────────────────────────────────────────────────────────────
+#
+# A fifth of the screen's HEIGHT, which is the dimension that does not change
+# meaning between a 4:3 projector and an ultrawide. Clamped so it is never
+# smaller than the original looked on a 1080p panel and never absurd on a 4K
+# one.
+logo.original = Image("logo.png");
+
+logo.target = screen_h / 5;
+logo.target = Math.Clamp(logo.target, 160, 420);
+
+# ⚠ ONE FACTOR, BOTH AXES. Scaling width and height to independent targets is
+# exactly the stretch this is fixing; the aspect is preserved because there is
+# only ever one number.
+logo.factor = logo.target / logo.original.GetHeight();
+logo.w = logo.original.GetWidth()  * logo.factor;
+logo.h = logo.original.GetHeight() * logo.factor;
+
+logo.image  = logo.original.Scale(logo.w, logo.h);
 logo.sprite = Sprite(logo.image);
-logo.sprite.SetX(Window.GetWidth()  / 2 - logo.image.GetWidth()  / 2);
-logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2);
+
+# Sat slightly above centre: the status line and the bar live underneath, and
+# the group of three reads as centred when the logo alone is not.
+logo.x = screen_w / 2 - logo.image.GetWidth()  / 2;
+logo.y = screen_h / 2 - logo.image.GetHeight() / 2 - screen_h / 12;
+logo.sprite.SetX(logo.x);
+logo.sprite.SetY(logo.y);
 logo.sprite.SetZ(100);
 
-# Show typed characters as bullets if a password is ever prompted (encrypted
-# install case); harmless on the live ISO where it never fires.
+# ── What it is doing ────────────────────────────────────────────────────────
+#
+# ⛔ THE LINE EXISTS BEFORE THERE IS ANYTHING TO PUT IN IT. A sprite created
+# inside the callback is a sprite that does not exist until the first message
+# arrives, and the first message is the one people are waiting for.
+status.y = logo.y + logo.image.GetHeight() + screen_h / 24;
+status.sprite = Sprite();
+status.sprite.SetZ(100);
+
+# Dimmer than the logo on purpose. This is a running commentary, not the
+# headline, and white-on-near-black at full strength pulls the eye off the mark
+# that says which system is starting.
+fun show_status(text) {
+    status.image = Image.Text(text, 0.62, 0.62, 0.70);
+    status.sprite.SetImage(status.image);
+    status.sprite.SetX(screen_w / 2 - status.image.GetWidth() / 2);
+    status.sprite.SetY(status.y);
+}
+
+# systemd's own unit status — "Starting …", "Reached target …". This is the
+# callback it drives, and until now nothing implemented it.
+fun display_message_callback(text) {
+    show_status(text);
+}
+
+# ⚠ A FRESH EMPTY SPRITE, which is the pattern the shipped script/script.script
+# uses for exactly this. Setting a rendered space instead relies on Image.Text
+# producing something sane for a string with no glyphs in it, and an image of
+# zero width is not a thing to hand SetImage on a path that runs mid-boot.
+fun hide_message_callback(text) {
+    status.sprite = Sprite();
+    status.sprite.SetZ(100);
+}
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);
+
+# ── How far along ───────────────────────────────────────────────────────────
+#
+# ⚠ A BAR, NOT A SPINNER, and it is honest about what it knows: plymouth's
+# progress is an ESTIMATE against the last boot's duration, so it is drawn as a
+# quiet rule that fills rather than a percentage that would invite people to
+# believe a number nobody measured.
+bar.w = Math.Clamp(screen_w / 4, 220, 560);
+bar.h = 3;
+bar.x = screen_w / 2 - bar.w / 2;
+bar.y = status.y + screen_h / 24;
+
+# ⛔ TWO IMAGES, NOT TEXT. The first version of this built both rules out of
+# Image.Text(" …spaces… ") — which renders exactly nothing, because a space has
+# no glyph. It would have been an invisible progress bar on every boot, and the
+# only way to find out was to boot it.
+#
+# ⚠ 8x8 RATHER THAN 1x1: whatever filtering Scale applies, a solid block still
+# scales to the same solid colour, where a single pixel can pick up whatever it
+# is filtered against.
+bar.track_image = Image("bar-track.png").Scale(bar.w, bar.h);
+bar.track = Sprite(bar.track_image);
+bar.track.SetX(bar.x);
+bar.track.SetY(bar.y);
+bar.track.SetZ(90);
+
+bar.fill_image = Image("bar-fill.png");
+bar.fill = Sprite();
+bar.fill.SetX(bar.x);
+bar.fill.SetY(bar.y);
+bar.fill.SetZ(95);
+
+fun progress_callback(duration, progress) {
+    # ⚠ CLAMPED BOTH ENDS. plymouth reports a progress above 1 when a boot runs
+    # longer than the estimate it was built from, and a fill wider than its own
+    # track reads as a rendering fault rather than as a slow boot.
+    p = Math.Clamp(progress, 0, 1);
+    w = bar.w * p;
+    # Scale() to zero is not a width; hold the bar at one pixel until there is
+    # something to show.
+    #
+    # ⚠ BRACED, like every `if` in the plymouth theme this was checked against.
+    # A braceless body may well parse — but the splash cannot be run on this
+    # machine, and the shipped script/script.script is the only evidence
+    # available of what this parser definitely accepts.
+    if (w < 1)
+      {
+        w = 1;
+      }
+    bar.fill.SetImage(bar.fill_image.Scale(w, bar.h));
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+# ── The password prompt, on an encrypted install ────────────────────────────
+#
+# Unchanged in effect from the original: the live ISO never reaches it, and an
+# encrypted install must not be left staring at a splash with no prompt.
 fun display_password_callback(prompt, bullets) {
     logo.sprite.SetOpacity(1);
+    show_status(prompt);
 }
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+fun display_normal_callback() {
+    logo.sprite.SetOpacity(1);
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+fun quit_callback() {
+    logo.sprite.SetOpacity(1);
+}
+Plymouth.SetQuitFunction(quit_callback);

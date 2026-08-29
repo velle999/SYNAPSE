@@ -3,6 +3,14 @@ Name=SynapseOS
 Description=SynapseOS dendrite boot splash
 ModuleName=script
 
+# ⛔ `Font=` IS WHAT PUTS A FONT IN THE INITRAMFS. The mkinitcpio plymouth hook
+# reads this line, resolves it with fc-match, and copies the result in as
+# /usr/share/fonts/Plymouth.ttf. With no line at all it resolves the EMPTY
+# pattern — whatever fontconfig happens to call the default on the build host —
+# which worked only because nothing in this theme drew text. The status line
+# does, so the face it draws in is now a stated one rather than a coincidence.
+Font=Sans 12
+
 [script]
 ImageDir=/usr/share/plymouth/themes/synapseos
 ScriptFile=/usr/share/plymouth/themes/synapseos/synapseos.script
