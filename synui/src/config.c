@@ -987,7 +987,7 @@ static int parse_hex_color(const char *val, float out[4])
  * rebind helper, so the shortcuts palette is now the only owner of both chords.
  * These stay named because seed_default_binds() and the tests both want the
  * launcher command in exactly one place. */
-#define SYN_BIND_LAUNCHER "spawn_toggle rofi -show drun"
+#define SYN_BIND_LAUNCHER "spawn_toggle " SYN_ROFI_DRUN
 #define SYN_BIND_CMDBAR   "cmdbar"
 
 static void seed_default_binds(syn_config_t *cfg)

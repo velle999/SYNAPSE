@@ -893,7 +893,8 @@ void synui_start_menu_open(syn_server_t *s)
          * fresh install is the window switcher. A user who wants other flags has
          * `tap_action = spawn rofi …`, which is finer-grained than this row can
          * be and is untouched by it. */
-        synui_spawn("rofi -show drun");
+        /* One string, shared with the Super+= bind — see SYN_ROFI_DRUN. */
+        synui_spawn(SYN_ROFI_DRUN);
         break;
     case SYN_START_MENU_BAR:
     default:

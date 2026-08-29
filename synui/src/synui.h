@@ -4743,12 +4743,33 @@ static inline void synui_terminal_cmd(const syn_config_t *cfg,
  * a command. This is the start menu's rule, which is the one an application
  * row has always been launched by.
  */
+/*
+ * ⛔ `-terminal` OR A TERMINAL APPLICATION LAUNCHES NOTHING. rofi resolves a
+ * Terminal=true entry through rofi-sensible-terminal, whose list is
+ * x-terminal-emulator, urxvt, xterm, konsole, alacritty, kitty, foot — and
+ * SynapseOS ships syntty, which is on nobody's list. Not one of those seven is
+ * installed on a stock install, so every CLI application in the launcher did
+ * exactly nothing when clicked. Reported as cliamp not launching from the
+ * menus, on two machines. It fails silently, which is why it reads as the
+ * program crashing rather than as the launcher never starting one.
+ *
+ * ⚠ syntty BY NAME, not cfg->terminal, and deliberately: this is a compile-time
+ * default and it matches what StartMenu.qml and the app page already hardcode
+ * for the same reason. All three doors open a CLI program the same way; a
+ * fourth opinion about which terminal to use is what this bug was.
+ */
+#define SYN_ROFI_DRUN "rofi -show drun -terminal syntty"
 static inline void synui_app_command(const syn_config_t *cfg,
                                      const syn_app_entry_t *e,
                                      char *buf, size_t n)
 {
     if (e->terminal) {
-        const char *term = cfg->terminal[0] ? cfg->terminal : "kitty";
+        /* ⛔ THE FALLBACK WAS `kitty`, WHICH THIS DISTRO DOES NOT SHIP —
+         * it came off the base set and off the ISO, and every fallback chain
+         * that still named it launched nothing on a machine where `terminal`
+         * was never set. syntty is what is installed, and what
+         * synui_terminal_cmd() above already tries first. */
+        const char *term = cfg->terminal[0] ? cfg->terminal : "syntty";
         snprintf(buf, n, "%s -e %s", term, e->exec);
     } else {
         snprintf(buf, n, "%s", e->exec);
