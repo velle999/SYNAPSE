@@ -1,0 +1,197 @@
+/* playlist.c — the queue mpv is holding, and the ones kept on disk.
+ *
+ * ⛔ MPV OWNS THE QUEUE. This file reads it and writes m3u8 files; it does not
+ * keep a second copy. A frontend holding its own list would go out of step the
+ * first time somebody dropped a file on the mpv window, hit `>` in mpv itself,
+ * or let a playlist finish — and the copy that is wrong is always the one on
+ * screen.
+ *
+ * ⚠ M3U8 BECAUSE MPV READS IT. `loadlist` takes it directly, so a playlist
+ * saved here opens in mpv, in VLC, on a phone, and in this program next year
+ * whatever happens to this code. A bespoke format would have been less work
+ * today and a file nothing else can open for ever.
+ *
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+#define _GNU_SOURCE
+#include "synplay.h"
+
+#include <ctype.h>
+#include <dirent.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+int sp_queue(int fd, sp_entry_t *out, int max)
+{
+	char reply[262144];
+	if (!sp_cmd(fd, "\"get_property\",\"playlist\"", reply, sizeof reply))
+		return -1;
+
+	size_t len = 0;
+	const char *arr = sp_json_raw(reply, "data", &len);
+	if (!arr) return 0;
+
+	int n = 0;
+	for (int i = 0; i < max; i++) {
+		size_t elen = 0;
+		const char *e = sp_json_elem(arr, i, &elen);
+		if (!e) break;
+
+		/* Bounded copy of the element so the field readers see one object.
+		 * A playlist entry is a filename and two flags; anything that does
+		 * not fit in this is not an entry. */
+		char item[PATH_MAX + 1024];
+		if (elen >= sizeof item) continue;
+		memcpy(item, e, elen);
+		item[elen] = '\0';
+
+		sp_entry_t *slot = &out[n];
+		memset(slot, 0, sizeof *slot);
+		if (!sp_json_str(item, "filename", slot->path, sizeof slot->path))
+			continue;
+		/* ⚠ mpv only carries `title` when the playlist named one — an m3u
+		 * #EXTINF, mostly. Without it the filename is what a person has to
+		 * read, so it is made readable rather than shown raw. */
+		if (!sp_json_str(item, "title", slot->title, sizeof slot->title))
+			sp_pretty_title(slot->path, slot->title, sizeof slot->title);
+		sp_json_bool(item, "current", &slot->current);
+		n++;
+	}
+	return n;
+}
+
+/*
+ * ⚠ A PLAYLIST NAME BECOMES A FILENAME, so it is checked rather than trusted.
+ * `../../.bashrc` is a name somebody can type, and a save that took it would
+ * write outside the playlist directory. Letters, digits, space, dash,
+ * underscore and dot — and never a leading dot, which would hide the file from
+ * the very listing that is meant to show it.
+ */
+bool sp_playlist_path(const char *name, char *out, size_t cap)
+{
+	if (!name || !*name || name[0] == '.') return false;
+	if (strlen(name) > 120) return false;
+	for (const char *p = name; *p; p++) {
+		if (isalnum((unsigned char)*p)) continue;
+		if (strchr(" -_.", *p)) continue;
+		return false;
+	}
+	snprintf(out, cap, "%s/%s.m3u8", sp_playlist_dir(), name);
+	return true;
+}
+
+int sp_playlist_save(int fd, const char *name)
+{
+	char path[PATH_MAX];
+	if (!sp_playlist_path(name, path, sizeof path))
+		die("'%s' is not a name a playlist can have — letters, digits, "
+		    "space, - _ .", name);
+
+	static sp_entry_t q[4096];
+	int n = sp_queue(fd, q, 4096);
+	if (n < 0) die("nothing is playing — there is no queue to save");
+	if (n == 0) die("the queue is empty");
+
+	/* Written to a temporary and renamed. A save interrupted half way
+	 * through would otherwise leave a playlist that is neither the old one
+	 * nor the new one, and the person finds out when they open it. */
+	char tmp[PATH_MAX + 8];
+	snprintf(tmp, sizeof tmp, "%s.new", path);
+	FILE *f = fopen(tmp, "w");
+	if (!f) die("cannot write %s", tmp);
+
+	fputs("#EXTM3U\n", f);
+	for (int i = 0; i < n; i++) {
+		/* ⚠ #EXTINF carries the title, so a saved playlist opens with the
+		 * names that were on screen rather than a column of paths. -1 is
+		 * "duration unknown", which is honest: this program does not
+		 * measure files it has not played. */
+		fprintf(f, "#EXTINF:-1,%s\n%s\n", q[i].title, q[i].path);
+	}
+	if (fclose(f) != 0) { unlink(tmp); die("cannot finish writing %s", tmp); }
+	if (rename(tmp, path) != 0) { unlink(tmp); die("cannot save %s", path); }
+
+	if (g_out == OUT_REC) printf("saved\t%s\t%d\n", name, n);
+	else printf("Saved %s — %d item%s\n", name, n, n == 1 ? "" : "s");
+	return 0;
+}
+
+int sp_playlist_load(int fd, const char *name, bool append)
+{
+	char path[PATH_MAX];
+	if (!sp_playlist_path(name, path, sizeof path))
+		die("'%s' is not a playlist name", name);
+	if (access(path, R_OK) != 0)
+		die("no playlist called '%s' — syn-play playlist list", name);
+
+	char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
+	sp_json_quote(path, quoted, sizeof quoted);
+	snprintf(args, sizeof args, "\"loadlist\",%s,\"%s\"",
+	         quoted, append ? "append" : "replace");
+	if (!sp_cmd(fd, args, NULL, 0))
+		die("mpv would not load %s", path);
+
+	if (g_out == OUT_REC) printf("loaded\t%s\n", name);
+	else printf("%s %s\n", append ? "Appended" : "Playing", name);
+	return 0;
+}
+
+static int name_cmp(const void *a, const void *b)
+{
+	return strcmp(*(const char **)a, *(const char **)b);
+}
+
+int sp_playlist_list(void)
+{
+	DIR *d = opendir(sp_playlist_dir());
+	if (!d) return 0;
+
+	char *names[1024];
+	int n = 0;
+	struct dirent *de;
+	while ((de = readdir(d)) && n < 1024) {
+		size_t len = strlen(de->d_name);
+		if (len < 6 || strcmp(de->d_name + len - 5, ".m3u8")) continue;
+		char *s = strdup(de->d_name);
+		if (!s) break;
+		s[len - 5] = '\0';
+		names[n++] = s;
+	}
+	closedir(d);
+	qsort(names, (size_t)n, sizeof names[0], name_cmp);
+
+	for (int i = 0; i < n; i++) {
+		char path[PATH_MAX];
+		int items = 0;
+		if (sp_playlist_path(names[i], path, sizeof path)) {
+			FILE *f = fopen(path, "r");
+			if (f) {
+				char line[PATH_MAX + 512];
+				while (sp_getline(f, line, sizeof line))
+					if (line[0] && line[0] != '#') items++;
+				fclose(f);
+			}
+		}
+		if (g_out == OUT_REC) printf("playlist\t%s\t%d\n", names[i], items);
+		else printf("  %-24s %d item%s\n", names[i], items,
+		            items == 1 ? "" : "s");
+		free(names[i]);
+	}
+	if (n == 0 && g_out == OUT_HUMAN)
+		printf("  no playlists yet — syn-play playlist save <name>\n");
+	return 0;
+}
+
+int sp_playlist_rm(const char *name)
+{
+	char path[PATH_MAX];
+	if (!sp_playlist_path(name, path, sizeof path))
+		die("'%s' is not a playlist name", name);
+	if (unlink(path) != 0)
+		die("no playlist called '%s'", name);
+	if (g_out == OUT_REC) printf("removed\t%s\n", name);
+	else printf("Removed %s\n", name);
+	return 0;
+}

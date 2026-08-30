@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<!-- syn-play - a play triangle over the queue behind it.
+     THE <svg> ROOT IS THE FIRST THING IN THIS FILE, before any comment.
+     gdk-pixbuf sniffs only the opening bytes to decide what a file is, so a
+     licence header above the root pushes it past that window and the icon
+     goes invisible in GTK while still rendering perfectly in Qt - which is
+     how it gets shipped. See the note in syn-clean.svg.
+     SynapseOS Project - SPDX-License-Identifier: GPL-2.0-or-later -->
+<defs>
+  <linearGradient id="p" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#5ee7d0"/>
+    <stop offset="1" stop-color="#3aa7ff"/>
+  </linearGradient>
+</defs>
+<rect x="3" y="6" width="42" height="36" rx="7" fill="#171a24"/>
+<rect x="3.75" y="6.75" width="40.5" height="34.5" rx="6.25" fill="none"
+      stroke="#2c3242" stroke-width="1.5"/>
+<!-- the queue behind it -->
+<rect x="9"  y="14" width="14" height="2.6" rx="1.3" fill="#4b5468"/>
+<rect x="9"  y="20" width="11" height="2.6" rx="1.3" fill="#3d4557"/>
+<rect x="9"  y="26" width="14" height="2.6" rx="1.3" fill="#3d4557"/>
+<rect x="9"  y="32" width="8"  height="2.6" rx="1.3" fill="#3d4557"/>
+<!-- and the thing it is all for -->
+<path d="M25.5 13.2 L39.5 23.6 Q40.6 24.4 39.5 25.2 L25.5 35.6
+         Q24 36.7 24 34.9 L24 13.9 Q24 12.1 25.5 13.2 Z" fill="url(#p)"/>
+</svg>

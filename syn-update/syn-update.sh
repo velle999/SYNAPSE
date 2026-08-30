@@ -67,7 +67,7 @@ SRC_GIT=""
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
             nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles
-            syn-settings syn-disks syn-cal syn-vault syn-clean syn-edit syntty syn-confine
+            syn-settings syn-disks syn-cal syn-vault syn-clean syn-play syn-edit syntty syn-confine
             limine-mkinitcpio-hook fetch synapse-wallpapers syn-arcade cliamp
             synstudio syn-gfn)
 

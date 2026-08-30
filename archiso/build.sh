@@ -277,6 +277,7 @@ PACKAGES=(
     # thing people boot a USB stick to deal with, and the machine they are
     # trying to clean is the one that will not start.
     syn-clean
+    syn-play
     # syn-edit — the text editor. Must be ON the ISO for the same reason
     # syn-disks must: syn-install names it in SEL_CORE, and a package the
     # installer asks for but the local repo does not carry fails the install at

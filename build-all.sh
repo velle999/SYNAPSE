@@ -32,7 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
-       syn-vault syn-clean
+       syn-vault syn-clean syn-play
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
 for _c in "${ONLY[@]}"; do
@@ -446,6 +446,14 @@ build_component syn-vault
 # composed from that variable, so a test that sets it cannot reach the build
 # user's real home even if a category is wrong.
 build_component syn-clean
+
+# syn-play — the mpv front end: playlists, shuffle, quick open and history.
+# meson C plus a quickshell window, built from the generic source tarball.
+#
+# ⚠ mpv is an OPTDEPEND, so this builds on a machine with no player installed —
+# and its suite says `skip` for the transport half rather than failing. The
+# parser, the history and the playlist writer are checked either way.
+build_component syn-play
 
 # syn-edit — the text editor. Same shape again: meson C plus a quickshell
 # front-end, built from a source tarball the generic collector above assembles

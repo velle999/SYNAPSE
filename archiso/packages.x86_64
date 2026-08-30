@@ -172,6 +172,7 @@ syn-vault
 # is a thing people boot a USB stick to deal with — the machine they are trying
 # to clean being the one that will not start.
 syn-clean
+syn-play
 # The game assistant: the MangoHud overlay driven by a compositor keybind from
 # inside a running game, plus controller detection, rumble, deadzone
 # calibration and SDL mapping overrides. On the live ISO because "does my

@@ -34,7 +34,7 @@ pkgver=0.1.0
 #   not have". It is an optdepend NO box has now — it came off the base set and
 #   the ISO in syn-install 100 — and the sentence was the reason syntty is the
 #   terminal this window spawns, so it had to say something true.
-pkgrel=27
+pkgrel=28
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Player
+GenericName=Media player
+Comment=Playlists, shuffle, quick open and history, on top of mpv
+Exec=syn-play gui
+Icon=syn-play
+Terminal=false
+Categories=AudioVideo;Player;Audio;Video;
+Keywords=play;player;media;music;video;movie;film;playlist;shuffle;queue;history;mpv;
+StartupNotify=true
+StartupWMClass=syn-play

@@ -344,6 +344,7 @@ FloatingWindow {
             { key: "comp_fetch",       std: 1, full: 1, min: 1, label: "fetch — the About OS readout" },
             { key: "comp_arcade",      std: 1, full: 1, min: 0, label: "Arcade — overlay, pads, big screen" },
             { key: "comp_cliamp",      std: 1, full: 1, min: 0, label: "cliamp — the music player" },
+            { key: "comp_synplay",     std: 1, full: 1, min: 0, label: "Player — playlists, shuffle and history, on mpv" },
             { key: "comp_synstudio",   std: 1, full: 1, min: 0, label: "Studio — photo darkroom and video" },
             { key: "comp_gfn",         std: 1, full: 1, min: 0, label: "GeForce NOW — cloud gaming in a browser" },
             { key: "comp_arsenal",     std: 1, full: 1, min: 0, label: "Arsenal — BlackArch browser" },
