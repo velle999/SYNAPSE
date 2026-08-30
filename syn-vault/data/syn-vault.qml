@@ -163,7 +163,14 @@ ShellRoot {
                 // The binary's own words: "password incorrect" and "something is
                 // still using it" are different problems with different fixes,
                 // and a single "that failed" throws the difference away.
-                root.askMsg = actErr.text.trim() || "that did not work"
+                // ⚠ WHITESPACE COLLAPSED, WORDS UNTOUCHED. The binary wraps
+                // its longer messages for a terminal, with two spaces of
+                // continuation indent; this panel word-wraps on its own, so
+                // those hard breaks land mid-paragraph as ragged indented
+                // lines. Reflowing is the window's business — the wording is
+                // still entirely the binary's.
+                const said = actErr.text.trim().replace(/\s*\n\s*/g, " ")
+                root.askMsg = said || "that did not work"
             }
             root.reload()
         }
@@ -189,7 +196,12 @@ ShellRoot {
         // second would be left unread in it. The confirmation above is this
         // window's job precisely because the binary skips it here.
         root.pendingPw = pwField.text
-        actProc.command = [root.bin, root.askIsNew ? "create" : "open", root.askFor]
+        // ⚠ --rec IS WHAT MAKES THE ERROR FIT. Without it the binary lets
+        // gocryptfs speak for itself on stderr, which is right at a terminal
+        // and is three lines of "failed to unlock master key: cipher: message
+        // authentication failed" in a panel with room for one. In --rec the
+        // backend is silenced and the binary gives its own sentence.
+        actProc.command = [root.bin, "--rec", root.askIsNew ? "create" : "open", root.askFor]
         actProc.running = false
         actProc.running = true
     }
@@ -199,7 +211,11 @@ ShellRoot {
         stderr: StdioCollector { id: closeErr }
         onExited: (code) => {
             root.busy = false
-            root.status = code === 0 ? "" : (closeErr.text.trim() || "could not close it")
+            // Reflowed for the same reason as askMsg above: the binary wraps
+            // "something is still using it" for a terminal, this draws it in a
+            // window that wraps by itself.
+            const said = closeErr.text.trim().replace(/\s*\n\s*/g, " ")
+            root.status = code === 0 ? "" : (said || "could not close it")
             root.reload()
         }
     }
@@ -207,7 +223,7 @@ ShellRoot {
     function closeVault(name) {
         if (root.busy) return
         root.busy = true
-        closeProc.command = [root.bin, "close", name]
+        closeProc.command = [root.bin, "--rec", "close", name]
         closeProc.running = false
         closeProc.running = true
     }

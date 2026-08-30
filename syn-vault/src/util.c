@@ -14,10 +14,21 @@
 
 out_mode_t g_out = OUT_HUMAN;
 
+/*
+ * ⚠ THE "syn-vault: " PREFIX IS FOR A TERMINAL, so --rec drops it. That prefix
+ * exists to say which program in a pipeline spoke; a front end already knows
+ * what it ran and puts this text straight in front of somebody, where the
+ * program's own name is noise in a sentence about their password.
+ */
+static void say_who(void)
+{
+	if (g_out != OUT_REC) fputs("syn-vault: ", stderr);
+}
+
 void warn(const char *fmt, ...)
 {
 	va_list ap;
-	fputs("syn-vault: ", stderr);
+	say_who();
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
@@ -27,7 +38,7 @@ void warn(const char *fmt, ...)
 void die(const char *fmt, ...)
 {
 	va_list ap;
-	fputs("syn-vault: ", stderr);
+	say_who();
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);

@@ -47,6 +47,12 @@ if [ "${init:-0}" = 1 ]; then
     for a in "$@"; do last=$a; done
     printf '{"Version":2}\n' > "$last/gocryptfs.conf"
 fi
+# A failing gocryptfs is NOISY, and that noise is the point of the --rec tests
+# below: two lines of its own before the caller ever gets a word in.
+if [ "${STUBRC:-0}" != 0 ]; then
+    echo "failed to unlock master key: cipher: message authentication failed" >&2
+    echo "Password incorrect." >&2
+fi
 exit "${STUBRC:-0}"
 STUB
 chmod +x "$T/bin/gocryptfs"
@@ -165,6 +171,27 @@ rm -f "$SYNVAULT_HOME/Vaults/work/stray.txt"
 STUBRC=1 sh -c "printf 'wrong\n' | '$S' open work" >/dev/null 2>&1
 [ $? -ne 0 ]
 chk "a backend that refuses the password fails the command" $?
+
+# ⛔ A WINDOW HAS ROOM FOR ONE LINE. gocryptfs explains itself over two before
+# this program adds a third, which is right in a terminal and is a wall of text
+# in the panel under a password box. In --rec the backend is silenced and this
+# program says the one thing somebody can act on — exit 12 is a wrong password,
+# confirmed against gocryptfs v2.6.1.
+out=$(STUBRC=12 sh -c "printf 'wrong\n' | '$S' --rec open work" 2>&1 >/dev/null || true)
+[ "$out" = "That password is not right." ]
+chk "a front end gets one plain sentence for a wrong password" $?
+
+! grep -q "master key" <<<"$out"
+chk "…with the backend's own chatter kept out of it" $?
+
+! grep -q "syn-vault:" <<<"$out"
+chk "…and no program name in front of a sentence somebody reads" $?
+
+# ⚠ AND THE TERMINAL KEEPS THE DETAIL. "wrong password" and "corrupted vault"
+# are different problems, and only gocryptfs can tell them apart.
+out=$(STUBRC=12 sh -c "printf 'wrong\n' | '$S' open work" 2>&1 >/dev/null || true)
+grep -q "master key" <<<"$out"
+chk "a terminal still sees why the backend refused" $?
 
 # ── closing ─────────────────────────────────────────────────────────────────
 #

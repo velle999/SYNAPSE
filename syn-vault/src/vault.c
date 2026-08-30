@@ -154,6 +154,47 @@ bool vault_is_open(const char *name)
 /* ── running the backend ────────────────────────────────────────────────── */
 
 /*
+ * The backend's own stderr, silenced for a front end.
+ *
+ * ⛔ ONLY IN --rec MODE, AND ONLY FOR THE CHILD. A person at a terminal wants
+ * gocryptfs's detail: "failed to unlock master key: cipher: message
+ * authentication failed" above "Password incorrect." says a wrong password and
+ * a corrupted vault apart, and throwing it away would be inventing a friendlier
+ * message at the cost of the difference. A window has nowhere to put three
+ * lines of it — it shows the text in a one-line panel under the password box —
+ * so in --rec mode the child says nothing and this program supplies the one
+ * sentence itself. See gocryptfs_reason().
+ */
+static void hush_backend(void)
+{
+	if (g_out != OUT_REC) return;
+	int null = open("/dev/null", O_WRONLY);
+	if (null < 0) return;
+	dup2(null, STDERR_FILENO);
+	if (null > STDERR_FILENO) close(null);
+}
+
+/*
+ * gocryptfs's exit code as a sentence somebody can act on.
+ *
+ * ⚠ CONFIRMED AGAINST gocryptfs v2.6.1, not read off a table: 12 wrong
+ * password, 11 unreadable gocryptfs.conf, 10 mountpoint not empty, 6 missing
+ * or unusable cipherdir. An unknown code returns NULL rather than a guess —
+ * the caller then says which code it was, which is at least true.
+ */
+static const char *gocryptfs_reason(int rc)
+{
+	switch (rc) {
+	case 12:  return "That password is not right.";
+	case 11:  return "This vault's settings file is missing or unreadable.";
+	case 10:  return "There are already files where this vault opens, so it was left shut.";
+	case 6:   return "This vault's encrypted files are missing.";
+	case 127: return "gocryptfs is not installed.";
+	default:  return NULL;
+	}
+}
+
+/*
  * Run argv with `pw` on its stdin, and wait.
  *
  * ⛔ THE PASSWORD GOES DOWN A PIPE, NEVER IN argv. See password_read().
@@ -173,6 +214,7 @@ static int run_with_password(char *const argv[], const char *pw)
 		close(fds[1]);
 		dup2(fds[0], STDIN_FILENO);
 		if (fds[0] > STDIN_FILENO) close(fds[0]);
+		hush_backend();
 		execvp(argv[0], argv);
 		_exit(127);
 	}
@@ -196,7 +238,7 @@ static int run_plain(char *const argv[])
 {
 	pid_t pid = fork();
 	if (pid < 0) return -1;
-	if (pid == 0) { execvp(argv[0], argv); _exit(127); }
+	if (pid == 0) { hush_backend(); execvp(argv[0], argv); _exit(127); }
 	int st = 0;
 	while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
 	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
@@ -288,7 +330,11 @@ int cmd_create(const char *name)
 	wipe(pw);
 
 	if (rc != 0) {
-		warn("gocryptfs could not create the vault (exit %d)", rc);
+		const char *why = gocryptfs_reason(rc);
+		if (g_out == OUT_REC && why)
+			warn("%s", why);
+		else
+			warn("gocryptfs could not create the vault (exit %d)", rc);
 		free(cipher); free(mount);
 		return 1;
 	}
@@ -358,10 +404,15 @@ int cmd_open(const char *name)
 	wipe(pw);
 
 	if (rc != 0) {
-		/* gocryptfs says "password incorrect" on stderr, which the caller sees.
-		 * Not restated here: inventing a friendlier message would throw away
-		 * the difference between a wrong password and a broken vault. */
-		warn("could not open '%s' (exit %d)", name, rc);
+		/* At a terminal, gocryptfs has already said why on stderr and that
+		 * detail is worth more than a friendlier sentence — so this only adds
+		 * which vault and which code. A front end saw none of it (hush_backend)
+		 * and has one line to fill, so it gets the sentence instead. */
+		const char *why = gocryptfs_reason(rc);
+		if (g_out == OUT_REC && why)
+			warn("%s", why);
+		else
+			warn("could not open '%s' (exit %d)", name, rc);
 		free(cipher); free(mount);
 		return 1;
 	}

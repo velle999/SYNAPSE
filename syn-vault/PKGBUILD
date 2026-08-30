@@ -22,7 +22,7 @@
 # window passes one in. There is deliberately no --password option.
 pkgname=syn-vault
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="A password-locked folder for your own files: an encrypted vault in userspace"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
