@@ -154,10 +154,17 @@ python3 - "$SYNCAL_HOME" <<'PY'
 import sys, os, datetime
 root = sys.argv[1]
 d = os.path.join(root, "work", "Home"); os.makedirs(d, exist_ok=True)
-now = datetime.datetime.now(datetime.timezone.utc)
+# ⛔ FROM LOCAL MIDNIGHT, THE SAME ANCHOR THE AGENDA USES. Hanging these off
+# `now` instead makes the fixture drift through the window as the day goes on:
+# `agenda --days=4` runs from the start of today, so the daily rule's third
+# instance at +75h leaves the range once the clock passes 21:00, and this file
+# fails for the last three hours of every day and passes every morning.
+base = datetime.datetime.now().astimezone().replace(
+    hour=0, minute=0, second=0, microsecond=0)
 def ics(uid, off, summ, extra=""):
-    s = (now + datetime.timedelta(hours=off)).strftime("%Y%m%dT%H%M%SZ")
-    e = (now + datetime.timedelta(hours=off + 1)).strftime("%Y%m%dT%H%M%SZ")
+    utc = datetime.timezone.utc
+    s = (base + datetime.timedelta(hours=off)).astimezone(utc).strftime("%Y%m%dT%H%M%SZ")
+    e = (base + datetime.timedelta(hours=off + 1)).astimezone(utc).strftime("%Y%m%dT%H%M%SZ")
     return (f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:{uid}\r\n"
             f"DTSTAMP:20260101T000000Z\r\nDTSTART:{s}\r\nDTEND:{e}\r\n"
             f"SUMMARY:{summ}\r\n{extra}END:VEVENT\r\nEND:VCALENDAR\r\n")
