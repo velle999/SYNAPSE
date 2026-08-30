@@ -59,6 +59,52 @@ int main(int argc, char **argv)
 	if (!root) { perror("mkdtemp"); return 2; }
 	setenv("SYNCAL_HOME", root, 1);
 
+	/* ── what a failure says, before anything talks to a server ─────────── */
+	//
+	// ⛔ THE REASON IS IN THE BODY. Google answered a 403 naming the switch that
+	// was off and the URL that turns it on, and syn-cal printed the status and
+	// threw the rest away — so a project with the CalDAV API disabled looked
+	// exactly like a bad token.
+	{
+		http_resp_t r;
+		memset(&r, 0, sizeof r);
+
+		r.body.b = (char *)"<?xml version=\"1.0\"?><errors xmlns=\"http://schemas.google.com/g/2005\">"
+		                   "<error><domain>GData</domain><code>accessNotConfigured</code>"
+		                   "<internalReason>CalDAV API has not been used in project 1234 "
+		                   "before or it is disabled.</internalReason></error></errors>";
+		char *w = server_said_public(&r);
+		ok_("a GData body gives up its reason",
+		    strstr(w, "CalDAV API has not been used") != NULL);
+		free(w);
+
+		/* ⚠ WITH A NAMESPACE PREFIX TOO. Every real DAV server sends one, and
+		 * which letter it uses is its own business — D:, d:, or none. */
+		r.body.b = (char *)"<D:error xmlns:D=\"DAV:\">"
+		                   "<D:responsedescription>Quota exceeded</D:responsedescription></D:error>";
+		w = server_said_public(&r);
+		ok_("…and so does a prefixed DAV one", strcmp(w, " — Quota exceeded") == 0);
+		free(w);
+
+		r.body.b = (char *)"Forbidden: this calendar is read-only";
+		w = server_said_public(&r);
+		ok_("a short plain-text body is the server talking too",
+		    strstr(w, "read-only") != NULL);
+		free(w);
+
+		/* ⛔ AND A PAGE IS NOT A REASON. An HTML error page appended to a warn()
+		 * scrolls the actual message off the screen. */
+		r.body.b = (char *)"<html><head><title>Error</title></head><body><p>oh dear</p></body></html>";
+		w = server_said_public(&r);
+		ok_("…but an HTML page is not repeated", strcmp(w, "") == 0);
+		free(w);
+
+		r.body.b = NULL;
+		w = server_said_public(&r);
+		ok_("…and an empty body adds nothing", strcmp(w, "") == 0);
+		free(w);
+	}
+
 	http_global_init();
 	/* The credentials tests/caldav_test.sh gives radicale. Basic auth, which is
 	   what every CalDAV provider except Google and Microsoft actually uses. */

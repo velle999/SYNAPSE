@@ -21,6 +21,11 @@ typedef struct { caldav_coll_t *e; size_t n, cap; } caldav_colls_t;
 void caldav_colls_free(caldav_colls_t *c);
 void colls_add_public(caldav_colls_t *c, caldav_coll_t v);
 
+/* Exposed for the tests: what the server said about a failure, in its own
+ * words, as " — <reason>" or "". See the note in caldav.c for why a status on
+ * its own is not a report. Always returns a string the caller frees. */
+char *server_said_public(const http_resp_t *resp);
+
 /* From whatever the user typed to the list of their calendars.
  *
  * Accepts a bare domain, a server root, a principal URL or a collection URL —

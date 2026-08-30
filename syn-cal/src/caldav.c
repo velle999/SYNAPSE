@@ -142,6 +142,82 @@ static bool dav_has(dav_xml_t *x, xmlNode *node, const char *expr)
 
 /* ── requests ───────────────────────────────────────────────────────────── */
 
+/* The text of the first of `tags` the body carries, with or without a namespace
+ * prefix. Nothing clever: the value wanted is always a leaf, so it runs to the
+ * next '<'. */
+static char *tag_text(const char *body, const char *const *tags, size_t ntags)
+{
+	if (!body) return NULL;
+	for (size_t i = 0; i < ntags; i++) {
+		char plain[64], prefixed[64];
+		snprintf(plain, sizeof plain, "<%s>", tags[i]);
+		snprintf(prefixed, sizeof prefixed, ":%s>", tags[i]);
+
+		const char *open = strstr(body, plain);
+		size_t olen = strlen(plain);
+		if (!open) {
+			const char *p = strstr(body, prefixed);
+			if (!p) continue;
+			/* Back to the '<' that opened it, so a prefix of any length works. */
+			const char *lt = p;
+			while (lt > body && *lt != '<') lt--;
+			if (*lt != '<') continue;
+			open = lt;
+			olen = (size_t)(p - lt) + strlen(prefixed);
+		}
+
+		const char *v = open + olen;
+		const char *e = strchr(v, '<');
+		if (!e || e == v) continue;
+		while (v < e && (*v == ' ' || *v == '\n' || *v == '\r' || *v == '\t')) v++;
+		size_t n = (size_t)(e - v);
+		while (n && (v[n - 1] == ' ' || v[n - 1] == '\n' ||
+		             v[n - 1] == '\r' || v[n - 1] == '\t')) n--;
+		if (!n) continue;
+		/* ⚠ CAPPED. An error body can be a whole HTML page, and a warn() that
+		 * scrolls the reason off the screen has not reported anything. */
+		if (n > 400) n = 400;
+		char *out = xmalloc(n + 1);
+		memcpy(out, v, n);
+		out[n] = '\0';
+		return out;
+	}
+	return NULL;
+}
+
+/* " — <what the server said>", or "" when it said nothing usable. The caller
+ * always frees it, so the messages below stay one xasprintf each.
+ *
+ * ⚠ THE SERVER'S OWN WORDS, for the reason oauth.c's exchange() gives at
+ * length. A 403 from Google's CalDAV endpoint is the difference between a token
+ * that is not signed in, a calendar that belongs to somebody else, and the
+ * CalDAV API being switched off in the Cloud project — and the body says which,
+ * by name, with the URL that fixes it. Printing the status alone sent somebody
+ * to re-check a token that was never the problem. */
+char *server_said_public(const http_resp_t *resp)
+{
+	static const char *const tags[] = {
+		"internalReason",       /* Google's GData error body */
+		"responsedescription",  /* RFC 4918, and what most DAV servers use */
+		"message",
+		"error",
+	};
+	char *what = tag_text(resp->body.b, tags, sizeof tags / sizeof *tags);
+
+	/* A short plain-text body is the server talking too. A long one, or one
+	 * full of markup nothing above recognised, is a page and not a reason. */
+	if (!what && resp->body.b && !strchr(resp->body.b, '<')) {
+		size_t n = strlen(resp->body.b);
+		if (n && n <= 200) what = xstrdup(resp->body.b);
+	}
+	if (!what) return xstrdup("");
+
+	char *out = xasprintf(" — %s", what);
+	free(what);
+	return out;
+}
+
+
 static bool propfind(const char *url, const http_auth_t *auth, const char *depth,
                      const char *body, http_resp_t *resp, char **err)
 {
@@ -151,7 +227,10 @@ static bool propfind(const char *url, const http_auth_t *auth, const char *depth
 	free(dh);
 	if (!ok) return false;
 	if (resp->status != 207 && resp->status != 200) {
-		if (err) *err = xasprintf("the server answered %ld to PROPFIND %s", resp->status, url);
+		char *why = server_said_public(resp);
+		if (err) *err = xasprintf("the server answered %ld to PROPFIND %s%s",
+		                          resp->status, url, why);
+		free(why);
 		return false;
 	}
 	return true;
@@ -352,7 +431,9 @@ static char *dav_get(remote_t *r, const char *href, size_t *len, char **etag, ch
 	free(url);
 	if (!ok) { http_resp_free(&resp); return NULL; }
 	if (resp.status < 200 || resp.status >= 300) {
-		if (err) *err = xasprintf("the server answered %ld", resp.status);
+		char *why = server_said_public(&resp);
+		if (err) *err = xasprintf("the server answered %ld%s", resp.status, why);
+		free(why);
 		http_resp_free(&resp);
 		return NULL;
 	}
@@ -389,7 +470,9 @@ static bool dav_put(remote_t *r, const char *href, const void *data, size_t len,
 
 	if (resp.status == 412 || resp.status == 409) { *conflict = true; http_resp_free(&resp); return true; }
 	if (resp.status < 200 || resp.status >= 300) {
-		if (err) *err = xasprintf("the server answered %ld to the upload", resp.status);
+		char *why = server_said_public(&resp);
+		if (err) *err = xasprintf("the server answered %ld to the upload%s", resp.status, why);
+		free(why);
 		http_resp_free(&resp);
 		return false;
 	}
@@ -419,7 +502,11 @@ static bool dav_del(remote_t *r, const char *href, const char *if_match,
 	if (resp.status == 412) { *conflict = true; http_resp_free(&resp); return true; }
 	/* 404 is success: it is gone, which is what was asked for. */
 	bool good = (resp.status >= 200 && resp.status < 300) || resp.status == 404;
-	if (!good && err) *err = xasprintf("the server answered %ld to the delete", resp.status);
+	if (!good && err) {
+		char *why = server_said_public(&resp);
+		*err = xasprintf("the server answered %ld to the delete%s", resp.status, why);
+		free(why);
+	}
 	http_resp_free(&resp);
 	return good;
 }

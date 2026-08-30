@@ -34,7 +34,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=15
+pkgrel=16
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -99,6 +99,12 @@ sha256sums=('SKIP')
 # empty refuses `account add-google` and says where to register — which is the
 # right answer for a rebuild that is not SynapseOS. Only this package speaks for
 # the SynapseOS project, so only this package ships its project's ids.
+#
+# ⛔ THE PROJECT MUST HAVE THE CalDAV API ENABLED, which is a different product
+# in the console from the Calendar API and is off by default. Without it the
+# whole flow works — consent, tokens, refresh — and every request then answers
+# 403 accessNotConfigured, which reads as a broken sign-in rather than a switch.
+#   https://console.cloud.google.com/apis/api/caldav.googleapis.com
 #
 # Google is the SynapseOS Cloud project 'synapseos-507023'. Microsoft is still
 # empty, so `account add-microsoft` continues to ask for --client-id until an

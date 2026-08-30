@@ -354,7 +354,12 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind,
 		     "\n"
 		     "  syn-cal account add-%s %s --client-id <the id>",
 		     kind == ACC_GOOGLE
-		       ? "https://console.cloud.google.com/apis/credentials — enable the Calendar API"
+		       /* ⛔ THE CalDAV API, NOT THE CALENDAR API. They are two products
+		        * in the console and this client speaks CalDAV; a project with
+		        * only the Calendar API enabled signs in perfectly and then
+		        * answers 403 accessNotConfigured to everything, naming the one
+		        * that is off. */
+		       ? "https://console.cloud.google.com/apis/api/caldav.googleapis.com — enable the CalDAV API"
 		       : "https://portal.azure.com — App registrations, and grant Calendars.ReadWrite",
 		     acc_kind_name(kind), name);
 		return 2;
