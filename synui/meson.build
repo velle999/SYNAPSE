@@ -434,7 +434,6 @@ install_data(['data/synui-calc.desktop',
               'data/synui-aimodel.desktop',
               'data/synui-filters.desktop',
               'data/synui-clipboard.desktop',
-              'data/synui-calendar.desktop',
               # The image viewer and the cropper — two faces of one panel
               # (src/crop.c), and two entries because they are two things to
               # ask for. The viewer also DECLARES the image MIME types, which
