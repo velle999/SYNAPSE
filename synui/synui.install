@@ -1,0 +1,92 @@
+# synui.install — put the fingerprint reader in the LOGIN stack, not just the
+# lock's.
+#
+# ⛔ THE GREETER HAS NEVER HAD ONE. synui ships /etc/pam.d/synui-lock-fprint and
+# the helper that drives it, so a fingerprint unlocks a LOCKED screen. Logging
+# in is a different stack entirely: greetd authenticates through
+# /etc/pam.d/greetd, which is greetd's own file and contains pam_securetty,
+# pam_nologin and system-local-login — and no pam_fprintd. So at boot there was
+# nothing to swipe at, ever. Reported as "it's mostly there at lock, it's the
+# boot it usually isn't if not ever", which was exactly right.
+#
+# ⚠ WHY A SCRIPTLET AND NOT A PACKAGED FILE. /etc/pam.d/greetd belongs to the
+# greetd package; shipping our own copy would be a file conflict and neither
+# package would install. It IS in greetd's backup= array, which is what makes
+# editing it safe: pacman preserves the modification across greetd upgrades and
+# writes a .pacnew instead of overwriting, so the line does not silently vanish
+# one update later.
+#
+# ⛔ sufficient, NEVER required. A reader that is absent, broken, unenrolled or
+# simply not swiped must fall through to the password prompt. `required` here
+# would mean a laptop whose reader failed cannot be logged into at all — the
+# one bug in this area nobody could work around from the login screen.
+#
+# SynapseOS Project — GPL-2.0-or-later
+
+_greetd_pam=/etc/pam.d/greetd
+_fp_line='auth       sufficient   pam_fprintd.so'
+
+_synui_fprint_in_greeter() {
+    # Nothing to do where there is no greetd, which is most desktops.
+    [ -f "$_greetd_pam" ] || return 0
+
+    # Already there — including a line somebody added by hand, which is not
+    # ours to duplicate.
+    if grep -q 'pam_fprintd' "$_greetd_pam"; then
+        return 0
+    fi
+
+    # ⚠ ONLY WHEN THE MODULE IS ACTUALLY INSTALLED. fprintd is an optdepend and
+    # is absent on most machines; a `sufficient` line naming a module PAM cannot
+    # dlopen is harmless to authentication but logs a complaint on every single
+    # login. post_upgrade runs on every synui update, so a machine that installs
+    # fprintd later picks this up at the next one.
+    if ! [ -e /usr/lib/security/pam_fprintd.so ] && ! [ -e /lib/security/pam_fprintd.so ]; then
+        return 0
+    fi
+
+    # ⛔ BEFORE system-local-login, AFTER securetty/nologin. Those two are
+    # `required`/`requisite` gates that must still run — a fingerprint is not a
+    # way past "this account is barred from logging in".
+    if ! grep -q '^auth.*include.*system-local-login' "$_greetd_pam"; then
+        echo ">>> synui: $_greetd_pam is not the stack this expected;"
+        echo "    leaving it alone. Add this above the auth include for a"
+        echo "    fingerprint at the login screen:"
+        echo "        $_fp_line"
+        return 0
+    fi
+
+    # Written via a temp file and moved into place: a half-written PAM stack is
+    # a machine nobody can log into, and the window for that is however long the
+    # write takes.
+    local tmp
+    tmp=$(mktemp "${_greetd_pam}.synui.XXXXXX") || return 0
+    awk -v line="$_fp_line" '
+        !done && /^auth[[:space:]]+include[[:space:]]+system-local-login/ {
+            print line
+            done = 1
+        }
+        { print }
+    ' "$_greetd_pam" > "$tmp" || { rm -f "$tmp"; return 0; }
+
+    # It must still contain the stack it started with. An awk that produced
+    # nothing useful is not something to move over a login file.
+    if ! grep -q 'system-local-login' "$tmp" || ! grep -q 'pam_fprintd' "$tmp"; then
+        rm -f "$tmp"
+        return 0
+    fi
+
+    chmod 644 "$tmp"
+    mv -f "$tmp" "$_greetd_pam"
+    echo ">>> synui: fingerprint added to the login screen ($_greetd_pam)."
+    echo "    It is sufficient, so a failed or absent swipe still asks for"
+    echo "    the password. Remove that line to undo it."
+}
+
+post_install() {
+    _synui_fprint_in_greeter
+}
+
+post_upgrade() {
+    _synui_fprint_in_greeter
+}
