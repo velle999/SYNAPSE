@@ -2024,6 +2024,12 @@ that is not running SynapseOS. Every dependency except `scenefx0.5` is in Arch's
 own repositories, and each component is one `PKGBUILD`:
 
 ```bash
+git clone <the syn-play repo> && cd syn-play && makepkg -si
+```
+
+or, without cloning anything, the `PKGBUILD` alone:
+
+```bash
 curl -LO https://github.com/velle999/SYNAPSE/raw/main/syn-play/PKGBUILD
 makepkg -si
 ```
@@ -2039,7 +2045,7 @@ Not in that set: `synapd`, `synapse-llama`, `synapse_kmod`, `synguard`,
 
 `packaging/README.md` covers the whole of it — how one `source=()` line serves
 both this checkout and everybody else, `tools/publish-sources.sh`,
-`packaging/aur-export.sh`, and `packaging/cleanroom.sh`, which builds each
+`packaging/git-export.sh`, and `packaging/cleanroom.sh`, which builds each
 component from its source tarball alone in an empty directory. That last one is
 the guard: a top-level directory missing from the tarball's allowlist is absent
 with no warning, and it only fails on a machine nobody here is sitting at.

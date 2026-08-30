@@ -35,15 +35,24 @@ package to trust: `makepkg` builds from source in front of you.
 
 ## Installing an application
 
-Each application is a single `PKGBUILD`, and none of them needs the compositor:
+Each application is one package repository, and none of them needs the
+compositor:
+
+```bash
+git clone <the syn-play repo>
+cd syn-play && makepkg -si
+```
+
+That is the whole of it. The `PKGBUILD` fetches its own source tarball from the
+release matching its version, and a build leaves the clone clean, so `git pull`
+later gets the next version.
+
+Without cloning anything, the `PKGBUILD` alone is enough:
 
 ```bash
 curl -LO https://github.com/velle999/SYNAPSE/raw/main/syn-play/PKGBUILD
 makepkg -si
 ```
-
-That is the whole of it. The `PKGBUILD` fetches its own source tarball from the
-release matching its version.
 
 Building from a checkout of this repository works too, and is the same two
 commands with the source assembled locally instead of downloaded:
@@ -178,16 +187,41 @@ so an uncommitted edit would ship inside an asset nobody can re-derive from its
 tag. Re-run it after any `pkgrel` bump — the new tag is a new release, and the
 old one stays valid for the `PKGBUILD` that pointed at it.
 
-### Submitting to the AUR
+### Per-package git repositories
 
-`packaging/aur-export.sh` writes each package the way the AUR wants it — a
-directory holding the `PKGBUILD` and a generated `.SRCINFO`, ready to be pushed
-to `ssh://aur@aur.archlinux.org/<name>.git`:
+`packaging/git-export.sh` writes each component as its own git repository —
+`PKGBUILD`, a generated `.SRCINFO`, its `.install` scriptlet if it has one, and
+a `.gitignore` so a build does not leave the clone dirty:
 
 ```bash
-packaging/aur-export.sh                 # all of them, into packaging/out/
-packaging/aur-export.sh syn-play        # just one
+packaging/git-export.sh                 # all of them, into packaging/out/
+packaging/git-export.sh syn-play        # just one
 ```
 
 It copies rather than rewrites — the exported `PKGBUILD` is byte-for-byte the
-one in the tree, so there is still only one of them.
+one in the tree, so there is still only one of them — and it is idempotent:
+re-running after a `pkgrel` bump makes one commit per changed package and says
+`unchanged` for the rest.
+
+⚠ **Identity is set per repository, on purpose.** `~/.gitconfig` on this machine
+carries credential helpers and no `user.email`, so a freshly created repo has
+none; commits then either fail or land unattributed, and GitHub — which matches
+commits to accounts by email — shows an unmatched one as an anonymous
+contributor.
+
+**This is the AUR's own layout.** Nothing about it is AUR-specific, so these
+push to any git host, but the `aur` remote is already recorded on every one:
+
+```bash
+git -C packaging/out/syn-play push origin main   # wherever you host them
+git -C packaging/out/syn-play push aur main      # if and when the AUR opens up
+```
+
+Nothing in the script pushes. Where these land is a namespace decision, and one
+`--origin 'https://…/%s.git'` records without acting on.
+
+⚠ `packaging/out/` is gitignored — it is regenerated from the PKGBUILDs, and
+committing it would be a second copy of every one of them, free to go stale
+against the one that is actually built. The repositories in it are real, though:
+delete the directory and their local history goes with it, so push them
+somewhere before relying on it.
