@@ -163,23 +163,70 @@ static void greeter_reject(syn_server_t *s)
 /* Extract the string value of a top-level "key" field into out. Tolerant of
  * whitespace around ':' — greetd is compact JSON, but don't bank on it.
  * Returns 1 if the field was found. */
+/* Extract the string value of a top-level "key" field into out. Tolerant of
+ * whitespace around ':' — greetd is compact JSON, but don't bank on it.
+ * Returns 1 if the field was found.
+ *
+ * ⛔ EVERY OCCURRENCE IS TRIED, NOT JUST THE FIRST, AND THAT IS THE WHOLE BUG
+ * THIS FUNCTION ONCE HAD. greetd's message is
+ *
+ *     {"type":"auth_message","auth_message_type":"info","auth_message":"Place your finger…"}
+ *
+ * and a search for "auth_message" matches the VALUE of "type" before it reaches
+ * the field of that name — the message type is literally the string
+ * auth_message. The old code took that first hit, found a comma where a colon
+ * should be, and returned "not found". So the prompt text was ALWAYS empty:
+ * pam_fprintd asked for a finger, waited its ten seconds, and the login screen
+ * drew nothing, because the words never survived the parse. Measured on the
+ * ThinkPad, where the reader works at the lock and looked dead at login:
+ *
+ *     synui greeter: pam says [info] ""
+ *
+ * A hit that is not followed by ':' is a VALUE that happens to read like a key.
+ * Skip it and keep looking.
+ */
 static int json_field(const char *json, const char *key, char *out, size_t n)
 {
     char pat[48];
     snprintf(pat, sizeof(pat), "\"%s\"", key);
-    const char *p = strstr(json, pat);
-    if (!p) return 0;
-    p += strlen(pat);
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p != ':') return 0;
-    p++;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p != '"') return 0;
-    p++;
-    size_t o = 0;
-    while (*p && *p != '"' && o + 1 < n) out[o++] = *p++;
-    out[o] = 0;
-    return 1;
+    size_t patlen = strlen(pat);
+
+    for (const char *p = json; (p = strstr(p, pat)) != NULL; p += patlen) {
+        const char *q = p + patlen;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q != ':') continue;          /* a value, not the key — keep looking */
+        q++;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q != '"') return 0;
+        q++;
+
+        /* ⚠ Backslash escapes are UNDONE here, not copied through. A PAM prompt
+         * is arbitrary text from a module; one containing a quote would
+         * otherwise end the value early and truncate the message mid-word. */
+        size_t o = 0;
+        while (*q && *q != '"' && o + 1 < n) {
+            if (*q == '\\' && q[1]) {
+                q++;
+                switch (*q) {
+                case 'n': out[o++] = '\n'; break;
+                case 't': out[o++] = '\t'; break;
+                case 'r': out[o++] = '\r'; break;
+                case 'b': out[o++] = '\b'; break;
+                case 'f': out[o++] = '\f'; break;
+                /* \uXXXX is left as-is: greetd does not emit it for these
+                 * strings, and half-decoding UTF-16 pairs here would be more
+                 * ways to be wrong than it is worth. */
+                default:  out[o++] = *q;   break;
+                }
+                q++;
+                continue;
+            }
+            out[o++] = *q++;
+        }
+        out[o] = 0;
+        return 1;
+    }
+    return 0;
 }
 
 static int msg_is(const char *json, const char *type)

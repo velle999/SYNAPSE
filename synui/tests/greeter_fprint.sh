@@ -31,6 +31,53 @@ chk() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 
 echo "greeter fingerprint"
 
+# ── The prompt text has to survive the parse ────────────────────────────────
+#
+# ⛔ THE BUG THAT MADE ALL OF THIS LOOK LIKE DEAD HARDWARE. greetd sends
+#
+#   {"type":"auth_message","auth_message_type":"info","auth_message":"Place your finger…"}
+#
+# and the message TYPE is literally the string "auth_message" — so a search for
+# that key matches the VALUE of "type" first. The old parser took that hit,
+# found a comma where a colon belonged, and reported the field missing. Every
+# prompt arrived with empty text, so the login screen drew nothing while
+# pam_fprintd sat waiting ten seconds for a finger:
+#
+#   synui greeter: pam says [info] ""
+#
+# Compiled and run, not grepped: this is a parser, and the only way to know a
+# parser works is to feed it the bytes.
+JF=$(mktemp -d) || exit 1
+trap 'rm -rf "$JF" "${T:-}"' EXIT
+{
+    printf '#include <stdio.h>\n#include <string.h>\n'
+    sed -n '/^static int json_field/,/^}$/p' "$HERE/../src/greeter.c"
+    cat <<'MAIN'
+int main(void) {
+    char o[256]; int bad = 0;
+    const char *m = "{\"type\":\"auth_message\",\"auth_message_type\":\"info\","
+                    "\"auth_message\":\"Place your finger on Synaptics Sensors\"}";
+    if (!json_field(m, "auth_message", o, sizeof o) ||
+        strcmp(o, "Place your finger on Synaptics Sensors")) { puts("prompt text lost"); bad = 1; }
+    if (!json_field(m, "auth_message_type", o, sizeof o) || strcmp(o, "info")) { puts("type lost"); bad = 1; }
+    if (!json_field(m, "type", o, sizeof o) || strcmp(o, "auth_message")) { puts("outer type lost"); bad = 1; }
+    const char *p = "{\"type\":\"auth_message\",\"auth_message_type\":\"secret\","
+                    "\"auth_message\":\"Password: \"}";
+    if (!json_field(p, "auth_message", o, sizeof o) || strcmp(o, "Password: ")) { puts("secret text lost"); bad = 1; }
+    const char *e = "{\"type\":\"auth_message\",\"auth_message\":\"say \\\"hi\\\" now\"}";
+    if (!json_field(e, "auth_message", o, sizeof o) || strcmp(o, "say \"hi\" now")) { puts("escape lost"); bad = 1; }
+    if (json_field(m, "nosuch", o, sizeof o)) { puts("invented a field"); bad = 1; }
+    return bad;
+}
+MAIN
+} > "$JF/jf.c"
+if cc -o "$JF/jf" "$JF/jf.c" 2>"$JF/cc.err"; then
+    "$JF/jf"
+    chk "a prompt's text survives a key that also appears as a value" $?
+else
+    bad "json_field would not compile standalone ($(head -1 "$JF/cc.err"))"
+fi
+
 # ── The reader is armed when the screen appears ─────────────────────────────
 #
 # create_session is what starts a PAM conversation, and a PAM conversation is
@@ -113,7 +160,6 @@ chk "…and it runs before greetd reads the stack" $?
 
 # ── The script, driven against real files ───────────────────────────────────
 T=$(mktemp -d) || exit 1
-trap 'rm -rf "$T"' EXIT
 cat > "$T/base" <<'PAM'
 #%PAM-1.0
 
