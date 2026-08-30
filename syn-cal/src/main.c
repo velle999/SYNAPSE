@@ -15,6 +15,7 @@
 #include "config.h"
 #include "event.h"
 #include "graph.h"
+#include "month.h"
 #include "oauth.h"
 #include "sync.h"
 
@@ -47,6 +48,7 @@ static void usage(FILE *f)
 "  syn-cal tui                          the month, in this terminal\n"
 "  syn-cal agenda [--days N] [--from YYYY-MM-DD]\n"
 "                                       what is on, across every calendar\n"
+"  syn-cal month [--from YYYY-MM]       the month, as a grid\n"
 "  syn-cal today                        just today\n"
 "  syn-cal week                         the next seven days\n"
 "  syn-cal events <name> <calendar>     the raw store, one calendar\n"
@@ -837,6 +839,13 @@ int main(int argc, char **argv)
 	conflict_t policy = CONFLICT_KEEP_BOTH;
 	bool dry = false;
 
+	/* ⚠ COLOUR IS A PROPERTY OF THE OUTPUT, NOT OF THE BUILD, and it is decided
+	 * once here so every command that prints inherits the same answer. Piped
+	 * into a file or a pager there are no escapes to strip, and NO_COLOR is
+	 * honoured because somebody who sets it means it. --rec turns it off again
+	 * below whatever this says. */
+	g_color = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");
+
 	int n = 0;
 	const char *pos[8];
 
@@ -897,6 +906,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "gui"))                       rc = cmd_gui();
 	else if (!strcmp(c, "tui"))                       rc = cmd_tui();
 	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days, from_date);
+	else if (!strcmp(c, "month"))                     rc = cmd_month(from_date);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);
 	else { warn("unknown command '%s'", c); usage(stderr); rc = 2; }

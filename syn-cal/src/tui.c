@@ -30,6 +30,7 @@
  */
 #define _GNU_SOURCE
 #include "event.h"
+#include "month.h"
 #include "syncal.h"
 
 #include <signal.h>
@@ -85,40 +86,6 @@ static bool tty_cbreak(void)
 
 /* ── the month ──────────────────────────────────────────────────────────── */
 
-static int days_in_month(int year, int mon)
-{
-	static const int d[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-	if (mon != 1) return d[mon];
-	bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
-	return leap ? 29 : 28;
-}
-
-/* Weekday of the 1st, 0 = Monday. Via mktime rather than by hand: it knows
- * about the calendar's own history, and this is not a place to be clever. */
-static int first_weekday(int year, int mon)
-{
-	struct tm t;
-	memset(&t, 0, sizeof t);
-	t.tm_year = year - 1900;
-	t.tm_mon = mon;
-	t.tm_mday = 1;
-	t.tm_hour = 12;              /* midday: no clock change can move the day */
-	t.tm_isdst = -1;
-	if (mktime(&t) == (time_t)-1) return 0;
-	return (t.tm_wday + 6) % 7;
-}
-
-static time_t month_start(int year, int mon)
-{
-	struct tm t;
-	memset(&t, 0, sizeof t);
-	t.tm_year = year - 1900;
-	t.tm_mon = mon;
-	t.tm_mday = 1;
-	t.tm_isdst = -1;
-	return mktime(&t);
-}
-
 #define C_RESET  "\033[0m"
 #define C_DIM    "\033[2m"
 #define C_BOLD   "\033[1m"
@@ -158,7 +125,9 @@ static void draw(int year, int mon, int sel, events_t *ev, bool colour)
 	printf("\n  %s%s%s\n\n", B, title, R);
 	printf("  %sMo Tu We Th Fr Sa Su%s\n", D, R);
 
-	int first = first_weekday(year, mon), dim = days_in_month(year, mon);
+	month_t m;
+	month_load(&m, year, mon);
+	int first = m.first, dim = m.days;
 	printf("  ");
 	for (int i = 0; i < first; i++) printf("   ");
 
@@ -217,26 +186,12 @@ static void draw(int year, int mon, int sel, events_t *ev, bool colour)
 
 /* ── the loop ───────────────────────────────────────────────────────────── */
 
-static void step_day(int *year, int *mon, int *sel, int delta)
+/* Whole months, clamping the selection: the 31st of March stepped back lands on
+ * the 28th of February, not on a day that does not exist. */
+static void tui_step_month(int *year, int *mon, int *sel, int delta)
 {
-	*sel += delta;
-	while (*sel < 1) {
-		if (--*mon < 0) { *mon = 11; (*year)--; }
-		*sel += days_in_month(*year, *mon);
-	}
-	int dim;
-	while (*sel > (dim = days_in_month(*year, *mon))) {
-		*sel -= dim;
-		if (++*mon > 11) { *mon = 0; (*year)++; }
-	}
-}
-
-static void step_month(int *year, int *mon, int *sel, int delta)
-{
-	*mon += delta;
-	while (*mon < 0)  { *mon += 12; (*year)--; }
-	while (*mon > 11) { *mon -= 12; (*year)++; }
-	int dim = days_in_month(*year, *mon);
+	month_step(year, mon, delta);
+	int dim = month_days_in(*year, *mon);
 	if (*sel > dim) *sel = dim;
 }
 
@@ -248,7 +203,9 @@ int cmd_tui(void)
 	int year = t.tm_year + 1900, mon = t.tm_mon, sel = t.tm_mday;
 
 	bool interactive = tty_cbreak();
-	bool colour = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");
+	/* The same answer main() worked out for every other command; asking the
+	 * question a second time here is how the two drift apart. */
+	bool colour = g_color;
 
 	int loaded_year = -1, loaded_mon = -1;
 	events_t ev;
@@ -258,10 +215,13 @@ int cmd_tui(void)
 		if (year != loaded_year || mon != loaded_mon) {
 			events_free(&ev);
 			char *err = NULL;
-			time_t from = month_start(year, mon);
-			/* 31 days from the 1st covers any month; the day filter above
-			 * drops whatever falls past the end of a short one. */
-			if (!agenda_range(from, from + 31 * 86400, &ev, &err)) {
+			month_t m;
+			month_load(&m, year, mon);
+			/* ⚠ TO THE 1ST OF THE NEXT MONTH, not the 1st plus 31 days: that
+			 * over-read pulled in early events from the following month, which
+			 * the day filter in draw() then had to drop. The month knows where
+			 * it ends. */
+			if (!agenda_range(m.start, m.end, &ev, &err)) {
 				warn("%s", err ? err : "could not read the calendars");
 				free(err);
 			}
@@ -282,18 +242,18 @@ int cmd_tui(void)
 		if (c == '\033') {
 			if (getchar() != '[') continue;
 			switch (getchar()) {
-			case 'C': step_day(&year, &mon, &sel, +1); break;   /* right */
-			case 'D': step_day(&year, &mon, &sel, -1); break;   /* left */
-			case 'B': step_day(&year, &mon, &sel, +7); break;   /* down */
-			case 'A': step_day(&year, &mon, &sel, -7); break;   /* up */
+			case 'C': month_step_day(&year, &mon, &sel, +1); break;   /* right */
+			case 'D': month_step_day(&year, &mon, &sel, -1); break;   /* left */
+			case 'B': month_step_day(&year, &mon, &sel, +7); break;   /* down */
+			case 'A': month_step_day(&year, &mon, &sel, -7); break;   /* up */
 			default: break;
 			}
 			continue;
 		}
 
 		switch (c) {
-		case ']': case '.': step_month(&year, &mon, &sel, +1); break;
-		case '[': case ',': step_month(&year, &mon, &sel, -1); break;
+		case ']': case '.': tui_step_month(&year, &mon, &sel, +1); break;
+		case '[': case ',': tui_step_month(&year, &mon, &sel, -1); break;
 		case 't': case 'T':
 			localtime_r(&now, &t);
 			year = t.tm_year + 1900; mon = t.tm_mon; sel = t.tm_mday;

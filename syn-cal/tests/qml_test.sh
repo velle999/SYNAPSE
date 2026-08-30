@@ -73,6 +73,24 @@ check "the agenda comes from the binary, not from QML date arithmetic" $?
 ! grep -qi 'RRULE\|FREQ=\|icaltime' "$QML"
 check "…and the window contains no recurrence logic of its own" $?
 
+# ⛔ AND NO CALENDAR ARITHMETIC EITHER. The grid arrives as records carrying the
+# row and column each day belongs in — see month.h. A window that worked out
+# which weekday a month opens on would be the second answer to that question,
+# and the one nobody fixes when February is wrong.
+grep -q '"--rec", "month"' "$QML"
+check "the month grid comes from the binary too" $?
+
+! grep -qE 'getDay\(\)|daysInMonth|% *4 *===? *0|isLeap' "$QML"
+check "…so the window works out no weekday and no leap year of its own" $?
+
+grep -q 'model: \["Week", "Month"\]' "$QML"
+check "both views are reachable, each button naming the view it gives you" $?
+
+# ⛔ A CELL THAT CANNOT SHOW THEM ALL SAYS SO. Silently drawing the first three
+# of five is a calendar that hides two appointments.
+grep -q '"+" + (cell.shown.length - cell.nshow) + " more"' "$QML"
+check "…and a full day says how many it is not showing" $?
+
 # ⛔ A BUTTON IS ITS OWN LABEL. Not an icon that needs a tooltip to say what it
 # does; only KEYS follow a setting.
 grep -q 'text: root.busy ? "Syncing…" : "Sync now"' "$QML"

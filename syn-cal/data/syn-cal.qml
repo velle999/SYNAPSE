@@ -339,11 +339,41 @@ FloatingWindow {
         return d
     }
 
+    // ── week or month ───────────────────────────────────────────────────────
+    //
+    // ⛔ THE GRID IS NOT COMPUTED HERE. `syn-cal --rec month` answers one record
+    // per day carrying the row and column it belongs in, so which weekday a
+    // month opens on — and whether February has 28 or 29 days — is decided once,
+    // in C, for all three front ends. QML places what it is handed.
+    property string view: "week"
+    property int monthOffset: 0
+    property var monthCells: []
+    property var eventsByDate: ({})
+
+    readonly property date monthAnchor: {
+        const d = new Date()
+        d.setHours(0, 0, 0, 0)
+        d.setDate(1)
+        d.setMonth(d.getMonth() + root.monthOffset)
+        return d
+    }
+    readonly property string monthTag: Qt.formatDate(root.monthAnchor, "yyyy-MM")
+    readonly property int monthRows: {
+        let r = 0
+        for (let i = 0; i < root.monthCells.length; i++)
+            r = Math.max(r, root.monthCells[i].row + 1)
+        return r > 0 ? r : 6
+    }
+
     function reload() {
         agendaProc.running = false
         agendaProc.running = true
         calsProc.running = false
         calsProc.running = true
+        if (root.view === "month") {
+            monthProc.running = false
+            monthProc.running = true
+        }
     }
 
     Component.onCompleted: reload()
@@ -355,7 +385,13 @@ FloatingWindow {
         // ⚠ THE BINARY DOES THE WORK. Recurrence expansion, time zones and the
         // clock change all happen in libical behind this command; nothing in
         // QML is capable of getting those right and nothing here tries.
-        command: [root.bin, "--rec", "agenda", "--days=" + root.days]
+        // ⚠ 31 DAYS FROM THE 1ST IN MONTH VIEW, deliberately over-reading. The
+        // grid only ever asks for dates it holds, so a short month's spare days
+        // match no cell and are never drawn — and asking for the exact length
+        // would make this command wait for the month records to arrive first.
+        command: root.view === "month"
+                 ? [root.bin, "--rec", "agenda", "--from=" + root.monthTag + "-01", "--days=31"]
+                 : [root.bin, "--rec", "agenda", "--days=" + root.days]
         stdout: StdioCollector {
             onStreamFinished: {
                 const rows = text.trim().split("\n").filter(l => l.length > 0)
@@ -378,6 +414,47 @@ FloatingWindow {
                     })
                 }
                 root.events = out
+
+                // ⚠ BUILT HERE, AND ASSIGNED WHOLE. Forty-two cells each
+                // filtering the whole list is work enough to feel, and mutating
+                // a var in place notifies nothing — the grid would keep drawing
+                // the month before last.
+                const by = {}
+                for (let k = 0; k < out.length; k++) {
+                    const key = Qt.formatDate(new Date(out[k].start), "yyyy-MM-dd")
+                    if (!by[key]) by[key] = []
+                    by[key].push(out[k])
+                }
+                root.eventsByDate = by
+            }
+        }
+    }
+
+    // ── syn-cal --rec month ─────────────────────────────────────────────────
+    Process {
+        id: monthProc
+        command: [root.bin, "--rec", "month", "--from=" + root.monthTag]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = text.trim().split("\n").filter(l => l.length > 0)
+                const out = []
+                for (let i = 1; i < rows.length; i++) {
+                    const f = rows[i].split("\t")
+                    if (f.length < 6) continue
+                    // Decoded like every other field, though a date has nothing
+                    // in it that needs it — see the note at the top of the file:
+                    // the exceptions are what drift.
+                    const date = root.disp(f[0])
+                    out.push({
+                        date: date,
+                        day: parseInt(date.slice(8), 10),
+                        row: parseInt(f[2], 10),
+                        col: parseInt(f[3], 10),
+                        today: f[4] === "1",
+                        count: parseInt(f[5], 10)
+                    })
+                }
+                root.monthCells = out
             }
         }
     }
@@ -731,8 +808,10 @@ FloatingWindow {
                             anchors { left: parent.left; verticalCenter: parent.verticalCenter
                                       right: nav.left; rightMargin: root.ui(12) }
                             elide: Text.ElideRight
-                            text: root.offset === 0 ? "The next " + root.days + " days"
-                                                    : Qt.formatDate(root.anchorDay, "d MMMM yyyy")
+                            text: root.view === "month"
+                                  ? Qt.formatDate(root.monthAnchor, "MMMM yyyy")
+                                  : (root.offset === 0 ? "The next " + root.days + " days"
+                                                       : Qt.formatDate(root.anchorDay, "d MMMM yyyy"))
                             color: root.cText
                             font { family: root.uiFont; pixelSize: root.ui(18); bold: true }
                         }
@@ -741,6 +820,39 @@ FloatingWindow {
                             id: nav
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             spacing: root.ui(10)
+
+                            // ⚠ EACH BUTTON SAYS WHICH VIEW IT GIVES YOU, and
+                            // the one you are looking at is the one filled in.
+                            // A single button that toggles has to be labelled
+                            // either where you are or where you would go, and
+                            // both readings are wrong half the time.
+                            Repeater {
+                                model: ["Week", "Month"]
+                                Rectangle {
+                                    width: root.ui(58); height: root.ui(26)
+                                    radius: root.ui(5)
+                                    property bool on: root.view === modelData.toLowerCase()
+                                    color: on ? root.cAccent
+                                              : (viewMouse.containsMouse ? root.cBg : "transparent")
+                                    border { width: 1; color: on ? root.cAccent : root.cDim }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: parent.on ? root.cPanel : root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                                    }
+                                    MouseArea {
+                                        id: viewMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.view = modelData.toLowerCase()
+                                            root.reload()
+                                        }
+                                    }
+                                }
+                            }
 
                             Repeater {
                                 model: [
@@ -765,8 +877,13 @@ FloatingWindow {
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            if (modelData.step === 0) root.offset = 0
-                                            else root.offset += modelData.step
+                                            if (root.view === "month") {
+                                                if (modelData.step === 0) root.monthOffset = 0
+                                                else root.monthOffset += modelData.step
+                                            } else {
+                                                if (modelData.step === 0) root.offset = 0
+                                                else root.offset += modelData.step
+                                            }
                                             root.reload()
                                         }
                                     }
@@ -777,6 +894,7 @@ FloatingWindow {
 
                     ListView {
                         id: agenda
+                        visible: root.view === "week"
                         width: parent.width
                         height: parent.height - root.ui(80)
                         clip: true
@@ -851,8 +969,115 @@ FloatingWindow {
                         }
                     }
 
+                    // ── the month ───────────────────────────────────────
+                    //
+                    // ⚠ NO MouseArea ON A CELL. A day that lights up under the
+                    // pointer and then does nothing when clicked is a button
+                    // that lies; the titles are already on the cell, so there
+                    // is nothing behind it to open.
+                    Item {
+                        id: monthGrid
+                        visible: root.view === "month"
+                        width: parent.width
+                        height: parent.height - root.ui(80)
+
+                        readonly property real gap: root.ui(4)
+                        readonly property real headH: root.ui(22)
+                        readonly property real cellW: (width - gap * 6) / 7
+                        readonly property real cellH: root.monthRows > 0
+                            ? (height - headH - gap * (root.monthRows - 1)) / root.monthRows
+                            : 0
+
+                        Repeater {
+                            model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                            Text {
+                                x: index * (monthGrid.cellW + monthGrid.gap)
+                                width: monthGrid.cellW
+                                height: monthGrid.headH
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData
+                                color: root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            }
+                        }
+
+                        Repeater {
+                            model: root.monthCells
+                            Rectangle {
+                                id: cell
+                                // ⚠ HELD, NOT READ THROUGH `modelData`. The
+                                // Repeater below rebinds that name to its own
+                                // index model, and every title in the cell would
+                                // then be looking at a number.
+                                readonly property var cellData: modelData
+                                readonly property var shown: root.eventsByDate[modelData.date] || []
+                                readonly property int fits:
+                                    Math.max(0, Math.floor((height - root.ui(24)) / root.ui(15)))
+                                // ⛔ NOTHING IS DROPPED SILENTLY. When the cell
+                                // cannot hold them all it gives up one more line
+                                // to say how many it is not showing.
+                                readonly property int nshow:
+                                    shown.length <= fits ? shown.length : Math.max(fits - 1, 0)
+
+                                x: modelData.col * (monthGrid.cellW + monthGrid.gap)
+                                y: monthGrid.headH + modelData.row * (monthGrid.cellH + monthGrid.gap)
+                                width: monthGrid.cellW
+                                height: monthGrid.cellH
+                                radius: root.ui(5)
+                                clip: true
+                                color: modelData.today ? root.wash(0.14) : "transparent"
+                                border { width: 1
+                                         color: modelData.today ? root.cAccent : root.cDim }
+
+                                Column {
+                                    x: root.ui(6)
+                                    y: root.ui(4)
+                                    width: parent.width - root.ui(12)
+                                    spacing: root.ui(1)
+
+                                    Text {
+                                        text: cell.cellData.day
+                                        color: cell.cellData.today ? root.cAccent : root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(12)
+                                               bold: cell.cellData.today }
+                                    }
+
+                                    Repeater {
+                                        model: cell.nshow
+                                        Text {
+                                            width: cell.width - root.ui(12)
+                                            elide: Text.ElideRight
+                                            text: cell.shown[index].summary === ""
+                                                  ? "(no title)" : cell.shown[index].summary
+                                            color: root.cText
+                                            font { family: root.uiFont; pixelSize: root.ui(10) }
+                                        }
+                                    }
+
+                                    Text {
+                                        visible: cell.shown.length > cell.nshow
+                                        width: cell.width - root.ui(12)
+                                        elide: Text.ElideRight
+                                        text: "+" + (cell.shown.length - cell.nshow) + " more"
+                                        color: root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Text {
-                        visible: root.events.length === 0
+                        visible: root.view === "month" && root.monthCells.length === 0
+                        text: root.calendars.length === 0
+                              ? "No calendars are set up yet."
+                              : "Loading " + Qt.formatDate(root.monthAnchor, "MMMM yyyy") + "…"
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(13) }
+                    }
+
+                    Text {
+                        visible: root.view === "week" && root.events.length === 0
                         text: root.calendars.length === 0
                               ? "No calendars are set up yet."
                               : "Nothing in the next " + root.days + " days."

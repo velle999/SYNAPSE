@@ -194,6 +194,52 @@ check "…and only the rule's instances are marked recurring" $?
 "$S" agenda --days=4 | grep -qE "^[A-Z][a-z]+day"
 check "the human agenda groups by day" $?
 
+# ── the month grid ──────────────────────────────────────────────────────────
+#
+# ⚠ FIXED MONTHS FOR THE SHAPE, and today's month only for the things that are
+# genuinely about today. Checking the grid against whatever month the build runs
+# in is exactly how the agenda cases above came to pass every morning and fail a
+# release at 21:01. February 2026 is twenty-eight days opening on a Sunday
+# whenever anybody runs this.
+
+[ "$("$S" --rec month --from=2026-02 | tail -n +2 | wc -l)" = 28 ]
+check "the month grid answers one record per day" $?
+
+[ "$("$S" --rec month --from=2028-02 | tail -n +2 | wc -l)" = 29 ]
+check "…twenty-nine in a leap February" $?
+
+"$S" --rec month --from=2026-02 | tail -n +2 | head -1 | grep -qP '^2026-02-01\t[0-9]+\t0\t6\t'
+check "…each in the cell its weekday says: 1 Feb 2026 is a Sunday" $?
+
+[ "$("$S" --rec month --from=2026-02 | tail -n +2 | awk -F'\t' '{print $3}' | sort -n | tail -1)" = 4 ]
+check "…so twenty-eight days opening on a Sunday still need five rows" $?
+
+# ⛔ THE SHAPE A `days / 7` GETS WRONG IN THE OTHER DIRECTION.
+[ "$("$S" --rec month --from=2027-02 | tail -n +2 | awk -F'\t' '{print $3}' | sort -n | tail -1)" = 3 ]
+check "…and opening on a Monday, four" $?
+
+[ "$("$S" --rec month | tail -n +2 | awk -F'\t' '$5==1' | wc -l)" = 1 ]
+check "exactly one day is marked today" $?
+
+# The fixture above put a one-off on today and a daily rule on the days after.
+[ "$("$S" --rec month | tail -n +2 | awk -F'\t' '$5==1 {print $6}')" -ge 1 ]
+check "…and today's cell counts the event that is on it" $?
+
+# ⛔ THE MONTH ENDS WHERE THE NEXT ONE BEGINS. Loading the 1st plus 31 days
+# pulled the following month's events into this month's grid.
+[ "$("$S" --rec month --from=2026-02 | tail -n +2 | tail -1 | cut -f1)" = "2026-02-28" ]
+check "…and no cell belongs to the month after" $?
+
+"$S" --rec month --from=2026-02-14 | tail -n +2 | head -1 | grep -q '^2026-02-01'
+check "a full date names the month it falls in" $?
+
+"$S" month --from=nonsense >/dev/null 2>&1
+[ $? -ne 0 ]
+check "a --from that is not a month fails" $?
+
+"$S" month | grep -q "Mo Tu We Th Fr Sa Su"
+check "the human grid is a week wide, headed by weekday" $?
+
 rm -rf "$SYNCAL_HOME/work/Home"
 
 # ── the OAuth kinds, without needing an account anywhere ────────────────────
