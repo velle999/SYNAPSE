@@ -252,6 +252,66 @@ FloatingWindow {
         }
     }
 
+    // A labelled text box. Inline for the same reason SynScrollBar is: this
+    // window carries its own palette and there is no shared QML module here.
+    component SynField: Column {
+        id: fld
+        property string label: ""
+        property string placeholder: ""
+        property alias text: box.text
+        // ⚠ ECHO OFF IS NOT ENOUGH ON ITS OWN — a password box must also keep
+        // out of the predictive/clipboard machinery a normal field opts into.
+        property bool secret: false
+        signal textEdited(string text)
+
+        spacing: root.ui(4)
+
+        Text {
+            text: fld.label
+            visible: fld.label !== ""
+            color: root.cDim
+            font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
+        }
+
+        Rectangle {
+            width: fld.width
+            height: root.ui(30)
+            radius: root.ui(5)
+            color: root.cBg
+            border { width: 1; color: box.activeFocus ? root.cAccent : root.cDim }
+
+            TextInput {
+                id: box
+                anchors { fill: parent; leftMargin: root.ui(8); rightMargin: root.ui(8) }
+                verticalAlignment: TextInput.AlignVCenter
+                clip: true
+                color: root.cText
+                selectionColor: root.cAccent
+                selectedTextColor: root.cPanel
+                echoMode: fld.secret ? TextInput.Password : TextInput.Normal
+                passwordCharacter: "\u2022"
+                inputMethodHints: fld.secret
+                    ? (Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+                       | Qt.ImhNoAutoUppercase)
+                    : Qt.ImhNone
+                font { family: root.uiFont; pixelSize: root.ui(13) }
+                onTextEdited: fld.textEdited(box.text)
+                // Enter submits, because a form that can only be finished with
+                // the mouse is a form that gets finished with the mouse.
+                Keys.onReturnPressed: root.submitAuth()
+                Keys.onEnterPressed: root.submitAuth()
+
+                Text {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    visible: box.text === "" && !box.activeFocus
+                    text: fld.placeholder
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(13) }
+                }
+            }
+        }
+    }
+
     // ── The records ─────────────────────────────────────────────────────────
     //
     // ⚠ DECODE EVERY FIELD, ONCE, AT THE PARSE. See the note at the top: the
@@ -351,6 +411,124 @@ FloatingWindow {
         }
     }
 
+    // ── Adding an account, and signing in ───────────────────────────────────
+    //
+    // ⛔ THE WINDOW SIGNS IN, NOT A TERMINAL. This pane used to say "add one
+    // from a terminal", which for the one flow a person is most likely to reach
+    // first — connect my Google calendar — meant the GUI was a viewer for
+    // something only the CLI could set up. Same binary, same verbs, same rules:
+    // everything below shells out to `syn-cal account add…` and `syn-cal login`.
+    property bool authOpen: false
+    property string authKind: "google"
+    property string authName: ""
+    property string authUrl: ""
+    property string authUser: ""
+    property bool authBusy: false
+    property string authMsg: ""
+    readonly property bool authOauth: root.authKind !== "caldav"
+
+    function authReset() {
+        root.authName = ""; root.authUrl = ""; root.authUser = ""
+        root.authMsg = ""; root.authBusy = false
+        authPass.text = ""
+    }
+
+    // Adding and signing in are two commands, so the second is started by the
+    // first one's exit rather than fired alongside it.
+    Process {
+        id: addProc
+        property string acct: ""
+        stdout: StdioCollector { id: addOut }
+        stderr: StdioCollector { id: addErr }
+        onExited: (code) => {
+            if (code !== 0) {
+                root.authBusy = false
+                root.authMsg = addErr.text.trim() || "could not add the account"
+                return
+            }
+            root.beginLogin(addProc.acct)
+        }
+    }
+
+    Process {
+        id: loginProc
+        stderr: StdioCollector { id: loginErr }
+        onExited: (code) => {
+            root.authBusy = false
+            // ⛔ THE PASSWORD DIES WITH THE CHILD. This object outlives the
+            // panel, so a credential left on its environment would be handed to
+            // whatever this window runs next. Same rule as syn-settings.
+            loginProc.environment = ({})
+            if (code === 0) {
+                root.authOpen = false
+                root.authReset()
+                root.status = "Signed in."
+                root.reload()
+            } else {
+                root.authMsg = loginErr.text.trim() || "sign-in did not complete"
+            }
+        }
+    }
+
+    function beginLogin(name) {
+        root.authBusy = true
+        if (root.authKind === "caldav") {
+            root.authMsg = "Checking the password…"
+            /*
+             * ⛔ A PASSWORD NEVER GOES IN argv. /proc/<pid>/cmdline is
+             * world-readable; /proc/<pid>/environ is not. syn-cal already reads
+             * the password from stdin when stdin is not a terminal, so the
+             * shell pipes it in from the environment and nothing sensitive ever
+             * reaches a command line.
+             *
+             * ⚠ AND NOT THROUGH Process.write() EITHER. A write issued before
+             * the child has spawned is dropped, and the usual fix — wait for its
+             * first output — cannot work here: syn-cal prints no prompt when
+             * stdin is a pipe, so there is no first output to wait for.
+             */
+            loginProc.environment = ({ "SYNCAL_PW": authPass.text })
+            loginProc.command = ["sh", "-c",
+                                 "printf '%s' \"$SYNCAL_PW\" | exec \"$0\" login \"$1\"",
+                                 root.bin, name]
+        } else {
+            root.authMsg = "Finish signing in in your browser…"
+            // ⚠ --browser, NOT the default. syn-cal decides from isatty when it
+            // is not told, and a window is not a terminal — without this the
+            // sign-in prints a URL into a pipe nobody reads and then times out.
+            loginProc.command = [root.bin, "login", name, "--browser"]
+        }
+        loginProc.running = false
+        loginProc.running = true
+    }
+
+    // Signing in an account that already exists — the row's own button.
+    function signIn(name, kind) {
+        if (root.authBusy) return
+        root.authKind = kind === "caldav" ? "caldav" : "google"
+        if (kind === "caldav") { root.authOpen = true; root.authName = name; return }
+        root.authMsg = ""
+        root.beginLogin(name)
+    }
+
+    function submitAuth() {
+        if (root.authBusy) return
+        const name = root.authName.trim()
+        if (name === "") { root.authMsg = "Give the account a name first."; return }
+        if (root.authKind === "caldav" && root.authUrl.trim() === "") {
+            root.authMsg = "A CalDAV account needs a server URL."; return
+        }
+        root.authMsg = "Adding…"
+        root.authBusy = true
+        addProc.acct = name
+        if (root.authKind === "caldav")
+            addProc.command = [root.bin, "account", "add", name, root.authUrl.trim(),
+                               "--user", root.authUser.trim()]
+        else
+            addProc.command = [root.bin, "account", "add-" + root.authKind, name]
+        addProc.running = false
+        addProc.running = true
+    }
+
     Process {
         id: syncProc
         command: [root.bin, "sync"]
@@ -423,12 +601,43 @@ FloatingWindow {
                                 width: parent.width
                                 font { family: root.uiFont; pixelSize: root.ui(13) }
                             }
-                            Text {
-                                text: modelData.secret === "not set"
-                                      ? "not signed in"
-                                      : modelData.on + " of " + modelData.total + " on"
-                                color: modelData.secret === "not set" ? root.cWarn : root.cDim
-                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            Row {
+                                width: parent.width
+                                spacing: root.ui(6)
+                                Text {
+                                    text: modelData.secret === "not set"
+                                          ? "not signed in"
+                                          : modelData.on + " of " + modelData.total + " on"
+                                    color: modelData.secret === "not set" ? root.cWarn : root.cDim
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                                }
+                                // An account with no token is one click from
+                                // having one — saying "not signed in" and
+                                // offering nothing is where this pane used to
+                                // stop.
+                                Rectangle {
+                                    visible: modelData.secret === "not set"
+                                    width: rowSignTxt.implicitWidth + root.ui(10)
+                                    height: root.ui(16)
+                                    radius: root.ui(4)
+                                    color: rowSign.containsMouse ? root.cAccent : "transparent"
+                                    border { width: 1; color: root.cAccent }
+                                    Text {
+                                        id: rowSignTxt
+                                        anchors.centerIn: parent
+                                        text: "Sign in"
+                                        color: rowSign.containsMouse ? root.cPanel : root.cAccent
+                                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                                    }
+                                    MouseArea {
+                                        id: rowSign
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        enabled: !root.authBusy
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.signIn(modelData.name, modelData.kind)
+                                    }
+                                }
                             }
                         }
                     }
@@ -437,9 +646,33 @@ FloatingWindow {
                         visible: root.calendars.length === 0
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: "No accounts yet.\n\nAdd one from a terminal:\n  syn-cal account add …"
+                        text: "No accounts yet."
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    // ⛔ THE BUTTON SAYS WHAT IT DOES, and it is always here —
+                    // not only while the list is empty. A second account is the
+                    // same job as the first.
+                    Rectangle {
+                        width: parent.width
+                        height: root.ui(28)
+                        radius: root.ui(6)
+                        color: addMouse.containsMouse ? root.cAccent : "transparent"
+                        border { width: 1; color: root.cDim }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Add account"
+                            color: addMouse.containsMouse ? root.cPanel : root.cText
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
+                        }
+                        MouseArea {
+                            id: addMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { root.authReset(); root.authKind = "google"; root.authOpen = true }
+                        }
                     }
                 }
 
@@ -481,45 +714,61 @@ FloatingWindow {
                     anchors.margins: root.ui(18)
                     spacing: root.ui(12)
 
-                    Row {
+                    // ⛔ ANCHORED, NOT A ROW WITH A COMPUTED SPACER. This was a
+                    // Row whose spacer was `parent.width - ui(340)`, and 340 is
+                    // the width of one particular title in one particular font:
+                    // "The next 7 days" is wider than the number allowed for, so
+                    // the row overflowed and clipped "Next" off the right edge.
+                    // A title is arbitrary text — a localised long month, a
+                    // larger UI scale, a different font — so no constant is the
+                    // right one. The title takes the space the buttons leave.
+                    Item {
                         width: parent.width
-                        spacing: root.ui(10)
+                        height: Math.max(title.height, nav.height)
 
                         Text {
+                            id: title
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter
+                                      right: nav.left; rightMargin: root.ui(12) }
+                            elide: Text.ElideRight
                             text: root.offset === 0 ? "The next " + root.days + " days"
                                                     : Qt.formatDate(root.anchorDay, "d MMMM yyyy")
                             color: root.cText
                             font { family: root.uiFont; pixelSize: root.ui(18); bold: true }
                         }
 
-                        Item { width: parent.width - root.ui(340); height: 1 }
+                        Row {
+                            id: nav
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            spacing: root.ui(10)
 
-                        Repeater {
-                            model: [
-                                { label: "Back",  step: -1 },
-                                { label: "Today", step: 0 },
-                                { label: "Next",  step: 1 }
-                            ]
-                            Rectangle {
-                                width: root.ui(64); height: root.ui(26)
-                                radius: root.ui(5)
-                                color: navMouse.containsMouse ? root.cPanel : "transparent"
-                                border { width: 1; color: root.cDim }
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData.label
-                                    color: root.cText
-                                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                                }
-                                MouseArea {
-                                    id: navMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (modelData.step === 0) root.offset = 0
-                                        else root.offset += modelData.step
-                                        root.reload()
+                            Repeater {
+                                model: [
+                                    { label: "Back",  step: -1 },
+                                    { label: "Today", step: 0 },
+                                    { label: "Next",  step: 1 }
+                                ]
+                                Rectangle {
+                                    width: root.ui(64); height: root.ui(26)
+                                    radius: root.ui(5)
+                                    color: navMouse.containsMouse ? root.cPanel : "transparent"
+                                    border { width: 1; color: root.cDim }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.label
+                                        color: root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                                    }
+                                    MouseArea {
+                                        id: navMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (modelData.step === 0) root.offset = 0
+                                            else root.offset += modelData.step
+                                            root.reload()
+                                        }
                                     }
                                 }
                             }
@@ -616,6 +865,193 @@ FloatingWindow {
                         text: root.status
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+                }
+            }
+        }
+
+        // ── Add account / sign in ───────────────────────────────────────────
+        //
+        // ⚠ A FULL-WINDOW SCRIM, and it takes the mouse. Without a MouseArea of
+        // its own the buttons underneath stay clickable through the dimming,
+        // which is how a modal panel turns into a decoration.
+        Rectangle {
+            anchors.fill: parent
+            visible: root.authOpen
+            color: Qt.rgba(0, 0, 0, root.isLight ? 0.28 : 0.55)
+
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: if (!root.authBusy) { root.authOpen = false; root.authReset() }
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(root.ui(420), parent.width - root.ui(48))
+                height: card.implicitHeight + root.ui(36)
+                radius: root.ui(10)
+                color: root.cPanel
+                border { width: 1; color: root.cDim }
+
+                // Swallow clicks that land on the card, so they do not reach the
+                // scrim behind it and close the thing being filled in.
+                MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+                Column {
+                    id: card
+                    anchors { left: parent.left; right: parent.right; top: parent.top
+                              margins: root.ui(18) }
+                    spacing: root.ui(12)
+
+                    Text {
+                        text: "Add an account"
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
+                    }
+
+                    Row {
+                        spacing: root.ui(8)
+                        Repeater {
+                            model: [
+                                { id: "google",    label: "Google" },
+                                { id: "microsoft", label: "Microsoft 365" },
+                                { id: "caldav",    label: "CalDAV" }
+                            ]
+                            Rectangle {
+                                width: kindTxt.implicitWidth + root.ui(18)
+                                height: root.ui(26)
+                                radius: root.ui(5)
+                                color: root.authKind === modelData.id ? root.cAccent
+                                     : kindMouse.containsMouse ? root.cBg : "transparent"
+                                border { width: 1
+                                         color: root.authKind === modelData.id ? root.cAccent : root.cDim }
+                                Text {
+                                    id: kindTxt
+                                    anchors.centerIn: parent
+                                    text: modelData.label
+                                    color: root.authKind === modelData.id ? root.cPanel : root.cText
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                                }
+                                MouseArea {
+                                    id: kindMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: !root.authBusy
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.authKind = modelData.id; root.authMsg = "" }
+                                }
+                            }
+                        }
+                    }
+
+                    SynField {
+                        id: nameField
+                        width: parent.width
+                        label: root.authOauth ? "Your address at this provider" : "A name for this account"
+                        placeholder: root.authOauth ? "you@gmail.com" : "work"
+                        text: root.authName
+                        onTextEdited: root.authName = text
+                    }
+
+                    SynField {
+                        width: parent.width
+                        visible: !root.authOauth
+                        label: "Server URL"
+                        placeholder: "https://example.org/dav/"
+                        text: root.authUrl
+                        onTextEdited: root.authUrl = text
+                    }
+
+                    SynField {
+                        width: parent.width
+                        visible: !root.authOauth
+                        label: "Username"
+                        text: root.authUser
+                        onTextEdited: root.authUser = text
+                    }
+
+                    SynField {
+                        id: authPass
+                        width: parent.width
+                        visible: !root.authOauth
+                        label: "Password"
+                        secret: true
+                    }
+
+                    // ⚠ SAID BEFORE IT HAPPENS, not after. A window that opens a
+                    // browser with no warning looks like it has crashed and
+                    // launched something at random.
+                    Text {
+                        width: parent.width
+                        visible: root.authOauth
+                        wrapMode: Text.WordWrap
+                        text: "Signing in opens your browser. Your password is typed at "
+                              + (root.authKind === "google" ? "Google" : "Microsoft")
+                              + ", never here."
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    Text {
+                        width: parent.width
+                        visible: root.authMsg !== ""
+                        wrapMode: Text.WordWrap
+                        text: root.authMsg
+                        color: root.authBusy ? root.cDim : root.cBad
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    Row {
+                        anchors.right: parent.right
+                        spacing: root.ui(8)
+
+                        Rectangle {
+                            width: root.ui(80); height: root.ui(30)
+                            radius: root.ui(6)
+                            color: cancelMouse.containsMouse ? root.cBg : "transparent"
+                            border { width: 1; color: root.cDim }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Cancel"
+                                color: root.cText
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            MouseArea {
+                                id: cancelMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: !root.authBusy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { root.authOpen = false; root.authReset() }
+                            }
+                        }
+
+                        Rectangle {
+                            width: signTxt.implicitWidth + root.ui(22); height: root.ui(30)
+                            radius: root.ui(6)
+                            color: signMouse.containsMouse ? root.cAccent : "transparent"
+                            border { width: 1; color: root.cAccent }
+                            opacity: root.authBusy ? 0.5 : 1.0
+                            Text {
+                                id: signTxt
+                                anchors.centerIn: parent
+                                // ⛔ THE BUTTON IS ITS OWN LABEL. "OK" would make
+                                // the sentence above it load-bearing.
+                                text: root.authBusy ? "Working…"
+                                    : root.authOauth ? "Sign in with browser" : "Add and sign in"
+                                color: signMouse.containsMouse ? root.cPanel : root.cAccent
+                                font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
+                            }
+                            MouseArea {
+                                id: signMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: !root.authBusy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.submitAuth()
+                            }
+                        }
                     }
                 }
             }

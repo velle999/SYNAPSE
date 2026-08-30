@@ -53,6 +53,8 @@ static void usage(FILE *f)
 "\n"
 "  --client-id ID   with account add-google/add-microsoft: use your own\n"
 "                   OAuth project instead of the one this build ships\n"
+"  --browser        with login: open the browser, whether or not this was\n"
+"                   run from a terminal. --no-browser prints the URL instead.\n"
 "  --rec        one record per line, for a front end\n"
 "  --dry-run    with sync: decide everything, change nothing\n"
 "  --conflict=keep-both|remote|local    default keep-both, which loses nothing\n"
@@ -279,6 +281,16 @@ static const char *builtin_client_id(acc_kind_t kind)
 	return id && *id ? id : NULL;
 }
 
+/* Whether the sign-in should open a browser: -1 decide from the terminal, 0 no,
+ * 1 yes.
+ *
+ * ⚠ isatty IS THE WRONG QUESTION FOR A WINDOW. It answers "was I run from a
+ * terminal", and a GUI that spawns syn-cal is not — so the browser flow degrades
+ * to printing a URL nobody will ever read, and the sign-in hangs until it times
+ * out looking like a failure. The caller that knows a person is watching says
+ * so; the terminal keeps deciding for itself. */
+static int g_browser = -1;
+
 static int cmd_account_add_oauth(const char *name, acc_kind_t kind, const char *client_id)
 {
 	if (!client_id || !*client_id) client_id = builtin_client_id(kind);
@@ -349,7 +361,8 @@ static int cmd_login(const char *name, const char *user)
 		 * an application teaches people to type their password into things. */
 		oauth_tokens_t t;
 		char *err = NULL;
-		bool ok = oauth_authorise(p, e->client_id, isatty(STDERR_FILENO), 0, &t, &err);
+		bool open_browser = g_browser >= 0 ? g_browser != 0 : isatty(STDERR_FILENO);
+		bool ok = oauth_authorise(p, e->client_id, open_browser, 0, &t, &err);
 		if (!ok) {
 			warn("%s", err ? err : "sign-in did not complete");
 			free(err);
@@ -789,6 +802,8 @@ int main(int argc, char **argv)
 		if (!strcmp(v, "--user") && i + 1 < argc) { user = argv[++i]; continue; }
 		if (!strncmp(v, "--days=", 7)) { days = atoi(v + 7); if (days < 1) days = 1; continue; }
 		if (!strncmp(v, "--from=", 7)) { from_date = v + 7; continue; }
+		if (!strcmp(v, "--browser"))    { g_browser = 1; continue; }
+		if (!strcmp(v, "--no-browser")) { g_browser = 0; continue; }
 		if (!strncmp(v, "--client-id=", 12)) { client_id = v + 12; continue; }
 		if (!strcmp(v, "--client-id") && i + 1 < argc) { client_id = argv[++i]; continue; }
 		if (!strncmp(v, "--conflict=", 11)) {

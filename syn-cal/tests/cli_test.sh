@@ -227,6 +227,45 @@ check "…and an explicit id beats the shipped one" $?
 "$S" accounts | grep -q "signed in:"
 check "…and is described as signed in, not as having a password" $?
 
+# ⚠ isatty IS THE WRONG QUESTION FOR A WINDOW, so login takes the decision as a
+# flag. Both spellings must PARSE — an unrecognised option exits 2 from usage(),
+# and the GUI would then look like it had failed to sign in when it had in fact
+# failed to start.
+#
+# ⛔ AGAINST AN ACCOUNT THAT DOES NOT EXIST, on purpose. A real login opens a
+# loopback listener and waits five minutes for a browser that is never coming.
+# "no account called …" is exit 1 — reached only after the flag was accepted,
+# which is exactly the thing being tested.
+for flag in --browser --no-browser; do
+    out=$("$S" login nosuchaccount "$flag" 2>&1); rc=$?
+    [ "$rc" -eq 1 ] && ! echo "$out" | grep -qi "unknown option"
+    check "login accepts $flag" $?
+done
+
+# ⚠ AND THE FLAG MUST DO SOMETHING, not merely parse. --no-browser prints the
+# authorisation URL instead of opening one, which is the branch a machine with
+# no browser and the whole test suite depend on.
+#
+# ⛔ CAPTURED UNDER `timeout`, NOT RUN TO COMPLETION. After printing the URL the
+# command opens a loopback listener and waits five minutes for a redirect that
+# is never coming, so the test reads what it needs and kills it. The timeout's
+# own exit status is therefore meaningless here and is deliberately discarded.
+"$S" account add-google urltest >/dev/null 2>&1
+url=$(timeout 6 "$S" login urltest --no-browser 2>/dev/null | head -1) || true
+echo "$url" | grep -q '^https://accounts.google.com/o/oauth2/v2/auth?'
+check "login --no-browser prints the authorisation URL instead of opening one" $?
+
+# PKCE, and the parameter that makes a refresh token arrive at all: without
+# access_type=offline Google returns one on the FIRST authorisation only, and
+# the account silently stops working an hour after the second.
+echo "$url" | grep -q 'code_challenge_method=S256'
+check "…and the URL carries a PKCE challenge" $?
+
+echo "$url" | grep -q 'access_type=offline'
+check "…and asks for offline access, so a refresh token comes back" $?
+
+"$S" account remove urltest >/dev/null 2>&1
+
 "$S" account add-microsoft work365 --client-id abc >/dev/null
 check "add-microsoft succeeds" $?
 

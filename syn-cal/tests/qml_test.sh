@@ -102,6 +102,55 @@ check "…and clips, so a long list cannot draw over the buttons below it" $?
 grep -q 'Qt.formatDate(new Date(root.events\[index - 1\].start), "yyyy-MM-dd")' "$QML"
 check "day grouping compares local dates, not a 24-hour arithmetic" $?
 
+# ── signing in, from the window ─────────────────────────────────────────────
+
+# ⛔ THE WINDOW SIGNS IN. This pane once said "add one from a terminal", which
+# made the GUI a viewer for something only the CLI could set up.
+! grep -q 'Add one from a terminal' "$QML"
+check "the empty state does not send the user to a terminal" $?
+
+grep -q 'text: "Add account"' "$QML"
+check "…it offers a button that says what it does" $?
+
+grep -q 'root.signIn(modelData.name, modelData.kind)' "$QML"
+check "…and an account with no token can be signed in from its own row" $?
+
+# ⚠ isatty IS THE WRONG QUESTION FOR A WINDOW. Without --browser the sign-in
+# prints a URL into a pipe nobody reads and then times out looking like failure.
+grep -q '"login", name, "--browser"' "$QML"
+check "the OAuth sign-in tells syn-cal to open a browser" $?
+
+grep -q -- '--browser' "$(dirname "$0")/../src/main.c"
+check "…and the binary accepts that flag" $?
+
+# ⛔ A CREDENTIAL NEVER GOES IN argv — /proc/<pid>/cmdline is world-readable.
+# syn-cal reads a password from stdin when stdin is not a terminal, so the
+# shell pipes it in from the environment.
+! grep -qE '"login".*authPass\.text|authPass\.text.*"login"' "$QML"
+check "the CalDAV password is never passed as an argument" $?
+
+grep -q 'SYNCAL_PW' "$QML"
+check "…it crosses in the environment instead" $?
+
+# ⚠ AND IT IS CLEARED AFTERWARDS. loginProc outlives the panel, so a password
+# left on its environment would be handed to the next command this window runs.
+grep -q 'loginProc.environment = ({})' "$QML"
+check "…and is cleared from the Process when the child exits" $?
+
+# Same no-op trap as the sync button.
+grep -q 'loginProc.running = false' "$QML"
+check "the login Process is stopped before it is started" $?
+
+# ⛔ A HEADER ROW MUST NOT ASSUME THE WIDTH OF ITS OWN TITLE. This was a Row
+# with a `parent.width - ui(340)` spacer; "The next 7 days" is wider than 340
+# allowed for, so the row overflowed and clipped the "Next" button off the
+# right-hand edge of the window.
+! grep -q 'width: parent.width - root.ui(340)' "$QML"
+check "the agenda header does not size itself from a hardcoded title width" $?
+
+grep -q 'right: nav.left' "$QML"
+check "…the title yields to the buttons instead" $?
+
 # The window names itself, or the dock cannot find its .desktop and shows a
 # generic icon with no "New Window".
 grep -q 'QS_APP_ID' "$(dirname "$0")/../src/main.c"
