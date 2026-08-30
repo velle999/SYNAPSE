@@ -18,6 +18,7 @@ conf.set_quoted('SYNCAL_DATADIR',
 # secret nor mandatory.
 conf.set_quoted('SYNCAL_GOOGLE_CLIENT_ID', get_option('google_client_id'))
 conf.set_quoted('SYNCAL_MICROSOFT_CLIENT_ID', get_option('microsoft_client_id'))
+conf.set_quoted('SYNCAL_GOOGLE_CLIENT_SECRET', get_option('google_client_secret'))
 configure_file(output: 'config.h', configuration: conf)
 add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', language: 'c')
 

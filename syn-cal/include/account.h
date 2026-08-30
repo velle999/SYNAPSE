@@ -26,6 +26,14 @@ typedef struct {
 	 * machine that installs it. Google and Microsoft both say so, which is why
 	 * PKCE exists. It lives in accounts.conf with the URL. */
 	char *client_id;
+	/* ⚠ ALSO NOT A SECRET, AND GOOGLE SAYS SO ITSELF. Google issues its
+	 * Desktop-app clients a "client secret", requires it at the token endpoint,
+	 * and documents that it is not treated as confidential for this client type
+	 * — it ships in the binary beside the id. Without it the exchange fails
+	 * with `invalid_request — client_secret is missing` AFTER the user has
+	 * already consented, which is the most confusing place to fail. NULL for
+	 * providers that refuse one; Microsoft public clients must not be sent it. */
+	char *client_secret;
 	/* When the access token stops working, as unix time. Also not a secret, and
 	 * keeping it out of the keyring means the expiry can be read without
 	 * unlocking anything. 0 means "never had one". */

@@ -250,7 +250,11 @@ done
 # command opens a loopback listener and waits five minutes for a redirect that
 # is never coming, so the test reads what it needs and kills it. The timeout's
 # own exit status is therefore meaningless here and is deliberately discarded.
-"$S" account add-google urltest >/dev/null 2>&1
+# ⚠ AN EXPLICIT id, NOT THE SHIPPED ONE. These three checks are about the URL's
+# SHAPE, which does not depend on whose project it names — and a build
+# configured without google_client_id would otherwise fail to add the account at
+# all and take the three of them down with it.
+"$S" account add-google urltest --client-id 123.apps.googleusercontent.com >/dev/null 2>&1
 url=$(timeout 6 "$S" login urltest --no-browser 2>/dev/null | head -1) || true
 echo "$url" | grep -q '^https://accounts.google.com/o/oauth2/v2/auth?'
 check "login --no-browser prints the authorisation URL instead of opening one" $?

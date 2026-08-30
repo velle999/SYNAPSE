@@ -60,6 +60,7 @@ void accounts_init(accounts_t *a) { a->e = NULL; a->n = a->cap = 0; }
 static void account_clear(account_t *acc)
 {
 	free(acc->name); free(acc->url); free(acc->user); free(acc->client_id);
+	free(acc->client_secret);
 	for (size_t i = 0; i < acc->ncals; i++) { free(acc->cals[i].url); free(acc->cals[i].name); }
 	free(acc->cals);
 	memset(acc, 0, sizeof *acc);
@@ -172,6 +173,7 @@ bool accounts_load(accounts_t *a)
 		else if (!strcmp(key, "user")) { free(cur->user); cur->user = xstrdup(v); }
 		else if (!strcmp(key, "insecure")) cur->insecure = !strcmp(v, "yes");
 		else if (!strcmp(key, "client_id")) { free(cur->client_id); cur->client_id = xstrdup(v); }
+		else if (!strcmp(key, "client_secret")) { free(cur->client_secret); cur->client_secret = xstrdup(v); }
 		else if (!strcmp(key, "token_expiry")) cur->token_expiry = strtol(v, NULL, 10);
 		else if (!strcmp(key, "calendar")) {
 			/* <on|off> <url> <name> — the name may contain spaces, the url
@@ -210,6 +212,7 @@ bool accounts_save(accounts_t *a)
 		if (e->url)  { char *v = pct_encode(e->url, true);  buf_addf(&out, "url = %s\n", v);  free(v); }
 		if (e->user) { char *v = pct_encode(e->user, false); buf_addf(&out, "user = %s\n", v); free(v); }
 		if (e->client_id) { char *v = pct_encode(e->client_id, false); buf_addf(&out, "client_id = %s\n", v); free(v); }
+		if (e->client_secret) { char *v = pct_encode(e->client_secret, false); buf_addf(&out, "client_secret = %s\n", v); free(v); }
 		if (e->token_expiry) buf_addf(&out, "token_expiry = %ld\n", e->token_expiry);
 		if (e->insecure) buf_addstr(&out, "insecure = yes\n");
 		for (size_t c = 0; c < e->ncals; c++) {

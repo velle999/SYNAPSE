@@ -21,6 +21,17 @@ class Handler(BaseHTTPRequestHandler):
         form = urllib.parse.parse_qs(self.rfile.read(n).decode())
         get = lambda k: (form.get(k) or [""])[0]
 
+        # ⛔ GOOGLE DEMANDS A SECRET FROM AN INSTALLED APP, so the fake does too
+        # — for one client id, so both halves stay testable. syn-cal shipped a
+        # sign-in that passed consent and died here on exactly this error, and
+        # a fake that never asked for the secret is why nothing caught it.
+        # The other client id models a public client that must NOT be sent one.
+        if get("client_id") == "secret-client" and not get("client_secret"):
+            return self.fail("invalid_request", "client_secret is missing.")
+        if get("client_id") == "public-client" and get("client_secret"):
+            return self.fail("invalid_request",
+                             "client_secret is not allowed for a public client")
+
         grant = get("grant_type")
         if grant == "authorization_code":
             if not get("code_verifier"):

@@ -34,7 +34,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=10
+pkgrel=11
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -105,12 +105,23 @@ sha256sums=('SKIP')
 # Azure app registration exists.
 _google_client_id='38371099927-5hgfu4tfpk5c1kbcpu48vs48mrf33qqk.apps.googleusercontent.com'
 _microsoft_client_id=''
+# ⛔ GOOGLE REQUIRES THIS AND DOCUMENTS IT AS NOT CONFIDENTIAL. Desktop-app
+# clients are issued a "client secret" that its token endpoint will not do the
+# exchange without — sending none fails AFTER the user has already consented,
+# with `invalid_request — client_secret is missing`, which is the most
+# confusing place available to fail. Public exactly like the id above; PKCE is
+# what actually protects the flow. Microsoft refuses one from a public client,
+# so there is deliberately no equivalent for it.
+#
+# The value is on the client's page in the Google Cloud console, under Clients.
+_google_client_secret='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'
 
 build() {
     cd "$srcdir/syn-cal-0.1.0"
     meson setup build --prefix=/usr --buildtype=release \
         -Dgoogle_client_id="$_google_client_id" \
-        -Dmicrosoft_client_id="$_microsoft_client_id"
+        -Dmicrosoft_client_id="$_microsoft_client_id" \
+        -Dgoogle_client_secret="$_google_client_secret"
     meson compile -C build
 }
 

@@ -306,6 +306,18 @@ static void open_in_browser(const char *url)
 
 /* ── the flow ───────────────────────────────────────────────────────────── */
 
+/* "&client_secret=…", or "" when the provider does not want one. Always returns
+ * a string the caller must free, so the two body builders below stay one
+ * xasprintf each instead of branching. */
+static char *secret_field(const char *client_secret)
+{
+	if (!client_secret || !*client_secret) return xstrdup("");
+	char *e = url_escape(client_secret);
+	char *f = xasprintf("&client_secret=%s", e);
+	free(e);
+	return f;
+}
+
 static bool exchange(const oauth_provider_t *p, const char *body,
                      oauth_tokens_t *out, char **err)
 {
@@ -345,6 +357,7 @@ static bool exchange(const oauth_provider_t *p, const char *body,
 }
 
 bool oauth_authorise(const oauth_provider_t *p, const char *client_id,
+                     const char *client_secret,
                      bool open_browser, long timeout_s, oauth_tokens_t *out, char **err)
 {
 	if (err) *err = NULL;
@@ -410,12 +423,15 @@ bool oauth_authorise(const oauth_provider_t *p, const char *client_id,
 			char *e_client2 = url_escape(client_id);
 			char *e_redir2 = url_escape(redirect);
 			char *e_ver = url_escape(verifier);
+			char *e_sec = secret_field(client_secret);
 			char *body = xasprintf("grant_type=authorization_code&code=%s&client_id=%s"
-			                       "&redirect_uri=%s&code_verifier=%s",
-			                       e_code, e_client2, e_redir2, e_ver);
+			                       "&redirect_uri=%s&code_verifier=%s%s",
+			                       e_code, e_client2, e_redir2, e_ver, e_sec);
 			ok = exchange(p, body, out, err);
 			memset(body, 0, strlen(body));
+			memset(e_sec, 0, strlen(e_sec));
 			free(body); free(e_code); free(e_client2); free(e_redir2); free(e_ver);
+			free(e_sec);
 		}
 		free(code); free(got_state); free(oerr);
 	}
@@ -426,15 +442,21 @@ bool oauth_authorise(const oauth_provider_t *p, const char *client_id,
 }
 
 bool oauth_refresh(const oauth_provider_t *p, const char *client_id,
+                   const char *client_secret,
                    const char *refresh_token, oauth_tokens_t *out, char **err)
 {
 	char *e_client = url_escape(client_id);
 	char *e_tok = url_escape(refresh_token);
-	char *body = xasprintf("grant_type=refresh_token&refresh_token=%s&client_id=%s",
-	                       e_tok, e_client);
+	/* ⚠ THE REFRESH NEEDS IT TOO. Sending the secret only on the first exchange
+	 * buys a sign-in that works once and then stops an hour later, which is a
+	 * far worse failure than one that never worked. */
+	char *e_sec = secret_field(client_secret);
+	char *body = xasprintf("grant_type=refresh_token&refresh_token=%s&client_id=%s%s",
+	                       e_tok, e_client, e_sec);
 	bool ok = exchange(p, body, out, err);
 	memset(body, 0, strlen(body));
-	free(body); free(e_client); free(e_tok);
+	memset(e_sec, 0, strlen(e_sec));
+	free(body); free(e_client); free(e_tok); free(e_sec);
 
 	/* ⚠ A REFRESH OFTEN ANSWERS WITHOUT A NEW REFRESH TOKEN, which means the
 	 * old one is still good. Storing the empty answer over it would log the

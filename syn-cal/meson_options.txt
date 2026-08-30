@@ -11,3 +11,11 @@ option('google_client_id', type: 'string', value: '',
        description: 'OAuth client id for `syn-cal account add-google` (public, not a secret)')
 option('microsoft_client_id', type: 'string', value: '',
        description: 'OAuth client id for `syn-cal account add-microsoft` (public, not a secret)')
+
+# ⛔ AND GOOGLE WANTS THE "SECRET" TOO. Google issues Desktop-app clients a
+# client secret and its token endpoint refuses the exchange without one, while
+# documenting that it is not confidential for this client type. Leaving it out
+# fails AFTER consent, with `client_secret is missing`. Microsoft refuses one
+# from a public client — leave that empty.
+option('google_client_secret', type: 'string', value: '',
+       description: 'OAuth client secret for the shipped Google client (public, per Google)')

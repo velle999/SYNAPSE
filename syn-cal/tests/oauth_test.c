@@ -116,7 +116,7 @@ int main(int argc, char **argv)
 
 		/* stdout carries ONLY the URL, so the shell can read it. Everything
 		 * else in this file goes to stderr. */
-		bool got = oauth_authorise(&fake, "test-client-id", false, 30, &t, &err);
+		bool got = oauth_authorise(&fake, "public-client", NULL, false, 30, &t, &err);
 		ok_("the browser flow completes and exchanges the code", got);
 		if (!got) fprintf(stderr, "        (%s)\n", err ? err : "no reason");
 		free(err); err = NULL;
@@ -132,7 +132,7 @@ int main(int argc, char **argv)
 		 * common case — must keep the old one. Storing the empty answer over it
 		 * logs the account out at the next expiry, an hour later, with nothing
 		 * to connect the two events. */
-		if (oauth_refresh(&fake, "test-client-id", "keep-me", &t, &err)) {
+		if (oauth_refresh(&fake, "public-client", NULL, "keep-me", &t, &err)) {
 			eq("a refresh with no new refresh token keeps the old one",
 			   t.refresh_token, "keep-me");
 			eq("…and still yields a fresh access token", t.access_token, "fake-access-2");
@@ -145,12 +145,45 @@ int main(int argc, char **argv)
 
 		/* A provider that refuses must say what it said. */
 		oauth_provider_t bad = { fake.auth_url, argv[1], "test.scope" };
-		if (!oauth_refresh(&bad, "test-client-id", "REFUSE", &t, &err)) {
+		if (!oauth_refresh(&bad, "public-client", NULL, "REFUSE", &t, &err)) {
 			ok_("a refused refresh reports the provider's own error",
 			    err && strstr(err, "invalid_grant") != NULL);
 			if (err && !strstr(err, "invalid_grant")) fprintf(stderr, "        (%s)\n", err);
 		} else {
 			ok_("a refused refresh reports the provider's own error", false);
+		}
+		free(err);
+		err = NULL;
+
+		/*
+		 * ⛔ THE SECRET REACHES THE TOKEN ENDPOINT.
+		 *
+		 * RFC 8252 says an installed app cannot keep a secret and this code was
+		 * written to that argument, sending none. Google requires one anyway
+		 * for its Desktop-app clients and refuses the exchange without it — so
+		 * a sign-in passed consent, came back with a code, and died on
+		 * "client_secret is missing" with the user watching. The fake provider
+		 * demands one for `secret-client`, so omitting it fails here instead.
+		 */
+		if (oauth_refresh(&fake, "secret-client", "s3cr3t", "keep-me", &t, &err)) {
+			ok_("a client that needs a secret gets one at the token endpoint", true);
+			oauth_tokens_free(&t);
+		} else {
+			ok_("a client that needs a secret gets one at the token endpoint", false);
+			fprintf(stderr, "        (%s)\n", err ? err : "no reason");
+		}
+		free(err); err = NULL;
+
+		/* …and the failure is reported in the provider's own words, which is
+		 * how tonight's cause was found at all. */
+		if (!oauth_refresh(&fake, "secret-client", NULL, "keep-me", &t, &err)) {
+			ok_("…and omitting it reports the provider's own complaint",
+			    err && strstr(err, "client_secret is missing") != NULL);
+			if (err && !strstr(err, "client_secret is missing"))
+				fprintf(stderr, "        (%s)\n", err);
+		} else {
+			ok_("…and omitting it reports the provider's own complaint", false);
+			oauth_tokens_free(&t);
 		}
 		free(err);
 	}

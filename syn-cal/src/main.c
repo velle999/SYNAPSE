@@ -53,6 +53,8 @@ static void usage(FILE *f)
 "\n"
 "  --client-id ID   with account add-google/add-microsoft: use your own\n"
 "                   OAuth project instead of the one this build ships\n"
+"  --client-secret S  with account add-google: Google requires one even for a\n"
+"                   desktop client, and documents it as not confidential\n"
 "  --browser        with login: open the browser, whether or not this was\n"
 "                   run from a terminal. --no-browser prints the URL instead.\n"
 "  --rec        one record per line, for a front end\n"
@@ -148,7 +150,7 @@ static bool renew(accounts_t *a, account_t *e, char **err)
 
 	oauth_tokens_t t;
 	memset(&t, 0, sizeof t);
-	bool ok = oauth_refresh(p, e->client_id, refresh, &t, err);
+	bool ok = oauth_refresh(p, e->client_id, e->client_secret, refresh, &t, err);
 	memset(refresh, 0, strlen(refresh));
 	free(refresh);
 	if (!ok) return false;
@@ -281,6 +283,15 @@ static const char *builtin_client_id(acc_kind_t kind)
 	return id && *id ? id : NULL;
 }
 
+/* Google only — see the note in account.h. Microsoft public clients are refused
+ * when they send one, so there is deliberately no Microsoft equivalent. */
+static const char *builtin_client_secret(acc_kind_t kind)
+{
+	if (kind != ACC_GOOGLE) return NULL;
+	const char *s = SYNCAL_GOOGLE_CLIENT_SECRET;
+	return s && *s ? s : NULL;
+}
+
 /* Whether the sign-in should open a browser: -1 decide from the terminal, 0 no,
  * 1 yes.
  *
@@ -291,9 +302,18 @@ static const char *builtin_client_id(acc_kind_t kind)
  * so; the terminal keeps deciding for itself. */
 static int g_browser = -1;
 
-static int cmd_account_add_oauth(const char *name, acc_kind_t kind, const char *client_id)
+static int cmd_account_add_oauth(const char *name, acc_kind_t kind,
+                                 const char *client_id, const char *client_secret)
 {
-	if (!client_id || !*client_id) client_id = builtin_client_id(kind);
+	/* ⚠ THE PAIR TRAVELS TOGETHER. Taking a caller's id while quietly keeping
+	 * the shipped secret would send SynapseOS's secret to somebody else's
+	 * project, which fails in a way nobody could read. */
+	bool own = client_id && *client_id;
+	if (!own) {
+		client_id = builtin_client_id(kind);
+		if (!client_secret || !*client_secret)
+			client_secret = builtin_client_secret(kind);
+	}
 	if (!client_id || !*client_id) {
 		/* Only a rebuild that compiled no id in reaches this. It is still the
 		 * right answer for that build — but it is no longer what a person who
@@ -301,8 +321,10 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind, const char *
 		warn("this build ships no OAuth client id, so it needs one of yours.\n"
 		     "\n"
 		     "  %s: register an application of type 'Desktop app'.\n"
-		     "  There is no client SECRET to copy — a desktop application cannot keep\n"
-		     "  one, which is why this uses PKCE.\n"
+		     "  Google also issues a client secret for that type and its token endpoint\n"
+		     "  requires it — pass it with --client-secret. Google documents that it is\n"
+		     "  not confidential for an installed application; PKCE is what protects the\n"
+		     "  flow. Microsoft wants no secret from a public client.\n"
 		     "\n"
 		     "  syn-cal account add-%s %s --client-id <the id>",
 		     kind == ACC_GOOGLE
@@ -319,6 +341,7 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind, const char *
 	account_t *e = accounts_add(&a, name);
 	e->kind = kind;
 	e->client_id = xstrdup(client_id);
+	if (client_secret && *client_secret) e->client_secret = xstrdup(client_secret);
 	if (kind == ACC_GOOGLE) e->url = xstrdup(GOOGLE_CALDAV);
 	bool ok = accounts_save(&a);
 	accounts_free(&a);
@@ -362,7 +385,8 @@ static int cmd_login(const char *name, const char *user)
 		oauth_tokens_t t;
 		char *err = NULL;
 		bool open_browser = g_browser >= 0 ? g_browser != 0 : isatty(STDERR_FILENO);
-		bool ok = oauth_authorise(p, e->client_id, open_browser, 0, &t, &err);
+		bool ok = oauth_authorise(p, e->client_id, e->client_secret,
+		                          open_browser, 0, &t, &err);
 		if (!ok) {
 			warn("%s", err ? err : "sign-in did not complete");
 			free(err);
@@ -783,6 +807,7 @@ int main(int argc, char **argv)
 {
 	const char *user = NULL;
 	const char *client_id = NULL;
+	const char *client_secret = NULL;
 	int days = 7;
 	const char *from_date = NULL;
 	conflict_t policy = CONFLICT_KEEP_BOTH;
@@ -806,6 +831,8 @@ int main(int argc, char **argv)
 		if (!strcmp(v, "--no-browser")) { g_browser = 0; continue; }
 		if (!strncmp(v, "--client-id=", 12)) { client_id = v + 12; continue; }
 		if (!strcmp(v, "--client-id") && i + 1 < argc) { client_id = argv[++i]; continue; }
+		if (!strncmp(v, "--client-secret=", 16)) { client_secret = v + 16; continue; }
+		if (!strcmp(v, "--client-secret") && i + 1 < argc) { client_secret = argv[++i]; continue; }
 		if (!strncmp(v, "--conflict=", 11)) {
 			const char *c = v + 11;
 			if (!strcmp(c, "keep-both")) policy = CONFLICT_KEEP_BOTH;
@@ -828,9 +855,9 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "account") && n >= 2) {
 		if (!strcmp(pos[1], "add") && n >= 4)         rc = cmd_account_add(pos[2], pos[3], user);
 		else if (!strcmp(pos[1], "add-google") && n >= 3)
-			rc = cmd_account_add_oauth(pos[2], ACC_GOOGLE, client_id);
+			rc = cmd_account_add_oauth(pos[2], ACC_GOOGLE, client_id, client_secret);
 		else if (!strcmp(pos[1], "add-microsoft") && n >= 3)
-			rc = cmd_account_add_oauth(pos[2], ACC_MICROSOFT, client_id);
+			rc = cmd_account_add_oauth(pos[2], ACC_MICROSOFT, client_id, client_secret);
 		else if (!strcmp(pos[1], "remove") && n >= 3) rc = cmd_account_remove(pos[2]);
 		else if (!strcmp(pos[1], "show") && n >= 3)   rc = cmd_calendars(pos[2]);
 		else { warn("usage: syn-cal account add|remove|show ..."); rc = 2; }
