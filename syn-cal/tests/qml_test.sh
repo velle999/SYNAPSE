@@ -123,6 +123,23 @@ check "…an event in the agenda opens for editing" $?
 grep -q 'root.bin, "delete", root.evUid' "$QML"
 check "…and can be deleted" $?
 
+# ⛔ AND A DAY IN THE GRID IS A WAY IN. Pointing at the day you mean and getting
+# a form for it is the obvious gesture; making people find a button in the
+# header and then retype the date is not.
+grep -q 'onClicked: root.evNewOn(cell.cellData.date)' "$QML"
+check "clicking a day makes an event on that day" $?
+
+grep -q 'onClicked: root.evEdit(cell.shown\[index\])' "$QML"
+check "…and clicking a title on that day opens that event instead" $?
+
+# An empty calendar is where somebody most wants to add something, and it had
+# nothing to press.
+grep -q '"Nothing in the next " + root.days' "$QML"
+check "…the empty week still says it is empty" $?
+
+grep -A32 'Nothing in the next ' "$QML" | grep -q 'onClicked: root.evNew()'
+check "…and offers a way to fill it" $?
+
 # ⛔ SAVED HERE IS NOT SAVED ANYWHERE ELSE. A window that says "Saved" and
 # leaves the appointment on one machine is telling somebody their meeting is
 # booked when nobody else can see it.

@@ -649,6 +649,16 @@ FloatingWindow {
         root.evOpen = true
     }
 
+    // Making one on a day that was pointed at, rather than on today.
+    function evNewOn(dateStr) {
+        root.evNew()
+        evDate.text = dateStr
+        // ⚠ NINE IN THE MORNING FOR ANOTHER DAY, the next hour for this one.
+        // evNew() opens at the next round hour, which is the right guess for
+        // today and a strange one for a Tuesday three weeks out.
+        if (dateStr !== Qt.formatDate(new Date(), "yyyy-MM-dd")) evTime.text = "09:00"
+    }
+
     function evEdit(e) {
         root.evUid = e.uid
         root.evMsg = ""
@@ -1371,10 +1381,12 @@ FloatingWindow {
 
                     // ── the month ───────────────────────────────────────
                     //
-                    // ⚠ NO MouseArea ON A CELL. A day that lights up under the
-                    // pointer and then does nothing when clicked is a button
-                    // that lies; the titles are already on the cell, so there
-                    // is nothing behind it to open.
+                    // ⚠ A CELL IS A BUTTON NOW, and it was not before only
+                    // because there was nothing behind it to open. Clicking a
+                    // day makes an event on that day; clicking a title on the
+                    // day opens that event instead, which is why the cell's
+                    // MouseArea is declared BEFORE the titles — the later
+                    // sibling is on top and gets the click first.
                     Item {
                         id: monthGrid
                         visible: root.view === "month"
@@ -1425,9 +1437,33 @@ FloatingWindow {
                                 height: monthGrid.cellH
                                 radius: root.ui(5)
                                 clip: true
-                                color: modelData.today ? root.wash(0.14) : "transparent"
+                                color: modelData.today ? root.wash(0.14)
+                                     : (dayMouse.containsMouse ? root.cPanel : "transparent")
                                 border { width: 1
-                                         color: modelData.today ? root.cAccent : root.cDim }
+                                         color: dayMouse.containsMouse ? root.cAccent
+                                              : (modelData.today ? root.cAccent : root.cDim) }
+
+                                MouseArea {
+                                    id: dayMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.evNewOn(cell.cellData.date)
+                                }
+
+                                // ⚠ A '+' ONLY WHILE THE POINTER IS ON THE DAY.
+                                // Drawn on every cell it is forty-two of them
+                                // competing with the dates; drawn on none, the
+                                // day being clickable is something you have to
+                                // already know.
+                                Text {
+                                    anchors { right: parent.right; top: parent.top
+                                              margins: root.ui(4) }
+                                    visible: dayMouse.containsMouse
+                                    text: "+"
+                                    color: root.cAccent
+                                    font { family: root.uiFont; pixelSize: root.ui(13); bold: true }
+                                }
 
                                 Column {
                                     x: root.ui(6)
@@ -1444,13 +1480,27 @@ FloatingWindow {
 
                                     Repeater {
                                         model: cell.nshow
-                                        Text {
+                                        Item {
                                             width: cell.width - root.ui(12)
-                                            elide: Text.ElideRight
-                                            text: cell.shown[index].summary === ""
-                                                  ? "(no title)" : cell.shown[index].summary
-                                            color: root.cText
-                                            font { family: root.uiFont; pixelSize: root.ui(10) }
+                                            height: titleTxt.implicitHeight
+                                            Text {
+                                                id: titleTxt
+                                                width: parent.width
+                                                elide: Text.ElideRight
+                                                text: cell.shown[index].summary === ""
+                                                      ? "(no title)" : cell.shown[index].summary
+                                                color: evMouse.containsMouse ? root.cAccent
+                                                                             : root.cText
+                                                font { family: root.uiFont
+                                                       pixelSize: root.ui(10) }
+                                            }
+                                            MouseArea {
+                                                id: evMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.evEdit(cell.shown[index])
+                                            }
                                         }
                                     }
 
@@ -1476,13 +1526,45 @@ FloatingWindow {
                         font { family: root.uiFont; pixelSize: root.ui(13) }
                     }
 
-                    Text {
+                    Column {
                         visible: root.view === "week" && root.events.length === 0
-                        text: root.calendars.length === 0
-                              ? "No calendars are set up yet."
-                              : "Nothing in the next " + root.days + " days."
-                        color: root.cDim
-                        font { family: root.uiFont; pixelSize: root.ui(13) }
+                        width: parent.width
+                        spacing: root.ui(10)
+
+                        Text {
+                            text: root.calendars.length === 0
+                                  ? "No calendars are set up yet."
+                                  : "Nothing in the next " + root.days + " days."
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(13) }
+                        }
+
+                        // ⛔ AN EMPTY CALENDAR IS WHERE SOMEBODY MOST WANTS TO
+                        // PUT SOMETHING IN IT, and it was the one screen with
+                        // nothing to press. The button in the header is there
+                        // too; this is the one that is where you are looking.
+                        Rectangle {
+                            visible: root.calendars.length > 0
+                            width: emptyNewTxt.implicitWidth + root.ui(22)
+                            height: root.ui(30)
+                            radius: root.ui(6)
+                            color: emptyNew.containsMouse ? root.cAccent : "transparent"
+                            border { width: 1; color: root.cAccent }
+                            Text {
+                                id: emptyNewTxt
+                                anchors.centerIn: parent
+                                text: "New event"
+                                color: emptyNew.containsMouse ? root.cPanel : root.cAccent
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            MouseArea {
+                                id: emptyNew
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.evNew()
+                            }
+                        }
                     }
 
                     Text {
