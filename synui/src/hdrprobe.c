@@ -36,7 +36,10 @@
 #define _GNU_SOURCE
 #include "synui.h"
 
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <wlr/render/color.h>
 #include <wlr/types/wlr_output.h>
@@ -57,6 +60,83 @@ static const float SRGB_TO_BT2020[9] = {
 /* Named apart from synui.h's own yn(): this file answers a different
  * question and a shadowed helper is a merge conflict waiting to be wrong. */
 static const char *hyn(bool v) { return v ? "yes" : "no"; }
+
+/* Defined below; every probe here goes through it so that the one place a
+ * state can be committed stays one place. */
+static bool try_state(struct wlr_output *o, struct wlr_output_state *st);
+
+/* ── the shape the hardware actually takes ──────────────────────────────────
+ *
+ * ⛔ THE CRTC IS NOT A GENERAL COLOUR ENGINE. It has a gamma LUT, and that is
+ * one curve per channel — which is precisely `wlr_color_transform_init_lut_3x1d`
+ * and precisely what nightlight already programs through this same path every
+ * evening. Handed anything else (an inverse-EOTF object, a 3x3 matrix, a
+ * pipeline of them) the DRM backend cannot express it in hardware, falls back
+ * to the renderer, and the renderer is fx_renderer, which refuses — so the
+ * whole commit fails validation.
+ *
+ * The consequence is the useful one: a transfer function is per-channel, so
+ * inverse-PQ CAN be baked into a 1D LUT. Primaries cannot — a matrix mixes
+ * channels and no per-channel curve does that. This function asks the only
+ * question that is left: does the LUT shape carrying the PQ curve go in?
+ */
+
+/* SMPTE ST 2084 inverse EOTF: linear [0,1] (1.0 = 10000 cd/m²) → PQ code. */
+static double pq_encode(double linear)
+{
+    static const double m1 = 2610.0 / 16384.0;
+    static const double m2 = 2523.0 / 4096.0 * 128.0;
+    static const double c1 = 3424.0 / 4096.0;
+    static const double c2 = 2413.0 / 4096.0 * 32.0;
+    static const double c3 = 2392.0 / 4096.0 * 32.0;
+
+    if (linear < 0.0) linear = 0.0;
+    if (linear > 1.0) linear = 1.0;
+    double y = pow(linear, m1);
+    return pow((c1 + c2 * y) / (1.0 + c3 * y), m2);
+}
+
+/* sRGB EOTF: encoded [0,1] → linear [0,1]. */
+static double srgb_to_linear(double v)
+{
+    return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+}
+
+/* Does the CRTC take an SDR→PQ curve as its gamma LUT?
+ *
+ * ⚠ SDR WHITE AT 203 cd/m², which is BT.2408's reference level and what every
+ * other compositor maps a desktop to. The number matters to how bright the
+ * result looks, not to whether the commit is accepted — but inventing a
+ * different one would make this probe answer a question no HDR mode would ask.
+ */
+static bool probe_pq_lut(struct wlr_output *o)
+{
+    size_t dim = wlr_output_get_gamma_size(o);
+    if (dim == 0) return false;
+
+    uint16_t *lut = calloc(3 * dim, sizeof *lut);
+    if (!lut) return false;
+    uint16_t *r = lut, *g = lut + dim, *b = lut + 2 * dim;
+
+    for (size_t i = 0; i < dim; i++) {
+        double enc = (double)i / (double)(dim - 1);
+        double lin = srgb_to_linear(enc) * (203.0 / 10000.0);
+        double pq = pq_encode(lin);
+        uint16_t v = (uint16_t)(pq * UINT16_MAX);
+        r[i] = g[i] = b[i] = v;
+    }
+
+    struct wlr_color_transform *tf = wlr_color_transform_init_lut_3x1d(dim, r, g, b);
+    free(lut);
+    if (!tf) return false;
+
+    struct wlr_output_state st;
+    wlr_output_state_init(&st);
+    wlr_output_state_set_color_transform(&st, tf);
+    bool ok = try_state(o, &st);
+    wlr_color_transform_unref(tf);
+    return ok;
+}
 
 /* One test commit, reported. `st` is consumed. */
 static bool try_state(struct wlr_output *o, struct wlr_output_state *st)
@@ -147,12 +227,13 @@ void hdrprobe_report(syn_server_t *s, void (*emit)(void *ctx, const char *line),
         bool desc_ok = probe_image_description(w);
         bool curve = false, matrix = false, pipeline = false;
         probe_transforms(w, &curve, &matrix, &pipeline);
+        bool pq_lut = probe_pq_lut(w);
 
         snprintf(line, sizeof line,
                  "%s\tpq=%s\tbt2020=%s\timage_description=%s\t"
-                 "tf_curve=%s\tmatrix=%s\tpipeline=%s",
+                 "tf_curve=%s\tmatrix=%s\tpipeline=%s\tpq_lut=%s",
                  w->name, hyn(tf_pq), hyn(prim_2020), hyn(desc_ok),
-                 hyn(curve), hyn(matrix), hyn(pipeline));
+                 hyn(curve), hyn(matrix), hyn(pipeline), hyn(pq_lut));
         emit(ctx, line);
     }
 }

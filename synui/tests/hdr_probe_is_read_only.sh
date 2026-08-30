@@ -44,8 +44,13 @@ tries=$(grep -c "try_state(o, &st)" "$F")
 chk "…and every state it opens is finished or handed to one that does ($inits opened, $fins finished, $tries tested)" $?
 
 # Colour transforms are reference-counted; the same argument applies.
-refs=$(grep -c "wlr_color_transform_init" "$F")
-unrefs=$(grep -c "wlr_color_transform_unref" "$F")
+#
+# ⚠ COMMENT LINES ARE STRIPPED FIRST. This file explains itself at length and
+# names these functions in prose; counting those mentions called correct code a
+# leak. Every comment line in this tree opens with `*` or `/*`.
+code() { grep -vE '^[[:space:]]*(\*|/\*)' "$F"; }
+refs=$(code | grep -c "wlr_color_transform_init")
+unrefs=$(code | grep -c "wlr_color_transform_unref")
 [ "$refs" -le "$unrefs" ]
 chk "…and every transform it makes is released ($refs made, $unrefs freed)" $?
 
