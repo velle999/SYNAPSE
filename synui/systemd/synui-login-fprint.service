@@ -1,0 +1,29 @@
+[Unit]
+# Sync greetd's auth stack to /etc/synui/login-fingerprint.enable, before greetd
+# reads it.
+#
+# ⛔ THIS IS WHAT MAKES THE OPT-IN A SETTING. Without it the flag only took
+# effect the next time pacman happened to reinstall synui, so creating the file
+# did nothing for days and read as the feature being broken.
+#
+# ⚠ Ordered Before=greetd.service and pulled in by a drop-in on greetd itself,
+# so it needs no `systemctl enable`: a unit that had to be enabled by hand would
+# be one more step between the flag and the thing it controls.
+Description=Sync the login-screen fingerprint into greetd's PAM stack
+Before=greetd.service
+ConditionPathExists=/etc/pam.d/greetd
+DefaultDependencies=no
+After=local-fs.target
+RequiresMountsFor=/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/synui/synui-login-fprint
+# Nothing here is fatal to booting. A greeter with the wrong fingerprint state
+# still asks for a password; a boot that failed over it would not.
+SuccessExitStatus=0 1
+Environment=SYNUI_FPRINT_QUIET=0
+
+[Install]
+WantedBy=multi-user.target

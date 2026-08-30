@@ -2587,7 +2587,7 @@ pkgver=0.1.0
 #   bitfields, verbatim. Every derived column was already telling the truth
 #   (pq=yes, image_description=yes, pq_lut=yes, sdr=no); the one fact that
 #   explained all four was the one not on the line.
-pkgrel=552
+pkgrel=553
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2889,6 +2889,19 @@ package() {
     # package is one pacman will happily leave with whatever mode it finds.
     install -Dm644 systemd/synui-greeter-bg.conf \
         "$pkgdir/usr/lib/tmpfiles.d/synui-greeter-bg.conf"
+
+    # The login-screen fingerprint switch. ⛔ THREE FILES, AND THE DROP-IN IS
+    # THE ONE THAT MAKES IT A SETTING: it pulls the sync in whenever greetd
+    # starts, so /etc/synui/login-fingerprint.enable takes effect at the next
+    # boot instead of the next time pacman happens to reinstall synui. The
+    # scriptlet runs the same script, so there is one implementation of which
+    # line is ours and when it comes out.
+    install -Dm755 systemd/synui-login-fprint.sh \
+        "$pkgdir/usr/lib/synui/synui-login-fprint"
+    install -Dm644 systemd/synui-login-fprint.service \
+        "$pkgdir/usr/lib/systemd/system/synui-login-fprint.service"
+    install -Dm644 systemd/greetd.service.d/synui-login-fprint.conf \
+        "$pkgdir/usr/lib/systemd/system/greetd.service.d/synui-login-fprint.conf"
     install -Dm644 config/synui.desktop \
         "$pkgdir/usr/share/wayland-sessions/synui.desktop"
 

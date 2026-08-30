@@ -903,10 +903,13 @@ without a reader one extra fork per lock and no visible change.
 
 ```
 sudo mkdir -p /etc/synui && sudo touch /etc/synui/login-fingerprint.enable
+sudo /usr/lib/synui/synui-login-fprint          # or just reboot
 ```
 
-then upgrade or reinstall `synui`. That puts `pam_fprintd` into
-`/etc/pam.d/greetd`; deleting the file and upgrading again takes it back out.
+That puts `pam_fprintd` into `/etc/pam.d/greetd`; deleting the file and running
+the same command takes it back out. The second line is only for *now* — a
+systemd oneshot runs it before `greetd` on every boot, so the flag is what
+decides, not when you last upgraded.
 
 ⚠ **It is opt-in because a reader that does not work is not free.**
 `pam_fprintd` blocks the PAM conversation while it waits for a finger, and

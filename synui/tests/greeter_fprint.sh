@@ -79,22 +79,39 @@ chk "…and a failed arm is silent, leaving the password screen as it was" $?
 awk '/^static void greeter_arm/,/^}/' "$G" | grep -q 'busy  = 0'
 chk "…and arming does not swallow the keyboard" $?
 
-# ── The PAM line, and the opt-in that gates it ──────────────────────────────
+# ── The PAM line, the opt-in, and the thing that applies it ─────────────────
 #
 # ⛔ OPT-IN, BECAUSE A READER THAT DOES NOT WORK IS NOT FREE. pam_fprintd blocks
 # the PAM conversation while it waits and greetd runs one at a time, so on a
 # machine whose sensor never answers every login pays that timeout and gets
-# nothing. The ThinkPad's sensor enumerates and has never once become
-# available; the line was pure cost there. It goes in only when asked for, and
-# comes back OUT on an unmarked machine.
-grep -q 'pam_fprintd.so timeout=10' "$I"
-chk "pam_fprintd is given a bounded timeout" $?
+# nothing. The ThinkPad's sensor enumerates and has never once become available.
+#
+# ⛔ AND THE SWITCH HAS TO APPLY WITHOUT A PACKAGE UPGRADE. The first version put
+# all of this in synui.install, so creating the flag did nothing until pacman
+# next reinstalled synui — the flag was set and the line was absent, which is
+# exactly what "not working" looked like.
+S="$HERE/../systemd/synui-login-fprint.sh"
+[ -x "$S" ] || bad "no $S"
 
-grep -q 'login-fingerprint.enable' "$I"
+grep -q 'pam_fprintd.so timeout=10' "$S"
+chk "pam_fprintd is given a bounded timeout" $?
+grep -q 'login-fingerprint.enable' "$S"
 chk "…and is gated on an opt-in flag" $?
 
-# The whole scriptlet, driven against real files. Sourcing it defines the
-# functions without running them, so each path can be exercised in a temp dir.
+# ⛔ ONE IMPLEMENTATION. The scriptlet must DELEGATE, not carry a copy.
+grep -q 'usr/lib/synui/synui-login-fprint' "$I"
+chk "synui.install runs the script rather than repeating it" $?
+! grep -q 'pam_fprintd.so timeout' "$I"
+chk "…and holds no second copy of the line to drift from" $?
+
+# The drop-in is what makes the flag take effect at boot with nothing enabled.
+D="$HERE/../systemd/greetd.service.d/synui-login-fprint.conf"
+grep -q 'Wants=synui-login-fprint.service' "$D" 2>/dev/null
+chk "greetd pulls the sync in, so nothing needs systemctl enable" $?
+grep -q 'Before=greetd.service' "$HERE/../systemd/synui-login-fprint.service"
+chk "…and it runs before greetd reads the stack" $?
+
+# ── The script, driven against real files ───────────────────────────────────
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 cat > "$T/base" <<'PAM'
@@ -108,24 +125,18 @@ session    include      system-local-login
 PAM
 
 drive() {   # drive <yes|no> <file>
-    (
-        . "$I"
-        _greetd_pam="$2"
-        _fp_flag="$T/flag"
-        # Every build host lacks fprintd, which is why this is a function.
-        _synui_have_pam_fprintd() { return 0; }
-        [ "$1" = yes ] && : > "$T/flag" || rm -f "$T/flag"
-        _synui_fprint_in_greeter
-    ) >/dev/null 2>&1
+    [ "$1" = yes ] && : > "$T/flag" || rm -f "$T/flag"
+    # Every build host lacks fprintd, which is why the module check is
+    # overridable — without it the add and upgrade paths never ran anywhere.
+    SYNUI_GREETD_PAM="$2" SYNUI_FPRINT_FLAG="$T/flag" \
+    SYNUI_FPRINT_ASSUME_MODULE=1 SYNUI_FPRINT_QUIET=1 sh "$S"
 }
 
 cp "$T/base" "$T/a"; drive no "$T/a"
 cmp -s "$T/base" "$T/a"
 chk "an unmarked machine with a clean stack is left alone" $?
 
-# ⛔ THE HALF THAT MATTERS. Earlier releases added the line unconditionally, so
-# machines already carry it. An upgrade that could not undo its own output would
-# leave that cost in place forever.
+# ⛔ THE HALF THAT MATTERS: releases before 552 added the line unconditionally.
 cp "$T/base" "$T/b"
 sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so\nauth       include|' "$T/b"
 drive no "$T/b"
@@ -134,8 +145,7 @@ chk "…and one we added before is taken back out" $?
 [ "$(grep -c system-local-login "$T/b")" = 3 ]
 chk "…leaving the rest of the stack intact" $?
 
-# ⛔ NEVER SOMEBODY ELSE'S LINE. Removal keys off a strict pattern; a line with
-# its own options belongs to whoever wrote it, and an upgrade must not eat it.
+# ⛔ NEVER SOMEBODY ELSE'S LINE.
 cp "$T/base" "$T/c"
 sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so max-tries=5 debug\nauth       include|' "$T/c"
 drive no "$T/c"
@@ -145,22 +155,33 @@ chk "…but a hand-written line with options is never touched" $?
 cp "$T/base" "$T/d"; drive yes "$T/d"
 grep -q 'pam_fprintd.so timeout=10' "$T/d"
 chk "asking for it adds the line" $?
-# ⛔ ABOVE the include: securetty and nologin are gates a finger must not skip.
 [ "$(grep -n pam_fprintd "$T/d" | cut -d: -f1)" -lt \
   "$(grep -n 'auth       include' "$T/d" | cut -d: -f1)" ]
 chk "…above system-local-login, below securetty and nologin" $?
 
-cp "$T/base" "$T/e"
-sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so\nauth       include|' "$T/e"
-drive yes "$T/e"
-grep -q 'timeout=10' "$T/e"
+# ⛔ AND TURNING IT ON IS ENOUGH — no reinstall, no upgrade. This is the case
+# that shipped broken: flag present, line absent, nothing to do about it.
+cp "$T/base" "$T/e"; drive no "$T/e"          # settles to "off"
+drive yes "$T/e"                              # …then the flag alone turns it on
+grep -q 'pam_fprintd.so timeout=10' "$T/e"
+chk "…and setting the flag on an already-synced machine is enough" $?
+
+cp "$T/base" "$T/f"
+sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so\nauth       include|' "$T/f"
+drive yes "$T/f"
+grep -q 'timeout=10' "$T/f"
 chk "…and an older line of ours gains the timeout" $?
 
-drive yes "$T/e"
-[ "$(grep -c pam_fprintd "$T/e")" = 1 ]
+drive yes "$T/f"
+[ "$(grep -c pam_fprintd "$T/f")" = 1 ]
 chk "…and running twice changes nothing" $?
 
-grep -q 'sufficient' "$I"
+# Off again, by removing the flag.
+drive no "$T/f"
+[ "$(grep -c pam_fprintd "$T/f")" = 0 ]
+chk "…and removing the flag turns it back off" $?
+
+grep -q 'sufficient' "$S"
 chk "it stays sufficient, so a dead reader still asks for the password" $?
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
