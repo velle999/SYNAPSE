@@ -33,9 +33,10 @@
 #   packaging/git-export.sh -o /srv/pkgrepos
 #   packaging/git-export.sh --origin 'https://github.com/velle999/pkg-%s.git'
 #
-# `--origin` takes a printf template; %s becomes the package name. The remote is
-# only recorded — nothing here pushes, because where these land is a namespace
-# decision and not this script's to make.
+# `--origin` takes a printf template; %s becomes the package name, and it
+# defaults to github.com/velle999/<pkgname> — the same repository that carries
+# the package's source releases. The remote is only recorded; nothing here
+# pushes. `tools/publish-sources.sh` is what creates the repository and pushes.
 #
 # SynapseOS Project — GPL-2.0-or-later
 # SPDX-License-Identifier: GPL-2.0-or-later
@@ -49,7 +50,9 @@ GIT_NAME="Velle Sinclair"
 GIT_EMAIL="brncomputerhelp@gmail.com"
 
 out="$BASE/packaging/out"
-origin_tpl=""
+# The package's own repository, which is also where its source releases live.
+# tools/publish-sources.sh creates it and pushes here.
+origin_tpl="https://github.com/velle999/%s.git"
 only=()
 while [ $# -gt 0 ]; do
     case "$1" in

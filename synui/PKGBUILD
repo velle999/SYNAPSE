@@ -2587,7 +2587,7 @@ pkgver=0.1.0
 #   bitfields, verbatim. Every derived column was already telling the truth
 #   (pq=yes, image_description=yes, pq_lut=yes, sdr=no); the one fact that
 #   explained all four was the one not on the line.
-pkgrel=561
+pkgrel=562
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2834,6 +2834,12 @@ install=synui.install
 # outside use would be a second set of depends and install rules, free to drift
 # from this one — and the person it broke for could not see this file at all.
 #
+# ⚠ ITS OWN REPOSITORY, NOT THIS ONE. The source release lives at
+# github.com/velle999/$pkgname — which is also where the PKGBUILD is published
+# as a clonable package repo — because putting them on SYNAPSE's releases page
+# buried the ISO downloads under a component tarball per bump, and made the
+# newest of those GitHub's "Latest release" for the whole project.
+#
 # ⚠ THE TAG CARRIES THE pkgrel, so the URL cannot point at the wrong source.
 # preflight.sh already refuses a source edit that does not bump pkgrel, which
 # means every change to what gets built moves this URL with it.
@@ -2844,7 +2850,7 @@ install=synui.install
 # asset is reproducible instead — collect-source.sh sorts and zeroes the
 # timestamps, so `tools/collect-source.sh <name>` at the tagged commit
 # re-derives it byte for byte. packaging/README.md has the whole of it.
-source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/SYNAPSE/releases/download/$pkgname-$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 # Refuse to build a tarball that is older than the working tree.

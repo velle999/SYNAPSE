@@ -39,7 +39,7 @@ Each application is one package repository, and none of them needs the
 compositor:
 
 ```bash
-git clone <the syn-play repo>
+git clone https://github.com/velle999/syn-play
 cd syn-play && makepkg -si
 ```
 
@@ -68,10 +68,17 @@ cd syn-play && makepkg -si
 Order matters — `synui` depends on both of the packages before it:
 
 ```bash
-for c in scenefx0.5 syntty synui; do
-    ( curl -LO "https://github.com/velle999/SYNAPSE/raw/main/$c/PKGBUILD" \
-      && makepkg -si )
+for c in syntty synui; do
+    ( git clone "https://github.com/velle999/$c" && cd "$c" && makepkg -si )
 done
+```
+
+`scenefx0.5` comes first and lives in the monorepo, since it only wraps an
+upstream release:
+
+```bash
+curl -LO https://github.com/velle999/SYNAPSE/raw/main/scenefx0.5/PKGBUILD
+makepkg -si
 ```
 
 `synui` installs `/usr/share/wayland-sessions/synui.desktop`, so any display
@@ -132,12 +139,23 @@ next version, and `pacman` will tell you it is newer.
 
 ## For maintainers
 
+### ⛔ Why the sources are NOT on this repository's releases page
+
+They were, for about an hour, and it was wrong twice over. Twelve component
+tarballs per release round buried the ISO downloads — and because GitHub calls
+the newest release "Latest", the project's release badge and every
+`/releases/latest` link resolved to a source tarball instead of the operating
+system.
+
+A package's sources belong with its PKGBUILD, so both live at
+`github.com/velle999/<pkgname>` and SYNAPSE's releases page is ISOs only.
+
 ### How one `source=()` line serves both
 
 Every in-house `PKGBUILD` reads:
 
 ```bash
-source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/SYNAPSE/releases/download/$pkgname-$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 ```
 
 `build-all.sh` runs `tools/collect-source.sh`, which drops
@@ -169,7 +187,7 @@ actually matters to somebody downloading it. `collect-source.sh` sorts entries
 and zeroes timestamps and ownership, so at the tagged commit:
 
 ```bash
-git checkout syn-play-0.1.0-5
+git checkout <the commit that published it>
 tools/collect-source.sh syn-play
 sha256sum syn-play/syn-play-0.1.0.tar.gz     # == the released asset
 ```
@@ -213,12 +231,14 @@ contributor.
 push to any git host, but the `aur` remote is already recorded on every one:
 
 ```bash
-git -C packaging/out/syn-play push origin main   # wherever you host them
+git -C packaging/out/syn-play push origin main   # github.com/velle999/syn-play
 git -C packaging/out/syn-play push aur main      # if and when the AUR opens up
 ```
 
-Nothing in the script pushes. Where these land is a namespace decision, and one
-`--origin 'https://…/%s.git'` records without acting on.
+`origin` defaults to `github.com/velle999/<pkgname>`, which is also where that
+package's source releases live. Nothing in this script pushes;
+`tools/publish-sources.sh` is what creates the repository, pushes it and
+attaches the release.
 
 ⚠ `packaging/out/` is gitignored — it is regenerated from the PKGBUILDs, and
 committing it would be a second copy of every one of them, free to go stale

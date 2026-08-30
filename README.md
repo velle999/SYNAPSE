@@ -2024,7 +2024,7 @@ that is not running SynapseOS. Every dependency except `scenefx0.5` is in Arch's
 own repositories, and each component is one `PKGBUILD`:
 
 ```bash
-git clone <the syn-play repo> && cd syn-play && makepkg -si
+git clone https://github.com/velle999/syn-play && cd syn-play && makepkg -si
 ```
 
 or, without cloning anything, the `PKGBUILD` alone:

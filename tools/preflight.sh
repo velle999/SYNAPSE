@@ -1161,6 +1161,12 @@ check_tarball() {
 #
 #   - a name in EXTERNAL whose source=() does not carry the release URL is an
 #     asset published where no PKGBUILD looks;
+#
+# ⛔ AND THE URL NAMES THE PACKAGE'S OWN REPOSITORY, NOT THIS ONE. These went to
+# SYNAPSE's releases first: twelve component tarballs buried the ISO downloads,
+# and the newest of them became GitHub's "Latest release" for the whole project,
+# so the README badge and every /releases/latest link pointed at a source
+# tarball instead of the operating system.
 #   - a PKGBUILD carrying the URL that is not in EXTERNAL is a package that
 #     404s for everybody outside this repo, because nothing publishes its
 #     source.
@@ -1191,7 +1197,7 @@ check_external() {
         [ -f "$name/PKGBUILD" ] || continue
         ver=$(pkgfield "$name" pkgver) || continue
         rel=$(pkgfield "$name" pkgrel) || continue
-        want="https://github.com/velle999/SYNAPSE/releases/download/$name-$ver-$rel/$name-$ver.tar.gz"
+        want="https://github.com/velle999/$name/releases/download/$ver-$rel/$name-$ver.tar.gz"
         got=$(pkgsources "$name" | grep -F "releases/download" || true)
 
         if [ -z "$got" ]; then
@@ -1220,7 +1226,7 @@ check_external() {
     local c
     while IFS= read -r c; do
         c=$(dirname "$c")
-        pkgsources "$c" | grep -qF "releases/download/$c-" || continue
+        pkgsources "$c" | grep -qF "/$c/releases/download/" || continue
         printf '%s\n' $ext | grep -qx "$c" && continue
         fail external "$c/PKGBUILD points at a release nothing publishes"             "Its source=() names a SYNAPSE release asset, but $c is not in"             "publish-sources.sh's EXTERNAL, so that asset is never created."             "Every build outside this checkout 404s."             "Fix: add $c to EXTERNAL."
     done < <(git ls-files '*/PKGBUILD')

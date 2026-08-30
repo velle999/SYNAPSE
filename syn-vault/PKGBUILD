@@ -22,7 +22,7 @@
 # window passes one in. There is deliberately no --password option.
 pkgname=syn-vault
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="A password-locked folder for your own files: an encrypted vault in userspace"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -56,6 +56,12 @@ optdepends=('quickshell: the graphical window (syn-vault gui)'
 # outside use would be a second set of depends and install rules, free to drift
 # from this one — and the person it broke for could not see this file at all.
 #
+# ⚠ ITS OWN REPOSITORY, NOT THIS ONE. The source release lives at
+# github.com/velle999/$pkgname — which is also where the PKGBUILD is published
+# as a clonable package repo — because putting them on SYNAPSE's releases page
+# buried the ISO downloads under a component tarball per bump, and made the
+# newest of those GitHub's "Latest release" for the whole project.
+#
 # ⚠ THE TAG CARRIES THE pkgrel, so the URL cannot point at the wrong source.
 # preflight.sh already refuses a source edit that does not bump pkgrel, which
 # means every change to what gets built moves this URL with it.
@@ -66,7 +72,7 @@ optdepends=('quickshell: the graphical window (syn-vault gui)'
 # asset is reproducible instead — collect-source.sh sorts and zeroes the
 # timestamps, so `tools/collect-source.sh <name>` at the tagged commit
 # re-derives it byte for byte. packaging/README.md has the whole of it.
-source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/SYNAPSE/releases/download/$pkgname-$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {

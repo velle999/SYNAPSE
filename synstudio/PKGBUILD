@@ -1470,7 +1470,7 @@ pkgver=0.1.0
 #   Verified in a nested headless synui against a font.state carrying a face
 #   and a scale nothing resolves to by accident (DejaVu Serif at 150%), so
 #   "it followed the file" and "it kept its defaults" cannot be confused.
-pkgrel=44
+pkgrel=45
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
@@ -1520,6 +1520,12 @@ optdepends=('quickshell: the window — darkroom and cutting room (synstudio gui
 # outside use would be a second set of depends and install rules, free to drift
 # from this one — and the person it broke for could not see this file at all.
 #
+# ⚠ ITS OWN REPOSITORY, NOT THIS ONE. The source release lives at
+# github.com/velle999/$pkgname — which is also where the PKGBUILD is published
+# as a clonable package repo — because putting them on SYNAPSE's releases page
+# buried the ISO downloads under a component tarball per bump, and made the
+# newest of those GitHub's "Latest release" for the whole project.
+#
 # ⚠ THE TAG CARRIES THE pkgrel, so the URL cannot point at the wrong source.
 # preflight.sh already refuses a source edit that does not bump pkgrel, which
 # means every change to what gets built moves this URL with it.
@@ -1530,7 +1536,7 @@ optdepends=('quickshell: the window — darkroom and cutting room (synstudio gui
 # asset is reproducible instead — collect-source.sh sorts and zeroes the
 # timestamps, so `tools/collect-source.sh <name>` at the tagged commit
 # re-derives it byte for byte. packaging/README.md has the whole of it.
-source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/SYNAPSE/releases/download/$pkgname-$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {
