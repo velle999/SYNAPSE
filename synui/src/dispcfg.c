@@ -599,6 +599,80 @@ static void dispcfg_toggle_deep_color(syn_server_t *s)
     synui_render_dispcfg(s);
 }
 
+/* ── HDR10 output (the row below deep colour) ────────────── */
+/*
+ * Shift+D, deliberately next to `d`: 10-bit scanout and HDR10 are the two
+ * things people mean by "HDR" and only one of them is, so the panel puts the
+ * real one one shift away from the one it is confused with.
+ *
+ * The status line carries the refusal because hdr_set() is the only thing that
+ * knows WHICH half was refused, and a toggle that silently does nothing is the
+ * exact failure this whole path exists to avoid.
+ */
+static void dispcfg_toggle_hdr(syn_server_t *s)
+{
+    syn_output_t *sel = selected_output(s);
+    if (!sel) return;
+
+    if (!sel->hdr_capable) {
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "%s cannot be driven in HDR10", sel->wlr_output->name);
+        synui_render_dispcfg(s);
+        return;
+    }
+
+    int want = !sel->hdr_on;
+    if (!hdr_toggle(s, sel))
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "%s refused HDR10", sel->wlr_output->name);
+    else if (want)
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "%s in HDR10 \xe2\x80\x94 %d cd/m\xc2\xb2 SDR white",
+                 sel->wlr_output->name, hdr_white_clamp(sel->hdr_white));
+    else
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "%s back to SDR", sel->wlr_output->name);
+
+    output_persist_save(s);
+    synui_render_dispcfg(s);
+}
+
+/*
+ * Where a plain white window sits on PQ's absolute scale.
+ *
+ * ⚠ NOT A BRIGHTNESS CONTROL, though it is the one that will be reached for.
+ * The monitor's own brightness moves the whole picture; this moves only where
+ * SDR content lands inside an HDR signal, which is the difference between a
+ * desktop that looks normal next to an HDR video and one that looks washed out
+ * or blinding beside it. Only meaningful while HDR is on, which is why the key
+ * says so rather than silently doing nothing.
+ */
+static void dispcfg_step_hdr_white(syn_server_t *s, int dir)
+{
+    syn_output_t *sel = selected_output(s);
+    if (!sel) return;
+
+    if (!sel->hdr_on) {
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "SDR white applies in HDR10 \xe2\x80\x94 Shift+D turns it on");
+        synui_render_dispcfg(s);
+        return;
+    }
+
+    int want = hdr_white_clamp(sel->hdr_white) + dir * HDR_SDR_WHITE_STEP;
+    if (!hdr_set_white(s, sel, want))
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "%s refused %d cd/m\xc2\xb2 SDR white",
+                 sel->wlr_output->name, hdr_white_clamp(want));
+    else
+        snprintf(s->dispcfg.status, sizeof(s->dispcfg.status),
+                 "%s SDR white %d cd/m\xc2\xb2", sel->wlr_output->name,
+                 hdr_white_clamp(sel->hdr_white));
+
+    output_persist_save(s);
+    synui_render_dispcfg(s);
+}
+
 /* Move the selected monitor one cell in the grid. If another monitor
  * already occupies the destination cell, swap grid cells with it instead
  * of stacking two outputs on top of each other. */
@@ -1076,6 +1150,9 @@ int dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         case XKB_KEY_Right: case XKB_KEY_L: dispcfg_move(s, +1,  0); return 1;
         case XKB_KEY_Up:    case XKB_KEY_K: dispcfg_move(s,  0, -1); return 1;
         case XKB_KEY_Down:  case XKB_KEY_J: dispcfg_move(s,  0, +1); return 1;
+        /* Shift+D: HDR10 output, one shift away from `d`'s 10-bit scanout —
+         * the two things "HDR" gets used to mean, and only one of them is. */
+        case XKB_KEY_D: dispcfg_toggle_hdr(s); return 1;
         default: break;
         }
     }
@@ -1118,6 +1195,15 @@ int dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return 1;
     case XKB_KEY_m:
         dispcfg_cycle_mode(s);
+        return 1;
+    /* SDR white in HDR10. The bracket pair rather than -/+, which already
+     * scale this screen — a key that means two things in one panel is a key
+     * that does the wrong one. */
+    case XKB_KEY_bracketleft:
+        dispcfg_step_hdr_white(s, -1);
+        return 1;
+    case XKB_KEY_bracketright:
+        dispcfg_step_hdr_white(s, +1);
         return 1;
     /* One monitor's scale, on the keys every zoom control uses. `equal` as
      * well as `plus`: on a US layout `+` is Shift+= and xkb hands over the

@@ -481,21 +481,25 @@ static void edge_damage_trace(syn_output_t *output,
     output->edge_dmg_hit = output->edge_dmg_miss = output->edge_dmg_full = 0;
 }
 
-static void scene_commit_nightlight(syn_output_t *output)
+/*
+ * The plain scene commit, with the output's colour pipeline on it.
+ *
+ * Named for what it does now rather than for night light alone: since HDR there
+ * is more than one thing wanting the single colour-transform slot, and hdr.c
+ * owns composing them and putting the answer on the state. See hdr_commit().
+ */
+static void scene_commit_colour(syn_output_t *output)
 {
     struct wlr_scene_output *scene_output = output->scene_output;
     struct wlr_output *wo = output->wlr_output;
-    int temp = nightlight_effective_temp(output->server);
+    syn_server_t *s = output->server;
 
-    /* wlr_scene_output_commit()'s own guard — with the addition that a night
-     * light change is worth a commit even when nothing on screen moved.
-     *
-     * The LUT length counts as a change too: an output first asked before it
-     * had a CRTC reports a gamma size of 0 and gets the fallback length, which
-     * the driver then refuses. Without the dim in the comparison that refusal
-     * is stamped once and never revisited. */
-    size_t dim = nightlight_lut_dim(wo);
-    if (temp == output->nightlight_temp && dim == output->nightlight_dim &&
+    /* wlr_scene_output_commit()'s own guard — with the addition that a colour
+     * change is worth a commit even when nothing on screen moved. Night light
+     * going on, the LUT length changing, HDR being switched on, the SDR white
+     * level moving: none of them damage a pixel. */
+    syn_color_state_t want = hdr_color_state(s, output);
+    if (hdr_color_state_eq(&want, &output->committed_color) &&
         !wlr_scene_output_needs_frame(scene_output))
         return;
 
@@ -525,33 +529,7 @@ static void scene_commit_nightlight(syn_output_t *output)
 
     edge_damage_trace(output, &state);
 
-    /* NULL is night light off, and committing it is how the screen gets its
-     * colour back — an identity transform every backend can honour. */
-    struct wlr_color_transform *nl = nightlight_color_transform(output->server, wo);
-    bool warm_ok = true;
-    struct wlr_output_state warm = {0};
-    if (wlr_output_state_copy(&warm, &state)) {
-        wlr_output_state_set_color_transform(&warm, nl);
-        warm_ok = wlr_output_test_state(wo, &warm);
-        if (warm_ok)
-            wlr_output_state_copy(&state, &warm);
-        wlr_output_state_finish(&warm);
-    } else {
-        warm_ok = false;
-    }
-
-    if (wlr_output_commit_state(wo, &state)) {
-        if (!warm_ok)
-            wlr_log(WLR_ERROR, "synui: nightlight: %s will not take the %dK "
-                    "transform at %zu LUT entries — frame committed without it",
-                    wo->name, temp, dim);
-        /* Stamped even when the transform was refused: a backend that says no
-         * once says no to the same transform every frame, and retrying it per
-         * frame would mean testing, and logging, at the refresh rate. The next
-         * temperature change — or a change of LUT length — asks again. */
-        output->nightlight_temp = temp;
-        output->nightlight_dim  = dim;
-    }
+    hdr_commit(s, output, &state);
 
     wlr_output_state_finish(&state);
 }
@@ -679,22 +657,25 @@ static void output_frame(struct wl_listener *listener, void *data)
     if (output->server->config.blur)
         syn_output_damage_whole(output);
 
-    /* A night light change has no damage of its own — the pixels are identical,
-     * only the LUT they are scanned out through moves — so on a still screen
-     * the commit below would be skipped and the toggle would do nothing until
-     * something else happened to repaint. Damage the output for it. */
-    if (output->nightlight_temp != nightlight_effective_temp(output->server) ||
-        output->nightlight_dim  != nightlight_lut_dim(output->wlr_output))
+    /* A colour change has no damage of its own — the pixels are identical, only
+     * the LUT they are scanned out through and what the connector is told they
+     * mean have moved — so on a still screen the commit below would be skipped
+     * and the toggle would do nothing until something else happened to repaint.
+     * Damage the output for it. Night light, the LUT length, HDR and the SDR
+     * white level are all in the comparison; see syn_color_state_t. */
+    syn_color_state_t colour_now = hdr_color_state(output->server, output);
+    if (!hdr_color_state_eq(&colour_now, &output->committed_color))
         syn_output_damage_whole(output);
 
     /* GLES post-process pass when available; plain scene commit otherwise
-     * (and whenever any step of the effects pass fails). Both paths carry night
-     * light on the output state they commit — see scene_commit_nightlight. */
+     * (and whenever any step of the effects pass fails). Both paths put the
+     * output's colour pipeline on the state they commit, through the same
+     * hdr_commit() — see scene_commit_colour. */
     /* effects.c commits whole-output damage by construction, so when it takes
      * the frame the request is already honoured — drop it rather than letting
      * it ride to some later plain commit. */
     if (!effects_output_commit(output))
-        scene_commit_nightlight(output);
+        scene_commit_colour(output);
     else
         output->damage_whole_pending = false;
 
@@ -900,6 +881,13 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * that way means the second monitor stays blue while the first is warm —
      * which reads as a broken monitor, not a setting. */
     nightlight_output_added(server, output);
+
+    /* ...and ask what this connector will take in HDR10, then give it back the
+     * mode outputs.conf saved for it. AFTER the EDID and deep-colour probes and
+     * after output_persist_apply(): the saved flag is parked in hdr_want
+     * because it is read while the output is still being built, before there is
+     * a capability to check it against. */
+    hdr_output_added(server, output);
 
     /* If the native lock (or the greeter, which reuses it) is up, this output
      * needs a clock/password pane — without one, a connector recreated by a
@@ -2659,6 +2647,12 @@ void synui_destroy(syn_server_t *s)
      * and the FcPattern it was built from, both of which LeakSanitizer counts
      * against the ASan smoke run. */
     syn_text_shutdown();
+
+    /* The SDR→PQ curves, for the same reason: the cache is process-wide and
+     * every entry holds a wlr_color_transform that LeakSanitizer counts against
+     * the ASan smoke run. Before the outputs go — nothing may still be holding
+     * one of these on a state it has not committed yet. */
+    hdr_shutdown();
 
     wlr_xcursor_manager_destroy(s->cursor_mgr);
     wlr_cursor_destroy(s->cursor);

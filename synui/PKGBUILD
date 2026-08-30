@@ -2512,7 +2512,45 @@ pkgver=0.1.0
 #   bar's microphone indicator watches the same one — one fact, two surfaces.
 #   ⚠ It draws "Listening", not "On". "On" describes a setting; what is true is
 #   that a device is open right now, and the status line says so both ways.
-pkgrel=547
+# 548: HDR10 output, on a compositor that cannot render HDR.
+#   Shift+D in the display panel (Super+D) drives the selected monitor in
+#   HDR10; `[` and `]` move where SDR white sits. `synctl hdr on|off <output>`
+#   and `synctl hdr white <output> <cd/m2>` are the same two controls from a
+#   script. Persisted per connector in outputs.conf as hdr= / hdr_white=.
+#   ⛔ THE OBVIOUS ROUTE IS CLOSED AND CLOSED SILENTLY. scenefx's fx_renderer
+#   declares features.output_color_transform = false and ignores the field, so
+#   a colour transform handed to the SCENE is dropped with no error — which is
+#   what nightlight.c found and documents. This goes on the OUTPUT STATE, where
+#   the DRM backend programs it into CRTC hardware after blending. synui keeps
+#   compositing 8-bit sRGB with every effect intact.
+#   ⛔ A CRTC IS A GAMMA LUT — ONE CURVE PER CHANNEL. Measured, not assumed:
+#   546/547's probe reported tf_curve=no, matrix=no, pipeline=no, pq_lut=yes on
+#   DP-3. An inverse-EOTF object, a 3x3 matrix and a pipeline of them are not
+#   expressible in that hardware, so the backend falls back to the renderer and
+#   the renderer refuses. A transfer function is per-channel, so sRGB→PQ bakes
+#   into a 1D LUT and goes in.
+#   ⚠ SO THE PRIMARIES ARE NOT CONVERTED, and the panel says so rather than
+#   leaving it to be discovered. sRGB primaries are asked for FIRST and BT.2020
+#   only as a fallback — HDR10 is entered by the PQ transfer function, not by
+#   the colour volume — because sending sRGB-primaried pixels in a BT.2020
+#   container is what makes a desktop come out over-saturated.
+#   ⛔ THERE IS ONE COLOUR-TRANSFORM SLOT PER OUTPUT AND NIGHT LIGHT WAS IN IT.
+#   wlr_output_state.color_transform is a single pointer, so HDR cannot set its
+#   own beside night light's: the second call replaces the first, silently. The
+#   warmth is folded INTO the PQ curve instead (in the encoded domain, where
+#   nightlight.c applies it), and both commit paths now go through one
+#   hdr_commit() rather than two copies of the same body.
+#   ⚠ AN OUTPUT PUT INTO HDR IS TAKEN BACK OUT EXPLICITLY. A state that leaves
+#   the image description unset leaves the connector carrying the last one — the
+#   same trap as never committing a NULL colour transform. A connector that will
+#   not accept a plain sRGB description back is never offered the mode at all.
+#   ⚠ 10-bit scanout is requested with it, best-effort and remembered: PQ spends
+#   most of its range on the bottom two stops, which is what makes 8-bit PQ band
+#   visibly in shadows. Switching HDR off puts back what HDR switched on.
+#   ⚠ Two SDR monitors on this desk report capable=no, and that is the common
+#   case — so every refusal is an answer, never a successful-looking no-op:
+#   `synctl hdr on` on a link that will not carry PQ returns an error.
+pkgrel=548
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

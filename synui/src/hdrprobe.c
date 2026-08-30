@@ -23,11 +23,18 @@
  * atomic backend validates it against the kernel with TEST_ONLY and reports
  * back, and the screen never changes.
  *
- * ⚠ AND IT TESTS THE PIECES SEPARATELY, because they fail separately. Signalling
- * HDR10 (the image description) is a different capability from mapping SDR into
- * it (the colour transform), and a machine that takes the first and refuses the
- * second would show a washed-out desktop rather than an error. Knowing which
- * half works is the entire point of asking.
+ * ⚠ AND IT REPORTS THE PIECES SEPARATELY, because they fail separately.
+ * Signalling HDR10 (the image description) is a different capability from
+ * mapping SDR into it (the colour transform), and that is different again from
+ * getting back OUT to plain sRGB — a machine that takes the first and refuses
+ * the second shows a washed-out desktop rather than an error, and one that
+ * refuses the third has a mode it cannot leave. Knowing which half works is the
+ * entire point of asking.
+ *
+ * ⚠ WHAT THE MODE ITSELF WOULD COMMIT IS ASKED BY hdr.c, not here. This file
+ * carried its own copy of the ST 2084 curve to ask about it, which is two
+ * implementations of one thing; the columns pq_lut/sdr/primaries/capable are
+ * hdr_probe()'s answers now, re-asked live on every report.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -36,10 +43,7 @@
 #define _GNU_SOURCE
 #include "synui.h"
 
-#include <math.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #include <wlr/render/color.h>
 #include <wlr/types/wlr_output.h>
@@ -61,10 +65,6 @@ static const float SRGB_TO_BT2020[9] = {
  * question and a shadowed helper is a merge conflict waiting to be wrong. */
 static const char *hyn(bool v) { return v ? "yes" : "no"; }
 
-/* Defined below; every probe here goes through it so that the one place a
- * state can be committed stays one place. */
-static bool try_state(struct wlr_output *o, struct wlr_output_state *st);
-
 /* ── the shape the hardware actually takes ──────────────────────────────────
  *
  * ⛔ THE CRTC IS NOT A GENERAL COLOUR ENGINE. It has a gamma LUT, and that is
@@ -73,70 +73,21 @@ static bool try_state(struct wlr_output *o, struct wlr_output_state *st);
  * evening. Handed anything else (an inverse-EOTF object, a 3x3 matrix, a
  * pipeline of them) the DRM backend cannot express it in hardware, falls back
  * to the renderer, and the renderer is fx_renderer, which refuses — so the
- * whole commit fails validation.
+ * whole commit fails validation. The three columns below are the measurement
+ * that established that, kept because it is the reason the mode is shaped the
+ * way it is and not a fact anyone should have to rediscover.
  *
  * The consequence is the useful one: a transfer function is per-channel, so
  * inverse-PQ CAN be baked into a 1D LUT. Primaries cannot — a matrix mixes
- * channels and no per-channel curve does that. This function asks the only
- * question that is left: does the LUT shape carrying the PQ curve go in?
- */
-
-/* SMPTE ST 2084 inverse EOTF: linear [0,1] (1.0 = 10000 cd/m²) → PQ code. */
-static double pq_encode(double linear)
-{
-    static const double m1 = 2610.0 / 16384.0;
-    static const double m2 = 2523.0 / 4096.0 * 128.0;
-    static const double c1 = 3424.0 / 4096.0;
-    static const double c2 = 2413.0 / 4096.0 * 32.0;
-    static const double c3 = 2392.0 / 4096.0 * 32.0;
-
-    if (linear < 0.0) linear = 0.0;
-    if (linear > 1.0) linear = 1.0;
-    double y = pow(linear, m1);
-    return pow((c1 + c2 * y) / (1.0 + c3 * y), m2);
-}
-
-/* sRGB EOTF: encoded [0,1] → linear [0,1]. */
-static double srgb_to_linear(double v)
-{
-    return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
-}
-
-/* Does the CRTC take an SDR→PQ curve as its gamma LUT?
+ * channels and no per-channel curve does that.
  *
- * ⚠ SDR WHITE AT 203 cd/m², which is BT.2408's reference level and what every
- * other compositor maps a desktop to. The number matters to how bright the
- * result looks, not to whether the commit is accepted — but inventing a
- * different one would make this probe answer a question no HDR mode would ask.
+ * ⚠ THE PQ CURVE, THE IMAGE DESCRIPTION AND THE WAY BACK TO sRGB ARE NOT ASKED
+ * HERE ANY MORE. They are hdr.c's, and this file used to carry its own copy of
+ * the ST 2084 arithmetic to ask about them — two implementations of the same
+ * curve, which is two answers waiting to disagree. hdr_probe() asks the
+ * connector for exactly what the mode will commit, and this reports what it
+ * found.
  */
-static bool probe_pq_lut(struct wlr_output *o)
-{
-    size_t dim = wlr_output_get_gamma_size(o);
-    if (dim == 0) return false;
-
-    uint16_t *lut = calloc(3 * dim, sizeof *lut);
-    if (!lut) return false;
-    uint16_t *r = lut, *g = lut + dim, *b = lut + 2 * dim;
-
-    for (size_t i = 0; i < dim; i++) {
-        double enc = (double)i / (double)(dim - 1);
-        double lin = srgb_to_linear(enc) * (203.0 / 10000.0);
-        double pq = pq_encode(lin);
-        uint16_t v = (uint16_t)(pq * UINT16_MAX);
-        r[i] = g[i] = b[i] = v;
-    }
-
-    struct wlr_color_transform *tf = wlr_color_transform_init_lut_3x1d(dim, r, g, b);
-    free(lut);
-    if (!tf) return false;
-
-    struct wlr_output_state st;
-    wlr_output_state_init(&st);
-    wlr_output_state_set_color_transform(&st, tf);
-    bool ok = try_state(o, &st);
-    wlr_color_transform_unref(tf);
-    return ok;
-}
 
 /* One test commit, reported. `st` is consumed. */
 static bool try_state(struct wlr_output *o, struct wlr_output_state *st)
@@ -146,28 +97,9 @@ static bool try_state(struct wlr_output *o, struct wlr_output_state *st)
     return ok;
 }
 
-/* Does the backend accept an image description saying "this is HDR10"? */
-static bool probe_image_description(struct wlr_output *o)
-{
-    struct wlr_output_state st;
-    wlr_output_state_init(&st);
-
-    struct wlr_output_image_description desc = {
-        .primaries = WLR_COLOR_NAMED_PRIMARIES_BT2020,
-        .transfer_function = WLR_COLOR_TRANSFER_FUNCTION_ST2084_PQ,
-        /* Left unset deliberately: mastering luminance and MaxCLL are optional,
-         * and a probe that supplied invented values would be asking a different
-         * question from the one a real HDR mode would ask. */
-    };
-    if (!wlr_output_state_set_image_description(&st, &desc)) {
-        wlr_output_state_finish(&st);
-        return false;
-    }
-    return try_state(o, &st);
-}
-
-/* …and a colour transform on the output state, which is where fx_renderer is
- * bypassed. Reported for each shape separately — see the header. */
+/* A colour transform on the output state, which is where fx_renderer is
+ * bypassed. Reported for each shape separately — see the header: they fail
+ * separately, and which one failed is the whole finding. */
 static void probe_transforms(struct wlr_output *o, bool *curve, bool *matrix,
                              bool *pipeline)
 {
@@ -224,16 +156,28 @@ void hdrprobe_report(syn_server_t *s, void (*emit)(void *ctx, const char *line),
         bool prim_2020 = (w->supported_primaries &
                           WLR_COLOR_NAMED_PRIMARIES_BT2020) != 0;
 
-        bool desc_ok = probe_image_description(w);
+        /* Asked live rather than reported from what was cached at output
+         * creation: a mode change or a different cable moves these answers, and
+         * a diagnostic that reports a stale yes is worse than no diagnostic. */
+        hdr_probe(s, o);
+
         bool curve = false, matrix = false, pipeline = false;
         probe_transforms(w, &curve, &matrix, &pipeline);
-        bool pq_lut = probe_pq_lut(w);
+
+        const char *prim = o->hdr_primaries == WLR_COLOR_NAMED_PRIMARIES_SRGB
+                             ? "srgb"
+                         : o->hdr_primaries == WLR_COLOR_NAMED_PRIMARIES_BT2020
+                             ? "bt2020" : "none";
 
         snprintf(line, sizeof line,
                  "%s\tpq=%s\tbt2020=%s\timage_description=%s\t"
-                 "tf_curve=%s\tmatrix=%s\tpipeline=%s\tpq_lut=%s",
-                 w->name, hyn(tf_pq), hyn(prim_2020), hyn(desc_ok),
-                 hyn(curve), hyn(matrix), hyn(pipeline), hyn(pq_lut));
+                 "tf_curve=%s\tmatrix=%s\tpipeline=%s\tpq_lut=%s\t"
+                 "sdr=%s\tprimaries=%s\tcapable=%s\ton=%s",
+                 w->name, hyn(tf_pq), hyn(prim_2020),
+                 hyn(o->hdr_primaries != 0),
+                 hyn(curve), hyn(matrix), hyn(pipeline), hyn(o->hdr_lut_ok),
+                 hyn(o->hdr_sdr_ok), prim, hyn(o->hdr_capable),
+                 hyn(o->hdr_on));
         emit(ctx, line);
     }
 }

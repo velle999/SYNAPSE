@@ -211,6 +211,26 @@ static size_t nightlight_dim_for(struct wlr_output *wo)
     return dim ? dim : NIGHTLIGHT_LUT_DIM_FALLBACK;
 }
 
+/*
+ * The per-channel multipliers night light is applying right now — {1,1,1} when
+ * it is off.
+ *
+ * ⛔ THIS EXISTS BECAUSE THERE IS ONE COLOUR-TRANSFORM SLOT PER OUTPUT.
+ * wlr_output_state.color_transform is a single pointer, so hdr.c cannot set an
+ * SDR→PQ curve *beside* night light's ramp: the second call silently replaces
+ * the first. In HDR the warmth is therefore not a transform of its own — it is
+ * folded into the PQ curve before that curve is built, which needs the scale
+ * and not the ramp. Exported rather than duplicated so a change to the
+ * blackbody approximation cannot make the warm screen and the warm HDR screen
+ * two different colours.
+ */
+void nightlight_channel_scale(syn_server_t *s, double out[3])
+{
+    out[0] = out[1] = out[2] = 1.0;
+    int temp = nightlight_effective_temp(s);
+    if (temp > 0) temp_to_rgb(temp, out);
+}
+
 int nightlight_effective_temp(syn_server_t *s)
 {
     return s->config.night_light ? s->config.night_light_temp : 0;

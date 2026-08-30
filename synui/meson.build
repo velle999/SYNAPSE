@@ -236,6 +236,7 @@ synui_exe = executable('synui',
     'src/output_persist.c',
     'src/dispcfg.c',
   'src/hdrprobe.c',
+  'src/hdr.c',
     'src/edid.c',
     'src/power.c',
     'src/game.c',
@@ -1278,6 +1279,30 @@ nightlight_test = executable('nightlight_test',
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('nightlight', nightlight_test)
+
+# The SDR->PQ curve, the fold that keeps night light working inside it, and the
+# cache both commit paths lean on. Links nightlight.c because the two share the
+# output's single colour-transform slot — the fold is checked against night
+# light's own answer, not against a constant. wlr_output_get_gamma_size() is
+# stubbed for the same reason it is in the night light test.
+hdr_test = executable('hdr_test',
+  ['tests/hdr_test.c', 'src/hdr.c', 'src/nightlight.c'],
+  include_directories : include_directories('src'),
+  dependencies : [wlroots, wayland, pixman, libm, scenefx, xkbcommon,
+                  cairo, fontconfig],
+  c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
+  build_by_default : false)
+test('hdr', hdr_test)
+
+# `synctl hdr` on a nested headless synui — the REFUSAL path, which is the one a
+# real desk hits on most of its monitors. A headless output cannot be driven in
+# HDR10, so every enable here must come back as an error rather than a
+# successful-looking no-op, and the compositor must survive being asked.
+hdr_cli = find_program('tests/hdr_cli.sh')
+test('hdr_cli', hdr_cli,
+     args : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 60)
 
 edid_hdr_test = executable('edid_hdr_test',
   ['tests/edid_hdr_test.c', 'src/edid.c'],

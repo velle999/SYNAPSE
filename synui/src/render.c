@@ -1329,15 +1329,30 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_move_to(cr, 760, y);
         syn_show_text(cr, depth);
 
-        /* What the monitor advertises over EDID — a separate fact from the
-         * column to its left, and the one the panel used to get wrong by
-         * deriving it from the framebuffer format. Deliberately dim: synui
-         * composites SDR, so an HDR10 monitor here is a capability sitting
-         * unused, not a mode that is switched on. */
-        if (o->hdr_pq || o->hdr_hlg) {
-            set_hue(cr, 0.62, 0.58, 0.78, 1.0);
+        /* Three different facts, one column, and they must not be allowed to
+         * blur back into each other:
+         *
+         *   HDR10 ON  — this connector is being DRIVEN in PQ right now
+         *   HDR10     — the monitor advertises it over EDID and the backend
+         *               will take it; Shift+D turns it on
+         *   HDR10 (—) — the monitor claims it and the backend will not
+         *
+         * The last one is the honest answer for a panel whose EDID says PQ on
+         * a link or a mode that cannot carry it, and it is the answer this
+         * column silently gave for everything before HDR could be driven at
+         * all: EDID alone reads as a mode you switched on. */
+        const char *hdr_txt = NULL;
+        if (o->hdr_on)                    { set_accent(cr, 0.95);
+                                            hdr_txt = "HDR10 ON"; }
+        else if (o->hdr_capable)          { set_hue(cr, 0.62, 0.58, 0.78, 1.0);
+                                            hdr_txt = o->hdr_pq ? "HDR10" : "HLG"; }
+        else if (o->hdr_pq || o->hdr_hlg) { set_hue(cr, 0.62, 0.58, 0.78, 0.45);
+                                            hdr_txt = o->hdr_pq
+                                                    ? "HDR10 (\xe2\x80\x94)"
+                                                    : "HLG (\xe2\x80\x94)"; }
+        if (hdr_txt) {
             cairo_move_to(cr, 872, y);
-            syn_show_text(cr, o->hdr_pq ? "HDR10" : "HLG");
+            syn_show_text(cr, hdr_txt);
         }
 
         y += 28;
@@ -1357,19 +1372,45 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     syn_output_t *selo = (d->selected >= 0 && d->selected < d->count)
                        ? d->order[d->selected] : NULL;
-    if (selo && (selo->hdr_pq || selo->hdr_hlg)) {
-        char line[192];
+    if (selo && selo->hdr_on) {
+        /* ⚠ IT SAYS WHAT IS NOT CONVERTED, and that is not a disclaimer to be
+         * trimmed later. The CRTC is a gamma LUT — one curve per channel — so
+         * the transfer function is mapped and the PRIMARIES are not: a matrix
+         * mixes channels and no per-channel curve does. On a connector that
+         * would only take a BT.2020 container the desktop is therefore
+         * over-saturated, and a person looking at slightly wrong colour needs
+         * this line to tell them it is known and why. */
+        char line[224];
+        snprintf(line, sizeof(line),
+                 "%s driven in HDR10 \xc2\xb7 PQ \xc2\xb7 %s primaries "
+                 "\xc2\xb7 %d cd/m\xc2\xb2 SDR white ([ ]) \xc2\xb7 %s scanout"
+                 "%s",
+                 selo->wlr_output->name,
+                 selo->hdr_primaries == WLR_COLOR_NAMED_PRIMARIES_BT2020
+                     ? "BT.2020" : "sRGB",
+                 hdr_white_clamp(selo->hdr_white),
+                 selo->deep_color ? "10-bit" : "8-bit",
+                 selo->hdr_primaries == WLR_COLOR_NAMED_PRIMARIES_BT2020
+                     ? " \xe2\x80\x94 gamut not converted, colours run wide"
+                     : "");
+        set_accent(cr, 0.95);
+        cairo_move_to(cr, 18, ph - 62);
+        syn_show_text(cr, line);
+    } else if (selo && (selo->hdr_pq || selo->hdr_hlg)) {
+        char line[224];
         char nits[32] = "";
         if (selo->hdr_max_nits > 0.0f)
             snprintf(nits, sizeof(nits), " \xc2\xb7 %.0f cd/m\xc2\xb2 peak",
                      (double)selo->hdr_max_nits);
         snprintf(line, sizeof(line),
-                 "%s reports %s%s%s%s \xe2\x80\x94 synui composites SDR sRGB; "
-                 "HDR output is not driven",
+                 "%s reports %s%s%s%s \xe2\x80\x94 %s",
                  selo->wlr_output->name,
                  selo->hdr_pq ? "HDR10 (PQ)" : "HLG",
                  (selo->hdr_pq && selo->hdr_hlg) ? " + HLG" : "",
-                 selo->wide_gamut ? " \xc2\xb7 BT.2020" : "", nits);
+                 selo->wide_gamut ? " \xc2\xb7 BT.2020" : "", nits,
+                 selo->hdr_capable
+                     ? "Shift+D drives it in HDR10"
+                     : "this link or mode will not carry an HDR10 signal");
         set_hue(cr, 0.62, 0.58, 0.78, 0.95);
         cairo_move_to(cr, 18, ph - 62);
         syn_show_text(cr, line);
@@ -1393,6 +1434,7 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 "
                         "d 10-bit colour (deep colour, not HDR) \xc2\xb7 "
+                        "Shift+D HDR10 output \xc2\xb7 [ ] SDR white \xc2\xb7 "
                         "Super+Ctrl+= scales EVERY screen \xc2\xb7 "
                         "Esc close");
 

@@ -5814,6 +5814,24 @@ typedef struct syn_layer_surface {
     struct wl_list popups;
 } syn_layer_surface_t;
 
+/* ── The output's colour pipeline, as one value ───────────
+ *
+ * ⛔ THERE IS ONE COLOUR-TRANSFORM SLOT PER OUTPUT and, since HDR, more than
+ * one thing that wants it. wlr_output_state.color_transform is a single
+ * pointer: night light's warm ramp and HDR's SDR→PQ curve cannot both be in
+ * it, so hdr.c composes them into one LUT and every commit path asks hdr.c for
+ * the single answer. This is what that answer was built from, kept beside the
+ * output so a commit path can ask "has anything moved?" once instead of
+ * comparing a growing list of fields — which is how the LUT length came to be
+ * left out of the comparison, and a refusal stamped once and never revisited.
+ */
+typedef struct {
+    int    temp;    /* night light Kelvin; 0 is identity, night light off */
+    size_t dim;     /* the CRTC gamma size the LUT was built at */
+    int    hdr;     /* this connector is being driven in HDR10 */
+    int    white;   /* SDR white level in HDR, cd/m²; meaningless when !hdr */
+} syn_color_state_t;
+
 /* ── Output ──────────────────────────────────────────────── */
 struct syn_output {
     struct wl_list           link;
@@ -5934,24 +5952,51 @@ struct syn_output {
      * post-process pass is active (NULL until first effects frame). */
     struct wlr_swapchain    *fx_swapchain;
 
-    /* nightlight.c: the colour temperature this output's committed colour
-     * transform was built for; 0 is identity, which is also where a freshly
-     * created output starts, so the zero value is already true. The transform
-     * is a CRTC LUT the kernel keeps until it is replaced, so it is committed
-     * on CHANGE rather than every frame: re-uploading a 1024-entry blob at the
-     * refresh rate is real work for a value that almost never moves, while
-     * *never* committing again would leave the screen warm after night light
-     * was switched off. */
-    int                      nightlight_temp;
+    /* hdr.c: what this output's colour pipeline was last COMMITTED with — the
+     * night light temperature, the LUT length it was built at, whether the
+     * connector is in HDR10 and at what SDR white level.
+     *
+     * The transform is a CRTC LUT the kernel keeps until it is replaced, so it
+     * is committed on CHANGE rather than every frame: re-uploading a
+     * 1024-entry blob at the refresh rate is real work for a value that almost
+     * never moves, while *never* committing again would leave the screen warm
+     * after night light was switched off.
+     *
+     * ⚠ EVERY FIELD IS PART OF THE COMPARISON, including the ones that look
+     * like detail. `dim` is here because a connector that had no CRTC when it
+     * was first asked reports a gamma size of 0, takes the fallback length and
+     * is refused — and with only the temperature compared, that refusal was
+     * stamped once and never retried when the CRTC arrived. The zero value is
+     * already true for a freshly created output: no transform, no HDR. */
+    syn_color_state_t        committed_color;
 
-    /* nightlight.c: the LUT length that transform was built at. Committed
-     * beside the temperature because the temperature alone is not enough to
-     * know the committed transform is still the right one: a connector that
-     * had no CRTC when it was first asked reports a gamma size of 0, takes the
-     * fallback length, and is refused — and without this the refusal would be
-     * stamped and never retried once the CRTC arrived. 0 until the first
-     * commit, which no real gamma size ever is. */
-    size_t                   nightlight_dim;
+    /* hdr.c: HDR10 output on this connector.
+     *
+     * `hdr_on` is the live state; `hdr_want` is what outputs.conf asked for,
+     * parked by output_persist_apply() because it runs before the capability
+     * is known and honoured by hdr_output_added() once it is. `hdr_capable`
+     * is whether the backend takes the whole pipeline here — the image
+     * description, the SDR→PQ curve as a CRTC LUT, AND a plain sRGB
+     * description to get back out; a mode that cannot be switched off is not
+     * offered. `hdr_primaries` is the wlr_color_named_primaries value that was
+     * accepted, sRGB for preference (the CRTC cannot convert primaries, so
+     * asking for BT.2020 would over-saturate the desktop).
+     *
+     * `hdr_touched` says the display has been given an HDR image description
+     * and is owed a plain sRGB one — leaving the field unset on the way out
+     * would leave the connector in PQ receiving sRGB pixels, which is the same
+     * trap as never committing a NULL colour transform. `hdr_forced_deep`
+     * records that turning HDR on is what turned 10-bit scanout on, so turning
+     * it off puts back a setting the user did not choose. */
+    int                      hdr_on;
+    int                      hdr_want;
+    int                      hdr_capable;
+    int                      hdr_lut_ok;
+    int                      hdr_sdr_ok;
+    uint32_t                 hdr_primaries;
+    int                      hdr_white;       /* SDR white, cd/m²; 0 = default */
+    int                      hdr_touched;
+    int                      hdr_forced_deep;
 
     /* synui_main.c: the right-edge damage trace. Per OUTPUT, never a function
      * static — the commit path runs once per output and a shared static would
@@ -9168,6 +9213,79 @@ int nightlight_effective_temp(syn_server_t *s);
 /* A new output comes up at identity and has to be told, or a second monitor
  * plugged in with night light on stays blue while the first is warm. */
 void nightlight_output_added(syn_server_t *s, syn_output_t *o);
+/* The per-channel multipliers night light is applying right now, {1,1,1} when
+ * it is off. ⛔ Exported for hdr.c ONLY, because there is one colour-transform
+ * slot per output: in HDR the warmth cannot be its own transform and has to be
+ * folded into the SDR→PQ curve before it is built. See nightlight.c. */
+void nightlight_channel_scale(syn_server_t *s, double out[3]);
+
+/* ── HDR10 output (hdr.c) ────────────────────────────────── */
+/*
+ * Driving a connector in HDR10 on a compositor that composites 8-bit sRGB.
+ *
+ * ⛔ THE CRTC IS A GAMMA LUT AND NOTHING ELSE, which is measured, not assumed:
+ * `synctl hdr` reported tf_curve=no, matrix=no, pipeline=no, pq_lut=yes. So the
+ * transfer function is baked into a 1D LUT on the OUTPUT STATE (where the DRM
+ * backend programs it into hardware after blending, bypassing fx_renderer,
+ * which refuses colour transforms) and the primaries are left alone — a matrix
+ * mixes channels and no per-channel curve can. See hdr.c's header.
+ */
+/* BT.2408's reference SDR white. PQ is an ABSOLUTE scale — a code value is a
+ * number of cd/m², not a fraction of the panel's peak — so an SDR desktop needs
+ * to be told where its white goes, and 1.0 would be a request for 10000 cd/m².
+ * The bounds are what a desktop is still readable at, not what PQ can encode. */
+#define HDR_SDR_WHITE_DEFAULT 203
+#define HDR_SDR_WHITE_MIN      80
+#define HDR_SDR_WHITE_MAX     600
+#define HDR_SDR_WHITE_STEP     10
+int  hdr_white_clamp(int nits);
+
+/* Ask this connector what it will take, once, at output creation. Fills
+ * hdr_capable/hdr_primaries/hdr_lut_ok/hdr_sdr_ok. ⛔ Nothing is committed:
+ * every question is wlr_output_test_state(), which the atomic backend
+ * validates with TEST_ONLY, so the screen never changes. */
+void hdr_probe(syn_server_t *s, syn_output_t *o);
+
+/* Turn HDR10 on or off for one output. Returns 1 if it is now in the requested
+ * state. Enabling tests the exact pipeline a frame will carry and refuses
+ * rather than committing something the hardware will drop; it also asks for
+ * 10-bit scanout, because 8-bit PQ bands visibly in the shadows. */
+int  hdr_set(syn_server_t *s, syn_output_t *o, int enable);
+int  hdr_toggle(syn_server_t *s, syn_output_t *o);
+
+/* The SDR white level, in cd/m², clamped to the bounds above. Tested against
+ * the hardware while HDR is on and left where it was if refused. */
+int  hdr_set_white(syn_server_t *s, syn_output_t *o, int nits);
+
+/* What this output's colour pipeline should be, and whether that is what it was
+ * last committed with — output_frame()'s "is a commit needed at all?" guard.
+ * A colour change has no damage of its own: the pixels are identical and only
+ * the LUT they are scanned out through, or what the connector is told they
+ * mean, has moved. */
+/* The single colour transform this output's state may carry: night light's ramp
+ * when HDR is off (NULL when night light is off too, which is a value to be
+ * COMMITTED, not a reason to skip the call), and that ramp folded into the
+ * SDR→PQ curve when it is on. Borrowed — do not unref. */
+struct wlr_color_transform *hdr_color_transform(syn_server_t *s, syn_output_t *o);
+
+syn_color_state_t hdr_color_state(syn_server_t *s, syn_output_t *o);
+bool hdr_color_state_eq(const syn_color_state_t *a, const syn_color_state_t *b);
+
+/* Commit `st` with this output's colour pipeline on it — the one transform slot
+ * and, on an output that has been in HDR, the image description. Both commit
+ * paths call this and nothing else. Returns what wlr_output_commit_state()
+ * returned; a hardware refusal costs the colour, not the frame, and is logged
+ * and stamped here. */
+bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st);
+
+/* A new connector: probe it, then honour whatever outputs.conf asked for.
+ * ⚠ AFTER output_persist_apply() and the EDID/deep-colour probes — the saved
+ * flag is parked in hdr_want because it is read before there is a capability
+ * to check it against. */
+void hdr_output_added(syn_server_t *s, syn_output_t *o);
+
+/* Free the process-wide LUT cache. */
+void hdr_shutdown(void);
 
 /* ── logind (logind.c) ───────────────────────────────────── */
 /* systemd-logind: lock before a sleep synui did not initiate (the lid), and set

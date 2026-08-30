@@ -521,6 +521,71 @@ static void cmd_hdr(syn_server_t *s, ipc_buf_t *b)
     bputs(b, "]");
 }
 
+/*
+ * `synctl hdr on|off <output>` and `synctl hdr white <output> <nits>` — the CLI
+ * half of the display panel's Shift+D and its bracket keys, driving the same
+ * hdr_set()/hdr_set_white() the panel does rather than a second path to the
+ * same hardware.
+ *
+ * ⚠ IT ANSWERS WHETHER IT WORKED, not whether it was understood. Enabling HDR
+ * can fail for reasons that have nothing to do with the request being valid —
+ * a link without the bandwidth, a mode the connector will not carry PQ at — and
+ * a caller reading this socket is not reading the journal.
+ */
+static syn_output_t *hdr_output_named(syn_server_t *s, const char *name)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (strcmp(o->wlr_output->name, name) == 0) return o;
+    return NULL;
+}
+
+static void hdr_err(ipc_buf_t *b, const char *err, const char *detail)
+{
+    bputs(b, "{\"error\":");
+    bjson_str(b, err);
+    if (detail) { bputs(b, ",\"output\":"); bjson_str(b, detail); }
+    bputs(b, "}\n");
+}
+
+static void cmd_hdr_set(syn_server_t *s, ipc_buf_t *b, const char *arg)
+{
+    /* "<verb> <output> [value]" */
+    char verb[16] = {0}, name[64] = {0};
+    int value = 0;
+    int n = sscanf(arg, "%15s %63s %d", verb, name, &value);
+    if (n < 2) { hdr_err(b, "hdr needs an output name", NULL); return; }
+
+    syn_output_t *o = hdr_output_named(s, name);
+    if (!o) { hdr_err(b, "no such output", name); return; }
+
+    if (strcmp(verb, "white") == 0) {
+        if (n < 3) { hdr_err(b, "hdr white needs a level in cd/m2", name); return; }
+        if (!hdr_set_white(s, o, value)) {
+            hdr_err(b, "that SDR white level was refused", name);
+            return;
+        }
+        output_persist_save(s);
+        bprintf(b, "{\"ok\":true,\"white\":%d}\n", hdr_white_clamp(o->hdr_white));
+        return;
+    }
+
+    int enable = strcmp(verb, "on") == 0;
+    if (!enable && strcmp(verb, "off") != 0) {
+        hdr_err(b, "hdr takes on, off or white", NULL);
+        return;
+    }
+    if (!hdr_set(s, o, enable)) {
+        hdr_err(b, enable && !o->hdr_capable
+                     ? "this output cannot be driven in HDR10"
+                     : "HDR10 was refused", name);
+        return;
+    }
+    output_persist_save(s);
+    bprintf(b, "{\"ok\":true,\"hdr\":%s,\"white\":%d}\n",
+            o->hdr_on ? "true" : "false", hdr_white_clamp(o->hdr_white));
+}
+
 static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
 {
     bputs(b, "[");
@@ -637,6 +702,12 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     }
     if (strcmp(line, "hdr") == 0) {
         cmd_hdr(s, out);
+        return;
+    }
+    if (strncmp(line, "hdr ", 4) == 0) {
+        const char *arg = line + 4;
+        while (*arg == ' ') arg++;
+        cmd_hdr_set(s, out, arg);
         return;
     }
     if (strcmp(line, "binds") == 0 || strcmp(line, "keys") == 0) {

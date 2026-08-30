@@ -461,7 +461,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`A` | Neural activity overlay |
 | `Super`+`Ctrl`+`=` / `Super`+`Ctrl`+`-` | **Scale the whole desktop** — the compositor's panels, every application and the cursor together, and sharp rather than magnified |
 | `Super`+`Ctrl`+`0` | Back to 100% |
-| `Super`+`D` | Display settings — resolution, refresh, arrangement, and `m` to cycle `display_mode` (extend / mirror / external) |
+| `Super`+`D` | Display settings — resolution, refresh, arrangement, `m` to cycle `display_mode` (extend / mirror / external), `d` for 10-bit colour and `Shift`+`D` for **HDR10 output** |
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager — fifteen: **Prism** and **Prism Light** (the house theme, and what a fresh install boots into), SYNAPSE / Dark / XP / 95, **macOS 26 / Aqua / Platinum**, plus six riced palettes |
@@ -1137,6 +1137,35 @@ re-runs itself on every hotplug, so unplugging the television gives a laptop its
 own screen back. Screen audio follows: `hdmi_audio = auto|on|off`, keyed off the
 ALSA ELD rather than the sink's name, because a GPU advertises an HDMI sink per
 pin whether or not a display is on it.
+
+**HDR10 output** is `Shift`+`D` in `Super`+`D`, on a monitor that will take it.
+The column beside each screen says which will: **HDR10 ON** is a display being
+driven in PQ right now, **HDR10** is one that can be and is not, and **HDR10
+(—)** is a panel that advertises it over a link or a mode that will not carry
+it. `[` and `]` move where SDR white sits — 203 cd/m² by default, which is
+where a plain white window lands on HDR's absolute scale. That is not a
+brightness control: it moves only where ordinary desktop content sits inside an
+HDR signal, which is the difference between a desktop that looks normal next to
+an HDR video and one that looks washed out beside it. The mode and the level are
+remembered per connector, and restored at the next login only if that monitor
+still accepts them.
+
+From a script it is `synctl hdr` for what each screen will take, and
+`synctl hdr on|off <output>` / `synctl hdr white <output> <cd/m²>` for the same
+two controls. Turning it on can fail — a cable, a refresh rate or a monitor that
+will not carry the signal — and when it does you get an error rather than a
+setting that quietly did nothing.
+
+What is driven is the *signal*: the display is told it is receiving HDR10 and
+ordinary desktop content is mapped correctly into it, with 10-bit scanout turned
+on alongside so shadows do not band. The desktop is still composited in 8-bit
+sRGB, so an HDR video does not gain highlights it did not have — that needs
+colour management inside the renderer, which is not here. On a monitor that will
+only accept a BT.2020 container the colours run wide, and the panel says so on
+the line under the list rather than leaving it to be noticed.
+
+Night light works on a screen in HDR, and is the same warmth as on the screen
+beside it.
 
 **The pointer** has two settings past its speed, under *Input → Pointer*.
 `accel_profile` is libinput's acceleration **curve** — `adaptive` moves the

@@ -46,6 +46,13 @@ typedef struct {
     int   x, y;
     int   primary;
     int   deep_color;   /* 10-bit scanout; see dispcfg_set_deep_color */
+    /* HDR10 output, and the SDR white level it was driven at. ⚠ The flag is
+     * a REQUEST when it is read back: output_persist_apply() runs while the
+     * output is still being built, before hdr_probe() has asked the connector
+     * anything, so it is parked in hdr_want and honoured by
+     * hdr_output_added(). Applying it here would be applying it blind. */
+    int   hdr;
+    int   hdr_white;
 } persist_entry_t;
 
 static persist_entry_t table[OUTPUT_PERSIST_MAX];
@@ -140,6 +147,8 @@ static void table_load(void)
             else if (!strcmp(tok, "y"))         e->y         = atoi(val);
             else if (!strcmp(tok, "primary"))   e->primary   = atoi(val);
             else if (!strcmp(tok, "deep_color")) e->deep_color = atoi(val);
+            else if (!strcmp(tok, "hdr"))       e->hdr       = atoi(val);
+            else if (!strcmp(tok, "hdr_white")) e->hdr_white = atoi(val);
         }
         table_count++;
     }
@@ -205,6 +214,12 @@ struct wlr_output_layout_output *output_persist_apply(syn_server_t *s,
     if (e->deep_color)
         dispcfg_set_deep_color(s, output, 1);
 
+    /* HDR is a REQUEST at this point, not an apply — see the struct field. The
+     * white level is carried across whether or not the mode was on, so turning
+     * it back on finds the level it was left at rather than the default. */
+    output->hdr_want  = e->hdr ? 1 : 0;
+    output->hdr_white = hdr_white_clamp(e->hdr_white);
+
     return wlr_output_layout_add(s->output_layout, wo, e->x, e->y);
 }
 
@@ -257,6 +272,13 @@ void output_persist_save(syn_server_t *s)
         e->grid_y    = o->grid_y;
         e->primary    = o->primary;
         e->deep_color = o->deep_color;
+        /* ⚠ hdr_on, not hdr_want: what is actually on screen. A connector that
+         * was saved in HDR and refused it this session (a different cable, a
+         * mode with no bandwidth for it) must not have the refusal written
+         * down as a choice to stop wanting it — hdr_output_added() clears
+         * hdr_want either way, so the live flag is the only honest source. */
+        e->hdr        = o->hdr_on;
+        e->hdr_white  = hdr_white_clamp(o->hdr_white);
         if (o->detached) continue;
 
         e->enabled   = wo->enabled;
@@ -303,16 +325,21 @@ void output_persist_save(syn_server_t *s)
                "# primary=1 marks the monitor Xwayland reports as the X11\n"
                "# RandR primary — where X11 apps that ask for \"the default\n"
                "# display\" (SDL games, so Steam) open. Press p in the display\n"
-               "# panel to move it.\n");
+               "# panel to move it.\n"
+               "#\n"
+               "# hdr=1 drives that monitor in HDR10 (Shift+D in the display\n"
+               "# panel). hdr_white is the SDR white level in cd/m2 — where a\n"
+               "# plain white window sits on PQ's absolute scale. It is only\n"
+               "# restored if the connector still accepts HDR at next login.\n");
     for (int i = 0; i < table_count; i++) {
         persist_entry_t *e = &table[i];
         fprintf(f,
                 "output %s enabled=%d width=%d height=%d refresh=%d "
                 "transform=%d scale=%.6f grid_x=%d grid_y=%d x=%d y=%d "
-                "primary=%d deep_color=%d\n",
+                "primary=%d deep_color=%d hdr=%d hdr_white=%d\n",
                 e->name, e->enabled, e->width, e->height, e->refresh,
                 e->transform, (double)e->scale, e->grid_x, e->grid_y,
-                e->x, e->y, e->primary, e->deep_color);
+                e->x, e->y, e->primary, e->deep_color, e->hdr, e->hdr_white);
     }
     fclose(f);
 }

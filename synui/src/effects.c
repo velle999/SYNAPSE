@@ -815,53 +815,21 @@ bool effects_output_commit(syn_output_t *output)
     wlr_output_state_set_damage(&st2, &full);
     pixman_region32_fini(&full);
 
-    /* Night light, applied at scanout on top of the post-processed buffer —
-     * the same place the pre-0.20 gamma ramp was applied, so a colour filter
-     * and night light still compose in the order they always did.
+    /* The output's colour pipeline, applied at scanout on top of the
+     * post-processed buffer — the same place the pre-0.20 gamma ramp was
+     * applied, so a colour filter and night light still compose in the order
+     * they always did, and HDR's SDR→PQ curve lands after the CRT warp rather
+     * than inside it.
      *
-     * NULL — night light off — is committed too, and that is the whole point:
-     * a state that leaves WLR_OUTPUT_STATE_COLOR_TRANSFORM unset leaves the
-     * CRTC LUT exactly as the last warm frame programmed it. Skipping the call
-     * on NULL gave a toggle that turned on and never off for as long as the
-     * post-process pass was running. Committing NULL is committing identity.
-     *
-     * Tested on a copy first, as in scene_commit_nightlight(): a backend that
-     * refuses the transform fails the WHOLE commit, which here would mean a
-     * dropped frame every frame rather than a missing tint. */
-    int temp = nightlight_effective_temp(s);
-    size_t nl_dim = nightlight_lut_dim(wo);
-    struct wlr_color_transform *nl = nightlight_color_transform(s, wo);
-    bool warm_ok = true;
-    struct wlr_output_state warm = {0};
-    if (wlr_output_state_copy(&warm, &st2)) {
-        wlr_output_state_set_color_transform(&warm, nl);
-        warm_ok = wlr_output_test_state(wo, &warm);
-        if (warm_ok)
-            wlr_output_state_copy(&st2, &warm);
-        wlr_output_state_finish(&warm);
-    } else {
-        warm_ok = false;
-    }
-
-    bool ok = wlr_output_commit_state(wo, &st2);
+     * ⛔ ONE CALL, SHARED WITH THE PLAIN PATH. This used to be a copy of
+     * scene_commit_nightlight()'s body, and the copy is why the LUT length was
+     * added to one guard and not the other. hdr_commit() owns the whole
+     * question now: which transform (night light's ramp, or that ramp folded
+     * into the PQ curve — there is only one slot), whether an image description
+     * is owed, testing it on a copy so a refusal costs the colour and not the
+     * frame, and stamping the result. */
+    bool ok = hdr_commit(s, output, &st2);
     wlr_output_state_finish(&st2);
-
-    if (ok) {
-        if (!warm_ok)
-            wlr_log(WLR_ERROR, "synui: nightlight: %s will not take the %dK "
-                    "transform at %zu LUT entries — frame committed without it",
-                    wo->name, temp, nl_dim);
-        /* Stamped for the same reason the scene path stamps it, and with the
-         * same "asked once" rule for a refusal. Leaving it unstamped is not
-         * merely untidy: output_frame() damages the whole output whenever this
-         * disagrees with the effective temperature, so an effects session that
-         * never stamped repainted everything, every frame, forever.
-         *
-         * The dim goes with it, and output_frame compares that too — see
-         * scene_commit_nightlight. */
-        output->nightlight_temp = temp;
-        output->nightlight_dim  = nl_dim;
-    }
 
     wlr_buffer_unlock(dst);
     wlr_texture_destroy(tex);
