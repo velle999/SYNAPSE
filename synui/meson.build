@@ -235,6 +235,7 @@ synui_exe = executable('synui',
     'src/geom_persist.c',
     'src/output_persist.c',
     'src/dispcfg.c',
+  'src/hdrprobe.c',
     'src/edid.c',
     'src/power.c',
     'src/game.c',
@@ -2001,6 +2002,11 @@ test('popup_hover_dismiss', popup_hover_dismiss,
 # Double-clicking a day in the bar's calendar opens syn-cal on it. A source
 # test, not a capture: this click spawns an application, and a rig that proved
 # it would open a real window on whoever ran the suite. See the file's own note.
+# The HDR probe must never commit output state — see the test's own note.
+hdr_probe_ro = find_program('tests/hdr_probe_is_read_only.sh')
+test('hdr_probe_is_read_only', hdr_probe_ro,
+     args : [meson.current_source_dir() / 'src'])
+
 calendar_double_click = find_program('tests/calendar_double_click.sh')
 test('calendar_double_click', calendar_double_click,
      args : [meson.current_source_dir() / 'src',

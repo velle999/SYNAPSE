@@ -10123,6 +10123,12 @@ void synui_move_deskicon_drag(syn_server_t *s);
 const syn_icon_entry_t *icon_lookup_desktop_path(const char *path);
 
 /* Launch a shell command (fork/exec); exposed for dock launches. */
+/* hdrprobe.c — can this machine be driven in HDR10? Non-destructive: every
+ * commit inside is a wlr_output_test_state(), so the display never changes.
+ * One tab-separated line per output, handed to `emit`. */
+void hdrprobe_report(syn_server_t *s, void (*emit)(void *ctx, const char *line),
+                     void *ctx);
+
 void synui_spawn(const char *cmd);
 
 /* ── spawntoggle.c ───────────────────────────────────────────

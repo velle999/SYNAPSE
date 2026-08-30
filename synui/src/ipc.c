@@ -500,6 +500,27 @@ static void cmd_binds(syn_server_t *s, ipc_buf_t *b)
     bputs(b, "]\n");
 }
 
+/* `synctl hdr` — what the hardware will actually accept.
+ *
+ * ⛔ NOTHING IS COMMITTED. hdrprobe_report() asks with wlr_output_test_state(),
+ * which the atomic backend validates against the kernel with TEST_ONLY. Asking
+ * by committing would put the display into HDR to find out whether it can be —
+ * which on half-supporting hardware is a black screen on somebody's only
+ * monitor, from a query. */
+static void hdr_emit(void *ctx, const char *line)
+{
+    ipc_buf_t *b = ctx;
+    if (b->len && b->buf[b->len - 1] != '[') bputs(b, ",");
+    bjson_str(b, line);
+}
+
+static void cmd_hdr(syn_server_t *s, ipc_buf_t *b)
+{
+    bputs(b, "[");
+    hdrprobe_report(s, hdr_emit, b);
+    bputs(b, "]");
+}
+
 static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
 {
     bputs(b, "[");
@@ -612,6 +633,10 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     }
     if (strcmp(line, "outputs") == 0 || strcmp(line, "monitors") == 0) {
         cmd_outputs(s, out);
+        return;
+    }
+    if (strcmp(line, "hdr") == 0) {
+        cmd_hdr(s, out);
         return;
     }
     if (strcmp(line, "binds") == 0 || strcmp(line, "keys") == 0) {
