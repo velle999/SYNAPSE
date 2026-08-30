@@ -131,6 +131,8 @@ static void store_tokens(accounts_t *a, account_t *e, oauth_tokens_t *t)
 	accounts_save(a);
 }
 
+static const char *secret_for(const account_t *e);
+
 /* Swap the refresh token for a fresh access token, and write both down. */
 static bool renew(accounts_t *a, account_t *e, char **err)
 {
@@ -150,7 +152,7 @@ static bool renew(accounts_t *a, account_t *e, char **err)
 
 	oauth_tokens_t t;
 	memset(&t, 0, sizeof t);
-	bool ok = oauth_refresh(p, e->client_id, e->client_secret, refresh, &t, err);
+	bool ok = oauth_refresh(p, e->client_id, secret_for(e), refresh, &t, err);
 	memset(refresh, 0, strlen(refresh));
 	free(refresh);
 	if (!ok) return false;
@@ -292,6 +294,28 @@ static const char *builtin_client_secret(acc_kind_t kind)
 	return s && *s ? s : NULL;
 }
 
+/* The secret this account should send, which is not always the one written down.
+ *
+ * ⚠ A SHIPPED CREDENTIAL BELONGS TO THE BUILD, NOT TO THE ACCOUNT. It is copied
+ * into accounts.conf when the account is added, so an account added by a build
+ * that shipped no secret goes on sending none for the rest of its life — and
+ * Google refuses the exchange AFTER consent, which does not read as a missing
+ * field. It reads as a sign-in that hangs. An account still using the id this
+ * build ships gets this build's secret, so no existing install has to be
+ * removed and added again to be repaired.
+ *
+ * ⛔ ONLY WHEN THE ID MATCHES. Sending SynapseOS's secret alongside somebody
+ * else's client id sends a credential to a project that is not ours, and fails
+ * in a way nobody could read. */
+static const char *secret_for(const account_t *e)
+{
+	if (e->client_secret && *e->client_secret) return e->client_secret;
+	const char *id = builtin_client_id(e->kind);
+	if (id && e->client_id && !strcmp(id, e->client_id))
+		return builtin_client_secret(e->kind);
+	return NULL;
+}
+
 /* Whether the sign-in should open a browser: -1 decide from the terminal, 0 no,
  * 1 yes.
  *
@@ -385,7 +409,7 @@ static int cmd_login(const char *name, const char *user)
 		oauth_tokens_t t;
 		char *err = NULL;
 		bool open_browser = g_browser >= 0 ? g_browser != 0 : isatty(STDERR_FILENO);
-		bool ok = oauth_authorise(p, e->client_id, e->client_secret,
+		bool ok = oauth_authorise(p, e->client_id, secret_for(e),
 		                          open_browser, 0, &t, &err);
 		if (!ok) {
 			warn("%s", err ? err : "sign-in did not complete");

@@ -48,6 +48,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 /* ── providers ──────────────────────────────────────────────────────────── */
@@ -201,7 +202,10 @@ static int listen_loopback(int *port, char **err)
 	/* ⛔ 127.0.0.1, NOT 0.0.0.0. Binding this to every interface would put an
 	 * endpoint that accepts an authorisation code on the local network for the
 	 * length of the flow. */
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	/* ⛔ SOCK_CLOEXEC. Without it this descriptor survives the exec below it and
+	 * the browser inherits a listener that accepts authorisation codes, held
+	 * open for as long as the browser runs — long after syn-cal has exited. */
+	int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) { if (err) *err = xstrdup("cannot open a socket"); return -1; }
 
 	int one = 1;
@@ -213,7 +217,10 @@ static int listen_loopback(int *port, char **err)
 	a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	a.sin_port = 0;                              /* the kernel picks */
 
-	if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0 || listen(fd, 1) != 0) {
+	/* ⚠ A BACKLOG OF ONE IS NOT ENOUGH. A Chromium browser opens speculative
+	 * connections alongside the one carrying the redirect; a queue that only
+	 * holds one drops the request that matters. */
+	if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0 || listen(fd, 8) != 0) {
 		if (err) *err = xasprintf("cannot listen on the loopback: %s", strerror(errno));
 		close(fd);
 		return -1;
@@ -229,62 +236,114 @@ static int listen_loopback(int *port, char **err)
 	return fd;
 }
 
-/* Wait for the browser to arrive, take the query string off the request line,
- * answer with a page, and return the query. */
-static char *await_redirect(int fd, long timeout_s, char **err)
+static long now_ms(void)
 {
-	struct pollfd pfd = { fd, POLLIN, 0 };
-	int ready = poll(&pfd, 1, (int)(timeout_s * 1000));
-	if (ready <= 0) {
-		if (err) *err = xstrdup("timed out waiting for the browser to come back");
-		return NULL;
-	}
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (long)ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
+}
 
-	int c = accept(fd, NULL, NULL);
-	if (c < 0) { if (err) *err = xstrdup("the browser's connection could not be accepted"); return NULL; }
-
+/* The query string off one accepted connection: "" for a request that carried
+ * none, NULL for a peer that said nothing at all. */
+static char *read_query(int c)
+{
 	/* The request line is all that is needed and it arrives first. A bounded
 	 * read, because the peer is a browser and this is still a network socket. */
 	char req[8192];
-	ssize_t n = 0;
 	size_t got = 0;
 	while (got < sizeof req - 1) {
 		struct pollfd p2 = { c, POLLIN, 0 };
 		if (poll(&p2, 1, 5000) <= 0) break;
-		n = read(c, req + got, sizeof req - 1 - got);
+		ssize_t n = read(c, req + got, sizeof req - 1 - got);
 		if (n <= 0) break;
 		got += (size_t)n;
 		req[got] = '\0';
 		if (strstr(req, "\r\n\r\n") || strchr(req, '\n')) break;
 	}
+	if (!got) return NULL;
 	req[got] = '\0';
 
-	char *query = NULL;
 	char *sp = strchr(req, ' ');
-	if (sp) {
-		char *path = sp + 1;
-		char *end = strpbrk(path, " \r\n");
-		if (end) *end = '\0';
-		char *q = strchr(path, '?');
-		if (q) query = xstrdup(q + 1);
-	}
+	if (!sp) return NULL;
+	char *path = sp + 1;
+	char *end = strpbrk(path, " \r\n");
+	if (end) *end = '\0';
+	char *q = strchr(path, '?');
+	return xstrdup(q ? q + 1 : "");
+}
 
-	const char *title = "You can close this window";
-	const char *sub = "syn-cal has what it needs.";
-	if (!query || !strstr(query, "code=")) {
-		title = "Something went wrong";
-		sub = "syn-cal did not receive an authorisation code. Try again in the terminal.";
-	}
+/* Wait for the browser to arrive, take the query string off the request line,
+ * answer with a page, and return the query.
+ *
+ * ⚠ THE FIRST CONNECTION IS NOT NECESSARILY THE REDIRECT. A Chromium browser
+ * preconnects to a host before it fetches from it, and it asks for a favicon
+ * afterwards; accepting exactly one connection and reading whatever it holds
+ * means the flow can consume an empty socket and report that the browser never
+ * came back — while the request carrying the code sits unanswered in the queue.
+ * Every connection is answered, and only the one carrying `code` or `error`
+ * ends the wait. */
+static char *await_redirect(int fd, long timeout_s, char **err)
+{
+	long deadline = now_ms() + timeout_s * 1000L;
 
-	char *body = xasprintf(REDIRECT_PAGE, title, sub);
-	char *head = xasprintf("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
-	                       "Content-Length: %zu\r\nConnection: close\r\n\r\n", strlen(body));
-	ssize_t w = write(c, head, strlen(head));
-	if (w > 0) w = write(c, body, strlen(body));
-	(void)w;
-	free(head); free(body);
-	close(c);
-	return query;
+	for (;;) {
+		long left = deadline - now_ms();
+		if (left <= 0) {
+			if (err) *err = xstrdup("timed out waiting for the browser to come back");
+			return NULL;
+		}
+
+		struct pollfd pfd = { fd, POLLIN, 0 };
+		int ready = poll(&pfd, 1, (int)(left > 60000 ? 60000 : left));
+		if (ready < 0) {
+			if (errno == EINTR) continue;
+			if (err) *err = xasprintf("waiting for the browser failed: %s", strerror(errno));
+			return NULL;
+		}
+		if (ready == 0) continue;                    /* not the deadline yet */
+
+		int c = accept(fd, NULL, NULL);
+		if (c < 0) {
+			if (errno == EINTR || errno == ECONNABORTED) continue;
+			if (err) *err = xstrdup("the browser's connection could not be accepted");
+			return NULL;
+		}
+
+		char *query = read_query(c);
+		char *code = query ? query_get(query, "code") : NULL;
+		char *oerr = query ? query_get(query, "error") : NULL;
+
+		if (!code && !oerr) {
+			/* Something the browser opened on the way past. Answer it so it is
+			 * not left hanging, and keep waiting for the real one. */
+			static const char nf[] = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n"
+			                         "Connection: close\r\n\r\n";
+			ssize_t w = write(c, nf, sizeof nf - 1);
+			(void)w;
+			close(c);
+			free(query);
+			continue;
+		}
+		bool have_code = code != NULL;
+		free(code); free(oerr);
+
+		const char *title = "You can close this window";
+		const char *sub = "syn-cal has what it needs.";
+		if (!have_code) {
+			title = "Something went wrong";
+			sub = "syn-cal did not receive an authorisation code. Try again in the terminal.";
+		}
+
+		char *body = xasprintf(REDIRECT_PAGE, title, sub);
+		char *head = xasprintf("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+		                       "Content-Length: %zu\r\nConnection: close\r\n\r\n", strlen(body));
+		ssize_t w = write(c, head, strlen(head));
+		if (w > 0) w = write(c, body, strlen(body));
+		(void)w;
+		free(head); free(body);
+		close(c);
+		return query;
+	}
 }
 
 static void open_in_browser(const char *url)
@@ -298,10 +357,20 @@ static void open_in_browser(const char *url)
 		int null = open("/dev/null", O_RDWR);
 		if (null >= 0) { dup2(null, 0); dup2(null, 1); dup2(null, 2); if (null > 2) close(null); }
 		setsid();
-		execlp("xdg-open", "xdg-open", url, (char *)NULL);
-		_exit(127);
+		/* ⛔ AND FORKED AGAIN, BECAUSE xdg-open DOES NOT RETURN. Its generic
+		 * fallback execs the browser and waits for it to quit, so waiting on
+		 * this child parks the sign-in for as long as the browser is open —
+		 * nothing ever calls accept(), the redirect sits unanswered in the
+		 * listener's queue, and the page in the browser spins after consent.
+		 * The grandchild is reparented to init; the intermediate exits now, so
+		 * the wait below returns immediately and there is no zombie. */
+		if (fork() == 0) {
+			execlp("xdg-open", "xdg-open", url, (char *)NULL);
+			_exit(127);
+		}
+		_exit(0);
 	}
-	if (pid > 0) waitpid(pid, NULL, 0);   /* xdg-open returns immediately */
+	if (pid > 0) waitpid(pid, NULL, 0);   /* the intermediate, which exits at once */
 }
 
 /* ── the flow ───────────────────────────────────────────────────────────── */
