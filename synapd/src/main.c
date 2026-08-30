@@ -34,6 +34,7 @@
 
 #include "synapd.h"
 #include "inference.h"
+#include "http_server.h"
 #include "socket_server.h"
 #include "selected.h"
 #include "context.h"
@@ -294,10 +295,15 @@ int main(int argc, char *argv[]) {
      * seconds, and clients (synsh at boot) connect exactly once. With the
      * socket up-front they connect immediately; queries during the load
      * get a "model still loading" error instead of no daemon at all. */
+    /* ⚠ AFTER the protocol the desktop uses, and NOT fatal. The compatibility
+     * face is for other people's clients; a machine whose /run is odd should
+     * still get an assistant rather than no daemon at all. */
     if (socket_server_start(&g_state) < 0) {
         syn_log(LOG_ERR, "synapd: socket_server_start failed");
         return EXIT_FAILURE;
     }
+
+    http_server_start(&g_state);
 
     /* The model picked in the desktop wins over the one on the command line.
      *
@@ -348,6 +354,7 @@ int main(int argc, char *argv[]) {
 
     /* Teardown */
     syn_log(LOG_INFO, "synapd: shutting down");
+    http_server_stop(&g_state);
     socket_server_stop(&g_state);
     inference_destroy(&g_state);
     context_flush(&g_state);

@@ -2,6 +2,15 @@
 #define INFERENCE_H
 #include "synapd.h"
 
+/* One turn of a conversation, as an OpenAI-shaped client sends them. */
+typedef struct { const char *role; const char *content; } syn_chat_msg_t;
+
+/* Render a conversation through the model's own chat template, ready to be run
+ * with raw=1 — which is the flag that says the caller owns the whole template.
+ * NULL when there is no template or the model is being reloaded; the caller
+ * falls back to the plain system+prompt route. Caller frees. */
+char *inference_render_chat(synapd_state_t *s, const syn_chat_msg_t *m, size_t n);
+
 int  inference_init(synapd_state_t *s);
 void inference_destroy(synapd_state_t *s);
 int  inference_run(synapd_state_t *s,

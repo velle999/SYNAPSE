@@ -587,22 +587,24 @@ int inference_init(synapd_state_t *s) {
  * [INST] family, and both fold the system role into the first user turn —
  * which matters because v0.2's template rejects a system role outright.
  */
-static char *apply_chat_template(synapd_inference_t *inf,
-                                 const char *system_ctx,
-                                 const char *user)
+/* Any number of turns, through the model's own template.
+ *
+ * ⚠ THE WHOLE CONVERSATION, NOT THE LAST TURN. An OpenAI-shaped client sends
+ * the history every time, and flattening it into one user message loses the
+ * turn markers the model was trained on — it then answers as if the previous
+ * exchange were a quotation somebody pasted. The template is the only thing
+ * that knows how this model separates turns, so it does the separating. */
+static char *apply_chat_messages(synapd_inference_t *inf,
+                                 const struct llama_chat_message *msg, size_t n)
 {
-    if (!inf->chat_tmpl) return NULL;
+    if (!inf->chat_tmpl || n == 0) return NULL;
 
-    struct llama_chat_message msg[2];
-    size_t n = 0;
-    if (system_ctx && *system_ctx) {
-        msg[n].role = "system"; msg[n].content = system_ctx; n++;
-    }
-    msg[n].role = "user"; msg[n].content = user; n++;
+    size_t body = 0;
+    for (size_t i = 0; i < n; i++)
+        body += strlen(msg[i].content ? msg[i].content : "") + 16;
 
     /* llama.cpp's own recommendation is 2x the message bytes; the markers it
      * adds are small next to the content. A short prompt still gets headroom. */
-    size_t body = strlen(user) + (system_ctx ? strlen(system_ctx) : 0);
     int32_t cap = (int32_t)(body * 2 + 256);
     char *buf = malloc(cap);
     if (!buf) return NULL;
@@ -622,6 +624,51 @@ static char *apply_chat_template(synapd_inference_t *inf,
     if (r < 0 || r >= cap) { free(buf); return NULL; }
     buf[r] = '\0';
     return buf;
+}
+
+static char *apply_chat_template(synapd_inference_t *inf,
+                                 const char *system_ctx,
+                                 const char *user)
+{
+    struct llama_chat_message msg[2];
+    size_t n = 0;
+    if (system_ctx && *system_ctx) {
+        msg[n].role = "system"; msg[n].content = system_ctx; n++;
+    }
+    msg[n].role = "user"; msg[n].content = user; n++;
+    return apply_chat_messages(inf, msg, n);
+}
+
+/* Render a whole conversation the way this model expects to see one.
+ *
+ * ⚠ TRY the read lock, like inference_describe: WAKE holds the write lock for
+ * the length of a multi-gigabyte reload, and an HTTP request that blocked on it
+ * would hold its connection open for the duration rather than saying the model
+ * is busy.
+ *
+ * Returns NULL when there is no template or the model is in flux — the caller
+ * has a legacy path for the first and an error for the second, and cannot tell
+ * them apart, which is why it must treat NULL as "use the plain route". */
+char *inference_render_chat(synapd_state_t *s, const syn_chat_msg_t *m, size_t n)
+{
+    if (!s || !m || n == 0) return NULL;
+    if (pthread_rwlock_tryrdlock(&s->model_rw) != 0) return NULL;
+
+    char *out = NULL;
+    synapd_inference_t *inf = s->inference;
+    if (inf && inf->model && inf->chat_tmpl) {
+        struct llama_chat_message *msg = calloc(n, sizeof *msg);
+        if (msg) {
+            for (size_t i = 0; i < n; i++) {
+                msg[i].role = m[i].role ? m[i].role : "user";
+                msg[i].content = m[i].content ? m[i].content : "";
+            }
+            out = apply_chat_messages(inf, msg, n);
+            free(msg);
+        }
+    }
+    pthread_rwlock_unlock(&s->model_rw);
+    return out;
 }
 
 /* ── Core inference call ──────────────────────────────────── */

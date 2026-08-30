@@ -7,6 +7,10 @@ dep_threads = dependency('threads')
 # --no-undefined means an implicit libm from another dependency is not enough.
 dep_m       = meson.get_compiler('c').find_library('m', required: true)
 dep_systemd = dependency('libsystemd', required: false)
+# json-c for the llama.cpp-compatible face. Hand-rolling JSON for an API
+# other people's clients call is how a quote inside a title becomes a parse
+# error on their side — the same reason syn-cal's oauth.c uses a real one.
+dep_jsonc   = dependency('json-c')
 
 # llama.cpp — prefer the installed synapse-llama package (/usr/lib), and only
 # fall back to llama-staging for a dev tree that hasn't installed it yet.
@@ -53,7 +57,7 @@ if dep_llama.found()
   add_project_arguments('-DHAVE_LLAMA', language: 'c')
 endif
 
-deps = [dep_threads, dep_m]
+deps = [dep_threads, dep_m, dep_jsonc]
 if dep_llama.found()
   deps += [dep_llama, dep_ggml, dep_ggml_base]
 endif
@@ -65,6 +69,7 @@ add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 executable('synapd',
   files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
+        'src/http_server.c',
         'src/context.c','src/scheduler.c','src/log.c','src/profile.c',
         'src/selected.c'),
   include_directories: llama_inc,
@@ -82,6 +87,20 @@ test('wire', wire_test)
 # strings — so this links it plus log.c for syn_log() and nothing else. The
 # longest-match rule is the part worth pinning down: it is what stops a new
 # [mistral] profile from quietly capturing Nemo.
+# The llama.cpp-compatible face. Links http_server.c and log.c and nothing
+# else — inference, context and the logger are stubbed in the test, so it runs
+# on a
+# machine with no model and no GPU, which is where a suite has to run to be
+# worth having. SYNAPD_HTTP_SOCKET_PATH is redirected at the build directory:
+# binding the real one would displace the daemon on a developer's own desktop.
+http_test = executable('http_test',
+  files('tests/http_test.c','src/http_server.c'),
+  include_directories: include_directories('include'),
+  c_args: ['-DSYNAPD_HTTP_SOCKET_PATH="' + meson.current_build_dir() + '/http_test.sock"'],
+  dependencies: [dep_threads, dep_jsonc] +
+                (dep_systemd.found() ? [dep_systemd] : []))
+test('http', http_test, timeout: 60)
+
 profile_test = executable('profile_test',
   files('tests/profile_test.c','src/profile.c','src/log.c'),
   include_directories: include_directories('include'),

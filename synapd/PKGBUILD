@@ -29,7 +29,7 @@ pkgver=0.1.0
 #   ⚠ INVISIBLE ON ANY BOX THAT HAS EVER PICKED A MODEL BY HAND, because
 #   /var/lib/synapd/model.selected outranks the config — which is why it
 #   survived this long on the machine it was written on.
-pkgrel=46
+pkgrel=47
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -58,7 +58,7 @@ license=('GPL-2.0-or-later')
 # build/ and src/synapd-0.1.0/ too — a stale meson cache pins the OLD library
 # by absolute path and fails with "libggml-base.so.0.9.7 ... missing".
 #
-depends=('glibc' 'systemd-libs' 'gcc-libs' 'libgomp' 'synapse-llama')
+depends=('glibc' 'systemd-libs' 'gcc-libs' 'libgomp' 'synapse-llama' 'json-c')
 makedepends=('meson' 'ninja' 'gcc' 'pkg-config')
 backup=('etc/synapd/synapd.conf')
 install=synapd.install

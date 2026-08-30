@@ -345,7 +345,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 
 | Component | What it does |
 |---|---|
-| **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. |
+| **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. **It also speaks llama.cpp's own HTTP API**, on a second socket at `/run/synapd/http.sock` — `/health`, `/props`, `/v1/models`, `/completion` and `/v1/chat/completions` — so anything written against llama-server or the OpenAI shape can use the model that is *already resident* instead of loading a second copy of it. A unix socket rather than a port, because a loopback port is reachable by every process on the machine, a web page included: `curl --unix-socket /run/synapd/http.sock http://localhost/v1/chat/completions -d '{"messages":[…]}'`. A whole conversation goes through the model's own chat template. `"stream": true` gets real event-stream framing, but the answer arrives in one event. |
 | **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell. |
 | **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling, spiral, monocle, floating and niri-style scrollable-tiling layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
