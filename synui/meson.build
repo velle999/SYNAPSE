@@ -1613,6 +1613,17 @@ test('greeter_bg', greeter_bg_t,
 # half (`synctl layout`) and pins the two things a selector can get wrong —
 # offering a layout the KEYMAP does not have, and losing the group when no
 # keyboard is on the seat, which is what a keyboard plugged in later adopts.
+# ⛔ THE LOGIN SCREEN'S FINGERPRINT, WHICH THREE RELEASES "FIXED" WITHOUT IT
+# EVER BEING REACHABLE. greetd owns PAM and only runs a conversation while it is
+# creating a session, and this greeter did not ask for one until Enter had been
+# pressed with a password already typed — so pam_fprintd in /etc/pam.d/greetd
+# was armed for the seconds AFTER you finished typing, and the prompt text was
+# discarded so nothing said so. Source-level, because the alternative is a real
+# greetd and a real reader, and getting this wrong means a laptop nobody can log
+# into.
+greeter_fp_t = find_program('tests/greeter_fprint.sh')
+test('greeter_fprint', greeter_fp_t, timeout : 60)
+
 lock_layout_t = find_program('tests/lock_layout.sh')
 test('lock_layout', lock_layout_t,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],

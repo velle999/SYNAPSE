@@ -114,6 +114,15 @@ static void json_escape(const char *in, char *out, size_t n)
     out[o] = 0;
 }
 
+/* Arm cycles allowed per login screen. Each is one greetd worker and one PAM
+ * stack, so a machine left at the login screen all night must not cycle
+ * forever; past this the password prompt stands on its own, which is what a
+ * machine with no reader does anyway. At pam_fprintd's timeout=10 this is
+ * roughly seven minutes of the finger staying live. */
+#define GREETER_MAX_REARMS 40
+
+static void greeter_arm(syn_server_t *s);
+
 /* ── teardown ────────────────────────────────────────────── */
 
 static void greeter_ipc_close(syn_server_t *s)
@@ -123,6 +132,10 @@ static void greeter_ipc_close(syn_server_t *s)
     s->greetd.rlen  = 0;
     s->greetd.state = GREETD_IDLE;
     s->greetd.busy  = 0;
+    s->greetd.armed          = 0;
+    s->greetd.pending_secret = 0;
+    s->greetd.submitted      = 0;
+    s->greetd.saw_fp_prompt  = 0;
     explicit_bzero(s->greetd.pw, sizeof(s->greetd.pw));
     s->greetd.pw_len = 0;
 }
@@ -138,6 +151,11 @@ static void greeter_reject(syn_server_t *s)
     s->nlock.bright = 1.0;
     s->greetd.editing_user = 0;  /* land back on the password — the common retry */
     lock_render(s);            /* show "Wrong password" at once, not on the next tick */
+
+    /* ⚠ AND OFFER THE FINGER AGAIN. A rejection ends the conversation, so
+     * without this the reader is dead for the rest of the screen's life and
+     * "it worked once" becomes the bug report. */
+    greeter_arm(s);
 }
 
 /* ── response handling ───────────────────────────────────── */
@@ -170,22 +188,88 @@ static int msg_is(const char *json, const char *type)
     return json_field(json, "type", t, sizeof(t)) && strcmp(t, type) == 0;
 }
 
-/* Answer one greetd auth_message: secret prompts get the password, everything
- * else (info/error/visible) gets an empty response so the exchange proceeds. */
-static void greeter_answer_auth(syn_server_t *s, const char *json)
+/* Send the response to whatever PAM last asked. `text` is NULL for the empty
+ * acknowledgement an info/error message wants. */
+static void greeter_send_response(syn_server_t *s, const char *text)
 {
-    char amt[32];
-    int secret = json_field(json, "auth_message_type", amt, sizeof(amt))
-                 && strcmp(amt, "secret") == 0;
-
     char esc[1100];
-    json_escape(secret ? s->greetd.pw : "", esc, sizeof(esc));
+    json_escape(text ? text : "", esc, sizeof(esc));
     char req[1200];
     snprintf(req, sizeof(req),
              "{\"type\":\"post_auth_message_response\",\"response\":\"%s\"}", esc);
     if (greetd_send(s->greetd.sock, req) < 0) greeter_reject(s);
     explicit_bzero(req, sizeof(req));
     explicit_bzero(esc, sizeof(esc));
+}
+
+/*
+ * Answer one greetd auth_message.
+ *
+ * ⛔ A `secret` PROMPT IS NOT ANSWERED UNTIL THE USER HAS SUBMITTED SOMETHING.
+ * The old code replied with whatever was in the password buffer the instant the
+ * prompt arrived — which was correct only because the exchange never began
+ * until Enter had already filled it. Arming at idle breaks that assumption:
+ * the buffer is empty, and an empty response is a FAILED PASSWORD ATTEMPT.
+ * This machine runs faillock. A greeter that burned an attempt every time it
+ * armed the reader would lock the account it exists to log in.
+ *
+ * ⚠ AND info IS WHERE THE FINGERPRINT PROMPT LIVES. pam_fprintd calls
+ * pam_info() with "Place your finger on <device>", which greetd forwards as
+ * auth_message_type "info". The old code threw the TEXT away and acked — so
+ * the reader was live and nothing on screen ever said so. It goes to
+ * nlock.fp_msg, which lock.c already draws under the clock for the session
+ * lock's own fingerprint.
+ */
+static void greeter_answer_auth(syn_server_t *s, const char *json)
+{
+    char amt[32];
+    if (!json_field(json, "auth_message_type", amt, sizeof(amt))) amt[0] = 0;
+
+    char text[256];
+    if (!json_field(json, "auth_message", text, sizeof(text))) text[0] = 0;
+
+    if (strcmp(amt, "secret") == 0) {
+        s->greetd.pending_secret = 1;
+        if (!s->greetd.submitted) {
+            s->nlock.busy  = 0;
+            s->greetd.busy = 0;
+
+            /* ⚠ THE READER HAS JUST GIVEN UP. Reaching the password prompt is
+             * how pam_fprintd's timeout is observed from out here, and the
+             * reader is cold from this moment on. If nobody has started typing,
+             * end this conversation and open a fresh one so it comes back —
+             * otherwise the finger works for one timeout after boot and never
+             * again while the screen sits there.
+             *
+             * ⛔ ONLY WITH AN EMPTY FIELD. Cancelling under a half-typed
+             * password would throw the characters away mid-word. Somebody who
+             * has started typing has chosen the password path. */
+            if (s->greetd.saw_fp_prompt && s->nlock.pw_len == 0 &&
+                s->greetd.rearms < GREETER_MAX_REARMS) {
+                greeter_ipc_close(s);
+                greeter_arm(s);
+                return;
+            }
+            lock_render(s);
+            return;
+        }
+        s->greetd.pending_secret = 0;
+        greeter_send_response(s, s->greetd.pw);
+        return;
+    }
+
+    /* info / error / visible. Show what it said — this is the finger prompt —
+     * and acknowledge so PAM proceeds. */
+    if (text[0]) {
+        snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg), "%s", text);
+        /* "Place your finger on …" is how pam_fprintd announces itself, and it
+         * is the only evidence out here that a reader took part at all. It
+         * gates the re-arm; see saw_fp_prompt in synui.h. */
+        if (strcasestr(text, "finger") || strcasestr(text, "swipe"))
+            s->greetd.saw_fp_prompt = 1;
+        lock_render(s);
+    }
+    greeter_send_response(s, NULL);
 }
 
 static void greeter_start_session(syn_server_t *s)
@@ -321,6 +405,90 @@ void greeter_start(syn_server_t *s)
         s->nlock.t_fade = NULL;
     }
     s->nlock.bright = 1.0;
+
+    /* ⛔ AND ARM THE READER. Everything above draws a login screen; this is what
+     * makes a fingerprint reach it. Last, because it needs the panel to exist
+     * to write a prompt onto. */
+    greeter_arm(s);
+}
+
+/*
+ * Open a greetd session for `user` and start the conversation.
+ *
+ * ⛔ THIS IS WHAT ARMS THE FINGERPRINT READER. greetd owns PAM and only runs a
+ * conversation while a session is being created, so `pam_fprintd` in
+ * /etc/pam.d/greetd does nothing at all until this has been sent. That is why
+ * adding the PAM line alone changed nothing: it was necessary and never
+ * sufficient.
+ *
+ * Called with no password at greeter start (armed, waiting for a finger) and
+ * again after a rejection. Returns 0 if the socket could not be opened, in
+ * which case the caller must leave the password path exactly as it was — a
+ * greeter that cannot reach greetd must still look and behave like one, or the
+ * machine has no way in at all.
+ */
+static int greeter_open_session(syn_server_t *s)
+{
+    const char *sockpath = getenv("GREETD_SOCK");
+    if (!sockpath || !*sockpath) {
+        wlr_log(WLR_ERROR, "synui greeter: GREETD_SOCK unset — not under greetd");
+        return 0;
+    }
+
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) {
+        wlr_log(WLR_ERROR, "synui greeter: socket: %s", strerror(errno));
+        return 0;
+    }
+    struct sockaddr_un a = { .sun_family = AF_UNIX };
+    snprintf(a.sun_path, sizeof(a.sun_path), "%s", sockpath);
+    if (connect(fd, (struct sockaddr *)&a, sizeof(a)) < 0) {
+        wlr_log(WLR_ERROR, "synui greeter: connect(%s): %s", sockpath, strerror(errno));
+        close(fd);
+        return 0;
+    }
+
+    s->greetd.sock           = fd;
+    s->greetd.rlen           = 0;
+    s->greetd.state          = GREETD_WAIT_CREATE;
+    s->greetd.pending_secret = 0;
+
+    char esc[80], req[160];
+    json_escape(s->greetd.user, esc, sizeof(esc));
+    snprintf(req, sizeof(req), "{\"type\":\"create_session\",\"username\":\"%s\"}", esc);
+    if (greetd_send(fd, req) < 0) { greeter_reject(s); return 0; }
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    s->greetd.src = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE,
+                                         greeter_readable, s);
+    return 1;
+}
+
+/*
+ * Arm the reader: a session with no password behind it, so pam_fprintd runs
+ * while the login screen is simply sitting there.
+ *
+ * ⚠ BOUNDED. pam_fprintd gives up after its `timeout=`, PAM then falls through
+ * to the password prompt, and this re-arms so the reader comes back — but a
+ * screen left alone all night must not cycle greetd workers forever, so the
+ * count is capped. After that the password prompt stands on its own, which is
+ * exactly the behaviour of every login screen that has no reader at all.
+ */
+static void greeter_arm(syn_server_t *s)
+{
+    if (s->greetd.sock >= 0) return;              /* already in a conversation */
+    if (s->greetd.user[0] == 0) return;
+    if (s->greetd.rearms >= GREETER_MAX_REARMS) return;
+    s->greetd.rearms++;
+
+    if (!greeter_open_session(s)) return;
+
+    s->greetd.armed     = 1;
+    s->greetd.submitted = 0;
+    /* ⛔ NOT busy. `busy` swallows keystrokes and draws "Checking…"; the whole
+     * point of arming is that somebody can still walk up and type. */
+    s->greetd.busy  = 0;
+    s->nlock.busy   = 0;
 }
 
 void greeter_submit(syn_server_t *s)
@@ -331,27 +499,9 @@ void greeter_submit(syn_server_t *s)
         lock_render(s);
         return;
     }
-    if (s->nlock.pw_len == 0) return;              /* nothing typed */
-
-    const char *sockpath = getenv("GREETD_SOCK");
-    if (!sockpath || !*sockpath) {
-        wlr_log(WLR_ERROR, "synui greeter: GREETD_SOCK unset — not under greetd");
-        s->nlock.failed = 1;
-        lock_render(s);
-        return;
-    }
-
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (fd < 0) { s->nlock.failed = 1; lock_render(s); return; }
-
-    struct sockaddr_un addr = { .sun_family = AF_UNIX };
-    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", sockpath);
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        wlr_log(WLR_ERROR, "synui greeter: connect(%s): %s", sockpath, strerror(errno));
-        close(fd);
-        s->nlock.failed = 1; lock_render(s);
-        return;
-    }
+    /* ⛔ STILL NOTHING ON AN EMPTY FIELD. An empty submission is a failed
+     * password attempt against faillock, and it is never what somebody meant. */
+    if (s->nlock.pw_len == 0) return;
 
     /* Take the typed password off the lock buffer and onto ours for the
      * (possibly multi-round) auth, then wipe the lock's copy immediately. */
@@ -363,20 +513,47 @@ void greeter_submit(syn_server_t *s)
     explicit_bzero(s->nlock.pw, sizeof(s->nlock.pw));
     s->nlock.pw_len = 0;
 
-    s->greetd.sock  = fd;
-    s->greetd.rlen  = 0;
-    s->greetd.state = GREETD_WAIT_CREATE;
-    s->greetd.busy  = 1;
-    s->nlock.busy   = 1;      /* draws "Checking…", swallows keys, via lock.c */
-    s->nlock.failed = 0;
+    s->greetd.submitted = 1;
+    s->greetd.failed    = 0;
+    s->nlock.failed     = 0;
 
-    char esc[80], req[160];
-    json_escape(s->greetd.user, esc, sizeof(esc));
-    snprintf(req, sizeof(req), "{\"type\":\"create_session\",\"username\":\"%s\"}", esc);
-    if (greetd_send(fd, req) < 0) { greeter_reject(s); return; }
+    /*
+     * Three ways in, and the first two are the arming case.
+     *
+     * ⚠ PAM MAY ALREADY BE WAITING FOR THIS. greeter_answer_auth() parks on a
+     * `secret` prompt rather than answering it with an empty buffer, so the
+     * common path after the reader has timed out is that the conversation is
+     * open and one response short. Answer it and nothing else has to happen.
+     */
+    if (s->greetd.sock >= 0 && s->greetd.pending_secret) {
+        s->greetd.pending_secret = 0;
+        s->greetd.busy = 1;
+        s->nlock.busy  = 1;                        /* "Checking…", keys swallowed */
+        greeter_send_response(s, s->greetd.pw);
+        lock_render(s);
+        return;
+    }
 
-    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
-    s->greetd.src = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE,
-                                         greeter_readable, s);
+    /* Armed and still inside pam_fprintd: the password prompt has not arrived
+     * yet. Hold it — answer_auth() sends it the moment PAM asks, which is when
+     * the reader gives up. Nothing is lost and no attempt is burned. */
+    if (s->greetd.sock >= 0) {
+        s->greetd.busy = 1;
+        s->nlock.busy  = 1;
+        lock_render(s);
+        return;
+    }
+
+    /* No conversation at all — the arm never happened (no GREETD_SOCK, or the
+     * cap was reached). Open one now: this is exactly the pre-arming
+     * behaviour, and it is the path that must keep working whatever else here
+     * is wrong. */
+    if (!greeter_open_session(s)) {
+        s->nlock.failed = 1;
+        lock_render(s);
+        return;
+    }
+    s->greetd.busy = 1;
+    s->nlock.busy  = 1;
     lock_render(s);   /* show "Checking…" */
 }

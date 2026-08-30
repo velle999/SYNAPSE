@@ -24,7 +24,19 @@
 # SynapseOS Project — GPL-2.0-or-later
 
 _greetd_pam=/etc/pam.d/greetd
-_fp_line='auth       sufficient   pam_fprintd.so'
+# ⚠ timeout=10 IS THE WHOLE TRADE-OFF, AND IT IS DELIBERATE. pam_fprintd blocks
+# the PAM conversation while it waits for a finger, and greetd runs ONE
+# conversation at a time — so the seconds it waits are seconds the password
+# prompt has not arrived yet. The greeter holds a submitted password and sends
+# it the moment PAM asks, so nothing is lost, but a long timeout would mean
+# typing a password and watching "Checking…" for half a minute. That is what
+# the default did: 36 seconds, measured on the ThinkPad, twice.
+#
+# 10s is long enough to reach for the reader and short enough not to be felt.
+# The greeter re-arms whenever the prompt arrives with an empty field, so the
+# finger stays live while nobody is typing — the timeout bounds the WAIT, not
+# the window.
+_fp_line='auth       sufficient   pam_fprintd.so timeout=10'
 
 _synui_fprint_in_greeter() {
     # Nothing to do where there is no greetd, which is most desktops.
@@ -32,7 +44,31 @@ _synui_fprint_in_greeter() {
 
     # Already there — including a line somebody added by hand, which is not
     # ours to duplicate.
+    #
+    # ⛔ BUT AN OLD LINE OF OURS IS UPGRADED, NOT LEFT ALONE. The first version
+    # of this had no `timeout=`, and returning here on sight of the word
+    # pam_fprintd meant every machine that already had it kept the default —
+    # 36 seconds of "Checking…" on every password login, and no upgrade would
+    # ever change it. "Already present" is not the same question as "already
+    # correct", and a post_upgrade that cannot fix its own earlier output is a
+    # fix that never arrives.
     if grep -q 'pam_fprintd' "$_greetd_pam"; then
+        # Somebody else's line, or one already carrying options: leave it.
+        if ! grep -qE '^auth[[:space:]]+sufficient[[:space:]]+pam_fprintd\.so[[:space:]]*$' "$_greetd_pam"; then
+            return 0
+        fi
+        local up
+        up=$(mktemp "${_greetd_pam}.synui.XXXXXX") || return 0
+        sed -E "s|^auth[[:space:]]+sufficient[[:space:]]+pam_fprintd\.so[[:space:]]*$|$_fp_line|" \
+            "$_greetd_pam" > "$up" || { rm -f "$up"; return 0; }
+        if ! grep -q 'system-local-login' "$up" || ! grep -q 'pam_fprintd' "$up"; then
+            rm -f "$up"
+            return 0
+        fi
+        chmod 644 "$up"
+        mv -f "$up" "$_greetd_pam"
+        echo ">>> synui: login fingerprint given a 10s timeout, so a typed"
+        echo "    password is not left waiting for a finger that is not coming."
         return 0
     fi
 

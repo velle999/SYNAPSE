@@ -7315,6 +7315,33 @@ struct syn_server {
         size_t   rlen;
         char     pw[512];               /* password held only across the exchange */
         int      pw_len;
+
+        /* ── The fingerprint at the login screen ──────────────────────────
+         *
+         * ⛔ THE READER IS ARMED BY create_session, AND NOTHING ELSE ARMS IT.
+         * greetd owns PAM; pam_fprintd only runs inside a conversation greetd
+         * is driving, and greetd only starts one when this greeter asks for a
+         * session. So a fingerprint at login is not a PAM question — the PAM
+         * line was necessary and never sufficient. The session is created when
+         * the login screen APPEARS, with no password, so the reader is live
+         * while somebody walks up to it.
+         *
+         * ⛔ AND A `secret` PROMPT IS NEVER ANSWERED BEFORE THE USER SUBMITS
+         * ONE. Replying with an empty string to make the exchange "proceed" is
+         * a failed password attempt, and this machine runs faillock — a
+         * greeter that did that on every arm would lock the account it exists
+         * to log in.
+         */
+        int      armed;           /* a session is open, waiting for a finger */
+        int      pending_secret;  /* PAM has asked for the password; unanswered */
+        int      submitted;       /* Enter pressed — answer as soon as it asks */
+        int      rearms;          /* arm cycles this screen; bounded, see greeter.c */
+        /* ⛔ A CONVERSATION THAT NEVER MENTIONED A FINGER IS NOT RE-ARMED.
+         * Without this the re-arm is a spin: on a machine with no pam_fprintd
+         * PAM goes straight to the password prompt with an empty field, which
+         * is exactly the condition that triggers a re-arm — forty greetd
+         * workers in a second, and a login screen that fights itself. */
+        int      saw_fp_prompt;   /* PAM asked for a finger in this conversation */
     } greetd;
 
     int             ai_pipe_req[2];
@@ -7714,6 +7741,7 @@ typedef enum {
     GREETD_WAIT_CREATE,   /* sent create_session, awaiting auth_message/success */
     GREETD_WAIT_AUTH,     /* sent the password, awaiting success/error */
     GREETD_WAIT_START,    /* sent start_session, greetd will kill us on success */
+    GREETD_ARMED,         /* session created with no password: waiting for a finger */
 } syn_greetd_state_t;
 
 /* Set up the login panel (same panes as the lock screen) and pick the account
