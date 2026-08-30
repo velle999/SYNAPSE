@@ -228,9 +228,22 @@ static void greeter_answer_auth(syn_server_t *s, const char *json)
     char text[256];
     if (!json_field(json, "auth_message", text, sizeof(text))) text[0] = 0;
 
+    /* ⛔ LOGGED, AND PERMANENTLY. This exchange has been the opaque middle of
+     * every fingerprint-at-login problem so far: the reader works at the lock
+     * and not here, and from outside the process "pam_fprintd never prompted",
+     * "it prompted and we dropped the text" and "it prompted and nobody could
+     * see it" are indistinguishable. They are three different bugs. One line
+     * per message costs nothing on a screen that appears once a boot and turns
+     * all three into something readable. */
+    wlr_log(WLR_INFO, "synui greeter: pam says [%s] \"%s\"",
+            amt[0] ? amt : "?", text);
+
     if (strcmp(amt, "secret") == 0) {
         s->greetd.pending_secret = 1;
         if (!s->greetd.submitted) {
+            wlr_log(WLR_INFO, "synui greeter: holding the password prompt "
+                              "(nothing typed yet, fp_prompt_seen=%d)",
+                    s->greetd.saw_fp_prompt);
             s->nlock.busy  = 0;
             s->greetd.busy = 0;
 
@@ -262,6 +275,7 @@ static void greeter_answer_auth(syn_server_t *s, const char *json)
      * and acknowledge so PAM proceeds. */
     if (text[0]) {
         snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg), "%s", text);
+        wlr_log(WLR_INFO, "synui greeter: drawing it under the clock");
         /* "Place your finger on …" is how pam_fprintd announces itself, and it
          * is the only evidence out here that a reader took part at all. It
          * gates the re-arm; see saw_fp_prompt in synui.h. */
