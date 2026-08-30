@@ -1,0 +1,63 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-clean — free disk space, and destroy files on purpose.
+#
+# ⛔ THE SECURE-DELETE HALF PROMISES LESS THAN ITS NAME, AND SAYS SO. Overwriting
+# a file only destroys the old bytes when they are rewritten in place. On btrfs —
+# what SynapseOS installs on — they are not: copy-on-write writes new blocks and
+# leaves the originals until something reuses them. Snapshots keep whole copies
+# that nothing here can or should touch, and an SSD's controller remaps blocks
+# out of reach of any software at all.
+#
+# So this program reports the ground it is standing on BEFORE it starts, in the
+# terminal and in the window, and says what would actually work: full-disk
+# encryption. A "securely deleted" message on btrfs would be a lie told to the
+# person who most needed the truth.
+#
+# ⚠ NO DEPENDENCY ON coreutils' shred. Not pride: shred(1) handles one file, and
+# a folder needs a walk that must refuse to cross a mount point or follow a
+# symlink out of the tree it was given. Spawning a process per file to get the
+# overwrite and then doing the dangerous part here anyway would put the risky
+# decisions in this code regardless, with the cost of N spawns on top.
+pkgname=syn-clean
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Free disk space, and destroy files you mean to destroy — caches, thumbnails, trash, secure delete"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# ⛔ NOTHING BUT libc, AND THAT IS THE DESIGN. This program walks directories,
+# sums block counts and writes zeroes; each of those is a syscall, and a library
+# between the user's files and this code would be a bug somebody else wrote
+# sitting on the delete path.
+depends=('glibc')
+
+makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
+
+optdepends=('quickshell: the graphical window (syn-clean gui)'
+            'pacman: counting orphaned packages'
+            'synfiles: Destroy Permanently in the file manager right-click menu')
+
+source=("syn-clean-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syn-clean-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syn-clean-0.1.0"
+    # ⛔ THE SUITE RUNS INSIDE A SCRATCH SYNCLEAN_HOME, which is the only way
+    # every path in this program is composed. A test for something that deletes
+    # directory trees must not be able to reach the build user's real home, and
+    # this is what makes that structural rather than careful.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syn-clean-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

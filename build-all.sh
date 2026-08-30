@@ -32,7 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
-       syn-vault
+       syn-vault syn-clean
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
 for _c in "${ONLY[@]}"; do
@@ -438,6 +438,14 @@ build_component syn-cal
 # and never on a command line, and that it will not mount over files somebody
 # would then lose.
 build_component syn-vault
+
+# syn-clean — disk cleanup and secure delete. meson C plus a quickshell window.
+#
+# ⚠ Its suite runs entirely inside a scratch SYNCLEAN_HOME. That is not
+# tidiness: this component deletes directory trees, and every path it touches is
+# composed from that variable, so a test that sets it cannot reach the build
+# user's real home even if a category is wrong.
+build_component syn-clean
 
 # syn-edit — the text editor. Same shape again: meson C plus a quickshell
 # front-end, built from a source tarball the generic collector above assembles

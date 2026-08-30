@@ -334,6 +334,8 @@ FloatingWindow {
             { key: "comp_syndisks",    std: 1, full: 1, min: 1, label: "Disks" },
             { key: "comp_synedit",     std: 1, full: 1, min: 1, label: "Editor" },
             { key: "comp_syncal",      std: 1, full: 1, min: 1, label: "Calendar" },
+            { key: "comp_synvault",    std: 1, full: 1, min: 1, label: "File Vault — a locked folder" },
+            { key: "comp_synclean",    std: 1, full: 1, min: 1, label: "Disk Cleanup — caches, and secure delete" },
             { key: "comp_synupdate",   std: 1, full: 1, min: 1, label: "syn-update — how fixes arrive" },
             { key: "comp_syn",         std: 1, full: 1, min: 1, label: "syn — the top-level CLI" },
             { key: "comp_synmodel",    std: 1, full: 1, min: 1, label: "syn-model — fetch AI models" },

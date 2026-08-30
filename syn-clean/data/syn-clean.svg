@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<!-- syn-clean — a brush sweeping, with the dust it lifted.
+     ⛔ THE <svg> ROOT IS THE FIRST THING IN THIS FILE, before any comment.
+     gdk-pixbuf sniffs only the opening bytes to decide what a file is, so a
+     licence header above the root pushes it past that window and the icon goes
+     invisible in GTK menus while still rendering perfectly everywhere else.
+     See reference_svg_root_past_256_bytes_invisible_to_gdk_pixbuf. -->
+  <defs>
+    <linearGradient id="h" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fb8f0"/>
+      <stop offset="1" stop-color="#5b8dd9"/>
+    </linearGradient>
+  </defs>
+  <!-- the handle -->
+  <rect x="26.5" y="5" width="5" height="17" rx="2.5"
+        transform="rotate(28 29 13)" fill="#9aa0ad"/>
+  <!-- the ferrule -->
+  <rect x="22.5" y="20" width="13" height="6.5" rx="2"
+        transform="rotate(28 29 23)" fill="url(#h)"/>
+  <!-- the bristles -->
+  <path d="M18 30 L33 22 L38 31 Q28 39 17 38 Z" fill="#e0af68"/>
+  <path d="M21 33 L23 38" stroke="#16171c" stroke-width="1.2" opacity="0.35"/>
+  <path d="M26 31 L27 38" stroke="#16171c" stroke-width="1.2" opacity="0.35"/>
+  <path d="M31 29 L33 36" stroke="#16171c" stroke-width="1.2" opacity="0.35"/>
+  <!-- what it swept up -->
+  <circle cx="9"  cy="34" r="2.1" fill="#5b8dd9"/>
+  <circle cx="12" cy="41" r="1.5" fill="#8fb8f0"/>
+  <circle cx="6"  cy="41" r="1.1" fill="#9aa0ad"/>
+</svg>

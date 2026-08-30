@@ -158,6 +158,20 @@ syn-cal
 syn-disks
 syn-edit
 syn-confine
+# The password-locked folder. ⚠ IT WAS NEVER ON THIS LIST, though it has been in
+# archiso/build.sh's PACKAGES since it shipped — so the ISO's local repo BUILT it
+# and the live image never INSTALLED it. The two lists are independent and both
+# are required; syn-install/tests/config_test.sh had been red about the other two
+# surfaces this component was missing from.
+#
+# ⚠ It pulls gocryptfs, which is a hard dependency, onto the ISO with it. That is
+# correct: a vault application installed without the thing that encrypts can
+# refuse every command it has.
+syn-vault
+# Disk cleanup and secure delete. On the live image because "this disk is full"
+# is a thing people boot a USB stick to deal with — the machine they are trying
+# to clean being the one that will not start.
+syn-clean
 # The game assistant: the MangoHud overlay driven by a compositor keybind from
 # inside a running game, plus controller detection, rumble, deadzone
 # calibration and SDL mapping overrides. On the live ISO because "does my

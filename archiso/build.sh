@@ -269,6 +269,14 @@ PACKAGES=(
     # too. That is correct and not an accident: a vault application installed
     # without the thing that encrypts can refuse every command it has.
     syn-vault
+    # syn-clean — disk cleanup and secure delete, on the ISO for the same
+    # reason: syn-install names it, and a package the installer asks for that
+    # the local repo does not carry fails the install at pacman.
+    #
+    # ⚠ AND A LIVE SESSION IS WHERE IT IS MOST WANTED. "This disk is full" is a
+    # thing people boot a USB stick to deal with, and the machine they are
+    # trying to clean is the one that will not start.
+    syn-clean
     # syn-edit — the text editor. Must be ON the ISO for the same reason
     # syn-disks must: syn-install names it in SEL_CORE, and a package the
     # installer asks for but the local repo does not carry fails the install at

@@ -111,7 +111,7 @@ pkgver=0.1.0
 #   repository standing in for GitHub: an empty tree takes the "nothing to
 #   build" path, which is before the sudo keep-alive and before build-all.sh,
 #   so it needs no network, no password and no build and still reaches this.
-pkgrel=51
+pkgrel=52
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

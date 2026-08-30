@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Disk Cleanup
+GenericName=Free disk space
+Comment=Clear caches, thumbnails and trash, and destroy files for good
+Exec=syn-clean gui
+Icon=syn-clean
+Terminal=false
+Categories=Utility;System;Filesystem;
+Keywords=clean;cleaner;cache;temp;temporary;junk;disk;space;free;shred;secure;delete;cookies;orphan;
+StartupNotify=true
+StartupWMClass=syn-clean

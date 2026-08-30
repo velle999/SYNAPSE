@@ -2235,6 +2235,71 @@ if [ -f "$QML" ]; then
         && ok "no applications means no Open with row" \
         || bad "the Open With row is added unconditionally"
 
+    # ── Destroy permanently, and Send to Vault ──────────────────────────────
+    #
+    # ⛔ TWO ENTRIES THAT REMOVE A FILE, AND ONLY ONE CAN BE UNDONE. They must
+    # not read as two flavours of the same thing: Trash is reversible and
+    # Destroy is not, so the wording differs ("Destroy", never a second
+    # "Delete") and a separator stands between them.
+    grep -q 'act: "shred"' "$QML" \
+        && ok "the file menu offers a permanent destroy" \
+        || bad "synfiles.qml lost the Destroy Permanently entry"
+
+    grep -q 'Destroy Permanently' "$QML" \
+        && ok "…worded so it cannot be mistaken for Move to Trash" \
+        || bad "the destroy entry is not clearly distinguished from trashing"
+
+    # ⛔ AND IT ASKS FIRST. Every other destructive entry here is undoable or
+    # goes to the trash; this one is neither.
+    grep -q 'root.askShred()' "$QML" \
+        && grep -q 'confirmShred' "$QML" \
+        && ok "…and asks before doing it" \
+        || bad "Destroy Permanently runs without confirmation"
+
+    # ⛔ ONE IMPLEMENTATION OF SECURE DELETE, AND IT IS syn-clean's. A second
+    # copy in QML would be a second set of decisions about passes, symlinks and
+    # recursion, drifting apart invisibly until somebody's file was not
+    # destroyed after all.
+    grep -q '"syn-clean", "--rec", "--yes", "shred"' "$QML" \
+        && ok "…by asking syn-clean, not by unlinking here" \
+        || bad "synfiles destroys files itself instead of calling syn-clean"
+
+    # ⚠ AND THE SHEET SAYS WHAT THE FILESYSTEM CAN ACTUALLY DELIVER. On btrfs
+    # overwriting writes new blocks and leaves the old ones, and snapshots hold
+    # whole copies — which the person deciding needs while deciding, not after.
+    grep -q 'root.shredCow' "$QML" \
+        && grep -qi 'full-disk encryption' "$QML" \
+        && ok "…and warns when the filesystem cannot honour it" \
+        || bad "the destroy sheet promises more than btrfs delivers"
+
+    # Send to Vault. ⛔ ONLY OPEN VAULTS ARE OFFERED: a closed vault's
+    # mountpoint is an ordinary directory, so moving into it puts the files on
+    # the unencrypted disk UNDERNEATH where the mount will later appear —
+    # neither encrypted nor, once mounted, visible. syn-vault calls that state
+    # `stray` and refuses to open over it.
+    grep -q 'act: "vault"' "$QML" \
+        && ok "the file menu can send a file to a vault" \
+        || bad "synfiles.qml lost the Send to Vault entry"
+
+    grep -q '!== "open") continue' "$QML" \
+        && ok "…and offers only the vaults that are open" \
+        || bad "Send to Vault does not filter for open vaults"
+
+    # ⛔ AND IT IS A MOVE, NOT AN ENCRYPT. An open vault is an ordinary
+    # directory; this window must not learn anything about cryptography.
+    grep -q 'root.runOp(\["move"\]' "$QML" \
+        && ok "…by moving into it, inventing no encryption of its own" \
+        || bad "Send to Vault does something other than a move"
+
+    ! sed 's,//.*,,' "$QML" | grep -qiE 'gocryptfs|fusermount'
+    if [ $? = 0 ]; then ok "…and knows nothing about the backend"
+    else bad "synfiles.qml mentions the vault backend"; fi
+
+    # No vault open is not a dead row: it opens the vault app instead.
+    grep -q 'act: "vaultopen"' "$QML" \
+        && ok "…and with none open it offers to open one" \
+        || bad "Send to Vault is a dead entry when no vault is open"
+
     # The flyout is a SIBLING of the menu, not a child: ctxFlick clips, so a
     # child would be sliced off at the menu's own right edge.
     grep -q 'id: ctxSub' "$QML" \

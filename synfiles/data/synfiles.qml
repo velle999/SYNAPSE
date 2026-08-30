@@ -1608,6 +1608,140 @@ FloatingWindow {
                    "compressing " + root.describeSelection() + "…")
     }
 
+    // ── Send to Vault ───────────────────────────────────────────────────────
+    //
+    // ⛔ THIS FILE MANAGER KNOWS NOTHING ABOUT ENCRYPTION, and must not start
+    // now. An open vault is an ORDINARY DIRECTORY at ~/Vaults/<name> — that is
+    // the whole point of the design — so "send to vault" is a MOVE into it and
+    // nothing more. Whether it is open, and where it is mounted, are syn-vault's
+    // answers; asking it is the only way this stays true when the vault layout
+    // changes.
+    //
+    // ⚠ Only OPEN vaults are offered. Moving into a closed vault's mountpoint
+    // would put the files on the ordinary unencrypted disk UNDER where the
+    // mount will later appear — they would look filed away and be neither
+    // encrypted nor, once it is mounted, visible. syn-vault refuses to open
+    // over that state and calls it `stray`; the way not to create one is not to
+    // offer the closed ones.
+    property var openVaults: []
+
+    Process {
+        id: vaultListProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.trim().split("\n").filter(l => l.length > 0)
+                const out = []
+                for (let i = 1; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 3) continue
+                    if (root.disp(f[1]) !== "open") continue
+                    out.push({ name: root.disp(f[0]), mount: root.disp(f[2]) })
+                }
+                root.openVaults = out
+            }
+        }
+        // A machine with no syn-vault installed is not an error to report — the
+        // menu simply has no vault row. onExited with a non-zero code leaves
+        // openVaults empty, which is exactly right.
+        onExited: { }
+    }
+
+    function loadVaults() {
+        root.openVaults = []
+        vaultListProc.command = ["syn-vault", "--rec", "list"]
+        vaultListProc.running = false
+        vaultListProc.running = true
+    }
+
+    function sendToVault(mount) {
+        const paths = root.selectedPaths()
+        if (paths.length === 0 || !mount) return
+        // The same move the rest of this window does, with the same conflict
+        // policy: refuse and name the collision rather than guessing which file
+        // was meant to survive.
+        root.runOp(["move"].concat(paths).concat([mount]),
+                   "moving " + root.describeSelection() + " into the vault")
+    }
+
+    function openVaultApp() {
+        // ⚠ DETACHED, and for the reason the Open With work established: a
+        // child that inherits this process's pipes dies of SIGPIPE when the
+        // window it was launched from closes them.
+        vaultGuiProc.command = ["syn-vault", "gui"]
+        vaultGuiProc.startDetached()
+    }
+    Process { id: vaultGuiProc }
+
+    // ── Secure delete ───────────────────────────────────────────────────────
+    //
+    // ⛔ ONE IMPLEMENTATION, AND IT IS NOT THIS ONE. Overwriting a file before
+    // unlinking it is syn-clean's job; this window asks for it. A second copy
+    // here would be a second set of decisions about passes, symlinks and
+    // directory recursion, and the two would drift — with the difference
+    // invisible until somebody's file was not destroyed after all.
+    //
+    // ⚠ AND WHAT IT CANNOT DO IS SHOWN BEFORE THE BUTTON, not after. On btrfs —
+    // what SynapseOS installs on — overwriting writes new blocks and leaves the
+    // old ones, and snapshots keep whole copies. syn-clean reports the ground
+    // it is standing on; this sheet puts that in front of the person deciding.
+    property bool confirmShred: false
+    property string shredFsType: ""
+    property bool shredCow: false
+    property bool shredSnaps: false
+
+    Process {
+        id: shredGroundProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.trim().split("\n")
+                if (lines.length < 2) return
+                const f = lines[1].split("\t")
+                root.shredFsType = f[0] || ""
+                root.shredCow = f[1] === "1"
+                root.shredSnaps = f[2] === "1"
+            }
+        }
+    }
+
+    function askShred() {
+        const paths = root.selectedPaths()
+        if (paths.length === 0) return
+        root.shredFsType = ""
+        root.shredCow = false
+        root.shredSnaps = false
+        // --dry-run, so asking what the ground is destroys nothing.
+        shredGroundProc.command = ["syn-clean", "--rec", "--dry-run", "--yes",
+                                   "shred", paths[0]]
+        shredGroundProc.running = false
+        shredGroundProc.running = true
+        root.confirmShred = true
+    }
+
+    Process {
+        id: shredProc
+        stderr: StdioCollector { id: shredErr }
+        onExited: {
+            root.busy = false
+            const said = shredErr.text.trim().replace(/\s*\n\s*/g, " ")
+            root.statusLine = said || "destroyed"
+            root.reloadAll()
+        }
+    }
+
+    function shredSelection() {
+        root.confirmShred = false
+        const paths = root.selectedPaths()
+        if (paths.length === 0 || root.busy) return
+        root.busy = true
+        root.statusLine = "destroying " + root.describeSelection() + "…"
+        // --yes because this sheet is the asking. syn-clean refuses to read
+        // silence on a pipe as consent, so without it this would block on a
+        // question with nobody to answer it.
+        shredProc.command = ["syn-clean", "--rec", "--yes", "shred"].concat(paths)
+        shredProc.running = false
+        shredProc.running = true
+    }
+
     // ── Drag and drop ───────────────────────────────────────────────────────
     //
     // Internal only. Dragging OUT to another application needs a Wayland data
@@ -3592,6 +3726,73 @@ FloatingWindow {
                             label: "Empty permanently"
                             on: true
                             onToggled: root.emptyTrash()
+                        }
+                    }
+                }
+            }
+
+            // ── Destroy permanently ─────────────────────────────────────────
+            //
+            // ⛔ THE ONE SHEET IN THIS WINDOW WHOSE ACTION HAS NO UNDO AND NO
+            // TRASH. It names what is about to go, and — while the person is
+            // deciding — what the filesystem underneath can actually deliver.
+            // On btrfs that is less than the word "destroy" promises, and
+            // saying so afterwards would be saying so too late.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 420
+                height: shredCol.implicitHeight + 32
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.cBad }
+                visible: root.confirmShred
+                z: 120
+
+                // Left/right/top only — a filled Column whose parent sizes to
+                // it is a binding loop.
+                Column {
+                    id: shredCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 16 }
+                    spacing: 10
+
+                    Text {
+                        text: "Destroy " + root.describeSelection() + "?"
+                        color: root.cBad
+                        font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
+                    }
+                    Text {
+                        width: parent.width - 4
+                        text: "Overwritten and deleted. It does not go to the Trash "
+                            + "and there is no undo."
+                        color: root.cText
+                        wrapMode: Text.WordWrap
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                    }
+                    Text {
+                        visible: root.shredCow
+                        width: parent.width - 4
+                        text: "⚠ This is " + root.shredFsType + ", which writes changes to new "
+                            + "blocks instead of over the old ones"
+                            + (root.shredSnaps ? ", and snapshots keep whole copies" : "")
+                            + ". The file will be gone, but its contents may still be "
+                            + "recoverable from the disk. Full-disk encryption is what "
+                            + "actually prevents that."
+                        color: root.cWarn
+                        wrapMode: Text.WordWrap
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+                    Row {
+                        spacing: 8
+                        ToggleChip {
+                            label: "Cancel"
+                            on: false
+                            onToggled: root.confirmShred = false
+                        }
+                        ToggleChip {
+                            label: "Destroy permanently"
+                            on: true
+                            onToggled: root.shredSelection()
                         }
                     }
                 }
@@ -5743,6 +5944,7 @@ FloatingWindow {
                             ctxMenu.rawY = gp.y
                             ctxMenu.open = true
                             root.loadActions()
+                            root.loadVaults()
                             return
                         }
 
@@ -6060,6 +6262,7 @@ FloatingWindow {
                             ctxMenu.rawY = p.y
                             ctxMenu.open = true
                             root.loadActions()
+                            root.loadVaults()
                             return
                         }
                         if (mouse.modifiers & Qt.ControlModifier)    pane.toggleSelect(name)
@@ -6477,6 +6680,36 @@ FloatingWindow {
                                          hint: "F2" })
                             items.push({ label: "Move to Trash" + many,
                                          act: "trash", on: n > 0, hint: "Del" })
+
+                            // ⛔ BELOW TRASH AND VISIBLY APART FROM IT. Both
+                            // remove a file; only one can be undone. Sitting
+                            // them next to each other with similar labels is
+                            // how somebody reaches for the wrong one, so the
+                            // separator and the wording carry the difference —
+                            // "Destroy" rather than a second kind of "Delete".
+                            items.push({ label: "-", act: "", on: true })
+                            items.push({ label: "Destroy Permanently…" + many,
+                                         act: "shred", on: n > 0 })
+
+                            // Send to Vault. A submenu when there is more than
+                            // one open vault, a single row when there is one,
+                            // and an invitation to open one when there is none
+                            // — a submenu arrow that opens onto nothing is the
+                            // failure the Open-with note above warns about.
+                            if (root.openVaults.length === 1) {
+                                items.push({ label: "Send to Vault" + many,
+                                             act: "vault", on: n > 0,
+                                             mount: root.openVaults[0].mount })
+                            } else if (root.openVaults.length > 1) {
+                                items.push({ label: "Send to Vault" + many,
+                                             act: "submenu", on: n > 0,
+                                             sub: root.openVaults.map(v => ({
+                                                 label: v.name, mount: v.mount
+                                             })) })
+                            } else {
+                                items.push({ label: "Send to Vault…", act: "vaultopen",
+                                             on: n > 0 })
+                            }
                         }
                         // Borrowed entries. The applications go in a SUBMENU
                         // and the service menus stay flat, and the difference
@@ -6660,6 +6893,13 @@ FloatingWindow {
                                     case "paste":   root.paste(); break
                                     case "rename":  pane.renaming = r.name; break
                                     case "trash":   root.trashSelection(); break
+                                    case "shred":   root.askShred(); break
+                                    case "vault":   root.sendToVault(ctxItem.modelData.mount); break
+                                    // No vault is open, so there is nowhere to
+                                    // send anything yet. Opening the vault app
+                                    // is the honest next step, not a greyed-out
+                                    // row that says nothing about why.
+                                    case "vaultopen": root.openVaultApp(); break
                                     case "restore": root.restoreFromTrash(r); break
                                     case "props":   root.openProperties(); break
                                     case "run":     root.runAction(ctxItem.modelData.desktop,
@@ -6839,7 +7079,18 @@ FloatingWindow {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         ctxMenu.open = false
-                                        root.runAction(ctxSubItem.modelData.desktop, "")
+                                        // Two kinds of row reach this flyout
+                                        // now: an application to open with, and
+                                        // a vault to send to. They are told
+                                        // apart by which field they carry
+                                        // rather than by a flag, because a row
+                                        // without a `desktop` has nothing for
+                                        // runAction to run and would silently
+                                        // do nothing at all.
+                                        if (ctxSubItem.modelData.mount !== undefined)
+                                            root.sendToVault(ctxSubItem.modelData.mount)
+                                        else
+                                            root.runAction(ctxSubItem.modelData.desktop, "")
                                     }
                                 }
                             }
