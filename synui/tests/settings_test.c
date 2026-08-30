@@ -489,12 +489,18 @@ static void test_launcher_pair_is_just_binds(void)
 
     /* Shipped: the command bar on Space, the launcher on '='. (It was the
      * other way round until 0.1.0-425 — which is why this block asserts the
-     * ARRANGEMENT and not just that both keys are bound to something.) */
+     * ARRANGEMENT and not just that both keys are bound to something.)
+     *
+     * ⚠ SYN_ROFI_DRUN, NOT THE STRING IT EXPANDS TO. This asserted a literal
+     * "rofi -show drun" and went red when the default gained `-terminal
+     * syntty` (kitty leaving the base set). What this test is about is WHICH
+     * KEY RUNS THE LAUNCHER; the launcher's own argv is config.c's business,
+     * and duplicating it here only means one more place to edit. */
     write_synuirc("");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
     assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", SYN_ROFI_DRUN));
 
     /* The dead key moves nothing. Not merely unparsed — if a swap ever comes
      * back, THIS is the assertion that fails. */
@@ -502,7 +508,7 @@ static void test_launcher_pair_is_just_binds(void)
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
     assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", SYN_ROFI_DRUN));
 
     /* The supported way to swap them: two binds, and nothing re-seats them. */
     write_synuirc("bind = super+space spawn_toggle rofi -show drun\n"

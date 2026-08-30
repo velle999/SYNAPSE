@@ -69,6 +69,12 @@ exempt_reason() {
         clock)    echo "the bar's clock popup — you click the clock, you do not launch it" ;;
         fontpick) echo "a Control panel ▸ Appearance row with no bind at all" ;;
         crop)     echo "has an entry under its own name (Image Cropper)" ;;
+        # The bar's clock popup, like `clock` above — and it has had NO bind at
+        # all since 2026-07-31, when T was taken off it because the clock is how
+        # everyone reached it anyway (see config.c). A menu entry would also sit
+        # next to syn-cal's, which is called Calendar and IS the application; two
+        # rows with one name, one of them a popup, is worse than no row.
+        calendar) echo "the bar's clock popup — Calendar the app is syn-cal" ;;
         *)        echo "" ;;
     esac
 }

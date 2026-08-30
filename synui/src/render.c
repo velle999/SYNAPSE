@@ -7849,8 +7849,15 @@ void synui_render_taskmgr(syn_server_t *s)
             }
             cairo_set_font_size(cr, 13);
             /* Force quit is the destructive one and says so in the colour the
-             * confirmation bar already uses for exactly that. */
-            if (i == 1) cairo_set_source_rgba(cr, 0.95, 0.55, 0.55, 1.0);
+             * confirmation bar already uses for exactly that.
+             *
+             * ⚠ THROUGH set_hue, NOT AS A LITERAL. A bare rgba is drawn at the
+             * same absolute colour whatever the panel underneath is doing, and
+             * this pale red measured 1.29:1 on 95's silver — the one menu entry
+             * that must be unmistakable, invisible on a light theme. set_hue
+             * runs it through the same corrector the accent goes through, so it
+             * stays red and stays legible. */
+            if (i == 1) set_hue(cr, 0.95, 0.55, 0.55, 1.0);
             else        set_ink(cr, INK_TEXT, 0.95);
             cairo_move_to(cr, mx + 14, iy + 18);
             syn_show_text(cr, taskmgr_menu_label(i));

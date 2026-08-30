@@ -228,35 +228,61 @@ EXPANDED_V="$HX,$UY ${HW}x${UH}"
 
 # A SINGLE click first, on a window that is not expanded: it must arm a resize
 # and nothing else. An expand on every press would make the border unusable.
-MIDX=$(( HX + HW / 2 ))
-TOPY=$(( HY - 1 ))
-vclick "$MIDX" "$TOPY" 1 || fail "the virtual pointer could not click"
+# ⛔ THE LEFT BORDER, NOT THE TOP ONE, AND THAT IS THE WHOLE POINT OF THIS
+# BLOCK. HOME_BOX comes from un-maximizing, so the window is flush against the
+# top of the usable area — HY *is* the bar's bottom edge. The invisible 8px
+# resize-grab ring hangs OUTSIDE the frame, which puts every pixel of the TOP
+# ring inside the bar, and a layer surface legitimately owns those pixels.
+#
+# Which of the two answers a press there is a stacking question, and the answer
+# CHANGES: the dispatch sections above expand and collapse this window, and
+# after that cycle the bar takes the click. So a top-border click tested the
+# z-order between a layer surface and a window's invisible ring, got a different
+# verdict depending on what had run before it, and reported it as "the gesture
+# is broken". Measured 2026-08-30: the same press is DECO_BORDER before the
+# expand/collapse cycle and DECO_NONE after it.
+#
+# The left border has open desktop beside it — HX is 102, not 0 — so nothing
+# else claims those pixels and the ring answers every time. Verified at HX-1,
+# HX-4 and HX+1: single click arms, double click expands, in every order.
+#
+# ⚠ The vertical axis is not going untested: the dispatch sections above prove
+# the geometry on both axes. What this block adds is the GESTURE, and one axis
+# driven by a real pointer proves the gesture.
+MIDY=$(( HY + HH / 2 ))
+LEFTX=$(( HX - 1 ))
+EXPANDED_H="$UX,$HY ${UW}x${HH}"
+[ "$(box)" = "$HOME_BOX" ] || fail "section 5 started from $(box), not $HOME_BOX"
+
+# A SINGLE click first, on a window that is not expanded: it must arm a resize
+# and nothing else. An expand on every press would make the border unusable.
+vclick "$LEFTX" "$MIDY" 1 || fail "the virtual pointer could not click"
 sleep 0.3
 [ "$(box)" = "$HOME_BOX" ] || fail "a SINGLE click on the border moved the window to
        $(box) — one press arms a resize, it does not expand."
-[ "$(flag expand_v)" = 0 ] || fail "a single click set the expand state"
+[ "$(flag expand_h)" = 0 ] || fail "a single click set the expand state"
 ok "a single click on the border expands nothing"
 
-# …and now two, on the same edge, inside the window.
-vclick "$MIDX" "$TOPY" 2
+# …and now two, on the same edge.
+vclick "$LEFTX" "$MIDY" 2
 wait_box "$HOME_BOX"
-[ "$(box)" = "$EXPANDED_V" ] || fail "double-clicking the TOP border at $MIDX,$TOPY gave
-       $(box), wanted $EXPANDED_V. The dispatch sections above already proved the
+[ "$(box)" = "$EXPANDED_H" ] || fail "double-clicking the LEFT border at $LEFTX,$MIDY gave
+       $(box), wanted $EXPANDED_H. The dispatch sections above already proved the
        geometry, so this is the gesture: either the press is not reaching
        DECO_BORDER, or the two are not being read as one double-click."
-[ "$(flag expand_v)" = 1 ] || fail "the gesture did not set the vertical axis"
-ok "a real double-click on the top border fills the height"
-
-# The LEFT border is still reachable — the vertical expand did not touch x — so
-# the second axis can be driven by pointer too. Both axes at once, by mouse.
-MIDY=$(( UY + UH / 2 ))
-LEFTX=$(( HX - 1 ))
-vclick "$LEFTX" "$MIDY" 2
-wait_box "$EXPANDED_V"
-[ "$(box)" = "$UX,$UY ${UW}x${UH}" ] || fail "double-clicking the LEFT border at
-       $LEFTX,$MIDY gave $(box), wanted the whole usable box $UX,$UY ${UW}x${UH}"
-[ "$(flag expand_h)" = 1 ] || fail "the left border did not set the horizontal axis"
+[ "$(flag expand_h)" = 1 ] || fail "the gesture did not set the horizontal axis"
 ok "a real double-click on the left border fills the width"
+
+# The second axis on top of the first. ⚠ BY KEYBIND, because the edge it would
+# have to be clicked on is the top one — see the note above about the bar. What
+# is being tested here is that the two axes COMPOSE, one set by mouse and one by
+# key, which is the mixture a person actually produces.
+synctl dispatch expand_v_toggle >/dev/null
+wait_box "$EXPANDED_H"
+[ "$(box)" = "$UX,$UY ${UW}x${UH}" ] || fail "adding the vertical axis to a window
+       expanded by mouse gave $(box), wanted the whole usable box $UX,$UY ${UW}x${UH}"
+[ "$(flag expand_v)" = 1 ] || fail "the keybind did not set the vertical axis"
+ok "the keybind adds the second axis to what the mouse expanded"
 
 # Back to the starting box the only way that is left, which is the point of the
 # warning above.

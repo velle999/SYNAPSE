@@ -472,6 +472,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`I` | View an image — zoom, pan, and step through the folder with the arrows; `c` crops the one you are looking at |
 | `Super`+`Shift`+`X` | Crop an image ("X for cut") — opens on your recent images from Pictures, Wallpapers and Downloads |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
+| `Super`+`U` / `Super`+`Shift`+`U` | Read the selected text aloud / start and stop reading (`syn-speak`) |
+| `Super`+`Shift`+`V` | Dictate — speak and it types what you said (`vibe voice type`) |
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, big clock, analog clock, music, quick-launch, post-it, Tuxagotchi) |
 | `Super`+`Escape` | Welcome guide — six pages on what this desktop does and which keys do it (see [The welcome guide](#the-welcome-guide)) |
 | `Super`+`Tab` | Cycle layout |
