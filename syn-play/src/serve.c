@@ -177,6 +177,26 @@ static void handle(char *line, int *fd, bool *want_queue, bool *want_hist,
 	if (!strcmp(line, "find")) { send_find(decoded); printf("e\n"); fflush(stdout); return; }
 	if (!strcmp(line, "history-clear")) { sp_history_clear(); *want_hist = true; return; }
 
+	/*
+	 * ⛔ DELETING A PLAYLIST DOES NOT NEED A PLAYER, AND USED TO DEMAND ONE.
+	 *
+	 * velle, 2026-08-30: "delete playlist x button isn't working". `plrm`
+	 * sat below the `if (*fd < 0) return;` that guards the transport verbs,
+	 * so the ✕ on a playlist did nothing at all unless something happened to
+	 * be playing — which, on a window just opened to tidy up playlists, it
+	 * never is. A playlist is a file; mpv has no opinion about it.
+	 *
+	 * ⚠ AND IT GOES THROUGH THE SILENT CORE. `sp_playlist_rm()` prints and
+	 * die()s: the print would land in this pipe as a record the window
+	 * cannot parse, and the exit would take the engine down — and the window
+	 * follows the engine out — over a playlist that was already gone.
+	 */
+	if (!strcmp(line, "plrm")) {
+		sp_playlist_unlink(decoded);
+		*want_pl = true;
+		return;
+	}
+
 	/* Everything past here needs a player, and these are the two verbs that
 	 * are allowed to start one. */
 	if (!strcmp(line, "play") || !strcmp(line, "add")) {
@@ -197,17 +217,11 @@ static void handle(char *line, int *fd, bool *want_queue, bool *want_hist,
 	if (!strcmp(line, "plload") || !strcmp(line, "plappend")) {
 		if (*fd < 0) *fd = sp_connect_or_start();
 		if (*fd < 0) return;
-		sp_out_t save = g_out;
-		g_out = OUT_REC;
-		/* ⚠ Its own output goes to the protocol pipe, so it is silenced
-		 * rather than allowed to emit a record the window does not know. */
-		fflush(stdout);
-		int devnull = dup(STDOUT_FILENO);
-		FILE *sink = freopen("/dev/null", "w", stdout);
-		sp_playlist_load(*fd, decoded, line[2] == 'a');
-		if (sink) { fflush(stdout); dup2(devnull, STDOUT_FILENO); }
-		close(devnull);
-		g_out = save;
+		/* ⚠ THE SILENT ONE. This used to call the CLI's verb with stdout
+		 * temporarily reopened onto /dev/null — which worked, and left the
+		 * engine's one output stream being juggled underneath it for the
+		 * length of a call that can talk to mpv. */
+		sp_playlist_open(*fd, decoded, line[2] == 'a');
 		*want_queue = true;
 		return;
 	}
@@ -245,17 +259,10 @@ static void handle(char *line, int *fd, bool *want_queue, bool *want_hist,
 		sp_cmd(*fd, args, NULL, 0);
 		*want_queue = true;
 	} else if (!strcmp(line, "plsave")) {
-		sp_out_t save = g_out;
-		fflush(stdout);
-		int devnull = dup(STDOUT_FILENO);
-		FILE *sink = freopen("/dev/null", "w", stdout);
-		sp_playlist_save(*fd, decoded);
-		if (sink) { fflush(stdout); dup2(devnull, STDOUT_FILENO); }
-		close(devnull);
-		g_out = save;
-		*want_pl = true;
-	} else if (!strcmp(line, "plrm")) {
-		sp_playlist_rm(decoded);
+		/* ⚠ SILENT, AND IT CANNOT EXIT. The CLI's verb die()s on an empty
+		 * queue, which is right at a prompt and is the engine vanishing
+		 * under a window that is merely showing a button. */
+		sp_playlist_store(*fd, decoded, NULL);
 		*want_pl = true;
 	}
 }
@@ -289,7 +296,30 @@ int sp_serve(void)
 		/* ── facts ─────────────────────────────────────────────────── */
 		if (fd < 0) fd = sp_connect();
 		if (fd < 0) {
+			/*
+			 * ⛔ THE HISTORY AND THE PLAYLISTS ARE FILES, NOT MPV.
+			 *
+			 * velle, 2026-08-30: "the playlist isn't showing after
+			 * creating closing and reopening but if i add to queue it
+			 * then appears". This branch used to `continue`, which
+			 * skipped the three list sends at the bottom of the loop —
+			 * so a window opened with nothing playing drew an empty
+			 * Playlists tab AND an empty History, and both filled in
+			 * the moment something started playing and the loop began
+			 * reaching the end. The flags stayed true the whole time;
+			 * nothing ever got to them.
+			 *
+			 * Only the QUEUE belongs to mpv. With no mpv there is no
+			 * queue, which is said once rather than left as whatever
+			 * the last session put on screen.
+			 */
 			printf("s\tstate\tstopped\n");
+			if (want_queue) {
+				printf("q-begin\nq-end\n");
+				want_queue = false;
+			}
+			if (want_hist) { send_history();   want_hist = false; }
+			if (want_pl)   { send_playlists(); want_pl   = false; }
 			printf("e\n");
 			fflush(stdout);
 			continue;

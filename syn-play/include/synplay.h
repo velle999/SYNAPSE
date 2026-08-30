@@ -126,6 +126,13 @@ typedef struct {
 /* The playlist mpv is holding. Returns the number filled, -1 if not running. */
 int  sp_queue(int fd, sp_entry_t *out, int max);
 
+/* ⛔ THE SILENT CORE, which is what `serve` calls. A function that prints goes
+ * down the protocol pipe, and one that die()s takes the engine — and the window
+ * with it. The verbs below are these plus words. */
+int  sp_playlist_store(int fd, const char *name, const char **why);
+bool sp_playlist_unlink(const char *name);
+bool sp_playlist_open(int fd, const char *name, bool append);
+
 int  sp_playlist_save(int fd, const char *name);
 int  sp_playlist_load(int fd, const char *name, bool append);
 int  sp_playlist_list(void);

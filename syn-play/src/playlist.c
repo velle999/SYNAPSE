@@ -82,17 +82,34 @@ bool sp_playlist_path(const char *name, char *out, size_t cap)
 	return true;
 }
 
-int sp_playlist_save(int fd, const char *name)
+/*
+ * ── The file operations, which neither print nor exit ───────────────────────
+ *
+ * ⛔ SEPARATE FROM THE VERBS BELOW BECAUSE `serve` CALLS THESE.
+ *
+ * A function that prints writes down the PROTOCOL PIPE — the window then reads
+ * `Removed Saturday night` as a record and has no idea what it is. Worse, one
+ * that die()s takes the engine with it, and the window follows the engine out
+ * (`onExited: Qt.quit()`), so a click on the ✕ of a playlist that was already
+ * gone would close the whole player.
+ *
+ * The CLI's verbs are thin wrappers that add the printing and the exiting.
+ */
+
+/* Rows written, or -1 with `why` set to a sentence. */
+int sp_playlist_store(int fd, const char *name, const char **why)
 {
 	char path[PATH_MAX];
-	if (!sp_playlist_path(name, path, sizeof path))
-		die("'%s' is not a name a playlist can have — letters, digits, "
-		    "space, - _ .", name);
+	if (!sp_playlist_path(name, path, sizeof path)) {
+		if (why) *why = "not a name a playlist can have — letters, digits, "
+		                "space, - _ .";
+		return -1;
+	}
 
 	static sp_entry_t q[4096];
 	int n = sp_queue(fd, q, 4096);
-	if (n < 0) die("nothing is playing — there is no queue to save");
-	if (n == 0) die("the queue is empty");
+	if (n < 0) { if (why) *why = "nothing is playing"; return -1; }
+	if (n == 0) { if (why) *why = "the queue is empty"; return -1; }
 
 	/* Written to a temporary and renamed. A save interrupted half way
 	 * through would otherwise leave a playlist that is neither the old one
@@ -100,7 +117,7 @@ int sp_playlist_save(int fd, const char *name)
 	char tmp[PATH_MAX + 8];
 	snprintf(tmp, sizeof tmp, "%s.new", path);
 	FILE *f = fopen(tmp, "w");
-	if (!f) die("cannot write %s", tmp);
+	if (!f) { if (why) *why = "cannot write there"; return -1; }
 
 	fputs("#EXTM3U\n", f);
 	for (int i = 0; i < n; i++) {
@@ -110,8 +127,44 @@ int sp_playlist_save(int fd, const char *name)
 		 * measure files it has not played. */
 		fprintf(f, "#EXTINF:-1,%s\n%s\n", q[i].title, q[i].path);
 	}
-	if (fclose(f) != 0) { unlink(tmp); die("cannot finish writing %s", tmp); }
-	if (rename(tmp, path) != 0) { unlink(tmp); die("cannot save %s", path); }
+	/* Written to a temporary and renamed. A save interrupted half way
+	 * through would otherwise leave a playlist that is neither the old one
+	 * nor the new one, and the person finds out when they open it. */
+	if (fclose(f) != 0) { unlink(tmp); if (why) *why = "could not finish writing"; return -1; }
+	if (rename(tmp, path) != 0) { unlink(tmp); if (why) *why = "could not save"; return -1; }
+	return n;
+}
+
+/* True if it was there and is not any more. */
+bool sp_playlist_unlink(const char *name)
+{
+	char path[PATH_MAX];
+	if (!sp_playlist_path(name, path, sizeof path)) return false;
+	return unlink(path) == 0;
+}
+
+/* Hand a saved playlist to mpv. False if there is no such playlist or mpv
+ * refused it. */
+bool sp_playlist_open(int fd, const char *name, bool append)
+{
+	char path[PATH_MAX];
+	if (!sp_playlist_path(name, path, sizeof path)) return false;
+	if (access(path, R_OK) != 0) return false;
+
+	char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
+	sp_json_quote(path, quoted, sizeof quoted);
+	snprintf(args, sizeof args, "\"loadlist\",%s,\"%s\"",
+	         quoted, append ? "append" : "replace");
+	return sp_cmd(fd, args, NULL, 0);
+}
+
+/* ── and the CLI's verbs, which are those plus words ─────────────────────── */
+
+int sp_playlist_save(int fd, const char *name)
+{
+	const char *why = "could not save";
+	int n = sp_playlist_store(fd, name, &why);
+	if (n < 0) die("%s", why);
 
 	if (g_out == OUT_REC) printf("saved\t%s\t%d\n", name, n);
 	else printf("Saved %s — %d item%s\n", name, n, n == 1 ? "" : "s");
@@ -125,12 +178,7 @@ int sp_playlist_load(int fd, const char *name, bool append)
 		die("'%s' is not a playlist name", name);
 	if (access(path, R_OK) != 0)
 		die("no playlist called '%s' — syn-play playlist list", name);
-
-	char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
-	sp_json_quote(path, quoted, sizeof quoted);
-	snprintf(args, sizeof args, "\"loadlist\",%s,\"%s\"",
-	         quoted, append ? "append" : "replace");
-	if (!sp_cmd(fd, args, NULL, 0))
+	if (!sp_playlist_open(fd, name, append))
 		die("mpv would not load %s", path);
 
 	if (g_out == OUT_REC) printf("loaded\t%s\n", name);
@@ -189,7 +237,7 @@ int sp_playlist_rm(const char *name)
 	char path[PATH_MAX];
 	if (!sp_playlist_path(name, path, sizeof path))
 		die("'%s' is not a playlist name", name);
-	if (unlink(path) != 0)
+	if (!sp_playlist_unlink(name))
 		die("no playlist called '%s'", name);
 	if (g_out == OUT_REC) printf("removed\t%s\n", name);
 	else printf("Removed %s\n", name);

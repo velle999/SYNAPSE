@@ -23,6 +23,11 @@ set -u
 BIN="${1:-}"
 [ -x "$BIN" ] || BIN=$(command -v syn-play)
 [ -x "$BIN" ] || { echo "cli_test: no syn-play binary"; exit 1; }
+# ⛔ ABSOLUTE, because one case below `cd`s into the media directory to check
+# that a RELATIVE path is resolved before mpv sees it — and a relative $BIN
+# stops existing the moment it does. meson passes a full path, so run by hand
+# the suite failed two cases the build ran green.
+case "$BIN" in /*) ;; *) BIN="$PWD/$BIN" ;; esac
 
 fails=0
 check() {  # check <what> <want> <got>
@@ -216,6 +221,47 @@ contains "the TUI works with no terminal at all" "Queue" "$out"
 sleep 0.5
 out=$("$BIN" --rec status)
 contains "stop ends the session" "state	stopped" "$out"
+
+# ── what the window is told with NO PLAYER RUNNING ──────────────────────────
+#
+# ⛔ velle, 2026-08-30: "the playlist isn't showing after creating closing and
+# reopening but if i add to queue it then appears". `serve`'s no-session branch
+# used to `continue`, skipping the list sends at the bottom of its loop — so a
+# window opened with nothing playing drew an empty Playlists tab AND an empty
+# History, and both filled in the moment something started playing.
+#
+# ⚠ THE ENGINE IS DRIVEN, NOT THE WINDOW. What is asserted is the records that
+# reach the pipe: a window test could pass on a window that draws its own stale
+# copy of a list nothing sent it.
+"$BIN" stop >/dev/null 2>&1
+sleep 0.5
+out=$(printf 'quit\n' | timeout 20 "$BIN" serve)
+
+contains "with no player, the engine still says so" "state	stopped" "$out"
+contains "⛔ …and still sends the saved playlists" "playlist	Test set" "$out"
+check "…inside a list block the window can swap in" "1" \
+      "$(printf '%s\n' "$out" | grep -c '^l-begin')"
+contains "⛔ …and still sends the history" "h-begin" "$out"
+check "…and says the queue is empty rather than leaving the last one drawn" "1" \
+      "$(printf '%s\n' "$out" | grep -c '^q-begin')"
+
+# ⛔ "delete playlist x button isn't working" — `plrm` sat below the guard that
+# needs a live mpv, so the ✕ did nothing unless something happened to be
+# playing, which on a window opened to tidy playlists it never is.
+out=$(printf 'plrm Test%%20set\nquit\n' | timeout 20 "$BIN" serve)
+check "⛔ a playlist is deleted with no player running" "no" \
+      "$([ -f "$T/share/syn-play/playlists/Test set.m3u8" ] && echo yes || echo no)"
+contains "…and the window is told the list changed" "l-begin" "$out"
+
+# ⚠ AND IT MUST NOT KILL THE ENGINE. sp_playlist_rm() die()s on a playlist that
+# is not there; the window follows the engine out, so a second click on a ✕
+# would have closed the whole player.
+out=$(printf 'plrm Test%%20set\nplrm nothing-here\nquit\n' | timeout 20 "$BIN" serve; echo "rc=$?")
+contains "⛔ deleting one that is already gone does not take the engine down" "rc=0" "$out"
+
+# ⚠ …and nothing it prints may reach the protocol pipe as a stray record.
+check "the engine emits no line the window cannot parse" "0" \
+      "$(printf '%s\n' "$out" | grep -cvE '^(s|q|h|l|f|playlist|hist)\b|^(q|h|l|f)-(begin|end)$|^e$|^rc=0$|^$')"
 
 echo ""
 if [ "$fails" -eq 0 ]; then echo "all checks passed"; else echo "$fails check(s) failed"; exit 1; fi
