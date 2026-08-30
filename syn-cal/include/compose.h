@@ -51,6 +51,7 @@ bool parse_duration(const char *s, long *seconds);
 bool parse_reminder(const char *s, int *minutes);
 
 int cmd_new(int argc, char **argv);
+int cmd_default(const char *value);
 int cmd_edit(int argc, char **argv);
 int cmd_delete(const char *uid);
 

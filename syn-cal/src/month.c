@@ -7,6 +7,7 @@
  */
 #define _GNU_SOURCE
 #include "month.h"
+#include "settings.h"
 #include "syncal.h"
 
 #include <stdio.h>
@@ -38,40 +39,15 @@ const char *week_start_name(week_start_t ws)
 
 week_start_t week_start_get(void)
 {
-	char *path = store_path("settings.conf");
-	size_t len = 0;
-	char *data = read_file(path, &len);
-	free(path);
-	if (!data) return WEEK_SUNDAY;
-
+	char *v = settings_get(WEEK_KEY);
 	week_start_t ws = WEEK_SUNDAY;
-	for (char *line = strtok(data, "\n"); line; line = strtok(NULL, "\n")) {
-		char *eq = strchr(line, '=');
-		if (!eq) continue;
-		*eq = '\0';
-		char *k = line, *v = eq + 1;
-		while (*k == ' ' || *k == '\t') k++;
-		for (char *e = k + strlen(k); e > k && (e[-1] == ' ' || e[-1] == '\t'); e--) e[-1] = '\0';
-		while (*v == ' ' || *v == '\t') v++;
-		for (char *e = v + strlen(v); e > v && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r'); e--)
-			e[-1] = '\0';
-		if (!strcmp(k, WEEK_KEY)) week_start_parse(v, &ws);
-	}
-	free(data);
+	if (v) { week_start_parse(v, &ws); free(v); }
 	return ws;
 }
 
 bool week_start_set(week_start_t ws, char **err)
 {
-	char *path = store_path("settings.conf");
-	char *body = xasprintf("# syn-cal settings.\n"
-	                       "# `syn-cal weekstart sun|mon` is the supported way to edit this.\n"
-	                       "%s = %s\n", WEEK_KEY, week_start_name(ws));
-	bool ok = write_file_atomic(path, body, strlen(body), 0600);
-	if (!ok && err) *err = xasprintf("could not write %s", path);
-	free(body);
-	free(path);
-	return ok;
+	return settings_set(WEEK_KEY, week_start_name(ws), err);
 }
 
 /* ── the grid ───────────────────────────────────────────────────────────── */

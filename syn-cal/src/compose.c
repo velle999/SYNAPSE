@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #include "compose.h"
 #include "account.h"
+#include "settings.h"
 #include "event.h"
 #include "store.h"
 
@@ -367,13 +368,47 @@ static bool read_dt(const char *unfolded, const char *name, time_t *out, bool *i
 
 /* ── which calendar ─────────────────────────────────────────────────────── */
 
-/* The one enabled calendar, when there is exactly one.
- *
- * ⚠ AND A REFUSAL WHEN THERE IS NOT. Picking the first of several would put an
- * appointment on a calendar the person did not name and may not even look at,
- * which they would find out about when somebody else did not turn up. */
-static bool only_calendar(accounts_t *a, const char **acct, const char **cal, char **err)
+/* The calendar a new event goes to when nobody says. "<account>/<calendar>". */
+#define DEFAULT_CAL_KEY "default_calendar"
+
+static bool split_in(const char *in, char **acct, char **cal);
+
+/* Is this account/calendar pair switched on right now? */
+static bool calendar_enabled(accounts_t *a, const char *acct, const char *cal)
 {
+	for (size_t i = 0; i < a->n; i++) {
+		if (strcmp(a->e[i].name, acct)) continue;
+		for (size_t c = 0; c < a->e[i].ncals; c++)
+			if (a->e[i].cals[c].enabled && a->e[i].cals[c].name &&
+			    !strcmp(a->e[i].cals[c].name, cal))
+				return true;
+	}
+	return false;
+}
+
+/* Where an event goes when nobody said: the remembered one, or the only one.
+ *
+ * ⛔ AND STILL A REFUSAL WHEN NEITHER APPLIES. Picking the first of several
+ * would put an appointment on a calendar the person did not name and may not
+ * even look at — which they find out about when somebody does not turn up.
+ *
+ * ⚠ THE REMEMBERED ONE IS CHECKED, NOT TRUSTED. A calendar that has since been
+ * switched off, renamed, or removed with its account is still a name in
+ * settings.conf; writing to it would put the event somewhere nothing syncs. */
+static bool default_calendar(accounts_t *a, char **acct, char **cal, char **err)
+{
+	char *saved = settings_get(DEFAULT_CAL_KEY);
+	if (saved) {
+		char *sa = NULL, *sc = NULL;
+		if (split_in(saved, &sa, &sc) && calendar_enabled(a, sa, sc)) {
+			free(saved);
+			*acct = sa;
+			*cal = sc;
+			return true;
+		}
+		free(sa); free(sc); free(saved);
+	}
+
 	const char *fa = NULL, *fc = NULL;
 	int n = 0;
 	for (size_t i = 0; i < a->n; i++)
@@ -383,12 +418,14 @@ static bool only_calendar(accounts_t *a, const char **acct, const char **cal, ch
 				n++;
 			}
 
-	if (n == 1) { *acct = fa; *cal = fc; return true; }
+	if (n == 1) { *acct = xstrdup(fa); *cal = xstrdup(fc); return true; }
 	if (n == 0) {
 		if (err) *err = xstrdup("no calendar is switched on — run: syn-cal discover <account>");
 		return false;
 	}
-	if (err) *err = xasprintf("there are %d calendars switched on, so say which: --in <account>/<calendar>", n);
+	if (err) *err = xasprintf("there are %d calendars switched on, so say which:\n"
+	                          "  --in <account>/<calendar>   just this once\n"
+	                          "  syn-cal default <account>/<calendar>   from now on", n);
 	return false;
 }
 
@@ -474,6 +511,59 @@ static bool take_opts(int argc, char **argv, opts_t *o, const char **positional)
 	return true;
 }
 
+/* `syn-cal default [<account>/<calendar>]` — where new events go. */
+int cmd_default(const char *value)
+{
+	accounts_t a;
+	accounts_load(&a);
+
+	if (!value) {
+		char *acct = NULL, *cal = NULL, *err = NULL;
+		bool have = default_calendar(&a, &acct, &cal, &err);
+		if (g_out == OUT_REC) {
+			rec_header("account\tcalendar");
+			if (have) {
+				char *pa = pct_encode(acct, false), *pc = pct_encode(cal, false);
+				rec_row("%s\t%s", pa, pc);
+				free(pa); free(pc);
+			}
+		} else if (have) {
+			printf("%s / %s\n", acct, cal);
+		} else {
+			warn("%s", err ? err : "no default calendar");
+		}
+		free(acct); free(cal); free(err);
+		accounts_free(&a);
+		return have ? 0 : 1;
+	}
+
+	char *acct = NULL, *cal = NULL;
+	if (!split_in(value, &acct, &cal)) {
+		warn("default wants <account>/<calendar>");
+		accounts_free(&a);
+		return 2;
+	}
+
+	/* ⛔ REFUSED IF IT IS NOT SWITCHED ON. Remembering a calendar nothing syncs
+	 * would send every later event somewhere it never leaves this machine. */
+	if (!calendar_enabled(&a, acct, cal)) {
+		warn("'%s / %s' is not a calendar that is switched on — syn-cal calendars %s",
+		     acct, cal, acct);
+		free(acct); free(cal);
+		accounts_free(&a);
+		return 1;
+	}
+
+	char *err = NULL;
+	bool ok = settings_set(DEFAULT_CAL_KEY, value, &err);
+	if (!ok) { warn("%s", err ? err : "could not save it"); free(err); }
+	else if (g_out != OUT_REC) printf("New events go to %s / %s.\n", acct, cal);
+
+	free(acct); free(cal);
+	accounts_free(&a);
+	return ok ? 0 : 1;
+}
+
 int cmd_new(int argc, char **argv)
 {
 	opts_t o;
@@ -527,16 +617,13 @@ int cmd_new(int argc, char **argv)
 			return 2;
 		}
 	} else {
-		const char *fa = NULL, *fc = NULL;
 		char *err = NULL;
-		if (!only_calendar(&a, &fa, &fc, &err)) {
+		if (!default_calendar(&a, &acct, &cal, &err)) {
 			warn("%s", err);
 			free(err);
 			accounts_free(&a);
 			return 1;
 		}
-		acct = xstrdup(fa);
-		cal = xstrdup(fc);
 	}
 
 	size_t len = 0;

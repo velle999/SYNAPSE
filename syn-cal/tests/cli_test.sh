@@ -373,6 +373,57 @@ check "an event can be deleted" $?
 [ $? -ne 0 ]
 check "…and deleting one that is not there fails rather than claiming success" $?
 
+# ── which calendar a new event goes to ──────────────────────────────────────
+#
+# ⛔ TWO SWITCHED ON MEANS syn-cal WILL NOT GUESS — an appointment on a calendar
+# nobody named is one somebody finds out about when the other person does not
+# turn up. But refusing is only half an answer, so it names both ways out.
+
+# ⚠ CAPTURED, NOT PIPED: the refusal exits non-zero, and under `set -o pipefail`
+# that becomes the pipeline's status, so a pipe into grep tests the exit code
+# rather than the words.
+amb=$("$S" new "Ambiguous" --at "2026-09-21 10:00" 2>&1 || true)
+grep -q -- "--in <account>/<calendar>" <<<"$amb"
+check "a new event with two calendars on says how to choose, both ways" $?
+
+grep -q "syn-cal default" <<<"$amb"
+check "…including the one that is remembered" $?
+
+"$S" default work/Home >/dev/null
+check "a default calendar can be set" $?
+
+[ "$("$S" --rec default | tail -1)" = "work	Home" ]
+check "…and read back" $?
+
+"$S" new "Now unambiguous" --at "2026-09-21 10:00" >/dev/null 2>&1
+check "…so a new event no longer needs telling" $?
+
+# ⛔ AND THE OTHER SETTING SURVIVES. The first settings.conf writer rewrote the
+# whole file with one key in it, so the second setting to exist would have been
+# erased by the first command that touched the other one.
+"$S" weekstart mon >/dev/null
+[ "$("$S" --rec default | tail -1)" = "work	Home" ]
+check "changing the week start does not erase the default calendar" $?
+
+"$S" default work/Home >/dev/null
+[ "$("$S" weekstart)" = "monday" ]
+check "…and setting the default does not erase the week start" $?
+"$S" weekstart sun >/dev/null
+
+# ⛔ A DEFAULT THAT IS SWITCHED OFF IS NOT USED. It is still a name in
+# settings.conf, and writing to it would put events somewhere nothing syncs.
+"$S" disable work Home >/dev/null 2>&1
+[ "$("$S" --rec default | tail -1)" != "work	Home" ]
+check "a default that has been switched off is not used" $?
+"$S" enable work Home >/dev/null 2>&1
+
+"$S" default work/Nonexistent >/dev/null 2>&1
+[ $? -ne 0 ]
+check "…and one that does not exist is refused, not remembered" $?
+
+[ "$("$S" --rec calendars | tail -n +2 | wc -l)" -ge 2 ]
+check "calendars with no account lists every account's, for a picker" $?
+
 # ── opening the window on a day ─────────────────────────────────────────────
 #
 # ⛔ THE DAY TRAVELS IN THE ENVIRONMENT. quickshell owns the command line, so

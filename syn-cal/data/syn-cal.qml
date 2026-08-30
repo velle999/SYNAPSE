@@ -638,6 +638,55 @@ FloatingWindow {
     // syncs, expands, groups and draws. Until there was a way to put an
     // appointment in from here it was a viewer for a calendar somebody else had
     // to write, which is most of what a calendar is for missing.
+    // ── which calendar a new event goes to ──────────────────────────────────
+    //
+    // ⛔ THE FORM HAD NO WAY TO SAY. With two calendars switched on, syn-cal
+    // rightly refuses to guess — and the window showed that refusal as an error
+    // under a form with no field to answer it with, which is a dead end rather
+    // than a message.
+    property var allCals: []          // [{ id: "account/calendar", label }]
+    property string evCal: ""
+
+    Process {
+        id: calsAllProc
+        command: [root.bin, "--rec", "calendars"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = text.trim().split("\n").filter(l => l.length > 0)
+                const out = []
+                for (let i = 1; i < rows.length; i++) {
+                    const f = rows[i].split("\t")
+                    if (f.length < 3) continue
+                    // Only the ones that are on: an event written to a calendar
+                    // that does not sync never leaves this machine.
+                    const on = f[2] === "1"
+                    if (!on) continue
+                    const acct = root.disp(f[0]), cal = root.disp(f[1])
+                    out.push({ id: acct + "/" + cal, label: cal, account: acct })
+                }
+                root.allCals = out
+            }
+        }
+    }
+
+    Process {
+        id: defaultProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = text.trim().split("\n").filter(l => l.length > 0)
+                if (rows.length < 2) return
+                const f = rows[1].split("\t")
+                if (f.length < 2) return
+                root.evCal = root.disp(f[0]) + "/" + root.disp(f[1])
+            }
+        }
+    }
+
+    // ⚠ REMEMBERED ONLY ON A SAVE THAT WORKED. Writing the choice down when the
+    // event itself failed would move every later event to a calendar somebody
+    // picked once, for an appointment that was never created.
+    Process { id: rememberProc }
+
     property bool evOpen: false
     property string evUid: ""          // "" while making a new one
     property string evMsg: ""
@@ -646,6 +695,13 @@ FloatingWindow {
     function evNew() {
         root.evUid = ""
         root.evMsg = ""
+        // Refreshed each time: a calendar switched on since this window opened
+        // should be offered, and one switched off should not.
+        calsAllProc.running = false
+        calsAllProc.running = true
+        defaultProc.command = [root.bin, "--rec", "default"]
+        defaultProc.running = false
+        defaultProc.running = true
         evTitle.text = ""
         // Opens on the day being looked at, at the next round hour — the two
         // things most likely to be right, and both easy to change.
@@ -701,6 +757,17 @@ FloatingWindow {
             }
             root.evOpen = false
             root.status = "Saved. Syncing…"
+            // The chosen calendar becomes the default, so the next event opens
+            // on it — which is the whole point of having picked one.
+            //
+            // ⚠ ONLY AFTER A SAVE THAT WORKED. Writing the choice down when the
+            // event itself failed would move every later event onto a calendar
+            // somebody picked once, for an appointment that was never made.
+            if (root.evCal !== "") {
+                rememberProc.command = [root.bin, "default", root.evCal]
+                rememberProc.running = false
+                rememberProc.running = true
+            }
             // ⛔ AND IT SYNCS. Written here is not saved anywhere anybody else
             // can see; a calendar that says "Saved" and leaves the appointment
             // on one machine is telling somebody their meeting is booked.
@@ -719,6 +786,10 @@ FloatingWindow {
 
         let args = root.evUid === "" ? ["new", evTitle.text.trim()]
                                      : ["edit", root.evUid, "--title", evTitle.text.trim()]
+        // ⚠ ONLY ON A NEW ONE. An edit finds the event where it already lives;
+        // --in on an edit says nothing about which calendar that is and could
+        // only be wrong.
+        if (root.evUid === "" && root.evCal !== "") args.push("--in", root.evCal)
         args.push("--at", when)
         if (evTime.text.trim() === "") args.push("--all-day")
         if (evFor.text.trim() !== "") args.push("--for", evFor.text.trim())
@@ -1670,6 +1741,57 @@ FloatingWindow {
                             width: (parent.width - root.ui(10)) / 2
                             label: "REMIND ME"
                             placeholder: "15m, 1h, none"
+                        }
+                    }
+
+                    // ⚠ ONLY WHEN THERE IS A CHOICE TO MAKE. One calendar is
+                    // not a decision, and a row offering it would be a control
+                    // that does nothing on most machines.
+                    Column {
+                        width: parent.width
+                        spacing: root.ui(4)
+                        visible: root.allCals.length > 1
+
+                        Text {
+                            text: "CALENDAR"
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
+                        }
+
+                        Flow {
+                            width: parent.width
+                            spacing: root.ui(6)
+
+                            Repeater {
+                                model: root.allCals
+                                Rectangle {
+                                    height: root.ui(26)
+                                    width: calTxt.implicitWidth + root.ui(18)
+                                    radius: root.ui(5)
+                                    property bool on: root.evCal === modelData.id
+                                    color: on ? root.cAccent
+                                         : (calMouse.containsMouse ? root.cBg : "transparent")
+                                    border { width: 1
+                                             color: on ? root.cAccent : root.cDim }
+                                    Text {
+                                        id: calTxt
+                                        anchors.centerIn: parent
+                                        // The calendar's own name. The account is
+                                        // in the sidebar already, and repeating it
+                                        // makes every chip mostly an address.
+                                        text: modelData.label
+                                        color: parent.on ? root.cPanel : root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                                    }
+                                    MouseArea {
+                                        id: calMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.evCal = modelData.id
+                                    }
+                                }
+                            }
                         }
                     }
 

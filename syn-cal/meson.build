@@ -30,6 +30,7 @@ jsonc     = dependency('json-c')
 libical   = dependency('libical')
 
 engine = files(
+  'src/settings.c',
   'src/util.c',
   'src/ics.c',
   'src/store.c',

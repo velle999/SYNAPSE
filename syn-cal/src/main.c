@@ -41,7 +41,10 @@ static void usage(FILE *f)
 "                                       browser for Google and Microsoft\n"
 "  syn-cal logout <name>                forget just the password\n"
 "  syn-cal discover <name>              ask the server which calendars exist\n"
-"  syn-cal calendars <name>             list them, and which are switched on\n"
+"  syn-cal calendars [name]             list them, and which are switched on;\n"
+"                                       every account when none is named\n"
+"  syn-cal default [<account>/<cal>]    where a new event goes when you do\n"
+"                                       not say. Printed, or set.\n"
 "  syn-cal enable <name> <calendar>     sync this one\n"
 "  syn-cal disable <name> <calendar>    stop syncing it\n"
 "  syn-cal sync [name]                  sync everything, or one account\n"
@@ -576,6 +579,29 @@ static int cmd_calendars(const char *name)
 {
 	accounts_t a;
 	accounts_load(&a);
+
+	/* ⛔ NO NAME MEANS EVERY ACCOUNT. A picker has to offer the whole set —
+	 * asking it to walk `accounts` and then call this once per account is three
+	 * commands to draw one menu, and it would be the front end deciding what
+	 * "switched on" means. */
+	if (!name) {
+		rec_header("account\tname\tenabled");
+		for (size_t i = 0; i < a.n; i++) {
+			for (size_t c = 0; c < a.e[i].ncals; c++) {
+				char *ac = pct_encode(a.e[i].name, false);
+				char *cn = pct_encode(a.e[i].cals[c].name ? a.e[i].cals[c].name : "", false);
+				if (g_out == OUT_REC)
+					rec_row("%s\t%s\t%d", ac, cn, a.e[i].cals[c].enabled);
+				else
+					printf("  [%s] %s / %s\n", a.e[i].cals[c].enabled ? "on " : "off",
+					       a.e[i].name, a.e[i].cals[c].name ? a.e[i].cals[c].name : "");
+				free(ac); free(cn);
+			}
+		}
+		accounts_free(&a);
+		return 0;
+	}
+
 	account_t *e = accounts_find(&a, name);
 	if (!e) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
 
@@ -951,7 +977,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "login") && n >= 2)           rc = cmd_login(pos[1], user);
 	else if (!strcmp(c, "logout") && n >= 2)          rc = secret_forget(pos[1], "password", NULL) ? 0 : 1;
 	else if (!strcmp(c, "discover") && n >= 2)        rc = cmd_discover(pos[1]);
-	else if (!strcmp(c, "calendars") && n >= 2)       rc = cmd_calendars(pos[1]);
+	else if (!strcmp(c, "calendars"))                 rc = cmd_calendars(n >= 2 ? pos[1] : NULL);
 	else if (!strcmp(c, "enable") && n >= 3)          rc = cmd_set_enabled(pos[1], pos[2], true);
 	else if (!strcmp(c, "disable") && n >= 3)         rc = cmd_set_enabled(pos[1], pos[2], false);
 	else if (!strcmp(c, "sync"))                      rc = cmd_sync(n >= 2 ? pos[1] : NULL, policy, dry);
@@ -962,6 +988,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "month"))                     rc = cmd_month(from_date);
 	else if (!strcmp(c, "delete") && n >= 2)          rc = cmd_delete(pos[1]);
 	else if (!strcmp(c, "weekstart"))                 rc = cmd_weekstart(n >= 2 ? pos[1] : NULL);
+	else if (!strcmp(c, "default"))                   rc = cmd_default(n >= 2 ? pos[1] : NULL);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);
 	else { warn("unknown command '%s'", c); usage(stderr); rc = 2; }

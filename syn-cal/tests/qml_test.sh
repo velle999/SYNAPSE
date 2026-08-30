@@ -123,6 +123,22 @@ check "…an event in the agenda opens for editing" $?
 grep -q 'root.bin, "delete", root.evUid' "$QML"
 check "…and can be deleted" $?
 
+# ⛔ AND THE FORM CAN SAY WHICH CALENDAR. syn-cal refuses to guess between two
+# switched-on calendars, which is right — but the window showed that refusal
+# under a form with no field to answer it with, which is a dead end.
+grep -q '"--rec", "calendars"' "$QML"
+check "the form offers the calendars the binary reports" $?
+
+grep -q 'args.push("--in", root.evCal)' "$QML"
+check "…and tells the binary which one was chosen" $?
+
+grep -q 'root.bin, "default", root.evCal' "$QML"
+check "…and remembers it for the next event" $?
+
+# One calendar is not a decision; a row offering it would be a dead control.
+grep -q 'visible: root.allCals.length > 1' "$QML"
+check "…but only shows the choice when there is one" $?
+
 # ⛔ AND A DAY IN THE GRID IS A WAY IN. Pointing at the day you mean and getting
 # a form for it is the obvious gesture; making people find a button in the
 # header and then retype the date is not.
@@ -150,7 +166,7 @@ check "…and the empty list takes no height, so nothing is pushed off-screen" $
 # ⛔ SAVED HERE IS NOT SAVED ANYWHERE ELSE. A window that says "Saved" and
 # leaves the appointment on one machine is telling somebody their meeting is
 # booked when nobody else can see it.
-grep -A6 'root.status = "Saved' "$QML" | grep -q 'root.sync()'
+grep -A16 'root.status = "Saved' "$QML" | grep -q 'root.sync()'
 check "…and saving syncs, rather than stopping at this machine" $?
 
 # ⛔ A BUTTON IS ITS OWN LABEL. Not an icon that needs a tooltip to say what it
