@@ -2550,7 +2550,44 @@ pkgver=0.1.0
 #   ⚠ Two SDR monitors on this desk report capable=no, and that is the common
 #   case — so every refusal is an answer, never a successful-looking no-op:
 #   `synctl hdr on` on a link that will not carry PQ returns an error.
-pkgrel=548
+# 549: the way out of HDR is a NULL image description, so the mode can be
+#   entered at all.
+#   ⛔ 548 SHIPPED AN HDR MODE NO MACHINE COULD TURN ON. It gated hdr_capable
+#   behind hdr_sdr_ok — "will this connector take a plain sRGB description back"
+#   — and asked that question with an image description carrying
+#   WLR_COLOR_TRANSFER_FUNCTION_SRGB. wlroots 0.20.2 raises
+#   wlr_output.supported_transfer_functions in exactly one place (backend/drm/
+#   util.c, `|= ST2084_PQ`) and supported_primaries in exactly one (`|= BT2020`),
+#   and output_basic_test() refuses any image description whose transfer
+#   function or primaries are not advertised. No backend advertises sRGB in
+#   either, so that description is refused on EVERY connector and EVERY GPU
+#   before the panel is asked. DP-3 logged "takes an HDR10 signal but will not
+#   take a plain sRGB one back" — which reads as one monitor's quirk and was
+#   universal.
+#   ⛔ THE EXIT IS wlr_output_state_set_image_description(st, NULL), COMMITTED.
+#   That sets the committed bit with a NULL pointer: the basic test skips
+#   validation for it, and the atomic backend turns it into Colorspace=Default
+#   with HDR_OUTPUT_METADATA cleared. ⚠ Not the same as leaving the field
+#   alone, which is the trap that strands a display in PQ — so it is a named
+#   function, state_leave_hdr(), and the probe asks with the same one the leave
+#   path sends. Asking about a state no commit will ever carry is the whole bug.
+#   ⚠ THE sRGB PRIMARIES RUNG NEVER WINS ON THIS wlroots, and the file says so
+#   now rather than implying the gamut was left alone. The ladder is kept — it
+#   is the right policy and costs one test commit — but BT.2020 is the only
+#   reachable container, so the desktop IS over-saturated in HDR and the panel's
+#   detail line is the honest one.
+#   ⚠ THE PICK IS A PURE FUNCTION NOW, hdr_pick_primaries(supported), because
+#   the decision that failed lived inside hdr_probe() where nothing could reach
+#   it: the probe needs a CRTC, so the headless rig answers "not capable" for
+#   its own reasons and looked correct while the mode was unreachable
+#   everywhere. tests/hdr_test.c pins it against the bitfield a real DRM
+#   connector actually hands it, and hdr_probe_is_read_only.sh fails on 548's
+#   source.
+#   ⚠ `synctl hdr` reports sup_prim= and sup_tf= — wlr_output's advertised
+#   bitfields, verbatim. Every derived column was already telling the truth
+#   (pq=yes, image_description=yes, pq_lut=yes, sdr=no); the one fact that
+#   explained all four was the one not on the line.
+pkgrel=549
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -104,6 +104,27 @@ chk "…and capable is only set once all three have answered yes" $?
 awk '/hdr_sdr_ok = /,/hdr_capable = 1/' "$H" | grep -q "return"
 chk "…with an early return when the way out is refused" $?
 
+# ⛔ AND THE WAY OUT IS A COMMITTED NULL DESCRIPTION, NOT AN sRGB ONE. This is
+# the check that pkgrel 548 needed and did not have. wlroots raises
+# wlr_output.supported_transfer_functions in exactly one place — the DRM
+# backend, `|= ST2084_PQ` — and output_basic_test() refuses any image
+# description whose transfer function is not advertised. So an image description
+# carrying WLR_COLOR_TRANSFER_FUNCTION_SRGB is refused on every connector, on
+# every GPU, before the panel is asked; 548 used one as the way out, hdr_sdr_ok
+# read 0 everywhere, and the mode could not be entered on any machine while the
+# log blamed the monitor. A committed NULL is the only expressible exit.
+! grep -q "WLR_COLOR_TRANSFER_FUNCTION_SRGB" "$H"
+chk "the way out is never an sRGB image description — nothing accepts one" $?
+
+grep -q "wlr_output_state_set_image_description(st, NULL)" "$H"
+chk "…it is a NULL description, which is committed and not merely left unset" $?
+
+# ⚠ AND THE PROBE MUST ASK WITH THE THING THE LEAVE PATH SENDS. 548's gate was
+# correct and its question was not: it asked about a state no commit would ever
+# carry. One function, called by both, is what keeps them from drifting apart.
+probe_body | grep -q "state_leave_hdr"
+chk "…and the capability probe asks with that same exit, not a lookalike" $?
+
 # Reference counting, on the same terms as the probe file above.
 hcode() { grep -vE '^[[:space:]]*(\*|/\*)' "$H"; }
 hrefs=$(hcode | grep -c "wlr_color_transform_init")

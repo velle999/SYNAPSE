@@ -36,6 +36,16 @@
  * implementations of one thing; the columns pq_lut/sdr/primaries/capable are
  * hdr_probe()'s answers now, re-asked live on every report.
  *
+ * ⛔ AND IT REPORTS WHAT THE OUTPUT ADVERTISES, NOT ONLY WHAT IT ANSWERED.
+ * sup_prim/sup_tf are wlr_output.supported_primaries and
+ * supported_transfer_functions verbatim. They are here because pkgrel 548
+ * shipped an HDR mode no machine could enter, and every derived column was
+ * telling the truth about it: pq=yes, image_description=yes, pq_lut=yes,
+ * sdr=no. The one fact that explained all of them — that wlroots advertises
+ * BT.2020 and PQ and NOTHING else, so any sRGB description is refused before
+ * the panel is asked — was the one fact not on the line. A capability report
+ * that omits the inputs can only be read by whoever already knows the answer.
+ *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
@@ -172,12 +182,14 @@ void hdrprobe_report(syn_server_t *s, void (*emit)(void *ctx, const char *line),
         snprintf(line, sizeof line,
                  "%s\tpq=%s\tbt2020=%s\timage_description=%s\t"
                  "tf_curve=%s\tmatrix=%s\tpipeline=%s\tpq_lut=%s\t"
-                 "sdr=%s\tprimaries=%s\tcapable=%s\ton=%s",
+                 "sdr=%s\tprimaries=%s\tsup_prim=0x%x\tsup_tf=0x%x\t"
+                 "capable=%s\ton=%s",
                  w->name, hyn(tf_pq), hyn(prim_2020),
                  hyn(o->hdr_primaries != 0),
                  hyn(curve), hyn(matrix), hyn(pipeline), hyn(o->hdr_lut_ok),
-                 hyn(o->hdr_sdr_ok), prim, hyn(o->hdr_capable),
-                 hyn(o->hdr_on));
+                 hyn(o->hdr_sdr_ok), prim,
+                 w->supported_primaries, w->supported_transfer_functions,
+                 hyn(o->hdr_capable), hyn(o->hdr_on));
         emit(ctx, line);
     }
 }

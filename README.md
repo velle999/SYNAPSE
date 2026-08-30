@@ -1160,9 +1160,10 @@ What is driven is the *signal*: the display is told it is receiving HDR10 and
 ordinary desktop content is mapped correctly into it, with 10-bit scanout turned
 on alongside so shadows do not band. The desktop is still composited in 8-bit
 sRGB, so an HDR video does not gain highlights it did not have — that needs
-colour management inside the renderer, which is not here. On a monitor that will
-only accept a BT.2020 container the colours run wide, and the panel says so on
-the line under the list rather than leaving it to be noticed.
+colour management inside the renderer, which is not here. The container is BT.2020 in
+practice — it is the only one wlroots will let an output ask for — so the
+colours run wide, and the panel says so on the line under the list rather than
+leaving it to be noticed.
 
 Night light works on a screen in HDR, and is the same warmth as on the screen
 beside it.

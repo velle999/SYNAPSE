@@ -5976,16 +5976,21 @@ struct syn_output {
      * parked by output_persist_apply() because it runs before the capability
      * is known and honoured by hdr_output_added() once it is. `hdr_capable`
      * is whether the backend takes the whole pipeline here — the image
-     * description, the SDR→PQ curve as a CRTC LUT, AND a plain sRGB
+     * description, the SDR→PQ curve as a CRTC LUT, AND a committed NULL
      * description to get back out; a mode that cannot be switched off is not
-     * offered. `hdr_primaries` is the wlr_color_named_primaries value that was
-     * accepted, sRGB for preference (the CRTC cannot convert primaries, so
-     * asking for BT.2020 would over-saturate the desktop).
+     * offered. ⛔ `hdr_sdr_ok` is that last one, and it is asked with the
+     * exact state a leave commits: 548 asked it with an sRGB DESCRIPTION,
+     * which no connector on this wlroots can accept, so it read 0 everywhere
+     * and withheld the mode on every machine. `hdr_primaries` is the
+     * wlr_color_named_primaries value that was accepted, sRGB for preference
+     * (the CRTC cannot convert primaries, so BT.2020 over-saturates the
+     * desktop) — ⚠ but wlroots 0.20.2 advertises BT.2020 only, so in practice
+     * this is always BT.2020 and the over-saturation is real.
      *
      * `hdr_touched` says the display has been given an HDR image description
-     * and is owed a plain sRGB one — leaving the field unset on the way out
-     * would leave the connector in PQ receiving sRGB pixels, which is the same
-     * trap as never committing a NULL colour transform. `hdr_forced_deep`
+     * and is owed the way out — leaving the field unset would leave the
+     * connector in PQ receiving sRGB pixels, which is the same trap as never
+     * committing a NULL colour transform. `hdr_forced_deep`
      * records that turning HDR on is what turned 10-bit scanout on, so turning
      * it off puts back a setting the user did not choose. */
     int                      hdr_on;
@@ -9245,6 +9250,14 @@ int  hdr_white_clamp(int nits);
  * every question is wlr_output_test_state(), which the atomic backend
  * validates with TEST_ONLY, so the screen never changes. */
 void hdr_probe(syn_server_t *s, syn_output_t *o);
+
+/* Which colour container to ask this connector for, given what it advertises in
+ * wlr_output.supported_primaries: sRGB if offered, else BT.2020, else 0 for a
+ * connector that carries no image description at all. Pure, and separate from
+ * hdr_probe() for that reason — the probe needs a CRTC and cannot be tested,
+ * this needs a bitfield and is. ⚠ wlroots 0.20.2 advertises BT.2020 ONLY, on
+ * every backend, so the sRGB rung is unreachable there; see hdr.c's header. */
+uint32_t hdr_pick_primaries(uint32_t supported);
 
 /* Turn HDR10 on or off for one output. Returns 1 if it is now in the requested
  * state. Enabling tests the exact pipeline a frame will carry and refuses

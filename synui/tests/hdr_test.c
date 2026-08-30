@@ -305,6 +305,40 @@ int main(void)
     CHECK(hdr_color_state(&s, &o).white == HDR_SDR_WHITE_DEFAULT,
           "an unset white level did not read as the default in the guard");
 
+    /*
+     * ── The gamut ladder, against the bitfields real outputs actually hand it
+     *
+     * ⛔ THIS IS THE CHECK PKGREL 548 DID NOT HAVE, AND IT COST THE WHOLE
+     * FEATURE. The decision "which container do I ask this connector for, and
+     * is there one at all" lived inside hdr_probe(), which needs a CRTC and so
+     * runs nowhere a test can reach; the headless rig answers "not capable" for
+     * its own reasons and looked right while the mode was unreachable on every
+     * real machine. As a pure function of the advertised bitfield it is
+     * checkable against the exact numbers wlroots produces.
+     *
+     * ⚠ THE MIDDLE CASE IS THE REAL ONE. wlroots 0.20.2 raises
+     * supported_primaries in exactly one place (backend/drm/util.c) and it
+     * raises BT.2020 and nothing else — so on every DRM connector on earth the
+     * sRGB rung is skipped, and anything that assumed sRGB would be there is
+     * asking for a description output_basic_test() rejects before the panel
+     * sees it. If a later wlroots starts advertising sRGB the first case starts
+     * firing, which is the day the desktop stops being over-saturated in HDR.
+     */
+    struct { const char *what; uint32_t sup; uint32_t want; } gamut[] = {
+        { "sRGB offered, so sRGB is taken",
+          WLR_COLOR_NAMED_PRIMARIES_SRGB | WLR_COLOR_NAMED_PRIMARIES_BT2020,
+          WLR_COLOR_NAMED_PRIMARIES_SRGB },
+        { "a real DRM connector on wlroots 0.20.2 (BT.2020 only)",
+          WLR_COLOR_NAMED_PRIMARIES_BT2020, WLR_COLOR_NAMED_PRIMARIES_BT2020 },
+        { "sRGB alone is still enough",
+          WLR_COLOR_NAMED_PRIMARIES_SRGB, WLR_COLOR_NAMED_PRIMARIES_SRGB },
+        { "a headless output, which advertises nothing", 0, 0 },
+    };
+    for (size_t i = 0; i < sizeof gamut / sizeof gamut[0]; i++)
+        CHECK(hdr_pick_primaries(gamut[i].sup) == gamut[i].want,
+              "%s: picked 0x%x, wanted 0x%x", gamut[i].what,
+              hdr_pick_primaries(gamut[i].sup), gamut[i].want);
+
     hdr_shutdown();
 
     if (failures) {

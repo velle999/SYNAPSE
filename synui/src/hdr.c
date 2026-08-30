@@ -30,13 +30,26 @@
  * matrix mixes channels; no per-channel curve does. Sending sRGB-primaried
  * pixels while telling the display they are BT.2020 is what makes a desktop
  * come out over-saturated in HDR, and it is the one thing about this that a
- * user would notice and could not explain. The answer is to ask the connector
- * for sRGB primaries FIRST (hdr_probe below) and only fall back to BT.2020: an
+ * user would notice and could not explain. So the connector is asked for sRGB
+ * primaries FIRST (hdr_pick_primaries below) and BT.2020 only as a fallback: an
  * HDR10 signal is entered by the PQ transfer function, not by the colour
  * volume, so a PQ image description with sRGB primaries is a perfectly ordinary
  * thing to send and leaves the gamut alone. Whichever is accepted, the
  * mastering display primaries say sRGB, because that is the truth about what
  * produced these pixels.
+ *
+ * ⛔ ON THIS wlroots THE sRGB RUNG NEVER WINS, AND THE DESKTOP IS OVER-SATURATED
+ * IN HDR. Measured in the source, not assumed: wlroots 0.20.2 raises
+ * wlr_output.supported_primaries in exactly one place — backend/drm/util.c,
+ * `|= WLR_COLOR_NAMED_PRIMARIES_BT2020` — and supported_transfer_functions in
+ * exactly one, `|= ST2084_PQ`. No backend ever advertises sRGB in either, and
+ * output_basic_test() (types/output/output.c) refuses any image description
+ * whose primaries or transfer function are not advertised. An sRGB-primaried
+ * description is therefore rejected by WLROOTS, on every connector and every
+ * GPU, before the panel is ever asked. The rung stays because it is the right
+ * policy and it costs one test commit at probe time — but it is a fallback
+ * ladder with one reachable rung today, and the detail line says BT.2020 so
+ * that nobody reads its existence as a promise that the gamut was left alone.
  *
  * ⛔ THERE IS ONE COLOUR-TRANSFORM SLOT PER OUTPUT, AND NIGHT LIGHT IS ALREADY
  * IN IT. wlr_output_state.color_transform is a single pointer. HDR cannot set
@@ -52,10 +65,27 @@
  * NULL colour transform, which night light had to learn: turning the mode off
  * and leaving the field alone would leave the display in PQ receiving
  * sRGB-encoded pixels, which is a very dark, very wrong screen with no error
- * anywhere. hdr_touched marks an output that owes the display an SDR image
- * description, and the mode is not offered at all on a connector that will not
- * accept one (hdr_probe) — a mode you cannot leave is worse than one you never
- * had.
+ * anywhere. hdr_touched marks an output that owes the display the way out, and
+ * the mode is not offered at all on a connector that will not take it
+ * (hdr_probe) — a mode you cannot leave is worse than one you never had.
+ *
+ * ⛔ AND THE WAY OUT IS A COMMITTED **NULL** DESCRIPTION, NOT AN sRGB ONE.
+ * Those are different things and only one of them exists on this stack.
+ * wlr_output_state_set_image_description(st, NULL) sets the committed bit with
+ * a NULL pointer: output_basic_test() skips validation entirely for it, and the
+ * atomic backend turns it into Colorspace=Default with HDR_OUTPUT_METADATA
+ * cleared (backend/drm/atomic.c — convert_primaries_to_colorspace(0) returns
+ * Default, create_hdr_output_metadata_blob(NULL) returns blob 0). Leaving the
+ * field alone is the trap above; setting it to NULL is the exit.
+ *
+ * ⛔ THIS IS WHAT MADE THE FEATURE UNREACHABLE. pkgrel 548 asked for a plain
+ * sRGB DESCRIPTION as the way out, which by the paragraph above no connector
+ * can ever accept — so hdr_sdr_ok was 0 everywhere, hdr_capable is gated behind
+ * it, and HDR10 could not be turned on on any machine. It logged a refusal that
+ * read like a quirk of one panel ("will not take a plain sRGB one back") and
+ * was in fact universal. The headless rig could not catch it: a headless output
+ * advertises no primaries at all, so it fails one step earlier and every
+ * refusal there still looks correct.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -261,13 +291,42 @@ static void hdr_desc_build(uint32_t primaries, int white,
     out->max_fall = white;
 }
 
-/* Plain sRGB — the description an output that has been in HDR must be given to
- * come back out. Not an absence of a description: see the file header. */
-static void sdr_desc_build(struct wlr_output_image_description *out)
+/*
+ * The way out of HDR: a NULL image description, COMMITTED.
+ *
+ * ⛔ NOT an sRGB description — see the file header. There is no sRGB image
+ * description any connector will accept on this wlroots; a committed NULL is
+ * the only expressible "this signal is ordinary again", and it is exactly what
+ * the atomic backend turns into Colorspace=Default with the HDR metadata blob
+ * cleared. ⚠ It is also not the same as leaving the field alone, which is the
+ * trap that leaves a display in PQ for good — hence a function, so that the
+ * difference has a name and every caller has to say which one it means.
+ */
+static bool state_leave_hdr(struct wlr_output_state *st)
 {
-    memset(out, 0, sizeof *out);
-    out->primaries = WLR_COLOR_NAMED_PRIMARIES_SRGB;
-    out->transfer_function = WLR_COLOR_TRANSFER_FUNCTION_SRGB;
+    return wlr_output_state_set_image_description(st, NULL);
+}
+
+/*
+ * The gamut policy, as a pure function of what the connector advertises: sRGB
+ * primaries if they are on offer, BT.2020 if they are not, 0 if neither is.
+ *
+ * ⚠ SEPARATE FROM THE PROBE BECAUSE THE PROBE CANNOT BE TESTED AND THIS CAN.
+ * hdr_probe() needs a real wlr_output and a real CRTC; this needs a bitfield,
+ * so hdr_test.c can hand it the desk's actual answer (BT.2020 only) and the
+ * headless rig's (nothing) and pin what each one picks. The whole of pkgrel
+ * 548's failure lived in a decision this shape, taken where nothing could
+ * reach it.
+ */
+uint32_t hdr_pick_primaries(uint32_t supported)
+{
+    static const uint32_t ladder[] = {
+        WLR_COLOR_NAMED_PRIMARIES_SRGB,
+        WLR_COLOR_NAMED_PRIMARIES_BT2020,
+    };
+    for (size_t i = 0; i < sizeof ladder / sizeof ladder[0]; i++)
+        if (supported & ladder[i]) return ladder[i];
+    return 0;
 }
 
 /* ── Asking the hardware ─────────────────────────────────── */
@@ -310,32 +369,46 @@ void hdr_probe(syn_server_t *s, syn_output_t *o)
     o->hdr_sdr_ok     = 0;
 
     /*
-     * sRGB primaries first, BT.2020 only as a fallback — see the file header.
-     * The order is the gamut policy, and it is the only place it is decided.
+     * The gamut policy decides WHICH container to ask for; the hardware still
+     * decides whether this connector will take it with a curve on top, so the
+     * pick is asked for rather than assumed. ⚠ A pick that the basic test then
+     * refuses is a wlroots bug, not a panel quirk — it would mean an output
+     * advertising primaries it will not accept — so it is logged as one.
      */
-    static const uint32_t candidates[] = {
-        WLR_COLOR_NAMED_PRIMARIES_SRGB,
-        WLR_COLOR_NAMED_PRIMARIES_BT2020,
-    };
     struct wlr_output_image_description desc;
-    for (size_t i = 0; i < sizeof candidates / sizeof candidates[0]; i++) {
-        hdr_desc_build(candidates[i], hdr_white_clamp(o->hdr_white), &desc);
-        if (test_desc(wo, &desc)) { o->hdr_primaries = candidates[i]; break; }
+    uint32_t want = hdr_pick_primaries(wo->supported_primaries);
+    if (!want) return;
+    hdr_desc_build(want, hdr_white_clamp(o->hdr_white), &desc);
+    if (!test_desc(wo, &desc)) {
+        wlr_log(WLR_INFO, "synui: hdr: %s advertises %s primaries but refused "
+                "a PQ description in them", wo->name,
+                want == WLR_COLOR_NAMED_PRIMARIES_SRGB ? "sRGB" : "BT.2020");
+        return;
     }
-    if (!o->hdr_primaries) return;
+    o->hdr_primaries = want;
 
     /* The curve, at this connector's own gamma size. */
     o->hdr_lut_ok = test_transform(wo,
         hdr_build(s, nightlight_lut_dim(wo), hdr_white_clamp(o->hdr_white)));
     if (!o->hdr_lut_ok) return;
 
-    /* And the way back out, which is a capability like any other. */
-    sdr_desc_build(&desc);
-    o->hdr_sdr_ok = test_desc(wo, &desc) ? 1 : 0;
+    /*
+     * And the way back out, which is a capability like any other — asked for as
+     * the exact state a leave will commit, a NULL description and nothing else.
+     * ⚠ ASK FOR THE THING YOU WILL SEND. 548 asked here for an sRGB description
+     * that the leave path would also have sent and that nothing can accept, and
+     * the gate did its job perfectly: it withheld a mode that genuinely could
+     * not be left. The gate was never the bug; what it was asked about was.
+     */
+    struct wlr_output_state st;
+    wlr_output_state_init(&st);
+    o->hdr_sdr_ok = (state_leave_hdr(&st) && wlr_output_test_state(wo, &st))
+                        ? 1 : 0;
+    wlr_output_state_finish(&st);
     if (!o->hdr_sdr_ok) {
-        wlr_log(WLR_INFO, "synui: hdr: %s takes an HDR10 signal but will not "
-                "take a plain sRGB one back — not offering a mode that cannot "
-                "be switched off", wo->name);
+        wlr_log(WLR_INFO, "synui: hdr: %s takes an HDR10 signal but refused a "
+                "plain one back — not offering a mode that cannot be switched "
+                "off", wo->name);
         return;
     }
 
@@ -412,7 +485,9 @@ bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st)
         hdr_desc_build(o->hdr_primaries, want.white, &desc);
         have_desc = true;
     } else if (o->hdr_touched) {
-        sdr_desc_build(&desc);
+        /* ⛔ The way out is a committed NULL, not an sRGB description — see the
+         * file header. `leaving` is what says which of the two `have_desc`
+         * means, and it must not collapse back into one flag. */
         have_desc = true;
         leaving = true;
     }
@@ -430,7 +505,10 @@ bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st)
     struct wlr_output_state try = {0};
     if (!hdr_lost && wlr_output_state_copy(&try, st)) {
         wlr_output_state_set_color_transform(&try, tf);
-        if (!have_desc || wlr_output_state_set_image_description(&try, &desc))
+        bool desc_ok = !have_desc ? true
+                     : leaving    ? state_leave_hdr(&try)
+                     : wlr_output_state_set_image_description(&try, &desc);
+        if (desc_ok)
             colour_ok = wlr_output_test_state(wo, &try);
         if (colour_ok) {
             ok = wlr_output_commit_state(wo, &try);
@@ -481,11 +559,11 @@ bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st)
         wlr_output_schedule_frame(wo);
     } else if (leaving) {
         /* hdr_probe() refuses to offer the mode on a connector that will not
-         * take an sRGB description back, so reaching here means the answer
-         * changed under us. Say so: the screen is wrong and nothing else in
-         * the system can tell why. */
-        wlr_log(WLR_ERROR, "synui: hdr: %s will not take a plain sRGB image "
-                "description — the display is stuck in PQ", wo->name);
+         * take the way out, so reaching here means the answer changed under
+         * us. Say so: the screen is wrong and nothing else in the system can
+         * tell why. */
+        wlr_log(WLR_ERROR, "synui: hdr: %s refused a plain image description "
+                "— the display is stuck in PQ", wo->name);
         /* hdr_touched is deliberately left set, so the next real state change
          * tries again — and committed_color is deliberately left stamped, so
          * this does NOT become a full repaint every frame forever. A wrong
