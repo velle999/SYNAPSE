@@ -193,6 +193,38 @@ check "synapd stays off when nothing needs it" 0 "${PICKED[comp_synapd]}"
 check "syn-model stays off when no model was chosen" 0 "${PICKED[comp_synmodel]}"
 
 echo ""
+echo "=== GeForce NOW gets a browser that can stream ==="
+#
+# ⛔ NOT A comp:comp RULE, so the PKGBUILD scrape above cannot check it: syn-gfn
+# deliberately has NO browser in depends (a browser is an optdepend; dragging
+# one into the ISO for a service not everybody uses is the wrong trade). The
+# rule exists because syn-gfn is ticked on every preset and the only browser
+# ticked on any preset is Firefox — which, since 2026-08-19, GeForce NOW
+# supports on WINDOWS. On Linux it browses the catalogue and starts no game.
+sel_reset standard
+PICKED[sw_chromium]=0; PICKED[sw_vivaldi]=0
+tmp=$(mktemp)
+sel_resolve_deps >"$tmp" 2>&1
+out=$(cat "$tmp"); rm -f "$tmp"
+check "a Standard install with syn-gfn gets Chromium" 1 "${PICKED[sw_chromium]}"
+check "…and is told why" yes \
+      "$(grep -qi 'GeForce NOW streams in a browser' <<<"$out" && echo yes || echo no)"
+
+# ⚠ A FLOOR, NOT A PREFERENCE. Somebody who ticked Vivaldi already has a
+# browser that streams, and a rule that adds a second one regardless is a rule
+# that ignores the answer it was given.
+sel_reset standard
+PICKED[sw_chromium]=0; PICKED[sw_vivaldi]=1
+sel_resolve_deps >/dev/null 2>&1
+check "Vivaldi already ticked means no second browser" 0 "${PICKED[sw_chromium]}"
+
+# And with syn-gfn declined, nothing is added for it.
+sel_reset standard
+PICKED[comp_gfn]=0; PICKED[sw_chromium]=0; PICKED[sw_vivaldi]=0
+sel_resolve_deps >/dev/null 2>&1
+check "no syn-gfn, no browser forced" 0 "${PICKED[sw_chromium]}"
+
+echo ""
 echo "=== a profile answers a page without asking ==="
 #
 # The unattended contract: with every row on a page answered, multi_select

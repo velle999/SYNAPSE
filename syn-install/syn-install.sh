@@ -1041,7 +1041,7 @@ SEL_COMPONENTS=(
     "comp_syndisks|1|1|core|syn-disks|Disks|disks + format"
     "comp_synedit|1|1|core|syn-edit|Editor|the text editor"
     "comp_syncal|1|1|core|syn-cal|Calendar|calendar + sync"
-    "comp_synvault|1|1|core|syn-vault|File Vault|password-locked folder"
+    "comp_synvault|1|1|core|syn-vault|File Vault|locked folder"
     "comp_synupdate|1|1|core|syn-update|Updates|receives fixes"
     "comp_syn|1|1|core|syn|syn|top-level CLI"
     "comp_synmodel|1|1|core|syn-model|Models|fetch AI models"
@@ -1283,6 +1283,24 @@ sel_resolve_deps() {
     $(sel_label "$need") — $(sel_label "$by") depends on it"
         fi
     done
+    # ⛔ GEFORCE NOW NEEDS A BROWSER THAT CAN STREAM, AND THE ONE WE SHIP IS NOT
+    # ONE. syn-gfn is ticked on every preset; Firefox is the only browser ticked
+    # on any of them. GeForce NOW's Firefox support (2026-08-19) is Windows
+    # only — on Linux the site lists the library and starts no game, and Firefox
+    # has no Keyboard Lock API, so Escape would never reach one anyway. Without
+    # this, every Standard install ships a GeForce NOW menu entry that cannot
+    # work on first click.
+    #
+    # ⚠ ONLY IF NOTHING ELSE CAN ALREADY DO IT. Somebody who ticked Vivaldi has
+    # a streaming browser and does not need a second one; this is a floor, not
+    # a preference. Chromium rather than Vivaldi because it is the smaller of
+    # the two and is in [extra], where every name on this list must be.
+    if sel_on comp_gfn && ! sel_on sw_chromium && ! sel_on sw_vivaldi; then
+        PICKED[sw_chromium]=1
+        forced="$forced
+    Chromium — GeForce NOW streams in a browser, and Firefox cannot on Linux"
+    fi
+
     # A model with no daemon to load it, and a daemon with no model, are both
     # legal and both worth a word: the first is a gigabytes-long download that
     # nothing on the machine can read.
