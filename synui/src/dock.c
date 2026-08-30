@@ -3564,6 +3564,19 @@ void dock_state_save(syn_server_t *s)
     fclose(f);
 }
 
+/*
+ * Is there room for another pin?
+ *
+ * ⚠ HERE AND NOT IN THE RENDERER. The cap is this file's rule, and the menu row
+ * has to say when it has been reached — a label that tested `dock_pin_count`
+ * against DOCK_PIN_MAX in render.c would be a second copy of the rule, free to
+ * disagree with the one that actually refuses.
+ */
+bool dock_pin_room(const syn_server_t *s)
+{
+    return s->config.dock_pin_count < DOCK_PIN_MAX;
+}
+
 void dock_pin_toggle(syn_server_t *s, const char *app_id)
 {
     if (!app_id || !*app_id) return;

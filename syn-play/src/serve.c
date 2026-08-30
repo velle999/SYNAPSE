@@ -28,6 +28,7 @@
 #define _GNU_SOURCE
 #include "synplay.h"
 
+#include <errno.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -36,6 +37,60 @@
 
 static volatile sig_atomic_t g_stop;
 static void on_signal(int sig) { (void)sig; g_stop = 1; }
+
+/*
+ * ⛔ poll() ON A FILE DESCRIPTOR AND fgets() ON THE SAME STREAM DO NOT MIX.
+ *
+ * This read commands with `sp_getline(stdin, …)`, which is fgets, which is
+ * BUFFERED. When the window sends two lines in one tick — which it does every
+ * time somebody drops two files, or opens three from the chooser — both arrive
+ * in a single write. fgets pulls the whole lot into stdio's buffer and hands
+ * back the first line; the second is then sitting in libc, where poll() on the
+ * FD cannot see it. poll times out, nothing more is read, and the second
+ * command is lost in silence. Dropping two files queued one, every time.
+ *
+ * ⚠ AND IT IS INVISIBLE FROM THE OTHER END. Driving `syn-play serve` from a
+ * shell works fine — two `printf`s are two write() calls, so the reader usually
+ * sees them separately — which is exactly why this survived being tested by
+ * hand and only fell out of driving the real window.
+ *
+ * So the buffer is ours: read what is there, then drain EVERY complete line out
+ * of it before polling again. This also handles the other half of the same
+ * problem, a line split across two reads.
+ */
+static char  g_in[PATH_MAX * 4];
+static size_t g_in_len;
+
+static bool in_fill(void)
+{
+	if (g_in_len >= sizeof g_in - 1) {
+		/* A line longer than this is not a command. Dropped rather than
+		 * left to wedge the reader for ever. */
+		g_in_len = 0;
+		return true;
+	}
+	ssize_t r = read(STDIN_FILENO, g_in + g_in_len, sizeof g_in - 1 - g_in_len);
+	if (r < 0) return errno == EINTR;
+	if (r == 0) return false;             /* the window is gone */
+	g_in_len += (size_t)r;
+	return true;
+}
+
+static bool in_take(char *line, size_t cap)
+{
+	char *nl = memchr(g_in, '\n', g_in_len);
+	if (!nl) return false;
+
+	size_t n = (size_t)(nl - g_in);
+	size_t copy = (n < cap - 1) ? n : cap - 1;
+	memcpy(line, g_in, copy);
+	line[copy] = '\0';
+	while (copy && (line[copy - 1] == '\r')) line[--copy] = '\0';
+
+	memmove(g_in, nl + 1, g_in_len - n - 1);
+	g_in_len -= n + 1;
+	return true;
+}
 
 static void rec_str(const char *key, const char *val)
 {
@@ -222,9 +277,11 @@ int sp_serve(void)
 		struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
 		int ready = poll(&pfd, 1, 250);
 		if (ready > 0 && (pfd.revents & POLLIN)) {
+			if (!in_fill()) break;                        /* window gone */
+			/* ⛔ EVERY complete line, not one per wake — see in_fill(). */
 			char line[PATH_MAX * 2];
-			if (!sp_getline(stdin, line, sizeof line)) break;  /* window gone */
-			if (line[0]) handle(line, &fd, &want_queue, &want_hist, &want_pl);
+			while (in_take(line, sizeof line))
+				if (line[0]) handle(line, &fd, &want_queue, &want_hist, &want_pl);
 		} else if (ready > 0) {
 			break;                                             /* HUP */
 		}

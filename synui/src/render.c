@@ -8170,7 +8170,15 @@ static const char *dockact_label(syn_server_t *s, syn_dockact_t a)
     }
 
     switch (a) {
-    case SYN_DOCKACT_PIN:    return "Pin to Dock";
+    /* ⛔ A ROW THAT CANNOT WORK SAYS SO IN ITS OWN LABEL. There is no disabled
+     * state in this menu, so a full pin list used to leave "Pin to Dock" sitting
+     * there doing nothing when clicked — the refusal went to wlr_log, which is
+     * not a place anybody looks. velle hit it at sixteen pins and reported it as
+     * the application's fault, which is exactly what a silent no-op looks like
+     * from outside. */
+    case SYN_DOCKACT_PIN:
+        return dock_pin_room(s) ? "Pin to Dock"
+                                : "Pin to Dock — the dock is full";
     case SYN_DOCKACT_UNPIN:  return "Unpin from Dock";
     case SYN_DOCKACT_OPEN:   return "Open";
     case SYN_DOCKACT_NEWWIN:   return "New Window";

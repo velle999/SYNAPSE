@@ -273,6 +273,68 @@ FloatingWindow {
         return h > 0 ? h + ":" + (m < 10 ? "0" : "") + m + ":" + ss : m + ":" + ss
     }
 
+    // A line the window says back. ⚠ TRANSIENT: it clears itself, because a
+    // message with no way to dismiss it is one that is still on screen an hour
+    // later describing something that stopped being true.
+    property string note: ""
+    function say(t) { root.note = t; noteClear.restart() }
+    Timer { id: noteClear; interval: 4000; onTriggered: root.note = "" }
+
+    /*
+     * ⚠ A DROPPED URL IS PERCENT-ENCODED, and it is not the path.
+     * A file manager hands over `file:///home/v/A%20Film%20(2001).mkv`; passed
+     * along as-is, mpv is asked to open a file whose name contains a literal
+     * `%20`. Decoded once, here, so the drop and the pickers cannot disagree
+     * about what a path is.
+     *
+     * ⛔ ANYTHING THAT IS NOT file:// IS RETURNED WHOLE. An http:// URL dragged
+     * out of a browser is a thing mpv can play — via yt-dlp — and stripping it
+     * to a "path" would break the one case that needs no filesystem at all.
+     */
+    function urlToPath(u) {
+        const t = ("" + u).trim()
+        if (t === "") return ""
+        if (t.indexOf("file://") !== 0) return t
+        try { return decodeURIComponent(t.substring(7)) }
+        catch (e) { return t.substring(7) }
+    }
+
+    /*
+     * What a drop actually does, kept out of the handler on purpose.
+     *
+     * ⛔ A DragEvent CANNOT BE CONSTRUCTED, so nothing can drive `onDropped`
+     * with a url in it — a Qt INTERNAL drag reaches the DropArea and matches its
+     * keys, but carries no mimeData, so `hasUrls` is false and this never runs.
+     * (Measured, not assumed.) Everything that can go wrong with the payload —
+     * the percent-decoding, which item replaces and which append, a folder being
+     * handed over whole — lives here instead, where the suite drives it with the
+     * exact bytes a file manager sends and checks the queue that came out.
+     *
+     * ⚠ A FOLDER NEEDS NOTHING SPECIAL. mpv expands a directory into its
+     * playable files itself, so a dropped folder is the same call as a dropped
+     * file and there is no second idea here of what is playable.
+     */
+    function acceptDrop(urls, playNow) {
+        const paths = []
+        for (let i = 0; i < urls.length; i++) paths.push(root.urlToPath(urls[i]))
+        root.openAll(paths, !playNow)
+    }
+
+    // ⛔ FIRST REPLACES, THE REST APPEND — the same rule as `syn-play a b c` on
+    // the command line. Two front ends that disagree about what handing over
+    // three files means is exactly the split this program is built to avoid.
+    function openAll(paths, append) {
+        let n = 0
+        for (let i = 0; i < paths.length; i++) {
+            const p = paths[i]
+            if (p === "") continue
+            root.send(((append || n > 0) ? "add " : "play ") + encodeURIComponent(p))
+            n++
+        }
+        if (n === 0) return
+        root.say((append ? "Queued " : "Playing ") + n + (n === 1 ? " item" : " items"))
+    }
+
     function dec(s) {
         if (s === undefined || s === "") return ""
         if (s.indexOf("%") < 0) return s
@@ -344,6 +406,81 @@ FloatingWindow {
         root.queued = []
     }
 
+    /*
+     * ── Opening a file, and opening a folder ────────────────────────────────
+     *
+     * ⛔ zenity, NOT a QML FileDialog. QtQuick.Dialogs is not shipped by
+     * quickshell, so `FileDialog` is a type this window cannot import — the
+     * same reason syn's Resolve installer picks its zip this way. zenity is
+     * already in this suite's dependency graph and its chooser is one line.
+     *
+     * ⚠ A FOLDER NEEDS NO SPECIAL PATH. mpv expands a directory into its
+     * playable files itself (`--directory-mode`, default `auto`), so "open
+     * folder" is the same `loadfile` as "open file" and there is no second
+     * walk here to disagree with mpv's about what is playable.
+     */
+    property bool hasPicker: true
+
+    Process {
+        // Asked once, rather than discovered when somebody presses the button
+        // and nothing happens. ⚠ `command -v` and not `which`: which is not
+        // installed everywhere and answers 0 for a shell builtin.
+        running: true
+        command: ["sh", "-c", "command -v zenity >/dev/null 2>&1"]
+        onExited: (code) => root.hasPicker = (code === 0)
+    }
+
+    Process {
+        id: pickFiles
+        // ⚠ A NEWLINE SEPARATOR, because the default is `|` and a filename may
+        // contain one. A newline cannot appear in a path on Linux… except it
+        // can; it is merely the least bad of the separators zenity offers, and
+        // the rows are trimmed and empty ones dropped below.
+        command: ["zenity", "--file-selection", "--multiple", "--separator=\n",
+                  "--title=Open files"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n").map(x => x.trim()).filter(x => x !== "")
+                if (lines.length === 0) return          // cancelled, which is not an error
+                root.openAll(lines.map(root.urlToPath), false)
+            }
+        }
+    }
+
+    Process {
+        id: pickFolder
+        command: ["zenity", "--file-selection", "--directory",
+                  "--title=Open a folder"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const dir = this.text.trim()
+                if (dir === "") return
+                root.openAll([root.urlToPath(dir)], false)
+            }
+        }
+    }
+
+    // ⚠ NOT `pick()`. That name is already the theme's dark/light chooser a
+    // hundred lines up, and a second function of the same name silently
+    // replaces it — every colour in this window resolved through a function
+    // expecting a boolean. qmllint calls that a Warning, which is the level an
+    // "only warnings" gate lets through.
+    function openPicker(folder) {
+        if (!root.hasPicker) {
+            root.say("zenity is not installed — synpkg install zenity")
+            return
+        }
+        // ⚠ `running = true` on a process that is ALREADY running is a silent
+        // no-op in quickshell, so a second press while the chooser is open
+        // would do nothing and read as a dead button. It is already open; say
+        // so instead.
+        const proc = folder ? pickFolder : pickFiles
+        if (proc.running) { root.say("the chooser is already open"); return }
+        proc.running = true
+    }
+
     Process {
         id: eng
         running: true
@@ -373,8 +510,35 @@ FloatingWindow {
             height: root.ui(46)
             color: root.cPanel
 
+            // ⚠ THE BUTTONS ARE PINNED AND THE FIELD TAKES WHAT IS LEFT.
+            // A Row holding all three fits at 620 wide and runs off the left at
+            // 380 — the same failure the assistant's header shipped with. There
+            // is one edge to anchor the field to, whatever this window is doing.
+            Row {
+                id: openBtns
+                anchors { right: parent.right; rightMargin: root.ui(8)
+                          verticalCenter: parent.verticalCenter }
+                spacing: root.ui(6)
+
+                // ⚠ SHORTER LABELS RATHER THAN NO LABELS. At the minimum width
+                // the words still say which is which; hiding one of them would
+                // leave two identical buttons doing different things.
+                readonly property bool roomy: root.width >= root.ui(560)
+
+                Chip {
+                    label: openBtns.roomy ? "Open files…" : "Files…"
+                    onClicked: root.openPicker(false)
+                }
+                Chip {
+                    label: openBtns.roomy ? "Open folder…" : "Folder…"
+                    onClicked: root.openPicker(true)
+                }
+            }
+
             Rectangle {
-                anchors { fill: parent; margins: root.ui(8) }
+                anchors { left: parent.left; right: openBtns.left; top: parent.top
+                          bottom: parent.bottom; margins: root.ui(8)
+                          rightMargin: root.ui(8) }
                 radius: root.ui(6)
                 color: root.cBg
                 border.width: 1
@@ -614,17 +778,34 @@ FloatingWindow {
 
             // Saving the queue lives beside the tab it belongs to rather than in
             // the transport row: it is about the list, not about playback.
+            // What the window has to say back, where the eye already is. ⚠ It
+            // takes the row from the buttons rather than sharing it: two things
+            // fighting for the same pixels is how a message ends up half drawn
+            // under a control.
+            Text {
+                anchors { right: parent.right; left: parent.left
+                          rightMargin: root.ui(12); leftMargin: root.ui(120)
+                          verticalCenter: parent.verticalCenter }
+                visible: root.note !== ""
+                text: root.note
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+                color: root.cAccent
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(11)
+            }
+
             Chip {
                 anchors { right: parent.right; rightMargin: root.ui(12)
                           verticalCenter: parent.verticalCenter }
-                visible: root.tab === 0 && queue.count > 0
+                visible: root.note === "" && root.tab === 0 && queue.count > 0
                 label: "Save as playlist"
                 onClicked: saveBox.open()
             }
             Chip {
                 anchors { right: parent.right; rightMargin: root.ui(12)
                           verticalCenter: parent.verticalCenter }
-                visible: root.tab === 1 && history.count > 0
+                visible: root.note === "" && root.tab === 1 && history.count > 0
                 label: "Clear history"
                 onClicked: root.send("history-clear")
             }
@@ -971,6 +1152,93 @@ FloatingWindow {
                 color: root.cDim
                 font.family: root.uiFont || "sans-serif"
                 font.pixelSize: root.ui(12)
+            }
+        }
+
+        /*
+         * ── Files dragged in ────────────────────────────────────────────────
+         *
+         * ⛔ KEYED, AND FILES ONLY. A DropArea filling the window is the topmost
+         * target for EVERY drag that crosses it — including, in a window that
+         * had one, the application's own. `keys` is what stops that: a DropArea
+         * whose keys do not match is never entered and delivery carries on
+         * underneath it. There is no internal drag here yet; declaring the keys
+         * now is what makes it safe to add one later, which is the exact bug
+         * synstudio lost three releases to.
+         *
+         * ⚠ TWO ZONES, BECAUSE THE ANSWER IS NOT OBVIOUS. Dropping a film while
+         * an album is playing could reasonably mean either thing, and a player
+         * that silently picked one would be wrong half the time — destructively,
+         * in the case where it wipes a queue somebody spent a while building.
+         * The halves are the whole window, so neither has to be aimed at.
+         */
+        DropArea {
+            id: fileDrop
+            anchors.fill: parent
+            keys: ["text/uri-list", "text/plain"]
+            z: 10
+
+            property bool onTop: true
+
+            // ⚠ THE HALVING RULE, NAMED. A DragEvent cannot be built by hand,
+            // so a test can drive neither handler below — but it can drive this,
+            // and getting the comparison backwards is the whole of what the
+            // zones can get wrong.
+            function zoneFor(y) { return y < fileDrop.height / 2 }
+
+            onEntered: (d) => {
+                // ⚠ ASKED, NOT ASSUMED. A drag carrying no urls is somebody
+                // dragging text about; refusing it here lets delivery CARRY ON
+                // underneath rather than swallowing the gesture and showing an
+                // overlay for a drop that could never have worked.
+                if (!d.hasUrls) { d.accepted = false; return }
+                fileDrop.onTop = fileDrop.zoneFor(d.y)
+            }
+            onPositionChanged: (d) => { fileDrop.onTop = fileDrop.zoneFor(d.y) }
+
+            onDropped: (d) => {
+                if (!d.hasUrls) { d.accepted = false; return }
+                root.acceptDrop(d.urls, fileDrop.onTop)
+                d.accept()
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                visible: fileDrop.containsDrag
+                color: Qt.rgba(root.cBg.r, root.cBg.g, root.cBg.b, 0.86)
+
+                Repeater {
+                    model: [[true, "Play now"], [false, "Add to the queue"]]
+                    Rectangle {
+                        id: zone
+                        required property var modelData
+                        readonly property bool isTop: zone.modelData[0]
+                        readonly property bool active: fileDrop.onTop === zone.isTop
+
+                        y: zone.isTop ? 0 : parent.height / 2
+                        width: parent.width
+                        height: parent.height / 2
+                        color: zone.active
+                               ? Qt.rgba(root.cAccent.r, root.cAccent.g,
+                                         root.cAccent.b, 0.16)
+                               : "transparent"
+
+                        Rectangle {
+                            anchors { fill: parent; margins: root.ui(10) }
+                            radius: root.ui(8)
+                            color: "transparent"
+                            border.width: zone.active ? 2 : 1
+                            border.color: zone.active ? root.cAccent : root.cLine
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: zone.modelData[1]
+                            color: zone.active ? root.cAccent : root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(zone.active ? 15 : 13)
+                        }
+                    }
+                }
             }
         }
 

@@ -4361,7 +4361,23 @@ typedef struct {
      * against roughly 200 KB for a whole ordinary take, which is why it is off
      * by default and says so in the panel. Persisted to record.state. */
     int   record_edit;          /* default 0 */
-#define DOCK_PIN_MAX 16
+/*
+ * ⛔ SIXTEEN WAS REACHED BY ORDINARY USE, AND THE REFUSAL WAS SILENT.
+ *
+ * velle, 2026-08-30: "player won't let me pin it to the dock". dock.state held
+ * exactly 16 pins — steam, firefox, mpv, chibi, vesktop and eleven of this
+ * desktop's own apps — so `dock_pin_toggle` hit the cap, logged to wlr_log and
+ * returned. The menu row said "Pin to Dock", the click did nothing, and there
+ * was nowhere for anyone to find out why.
+ *
+ * SynapseOS ships about twenty applications of its own. A pin list that a
+ * normal desktop fills is not a limit, it is a bug with a number in it.
+ *
+ * ⚠ DOCK_MAX_ENTRIES MUST STAY AHEAD OF IT. That is pinned PLUS running, so a
+ * cap equal to this one would mean a full pin list leaves no cell for a window
+ * that is actually open — the icons would simply stop appearing.
+ */
+#define DOCK_PIN_MAX 32
 #define GAME_EXCLUDE_MAX 16
 /* game_output: which monitor a detected game is fullscreened onto. The order
  * is the order the control panel cycles them in, so PRIMARY — the answer that
@@ -5422,7 +5438,7 @@ static inline int chrome_shadow(const syn_config_t *cfg)
  * dock — rendering differs only by which output's box the tree sits in
  * (see syn_output::dock), so hit-box coordinates here are dock-canvas-local
  * and valid for every output alike. */
-#define DOCK_MAX_ENTRIES 32
+#define DOCK_MAX_ENTRIES 48
 /* What `syn_server_t::dock_drag.icon` holds when the press did not land on an
  * app icon. All four are negative so the same `>= 0` test that means "an entry
  * index" keeps working unchanged.
@@ -10159,6 +10175,7 @@ void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e);
 void dock_state_load(syn_config_t *cfg);
 void dock_state_save(syn_server_t *s);
 /* Toggle app_id in the pinned set, persist, and rebuild the dock. */
+bool dock_pin_room(const syn_server_t *s);
 void dock_pin_toggle(syn_server_t *s, const char *app_id);
 
 /* Drag-to-reposition (input.c wires these to pointer button/motion). A press

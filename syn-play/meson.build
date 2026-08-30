@@ -48,3 +48,18 @@ test('cli', find_program('tests/cli_test.sh'),
      args: [syn_play.full_path()],
      depends: [syn_play],
      timeout: 120)
+
+# ⛔ FILES DRAGGED IN, DRIVEN RATHER THAN READ. A `keys` list that excludes the
+# drag, a url left percent-encoded, a zone test comparing the wrong way round —
+# every one of those reads correctly and does nothing, and synstudio lost three
+# releases to exactly that. This loads the shipped QML offscreen and asserts on
+# the queue MPV IS HOLDING, not on a property the window set itself.
+#
+# ⚠ It found a real one: `serve` polled the file descriptor and read with
+# buffered stdio, so two commands arriving in a single write lost the second —
+# every multi-file drop queued one file. Driving it from a shell could not see
+# that, because two printfs are two writes.
+test('drop', find_program('tests/drop_test.sh'),
+     args: [syn_play.full_path()],
+     depends: [syn_play],
+     timeout: 180)

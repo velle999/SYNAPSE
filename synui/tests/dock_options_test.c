@@ -872,6 +872,45 @@ int main(void)
     check(!dock_power_at(&server, bar_x + pwr_first + 2, probe_y),
           "…and stops answering for the point it used to hold");
 
+    /*
+     * ── The pin list, and what it does when it is full ──────────────────────
+     *
+     * ⛔ velle, 2026-08-30: "player won't let me pin it to the dock". dock.state
+     * held exactly DOCK_PIN_MAX entries, so dock_pin_toggle() refused, logged to
+     * wlr_log and returned — leaving a menu row that said "Pin to Dock" and did
+     * nothing when clicked. Nothing on screen said why, so it read as a fault in
+     * the application being pinned.
+     *
+     * Two things are checked: that the cap is big enough not to be reached by an
+     * ordinary desktop, and that when it IS reached the row SAYS so.
+     */
+    server.config.dock_pin_count = 0;
+    check(DOCK_PIN_MAX >= 24,
+          "the pin list holds more than a desktop's worth of apps");
+    /* ⚠ Pinned PLUS running share one table. A cap equal to it would mean a
+     * full pin list leaves no cell for a window that is actually open. */
+    check(DOCK_MAX_ENTRIES > DOCK_PIN_MAX,
+          "…and there is room for running windows beyond every pin");
+
+    for (int i = 0; i < DOCK_PIN_MAX; i++)
+        snprintf(server.config.dock_pin[i], 128, "app%d", i);
+    server.config.dock_pin_count = DOCK_PIN_MAX;
+
+    dock_pin_toggle(&server, "one-too-many");
+    check_int(server.config.dock_pin_count, DOCK_PIN_MAX,
+              "a pin past the cap is refused rather than overrunning the table");
+    check(!dock_pin_room(&server),
+          "⛔ …and the menu can tell, so the row says the dock is full "
+          "instead of doing nothing");
+
+    /* And with room, the label is the plain one and the pin lands. */
+    server.config.dock_pin_count = DOCK_PIN_MAX - 1;
+    check(dock_pin_room(&server),
+          "…while a dock with room reports room");
+    dock_pin_toggle(&server, "syn-play");
+    check_int(server.config.dock_pin_count, DOCK_PIN_MAX,
+              "…and the pin is taken");
+
     printf("dock_options_test: %s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;
 }

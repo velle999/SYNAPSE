@@ -72,6 +72,18 @@ static bool tty_raw(void)
 	t.c_cc[VTIME] = 0;
 	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &t) != 0) return false;
 
+	/*
+	 * ⛔ UNBUFFERED, BECAUSE THIS LOOP POLLS THE FILE DESCRIPTOR. getchar()
+	 * on a buffered stream reads as much as is available and hands back one
+	 * byte, leaving the rest inside libc where poll() cannot see it. An
+	 * arrow key is THREE bytes that arrive together: the first getchar()
+	 * would swallow all three, the 20ms poll for the tail would find nothing
+	 * on the fd, and the `[` and `A` would come back later as two keystrokes
+	 * that mean nothing — an arrow key that intermittently does nothing.
+	 * Same fault as serve.c's, which cost a dropped file.
+	 */
+	setvbuf(stdin, NULL, _IONBF, 0);
+
 	g_cbreak = true;
 	atexit(tty_restore);
 	signal(SIGINT, tty_signal);
