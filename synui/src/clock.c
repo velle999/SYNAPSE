@@ -592,7 +592,6 @@ int calendar_motion(syn_server_t *s, double lx, double ly)
 int calendar_click(syn_server_t *s, double lx, double ly, uint32_t button,
                   uint32_t time_msec)
 {
-    (void)time_msec;   /* only the pickers need it, for their double click */
     syn_cal_t *cal = &s->cal;
     if (!cal->visible) return 0;
 
@@ -605,6 +604,36 @@ int calendar_click(syn_server_t *s, double lx, double ly, uint32_t button,
 
     int day = cal_day_at(cal, lx, ly);
     if (day < 0) return 1;                 /* header, footer, a blank cell */
+
+    /* ⛔ A DOUBLE CLICK OPENS THE DAY IN syn-cal, with a new event on it.
+     *
+     * ⚠ AND IT IS TESTED BEFORE THE `day == cal->sel` EARLY RETURN THAT USED TO
+     * BE HERE. The first click of the pair selects the day, so the second one
+     * always lands on the already-selected day — the exact case that return
+     * threw away. A double click on any day but the one already selected would
+     * have worked, and on the one you just clicked, which is every double
+     * click, it would not.
+     *
+     * ⚠ PER-DAY, 400ms, matching the cursor picker so the two feel the same. */
+    int dbl = (cal->last_click_day == day) &&
+              (time_msec - cal->last_click_ms < 400);
+    cal->last_click_day = dbl ? -1 : day;
+    cal->last_click_ms  = time_msec;
+
+    if (dbl) {
+        /* Built from integers, never pasted: synui_spawn() runs /bin/sh -c, and
+         * a date assembled with %04d-%02d-%02d cannot carry a shell character
+         * whatever the calendar's state is. */
+        char cmd[96];
+        snprintf(cmd, sizeof cmd, "syn-cal gui %04d-%02d-%02d",
+                 cal->year, cal->mon + 1, day);
+        synui_spawn(cmd);
+        /* The popup goes: it did its job, and leaving it over the window that
+         * is about to open would put the new event form behind a calendar. */
+        calendar_hide(s);
+        return 1;
+    }
+
     if (day == cal->sel) return 1;
 
     cal->sel = day;

@@ -1572,6 +1572,12 @@ typedef struct {
     /* Pointer geometry, written by synui_render_calendar(). The row band spans
      * all seven day columns; clock.c splits it back up. */
     syn_hit_t hit;
+
+    /* Double-click tracking, so a day can be opened in syn-cal. Kept per-DAY
+     * rather than per-row: the hit band is a whole week, and two clicks on
+     * different days of the same week are not a double click on either. */
+    int      last_click_day;
+    uint32_t last_click_ms;
 } syn_cal_t;
 
 /* ── Theme manager (theme.c) ─────────────────────────────── */

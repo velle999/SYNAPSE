@@ -45,7 +45,8 @@ static void usage(FILE *f)
 "  syn-cal enable <name> <calendar>     sync this one\n"
 "  syn-cal disable <name> <calendar>    stop syncing it\n"
 "  syn-cal sync [name]                  sync everything, or one account\n"
-"  syn-cal gui                          the window\n"
+"  syn-cal gui [YYYY-MM-DD]             the window; a date opens a new event\n"
+"                                       on that day\n"
 "  syn-cal tui                          the month, in this terminal\n"
 "  syn-cal agenda [--days N] [--from YYYY-MM-DD]\n"
 "                                       what is on, across every calendar\n"
@@ -826,7 +827,7 @@ static int cmd_agenda(int days, const char *from_date)
  * reason synfiles, synpkg and syn-disks do it that way: the binary stays usable
  * over SSH, and the window consumes exactly the records any other consumer
  * would. */
-static int cmd_gui(void)
+static int cmd_gui(const char *new_on)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
 		die("no display — syn-cal gui needs a graphical session");
@@ -845,6 +846,20 @@ static int cmd_gui(void)
 	 * opened from another quickshell app would otherwise take that app's
 	 * identity and have no dock entry of its own. */
 	setenv("QS_APP_ID", "syn-cal", 1);
+
+	/* ⛔ THE DAY TO OPEN ON, THROUGH THE ENVIRONMENT. quickshell takes the QML
+	 * path and its own flags; an extra argument after it is quickshell's to
+	 * interpret, not this program's, so there is nowhere on that command line to
+	 * put one. The window reads this once at startup and opens its New event
+	 * form on that day — which is what the bar's calendar does when a day in it
+	 * is double-clicked.
+	 *
+	 * ⚠ UNSET WHEN THERE IS NO DATE, not left as it was. These apps hand their
+	 * whole environment to what they spawn, so a stale value inherited from
+	 * whatever opened this window would make a plain `syn-cal gui` come up with
+	 * an event form on somebody else's day. */
+	if (new_on && *new_on) setenv("SYNCAL_NEW_ON", new_on, 1);
+	else                   unsetenv("SYNCAL_NEW_ON");
 
 	const char *qml = SYNCAL_DATADIR "/syn-cal.qml";
 	if (access(qml, R_OK) != 0 && access("data/syn-cal.qml", R_OK) == 0)
@@ -941,7 +956,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "disable") && n >= 3)         rc = cmd_set_enabled(pos[1], pos[2], false);
 	else if (!strcmp(c, "sync"))                      rc = cmd_sync(n >= 2 ? pos[1] : NULL, policy, dry);
 	else if (!strcmp(c, "events") && n >= 3)          rc = cmd_events(pos[1], pos[2]);
-	else if (!strcmp(c, "gui"))                       rc = cmd_gui();
+	else if (!strcmp(c, "gui"))                       rc = cmd_gui(n >= 2 ? pos[1] : from_date);
 	else if (!strcmp(c, "tui"))                       rc = cmd_tui();
 	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days, from_date);
 	else if (!strcmp(c, "month"))                     rc = cmd_month(from_date);

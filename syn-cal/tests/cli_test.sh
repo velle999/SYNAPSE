@@ -373,6 +373,29 @@ check "an event can be deleted" $?
 [ $? -ne 0 ]
 check "…and deleting one that is not there fails rather than claiming success" $?
 
+# ── opening the window on a day ─────────────────────────────────────────────
+#
+# ⛔ THE DAY TRAVELS IN THE ENVIRONMENT. quickshell owns the command line, so
+# there is nowhere on it for an argument of ours — the bar's calendar runs
+# `syn-cal gui <date>` when a day in it is double-clicked, and this is the only
+# thing carrying that date to the window.
+
+FAKE="$T/fakebin"
+mkdir -p "$FAKE"
+printf '#!/bin/sh\necho "NEW_ON=[$SYNCAL_NEW_ON]"\n' > "$FAKE/quickshell"
+chmod +x "$FAKE/quickshell"
+
+out=$(PATH="$FAKE:$PATH" WAYLAND_DISPLAY=test "$S" gui 2026-09-21 2>&1)
+[ "$out" = "NEW_ON=[2026-09-21]" ]
+check "gui passes the day it was opened for through to the window" $?
+
+# ⚠ AND CLEARS A STALE ONE. These apps hand their whole environment to what
+# they spawn, so an inherited value would open a plain `syn-cal gui` on somebody
+# else's day.
+out=$(PATH="$FAKE:$PATH" WAYLAND_DISPLAY=test SYNCAL_NEW_ON=2020-01-01 "$S" gui 2>&1)
+[ "$out" = "NEW_ON=[]" ]
+check "…and clears it when no day was given" $?
+
 rm -rf "$SYNCAL_HOME/work/Home"
 
 # ── the OAuth kinds, without needing an account anywhere ────────────────────

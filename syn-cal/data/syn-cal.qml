@@ -389,7 +389,19 @@ FloatingWindow {
         }
     }
 
-    Component.onCompleted: reload()
+    Component.onCompleted: {
+        reload()
+        // ⛔ THE DAY THIS WINDOW WAS OPENED FOR. `syn-cal gui 2026-09-21` — which
+        // is what the bar's calendar runs when a day in it is double-clicked —
+        // arrives as an environment variable, because quickshell owns the
+        // command line and there is nowhere on it for an argument of ours.
+        //
+        // ⚠ VALIDATED, NOT TRUSTED. It reaches this window through whatever
+        // spawned it, and a value that is not a date would put unreadable text
+        // in the day field and produce an event nobody can find.
+        const on = Quickshell.env("SYNCAL_NEW_ON")
+        if (on && /^\d{4}-\d{2}-\d{2}$/.test(on)) root.evNewOn(on)
+    }
 
     // ── syn-cal --rec agenda ────────────────────────────────────────────────
 

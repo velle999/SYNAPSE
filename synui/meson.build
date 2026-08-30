@@ -1998,6 +1998,14 @@ test('popup_hover_dismiss', popup_hover_dismiss,
 # Three captures: bar+widget up, then bar_enabled = off (the top edge back to
 # bare wallpaper, the widget's corner UNCHANGED — that is the assertion a stop
 # command cannot pass), then on again from the watch alone.
+# Double-clicking a day in the bar's calendar opens syn-cal on it. A source
+# test, not a capture: this click spawns an application, and a rig that proved
+# it would open a real window on whoever ran the suite. See the file's own note.
+calendar_double_click = find_program('tests/calendar_double_click.sh')
+test('calendar_double_click', calendar_double_click,
+     args : [meson.current_source_dir() / 'src',
+             meson.current_source_dir() / '..' / 'syn-cal'])
+
 bar_enabled = find_program('tests/bar_enabled.sh')
 test('bar_enabled', bar_enabled,
      args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
