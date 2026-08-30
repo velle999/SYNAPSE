@@ -1,0 +1,48 @@
+# A loopback port for llama.cpp-shaped clients — OFF UNLESS SOMEBODY ASKS.
+#
+# synapd's compatibility API lives on /run/synapd/http.sock, and a unix socket
+# is the right default for it: a loopback port is reachable by every process on
+# the machine, a page in a browser included, and that model answers questions
+# about the machine it runs on.
+#
+# ⚠ BUT ALMOST NO FRONTEND CAN DIAL A UNIX SOCKET. Open WebUI, Continue, aider,
+# LM Studio and llama.cpp's own web UI all take a URL. So the compatibility
+# layer was correct and unreachable by the clients it exists for, which is half
+# a feature.
+#
+# This is the other half, as a deliberate act rather than a default:
+#
+#     systemctl enable --now synapd-http-proxy.socket
+#     # then point anything at http://127.0.0.1:8080/v1
+#
+# ⛔ 127.0.0.1, NEVER 0.0.0.0. This is a local model with no authentication of
+# any kind; binding it to every interface publishes an unauthenticated assistant
+# — with the machine's own context in it — to the network. If you want it on
+# another machine, forward it over ssh, which is a decision with a login on it.
+#
+# Changing the port is an override, not an edit of this file:
+#
+#     systemctl edit synapd-http-proxy.socket
+#     [Socket]
+#     ListenStream=
+#     ListenStream=127.0.0.1:11434
+#
+# The empty assignment first is required: ListenStream is a list, and a
+# drop-in that only adds one leaves this one listening as well.
+#
+# SynapseOS Project — GPL-2.0-or-later
+
+[Unit]
+Description=llama.cpp-compatible port for synapd (127.0.0.1:8080)
+Documentation=https://github.com/velle999/SYNAPSE
+# The thing being proxied to. Without this, enabling the port on a machine
+# where synapd is masked or absent gets connections that hang instead of
+# refusing, which reads as a broken model rather than a stopped daemon.
+Requires=synapd.service
+After=synapd.service
+
+[Socket]
+ListenStream=127.0.0.1:8080
+
+[Install]
+WantedBy=sockets.target

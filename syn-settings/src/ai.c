@@ -91,7 +91,26 @@ static const struct ai_unit ai_units[] = {
 	{ "synapd.socket",         "socket activation — this starts the daemon on the next request" },
 	{ "synapd-bridge.socket",  "LAN bridge on :11435 — a client anywhere on the network reaches this" },
 	{ "synapd-bridge.service", "proxies LAN requests to synapd" },
+	{ "synapd-http-proxy.socket",
+	  "127.0.0.1:8080 for llama.cpp-shaped frontends — off unless enabled" },
+	{ "synapd-http-proxy.service", "proxies that port to synapd's HTTP socket" },
 };
+
+/* Is this unit absent from the machine?
+ *
+ * ⛔ TWO SPELLINGS, AND ONE OF THEM IS THE ONLY ONE THAT HAPPENS. systemd
+ * prints "not-found" for `is-enabled` on a unit it does not have; the empty
+ * output this file's "not installed" sentinel was written for comes from an
+ * older systemd, or from systemctl failing outright. So the check that was
+ * meant to hide the button for a missing unit never fired: every absent unit
+ * was offered Enable/Start, which does nothing and reports success at having
+ * done it — a dead button in the app whose whole job is showing true state.
+ */
+static int unit_absent(const char *en)
+{
+	return !strcmp(en, "not installed") || !strcmp(en, "not-found") ||
+	       !strcmp(en, "not-found\n");
+}
 
 int pane_ai(void)
 {
@@ -114,6 +133,37 @@ int pane_ai(void)
 		        "needs synui-ai-backend(1), shipped by the synui package\t-");
 	}
 
+	/* ── The llama.cpp-compatible port ────────────────────────────────── */
+	/*
+	 * ⛔ A SWITCH, NOT TWO UNIT BUTTONS. The socket below is in ai_units[] as
+	 * well, because seeing its real state matters — but enable and start are
+	 * separate there, and a port that is enabled and not listening (or
+	 * listening and not enabled) is neither of the two answers anybody wanted.
+	 *
+	 * ⚠ AND IT SAYS WHAT TURNING IT ON MEANS. synapd's HTTP API is on a unix
+	 * socket precisely because a port is reachable by every local process, a
+	 * page in a browser included, and this model answers questions about this
+	 * machine. Somebody deciding is owed that sentence, not just a toggle.
+	 */
+	if (have_cmd("systemctl")) {
+		char en[64], act[64];
+		unit_state("synapd-http-proxy.socket", en, sizeof en, act, sizeof act);
+
+		if (unit_absent(en)) {
+			rec_row("llama-api\tllama.cpp API port\tunavailable\t-\t"
+			        "needs a synapd that ships synapd-http-proxy.socket\t-");
+		} else {
+			const char *on = !strcmp(en, "enabled") ? "on" : "off";
+			rec_row("llama-api\tllama.cpp API port\t%s\t%s\t"
+			        "127.0.0.1:8080 for frontends written against llama-server "
+			        "or the OpenAI API, over the model synapd already holds \xc2\xb7 "
+			        "no authentication, so every process on this machine can "
+			        "reach it \xc2\xb7 loopback only, never the network\t"
+			        "toggle:llama-api",
+			        on, act);
+		}
+	}
+
 	/* ── What is actually running ─────────────────────────────────────── */
 	if (have_cmd("systemctl")) {
 		for (size_t i = 0; i < sizeof ai_units / sizeof ai_units[0]; i++) {
@@ -122,7 +172,7 @@ int pane_ai(void)
 			snprintf(action, sizeof action, "unit:%s", ai_units[i].unit);
 			rec_row("unit\t%s\t%s\t%s\t%s\t%s",
 			        ai_units[i].unit, en, act, ai_units[i].what,
-			        strcmp(en, "not installed") ? action : "-");
+			        !unit_absent(en) ? action : "-");
 		}
 	} else {
 		rec_row("unit\t-\tunknown\t-\tsystemctl not available\t-");

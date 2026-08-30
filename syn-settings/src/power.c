@@ -40,6 +40,22 @@ static const struct unit_row units[] = {
 	{ "synnet.service",             "network policy and the firewall set" },
 };
 
+/* Is this unit absent from the machine?
+ *
+ * ⛔ TWO SPELLINGS, AND ONE OF THEM IS THE ONLY ONE THAT HAPPENS. systemd
+ * prints "not-found" for `is-enabled` on a unit it does not have; the empty
+ * output this file's "not installed" sentinel was written for comes from an
+ * older systemd, or from systemctl failing outright. So the check that was
+ * meant to hide the button for a missing unit never fired: every absent unit
+ * was offered Enable/Start, which does nothing and reports success at having
+ * done it — a dead button in the app whose whole job is showing true state.
+ */
+static int unit_absent(const char *en)
+{
+	return !strcmp(en, "not installed") || !strcmp(en, "not-found") ||
+	       !strcmp(en, "not-found\n");
+}
+
 static void unit_state(const char *unit, char *en, size_t en_cap,
                        char *act, size_t act_cap)
 {
@@ -77,7 +93,7 @@ int pane_power(void)
 			 * button whose only outcome is an error. */
 			rec_row("unit\t%s\t%s\t%s\t%s\t%s",
 			        units[i].unit, en, act, units[i].what,
-			        strcmp(en, "not installed") ? unit_action : "-");
+			        !unit_absent(en) ? unit_action : "-");
 		}
 	} else {
 		rec_row("unit\t-\tunknown\t-\tsystemctl not available\t-");

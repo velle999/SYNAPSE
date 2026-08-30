@@ -111,6 +111,34 @@ for pane in display region network bluetooth power kernel apps time ai speech fp
     check_actions "$pane"
 done
 
+# ── The llama.cpp API port ──────────────────────────────────────────────────
+#
+# ⛔ A SWITCH THAT ENABLES AND STARTS IN ONE GO. The generic `unit` verb can do
+# it in two, and a port that is enabled but not listening — or listening now and
+# gone after a reboot — is neither answer anybody asked for.
+
+refuses "set llama-api refuses anything but on or off" 2 set llama-api maybe
+refuses "…and refuses an empty value" 2 set llama-api
+
+if "$BIN" --dry-run set llama-api on 2>&1 | grep -q -- "--now"; then
+    ok "turning it on enables AND starts it"; else bad "turning it on enables AND starts it"; fi
+
+if "$BIN" --dry-run set llama-api on 2>&1 | grep -q "synapd-http-proxy.socket"; then
+    ok "…the socket, not the service that follows it"
+else bad "…the socket, not the service that follows it"; fi
+
+if "$BIN" --dry-run set llama-api off 2>&1 | grep -q "disable"; then
+    ok "turning it off disables it"; else bad "turning it off disables it"; fi
+
+# ⛔ A UNIT THAT IS NOT ON THE MACHINE MUST NOT BE OFFERED A BUTTON. systemd
+# prints "not-found" for is-enabled on a missing unit, and this pane's sentinel
+# used to look for an empty string — so every absent unit got Enable/Start,
+# which does nothing and says it worked.
+bogus=0
+"$BIN" --rec ai | awk -F"\t" '$3 == "not-found" && $6 != "-" { exit 1 }' || bogus=$?
+if [ "$bogus" -eq 0 ]; then ok "a unit that is not installed is offered no action"
+else bad "a unit that is not installed is offered no action"; fi
+
 # ── Default applications ────────────────────────────────────────────────────
 #
 # Every write here goes into a SANDBOX $HOME. The rest of this suite is safe

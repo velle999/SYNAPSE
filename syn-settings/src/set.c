@@ -324,6 +324,26 @@ int do_set(int argc, char **argv)
 	    !strcmp(key, "date-format"))
 		return do_set_clock(key, val);
 
+	/* The loopback port that lets llama.cpp-shaped frontends reach synapd.
+	 *
+	 * ⛔ ONE SWITCH, enable AND start. The generic `unit` verb can do this in
+	 * two steps, and two steps is how somebody ends up with a socket that is
+	 * enabled and not listening — or listening now and gone after a reboot.
+	 * Neither state is one anybody asked for.
+	 *
+	 * ⚠ THE SOCKET, NOT THE SERVICE. systemd starts the proxy on the first
+	 * connection; enabling the service instead gets a proxy for a port nothing
+	 * is listening on. */
+	if (!strcmp(key, "llama-api")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("llama-api takes on or off");
+		char *a[] = { (char *)"systemctl",
+		              (char *)(strcmp(val, "on") ? "disable" : "enable"),
+		              (char *)"--now",
+		              (char *)"synapd-http-proxy.socket", NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "ntp")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("ntp takes on or off");
@@ -333,7 +353,8 @@ int do_set(int argc, char **argv)
 	}
 
 	return refuse("unknown key — try keymap, xkb, locale, timezone, ntp, "
-	              "time-format, time-seconds, date-format, wifi or bluetooth");
+	              "time-format, time-seconds, date-format, wifi, bluetooth "
+	              "or llama-api");
 }
 
 /* Bring a single interface up or down.

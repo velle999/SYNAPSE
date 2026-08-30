@@ -1,0 +1,69 @@
+# The proxy behind synapd-http-proxy.socket. See that file for why it exists
+# and why it is off by default.
+#
+# systemd-socket-proxyd is part of systemd, so this costs no dependency: it
+# accepts on the socket unit's port and shovels bytes to the unix socket.
+#
+# ⚠ STARTED BY THE SOCKET, NOT ENABLED ITSELF. It has no [Install] section on
+# purpose — `systemctl enable synapd-http-proxy.service` would be a service
+# listening on nothing. The socket is the thing you enable; this follows it.
+#
+# SynapseOS Project — GPL-2.0-or-later
+
+[Unit]
+Description=llama.cpp-compatible port for synapd (proxy)
+Documentation=https://github.com/velle999/SYNAPSE
+Requires=synapd-http-proxy.socket
+After=synapd-http-proxy.socket synapd.service
+
+[Service]
+# ⚠ THE UNIX PATH IS THE ARGUMENT, and it is the compatibility socket, not
+# synapd's own: /run/synapd/synapd.sock speaks a binary protocol and would
+# answer an HTTP request with silence.
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd /run/synapd/http.sock
+
+# ⛔ A TRANSIENT IDENTITY THAT IS IN THE synapse GROUP AND NOTHING ELSE.
+#
+# http.sock is 0660 root:synapse and connect() on a unix socket needs write
+# permission on the inode, so the proxy has to be in that group — and in
+# nothing else, because everything else it could reach is something a byte
+# shovel has no business reaching.
+#
+# ⚠ NOT User=nobody: systemd itself warns about it, and it is right to. `nobody`
+# is shared with every other service that reached for a cheap unprivileged user,
+# so it isolates this from none of them. DynamicUser allocates a UID for the
+# lifetime of the unit and takes it away again.
+#
+# ⚠ NOT the synapd user either. That is the daemon's own identity, with access
+# to the models and the state directory; a proxy that is compromised should not
+# inherit the thing it is a front for.
+DynamicUser=yes
+SupplementaryGroups=synapse
+
+# It shovels bytes between two sockets. It has no business with anything else.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+# ⚠ AF_UNIX AS WELL AS AF_INET. The port comes in on one and goes out on the
+# other; restricting to inet alone breaks the half that reaches synapd.
+RestrictAddressFamilies=AF_UNIX AF_INET
+# Read-only everything: it opens no path of its own beyond the socket systemd
+# hands it and the one it connects to.
+ReadOnlyPaths=/
