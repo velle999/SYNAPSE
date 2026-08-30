@@ -34,7 +34,7 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=12
+pkgrel=13
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -114,7 +114,16 @@ _microsoft_client_id=''
 # so there is deliberately no equivalent for it.
 #
 # The value is on the client's page in the Google Cloud console, under Clients.
-_google_client_secret='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'
+#
+# ⚠ AND IT CAN BE ROTATED OUT FROM UNDER A RELEASE. The first one shipped here
+# was refused by the token endpoint with `invalid_client — The provided client
+# secret is invalid`, after consent, and there is nothing in the flow that says
+# so until then. The id and the secret are checked separately: a request sent
+# with no secret at all answers `client_secret is missing` while a request with
+# a wrong one answers `invalid_client`, so the two failures tell you which half
+# is stale. `code=bogus` is enough to ask — a secret Google accepts gets as far
+# as `invalid_grant — Malformed auth code`.
+_google_client_secret='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'
 
 build() {
     cd "$srcdir/syn-cal-0.1.0"
