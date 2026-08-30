@@ -76,19 +76,25 @@ check "discover finds the calendars" $?
 [ "$("$S" --rec calendars work | tail -n +2 | wc -l)" = 2 ]
 check "…both of them" $?
 
-# ⛔ NEW CALENDARS START OFF. Discovery on a work account turns up every shared
-# calendar in the building; syncing them because they exist is how a planner
-# becomes unreadable on first use.
-[ "$("$S" --rec calendars work | tail -n +2 | awk -F'\t' '$3==1' | wc -l)" = 0 ]
-check "…switched off until asked for" $?
+# ⛔ AND THE FIRST DISCOVERY TURNS THEM ON. An account that is added, signed in,
+# discovered and then still shows an empty calendar is a setup that completed
+# successfully and produced nothing.
+[ "$("$S" --rec calendars work | tail -n +2 | awk -F'\t' '$3==1' | wc -l)" = 2 ]
+check "…and a new account's calendars are switched on" $?
 
-"$S" enable work Home >/dev/null
+"$S" disable work Home >/dev/null
 [ "$("$S" --rec calendars work | tail -n +2 | awk -F'\t' '$3==1' | wc -l)" = 1 ]
-check "enable turns exactly one on" $?
+check "disable turns exactly one off" $?
 
+# ⛔ ONLY THE FIRST. Re-running discovery must not undo a choice — the whole
+# point of being able to turn one off.
 "$S" discover work >/dev/null
 [ "$("$S" --rec calendars work | tail -n +2 | awk -F'\t' '$3==1' | wc -l)" = 1 ]
 check "…and running discover again does not undo the choice" $?
+
+"$S" enable work Home >/dev/null
+[ "$("$S" --rec calendars work | tail -n +2 | awk -F'\t' '$3==1' | wc -l)" = 2 ]
+check "enable turns it back on" $?
 
 # ── up ──────────────────────────────────────────────────────────────────────
 mkdir -p "$T/store/work/Home"
@@ -96,7 +102,7 @@ printf 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:cli-1@x\r\nDTSTAMP
   > "$T/store/work/Home/cli-1%40x.ics"
 
 out=$("$S" --rec sync)
-[ "$(echo "$out" | awk -F'\t' 'NR==2{print $6}')" = 1 ]
+[ "$(echo "$out" | awk -F'\t' '$2=="Home"{print $6}')" = 1 ]
 check "sync pushes a new local event" $?
 
 curl -s -u tester:secret -X PROPFIND "http://127.0.0.1:$PORT/tester/home/" -H 'Depth: 1' \
@@ -105,13 +111,13 @@ curl -s -u tester:secret -X PROPFIND "http://127.0.0.1:$PORT/tester/home/" -H 'D
 check "…and the server really has it, under a safe href" $?
 
 out=$("$S" --rec sync)
-[ "$(echo "$out" | awk -F'\t' 'NR==2{print $4+$5+$6+$7+$8+$9}')" = 0 ]
+[ "$(echo "$out" | awk -F'\t' 'NR>1{t+=$4+$5+$6+$7+$8+$9} END{print t+0}')" = 0 ]
 check "…and syncing again moves nothing" $?
 
 # ── down, into a cold store ─────────────────────────────────────────────────
 rm -rf "$T/store/work" "$T/store/state"/*.idx
 out=$("$S" --rec sync)
-[ "$(echo "$out" | awk -F'\t' 'NR==2{print $3}')" = 1 ]
+[ "$(echo "$out" | awk -F'\t' '$2=="Home"{print $3}')" = 1 ]
 check "a cold client pulls the event back down" $?
 
 "$S" --rec events work Home | grep -q "Ship%20syn-cal"
@@ -132,7 +138,7 @@ rm -f "$T/store/work/Home/cli-2%40x.ics"
 "$S" sync >/dev/null 2>&1
 rm -f "$T/store/work/Home/cli-1%40x.ics"
 out=$("$S" --rec sync)
-[ "$(echo "$out" | awk -F'\t' 'NR==2{print $8}')" = 1 ]
+[ "$(echo "$out" | awk -F'\t' '$2=="Home"{print $8}')" = 1 ]
 check "deleting a file locally deletes it on the server" $?
 
 # ── failure is reported, not swallowed ──────────────────────────────────────

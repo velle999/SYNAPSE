@@ -488,13 +488,21 @@ static int cmd_discover(const char *name)
 		return 1;
 	}
 
-	/* ⚠ NEWLY FOUND CALENDARS ARE OFF. Discovery on a work account can turn up
-	 * a dozen shared calendars; syncing them all because they exist is how a
-	 * planner becomes unreadable on first use. A calendar already switched on
-	 * stays on — re-running discovery must not undo a choice. */
+	/* ⛔ THE FIRST DISCOVERY TURNS ON WHAT IT FINDS. Leaving them off meant
+	 * adding an account, signing in, finding the calendar and then being told
+	 * nothing was on it — a setup that completes successfully and produces an
+	 * empty calendar, which is the same dead end as every other step here that
+	 * did nothing and said nothing about it.
+	 *
+	 * ⚠ ONLY THE FIRST. After that a calendar carries whatever it was set to
+	 * and anything NEW arrives off: re-running discovery must not undo a choice,
+	 * and a calendar somebody shares with you later must not start syncing
+	 * because a refresh happened to notice it. */
+	bool first_discovery = (e->ncals == 0);
 	for (size_t i = 0; i < colls.n; i++) {
 		acc_cal_t *known = acc_find_cal(e, colls.e[i].url);
-		acc_set_cal(e, colls.e[i].url, colls.e[i].name, known ? known->enabled : false);
+		bool on = known ? known->enabled : first_discovery;
+		acc_set_cal(e, colls.e[i].url, colls.e[i].name, on);
 	}
 	accounts_save(&a);
 
@@ -516,7 +524,10 @@ static int cmd_discover(const char *name)
 			printf("  [%s] %s\n", (c && c->enabled) ? "on " : "off",
 			       colls.e[i].name ? colls.e[i].name : colls.e[i].url);
 		}
-		printf("\nNew calendars start switched off.\n  syn-cal enable %s \"<name>\"\n", name);
+		if (first_discovery)
+			printf("\nAll switched on. `syn-cal disable %s \"<name>\"` turns one off.\n", name);
+		else
+			printf("\nAnything new starts switched off.\n  syn-cal enable %s \"<name>\"\n", name);
 	}
 
 	caldav_colls_free(&colls);

@@ -683,10 +683,15 @@ FloatingWindow {
         onExited: (code) => {
             root.setupBusy = false
             if (code === 0) {
-                root.setupMsg = "Tick the calendars to sync."
+                root.setupMsg = "Found what the server has."
                 root.loadCalendars(discoverProc.acct)
                 calsProc.running = false
                 calsProc.running = true
+                // ⛔ AND THEN IT SYNCS. A first discovery switches on what it
+                // found, so stopping here would leave the window showing ticked
+                // calendars and an empty month until somebody thought to press
+                // Sync — setup that looks finished and has fetched nothing.
+                root.sync()
             } else {
                 root.setupMsg = discoverErr.text.trim() || "the server did not answer"
             }

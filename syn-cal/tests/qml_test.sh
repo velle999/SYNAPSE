@@ -100,6 +100,15 @@ check "…they are read off the records, column by column" $?
 grep -q '"+" + (cell.shown.length - cell.nshow) + " more"' "$QML"
 check "…and a full day says how many it is not showing" $?
 
+# ⛔ SETUP THAT LOOKS FINISHED MUST HAVE FETCHED SOMETHING. A first discovery
+# switches its calendars on, so the window syncs straight after rather than
+# leaving a ticked list above an empty month.
+grep -q 'root.sync()' "$QML"
+check "finding calendars is followed by a sync" $?
+
+grep -q 'root.bin, "discover"' "$QML"
+check "…and the window is what asks for them, not a terminal" $?
+
 # ⛔ A BUTTON IS ITS OWN LABEL. Not an icon that needs a tooltip to say what it
 # does; only KEYS follow a setting.
 grep -q 'text: root.busy ? "Syncing…" : "Sync now"' "$QML"
