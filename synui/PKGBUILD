@@ -2587,7 +2587,7 @@ pkgver=0.1.0
 #   bitfields, verbatim. Every derived column was already telling the truth
 #   (pq=yes, image_description=yes, pq_lut=yes, sdr=no); the one fact that
 #   explained all four was the one not on the line.
-pkgrel=551
+pkgrel=552
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

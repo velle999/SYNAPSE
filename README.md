@@ -899,6 +899,26 @@ Turn it off in **Control panel ▸ Power ▸ Unlock with fingerprint**, or with
 `lock_fingerprint = off` in `synuirc`. It is on by default and costs a machine
 without a reader one extra fork per lock and no visible change.
 
+**At the login screen it is opt-in**, and that is a different switch:
+
+```
+sudo mkdir -p /etc/synui && sudo touch /etc/synui/login-fingerprint.enable
+```
+
+then upgrade or reinstall `synui`. That puts `pam_fprintd` into
+`/etc/pam.d/greetd`; deleting the file and upgrading again takes it back out.
+
+⚠ **It is opt-in because a reader that does not work is not free.**
+`pam_fprintd` blocks the PAM conversation while it waits for a finger, and
+greetd runs one conversation at a time — so the seconds it waits are seconds
+the password prompt has not appeared yet. On a machine whose sensor never
+answers, every login pays that and gets nothing back. Unlike the lock, which
+runs its fingerprint helper *alongside* the password, the login screen cannot:
+greetd owns authentication and asks one question at a time.
+
+So turn it on once you know the reader works — `syn-settings` ▸ Fingerprint, or
+lock the screen and try it there.
+
 ### The look it ships with
 
 A fresh install boots into **SYNAPSE Prism**, and Prism has no colour of its

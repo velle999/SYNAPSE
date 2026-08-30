@@ -21,9 +21,27 @@
 # would mean a laptop whose reader failed cannot be logged into at all — the
 # one bug in this area nobody could work around from the login screen.
 #
+# ⛔ AND OPT-IN, BECAUSE A READER THAT DOES NOT WORK IS NOT FREE. pam_fprintd
+# blocks the PAM conversation while it waits, and greetd runs one conversation
+# at a time — so on a machine whose sensor never answers, every login pays that
+# timeout and gets nothing for it. Measured on the ThinkPad: the sensor
+# enumerates (06cb:00bd) but reports bcdDevice 0.00 and no product string,
+# fprintd logs "Device responded with error: 789" the instant it starts, and
+# every lock screen for a week logged "reader never became available". The
+# fingerprint could not have worked there, and the wait was pure cost.
+#
+# So the line goes in only when $_fp_flag says somebody wants it, and an
+# unmarked machine has it TAKEN OUT again on upgrade. Default is a fast login;
+# a working reader is one file away.
+#
 # SynapseOS Project — GPL-2.0-or-later
 
 _greetd_pam=/etc/pam.d/greetd
+
+# Touch this to ask for a fingerprint at the login screen. A file rather than a
+# synuirc key because /etc/pam.d/greetd is root's and this scriptlet is the only
+# thing that edits it — a per-user setting could not turn it on anyway.
+_fp_flag=/etc/synui/login-fingerprint.enable
 # ⚠ timeout=10 IS THE WHOLE TRADE-OFF, AND IT IS DELIBERATE. pam_fprintd blocks
 # the PAM conversation while it waits for a finger, and greetd runs ONE
 # conversation at a time — so the seconds it waits are seconds the password
@@ -38,46 +56,88 @@ _greetd_pam=/etc/pam.d/greetd
 # the window.
 _fp_line='auth       sufficient   pam_fprintd.so timeout=10'
 
+# The line this scriptlet writes, and the pattern that recognises one it wrote
+# before — with or without the timeout the first version left off.
+#
+# ⛔ THE PATTERN IS STRICT ON PURPOSE. Removal keys off it, and a line somebody
+# added by hand with their own options must never be taken out by an upgrade.
+# Ours is exactly "auth sufficient pam_fprintd.so" with an optional timeout= and
+# nothing else; anything richer than that belongs to whoever wrote it.
+_fp_ours='^auth[[:space:]]+sufficient[[:space:]]+pam_fprintd\.so([[:space:]]+timeout=[0-9]+)?[[:space:]]*$'
+
+# Is the module actually there? A function rather than the test inline, so the
+# suite can answer it on a build host that has no fprintd — which is every build
+# host, and was why the add and upgrade paths went unexercised.
+_synui_have_pam_fprintd() {
+    [ -e /usr/lib/security/pam_fprintd.so ] || [ -e /lib/security/pam_fprintd.so ]
+}
+
+# Rewrite $_greetd_pam through a temp file, but only if the result still looks
+# like the stack it started as. A half-written PAM file is a machine nobody can
+# log into, and the window for that is however long the write takes.
+_synui_pam_commit() {   # _synui_pam_commit <tmpfile>
+    if ! grep -q 'system-local-login' "$1"; then
+        rm -f "$1"
+        return 1
+    fi
+    chmod 644 "$1"
+    mv -f "$1" "$_greetd_pam"
+    return 0
+}
+
 _synui_fprint_in_greeter() {
     # Nothing to do where there is no greetd, which is most desktops.
     [ -f "$_greetd_pam" ] || return 0
 
-    # Already there — including a line somebody added by hand, which is not
-    # ours to duplicate.
+    local tmp
+
+    # ── Not asked for: take ours back out ────────────────────────────────────
     #
-    # ⛔ BUT AN OLD LINE OF OURS IS UPGRADED, NOT LEFT ALONE. The first version
-    # of this had no `timeout=`, and returning here on sight of the word
-    # pam_fprintd meant every machine that already had it kept the default —
-    # 36 seconds of "Checking…" on every password login, and no upgrade would
-    # ever change it. "Already present" is not the same question as "already
-    # correct", and a post_upgrade that cannot fix its own earlier output is a
-    # fix that never arrives.
-    if grep -q 'pam_fprintd' "$_greetd_pam"; then
-        # Somebody else's line, or one already carrying options: leave it.
-        if ! grep -qE '^auth[[:space:]]+sufficient[[:space:]]+pam_fprintd\.so[[:space:]]*$' "$_greetd_pam"; then
-            return 0
-        fi
-        local up
-        up=$(mktemp "${_greetd_pam}.synui.XXXXXX") || return 0
-        sed -E "s|^auth[[:space:]]+sufficient[[:space:]]+pam_fprintd\.so[[:space:]]*$|$_fp_line|" \
-            "$_greetd_pam" > "$up" || { rm -f "$up"; return 0; }
-        if ! grep -q 'system-local-login' "$up" || ! grep -q 'pam_fprintd' "$up"; then
-            rm -f "$up"
-            return 0
-        fi
-        chmod 644 "$up"
-        mv -f "$up" "$_greetd_pam"
-        echo ">>> synui: login fingerprint given a 10s timeout, so a typed"
-        echo "    password is not left waiting for a finger that is not coming."
+    # ⛔ THIS IS THE HALF THAT ACTUALLY MATTERS. Earlier versions added the line
+    # unconditionally, so machines are already carrying it — including ones
+    # whose sensor never answers, where it costs a pam_fprintd timeout on every
+    # single login and can never succeed. An upgrade that could not undo its own
+    # earlier output would leave that cost in place forever.
+    if [ ! -e "$_fp_flag" ]; then
+        grep -qE "$_fp_ours" "$_greetd_pam" || return 0
+        tmp=$(mktemp "${_greetd_pam}.synui.XXXXXX") || return 0
+        grep -vE "$_fp_ours" "$_greetd_pam" > "$tmp" || { rm -f "$tmp"; return 0; }
+        _synui_pam_commit "$tmp" || return 0
+        echo ">>> synui: the login-screen fingerprint is opt-in now, and this"
+        echo "    machine has not asked for it — the pam_fprintd line has been"
+        echo "    removed from $_greetd_pam. It was costing a timeout on every"
+        echo "    login whether or not the reader worked."
+        echo "    To turn it on:  sudo mkdir -p /etc/synui &&"
+        echo "                    sudo touch $_fp_flag"
+        echo "    then reinstall or upgrade synui."
         return 0
     fi
 
-    # ⚠ ONLY WHEN THE MODULE IS ACTUALLY INSTALLED. fprintd is an optdepend and
-    # is absent on most machines; a `sufficient` line naming a module PAM cannot
-    # dlopen is harmless to authentication but logs a complaint on every single
-    # login. post_upgrade runs on every synui update, so a machine that installs
-    # fprintd later picks this up at the next one.
-    if ! [ -e /usr/lib/security/pam_fprintd.so ] && ! [ -e /lib/security/pam_fprintd.so ]; then
+    # ── Asked for ────────────────────────────────────────────────────────────
+
+    # ⚠ ONLY WHEN THE MODULE IS ACTUALLY INSTALLED. fprintd is an optdepend; a
+    # `sufficient` line naming a module PAM cannot dlopen is harmless to
+    # authentication but logs a complaint on every single login. post_upgrade
+    # runs on every synui update, so a machine that installs fprintd later picks
+    # this up at the next one.
+    if ! _synui_have_pam_fprintd; then
+        echo ">>> synui: $_fp_flag is set, but pam_fprintd is not installed."
+        echo "    pacman -S fprintd, then upgrade synui again."
+        return 0
+    fi
+
+    if grep -q 'pam_fprintd' "$_greetd_pam"; then
+        # Already correct, or somebody else's line: either way, leave it.
+        grep -qF "$_fp_line" "$_greetd_pam" && return 0
+        grep -qE "$_fp_ours" "$_greetd_pam" || return 0
+
+        # Ours, but from the version that wrote no timeout — the default left
+        # 36 seconds of "Checking…" in front of every password login.
+        tmp=$(mktemp "${_greetd_pam}.synui.XXXXXX") || return 0
+        sed -E "s|$_fp_ours|$_fp_line|" "$_greetd_pam" > "$tmp" || { rm -f "$tmp"; return 0; }
+        _synui_pam_commit "$tmp" || return 0
+        echo ">>> synui: login fingerprint given a 10s timeout, so a typed"
+        echo "    password is not left waiting for a finger that is not coming."
         return 0
     fi
 
@@ -92,10 +152,6 @@ _synui_fprint_in_greeter() {
         return 0
     fi
 
-    # Written via a temp file and moved into place: a half-written PAM stack is
-    # a machine nobody can log into, and the window for that is however long the
-    # write takes.
-    local tmp
     tmp=$(mktemp "${_greetd_pam}.synui.XXXXXX") || return 0
     awk -v line="$_fp_line" '
         !done && /^auth[[:space:]]+include[[:space:]]+system-local-login/ {
@@ -104,19 +160,12 @@ _synui_fprint_in_greeter() {
         }
         { print }
     ' "$_greetd_pam" > "$tmp" || { rm -f "$tmp"; return 0; }
+    grep -q 'pam_fprintd' "$tmp" || { rm -f "$tmp"; return 0; }
+    _synui_pam_commit "$tmp" || return 0
 
-    # It must still contain the stack it started with. An awk that produced
-    # nothing useful is not something to move over a login file.
-    if ! grep -q 'system-local-login' "$tmp" || ! grep -q 'pam_fprintd' "$tmp"; then
-        rm -f "$tmp"
-        return 0
-    fi
-
-    chmod 644 "$tmp"
-    mv -f "$tmp" "$_greetd_pam"
     echo ">>> synui: fingerprint added to the login screen ($_greetd_pam)."
     echo "    It is sufficient, so a failed or absent swipe still asks for"
-    echo "    the password. Remove that line to undo it."
+    echo "    the password. Remove $_fp_flag to undo it."
 }
 
 post_install() {

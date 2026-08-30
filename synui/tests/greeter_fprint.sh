@@ -79,20 +79,89 @@ chk "…and a failed arm is silent, leaving the password screen as it was" $?
 awk '/^static void greeter_arm/,/^}/' "$G" | grep -q 'busy  = 0'
 chk "…and arming does not swallow the keyboard" $?
 
-# ── The PAM line ────────────────────────────────────────────────────────────
+# ── The PAM line, and the opt-in that gates it ──────────────────────────────
+#
+# ⛔ OPT-IN, BECAUSE A READER THAT DOES NOT WORK IS NOT FREE. pam_fprintd blocks
+# the PAM conversation while it waits and greetd runs one at a time, so on a
+# machine whose sensor never answers every login pays that timeout and gets
+# nothing. The ThinkPad's sensor enumerates and has never once become
+# available; the line was pure cost there. It goes in only when asked for, and
+# comes back OUT on an unmarked machine.
 grep -q 'pam_fprintd.so timeout=10' "$I"
 chk "pam_fprintd is given a bounded timeout" $?
 
-# ⛔ AND AN OLD LINE IS UPGRADED. The first version wrote no timeout, and the
-# "already present" check returned before touching it — so every machine that
-# already had the line kept the 36-second default and no upgrade could ever
-# change it. A post_upgrade that cannot fix its own earlier output is a fix that
-# never arrives.
-grep -q 'sufficient\[\[:space:\]\]+pam_fprintd' "$I" || grep -q 'pam_fprintd\\.so\[\[:space:\]\]\*\$' "$I"
-chk "an earlier line without a timeout is rewritten, not skipped" $?
+grep -q 'login-fingerprint.enable' "$I"
+chk "…and is gated on an opt-in flag" $?
+
+# The whole scriptlet, driven against real files. Sourcing it defines the
+# functions without running them, so each path can be exercised in a temp dir.
+T=$(mktemp -d) || exit 1
+trap 'rm -rf "$T"' EXIT
+cat > "$T/base" <<'PAM'
+#%PAM-1.0
+
+auth       required     pam_securetty.so
+auth       requisite    pam_nologin.so
+auth       include      system-local-login
+account    include      system-local-login
+session    include      system-local-login
+PAM
+
+drive() {   # drive <yes|no> <file>
+    (
+        . "$I"
+        _greetd_pam="$2"
+        _fp_flag="$T/flag"
+        # Every build host lacks fprintd, which is why this is a function.
+        _synui_have_pam_fprintd() { return 0; }
+        [ "$1" = yes ] && : > "$T/flag" || rm -f "$T/flag"
+        _synui_fprint_in_greeter
+    ) >/dev/null 2>&1
+}
+
+cp "$T/base" "$T/a"; drive no "$T/a"
+cmp -s "$T/base" "$T/a"
+chk "an unmarked machine with a clean stack is left alone" $?
+
+# ⛔ THE HALF THAT MATTERS. Earlier releases added the line unconditionally, so
+# machines already carry it. An upgrade that could not undo its own output would
+# leave that cost in place forever.
+cp "$T/base" "$T/b"
+sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so\nauth       include|' "$T/b"
+drive no "$T/b"
+[ "$(grep -c pam_fprintd "$T/b")" = 0 ]
+chk "…and one we added before is taken back out" $?
+[ "$(grep -c system-local-login "$T/b")" = 3 ]
+chk "…leaving the rest of the stack intact" $?
+
+# ⛔ NEVER SOMEBODY ELSE'S LINE. Removal keys off a strict pattern; a line with
+# its own options belongs to whoever wrote it, and an upgrade must not eat it.
+cp "$T/base" "$T/c"
+sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so max-tries=5 debug\nauth       include|' "$T/c"
+drive no "$T/c"
+grep -q 'max-tries=5' "$T/c"
+chk "…but a hand-written line with options is never touched" $?
+
+cp "$T/base" "$T/d"; drive yes "$T/d"
+grep -q 'pam_fprintd.so timeout=10' "$T/d"
+chk "asking for it adds the line" $?
+# ⛔ ABOVE the include: securetty and nologin are gates a finger must not skip.
+[ "$(grep -n pam_fprintd "$T/d" | cut -d: -f1)" -lt \
+  "$(grep -n 'auth       include' "$T/d" | cut -d: -f1)" ]
+chk "…above system-local-login, below securetty and nologin" $?
+
+cp "$T/base" "$T/e"
+sed -i 's|^auth       include|auth       sufficient   pam_fprintd.so\nauth       include|' "$T/e"
+drive yes "$T/e"
+grep -q 'timeout=10' "$T/e"
+chk "…and an older line of ours gains the timeout" $?
+
+drive yes "$T/e"
+[ "$(grep -c pam_fprintd "$T/e")" = 1 ]
+chk "…and running twice changes nothing" $?
 
 grep -q 'sufficient' "$I"
-chk "…and it stays sufficient, so a dead reader still asks for the password" $?
+chk "it stays sufficient, so a dead reader still asks for the password" $?
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ] || exit 1
