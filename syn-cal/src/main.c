@@ -49,6 +49,9 @@ static void usage(FILE *f)
 "  syn-cal agenda [--days N] [--from YYYY-MM-DD]\n"
 "                                       what is on, across every calendar\n"
 "  syn-cal month [--from YYYY-MM]       the month, as a grid\n"
+"  syn-cal weekstart [sun|mon]          which day a week is drawn from,\n"
+"                                       for the grid, the terminal and the\n"
+"                                       window. Sunday unless you say so.\n"
 "  syn-cal today                        just today\n"
 "  syn-cal week                         the next seven days\n"
 "  syn-cal events <name> <calendar>     the raw store, one calendar\n"
@@ -912,6 +915,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "tui"))                       rc = cmd_tui();
 	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days, from_date);
 	else if (!strcmp(c, "month"))                     rc = cmd_month(from_date);
+	else if (!strcmp(c, "weekstart"))                 rc = cmd_weekstart(n >= 2 ? pos[1] : NULL);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);
 	else { warn("unknown command '%s'", c); usage(stderr); rc = 2; }

@@ -43,8 +43,16 @@ out=$("$S" tui < /dev/null)
 [ $? = 0 ]
 check "the tui runs with stdin closed and exits" $?
 
-echo "$out" | grep -q "Mo Tu We Th Fr Sa Su"
-check "…drawing a week header starting Monday" $?
+echo "$out" | grep -q "Su Mo Tu We Th Fr Sa"
+check "…drawing a week header starting Sunday, which is the default" $?
+
+# ⛔ AND IT IS THE SETTING THAT DECIDES, not a literal in this file. The terminal
+# view and the grid it shares with `syn-cal month` have to move together; a
+# heading that stayed put would be off by one all month.
+"$S" weekstart mon >/dev/null
+"$S" tui < /dev/null 2>/dev/null | grep -q "Mo Tu We Th Fr Sa Su"
+check "…and following the setting when it says Monday" $?
+"$S" weekstart sun >/dev/null
 
 echo "$out" | grep -q "$(date +%-d) $(date +'%B %Y')"
 check "…and naming the selected day in words" $?

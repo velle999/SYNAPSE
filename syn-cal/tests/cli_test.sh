@@ -208,21 +208,24 @@ check "the month grid answers one record per day" $?
 [ "$("$S" --rec month --from=2028-02 | tail -n +2 | wc -l)" = 29 ]
 check "…twenty-nine in a leap February" $?
 
-"$S" --rec month --from=2026-02 | tail -n +2 | head -1 | grep -qP '^2026-02-01\t[0-9]+\t0\t6\t'
+# Weeks start on Sunday here — the block below changes it and changes it back.
+"$S" --rec month --from=2026-02 | tail -n +2 | head -1 | grep -qP '^2026-02-01\t[0-9]+\t0\t0\t0\t'
 check "…each in the cell its weekday says: 1 Feb 2026 is a Sunday" $?
 
-[ "$("$S" --rec month --from=2026-02 | tail -n +2 | awk -F'\t' '{print $3}' | sort -n | tail -1)" = 4 ]
-check "…so twenty-eight days opening on a Sunday still need five rows" $?
+[ "$("$S" --rec month --from=2026-02 | tail -n +2 | awk -F'\t' '{print $3}' | sort -n | tail -1)" = 3 ]
+check "…so twenty-eight days opening in column 0 fit in four rows" $?
 
-# ⛔ THE SHAPE A `days / 7` GETS WRONG IN THE OTHER DIRECTION.
-[ "$("$S" --rec month --from=2027-02 | tail -n +2 | awk -F'\t' '{print $3}' | sort -n | tail -1)" = 3 ]
-check "…and opening on a Monday, four" $?
+# ⛔ THE SHAPE A `days / 7` GETS WRONG IN THE OTHER DIRECTION. 1 Feb 2027 is a
+# Monday, which is column 1 of a Sunday-first grid — and one column in is enough
+# to push the same twenty-eight days into a fifth row.
+[ "$("$S" --rec month --from=2027-02 | tail -n +2 | awk -F'\t' '{print $3}' | sort -n | tail -1)" = 4 ]
+check "…and opening one column in, five" $?
 
-[ "$("$S" --rec month | tail -n +2 | awk -F'\t' '$5==1' | wc -l)" = 1 ]
+[ "$("$S" --rec month | tail -n +2 | awk -F'\t' '$6==1' | wc -l)" = 1 ]
 check "exactly one day is marked today" $?
 
 # The fixture above put a one-off on today and a daily rule on the days after.
-[ "$("$S" --rec month | tail -n +2 | awk -F'\t' '$5==1 {print $6}')" -ge 1 ]
+[ "$("$S" --rec month | tail -n +2 | awk -F'\t' '$6==1 {print $7}')" -ge 1 ]
 check "…and today's cell counts the event that is on it" $?
 
 # ⛔ THE MONTH ENDS WHERE THE NEXT ONE BEGINS. Loading the 1st plus 31 days
@@ -237,7 +240,47 @@ check "a full date names the month it falls in" $?
 [ $? -ne 0 ]
 check "a --from that is not a month fails" $?
 
+# ── which day the week starts on ────────────────────────────────────────────
+#
+# ⛔ SUNDAY UNLESS SOMEBODY SAYS OTHERWISE, and the heading moves with the grid.
+# A grid drawn Sunday-first under a Monday-first heading is off by one all month
+# and reads as the grid being broken.
+
+[ "$("$S" weekstart)" = "sunday" ]
+check "weeks start on Sunday until told otherwise" $?
+
+"$S" month | grep -q "Su Mo Tu We Th Fr Sa"
+check "…and the grid is headed from Sunday" $?
+
+# 1 August 2026 is a Saturday: the last column Sunday-first, the second-to-last
+# Monday-first. dow is 6 either way — a column is not a weekday.
+"$S" --rec month --from=2026-08 | tail -n +2 | head -1 | grep -qP '^2026-08-01\t[0-9]+\t0\t6\t6\t'
+check "…so the 1st sits in column 6, and says it is a Saturday" $?
+
+"$S" weekstart mon >/dev/null
+check "the week start can be changed" $?
+
+[ "$("$S" weekstart)" = "monday" ]
+check "…and it stays changed" $?
+
 "$S" month | grep -q "Mo Tu We Th Fr Sa Su"
+check "…the heading follows it" $?
+
+"$S" --rec month --from=2026-08 | tail -n +2 | head -1 | grep -qP '^2026-08-01\t[0-9]+\t0\t5\t6\t'
+check "…and so does the column, while the weekday does not" $?
+
+# ⛔ A TYPO IS REFUSED, NOT ROUNDED TO A DEFAULT.
+"$S" weekstart tuesday >/dev/null 2>&1
+[ $? -ne 0 ]
+check "a day that is not sun or mon is refused" $?
+
+[ "$("$S" weekstart)" = "monday" ]
+check "…and the setting is left alone" $?
+
+"$S" weekstart sun >/dev/null
+check "and back to Sunday" $?
+
+"$S" month | grep -q "Su Mo Tu We Th Fr Sa"
 check "the human grid is a week wide, headed by weekday" $?
 
 rm -rf "$SYNCAL_HOME/work/Home"

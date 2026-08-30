@@ -12,7 +12,67 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>   /* strcasecmp */
 #include <time.h>
+
+/* ── which day the week starts on ───────────────────────────────────────── */
+
+/* ⛔ ONE LINE, ONE KEY, AND ITS OWN FILE. Not accounts.conf: that file is a list
+ * of accounts and every reader of it walks sections. A preference that is not
+ * about any account has no section to live in, and inventing one would mean an
+ * account could be called [settings]. */
+#define WEEK_KEY "week_start"
+
+bool week_start_parse(const char *s, week_start_t *out)
+{
+	if (!s || !*s) return false;
+	if (!strcasecmp(s, "sun") || !strcasecmp(s, "sunday")) { *out = WEEK_SUNDAY; return true; }
+	if (!strcasecmp(s, "mon") || !strcasecmp(s, "monday")) { *out = WEEK_MONDAY; return true; }
+	return false;
+}
+
+const char *week_start_name(week_start_t ws)
+{
+	return ws == WEEK_MONDAY ? "monday" : "sunday";
+}
+
+week_start_t week_start_get(void)
+{
+	char *path = store_path("settings.conf");
+	size_t len = 0;
+	char *data = read_file(path, &len);
+	free(path);
+	if (!data) return WEEK_SUNDAY;
+
+	week_start_t ws = WEEK_SUNDAY;
+	for (char *line = strtok(data, "\n"); line; line = strtok(NULL, "\n")) {
+		char *eq = strchr(line, '=');
+		if (!eq) continue;
+		*eq = '\0';
+		char *k = line, *v = eq + 1;
+		while (*k == ' ' || *k == '\t') k++;
+		for (char *e = k + strlen(k); e > k && (e[-1] == ' ' || e[-1] == '\t'); e--) e[-1] = '\0';
+		while (*v == ' ' || *v == '\t') v++;
+		for (char *e = v + strlen(v); e > v && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r'); e--)
+			e[-1] = '\0';
+		if (!strcmp(k, WEEK_KEY)) week_start_parse(v, &ws);
+	}
+	free(data);
+	return ws;
+}
+
+bool week_start_set(week_start_t ws, char **err)
+{
+	char *path = store_path("settings.conf");
+	char *body = xasprintf("# syn-cal settings.\n"
+	                       "# `syn-cal weekstart sun|mon` is the supported way to edit this.\n"
+	                       "%s = %s\n", WEEK_KEY, week_start_name(ws));
+	bool ok = write_file_atomic(path, body, strlen(body), 0600);
+	if (!ok && err) *err = xasprintf("could not write %s", path);
+	free(body);
+	free(path);
+	return ok;
+}
 
 /* ── the grid ───────────────────────────────────────────────────────────── */
 
@@ -32,9 +92,9 @@ void month_step(int *year, int *mon, int delta)
 	while (*mon > 11) { *mon -= 12; (*year)++; }
 }
 
-/* Weekday of the 1st, 0 = Monday. Via mktime rather than by hand: it knows
- * about the calendar's own history, and this is not a place to be clever. */
-static int first_weekday(int year, int mon)
+/* tm_wday of the 1st, 0 = Sunday. Via mktime rather than by hand: it knows about
+ * the calendar's own history, and this is not a place to be clever. */
+static int first_wday(int year, int mon)
 {
 	struct tm t;
 	memset(&t, 0, sizeof t);
@@ -44,7 +104,7 @@ static int first_weekday(int year, int mon)
 	t.tm_hour = 12;              /* midday: no clock change can move the day */
 	t.tm_isdst = -1;
 	if (mktime(&t) == (time_t)-1) return 0;
-	return (t.tm_wday + 6) % 7;
+	return t.tm_wday;
 }
 
 static time_t day_start(int year, int mon, int day)
@@ -60,12 +120,25 @@ static time_t day_start(int year, int mon, int day)
 
 bool month_load(month_t *m, int year, int mon)
 {
+	return month_load_week(m, year, mon, week_start_get());
+}
+
+int month_dow_of_col(const month_t *m, int col)
+{
+	return (m->week_start + col) % 7;
+}
+
+bool month_load_week(month_t *m, int year, int mon, week_start_t ws)
+{
 	month_step(&year, &mon, 0);          /* normalise before anything reads it */
 	memset(m, 0, sizeof *m);
 	m->year = year;
 	m->mon = mon;
+	m->week_start = ws;
 	m->days = month_days_in(year, mon);
-	m->first = first_weekday(year, mon);
+	/* ⚠ THE COLUMN, NOT THE WEEKDAY. Sunday is column 0 of a Sunday-first grid
+	 * and column 6 of a Monday-first one; everything below counts columns. */
+	m->first = (first_wday(year, mon) - (int)ws + 7) % 7;
 	/* ⚠ CEILING, NOT days/7. February starting on a Monday is exactly four
 	 * rows and every other shape needs the partial one. */
 	m->rows = (m->first + m->days + 6) / 7;
@@ -138,6 +211,34 @@ static bool month_from(const char *from_date, int *year, int *mon)
 	return true;
 }
 
+int cmd_weekstart(const char *value)
+{
+	if (!value) {
+		if (g_out == OUT_REC) {
+			rec_header("week_start");
+			rec_row("%s", week_start_name(week_start_get()));
+		} else {
+			printf("%s\n", week_start_name(week_start_get()));
+		}
+		return 0;
+	}
+
+	week_start_t ws;
+	if (!week_start_parse(value, &ws)) {
+		warn("weekstart wants 'sun' or 'mon', not '%s'", value);
+		return 2;
+	}
+	char *err = NULL;
+	if (!week_start_set(ws, &err)) {
+		warn("%s", err ? err : "could not write the setting");
+		free(err);
+		return 1;
+	}
+	if (g_out != OUT_REC)
+		printf("Weeks start on %s.\n", ws == WEEK_MONDAY ? "Monday" : "Sunday");
+	return 0;
+}
+
 int cmd_month(const char *from_date)
 {
 	int year, mon;
@@ -172,12 +273,17 @@ int cmd_month(const char *from_date)
 		 * from this and does no calendar arithmetic of its own — which is the
 		 * whole reason `row` and `col` are here rather than left for a front
 		 * end to infer from the first day's weekday. */
-		rec_header("date\tstart\trow\tcol\ttoday\tcount");
+		/* ⚠ AND `dow` BESIDE `col`, BECAUSE THEY ARE NOT THE SAME THING.
+		 * Which column a Sunday is depends on where the week starts, so a
+		 * front end labelling its headings Mon..Sun from the column number
+		 * would be right for one setting and silently wrong for the other.
+		 * It reads the weekday off the record instead. */
+		rec_header("date\tstart\trow\tcol\tdow\ttoday\tcount");
 		for (int day = 1; day <= m.days; day++) {
 			int cell = m.first + day - 1;
-			rec_row("%04d-%02d-%02d\t%ld\t%d\t%d\t%d\t%d",
+			rec_row("%04d-%02d-%02d\t%ld\t%d\t%d\t%d\t%d\t%d",
 			        m.year, m.mon + 1, day, (long)month_day_start(&m, day),
-			        cell / 7, cell % 7,
+			        cell / 7, cell % 7, month_dow_of_col(&m, cell % 7),
 			        (m.year == t_y && m.mon == t_m && day == t_d) ? 1 : 0,
 			        counts[day]);
 		}
@@ -199,7 +305,13 @@ int cmd_month(const char *from_date)
 	const char *A = g_color ? "\033[36m" : "";
 
 	printf("\n  %s%s%s\n\n", B, title, R);
-	printf("  %sMo Tu We Th Fr Sa Su%s\n", D, R);
+	/* ⚠ HEADED FROM THE SETTING, NOT FROM A LITERAL. A grid drawn
+	 * Sunday-first under a heading that starts at Monday is off by one all
+	 * month, and reads as the grid being wrong rather than the heading. */
+	static const char *const abbr[] = { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
+	printf("  %s", D);
+	for (int c = 0; c < 7; c++) printf("%s%s", c ? " " : "", abbr[month_dow_of_col(&m, c)]);
+	printf("%s\n", R);
 	printf("  ");
 	for (int i = 0; i < m.first; i++) printf("   ");
 

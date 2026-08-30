@@ -5,10 +5,11 @@
  * times is the day a leap year is fixed in one of them. What follows is the
  * whole of what the grid promises, so the copy that drifts fails here first.
  *
- * ⚠ THE CASES ARE CHOSEN, NOT SPRINKLED. February 2026 opens on a Sunday, which
- * is the shape that needs a sixth row for twenty-eight days; February 2027 opens
- * on a Monday, which is the only shape that fits in four. Both are wrong under a
- * `days / 7`, and only one of them is wrong under a naive ceiling.
+ * ⚠ THE CASES ARE CHOSEN, NOT SPRINKLED. Twenty-eight days fit in four rows
+ * only when the month opens on the first column, and need five otherwise — so
+ * February 2026 is four rows Sunday-first and five Monday-first, and the same
+ * twenty-eight days answer differently depending on a setting. A `days / 7` is
+ * wrong for both.
  *
  * SynapseOS Project — GPL-2.0-or-later
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -41,21 +42,62 @@ static void test_lengths(void)
 	ok_("…2000 had 29: divisible by 400", month_days_in(2000, 1) == 29);
 }
 
+/* ⛔ THE WHOLE GRID MOVES WITH THE SETTING. Every assertion about a column is an
+ * assertion about which day the week starts on, so the ones below say which. */
+static void test_week_start(void)
+{
+	month_t sun, mon;
+	/* 1 August 2026 is a Saturday: the last column of a Sunday-first grid and
+	 * the second-to-last of a Monday-first one. */
+	ok_("August 2026 opens in column 6 when weeks start on Sunday",
+	    month_load_week(&sun, 2026, 7, WEEK_SUNDAY) && sun.first == 6);
+	ok_("…and in column 5 when they start on Monday",
+	    month_load_week(&mon, 2026, 7, WEEK_MONDAY) && mon.first == 5);
+
+	ok_("…and thirty-one days need six rows either way", sun.rows == 6 && mon.rows == 6);
+
+	month_load_week(&sun, 2026, 1, WEEK_SUNDAY);   /* February 2026: a Sunday */
+	month_load_week(&mon, 2026, 1, WEEK_MONDAY);
+	ok_("February 2026 opens column 0 Sunday-first and 6 Monday-first",
+	    sun.first == 0 && mon.first == 6);
+	ok_("…so the same 28 days are four rows one way and five the other",
+	    sun.rows == 4 && mon.rows == 5);
+
+	/* A column is not a weekday, and this is the mapping that says so. */
+	ok_("column 0 is Sunday when weeks start on Sunday",
+	    month_dow_of_col(&sun, 0) == 0 && month_dow_of_col(&sun, 6) == 6);
+	ok_("…and Monday when they start on Monday",
+	    month_dow_of_col(&mon, 0) == 1 && month_dow_of_col(&mon, 6) == 0);
+
+	week_start_t ws;
+	ok_("'sun' and 'SUNDAY' both parse", week_start_parse("sun", &ws) && ws == WEEK_SUNDAY &&
+	    week_start_parse("SUNDAY", &ws) && ws == WEEK_SUNDAY);
+	ok_("'mon' and 'Monday' both parse", week_start_parse("mon", &ws) && ws == WEEK_MONDAY &&
+	    week_start_parse("Monday", &ws) && ws == WEEK_MONDAY);
+	/* ⛔ AND A TYPO IS REFUSED, NOT ROUNDED TO A DEFAULT. Silently picking one
+	 * is how somebody's setting goes missing without a word. */
+	ok_("…and anything else is refused", !week_start_parse("tuesday", &ws) &&
+	    !week_start_parse("", &ws) && !week_start_parse(NULL, &ws));
+}
+
 static void test_rows(void)
 {
 	month_t m;
 
-	ok_("February 2027 opens on a Monday", month_load(&m, 2027, 1) && m.first == 0);
+	ok_("February 2027 opens on a Monday",
+	    month_load_week(&m, 2027, 1, WEEK_MONDAY) && m.first == 0);
 	ok_("…so twenty-eight days need four rows", m.rows == 4);
 
-	ok_("February 2026 opens on a Sunday", month_load(&m, 2026, 1) && m.first == 6);
+	ok_("February 2026 opens on a Sunday",
+	    month_load_week(&m, 2026, 1, WEEK_MONDAY) && m.first == 6);
 	ok_("…so the same twenty-eight days need five", m.rows == 5);
 
-	ok_("August 2026 opens on a Saturday", month_load(&m, 2026, 7) && m.first == 5);
+	ok_("August 2026 opens on a Saturday",
+	    month_load_week(&m, 2026, 7, WEEK_MONDAY) && m.first == 5);
 	ok_("…and needs six rows", m.rows == 6);
 
-	ok_("May 2027 opens on a Saturday with 31 days", month_load(&m, 2027, 4) &&
-	    m.first == 5 && m.days == 31);
+	ok_("May 2027 opens on a Saturday with 31 days",
+	    month_load_week(&m, 2027, 4, WEEK_MONDAY) && m.first == 5 && m.days == 31);
 	ok_("…which is the widest a month gets: six rows", m.rows == 6);
 }
 
@@ -195,6 +237,7 @@ int main(void)
 
 	printf("month\n");
 	test_lengths();
+	test_week_start();
 	test_rows();
 	test_bounds();
 	test_stepping();

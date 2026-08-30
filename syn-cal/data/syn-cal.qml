@@ -358,6 +358,19 @@ FloatingWindow {
         return d
     }
     readonly property string monthTag: Qt.formatDate(root.monthAnchor, "yyyy-MM")
+    // ⛔ THE HEADINGS COME OFF THE RECORDS. Which column a Sunday is depends on
+    // a setting the binary owns, so a fixed ["Mon"…"Sun"] here is right for one
+    // configuration and quietly one day out for the other — a whole month drawn
+    // under the wrong labels, which reads as the grid being broken. Every column
+    // appears somewhere in a month, so the answer is always complete.
+    readonly property var monthHeadings: {
+        const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        const out = ["", "", "", "", "", "", ""]
+        for (let i = 0; i < root.monthCells.length; i++)
+            out[root.monthCells[i].col] = names[root.monthCells[i].dow]
+        return out
+    }
+
     readonly property int monthRows: {
         let r = 0
         for (let i = 0; i < root.monthCells.length; i++)
@@ -440,7 +453,7 @@ FloatingWindow {
                 const out = []
                 for (let i = 1; i < rows.length; i++) {
                     const f = rows[i].split("\t")
-                    if (f.length < 6) continue
+                    if (f.length < 7) continue
                     // Decoded like every other field, though a date has nothing
                     // in it that needs it — see the note at the top of the file:
                     // the exceptions are what drift.
@@ -450,8 +463,9 @@ FloatingWindow {
                         day: parseInt(date.slice(8), 10),
                         row: parseInt(f[2], 10),
                         col: parseInt(f[3], 10),
-                        today: f[4] === "1",
-                        count: parseInt(f[5], 10)
+                        dow: parseInt(f[4], 10),
+                        today: f[5] === "1",
+                        count: parseInt(f[6], 10)
                     })
                 }
                 root.monthCells = out
@@ -609,11 +623,113 @@ FloatingWindow {
     Process {
         id: syncProc
         command: [root.bin, "sync"]
+        // ⚠ AND ITS REASON, NOT JUST THAT IT FAILED. syn-cal repeats what the
+        // server said — the CalDAV API being switched off in a Cloud project
+        // says so in those words — and a window that replaces all of it with
+        // "some calendars did not sync" is where that gets thrown away again.
+        stderr: StdioCollector { id: syncErr }
         onExited: (code) => {
             root.busy = false
-            root.status = code === 0 ? "Up to date." : "Some calendars did not sync."
+            root.status = code === 0 ? "Up to date."
+                                     : (syncErr.text.trim() || "Some calendars did not sync.")
             root.reload()
         }
+    }
+
+    // ── Setting an account up, in the window ────────────────────────────────
+    //
+    // ⛔ NOT IN A TERMINAL. Signing in already happens here; a person who has
+    // just signed in and sees "0 of 0 calendars on" needs `discover`, `enable`
+    // and `sync`, and sending them to a command line for those three is the
+    // window being a viewer for something only the CLI can set up — the exact
+    // thing the note above the sign-in panel says this file does not do.
+    property var calsByAccount: ({})
+    property string openAccount: ""
+    property string setupMsg: ""
+    property bool setupBusy: false
+
+    Process {
+        id: calsProcOne
+        property string acct: ""
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = text.trim().split("\n").filter(l => l.length > 0)
+                const out = []
+                for (let i = 1; i < rows.length; i++) {
+                    const f = rows[i].split("\t")
+                    if (f.length < 3) continue
+                    out.push({ url: root.disp(f[0]), name: root.disp(f[1]), on: f[2] === "1" })
+                }
+                // Assigned whole: mutating a var in place notifies nothing.
+                const by = {}
+                for (const k in root.calsByAccount) by[k] = root.calsByAccount[k]
+                by[calsProcOne.acct] = out
+                root.calsByAccount = by
+            }
+        }
+    }
+
+    function loadCalendars(name) {
+        calsProcOne.acct = name
+        calsProcOne.command = [root.bin, "--rec", "calendars", name]
+        calsProcOne.running = false
+        calsProcOne.running = true
+    }
+
+    Process {
+        id: discoverProc
+        property string acct: ""
+        stderr: StdioCollector { id: discoverErr }
+        onExited: (code) => {
+            root.setupBusy = false
+            if (code === 0) {
+                root.setupMsg = "Tick the calendars to sync."
+                root.loadCalendars(discoverProc.acct)
+                calsProc.running = false
+                calsProc.running = true
+            } else {
+                root.setupMsg = discoverErr.text.trim() || "the server did not answer"
+            }
+        }
+    }
+
+    function discover(name) {
+        if (root.setupBusy) return
+        root.setupBusy = true
+        root.setupMsg = "Asking the server…"
+        root.openAccount = name
+        discoverProc.acct = name
+        discoverProc.command = [root.bin, "discover", name]
+        discoverProc.running = false
+        discoverProc.running = true
+    }
+
+    Process {
+        id: toggleProc
+        property string acct: ""
+        stderr: StdioCollector { id: toggleErr }
+        onExited: (code) => {
+            root.setupBusy = false
+            if (code !== 0) {
+                root.setupMsg = toggleErr.text.trim() || "that calendar could not be changed"
+                root.loadCalendars(toggleProc.acct)   // back to what is really set
+                return
+            }
+            root.setupMsg = ""
+            root.loadCalendars(toggleProc.acct)
+            calsProc.running = false
+            calsProc.running = true
+            root.reload()
+        }
+    }
+
+    function toggleCalendar(acct, cal, on) {
+        if (root.setupBusy) return
+        root.setupBusy = true
+        toggleProc.acct = acct
+        toggleProc.command = [root.bin, on ? "disable" : "enable", acct, cal]
+        toggleProc.running = false
+        toggleProc.running = true
     }
 
     function sync() {
@@ -715,6 +831,153 @@ FloatingWindow {
                                         onClicked: root.signIn(modelData.name, modelData.kind)
                                     }
                                 }
+
+                                // ⛔ AND A SIGNED-IN ACCOUNT IS ONE CLICK FROM
+                                // ITS CALENDARS. "0 of 0 on" with nothing to
+                                // press is the same dead end as "not signed in"
+                                // with no way to sign in.
+                                Rectangle {
+                                    visible: modelData.secret !== "not set"
+                                    width: calsTxt.implicitWidth + root.ui(10)
+                                    height: root.ui(16)
+                                    radius: root.ui(4)
+                                    color: rowCals.containsMouse ? root.cAccent : "transparent"
+                                    border { width: 1; color: root.cDim }
+                                    Text {
+                                        id: calsTxt
+                                        anchors.centerIn: parent
+                                        text: root.openAccount === modelData.name
+                                              ? "Hide" : "Calendars"
+                                        color: rowCals.containsMouse ? root.cPanel : root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                                    }
+                                    MouseArea {
+                                        id: rowCals
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (root.openAccount === modelData.name) {
+                                                root.openAccount = ""
+                                            } else {
+                                                root.openAccount = modelData.name
+                                                root.setupMsg = ""
+                                                root.loadCalendars(modelData.name)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── this account's calendars ────────────────────
+                            Column {
+                                id: mineCol
+                                width: parent.width
+                                spacing: root.ui(2)
+                                visible: root.openAccount === modelData.name
+
+                                property var mine: root.calsByAccount[modelData.name] || []
+
+                                Item { width: 1; height: root.ui(3) }
+
+                                Repeater {
+                                    model: mineCol.mine
+                                    // ⚠ ONE MouseArea PER ROW. A single one over
+                                    // the list reports the row it was entered on
+                                    // and nothing after it.
+                                    //
+                                    // ⛔ AND IT HANGS OFF AN Item, NOT THE Row.
+                                    // A Row positions every visible child, so an
+                                    // anchors.fill MouseArea inside one is given
+                                    // a slot of its own and fights the anchor.
+                                    Item {
+                                        width: calList.width
+                                        height: root.ui(16)
+
+                                        Row {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: root.ui(6)
+                                            Rectangle {
+                                                width: root.ui(13); height: root.ui(13)
+                                                radius: root.ui(3)
+                                                color: modelData.on ? root.cAccent : "transparent"
+                                                border { width: 1
+                                                         color: modelData.on ? root.cAccent
+                                                                             : root.cDim }
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    visible: modelData.on
+                                                    text: "✓"
+                                                    color: root.cPanel
+                                                    font { family: root.uiFont
+                                                           pixelSize: root.ui(9) }
+                                                }
+                                            }
+                                            Text {
+                                                width: calList.width - root.ui(26)
+                                                elide: Text.ElideRight
+                                                text: modelData.name === "" ? modelData.url
+                                                                            : modelData.name
+                                                color: tickMouse.containsMouse ? root.cAccent
+                                                                               : root.cText
+                                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: tickMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !root.setupBusy
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.toggleCalendar(
+                                                root.openAccount, modelData.name, modelData.on)
+                                        }
+                                    }
+                                }
+
+                                // ⛔ THE BUTTON SAYS WHAT IT DOES. It is here
+                                // whether or not any were found: the first run
+                                // needs it, and a calendar added on the server
+                                // later is the same job.
+                                Rectangle {
+                                    width: parent.width
+                                    height: root.ui(20)
+                                    radius: root.ui(4)
+                                    color: findMouse.containsMouse ? root.cAccent : "transparent"
+                                    border { width: 1; color: root.cDim }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.setupBusy ? "Asking…" : "Find calendars"
+                                        color: findMouse.containsMouse ? root.cPanel : root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                                    }
+                                    MouseArea {
+                                        id: findMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        enabled: !root.setupBusy
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.discover(modelData.name)
+                                    }
+                                }
+
+                                // ⚠ THE SERVER'S OWN WORDS, IN THE WINDOW. The
+                                // 403 that means "the CalDAV API is switched off
+                                // in this Cloud project" names the switch and
+                                // the URL that flips it, and a person who never
+                                // opens a terminal is exactly who needs to read
+                                // it.
+                                Text {
+                                    visible: root.setupMsg !== ""
+                                    width: parent.width
+                                    wrapMode: Text.WordWrap
+                                    text: root.setupMsg
+                                    color: root.cWarn
+                                    font { family: root.uiFont; pixelSize: root.ui(10) }
+                                }
+
+                                Item { width: 1; height: root.ui(4) }
                             }
                         }
                     }
@@ -989,7 +1252,7 @@ FloatingWindow {
                             : 0
 
                         Repeater {
-                            model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                            model: root.monthHeadings
                             Text {
                                 x: index * (monthGrid.cellW + monthGrid.gap)
                                 width: monthGrid.cellW

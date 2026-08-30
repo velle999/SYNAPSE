@@ -86,6 +86,15 @@ check "…so the window works out no weekday and no leap year of its own" $?
 grep -q 'model: \["Week", "Month"\]' "$QML"
 check "both views are reachable, each button naming the view it gives you" $?
 
+# ⛔ AND NOT WHICH DAY THE WEEK STARTS ON EITHER. That is a setting the binary
+# owns; a fixed heading list here is right for one value of it and a day out for
+# the other, which draws a whole month under the wrong labels.
+! grep -q '\["Mon", "Tue", "Wed"' "$QML"
+check "…and the weekday headings are not a fixed list" $?
+
+grep -q 'names\[root.monthCells\[i\].dow\]' "$QML"
+check "…they are read off the records, column by column" $?
+
 # ⛔ A CELL THAT CANNOT SHOW THEM ALL SAYS SO. Silently drawing the first three
 # of five is a calendar that hides two appointments.
 grep -q '"+" + (cell.shown.length - cell.nshow) + " more"' "$QML"

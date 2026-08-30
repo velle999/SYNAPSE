@@ -122,12 +122,16 @@ static void draw(int year, int mon, int sel, events_t *ev, bool colour)
 			busy[lt.tm_mday] = true;
 	}
 
-	printf("\n  %s%s%s\n\n", B, title, R);
-	printf("  %sMo Tu We Th Fr Sa Su%s\n", D, R);
-
 	month_t m;
 	month_load(&m, year, mon);
 	int first = m.first, dim = m.days;
+
+	printf("\n  %s%s%s\n\n", B, title, R);
+	/* The heading follows the setting, like the grid under it. */
+	static const char *const abbr[] = { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
+	printf("  %s", D);
+	for (int c = 0; c < 7; c++) printf("%s%s", c ? " " : "", abbr[month_dow_of_col(&m, c)]);
+	printf("%s\n", R);
 	printf("  ");
 	for (int i = 0; i < first; i++) printf("   ");
 
