@@ -8,12 +8,18 @@
 # trade. It picks the first Chromium-family browser it finds at runtime — see
 # `syn-gfn --list-browsers`.
 #
-# ⚠ FIREFOX IS NOT A FALLBACK. GeForce NOW's web client refuses Gecko outright,
-# so the browser SynapseOS does ship cannot run this and listing it as an
-# option would only produce a different failure.
+# ⚠ FIREFOX IS NOT A FALLBACK — AND NO LONGER FOR THE OLD REASON. GeForce NOW
+# stopped refusing Gecko on 2026-08-19, when NVIDIA and Mozilla shipped
+# official support in Firefox 154 — for WINDOWS. On Linux, Firefox loads the
+# site, lists the library and starts no game; it also has no Keyboard Lock API
+# (measured on 154.0.1: navigator.keyboard is absent), so Escape would not
+# reach a game even if one started. The launcher knows Firefox by name, says
+# exactly that, and opens it on request for browsing the catalogue.
+# GECKO_CAN_STREAM in syn-gfn.sh is the one line to change when this reaches
+# Linux.
 pkgname=syn-gfn
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="GeForce NOW in a browser that can hold the mouse — cloud gaming for SynapseOS"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -25,7 +31,8 @@ depends=('bash')
 # page is full screen with the pointer captured is a prompt nobody can see.
 optdepends=('python: pre-grant the keyboard/pointer-lock permissions'
             'chromium: the browser to stream in'
-            'vivaldi: the browser to stream in')
+            'vivaldi: the browser to stream in'
+            'firefox: browse the catalogue (cannot stream on Linux yet)')
 source=('syn-gfn.sh'
         'syn-gfn.desktop'
         'syn-gfn.svg')

@@ -180,8 +180,14 @@ cliamp
 synstudio
 # GeForce NOW, in whichever Chromium-family browser is installed. Ships with no
 # browser dependency of its own — it names what is missing rather than dragging
-# a second browser onto the ISO beside Firefox, which the service refuses
-# anyway.
+# a second browser onto the ISO beside Firefox.
+#
+# ⚠ THE OLD REASON FOR THAT LAST CLAUSE EXPIRED on 2026-08-19: the service no
+# longer "refuses Firefox anyway". NVIDIA and Mozilla shipped GeForce NOW on
+# Firefox 154 that day — on Windows. Linux Firefox browses the catalogue and
+# starts no game, so the conclusion holds and the reason had to change. A live
+# ISO session therefore cannot stream; syn-gfn says so and says what to
+# install.
 syn-gfn
 # The settings app: displays, region, date and time, network, Bluetooth, power,
 # kernels, default applications, and where configuration lives. It was in

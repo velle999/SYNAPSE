@@ -44,8 +44,12 @@ hasnt(){ if printf '%s' "$2" | grep -qF -- "$3"; then bad "$1 ($3 is in: $2)"; e
 # the desktop of whoever ran the suite — which is exactly what the first draft
 # of this file did.
 mkdir -p "$TMP/bin"
+# ⚠ THE GECKO NAMES ARE STUBBED TOO, and firefox is the one that matters: it
+# is installed on every SynapseOS box, so a test that forgets it opens the
+# suite-runner's real Firefox.
 for b in vivaldi-stable chromium chromium-browser google-chrome-stable \
-         google-chrome brave brave-browser microsoft-edge-stable; do
+         google-chrome brave brave-browser microsoft-edge-stable \
+         firefox firefox-esr firefox-developer-edition librewolf; do
     cat > "$TMP/bin/$b" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "$b"        >  "$TMP/who"
@@ -154,6 +158,86 @@ grep -q "would use this one" "$TMP/out" \
 rc=$(run --browser=chromium)
 check "--browser= is honoured" 0 "$rc"
 check "…and it is the one that ran" "chromium" "$(cat "$TMP/who")"
+
+# ── Firefox ────────────────────────────────────────────────────────────────
+#
+# ⛔ GEFORCE NOW SUPPORTS FIREFOX ON WINDOWS, AND THIS IS LINUX. NVIDIA and
+# Mozilla shipped it on 2026-08-19 for Firefox 154 on Windows browsers; on
+# Linux the site lists the library and starts no game. Firefox here also has no
+# Keyboard Lock API at all — measured on 154.0.1, navigator.keyboard is absent
+# — so Escape would leave full screen instead of opening the in-game menu.
+#
+# Which makes "pick Firefox because it is installed" the worst of the options:
+# it turns a launcher that says what is missing into one that opens a page and
+# fails later, looking like the account's fault.
+rm -f "$TMP/who"
+rc=$(run)
+check "Firefox is NOT picked automatically while it cannot stream" \
+      "vivaldi-stable" "$(cat "$TMP/who" 2>/dev/null)"
+
+# Only Firefox on PATH: the stock SynapseOS box, which ticks Firefox and
+# neither Chromium nor Vivaldi.
+#
+# ⛔ AND /usr/bin IS NOT ON THIS ONE. Prepending a directory cannot HIDE a real
+# vivaldi-stable in /usr/bin — `command -v` finds it there and the launcher
+# execs it, which is the very mistake this file warns about at the top and
+# which it then made itself: this block opened a browser on the desktop of
+# whoever ran the suite. The only PATH that proves "no streaming browser
+# installed" is one that does not contain any. bash covers printf and
+# command -v; mkdir and cat are the two externals the Gecko path needs.
+mkdir -p "$TMP/gecko-only"
+cp "$TMP/bin/firefox" "$TMP/gecko-only/firefox"
+for t in mkdir cat; do ln -sf "$(command -v $t)" "$TMP/gecko-only/$t"; done
+BASH_BIN=$(command -v bash)     # bash is not on that PATH either
+rc=$(PATH="$TMP/gecko-only" "$BASH_BIN" "$GFN" >"$TMP/out" 2>"$TMP/err"; echo $?)
+check "with only Firefox installed it refuses rather than half-working" 1 "$rc"
+grep -qi "cannot stream" "$TMP/err" \
+    && ok "…saying the browser it found cannot stream, not that none exists" \
+    || bad "the Firefox-only message does not say why ($(cat "$TMP/err"))"
+grep -qi "synpkg install chromium" "$TMP/err" \
+    && ok "…and how to fix it" || bad "no fix offered"
+grep -qi "browser=firefox" "$TMP/err" \
+    && ok "…and how to browse the catalogue anyway" || bad "no catalogue route offered"
+
+# Asked for by name it runs — with GECKO flags, and none of Chromium's.
+# ⚠ ITS OWN PROFILE DIRECTORY. Every run above was Chromium and seeded a
+# Preferences file into the default one, so a check for "no Chromium
+# Preferences here" against that directory tests the earlier tests.
+FFPROFILE="$TMP/ff-profile"
+rc=$(run --browser=firefox --profile="$FFPROFILE")
+check "--browser=firefox runs it" 0 "$rc"
+check "…and it is the one that ran" "firefox" "$(cat "$TMP/who")"
+argv=$(cat "$TMP/argv")
+
+# ⛔ A CHROMIUM FLAG HANDED TO FIREFOX IS NOT AN ERROR, IT IS A TAB. Gecko
+# treats an unrecognised bare argument as a URL to open, so --user-data-dir
+# would not fail loudly — it would start the browser with junk tabs beside the
+# game and no message anywhere.
+has   "…with Gecko's own profile flag"     "$argv" "--profile $FFPROFILE"
+has   "…and its own instance, not a tab in the browsing session" \
+      "$argv" "--new-instance"
+hasnt "no --user-data-dir: that is Chromium's" "$argv" "--user-data-dir"
+hasnt "no --use-angle: that is Chromium's"     "$argv" "--use-angle"
+hasnt "no --enable-features: that is Chromium's" "$argv" "--enable-features"
+grep -qi "cannot start a game\|not start a game" "$TMP/err" \
+    && ok "…and it says the stream will not start on Linux" \
+    || bad "launching Firefox by name said nothing about the limit"
+
+# user.js, not Chromium's Preferences JSON — a different browser keeps its
+# settings somewhere else, and seeding the wrong file is a silent no-op.
+UJ="$FFPROFILE/user.js"
+[ -r "$UJ" ] && ok "a user.js is seeded for Gecko" || bad "no user.js at $UJ"
+grep -q "dom.fullscreen.keyboard_lock.enabled" "$UJ" 2>/dev/null \
+    && ok "…turning on Firefox's own keyboard lock, which is not navigator.keyboard" \
+    || bad "user.js does not enable Firefox's keyboard lock"
+[ -r "$FFPROFILE/Default/Preferences" ] \
+    && bad "Chromium Preferences were written for a Gecko browser" \
+    || ok "…and no Chromium Preferences file is written for it"
+
+rc=$(run --list-browsers)
+grep -qi "catalogue only" "$TMP/out" \
+    && ok "--list-browsers separates streaming from catalogue-only" \
+    || bad "--list-browsers does not distinguish the two families"
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ] || exit 1
