@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<!-- cliamp — a terminal music player, drawn as one: a dark console pane with a
+     title strip and a spectrum in it, which is what the program actually looks
+     like and what somebody scanning a menu will recognise.
+
+     ⛔ THE <svg> ROOT IS THE FIRST THING IN THIS FILE. gdk-pixbuf sniffs only
+     the opening bytes to decide what a file is, so a header comment above the
+     root pushes it out of that window: GTK then calls the file unrecognized and
+     the menu entry is BLANK, while Qt parses the XML and shows it perfectly —
+     which is how such a thing ships. The note lives below the root for that
+     reason. See reference: synfiles/data/synfiles.svg does the same.
+
+     SynapseOS Project — GPL-2.0-or-later -->
+  <defs>
+    <linearGradient id="scr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2f3a"/>
+      <stop offset="1" stop-color="#151920"/>
+    </linearGradient>
+  </defs>
+
+  <!-- the console body -->
+  <rect x="3" y="8" width="42" height="32" rx="4" fill="url(#scr)"/>
+  <rect x="3.75" y="8.75" width="40.5" height="30.5" rx="3.25"
+        fill="none" stroke="#0c0e12" stroke-width="1.5"/>
+
+  <!-- the title strip, the way a Winamp-era player wears one -->
+  <rect x="6" y="11" width="36" height="6" rx="1.6" fill="#0f1218"/>
+  <rect x="7.6" y="13.1" width="18" height="1.8" rx=".9" fill="#8fd98f"/>
+  <circle cx="39.2" cy="14" r="1.5" fill="#d9a326"/>
+
+  <!-- the spectrum: the thing cliamp is for -->
+  <g fill="#8fd98f">
+    <rect x="7.5"  y="30" width="3" height="6"  rx=".8"/>
+    <rect x="12"   y="25" width="3" height="11" rx=".8"/>
+    <rect x="16.5" y="21" width="3" height="15" rx=".8"/>
+    <rect x="21"   y="27" width="3" height="9"  rx=".8"/>
+    <rect x="25.5" y="23" width="3" height="13" rx=".8"/>
+    <rect x="30"   y="28" width="3" height="8"  rx=".8"/>
+    <rect x="34.5" y="24" width="3" height="12" rx=".8"/>
+  </g>
+  <g fill="#d9a326">
+    <rect x="7.5"  y="28.6" width="3" height="1.4" rx=".7"/>
+    <rect x="12"   y="23.6" width="3" height="1.4" rx=".7"/>
+    <rect x="16.5" y="19.6" width="3" height="1.4" rx=".7"/>
+    <rect x="21"   y="25.6" width="3" height="1.4" rx=".7"/>
+    <rect x="25.5" y="21.6" width="3" height="1.4" rx=".7"/>
+    <rect x="30"   y="26.6" width="3" height="1.4" rx=".7"/>
+    <rect x="34.5" y="22.6" width="3" height="1.4" rx=".7"/>
+  </g>
+</svg>

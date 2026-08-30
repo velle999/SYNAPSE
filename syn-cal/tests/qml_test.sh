@@ -140,6 +140,13 @@ check "…the empty week still says it is empty" $?
 grep -A32 'Nothing in the next ' "$QML" | grep -q 'onClicked: root.evNew()'
 check "…and offers a way to fill it" $?
 
+# ⛔ AND THE LIST GIVES UP ITS SPACE WHEN IT IS EMPTY. A Column skips invisible
+# children but not empty ones: an agenda still claiming `parent.height - 80`
+# with nothing in it pushed the empty state past the bottom of the window, and
+# the button under it was drawn cut in half.
+grep -q 'visible: root.view === "week" && root.events.length > 0' "$QML"
+check "…and the empty list takes no height, so nothing is pushed off-screen" $?
+
 # ⛔ SAVED HERE IS NOT SAVED ANYWHERE ELSE. A window that says "Saved" and
 # leaves the appointment on one machine is telling somebody their meeting is
 # booked when nobody else can see it.

@@ -1310,7 +1310,13 @@ FloatingWindow {
 
                     ListView {
                         id: agenda
-                        visible: root.view === "week"
+                        // ⛔ AND ONLY WHEN THERE IS SOMETHING IN IT. A Column
+                        // skips invisible children but not empty ones, so an
+                        // agenda with no events still took `parent.height - 80`
+                        // and pushed the empty state — and the New event button
+                        // under it — off the bottom of the window, where the
+                        // button was drawn cut in half.
+                        visible: root.view === "week" && root.events.length > 0
                         width: parent.width
                         height: parent.height - root.ui(80)
                         clip: true
