@@ -22,9 +22,13 @@ What is asserted, in order of how easily each breaks:
      changes nothing at all.
   6. Every companion tool that writes is behind the confirmation gate, and no
      tool that only reads is.
+  7. The chat window's panel is sent the ROWS, not the lines the CLI prints —
+     it has to draw a checkbox and know which id it belongs to — and a tick is
+     a toggle both ways, with the completion stamp cleared on the way back.
 
 Usage: companion_test.py            (from the vibe source tree)
 """
+import json
 import os
 import sys
 import tempfile
@@ -225,6 +229,88 @@ check("market_quote is a tool the model must ask before using",
       "market_quote" in VibeModel._CONFIRM_TOOLS)
 check("…because it LEAVES the machine, not because it writes",
       "market_quote" not in {"todo_add", "todo_complete", "habit_check"})
+
+
+# ── 8. What the window's panel draws ────────────────────────────────────────
+#
+# ⛔ THE PANEL DRAWS FIELDS, NOT THE CLI's LINES. `/todo` prints
+# `[ ] !! #3 buy milk`, which is right in a terminal and useless to a window
+# that has to put a checkbox next to a row and know which id it belongs to —
+# so the engine sends `P` records carrying the rows. If that ever becomes the
+# rendered line again, the panel silently loses every checkbox.
+from vibe import serve                              # noqa: E402
+
+
+class _Rec:
+    """A wire that keeps what it was given instead of writing it out."""
+    def __init__(self):
+        self.recs = []
+
+    def rec(self, tag, *fields):
+        self.recs.append((tag, *fields))
+
+    def last(self, tag, key):
+        for t, *f in reversed(self.recs):
+            if t == tag and f and f[0] == key:
+                return f[1]
+        return None
+
+
+srv = serve.Server.__new__(serve.Server)
+srv.wire = _Rec()
+
+for t in P.todo_all():
+    P.todo_delete(t["id"])
+panel_task = P.todo_add("panel row", priority=1)
+srv.emit_companion()
+
+drawn = json.loads(srv.wire.last("P", "todos") or "[]")
+check("the panel is sent task rows, with their ids",
+      any(r["id"] == panel_task["id"] and r["text"] == "panel row" for r in drawn),
+      f"got {drawn}")
+check("…as fields, not as the line the CLI prints",
+      all("[ ]" not in r["text"] for r in drawn))
+check("habits arrive with the week grid and the streak",
+      all({"week", "streak", "today"} <= set(h) for h in
+          json.loads(srv.wire.last("P", "habits") or "[]")))
+check("goals arrive with a percentage the panel can draw a bar from",
+      all(isinstance(g["progress"], int) for g in
+          json.loads(srv.wire.last("P", "goals") or "[]")))
+
+# ⛔ A TICK IS A TOGGLE. A checkbox that only goes one way turns a misclick
+# into a row that has to be repaired from a terminal.
+srv.check("todo", str(panel_task["id"]))
+check("the panel's checkbox completes a task",
+      P.todo_get(panel_task["id"])["status"] == "done")
+srv.check("todo", str(panel_task["id"]))
+back = P.todo_get(panel_task["id"])
+check("…and ticking it again puts it back",
+      back["status"] == "todo", f"got {back['status']}")
+
+# ⚠ `completed_at` IS CLEARED with it. It is the column todo_stats counts as
+# finished today, so a reopened task left carrying its timestamp goes on being
+# counted — a day's total claiming work that has been put back on the list.
+check("⚠ reopening clears the completion stamp, so the day's total is honest",
+      back["completed_at"] is None, f"got {back['completed_at']}")
+
+toggle_habit = P.habit_add("panel habit", "*")
+srv.check("habit", str(toggle_habit["id"]))
+row = next(h for h in P.habit_dashboard() if h["id"] == toggle_habit["id"])
+check("the panel's checkbox ticks a habit for today", row["done_today"])
+srv.check("habit", str(toggle_habit["id"]))
+row = next(h for h in P.habit_dashboard() if h["id"] == toggle_habit["id"])
+check("…and unticks it", not row["done_today"])
+
+# ⚠ IT SAYS SO RATHER THAN DOING NOTHING. A checkbox on a row that has been
+# deleted underneath the window is a live case, not a hypothetical.
+srv.wire.recs.clear()
+srv.check("todo", "99999")
+check("a tick on a row that is gone is answered in a sentence",
+      any(t == "A" for t, *_ in srv.wire.recs))
+srv.wire.recs.clear()
+srv.check("nonsense", "1")
+check("…and so is a tick on nothing this knows about",
+      any(t == "A" for t, *_ in srv.wire.recs))
 
 print(f"\n  {npass} passed, {nfail} failed")
 sys.exit(1 if nfail else 0)

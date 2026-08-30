@@ -172,7 +172,7 @@ and this is it.
 vibe persona [list|<name>|show]     the voice — 7 of them, each with its own temperature
 vibe todo [list|today|overdue]      tasks
 vibe todo add <text> [--project P] [--prio 1-4] [--due YYYY-MM-DD] [--tags a,b]
-vibe todo done|start|cancel|rm <id>
+vibe todo done|start|reopen|cancel|rm <id>
 vibe habit [list] | add <name> | check|uncheck|rm <id>
 vibe goal [list [done]] | add <title> | progress <id> <pct> | milestone <id> <t> | done <mid>
 vibe pom [status] | start [task] [--min N] | stop | stats
@@ -202,6 +202,18 @@ day's total is what finished rather than what was started.
 
 Data lives in `~/.local/share/vibe/companion.db` — velle.ai's schemas, column
 for column, so an existing `companion.db` opens here.
+
+**And they are on screen, not only in the typing.** The chat window opens as a
+small box — a quick question and its answer — with a **Full size** button in the
+header for the sessions that want the room. The ☰ menu names every one of the
+companion's lists (tasks, habits, goals, the focus timer, markets), the persona
+and the backend, so nothing depends on knowing that a leading slash means
+anything; typing one lists what it can do. At full size a **companion panel**
+opens down the right: the focus countdown, today's tasks with a checkbox that
+ticks both ways, each habit's week and streak, and each goal's progress. It
+draws `P` records from the engine — the rows themselves, not the lines the CLI
+prints — so the window, the CLI and the bar cannot come to disagree about what
+is written down.
 
 ## Features
 

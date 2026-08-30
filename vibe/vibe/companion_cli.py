@@ -117,7 +117,7 @@ def verb_todo(argv: list[str]) -> int:
         return 1
     tid = _int(rest[0], 0)
     action = {"done": P.todo_complete, "start": P.todo_start,
-              "cancel": P.todo_cancel}.get(cmd)
+              "reopen": P.todo_reopen, "cancel": P.todo_cancel}.get(cmd)
     if action:
         t = action(tid)
         if not t:

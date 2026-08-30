@@ -36,9 +36,36 @@ FloatingWindow {
     id: root
 
     title: "SYNAPSE Assistant"
-    implicitWidth: 820
-    implicitHeight: 640
-    minimumSize: Qt.size(420, 320)
+
+    // ── The small box, and the button out of it ─────────────────────────────
+    //
+    // velle, 2026-08-30: *"i figures we'd have a button for full size window
+    // and default to small box when you click like this"* — with a screenshot
+    // of this window dragged down to its minimum.
+    //
+    // ⚠ THE DEFAULT IS THE QUICK ASK, NOT THE SESSION. Most of what this window
+    // is for is one question and one answer; 820×640 landing on the desktop for
+    // that is a window that has to be moved and resized before it can be used.
+    // The long sessions are the other case, and they get a button.
+    implicitWidth: 460
+    implicitHeight: 380
+    minimumSize: Qt.size(360, 260)
+
+    // How much room there is, and what that is enough for. ⚠ MEASURED IN ui()
+    // UNITS, not in pixels: at a 150% desktop font every control in the header
+    // is half as wide again, and a breakpoint written in raw pixels would keep
+    // showing a row that no longer fits.
+    // ⚠ COMFORTABLY BELOW THE DEFAULT WIDTH, not level with it. A threshold set
+    // to exactly the size the window opens at is a word that appears and
+    // disappears as the window is nudged a pixel either way.
+    readonly property bool roomForLabels: root.width >= root.ui(360)
+    readonly property bool roomForVoice:  root.width >= root.ui(660)
+    readonly property bool roomForPanel:  root.width >= root.ui(760)
+
+    // The companion panel — velle.ai's half of this window. Auto: it is open
+    // wherever there is room for it, which is what "full size" gets you.
+    property bool panelWanted: true
+    readonly property bool panelOn: root.roomForPanel && root.panelWanted
 
     // ShellRoot outlives its window: without this, quickshell stays alive with
     // nothing on screen and every later launch exits 0 having drawn nothing.
@@ -241,6 +268,151 @@ FloatingWindow {
         }
     }
 
+    /*
+     * ⛔ A MENU IS PART OF THE WINDOW, AND HAS TO LOOK LIKE IT.
+     *
+     * An unstyled QtQuick Controls Menu draws in Qt's default style: a WHITE
+     * popup with a blue highlight, in a window that is otherwise the desktop's
+     * own colours. That was survivable while the menus here were two rarely
+     * opened pickers; it is not, now that ☰ is where the companion's lists are
+     * found. A theme switch has to move this with everything else.
+     *
+     * ⚠ THE DELEGATE IS FOR THE ROWS QML DOES NOT DECLARE. A nested Menu is
+     * turned into a row of its parent by `addMenu()`, which builds it from
+     * `delegate` — so a file that styles only the items it wrote out gets a
+     * themed menu with two default-styled submenu rows in the middle of it.
+     */
+    component SynMenuItem: MenuItem {
+        id: mi
+        implicitHeight: root.ui(27)
+        // ⚠ SIZED TO THE LONGEST ROW, not to a number picked once. The mode
+        // picker's rows are whole sentences and the panel toggle's label runs
+        // to five words — pinned at a fixed width they elide to "Hide the
+        // companion p…", which is a menu that has stopped saying what it does.
+        // ⚠ PLUS THE MENU'S OWN PADDING. A row whose implicit width is exactly
+        // its text's is handed `availableWidth` — the popup minus that padding
+        // — and elides by those few pixels, which is a row that fits everywhere
+        // except on screen.
+        /*
+         * ⛔ MEASURED WITH TextMetrics, NOT OFF THE LABEL'S OWN implicitWidth.
+         *
+         * An eliding Text inside a control is handed `availableWidth`, which is
+         * derived from this very property — so asking the label how wide it
+         * wants to be settles at whatever width it was already given. Every row
+         * came back at the floor and the longest label elided in a menu with a
+         * clear inch of room beside it, twice, at two different fixed points.
+         * TextMetrics measures the string against the font and knows nothing
+         * about the layout, which is the only way out of that loop.
+         *
+         * ⚠ EVERY PADDING IS COUNTED, INCLUDING THE MENU'S OWN. This row's (10
+         * either side, plus the submenu arrow's room where there is one) AND
+         * the popup's 4 each side — leaving those eight pixels out left the
+         * longest label two characters short of fitting in a menu measured
+         * exactly for it. Rounded up as well: TextMetrics answers in fractions
+         * of a pixel and a row short by one elides as badly as one short by
+         * twenty.
+         */
+        // ⚠ THE ROW OWNS ITS PADDING, so the sum below is complete. Left on the
+        // label, the control's own inset sat between them uncounted and the
+        // width came out eleven pixels short however carefully the text was
+        // measured — which is two characters, which is an ellipsis.
+        leftPadding: root.ui(10)
+        rightPadding: mi.subMenu ? root.ui(26) : root.ui(10)
+
+        implicitWidth: Math.max(root.ui(180),
+                                Math.ceil(mlabelSize.width)
+                                + mi.leftPadding + mi.rightPadding
+                                + root.ui(14))          // the popup's own
+
+        TextMetrics {
+            id: mlabelSize
+            text: mi.text
+            font.family: root.uiFont || "sans-serif"
+            font.pixelSize: root.ui(12)
+        }
+
+        contentItem: Text {
+            text: mi.text
+            color: mi.enabled ? root.cText : root.cDim
+            elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+            font.family: root.uiFont || "sans-serif"
+            font.pixelSize: root.ui(12)
+        }
+        background: Rectangle {
+            color: mi.highlighted ? root.cMine : "transparent"
+        }
+        // ⚠ Drawn here rather than left to the style, for the same reason as
+        // everything else in this block: the style's arrow is a dark glyph
+        // chosen for a light popup.
+        arrow: Text {
+            visible: mi.subMenu
+            anchors { right: parent.right; rightMargin: root.ui(8)
+                      verticalCenter: parent.verticalCenter }
+            text: "▸"
+            color: root.cDim
+            font.family: root.uiFont || "sans-serif"
+            font.pixelSize: root.ui(11)
+        }
+    }
+
+    component SynMenuSeparator: MenuSeparator {
+        padding: root.ui(4)
+        contentItem: Rectangle {
+            implicitHeight: 1
+            color: root.cLine
+        }
+    }
+
+    component SynMenu: Menu {
+        id: mnu
+        padding: root.ui(4)
+        delegate: SynMenuItem {}
+
+        /*
+         * ⛔ A Menu HERE DOES NOT GROW FOR ITS ROWS — IT IS THE BACKGROUND'S
+         * WIDTH AND NOTHING ELSE.
+         *
+         * Measured, after two wrong fixes: with the background pinned at 210 the
+         * popup was 210 whatever the rows asked for, and dropping the background
+         * to 120 gave a 120-wide popup with EVERY label elided — `Start a …`,
+         * `Read ans…`, `New conv…`. The row's own implicitWidth reaches the
+         * popup's width calculation nowhere, so the widest row has to be
+         * measured and handed over.
+         *
+         * ⚠ RE-MEASURED ON EVERY OPEN, not once. Half the labels here change
+         * with what is true — "Full size" becomes "Exit full size", "Start a
+         * focus timer" becomes "Stop the focus timer" — and a width taken when
+         * the menu was built is the width of last time's words.
+         */
+        property int rowWidth: root.ui(150)
+
+        function measure() {
+            var w = root.ui(150)
+            for (var i = 0; i < mnu.count; i++) {
+                var it = mnu.itemAt(i)
+                if (it && it.implicitWidth > w)
+                    w = it.implicitWidth
+            }
+            mnu.rowWidth = w
+        }
+
+        implicitWidth: mnu.rowWidth
+        onAboutToShow: mnu.measure()
+        onCountChanged: mnu.measure()
+
+        background: Rectangle {
+            // ⚠ A FLOOR, NOT THE WIDTH. A Menu takes the wider of its
+            // background's implicit width and its rows', so a background sized
+            // to look right is a menu that never grows for a long label.
+            implicitWidth: root.ui(120)
+            radius: root.ui(6)
+            color: root.cPanel
+            border.width: 1
+            border.color: root.cLine
+        }
+    }
+
     // ── Engine state ────────────────────────────────────────────────────────
     property string backend: "…"
     property string modelName: ""
@@ -277,6 +449,27 @@ FloatingWindow {
 
     // The turns on screen. `kind` is who is speaking: me, it, tool, note, bad.
     ListModel { id: log }
+
+    // ── The companion's own records ─────────────────────────────────────────
+    //
+    // ⛔ THEY ARRIVE AS FIELDS, NOT AS THE CLI's LINES. `/todo` prints
+    // `[ ] !! #3 buy milk` and that is right in a terminal; a panel has to draw
+    // a checkbox and know which id it belongs to, so the engine sends `P`
+    // records carrying the rows themselves. Parsing the printed line back into
+    // fields here would be a second renderer that goes wrong the day one of
+    // them changes.
+    ListModel { id: todos }
+    ListModel { id: habits }
+    ListModel { id: goals }
+    property var stats: ({})
+
+    function fill(model, json) {
+        var arr = []
+        try { arr = JSON.parse(json) } catch (e) { arr = [] }
+        model.clear()
+        for (var i = 0; i < arr.length; i++)
+            model.append(arr[i])
+    }
 
     // A tool result is whatever the tool returned — a grep over a big file is
     // thousands of lines, and pasting all of it into the transcript buries the
@@ -400,6 +593,11 @@ FloatingWindow {
             root.pendingId = a
             root.pendingTool = b
             root.pendingArgs = c
+        } else if (tag === "P") {
+            if (a === "todos")       root.fill(todos, b)
+            else if (a === "habits") root.fill(habits, b)
+            else if (a === "goals")  root.fill(goals, b)
+            else if (a === "stats")  { try { root.stats = JSON.parse(b) } catch (e) { root.stats = ({}) } }
         } else if (tag === "A") {
             root.say("bad", a)
         } else if (tag === "E") {
@@ -424,6 +622,25 @@ FloatingWindow {
         if (!root.firstRecord) return
         for (const q of root.queued) eng.write(q + "\n")
         root.queued = []
+        // The panel has nothing in it until it is asked. ⚠ Asked ONCE, here,
+        // rather than polled: every later change comes back on the `P` records
+        // the engine sends at the end of a turn, so a timer would be a query a
+        // second answering a question nothing had asked.
+        root.send("companion")
+    }
+
+    // A companion command, run as though it had been typed. ⚠ THROUGH THE SAME
+    // PATH: `serve._slash()` answers these before synsh and before the model,
+    // so a menu entry and a typed line cannot come to mean different things.
+    function slash(cmd) { root.send("ask " + encodeURIComponent(cmd)) }
+
+    // …and for the ones that need an argument. ⛔ PREFILLED, NOT RUN. `/quant`
+    // with no ticker prints its usage, and a menu entry whose whole effect is a
+    // usage line teaches people that the menu does not work.
+    function prefill(text) {
+        input.text = text
+        input.cursorPosition = text.length
+        input.forceActiveFocus()
     }
 
     Process {
@@ -448,16 +665,175 @@ FloatingWindow {
         Rectangle {           // header
             id: head
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 40
+            height: Math.max(40, root.ui(40))
             color: root.cPanel
 
-            // ⚠ BOUND ON THE RIGHT, and elided. Anchored to the left alone it
+            /*
+             * ⛔ A HEADER IS A BUDGET, NOT A CHAIN.
+             *
+             * Every control used to sit in one Row anchored to the RIGHT edge,
+             * which fits at 820 wide and runs off the LEFT of the window at
+             * 420: dragged to its minimum this window drew `efault ▾` where the
+             * persona chip was, and the model name — anchored between the left
+             * edge and a Row wider than the window — had negative width and was
+             * not drawn at all. velle, 2026-08-30: "the text formatting is a
+             * bit of a mess", over a screenshot of exactly that.
+             *
+             * A Row cannot be asked to fit. So the header is: one menu button
+             * pinned left, the controls that must be reachable at any size
+             * pinned right, the model name taking whatever is left over and
+             * eliding, and EVERYTHING ELSE in the ☰ menu — which is one glyph
+             * at one width whatever the window is doing.
+             *
+             * ⚠ THE BREAKPOINTS ARE IN ui() UNITS. At a 150% desktop font every
+             * control here is half as wide again; a threshold written in raw
+             * pixels would go on showing a row that no longer fits.
+             */
+            Text {
+                id: burger
+                anchors { left: parent.left; leftMargin: 12
+                          verticalCenter: parent.verticalCenter }
+                text: "☰"
+                color: mainMenu.opened ? root.cAccent : root.cText
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(15)
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6          // a 15px glyph is not a target
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mainMenu.open()
+                }
+
+                /*
+                 * ⛔ THIS IS WHERE THE COMPANION LIVES ON A SMALL WINDOW.
+                 *
+                 * velle, 2026-08-30: "i don't really see the velle.ai
+                 * features". They shipped as slash commands and nothing on
+                 * screen said so — a feature nobody can find is a feature that
+                 * did not ship. Every one of them is named here, and the ones
+                 * that need an argument PREFILL the input rather than running:
+                 * a menu entry that fails because it was given no ticker
+                 * teaches people not to use the menu.
+                 */
+                SynMenu {
+                    id: mainMenu
+
+                    SynMenuItem {
+                        text: "Tasks"
+                        onTriggered: root.slash("/todo")
+                    }
+                    SynMenuItem {
+                        text: "Habits"
+                        onTriggered: root.slash("/habit")
+                    }
+                    SynMenuItem {
+                        text: "Goals"
+                        onTriggered: root.slash("/goal")
+                    }
+                    // ⚠ IT SAYS WHICH WAY IT GOES. One entry that starts a
+                    // timer and stops it is fine; one that does not say which
+                    // is a coin toss on a timer somebody is relying on.
+                    SynMenuItem {
+                        text: root.pomEnds > 0 ? "Stop the focus timer"
+                                               : "Start a focus timer"
+                        onTriggered: root.slash(root.pomEnds > 0 ? "/pom stop"
+                                                                 : "/pom start")
+                    }
+                    SynMenuItem {
+                        text: "Markets…"
+                        onTriggered: root.prefill("/quant ")
+                    }
+
+                    SynMenuSeparator {}
+
+                    SynMenu {
+                        title: "Persona"
+                        // ⚠ The names come from the ENGINE (root.personaList,
+                        // an S record), not from a list written out here — a
+                        // second copy in QML is the one that goes stale the day
+                        // a persona is added, and it would go stale silently.
+                        Repeater {
+                            model: root.personaList
+                            SynMenuItem {
+                                id: prow
+                                required property string modelData
+                                text: prow.modelData
+                                onTriggered: root.send("persona " + prow.modelData)
+                            }
+                        }
+                    }
+                    SynMenu {
+                        title: "Backend"
+                        Repeater {
+                            model: ["synapd", "ollama", "anthropic", "openai"]
+                            SynMenuItem {
+                                id: brow
+                                required property string modelData
+                                text: brow.modelData
+                                onTriggered: root.send("provider " + brow.modelData)
+                            }
+                        }
+                    }
+
+                    SynMenuSeparator {}
+
+                    // ⚠ HIDDEN, NOT GREYED, where the box cannot do it. A
+                    // microphone that cannot be pressed is a question the user
+                    // has to go and answer somewhere else; no microphone is a
+                    // window that never raised it.
+                    SynMenuItem {
+                        text: root.reading ? "Stop reading aloud" : "Read answers aloud"
+                        visible: root.canSpeak !== "no"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: { root.send("hush")
+                                       root.send("speak " + (root.reading ? "off" : "on")) }
+                    }
+                    SynMenuItem {
+                        text: "Listen"
+                        visible: root.canHear !== "no"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: if (!root.listening) root.send("listen")
+                    }
+                    // ⛔ THE LOUDEST CONTROL IN THE WINDOW. Armed, this leaves a
+                    // microphone open until it is turned off — so it says which
+                    // state it is in rather than merely offering the switch.
+                    SynMenuItem {
+                        text: root.waking ? "Stop answering to its name"
+                                          : "Answer to its name"
+                        visible: root.canHear !== "no"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: root.send("wake " + (root.waking ? "off" : "on"))
+                    }
+
+                    SynMenuSeparator {}
+
+                    SynMenuItem {
+                        text: root.panelWanted ? "Hide the companion panel"
+                                               : "Show the companion panel"
+                        // ⚠ It says why it cannot, rather than vanishing: a
+                        // control that is not there reads as one that does not
+                        // exist, and the panel does — there is no room for it.
+                        enabled: root.roomForPanel
+                        onTriggered: root.panelWanted = !root.panelWanted
+                    }
+                    SynMenuItem {
+                        text: root.fullscreen ? "Leave full size" : "Full size"
+                        onTriggered: root.fullscreen = !root.fullscreen
+                    }
+                    SynMenuItem {
+                        text: "New conversation"
+                        onTriggered: root.send("reset")
+                    }
+                }
+            }
+
+            // ⚠ BOUND ON BOTH SIDES, and elided. Anchored to the left alone it
             // keeps its full width at every window size, so shrinking the
             // window slides the model name straight under the controls — two
             // strings drawn in the same pixels, both unreadable.
             Text {
-                anchors { left: parent.left; leftMargin: 14
-                          right: ctrls.left; rightMargin: 12
+                anchors { left: burger.right; leftMargin: 10
+                          right: ctrls.left; rightMargin: 10
                           verticalCenter: parent.verticalCenter }
                 text: root.modelName
                 elide: Text.ElideRight
@@ -472,16 +848,10 @@ FloatingWindow {
             // there is one edge to anchor to whatever this box can do.
             Row {
                 id: ctrls
-                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                spacing: 12
+                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                spacing: 10
 
-                // ⚠ HIDDEN, NOT GREYED, where the box cannot do it. A microphone
-                // that cannot be pressed is a question the user has to go and
-                // answer somewhere else; no microphone is a window that never
-                // raised it.
-                // ⛔ THE LOUDEST CONTROL IN THE WINDOW, and it looks it while it is
-                // on. Armed, this leaves a microphone open until it is turned off.
-                // ── The focus timer ────────────────────────────────────
+                // ── The focus timer ────────────────────────────────────────
                 //
                 // ⛔ IT READS THE STATE FILE, NOT THE ENGINE. The timer outlives
                 // this window on purpose (see vibe/pomodoro.py), and the bar
@@ -505,81 +875,20 @@ FloatingWindow {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.send("ask " + encodeURIComponent("/pom stop"))
+                        onClicked: root.slash("/pom stop")
                     }
                 }
 
-                // ── The voice ──────────────────────────────────────────────
+                // ── The voice, where there is room for it ──────────────────
                 //
-                // ⚠ ONE CHIP, NOT SEVEN BUTTONS. Seven personas in a header row
-                // would push the model name off a narrow window; the chip names
-                // the current one and opens the list.
-                Text {
-                    id: personaChip
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.persona + " ▾"
-                    color: root.cDim
-                    font.family: root.uiFont || "sans-serif"
-                    font.pixelSize: root.ui(12)
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: personaMenu.open()
-                    }
-                    // ⚠ The names come from the ENGINE (root.personaList, an S
-                    // record), not from a list written out here — a second copy
-                    // in QML is the one that goes stale the day a persona is
-                    // added, and it would go stale silently.
-                    Menu {
-                        id: personaMenu
-                        Repeater {
-                            model: root.personaList
-                            MenuItem {
-                                id: prow
-                                required property string modelData
-                                text: prow.modelData
-                                onTriggered: root.send("persona " + prow.modelData)
-                            }
-                        }
-                    }
-                }
-
-                // ⛔ FULLSCREEN IS A WINDOW PROPERTY, NOT A COMPOSITOR REQUEST.
-                // FloatingWindow carries `fullscreen`, so this works on KDE and
-                // GNOME as well as here — asking synui to do it would give the
-                // window a control that silently does nothing on two of the
-                // three desktops SynapseOS ships onto.
-                Text {
-                    id: fsBtn
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.fullscreen ? "⤡" : "⤢"
-                    color: root.cDim
-                    font.pixelSize: root.ui(14)
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.fullscreen = !root.fullscreen
-                    }
-                }
-
-                Text {
-                    id: wakeBtn
-                    visible: root.canHear !== "no"
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.waking ? "◉ answering to its name" : "wake"
-                    color: root.waking ? root.cBad : root.cDim
-                    font.family: root.uiFont || "sans-serif"
-                    font.pixelSize: root.ui(12)
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.send("wake " + (root.waking ? "off" : "on"))
-                    }
-                }
-
+                // ⚠ IN THE MENU AS WELL, ALWAYS. These two are the only
+                // controls that come and go with the window's width, and a
+                // control that disappears when a window is made smaller has to
+                // still be somewhere — otherwise turning a listening microphone
+                // off means making the window bigger first.
                 Text {
                     id: micBtn
-                    visible: root.canHear !== "no"
+                    visible: root.canHear !== "no" && (root.roomForVoice || root.listening)
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.listening ? "◉ listening" : "🎤"
                     color: root.listening ? root.cWarn : root.cDim
@@ -594,7 +903,7 @@ FloatingWindow {
 
                 Text {
                     id: readBtn
-                    visible: root.canSpeak !== "no"
+                    visible: root.canSpeak !== "no" && (root.roomForVoice || root.reading)
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.reading ? "🔊" : "🔇"
                     color: root.reading ? root.cAccent : root.cDim
@@ -613,10 +922,31 @@ FloatingWindow {
                     }
                 }
 
+                // ⛔ THE WAKE INDICATOR IS NOT A CONVENIENCE AND DOES NOT HIDE.
+                // Armed, a microphone in this room is open; a window narrow
+                // enough to drop the switch must not drop the disclosure with
+                // it. Off, there is nothing to say and it takes no room.
+                Text {
+                    id: wakeBtn
+                    visible: root.waking
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.roomForLabels ? "◉ answering to its name" : "◉"
+                    color: root.cBad
+                    font.family: root.uiFont || "sans-serif"
+                    font.pixelSize: root.ui(12)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.send("wake off")
+                    }
+                }
+
                 Rectangle {       // the cloud/local tell, in a word and a colour
                     id: pill
                     anchors.verticalCenter: parent.verticalCenter
-                    width: tag.implicitWidth + 14; height: 20; radius: 10
+                    width: tag.implicitWidth + root.ui(14)
+                    height: root.ui(20)
+                    radius: height / 2
                     color: root.cloud ? Qt.rgba(root.cWarn.r, root.cWarn.g, root.cWarn.b, 0.22)
                                       : Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.18)
                     Text {
@@ -628,9 +958,15 @@ FloatingWindow {
                         font.pixelSize: root.ui(11)
                     }
                 }
+
                 Text {
                     id: modeBtn
                     anchors.verticalCenter: parent.verticalCenter
+                    // ⚠ CAPPED AND ELIDED. `auto · plan ▾` is half again the
+                    // width of `ask ▾`, and a control that grows with what the
+                    // router chose is a header that reflows mid-answer.
+                    width: Math.min(implicitWidth, root.width * 0.28)
+                    elide: Text.ElideRight
                     text: root.mode + (root.mode === "auto" && root.turnMode !== ""
                                        ? " · " + root.turnMode : "") + " ▾"
                     color: root.cAccent
@@ -641,14 +977,14 @@ FloatingWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: modeMenu.open()
                     }
-                    Menu {
+                    SynMenu {
                         id: modeMenu
                         Repeater {
                             model: [["auto",  "Auto — picks per message"],
                                     ["ask",   "Ask — answers, touches nothing"],
                                     ["agent", "Agent — answers and does it"],
                                     ["plan",  "Plan — looks, and writes the steps"]]
-                            MenuItem {
+                            SynMenuItem {
                                 id: mrow
                                 required property var modelData
                                 text: mrow.modelData[1]
@@ -658,29 +994,62 @@ FloatingWindow {
                     }
                 }
 
-                Text {
-                    id: menuBtn
+                /*
+                 * ⛔ FULL SIZE IS A BUTTON, AND IT LOOKS LIKE ONE.
+                 *
+                 * This was already here as a bare `⤢` in the dim colour every
+                 * other label uses, eighth along a row that had run off the
+                 * edge of the window — velle, 2026-08-30: "i figures we'd have
+                 * a button for full size window". It existed and it was not
+                 * findable, which for a control is the same thing. A border, a
+                 * hover, its own word where there is room, and pinned last so
+                 * it is in the same place at every size.
+                 *
+                 * ⛔ FULLSCREEN IS A WINDOW PROPERTY, NOT A COMPOSITOR REQUEST.
+                 * FloatingWindow carries `fullscreen`, so this works on KDE and
+                 * GNOME as well as here — asking synui to do it would give the
+                 * window a control that silently does nothing on two of the
+                 * three desktops SynapseOS ships onto.
+                 */
+                Rectangle {
+                    id: fsBtn
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "backend ▾"
-                    color: root.cDim
-                    font.family: root.uiFont || "sans-serif"
-                    font.pixelSize: root.ui(12)
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: backends.open()
-                    }
-                    Menu {
-                        id: backends
-                        Repeater {
-                            model: ["synapd", "ollama", "anthropic", "openai"]
-                            MenuItem {
-                                id: pick
-                                required property string modelData
-                                text: pick.modelData
-                                onTriggered: root.send("provider " + pick.modelData)
-                            }
+                    width: fsRow.implicitWidth + root.ui(14)
+                    height: root.ui(22)
+                    radius: root.ui(5)
+                    color: fsArea.containsMouse
+                           ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.18)
+                           : "transparent"
+                    border.width: 1
+                    border.color: fsArea.containsMouse ? root.cAccent : root.cDim
+                    Behavior on color { ColorAnimation { duration: 90 } }
+
+                    Row {
+                        id: fsRow
+                        anchors.centerIn: parent
+                        spacing: root.ui(5)
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.fullscreen ? "⤡" : "⤢"
+                            color: fsArea.containsMouse ? root.cAccent : root.cText
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(13)
                         }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.roomForLabels
+                            text: root.fullscreen ? "Exit full size" : "Full size"
+                            color: fsArea.containsMouse ? root.cAccent : root.cText
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(12)
+                        }
+                    }
+                    MouseArea {
+                        id: fsArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.fullscreen = !root.fullscreen
                     }
                 }
             }
@@ -688,7 +1057,8 @@ FloatingWindow {
 
         ListView {             // the conversation
             id: chat
-            anchors { top: head.bottom; left: parent.left; right: parent.right; bottom: ask.top }
+            anchors { top: head.bottom; left: parent.left; bottom: ask.top
+                      right: root.panelOn ? panel.left : parent.right }
             anchors.margins: 10
             clip: true
             spacing: 8
@@ -729,6 +1099,369 @@ FloatingWindow {
                              : turn.kind === "tool" ? root.cDim
                              : turn.kind === "note" ? root.cAccent
                                                     : root.cText
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ── The companion panel ─────────────────────────────────────────────
+         *
+         * ⛔ THE FEATURES HAD TO BE ON SCREEN. velle, 2026-08-30: "i don't
+         * really see the velle.ai features". Todos, habits, goals and the focus
+         * timer all shipped and all of them were reachable only by typing a
+         * slash command that nothing in the window mentioned. A capability
+         * nobody can find has not been delivered.
+         *
+         * ⚠ IT DRAWS `P` RECORDS, IT DOES NOT READ THE DATABASE. sqlite is two
+         * processes away from here on purpose — one writer, one idea of what
+         * "done" means, and the streak arithmetic a tick sets off lives in
+         * productivity.py where the CLI calls it too.
+         *
+         * ⚠ ONLY WHERE THERE IS ROOM. On the small box a 300px panel is the
+         * window; the ☰ menu is the way in there, and it names every one of
+         * these lists. `panelOn` is the width test and the setting together.
+         */
+        Rectangle {
+            id: panel
+            visible: root.panelOn
+            anchors { top: head.bottom; right: parent.right; bottom: ask.top }
+            width: root.panelOn ? Math.min(root.ui(320), Math.round(root.width * 0.34)) : 0
+            color: root.isLight ? Qt.darker(root.cBg, 1.04) : Qt.lighter(root.cBg, 1.5)
+
+            Rectangle {         // the seam, so the panel is a place and not a margin
+                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                width: 1
+                color: root.cLine
+            }
+
+            Flickable {
+                id: panelView
+                anchors { fill: parent; leftMargin: 1 }
+                clip: true
+                contentWidth: width
+                contentHeight: sections.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+
+                // ⛔ A VIEW THAT SCROLLS SAYS SO — the rule this window was
+                // pinned by once already. A day's tasks outgrow 300 pixels.
+                ScrollBar.vertical: SynScrollBar {}
+
+                Column {
+                    id: sections
+                    width: panelView.width - root.ui(11)
+                    spacing: root.ui(6)
+                    topPadding: root.ui(10)
+                    bottomPadding: root.ui(14)
+                    leftPadding: root.ui(12)
+
+                    // ── Focus ──────────────────────────────────────────────
+                    //
+                    // ⚠ ONE FACT, THREE READERS. This is the bar's file and the
+                    // CLI's, arithmetic on a deadline rather than a countdown
+                    // anybody has to keep writing down.
+                    Text {
+                        text: "FOCUS"
+                        color: root.cDim
+                        font.family: root.uiFont || "sans-serif"
+                        font.pixelSize: root.ui(10)
+                        font.letterSpacing: 1
+                    }
+                    Row {
+                        spacing: root.ui(8)
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: {
+                                if (root.pomEnds <= 0) return "—"
+                                const left = Math.max(0, root.pomEnds - root.pomNow)
+                                if (left <= 0) return "done"
+                                const m = Math.floor(left / 60), s = left % 60
+                                return m + ":" + (s < 10 ? "0" : "") + s
+                            }
+                            color: root.pomEnds > 0 ? root.cAccent : root.cDim
+                            font.family: "monospace"
+                            font.pixelSize: root.ui(18)
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.pomEnds > 0 ? "stop" : "start 25 min"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(11)
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.slash(root.pomEnds > 0 ? "/pom stop"
+                                                                      : "/pom start")
+                            }
+                        }
+                    }
+
+                    Item { width: 1; height: root.ui(8) }
+
+                    // ── Tasks ──────────────────────────────────────────────
+                    Row {
+                        width: sections.width - root.ui(12)
+                        spacing: root.ui(6)
+                        Text {
+                            text: "TASKS"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(10)
+                            font.letterSpacing: 1
+                        }
+                        Text {
+                            // ⚠ The overdue count is the one worth a colour. A
+                            // panel that shades every number teaches the eye to
+                            // ignore all of them.
+                            visible: (root.stats.overdue || 0) > 0
+                            text: (root.stats.overdue || 0) + " overdue"
+                            color: root.cBad
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(10)
+                        }
+                        Text {
+                            text: "＋"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(11)
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.prefill("/todo add ")
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: todos.count === 0
+                        width: sections.width - root.ui(12)
+                        text: "Nothing on the list. ＋, or type /todo add …"
+                        wrapMode: Text.Wrap
+                        color: root.cDim
+                        font.family: root.uiFont || "sans-serif"
+                        font.pixelSize: root.ui(11)
+                    }
+
+                    Repeater {
+                        model: todos
+                        Row {
+                            id: trow
+                            required property int id
+                            required property string text
+                            required property string status
+                            required property int prio
+                            required property string due
+                            readonly property bool done: trow.status === "done"
+
+                            width: sections.width - root.ui(12)
+                            spacing: root.ui(6)
+
+                            // ⛔ A TICK IS A TOGGLE, both ways — the engine
+                            // reopens a task it finds already done. A checkbox
+                            // that only goes one way turns a misclick into
+                            // something to be undone from a terminal.
+                            Text {
+                                anchors.top: parent.top
+                                text: trow.done ? "☑" : "☐"
+                                color: trow.done ? root.cDim : root.cAccent
+                                font.family: root.uiFont || "sans-serif"
+                                font.pixelSize: root.ui(13)
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -4
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.send("check todo " + trow.id)
+                                }
+                            }
+                            Text {
+                                width: trow.width - root.ui(25)
+                                text: trow.text
+                                      + (trow.due !== "" ? "  " + trow.due : "")
+                                wrapMode: Text.Wrap
+                                // ⚠ Struck through rather than removed. A list
+                                // that deletes the row you just ticked gives no
+                                // sign anything happened where you clicked.
+                                font.strikeout: trow.done
+                                color: trow.done ? root.cDim
+                                     : trow.prio <= 1 ? root.cWarn : root.cText
+                                font.family: root.uiFont || "sans-serif"
+                                font.pixelSize: root.ui(12)
+                            }
+                        }
+                    }
+
+                    Item { width: 1; height: root.ui(8) }
+
+                    // ── Habits ─────────────────────────────────────────────
+                    Row {
+                        width: sections.width - root.ui(12)
+                        spacing: root.ui(6)
+                        Text {
+                            text: "HABITS"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(10)
+                            font.letterSpacing: 1
+                        }
+                        Text {
+                            text: "＋"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(11)
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.prefill("/habit add ")
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: habits.count === 0
+                        width: sections.width - root.ui(12)
+                        text: "No habits yet. ＋, or type /habit add …"
+                        wrapMode: Text.Wrap
+                        color: root.cDim
+                        font.family: root.uiFont || "sans-serif"
+                        font.pixelSize: root.ui(11)
+                    }
+
+                    Repeater {
+                        model: habits
+                        Row {
+                            id: hrow
+                            required property int id
+                            required property string name
+                            required property bool today
+                            required property int streak
+                            required property string week
+
+                            width: sections.width - root.ui(12)
+                            spacing: root.ui(6)
+
+                            Text {
+                                text: hrow.today ? "☑" : "☐"
+                                color: hrow.today ? root.cAccent : root.cDim
+                                font.family: root.uiFont || "sans-serif"
+                                font.pixelSize: root.ui(13)
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -4
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.send("check habit " + hrow.id)
+                                }
+                            }
+                            Text {
+                                width: hrow.width - root.ui(96)
+                                text: hrow.name
+                                elide: Text.ElideRight
+                                color: root.cText
+                                font.family: root.uiFont || "sans-serif"
+                                font.pixelSize: root.ui(12)
+                            }
+                            // ⚠ MONOSPACE, because it is a grid and not a word:
+                            // seven cells that have to line up under each other
+                            // down the column.
+                            Text {
+                                text: hrow.week
+                                color: root.cAccent
+                                font.family: "monospace"
+                                font.pixelSize: root.ui(11)
+                            }
+                            Text {
+                                text: hrow.streak > 0 ? hrow.streak + "d" : ""
+                                color: root.cDim
+                                font.family: "monospace"
+                                font.pixelSize: root.ui(11)
+                            }
+                        }
+                    }
+
+                    Item { width: 1; height: root.ui(8) }
+
+                    // ── Goals ──────────────────────────────────────────────
+                    Row {
+                        width: sections.width - root.ui(12)
+                        spacing: root.ui(6)
+                        Text {
+                            text: "GOALS"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(10)
+                            font.letterSpacing: 1
+                        }
+                        Text {
+                            text: "＋"
+                            color: root.cDim
+                            font.family: root.uiFont || "sans-serif"
+                            font.pixelSize: root.ui(11)
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.prefill("/goal add ")
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: goals.count === 0
+                        width: sections.width - root.ui(12)
+                        text: "No goals yet. ＋, or type /goal add …"
+                        wrapMode: Text.Wrap
+                        color: root.cDim
+                        font.family: root.uiFont || "sans-serif"
+                        font.pixelSize: root.ui(11)
+                    }
+
+                    Repeater {
+                        model: goals
+                        Column {
+                            id: grow
+                            required property int id
+                            required property string title
+                            required property int progress
+
+                            width: sections.width - root.ui(12)
+                            spacing: root.ui(3)
+                            topPadding: root.ui(3)
+
+                            Row {
+                                width: grow.width
+                                spacing: root.ui(6)
+                                Text {
+                                    width: grow.width - root.ui(38)
+                                    text: grow.title
+                                    elide: Text.ElideRight
+                                    color: root.cText
+                                    font.family: root.uiFont || "sans-serif"
+                                    font.pixelSize: root.ui(12)
+                                }
+                                Text {
+                                    text: grow.progress + "%"
+                                    color: root.cDim
+                                    font.family: "monospace"
+                                    font.pixelSize: root.ui(11)
+                                }
+                            }
+                            Rectangle {
+                                width: grow.width
+                                height: root.ui(4)
+                                radius: height / 2
+                                color: root.cLine
+                                Rectangle {
+                                    width: parent.width * Math.max(0, Math.min(100, grow.progress)) / 100
+                                    height: parent.height
+                                    radius: parent.radius
+                                    color: root.cAccent
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -777,6 +1510,86 @@ FloatingWindow {
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                     onClicked: { root.send("confirm " + root.pendingId + " no"); root.pendingId = "" }
+                }
+            }
+        }
+
+        /*
+         * ── What a slash can do ─────────────────────────────────────────────
+         *
+         * ⛔ THE SECOND HALF OF "I DON'T REALLY SEE THE velle.ai FEATURES".
+         * The ☰ menu is where they are found; this is where they are LEARNT.
+         * `/todo add buy milk` is only obvious to somebody who already knows
+         * the list exists, and a chat box gives no hint that a leading slash
+         * means anything at all — so the moment one is typed, the window says
+         * what it has.
+         *
+         * ⚠ IT IS A HINT, NOT A COMPLETER. It takes no focus and swallows no
+         * keys: `/todo add buy milk` typed straight through must reach the
+         * engine exactly as it did before this existed. Clicking a row fills
+         * the verb in; Enter still sends whatever is in the box.
+         */
+        Rectangle {
+            id: hints
+            // Only while the verb is still being typed — once there is a space
+            // the user is writing arguments and a list of verbs is in the way.
+            visible: root.pendingId === "" && /^\/[a-z]*$/.test(input.text)
+            anchors { left: parent.left; right: parent.right; bottom: ask.top }
+            anchors.margins: 0
+            height: visible ? hintCol.implicitHeight + root.ui(10) : 0
+            color: root.cPanel
+
+            Column {
+                id: hintCol
+                anchors { left: parent.left; right: parent.right
+                          top: parent.top; topMargin: root.ui(5)
+                          leftMargin: root.ui(12); rightMargin: root.ui(12) }
+
+                Repeater {
+                    model: [["/todo",    "tasks — list, add, done"],
+                            ["/habit",   "habits, and the streak on each"],
+                            ["/goal",    "goals and their milestones"],
+                            ["/pom",     "the focus timer"],
+                            ["/quant",   "a ticker's price and indicators"],
+                            ["/persona", "the voice it answers in"]]
+
+                    Rectangle {
+                        id: hrowItem
+                        required property var modelData
+                        // ⚠ Filtered on what has been typed so far, so `/h`
+                        // narrows to the one line that matters instead of
+                        // making the reader find it again.
+                        readonly property bool hit:
+                            hrowItem.modelData[0].indexOf(input.text) === 0
+                        visible: hrowItem.hit
+                        width: hintCol.width
+                        height: visible ? root.ui(20) : 0
+                        color: hintArea.containsMouse ? root.cMine : "transparent"
+
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: root.ui(8)
+                            Text {
+                                text: hrowItem.modelData[0]
+                                color: root.cAccent
+                                font.family: "monospace"
+                                font.pixelSize: root.ui(12)
+                            }
+                            Text {
+                                text: hrowItem.modelData[1]
+                                color: root.cDim
+                                font.family: root.uiFont || "sans-serif"
+                                font.pixelSize: root.ui(11)
+                            }
+                        }
+                        MouseArea {
+                            id: hintArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.prefill(hrowItem.modelData[0] + " ")
+                        }
+                    }
                 }
             }
         }

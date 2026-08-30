@@ -28,6 +28,7 @@ quotes can contain bytes that are not valid UTF-8.
   T  text                a chunk of the assistant's reply
   C  id name args        a tool is waiting to be allowed to run
   X  name result         a tool ran, and what it said
+  P  list json            the companion's own records: todos, habits, goals
   A  text                something went wrong, in a sentence
   E  serial              end of turn — the window re-enables its input on this
 
@@ -43,6 +44,8 @@ Commands:
   reset                  forget the conversation
   provider NAME          switch backend, for this process
   state                  re-emit the S records
+  companion              re-emit the P records
+  check todo|habit ID    tick a row off in the panel
   quit
 
 ⚠ THE TURN RUNS ON ITS OWN THREAD. `confirm` arrives while the model is
@@ -66,6 +69,7 @@ from pathlib import Path
 import vibe.config as cfg
 from vibe import intents, keywords, modes, tools, voice as voicemod, wake as wakemod
 from vibe import companion_cli, personas
+from vibe import productivity as P
 
 
 # ── the wire ────────────────────────────────────────────────────────────────
@@ -172,6 +176,74 @@ class Server:
         self.wire.rec("V", "reading", "yes" if self.speaking else "no")
         self.wire.rec("V", "wake", "on" if (self._wake and self._wake.running) else "off")
         self.wire.rec("S", "ready", "yes" if self.model else "no")
+
+    # ── the companion, as facts rather than as printed lines ────────────
+    #
+    # ⛔ THE PANEL NEEDS FIELDS, NOT THE CLI's TEXT. `companion_cli` renders a
+    # task as `[ ] !! #3 buy milk due 2026-09-01`, which is exactly right in a
+    # terminal and useless to a window that has to draw a checkbox and know
+    # which id it belongs to. Sending the rendered line would have given a
+    # panel that can show a list and cannot tick anything off it.
+    #
+    # ⚠ ONE RECORD PER LIST, not one per row: a hundred records to redraw a
+    # list is a hundred parses and a hundred model resets in QML.
+    def emit_companion(self):
+        try:
+            todos = [{"id": t["id"], "text": t["content"], "status": t["status"],
+                      "prio": t["priority"], "due": t["due_date"] or "",
+                      "project": t["project"] or ""}
+                     for t in P.todo_all()][:120]
+            habits = [{"id": h["id"], "name": h["name"], "icon": h["icon"],
+                       "streak": h["streak"], "today": bool(h["done_today"]),
+                       "week": "".join("#" if d["done"] else "." for d in h["week"])}
+                      for h in P.habit_dashboard()][:60]
+            goals = [{"id": g["id"], "title": g["title"],
+                      "progress": g["progress"]}
+                     for g in P.goal_all()][:60]
+            stats = P.todo_stats()
+        except Exception as e:                      # noqa: BLE001
+            # A companion database that cannot be read is worth one sentence,
+            # not a dead window: the chat half does not depend on any of this.
+            self.wire.rec("A", f"companion: {e}")
+            return
+        self.wire.rec("P", "todos", json.dumps(todos))
+        self.wire.rec("P", "habits", json.dumps(habits))
+        self.wire.rec("P", "goals", json.dumps(goals))
+        self.wire.rec("P", "stats", json.dumps(stats))
+
+    def check(self, what: str, ident: str):
+        """Tick a row off from the panel.
+
+        ⛔ THROUGH THE SAME FUNCTIONS THE CLI CALLS. A panel writing its own
+        UPDATE would be a second idea of what "done" means — the streak
+        arithmetic and the goal recalculation a completion triggers live in
+        productivity.py, and a checkbox that skipped them would leave the
+        window and `vibe todo` disagreeing about the same row.
+
+        ⚠ A TICK IS A TOGGLE, both ways. A checkbox that only goes one way
+        turns a misclick into something that has to be undone from a terminal.
+        """
+        try:
+            rid = int(ident.strip())
+        except ValueError:
+            self.wire.rec("A", f"check: not a number: {ident}")
+            return
+        if what == "todo":
+            t = P.todo_get(rid)
+            if not t:
+                self.wire.rec("A", f"no task #{rid}")
+                return
+            (P.todo_reopen if t["status"] == "done" else P.todo_complete)(rid)
+        elif what == "habit":
+            hit = next((h for h in P.habit_dashboard() if h["id"] == rid), None)
+            if not hit:
+                self.wire.rec("A", f"no habit #{rid}")
+                return
+            (P.habit_uncheck if hit["done_today"] else P.habit_check)(rid)
+        else:
+            self.wire.rec("A", f"check: nothing called {what!r}")
+            return
+        self.emit_companion()
 
     def set_persona(self, name: str):
         """Switch the assistant's voice, live.
@@ -313,6 +385,11 @@ class Server:
         # a task list drawn in the model's voice would read as something a model
         # said rather than as what is actually written down.
         self.wire.rec("X", "", buf.getvalue().rstrip() or "(nothing)")
+        # The panel is looking at the same rows this just changed. Re-emitted
+        # here rather than polled: a timer in QML would show a task appearing a
+        # second or two after the line that added it, which reads as a window
+        # that did not notice.
+        self.emit_companion()
         self.wire.rec("E", "", "")
         return True
 
@@ -396,6 +473,12 @@ class Server:
                 except Exception:
                     pass
             self._said = ""
+            # ⚠ ONCE A TURN, NOT PER TOOL CALL. The model has its own companion
+            # tools, so any turn may have added a task or ticked a habit — and
+            # the panel has no other way to hear about it. Four short queries
+            # against a database this window already holds open is cheaper than
+            # a poll that runs whether or not anything happened.
+            self.emit_companion()
             self.wire.rec("E", serial)
 
     # ── commands ────────────────────────────────────────────────────────
@@ -448,6 +531,13 @@ class Server:
             return True
         if verb == "state":
             self.emit_state()
+            return True
+        if verb == "companion":
+            self.emit_companion()
+            return True
+        if verb == "check":
+            what, _, ident = rest.strip().partition(" ")
+            self.check(what.strip(), ident)
             return True
         self.wire.rec("A", f"unknown command: {verb}")
         return True

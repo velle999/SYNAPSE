@@ -90,6 +90,18 @@ def todo_start(tid: int) -> dict | None:
     return _todo_set(tid, "UPDATE todos SET status = 'doing' WHERE id = ?")
 
 
+def todo_reopen(tid: int) -> dict | None:
+    """Put a finished task back.
+
+    ⚠ `completed_at` IS CLEARED, not left behind. It is the column
+    `todo_stats` counts as finished today, so a task reopened with its
+    timestamp still on it goes on being counted — the day's total would claim
+    work that has been put back on the list.
+    """
+    return _todo_set(tid, "UPDATE todos SET status = 'todo',"
+                          " completed_at = NULL WHERE id = ?")
+
+
 def todo_cancel(tid: int) -> dict | None:
     return _todo_set(tid, "UPDATE todos SET status = 'cancelled' WHERE id = ?")
 
