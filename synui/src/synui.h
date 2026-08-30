@@ -6299,6 +6299,11 @@ struct syn_server {
         int                      fp_fd;     /* status-pipe read end, -1 when idle */
         struct wl_event_source  *fp_src;
         int                      fp_fails;  /* consecutive F verdicts this lock */
+        /* Consecutive R verdicts — "the reader is not there RIGHT NOW", which
+         * is not the same claim as "this machine has no reader". See the R case
+         * in lock.c: a resume re-enumerates the device and fprintd answers
+         * unavailable for a few seconds afterwards. */
+        int                      fp_unavail;
         uint32_t                 fp_retry_ms;  /* earliest restart, monotonic ms */
         char                     fp_msg[128];  /* last M line, drawn under the clock */
         /* The helper writes whole lines, but a pipe read can still split one:

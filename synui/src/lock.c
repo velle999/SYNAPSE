@@ -1027,20 +1027,36 @@ static int lock_fade_cb(void *data)
     return 0;
 }
 
+/* Defined in the fingerprint section below. Called from here because the reader
+ * is re-armed both by user activity and by the second-hand tick — see the note
+ * in lock_clock_cb. */
+static void lock_fprint_start(syn_server_t *s);
+
 static int lock_clock_cb(void *data)
 {
     syn_server_t *s = data;
     if (!s->nlock.active) return 0;
     if (s->nlock.bright > 0.02)      /* nothing visible ⇒ nothing to update */
         lock_render(s);
+    /*
+     * ⚠ THE RETRY CANNOT DEPEND ON SOMEBODY MOVING THE MOUSE. Re-arming the
+     * reader was activity-driven only, which is right for a failed swipe —
+     * the next one comes when a person walks up. It is wrong for a reader that
+     * was not ready yet: the lock comes up on resume, the device is still
+     * re-enumerating, and the whole point is that a finger works WITHOUT
+     * touching a key first. So the second-hand tick re-arms it too.
+     *
+     * This costs nothing when there is nothing to do: SYN_FP_RUNNING and
+     * SYN_FP_UNAVAIL are both non-IDLE, so a reader that is waiting and a
+     * machine that has given up are each skipped by the state test.
+     */
+    if (s->nlock.fp_state == SYN_FP_IDLE &&
+        (int32_t)(lock_now_ms() - s->nlock.fp_retry_ms) >= 0)
+        lock_fprint_start(s);
     if (s->nlock.t_clock)
         wl_event_source_timer_update(s->nlock.t_clock, 1000);
     return 0;
 }
-
-/* Defined in the fingerprint section below; called from here because a failed
- * swipe is re-armed by user activity. */
-static void lock_fprint_start(syn_server_t *s);
 
 /* Snap to full brightness and reschedule the fade. Called on every key and on
  * pointer motion while locked. */
@@ -1190,6 +1206,30 @@ static void lock_auth_start(syn_server_t *s)
  * password prompt that works fine. */
 #define LOCK_FP_MAX_FAILS  5
 
+/*
+ * "The reader is not answering right now" — how long to keep asking, and how
+ * often.
+ *
+ * ⛔ THIS IS THE SECOND CAUSE OF "IT IS ONLY THERE SOMETIMES". The first was
+ * timeouts spending the failure budget, fixed in synui-lock-fprint.c. This one
+ * is the answer that USED to be terminal: pam_fprintd returns
+ * PAM_AUTHINFO_UNAVAIL both for a machine with no reader and for a reader that
+ * is present but not usable yet — fprintd still activating on the bus, the
+ * device re-enumerating after a resume, or the previous process still holding
+ * the claim. A lock that comes up ON RESUME, which is how a laptop usually
+ * locks, therefore asked once, was told "no reader", and never asked again.
+ *
+ * Four attempts over roughly fifteen seconds covers a USB re-enumeration. The
+ * cost lands narrowly: a machine with no fprintd at all never reaches this,
+ * because the helper's preflight finds no pam_fprintd.so and answers U on the
+ * first fork exactly as before. Only a machine that HAS fprintd and no usable
+ * device pays the extra three, in the first seconds of a lock, and is then
+ * silent for the rest of it. The backoff doubles so the last window is the
+ * long one.
+ */
+#define LOCK_FP_UNAVAIL_MS    2000
+#define LOCK_FP_MAX_UNAVAIL   4
+
 /* Drop a partial UTF-8 sequence off the end of a truncated string.
  *
  * fp_msg is filled with snprintf, which truncates by BYTES, and pam_fprintd's
@@ -1274,11 +1314,36 @@ static int lock_fprint_line(syn_server_t *s, const char *line)
         return 1;
 
     case 'U':
-        /* The common case, and the quiet one: no reader, no fprintd, or no
-         * enrolled prints. Clear the message — there is nothing to tell the
-         * user about a feature this machine does not have. */
+        /* Proven permanent: a broken or absent PAM stack. Clear the message —
+         * there is nothing to tell the user about a feature this machine does
+         * not have. */
         s->nlock.fp_msg[0] = 0;
         lock_fprint_disable(s, "unavailable");
+        lock_render(s);
+        return 1;
+
+    case 'R':
+        /*
+         * ⚠ "NOT RIGHT NOW" IS NOT "NOT ON THIS MACHINE". See the note on
+         * LOCK_FP_UNAVAIL_MS: this is the answer a present reader gives while
+         * it is still coming back after a resume, and treating it as terminal
+         * is what left a resumed laptop with no fingerprint prompt.
+         *
+         * ⛔ AND IT DOES NOT SPEND THE SWIPE BUDGET. fp_fails is for fingers
+         * that did not match; counting a reader that never answered against it
+         * would retire the reader early for a person who never touched it.
+         */
+        lock_fprint_stop(s);
+        s->nlock.fp_msg[0] = 0;
+        s->nlock.fp_unavail++;
+        if (s->nlock.fp_unavail >= LOCK_FP_MAX_UNAVAIL) {
+            lock_fprint_disable(s, "reader never became available");
+        } else {
+            /* Doubling, so four attempts reach about fifteen seconds rather
+             * than eight — long enough for a USB device to re-enumerate. */
+            uint32_t wait = LOCK_FP_UNAVAIL_MS << (s->nlock.fp_unavail - 1);
+            s->nlock.fp_retry_ms = lock_now_ms() + wait;
+        }
         lock_render(s);
         return 1;
 
@@ -1655,6 +1720,7 @@ void synui_lock(syn_server_t *s)
     s->nlock.fp_fd       = -1;
     s->nlock.fp_src      = NULL;
     s->nlock.fp_fails    = 0;
+    s->nlock.fp_unavail  = 0;
     s->nlock.fp_retry_ms = lock_now_ms();
     s->nlock.fp_msg[0]   = 0;
     s->nlock.fp_rxlen    = 0;

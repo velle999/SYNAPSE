@@ -16,17 +16,40 @@
  *     F\n          a finger was presented and did not match; retry allowed
  *     T\n          nobody presented one before pam_fprintd gave up; retry, and
  *                 do NOT spend the lock's failure budget on it
- *     U\n          no fingerprint auth on this machine; do not retry
+ *     R\n          the reader is not answering RIGHT NOW; retry a few times
+ *     U\n          no fingerprint auth on this machine at all; do not retry
  *     M<text>\n    show <text> under the clock
  *
- * Exactly one of A/F/U is written, last, and then the process exits.
+ * Exactly one of A/F/T/R/U is written, last, and then the process exits.
  *
- * U is the case that matters most, because it is the common one: this is a
- * distro that ships on desktops with no reader at all. pam_fprintd asks fprintd
- * for a device list and returns PAM_AUTHINFO_UNAVAIL immediately when there is
- * none, or when the user has enrolled no prints. So the compositor does not
- * have to detect a reader: it starts this, and a machine without one answers U
- * in milliseconds and is never asked again for the rest of the lock.
+ * R and U are the same PAM code read two different ways, and telling them apart
+ * is the whole point of this pass.
+ *
+ * pam_fprintd asks fprintd for a device list and returns PAM_AUTHINFO_UNAVAIL
+ * when there is none — which is the common case, because this is a distro that
+ * ships on desktops with no reader at all. But it returns exactly the same code
+ * when the device is there and simply cannot be used YET: fprintd still being
+ * activated on the bus, the reader re-enumerating on the USB bus after a
+ * resume, or the device still claimed by the process that had it before. Those
+ * clear up in seconds.
+ *
+ * Treating that code as permanent is what made the reader "only there
+ * sometimes" AFTER the timeout fix below: a lock that comes up on resume — the
+ * most common way a laptop locks — asked once, was told the machine had no
+ * reader, and never asked again for the rest of that lock. Locking by hand a
+ * minute later worked, which is exactly the shape that makes it look random.
+ *
+ * So a runtime PAM_AUTHINFO_UNAVAIL is now R: the lock retries it a few times
+ * over the following seconds and then gives up for good.
+ *
+ * ⚠ AND THE COMMON CASE IS UNCHANGED. A machine with no fprintd never gets as
+ * far as PAM: the preflight below finds no pam_fprintd.so and answers U on the
+ * first fork, exactly as before. Only a machine that HAS fprintd and no usable
+ * device pays the extra attempts.
+ *
+ * U is kept for what can be PROVEN permanent without waiting: the two setup
+ * failures checked below, and the PAM codes that mean the stack itself is
+ * broken rather than the device absent.
  *
  * The two setup failures — no service file, no pam_fprintd.so — are checked
  * HERE rather than left to PAM, because PAM reports both as an ordinary
@@ -239,7 +262,13 @@ int main(void)
     case PAM_SUCCESS:
         emit("A\n", 2);
         return 0;
-    case PAM_AUTHINFO_UNAVAIL:       /* no reader, or no enrolled prints */
+    case PAM_AUTHINFO_UNAVAIL:
+        /* ⚠ NOT PROOF THAT THIS MACHINE HAS NO READER. The same code comes back
+         * from a device that is present but not yet usable — see the header.
+         * The lock decides how many times that is worth re-asking; this process
+         * only reports which kind of "no" it got. */
+        emit("R\n", 2);
+        return 1;
     case PAM_MODULE_UNKNOWN:         /* pam_fprintd.so not installed */
     case PAM_SYSTEM_ERR:
     case PAM_ABORT:
