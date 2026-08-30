@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<!-- syn-vault — a padlock over a folder.
+     ⛔ THE <svg> ROOT IS THE FIRST THING IN THIS FILE. gdk-pixbuf sniffs only
+     the opening bytes to decide what a file is, so a comment or a licence
+     header above the root pushes it out of that window and the icon becomes
+     invisible in GTK menus while rendering perfectly everywhere else. That is
+     why this note is here, below it, rather than at the top.
+     SynapseOS Project — GPL-2.0-or-later -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b8dd9"/>
+      <stop offset="1" stop-color="#3a63a8"/>
+    </linearGradient>
+    <linearGradient id="lock" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4d06a"/>
+      <stop offset="1" stop-color="#d9a326"/>
+    </linearGradient>
+  </defs>
+
+  <!-- the folder -->
+  <path d="M5 13.5a2.5 2.5 0 0 1 2.5-2.5h10.2c.8 0 1.6.4 2.1 1l2 2.6h18.7a2.5 2.5
+           0 0 1 2.5 2.5v20.4a2.5 2.5 0 0 1-2.5 2.5H7.5A2.5 2.5 0 0 1 5 37.5z"
+        fill="url(#body)"/>
+  <path d="M5 18.6h38v2.2H5z" fill="#000" opacity=".12"/>
+
+  <!-- the shackle, drawn before the body so the body laps over its feet -->
+  <path d="M18.6 27.4v-3.6a5.4 5.4 0 0 1 10.8 0v3.6"
+        fill="none" stroke="#8a6a12" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M18.6 27.4v-3.6a5.4 5.4 0 0 1 10.8 0v3.6"
+        fill="none" stroke="url(#lock)" stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- the lock body -->
+  <rect x="14.4" y="26.6" width="19.2" height="13.2" rx="2.6" fill="url(#lock)"/>
+  <rect x="14.4" y="26.6" width="19.2" height="13.2" rx="2.6"
+        fill="none" stroke="#8a6a12" stroke-width="1.1" opacity=".55"/>
+  <circle cx="24" cy="32.3" r="2.1" fill="#6b520c"/>
+  <path d="M23.1 32.3h1.8l-.4 4.4h-1z" fill="#6b520c"/>
+</svg>

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=File Vault
+GenericName=Encrypted folder
+Comment=A password-locked folder for your own files
+Exec=syn-vault gui
+Icon=syn-vault
+Terminal=false
+Categories=Utility;Security;Archiving;
+Keywords=vault;encrypt;encrypted;password;lock;locker;private;secure;
+StartupNotify=true
+StartupWMClass=syn-vault

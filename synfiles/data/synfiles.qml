@@ -2715,6 +2715,20 @@ FloatingWindow {
                         }
                     }
 
+                    // ⛔ NOT A VIEW, AND SO NOT IN THE Repeater ABOVE. The vault
+                    // is another application: this opens it rather than
+                    // navigating, because a locked vault has no directory for a
+                    // file manager to show and an unlocked one is an ordinary
+                    // folder it can already reach. Putting it here is the whole
+                    // point — somebody looking for their private files looks in
+                    // the file manager, not in an applications menu.
+                    SideRow {
+                        label: "Vault"
+                        iconName: "syn-vault"
+                        active: false
+                        onActivated: root.openVault()
+                    }
+
                     Item { width: 1; height: 10 }
                     SideHeading {
                         text: "Folders"
@@ -6862,6 +6876,17 @@ FloatingWindow {
         bottomPadding: 4
         color: root.cDim
         font { family: root.uiFont; pixelSize: root.ui(10); bold: true  }
+    }
+
+    // ⚠ THE VAULT IS A SEPARATE PROGRAM, and synfiles must not learn to open
+    // one itself. Two implementations of "is this vault unlocked" is one too
+    // many, and the wrong answer to that question tells somebody their files
+    // are encrypted when they are not.
+    Process { id: vaultProc; command: ["syn-vault", "gui"] }
+
+    function openVault() {
+        vaultProc.running = false
+        vaultProc.running = true
     }
 
     component SideRow: Rectangle {

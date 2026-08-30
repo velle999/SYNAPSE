@@ -32,6 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
+       syn-vault
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
 for _c in "${ONLY[@]}"; do
@@ -426,6 +427,17 @@ build_component syn-disks
 # ⚠ DBUS is pointed at a dead socket by the tests, so libsecret cannot write
 # into the build user's real login keyring.
 build_component syn-cal
+
+# syn-vault — the file vault. meson C plus a quickshell window.
+#
+# ⚠ Its check() runs against a STUB gocryptfs, deliberately. A real vault needs
+# /dev/fuse and a user allowed to use it, and a build host has neither — so a
+# suite that mounted anything would be one that silently never ran. What the
+# stub does prove is everything this component decides on its own: the names it
+# refuses, the paths it composes, that the password reaches the backend on stdin
+# and never on a command line, and that it will not mount over files somebody
+# would then lose.
+build_component syn-vault
 
 # syn-edit — the text editor. Same shape again: meson C plus a quickshell
 # front-end, built from a source tarball the generic collector above assembles

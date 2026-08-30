@@ -261,6 +261,14 @@ PACKAGES=(
     # folder — but the installer's list is what decides this, not usefulness.
     # Builds offline: meson, libc, curl, libxml2, libsecret.
     syn-cal
+    # syn-vault — the file vault. On the ISO for the same reason as the two
+    # above: syn-install names it, and a package the installer asks for that the
+    # local repo does not carry fails the install at pacman.
+    #
+    # ⚠ IT PULLS gocryptfs, WHICH IS A HARD DEPENDENCY, so that lands on the ISO
+    # too. That is correct and not an accident: a vault application installed
+    # without the thing that encrypts can refuse every command it has.
+    syn-vault
     # syn-edit — the text editor. Must be ON the ISO for the same reason
     # syn-disks must: syn-install names it in SEL_CORE, and a package the
     # installer asks for but the local repo does not carry fails the install at
