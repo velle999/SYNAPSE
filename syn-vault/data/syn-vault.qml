@@ -127,11 +127,32 @@ ShellRoot {
         pwAgain.text = ""
     }
 
+    // The password this window is holding for the child it just asked for, and
+    // only until the pipe is live. See onStarted.
+    property string pendingPw: ""
+
     Process {
         id: actProc
-        stdin: StdioCollector {}
+        // ⛔ stdinEnabled, NOT a `stdin:` parser. StdioCollector reads a stream;
+        // stdin is written, not parsed, so there is nothing for one to collect
+        // and Process has no such property. Assigning it is not a bad password
+        // path or a dead button — it fails to parse the file, so the window
+        // never opens at all, from the menu or from synfiles alike.
+        stdinEnabled: true
         stderr: StdioCollector { id: actErr }
+
+        // ⛔ WRITTEN HERE, NOT AFTER `running = true`. That property is a
+        // request to start, not a started child: a write issued before the fork
+        // completes is discarded silently, and the binary then sits on an empty
+        // pipe until somebody closes the window. `started` is the pipe saying
+        // it exists.
+        onStarted: {
+            actProc.write(root.pendingPw + "\n")
+            root.pendingPw = ""
+        }
+
         onExited: (code) => {
+            root.pendingPw = ""
             root.busy = false
             if (code === 0) {
                 root.askFor = ""
@@ -163,11 +184,14 @@ ShellRoot {
 
         root.busy = true
         root.askMsg = ""
+        // ⚠ ONE LINE, EVEN WHEN CREATING. The binary asks twice only when it has
+        // a terminal to ask twice; on a pipe it reads a single line and the
+        // second would be left unread in it. The confirmation above is this
+        // window's job precisely because the binary skips it here.
+        root.pendingPw = pwField.text
         actProc.command = [root.bin, root.askIsNew ? "create" : "open", root.askFor]
         actProc.running = false
         actProc.running = true
-        actProc.write(pwField.text + "\n")
-        if (root.askIsNew) actProc.write(pwField.text + "\n")
     }
 
     Process {
