@@ -14,6 +14,7 @@
 #include "caldav.h"
 #include "config.h"
 #include "event.h"
+#include "compose.h"
 #include "graph.h"
 #include "month.h"
 #include "oauth.h"
@@ -55,6 +56,15 @@ static void usage(FILE *f)
 "  syn-cal today                        just today\n"
 "  syn-cal week                         the next seven days\n"
 "  syn-cal events <name> <calendar>     the raw store, one calendar\n"
+"\n"
+"  syn-cal new \"Dentist\" --at \"2026-09-21 13:15\" [--for 30m] [--remind 15m]\n"
+"                    [--where \"...\"] [--notes \"...\"] [--all-day]\n"
+"                    [--in <account>/<calendar>]\n"
+"  syn-cal edit <id> [the same options]  change one\n"
+"  syn-cal delete <id>                   remove one\n"
+"\n"
+"  A new event is written here and goes up on the next sync. Ids come from\n"
+"  `syn-cal --rec agenda`.\n"
 "\n"
 "  --client-id ID   with account add-google/add-microsoft: use your own\n"
 "                   OAuth project instead of the one this build ships\n"
@@ -865,6 +875,15 @@ int main(int argc, char **argv)
 	 * below whatever this says. */
 	g_color = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");
 
+	/* ⛔ `new` AND `edit` TAKE THEIR OWN OPTIONS, so the loop below never sees
+	 * them. It rejects any --flag it does not recognise — which is right for
+	 * every other command and exactly wrong for these two, where --at, --for and
+	 * --remind belong to the subcommand and their VALUES would otherwise be
+	 * collected as positional arguments. Handing the tail over whole is the only
+	 * reading that cannot get that wrong. */
+	if (argc > 2 && !strcmp(argv[1], "new"))  return cmd_new(argc - 2, argv + 2);
+	if (argc > 2 && !strcmp(argv[1], "edit")) return cmd_edit(argc - 2, argv + 2);
+
 	int n = 0;
 	const char *pos[8];
 
@@ -926,6 +945,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "tui"))                       rc = cmd_tui();
 	else if (!strcmp(c, "agenda"))                    rc = cmd_agenda(days, from_date);
 	else if (!strcmp(c, "month"))                     rc = cmd_month(from_date);
+	else if (!strcmp(c, "delete") && n >= 2)          rc = cmd_delete(pos[1]);
 	else if (!strcmp(c, "weekstart"))                 rc = cmd_weekstart(n >= 2 ? pos[1] : NULL);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);

@@ -620,6 +620,108 @@ FloatingWindow {
         addProc.running = true
     }
 
+    // ── Making and changing an event ────────────────────────────────────────
+    //
+    // ⛔ THE POINT OF A CALENDAR. Everything else in this window reads: it
+    // syncs, expands, groups and draws. Until there was a way to put an
+    // appointment in from here it was a viewer for a calendar somebody else had
+    // to write, which is most of what a calendar is for missing.
+    property bool evOpen: false
+    property string evUid: ""          // "" while making a new one
+    property string evMsg: ""
+    property bool evBusy: false
+
+    function evNew() {
+        root.evUid = ""
+        root.evMsg = ""
+        evTitle.text = ""
+        // Opens on the day being looked at, at the next round hour — the two
+        // things most likely to be right, and both easy to change.
+        const d = root.view === "month" ? new Date(root.monthAnchor) : new Date()
+        if (root.view === "month") d.setDate(new Date().getDate())
+        d.setHours(d.getHours() + 1, 0, 0, 0)
+        evDate.text = Qt.formatDate(d, "yyyy-MM-dd")
+        evTime.text = Qt.formatDateTime(d, "HH:mm")
+        evFor.text = "1h"
+        evRemind.text = "none"
+        evWhere.text = ""
+        evNotes.text = ""
+        root.evOpen = true
+    }
+
+    function evEdit(e) {
+        root.evUid = e.uid
+        root.evMsg = ""
+        evTitle.text = e.summary
+        const s = new Date(e.start)
+        evDate.text = Qt.formatDate(s, "yyyy-MM-dd")
+        evTime.text = e.allDay ? "" : Qt.formatDateTime(s, "HH:mm")
+        const mins = Math.max(1, Math.round((e.end - e.start) / 60000))
+        evFor.text = e.allDay ? "" : (mins % 60 === 0 ? (mins / 60) + "h" : mins + "m")
+        // ⚠ LEFT BLANK, NOT "none". An empty reminder box means "do not mention
+        // it", and syn-cal then keeps whatever the event already had; "none"
+        // would take an existing reminder off every time somebody renamed
+        // something.
+        evRemind.text = ""
+        evWhere.text = e.location
+        evNotes.text = ""
+        root.evOpen = true
+    }
+
+    Process {
+        id: evProc
+        stderr: StdioCollector { id: evErr }
+        onExited: (code) => {
+            root.evBusy = false
+            if (code !== 0) {
+                root.evMsg = evErr.text.trim() || "that did not work"
+                return
+            }
+            root.evOpen = false
+            root.status = "Saved. Syncing…"
+            // ⛔ AND IT SYNCS. Written here is not saved anywhere anybody else
+            // can see; a calendar that says "Saved" and leaves the appointment
+            // on one machine is telling somebody their meeting is booked.
+            root.sync()
+        }
+    }
+
+    function evSave() {
+        if (root.evBusy) return
+        if (evTitle.text.trim() === "") { root.evMsg = "It needs a name."; return }
+        if (evDate.text.trim() === "") { root.evMsg = "It needs a date."; return }
+
+        const when = evTime.text.trim() === ""
+                   ? evDate.text.trim()
+                   : evDate.text.trim() + " " + evTime.text.trim()
+
+        let args = root.evUid === "" ? ["new", evTitle.text.trim()]
+                                     : ["edit", root.evUid, "--title", evTitle.text.trim()]
+        args.push("--at", when)
+        if (evTime.text.trim() === "") args.push("--all-day")
+        if (evFor.text.trim() !== "") args.push("--for", evFor.text.trim())
+        if (evRemind.text.trim() !== "") args.push("--remind", evRemind.text.trim())
+        // ⚠ SENT EVEN WHEN EMPTY, on an edit. Clearing the location has to be
+        // able to mean clearing it, not "leave the old one".
+        if (evWhere.text.trim() !== "" || root.evUid !== "") args.push("--where", evWhere.text.trim())
+        if (evNotes.text.trim() !== "" || root.evUid !== "") args.push("--notes", evNotes.text.trim())
+
+        root.evBusy = true
+        root.evMsg = ""
+        evProc.command = [root.bin].concat(args)
+        evProc.running = false
+        evProc.running = true
+    }
+
+    function evDelete() {
+        if (root.evBusy || root.evUid === "") return
+        root.evBusy = true
+        root.evMsg = ""
+        evProc.command = [root.bin, "delete", root.evUid]
+        evProc.running = false
+        evProc.running = true
+    }
+
     Process {
         id: syncProc
         command: [root.bin, "sync"]
@@ -1089,6 +1191,30 @@ FloatingWindow {
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             spacing: root.ui(10)
 
+                            // ⛔ FIRST, AND IT SAYS WHAT IT MAKES. A calendar
+                            // whose only verb is "look" is a viewer.
+                            Rectangle {
+                                width: newTxt.implicitWidth + root.ui(18)
+                                height: root.ui(26)
+                                radius: root.ui(5)
+                                color: newMouse.containsMouse ? root.cAccent : "transparent"
+                                border { width: 1; color: root.cAccent }
+                                Text {
+                                    id: newTxt
+                                    anchors.centerIn: parent
+                                    text: "New event"
+                                    color: newMouse.containsMouse ? root.cPanel : root.cAccent
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                                }
+                                MouseArea {
+                                    id: newMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.evNew()
+                                }
+                            }
+
                             // ⚠ EACH BUTTON SAYS WHICH VIEW IT GIVES YOU, and
                             // the one you are looking at is the one filled in.
                             // A single button that toggles has to be labelled
@@ -1232,6 +1358,12 @@ FloatingWindow {
                                     id: rowMouse
                                     anchors.fill: parent
                                     hoverEnabled: true
+                                    // ⚠ A ROW THAT LIGHTS UP UNDER THE POINTER
+                                    // HAS TO DO SOMETHING. It has highlighted on
+                                    // hover since this window was written, and
+                                    // clicking it did nothing at all.
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.evEdit(modelData)
                                 }
                             }
                         }
@@ -1358,6 +1490,188 @@ FloatingWindow {
                         text: root.status
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+                }
+            }
+        }
+
+        // ── The event editor ────────────────────────────────────────────────
+        Rectangle {
+            anchors.fill: parent
+            visible: root.evOpen
+            color: Qt.rgba(0, 0, 0, root.isLight ? 0.28 : 0.55)
+
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: if (!root.evBusy) root.evOpen = false
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(root.ui(440), parent.width - root.ui(48))
+                height: evCard.implicitHeight + root.ui(36)
+                radius: root.ui(10)
+                color: root.cPanel
+                border { width: 1; color: root.cDim }
+
+                MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+                Column {
+                    id: evCard
+                    anchors { left: parent.left; right: parent.right; top: parent.top
+                              margins: root.ui(18) }
+                    spacing: root.ui(10)
+
+                    Text {
+                        text: root.evUid === "" ? "New event" : "Event"
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(16); bold: true }
+                    }
+
+                    SynField {
+                        id: evTitle
+                        width: parent.width
+                        label: "WHAT"
+                        placeholder: "Dentist"
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: root.ui(10)
+                        SynField {
+                            id: evDate
+                            width: (parent.width - root.ui(10)) * 0.55
+                            label: "DAY"
+                            placeholder: "2026-09-21"
+                        }
+                        SynField {
+                            id: evTime
+                            width: (parent.width - root.ui(10)) * 0.45
+                            label: "TIME"
+                            // ⚠ SAYING WHAT EMPTY MEANS, rather than leaving it
+                            // to be discovered. An all-day event is the absence
+                            // of a time, and nothing else on the form says so.
+                            placeholder: "13:15 — or blank for all day"
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: root.ui(10)
+                        SynField {
+                            id: evFor
+                            width: (parent.width - root.ui(10)) / 2
+                            label: "FOR"
+                            placeholder: "1h, 30m, 1h30m"
+                        }
+                        SynField {
+                            id: evRemind
+                            width: (parent.width - root.ui(10)) / 2
+                            label: "REMIND ME"
+                            placeholder: "15m, 1h, none"
+                        }
+                    }
+
+                    SynField {
+                        id: evWhere
+                        width: parent.width
+                        label: "WHERE"
+                        placeholder: "optional"
+                    }
+
+                    SynField {
+                        id: evNotes
+                        width: parent.width
+                        label: "NOTES"
+                        placeholder: "optional"
+                    }
+
+                    Text {
+                        visible: root.evMsg !== ""
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: root.evMsg
+                        color: root.cWarn
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: root.ui(10)
+
+                        // ⛔ DELETE IS ON THE LEFT, AWAY FROM SAVE, and only
+                        // appears for an event that exists. A destructive button
+                        // beside the one everybody presses is a mis-click that
+                        // removes an appointment.
+                        Rectangle {
+                            visible: root.evUid !== ""
+                            width: root.ui(80); height: root.ui(30)
+                            radius: root.ui(6)
+                            color: delMouse.containsMouse ? root.cBad : "transparent"
+                            border { width: 1; color: root.cBad }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Delete"
+                                color: delMouse.containsMouse ? root.cPanel : root.cBad
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            MouseArea {
+                                id: delMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: !root.evBusy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.evDelete()
+                            }
+                        }
+
+                        Item {
+                            width: parent.width - root.ui(180) - (root.evUid !== "" ? root.ui(90) : 0)
+                            height: 1
+                        }
+
+                        Rectangle {
+                            width: root.ui(80); height: root.ui(30)
+                            radius: root.ui(6)
+                            color: evCancelMouse.containsMouse ? root.cBg : "transparent"
+                            border { width: 1; color: root.cDim }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Cancel"
+                                color: root.cText
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            MouseArea {
+                                id: evCancelMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: !root.evBusy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.evOpen = false
+                            }
+                        }
+
+                        Rectangle {
+                            width: root.ui(90); height: root.ui(30)
+                            radius: root.ui(6)
+                            color: saveMouse.containsMouse ? root.cAccent : "transparent"
+                            border { width: 1; color: root.cAccent }
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.evBusy ? "Saving…" : "Save"
+                                color: saveMouse.containsMouse ? root.cPanel : root.cAccent
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            MouseArea {
+                                id: saveMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: !root.evBusy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.evSave()
+                            }
+                        }
                     }
                 }
             }

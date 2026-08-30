@@ -109,6 +109,26 @@ check "finding calendars is followed by a sync" $?
 grep -q 'root.bin, "discover"' "$QML"
 check "…and the window is what asks for them, not a terminal" $?
 
+# ⛔ AND THE WINDOW CAN MAKE AN EVENT. Everything else here reads; without this
+# the calendar is a viewer for one somebody else has to write.
+grep -q 'text: "New event"' "$QML"
+check "there is a button that makes an event, saying so" $?
+
+grep -q '"new", evTitle.text.trim()' "$QML"
+check "…which goes through the binary, like everything else" $?
+
+grep -q 'onClicked: root.evEdit(modelData)' "$QML"
+check "…an event in the agenda opens for editing" $?
+
+grep -q 'root.bin, "delete", root.evUid' "$QML"
+check "…and can be deleted" $?
+
+# ⛔ SAVED HERE IS NOT SAVED ANYWHERE ELSE. A window that says "Saved" and
+# leaves the appointment on one machine is telling somebody their meeting is
+# booked when nobody else can see it.
+grep -A6 'root.status = "Saved' "$QML" | grep -q 'root.sync()'
+check "…and saving syncs, rather than stopping at this machine" $?
+
 # ⛔ A BUTTON IS ITS OWN LABEL. Not an icon that needs a tooltip to say what it
 # does; only KEYS follow a setting.
 grep -q 'text: root.busy ? "Syncing…" : "Sync now"' "$QML"

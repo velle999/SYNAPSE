@@ -76,6 +76,37 @@ static bool is_cancelled(icalcomponent *c)
 	return p && icalproperty_get_status(p) == ICAL_STATUS_CANCELLED;
 }
 
+/* ⛔ AN ALL-DAY EVENT IS A DATE, NOT AN INSTANT. libical resolves a VALUE=DATE
+ * to midnight UTC, and everything downstream formats with localtime_r — so
+ * anywhere west of the meridian a birthday on the 22nd is drawn on the 21st, in
+ * the agenda, the grid and the terminal alike, and an all-day event on the 1st
+ * of a month lands in the month before. Re-anchoring to local midnight is the
+ * only reading of "the 22nd" that is the 22nd in every zone.
+ *
+ * ⚠ AND IT IS DONE HERE, ONCE. Every view would otherwise need to know that
+ * all-day timestamps are a different kind of number from the rest — which is
+ * three chances to forget, and it is invisible in the zone it was written in. */
+static time_t date_to_local_midnight(time_t utc_midnight)
+{
+	struct tm g;
+	gmtime_r(&utc_midnight, &g);
+	struct tm lt;
+	memset(&lt, 0, sizeof lt);
+	lt.tm_year = g.tm_year;
+	lt.tm_mon = g.tm_mon;
+	lt.tm_mday = g.tm_mday;
+	lt.tm_isdst = -1;
+	time_t r = mktime(&lt);
+	return r == (time_t)-1 ? utc_midnight : r;
+}
+
+static void anchor_if_all_day(event_t *ev)
+{
+	if (!ev->all_day) return;
+	ev->start = date_to_local_midnight(ev->start);
+	ev->end = date_to_local_midnight(ev->end);
+}
+
 static void fill(event_t *ev, icalcomponent *c, const char *account, const char *calendar)
 {
 	ev->uid = dup_or_null(icalcomponent_get_uid(c));
@@ -141,6 +172,7 @@ static void on_instance(icalcomponent *comp, const struct icaltime_span *span, v
 		/* An override only exists because there is a series to override. */
 		ev->recurring = true;
 	}
+	anchor_if_all_day(ev);
 }
 
 bool event_expand(const char *ics, size_t len, time_t from, time_t to,
@@ -182,13 +214,41 @@ bool event_expand(const char *ics, size_t len, time_t from, time_t to,
 	 * moved occurrence, synced on its own. */
 	if (!master && nover == 0) { icalcomponent_free(root); return true; }
 
+	size_t kept_from = out->n;
+
 	if (master) {
 		expand_ctx_t cx = { out, over, over_at, nover, over_used,
 		                    account, calendar, master, has_rule(master) };
-		icaltimetype a = icaltime_from_timet_with_zone(from, 0, icaltimezone_get_utc_timezone());
-		icaltimetype b = icaltime_from_timet_with_zone(to, 0, icaltimezone_get_utc_timezone());
+		/* ⛔ ASKED A DAY WIDE ON EACH SIDE, AND TRIMMED BELOW. libical decides
+		 * membership from the instant it resolved, which for an all-day event
+		 * is midnight UTC — so a birthday on the 22nd is fetched by a query for
+		 * the 21st (west of the meridian) and missed by one for the 22nd. It is
+		 * anchored to local midnight afterwards, and by then the range decision
+		 * has already been made on the wrong number. Over-asking and filtering
+		 * on the anchored time is the only order that gets both ends right. */
+		icaltimetype a = icaltime_from_timet_with_zone(from - 86400, 0,
+		                                              icaltimezone_get_utc_timezone());
+		icaltimetype b = icaltime_from_timet_with_zone(to + 86400, 0,
+		                                              icaltimezone_get_utc_timezone());
 		icalcomponent_foreach_recurrence(master, a, b, on_instance, &cx);
 	}
+
+	/* Keep what genuinely overlaps the range that was asked for. An end equal
+	 * to the start is a zero-length event, which still belongs to its instant
+	 * rather than to nothing. */
+	size_t w = kept_from;
+	for (size_t i = kept_from; i < out->n; i++) {
+		event_t *e = &out->e[i];
+		time_t end = e->end > e->start ? e->end : e->start + 1;
+		if (e->start < to && end > from) {
+			if (w != i) out->e[w] = out->e[i];
+			w++;
+		} else {
+			free(e->uid); free(e->summary); free(e->location);
+			free(e->account); free(e->calendar);
+		}
+	}
+	out->n = w;
 
 	/* Any override the expansion did not consume — because the master's rule no
 	 * longer generates that instant, or because there is no master here. */
@@ -204,6 +264,7 @@ bool event_expand(const char *ics, size_t len, time_t from, time_t to,
 		ev->end = icaltime_is_null_time(e) ? s
 		        : icaltime_as_timet_with_zone(e, icaltimezone_get_utc_timezone());
 		ev->recurring = true;
+		anchor_if_all_day(ev);
 	}
 
 	icalcomponent_free(root);
