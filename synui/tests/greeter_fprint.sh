@@ -119,6 +119,40 @@ chk "the fingerprint row is not stranded behind the greeter's early return" $?
 awk '/^static void lock_draw_panel/,/^}$/' "$L" | grep -q 'lock_draw_fp_row'
 chk "…it is drawn from the panel, which both screens go through" $?
 
+# ── The window, and whether the screen tells the truth about it ─────────────
+#
+# ⛔ NOTHING REPORTS A FINGER LANDING. fprintd signals VerifyStatus(result,
+# done) when a scan RESOLVES and has no touch-down event, so a two-second verify
+# is two seconds of total silence from every layer. All the screen can honestly
+# say is "still listening" — which is what the breathing mark says and what a
+# line of static text does not. fp_live is that bit; lock.c breathes on it.
+grep -q 'fp_live = 1' "$G" && grep -q 'fp_live = 0' "$G"
+chk "the screen knows whether a finger is being waited for" $?
+
+awk '/secret.*== 0/,/^    }/' "$G" | grep -q 'fp_live = 0'
+chk "…and the window closes when PAM asks for the password instead" $?
+
+# ⛔ AND THE ROW GOES AWAY WITH THE READER. Past the arm cap this screen has
+# stopped offering a finger; leaving the prompt up invites a gesture nothing
+# will answer, which is indistinguishable from broken hardware.
+awk '/if \(s->greetd.saw_fp_prompt && s->nlock.pw_len == 0/,/^            return;/' "$G" |
+    grep -q 'nlock.fp_msg\[0\] = 0'
+chk "a screen that has stopped offering the reader stops saying so" $?
+
+# ⛔ AND SOMEBODY ARRIVING BRINGS IT BACK. The cap is right for an idle screen
+# and wrong for the person who walks up at hour three.
+awk '/^void greeter_notify_activity/,/^}/' "$G" | grep -q 'rearms = 0'
+chk "activity offers the reader again after the cap" $?
+
+awk '/^void greeter_notify_activity/,/^}/' "$G" | grep -q 'fp_ever'
+chk "…but never on a machine that has no finger prompt at all" $?
+
+awk '/^void greeter_notify_activity/,/^}/' "$G" | grep -q 'pw_len > 0'
+chk "…and never over a half-typed password" $?
+
+grep -q 'greeter_notify_activity(s);' "$HERE/../src/lock.c"
+chk "…and the key handler actually calls it" $?
+
 # ⛔ NO SPIN. On a machine with no pam_fprintd, PAM goes straight to the
 # password prompt with an empty field — which is exactly the re-arm condition.
 # Without the guard that is forty greetd workers in a second.

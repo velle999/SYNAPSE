@@ -32,6 +32,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <math.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,6 +82,14 @@
  * because that is where it is read: you look at it after typing, when what you
  * typed came back rejected. */
 #define LOCK_KBD_Y      352
+
+/* The fingerprint mark's cell (a 20px glyph and the gap to the text) and the
+ * period of its breath. 1.6s is slow enough to read as breathing rather than
+ * flashing, which is the difference between "listening" and "alarm". */
+#define LOCK_FP_Y        320     /* the row's baseline, within the CORE band */
+#define LOCK_FP_MARK_W   32.0
+#define LOCK_FP_PULSE_S  1.6
+#define LOCK_FP_PULSE_MS 50      /* 20 Hz — smooth enough for a breath */
 
 /* The transport buttons: three circles on the footer's centre line. */
 #define LOCK_BTN_R      17.0
@@ -357,7 +366,10 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     cairo_set_font_size(cr, 22);
 
     const double lx = cx - 170;     /* left edge of the field block */
-    const double y_user = 258, y_pass = 296;
+    /* Lifted 8px from where they were, to open the gap under the entry for the
+     * fingerprint row at LOCK_FP_Y — which is a row this block did not have to
+     * share the band with until the reader started announcing itself here. */
+    const double y_user = 250, y_pass = 288;
     int editing_user = s->greetd.editing_user;
     cairo_text_extents_t te;
 
@@ -404,7 +416,10 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
         syn_text_extents(cr, msg, &te);
         if (failed) cairo_set_source_rgba(cr, 1.0, 0.36, 0.42, a);
         else        lock_set_accent(s, cr, a);
-        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 332);
+        /* BELOW the fingerprint row (LOCK_FP_Y), not above it: the two are
+         * live at the same time and the reader's row belongs with the entry it
+         * is an alternative to. Still clear of the layout chip at LOCK_KBD_Y. */
+        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 344);
         syn_show_text(cr, msg);
     }
 }
@@ -893,9 +908,96 @@ static void lock_draw_core(syn_server_t *s, cairo_t *cr)
  * which on a machine without one is always. Dimmer than the password row: it is
  * the second way in.
  *
- * y=312 is in the CORE band's coordinates (the caller has translated), between
- * the entry and the layout chip at LOCK_KBD_Y, and it clears the greeter's
- * status line at 332 as well as the lock's own at 275.
+ * LOCK_FP_Y is in the CORE band's coordinates (the caller has translated). It
+ * sits between the entry and the layout chip at LOCK_KBD_Y on both screens, and
+ * the login screen is the tight one: its password row is 24px lower than the
+ * lock's, so a row placed to look right on the lock crowds the caret there.
+ * The greeter's status line moved down with it — see lock_draw_greeter_fields.
+ */
+/*
+ * Is a finger being waited for at this instant?
+ *
+ * ⛔ ONE QUESTION, TWO SCREENS, AND THEY KNOW IT DIFFERENTLY. The session lock
+ * runs its own helper and has a state machine (fp_state). The login screen has
+ * only what greetd forwards from PAM, so it infers the window from the prompt
+ * arriving and the password prompt ending it (greetd.fp_live). The row above
+ * must not care which: it draws the same thing on both screens because it is
+ * the same screen to the person looking at it.
+ */
+static int lock_fp_waiting(syn_server_t *s)
+{
+    if (s->greeter) return s->greetd.fp_live;
+    return s->nlock.fp_state == SYN_FP_RUNNING;
+}
+
+/*
+ * The fingerprint mark: three arcs and a core, breathing while the reader is
+ * listening.
+ *
+ * ⛔ THIS IS THE ONLY HONEST FEEDBACK THERE IS, AND IT IS WORTH SAYING WHY.
+ * A verify takes two to four seconds on this sensor and NOTHING in the stack
+ * reports a finger landing: fprintd signals `VerifyStatus(result, done)` when a
+ * scan RESOLVES — match, no-match, or a retry reason — and has no touch-down
+ * event to forward. pam_fprintd therefore says one thing at the start and
+ * nothing again until it matches or gives up. So the screen cannot say "it saw
+ * you"; it can only say "still listening", which is exactly what a pulse says
+ * and what a line of static text does not. Held against a silent screen, two
+ * seconds reads as a dead reader — which is how this ended up costing six
+ * releases of looking at the hardware.
+ *
+ * It stops the instant the window closes, because a mark still pulsing over a
+ * reader that is not listening would be the same lie with better graphics.
+ */
+static void lock_draw_fp_mark(cairo_t *cr, double mx, double my, double alpha)
+{
+    cairo_set_line_width(cr, 1.4);
+    /* Open at the bottom, so it reads as a fingerprint rather than a target. */
+    for (double r = 3.0; r <= 9.5; r += 3.0) {
+        cairo_new_path(cr);
+        cairo_arc(cr, mx, my, r, M_PI * 0.78, M_PI * 2.22);
+        cairo_stroke(cr);
+    }
+    (void)alpha;
+    cairo_new_path(cr);
+    cairo_arc(cr, mx, my, 1.2, 0, 2 * M_PI);
+    cairo_fill(cr);
+}
+
+/*
+ * The fingerprint row: the mark, then whatever PAM last said about the reader.
+ *
+ * ⛔ DRAWN BY lock_draw_panel, NOT BY lock_draw_core, AND THAT IS THE WHOLE
+ * POINT OF IT BEING A FUNCTION. The core returns early on the greeter's
+ * two-field block — `if (s->greeter) { lock_draw_greeter_fields(...); return; }`
+ * — so everything written after that return exists on the LOCK screen only.
+ * This row was written after it. The login screen therefore had a live reader,
+ * a prompt that arrived, a prompt that parsed, and a message copied into
+ * nlock.fp_msg that nothing ever put on a pixel:
+ *
+ *     synui greeter: pam says [info] "Place your finger on the fingerprint reader"
+ *     synui greeter: drawing it under the clock      <- it did not
+ *
+ * The login screen is the ONE screen where this row has to appear, because it
+ * is the only place somebody has no other way to know the reader is waiting.
+ * The layout chip above sits outside the core for exactly this reason and says
+ * so; this row is the second thing to learn it.
+ *
+ * Both live at once, so this is its own row rather than a state of the password
+ * one: "Place your finger…" has to sit UNDER the dots being typed, not replace
+ * them. Empty — so nothing is drawn — whenever the reader has nothing to say,
+ * which on a machine without one is always. Dimmer than the password row: it is
+ * the second way in.
+ *
+ * ⚠ THE MARK AND THE TEXT ARE ONE BLOCK, MEASURED BEFORE ANYTHING IS DRAWN.
+ * The row is centred, so a mark laid out left-to-right from a fixed origin
+ * would shift the text off centre and the row would jump sideways the moment
+ * the reader started or stopped listening.
+ *
+ * LOCK_FP_Y is in the CORE band's coordinates (the caller has translated). It
+ * sits between the entry and the layout chip at LOCK_KBD_Y on both screens, and
+ * the login screen is the tight one: its password row is 24px lower than the
+ * lock's, so a row placed to look right on the lock crowds the caret there.
+ * The greeter's status line moved down with it — see lock_draw_greeter_fields.
  */
 static void lock_draw_fp_row(syn_server_t *s, cairo_t *cr, double a)
 {
@@ -906,8 +1008,25 @@ static void lock_draw_fp_row(syn_server_t *s, cairo_t *cr, double a)
                            CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 15);
     syn_text_extents(cr, s->nlock.fp_msg, &te);
+
+    int waiting = lock_fp_waiting(s);
+    double mark_w = waiting ? LOCK_FP_MARK_W : 0.0;
+    double block  = mark_w + te.width;
+    double x0     = LOCK_PANEL_W / 2.0 - block / 2;
+
+    if (waiting) {
+        /* Breathing, not spinning: the reader is WAITING, not working, and a
+         * spinner would promise progress nothing is making. The floor is well
+         * clear of invisible — at the bottom of the breath the mark still has
+         * to be findable by someone who looked away. */
+        double phase = fmod(lock_now_ms() / 1000.0, LOCK_FP_PULSE_S) / LOCK_FP_PULSE_S;
+        double lvl   = 0.34 + 0.44 * (0.5 - 0.5 * cos(2 * M_PI * phase));
+        lock_set_ink(s, cr, lvl, a);
+        lock_draw_fp_mark(cr, x0 + 11, LOCK_FP_Y - 5, a);
+    }
+
     lock_set_ink(s, cr, 0.58, a);
-    cairo_move_to(cr, LOCK_PANEL_W / 2.0 - te.width / 2 - te.x_bearing, 312);
+    cairo_move_to(cr, x0 + mark_w - te.x_bearing, LOCK_FP_Y);
     syn_show_text(cr, s->nlock.fp_msg);
 }
 
@@ -943,6 +1062,46 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     cairo_restore(cr);
 }
 
+/*
+ * The pulse timer runs EXACTLY while a finger is being waited for, and not one
+ * frame longer.
+ *
+ * ⛔ IT IS SYNCED FROM lock_render() RATHER THAN SWITCHED ON AT EACH PLACE THE
+ * STATE CHANGES, because those places are in three files — greeter.c learns the
+ * window from PAM, lock.c's helper learns it from a pipe, and the fade learns
+ * that nothing is visible — and a timer left running by the one path that
+ * forgot to stop it is a login screen repainting a 720x580 panel twenty times a
+ * second forever. Every one of those paths already ends in a repaint, so the
+ * repaint is where the question gets asked.
+ */
+static int lock_pulse_cb(void *data)
+{
+    syn_server_t *s = data;
+    if (!s->nlock.active) return 0;
+    lock_render(s);          /* which re-arms this timer, or stops it */
+    return 0;
+}
+
+static void lock_fp_pulse_sync(syn_server_t *s)
+{
+    int want = s->nlock.active && s->nlock.fp_msg[0] &&
+               s->nlock.bright > 0.02 && lock_fp_waiting(s);
+
+    if (!want) {
+        if (s->nlock.t_pulse) {
+            wl_event_source_remove(s->nlock.t_pulse);
+            s->nlock.t_pulse = NULL;
+        }
+        return;
+    }
+    if (!s->nlock.t_pulse) {
+        struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+        s->nlock.t_pulse = wl_event_loop_add_timer(loop, lock_pulse_cb, s);
+    }
+    if (s->nlock.t_pulse)
+        wl_event_source_timer_update(s->nlock.t_pulse, LOCK_FP_PULSE_MS);
+}
+
 /* Render every pane. Panels are created lazily here so synui_lock() need only
  * record the outputs. Non-static so the greeter (greeter.c) can repaint the
  * shared panel after a rejected login. */
@@ -971,6 +1130,8 @@ void lock_render(syn_server_t *s)
         int py = box.y + (box.height - LOCK_PANEL_H) / 2;
         wlr_scene_node_set_position(&s->nlock.pane[i].buf->node, px, py);
     }
+
+    lock_fp_pulse_sync(s);
 }
 
 /* A monitor unplugged — or destroyed and recreated across a suspend/DPMS
@@ -1100,6 +1261,11 @@ void lock_notify_activity(syn_server_t *s)
 {
     if (!s->nlock.active) return;
     s->nlock.last_input_ms = lock_now_ms();
+
+    /* The login screen's reader has an arm cap and an idle screen reaches it;
+     * somebody arriving is when it should be offered again. No-op everywhere
+     * else — see greeter_notify_activity. */
+    greeter_notify_activity(s);
     if (s->nlock.bright < 1.0) {
         s->nlock.bright = 1.0;
         lock_render(s);
@@ -1828,6 +1994,7 @@ void synui_unlock(syn_server_t *s)
     s->nlock.fp_msg[0] = 0;
     if (s->nlock.t_clock) { wl_event_source_remove(s->nlock.t_clock); s->nlock.t_clock = NULL; }
     if (s->nlock.t_fade)  { wl_event_source_remove(s->nlock.t_fade);  s->nlock.t_fade  = NULL; }
+    if (s->nlock.t_pulse) { wl_event_source_remove(s->nlock.t_pulse); s->nlock.t_pulse = NULL; }
 
     if (s->nlock.tree) {
         wlr_scene_node_destroy(&s->nlock.tree->node);   /* takes the panes with it */

@@ -32,6 +32,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <stdarg.h>
 
 #include <cairo.h>
@@ -56,7 +57,7 @@ static void check(int ok, const char *what)
  * draws a caret underscore whose ink lands two rows above this band, so a
  * band opened any wider reports "something is drawn here" on a screen with no
  * prompt at all — which is the assertion at the bottom of this file. */
-#define FP_BASELINE  (LOCK_HEAD_H_T + 312)
+#define FP_BASELINE  (LOCK_HEAD_H_T + 320)   /* lock.c's LOCK_FP_Y */
 #define FP_TOP       (FP_BASELINE - 11)   /* clears the greeter caret at 358 */
 #define FP_BOT       (FP_BASELINE + 5)
 
@@ -133,6 +134,7 @@ void clock_state_load(syn_server_t *s) { (void)s; }
 void sound_play(syn_server_t *s, syn_sound_event_t evt) { (void)s; (void)evt; }
 void power_notify_activity(syn_server_t *s) { (void)s; }
 void greeter_submit(syn_server_t *s) { (void)s; }
+void greeter_notify_activity(syn_server_t *s) { (void)s; }
 void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface_)
 { (void)s; (void)view; (void)surface_; }
 struct wlr_surface *view_surface(syn_view_t *v) { (void)v; return NULL; }
@@ -219,6 +221,32 @@ static int band_ink(void)
     return n;
 }
 
+/* The band's total ink WEIGHT, not its pixel count. The mark breathes by
+ * changing colour at a fixed alpha, so its coverage never varies — a counting
+ * probe cannot see the pulse at all, and the first version of this file could
+ * have watched a frozen mark forever. */
+static long band_weight(void)
+{
+    cairo_surface_flush(surface);
+    const unsigned char *data = cairo_image_surface_get_data(surface);
+    int stride = cairo_image_surface_get_stride(surface);
+    long sum = 0;
+    for (int y = FP_TOP; y <= FP_BOT; y++) {
+        const uint32_t *row = (const uint32_t *)(data + (size_t)y * stride);
+        for (int x = 0; x < LOCK_PANEL_W_T; x++) {
+            uint32_t p = row[x];
+            sum += ((p >> 16) & 0xff) + ((p >> 8) & 0xff) + (p & 0xff);
+        }
+    }
+    return sum;
+}
+
+static void nap_ms(long ms)
+{
+    struct timespec ts = { ms / 1000, (ms % 1000) * 1000000L };
+    nanosleep(&ts, NULL);
+}
+
 /* Render once with no prompt and once with one, and answer how much ink the
  * prompt ADDED to the band. */
 static int ink_added_by_prompt(int greeter)
@@ -262,6 +290,48 @@ int main(void)
     int quiet_greeter = band_ink();
     check(quiet_greeter == 0 && band_ink() == 0,
           "a reader with nothing to say takes no pixels on either screen");
+
+    /* ── The part somebody standing at the screen actually asked for ────────
+     *
+     * ⛔ A VERIFY TAKES SECONDS AND NOTHING REPORTS A FINGER LANDING. fprintd
+     * signals VerifyStatus(result, done) when a scan RESOLVES and has no
+     * touch-down event, so pam_fprintd says one thing and then goes quiet. The
+     * mark is the whole of the feedback: it says the reader is listening NOW,
+     * which is the only true thing available. */
+    rig_reset(1);
+    snprintf(server.nlock.fp_msg, sizeof(server.nlock.fp_msg),
+             "Place your finger on the fingerprint reader");
+    lock_render(&server);
+    int text_only = band_ink();
+
+    server.greetd.fp_live = 1;              /* PAM is waiting for a finger */
+    lock_render(&server);
+    check(band_ink() > text_only,
+          "a live reader draws a mark beside the prompt");
+
+    /* ⛔ AND IT HAS TO MOVE. A mark that is drawn once and never repainted is
+     * the static line of text this row is replacing, with a nicer glyph. */
+    long lo = -1, hi = -1;
+    for (int i = 0; i < 6; i++) {           /* ~1s: over half a breath */
+        lock_render(&server);
+        long w = band_weight();
+        if (lo < 0 || w < lo) lo = w;
+        if (hi < 0 || w > hi) hi = w;
+        nap_ms(170);
+    }
+    check(hi - lo > 200, "…and it breathes, so the screen is visibly alive");
+    if (hi - lo <= 200)
+        printf("        (weight held between %ld and %ld across ~1s — the mark "
+               "is frozen)\n", lo, hi);
+
+    /* ⛔ AND IT STOPS WHEN THE WINDOW DOES. Between arm cycles, and past the
+     * arm cap, nothing is listening — a mark still pulsing there invites a
+     * finger the reader will not answer, which is the same lie with better
+     * graphics. */
+    server.greetd.fp_live = 0;
+    lock_render(&server);
+    check(band_ink() == text_only,
+          "…and it is gone the moment PAM stops waiting");
 
     if (surface) { cairo_surface_destroy(surface); surface = NULL; }
     printf("%s\n", failures ? "FAILED" : "all passed");

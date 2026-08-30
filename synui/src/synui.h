@@ -6333,6 +6333,11 @@ struct syn_server {
         struct wlr_scene_tree   *tree;      /* backstop + the per-output panes */
         struct wl_event_source  *t_clock;   /* 1 Hz, so the minute updates */
         struct wl_event_source  *t_fade;    /* eases `bright` toward its target */
+        /* Runs ONLY while a finger is being waited for, and stops the moment it
+         * is not — see lock_fp_pulse_sync(). A repaint timer that ran whenever
+         * the screen was up would redraw the whole panel twenty times a second
+         * for a machine with no reader. */
+        struct wl_event_source  *t_pulse;   /* ~20 Hz, breathes the fp mark */
         pid_t                    auth_pid;
         int                      auth_fd;   /* result-pipe read end, -1 when idle */
         struct wl_event_source  *auth_src;
@@ -7342,6 +7347,32 @@ struct syn_server {
          * is exactly the condition that triggers a re-arm — forty greetd
          * workers in a second, and a login screen that fights itself. */
         int      saw_fp_prompt;   /* PAM asked for a finger in this conversation */
+
+        /*
+         * ⛔ IS THE READER LISTENING RIGHT NOW? The prompt text alone cannot
+         * say. pam_fprintd asks once, waits its `timeout=`, and says nothing
+         * further until it gives up — and fprintd has no touch-down event to
+         * forward even if it wanted to: `VerifyStatus(result, done)` fires when
+         * a scan RESOLVES, never when a finger lands. So for the two to four
+         * seconds a verify takes, every layer above the sensor is silent, and a
+         * static line of text is indistinguishable from a dead screen.
+         *
+         * fp_live is that missing bit, and it is what makes the row breathe:
+         * set when the finger prompt arrives, cleared when PAM moves on to the
+         * password or the conversation closes. A row that pulses while the
+         * window is open and stops when it is not is the only honest answer
+         * available — it says "still listening", which is all anybody knows.
+         *
+         * ⛔ AND fp_ever GATES COMING BACK. The arm cycle is capped
+         * (GREETER_MAX_REARMS) so an idle screen cannot spin greetd workers all
+         * night, which means a screen left alone stops offering the reader —
+         * and somebody walking up to it hours later is exactly when it should
+         * be offered again. Activity re-arms, but only on a machine that has
+         * actually seen a finger prompt: without that test the re-arm is a spin
+         * on every machine with no pam_fprintd at all.
+         */
+        int      fp_live;         /* pam_fprintd is waiting for a finger NOW */
+        int      fp_ever;         /* this screen has seen a finger prompt at all */
     } greetd;
 
     int             ai_pipe_req[2];
@@ -7643,6 +7674,11 @@ void session_lock_arrange(syn_server_t *s);      /* re-place lock surfaces */
  * call it. lock_handle_key returns 1 when it consumed the key. */
 void synui_lock(syn_server_t *s);
 void synui_unlock(syn_server_t *s);
+/* Somebody is at the login screen: bring the fingerprint reader back if the
+ * arm cycle gave up on an idle screen. No-op off the greeter, and on a machine
+ * that has never seen a finger prompt. Called from lock_notify_activity(). */
+void greeter_notify_activity(syn_server_t *s);
+
 int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint,
                     uint32_t mods);
 /* A press on the lock screen, in LAYOUT coordinates. Returns 1 when it landed

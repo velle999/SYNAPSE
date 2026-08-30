@@ -136,6 +136,7 @@ static void greeter_ipc_close(syn_server_t *s)
     s->greetd.pending_secret = 0;
     s->greetd.submitted      = 0;
     s->greetd.saw_fp_prompt  = 0;
+    s->greetd.fp_live        = 0;   /* nothing is waiting for a finger now */
     explicit_bzero(s->greetd.pw, sizeof(s->greetd.pw));
     s->greetd.pw_len = 0;
 }
@@ -287,6 +288,12 @@ static void greeter_answer_auth(syn_server_t *s, const char *json)
 
     if (strcmp(amt, "secret") == 0) {
         s->greetd.pending_secret = 1;
+        /* ⛔ THE WINDOW HAS CLOSED. Reaching the password prompt IS how
+         * pam_fprintd's timeout is observed from out here, so the row must stop
+         * breathing at this exact moment — a mark that kept pulsing through the
+         * dead stretch between arms is worse than no mark, because it is an
+         * invitation to hold a finger against a reader that is not listening. */
+        s->greetd.fp_live = 0;
         if (!s->greetd.submitted) {
             wlr_log(WLR_INFO, "synui greeter: holding the password prompt "
                               "(nothing typed yet, fp_prompt_seen=%d)",
@@ -310,6 +317,15 @@ static void greeter_answer_auth(syn_server_t *s, const char *json)
                 greeter_arm(s);
                 return;
             }
+
+            /* ⛔ NO RE-ARM MEANS NO READER, AND THE ROW HAS TO SAY SO BY GOING
+             * AWAY. Past the cap this screen has stopped offering a finger
+             * entirely, and leaving "Place your finger on the fingerprint
+             * reader" under the clock is a login screen inviting a gesture it
+             * will not answer — which is indistinguishable from a broken reader
+             * and is how five rounds got spent on a working one. It comes back
+             * with the reader, on the first keystroke: greeter_notify_activity. */
+            s->nlock.fp_msg[0] = 0;
             lock_render(s);
             return;
         }
@@ -326,8 +342,15 @@ static void greeter_answer_auth(syn_server_t *s, const char *json)
         /* "Place your finger on …" is how pam_fprintd announces itself, and it
          * is the only evidence out here that a reader took part at all. It
          * gates the re-arm; see saw_fp_prompt in synui.h. */
-        if (strcasestr(text, "finger") || strcasestr(text, "swipe"))
+        if (strcasestr(text, "finger") || strcasestr(text, "swipe")) {
             s->greetd.saw_fp_prompt = 1;
+            /* The reader is listening from here until PAM asks for the password
+             * or this conversation ends. lock.c breathes the mark on fp_live;
+             * fp_ever is what lets activity bring the reader back after the arm
+             * cap has been reached. */
+            s->greetd.fp_live = 1;
+            s->greetd.fp_ever = 1;
+        }
         lock_render(s);
     }
     greeter_send_response(s, NULL);
@@ -550,6 +573,39 @@ static void greeter_arm(syn_server_t *s)
      * point of arming is that somebody can still walk up and type. */
     s->greetd.busy  = 0;
     s->nlock.busy   = 0;
+}
+
+/*
+ * Somebody is at the screen — offer the reader again if the arm cycle gave up.
+ *
+ * ⛔ THE CAP IS RIGHT AND ITS CONSEQUENCE IS NOT. Forty arms at pam_fprintd's
+ * ten-second timeout is about seven minutes, after which a login screen left
+ * alone stops offering a finger — which is what it must do, or it cycles greetd
+ * workers all night. But the person who walks up at hour three finds a screen
+ * that looks exactly like the armed one and answers nothing. Arriving IS the
+ * signal that the next finger is coming, so the count starts over on the first
+ * key or the first pointer motion.
+ *
+ * ⛔ ONLY WHERE A FINGER PROMPT HAS ACTUALLY BEEN SEEN (fp_ever). On a machine
+ * with no pam_fprintd in the stack, PAM goes straight to the password prompt
+ * with an empty field — which is the re-arm condition — and re-arming on every
+ * keystroke there is the forty-workers-a-second spin the cap exists to stop.
+ *
+ * ⚠ AND NOT OVER A HALF-TYPED PASSWORD, and not while a conversation is already
+ * open: both of those are somebody mid-login, and tearing the exchange down
+ * under them would throw away what they typed.
+ */
+void greeter_notify_activity(syn_server_t *s)
+{
+    if (!s->greeter) return;
+    if (!s->greetd.fp_ever) return;          /* no reader in this PAM stack */
+    if (s->greetd.sock >= 0) return;         /* a conversation is already live */
+    if (s->greetd.submitted || s->nlock.pw_len > 0) return;   /* mid-login */
+    if (s->greetd.rearms < GREETER_MAX_REARMS) return;        /* not capped yet */
+
+    wlr_log(WLR_INFO, "synui greeter: someone is here — offering the reader again");
+    s->greetd.rearms = 0;
+    greeter_arm(s);
 }
 
 void greeter_submit(syn_server_t *s)
