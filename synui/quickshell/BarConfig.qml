@@ -43,6 +43,10 @@ QtObject {
          * and nobody has to find two switches on the one that has it. Same
          * shape as the weather row above. */
         "assistant":  true,
+        /* The focus timer. On, and costing nothing until one is started —
+         * the module is invisible with no session running, so this is not a
+         * permanent clock on everybody's bar. */
+        "pomodoro":   true,
         "sysinfo":    true,     // cpu + memory
         "volume":     true,
         "netbt":      true      // network + bluetooth
@@ -58,6 +62,7 @@ QtObject {
         { key: "updates",    label: "Update notifier" },
         { key: "weather",    label: "Weather" },
         { key: "assistant",  label: "Assistant" },
+        { key: "pomodoro",   label: "Focus timer" },
         { key: "sysinfo",    label: "CPU + memory" },
         { key: "volume",     label: "Volume" },
         { key: "netbt",      label: "Network + Bluetooth" }

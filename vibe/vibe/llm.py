@@ -9,6 +9,8 @@ from typing import Iterator
 
 import vibe.config as cfg
 from vibe import cloud, modes
+from vibe import personas
+from vibe import companion_tools
 from . import synapd_client
 from .tools import TOOL_MAP, TOOL_SCHEMAS, execute_tool
 
@@ -111,8 +113,12 @@ class VibeModel:
     # the control panel changes nothing, and a confirmation on it would train
     # the user to press Enter without reading — which is what makes the
     # confirmations that matter stop working.
-    _CONFIRM_TOOLS = {"bash", "write_file", "edit_file",
-                      "desktop_action", "desktop_setting", "move_file"}
+    # ⚠ The companion's writing tools are in here by the same line: a task the
+    # model inferred from a sentence and added to somebody's list is a write to
+    # their records, and listing them is not.
+    _CONFIRM_TOOLS = ({"bash", "write_file", "edit_file",
+                       "desktop_action", "desktop_setting", "move_file"}
+                      | companion_tools.WRITE_TOOLS)
 
     def __init__(self, verbose: bool = False):
         self._messages: list[dict] = []
@@ -237,6 +243,13 @@ class VibeModel:
             except Exception:
                 pass
         system_content = SYSTEM_PROMPT.format(cwd=cwd, memory_section=memory_section)
+        # ⛔ APPENDED, NEVER SUBSTITUTED. The persona is a voice; everything
+        # above it — the tools, this desktop's facts, and the rule about when
+        # NOT to reach for a tool — is what makes this an assistant rather than
+        # a chatbot, and a costume must not cost any of it. Empty string for
+        # the default persona, so nothing changes for anyone who never picks
+        # one. See vibe/personas.py.
+        system_content += personas.voice_section()
         self._messages = [
             {"role": "system", "content": system_content}
         ]
@@ -368,7 +381,7 @@ class VibeModel:
                 "messages": msgs,
                 "stream": False,
                 "options": {
-                    "temperature": cfg.TEMPERATURE,
+                    "temperature": personas.temperature(),
                     "num_predict": cfg.MAX_TOKENS,
                     "num_ctx": cfg.OLLAMA_CTX,
                     "num_gpu": cfg.OLLAMA_NUM_GPU,
@@ -416,7 +429,7 @@ class VibeModel:
             # llama-cpp: create completion without tools
             for chunk in self._llm.create_chat_completion(
                 messages=msgs,
-                temperature=cfg.TEMPERATURE,
+                temperature=personas.temperature(),
                 max_tokens=cfg.MAX_TOKENS,
                 stream=True,
             ):
@@ -451,6 +464,11 @@ class VibeModel:
         # asked about a real folder invented its contents; see modes._ASK_NO_INVENT.
         if self.active_mode == modes.ASK:
             text_for_model += modes.ask_addendum(user_text)
+        # ⚠ AND SO DOES THE PERSONA'S, for exactly the same reason: a character
+        # described once in a system block Mistral folded into turn one has
+        # faded by message ten, and a persona that quietly stops being itself
+        # halfway through a conversation is the whole feature not working.
+        text_for_model += personas.reminder()
 
         self._messages.append({
             "role": "user",
@@ -777,7 +795,7 @@ class VibeModel:
                 tool_choice=tool_choice)
         kwargs = dict(
             messages=self._messages,
-            temperature=cfg.TEMPERATURE,
+            temperature=personas.temperature(),
             top_p=cfg.TOP_P,
             top_k=cfg.TOP_K,
             min_p=cfg.MIN_P,
@@ -808,7 +826,7 @@ class VibeModel:
             "messages": self._trim_messages_for_ollama(),
             "stream": False,
             "options": {
-                "temperature": cfg.TEMPERATURE,
+                "temperature": personas.temperature(),
                 "top_p": cfg.TOP_P,
                 "top_k": cfg.TOP_K,
                 "repeat_penalty": cfg.REPEAT_PENALTY,

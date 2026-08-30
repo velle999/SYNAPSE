@@ -13,6 +13,7 @@ from rich import box
 
 import vibe.config as cfg
 from vibe import intents as _intents
+from vibe import companion_cli
 from vibe.llm import VibeModel
 from vibe.tools import execute_tool
 from vibe.ui import (
@@ -478,7 +479,16 @@ def _verb_intents(argv) -> int:
     return 0
 
 
+# The companion verbs live in their own module — five families of
+# subcommands would double this file, and the window half calls the same
+# functions through vibe/serve.py.
 _VERBS = {
+    "persona": companion_cli.verb_persona,
+    "todo": companion_cli.verb_todo,
+    "habit": companion_cli.verb_habit,
+    "goal": companion_cli.verb_goal,
+    "pom": companion_cli.verb_pom,
+    "quant": companion_cli.verb_quant,
     "serve": _verb_serve,
     "intents": _verb_intents,
     "wake": _verb_wake,

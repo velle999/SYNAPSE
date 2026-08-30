@@ -54,6 +54,32 @@ FloatingWindow {
     property var p: ({})
     readonly property bool isLight: p.scheme === "light"
 
+    // ⛔ ABSENT MEANS NOTHING IS RUNNING, which is also what a desktop that has
+    // never started a timer looks like — so a failed load is the ordinary case
+    // here, not an error worth printing.
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/pomodoro.state"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const m = this.text().match(/^\s*ends\s*=\s*(\d+)\s*$/m)
+            root.pomEnds = m ? parseInt(m[1]) : 0
+            root.pomNow = Math.floor(Date.now() / 1000)
+        }
+        onLoadFailed: root.pomEnds = 0
+    }
+
+    Timer {
+        // ⚠ Stopped when there is no timer: a 1 Hz repaint of a window that has
+        // nothing to count is a wakeup a second, forever, on a laptop.
+        running: root.pomEnds > 0
+        interval: 1000
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.pomNow = Math.floor(Date.now() / 1000)
+    }
+
     FileView {
         path: Quickshell.env("HOME") + "/.config/synui/theme.json"
         watchChanges: true
@@ -231,6 +257,17 @@ FloatingWindow {
     // is installed.
     property string canSpeak: "no"
     property string canHear: "no"
+
+    // The assistant's voice, and the set to choose from. Both come from the
+    // engine's state records rather than being listed here — a second copy of
+    // the persona names in QML is a list that goes stale the day one is added.
+    property string persona: "default"
+    property var personaList: []
+
+    // The focus timer, as the bar sees it: a deadline in epoch seconds, and a
+    // clock that ticks only while there is something to count.
+    property int pomEnds: 0
+    property int pomNow: 0
     property bool   reading: false
     property bool   listening: false
     property bool   waking: false
@@ -327,6 +364,8 @@ FloatingWindow {
             else if (a === "model")    root.modelName = b
             else if (a === "cloud")    root.cloud = (b === "yes")
             else if (a === "mode")     root.mode = b
+            else if (a === "persona")  root.persona = b
+            else if (a === "personas") root.personaList = b.split(" ").filter(x => x.length)
             else if (a === "reset")    log.clear()
             root.firstRecord = true
         } else if (tag === "V") {
@@ -442,6 +481,87 @@ FloatingWindow {
                 // raised it.
                 // ⛔ THE LOUDEST CONTROL IN THE WINDOW, and it looks it while it is
                 // on. Armed, this leaves a microphone open until it is turned off.
+                // ── The focus timer ────────────────────────────────────
+                //
+                // ⛔ IT READS THE STATE FILE, NOT THE ENGINE. The timer outlives
+                // this window on purpose (see vibe/pomodoro.py), and the bar
+                // shows the same file — so the chat window is a THIRD reader of
+                // one fact rather than a second source of it. The countdown is
+                // arithmetic on the deadline: nothing is spawned per second and
+                // nothing has to be rewritten to stay true.
+                Text {
+                    id: pomChip
+                    visible: root.pomEnds > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: {
+                        const left = Math.max(0, root.pomEnds - root.pomNow)
+                        if (left <= 0) return "focus done"
+                        const m = Math.floor(left / 60), sec = left % 60
+                        return m + ":" + (sec < 10 ? "0" : "") + sec
+                    }
+                    color: (root.pomEnds - root.pomNow) <= 0 ? root.cWarn : root.cDim
+                    font.family: "monospace"
+                    font.pixelSize: root.ui(12)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.send("ask " + encodeURIComponent("/pom stop"))
+                    }
+                }
+
+                // ── The voice ──────────────────────────────────────────────
+                //
+                // ⚠ ONE CHIP, NOT SEVEN BUTTONS. Seven personas in a header row
+                // would push the model name off a narrow window; the chip names
+                // the current one and opens the list.
+                Text {
+                    id: personaChip
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.persona + " ▾"
+                    color: root.cDim
+                    font.family: root.uiFont || "sans-serif"
+                    font.pixelSize: root.ui(12)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: personaMenu.open()
+                    }
+                    // ⚠ The names come from the ENGINE (root.personaList, an S
+                    // record), not from a list written out here — a second copy
+                    // in QML is the one that goes stale the day a persona is
+                    // added, and it would go stale silently.
+                    Menu {
+                        id: personaMenu
+                        Repeater {
+                            model: root.personaList
+                            MenuItem {
+                                id: prow
+                                required property string modelData
+                                text: prow.modelData
+                                onTriggered: root.send("persona " + prow.modelData)
+                            }
+                        }
+                    }
+                }
+
+                // ⛔ FULLSCREEN IS A WINDOW PROPERTY, NOT A COMPOSITOR REQUEST.
+                // FloatingWindow carries `fullscreen`, so this works on KDE and
+                // GNOME as well as here — asking synui to do it would give the
+                // window a control that silently does nothing on two of the
+                // three desktops SynapseOS ships onto.
+                Text {
+                    id: fsBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.fullscreen ? "⤡" : "⤢"
+                    color: root.cDim
+                    font.pixelSize: root.ui(14)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.fullscreen = !root.fullscreen
+                    }
+                }
+
                 Text {
                     id: wakeBtn
                     visible: root.canHear !== "no"

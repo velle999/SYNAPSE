@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from vibe import desktop, system
+from vibe import companion_tools
 
 
 # ── Tool definitions (OpenAI function-calling schema) ──────────────────────────
@@ -226,6 +227,7 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    *companion_tools.SCHEMAS,
 ]
 
 
@@ -735,6 +737,10 @@ TOOL_MAP = {
     "desktop_action": lambda args: desktop.desktop_action(**args),
     "desktop_setting": lambda args: desktop.desktop_setting(**args),
     "move_file": lambda args: desktop.move_file(**args),
+    # The companion's own records — see vibe/companion_tools.py. Registered
+    # here rather than in a second dispatcher so `execute_tool` stays the one
+    # place a tool name is resolved.
+    **companion_tools.MAP,
 }
 
 

@@ -81,6 +81,13 @@ QtObject {
     // a button you cannot see and can still press.
     readonly property string assistant:  "\uF075"
 
+    // The focus timer. ⚠ Both checked against SymbolsNerdFontMono with
+    // fontTools before being used here — the assistant's own glyph is a speech
+    // bubble because the two obvious robot codepoints are not in this font, and
+    // a missing glyph draws as a box that no test notices.
+    readonly property string focus:      "\uF252"
+    readonly property string focusDone:  "\uF254"
+
     /* -- Weather --
      *
      * The nf-weather block, one glyph per icon NAME weather.c publishes — so

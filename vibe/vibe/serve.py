@@ -56,6 +56,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 import itertools
 import json
+import contextlib
+import io
 import os
 import sys
 import threading
@@ -63,6 +65,7 @@ from pathlib import Path
 
 import vibe.config as cfg
 from vibe import intents, keywords, modes, tools, voice as voicemod, wake as wakemod
+from vibe import companion_cli, personas
 
 
 # ── the wire ────────────────────────────────────────────────────────────────
@@ -159,6 +162,8 @@ class Server:
         self.wire.rec("S", "cloud", "yes" if cfg.BACKEND in ("anthropic", "openai") else "no")
         self.wire.rec("S", "keywords", "yes" if keywords.available() else "no")
         self.wire.rec("S", "mode", self.mode)
+        self.wire.rec("S", "persona", personas.current())
+        self.wire.rec("S", "personas", " ".join(personas.names()))
         # ⚠ ASKED WITHOUT LOADING THE ENGINES. status() reports what is
         # installed; building piper to answer "is piper there" would cost a
         # second of model loading every time the window opens.
@@ -167,6 +172,34 @@ class Server:
         self.wire.rec("V", "reading", "yes" if self.speaking else "no")
         self.wire.rec("V", "wake", "on" if (self._wake and self._wake.running) else "off")
         self.wire.rec("S", "ready", "yes" if self.model else "no")
+
+    def set_persona(self, name: str):
+        """Switch the assistant's voice, live.
+
+        ⛔ THE SYSTEM BLOCK IS REBUILT, NOT PATCHED. The persona is appended to
+        the system prompt at reset time, so a switch that only wrote the state
+        file would take effect at the NEXT window — the voice would change
+        somewhere the user was not looking. reset() rebuilds it, which does
+        clear the conversation, and that is said out loud rather than done
+        quietly: a persona that kept the old turns would spend the rest of the
+        session with the previous character's words in its own mouth.
+
+        ⚠ The greeting is the acknowledgement. A tone change with no output
+        leaves you typing a question purely to find out whether it worked.
+        """
+        if not name:
+            self.wire.rec("S", "persona", personas.current())
+            return
+        if not personas.select(name):
+            self.wire.rec("A", f"no such persona: {name}")
+            return
+        if self.model:
+            self.model.reset()
+        self.wire.rec("S", "persona", name)
+        greet = personas.greeting(name)
+        if greet:
+            self.wire.rec("T", "", greet)
+            self.wire.rec("E", "", "")
 
     def model_label(self) -> str:
         if cfg.BACKEND == "ollama":
@@ -234,8 +267,59 @@ class Server:
         self._turn = threading.Thread(target=self._run_turn, args=(text,), daemon=True)
         self._turn.start()
 
+    # The companion's slash commands, and the one place they are listed.
+    _SLASH = {"todo": companion_cli.verb_todo,
+              "habit": companion_cli.verb_habit,
+              "goal": companion_cli.verb_goal,
+              "pom": companion_cli.verb_pom,
+              "quant": companion_cli.verb_quant,
+              "persona": None}      # persona goes through set_persona, below
+
+    def _slash(self, text: str) -> bool:
+        """Carry out `/todo add …` and friends. True if this line was one.
+
+        ⛔ BEFORE THE MODEL, AND BEFORE synsh. These are the user typing a
+        command at their own records — there is nothing to interpret, and a
+        line that reached the model would come back as a sentence ABOUT adding
+        a task rather than a task. Same shape as the desktop intents: the
+        cheapest correct answer is the one that loads nothing.
+
+        ⛔ STDOUT IS CAPTURED, NOT PRINTED. serve.main() hands the real stdout
+        to the wire and points sys.stdout at stderr precisely because a stray
+        print is a malformed record — so these CLI functions, which print, are
+        run with stdout rebound to a buffer and the buffer is sent as a tool
+        record. Nothing they write can reach the pipe.
+        """
+        if not text.startswith("/"):
+            return False
+        verb, _, rest = text[1:].partition(" ")
+        verb = verb.strip().lower()
+        if verb == "persona":
+            self.wire.rec("U", text)
+            self.set_persona(dec(rest).strip() if rest.strip() else "")
+            return True
+        fn = self._SLASH.get(verb)
+        if fn is None:
+            return False
+        self.wire.rec("U", text)
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                fn(rest.split())
+        except Exception as e:                      # noqa: BLE001
+            self.wire.rec("A", f"/{verb}: {e}")
+            return True
+        # A tool record, not assistant text: this is the desktop answering, and
+        # a task list drawn in the model's voice would read as something a model
+        # said rather than as what is actually written down.
+        self.wire.rec("X", "", buf.getvalue().rstrip() or "(nothing)")
+        self.wire.rec("E", "", "")
+        return True
+
     def _run_turn(self, text: str):
         serial = next(self._serial)
+        if self._slash(text):
+            return
         self.wire.rec("U", text)
         try:
             # synsh first, and only for a line it claims whole. See keywords.py.
@@ -358,6 +442,9 @@ class Server:
             return True
         if verb == "provider":
             self.set_provider(dec(rest).strip())
+            return True
+        if verb == "persona":
+            self.set_persona(dec(rest).strip())
             return True
         if verb == "state":
             self.emit_state()

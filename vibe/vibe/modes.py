@@ -68,8 +68,14 @@ DIRECT_MODES = frozenset({AUTO, AGENT})
 # What each mode is allowed to reach for. PLAN's list is the whole of what
 # makes it safe: it can look at anything and change nothing, so a plan can be
 # read before any of it happens.
+# ⚠ THE COMPANION'S READERS BELONG HERE TOO. PLAN mode looks and writes out
+# the steps, and a plan about somebody's week that could not read their own
+# task list would be a plan invented from nothing — which is the exact failure
+# ASK mode's no-invent rule exists for.
 READ_ONLY_TOOLS = frozenset({"read_file", "glob", "grep", "list_dir",
-                            "desktop_open", "system_info"})
+                             "desktop_open", "system_info",
+                             "todo_list", "habit_list", "goal_list",
+                             "pomodoro_status"})
 
 DESCRIPTION_SHELL = "runs it, once you say so"
 DESCRIPTION_DIRECT = "does it, with no model involved"

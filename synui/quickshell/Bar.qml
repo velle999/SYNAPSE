@@ -670,6 +670,13 @@ PanelWindow {
                     Assistant { barScreen: bar.screen
                                 barVisible: BarConfig.get(bar.outName, "assistant") }
 
+                    /* The focus timer, beside the assistant that starts it.
+                     * Invisible unless one is running, like Updates and
+                     * Weather — a bar that always carried a stopped clock
+                     * would be a bar with a permanent 0:00 on it. */
+                    Pomodoro  { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "pomodoro") }
+
                     Tray      { barScreen: bar.screen
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: BarConfig.get(bar.outName, "tray") }

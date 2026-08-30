@@ -162,6 +162,47 @@ JSON code fence or never closes the tag.
 control token; every other model reads it as the first two words of the
 question.
 
+## The companion — tasks, habits, goals, focus and markets
+
+Folded in from **velle.ai**, whose personalities and productivity suite live
+here rather than in a second assistant. There is one assistant on this desktop
+and this is it.
+
+```
+vibe persona [list|<name>|show]     the voice — 7 of them, each with its own temperature
+vibe todo [list|today|overdue]      tasks
+vibe todo add <text> [--project P] [--prio 1-4] [--due YYYY-MM-DD] [--tags a,b]
+vibe todo done|start|cancel|rm <id>
+vibe habit [list] | add <name> | check|uncheck|rm <id>
+vibe goal [list [done]] | add <title> | progress <id> <pct> | milestone <id> <t> | done <mid>
+vibe pom [status] | start [task] [--min N] | stop | stats
+vibe quant <ticker> …               price and indicators (the one that uses the network)
+```
+
+Every one of them is also a slash command in the chat window (`/todo add …`),
+and the model has read tools for all of them plus gated write tools — the same
+line as everywhere else in vibe: **does it write** asks first, reading does not.
+`market_quote` asks too, for a different reason: it is the only tool that
+**leaves the machine**.
+
+**A persona is a voice, not a system prompt.** velle.ai's profiles replace the
+whole prompt; here they are appended to it, so the tool rules, this machine's
+facts and the rule about when *not* to reach for a tool all survive the
+costume. The temperature comes with the voice, and the default persona changes
+nothing at all.
+
+**The focus timer is on the bar.** The running session is a row in the
+companion database plus a deadline published to
+`~/.config/synui/pomodoro.state`; the bar, the chat window and the CLI are three
+readers of that one fact. It survives the chat window being closed — which a
+timer owned by `vibe serve` could not — and the first reader to notice the
+deadline pass closes the session and sends the notification, so it announces
+exactly once. Stopping early does **not** count as a completed pomodoro, so the
+day's total is what finished rather than what was started.
+
+Data lives in `~/.local/share/vibe/companion.db` — velle.ai's schemas, column
+for column, so an existing `companion.db` opens here.
+
 ## Features
 
 - Agentic tool-call loop: reads files, writes files, edits files, runs bash commands, globs, greps
