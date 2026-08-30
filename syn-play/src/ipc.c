@@ -187,13 +187,89 @@ static void start_watcher(void)
 	waitpid(pid, &st, 0);
 }
 
+/*
+ * ⛔ A FOLDER IS ONE PLAYLIST ENTRY UNTIL MPV IS TOLD OTHERWISE, AND SHUFFLE
+ * COUNTS IT ONCE.
+ *
+ * mpv does expand a directory handed to `loadfile` — but `--directory-mode`
+ * defaults to `auto`, which its manual defines as `recursive` only with
+ * `--shuffle`, and `lazy` otherwise. Lazy stops at the first level: the albums
+ * inside an added music folder stay in the playlist as ONE entry each until
+ * playback reaches them and opens them. `playlist-shuffle` therefore shuffles a
+ * handful of FOLDERS, plays whichever it lands on in track order, and never
+ * reaches most of the files. That reads as a broken shuffle rather than as a
+ * directory setting, which is why it went unnoticed: every file does eventually
+ * play, just never out of order.
+ *
+ * Asked of mpv rather than walked here, per the rule at the top of synplay.h.
+ * A directory walk in this program would be a second idea of what is in a
+ * folder, disagreeing with the one that has to open the files anyway — and it
+ * would have to re-derive `--directory-filter-types` to boot.
+ *
+ * ⛔ SET AS A PROPERTY, NEVER AS A COMMAND-LINE FLAG. Both of these options are
+ * newer than the oldest mpv this frontend can talk to, and mpv EXITS on an
+ * option it does not know — so passing them in `sp_start_mpv()`'s argv would
+ * turn an older player into "syn-play cannot start mpv" with nothing on screen
+ * to say why. An unknown PROPERTY is a failed reply on a live socket, which is
+ * ignored here and costs nothing. It also reaches an mpv that was already
+ * running before this program was upgraded.
+ *
+ * ⚠ `image` COMES OUT OF THE FILTER, and only recursion made that matter. mpv's
+ * default types include images, so recursing into an album folder queues the
+ * cover.jpg sitting beside the tracks and a shuffled queue stops on artwork.
+ * This program's own media list (MEDIA_EXT in open.c) has never contained an
+ * image format; the filter is set to agree with it rather than to invent a
+ * policy.
+ */
+void sp_dir_recursion(int fd)
+{
+	if (fd < 0) return;
+	sp_cmd(fd, "\"set_property\",\"directory-mode\",\"recursive\"", NULL, 0);
+	sp_cmd(fd, "\"set_property\",\"directory-filter-types\","
+	           "\"video,audio,archive,playlist\"", NULL, 0);
+}
+
+/*
+ * ⛔ A DIRECTORY GOES IN WITH `loadlist`, NOT `loadfile`, AND THE DIFFERENCE IS
+ * WHEN IT EXPANDS.
+ *
+ * Measured on mpv 0.41: `loadfile <dir> replace` expands the folder into
+ * entries straight away — because that call is opening it — but `loadfile <dir>
+ * append` and `append-play` leave it in the playlist as ONE row until playback
+ * arrives there and opens it. So a folder that is QUEUED rather than played
+ * stays a single row, and `playlist-shuffle` gives an album of forty tracks one
+ * ticket in the draw. `loadlist` expands a directory at the moment it is asked,
+ * in every mode, and answers with how many entries it added.
+ *
+ * ⚠ THE SAME COMMAND THAT LOADS AN m3u8, which is not a trick: mpv treats a
+ * directory as a playlist, so this is a folder being read as what it already
+ * is. Both spellings take the same mode words, so no caller has to branch.
+ *
+ * ⚠ AND IT STILL NEEDS sp_dir_recursion(). `loadlist` honours
+ * `--directory-mode` — with the default it expands one level and leaves the
+ * album folders inside as rows of their own.
+ */
+bool sp_load(int fd, const char *path, const char *mode)
+{
+	struct stat st;
+	bool dir = (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+
+	char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
+	sp_json_quote(path, quoted, sizeof quoted);
+	snprintf(args, sizeof args, "\"%s\",%s,\"%s\"",
+	         dir ? "loadlist" : "loadfile", quoted, mode);
+	return sp_cmd(fd, args, NULL, 0);
+}
+
 int sp_connect_or_start(void)
 {
 	int fd = connect_once();
-	if (fd >= 0) return fd;
+	if (fd >= 0) { sp_dir_recursion(fd); return fd; }
 	if (!sp_start_mpv()) return -1;
 	start_watcher();
-	return connect_once();
+	fd = connect_once();
+	sp_dir_recursion(fd);
+	return fd;
 }
 
 /* ── one command, one reply ─────────────────────────────────────────────── */

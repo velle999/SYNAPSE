@@ -202,11 +202,10 @@ static void handle(char *line, int *fd, bool *want_queue, bool *want_hist,
 	if (!strcmp(line, "play") || !strcmp(line, "add")) {
 		if (*fd < 0) *fd = sp_connect_or_start();
 		if (*fd < 0) return;
-		char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
-		sp_json_quote(decoded, quoted, sizeof quoted);
-		snprintf(args, sizeof args, "\"loadfile\",%s,\"%s\"",
-		         quoted, line[0] == 'p' ? "replace" : "append-play");
-		if (sp_cmd(*fd, args, NULL, 0)) {
+		/* ⚠ EITHER ZONE CAN BE HANDED A FOLDER — a file manager drags one
+		 * as readily as a file. sp_load() puts its contents in the queue
+		 * rather than the folder itself. */
+		if (sp_load(*fd, decoded, line[0] == 'p' ? "replace" : "append-play")) {
 			char title[512];
 			sp_pretty_title(decoded, title, sizeof title);
 			sp_history_note(decoded, title, 0, 0);
@@ -235,7 +234,8 @@ static void handle(char *line, int *fd, bool *want_queue, bool *want_hist,
 	else if (!strcmp(line, "toggle")) sp_cmd(*fd, "\"cycle\",\"pause\"", NULL, 0);
 	else if (!strcmp(line, "stop"))  { sp_cmd(*fd, "\"quit\"", NULL, 0);
 	                                   close(*fd); *fd = -1; }
-	else if (!strcmp(line, "shuffle"))   { sp_cmd(*fd, "\"playlist-shuffle\"", NULL, 0);
+	else if (!strcmp(line, "shuffle"))   { sp_expand_queue_dirs(*fd);
+	                                       sp_cmd(*fd, "\"playlist-shuffle\"", NULL, 0);
 	                                       *want_queue = true; }
 	else if (!strcmp(line, "unshuffle")) { sp_cmd(*fd, "\"playlist-unshuffle\"", NULL, 0);
 	                                       *want_queue = true; }

@@ -181,6 +181,99 @@ contains "shuffle is mpv's own" "Shuffled" "$out"
 out=$("$BIN" unshuffle)
 contains "...and so is the undo, which restores the order added" "Unshuffled" "$out"
 
+# ── a FOLDER, which is what makes shuffle fair ──────────────────────────────
+#
+# ⛔ THE BUG THIS EXISTS FOR: A QUEUED FOLDER STAYED ONE PLAYLIST ROW.
+#
+# mpv expands a directory handed to `loadfile` only when it OPENS it — so
+# `replace` does and `append`/`append-play` do not, and the folder sits in the
+# playlist as a single row until playback arrives there. An album of forty
+# tracks therefore got ONE ticket in `playlist-shuffle`, played in track order
+# when it came up, and most of a library was never reached.
+#
+# Two levels down it was worse whichever verb was used: `--directory-mode`
+# defaults to `auto`, which mpv's manual defines as `recursive` with `--shuffle`
+# and `lazy` otherwise — so even the folder that WAS opened left the album
+# folders inside it as rows of their own.
+#
+# ⚠ SO THE NESTING BELOW IS THE POINT. A flat folder passes on the old code for
+# the `replace` case and proves nothing.
+
+mkdir -p "$T/Library/Album A/Disc 2" "$T/Library/Album B"
+cp "$SILENT" "$T/Library/Album A/01 One.wav"
+cp "$SILENT" "$T/Library/Album A/02 Two.wav"
+cp "$SILENT" "$T/Library/Album A/Disc 2/05 Five.wav"
+cp "$SILENT" "$T/Library/Album B/03 Three.wav"
+# ⚠ Artwork sits beside the tracks in every real music folder, and mpv's default
+# directory filter includes images — recursion is what makes that bite.
+touch "$T/Library/Album B/cover.jpg"
+
+"$BIN" clear >/dev/null; sleep 0.3
+"$BIN" "$T/Library" >/dev/null 2>&1
+sleep 0.8
+out=$("$BIN" --rec queue)
+check "playing a folder queues every file under it, not the folder" "4" \
+      "$(printf '%s\n' "$out" | grep -c '^item')"
+contains "...reaching a subdirectory two levels down" "05 Five.wav" "$out"
+check "...and leaving the cover art out of the queue" "0" \
+      "$(printf '%s\n' "$out" | grep -c 'cover\.jpg')"
+
+# ⛔ THE HALF THAT WAS ACTUALLY BROKEN: queueing rather than playing.
+"$BIN" clear >/dev/null; sleep 0.3
+"$BIN" "$SILENT" >/dev/null 2>&1
+sleep 0.5
+"$BIN" add "$T/Library" >/dev/null 2>&1
+sleep 0.8
+out=$("$BIN" --rec queue)
+check "ADDING a folder queues its files too, not one row" "5" \
+      "$(printf '%s\n' "$out" | grep -c '^item')"
+
+# ⛔ AND A QUEUE BUILT BEFORE ANY OF THIS. An mpv left running by an older build,
+# or a folder dropped on the mpv window itself, still holds the folder as one
+# row — and an option set afterwards does not go back for entries mpv has
+# already taken. Shuffle re-asks for those rows before it draws.
+# ⚠ WITH NOTHING PLAYING, on purpose. A folder appended to a player that is
+# mid-file gets opened by the playback that reaches it, which expands it and
+# hides the row this case is about — so the case would pass for the wrong
+# reason, on timing.
+"$BIN" clear >/dev/null; sleep 0.5
+python3 - "$SYNPLAY_HOME/syn-play.sock" "$T/Library" <<'IPC'
+import json, socket, sys
+s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])
+f = s.makefile("rwb")
+# The old spelling, on the old default: one row for the whole folder.
+for cmd in (["set_property", "directory-mode", "auto"],
+            ["loadfile", sys.argv[2], "append"]):
+    f.write((json.dumps({"command": cmd, "request_id": 1}) + "\n").encode())
+    f.flush()
+    while json.loads(f.readline()).get("request_id") != 1:
+        pass
+IPC
+sleep 0.6
+out=$("$BIN" --rec queue)
+# ⚠ COUNTED AS "is the FOLDER there", not as a total. `playlist-clear` keeps
+# whatever mpv is currently on, so the number of other rows is mpv's business
+# and not something this case should be pinned to.
+check "a folder queued the old way sits in the queue as itself" "1" \
+      "$(printf '%s\n' "$out" | grep -c "	$T/Library\$")"
+"$BIN" shuffle >/dev/null
+sleep 0.8
+out=$("$BIN" --rec queue)
+check "...and shuffle expands it rather than drawing it as one ticket" "0" \
+      "$(printf '%s\n' "$out" | grep -c "	$T/Library\$")"
+contains "...down to the file two levels inside it" "05 Five.wav" "$out"
+# ⚠ DISTINCT paths: `playlist-clear` kept whatever mpv was on, which is one of
+# these tracks, so a plain count would be counting that twice.
+check "...with every track in the folder now a row of its own" "4" \
+      "$(printf '%s\n' "$out" | grep -o "	$T/Library/.*" | sort -u | wc -l)"
+
+# Back to the three plain files the cases below are written against.
+"$BIN" clear >/dev/null; sleep 0.3
+"$BIN" "$SILENT" >/dev/null 2>&1
+"$BIN" add "$T/Videos/Silence Two.wav" >/dev/null 2>&1
+(cd "$T/Videos" && "$BIN" add "Silence Two.wav" >/dev/null 2>&1)
+sleep 0.5
+
 "$BIN" playlist save "Test set" >/dev/null
 out=$("$BIN" playlist list)
 contains "a saved playlist is listed" "Test set" "$out"

@@ -281,11 +281,7 @@ static void play_selected(int *fd, bool append)
 	if (*fd < 0) *fd = sp_connect_or_start();
 	if (*fd < 0) { snprintf(g_note, sizeof g_note, "could not start mpv"); return; }
 
-	char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
-	sp_json_quote(target, quoted, sizeof quoted);
-	snprintf(args, sizeof args, "\"loadfile\",%s,\"%s\"",
-	         quoted, append ? "append-play" : "replace");
-	if (sp_cmd(*fd, args, NULL, 0)) {
+	if (sp_load(*fd, target, append ? "append-play" : "replace")) {
 		char title[512];
 		sp_pretty_title(target, title, sizeof title);
 		sp_history_note(target, title, 0, 0);
@@ -380,6 +376,7 @@ int sp_tui(void)
 			break;
 
 		case 's':
+			if (fd >= 0) sp_expand_queue_dirs(fd);
 			if (fd >= 0 && sp_cmd(fd, "\"playlist-shuffle\"", NULL, 0))
 				snprintf(g_note, sizeof g_note, "shuffled");
 			refresh(fd);
@@ -483,10 +480,7 @@ int sp_tui(void)
 				if (sp_find(q, hit, 1) == 1) {
 					if (fd < 0) fd = sp_connect_or_start();
 					if (fd >= 0) {
-						char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
-						sp_json_quote(hit[0].path, quoted, sizeof quoted);
-						snprintf(args, sizeof args, "\"loadfile\",%s,\"replace\"", quoted);
-						sp_cmd(fd, args, NULL, 0);
+						sp_load(fd, hit[0].path, "replace");
 						sp_history_note(hit[0].path, hit[0].title, 0, 0);
 						snprintf(g_note, sizeof g_note, "playing %.200s", hit[0].title);
 					}

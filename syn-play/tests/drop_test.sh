@@ -66,6 +66,7 @@ url_of() { python3 -c "import urllib.parse,sys; print('file://'+urllib.parse.quo
 FILM=$(url_of "$T/Videos/A Film (2001).wav")
 OTHER=$(url_of "$T/Videos/Another One.wav")
 SEASON=$(url_of "$T/Videos/Season 1")
+VIDEOS=$(url_of "$T/Videos")
 
 # The probe: the SHIPPED file, with a driver appended. ⛔ Appended to the real
 # thing — a replica of the drop graph is a second layout, and the one that goes
@@ -145,6 +146,21 @@ check "a drop in the upper half replaces the queue" "1" "$(items)"
 probe "root.acceptDrop([\"$SEASON\"], true); done.start()" >/dev/null 2>&1
 sleep 1.5
 check "a dropped FOLDER is expanded by mpv into its files" "3" "$(items)"
+
+# ⛔ AND THE LOWER HALF, WHICH IS THE ONE THAT WAS BROKEN.
+#
+# The case above passed from the day it was written, and hid this one: mpv
+# expands a directory handed to `loadfile` only when it OPENS it, and the upper
+# half is `replace`, which opens immediately. A folder dropped on the LOWER half
+# is `append-play` — it went into the playlist as a single row and stayed one
+# until playback happened to reach it, so `playlist-shuffle` drew a whole season
+# as one ticket and never got inside it. Both halves go through sp_load() now.
+#
+# ⚠ NESTED ON PURPOSE: $T/Videos holds the two films AND Season 1's three
+# episodes, so a folder that only expands one level still fails this.
+probe "root.acceptDrop([\"$FILM\"], true); root.acceptDrop([\"$VIDEOS\"], false); done.start()" >/dev/null 2>&1
+sleep 2
+check "a folder dropped to QUEUE is its files too, not one row" "6" "$(items)"
 
 probe "root.acceptDrop([\"$FILM\", \"$OTHER\"], true); done.start()" >/dev/null 2>&1
 sleep 1.5

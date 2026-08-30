@@ -18,6 +18,14 @@
 # a phone. A second implementation of any of those would be a second answer to
 # disagree with the one actually playing the audio.
 #
+# ⚠ A FOLDER IS A PLAYLIST, and mpv is what says what is in it. `loadlist` on a
+# directory expands it into its files at the moment it is asked — which is what
+# makes a shuffle fair, since a folder left in the queue as ONE row is one
+# ticket in the draw for however many tracks are inside it. Directories are
+# still mpv's to walk, filtered by mpv's own `--directory-filter-types`; this
+# only asks for `--directory-mode=recursive`, and for images to be left out of
+# the filter to match the media list this program has always used.
+#
 # ── Why it does not link libmpv ─────────────────────────────────────────────
 #
 # ⚠ The window is quickshell, and quickshell cannot host libmpv — there is no
@@ -41,7 +49,7 @@
 # one, or want last night's film back.
 pkgname=syn-play
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="Playlists, shuffle, quick open and history for mpv — window, terminal UI and command line"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

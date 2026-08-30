@@ -133,12 +133,10 @@ static int load_targets(int fd, char **paths, int n, bool append_all)
 			continue;
 		}
 
-		char quoted[PATH_MAX * 2], args[PATH_MAX * 2 + 64];
-		sp_json_quote(abs, quoted, sizeof quoted);
 		bool first = (loaded == 0 && !append_all);
-		snprintf(args, sizeof args, "\"loadfile\",%s,\"%s\"",
-		         quoted, first ? "replace" : "append-play");
-		if (!sp_cmd(fd, args, NULL, 0)) {
+		/* ⚠ A FOLDER IS A LEGITIMATE TARGET, and sp_load() is what makes
+		 * it become its files instead of a single queue row. */
+		if (!sp_load(fd, abs, first ? "replace" : "append-play")) {
 			warn("mpv would not take %s", abs);
 			continue;
 		}
@@ -521,6 +519,11 @@ int main(int argc, char **argv)
 		 * a copied list would have thrown that away for good.
 		 */
 		int fd = need_fd();
+		/* ⚠ Folders first: a queue row that is still a directory — queued
+		 * by an older build, or dropped on the mpv window itself — is one
+		 * ticket in the draw for a whole album. Only on the way IN;
+		 * unshuffle is restoring an order, not building one. */
+		if (c[0] == 's') sp_expand_queue_dirs(fd);
 		bool ok = sp_cmd(fd, c[0] == 's' ? "\"playlist-shuffle\""
 		                                 : "\"playlist-unshuffle\"", NULL, 0);
 		close(fd);

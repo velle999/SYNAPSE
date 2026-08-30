@@ -21,6 +21,7 @@
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 int sp_queue(int fd, sp_entry_t *out, int max)
@@ -60,6 +61,63 @@ int sp_queue(int fd, sp_entry_t *out, int max)
 		n++;
 	}
 	return n;
+}
+
+/*
+ * ⛔ THE QUEUE CAN ALREADY HOLD FOLDERS, AND SETTING THE OPTION DOES NOT GO
+ * BACK FOR THEM.
+ *
+ * sp_load() puts every LATER folder in as its files, but mpv does not revisit
+ * entries it has already taken — so a queue built before this program was
+ * upgraded, or by dropping a folder on the mpv window itself, still has a
+ * folder sitting in it as one row, and no option set afterwards reaches it.
+ * Shuffling that is the exact complaint this fixes, so shuffle re-asks for
+ * those rows first: the directory is removed and handed back through sp_load(),
+ * which loads it as the playlist it is.
+ *
+ * ⚠ SAFE ONLY BECAUSE SHUFFLE IS ABOUT TO REORDER EVERYTHING ANYWAY. This
+ * appends the expansion at the end rather than in place, which would be a
+ * visible reordering at any other moment — and `playlist-unshuffle` restores
+ * the order files were ADDED in, so the added order is what this is spending.
+ * Do not call it from anywhere that is not immediately shuffling.
+ *
+ * ⛔ THE PLAYING ROW IS LEFT ALONE. `playlist-remove` on the current entry
+ * stops or advances playback, so a folder that mpv is in the middle of opening
+ * would cut the music off to tidy up the queue. It is already being expanded by
+ * the play that entered it; skipping it costs nothing.
+ *
+ * ⚠ BACKWARDS, because removing index i renumbers everything after it.
+ */
+int sp_expand_queue_dirs(int fd)
+{
+	if (fd < 0) return 0;
+
+	/* ⛔ ASKED HERE TOO, not assumed. The transport verbs reach mpv through
+	 * sp_connect(), which does not set this — so a `syn-play shuffle` would
+	 * hand each folder straight back to a player still expanding one level
+	 * at a time, and re-queue the same directory rows it just removed. */
+	sp_dir_recursion(fd);
+
+	static sp_entry_t q[4096];
+	int n = sp_queue(fd, q, 4096);
+	if (n <= 0) return 0;
+
+	int done = 0;
+	for (int i = n - 1; i >= 0; i--) {
+		if (q[i].current) continue;
+
+		struct stat st;
+		if (stat(q[i].path, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+
+		char args[64];
+		snprintf(args, sizeof args, "\"playlist-remove\",%d", i);
+		if (!sp_cmd(fd, args, NULL, 0)) continue;
+
+		/* ⚠ `append`, NOT `append-play`. Tidying the queue must not start
+		 * playing something; there may be nothing playing at all. */
+		if (sp_load(fd, q[i].path, "append")) done++;
+	}
+	return done;
 }
 
 /*

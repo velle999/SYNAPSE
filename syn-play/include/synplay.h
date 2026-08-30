@@ -116,6 +116,17 @@ void sp_now_title(int fd, const char *path, char *out, size_t cap);
  * be started or never came up. */
 bool sp_start_mpv(void);
 
+/* Make mpv expand a directory all the way down instead of one level at a time,
+ * so a folder in the queue is its files rather than a single row a shuffle can
+ * only land on once. Set as a property and ignored if it fails — see ipc.c for
+ * why it is never a command-line flag. Applied by sp_connect_or_start(). */
+void sp_dir_recursion(int fd);
+
+/* Put `path` in mpv's playlist — `mode` is mpv's own "replace", "append" or
+ * "append-play". A DIRECTORY is loaded as the playlist it is, so it becomes its
+ * files right away rather than one row that expands when played; see ipc.c. */
+bool sp_load(int fd, const char *path, const char *mode);
+
 /* ── playlist.c ─────────────────────────────────────────────────────────── */
 typedef struct {
 	char path[PATH_MAX];
@@ -125,6 +136,12 @@ typedef struct {
 
 /* The playlist mpv is holding. Returns the number filled, -1 if not running. */
 int  sp_queue(int fd, sp_entry_t *out, int max);
+
+/* Replace any directory still sitting in the queue as one row with the files
+ * inside it. Returns how many were expanded.
+ * ⛔ CALL ONLY IMMEDIATELY BEFORE SHUFFLING — it appends rather than splices,
+ * which is a visible reorder anywhere else. See playlist.c. */
+int  sp_expand_queue_dirs(int fd);
 
 /* ⛔ THE SILENT CORE, which is what `serve` calls. A function that prints goes
  * down the protocol pipe, and one that die()s takes the engine — and the window
