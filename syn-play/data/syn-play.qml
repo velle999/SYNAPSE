@@ -843,6 +843,32 @@ FloatingWindow {
                     height: root.ui(30)
                     radius: root.ui(4)
                     color: fArea.containsMouse ? root.cRow : "transparent"
+                    /*
+                     * ⛔ THE ROW-WIDE MOUSEAREA IS DECLARED FIRST, AND THAT IS THE
+                     * WHOLE REASON THE INLINE LINKS IN THESE ROWS WORK.
+                     *
+                     * A later sibling is stacked ON TOP in QML, and a press goes
+                     * to the topmost item that accepts it. With this area written
+                     * last it covered every link in its own row: the ✕ on a
+                     * playlist sent `plload`, the ✕ on a queue row sent `jump`.
+                     * The button was hit and the wrong thing happened, silently.
+                     *
+                     * ⚠ Hover is not affected either way. The link areas are not
+                     * hoverEnabled, so `containsMouse` here stays true underneath
+                     * them and a link does not vanish as the pointer reaches it.
+                     * tests/qml_test.sh drives a real pointer over both.
+                     */
+                    MouseArea {
+                        id: fArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.send("play " + encodeURIComponent(fRow.path))
+                            openField.text = ""
+                            found.clear()
+                        }
+                    }
 
                     Text {
                         anchors { left: parent.left; right: playHere.left
@@ -868,17 +894,6 @@ FloatingWindow {
                             anchors.margins: -root.ui(4)
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.send("add " + encodeURIComponent(fRow.path))
-                        }
-                    }
-                    MouseArea {
-                        id: fArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.send("play " + encodeURIComponent(fRow.path))
-                            openField.text = ""
-                            found.clear()
                         }
                     }
                 }
@@ -918,6 +933,16 @@ FloatingWindow {
                      : qArea.containsMouse ? Qt.rgba(root.cAccent.r, root.cAccent.g,
                                                      root.cAccent.b, 0.07)
                                            : "transparent"
+                /* ⛔ FIRST, so the ✕ below is stacked ABOVE it — written last it
+                 * covered the ✕ and a click there sent `jump`. The search
+                 * delegate above has the whole of it. */
+                MouseArea {
+                    id: qArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.send("jump " + qRow.idx)
+                }
 
                 Text {
                     anchors { left: parent.left; leftMargin: root.ui(10)
@@ -954,13 +979,6 @@ FloatingWindow {
                         onClicked: root.send("remove " + qRow.idx)
                     }
                 }
-                MouseArea {
-                    id: qArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.send("jump " + qRow.idx)
-                }
             }
 
             Text {
@@ -995,6 +1013,20 @@ FloatingWindow {
                 height: root.ui(30)
                 radius: root.ui(4)
                 color: hArea.containsMouse ? root.cRow : "transparent"
+                /* ⛔ FIRST, so `queue` below is stacked ABOVE it — see the search
+                 * delegate. */
+                MouseArea {
+                    id: hArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    // ⛔ NO SEEK ON THE WAY IN. mpv wrote a watch-later file when
+                    // this stopped and resumes from it on its own; seeking to the
+                    // position in our history on top of that would be a second,
+                    // staler answer fighting the correct one — visibly, as a jump
+                    // a second after playback starts.
+                    onClicked: root.send("play " + encodeURIComponent(hRow.path))
+                }
 
                 // ⚠ The position is shown only when it MEANS something. "0:00
                 // in" beside every row is noise that hides the two rows where it
@@ -1037,18 +1069,6 @@ FloatingWindow {
                         onClicked: root.send("add " + encodeURIComponent(hRow.path))
                     }
                 }
-                MouseArea {
-                    id: hArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    // ⛔ NO SEEK ON THE WAY IN. mpv wrote a watch-later file when
-                    // this stopped and resumes from it on its own; seeking to the
-                    // position in our history on top of that would be a second,
-                    // staler answer fighting the correct one — visibly, as a jump
-                    // a second after playback starts.
-                    onClicked: root.send("play " + encodeURIComponent(hRow.path))
-                }
             }
 
             Text {
@@ -1081,6 +1101,16 @@ FloatingWindow {
                 height: root.ui(32)
                 radius: root.ui(4)
                 color: pArea.containsMouse ? root.cRow : "transparent"
+                /* ⛔ FIRST, so `queue` and the ✕ below are stacked ABOVE it.
+                 * Written last it covered both, and the ✕ sent `plload` instead
+                 * of `plrm` — a delete button that played the playlist. */
+                MouseArea {
+                    id: pArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.send("plload " + encodeURIComponent(pRow.name))
+                }
 
                 Text {
                     anchors { left: parent.left; leftMargin: root.ui(10)
@@ -1132,13 +1162,6 @@ FloatingWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.send("plrm " + encodeURIComponent(pRow.name))
                     }
-                }
-                MouseArea {
-                    id: pArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.send("plload " + encodeURIComponent(pRow.name))
                 }
             }
 

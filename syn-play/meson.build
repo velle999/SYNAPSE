@@ -63,3 +63,13 @@ test('drop', find_program('tests/drop_test.sh'),
      args: [syn_play.full_path()],
      depends: [syn_play],
      timeout: 180)
+
+# ⛔ AND WHETHER A CLICK CAN REACH THE THING IT IS AIMED AT. A later sibling is
+# stacked on top in QML, so a row-wide MouseArea written after the ✕ in its row
+# covers it — the button is hit and the wrong verb is sent, in silence, and both
+# a screenshot and a grep over the file pass. That shipped in all four lists at
+# once. This drives the shipped QML's real geometry.
+test('click', find_program('tests/click_test.sh'),
+     args: [syn_play.full_path()],
+     depends: [syn_play],
+     timeout: 180)
