@@ -681,6 +681,21 @@ dock_clock_fit_test = executable('dock_clock_fit_test',
   build_by_default : false)
 test('dock_clock_fit', dock_clock_fit_test)
 
+# ⛔ IS THE FINGERPRINT PROMPT ON THE LOGIN SCREEN'S PIXELS? Six releases chased
+# a reader that was working: lock_draw_core() returns early on the greeter's
+# two-field block, and the fingerprint row was written after that return, so the
+# words arrived, parsed, were copied into nlock.fp_msg — and only ever appeared
+# on the session lock. Every test watching that path was a grep, and a grep can
+# see that lock.c draws fp_msg but not whether the greeter ever reaches it. This
+# one renders the real panel through lock_render() and reads the band back.
+lock_fp_row_test = executable('lock_fp_row_test',
+  ['tests/lock_fp_row_test.c', 'src/lock.c', 'src/contrast.c', 'src/cairo_shapes.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('lock_fp_row', lock_fp_row_test)
+
 # The clock cell's own drag: it can be picked up and carried into any gap in the
 # icon row (dock_clock_slot, persisted as clock_slot in dock.state). Same stub
 # rig as the reorder test — no pointer exists headless, so dock.c is driven

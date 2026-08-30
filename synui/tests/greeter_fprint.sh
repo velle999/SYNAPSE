@@ -103,6 +103,22 @@ chk "…and an empty field still submits nothing at all" $?
 grep -q 'auth_message"' "$G" && grep -q 'nlock.fp_msg' "$G"
 chk "PAM's message text is shown, not thrown away" $?
 
+# ⛔ AND IT HAS TO REACH A PIXEL, WHICH THE CHECK ABOVE CANNOT SEE. It passed
+# for six releases while the login screen drew nothing: lock_draw_core() returns
+# early on the greeter's two-field block, and the fingerprint row lived after
+# that return — so greeter.c wrote fp_msg, lock.c drew fp_msg, and the two never
+# met on the one screen that needed them to. The row is called from
+# lock_draw_panel now, outside the core, like the layout chip beside it.
+#
+# ⚠ THE REAL PROOF IS tests/lock_fp_row_test.c, which renders the panel and
+# reads the band back. These two are the cheap guard on the shape it needs.
+L="$HERE/../src/lock.c"
+! awk '/^static void lock_draw_core/,/^}$/' "$L" | grep -q 'nlock.fp_msg'
+chk "the fingerprint row is not stranded behind the greeter's early return" $?
+
+awk '/^static void lock_draw_panel/,/^}$/' "$L" | grep -q 'lock_draw_fp_row'
+chk "…it is drawn from the panel, which both screens go through" $?
+
 # ⛔ NO SPIN. On a machine with no pam_fprintd, PAM goes straight to the
 # password prompt with an empty field — which is exactly the re-arm condition.
 # Without the guard that is forty greetd workers in a second.

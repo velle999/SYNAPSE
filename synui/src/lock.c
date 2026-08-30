@@ -854,20 +854,9 @@ static void lock_draw_core(syn_server_t *s, cairo_t *cr)
         }
     }
 
-    /* The fingerprint reader gets its OWN row, below the password one, because
-     * both are live at once — "Place your finger on the reader" has to be able
-     * to sit under the dots being typed, not replace them. Empty (so nothing is
-     * drawn) whenever the reader has nothing to say, which on a machine without
-     * one is always. Dimmer than the password row: it is the second way in. */
-    if (s->nlock.fp_msg[0]) {
-        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
-                               CAIRO_FONT_WEIGHT_NORMAL);
-        cairo_set_font_size(cr, 15);
-        syn_text_extents(cr, s->nlock.fp_msg, &te);
-        lock_set_ink(s, cr, 0.58, a);
-        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 312);
-        syn_show_text(cr, s->nlock.fp_msg);
-    }
+    /* The fingerprint row is NOT drawn here — see lock_draw_fp_row, which
+     * lock_draw_panel calls outside this function. It has to survive the
+     * greeter's early return above, and it did not. */
 }
 
 /* The whole panel: header, core, footer.
@@ -878,6 +867,50 @@ static void lock_draw_core(syn_server_t *s, cairo_t *cr)
  * cannot be seen and can still be pressed, and "the track that ended is still
  * skippable" is exactly the class of bug a stale rect produces.
  */
+/*
+ * The fingerprint row: whatever PAM last said about the reader, under the
+ * entry.
+ *
+ * ⛔ DRAWN BY lock_draw_panel, NOT BY lock_draw_core, AND THAT IS THE WHOLE
+ * POINT OF IT BEING A FUNCTION. The core returns early on the greeter's
+ * two-field block — `if (s->greeter) { lock_draw_greeter_fields(...); return; }`
+ * — so everything written after that return exists on the LOCK screen only.
+ * This row was written after it. The login screen therefore had a live reader,
+ * a prompt that arrived, a prompt that parsed, and a message copied into
+ * nlock.fp_msg that nothing ever put on a pixel:
+ *
+ *     synui greeter: pam says [info] "Place your finger on the fingerprint reader"
+ *     synui greeter: drawing it under the clock      <- it did not
+ *
+ * The login screen is the ONE screen where this row has to appear, because it
+ * is the only place somebody has no other way to know the reader is waiting.
+ * The layout chip above sits outside the core for exactly this reason and says
+ * so; this row is the second thing to learn it.
+ *
+ * Both live at once, so this is its own row rather than a state of the password
+ * one: "Place your finger…" has to sit UNDER the dots being typed, not replace
+ * them. Empty — so nothing is drawn — whenever the reader has nothing to say,
+ * which on a machine without one is always. Dimmer than the password row: it is
+ * the second way in.
+ *
+ * y=312 is in the CORE band's coordinates (the caller has translated), between
+ * the entry and the layout chip at LOCK_KBD_Y, and it clears the greeter's
+ * status line at 332 as well as the lock's own at 275.
+ */
+static void lock_draw_fp_row(syn_server_t *s, cairo_t *cr, double a)
+{
+    if (!s->nlock.fp_msg[0]) return;
+
+    cairo_text_extents_t te;
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 15);
+    syn_text_extents(cr, s->nlock.fp_msg, &te);
+    lock_set_ink(s, cr, 0.58, a);
+    cairo_move_to(cr, LOCK_PANEL_W / 2.0 - te.width / 2 - te.x_bearing, 312);
+    syn_show_text(cr, s->nlock.fp_msg);
+}
+
 static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
 {
     memset(&s->nlock.hit_prev,   0, sizeof(s->nlock.hit_prev));
@@ -896,8 +929,11 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     cairo_translate(cr, 0, LOCK_HEAD_H);
     lock_draw_core(s, cr);
     /* AFTER the core, and outside it: lock_draw_core returns early on the
-     * greeter's two-field block, and the chip is on that screen for the reason
-     * it exists at all. */
+     * greeter's two-field block, and both of these are on that screen for the
+     * reason they exist at all — the chip says which layout the password is
+     * going in as, and the row below says the reader is waiting. Anything that
+     * belongs on BOTH screens is called from here, not from the core. */
+    lock_draw_fp_row(s, cr, a);
     lock_draw_layout_chip(s, cr, a);
     cairo_restore(cr);
 
