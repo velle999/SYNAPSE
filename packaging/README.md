@@ -200,10 +200,42 @@ tools/publish-sources.sh --dry-run
 tools/publish-sources.sh             # create what is missing
 ```
 
-It refuses to run on a dirty tree: the tarball is built from the working tree,
+For each package it regenerates the repository, creates it on GitHub if it is
+missing, pushes it, and attaches the source release. ⛔ In that order: a release
+published for a version whose `PKGBUILD` was never pushed hands somebody a clone
+that fetches a tarball its own `PKGBUILD` does not name.
+
+It refuses to run on a dirty tree — the tarball is built from the working tree,
 so an uncommitted edit would ship inside an asset nobody can re-derive from its
-tag. Re-run it after any `pkgrel` bump — the new tag is a new release, and the
-old one stays valid for the `PKGBUILD` that pointed at it.
+tag.
+
+### ⛔ Re-run it after EVERY pkgrel bump that reaches `main`
+
+Not only at release time. The `PKGBUILD` composes its source URL from its own
+`pkgver`/`pkgrel`, which is what makes it unable to fetch a source it was not
+written against — and the cost of that is that **a bump which is committed and
+pushed but not published 404s for everybody who is not us**.
+
+⚠ **It cannot fail here, which is the whole problem.** `build-all.sh` drops the
+tarball beside the `PKGBUILD` and makepkg prefers it, so the URL is never
+exercised on this machine; the package builds, installs and runs perfectly while
+being uninstallable everywhere else. `--list` is the only thing that says so:
+
+```
+  syn-play       0.1.0-6    repo ok   published
+  synfiles       0.1.0-72   repo ok   not published     ← this one 404s
+```
+
+It is step 5 of *Cutting a release* in the top-level README, and idempotent, so
+running it after any build is safe.
+
+⚠ **`syn-cal` trips GitHub's push protection on a new repository.** Its
+`PKGBUILD` carries `_google_client_id` and `_google_client_secret` — a Google
+*desktop-app* client, which that file explains at length is public by design,
+with PKCE doing the real protection. If it ever needs a fresh repository, note
+that **the id and the secret are two separate allowances**: approving one still
+leaves the push rejected, and the second refusal names only the type still
+blocking, which reads like the first click failed rather than half-worked.
 
 ### Per-package git repositories
 

@@ -2071,6 +2071,18 @@ with no warning, and it only fails on a machine nobody here is sitting at.
    there), and no `libggml-cuda.so` in the squashfs.
 4. `archiso/publish-release.sh <version>` — it splits the ISO into 1900 MiB
    `.part*` files (GitHub caps assets at 2 GiB) and creates the release.
+5. **`tools/publish-sources.sh`** — the packages that install outside SynapseOS
+   ship their sources from their own repositories, and the `PKGBUILD` composes
+   that URL from its own `pkgver`/`pkgrel`. So a bump that is committed and
+   pushed but not published leaves that package **404ing for everybody who is
+   not us**, while building perfectly here — the local tarball is always
+   present on this machine, which is the whole reason the URL is never
+   exercised locally. `--list` says which are behind; the run itself is
+   idempotent and skips what is current.
+
+⚠ Step 5 is not only a release-time step. It belongs after **any** `pkgrel`
+bump that reaches `main`, release or not — see
+[`packaging/README.md`](packaging/README.md).
 
 ---
 
