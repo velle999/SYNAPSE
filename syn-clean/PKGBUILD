@@ -21,7 +21,7 @@
 # decisions in this code regardless, with the cost of N spawns on top.
 pkgname=syn-clean
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Free disk space, and destroy files you mean to destroy — caches, thumbnails, trash, secure delete"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -39,7 +39,27 @@ optdepends=('quickshell: the graphical window (syn-clean gui)'
             'pacman: counting orphaned packages'
             'synfiles: Destroy Permanently in the file manager right-click menu')
 
-source=("syn-clean-0.1.0.tar.gz")
+# ── Where the source comes from, here and everywhere else ──────────────────
+#
+# ⛔ ONE source LINE SERVES BOTH, AND THAT IS DELIBERATE. build-all.sh runs
+# tools/collect-source.sh, which drops $pkgname-$pkgver.tar.gz beside this file;
+# makepkg finds it (`-> Found ...`) and never touches the URL. Anybody WITHOUT
+# this checkout has no such file, so makepkg fetches the identical tarball from
+# the release that carries this exact pkgver-pkgrel. A second PKGBUILD for
+# outside use would be a second set of depends and install rules, free to drift
+# from this one — and the person it broke for could not see this file at all.
+#
+# ⚠ THE TAG CARRIES THE pkgrel, so the URL cannot point at the wrong source.
+# preflight.sh already refuses a source edit that does not bump pkgrel, which
+# means every change to what gets built moves this URL with it.
+#
+# ⛔ AND sha256sums STAYS 'SKIP'. A real checksum would break every LOCAL build
+# the moment somebody edited a source file, because the tarball beside this file
+# is regenerated from the working tree and would no longer match. The published
+# asset is reproducible instead — collect-source.sh sorts and zeroes the
+# timestamps, so `tools/collect-source.sh <name>` at the tagged commit
+# re-derives it byte for byte. packaging/README.md has the whole of it.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/SYNAPSE/releases/download/$pkgname-$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {

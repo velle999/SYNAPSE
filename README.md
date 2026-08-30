@@ -2017,6 +2017,33 @@ GPU package with a CPU one. Produce a staging tree with
 `sudo archiso/build.sh --gpu=cuda --llama-only`. It asks for `sudo` **up front**
 and then runs unattended.
 
+### Installing the desktop and its apps on plain Arch
+
+The desktop and the applications are packaged to be installed on an Arch machine
+that is not running SynapseOS. Every dependency except `scenefx0.5` is in Arch's
+own repositories, and each component is one `PKGBUILD`:
+
+```bash
+curl -LO https://github.com/velle999/SYNAPSE/raw/main/syn-play/PKGBUILD
+makepkg -si
+```
+
+`synui` installs a `wayland-sessions` entry, so any display manager offers it as
+a session. It also ships system-wide files — including `/etc/xdg/kdeglobals`,
+which re-themes every Qt and KDE application on the machine — so read
+[`packaging/README.md`](packaging/README.md) before installing it beside another
+desktop. The applications ship nothing outside their own namespace.
+
+Not in that set: `synapd`, `synapse-llama`, `synapse_kmod`, `synguard`,
+`syn-install` and `syn-update`, which assume they own the machine.
+
+`packaging/README.md` covers the whole of it — how one `source=()` line serves
+both this checkout and everybody else, `tools/publish-sources.sh`,
+`packaging/aur-export.sh`, and `packaging/cleanroom.sh`, which builds each
+component from its source tarball alone in an empty directory. That last one is
+the guard: a top-level directory missing from the tarball's allowlist is absent
+with no warning, and it only fails on a machine nobody here is sitting at.
+
 ### Cutting a release
 
 0. **`tools/preflight.sh`** — it refuses a commit that cannot ship. A source

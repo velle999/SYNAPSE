@@ -973,62 +973,35 @@ create_source_tarball() {
         return 0
     fi
 
-    # Collect directories/files that exist in the package
-    local items=()
-    [ -d "${pkg}/src" ]     && items+=("${pkg}/src/")
-    [ -d "${pkg}/include" ] && items+=("${pkg}/include/")
-    [ -f "${pkg}/meson.build" ] && items+=("${pkg}/meson.build")
-    [ -d "${pkg}/data" ]    && items+=("${pkg}/data/")
-    [ -d "${pkg}/config" ]  && items+=("${pkg}/config/")
-    [ -d "${pkg}/systemd" ] && items+=("${pkg}/systemd/")
-    [ -d "${pkg}/sysusers" ] && items+=("${pkg}/sysusers/")
-    [ -d "${pkg}/tmpfiles" ] && items+=("${pkg}/tmpfiles/")
-    [ -d "${pkg}/rules" ]   && items+=("${pkg}/rules/")
-    [ -d "${pkg}/protocols" ] && items+=("${pkg}/protocols/")
-    [ -d "${pkg}/tests" ]   && items+=("${pkg}/tests/")
-    # synapse_kmod extras
-    [ -f "${pkg}/Makefile" ]  && items+=("${pkg}/Makefile")
-    [ -f "${pkg}/dkms.conf" ] && items+=("${pkg}/dkms.conf")
-    [ -d "${pkg}/hooks" ]     && items+=("${pkg}/hooks/")
-    [ -d "${pkg}/tools" ]     && items+=("${pkg}/tools/")
-    [ -f "${pkg}/synapse_kmod.install" ] && items+=("${pkg}/synapse_kmod.install")
-    # vibe extras: a pure-Python app (entry point + package + launcher), not the
-    # src/include/meson layout the C packages use.
-    [ -f "${pkg}/main.py" ]    && items+=("${pkg}/main.py")
-    [ -d "${pkg}/vibe" ]       && items+=("${pkg}/vibe/")
-    [ -d "${pkg}/packaging" ]  && items+=("${pkg}/packaging/")
-    # Top-level docs: PKGBUILDs install them (synapse_kmod ships HARDENING.md to
-    # /usr/share/doc), so omitting them fails package() with "cannot stat".
-    # Globbed rather than named, because this collector is a SECOND COPY of the
-    # one in build-all.sh and the two drift: build-all.sh grew a HARDENING.md
-    # line and this one did not, so the ISO build broke the first time anyone
-    # cut a release after that file was added.
-    for _md in "${pkg}"/*.md; do
-        [ -f "$_md" ] && items+=("$_md")
-    done
-
-    if [[ ${#items[@]} -eq 0 ]]; then
-        warn "No source files found for ${pkg}"
-        return 1
+    # ⛔ ONE OWNER, AND THIS WAS THE THIRD COPY OF IT. The list of what goes
+    # into a source tarball lived here, in build-all.sh, and now also had to
+    # serve tools/publish-sources.sh — and the comments this replaces are a
+    # record of the same drift arriving twice: a *.md glob here that was a named
+    # HARDENING.md there, and an exclude fixed in one copy and not the other,
+    # each of them breaking a release. It lives in tools/collect-source.sh now.
+    #
+    # ⚠ AND IT MATTERS MORE THAN IT USED TO. A PKGBUILD's source=() now names a
+    # release URL after the local filename, so a collector that produced nothing
+    # would no longer stop the build — makepkg would DOWNLOAD the last published
+    # source and the ISO would ship something that is not this tree. Failing
+    # here is what keeps that impossible.
+    # ⚠ TWO KINDS OF "NO TARBALL", AND ONLY ONE IS A PROBLEM. collect-source.sh
+    # exits 2 when the component contributes no local sources at all — scenefx
+    # is the case: its source=() is an upstream URL and the filename half of it
+    # happens to match the guard above. Downloading is the RIGHT answer there.
+    # Exit 1 is our component with sources that could not be packed, and that
+    # must stop the build.
+    local crc=0
+    set +e
+    "${PROJECT_ROOT}/tools/collect-source.sh" "${pkg}" "${tarball}" >/dev/null
+    crc=$?
+    set -e
+    if [[ $crc -eq 2 ]]; then
+        log "${pkg}: no local sources to collect — its PKGBUILD fetches its own"
+        cd "${SCRIPT_DIR}"
+        return 0
     fi
-
-    # Exclude ONLY the versioned makepkg extraction dir, never the broad
-    # ${pkg}-* glob: that also matched real source files named ${pkg}-*
-    # (e.g. src/synui-lock-auth.c), silently dropping them from the tarball so
-    # the build failed with "File src/synui-lock-auth.c does not exist".
-    # build-all.sh's collector was already fixed this way; this copy drifted.
-    tar czf "${tarball}" \
-        --transform "s|^${pkg}/|${pkg}-${SYNAPSEOS_VERSION}/|" \
-        --exclude="${pkg}/src/${pkg}-${SYNAPSEOS_VERSION}" \
-        --exclude="${pkg}/pkg" \
-        --exclude="${pkg}/*.pkg.tar*" \
-        --exclude="${pkg}/*.tar.gz" \
-        --exclude="${pkg}/*.ko" \
-        --exclude="${pkg}/*.o" \
-        --exclude="${pkg}/*.mod*" \
-        --exclude="${pkg}/modules.order" \
-        --exclude="${pkg}/Module.symvers" \
-        "${items[@]}" 2>/dev/null
+    [[ $crc -eq 0 ]] || err "${pkg}: could not collect its source — refusing to build, because makepkg would silently fall back to the published tarball instead"
 
     ok "Source tarball: ${tarball}"
     cd "${SCRIPT_DIR}"

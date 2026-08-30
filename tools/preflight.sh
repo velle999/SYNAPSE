@@ -323,6 +323,8 @@ LISTS
         [ "$(read_array archiso/build.sh PACKAGES | wc -l)" -gt 5 ]
     st "build rules are findable"              expect-pass \
         [ "$(grep -cE '^build_(component|script_pkg|vendored_pkg) ' build-all.sh)" -gt 5 ]
+    st "publish-sources EXTERNAL is readable"  expect-pass \
+        [ "$(read_array tools/publish-sources.sh EXTERNAL | wc -l)" -gt 5 ]
 
     if [ "$st_fail" -gt 0 ]; then
         printf '\n%s%d self-test failure(s) — the checks below cannot be trusted%s\n' \
@@ -1099,16 +1101,20 @@ check_leavings() {
 # installed machine's syn-update died on it.
 check_tarball() {
     local c f bad=$FINDINGS n=0
+    # ⚠ THE ALLOWLIST MOVED, AND THIS CHECK HAS TO MOVE WITH IT. It lived inline
+    # in build-all.sh until tools/publish-sources.sh needed the same tarball for
+    # people without this checkout; both callers now go through
+    # tools/collect-source.sh, which is the one place the list exists.
     for f in meson_options.txt meson.options; do
-        grep -q "name/$f" build-all.sh || continue
+        grep -q "name/$f" tools/collect-source.sh || continue
         n=$((n + 1))
     done
     if [ "$n" -eq 0 ]; then
         fail tarball \
-            "build-all.sh collects no meson options file" \
+            "tools/collect-source.sh collects no meson options file" \
             "A component with meson_options.txt builds in its tree and fails" \
             "inside makepkg with \"Unknown option\", mid-update." \
-            "Fix: add it to the dirs list in build_component()."
+            "Fix: add it to the dirs list in tools/collect-source.sh."
         return 0
     fi
 
@@ -1141,6 +1147,88 @@ check_tarball() {
     return 0
 }
 
+# ── Check 12: buildable by somebody without this checkout ────
+#
+# Every in-house PKGBUILD builds from `$pkgname-$pkgver.tar.gz`, which
+# build-all.sh assembles from the working tree and .gitignore keeps out of the
+# repo. For a component nobody outside is meant to build, that is correct and
+# invisible. For one that IS meant to be built elsewhere it is fatal and equally
+# invisible: `makepkg` stops at "Retrieving sources" on a stock Arch box, and
+# nothing here can tell, because on THIS machine the file is always there.
+#
+# So the external set (tools/publish-sources.sh's EXTERNAL) and the source=()
+# lines have to agree, in both directions:
+#
+#   - a name in EXTERNAL whose source=() does not carry the release URL is an
+#     asset published where no PKGBUILD looks;
+#   - a PKGBUILD carrying the URL that is not in EXTERNAL is a package that
+#     404s for everybody outside this repo, because nothing publishes its
+#     source.
+#
+# ⛔ AND THE URL MUST CARRY THE pkgrel. The tag is <pkgname>-<pkgver>-<pkgrel>;
+# written any other way it goes stale on the next bump and silently serves the
+# previous source to everyone who is not us.
+#
+# ⚠ THE CLOSURE IS PART OF IT. synui depends on syntty, so publishing synui
+# alone gives an outsider a package they cannot install. A depend that is a
+# component of this repo has to be reachable too — either in EXTERNAL, or
+# self-sufficient already because its own source=() is an upstream URL
+# (scenefx0.5, which fetches from wlrfx/scenefx and needs nothing from here).
+check_external() {
+    local bad=$FINDINGS ext n=0 name ver rel want got dep
+    ext=$(read_array tools/publish-sources.sh EXTERNAL) || {
+        fail external             "tools/publish-sources.sh EXTERNAL is unreadable"             "Every check below would then compare two empty sets and pass."             "Fix: keep it a plain array literal."
+        return 0
+    }
+
+    for name in $ext; do
+        n=$((n + 1))
+        [ -f "$name/PKGBUILD" ] && continue
+        fail external "$name is in EXTERNAL but has no PKGBUILD"             "publish-sources.sh would fail on it, having already published"             "the components before it in the list."             "Fix: remove the name, or add the component."
+    done
+
+    for name in $ext; do
+        [ -f "$name/PKGBUILD" ] || continue
+        ver=$(pkgfield "$name" pkgver) || continue
+        rel=$(pkgfield "$name" pkgrel) || continue
+        want="https://github.com/velle999/SYNAPSE/releases/download/$name-$ver-$rel/$name-$ver.tar.gz"
+        got=$(pkgsources "$name" | grep -F "releases/download" || true)
+
+        if [ -z "$got" ]; then
+            fail external "$name/PKGBUILD has no release source"                 "It is in EXTERNAL, so its tarball is published — but the"                 "PKGBUILD names only the local filename, which exists on this"                 "machine and nowhere else. makepkg stops at \"Retrieving"                 "sources\" for everybody who is not us."                 "Fix: source=(\"\$pkgname-\$pkgver.tar.gz::$want\")"
+            continue
+        fi
+        case "$got" in
+            *"::$want") ;;
+            *) fail external "$name/PKGBUILD's release URL is not the one it needs"                    "want: $want"                    "got:  ${got#*::}"                    "A URL that does not carry pkgrel goes stale on the next"                    "bump and serves the PREVIOUS source, silently." ;;
+        esac
+        case "$got" in
+            "$name-$ver.tar.gz::"*) ;;
+            *) fail external "$name/PKGBUILD renames its local tarball"                    "The filename before :: is what makepkg looks for on disk,"                    "and collect-source.sh writes $name-$ver.tar.gz."                    "Written any other way, build-all.sh downloads instead of"                    "using the tree it just collected — so a local edit builds"                    "the RELEASED source and the change appears to do nothing." ;;
+        esac
+
+        # The closure.
+        for dep in $(pkgdeps "$name"); do
+            [ -f "$dep/PKGBUILD" ] || continue          # not ours; pacman's problem
+            printf '%s\n' $ext | grep -qx "$dep" && continue
+            pkgsources "$dep" | grep -qE '^[^:]*::https?://|^https?://' && continue
+            fail external "$name depends on $dep, which nothing publishes"                 "$dep is a component of this repo, is not in EXTERNAL, and its"                 "source=() is a local tarball — so an outsider can install"                 "$name's dependency from nowhere."                 "Fix: add $dep to EXTERNAL, or drop $name from it."
+        done
+    done
+
+    # The other direction.
+    local c
+    while IFS= read -r c; do
+        c=$(dirname "$c")
+        pkgsources "$c" | grep -qF "releases/download/$c-" || continue
+        printf '%s\n' $ext | grep -qx "$c" && continue
+        fail external "$c/PKGBUILD points at a release nothing publishes"             "Its source=() names a SYNAPSE release asset, but $c is not in"             "publish-sources.sh's EXTERNAL, so that asset is never created."             "Every build outside this checkout 404s."             "Fix: add $c to EXTERNAL."
+    done < <(git ls-files '*/PKGBUILD')
+
+    [ "$FINDINGS" -eq "$bad" ] && ok external         "$n component(s) buildable without this checkout — set, URLs and closure agree"
+    return 0
+}
+
 # ── Run ──────────────────────────────────────────────────────
 
 case "$MODE" in
@@ -1160,6 +1248,7 @@ check_uifont
 check_scrollbar
 check_leavings
 check_tarball
+check_external
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \

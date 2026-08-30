@@ -131,50 +131,12 @@ build_component() {
         return 0
     fi
 
-    cd "$BASE"
-
-    # Collect directories that exist
-    local dirs=()
-    [ -d "$name/src" ]     && dirs+=("$name/src/")
-    [ -d "$name/include" ] && dirs+=("$name/include/")
-    [ -f "$name/meson.build" ] && dirs+=("$name/meson.build")
-    # ⛔ THE OPTIONS FILE TRAVELS WITH meson.build. This list is an allowlist, so
-    # a file it does not name is simply absent from the tarball — and a
-    # meson.build calling get_option() for an option nothing defines fails at
-    # `meson setup` inside makepkg, long after the tree it was tested in built
-    # fine. syn-cal shipped a client id that way and the update died on
-    # `Unknown option`. preflight.sh gates this now.
-    [ -f "$name/meson_options.txt" ] && dirs+=("$name/meson_options.txt")
-    [ -f "$name/meson.options" ]     && dirs+=("$name/meson.options")
-    [ -d "$name/data" ]    && dirs+=("$name/data/")
-    [ -d "$name/config" ]  && dirs+=("$name/config/")
-    [ -d "$name/systemd" ] && dirs+=("$name/systemd/")
-    [ -d "$name/sysusers" ] && dirs+=("$name/sysusers/")
-    [ -d "$name/tmpfiles" ] && dirs+=("$name/tmpfiles/")
-    [ -d "$name/rules" ]   && dirs+=("$name/rules/")
-    [ -d "$name/protocols" ] && dirs+=("$name/protocols/")
-    [ -d "$name/tests" ]   && dirs+=("$name/tests/")
-    # synapse_kmod extras
-    [ -f "$name/Makefile" ]  && dirs+=("$name/Makefile")
-    [ -f "$name/dkms.conf" ] && dirs+=("$name/dkms.conf")
-    [ -d "$name/hooks" ]     && dirs+=("$name/hooks/")
-    [ -d "$name/tools" ]     && dirs+=("$name/tools/")
-    [ -f "$name/synapse_kmod.install" ] && dirs+=("$name/synapse_kmod.install")
-    [ -f "$name/HARDENING.md" ]         && dirs+=("$name/HARDENING.md")
-
-    tar czf "$name/$name-0.1.0.tar.gz" \
-        --transform "s|^$name/|$name-0.1.0/|" \
-        --exclude="$name/src/$name-0.1.0" \
-        --exclude="$name/pkg" \
-        --exclude="$name/src/pkg" \
-        --exclude="$name/*.pkg.tar*" \
-        --exclude="$name/*.tar.gz" \
-        --exclude="$name/*.ko" \
-        --exclude="$name/*.o" \
-        --exclude="$name/*.mod*" \
-        --exclude="$name/modules.order" \
-        --exclude="$name/Module.symvers" \
-        "${dirs[@]}" 2>/dev/null || true
+    # ⛔ ONE OWNER. The allowlist that decides what is IN this tarball lives in
+    # tools/collect-source.sh, because tools/publish-sources.sh has to assemble
+    # the byte-identical thing for people who do not have this checkout. Two
+    # copies of that list would ship a component here and not there, and the
+    # person who found out could see neither script.
+    "$BASE/tools/collect-source.sh" "$name" >/dev/null
 
     cd "$BASE/$name"
     makepkg -sf --noconfirm

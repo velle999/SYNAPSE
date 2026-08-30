@@ -209,3 +209,8 @@ archiso/out/*.b2sum
 synui/crash-*/
 synui/*-capture-*.log
 synui/cat.png
+
+# ── packaging/aur-export.sh output ──────────────────────────
+# Regenerated from the PKGBUILDs on demand; committing it would be a second
+# copy of every PKGBUILD, free to go stale against the one that is built.
+packaging/out/
