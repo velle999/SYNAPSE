@@ -101,8 +101,17 @@
  * under a second, and pam_fprintd's own default patience is 30. Deliberately
  * below that so a shortened timeout still reads as a timeout, and far above any
  * plausible match so a genuine rejection never does.
+ *
+ * ⚠ IT APPLIES TO EVERY "NO", NOT JUST PAM_AUTH_ERR. Which code pam_fprintd
+ * returns for "nobody swiped" depends on the driver: this box answers
+ * PAM_AUTHINFO_UNAVAIL, and reading that as "there is no reader here" is what
+ * retired it two minutes into every lock. The DURATION is the fact; the code
+ * only says which flavour of no.
  */
 #define FP_IDLE_SECS 10
+
+char fp_verdict(int rc, bool waited);
+static void emit_verdict(int rc, bool waited);
 
 /* Where Linux-PAM looks for a service: /etc/pam.d, and since 1.6 the vendor
  * fallback /usr/lib/pam.d. Both, because the package installs to the first and
@@ -254,30 +263,64 @@ int main(void)
 
     pam_end(pamh, rc);
 
+    emit_verdict(rc, waited);
+    return rc == PAM_SUCCESS ? 0 : 1;
+}
+
+/*
+ * ⛔ ONE FUNCTION, SO THE RULE CAN BE COMPILED AND ASSERTED ON.
+ *
+ * Which letter goes up the pipe is the whole retry policy, and it was wrong for
+ * a year inside a switch nothing could reach. tests/lock_fprint_verdict.sh
+ * builds this and feeds it every (code, duration) pair; a grep over the source
+ * cannot tell an unconditional R from a conditional one.
+ */
+char fp_verdict(int rc, bool waited)
+{
     /* "Unavailable" is anything that says the machine cannot do this at all, as
      * opposed to a finger that did not match. Retrying the former is a loop
      * that burns a fork per attempt and never succeeds; retrying the latter is
      * just letting the user swipe again. */
     switch (rc) {
     case PAM_SUCCESS:
-        emit("A\n", 2);
-        return 0;
+        return 'A';
     case PAM_AUTHINFO_UNAVAIL:
-        /* ⚠ NOT PROOF THAT THIS MACHINE HAS NO READER. The same code comes back
-         * from a device that is present but not yet usable — see the header.
-         * The lock decides how many times that is worth re-asking; this process
-         * only reports which kind of "no" it got. */
-        emit("R\n", 2);
-        return 1;
+        /*
+         * ⛔ AND `waited` DECIDES HERE TOO — THIS IS THE BRANCH THAT ACTUALLY
+         * FIRES ON THE THINKPAD.
+         *
+         * The timeout heuristic above was applied only to PAM_AUTH_ERR, and
+         * this reader does not answer with PAM_AUTH_ERR. Synaptics 06cb:00bd
+         * with fprintd 1.94.5 returns PAM_AUTHINFO_UNAVAIL after waiting its
+         * full ~30 seconds for a finger that never came — which fell straight
+         * through to an unconditional R, and four of those retire the reader
+         * for the rest of the lock. Measured across a day of locks on the
+         * ThinkPad: EVERY one logged "fingerprint off for this lock (reader
+         * never became available)" about 2m20s in, whether or not the machine
+         * ever suspended. Locking and swiping immediately worked every time,
+         * which is what made it look like the reader "was not there after
+         * standby" rather than a budget spent by nobody being in the room.
+         *
+         * ⚠ THE FAST CASE IS THE REAL ONE AND IS UNCHANGED. A machine whose
+         * device is missing, or whose fprintd has not come up yet, answers
+         * UNAVAIL in microseconds — pam_fprintd asks for a device list and gets
+         * nothing back. Only the answer that took half a minute is a person who
+         * did not swipe, and it must not be charged to the device.
+         */
+        return waited ? 'T' : 'R';
     case PAM_MODULE_UNKNOWN:         /* pam_fprintd.so not installed */
     case PAM_SYSTEM_ERR:
     case PAM_ABORT:
-        emit("U\n", 2);
-        return 1;
+        return 'U';
     default:                         /* PAM_AUTH_ERR, PAM_MAXTRIES, … */
         /* T: nobody presented a finger. Same "try again" as F, but it does not
          * spend the lock's patience — see FP_IDLE_SECS above. */
-        emit(waited ? "T\n" : "F\n", 2);
-        return 1;
+        return waited ? 'T' : 'F';
     }
+}
+
+static void emit_verdict(int rc, bool waited)
+{
+    char line[2] = { fp_verdict(rc, waited), '\n' };
+    emit(line, 2);
 }

@@ -7702,6 +7702,7 @@ int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint,
  * the click was nothing but the user arriving, which is all a click on this
  * screen used to be. */
 int  lock_handle_button(syn_server_t *s, double lx, double ly, uint32_t button);
+void lock_fprint_resume(syn_server_t *s);
 void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
 void lock_render(syn_server_t *s);               /* repaint panes (greeter reuses) */
 

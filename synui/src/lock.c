@@ -1486,6 +1486,56 @@ static void lock_fprint_stop(syn_server_t *s)
         s->nlock.fp_state = SYN_FP_IDLE;
 }
 
+/*
+ * ── The machine woke up ─────────────────────────────────────────────────────
+ *
+ * ⛔ A SUSPEND IS A DISCONTINUITY, AND EVERYTHING THE LOCK LEARNED BEFORE IT IS
+ * STALE.
+ *
+ * velle, 2026-08-30: "fingerprint reader not there after standby". Measured on
+ * the ThinkPad across a whole day of locks — every lock that was NOT followed
+ * by a suspend armed the reader and unlocked with a finger in about three
+ * seconds; every lock that sat through a suspend came back and was unlocked
+ * with the PASSWORD, and no `logind: resumed` was ever followed by fprintd
+ * starting again.
+ *
+ * The cause is that the retry budgets are per LOCK and a suspend does not start
+ * a new one. The screen locks, the reader is armed, nobody is there; pam_fprintd
+ * times out, the helper is re-forked, and after a couple of minutes of that the
+ * budget is spent and `fp_state` is SYN_FP_UNAVAIL — terminal for the rest of
+ * the lock. THEN the machine suspends. Hours later the lid opens onto the same
+ * lock object, with the same spent budget, and both re-arm sites are gated on
+ * SYN_FP_IDLE so neither the one-second tick nor `lock_notify_activity()` can
+ * do anything about it.
+ *
+ * ⚠ AND A KEYSTROKE CANNOT SAVE IT EITHER, which is why this reads as broken
+ * hardware rather than a timeout: the re-arm on activity has the same guard. A
+ * person opening the lid puts a finger on the reader without touching a key —
+ * which is the entire point of the feature — so nothing runs at all.
+ *
+ * So a resume starts the fingerprint over. Not merely "reset the counters":
+ * any helper still in flight is killed too, because it is blocked in a PAM
+ * conversation with an fprintd that has since exited, holding a claim on a USB
+ * device that has re-enumerated underneath it. Whether the state was stuck at
+ * RUNNING or retired to UNAVAIL, the answer after a suspend is the same one —
+ * none of it is true any more.
+ */
+void lock_fprint_resume(syn_server_t *s)
+{
+    if (!s->nlock.active) return;
+
+    lock_fprint_stop(s);              /* signals the helper; state → IDLE */
+    s->nlock.fp_state    = SYN_FP_IDLE;   /* …and out of UNAVAIL, which stop() keeps */
+    s->nlock.fp_fails    = 0;
+    s->nlock.fp_unavail  = 0;
+    /* ⚠ Now, not "now + a backoff". The person is at the machine with a finger
+     * already on the sensor; the next tick is the one that has to arm it. */
+    s->nlock.fp_retry_ms = lock_now_ms();
+    s->nlock.fp_msg[0]   = 0;
+    s->nlock.fp_rxlen    = 0;
+    wlr_log(WLR_INFO, "synui: lock: fingerprint re-armed after resume");
+}
+
 /* Give up on the reader for the rest of this lock. */
 static void lock_fprint_disable(syn_server_t *s, const char *why)
 {

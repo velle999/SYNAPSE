@@ -292,6 +292,15 @@ static int on_prepare_for_sleep(sd_bus_message *m, void *data, sd_bus_error *e)
          * the session is not locked; the bar's clock is already on screen. */
         lock_notify_activity(s);
 
+        /* ⛔ AND START THE FINGERPRINT OVER. The retry budgets are per lock and
+         * a suspend does not start a new one, so a screen that sat locked long
+         * enough to retire the reader comes back with it still retired — and
+         * both re-arm sites are gated on the state this clears. Measured on the
+         * ThinkPad: every lock that slept was unlocked with the password, and
+         * no resume was ever followed by fprintd starting. See
+         * lock_fprint_resume(). No-op when the session is not locked. */
+        lock_fprint_resume(s);
+
         /* A Workshop wallpaper does not survive a suspend: linux-wallpaperengine
          * loses its layer surfaces and cannot rebuild them, so the screen wakes
          * to whatever wallpaper.c paints underneath. Armed here as well as from

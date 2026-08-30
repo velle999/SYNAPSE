@@ -1639,6 +1639,17 @@ test('greeter_bg', greeter_bg_t,
 greeter_fp_t = find_program('tests/greeter_fprint.sh')
 test('greeter_fprint', greeter_fp_t, timeout : 60)
 
+# ⛔ The LOCK's reader, which is a different helper and a different fault. The
+# verdict letter is the whole retry policy and it was wrong inside a switch
+# nothing reached: `waited` — did this attempt take longer than a person takes
+# to swipe? — was consulted only on PAM_AUTH_ERR, while this hardware answers
+# PAM_AUTHINFO_UNAVAIL after its full 30s wait. Four of those retire the reader
+# for the lock, so nobody being in the room was charged to the device and every
+# lock lost its fingerprint about two minutes in. Compiles fp_verdict() out of
+# the real file and asks it; a grep cannot tell a conditional R from a bare one.
+lock_fp_t = find_program('tests/lock_fprint_verdict.sh')
+test('lock_fprint_verdict', lock_fp_t, timeout : 60)
+
 lock_layout_t = find_program('tests/lock_layout.sh')
 test('lock_layout', lock_layout_t,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],
