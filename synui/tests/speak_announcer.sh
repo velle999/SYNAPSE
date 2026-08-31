@@ -282,6 +282,66 @@ printf '  ..    engine reported: both=[%s] espeak-only=[%s] neither=[%s]\n' \
         this line has to be unambiguous, because the switch will turn on and
         the machine will stay silent."
 
+# ── 7. `stop` actually stops it, speaker AND the process making the noise ──
+#
+# ⛔ THIS WENT UNTESTED AND WAS BROKEN THE WHOLE TIME. speak() recorded `$!`
+# from a `setsid ... &`, which is the WRAPPER — setsid forks when it is already
+# a process-group leader — so the pid in the file had exited before anyone read
+# it and every `kill` hit a corpse. Nothing caught it because nothing had a
+# lifetime to stop: `vibe voice say` queued onto a daemon thread and returned in
+# milliseconds. So the two things to hold down are that the recorded pid is a
+# LIVE process, and that stopping it also takes the child with it — piper writes
+# a wav and hands it to aplay, and a signal aimed at the parent alone leaves
+# aplay playing to the end of the sentence.
+STOPDIR=$TMP/stop
+mkdir -p "$STOPDIR"
+# A speaker with the real shape: it outlives the call and it has a child doing
+# the actual work, which is what aplay is.
+cat > "$BIN/vibe" <<'EOF'
+#!/bin/sh
+sleep 60 &
+echo $! > "$SPEAK_CHILD"
+sleep 60
+EOF
+chmod +x "$BIN/vibe"
+export SPEAK_CHILD="$STOPDIR/child"
+
+SPEAK_RUN=$TMP/run
+XDG_RUNTIME_DIR=$SPEAK_RUN PATH="$BIN:$PATH" \
+    "$SPEAK" say "interrupt me" >/dev/null 2>&1
+for _ in $(seq 1 200); do [ -s "$SPEAK_RUN/syn-speak/pid" ] && break; sleep 0.02; done
+for _ in $(seq 1 200); do [ -s "$SPEAK_CHILD" ] && break; sleep 0.02; done
+
+SPID=$(cat "$SPEAK_RUN/syn-speak/pid" 2>/dev/null)
+CPID=$(cat "$SPEAK_CHILD" 2>/dev/null)
+
+if [ -n "$SPID" ] && kill -0 "$SPID" 2>/dev/null; then
+    ok "the pid it records is a live process, not the setsid wrapper"
+else
+    bad "the recorded pid [$SPID] is not running. This is the original bug: the
+        shell reports setsid's pid, setsid forks, and the number written to the
+        file belongs to a process that has already exited — so every stop is a
+        kill aimed at nothing, and it looks like it worked."
+fi
+
+XDG_RUNTIME_DIR=$SPEAK_RUN PATH="$BIN:$PATH" \
+    "$SPEAK" stop >/dev/null 2>&1
+sleep 0.4
+
+kill -0 "$SPID" 2>/dev/null \
+    && bad "after \`syn-speak stop\` the speaker [$SPID] is still running." \
+    || ok "stop reaps the speaker"
+
+if [ -n "$CPID" ] && kill -0 "$CPID" 2>/dev/null; then
+    bad "after \`syn-speak stop\` the speaker's child [$CPID] is STILL RUNNING.
+        That child is aplay in the real thing: the words keep coming out of the
+        speakers after the reader was switched off, and the next announcement
+        talks over this one. Signal the process GROUP, not the pid."
+    kill "$CPID" 2>/dev/null
+else
+    ok "...and the child doing the talking goes with it"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
     echo "PASS"

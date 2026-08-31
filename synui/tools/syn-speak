@@ -72,11 +72,49 @@ setval() {   # setval KEY VALUE
 # So a new utterance STOPS the one in progress, which is also what makes the
 # announcer usable — moving quickly between windows should leave you hearing
 # the one you landed on, not a queue of the ones you passed.
+# Start a speaker detached, and record the pid that can actually stop it.
+#
+# ⛔ `setsid cmd & ... $!` RECORDS THE WRONG PROCESS. setsid(1) forks whenever it
+# is already a process-group leader, and the pid the shell reports is then the
+# wrapper — which has exited by the time anybody reads the file. Every kill in
+# speak_stop went to a dead pid, for both speakers, for as long as this script
+# has existed. It was invisible because nothing had a lifetime to stop: `vibe
+# voice say` queued the words onto a daemon thread and exited in milliseconds,
+# so the speaker was always already gone. vibe 28 made it wait, and the bug
+# surfaced as an "off" that kept talking.
+#
+# The inner shell writes its own $$ and then execs, so that one number is the
+# speaker's pid whether or not setsid forked — and, because that shell is the
+# session leader, it is also the pgid of the group aplay joins. piper does not
+# make the noise itself: it writes a wav and hands it to aplay, a CHILD, which
+# survives any signal aimed at the parent alone.
+speak_spawn() {   # speak_spawn CMD [ARG...]
+    mkdir -p "$RUN"
+    # Cleared first: the file is written by the child now, so a stale pid left
+    # here would be a stop aimed at whatever inherited that number.
+    rm -f "$RUN/pid"
+    setsid sh -c 'echo $$ > "$1"; shift; exec "$@"' _ "$RUN/pid" "$@" \
+        >/dev/null 2>&1 < /dev/null &
+}
+
 speak_stop() {
     [ -f "$RUN/pid" ] || return 0
     local p; p=$(cat "$RUN/pid" 2>/dev/null)
     case $p in ''|*[!0-9]*) return 0 ;; esac
-    kill "$p" 2>/dev/null
+    # ⛔ THE GROUP, NOT THE PROCESS. Both speakers below are started under
+    # `setsid`, so each is a session and process-group leader whose pgid is this
+    # pid — and the thing actually making the noise is a CHILD of it: piper
+    # synthesises to a wav and hands it to aplay. Signalling $p alone reaps the
+    # parent and leaves aplay orphaned, playing on to the end of the sentence.
+    # That is an "off" that keeps talking and an announcer whose next window
+    # speaks over the last one, which is the failure this function exists to
+    # prevent.
+    #
+    # Invisible until vibe 28. Before it, `vibe voice say` queued the utterance
+    # onto a daemon thread and exited in milliseconds, so by the time anything
+    # called this the parent was already gone and there had never been a child
+    # to leave behind — the kill was a no-op that looked like it worked.
+    kill -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null
     rm -f "$RUN/pid"
 }
 
@@ -92,9 +130,7 @@ speak() {   # speak TEXT
     # not installed, not a second opinion.
     if have vibe; then
         speak_stop
-        mkdir -p "$RUN"
-        setsid vibe voice say "$text" >/dev/null 2>&1 < /dev/null &
-        printf '%s\n' "$!" > "$RUN/pid"
+        speak_spawn vibe voice say "$text"
         return 0
     fi
 
@@ -115,9 +151,7 @@ speak() {   # speak TEXT
     mkdir -p "$RUN"
     # Detached, output discarded: a caller may be a keybind with nowhere for
     # espeak's chatter to go, and a blocked write would leave the key stuck.
-    setsid "$TTS" -v "$voice" -s "$rate" -a "$amp" -- "$text" \
-        >/dev/null 2>&1 < /dev/null &
-    printf '%s\n' "$!" > "$RUN/pid"
+    speak_spawn "$TTS" -v "$voice" -s "$rate" -a "$amp" -- "$text"
 }
 
 # ---- what there is to say ------------------------------------------------

@@ -2681,6 +2681,27 @@ pkgver=0.1.0
 #   shell and points at the LIVE desktop, and quickshell's `synctl` children
 #   inherit it — the bar under test was polling the real machine and reporting
 #   its desktops. Every rig here now unsets it and exports the rig's own.
+# 565: stopping the reader left it talking.
+#   ⛔ `speak_stop` HAS NEVER STOPPED ANYTHING. speak() started its speaker as
+#   `setsid ... &` and recorded `$!` — but setsid(1) forks whenever it is already
+#   a process-group leader, so the number written to $RUN/pid belonged to a
+#   wrapper that had exited before anybody read it. Every kill went to a corpse
+#   and returned success. It stayed invisible because there was nothing to stop:
+#   `vibe voice say` queued the words onto a daemon thread and exited in
+#   milliseconds (fixed in vibe 28), so the speaker was always already gone.
+#   ⚠ THE SIGNAL GOES TO THE GROUP, NOT THE PROCESS. piper does not make the
+#   noise itself — it synthesises a wav and hands it to aplay, a CHILD — so even
+#   with the right pid, killing the parent alone leaves aplay playing to the end
+#   of the sentence. That is an `off` that keeps talking, and an announcer whose
+#   next window speaks over the last. Both speakers now go through speak_spawn(),
+#   where the inner shell writes its own $$ before exec'ing: one number that is
+#   the speaker's pid whether or not setsid forked, and the pgid of the group
+#   aplay joins. speak_stop signals `-$pid`, falling back to the bare pid.
+#   The test grew a phase 7 for it, with a stub speaker shaped like the real one
+#   — it outlives the call and it has a child — because the whole reason this
+#   lasted was that a stop which does nothing is indistinguishable from one that
+#   worked. It fails against the old script.
+#
 # 564: the screen reader's switch had nothing behind it.
 #   ⛔ `syn-speak on` HAS NEVER STARTED THE ANNOUNCER. It writes on=yes, says
 #   "Speech is on", and runs `systemctl --user enable --now syn-speak.service`
@@ -2711,7 +2732,7 @@ pkgver=0.1.0
 #   and without a display in the environment. Every voice candidate is stubbed —
 #   `vibe` first on PATH as well as espeak-ng, since the positive case has to
 #   stub them all or a real one speaks on the developer's session.
-pkgrel=564
+pkgrel=565
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
