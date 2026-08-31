@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=16
+pkgrel=17
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -192,10 +192,23 @@ build() {
     _pyver="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     msg2 "Vendoring python deps for python $_pyver"
 
+    # ⚠ --no-warn-conflicts, because this is a --target install and pip's
+    # conflict report is about a DIFFERENT environment. pip audits the system
+    # site-packages it is not installing into, and prints anything it dislikes
+    # there under an "ERROR:" prefix while exiting 0 — so an unrelated Arch
+    # mismatch (python-py7zr 1.1.3 wants pyppmd>=1.3.1; Arch ships 1.2.0, and
+    # only calibre pulls either in) shows up in the middle of every chibi build
+    # looking exactly like a build failure. It was reported as one the first
+    # time this package built through syn-update.
+    #
+    # ⛔ This silences the CONFLICT REPORT ONLY. A dependency pip cannot resolve
+    # for the packages actually being installed here is still a hard error and
+    # still fails the build.
     pip install \
         --target="$srcdir/pydeps" \
         --no-cache-dir \
         --no-compile \
+        --no-warn-conflicts \
         --upgrade \
         "${_pydeps[@]}"
 }
