@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # git-export.sh — each externally-installable component as its own git
-# repository, holding the PKGBUILD and a generated .SRCINFO.
+# repository, holding the PKGBUILD, a generated .SRCINFO and a README.
 #
 # ── Why one repo per package ────────────────────────────────────────────────
 #
@@ -102,6 +102,8 @@ for name in "${EXTERNAL[@]}"; do
     # sources the PKGBUILD, and several of ours read files beside them.
     ( cd "$BASE/$name" && makepkg --printsrcinfo ) > "$d/.SRCINFO"
 
+    ver=$( set +u; . "$BASE/$name/PKGBUILD" >/dev/null 2>&1; printf '%s-%s' "$pkgver" "$pkgrel" )
+
     # What a build leaves behind. Without this the first `makepkg -si` somebody
     # runs turns the clone dirty, and the next `git pull` refuses.
     cat > "$d/.gitignore" <<'IGN'
@@ -110,6 +112,53 @@ src/
 *.pkg.tar.zst
 *.tar.gz
 IGN
+
+    # ── the README that repository shows ────────────────────────────────────
+    #
+    # ⚠ ASSEMBLED, NOT COPIED. The prose is written once in
+    # packaging/readme/<name>.md; the version, the licence and the install
+    # lines are generated here — those are exactly the parts that go stale the
+    # moment a pkgrel moves and nobody thinks to re-read the paragraph around
+    # them. A component with no prose file still gets a README, off its
+    # pkgdesc, rather than the export failing over documentation.
+    #
+    # ⛔ AND THE PROSE LIVES IN packaging/, NOT BESIDE THE PKGBUILD.
+    # preflight.sh gates every edit inside <name>/ on a pkgrel bump, and it is
+    # right to: cliamp and fetch really do install a top-level README.md into
+    # /usr/share/doc, so for them a README edit DOES change the package. A
+    # README in the component directory would therefore either demand twelve
+    # version bumps for a typo, or need a blanket exemption that is wrong for
+    # those two. Keeping it here means the gate never has to be taught a
+    # special case.
+    # ⚠ Comma-joined: synui carries four licences and "GPL MIT Apache CC" run
+    # together reads as one long identifier rather than as a list.
+    lic=$( set +u; . "$BASE/$name/PKGBUILD" >/dev/null 2>&1
+           IFS=,; printf '%s' "${license[*]}" )
+    lic=${lic//,/, }
+    {
+        if [ -f "$BASE/packaging/readme/$name.md" ]; then
+            cat "$BASE/packaging/readme/$name.md"
+        else
+            desc=$( set +u; . "$BASE/$name/PKGBUILD" >/dev/null 2>&1
+                    printf '%s' "${pkgdesc:-}" )
+            printf '# %s\n\n%s\n' "$name" "${desc:-A SynapseOS component.}"
+        fi
+
+        printf '\n## Install\n\n'
+        printf '%s\n' '```bash'
+        printf 'git clone https://github.com/velle999/%s\n' "$name"
+        printf 'cd %s && makepkg -si\n' "$name"
+        printf '%s\n' '```'
+        printf '\n%s\n' 'makepkg fetches the source for this PKGBUILD'"'"'s exact version from this'
+        printf '%s\n' 'repository'"'"'s releases, so a clone can only ever build the source it was'
+        printf '%s\n' 'written against. `.SRCINFO` lists what it needs.'
+
+        printf '\n## Where this comes from\n\n'
+        printf '%s\n' 'Developed in [the SynapseOS monorepo](https://github.com/velle999/SYNAPSE),'
+        printf 'in `%s/`. **This repository is generated from it** — the PKGBUILD, a\n' "$name"
+        printf '%s\n' 'generated `.SRCINFO` and this README — so issues and patches belong there.'
+        printf '\n%s %s · %s\n' "$name" "$ver" "${lic:-GPL-2.0-or-later}"
+    } > "$d/README.md"
 
     if [ ! -d "$d/.git" ]; then
         git -C "$d" init -q -b main
@@ -134,8 +183,6 @@ IGN
             git -C "$d" remote add origin "$url"
         fi
     fi
-
-    ver=$( set +u; . "$BASE/$name/PKGBUILD" >/dev/null 2>&1; printf '%s-%s' "$pkgver" "$pkgrel" )
 
     git -C "$d" add -A
     if git -C "$d" diff --cached --quiet 2>/dev/null; then

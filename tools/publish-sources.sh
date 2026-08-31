@@ -40,6 +40,10 @@
 #   tools/publish-sources.sh                  # publish what is missing
 #   tools/publish-sources.sh --force syn-play # re-upload one, replacing the asset
 #
+# Every run also re-asserts each repository's TOPICS from the table below —
+# there is no separate command for it, and none is wanted: the table is the
+# answer, so applying it is not an occasion.
+#
 # SynapseOS Project — GPL-2.0-or-later
 # SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -68,6 +72,37 @@ EXTERNAL=(
     # the applications
     syn-cal syn-clean syn-disks syn-edit synfiles syn-play syn-settings
     synsh synstudio syn-vault
+)
+
+# ⚠ WHAT GITHUB CALLS TOPICS, AND THE ONLY PLACE THEY ARE WRITTEN DOWN.
+#
+# A repository holding one PKGBUILD is invisible without them: nobody browses
+# to `velle999/syn-vault`, they search for `gocryptfs` or `file-manager`. The
+# description is generated from pkgdesc and the homepage points back here;
+# these are the third thing GitHub indexes and the only one nothing else sets.
+#
+# ⛔ SET, NOT ADDED. This list replaces a repository's topics outright, so this
+# file stays the answer to "what is that repo tagged as" — `--add-topic` would
+# accumulate whatever anybody ever tried and never remove it.
+#
+# ⚠ GitHub's rules: lower case, digits and hyphens, starting with a letter or
+# digit, 35 characters each and at most 20 per repository. Anything else is
+# rejected for the WHOLE call, so a typo here loses every topic on that repo
+# rather than one.
+TOPICS_COMMON="synapseos linux arch-linux pkgbuild"
+declare -A TOPICS=(
+    [synui]="wayland wayland-compositor wlroots compositor desktop-environment scenefx"
+    [syntty]="terminal terminal-emulator wayland pty freetype"
+    [syn-cal]="calendar caldav google-calendar icalendar scheduling"
+    [syn-clean]="disk-cleanup cleaner shred secure-delete"
+    [syn-disks]="disk-utility partitioning filesystem smart udisks"
+    [syn-edit]="text-editor modal-editor vim-like syntax-highlighting"
+    [synfiles]="file-manager file-browser thumbnails gvfs"
+    [syn-play]="mpv media-player video-player music-player playlist"
+    [syn-settings]="settings control-panel system-configuration"
+    [synsh]="shell natural-language llm ai command-line"
+    [synstudio]="photo-editing video-editing raw-image color-grading darkroom"
+    [syn-vault]="encryption encrypted-filesystem gocryptfs fuse privacy"
 )
 
 dry=0; force=0; list=0; only=()
@@ -194,5 +229,34 @@ byte."
         printf '  published %-13s %s %s\n' "$name" "$repo" "$tag"
     fi
 done
+
+# ── topics, once every repository that needs one exists ─────────────────────
+#
+# ⚠ A PASS OF ITS OWN, because the loop above returns early for a component
+# whose release is already published — which is every component on almost
+# every run, and exactly the ones whose topics would then never be revisited.
+if [ "$list" -eq 0 ]; then
+    for name in "${EXTERNAL[@]}"; do
+        want "$name" || continue
+        repo="$OWNER/$name"
+        topics="$TOPICS_COMMON ${TOPICS[$name]:-}"
+
+        if [ "$dry" -eq 1 ]; then
+            printf '  topics    %-13s %s\n' "$name" "$topics"
+            continue
+        fi
+
+        gh repo view "$repo" >/dev/null 2>&1 || continue
+
+        args=()
+        for t in $topics; do args+=(-f "names[]=$t"); done
+        if gh api --method PUT "repos/$repo/topics" "${args[@]}" >/dev/null 2>&1; then
+            printf '  topics    %-13s %s\n' "$name" "$topics"
+        else
+            printf '  FAILED    %-13s topics rejected: %s\n' "$name" "$topics"
+            rc=1
+        fi
+    done
+fi
 
 exit $rc
