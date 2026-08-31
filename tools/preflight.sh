@@ -100,6 +100,14 @@ declare -A UNREGISTERED=(
     # TUs ported onto scenefx's own headers, see its PKGBUILD header), and git
     # history is a worse place to look for that than a directory. Deleting it
     # is a one-line change whenever that stops being true.
+    # FOR OUTSIDERS ONLY, and it must stay that way. It provides the
+    # synapse-llama name using Arch's llama-cpp and ggml, and CONFLICTS with the
+    # real synapse-llama — so on a SynapseOS machine it is not merely
+    # unnecessary, it is the wrong package. Putting it in a build list, on the
+    # ISO or in an installer roster would offer somebody a way to break their
+    # own AI stack. It is published, and nothing here installs it.
+    [synapse-llama-system]="for machines that are NOT SynapseOS: it maps Arch's llama-cpp/ggml onto the synapse-llama name and conflicts with the real one, so it belongs in no build list, no ISO and no installer roster"
+
     [scenefx]="retired: the 0.4 fork superseded by scenefx0.5; in no build list and installed nowhere, kept for the ported scene TUs its PKGBUILD documents"
 
 )
@@ -1220,6 +1228,20 @@ check_external_membership() {
     return 0
 }
 
+# Does some component in EXTERNAL provide <name>? Sourced rather than grepped,
+# because a provides array can be built in a case block — synapse-llama's is.
+provided_by_external() {  # provided_by_external <name> <external-list>
+    local want=$1 ext=$2 c p
+    for c in $ext; do
+        [ -f "$c/PKGBUILD" ] || continue
+        for p in $( set +u; . "$c/PKGBUILD" >/dev/null 2>&1
+                    printf '%s\n' "${provides[@]:-}" ); do
+            [ "${p%%[<=>]*}" = "$want" ] && return 0
+        done
+    done
+    return 1
+}
+
 check_external() {
     local bad=$FINDINGS ext n=0 name ver rel want got dep
     ext=$(read_array tools/publish-sources.sh EXTERNAL) || {
@@ -1240,6 +1262,15 @@ check_external() {
         want="https://github.com/velle999/$name/releases/download/$ver-$rel/$name-$ver.tar.gz"
         got=$(pkgsources "$name" | grep -F "releases/download" || true)
 
+        # ⚠ A PACKAGE WITH NO SOURCES AT ALL IS ALREADY BUILDABLE ANYWHERE.
+        # synapse-llama-system installs no files — it is a name and a set of
+        # dependencies — so there is nothing to fetch and nothing to publish
+        # but the PKGBUILD, which its repository carries. Demanding a release
+        # URL of it would be demanding a tarball of nothing.
+        if [ -z "$(pkgsources "$name")" ]; then
+            continue
+        fi
+
         if [ -z "$got" ]; then
             fail external "$name/PKGBUILD has no release source"                 "It is in EXTERNAL, so its tarball is published — but the"                 "PKGBUILD names only the local filename, which exists on this"                 "machine and nowhere else. makepkg stops at \"Retrieving"                 "sources\" for everybody who is not us."                 "Fix: source=(\"\$pkgname-\$pkgver.tar.gz::$want\")"
             continue
@@ -1258,6 +1289,13 @@ check_external() {
             [ -f "$dep/PKGBUILD" ] || continue          # not ours; pacman's problem
             printf '%s\n' $ext | grep -qx "$dep" && continue
             pkgsources "$dep" | grep -qE '^[^:]*::https?://|^https?://' && continue
+            # ⚠ A NAME CAN BE SATISFIED BY SOMETHING THAT IS NOT CALLED IT.
+            # synapd depends on synapse-llama, which is unpublishable — it is a
+            # staged ISO build. synapse-llama-system PROVIDES that name out of
+            # the distribution's own llama.cpp and IS published, so an outsider
+            # can install the dependency after all. Reading only package NAMES
+            # here would refuse a closure that pacman resolves perfectly well.
+            provided_by_external "$dep" "$ext" && continue
             fail external "$name depends on $dep, which nothing publishes"                 "$dep is a component of this repo, is not in EXTERNAL, and its"                 "source=() is a local tarball — so an outsider can install"                 "$name's dependency from nowhere."                 "Fix: add $dep to EXTERNAL, or drop $name from it."
         done
     done

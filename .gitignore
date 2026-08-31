@@ -46,6 +46,8 @@ syn-firstboot/src/
 syn-update/src/
 syn-install/src/
 syn-arsenal/src/
+# A metapackage: no sources, but makepkg still makes the directory.
+synapse-llama-system/src/
 # samsung-m2020 now DOWNLOADS Samsung's ULD tarball instead of vendoring it, so
 # src/ holds the extracted proprietary driver — every vendor PPD and binary in
 # the release, not just the four files this packages. Committing it is the exact

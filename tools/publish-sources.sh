@@ -74,6 +74,9 @@ EXTERNAL=(
     synsh synstudio syn-vault
     # packages, security and gaming — each installs and runs on plain Arch
     synpkg syn-arsenal syn-model syn-confine synguard syn-arcade syn-gfn
+    # the AI stack, and the package that lets a stranger satisfy it with the
+    # distribution's own llama.cpp instead of a tree only an ISO build stages
+    synapse-llama-system synapd synnet vibe
 )
 
 # ⛔ AND THE ONES THAT ARE DELIBERATELY NOT PUBLISHED, WITH THE REASON.
@@ -88,15 +91,12 @@ EXTERNAL=(
 # Resolving an entry means DELETING its line, exactly as the registration
 # table above works.
 declare -A NOT_EXTERNAL=(
-    [synapd]="needs a pinned llama.cpp build that is staged in this repo, not a dependency anybody can resolve"
-    [synapse-llama]="the pinned llama.cpp build itself — assembled from llama-staging/, which is a build output and not source"
+    [synapse-llama]="the pinned llama.cpp build itself — assembled from llama-staging/, which is a build output and not source; synapse-llama-system is what satisfies its name elsewhere"
     [synapse_kmod]="DKMS against a running kernel; it means something different on every machine and nothing on most"
     [syn-install]="installs SynapseOS onto a disk — it has no meaning on a machine that is not being turned into one"
     [syn-firstboot]="the first-boot wizard of a SynapseOS installation, for the same reason"
     [syn-update]="updates an installed SynapseOS from this very repository; publishing it would publish a second way to be out of date"
     [syn]="the unified CLI, which is a front end to the other syn-* tools and does nothing without them"
-    [synnet]="depends on synapd, which is not published — a clone would fetch a PKGBUILD it cannot satisfy"
-    [vibe]="the same: it depends on synapd"
     [synapse-wallpapers]="wallpaper assets with no source to build; they travel in the ISO"
     [scenefx]="retired fork, kept only for the scene TUs its PKGBUILD documents"
     [scenefx0.5]="already self-sufficient — its source=() fetches from wlrfx/scenefx upstream"
@@ -147,6 +147,10 @@ declare -A TOPICS=(
     [synguard]="security ebpf intrusion-detection monitoring"
     [syn-arcade]="gaming game-overlay controller mangohud"
     [syn-gfn]="cloud-gaming geforce-now gaming"
+    [synapd]="llm llama-cpp inference-server daemon ai"
+    [synnet]="firewall nftables network-security daemon"
+    [vibe]="ai coding-assistant agent llm cli"
+    [synapse-llama-system]="llama-cpp ggml meta-package ai"
 )
 
 dry=0; force=0; list=0; only=()
@@ -255,6 +259,17 @@ for name in "${EXTERNAL[@]}"; do
     # ── the source release, in that repository ──────────────────────────────
     #
     # ⚠ The repository is already current by here; this is only the asset.
+    #
+    # ⚠ AND SOME PACKAGES HAVE NO ASSET. synapse-llama-system installs no files;
+    # it is a name and a list of dependencies, so its repository is complete
+    # with the PKGBUILD alone and there is no tarball to attach. Publishing an
+    # empty one would be publishing a promise nothing keeps.
+    if [ -z "$(pkgfield "$name" source)" ]; then
+        printf '  ok        %-13s %s  (no sources — the PKGBUILD is the package)\n' \
+               "$name" "$repo"
+        continue
+    fi
+
     if [ -n "$have_rel" ] && [ "$force" -eq 0 ]; then
         printf '  ok        %-13s %s %s\n' "$name" "$repo" "$tag"
         continue

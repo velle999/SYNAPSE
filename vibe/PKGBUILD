@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=25
+pkgrel=26
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -45,7 +45,16 @@ optdepends=(
 
 # Built from the local working tree (the synapd backend is not upstream yet) via
 # packaging/build.sh, which tars main.py + the vibe/ package + the launcher.
-source=("vibe-0.1.0.tar.gz")
+# ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
+# what makepkg looks for on disk, so a build from this checkout uses the tarball
+# build-all.sh just collected and never downloads. The URL after it is for
+# everybody else, and it names <pkgver>-<pkgrel> because that tag is the only
+# thing that makes a published source unambiguously the one this PKGBUILD was
+# written against.
+#
+# ⛔ AND sha256sums STAYS 'SKIP' — a real checksum breaks every local build the
+# moment the tree changes, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 package() {

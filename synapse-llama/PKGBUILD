@@ -40,7 +40,7 @@
 _backend="${SYNAPSE_LLAMA_BACKEND:-cpu}"
 
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 # The upstream llama.cpp commit build.sh pins. Keep in sync with LLAMA_REF.
 _llama_ref=b10241
 arch=('x86_64')
@@ -79,6 +79,21 @@ vulkan)
     depends=('glibc' 'gcc-libs')
     ;;
 esac
+
+# ⛔ THESE ARE ARCH'S OWN FILES, AT ARCH'S OWN PATHS.
+#
+# Every backend of this package installs /usr/lib/libllama.so, /usr/lib/libggml.so,
+# /usr/include/llama.h, /usr/bin/llama-cli and a dozen more — the same paths
+# `extra/llama-cpp` and `extra/ggml` install. Nothing said so, so anybody who
+# installed either of those alongside it met a raw pacman FILE CONFLICT listing
+# a dozen paths, instead of being told plainly that two packages cannot both be
+# here. Declared for what it is: this package IS a llama.cpp and a ggml, and it
+# replaces rather than accompanies them.
+#
+# ⚠ Appended rather than set: the CPU case above declares neither, because for
+# it `synapse-llama` is its own name and not something it stands in for.
+provides+=('llama-cpp' 'ggml')
+conflicts+=('llama-cpp' 'ggml')
 
 package() {
     # Always resolve the BACKEND-NAMED dir, never the bare `llama-staging`

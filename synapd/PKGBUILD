@@ -29,7 +29,7 @@ pkgver=0.1.0
 #   ⚠ INVISIBLE ON ANY BOX THAT HAS EVER PICKED A MODEL BY HAND, because
 #   /var/lib/synapd/model.selected outranks the config — which is why it
 #   survived this long on the machine it was written on.
-pkgrel=48
+pkgrel=49
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -59,10 +59,26 @@ license=('GPL-2.0-or-later')
 # by absolute path and fails with "libggml-base.so.0.9.7 ... missing".
 #
 depends=('glibc' 'systemd-libs' 'gcc-libs' 'libgomp' 'synapse-llama' 'json-c')
+
+# ⚠ THE GPU HALF IS THE PROVIDER'S, NOT SYNAPD'S. On SynapseOS the backend is
+# baked into synapse-llama-<backend>; anywhere else ggml loads one out of
+# /usr/lib/ggml at run time, so naming them here is how somebody installing
+# synapse-llama-system finds out that CPU-only is a choice they can change.
+optdepends=('ggml-cuda: GPU offload on NVIDIA, with synapse-llama-system'
+            'ggml-vulkan: GPU offload on AMD and Intel, with synapse-llama-system')
 makedepends=('meson' 'ninja' 'gcc' 'pkg-config')
 backup=('etc/synapd/synapd.conf')
 install=synapd.install
-source=("synapd-0.1.0.tar.gz")
+# ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
+# what makepkg looks for on disk, so a build from this checkout uses the tarball
+# build-all.sh just collected and never downloads. The URL after it is for
+# everybody else, and it names <pkgver>-<pkgrel> because that tag is the only
+# thing that makes a published source unambiguously the one this PKGBUILD was
+# written against.
+#
+# ⛔ AND sha256sums STAYS 'SKIP' — a real checksum breaks every local build the
+# moment the tree changes, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 prepare() {
