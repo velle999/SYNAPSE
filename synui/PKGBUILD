@@ -2681,7 +2681,37 @@ pkgver=0.1.0
 #   shell and points at the LIVE desktop, and quickshell's `synctl` children
 #   inherit it — the bar under test was polling the real machine and reporting
 #   its desktops. Every rig here now unsets it and exports the rig's own.
-pkgrel=563
+# 564: the screen reader's switch had nothing behind it.
+#   ⛔ `syn-speak on` HAS NEVER STARTED THE ANNOUNCER. It writes on=yes, says
+#   "Speech is on", and runs `systemctl --user enable --now syn-speak.service`
+#   — a unit that was never written and never packaged. `unit_do` ends in
+#   `|| true` on purpose, so a box without systemd is not a broken install, and
+#   that swallowed the failure whole. Since 527 all three surfaces that offer
+#   this reported On and no window was ever announced: the Super+Shift+U
+#   keybind (528), synui's control panel row (530) and syn-settings ▸ Speech.
+#   `syn-speak status` said `on yes` too. Found writing the wiki page for it.
+#   ⚠ THE STATE FILE IS NOT THE ANNOUNCER. Everything downstream reads on=yes
+#   and is right to; what was missing is the process that acts on it. The unit
+#   ships now (systemd/syn-speak.service, WantedBy=default.target so the choice
+#   survives a login), Restart=on-failure rather than always — the loop returns
+#   0 the moment it reads on=no, and `always` would respawn a reader the user
+#   has just switched off.
+#   ⚠ AND A USER UNIT HAS NO WAYLAND_DISPLAY. Nothing here runs `systemctl
+#   --user import-environment`, so the announcer's synctl could not have found
+#   the compositor even with the unit in place — it would have polled in
+#   silence, which is the same symptom for a second reason. display_name()
+#   resolves $XDG_RUNTIME_DIR/synui-display, the name synui publishes and that
+#   synui-foot.service and synui-media-inhibit already read; an explicit
+#   WAYLAND_DISPLAY always wins, because that file names the LIVE desktop and a
+#   nested synui must not read the real session's windows out loud.
+#   tests/speak_announcer.sh pins both: the unit is shipped AND installed (read
+#   out of the sources, with the unit name taken from the script rather than
+#   typed, so the switch and the package cannot drift), and the loop actually
+#   speaks a focus change, once per change, stopping when switched off, with
+#   and without a display in the environment. Every voice candidate is stubbed —
+#   `vibe` first on PATH as well as espeak-ng, since the positive case has to
+#   stub them all or a real one speaks on the developer's session.
+pkgrel=564
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2854,6 +2884,15 @@ optdepends=(# Network printers: cups does the discovery (its own dnssd backend) 
             # nothing in it that glows should not pull in a lighting daemon,
             # and syn-rgb says which one is missing rather than doing nothing.
             'openrgb: put the desktop accent on RGB hardware (syn-rgb)'
+            # ⚠ THE SECOND VOICE, NOT THE FIRST. syn-speak speaks through
+            # `vibe voice say` where vibe is installed — chibi's piper — so the
+            # screen reader and the assistant sound like the same desktop and
+            # one place works out which engine this box has. espeak-ng is what
+            # is left when vibe is absent, which on an install that chose no AI
+            # stack is the only thing left; without either, the switch turns on
+            # and the machine stays silent. Not a hard depends: a desktop that
+            # never speaks should not carry a synthesiser.
+            'espeak-ng: the voice the screen reader falls back to where vibe is not installed (syn-speak)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
             # The music widget's LIBRARY half. Without it the widget is the
             # transport it shipped as — MPRIS, three buttons, whatever is
@@ -3123,6 +3162,10 @@ package() {
     # installed, so the screen reader and the assistant are one voice; espeak-ng
     # is the fallback, not a second engine.
     install -Dm755 tools/syn-speak "$pkgdir/usr/bin/syn-speak"
+    # ⛔ THE ANNOUNCER IS THE UNIT. `syn-speak on` enables it; shipping the
+    # script without it is a switch with nothing behind it — see 564.
+    install -Dm644 systemd/syn-speak.service \
+        "$pkgdir/usr/lib/systemd/user/syn-speak.service"
     install -Dm644 systemd/syn-rgb.service \
         "$pkgdir/usr/lib/systemd/user/syn-rgb.service"
     install -Dm644 systemd/syn-rgb.path \

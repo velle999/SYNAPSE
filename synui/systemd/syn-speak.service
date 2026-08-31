@@ -1,0 +1,37 @@
+[Unit]
+# The announcer half of syn-speak(1): the loop that watches which window has
+# focus and speaks it when it changes.
+#
+# ⛔ THIS UNIT IS THE FEATURE. `syn-speak on` writes on=yes and enables this;
+# without it the switch was a state file and a spoken confirmation with nothing
+# behind them — every surface reported On (the Super+Shift+U keybind, synui's
+# control panel, syn-settings ▸ Speech) and no window was ever announced,
+# because `unit_do` swallows a failed enable so that a box with no systemd is
+# not a broken install. A missing unit looked exactly like that.
+Description=SynapseOS screen reader (announce the focused window)
+Documentation=man:espeak-ng(1)
+
+# The compositor is what it asks about, and it asks through synctl. No
+# Requires: synui is started by greetd, not by a user unit, so there is nothing
+# here to depend ON — the announcer resolves the display itself (see
+# display_name() in syn-speak) and polls until one exists.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/syn-speak watch
+
+# ⚠ on-failure, NOT always. The loop returns 0 the moment it sees on=no, which
+# is how `syn-speak off` stops it even if the disable races the poll — and
+# `Restart=always` would fight that, respawning an announcer the user has just
+# switched off. A crash, on the other hand, must not silently end the reader
+# somebody is relying on to use the machine.
+Restart=on-failure
+RestartSec=3
+
+# Speech is not urgent and must never be the reason something else stutters.
+Nice=5
+
+[Install]
+# So it comes back at the next login. `syn-speak on` runs `enable --now`, and
+# the whole point of the state file is that the choice is remembered.
+WantedBy=default.target

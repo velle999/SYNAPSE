@@ -2345,6 +2345,20 @@ test('cascade_grid', cascade_grid,
 # whatever heads the stacking list — see the file for the report it comes from.
 # The phosphor hot core must saturate toward the phosphor's spectrum, not white
 # — the cream-highlight regression. No GPU needed; see the file for the limits.
+# The screen reader's SWITCH and its ANNOUNCER are two facts, and for four
+# pkgrels only the first existed: `syn-speak on` enabled a unit the package did
+# not ship, `unit_do`'s `|| true` swallowed the failure, and all three surfaces
+# reported On while nothing was ever announced. Asserts the unit is shipped and
+# installed, that the watch loop really speaks a focus change (every voice
+# candidate stubbed — a real one would talk out loud on the developer's
+# session), and that it resolves the display a user unit does not inherit.
+speak_announcer = find_program('tests/speak_announcer.sh')
+test('speak_announcer', speak_announcer,
+     args    : [meson.current_source_dir() / 'tools/syn-speak',
+                meson.current_source_dir() / 'systemd',
+                meson.current_source_dir() / 'PKGBUILD'],
+     timeout : 60)
+
 phosphor_tint = find_program('tests/phosphor_tint.sh')
 test('phosphor_tint', phosphor_tint,
      args    : [meson.current_source_dir() / 'src/effects.c',

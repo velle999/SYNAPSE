@@ -122,12 +122,45 @@ speak() {   # speak TEXT
 
 # ---- what there is to say ------------------------------------------------
 
+# Which Wayland display to ask.
+#
+# ⚠ A USER UNIT HAS NO WAYLAND_DISPLAY. Nothing in this session runs
+# `systemctl --user import-environment`, so the announcer started by
+# syn-speak.service inherits an environment in which `synctl` cannot find the
+# compositor — and synctl failing is indistinguishable, from here, from a
+# desktop with no focused window. The announcer would run, poll, and say
+# nothing, for ever.
+#
+# synui publishes the name for exactly this: $XDG_RUNTIME_DIR/synui-display,
+# which synui-foot.service and synui-media-inhibit already read. /tmp is the
+# fallback only where XDG_RUNTIME_DIR is unset (synui outside a session, i.e.
+# the test rigs), matching synui-media-inhibit.sh.
+#
+# ⛔ AN EXPLICIT WAYLAND_DISPLAY ALWAYS WINS, and is never overridden. A nested
+# or headless synui sets its own, while the published file still names the LIVE
+# desktop — preferring the file there would point the announcer at the session
+# somebody is actually using. Re-read per call rather than exported once, so a
+# compositor restart is picked up without restarting the announcer.
+display_name() {
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        printf '%s' "$WAYLAND_DISPLAY"
+        return 0
+    fi
+    local f=${XDG_RUNTIME_DIR:-}/synui-display
+    [ -n "${XDG_RUNTIME_DIR:-}" ] || f=/tmp/synui-display
+    [ -r "$f" ] || return 1
+    local d; d=$(tr -d '[:space:]' < "$f" 2>/dev/null)
+    [ -n "$d" ] || return 1
+    printf '%s' "$d"
+}
+
 # The focused window, as a sentence. Title first: it is what changed and what
 # identifies the window; the application is the fallback for a window that has
 # no title of its own, which is common enough on dialogs.
 window_line() {
     have "$SYNCTL" || return 1
-    "$SYNCTL" activewindow 2>/dev/null | python3 -c '
+    local disp; disp=$(display_name) || return 1
+    WAYLAND_DISPLAY=$disp "$SYNCTL" activewindow 2>/dev/null | python3 -c '
 import json, sys
 try:
     w = json.load(sys.stdin)
@@ -148,9 +181,10 @@ selection_text() {
     # The PRIMARY selection first — on a Wayland desktop that is what "the text
     # I just highlighted" means, and the clipboard is what was deliberately
     # copied. Both are worth speaking and they are different questions.
+    local disp; disp=$(display_name) || return 1
     if have wl-paste; then
-        wl-paste --primary --no-newline 2>/dev/null && return 0
-        wl-paste --no-newline 2>/dev/null && return 0
+        WAYLAND_DISPLAY=$disp wl-paste --primary --no-newline 2>/dev/null && return 0
+        WAYLAND_DISPLAY=$disp wl-paste --no-newline 2>/dev/null && return 0
     fi
     return 1
 }
@@ -176,6 +210,13 @@ watch_loop() {
     done
 }
 
+# ⛔ THE SWITCH AND THE THING IT SWITCHES ARE TWO SEPARATE FACTS, and for four
+# pkgrels only the first of them existed. `on` wrote on=yes, said "Speech is
+# on", and enabled a syn-speak.service that WAS NOT SHIPPED — the `|| true`
+# below swallowed the failure, so all three surfaces that offer this (the
+# keybind, synui's control panel, syn-settings) reported On and nothing was ever
+# announced. The state file is not the announcer; the unit is, and the unit has
+# to be in the package.
 unit_do() {   # unit_do enable|disable
     command -v systemctl >/dev/null 2>&1 || return 0
     systemctl --user "$1" --now syn-speak.service >/dev/null 2>&1 || true
@@ -215,7 +256,14 @@ case ${1:-status} in
             printf 'voice\t%s\n'    "$(getval voice en)"
             printf 'rate\t%s\n'     "$(getval rate 175)"
             printf 'volume\t%s\n'   "$(getval volume 100)"
-            printf 'engine\t%s\n'   "$(have "$TTS" && printf yes || printf no)"
+            # ⚠ WHICH voice, not "is espeak-ng here". This answered yes/no on
+            # $TTS alone, so a box speaking perfectly well through vibe's piper
+            # reported `engine no` — a working setup described as a broken one,
+            # which is the first line anybody reads when the reader is silent.
+            # The answer is the engine speak() would actually pick.
+            printf 'engine\t%s\n'   "$(have vibe && printf vibe \
+                                        || { have "$TTS" && printf '%s' "$TTS" \
+                                             || printf none; })"
             printf 'window\t%s\n'   "$(window_line || printf '-')" ;;
     -h|--help|help)
             say "syn-speak — the desktop, out loud"
