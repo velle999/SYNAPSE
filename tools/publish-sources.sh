@@ -169,23 +169,33 @@ for name in "${EXTERNAL[@]}"; do
         continue
     fi
 
-    if [ -n "$have_rel" ] && [ "$force" -eq 0 ]; then
-        printf '  ok        %-13s %s %s\n' "$name" "$repo" "$tag"
-        continue
-    fi
-
     if [ "$dry" -eq 1 ]; then
-        printf '  would     %-13s %s %s  <- %s%s\n' "$name" "$repo" "$tag" "$asset" \
-               "$([ -n "$have_repo" ] || echo '  (creating the repository)')"
+        if [ -n "$have_rel" ] && [ "$force" -eq 0 ]; then
+            printf '  would     %-13s %s  <- the repository; %s is published already\n' \
+                   "$name" "$repo" "$tag"
+        else
+            printf '  would     %-13s %s %s  <- %s%s\n' "$name" "$repo" "$tag" "$asset" \
+                   "$([ -n "$have_repo" ] || echo '  (creating the repository)')"
+        fi
         continue
     fi
 
-    # ── the package repository ──────────────────────────────────────────────
+    # ── the package repository, ON EVERY RUN ────────────────────────────────
     #
     # ⚠ REGENERATED FIRST, ALWAYS. The exported repo holds a COPY of the
     # PKGBUILD; publishing a release for a version whose PKGBUILD was never
     # pushed would give somebody a clone that fetches a tarball its own
     # PKGBUILD does not name.
+    #
+    # ⛔ AND PUSHED BEFORE THE RELEASE IS CONSIDERED, not after it is missing.
+    # This sat below the "already published" early return, so the tree only
+    # ever reached GitHub on a run that also had a release to upload — and a
+    # change to the tree ALONE has no release to upload by definition. Adding
+    # a README to all twelve therefore did nothing at all: every one printed
+    # `ok` and pushed nothing, and the repositories kept showing a bare
+    # PKGBUILD. Anything that is not the source tarball — the README, the
+    # .SRCINFO, an .install scriptlet — is published by this line or not at
+    # all.
     "$BASE/packaging/git-export.sh" "$name" >/dev/null
 
     d="$BASE/packaging/out/$name"
@@ -199,6 +209,12 @@ for name in "${EXTERNAL[@]}"; do
     git -C "$d" push -q --set-upstream origin main
 
     # ── the source release, in that repository ──────────────────────────────
+    #
+    # ⚠ The repository is already current by here; this is only the asset.
+    if [ -n "$have_rel" ] && [ "$force" -eq 0 ]; then
+        printf '  ok        %-13s %s %s\n' "$name" "$repo" "$tag"
+        continue
+    fi
     if [ -x "$BASE/$name/mktarball.sh" ]; then
         ( cd "$BASE/$name" && ./mktarball.sh >/dev/null )
     else
