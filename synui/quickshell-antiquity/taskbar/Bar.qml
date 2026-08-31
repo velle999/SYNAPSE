@@ -79,6 +79,10 @@ Scope {
 
                     Workspaces {
                         id: workspaces
+                        // Which pill is lit is this MONITOR's desktop under
+                        // workspace_mode = per-monitor; without the name every
+                        // bar would light the focused screen's.
+                        outName: modelData.name
                         anchors.leftMargin: 2
                         anchors.rightMargin: 0
                     }

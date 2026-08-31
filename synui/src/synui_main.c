@@ -63,6 +63,7 @@
 
 #include "synui.h"
 #include "effects.h"
+#include "cube.h"
 #include "kde_blur.h"
 
 /* ── Security context: which globals a sandboxed client may see ──── */
@@ -192,9 +193,17 @@ void synui_config_reload(syn_server_t *s)
      * frame, and the re-tile below damages the outputs anyway. */
     uifx_apply(s);
 
-    /* Re-tile the visible desktop (layout_apply covers every output) with the
-     * new gap/border. Hidden desktops re-flow on switch. */
-    layout_apply(s, server_active_workspace(s));
+    /* workspace_mode may have just changed, which changes WHICH desktops are
+     * visible — and under SHARED it drags every monitor back onto the desk's
+     * one desktop, so a session that had been split across screens comes back
+     * together instead of leaving windows on monitors nothing shows. Before
+     * the re-tile: layout_apply asks workspace_visible(). */
+    workspace_sync_visibility(s);
+    view_refresh_visibility(s);
+
+    /* Re-tile every visible desktop (layout_apply covers each output's share)
+     * with the new gap/border. Hidden desktops re-flow on switch. */
+    layout_apply_visible(s);
     /* Then re-apply every view's geometry: border_width/titlebar_height may
      * have changed, which moves the content box inside an unchanged frame. The
      * layout pass doesn't cover that for floating windows, and repainting the
@@ -229,11 +238,38 @@ syn_output_t *server_focused_output(syn_server_t *s)
     return NULL;
 }
 
+/*
+ * "The desktop I am on."
+ *
+ * Under SHARED there is exactly one and this is it. Under PER_OUTPUT every
+ * monitor has its own, and the one the user means is the one on the monitor
+ * they are looking at — so this follows the focus. Callers that mean a
+ * PARTICULAR monitor (occlusion, the dock's fullscreen rule, tiling) must ask
+ * output_active_workspace() instead; asking this one would answer about the
+ * focused screen while acting on another.
+ */
 syn_workspace_t *server_active_workspace(syn_server_t *s)
 {
+    if (s->config.workspace_mode == SYN_WS_MODE_PER_OUTPUT)
+        return output_active_workspace(s, server_focused_output(s));
+
     int idx = s->active_workspace;
     if (idx < 0 || idx >= WORKSPACE_MAX) idx = 0;
     return &s->workspaces[idx];
+}
+
+int output_workspace_index(syn_server_t *s, syn_output_t *o)
+{
+    if (!s) return 0;
+    int idx = (s->config.workspace_mode == SYN_WS_MODE_PER_OUTPUT && o)
+                  ? o->active_workspace : s->active_workspace;
+    if (idx < 0 || idx >= WORKSPACE_MAX) idx = 0;
+    return idx;
+}
+
+syn_workspace_t *output_active_workspace(syn_server_t *s, syn_output_t *o)
+{
+    return &s->workspaces[output_workspace_index(s, o)];
 }
 
 /* The monitor X11 should call primary (see xwayland_apply_primary). An
@@ -269,6 +305,80 @@ syn_output_t *server_primary_output(syn_server_t *s)
 int workspace_visible(syn_workspace_t *ws)
 {
     return ws && ws->visible;
+}
+
+int workspace_visible_on(syn_workspace_t *ws, syn_output_t *o)
+{
+    if (!ws) return 0;
+    /* No monitor named: the desk-wide answer, which is what every caller that
+     * predates per-monitor desktops was already getting. */
+    if (!o || !o->server) return ws->visible;
+    return ws->index == output_workspace_index(o->server, o);
+}
+
+/*
+ * ⚠ `v->workspace->visible` IS NOT THIS QUESTION, and the difference is the
+ * whole per-monitor feature. Under PER_OUTPUT desktop 2 can be visible — on
+ * the monitor next door — while the window in front of us lives on desktop 2's
+ * share of THIS screen, which is showing desktop 5. The workspace is visible;
+ * the window is not. Every show/hide decision has to ask about the monitor the
+ * window is actually on.
+ */
+bool view_workspace_shown(syn_view_t *v)
+{
+    if (!v || !v->workspace) return false;
+    syn_server_t *s = v->server;
+    if (!s) return v->workspace->visible;
+    if (s->config.workspace_mode != SYN_WS_MODE_PER_OUTPUT)
+        return v->workspace->index == s->active_workspace;
+    /* A view with no monitor yet (between new_surface and map) can only be
+     * answered desk-wide; it gets an output before anything draws it. */
+    if (!v->output) return v->workspace->visible;
+    return v->workspace->index == v->output->active_workspace;
+}
+
+/*
+ * `visible` is a CACHE of what the outputs are showing, and this is the one
+ * place that writes it. Deriving it on demand would mean walking the output
+ * list inside loops that run per window per frame; recomputing it whenever a
+ * monitor changes desktop (or the monitor list changes) costs a handful of
+ * assignments instead.
+ *
+ * Under SHARED it also drags every output's own field back into step, so
+ * turning per-monitor desktops ON starts from the truth — each monitor showing
+ * the desktop the whole desk was on — rather than from whatever those fields
+ * held the last time the mode was used.
+ */
+void workspace_sync_visibility(syn_server_t *s)
+{
+    if (!s) return;
+    for (int i = 0; i < WORKSPACE_MAX; i++)
+        s->workspaces[i].visible = 0;
+
+    int active = s->active_workspace;
+    if (active < 0 || active >= WORKSPACE_MAX) active = 0;
+
+    syn_output_t *o;
+    if (s->config.workspace_mode != SYN_WS_MODE_PER_OUTPUT) {
+        wl_list_for_each(o, &s->outputs, link)
+            o->active_workspace = active;
+        s->workspaces[active].visible = 1;
+        return;
+    }
+
+    int any = 0;
+    wl_list_for_each(o, &s->outputs, link) {
+        /* A detached screen is out of the layout and switched off — it shows
+         * nothing, and its windows have already been re-homed elsewhere. */
+        if (o->detached) continue;
+        int idx = o->active_workspace;
+        if (idx < 0 || idx >= WORKSPACE_MAX) idx = o->active_workspace = active;
+        s->workspaces[idx].visible = 1;
+        any = 1;
+    }
+    /* Headless startup, or every screen detached: something has to be the
+     * desktop, or a window mapped now would be hidden with no way back. */
+    if (!any) s->workspaces[active].visible = 1;
 }
 
 void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
@@ -674,10 +784,27 @@ static void output_frame(struct wl_listener *listener, void *data)
     /* effects.c commits whole-output damage by construction, so when it takes
      * the frame the request is already honoured — drop it rather than letting
      * it ride to some later plain commit. */
-    if (!effects_output_commit(output))
-        scene_commit_colour(output);
-    else
+    /*
+     * THE CUBE TAKES THE FRAME FIRST while a desktop turn is in flight, because
+     * it is not a filter over the scene — it draws the scene TWICE OVER, on two
+     * quads in perspective, and there is no order in which the CRT pass could
+     * also have the buffer. So the two are exclusive for the few hundred
+     * milliseconds a switch lasts: a CRT desktop that turns loses its scanlines
+     * for the length of the turn and gets them back when it lands. That is the
+     * honest trade, and the alternative (a second full-screen pass over the
+     * cube's output, every frame) costs more than the effect is worth.
+     *
+     * cube_output_commit() returns false the moment the turn is over OR fails,
+     * which is what puts the frame back on the ordinary path below — including
+     * the very frame the cube lands on, whose picture is identical either way.
+     */
+    if (cube_active(output) && cube_output_commit(output)) {
         output->damage_whole_pending = false;
+    } else if (!effects_output_commit(output)) {
+        scene_commit_colour(output);
+    } else {
+        output->damage_whole_pending = false;
+    }
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -706,6 +833,11 @@ static void output_destroy(struct wl_listener *listener, void *data)
     /* Close any layer surfaces (panels/bars) anchored to this output. */
     layer_output_destroy(output);
     effects_output_destroy(output);
+    /* Beside effects', and OUTSIDE the shutdown guard below for the same
+     * reason: a turn in flight holds a locked scene buffer and a swapchain, and
+     * a shutdown that skips this leaks both (which LeakSanitizer will say so
+     * about, loudly, on the next asan run). */
+    cube_output_destroy(output);
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
@@ -755,8 +887,15 @@ static void output_destroy(struct wl_listener *listener, void *data)
             wlr_log(WLR_INFO, "synui: %d window(s) re-homed from %s onto %s",
                     moved, output->wlr_output->name,
                     home ? home->wlr_output->name : "(no output left)");
-        if (home)
-            layout_apply(server, server_active_workspace(server));
+        /* This screen's desktop is no longer being shown by anyone, so the
+         * visible set has shrunk — and the windows just re-homed onto `home`
+         * are only on screen if `home` happens to be showing their desktop.
+         * Both answers change here, and both are read by the re-tile below. */
+        workspace_sync_visibility(server);
+        if (home) {
+            view_refresh_visibility(server);
+            layout_apply_visible(server);
+        }
     }
 
     /* The UI pin, cleared OUTSIDE the shutdown guard because this is about to be
@@ -806,6 +945,13 @@ static void server_new_output(struct wl_listener *listener, void *data)
     output->server = server;
     wlr_output->data = output;
     wl_list_init(&output->layer_surfaces);
+
+    /* A monitor plugged in mid-session joins the desk showing what the rest of
+     * it is showing — not desktop 1, which under per-monitor desktops would
+     * hand it a screen the user has to switch away from before it is useful.
+     * Under SHARED this is what workspace_sync_visibility() would set anyway;
+     * seeding here means the field is never read before that first sync. */
+    output->active_workspace = server->active_workspace;
 
     /* ⚠ -1 IS "NOT MEASURED" AND calloc GIVES 0.0, WHICH IS "BLACK". Every one
      * of these is filled before anything reads it in the ordinary case — the
@@ -868,6 +1014,10 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wl_signal_add(&wlr_output->events.frame, &output->frame);
 
     wl_list_insert(&server->outputs, &output->link);
+    /* The desktop this screen is showing is now part of the answer to "which
+     * workspaces are visible" — and under SHARED the sync is what pins its
+     * field to the desk's. */
+    workspace_sync_visibility(server);
 
     /* Ask once whether this connector can carry a 10-bit framebuffer, and once
      * what the monitor's EDID claims about HDR, so the display panel can show
@@ -916,7 +1066,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     wlr_log(WLR_INFO, "synui: new output %s %dx%d — showing workspace %d",
             wlr_output->name, wlr_output->width, wlr_output->height,
-            server->active_workspace + 1);
+            output_workspace_index(server, output) + 1);
 
     /* Seed the usable area (full box; no layer surfaces yet), then lay the
      * visible desktop out across every output (this one included) and re-home
@@ -929,7 +1079,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * first layout actually happens. */
     deskicons_layout(server);
     synui_render_deskicons(server);
-    layout_apply(server, server_active_workspace(server));
+    layout_apply_visible(server);
     if (server->overlay.visible)
         synui_render_overlay(server);
     if (server->cmdbar.visible)
@@ -1644,8 +1794,8 @@ static void handle_request_activate(struct wl_listener *listener, void *data)
 
     if (view->minimized)
         view_apply_minimized(s, view, 0);
-    if (view->workspace && !workspace_visible(view->workspace))
-        workspace_switch(s, view->workspace->index);
+    if (view->workspace && !view_workspace_shown(view))
+        workspace_switch_on(s, view->output, view->workspace->index);
 
     wlr_scene_node_raise_to_top(view_node(view));
     focus_view(s, view, view_surface(view));
@@ -2542,6 +2692,7 @@ void synui_destroy(syn_server_t *s)
     secfeed_stop(s);
     synmon_stop(s);
     effects_finish(s);
+    cube_finish(s);
     matrix_finish(s);
 
     /* Tear down Xwayland first so its surfaces/listeners are gone before we

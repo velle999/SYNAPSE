@@ -926,7 +926,7 @@ static bool point_over_window(syn_server_t *s, double lx, double ly)
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[wi].windows, link) {
             if (!v->mapped || v->minimized) continue;
-            if (v->workspace && !workspace_visible(v->workspace)) continue;
+            if (v->workspace && !view_workspace_shown(v)) continue;
             if (lx >= v->x && lx < v->x + v->w &&
                 ly >= v->y && ly < v->y + v->h)
                 return true;

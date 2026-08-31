@@ -143,9 +143,13 @@ Scope {
                     }
 
                     property int buttonCount: 3
-                    // Global, not per-screen: synui has one set of desktops that
-                    // every monitor switches together. See SynWorkspaces.qml.
+                    // The LIST is global — synui's desktops span the whole desk,
+                    // so every screen shows the same nine. Which one is LIT is
+                    // not: under workspace_mode = per-monitor each screen picks
+                    // its own. See SynWorkspaces.qml's focusedIdOn().
                     property var currentWorkspaces: SynWorkspaces.list
+                    readonly property int litId:
+                        SynWorkspaces.focusedIdOn(root.modelData ? root.modelData.name : "")
 
                     // The workspace "bar"
                     Repeater {
@@ -154,7 +158,7 @@ Scope {
 
                         delegate: Rectangle {
                             id: workspaceButtonRect
-                            property bool isActive: modelData.id == SynWorkspaces.focusedId
+                            property bool isActive: modelData.id == radialBarCurve.litId
                             width: 26
                             height: 26
                             radius: width / 2

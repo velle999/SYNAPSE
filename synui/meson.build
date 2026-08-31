@@ -280,6 +280,7 @@ synui_exe = executable('synui',
     'src/text.c',
     'src/contrast.c',
     'src/effects.c',
+    'src/cube.c',
     'src/wallpaper.c',
     'src/barscan.c',
   'src/palette.c',
@@ -1958,6 +1959,44 @@ test('ws_slide', ws_slide,
                 synctl_exe.full_path()],
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
+
+# The OTHER axis of a desktop switch: how many monitors it moves
+# (workspace_mode). Two headless outputs and a window on each, because the
+# failure this catches is not "the switch does nothing" but an unfocused monitor
+# quietly following along — which on a real desk looks like the feature working
+# until you glance at the second screen. The shared half is the control.
+ws_per_monitor = find_program('tests/ws_per_monitor.sh')
+test('ws_per_monitor', ws_per_monitor,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 180)
+
+# The cube (cube.c), which ws_slide.sh is blind to by construction: it is not a
+# per-window animation, so there is no draw offset and no alpha to read. What is
+# asserted instead is that it DREW (cube.c's per-turn DEBUG line counts frames;
+# zero means the driver refused and the switch fell back, which is a skip and not
+# a failure), that the outgoing desktop is disabled while still fully opaque, and
+# that a full turn each way lands PIXEL-IDENTICAL to where it started.
+ws_cube = find_program('tests/ws_cube.sh')
+test('ws_cube', ws_cube,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 180)
+
+# ...and the surface the user actually looks at: the bar's desktop pills, which
+# must light PER MONITOR. `synctl workspaces` marks a desktop visible when it is
+# up on ANY screen, so a bar reading that field lights every screen's desktop on
+# every screen — and the delegate is one stale binding away from lighting two at
+# once even with the right data. Neither failure logs anything, so this reads
+# rendered pixels off two headless bars.
+ws_bar_pills = find_program('tests/ws_bar_pills.sh')
+test('ws_bar_pills', ws_bar_pills,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe, synctl_exe],
+     timeout : 180)
 
 # The BAR's panels follow corner_radius, and a retro chrome squares them again.
 # Reads rendered pixels (grim + PIL) rather than a property, because the whole

@@ -284,7 +284,7 @@ void layer_arrange_output(syn_output_t *output)
      * unmapped. Reported 2026-08-12 as "windows in background resetting to
      * foreground when I change volume". */
     if (usable_changed && !s->shutting_down)
-        layout_apply(s, server_active_workspace(s));
+        layout_apply_visible(s);
 
     /* The desktop icon grid is sized against that same box, and the bar reserves
      * its strip *after* synui has started — quickshell is a client, so the very
@@ -321,7 +321,10 @@ void layer_update_occlusion(syn_server_t *s, syn_output_t *o)
 
     int hide = 0;
     syn_view_t *v;
-    wl_list_for_each(v, &server_active_workspace(s)->windows, link) {
+    /* The desktop THIS monitor is showing — the panels being uncovered are its
+     * panels, so a fullscreen window on the focused screen's desktop says
+     * nothing about them. */
+    wl_list_for_each(v, &output_active_workspace(s, o)->windows, link) {
         if (v->output != o) continue;   /* only this monitor's windows cover it */
         if (v->mapped && v->fullscreen && !v->minimized) { hide = 1; break; }
     }

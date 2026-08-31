@@ -75,7 +75,7 @@ static void ft_handle_activate(struct wl_listener *listener, void *data)
     syn_server_t *s = v->server;
     if (!v->mapped || s->locked) return;
 
-    if (v->workspace && !workspace_visible(v->workspace))
+    if (v->workspace && !view_workspace_shown(v))
         workspace_switch(s, v->workspace->index);
     focus_view(s, v, view_surface(v));
 }
@@ -110,7 +110,7 @@ static void ft_handle_minimize(struct wl_listener *listener, void *data)
     /* Restoring a window on a hidden workspace should bring it into view,
      * mirroring ft_handle_activate — otherwise "restore" would silently
      * un-hide a window nobody can see. */
-    if (!event->minimized && v->workspace && !workspace_visible(v->workspace))
+    if (!event->minimized && v->workspace && !view_workspace_shown(v))
         workspace_switch(v->server, v->workspace->index);
     view_apply_minimized(v->server, v, event->minimized);
 }

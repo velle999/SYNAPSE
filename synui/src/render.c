@@ -8821,7 +8821,7 @@ static void alttab_where(syn_server_t *s, syn_view_t *v, bool longform,
 {
     char ws[32] = "", mn[16] = "";
 
-    if (v->workspace && v->workspace->index != s->active_workspace)
+    if (v->workspace && !view_workspace_shown(v))
         snprintf(ws, sizeof ws, longform ? "Desktop %d" : "D%d",
                  v->workspace->index + 1);
     if (v->minimized)
@@ -9355,6 +9355,10 @@ void synui_render_overview(syn_server_t *s)
     for (int i = 0; i < WORKSPACE_MAX; i++) {
         int wx = ws[i].x - ox, wy = ws[i].y - oy;
         int ww = ws[i].width,  wh = ws[i].height;
+        /* "Active" in the strip means the desktop the user is standing on —
+         * the focused monitor's. Under per-monitor desktops the OTHER screens'
+         * desktops are on screen too, and `used` below already distinguishes
+         * them from the empty ones. */
         bool active = (i == s->active_workspace);
 
         /* Occupied desktops read differently from empty ones — that is what

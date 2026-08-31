@@ -647,14 +647,39 @@ static void anim_start(syn_view_t *view, int ms,
     if (!view->mapped) return;
 
     if (ms <= 0) {
+        /*
+         * ⚠ A HIDE IS A HIDE, WHATEVER ALPHA IT ENDED ON. This used to read
+         * `hide_when_done && alpha_to <= 0.0f`, which is only correct for the
+         * fade — the one style whose end state happens to be transparent. Every
+         * style that leaves the window SOLID and takes it away by other means
+         * fell straight through it and left the outgoing desktop's nodes
+         * enabled, so the desk you had just left stayed drawn on top of the one
+         * you switched to. It bit `cube` (whose windows must stay solid: they
+         * are inside the photograph being turned) and it was already latent for
+         * `slide` at anim_workspace_ms = 0, where the window would be left
+         * enabled AND shoved a screen-width sideways.
+         *
+         * The completion path in anim_tick has said "regardless of the alpha it
+         * ended on" since the slide landed; this is the same rule for the
+         * zero-length case, which is simply that path with no frames in it.
+         */
         view->alpha       = alpha_to;
         view->fade_active = 0;
+        if (hide_when_done) {
+            /* ...and end where completion ends: at rest. A disabled node keeps
+             * its offset, and anything that re-enables it without clearing that
+             * offset (an un-minimize, a switch back) would bring the window
+             * back beside itself. */
+            view->anim_dx = view->anim_dy = 0;
+            view_place_node(view);
+            anim_apply_alpha(view);
+            wlr_scene_node_set_enabled(view_node(view), false);
+            return;
+        }
         view->anim_dx     = dx_to;
         view->anim_dy     = dy_to;
         view_place_node(view);
         anim_apply_alpha(view);
-        if (hide_when_done && alpha_to <= 0.0f)
-            wlr_scene_node_set_enabled(view_node(view), false);
         return;
     }
 
@@ -741,6 +766,18 @@ void anim_workspace_hide(syn_view_t *view, int dir)
     case ANIM_WS_NONE:
         ms = 0;
         break;
+    case ANIM_WS_CUBE:
+        /* ⚠ THE CUBE IS NOT A PER-WINDOW STYLE, so this path does nothing but
+         * get out of the way. cube.c has already photographed this desktop and
+         * is about to turn that picture in 3D; the windows in the picture must
+         * be exactly as they were, so fading or sliding them here would fade
+         * and slide the FACE OF THE CUBE. Disabling the node on the spot (ms=0
+         * with the full-opacity end state) is right for the same reason: the
+         * outgoing desktop lives in the snapshot from here on, and the live
+         * scene needs to be the incoming one from the very first frame. */
+        ms = 0;
+        to = 1.0f;
+        break;
     case ANIM_WS_SLIDE:
         /* Switching UP (dir > 0) sends this desk off to the LEFT, the way a
          * pager reads. The windows keep full opacity: they are leaving, not
@@ -769,6 +806,12 @@ void anim_workspace_show(syn_view_t *view, int dir)
     switch (s->config.anim_workspace) {
     case ANIM_WS_NONE:
         ms = 0;
+        break;
+    case ANIM_WS_CUBE:
+        /* See hide(): the incoming desktop is the live scene the cube's second
+         * face samples, so it has to be whole and solid from frame one. */
+        ms = 0;
+        view->alpha = 1.0f;
         break;
     case ANIM_WS_SLIDE:
         /* The mirror of hide(): the incoming desk comes from the side the

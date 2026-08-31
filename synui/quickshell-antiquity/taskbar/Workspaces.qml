@@ -12,9 +12,16 @@ RowLayout {
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
 
-    // Every desktop, not this screen's — synui's workspaces are global, so
-    // there is no per-monitor set to filter down to. See SynWorkspaces.qml.
+    // Every desktop, not this screen's — synui's desktops span the whole desk,
+    // so there is no per-monitor set to filter down to. WHICH ONE IS LIT is
+    // per-screen though; see SynWorkspaces.qml's focusedIdOn().
     property var currentWorkspaces: SynWorkspaces.list
+
+    // The monitor this bar is on. Handed down by taskbar/Bar.qml, which has it
+    // as its Variants modelData; empty makes focusedIdOn fall back to the
+    // desk-wide answer, which is right on a single-monitor desk either way.
+    property string outName: ""
+    readonly property int litId: SynWorkspaces.focusedIdOn(workspaces.outName)
     Repeater {
         model: parent.currentWorkspaces
         Button {
@@ -45,7 +52,7 @@ RowLayout {
             // schema uniform, and is the one thing to bind if synui ever grows
             // an urgency hint.
             function getColor() {
-                if (modelData.id == SynWorkspaces.focusedId || mouse.hovered) {
+                if (modelData.id == workspaces.litId || mouse.hovered) {
                     return Config.colors.accent;
                 }
                 // barText, not text or textLight: these numerals sit on the

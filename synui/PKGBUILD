@@ -2587,7 +2587,101 @@ pkgver=0.1.0
 #   bitfields, verbatim. Every derived column was already telling the truth
 #   (pq=yes, image_description=yes, pq_lut=yes, sdr=no); the one fact that
 #   explained all four was the one not on the line.
-pkgrel=562
+# 563: the desktop cube, and desktops that can differ per monitor.
+#   Two things velle asked for together, and they are independent — one is how a
+#   switch LOOKS, the other is how many screens it moves.
+#
+#   `anim_workspace = cube` (Windows -> Desktop switch -> Cube). The desk turns
+#   about a vertical axis: the desktop you leave and the one you arrive at are
+#   two faces of a cube meeting at a right angle, on black, shaded so the corner
+#   between them reads, pulled back far enough that the turn fits on screen.
+#   ⚠ IT IS NOT A PER-WINDOW ANIMATION AND COULD NOT BE. Every other style moves
+#   scene nodes; a scene node translates and cannot rotate in perspective, so
+#   there is no arrangement of them that draws this. src/cube.c takes the frame
+#   instead, the way effects.c does for the CRT pass: it renders the scene into a
+#   private offscreen swapchain and draws it itself through a GLES2 program with
+#   a perspective vertex shader and two quads.
+#   The outgoing face is a PHOTOGRAPH — one scene render taken by cube_begin()
+#   before the switch hides anything — because only one desktop can be live in
+#   the scene graph at a time. Across a few hundred milliseconds of rotation a
+#   still is indistinguishable from a live face, and it costs one extra render
+#   for the whole turn instead of a second full one every frame. The order is
+#   load-bearing: cube_begin() is ws_switch_core()'s FIRST act, since a desktop
+#   whose windows are already disabled photographs as bare wallpaper.
+#   The projection is the identity at theta = 0 (f = CUBE_DIST - 1, and the
+#   pull-back's sin(2|theta|) is zero at both ends), so the first and last frames
+#   of the turn are pixel-identical to no animation at all — which is what allows
+#   it to be armed on every switch. tests/ws_cube.sh asserts exactly that with
+#   grim: a full turn each way comes back to the same pixels.
+#   It costs the CRT pass for the length of the turn — the two cannot both have
+#   the frame — and any failure (no shader, no buffer) ends the turn and falls
+#   through to the ordinary commit, so the worst case is a switch that did not
+#   animate, never a black screen. Wants 400-600ms; 140 is too short to read.
+#
+#   ⛔ AND IT FOUND A LATENT BUG IN anim.c. anim_start's zero-length branch
+#   disabled the node only `if (hide_when_done && alpha_to <= 0.0f)` — correct
+#   for the fade, the one style whose end state is transparent. The cube's
+#   windows must stay SOLID (they are inside the photograph being turned), so
+#   they fell through it and the desktop you had just left stayed drawn on top of
+#   the one you switched to. Already latent for `slide` at anim_workspace_ms = 0,
+#   which would leave a window enabled AND shoved a screen-width sideways.
+#   anim_tick's completion path has said "regardless of the alpha it ended on"
+#   since the slide landed; the zero-length case is that path with no frames in
+#   it, and now says the same thing.
+#   ⚠ The turn is about the VIEWER'S vertical axis, which on a 90/270 monitor is
+#   not the buffer's: the scene renders with the output transform already baked
+#   in, so a cube built straight out of buffer coordinates rolls like a drum on a
+#   portrait screen. The shader works in screen coordinates and maps back on its
+#   last line — the same test effects.c makes for its scanlines. Verified on a
+#   headless output with transform=1.
+#
+#   `workspace_mode = per-monitor` (Windows -> Desktops span). Each screen
+#   remembers the desktop it is showing and Super+2 moves only the monitor the
+#   focus is on. Default stays `shared`.
+#   ⚠ THIS IS NOT THE OLD PER-OUTPUT MODEL COMING BACK. That one (ROADMAP phase
+#   K, removed at pkgrel 70) had each workspace OWNED by a monitor, which on a
+#   three-monitor desk permanently claimed desktops 1/2/3 — one per screen — so
+#   Super+1 on the screen already showing 1 hit an early-out and did nothing and
+#   Super+2 only warped the cursor. The three numbers a user reaches for first
+#   were the three that could not work.
+#   Here a workspace is still a desk-wide window list that nothing owns; an
+#   output merely CHOOSES an index to look at, and two monitors showing desktop 2
+#   at once is legal — each draws its own share of it. So `switch this monitor to
+#   i` always does what it says, and SHARED is the same model with every output
+#   pinned to one index rather than a different model.
+#   The invariant that carries it is `view_workspace_shown()`: a window is on
+#   screen iff the monitor IT lives on is showing ITS desktop. `ws->visible` is
+#   not that question and every site that asked it has been moved over — under
+#   per-monitor, desktop 2 can be visible next door while the window in front of
+#   you is on this screen's share of it.
+#   `synctl outputs` reports each screen's "workspace", which is the only
+#   external view of the split (`activeworkspace` answers about the focused
+#   screen alone and cannot tell a monitor that moved from one that did not).
+#   tests/ws_per_monitor.sh runs two headless outputs with a window on each; its
+#   assertions are about the output that was NOT switched, because the failure
+#   here is not "the switch does nothing" but an unfocused monitor quietly
+#   following along — which looks like the feature working until you glance at
+#   the second screen.
+#
+#   ⚠ AND THE BAR'S PILLS ARE A SECOND, SEPARATE ANSWER. `visible` means "up on
+#   SOME monitor", so under per-monitor both bars lit both screens' desktops. The
+#   row carries `outputs` now — the monitors showing it, by name — and BOTH
+#   shipped bars read it: quickshell/modules/Workspaces.qml and Antiquity's
+#   SynWorkspaces.focusedIdOn(). Under `shared` that is every monitor for exactly
+#   one desktop, so the two modes read identically and there is no branch.
+#   ⛔ AND THE OBVIOUS SPELLING IS A STALE BINDING. `active: shownHere(modelData)`
+#   reads nothing QML can watch — modelData is a plain JS object — so each pill
+#   kept the first answer it was given and the screen that moved lit its old
+#   desktop AND its new one. Fixed by resolving a `litId` property that reads
+#   root.workspaces (which the poll reassigns) and comparing ids in the delegate.
+#   It renders and does not log, so tests/ws_bar_pills.sh reads PIXELS off two
+#   headless bars: how many pills are filled, and where. Verified to fail on the
+#   `visible` spelling before being kept.
+#   ⛔ That rig also found how easily one leaks: SYNUI_SOCKET is set in this
+#   shell and points at the LIVE desktop, and quickshell's `synctl` children
+#   inherit it — the bar under test was polling the real machine and reporting
+#   its desktops. Every rig here now unsets it and exports the rig's own.
+pkgrel=563
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

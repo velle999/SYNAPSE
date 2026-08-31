@@ -20,14 +20,19 @@ import Quickshell.Io
  * would mean three `synctl` forks every 400ms, three times per monitor.
  *
  * THE SEMANTIC DIFFERENCE, and why the port is not a rename:
- * Hyprland scopes a workspace to a monitor, so upstream filtered the list by
+ * Hyprland scopes a workspace to a monitor, so upstream filtered the LIST by
  * `w.monitor.name == screen.name` and each bar showed only its own screen's
- * desktops. synui's workspaces span ALL monitors at once — switching moves
- * every screen together, and `synctl workspaces` has no monitor field to
- * filter on because the concept does not exist. So the filter is GONE rather
- * than reimplemented: every bar shows the same nine desktops, which is what
- * they actually are. Reintroducing a per-screen filter here would mean
- * inventing a partition the compositor does not have.
+ * desktops. synui's desktops span the whole desk — the same nine exist on every
+ * monitor — so that filter is GONE rather than reimplemented: every bar shows
+ * all nine, which is what they actually are.
+ *
+ * ⚠ WHICH ONE IS LIT is a different question, and it IS per-screen. Under
+ * `workspace_mode = per-monitor` each monitor chooses the desktop it shows, so
+ * more than one row comes back `visible` and a bar reading that alone would
+ * light every screen's desktop on every screen. Each row now carries `outputs`
+ * — the monitors showing that desktop, by name — and `focusedIdOn(name)` is the
+ * question a bar should ask. Under `shared` it answers exactly what `focusedId`
+ * always did, because there `outputs` is every monitor for one desktop.
  */
 Singleton {
     id: root
@@ -35,13 +40,35 @@ Singleton {
     // Last good list. Deliberately not cleared on a failed parse — see below.
     property var list: []
 
-    // The visible desktop. synui marks exactly one `visible`, so this is a
-    // derived fact rather than a second query. -1 while the first poll is
-    // still in flight, which no delegate should ever match.
+    // The desk-wide answer: the first desktop that is up anywhere. Correct on
+    // its own only while every monitor shows the same one — kept for callers
+    // with no screen in hand, and as focusedIdOn's fallback. -1 while the first
+    // poll is still in flight, which no delegate should ever match.
     readonly property int focusedId: {
         for (const w of root.list)
             if (w.visible === true)
                 return w.id
+        return -1
+    }
+
+    /*
+     * The desktop MONITOR `name` is showing. This is what a bar wants: under
+     * per-monitor desktops `focusedId` would light the same pill on every screen
+     * regardless of which one that desktop is actually on.
+     *
+     * Falls back to focusedId for an empty name, and for a compositor too old to
+     * send `outputs` at all — in which case there is only ever one visible
+     * desktop and the two answers are the same.
+     */
+    function focusedIdOn(name: string): int {
+        if (!name)
+            return root.focusedId
+        for (const w of root.list) {
+            if (!Array.isArray(w.outputs))
+                return root.focusedId
+            if (w.outputs.indexOf(name) >= 0)
+                return w.id
+        }
         return -1
     }
 

@@ -88,6 +88,11 @@ void synui_spawn(const char *cmd) { snprintf(spawned, sizeof(spawned), "%s", cmd
  * assertion that dragging around the desktop never turns into a file drag. */
 static bool promoted;
 int workspace_visible(syn_workspace_t *ws) { (void)ws; return 1; }
+/* Per-monitor desktops. These say "everything is on screen, on the one
+ * desktop", which is the state every assertion in this file is written
+ * against — the dock's own behaviour is what is under test, not which
+ * monitor is showing what. */
+bool view_workspace_shown(syn_view_t *v)                 { (void)v; return true; }
 bool deskdrag_start(syn_server_t *s, const char *path)
 {
     (void)s; (void)path;

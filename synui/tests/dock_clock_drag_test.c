@@ -131,6 +131,15 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *v, int on)
 void focus_view(syn_server_t *s, syn_view_t *v, struct wlr_surface *surf)
 { (void)s; (void)v; (void)surf; }
 int workspace_visible(syn_workspace_t *ws) { (void)ws; return 1; }
+/* Per-monitor desktops. These say "everything is on screen, on the one
+ * desktop", which is the state every assertion in this file is written
+ * against — the dock's own behaviour is what is under test, not which
+ * monitor is showing what. */
+bool view_workspace_shown(syn_view_t *v)                 { (void)v; return true; }
+syn_workspace_t *output_active_workspace(syn_server_t *s, syn_output_t *o)
+{ (void)o; return server_active_workspace(s); }
+void workspace_switch_on(syn_server_t *s, syn_output_t *o, int i)
+{ (void)s; (void)o; (void)i; }
 void workspace_switch(syn_server_t *s, int idx) { (void)s; (void)idx; }
 /* Only reached by dock_output_fullscreen(), which walks the active desk looking
  * for a fullscreen window to tuck the dock under. Workspace 0's window list is

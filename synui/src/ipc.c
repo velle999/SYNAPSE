@@ -430,8 +430,26 @@ static void cmd_workspaces(syn_server_t *s, ipc_buf_t *b)
         bjson_str(b, ws->name);
         bputs(b, ",\"layout\":");
         bjson_str(b, layout_name(ws->layout));
-        bprintf(b, ",\"windows\":%d,\"visible\":%s}",
+        /* `visible` is "shown on at least one monitor" — under per-monitor
+         * desktops several are true at once, which is the point. Which is also
+         * why it is no longer enough on its own: a bar asking "am I the desktop
+         * this screen is on" gets a yes from every desktop that is up anywhere.
+         * `outputs` is that question answered — the monitors showing this
+         * desktop, by name, empty when none are. Under `shared` it is every
+         * connected monitor for exactly one workspace and empty for the rest,
+         * so a consumer can read it the same way in both modes. */
+        bprintf(b, ",\"windows\":%d,\"visible\":%s,\"outputs\":[",
                 n, workspace_visible(ws) ? "true" : "false");
+        int first_o = 1;
+        syn_output_t *o;
+        wl_list_for_each(o, &s->outputs, link) {
+            if (o->detached) continue;
+            if (output_workspace_index(s, o) != w) continue;
+            if (!first_o) bputs(b, ",");
+            first_o = 0;
+            bjson_str(b, o->wlr_output->name);
+        }
+        bputs(b, "]}");
     }
     bputs(b, "]\n");
 }
@@ -616,6 +634,13 @@ static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
         bprintf(b, ",\"primary\":%s", o == primary ? "true" : "false");
         bprintf(b, ",\"focused\":%s",
                 o == server_focused_output(s) ? "true" : "false");
+        /* Which desktop this screen is showing. Under `workspace_mode =
+         * shared` every output answers the same number and this is redundant;
+         * under per-monitor it is the ONLY way to see the split from outside —
+         * `activeworkspace` answers about the focused screen alone, so a test
+         * (or a bar) reading it could not tell a second monitor that moved from
+         * one that did not. */
+        bprintf(b, ",\"workspace\":%d", output_workspace_index(s, o) + 1);
         bputs(b, "}");
     }
     bputs(b, "]\n");

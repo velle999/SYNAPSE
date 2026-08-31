@@ -1138,7 +1138,9 @@ static bool dock_output_fullscreen(syn_output_t *o)
 {
     syn_server_t *s = o->server;
     syn_view_t *v;
-    wl_list_for_each(v, &server_active_workspace(s)->windows, link) {
+    /* THIS monitor's desktop, not the desk's — under per-monitor desktops the
+     * focused screen may be showing a game while this one is not. */
+    wl_list_for_each(v, &output_active_workspace(s, o)->windows, link) {
         if (v->output != o) continue;
         if (v->mapped && v->fullscreen && !v->minimized) return true;
     }
@@ -2883,9 +2885,11 @@ void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
         return;
     }
 
-    /* Restore and focus both need the app's workspace on screen. */
-    if (ws_ref->workspace && !workspace_visible(ws_ref->workspace))
-        workspace_switch(s, ws_ref->workspace->index);
+    /* Restore and focus both need the app's workspace on screen — on ITS
+     * monitor. Under per-monitor desktops switching the focused screen would
+     * show that desktop's share HERE, which is not where the window is. */
+    if (ws_ref->workspace && !view_workspace_shown(ws_ref))
+        workspace_switch_on(s, ws_ref->output, ws_ref->workspace->index);
 
     /* Any hidden instance → raise the group. Restoring *every* minimized window,
      * not just one, is what keeps a duplicate from being stranded; the last one

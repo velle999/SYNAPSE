@@ -511,14 +511,20 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
 static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
 {
     int n = 0;
-    int lo = 0, hi = WORKSPACE_MAX;
-    if (!s->config.alt_tab_all_desktops)
-        lo = s->active_workspace, hi = lo + 1;
 
-    for (int w = lo; w < hi && n < max; w++) {
+    /* ⚠ THE SCOPE IS "ON SCREEN", NOT "WORKSPACE N". It used to be a range of
+     * workspace indices — [active, active+1) — which is the same thing only
+     * while every monitor shows the same desktop. Under per-monitor desktops it
+     * is not: two screens can be on 2 and 5, and a range would hide half of
+     * what the user is looking at from Alt-Tab. view_workspace_shown() asks the
+     * question that is right in both modes, per window, against the monitor
+     * that window actually lives on. */
+    for (int w = 0; w < WORKSPACE_MAX && n < max; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link) {
             if (!v->mapped) continue;
+            if (!s->config.alt_tab_all_desktops && !view_workspace_shown(v))
+                continue;
             if (!v->minimized || s->config.alt_tab_minimized) {
                 if (n >= max) break;
                 out[n++] = v;
@@ -545,7 +551,8 @@ static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
             if (v->mapped || v->override_redirect) continue;
             if (!v->minimized || !v->xsurface) continue;
             if (!v->workspace) continue;
-            if (v->workspace->index < lo || v->workspace->index >= hi) continue;
+            if (!s->config.alt_tab_all_desktops && !view_workspace_shown(v))
+                continue;
             out[n++] = v;
         }
     }
@@ -570,8 +577,8 @@ static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
  * keyboard to something that is not on screen. */
 static bool alttab_view_onscreen(syn_server_t *s, syn_view_t *v)
 {
-    return !v->minimized && v->workspace &&
-           v->workspace->index == s->active_workspace;
+    (void)s;
+    return !v->minimized && view_workspace_shown(v);
 }
 
 /* Bring `v` out to where it can be used, whatever that takes, and focus it.
@@ -588,8 +595,11 @@ static void alttab_reveal(syn_server_t *s, syn_view_t *v)
     /* Desktop first: view_apply_minimized() only actually shows a window whose
      * workspace is visible, so restoring before switching would leave the node
      * disabled and the window minimized-in-fact on arrival. */
-    if (v->workspace && v->workspace->index != s->active_workspace)
-        workspace_switch(s, v->workspace->index);
+    /* On the monitor the window LIVES on, not the focused one: under
+     * per-monitor desktops switching the screen in front of us to that desktop
+     * would show its share of it — which is not where this window is. */
+    if (v->workspace && !view_workspace_shown(v))
+        workspace_switch_on(s, v->output, v->workspace->index);
 
     /* An X11 window that minimised itself is UNMAPPED: there is no buffer to
      * raise and no surface to hand the keyboard to. All that can be done is
@@ -1186,8 +1196,8 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                  * the screen exactly as it was. */
                 if (hit->minimized)
                     view_apply_minimized(s, hit, 0);
-                if (hit->workspace && !workspace_visible(hit->workspace))
-                    workspace_switch(s, hit->workspace->index);
+                if (hit->workspace && !view_workspace_shown(hit))
+                    workspace_switch_on(s, hit->output, hit->workspace->index);
                 focus_view(s, hit, view_surface(hit));
             }
         }

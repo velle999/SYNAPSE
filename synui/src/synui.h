@@ -151,8 +151,45 @@ typedef enum {
     ANIM_WS_NONE = 0,      /* the desktop is simply the other one now         */
     ANIM_WS_FADE,          /* outgoing windows fade out, incoming fade in     */
     ANIM_WS_SLIDE,         /* both desks slide, in the direction you switched */
+    /*
+     * CUBE is not a per-window style at all, and that is why it sits apart
+     * from the two above. The other styles move each window's frame node; a
+     * cube has to turn the WHOLE SCREEN in perspective, which the scene graph
+     * cannot express (a scene node translates; it does not rotate in 3D). So
+     * cube.c takes the frame instead: it snapshots the outgoing desktop, lets
+     * the scene render the incoming one, and draws both as two faces of a cube
+     * through its own GLES2 pass. anim.c therefore treats CUBE as "no per-window
+     * animation" — the windows are already inside the picture being turned, and
+     * fading them as well would fade the faces of the cube.
+     */
+    ANIM_WS_CUBE,          /* the desk turns: two faces of a cube, in 3D      */
     ANIM_WS_COUNT,         /* keep last                                       */
 } syn_anim_ws_t;
+
+/*
+ * Which monitors a desktop switch moves.
+ *
+ * SHARED is the model synui has always had: a workspace is a virtual desktop
+ * spanning the whole desk (KDE/GNOME/Windows), so Super+2 moves every monitor
+ * at once. PER_OUTPUT makes the CHOICE per monitor instead — each screen
+ * remembers which desktop it is showing, and Super+2 moves only the one the
+ * focus is on, leaving the others where they were.
+ *
+ * ⚠ What does NOT change is what a workspace IS. Its window list still spans
+ * every monitor, and each window still records the monitor it sits on
+ * (syn_view::output). PER_OUTPUT only removes the rule that every output must
+ * be looking at the same index; two outputs showing desktop 2 at once is a
+ * legal state, and each of them draws its own share of it. That is what keeps
+ * this a generalisation of SHARED rather than the old per-output model — the
+ * one where each workspace was OWNED by a monitor, which is what made Super+1
+ * a silent no-op on a three-monitor desk (see workspace_switch_on).
+ */
+typedef enum {
+    SYN_WS_MODE_SHARED = 0,   /* one desktop across every monitor            */
+    SYN_WS_MODE_PER_OUTPUT,   /* each monitor picks its own                  */
+    SYN_WS_MODE_COUNT,        /* keep last                                   */
+} syn_ws_mode_t;
+extern const char *const syn_ws_mode_names[SYN_WS_MODE_COUNT];
 
 /* Shared by both events: an animation system whose halves decay differently
  * reads as two systems. Order matches ctl_names_anim_curve[] and the spellings
@@ -513,6 +550,8 @@ typedef struct syn_keyboard syn_keyboard_t;
 
 struct wlr_swapchain;   /* render/swapchain.h — only referenced by pointer */
 struct syn_effects;     /* effects.c private state */
+struct syn_cube;        /* cube.c per-output turn state */
+struct syn_cube_gl;     /* cube.c shared GL state (programs + EGL context) */
 
 /* ── AI request / response ───────────────────────────────── */
 typedef struct {
@@ -1802,6 +1841,7 @@ typedef enum {
     CTL_ROW_ANIM_WORKSPACE,
     CTL_ROW_ANIM_WORKSPACE_MS,
     CTL_ROW_ANIM_CURVE,
+    CTL_ROW_WORKSPACE_MODE,    /* does a desktop switch move one monitor or all */
     CTL_ROW_MASTER_FACTOR,
     CTL_ROW_CASCADE_STACK, /* windows per pile in LAYOUT_CASCADE */
     CTL_ROW_FOCUS_MODE,
@@ -1959,6 +1999,11 @@ typedef enum {
     CTL_APPLY_DESKICONS, /* redraw the desktop icon grid                  */
     CTL_APPLY_WALLPAPER, /* repaint every output's wallpaper              */
     CTL_APPLY_WPACCENT,  /* re-resolve the accent off the wallpaper       */
+    /* workspace_mode: the set of VISIBLE desktops has just changed, which is
+     * not something a re-tile can discover on its own — the nodes have to be
+     * re-enabled/disabled against each monitor's desktop first, or turning the
+     * mode off leaves windows shown on screens nothing is looking at. */
+    CTL_APPLY_WSMODE,
 } syn_ctl_apply_t;
 
 /* What activating a row does. The distinction is not cosmetic: only CTL_KIND_PANEL
@@ -3667,6 +3712,10 @@ typedef struct {
     int   anim_workspace;      /* syn_anim_ws_t                              */
     int   anim_curve;          /* syn_anim_curve_t, shared by both           */
     int   anim_rise_px;        /* how far ANIM_WINDOW_RISE travels           */
+
+    /* synuirc workspace_mode (default shared): does a desktop switch move the
+     * whole desk, or only the monitor the focus is on? syn_ws_mode_t. */
+    int   workspace_mode;
 
     int   titlebar_height;
 
@@ -5505,13 +5554,21 @@ typedef struct {
  * whole desk. Exactly one workspace is visible at a time.
  *
  * `layout` and `master_factor` are per-desktop, not per-monitor: every output
- * showing this desktop tiles the same way. */
+ * showing this desktop tiles the same way.
+ *
+ * Under config.workspace_mode == SYN_WS_MODE_PER_OUTPUT each monitor picks its
+ * own desktop, so MORE THAN ONE workspace can be visible at a time — but a
+ * workspace is still one desk-wide window list, and each output that shows it
+ * draws only the windows whose syn_view::output is that monitor. */
 struct syn_workspace {
     int              index;
     char             name[WORKSPACE_NAME_LEN];
     char             intent[256];
     syn_layout_t     layout;
-    int              visible;        /* == (index == server->active_workspace) */
+    /* Shown on AT LEAST ONE output. Under SHARED that is the same thing as
+     * `index == server->active_workspace`; under PER_OUTPUT it is not, and
+     * workspace_visible_on() is the question to ask about one monitor. */
+    int              visible;
     float            master_factor;  /* master column width, 0.10–0.90 */
     struct wl_list   windows;   /* syn_view_t::link — across all outputs */
 };
@@ -5860,6 +5917,20 @@ struct syn_output {
      * moved with Shift+arrows in the display panel. */
     int                      grid_x, grid_y;
 
+    /*
+     * Which virtual desktop this monitor is showing.
+     *
+     * Only consulted under config.workspace_mode == SYN_WS_MODE_PER_OUTPUT;
+     * under SHARED every output shows server::active_workspace and this field
+     * is kept equal to it, so nothing has to ask which mode it is in — read it
+     * through output_workspace_index(), which answers for both.
+     *
+     * Seeded to the server's current desktop when the output appears, so a
+     * monitor plugged in mid-session joins the desk showing what the others
+     * are, rather than an empty desktop 1.
+     */
+    int                      active_workspace;
+
     /* The "primary" monitor, in the X11 RandR sense: the one Xwayland
      * reports with the primary flag. Wayland has no such concept, but X11
      * toolkits do — SDL puts the primary output first in its display list,
@@ -5967,6 +6038,12 @@ struct syn_output {
     /* effects.c: offscreen swapchain the scene renders into when the GLES
      * post-process pass is active (NULL until first effects frame). */
     struct wlr_swapchain    *fx_swapchain;
+
+    /* cube.c: the desktop turn in flight on this monitor, or NULL. Allocated
+     * on the switch that starts it and freed when it lands, so an idle desk
+     * carries no snapshot buffers — a full-screen texture per output is not
+     * something to hold for the 99.9% of the session that is not turning. */
+    struct syn_cube         *cube;
 
     /* hdr.c: what this output's colour pipeline was last COMMITTED with — the
      * night light temperature, the LUT length it was built at, whether the
@@ -6289,6 +6366,7 @@ struct syn_server {
     struct wlr_renderer        *renderer;
     struct wlr_allocator       *allocator;
     struct syn_effects         *effects;   /* GLES post-process (effects.c); NULL = unavailable */
+    struct syn_cube_gl         *cube_gl;   /* cube.c programs + EGL ctx; NULL until first turn */
     struct wlr_compositor      *compositor;
     struct wlr_scene           *scene;
     struct wlr_scene_output_layout *scene_layout;
@@ -7564,7 +7642,25 @@ syn_output_t *server_primary_output(syn_server_t *s);
 /* The workspace on the focused output (never NULL; falls back to ws 0). */
 syn_workspace_t *server_active_workspace(syn_server_t *s);
 /* Is this workspace currently shown on its output? */
+/* Shown on at least one monitor. Under SHARED that is "it is the active
+ * desktop"; under PER_OUTPUT several workspaces answer true at once. */
 int workspace_visible(syn_workspace_t *ws);
+/* Shown on THIS monitor. The per-output question, and the one every visibility
+ * decision about a particular window ends up asking. */
+int workspace_visible_on(syn_workspace_t *ws, syn_output_t *o);
+/* Which desktop `o` is showing (server::active_workspace under SHARED). NULL
+ * output answers with the server's, so callers with no monitor in hand still
+ * get the desk-wide answer they used to get. */
+int output_workspace_index(syn_server_t *s, syn_output_t *o);
+syn_workspace_t *output_active_workspace(syn_server_t *s, syn_output_t *o);
+/* Is this window on a desktop that is on screen right now, on ITS monitor?
+ * The one predicate that is correct in both modes — `v->workspace->visible` is
+ * not, because under PER_OUTPUT a workspace can be visible on some OTHER
+ * screen than the one the window lives on. */
+bool view_workspace_shown(syn_view_t *v);
+/* Recompute every workspace's `visible` from what the outputs are showing.
+ * Call after anything that changes an output's desktop, or the output list. */
+void workspace_sync_visibility(syn_server_t *s);
 /* Layout/usable box of a specific output (1920x1080 fallback). */
 void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box);
 void output_usable_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box);
@@ -7945,6 +8041,11 @@ void view_fullscreen_rescale(syn_view_t *view);
  * fullscreen fit letterboxed. 0 when there is no single buffer to measure. */
 int  view_scaled_content_box(syn_view_t *v, struct wlr_box *out);
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
+/* …with the tie broken toward a monitor other than the focused one. For a
+ * switch aimed at a screen the user is not looking at (revealing a window from
+ * the dock under per-monitor desktops); NULL `prefer` = the focused output. */
+void workspace_focus_first_on(syn_server_t *s, syn_workspace_t *ws,
+                              syn_output_t *prefer);
 /* The tiling passes act on one (workspace, output) pair: the windows of ws that
  * live on o. layout_apply() runs them for every output showing ws. */
 void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
@@ -8047,8 +8148,23 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                const char *json_response);
 int  parse_ai_layout_line(const char *line, char *app_id, size_t app_len,
                           float *x, float *y, float *w, float *h);
+/* Go to desktop `index`. Under SHARED that is the whole desk; under PER_OUTPUT
+ * it is the focused monitor only — the bind, the pager and `synctl dispatch ws`
+ * all mean "the desktop I am looking at", whichever mode is on. */
 void workspace_switch(syn_server_t *s, int index);
+/* The same switch, aimed at one monitor. The primitive workspace_switch() is
+ * built from; also what the per-monitor pager needs. NULL `o` = focused. */
+void workspace_switch_on(syn_server_t *s, syn_output_t *o, int index);
 void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index);
+/* Re-tile every desktop that is on screen. Under SHARED that is the one
+ * `layout_apply(s, server_active_workspace(s))` always meant; under PER_OUTPUT
+ * it can be one per monitor, and the old form would re-tile only the focused
+ * screen's. */
+void layout_apply_visible(syn_server_t *s);
+/* Push every mapped window's scene node back in line with what ITS monitor is
+ * showing — for the changes that move the answer without going through a
+ * switch: a monitor unplugged, workspace_mode flipped. */
+void view_refresh_visibility(syn_server_t *s);
 
 /* ── ai_interface.c ──────────────────────────────────────── */
 int  ai_thread_start(syn_server_t *s);

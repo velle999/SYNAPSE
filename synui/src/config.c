@@ -493,10 +493,12 @@
  *                                 times the niri strip slide)
  *   anim_rise_px = 24            (0-200; how far a Rise window travels up into
  *                                 place. Ignored by the other styles)
- *   anim_workspace = fade|slide|none   (Fade cross-fades the two desks; Slide
- *       sends them off the way you switched)
+ *   anim_workspace = fade|slide|cube|none   (Fade cross-fades the two desks;
+ *       Slide sends them off the way you switched; Cube turns the desk in 3D,
+ *       the two desktops meeting at a right angle)
  *   anim_workspace_ms = 140      (a slide wants longer than a fade — the eye
- *                                 has to follow it somewhere)
+ *                                 has to follow it somewhere — and a cube
+ *                                 wants longer again; 400-600 reads best)
  *   anim_curve = linear|ease-in|ease-out|ease-in-out
  *       Shared by both, and by the strip slide: two easings read as two
  *       desktops.
@@ -504,6 +506,13 @@
  *                                 what the panel writes)
  *
  * ── Layout ─────────────────────────────────────────────────
+ *   workspace_mode = shared|per-monitor
+ *       shared:      one desktop across every monitor. Super+2 moves the whole
+ *                    desk. This is what synui has always done.
+ *       per-monitor: each monitor remembers the desktop it is showing, and
+ *                    Super+2 moves only the monitor the focus is on. Windows
+ *                    do not move — a desktop still spans the desk, each screen
+ *                    just chooses which one it is looking at.
  *   gap = 8                      (0-128; between tiled windows)
  *   master_factor = 0.60         (share of the screen the master window takes)
  *   float_inset = 8              (0-40 %; kept clear at each edge by the
@@ -940,7 +949,12 @@ const char *const syn_anim_window_names[ANIM_WINDOW_COUNT] = {
     "off", "fade", "rise",
 };
 const char *const syn_anim_ws_names[ANIM_WS_COUNT] = {
-    "off", "fade", "slide",
+    "off", "fade", "slide", "cube",
+};
+/* Same rule, same reason: "per-monitor" is hyphenated here AND in the control
+ * panel's display name, or the row persists as something this parser rejects. */
+const char *const syn_ws_mode_names[SYN_WS_MODE_COUNT] = {
+    "shared", "per-monitor",
 };
 const char *const syn_anim_curve_names[ANIM_CURVE_COUNT] = {
     "ease-out", "linear", "ease-in-out", "ease-in",
@@ -1475,6 +1489,10 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->anim_workspace_ms = ANIMATION_MS_DEF;
     cfg->anim_window       = ANIM_WINDOW_FADE;
     cfg->anim_workspace    = ANIM_WS_FADE;
+    /* Shared: a desktop switch has moved the whole desk since the virtual-
+     * desktop model landed, and a default that quietly split the monitors
+     * apart would read as monitors losing their windows. Opt in. */
+    cfg->workspace_mode    = SYN_WS_MODE_SHARED;
     cfg->anim_curve        = ANIM_CURVE_EASE_OUT;
     cfg->anim_rise_px      = ANIM_RISE_PX_DEF;
     { static const float c[4] = COLOR_TITLEBAR_NORM;    memcpy(cfg->titlebar_color,       c, sizeof(c)); }
@@ -2394,6 +2412,13 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         for (int i = 0; i < ANIM_WS_COUNT; i++)
             if (strcmp(val, syn_anim_ws_names[i]) == 0) {
                 cfg->anim_workspace = i;
+                break;
+            }
+    }
+    else if (strcmp(key, "workspace_mode") == 0) {
+        for (int i = 0; i < SYN_WS_MODE_COUNT; i++)
+            if (strcmp(val, syn_ws_mode_names[i]) == 0) {
+                cfg->workspace_mode = i;
                 break;
             }
     }

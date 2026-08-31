@@ -1215,14 +1215,39 @@ still reads raw motion, and a tablet stays under its stylus.
 **Animations** are two settings, not one, under *Windows → Animation* in the
 control panel (`Super`+`C`) or in `synuirc`. A window opening can be `off`,
 `fade` or `rise` (it glides up `anim_rise_px` into place); switching desktop can
-be `off`, `fade` (a cross-fade) or `slide` — both desks move in the direction
-you switched, at full opacity, going up sends the old one off to the left. Each
-has its own length in ms, `0` meaning off, and they share one `anim_curve`
-(`ease-out`, `linear`, `ease-in-out`, `ease-in`) so the desktop decays one way.
+be `off`, `fade` (a cross-fade), `slide` — both desks move in the direction you
+switched, at full opacity, going up sends the old one off to the left — or
+`cube`. Each has its own length in ms, `0` meaning off, and they share one
+`anim_curve` (`ease-out`, `linear`, `ease-in-out`, `ease-in`) so the desktop
+decays one way.
+
+**The cube** turns the whole desk about a vertical axis: the desktop you are
+leaving and the one you are going to are two faces of a cube meeting at a right
+angle, lit so the corner between them reads, on black, pulling back far enough
+that the turn fits on the screen. It is a different kind of thing from the other
+styles and works differently — they move each window, and this cannot, because
+the scene graph has no rotation in it. So the compositor takes the frame: it
+photographs the desktop being left, renders the incoming one live, and draws
+both as two quads in perspective through a shader of its own (`cube.c`). It
+wants longer than the others — 400–600 ms rather than 140 — and it costs the CRT
+filter for the length of the turn, since the two cannot both have the frame. A
+machine whose driver will not compile the shader gets an un-animated switch
+rather than a broken one.
 
 A window *closing* is never animated: the client's buffer is gone the moment it
 unmaps. Nothing here ever resizes a window to animate it either — that would
 re-configure the client every frame — so what moves, moves at a fixed size.
+
+**Desktops span every monitor by default**, KDE/GNOME style: one virtual desktop
+across the whole desk, so `Super`+`2` moves every screen at once and each window
+remembers which monitor it sits on. `workspace_mode = per-monitor` (*Windows →
+Desktops span* in the control panel) changes who moves, not what a desktop is:
+each screen remembers the desktop it is showing, and the switch moves only the
+monitor the focus is on. Two monitors showing the same desktop is a legal state
+under it — each draws its own share — so the bind always does what it says
+instead of finding a desktop another screen has claimed. Each screen's bar
+highlights its own desktop, and clicking a pill moves the monitor whose bar you
+clicked.
 
 Full detail in the wiki: [Cursor Themes](https://github.com/velle999/SYNAPSE/wiki/Cursor-Themes) ·
 [Sound Themes](https://github.com/velle999/SYNAPSE/wiki/Sound-Themes) ·

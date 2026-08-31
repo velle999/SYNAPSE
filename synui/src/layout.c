@@ -55,6 +55,7 @@
 #include <time.h>
 
 #include "synui.h"
+#include "cube.h"
 
 /* Same clock the fades run on (anim.c). The strip slide and a cross-fade
  * routinely start in the same frame — a desktop switch does both — so they have
@@ -1208,18 +1209,24 @@ bool layout_scroll_tick(syn_server_t *s, double now)
 {
     if (!s) return false;
 
-    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
-    if (ws->layout != LAYOUT_NIRI) return false;
-
     /* Animations off: niri_scroll_to already snapped every strip to its target
      * and cleared the flag, so there is nothing in flight to advance. */
     double dur = s->config.anim_window_ms / 1000.0;
     if (dur <= 0.0) return false;
 
-    int idx = ws->index;
     bool running = false;
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
+        /* ⚠ EACH MONITOR'S OWN DESKTOP. This used to read the desk's single
+         * active workspace and use its index for every output — correct only
+         * while every screen shows the same desktop. Under per-monitor desktops
+         * a niri strip on the second screen would then be advanced through
+         * ANOTHER desktop's strip_* slots: it would stall, and the wrong
+         * desktop's saved scroll would drift. The state is already per-output
+         * per-index; all that was wrong was where the index came from. */
+        syn_workspace_t *ws = output_active_workspace(s, o);
+        if (ws->layout != LAYOUT_NIRI) continue;
+        int idx = ws->index;
         if (!o->strip_sliding[idx]) continue;
 
         float t = (float)((now - o->strip_t0[idx]) / dur);
@@ -1506,11 +1513,16 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     if (!workspace_visible(ws)) return;
 
     /* Re-enable all nodes first (minimized ones stay hidden — their own
-     * apply path owns disabling/enabling the node). */
+     * apply path owns disabling/enabling the node).
+     *
+     * ⚠ Only the ones on a monitor that is SHOWING this desktop. Under
+     * per-monitor desktops the workspace is visible somewhere without being
+     * visible everywhere, and re-enabling the lot would paint desktop 2's
+     * windows on top of whatever the other screens are looking at. */
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
         if (v->mapped && !v->minimized)
-            wlr_scene_node_set_enabled(view_node(v), true);
+            wlr_scene_node_set_enabled(view_node(v), view_workspace_shown(v));
 
     /* AI-managed marking (and its cyan border) only persists under the AI
      * layout; clear it for the other layouts so the border reflects reality. */
@@ -1575,6 +1587,11 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     syn_output_t *focused = server_focused_output(s);
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
+        /* A monitor looking at another desktop is not this desktop's business:
+         * tiling it here would move windows it cannot see, and (on niri) start
+         * a scroll animation on a strip nobody is watching. Always true under
+         * SHARED, where every output shows the same index. */
+        if (!workspace_visible_on(ws, o)) continue;
         switch (ws->layout) {
         case LAYOUT_TILING:   layout_tile(s, ws, o);     break;
         case LAYOUT_SPIRAL:   layout_spiral(s, ws, o);   break;
@@ -1815,7 +1832,7 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized)
      * workspace keeps all its nodes disabled regardless of minimized state
      * (workspace_switch re-enables mapped, non-minimized nodes when it next
      * becomes visible). */
-    int show = !view->minimized && workspace_visible(view->workspace);
+    int show = !view->minimized && view_workspace_shown(view);
     wlr_scene_node_set_enabled(view_node(view), show);
 
     if (view->minimized) {
@@ -1857,15 +1874,30 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized)
  * user is not looking at, and throwing focus there on every close would be its
  * own version of the same complaint.
  */
-void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
+void workspace_focus_first_on(syn_server_t *s, syn_workspace_t *ws,
+                              syn_output_t *prefer)
 {
     /* The desktop spans every monitor, so prefer a window on the one the user
      * is actually looking at — otherwise switching desktops would throw focus
-     * onto whichever screen happens to hold the list's first window. */
-    syn_output_t *focused = server_focused_output(s);
+     * onto whichever screen happens to hold the list's first window.
+     *
+     * `prefer` overrides that for the one caller that knows better: a switch
+     * aimed at a monitor which is NOT the focused one (revealing a window from
+     * the dock or Alt-Tab under per-monitor desktops). Preferring the focused
+     * screen there would hand focus to a window on a desktop that screen is not
+     * showing — i.e. to something invisible, which is the whole class of bug the
+     * fallback below exists to avoid.
+     *
+     * ⛔ AND THE FALLBACK IS NOT SAFE UNDER PER-MONITOR DESKTOPS. `ws` can be on
+     * screen on one monitor and off on another, so "any window on this desktop"
+     * includes windows that are genuinely not drawn. view_workspace_shown() is
+     * the filter; under SHARED it is true for every window on a visible ws and
+     * this reads exactly as it always did. */
+    syn_output_t *focused = prefer ? prefer : server_focused_output(s);
     syn_view_t *v, *best = NULL, *fallback = NULL;
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->minimized) continue;
+        if (!view_workspace_shown(v)) continue;
         if (v->output == focused) {
             if (!best || v->focus_seq > best->focus_seq) best = v;
         } else if (!fallback || v->focus_seq > fallback->focus_seq) {
@@ -1876,46 +1908,105 @@ void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
     focus_view(s, pick, pick ? view_surface(pick) : NULL);
 }
 
+void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
+{
+    workspace_focus_first_on(s, ws, NULL);
+}
+
 /* ── Workspace switching ─────────────────────────────────── */
-/* Switch the whole desk to virtual desktop `index`: every monitor swaps to its
- * share of that workspace at once. Nothing is bound to a particular output, so
- * this always does something no matter how many monitors are plugged in. */
-void workspace_switch(syn_server_t *s, int index)
+/*
+ * ⚠ THE BUG THIS MUST NOT REGROW. synui once had per-output workspaces, in the
+ * shape where each workspace was OWNED by a monitor. On a three-monitor desk
+ * that permanently claimed desktops 1/2/3 — one per screen — so Super+1 on the
+ * screen already showing 1 hit an early-out and did literally nothing, and
+ * Super+2 only warped the cursor to the screen that owned it. The three numbers
+ * a user reaches for first were the three that could not work.
+ *
+ * That cannot happen here because a workspace is still not owned by anything:
+ * it is a desk-wide window list, and an output merely CHOOSES an index to look
+ * at. Two monitors showing desktop 2 at once is a legal state — each draws its
+ * own share of it — so "switch this monitor to i" always does what it says. The
+ * only early-out left is the honest one: this monitor is already on i.
+ *
+ * `only` is the monitor being switched, or NULL for the whole desk. Those are
+ * the two real cases and they differ in three places (which views animate,
+ * which field records the new index, and whether one output early-outs while
+ * the others still have work) — which is why they are one function and not two.
+ */
+static void ws_switch_core(syn_server_t *s, syn_output_t *only, int index)
 {
     if (index < 0 || index >= WORKSPACE_MAX) return;
-    if (index == s->active_workspace) return;
 
-    syn_workspace_t *cur    = &s->workspaces[s->active_workspace];
+    int from = only ? output_workspace_index(s, only) : s->active_workspace;
+    if (from < 0 || from >= WORKSPACE_MAX) from = 0;
+    if (index == from) return;
+
+    syn_workspace_t *cur    = &s->workspaces[from];
     syn_workspace_t *target = &s->workspaces[index];
 
     /* Which way the desk moved, for the styles that have a direction. Taken
      * from the workspace NUMBERS rather than from the bind that got here, so
      * "go to 5" from 2 and from 8 read as the opposite movements they are. */
-    int dir = (index > s->active_workspace) ? 1 : -1;
+    int dir = (index > from) ? 1 : -1;
+
+    /* THE SNAPSHOT COMES FIRST, before anything is hidden: the cube's outgoing
+     * face is a picture of the desktop as it stands right now, and once the
+     * loop below has run there is nothing left to photograph. A no-op for every
+     * other style. */
+    if (only) {
+        cube_begin(s, only, dir);
+    } else {
+        syn_output_t *o;
+        wl_list_for_each(o, &s->outputs, link)
+            cube_begin(s, o, dir);
+    }
 
     /* The outgoing desktop's windows animate away and are only disabled once
      * they have actually gone (anim.c); the incoming ones animate in.
-     * config.anim_workspace decides whether that is a cross-fade, a slide, or
-     * nothing at all. */
+     * config.anim_workspace decides whether that is a cross-fade, a slide, a
+     * cube, or nothing at all. */
     syn_view_t *v;
     wl_list_for_each(v, &cur->windows, link)
-        if (v->mapped)
+        if (v->mapped && (!only || v->output == only))
             anim_workspace_hide(v, dir);
-    cur->visible = 0;
 
-    /* Show the incoming one. */
-    s->active_workspace = index;
-    target->visible = 1;
-    wlr_log(WLR_INFO, "synui: workspace %d", index + 1);
+    /* Record it. One field or the other — workspace_sync_visibility() derives
+     * every workspace's `visible` from the outputs afterwards, and under SHARED
+     * it is also what drags each output's own field onto the desk's. */
+    if (only) only->active_workspace = index;
+    else      s->active_workspace    = index;
+
+    /* The desk-wide "which desktop am I on" follows the monitor the user is
+     * looking at, so the bar, the overview header and `synctl activeworkspace`
+     * keep answering about the screen in front of them. */
+    if (only && only == server_focused_output(s))
+        s->active_workspace = index;
+
+    workspace_sync_visibility(s);
+
+    wlr_log(WLR_INFO, "synui: workspace %d%s%s", index + 1,
+            only ? " on " : "",
+            only ? only->wlr_output->name : "");
+
     wl_list_for_each(v, &target->windows, link)
-        if (v->mapped && !v->minimized)
+        if (v->mapped && !v->minimized && (!only || v->output == only))
             anim_workspace_show(v, dir);
 
+    /* ⚠ ONLY THE INCOMING DESKTOP IS RE-TILED, and the outgoing one deliberately
+     * is not. Its windows are mid-animation: layout_apply's first act is to
+     * re-decide every node's enabled state, which for a window that has just
+     * been told to fade away is "off, now" — the fade would be cut to a single
+     * frame. anim.c owns taking them away and does it when they have actually
+     * gone. Nor is a re-tile owed: under per-monitor desktops the desktop being
+     * left may still be on screen next door, but nothing arrived on or left
+     * THAT monitor's share of it, so its arrangement has not changed. */
     layout_apply(s, target);
 
-    /* Focus the target workspace's first window (or clear focus if empty —
-     * the previous workspace's windows are hidden now). */
-    workspace_focus_first(s, target);
+    /* Focus the target workspace's first window (or clear focus if there is
+     * none, so keys stop flowing to a window nobody can see) — on the monitor
+     * that just switched, which under per-monitor desktops need not be the
+     * focused one. */
+    workspace_focus_first_on(s, target, only);
 
     /* Switching away from a fullscreen window must bring the bar back — and
      * switching onto one must hide it again. */
@@ -1931,11 +2022,70 @@ void workspace_switch(syn_server_t *s, int index)
         snprintf(prompt, sizeof(prompt),
             "[WORKSPACE_SWITCH] switched to workspace '%s' (intent: %s). "
             "Update neural overlay context.",
-            s->workspaces[index].name,
-            s->workspaces[index].intent[0] ? s->workspaces[index].intent : "general");
+            target->name,
+            target->intent[0] ? target->intent : "general");
         syn_ai_request_t req = { .type = AI_MSG_STATUS_UPDATE };
         strncpy(req.prompt, prompt, sizeof(req.prompt) - 1);
         ai_thread_send(s, &req);
+    }
+}
+
+/* "Go to desktop i" — what every bind, the pager and `synctl dispatch ws` mean.
+ * Whole desk under SHARED; the monitor the focus is on under PER_OUTPUT. */
+void workspace_switch(syn_server_t *s, int index)
+{
+    ws_switch_core(s,
+        s->config.workspace_mode == SYN_WS_MODE_PER_OUTPUT
+            ? server_focused_output(s) : NULL,
+        index);
+}
+
+/* The same switch aimed at one monitor. Under SHARED there is no such thing —
+ * a desktop spans the desk — so it means the desk, which is the only answer
+ * that leaves the outputs agreeing with each other. NULL `o` = focused. */
+void workspace_switch_on(syn_server_t *s, syn_output_t *o, int index)
+{
+    if (s->config.workspace_mode != SYN_WS_MODE_PER_OUTPUT) {
+        ws_switch_core(s, NULL, index);
+        return;
+    }
+    ws_switch_core(s, o ? o : server_focused_output(s), index);
+}
+
+/*
+ * Re-tile every desktop that is on screen. Under SHARED that is one workspace
+ * and this is what `layout_apply(s, server_active_workspace(s))` always meant;
+ * under PER_OUTPUT it can be one per monitor, and calling the old form would
+ * silently re-tile only the focused screen's.
+ */
+void layout_apply_visible(syn_server_t *s)
+{
+    if (!s) return;
+    for (int i = 0; i < WORKSPACE_MAX; i++)
+        if (workspace_visible(&s->workspaces[i]))
+            layout_apply(s, &s->workspaces[i]);
+}
+
+/*
+ * Push every mapped window's scene node back in line with what its monitor is
+ * showing. The switch path does this as part of animating; this is for the
+ * changes that move the ANSWER without going through a switch at all — a
+ * monitor unplugged (its windows land on a screen that may be on another
+ * desktop), and workspace_mode itself being flipped in the control panel.
+ */
+void view_refresh_visibility(syn_server_t *s)
+{
+    if (!s) return;
+    for (int i = 0; i < WORKSPACE_MAX; i++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[i].windows, link) {
+            if (!v->mapped) continue;
+            bool show = !v->minimized && view_workspace_shown(v);
+            /* A window coming back from hidden must not keep an offset from a
+             * slide nobody finished, or it arrives beside itself. */
+            if (show) anim_reset(v);
+            wlr_scene_node_set_enabled(view_node(v), show);
+        }
     }
 }
 
@@ -1952,9 +2102,11 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
     wl_list_remove(&view->link);
     wl_list_insert(&view->workspace->windows, &view->link);
 
-    /* Visible only if the target desktop is the one being shown. */
+    /* Visible only if the target desktop is the one being shown ON THIS
+     * WINDOW'S MONITOR — under per-monitor desktops the other screens may be
+     * showing it while this one is not. */
     wlr_scene_node_set_enabled(view_node(view),
-                                workspace_visible(view->workspace) &&
+                                view_workspace_shown(view) &&
                                 !view->minimized);
 
     layout_apply(s, &s->workspaces[old_ws]);
@@ -1963,7 +2115,7 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
     /* If the moved window was focused and is now hidden, hand focus back to
      * the desktop still on screen so keys don't keep going to an invisible
      * window. */
-    if (s->focused_view == view && !workspace_visible(view->workspace))
+    if (s->focused_view == view && !view_workspace_shown(view))
         workspace_focus_first(s, &s->workspaces[old_ws]);
 }
 

@@ -181,7 +181,12 @@ static const char *const ctl_names_accel_profile[] = {
  * lower-cased spellings synuirc takes live in config.c beside the parser, so a
  * new style needs its display name added HERE and its word THERE. */
 static const char *const ctl_names_anim_window[] = { "Off", "Fade", "Rise" };
-static const char *const ctl_names_anim_ws[]     = { "Off", "Fade", "Slide" };
+static const char *const ctl_names_anim_ws[]     = { "Off", "Fade", "Slide", "Cube" };
+/* ⚠ "Per-monitor" is HYPHENATED to match syn_ws_mode_names[]. ctl_persist()
+ * writes an enum row by lower-casing the display name and nothing else, so a
+ * space here would persist a word config.c rejects — a setting that works all
+ * session and is back to Shared at the next login. */
+static const char *const ctl_names_ws_mode[]    = { "Shared", "Per-monitor" };
 /* Hyphenated, not spaced: ctl_persist writes an enum by lower-casing the name
  * it shows, so "Ease out" would persist as "ease out" and config.c spells it
  * "ease-out". Same reason cat_breed's "Russian-Blue" carries its hyphen. */
@@ -649,15 +654,22 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_ANIM_WORKSPACE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktop switch", NULL,
       .key = "anim_workspace", .off = CFG(anim_workspace), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_anim_ws), .apply = CTL_APPLY_NONE,
-      .help = "Fade cross-fades the two desks; Slide sends them off the way you switched" },
+      .help = "Fade cross-fades the two desks; Slide sends them off the way you "
+              "switched; Cube turns the desk in 3D" },
     { CTL_ROW_ANIM_WORKSPACE_MS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktop length", NULL,
       .key = "anim_workspace_ms", .off = CFG(anim_workspace_ms), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,
-      .help = "A slide wants longer than a fade — the eye has to follow it somewhere" },
+      .help = "A slide wants longer than a fade — the eye has to follow it "
+              "somewhere — and a cube wants longer again; try 400-600" },
     { CTL_ROW_ANIM_CURVE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Easing", NULL,
       .key = "anim_curve", .off = CFG(anim_curve), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_anim_curve), .apply = CTL_APPLY_NONE,
       .help = "Shared by both, and by the strip slide: two easings read as two desktops" },
+    { CTL_ROW_WORKSPACE_MODE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktops span", NULL,
+      .key = "workspace_mode", .off = CFG(workspace_mode), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_ws_mode), .apply = CTL_APPLY_WSMODE,
+      .help = "Shared: one desktop across every monitor. Per-monitor: each "
+              "screen remembers its own, and the switch moves only the focused one" },
 
     /* Window behaviour, which is what KDE calls this and what most people come
      * looking for. Focus leads: it is the one row here that changes what the
@@ -1464,6 +1476,19 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
     case CTL_APPLY_RELAYOUT:
         for (int w = 0; w < WORKSPACE_MAX; w++)
             layout_apply(s, &s->workspaces[w]);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_WSMODE:
+        /* Order matters. Recompute which desktops are on screen, THEN push
+         * every window's scene node into line with it, THEN re-tile — the
+         * re-tile only walks visible workspaces, so a window whose node is
+         * still enabled from the other mode would otherwise be left drawn on a
+         * screen that is not showing its desktop. */
+        workspace_sync_visibility(s);
+        view_refresh_visibility(s);
+        layout_apply_visible(s);
+        layer_update_occlusion_all(s);
         ctlpanel_repaint(s);
         break;
 

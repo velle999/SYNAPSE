@@ -242,6 +242,13 @@ void synui_config_apply_launcher_binds(syn_config_t *c) { (void)c; }
 const char *layout_label(syn_layout_t l)             { (void)l; return "stack"; }
 const char *theme_name(syn_theme_t t)                { (void)t; return "synapse"; }
 syn_workspace_t *server_active_workspace(syn_server_t *s) { (void)s; return NULL; }
+/* Per-monitor desktops (CTL_APPLY_WSMODE). The row under test is the config
+ * store — whether flipping it re-derives the visible set is layout.c's and
+ * synui_main.c's business, and neither is linked here. */
+void workspace_sync_visibility(syn_server_t *s)      { (void)s; }
+void view_refresh_visibility(syn_server_t *s)        { (void)s; }
+void layout_apply_visible(syn_server_t *s)           { (void)s; }
+void layer_update_occlusion_all(syn_server_t *s)     { (void)s; }
 bool syn_config_path(char *buf, size_t n, const char *leaf)
 { (void)buf; (void)n; (void)leaf; return false; }
 

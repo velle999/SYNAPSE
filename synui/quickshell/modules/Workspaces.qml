@@ -6,13 +6,24 @@ import ".."
 /*
  * Virtual desktops.
  *
- * synui's workspaces span ALL monitors — switching moves every screen at once —
- * so this is one row of pills, not a per-output set. `synctl workspaces` gives
- * the whole picture in a single call (id, name, window count, which is visible),
- * so there is no second poll for the active one.
+ * synui's workspaces span the WHOLE DESK — the same nine on every monitor — so
+ * this is one row of pills rather than a per-output set. `synctl workspaces`
+ * gives the whole picture in a single call (id, name, window count, which
+ * monitors are showing it), so there is no second poll for the active one.
+ *
+ * ⚠ WHICH PILL IS LIT IS PER-MONITOR, and `visible` is NOT that question.
+ * Under `workspace_mode = per-monitor` each screen chooses its own desktop, so
+ * more than one workspace is `visible` at a time and every bar would light both
+ * of them. The row's `outputs` array is the per-screen answer — the monitors
+ * currently showing that desktop, by name — and under `shared` it is every
+ * monitor for exactly one desktop, so this reads identically in both modes.
+ * The `visible` fallback is for a compositor older than that field.
  *
  * Clicking dispatches through synctl rather than reimplementing anything:
- * `synctl dispatch ws N` runs the exact keybind action Super+N does.
+ * `synctl dispatch ws N` runs the exact keybind action Super+N does. It moves
+ * the monitor the POINTER is on, which under per-monitor desktops is the one
+ * whose bar was just clicked — so a click on this bar moves this screen, with
+ * nothing here needing to say so.
  */
 Item {
     id: root
@@ -38,6 +49,36 @@ Item {
 
     property var workspaces: []
 
+    /* The name synui knows this monitor by, which is what `outputs` carries. */
+    readonly property string outName: root.barScreen ? (root.barScreen.name || "") : ""
+
+    /* Is `w` the desktop THIS screen is showing? */
+    function shownHere(w) {
+        if (w && Array.isArray(w.outputs))
+            return root.outName !== "" ? w.outputs.indexOf(root.outName) >= 0
+                                       : w.outputs.length > 0
+        return w && w.visible === true
+    }
+
+    /*
+     * The desktop this screen is on, resolved ONCE per poll rather than per
+     * pill.
+     *
+     * ⚠ AND THIS IS WHY IT IS A PROPERTY AND NOT A CALL IN THE DELEGATE.
+     * `active: root.shownHere(modelData)` looks equivalent and is a STALE
+     * BINDING: modelData is a plain JS object, so nothing in that expression is
+     * a property QML can watch, and the pill keeps whatever answer it was first
+     * given. On a two-monitor desk that showed the second screen lighting both
+     * its old desktop and its new one at once. Reading root.workspaces here —
+     * which the poll reassigns — is what makes the dependency real.
+     */
+    readonly property int litId: {
+        for (const w of root.workspaces)
+            if (root.shownHere(w))
+                return w.id
+        return -1
+    }
+
     implicitWidth: row.implicitWidth
     implicitHeight: Theme.barHeight
 
@@ -53,7 +94,7 @@ Item {
                 id: pill
                 required property var modelData
 
-                readonly property bool active: modelData.visible === true
+                readonly property bool active: pill.modelData.id === root.litId
                 readonly property bool occupied: (modelData.windows || 0) > 0
 
                 width: 22
