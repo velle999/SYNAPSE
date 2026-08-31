@@ -1595,6 +1595,36 @@ FloatingWindow {
     property var lookList: []
     property var lutList: []
     property bool lutMenuOpen: false
+
+    // ── The delivery frame ──────────────────────────────────────────────────
+    //
+    // The project's own size, which `timeline new --size` used to be the only
+    // way to say — so a cut begun at 1920x1080 could never become a vertical
+    // version of itself without being rebuilt. The status bar has shown these
+    // numbers all along; they are a control now rather than a caption.
+    //
+    // The list matches the names `timeline size` accepts, and it is the only
+    // list here: a preset the CLI does not know would be a menu entry that
+    // fails, and the reverse is a name you can only reach by typing it.
+    property bool sizeMenuOpen: false
+    readonly property var sizePresets: [
+        { name: "4k",       label: "4K UHD",        w: 3840, h: 2160 },
+        { name: "dci4k",    label: "DCI 4K",        w: 4096, h: 2160 },
+        { name: "1440p",    label: "1440p",         w: 2560, h: 1440 },
+        { name: "1080p",    label: "1080p HD",      w: 1920, h: 1080 },
+        { name: "720p",     label: "720p",          w: 1280, h:  720 },
+        { name: "480p",     label: "480p",          w:  854, h:  480 },
+        { name: "dci2k",    label: "DCI 2K",        w: 2048, h: 1080 },
+        { name: "vertical", label: "Vertical 9:16", w: 1080, h: 1920 },
+        { name: "square",   label: "Square 1:1",    w: 1080, h: 1080 }
+    ]
+    function setProjectSize(ref) {
+        root.sizeMenuOpen = false
+        if (!root.proj) return
+        // Straight through the edit queue, so it takes its turn with every
+        // other change and the reload that follows redraws the status bar.
+        root.tlRun(["size", root.proj, ref])
+    }
     // Which page asked for a LUT. The chooser and the file picker are shared
     // between the darkroom and the cutting room, and a LUT picked from the
     // clip inspector that landed on the open photograph instead would be the
@@ -5536,9 +5566,23 @@ FloatingWindow {
                           : root.mode === "video"
                           ? (root.tl.w + " × " + root.tl.h + "  ·  " + root.tl.fps + " fps")
                           : (root.imgW > 0 ? root.imgW + " × " + root.imgH : "")
-                    color: root.cDim
+                    // Lit only when it does something. In the darkroom this is
+                    // the picture's own size and there is nothing to pick.
+                    color: sizeHit.containsMouse && sizeHit.enabled
+                           ? root.cText : root.cDim
                     font.pixelSize: root.ui(11)
                     font.family: root.uiFont
+
+                    MouseArea {
+                        id: sizeHit
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        hoverEnabled: true
+                        enabled: root.mode === "video" && !root.atStart && !!root.proj
+                        cursorShape: enabled ? Qt.PointingHandCursor
+                                             : Qt.ArrowCursor
+                        onClicked: root.sizeMenuOpen = true
+                    }
                 }
 
                 Text {
@@ -5671,7 +5715,8 @@ FloatingWindow {
         const shift = (e.modifiers & Qt.ShiftModifier) !== 0
         const video = root.mode === "video"
         const sheet = root.saveOpen || root.exportOpen || root.pickerOpen
-                      || root.lutMenuOpen || root.helpOpen
+                      || root.lutMenuOpen || root.sizeMenuOpen
+                      || root.helpOpen
 
         if (e.key === Qt.Key_Escape) {
             if (root.helpOpen)          root.helpOpen = false
@@ -5679,6 +5724,7 @@ FloatingWindow {
             else if (root.exportOpen)   root.exportOpen = false
             else if (root.pickerOpen)   root.pickerOpen = false
             else if (root.lutMenuOpen)  root.lutMenuOpen = false
+            else if (root.sizeMenuOpen) root.sizeMenuOpen = false
             else if (root.playing || root.revStep > 0) root.shuttleStop()
             else return
             e.accepted = true
@@ -6199,6 +6245,105 @@ FloatingWindow {
                           active: root.saveName !== "" && !root.saveBusy
                           onClicked: root.doSave() }
                 }
+            }
+        }
+    }
+
+    // ── Which frame ────────────────────────────────────────────────────
+    //
+    // Sized to its content on purpose: nine presets fit, so there is nothing
+    // to scroll and therefore no scrollbar owed. A list that grew past the
+    // screen would need one — see the preflight gate.
+    Rectangle {
+        anchors.fill: parent
+        visible: root.sizeMenuOpen
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.sizeMenuOpen = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(360, parent.width - 80)
+            height: Math.min(sizeCol.height + 28, parent.height - 80)
+            color: root.cPanel
+            radius: 6
+            border.width: 1
+            border.color: root.wash(0.28)
+
+            MouseArea { anchors.fill: parent }
+
+            Column {
+                id: sizeCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 14
+                spacing: 8
+
+                Text {
+                    width: parent.width
+                    text: "Project frame"
+                    color: root.cText
+                    font.pixelSize: root.ui(14)
+                    font.family: root.uiFont
+                    font.bold: true
+                }
+                Text {
+                    width: parent.width
+                    text: "What this cut delivers in. Clips are fitted to it — "
+                          + "changing it re-frames the whole timeline, it does "
+                          + "not re-cut anything."
+                    wrapMode: Text.WordWrap
+                    color: root.cDim
+                    font.pixelSize: root.ui(11)
+                    font.family: root.uiFont
+                }
+
+                Repeater {
+                    model: root.sizePresets
+                    Rectangle {
+                        id: sizeRow
+                        required property var modelData
+                        width: sizeCol.width
+                        height: 30
+                        // The one in use is marked, so the menu answers "what
+                        // is it now" without being read against the status bar.
+                        readonly property bool current:
+                            root.tl.w === sizeRow.modelData.w
+                            && root.tl.h === sizeRow.modelData.h
+                        color: sizeArea.containsMouse ? root.wash(0.16)
+                             : sizeRow.current ? root.wash(0.10) : "transparent"
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left; anchors.leftMargin: 8
+                            text: (sizeRow.current ? "● " : "")
+                                  + sizeRow.modelData.label
+                            color: root.cText
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right; anchors.rightMargin: 8
+                            text: sizeRow.modelData.w + " × " + sizeRow.modelData.h
+                            color: root.cDim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                        }
+                        MouseArea {
+                            id: sizeArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.setProjectSize(sizeRow.modelData.name)
+                        }
+                    }
+                }
+
+                Btn { label: "Close"; onClicked: root.sizeMenuOpen = false }
             }
         }
     }

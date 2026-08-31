@@ -1470,7 +1470,7 @@ pkgver=0.1.0
 #   Verified in a nested headless synui against a font.state carrying a face
 #   and a scale nothing resolves to by accident (DejaVu Serif at 150%), so
 #   "it followed the file" and "it kept its defaults" cannot be confused.
-pkgrel=45
+pkgrel=46
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

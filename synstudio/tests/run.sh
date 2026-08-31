@@ -4270,6 +4270,83 @@ if [ -f "$qml" ]; then
     seen "the release is what puts it in the cut" 'root.photoDropAt(' < "$qml"
 fi
 
+# ── a LUT used by path is kept, and browsable afterwards ────────────────────
+#
+# ⛔ It was usable exactly once. ss_lut_lookup reads any ref with a '/' straight
+# off disk, which is what lets somebody drop one in from a download — and
+# nothing put it anywhere, so it never reached the catalogue, the browser, or
+# the next clip.
+kdir="$TMP/keepcat"; kdrop="$TMP/keepdrop"
+mkdir -p "$kdir" "$kdrop"
+$BIN lut --out "$kdrop/keepme.cube" --set contrast=25 --size 17 >/dev/null 2>&1
+cp "$TMP/half.cube" "$kdrop/other.cube" 2>/dev/null ||     $BIN lut --out "$kdrop/other.cube" --set exposure=1 --size 17 >/dev/null 2>&1
+
+check "a path is not in the catalogue to start with" "0"       "$(SYNSTUDIO_LUTS="$kdir" $BIN luts 2>/dev/null | grep -c keepme)"
+
+SYNSTUDIO_LUTS="$kdir" $BIN pixel 0.5 0.5 0.5 --set lut="$kdrop/keepme.cube" \
+    >/dev/null 2>&1
+check "a LUT used by path is kept" "1" \
+      "$(ls "$kdir" 2>/dev/null | grep -c '^keepme\.cube$')"
+SYNSTUDIO_LUTS="$kdir" $BIN luts 2>/dev/null \
+    | seen "and it is in the catalogue afterwards" "keepme"
+
+# The same file again is not a second copy — the catalogue would fill with
+# duplicates of whatever LUT somebody likes.
+SYNSTUDIO_LUTS="$kdir" $BIN pixel 0.5 0.5 0.5 --set lut="$kdrop/keepme.cube" \
+    >/dev/null 2>&1
+check "the same LUT twice is kept once" "1" "$(ls "$kdir" | wc -l)"
+
+# ⚠ A DIFFERENT table under a name already taken must not overwrite it.
+# `film.cube` is the most reused file name in colour.
+cp "$kdrop/other.cube" "$kdrop/keepme.cube"
+SYNSTUDIO_LUTS="$kdir" $BIN pixel 0.5 0.5 0.5 --set lut="$kdrop/keepme.cube" \
+    >/dev/null 2>&1
+check "a different LUT of the same name is suffixed" "1" \
+      "$(ls "$kdir" | grep -c '^keepme-2\.cube$')"
+check "and the first one is still there" "1" \
+      "$(ls "$kdir" | grep -c '^keepme\.cube$')"
+
+# A file that is not a LUT must stay a path: renaming it would turn a clear
+# failure at resolve time into a confusing one here.
+echo "not a cube at all" > "$kdrop/bogus.cube"
+SYNSTUDIO_LUTS="$kdir" $BIN pixel 0.5 0.5 0.5 --set lut="$kdrop/bogus.cube" \
+    >/dev/null 2>&1
+check "a file that is not a LUT is not kept" "0" \
+      "$(ls "$kdir" | grep -c bogus)"
+
+# ── the project's delivery frame is pickable after `new` ────────────────────
+#
+# ⛔ `timeline new --size WxH` was the only way to say it, so a cut begun at
+# 1920x1080 could never become a vertical version of itself.
+sproj="$TMP/size.syntl"
+$BIN timeline new "$sproj" --size 1920x1080 --fps 25 >/dev/null 2>&1
+check "the frame reads back" "1920" \
+      "$($BIN timeline size "$sproj" | awk '/^width/{print $2}')"
+$BIN timeline size "$sproj" vertical >/dev/null 2>&1
+check "a preset name sets it" "1080x1920" \
+      "$($BIN timeline size "$sproj" | awk '/^width/{w=$2} /^height/{h=$2} END{print w"x"h}')"
+$BIN timeline size "$sproj" 2560x1440 >/dev/null 2>&1
+check "WxH sets it" "2560x1440" \
+      "$($BIN timeline size "$sproj" | awk '/^width/{w=$2} /^height/{h=$2} END{print w"x"h}')"
+# ⛔ EVEN BOTH WAYS: every intermediate is yuv420, whose chroma planes are half
+# size, and an odd dimension has no whole number of chroma samples.
+$BIN timeline size "$sproj" 1921x1081 >/dev/null 2>&1
+check "an odd frame is rounded up, not refused" "1922x1082" \
+      "$($BIN timeline size "$sproj" | awk '/^width/{w=$2} /^height/{h=$2} END{print w"x"h}')"
+check "it is written to the project" "1" \
+      "$(grep -c '^size	1922	1082' "$sproj")"
+check "a name that is not a preset is refused" "1" \
+      "$($BIN timeline size "$sproj" 90210 >/dev/null 2>&1; echo $?)"
+check "an impossible frame is refused" "1" \
+      "$($BIN timeline size "$sproj" 4x4 >/dev/null 2>&1; echo $?)"
+check "and a refusal changes nothing" "1922" \
+      "$($BIN timeline size "$sproj" | awk '/^width/{print $2}')"
+
+if [ -f "$qml" ]; then
+    seen "the status size opens the frame picker" 'root.sizeMenuOpen = true' < "$qml"
+    seen "picking one goes through the edit queue" 'root.tlRun(["size"' < "$qml"
+fi
+
 pass=$(grep -c '^p' "$RESULTS")
 fail=$(grep -c '^f' "$RESULTS")
 

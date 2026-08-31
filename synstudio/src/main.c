@@ -144,6 +144,7 @@ static void usage(void)
 "\n"
 " what a clip looks like\n"
 "  timeline get   PROJ T C [KEY]          everything known about one clip\n"
+"  timeline size  PROJ [WxH|1080p|vertical|4k|...]   the delivery frame\n"
 "  timeline set   PROJ T C KEY=VALUE...   opacity, speed, fades, motion,\n"
 "                                         transition, title (`timeline keys`)\n"
 "       retime: `reverse=1` plays it backwards, `freeze=S` holds the frame\n"
@@ -374,6 +375,38 @@ static int apply_set(ss_develop *d, const char *key, const char *val)
          * LUT set and nothing else would render as nothing, and look like the
          * import had failed. Same reasoning, same place: the reader must not
          * do this, so the command layer does. */
+        /* A LUT brought in BY PATH is kept, and the reference becomes the
+         * name it is kept under.
+         *
+         * ⛔ Without this a picked .cube was usable exactly once. ss_lut_lookup
+         * reads any ref with a '/' straight off disk — which is what lets
+         * somebody drop one in from a download — and nothing put it anywhere,
+         * so it never reached the browser, `synstudio luts`, or the next clip.
+         *
+         * Rewriting the ref is the other half, and ss_lut_lookup's own comment
+         * asks for it: a project naming `kodak2383` opens on a machine where
+         * that file lives somewhere else, and one naming a path in somebody's
+         * Downloads does not. Keeping the file is what makes the rewrite true.
+         *
+         * A ref that cannot be kept — unreadable, or not a LUT at all — is left
+         * exactly as it was, so the failure is still reported by whoever tries
+         * to resolve it rather than being turned into a confusing rename here.
+         *
+         * Same place as the two rules below, and for the same reason: the
+         * sidecar reader shares ss_develop_set and must not do any of this. */
+        if (!strcmp(key, "lut") && *val && strchr(val, '/')) {
+            char kept[SS_LUT_REF];
+            int rc = ss_lut_keep(val, kept, sizeof kept);
+            if (rc >= 0) {
+                if (rc == 1) {
+                    char dir[1024];
+                    if (ss_lut_dir(dir, sizeof dir) == 0)
+                        fprintf(stderr, "kept LUT as %s (%s/%s.cube)\n",
+                                kept, dir, kept);
+                }
+                snprintf(d->lut, sizeof d->lut, "%s", kept);
+            }
+        }
         if (!strcmp(key, "lut") && *val && d->lut_amount == 0.0f)
             d->lut_amount = 100.0f;
         return 0;
@@ -2001,6 +2034,57 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (argc > 4 && tl_save(proj, t) != 0) return die("cannot write %s", proj);
         if (t->lufs < 0.0f) printf("target\t%.2f\n", (double)t->lufs);
         else                printf("target\tnone\n");
+        return 0;
+    }
+
+    /* The frame this project delivers in.
+     *
+     * ⛔ `timeline new --size WxH` was the ONLY way to say it, so a cut started
+     * at 1920x1080 could never become anything else — a vertical version of an
+     * existing edit meant building the whole thing again. It belongs in the
+     * document beside the render range and the loudness target, for the same
+     * reason those do: it is a decision about the deliverable that somebody
+     * makes while looking at the cut, not a flag to retype at every render.
+     *
+     * Names as well as numbers, because "1080p" is what people say and
+     * 1920x1080 is what they then have to look up. */
+    if (!strcmp(verb, "size")) {
+        static const struct { const char *name; int w, h; } preset[] = {
+            { "4k",       3840, 2160 }, { "2160p",    3840, 2160 },
+            { "1440p",    2560, 1440 }, { "1080p",    1920, 1080 },
+            { "720p",     1280,  720 }, { "480p",      854,  480 },
+            { "dci2k",    2048, 1080 }, { "dci4k",    4096, 2160 },
+            { "vertical", 1080, 1920 }, { "square",   1080, 1080 },
+        };
+        int w = 0, h = 0;
+
+        if (argc > 4) {
+            const char *a = argv[4];
+            size_t i;
+            for (i = 0; i < sizeof preset / sizeof preset[0]; i++)
+                if (!strcasecmp(a, preset[i].name)) {
+                    w = preset[i].w; h = preset[i].h; break;
+                }
+            if (!w && sscanf(a, "%dx%d", &w, &h) != 2)
+                return die("size wants WxH or a name "
+                           "(4k 2160p 1440p 1080p 720p 480p dci2k dci4k "
+                           "vertical square)");
+            if (w < 16 || h < 16 || w > 16384 || h > 16384)
+                return die("%dx%d is not a frame anyone can deliver "
+                           "(16..16384 each way)", w, h);
+            /* ⛔ EVEN, BOTH WAYS. Every intermediate here is yuv420, whose
+             * chroma planes are half size — an odd dimension has no whole
+             * number of chroma samples and the encoder either refuses the
+             * graph or silently crops a line off. Rounded up rather than
+             * rejected: nobody typing 1921 wants an error, they want 1922. */
+            if (w & 1) w++;
+            if (h & 1) h++;
+            t->w = w;
+            t->h = h;
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        }
+        printf("width\t%d\nheight\t%d\naspect\t%.4f\n",
+               t->w, t->h, t->h > 0 ? (double)t->w / t->h : 0.0);
         return 0;
     }
 

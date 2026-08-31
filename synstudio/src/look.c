@@ -858,3 +858,137 @@ int ss_queue_clear(void)
     if (remove(path) != 0 && errno != ENOENT) return -1;
     return 0;
 }
+
+/* --------------------------------------------------- keeping a used LUT -- */
+
+/* Where a LUT the user brought in gets kept. Same rule as ss_look_dir: the
+ * first directory of SYNSTUDIO_LUTS when a bundle is named, otherwise the
+ * user's own config. */
+int ss_lut_dir(char *out, size_t n)
+{
+    const char *home = getenv("HOME");
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    const char *env = getenv("SYNSTUDIO_LUTS");
+
+    if (env && *env) {
+        const char *colon = strchr(env, ':');
+        size_t len = colon ? (size_t)(colon - env) : strlen(env);
+        if (len && len < n) { memcpy(out, env, len); out[len] = '\0'; return 0; }
+    }
+    if (xdg && *xdg) { snprintf(out, n, "%s/synstudio/luts", xdg); return 0; }
+    if (home && *home) { snprintf(out, n, "%s/.config/synstudio/luts", home); return 0; }
+    return -1;
+}
+
+/* Byte-for-byte, because two LUTs with the same file name are routinely not
+ * the same table — every vendor ships a `film.cube`. */
+static int same_file(const char *a, const char *b)
+{
+    FILE *fa = fopen(a, "rb"), *fb = fopen(b, "rb");
+    int same = 0;
+
+    if (fa && fb) {
+        char ba[8192], bb[8192];
+        size_t na, nb;
+        same = 1;
+        do {
+            na = fread(ba, 1, sizeof ba, fa);
+            nb = fread(bb, 1, sizeof bb, fb);
+            if (na != nb || memcmp(ba, bb, na)) { same = 0; break; }
+        } while (na);
+    }
+    if (fa) fclose(fa);
+    if (fb) fclose(fb);
+    return same;
+}
+
+static int copy_file(const char *from, const char *to)
+{
+    FILE *in = fopen(from, "rb"), *out;
+    char buf[8192];
+    size_t n;
+    int rc = 0;
+
+    if (!in) return -1;
+    out = fopen(to, "wb");
+    if (!out) { fclose(in); return -1; }
+    while ((n = fread(buf, 1, sizeof buf, in)) > 0)
+        if (fwrite(buf, 1, n, out) != n) { rc = -1; break; }
+    if (ferror(in)) rc = -1;
+    if (fclose(out) != 0) rc = -1;
+    fclose(in);
+    if (rc != 0) remove(to);
+    return rc;
+}
+
+/* Copy a LUT that was used by PATH into the catalogue, and hand back the name
+ * it now answers to.
+ *
+ * ⛔ A LUT USED BY PATH WAS INVISIBLE AFTERWARDS. ss_lut_lookup takes any ref
+ * containing '/' as a file to read directly — which is what lets somebody drop
+ * a .cube in from a download — and nothing put it anywhere. So the grade
+ * worked, and the LUT was not in the browser, not in `synstudio luts`, and not
+ * offered on the next clip: usable exactly once, by remembering where it came
+ * from.
+ *
+ * ⚠ AND THE NAME IS WHAT TRAVELS. ss_lut_lookup's own comment says it: a
+ * project naming `kodak2383` opens on a machine where that file lives
+ * somewhere else, and one naming /home/velle/Downloads/kodak2383.cube does not.
+ * Keeping the file is what makes rewriting the reference to a name honest.
+ *
+ * Returns 1 when a copy was made, 0 when there was nothing to do (already a
+ * catalogue name, or the identical file is already kept), -1 on failure.
+ * `name` is filled in for 1 and 0 alike.
+ */
+int ss_lut_keep(const char *ref, char *name, size_t n)
+{
+    char src[1024], dir[1024], dest[1300], base[SS_LUT_REF];
+    ss_lut3d probe;
+    char err[256];
+    struct stat st;
+    int i;
+
+    if (!ref || !*ref || !name || n == 0) return -1;
+
+    /* No '/' is already a catalogue name; there is nothing to keep. */
+    if (!strchr(ref, '/')) { snprintf(name, n, "%s", ref); return 0; }
+
+    expand_path(ref, src, sizeof src);
+    if (stat(src, &st) != 0 || !S_ISREG(st.st_mode)) return -1;
+    /* Parsed before it is copied. Filling the catalogue with files that turn
+     * out not to be LUTs would put entries in the browser that cannot open. */
+    if (ss_lut_read(src, &probe, err, sizeof err) != 0) return -1;
+    ss_lut_free(&probe);
+
+    if (ss_lut_dir(dir, sizeof dir) != 0) return -1;
+    basename_noext(src, ".cube", base, sizeof base);
+    if (!*base) return -1;
+
+    /* Already living in the catalogue directory — nothing to copy, and the
+     * name is what it is called there. */
+    snprintf(dest, sizeof dest, "%s/%s.cube", dir, base);
+    if (stat(dest, &st) == 0 && same_file(src, dest)) {
+        snprintf(name, n, "%s", base);
+        return 0;
+    }
+
+    if (mkdir_p(dir) != 0) return -1;
+
+    /* A DIFFERENT table under a name already taken gets a suffix rather than
+     * overwriting: `film.cube` is the most reused file name in colour, and
+     * silently replacing somebody's copy of one is a grade changing under a
+     * project that never asked. */
+    for (i = 2; stat(dest, &st) == 0 && i < 100; i++)
+        snprintf(dest, sizeof dest, "%s/%s-%d.cube", dir, base, i);
+    if (stat(dest, &st) == 0) return -1;      /* a hundred of them; give up */
+
+    if (copy_file(src, dest) != 0) return -1;
+
+    basename_noext(dest, ".cube", base, sizeof base);
+    snprintf(name, n, "%s", base);
+    /* The catalogue is read once and cached; a LUT kept during this run has to
+     * show up in the same run's browser, which is the whole point. */
+    lloaded = 0;
+    nlcat = 0;
+    return 1;
+}

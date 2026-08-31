@@ -437,6 +437,11 @@ typedef struct {
     int  dims, size;
 } ss_lut_entry;
 
+/* Keep a LUT used by path in the catalogue, and give back the name it now
+ * answers to. 1 = copied, 0 = nothing to do, -1 = failed. See look.c. */
+int  ss_lut_dir(char *out, size_t n);
+int  ss_lut_keep(const char *ref, char *name, size_t n);
+
 int                 ss_lut_count(void);
 const ss_lut_entry *ss_lut_at(int i);
 /* A reference is a catalogue NAME, or a path if it has a '/' in it (~ is
