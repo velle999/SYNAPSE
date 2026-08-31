@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=15
+pkgrel=16
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -15,7 +15,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=a0943cfbc66242a6222102b2b87e5f7cff5449ac
+_commit=f09b053773255f92ff0e184efdcd878b2ddda398
 
 # Runtime deps.
 #
@@ -95,21 +95,31 @@ _pydeps=(
 _voice=en_GB-cori-medium
 _piperrev=v1.0.0
 
-# STT model (faster-whisper tiny), pinned to an upstream HF revision.
+# STT model (faster-whisper small), pinned to an upstream HF revision.
 # Shipping it is what lets a freshly imaged machine hear you with NO network:
-# faster-whisper given a bare model name ("tiny") downloads ~75MB from
-# HuggingFace on first run, so without this the ISO would boot up deaf.
-_whisperrev=d90ca5fe260221311c53c58e660288d3deb8d356
+# faster-whisper given a bare model name downloads from HuggingFace on first
+# run, so without this the ISO would boot up deaf.
+#
+# ⚠ small, NOT tiny, since 0.1.0-16. tiny is 75MB and it shows: dictation came
+# back as "You're going to hear a bunch of phrases you're talking, watching in
+# phrase here" for a clearly spoken sentence. small is ~461MB and is the point
+# where a dictated line is usable without rereading it. int8 on CPU, so it
+# stays reasonable on a machine with no GPU time to spare.
+#
+# The tokenizer and vocabulary are byte-identical across whisper sizes — only
+# model.bin and config.json actually change — which is why two of the four
+# checksums below did not move.
+_whisperrev=536b0662742c02347bc0e980a01041f333bce120
 _hf=https://huggingface.co
 
 source=(
     "git+$url.git#commit=$_commit"
     "$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx"
     "$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx.json"
-    "whisper-model.bin::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/model.bin"
-    "whisper-config.json::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/config.json"
-    "whisper-tokenizer.json::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/tokenizer.json"
-    "whisper-vocabulary.txt::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/vocabulary.txt"
+    "whisper-model.bin::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/model.bin"
+    "whisper-config.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/config.json"
+    "whisper-tokenizer.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/tokenizer.json"
+    "whisper-vocabulary.txt::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/vocabulary.txt"
     "chibi.sh"
     "chibi.desktop"
     "chibi-64.png"
@@ -119,8 +129,8 @@ sha256sums=(
     'SKIP'
     '1899f98e5fb8310154f3c2973f4b8a929ba7245e722b3d3a85680b833d95f10d'
     'e262c16d7f192f69d4edd6b4ef8a5915379e67495fcc402f1ab15eeb33da3d36'
-    'dcb76c6586fc06cbdac6dd21f14cfd129cc4cdd9dce19bf4ffa62e59cbe6e6d1'
-    'a73a28cdfe1c43ccc7202fa333d1f89c202477271407ae9a7f19afa52039cac8'
+    '3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671'
+    'b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828'
     'fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab'
     '34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913'
     'SKIP'
@@ -252,13 +262,13 @@ package() {
         "$pkgdir/usr/share/piper-voices/$_voice.onnx.json"
 
     install -Dm644 "$srcdir/whisper-model.bin" \
-        "$pkgdir/usr/share/faster-whisper/tiny/model.bin"
+        "$pkgdir/usr/share/faster-whisper/small/model.bin"
     install -Dm644 "$srcdir/whisper-config.json" \
-        "$pkgdir/usr/share/faster-whisper/tiny/config.json"
+        "$pkgdir/usr/share/faster-whisper/small/config.json"
     install -Dm644 "$srcdir/whisper-tokenizer.json" \
-        "$pkgdir/usr/share/faster-whisper/tiny/tokenizer.json"
+        "$pkgdir/usr/share/faster-whisper/small/tokenizer.json"
     install -Dm644 "$srcdir/whisper-vocabulary.txt" \
-        "$pkgdir/usr/share/faster-whisper/tiny/vocabulary.txt"
+        "$pkgdir/usr/share/faster-whisper/small/vocabulary.txt"
 
     # ── Launcher, desktop entry, icons ───────────────────────────────────
     install -Dm755 "$srcdir/chibi.sh" "$pkgdir/usr/bin/chibi"

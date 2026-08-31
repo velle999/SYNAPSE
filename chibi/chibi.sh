@@ -106,7 +106,7 @@ export CHIBI_LLM_BACKEND="${CHIBI_LLM_BACKEND:-synapd}"
 export CHIBI_SYNAPD_SOCKET="${CHIBI_SYNAPD_SOCKET:-/run/synapd/synapd.sock}"
 # Load the packaged STT model instead of downloading ~75MB from HuggingFace on
 # first run — without this a freshly imaged, offline machine boots up deaf.
-export CHIBI_STT_MODEL_DIR="${CHIBI_STT_MODEL_DIR:-/usr/share/faster-whisper/tiny}"
+export CHIBI_STT_MODEL_DIR="${CHIBI_STT_MODEL_DIR:-/usr/share/faster-whisper/small}"
 # Come up windowed. Chibi's own default is the Pi kiosk's fullscreen, which on
 # a desktop means no titlebar, so no close button — and under Wayland there is
 # no window manager keybind to escape it either. The app draws its own quit
