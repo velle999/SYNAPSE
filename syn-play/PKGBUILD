@@ -49,7 +49,7 @@
 # one, or want last night's film back.
 pkgname=syn-play
 pkgver=0.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc="Playlists, shuffle, quick open and history for mpv — window, terminal UI and command line"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

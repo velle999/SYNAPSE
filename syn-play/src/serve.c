@@ -13,6 +13,7 @@
  *
  *   s <key> <value>        one fact: state, path, title, pos, duration, …
  *   q <i> <cur> <t> <p>    one queue row, between q-begin and q-end
+ *   q-more <n>            rows the queue list could not hold, if any
  *   h <when> <pos> <dur> <t> <p>   one history row, between h-begin and h-end
  *   l <name> <count>       one saved playlist, between l-begin and l-end
  *   f <t> <p>              one quick-open hit, between f-begin and f-end
@@ -104,10 +105,19 @@ static void rec_num(const char *key, double v)
 	printf("s\t%s\t%.3f\n", key, v);
 }
 
+/*
+ * ⛔ AND IT SAYS WHEN IT COULD NOT SEND THEM ALL. An sp_entry_t carries a
+ * PATH_MAX path, so this array is already 19 MB of static and does not grow to
+ * whatever somebody owns. Unreachable while a folder was one queue row;
+ * reachable the moment folders expand — and a window drawing 4096 of 5000 rows
+ * with nothing to say so is the dock's sixteen-pin ceiling again.
+ */
+#define SERVE_QUEUE_MAX 4096
+
 static void send_queue(int fd)
 {
-	static sp_entry_t q[4096];
-	int n = sp_queue(fd, q, 4096);
+	static sp_entry_t q[SERVE_QUEUE_MAX];
+	int n = sp_queue(fd, q, SERVE_QUEUE_MAX);
 	if (n < 0) n = 0;
 	printf("q-begin\n");
 	for (int i = 0; i < n; i++) {
@@ -115,6 +125,13 @@ static void send_queue(int fd)
 		sp_enc(q[i].title, t, sizeof t);
 		sp_enc(q[i].path, p, sizeof p);
 		printf("q\t%d\t%s\t%s\t%s\n", i, q[i].current ? "1" : "0", t, p);
+	}
+	/* ⚠ mpv's own count, not the cap — the number missing is a fact about
+	 * the playlist, not about this array. */
+	if (n == SERVE_QUEUE_MAX) {
+		double total = 0;
+		if (sp_get_num(fd, "playlist-count", &total) && (int)total > n)
+			printf("q-more\t%d\n", (int)total - n);
 	}
 	printf("q-end\n");
 }

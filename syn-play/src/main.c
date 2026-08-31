@@ -228,11 +228,25 @@ static int cmd_status(void)
 	return 0;
 }
 
+/*
+ * ⛔ THE LIST IS CAPPED AND THE CAP HAS TO SAY SO.
+ *
+ * An sp_entry_t carries a PATH_MAX path, so 4096 of them is already 19 MB of
+ * static — this does not grow to whatever somebody owns. It never mattered
+ * while a folder was one queue row; a recursively expanded library reaches it,
+ * and a list that quietly stops at 4096 of 5000 is the dock's sixteen-pin
+ * ceiling again. mpv's own `playlist-count` is what the missing rows are
+ * counted against, so the number is its, not a guess from the cap.
+ */
+#define QUEUE_MAX 4096
+
 static int cmd_queue(void)
 {
 	int fd = need_fd();
-	static sp_entry_t q[4096];
-	int n = sp_queue(fd, q, 4096);
+	static sp_entry_t q[QUEUE_MAX];
+	int n = sp_queue(fd, q, QUEUE_MAX);
+	double total = 0;
+	if (n == QUEUE_MAX) sp_get_num(fd, "playlist-count", &total);
 	close(fd);
 	if (n < 0) die("mpv would not say what is queued");
 
@@ -247,6 +261,11 @@ static int cmd_queue(void)
 		}
 	}
 	if (n == 0 && g_out == OUT_HUMAN) printf("The queue is empty.\n");
+	if ((int)total > n) {
+		if (g_out == OUT_REC) printf("more\t%d\n", (int)total - n);
+		else printf("     … and %d more that this list does not show\n",
+		            (int)total - n);
+	}
 	return 0;
 }
 

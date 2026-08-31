@@ -267,6 +267,60 @@ contains "...down to the file two levels inside it" "05 Five.wav" "$out"
 check "...with every track in the folder now a row of its own" "4" \
       "$(printf '%s\n' "$out" | grep -o "	$T/Library/.*" | sort -u | wc -l)"
 
+# ── a queue as long as a library ────────────────────────────────────────────
+#
+# ⛔ THE BUG THIS EXISTS FOR: AN EMPTY QUEUE BESIDE A PLAYER THAT WAS PLAYING.
+#
+# The socket reader read a reply into a fixed 64 KB buffer and, when one did
+# not fit, returned the TRUNCATED line as though it were whole — leaving the
+# rest of it in the socket for the next read to pick up as a fresh message.
+# mpv puts `request_id` at the END of a reply, so the truncated one matched
+# nothing and the command then blocked on a line that was never coming.
+#
+# ⚠ It could not fire while a folder was ONE queue row. Expanding folders made
+# `get_property playlist` proportional to somebody's music library, and the
+# first thing that broke was the queue: empty, while playback and every short
+# reply carried on working perfectly.
+#
+# ⚠ SO THE COUNT IS THE POINT. Enough entries that the reply passes 64 KB —
+# a few hundred paths does it — and long names so it does so on a short
+# temporary path as well as a long one.
+
+mkdir -p "$T/Big/Tracks"
+python3 - "$SILENT" "$T/Big/Tracks" <<'BIG'
+import os, sys
+data = open(sys.argv[1], "rb").read()
+for i in range(800):
+    name = "%03d A Track Name Long Enough To Fill A Buffer.wav" % i
+    open(os.path.join(sys.argv[2], name), "wb").write(data)
+BIG
+
+"$BIN" clear >/dev/null; sleep 0.3
+"$BIN" "$T/Big" >/dev/null 2>&1
+sleep 2
+out=$("$BIN" --rec queue)
+check "a library-sized queue is read whole, not truncated to nothing" "800" \
+      "$(printf '%s\n' "$out" | grep -c '^item')"
+
+# ⛔ AND THE ENGINE THE WINDOW TALKS TO, WHICH IS WHERE IT WAS SEEN.
+#
+# A CLI verb opens a connection, asks one thing and closes it, so a desynced
+# socket dies with the process and the next command looks fine. `serve` holds
+# ONE connection for the life of the window — so the unread tail of a
+# truncated reply was still there for the next read, and the engine wedged
+# with the queue never sent. That is the report: a window showing an empty
+# queue beside a player that is playing.
+#
+# ⚠ UNDER `timeout`, because the failure being guarded against is a HANG. A
+# case that waits for a wedged engine takes the whole suite with it.
+out=$(sleep 2 | timeout 30 "$BIN" serve 2>/dev/null)
+# ⚠ THE FIRST BLOCK ONLY. serve re-sends the queue as playback moves, so a
+# range match over two seconds counts it as many times as it was sent.
+check "the window's engine sends every queue row on one connection" "800" \
+      "$(printf '%s\n' "$out" | awk '/^q-begin/{f=1;next} /^q-end/{if(f)exit} f&&/^q	/{n++} END{print n+0}')"
+check "...and goes on reporting state afterwards" "yes" \
+      "$(printf '%s\n' "$out" | grep -q '^s	state' && echo yes || echo no)"
+
 # Back to the three plain files the cases below are written against.
 "$BIN" clear >/dev/null; sleep 0.3
 "$BIN" "$SILENT" >/dev/null 2>&1

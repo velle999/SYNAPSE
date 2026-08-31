@@ -208,6 +208,43 @@ const char *sp_json_raw(const char *json, const char *key, size_t *len)
 	return v;
 }
 
+/*
+ * ⛔ AN ITERATOR, BECAUSE sp_json_elem() IS QUADRATIC AND THE PLAYLIST GOT BIG.
+ *
+ * sp_json_elem() rescans from the start of the array for every index, which
+ * cost nothing while a queue was a handful of rows and a folder was one of
+ * them. A recursively expanded music library is thousands, and walking it
+ * index by index scans gigabytes of characters to read a list mpv produced in
+ * one go. sp_json_elem stays — it is the right shape for "the third one" and
+ * for the tests — and anything walking the WHOLE array uses these.
+ *
+ * ⚠ THE ARRAY'S `[` IS CONSUMED BY sp_json_iter(), NOT BY THE FIRST next().
+ * A next() that skipped a leading `[` itself could not tell the array's own
+ * bracket from an element that is itself an array.
+ */
+void sp_json_iter(const char *array, const char **cursor)
+{
+	const char *p = array ? skip_ws(array) : NULL;
+	*cursor = (p && *p == '[') ? p + 1 : NULL;
+}
+
+const char *sp_json_next(const char **cursor, size_t *len)
+{
+	const char *p = *cursor;
+	if (!p) return NULL;
+
+	p = skip_ws(p);
+	while (*p == ',') p = skip_ws(p + 1);
+	if (*p == ']' || !*p) { *cursor = NULL; return NULL; }
+
+	const char *end = skip_value(p);
+	if (!end) { *cursor = NULL; return NULL; }
+
+	if (len) *len = (size_t)(end - p);
+	*cursor = end;
+	return p;
+}
+
 const char *sp_json_elem(const char *array, int idx, size_t *len)
 {
 	const char *p = skip_ws(array);

@@ -24,20 +24,32 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+/*
+ * ⛔ THE REPLY IS AS LONG AS THE LIBRARY, AND IT USED TO BE READ INTO 256 KB.
+ *
+ * A queue was a handful of rows for as long as a folder was ONE of them. Once
+ * a directory expands into its files, `get_property playlist` is proportional
+ * to how much music somebody owns — and the fixed buffer here, plus the fixed
+ * one inside the socket reader, turned that into an EMPTY QUEUE beside a
+ * player that was working perfectly. sp_cmd_full() and the array iterator are
+ * both here for this one call.
+ */
 int sp_queue(int fd, sp_entry_t *out, int max)
 {
-	char reply[262144];
-	if (!sp_cmd(fd, "\"get_property\",\"playlist\"", reply, sizeof reply))
-		return -1;
+	const char *reply = sp_cmd_full(fd, "\"get_property\",\"playlist\"");
+	if (!reply) return -1;
 
 	size_t len = 0;
 	const char *arr = sp_json_raw(reply, "data", &len);
 	if (!arr) return 0;
 
+	const char *it;
+	sp_json_iter(arr, &it);
+
 	int n = 0;
 	for (int i = 0; i < max; i++) {
 		size_t elen = 0;
-		const char *e = sp_json_elem(arr, i, &elen);
+		const char *e = sp_json_next(&it, &elen);
 		if (!e) break;
 
 		/* Bounded copy of the element so the field readers see one object.

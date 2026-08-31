@@ -37,6 +37,11 @@
 #include <time.h>
 #include <unistd.h>
 
+/* Defined with the rest of the reader, below. Called here because a fresh
+ * connection can be handed the FD NUMBER of the one just closed — anything
+ * still buffered from the old socket has to go when the new one is made. */
+static void rd_discard(void);
+
 static int connect_once(void)
 {
 	const char *path = sp_socket_path();
@@ -53,6 +58,7 @@ static int connect_once(void)
 		close(fd);
 		return -1;
 	}
+	rd_discard();
 	return fd;
 }
 
@@ -289,25 +295,83 @@ static bool write_all(int fd, const char *buf, size_t n)
 }
 
 /* Reads one \n-terminated line. Returns false at EOF or on error. */
-static bool read_line(int fd, char *buf, size_t cap)
+/*
+ * ⛔ A REPLY IS AS BIG AS THE PLAYLIST, AND A FIXED BUFFER TRUNCATED IT
+ * *AND* DESYNCHRONISED THE SOCKET.
+ *
+ * This read one byte at a time into a 64 KB caller buffer and, on overflow,
+ * returned the truncated line AS IF IT WERE COMPLETE — leaving the rest of it
+ * unread in the socket, where the next read picked it up as a fresh message.
+ * mpv puts `request_id` at the END of a reply, so a truncated one matches
+ * nothing, and sp_cmd() then spun through fragments until it blocked on a line
+ * that was never coming.
+ *
+ * ⚠ It never fired while a folder was ONE queue row. Recursive expansion made
+ * `get_property playlist` proportional to a music library, and the symptom was
+ * "the queue is empty but it is playing" plus a command that hung — the queue
+ * read failing while every short reply carried on working perfectly.
+ *
+ * So: the line grows to whatever arrives, and a partial read is never handed
+ * back as a whole one.
+ *
+ * ⚠ AND BUFFERED. One `read()` per BYTE is 90,000 syscalls for a 600-track
+ * folder and millions for a library; the readahead below makes it one per
+ * 64 KB. It is discarded on connect rather than tracked per-fd — a new
+ * connection can be handed the same fd number as the one just closed, so
+ * anything left from the old socket has to go at the moment the new one is
+ * made, not the next time the number changes.
+ */
+static char   rd_buf[65536];
+static size_t rd_len, rd_off;
+static char  *rd_line;
+static size_t rd_cap;
+
+static void rd_discard(void) { rd_len = rd_off = 0; }
+
+static int rd_getc(int fd)
+{
+	if (rd_off >= rd_len) {
+		ssize_t r;
+		do { r = read(fd, rd_buf, sizeof rd_buf); } while (r < 0 && errno == EINTR);
+		if (r <= 0) return -1;
+		rd_len = (size_t)r;
+		rd_off = 0;
+	}
+	return (unsigned char)rd_buf[rd_off++];
+}
+
+/* The whole of the next line, however long. Points at a buffer owned here and
+ * valid until the next call. False at end of stream. */
+static bool read_line(int fd, char **out)
 {
 	size_t o = 0;
-	while (o + 1 < cap) {
-		char c;
-		ssize_t r = read(fd, &c, 1);
-		if (r < 0) {
-			if (errno == EINTR) continue;
-			return false;
+	bool   oom = false;
+
+	for (;;) {
+		int c = rd_getc(fd);
+		if (c < 0) return false;
+		if (c == '\n') break;
+
+		/* ⚠ ON A FAILED GROW, KEEP DRAINING. Returning here would leave
+		 * the tail of this line in the socket for the next read to take
+		 * as a message — the exact failure this replaced. */
+		if (!oom && o + 1 >= rd_cap) {
+			size_t want = rd_cap ? rd_cap * 2 : 16384;
+			char  *p    = realloc(rd_line, want);
+			if (p) { rd_line = p; rd_cap = want; }
+			else   { oom = true; }
 		}
-		if (r == 0) return false;
-		if (c == '\n') { buf[o] = '\0'; return true; }
-		buf[o++] = c;
+		if (!oom) rd_line[o++] = (char)c;
 	}
-	buf[o] = '\0';
+	if (oom) return false;
+
+	rd_line[o] = '\0';
+	*out = rd_line;
 	return true;
 }
 
-bool sp_cmd(int fd, const char *json_args, char *reply, size_t cap)
+static bool cmd_core(int fd, const char *json_args, char *reply, size_t cap,
+                     char **full)
 {
 	static int next_id = 1;
 	int id = next_id++;
@@ -324,9 +388,9 @@ bool sp_cmd(int fd, const char *json_args, char *reply, size_t cap)
 	 * taking the next line as the answer works right up until something is
 	 * actually playing, which is every time it matters.
 	 */
-	char line[65536];
 	for (int guard = 0; guard < 512; guard++) {
-		if (!read_line(fd, line, sizeof line)) return false;
+		char *line;
+		if (!read_line(fd, &line)) return false;
 		double got;
 		if (!sp_json_num(line, "request_id", &got)) continue;   /* an event */
 		if ((int)got != id) continue;                            /* not ours */
@@ -334,10 +398,32 @@ bool sp_cmd(int fd, const char *json_args, char *reply, size_t cap)
 		char err[64] = "";
 		if (sp_json_str(line, "error", err, sizeof err) && strcmp(err, "success"))
 			return false;
+		if (full)  *full = line;
 		if (reply) snprintf(reply, cap, "%s", line);
 		return true;
 	}
 	return false;
+}
+
+bool sp_cmd(int fd, const char *json_args, char *reply, size_t cap)
+{
+	return cmd_core(fd, json_args, reply, cap, NULL);
+}
+
+/*
+ * ⛔ FOR THE ONE REPLY THAT HAS NO SENSIBLE FIXED SIZE. sp_cmd() copies into
+ * the caller's buffer, which is right for `path`, `volume` and the rest — they
+ * are bounded and a caller that names 512 bytes means it. The PLAYLIST is
+ * bounded only by how much music somebody owns, and the last buffer named for
+ * it (256 KB) was a guess that a library walks straight past.
+ *
+ * ⚠ Valid until the next command on this connection.
+ */
+const char *sp_cmd_full(int fd, const char *json_args)
+{
+	char *line = NULL;
+	if (!cmd_core(fd, json_args, NULL, 0, &line)) return NULL;
+	return line;
 }
 
 /* ── properties ─────────────────────────────────────────────────────────── */

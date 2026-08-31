@@ -266,6 +266,11 @@ FloatingWindow {
     // flicker empty four times a second.
     property var pending: []
 
+    // Rows the engine had to leave out of the queue list, from its `q-more`
+    // record. ⚠ Reset at `q-begin`, so a queue that shrinks back under the
+    // ceiling stops claiming there is more.
+    property int queueMore: 0
+
     function fmt(t) {
         if (!(t > 0)) return "0:00"
         const s = Math.floor(t % 60), m = Math.floor(t / 60) % 60, h = Math.floor(t / 3600)
@@ -364,6 +369,7 @@ FloatingWindow {
         } else if (tag === "q-begin" || tag === "h-begin" ||
                    tag === "l-begin" || tag === "f-begin") {
             root.pending = []
+            if (tag === "q-begin") root.queueMore = 0
         } else if (tag === "q") {
             root.pending.push({ idx: parseInt(f[1]), current: f[2] === "1",
                                 title: root.dec(f[3]), path: root.dec(f[4]) })
@@ -378,6 +384,10 @@ FloatingWindow {
             root.pending.push({ name: f[1], count: parseInt(f[2]) })
         } else if (tag === "f") {
             root.pending.push({ title: root.dec(f[1]), path: root.dec(f[2]) })
+        } else if (tag === "q-more") {
+            // ⚠ Held aside rather than pushed: `pending` becomes the model, and
+            // a row that is not a queue entry would draw as a blank one.
+            root.queueMore = parseInt(f[1])
         } else if (tag === "q-end") { root.swap(queue, root.pending)
         } else if (tag === "h-end") { root.swap(history, root.pending)
         } else if (tag === "l-end") { root.swap(playlists, root.pending)
@@ -988,6 +998,18 @@ FloatingWindow {
                 color: root.cDim
                 font.family: root.uiFont || "sans-serif"
                 font.pixelSize: root.ui(12)
+            }
+
+            // ⚠ THE LIST HAS A CEILING AND SAYS SO. The engine sends at most
+            // 4096 rows; a queue longer than that is drawn short, and silence
+            // there would read as "that is the whole queue".
+            Text {
+                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
+                visible: root.queueMore > 0
+                text: "… and " + root.queueMore + " more not shown here"
+                color: root.cDim
+                font.family: root.uiFont || "sans-serif"
+                font.pixelSize: root.ui(11)
             }
         }
 

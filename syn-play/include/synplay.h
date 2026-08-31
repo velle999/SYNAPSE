@@ -86,6 +86,12 @@ void sp_json_quote(const char *in, char *out, size_t cap);
  * NULL past the end. */
 const char *sp_json_elem(const char *array, int idx, size_t *len);
 
+/* The same walk, once, for an array big enough that re-scanning it per index
+ * matters — a playlist is as long as a music library. Set the cursor with
+ * sp_json_iter(), then call sp_json_next() until it returns NULL. */
+void        sp_json_iter(const char *array, const char **cursor);
+const char *sp_json_next(const char **cursor, size_t *len);
+
 /* ── ipc.c ──────────────────────────────────────────────────────────────── */
 /* Connect to a running mpv. -1 when there is none, without complaint: no
  * session running is the ordinary case, not an error. */
@@ -97,6 +103,11 @@ bool sp_session_live(void);
 /* One command, one reply. `reply` may be NULL. Returns false on any transport
  * failure or an mpv `error` that is not "success". */
 bool sp_cmd(int fd, const char *json_args, char *reply, size_t cap);
+/* The whole reply, for the one property with no sensible fixed size: mpv's
+ * playlist is as big as somebody's music library. Points at a buffer owned by
+ * ipc.c and valid until the next command on this connection. NULL on failure. */
+const char *sp_cmd_full(int fd, const char *json_args);
+
 /* Convenience wrappers over sp_cmd. */
 bool sp_get_str(int fd, const char *prop, char *out, size_t cap);
 bool sp_get_num(int fd, const char *prop, double *out);

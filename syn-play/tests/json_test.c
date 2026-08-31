@@ -92,6 +92,31 @@ int main(void)
 
 	ck("element 3 is absent", sp_json_elem(arr, 3, &len) == NULL);
 
+	/* ⛔ THE ITERATOR IS WHAT sp_queue WALKS NOW, and it has to agree with
+	 * sp_json_elem exactly — a playlist read one way and counted the other
+	 * is the kind of disagreement that shows up as a row going missing. */
+	const char *it;
+	size_t ilen = 0;
+	int walked = 0;
+	bool agrees = true;
+	sp_json_iter(arr, &it);
+	for (const char *ie; (ie = sp_json_next(&it, &ilen)); walked++) {
+		size_t elen = 0;
+		const char *want = sp_json_elem(arr, walked, &elen);
+		if (!want || elen != ilen || memcmp(want, ie, ilen)) agrees = false;
+	}
+	ck("the iterator walks every element", walked == 3);
+	ck("...and gives byte for byte what sp_json_elem gives", agrees);
+	ck("...and NULL past the end", sp_json_next(&it, &ilen) == NULL);
+
+	/* ⚠ An empty array ends immediately rather than returning its own `]`. */
+	sp_json_iter("[]", &it);
+	ck("an empty array yields nothing", sp_json_next(&it, &ilen) == NULL);
+
+	/* ⚠ Not an array at all: no cursor, no walk, no crash. */
+	sp_json_iter("{\"a\":1}", &it);
+	ck("an object is not walked as an array", sp_json_next(&it, &ilen) == NULL);
+
 	/* escapes, both ways */
 	const char *uni = "{\"data\":\"caf\\u00e9 \\u2014 live\\nset\"}";
 	sp_json_str(uni, "data", b, sizeof b);
