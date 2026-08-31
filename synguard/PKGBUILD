@@ -64,7 +64,7 @@ pkgver=0.1.0
 #   killing. Also: sg_kill_tree SIGSTOPs before tearing down, so a machine in
 #   that state is usually resumable with kill -CONT, and `[[ -e path ]]` is a
 #   builtin that needs no exec.
-pkgrel=39
+pkgrel=40
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -75,7 +75,16 @@ depends=('glibc' 'systemd-libs' 'libbpf')
 # kernel — the whole reason enforcement went this way instead of into the kmod.
 makedepends=('meson' 'ninja' 'gcc' 'pkg-config' 'clang' 'bpf')
 optdepends=('synapd: AI threat classification')
-source=("synguard-0.1.0.tar.gz")
+# ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
+# what makepkg looks for on disk, so a build from this checkout uses the
+# tarball build-all.sh just collected and never downloads. The URL after it is
+# for everybody else, and it names <pkgver>-<pkgrel> because that tag is the
+# only thing that makes a published source unambiguously the one this PKGBUILD
+# was written against.
+#
+# ⛔ AND sha256sums STAYS 'SKIP'. A real checksum would break every LOCAL build
+# the moment the tree changed, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 # Refuse to build a tarball that is older than the working tree.

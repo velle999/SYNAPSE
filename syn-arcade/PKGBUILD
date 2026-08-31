@@ -1050,7 +1050,7 @@ pkgver=0.1.0
 #   relationship its layout depends on. A face is a face at any distance; a
 #   ten-foot UI's sizes are not the desktop's.
 #   tools/preflight.sh gates this repo-wide now, and names the exemption.
-pkgrel=49
+pkgrel=50
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -1128,7 +1128,16 @@ optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mo
             'sdl2-compat: SDL2 games that read the controller mappings'
             'sdl3: SDL3 games read the mappings — and `syn-arcade map learn` needs it to WRITE one, because the GUID and the button numbers in a mapping are SDL’s own')
 
-source=("syn-arcade-0.1.0.tar.gz")
+# ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
+# what makepkg looks for on disk, so a build from this checkout uses the
+# tarball build-all.sh just collected and never downloads. The URL after it is
+# for everybody else, and it names <pkgver>-<pkgrel> because that tag is the
+# only thing that makes a published source unambiguously the one this PKGBUILD
+# was written against.
+#
+# ⛔ AND sha256sums STAYS 'SKIP'. A real checksum would break every LOCAL build
+# the moment the tree changed, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {

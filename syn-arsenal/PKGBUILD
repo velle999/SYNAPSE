@@ -7,7 +7,7 @@
 # handing you `syn arsenal --enable-repo` is most of what a first run is for.
 pkgname=syn-arsenal
 pkgver=0.1.0
-pkgrel=11
+pkgrel=12
 pkgdesc="SYNAPSE Arsenal: browse and install BlackArch security tooling by category"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -19,17 +19,26 @@ depends=('pacman' 'bash' 'curl')
 # so they are optdepends and the launcher degrades to the terminal without them.
 optdepends=('quickshell: the graphical browser (syn-arsenal without --tui)'
             'polkit: install/remove from the GUI without a terminal')
-source=('syn-arsenal.sh'
-        'arsenal-query.sh'
-        'arsenal-tui.sh'
-        'arsenal-enable-repo.sh'
-        'syn-arsenal.desktop'
-        'syn-arsenal.svg'
-        'arsenal.qml')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+# ⛔ ONE TARBALL, NOT A LIST OF LOOSE FILES.
+#
+# Every file this package installs used to be named here individually, which
+# builds perfectly from a checkout and cannot be published: there is nothing to
+# attach to a release and nothing for an outsider's makepkg to fetch. The
+# tarball collect-source.sh assembles is that one thing, and the URL after `::`
+# is where everybody who is not us gets it. The filename BEFORE `::` is what
+# makepkg looks for on disk first, so a build from this tree still uses the
+# tarball build-all.sh just collected and never downloads.
+#
+# ⚠ AND package() NOW WORKS INSIDE THE EXTRACTED DIRECTORY. The files arrive at
+# $srcdir/$pkgname-$pkgver/ rather than loose in $srcdir.
+#
+# ⛔ sha256sums STAYS 'SKIP' — a real checksum breaks every local build the
+# moment the tree changes, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
 
 package() {
-    cd "$srcdir"
+    cd "$srcdir/$pkgname-$pkgver"
 
     install -Dm755 syn-arsenal.sh          "$pkgdir/usr/bin/syn-arsenal"
 

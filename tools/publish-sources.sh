@@ -72,6 +72,43 @@ EXTERNAL=(
     # the applications
     syn-cal syn-clean syn-disks syn-edit synfiles syn-play syn-settings
     synsh synstudio syn-vault
+    # packages, security and gaming — each installs and runs on plain Arch
+    synpkg syn-arsenal syn-model syn-confine synguard syn-arcade syn-gfn
+)
+
+# ⛔ AND THE ONES THAT ARE DELIBERATELY NOT PUBLISHED, WITH THE REASON.
+#
+# This table is the other half of EXTERNAL, and preflight.sh requires every
+# component to be in one or the other. Without it a component is external by
+# omission — which is how synpkg, the package manager, sat unpublishable for
+# forty-three releases while the check above reported twelve components in
+# perfect agreement with themselves. A set that only validates its members
+# cannot see the one that was never added.
+#
+# Resolving an entry means DELETING its line, exactly as the registration
+# table above works.
+declare -A NOT_EXTERNAL=(
+    [synapd]="needs a pinned llama.cpp build that is staged in this repo, not a dependency anybody can resolve"
+    [synapse-llama]="the pinned llama.cpp build itself — assembled from llama-staging/, which is a build output and not source"
+    [synapse_kmod]="DKMS against a running kernel; it means something different on every machine and nothing on most"
+    [syn-install]="installs SynapseOS onto a disk — it has no meaning on a machine that is not being turned into one"
+    [syn-firstboot]="the first-boot wizard of a SynapseOS installation, for the same reason"
+    [syn-update]="updates an installed SynapseOS from this very repository; publishing it would publish a second way to be out of date"
+    [syn]="the unified CLI, which is a front end to the other syn-* tools and does nothing without them"
+    [synnet]="depends on synapd, which is not published — a clone would fetch a PKGBUILD it cannot satisfy"
+    [vibe]="the same: it depends on synapd"
+    [synapse-wallpapers]="wallpaper assets with no source to build; they travel in the ISO"
+    [scenefx]="retired fork, kept only for the scene TUs its PKGBUILD documents"
+    [scenefx0.5]="already self-sufficient — its source=() fetches from wlrfx/scenefx upstream"
+    [chibi]="builds from its own upstream repository already"
+    [tepris]="the same"
+    [nexus-chat]="the same"
+    [cliamp]="the same"
+    [fetch]="the same"
+    [linux-wallpaperengine-pkg]="third-party packaging; the source is somebody else's repository"
+    [samsung-m2020]="the same — a printer driver packaged from Samsung's ULD"
+    [limine-mkinitcpio-hook]="the same"
+    [limine-snapper-sync]="the same"
 )
 
 # ⚠ WHAT GITHUB CALLS TOPICS, AND THE ONLY PLACE THEY ARE WRITTEN DOWN.
@@ -103,6 +140,13 @@ declare -A TOPICS=(
     [synsh]="shell natural-language llm ai command-line"
     [synstudio]="photo-editing video-editing raw-image color-grading darkroom"
     [syn-vault]="encryption encrypted-filesystem gocryptfs fuse privacy"
+    [synpkg]="package-manager pacman aur flatpak flathub"
+    [syn-arsenal]="security-tools blackarch pentesting"
+    [syn-model]="llm model-manager ai downloader"
+    [syn-confine]="sandbox landlock security hardening"
+    [synguard]="security ebpf intrusion-detection monitoring"
+    [syn-arcade]="gaming game-overlay controller mangohud"
+    [syn-gfn]="cloud-gaming geforce-now gaming"
 )
 
 dry=0; force=0; list=0; only=()

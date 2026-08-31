@@ -1180,6 +1180,46 @@ check_tarball() {
 # component of this repo has to be reachable too — either in EXTERNAL, or
 # self-sufficient already because its own source=() is an upstream URL
 # (scenefx0.5, which fetches from wlrfx/scenefx and needs nothing from here).
+# ⛔ EVERY COMPONENT IS EXTERNAL OR IS DECLARED NOT TO BE, AND THIS IS WHY.
+#
+# check_external below verifies that the components IN the set agree with
+# themselves — the URL carries the pkgrel, the local filename matches, the
+# dependency closure is reachable. All of that passed for twelve components
+# while synpkg, the package manager, sat unbuildable outside this checkout for
+# forty-three releases. A set that only validates its members cannot see the
+# one nobody added: silence and correctness look identical.
+#
+# So membership is a decision that has to be written down either way. A
+# component is in EXTERNAL, or it is in publish-sources.sh's NOT_EXTERNAL table
+# with a sentence saying why — and a NEW component is in neither, so it fails
+# here on the commit that adds it rather than in a year.
+check_external_membership() {
+    local bad=$FINDINGS ext notext name c
+
+    ext=$(read_array tools/publish-sources.sh EXTERNAL) || return 0
+    # The declared-out names are the keys of an associative array, one per line.
+    notext=$(sed -n '/^declare -A NOT_EXTERNAL=(/,/^)/p' tools/publish-sources.sh |
+             sed -n 's/^[[:space:]]*\[\([^]]*\)\].*/\1/p')
+
+    for c in */PKGBUILD; do
+        name=${c%/PKGBUILD}
+        printf '%s\n' $ext    | grep -qxF "$name" && continue
+        printf '%s\n' $notext | grep -qxF "$name" && continue
+        fail external \
+            "$name is neither in EXTERNAL nor declared out of it" \
+            "Nothing publishes its source, so makepkg in $name/ stops at" \
+            "\"Retrieving sources\" for everybody who is not us — and no check" \
+            "said so, because the external checks only read the set's members." \
+            "Fix: add it to EXTERNAL in tools/publish-sources.sh and give its" \
+            "PKGBUILD the release source line, or add it to NOT_EXTERNAL there" \
+            "with the reason it cannot be published."
+    done
+
+    [ "$FINDINGS" -eq "$bad" ] &&
+        ok external "$(ls -d */PKGBUILD | wc -l) component(s) — each is published or says why not"
+    return 0
+}
+
 check_external() {
     local bad=$FINDINGS ext n=0 name ver rel want got dep
     ext=$(read_array tools/publish-sources.sh EXTERNAL) || {
@@ -1254,6 +1294,7 @@ check_uifont
 check_scrollbar
 check_leavings
 check_tarball
+check_external_membership
 check_external
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \

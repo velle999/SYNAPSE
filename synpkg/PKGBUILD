@@ -148,7 +148,7 @@ pkgver=0.1.0
 #   ⚠ ONE SCAN PER WINDOW, like the .desktop map beside it, and it is allowed to
 #   find nothing — in a chroot without the data the map stays empty and every
 #   row falls back to the monogram, which is where this started.
-pkgrel=43
+pkgrel=44
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -186,7 +186,16 @@ optdepends=('quickshell: the graphical browser (synpkg gui)'
             'syntty>=0.1.0-27: terminal the GUI opens for a full system upgrade'
             'foot: the same, on an install that predates syntty')
 
-source=("synpkg-0.1.0.tar.gz")
+# ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
+# what makepkg looks for on disk, so a build from this checkout uses the
+# tarball build-all.sh just collected and never downloads. The URL after it is
+# for everybody else, and it names <pkgver>-<pkgrel> because that tag is the
+# only thing that makes a published source unambiguously the one this PKGBUILD
+# was written against.
+#
+# ⛔ AND sha256sums STAYS 'SKIP'. A real checksum would break every LOCAL build
+# the moment the tree changed, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {

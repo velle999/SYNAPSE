@@ -10,6 +10,11 @@
 # has already paid for elsewhere — a package that builds here and not there,
 # discovered by somebody who cannot see either script.
 #
+# ⚠ A SCRIPT COMPONENT IS ITS TOP-LEVEL FILES, and those are collected from
+# what git TRACKS rather than from the allowlist below — see the loop at the
+# bottom of the selection. The same question decides src/: tracked means it is
+# the component's source, untracked means it is makepkg's extraction dir.
+#
 # ⚠ THE DIRECTORY LIST IS AN ALLOWLIST. A top-level directory it does not name
 # is simply absent from the tarball, and nothing warns: makepkg is green, the
 # package installs, the files are not there. quickshell-antiquity/ sat fully
@@ -58,7 +63,22 @@ cd "$BASE"
 
 # Collect directories that exist.
 dirs=()
-[ -d "$name/src" ]     && dirs+=("$name/src/")
+# ⛔ src/ IS SOURCE FOR ONE KIND OF COMPONENT AND MAKEPKG'S STAGING FOR THE
+# OTHER, AND ONLY GIT KNOWS WHICH.
+#
+# A meson component keeps its C in src/ and git tracks it. A SCRIPT component
+# keeps its files loose at the top level, and its src/ is where makepkg
+# extracted the last build — untracked, and full of copies. Sweeping that in
+# ships "whatever you built last" as the source somebody else compiles, which
+# is the opposite of the reproducibility this tarball exists to promise. It is
+# also how a tarball for a script component came out holding a stale copy of
+# its own scripts and nothing else.
+#
+# ⚠ preflight.sh's pkgrel gate makes the same split for the same reason, one
+# file at a time: tracked means source, untracked means staging.
+if [ -d "$name/src" ] && [ -n "$(git -C "$BASE" ls-files "$name/src" | head -n1)" ]; then
+    dirs+=("$name/src/")
+fi
 [ -d "$name/include" ] && dirs+=("$name/include/")
 [ -f "$name/meson.build" ] && dirs+=("$name/meson.build")
 [ -f "$name/meson_options.txt" ] && dirs+=("$name/meson_options.txt")
@@ -96,6 +116,22 @@ fi
 for _md in "$name"/*.md; do
     [ -f "$_md" ] && dirs+=("$_md")
 done
+
+# ⚠ AND THE LOOSE FILES A SCRIPT COMPONENT IS MADE OF. syn-gfn, syn-model and
+# syn-arsenal have no src/ and no meson.build — the shell scripts, .desktop,
+# .svg, units and polkit rules sit at the top level, and the allowlist above
+# named none of them. Their tarballs came out holding tests/ and nothing else.
+#
+# ⛔ TRACKED ONLY, and never a dotfile, the PKGBUILD or an .install scriptlet:
+# the first two are published beside the tarball by git-export.sh, and a
+# .gitignore is not source. A meson component has no such files, so this adds
+# nothing to the twelve that were already published — checked, not assumed.
+while IFS= read -r _f; do
+    case "$_f" in
+        */*|.*|PKGBUILD|*.install|*.md|meson.build|meson_options.txt|meson.options) continue ;;
+    esac
+    [ -f "$name/$_f" ] && dirs+=("$name/$_f")
+done < <(git -C "$BASE" ls-files "$name" | sed "s#^$name/##")
 
 [ ${#dirs[@]} -gt 0 ] || { echo "collect-source: $name has nothing to collect" >&2; exit 2; }
 

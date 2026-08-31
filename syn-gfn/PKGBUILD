@@ -19,7 +19,7 @@
 # Linux.
 pkgname=syn-gfn
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="GeForce NOW in a browser that can hold the mouse — cloud gaming for SynapseOS"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -33,13 +33,26 @@ optdepends=('python: pre-grant the keyboard/pointer-lock permissions'
             'chromium: the browser to stream in'
             'vivaldi: the browser to stream in'
             'firefox: browse the catalogue (cannot stream on Linux yet)')
-source=('syn-gfn.sh'
-        'syn-gfn.desktop'
-        'syn-gfn.svg')
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+# ⛔ ONE TARBALL, NOT A LIST OF LOOSE FILES.
+#
+# Every file this package installs used to be named here individually, which
+# builds perfectly from a checkout and cannot be published: there is nothing to
+# attach to a release and nothing for an outsider's makepkg to fetch. The
+# tarball collect-source.sh assembles is that one thing, and the URL after `::`
+# is where everybody who is not us gets it. The filename BEFORE `::` is what
+# makepkg looks for on disk first, so a build from this tree still uses the
+# tarball build-all.sh just collected and never downloads.
+#
+# ⚠ AND package() NOW WORKS INSIDE THE EXTRACTED DIRECTORY. The files arrive at
+# $srcdir/$pkgname-$pkgver/ rather than loose in $srcdir.
+#
+# ⛔ sha256sums STAYS 'SKIP' — a real checksum breaks every local build the
+# moment the tree changes, which is every build that matters here.
+source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
 
 package() {
-    cd "$srcdir"
+    cd "$srcdir/$pkgname-$pkgver"
 
     install -Dm755 syn-gfn.sh      "$pkgdir/usr/bin/syn-gfn"
     install -Dm644 syn-gfn.desktop "$pkgdir/usr/share/applications/syn-gfn.desktop"
