@@ -61,7 +61,11 @@ LISTEN_SECONDS = 12.0
 
 
 def _mic_device() -> str:
-    """The capture device chibi should use, or "" to leave its own pick alone.
+    """The capture device an OLD chibi should use, or "" to leave its pick alone.
+
+    ⚠ COMPATIBILITY ONLY. A chibi that resolves this itself is never sent here
+    — see the probe in _stt(). This exists so that dictation is not silently
+    broken on a box whose chibi predates the fix.
 
     ⛔ chibi ADDRESSES THE FIRST ALSA CARD BY NAME, WHICH IS NOT THE MICROPHONE.
     Its _resolve_alsa_device() takes the first `card N:` out of `arecord -l` —
@@ -212,13 +216,24 @@ class Voice:
             return None
         try:
             _add_chibi_path()
-            # Before VoiceInput is constructed: the recorder command is built
-            # from this the first time it captures.
-            dev = _mic_device()
-            if dev:
-                os.environ["CHIBI_MIC_DEVICE"] = dev
             with _quiet():
-                from voice_input import VoiceInput
+                import voice_input as _vi
+                # ⛔ ONE OWNER OF "WHICH MICROPHONE", AND IT IS CHIBI. Every
+                # chibi that has _has_alsa_pcm resolves the capture device
+                # correctly on its own, so setting CHIBI_MIC_DEVICE here as
+                # well would be a second copy of the same policy — and, being
+                # an environment variable, one that silently OUTRANKS chibi's
+                # the day the two disagree. Older copies take the first ALSA
+                # card, which on a desktop is the onboard jack with nothing in
+                # it, so the override below is for those alone and retires
+                # itself as soon as chibi is updated. chibi is an optdepend
+                # with no version to constrain, which is why this is a probe of
+                # the installed code rather than an assumption about it.
+                if not hasattr(_vi, "_has_alsa_pcm"):
+                    dev = _mic_device()
+                    if dev:
+                        os.environ["CHIBI_MIC_DEVICE"] = dev
+                VoiceInput = _vi.VoiceInput
                 # ⚠ THE MODEL DIRECTORY, NOT THE MODEL NAME. A bare name sends
                 # faster-whisper to HuggingFace for ~75MB on first use, so a
                 # box with no network comes up deaf — and the failure is a
