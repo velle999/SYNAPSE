@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=26
+pkgrel=27
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -45,16 +45,13 @@ optdepends=(
 
 # Built from the local working tree (the synapd backend is not upstream yet) via
 # packaging/build.sh, which tars main.py + the vibe/ package + the launcher.
-# ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
-# what makepkg looks for on disk, so a build from this checkout uses the tarball
-# build-all.sh just collected and never downloads. The URL after it is for
-# everybody else, and it names <pkgver>-<pkgrel> because that tag is the only
-# thing that makes a published source unambiguously the one this PKGBUILD was
-# written against.
-#
-# ⛔ AND sha256sums STAYS 'SKIP' — a real checksum breaks every local build the
-# moment the tree changes, which is every build that matters here.
-source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
+# ⚠ A LOCAL TARBALL, AND IT STAYS ONE. This cannot carry a release URL like
+# the published components do: github.com/velle999/vibe is already vibe's OWN
+# upstream repository — main.py, its own README, its own history — and a
+# packaging export pushed there would overwrite a real project. Publishing this
+# needs a repository under a different name, which is a decision and not a
+# detail. See NOT_EXTERNAL in tools/publish-sources.sh.
+source=("vibe-0.1.0.tar.gz")
 sha256sums=('SKIP')
 
 package() {

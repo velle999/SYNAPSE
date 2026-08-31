@@ -76,7 +76,7 @@ EXTERNAL=(
     synpkg syn-arsenal syn-model syn-confine synguard syn-arcade syn-gfn
     # the AI stack, and the package that lets a stranger satisfy it with the
     # distribution's own llama.cpp instead of a tree only an ISO build stages
-    synapse-llama-system synapd synnet vibe
+    synapse-llama-system synapd synnet
 )
 
 # ⛔ AND THE ONES THAT ARE DELIBERATELY NOT PUBLISHED, WITH THE REASON.
@@ -97,6 +97,7 @@ declare -A NOT_EXTERNAL=(
     [syn-firstboot]="the first-boot wizard of a SynapseOS installation, for the same reason"
     [syn-update]="updates an installed SynapseOS from this very repository; publishing it would publish a second way to be out of date"
     [syn]="the unified CLI, which is a front end to the other syn-* tools and does nothing without them"
+    [vibe]="its name is already taken: github.com/velle999/vibe is vibe's OWN upstream repository, a different tree with its own history, and a packaging export pushed there would overwrite it. Publishing needs a repo under another name"
     [synapse-wallpapers]="wallpaper assets with no source to build; they travel in the ISO"
     [scenefx]="retired fork, kept only for the scene TUs its PKGBUILD documents"
     [scenefx0.5]="already self-sufficient — its source=() fetches from wlrfx/scenefx upstream"
@@ -149,7 +150,6 @@ declare -A TOPICS=(
     [syn-gfn]="cloud-gaming geforce-now gaming"
     [synapd]="llm llama-cpp inference-server daemon ai"
     [synnet]="firewall nftables network-security daemon"
-    [vibe]="ai coding-assistant agent llm cli"
     [synapse-llama-system]="llama-cpp ggml meta-package ai"
 )
 
