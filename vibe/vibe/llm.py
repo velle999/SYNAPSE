@@ -9,6 +9,7 @@ from typing import Iterator
 
 import vibe.config as cfg
 from vibe import cloud, modes
+from vibe import chibi_bridge
 from vibe import personas
 from vibe import companion_tools
 from . import synapd_client
@@ -249,6 +250,12 @@ class VibeModel:
         # a chatbot, and a costume must not cost any of it. Empty string for
         # the default persona, so nothing changes for anyone who never picks
         # one. See vibe/personas.py.
+        # What the avatar on this desktop already knows about this person.
+        # ⛔ APPENDED AS CONTEXT, NEVER AS INSTRUCTIONS — it is a record of a
+        # user written by another program, and a memory that can issue orders
+        # is an injection surface. Empty on a machine without chibi, which is
+        # every plain-Arch install. See vibe/chibi_bridge.py.
+        system_content += chibi_bridge.memory_section()
         system_content += personas.voice_section()
         self._messages = [
             {"role": "system", "content": system_content}

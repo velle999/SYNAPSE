@@ -4,7 +4,7 @@ import subprocess
 import re
 from pathlib import Path
 
-from vibe import desktop, system
+from vibe import chibi_bridge, desktop, system
 from vibe import companion_tools
 
 
@@ -113,6 +113,27 @@ TOOL_SCHEMAS = [
                     "path": {"type": "string", "description": "Directory to list (default: cwd)"},
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "chibi_recall",
+            "description": (
+                "Search Thoth, the personal corpus the chibi avatar on this "
+                "desktop keeps indexed — the user's own notes and documents. "
+                "Use it when a question is about THEIR material rather than "
+                "general knowledge, and when what they remember matters. "
+                "Returns nothing if chibi is not installed or has no index, "
+                "which is not an error."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to look for"},
+                },
+                "required": ["query"],
             },
         },
     },
@@ -737,6 +758,11 @@ TOOL_MAP = {
     "desktop_action": lambda args: desktop.desktop_action(**args),
     "desktop_setting": lambda args: desktop.desktop_setting(**args),
     "move_file": lambda args: desktop.move_file(**args),
+    # chibi's half of the bridge. It owns the index and the memory; this only
+    # asks. See vibe/chibi_bridge.py — assistant_bridge.py in chibi is the same
+    # arrangement pointing the other way.
+    "chibi_recall": lambda args: (chibi_bridge.recall(**args)
+                                  or "chibi has nothing indexed about that."),
     # The companion's own records — see vibe/companion_tools.py. Registered
     # here rather than in a second dispatcher so `execute_tool` stays the one
     # place a tool name is resolved.

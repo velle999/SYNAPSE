@@ -83,8 +83,15 @@ class Intent:
 # ⚠ POLITENESS IS NOT PART OF THE REQUEST. "hey synapse, could you open my
 # downloads please" is the same line as "open downloads", and a table that only
 # knows the second one is a table that works until somebody is polite to it.
+# ⚠ EVERY NAME THE DESKTOP ANSWERS TO, not just this program's. chibi drives
+# these same intents through assistant_bridge.py, and the people talking to it
+# call it by ITS name — "chibi, open my downloads" reached the model as a
+# request to open something called "chibi, downloads" and did nothing useful.
+# One list, because the two front-ends must not disagree about what counts as
+# being spoken to.
 _ADDRESS_RE = re.compile(
-    r"^(?:hey|ok|okay|yo)?[\s,]*(?:vibe|synapse|computer|assistant)\b[\s,:]*", re.I)
+    r"^(?:hey|ok|okay|yo)?[\s,]*(?:vibe|synapse|chibi|computer|assistant)\b[\s,:]*",
+    re.I)
 _PREFIX_RE = re.compile(
     r"^(?:please|pls|can you|could you|would you|will you|i want you to|"
     r"i'd like you to|i would like you to|let's|lets|just)\s+", re.I)

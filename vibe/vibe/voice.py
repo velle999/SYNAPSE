@@ -34,7 +34,7 @@ import time
 
 _CHIBI_APP = "/usr/lib/chibi/app"
 _CHIBI_DEPS = "/usr/lib/chibi/pydeps"
-_STT_MODEL = "/usr/share/faster-whisper/tiny"
+_STT_MODEL = "/usr/share/faster-whisper/small"
 
 
 @contextlib.contextmanager
@@ -235,9 +235,10 @@ class Voice:
                         os.environ["CHIBI_MIC_DEVICE"] = dev
                 VoiceInput = _vi.VoiceInput
                 # ⚠ THE MODEL DIRECTORY, NOT THE MODEL NAME. A bare name sends
-                # faster-whisper to HuggingFace for ~75MB on first use, so a
-                # box with no network comes up deaf — and the failure is a
-                # stall, not a message. chibi ships the converted model.
+                # faster-whisper to HuggingFace on first use — ~461MB for the
+                # `small` this now points at — so a box with no network comes
+                # up deaf, and the failure is a stall rather than a message.
+                # chibi packages the converted model at that path.
                 self._in = VoiceInput(model_dir=_STT_MODEL if
                                       os.path.isdir(_STT_MODEL) else "")
         except Exception:
