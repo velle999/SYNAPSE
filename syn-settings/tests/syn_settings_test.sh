@@ -1817,6 +1817,42 @@ case $out in
     *) bad "the wake row does not disclose the microphone" ;;
 esac
 
+# ⛔ A SWITCH AND THE THING IT SWITCHES ARE TWO SEPARATE FACTS, and this pane is
+# where the second one is visible. syn-speak.service was missing from the synui
+# package for four releases: `syn-speak on` enabled it, the enable failed, the
+# failure was swallowed on purpose, and every surface offering the reader — the
+# switch two rows above included — reported On while nothing was announced. A
+# unit row reading "not installed" beside a switch reading "on" is the sentence
+# that would have said so, and both units are listed for that reason.
+for u in syn-speak.service vibe-wake.service; do
+    case $out in
+        *"$u"*) ok "the Speech pane names $u" ;;
+        *) bad "no unit row for $u. The pane shows two switches; a switch whose
+       unit is not on screen cannot be told apart from one whose unit is not on
+       the machine." ;;
+    esac
+done
+
+# ...and the row says which switch owns it, or it is a status line with no
+# instruction in it.
+case $out in
+    *"the announcer"*) ok "…and says which of them is the announcer" ;;
+    *) bad "the syn-speak.service row does not say what it is" ;;
+esac
+
+# ⛔ AND IT MUST NOT REPORT A MISSING UNIT AS ENABLED. systemd prints
+# "not-found" for is-enabled on a unit it does not have — it does not print
+# nothing, which is what the empty-output sentinel here was written for — so a
+# reader checking for empty never sees the case that actually happens. The word
+# is translated; "not-found" reaching the GUI would be a state its vocabulary
+# has no row style for.
+case $out in
+    *"not-found"*) bad "a unit row leaked systemd's raw \"not-found\". It has to
+       be translated to \"not installed\" — see user_unit_state() and the same
+       trap in ai.c's unit_absent()." ;;
+    *) ok "no raw systemd sentinel reaches the rows" ;;
+esac
+
 for pair in "screen-reader:maybe" "wake-word:maybe" "speech-rate:9999" \
             "speech-rate:abc" "speech-volume:200" "wake-words:,,,"; do
     k=${pair%%:*}; v=${pair#*:}

@@ -100,6 +100,45 @@ static void voice_caps(char *speak, size_t sc, char *listen, size_t lc)
 	}
 }
 
+/*
+ * A USER unit's enabled/active words.
+ *
+ * ⛔ THE STATUS IS NOT THE ANSWER AND AN ABSENT UNIT IS NOT SILENT. systemctl
+ * exits non-zero for "disabled", for "masked" and for "no such unit" alike, so
+ * the word it PRINTS is what has to be read — and for a unit the machine does
+ * not have, `is-enabled` prints "not-found" rather than nothing. A caller
+ * checking for empty output (which is what an older systemd, or a systemctl
+ * that failed outright, gives) never sees the case that actually happens. Same
+ * trap, and the same two spellings, as ai.c's unit_absent().
+ *
+ * ⚠ --user, unlike ai.c's: everything this pane talks about is a session
+ * service. Asking the system manager about syn-speak.service finds nothing and
+ * reports it as missing, which is the one wrong answer here.
+ */
+static void user_unit_state(const char *unit, char *en, size_t en_cap,
+                            char *act, size_t act_cap)
+{
+	char out[128] = "";
+	char *is_en[]  = { (char *)"systemctl", (char *)"--user",
+	                   (char *)"is-enabled", (char *)unit, NULL };
+	char *is_act[] = { (char *)"systemctl", (char *)"--user",
+	                   (char *)"is-active",  (char *)unit, NULL };
+
+	run_capture_quiet(is_en, out, sizeof out);
+	out[strcspn(out, "\n")] = '\0';
+	tsv_clean(out);
+	if (!out[0] || !strcmp(out, "not-found"))
+		snprintf(en, en_cap, "not installed");
+	else
+		snprintf(en, en_cap, "%s", out);
+
+	out[0] = '\0';
+	run_capture_quiet(is_act, out, sizeof out);
+	out[strcspn(out, "\n")] = '\0';
+	tsv_clean(out);
+	snprintf(act, act_cap, "%s", out[0] ? out : "-");
+}
+
 int pane_speech(void)
 {
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
@@ -158,23 +197,35 @@ int pane_speech(void)
 	        "conversation\tset:wake-words",
 	        words[0] ? words : "synapse, computer");
 
-	/* ── And the unit behind the listener ─────────────────────────────── */
+	/* ── And the two units behind the two switches ────────────────────── */
+	/*
+	 * ⛔ A SWITCH AND THE THING IT SWITCHES ARE TWO SEPARATE FACTS, and this
+	 * pane exists to show the second one. syn-speak.service is here because it
+	 * was MISSING FROM THE PACKAGE for four synui releases: `syn-speak on`
+	 * enabled it, the enable failed, the failure was swallowed on purpose (so
+	 * that a machine without systemd is not a broken install), and every
+	 * surface offering the reader — this row's switch included — reported On
+	 * while nothing was ever announced. A row reading "not installed" beside a
+	 * switch reading "on" is exactly the sentence that would have said so.
+	 *
+	 * ⚠ ORDER MATCHES THE SWITCHES ABOVE: reader first, then listener. Two
+	 * unit rows in the other order is a person reading the wrong one.
+	 */
 	if (have_cmd("systemctl")) {
 		char en[64] = "", act[64] = "";
-		char *a1[] = { (char *)"systemctl", (char *)"--user",
-		               (char *)"is-enabled", (char *)"vibe-wake.service", NULL };
-		char *a2[] = { (char *)"systemctl", (char *)"--user",
-		               (char *)"is-active", (char *)"vibe-wake.service", NULL };
-		run_capture_quiet(a1, en, sizeof en);
-		run_capture_quiet(a2, act, sizeof act);
-		en[strcspn(en, "\n")] = '\0';
-		act[strcspn(act, "\n")] = '\0';
-		tsv_clean(en);
-		tsv_clean(act);
+
+		user_unit_state("syn-speak.service", en, sizeof en, act, sizeof act);
+		rec_row("unit\tsyn-speak.service\t%s\t%s\t"
+		        "the announcer \xc2\xb7 the Screen reader switch above is what "
+		        "turns it on. \"not installed\" with the switch on means synui "
+		        "is older than 0.1.0-564 and nothing will be announced\t-",
+		        en, act);
+
+		user_unit_state("vibe-wake.service", en, sizeof en, act, sizeof act);
 		rec_row("unit\tvibe-wake.service\t%s\t%s\t"
 		        "the listener. Shipped disabled \xc2\xb7 the switch above is "
 		        "what turns it on\t-",
-		        en[0] ? en : "not installed", act[0] ? act : "inactive");
+		        en, act);
 	}
 
 	return 0;

@@ -108,7 +108,24 @@ pkgver=0.1.0
 #   loosening sane_value would have weakened it for the thirty keys that DO
 #   exec. The test now sets each key to the value its own help text suggests,
 #   which is the check that would have caught it.
-pkgrel=41
+# 42: the Speech pane shows the unit behind the reader, not just the switch.
+#   ⛔ A SWITCH AND THE THING IT SWITCHES ARE TWO SEPARATE FACTS. This pane
+#   listed vibe-wake.service — the listener — and nothing for the announcer,
+#   which is precisely where the gap was: syn-speak.service was missing from the
+#   synui package for four releases (synui 564 ships it), `syn-speak on` enabled
+#   a unit that was not there, the failure was swallowed on purpose so that a
+#   machine without systemd is not a broken install, and the Screen reader
+#   switch here reported On with nothing behind it. A row reading "not
+#   installed" beside a switch reading "on" is the sentence that would have said
+#   so; both units are listed now, reader first, matching the switches above.
+#   ⛔ AND "not-found" IS THE ANSWER THAT ACTUALLY HAPPENS. The old inline
+#   lookup fell back to "not installed" only on EMPTY output — which comes from
+#   an older systemd or from systemctl failing outright — while systemd prints
+#   "not-found" for `is-enabled` on a unit it does not have. Both spellings are
+#   translated now, in a shared user_unit_state() the wake row uses too; the
+#   same trap ai.c documents in unit_absent(), and the reason this one is
+#   --user: everything on this pane is a session service.
+pkgrel=42
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
