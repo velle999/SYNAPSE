@@ -4,6 +4,8 @@ REPL entry point with slash commands
 """
 
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -337,6 +339,35 @@ def _verb_key(argv) -> int:
     return 0
 
 
+def _toast(summary: str, body: str = "", replace: str = "",
+           timeout: int = 5000) -> str:
+    """Put a message on the desktop, and return the id it can be updated through.
+
+    ⛔ THE KEYBIND HAS NOWHERE TO PRINT. Super+Shift+V reaches `voice type`
+    through synui's spawn(), which is `/bin/sh -c` with stdout and stderr on
+    /dev/null. Every word this verb writes to the terminal — "heard nothing", a
+    missing wtype, the transcription itself — is discarded before anybody sees
+    it, and on a twelve-second listen with no indicator that is indistinguishable
+    from a key that does nothing. Which is exactly how it was reported.
+
+    An empty return is not a failure: a box with no notification daemon still
+    dictates, it just does it quietly. synui answers this itself (src/notif.c),
+    so on this desktop there is always one.
+    """
+    if not shutil.which("notify-send"):
+        return ""
+    argv = ["notify-send", "-a", "synui", "--print-id", "-t", str(timeout)]
+    if replace:
+        argv += ["--replace-id", replace]
+    argv += ["--", summary, body] if body else ["--", summary]
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+        return r.stdout.strip()
+    except Exception:
+        # An indicator that could raise would take dictation down with it.
+        return ""
+
+
 def _verb_voice(argv) -> int:
     """Speech in and out, on the command line.
 
@@ -374,16 +405,32 @@ def _verb_voice(argv) -> int:
         print(text)
         return 0
     if sub == "type":
-        # Dictation into whatever has focus. This is the keybind's verb.
-        import shutil, subprocess
+        # Dictation into whatever has focus. This is the keybind's verb, so
+        # everything it has to say goes to the desktop as well as the terminal.
+        from vibe.voice import LISTEN_SECONDS
         if not shutil.which("wtype"):
             print_error("wtype is not installed — synpkg install wtype")
+            _toast("Dictation unavailable", "wtype is not installed")
             return 3
+        # ⚠ TWO PHASES, AND ONLY THE SECOND IS THE ONE TO SPEAK INTO. The model
+        # loads before the microphone opens, so a single "speak now" raised at
+        # the top of this would be a lie for however long that takes.
+        nid = _toast("Dictation", "getting ready…", timeout=60000)
+        if not v.prepare():
+            print_error(v.why_deaf())
+            _toast("Dictation unavailable", v.why_deaf(), replace=nid,
+                   timeout=6000)
+            return 3
+        nid = _toast("Listening — speak now",
+                     "%d seconds" % round(LISTEN_SECONDS), replace=nid,
+                     timeout=int(LISTEN_SECONDS * 1000))
         text, err = v.listen()
         if err:
             print_error(err)
+            _toast("Dictation", err, replace=nid, timeout=5000)
             return 3
         if not text:
+            _toast("Dictation", "nothing to type", replace=nid, timeout=4000)
             return 0
         # ⚠ ONE wtype CALL for the whole string. Each invocation creates a
         # virtual keyboard and destroys it on exit, and on a seat whose only
@@ -391,6 +438,12 @@ def _verb_voice(argv) -> int:
         # call lands nowhere. It costs nothing here and it is the difference
         # between dictation working and dictation working once.
         subprocess.run(["wtype", "--", text])
+        # ⚠ AFTER wtype, never before it. wtype builds a virtual keyboard and
+        # tears it down again, and on a seat whose only keyboard is that one the
+        # focused client can lose focus in between — so nothing gets to touch
+        # the screen between the listen and the keystrokes. The toast is
+        # confirmation of what was typed, which is only true once it has been.
+        _toast("Dictated", text, replace=nid, timeout=4000)
         return 0
     if sub == "stop":
         v.stop()

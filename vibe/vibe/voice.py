@@ -54,6 +54,12 @@ def _add_chibi_path():
             sys.path.insert(0, p)
 
 
+# How long one dictation listens for. Named because the indicator has to say
+# it — a countdown that disagreed with the recorder would be worse than none —
+# and a number spelled twice is a number that drifts.
+LISTEN_SECONDS = 12.0
+
+
 class Voice:
     """Speech out and speech in, whichever engines this box actually has.
 
@@ -182,6 +188,18 @@ class Voice:
             self._in = None
         return self._in
 
+    def prepare(self) -> bool:
+        """Load the speech engine up front. True when this box can listen.
+
+        listen() does this on its way in, which is right for a library and
+        wrong for an indicator: faster-whisper takes seconds to load on a cold
+        cache and THE MICROPHONE IS NOT OPEN FOR ANY OF IT. "Speak now" shown
+        before this returns is an invitation to talk into nothing, and the
+        words are simply gone. Idempotent — listen() finds the same cached
+        engine, so calling both costs one load.
+        """
+        return self._stt() is not None
+
     def why_deaf(self) -> str:
         """One sentence naming what is missing, for a box that cannot listen."""
         if not chibi_available():
@@ -192,7 +210,7 @@ class Voice:
                     "reinstall chibi")
         return "the speech engine would not start (see the log)"
 
-    def listen(self, seconds: float = 12.0) -> tuple[str, str]:
+    def listen(self, seconds: float = LISTEN_SECONDS) -> tuple[str, str]:
         """Capture one utterance and transcribe it.
 
         Returns (text, error). Exactly one of them is set.
