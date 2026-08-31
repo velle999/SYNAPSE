@@ -60,6 +60,42 @@ def _add_chibi_path():
 LISTEN_SECONDS = 12.0
 
 
+def _mic_device() -> str:
+    """The capture device chibi should use, or "" to leave its own pick alone.
+
+    ⛔ chibi ADDRESSES THE FIRST ALSA CARD BY NAME, WHICH IS NOT THE MICROPHONE.
+    Its _resolve_alsa_device() takes the first `card N:` out of `arecord -l` —
+    right for the headless Pi it was written for, where the bare `default`
+    device is often absent and there is only one capture card. On a desktop the
+    first card is the onboard analogue codec with nothing plugged into it, and
+    the USB microphone is card 3. Dictation recorded an empty jack and reported
+    "heard nothing" every time, while every other app's level meter moved:
+
+        plughw:CARD=Generic     peak 153/32768   rms 36    (noise floor)
+        plughw:CARD=Microphone  peak 925/32768   rms 196   (the real mic)
+
+    ⚠ THE ANSWER IS NOT TO NAME THE RIGHT CARD. That pins today's hardware into
+    the config and breaks the next time something is plugged in. ALSA's
+    `pipewire` PCM follows the DEFAULT SOURCE, so this tracks whatever the
+    desktop is actually set to, including a mic swapped mid-session.
+
+    Never overrides a CHIBI_MIC_DEVICE that is already set: it is chibi's
+    documented escape hatch, and somebody who used it meant it.
+    """
+    if os.environ.get("CHIBI_MIC_DEVICE"):
+        return ""
+    try:
+        out = subprocess.run(["arecord", "-L"], capture_output=True,
+                             text=True, timeout=5).stdout
+    except Exception:
+        return ""
+    # Column 0 is a PCM name; the descriptions under each are indented, so an
+    # lstrip here would match the word inside one of those and name a device
+    # that does not exist.
+    return "pipewire" if any(l.rstrip() == "pipewire"
+                             for l in out.splitlines()) else ""
+
+
 class Voice:
     """Speech out and speech in, whichever engines this box actually has.
 
@@ -176,6 +212,11 @@ class Voice:
             return None
         try:
             _add_chibi_path()
+            # Before VoiceInput is constructed: the recorder command is built
+            # from this the first time it captures.
+            dev = _mic_device()
+            if dev:
+                os.environ["CHIBI_MIC_DEVICE"] = dev
             with _quiet():
                 from voice_input import VoiceInput
                 # ⚠ THE MODEL DIRECTORY, NOT THE MODEL NAME. A bare name sends
