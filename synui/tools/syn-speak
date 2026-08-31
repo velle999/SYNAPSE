@@ -191,7 +191,25 @@ display_name() {
 # The focused window, as a sentence. Title first: it is what changed and what
 # identifies the window; the application is the fallback for a window that has
 # no title of its own, which is common enough on dialogs.
-window_line() {
+# The focused window, as an identity and a sentence: "<key>\t<line>".
+#
+# ⛔ A TITLE IS NOT AN IDENTITY. This compared the whole spoken line and treated
+# any difference as a new window — but a terminal running a program with a
+# spinner in its title ("◑ …" / "◐ …") rewrites it several times a second, so
+# every poll looked like a focus change. The announcer stopped the utterance it
+# had just started and began it again, forever: you hear the first syllable of
+# the title on a loop and nothing else. It could not be seen until synui 565
+# made speak_stop actually stop something, and vibe 28 made it speak at all.
+#
+# So the key is the WINDOW, not what it happens to be displaying. The pid is
+# already in synui's reply and it is stable for the life of the window, which
+# is exactly the granularity this announcer is documented to have: it speaks
+# what has FOCUS when focus MOVES. A title that changes under a window that did
+# not is not a focus change and is not announced.
+#
+# ⚠ Falls back to the line when there is no pid, so an activewindow reply
+# without one keeps the old behaviour rather than going silent.
+window_probe() {
     have "$SYNCTL" || return 1
     local disp; disp=$(display_name) || return 1
     WAYLAND_DISPLAY=$disp "$SYNCTL" activewindow 2>/dev/null | python3 -c '
@@ -205,10 +223,21 @@ if not isinstance(w, dict):
 title = (w.get("title") or "").strip()
 app   = (w.get("app_id") or "").strip()
 if title and app and title.lower() != app.lower():
-    print(f"{title}, {app}")
+    line = f"{title}, {app}"
 else:
-    print(title or app)
+    line = title or app
+if not line:
+    sys.exit(1)
+pid = w.get("pid")
+key = str(pid) if isinstance(pid, int) and pid > 0 else line
+print(key + "\t" + line)
 ' 2>/dev/null
+}
+
+# Just the sentence — what `syn-speak window` says out loud.
+window_line() {
+    local p; p=$(window_probe) || return 1
+    printf '%s' "${p#*$'\t'}"
 }
 
 selection_text() {
@@ -232,12 +261,16 @@ selection_text() {
 # nothing measurable — it is the same shape barscan.c settled on for the same
 # reason.
 watch_loop() {
-    local last="" now
+    local last="" probe key now
     while :; do
         [ "$(getval on no)" = "yes" ] || return 0
-        now=$(window_line)
-        if [ -n "$now" ] && [ "$now" != "$last" ]; then
-            last=$now
+        # One call, both answers. Asking twice would be a second round trip and
+        # a chance for the two to disagree about which window they describe.
+        probe=$(window_probe)
+        key=${probe%%$'\t'*}
+        now=${probe#*$'\t'}
+        if [ -n "$now" ] && [ "$key" != "$last" ]; then
+            last=$key
             speak "$now"
         fi
         sleep "$(getval interval 0.5)"

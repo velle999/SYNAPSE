@@ -2681,6 +2681,28 @@ pkgver=0.1.0
 #   shell and points at the LIVE desktop, and quickshell's `synctl` children
 #   inherit it — the bar under test was polling the real machine and reporting
 #   its desktops. Every rig here now unsets it and exports the rig's own.
+# 566: the reader said the first syllable of a title, over and over.
+#   ⛔ A TITLE IS NOT AN IDENTITY. watch_loop compared the whole spoken line and
+#   took any difference for a focus change. Anything with a spinner in its title
+#   — Claude Code in syntty, "◑ Building" then "◐ Building" — rewrites it several
+#   times a second, so every 0.5s poll looked like a new window: speak() stopped
+#   the sentence it had just started and began it again. With the pointer parked
+#   over such a window the reader said the first syllable on a loop and never
+#   finished anything. Reported from the live desktop.
+#   ⚠ IT TOOK 565 AND vibe 28 TO BECOME AUDIBLE. Before those, speak_stop killed
+#   nothing and `vibe voice say` never spoke, so the loop restarted an utterance
+#   that was not playing. Two fixes landing made a third bug the visible one.
+#   The key is the WINDOW now — the pid, already in synui's activewindow reply
+#   and stable for its whole life — which is the granularity this thing is
+#   documented to have: it speaks what has FOCUS when focus MOVES, and a title
+#   changing under a window that did not move is neither. window_probe() emits
+#   "<key>\t<line>" so one round trip answers both questions and the two cannot
+#   disagree about which window they describe; window_line() is the sentence half
+#   and is what `syn-speak window` still speaks. Falls back to the line where
+#   there is no pid, so an older reply keeps the old behaviour instead of going
+#   silent. Test phase 6b drives a stub whose title flips every call under one
+#   pid; it counts 9 announcements in 2s against 565 and 1 against this.
+#
 # 565: stopping the reader left it talking.
 #   ⛔ `speak_stop` HAS NEVER STOPPED ANYTHING. speak() started its speaker as
 #   `setsid ... &` and recorded `$!` — but setsid(1) forks whenever it is already
@@ -2732,7 +2754,7 @@ pkgver=0.1.0
 #   and without a display in the environment. Every voice candidate is stubbed —
 #   `vibe` first on PATH as well as espeak-ng, since the positive case has to
 #   stub them all or a real one speaks on the developer's session.
-pkgrel=565
+pkgrel=566
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

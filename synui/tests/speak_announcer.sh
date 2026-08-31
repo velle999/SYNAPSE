@@ -282,6 +282,53 @@ printf '  ..    engine reported: both=[%s] espeak-only=[%s] neither=[%s]\n' \
         this line has to be unambiguous, because the switch will turn on and
         the machine will stay silent."
 
+# ── 6b. a title that animates under one window is announced ONCE ────────
+#
+# ⛔ THE REGRESSION THAT MADE THE READER UNUSABLE. Claude Code (and anything
+# else with a spinner) rewrites its terminal title several times a second:
+# "◑ Building" then "◐ Building". The loop compared the whole spoken line, so
+# every poll read as a focus change — it stopped the sentence it had just
+# started and began it again, and all you ever heard was the first syllable, on
+# a loop, for as long as the pointer sat there. Keyed on the pid instead, which
+# is the window and does not move while the title spins.
+SPIN=$TMP/spin
+mkdir -p "$SPIN/synui"
+printf 'on=yes\ninterval=0.2\n' > "$SPIN/synui/speak.state"
+: > "$TMP/said-spin"
+
+cat > "$BIN/synctl-spin" <<'EOF'
+#!/bin/sh
+[ "${1:-}" = activewindow ] || exit 1
+# Same window every time — same pid — with a title that never sits still.
+if [ -f "$SPIN_PHASE" ] && [ "$(cat "$SPIN_PHASE")" = b ]; then
+    printf 'a\n' > "$SPIN_PHASE"
+    printf '{"title":"\xe2\x97\x91 Building","app_id":"syntty","pid":4242}\n'
+else
+    printf 'b\n' > "$SPIN_PHASE"
+    printf '{"title":"\xe2\x97\x90 Building","app_id":"syntty","pid":4242}\n'
+fi
+EOF
+chmod +x "$BIN/synctl-spin"
+export SPIN_PHASE="$SPIN/phase"
+
+SPEAK_SAID="$TMP/said-spin" XDG_CONFIG_HOME="$SPIN" \
+    SYN_SPEAK_SYNCTL="$BIN/synctl-spin" sh "$SPEAK" watch >/dev/null 2>&1 &
+SPINW=$!
+sleep 2.0
+printf 'on=no\ninterval=0.2\n' > "$SPIN/synui/speak.state"
+sleep 0.6
+kill "$SPINW" 2>/dev/null; wait "$SPINW" 2>/dev/null
+
+SPINN=$(grep -c "Building" "$TMP/said-spin" 2>/dev/null || echo 0)
+if [ "$SPINN" = 1 ]; then
+    ok "an animating title under one window is announced once, not every poll"
+else
+    bad "a title that spins under a SINGLE window was announced $SPINN times in
+        2s. Each one stops the last mid-word, so the reader says the first
+        syllable over and over and never finishes a sentence. Compare the
+        window (pid), not the line it is currently displaying."
+fi
+
 # ── 7. `stop` actually stops it, speaker AND the process making the noise ──
 #
 # ⛔ THIS WENT UNTESTED AND WAS BROKEN THE WHOLE TIME. speak() recorded `$!`
