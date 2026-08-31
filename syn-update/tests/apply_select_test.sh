@@ -506,10 +506,24 @@ case "$out" in
     *) bad "an unknown component name was not refused: $out" ;;
 esac
 # An unbuildable one is explained rather than called a typo.
-out=$(bash "$script" apply chibi 2>&1)
+# ⚠ NOT chibi any more. chibi was the example here until it moved into
+# COMPONENTS — its payload is large but its SOURCE changes, and this assertion
+# quietly became a test that the updater still refuses to update it.
+out=$(bash "$script" apply synapse-llama 2>&1)
 case "$out" in
     *"cannot be built on an installed system"*) ok "an unsupported component explains itself" ;;
-    *) bad "chibi was not explained: $out" ;;
+    *) bad "synapse-llama was not explained: $out" ;;
+esac
+# ...and chibi is not one of them. It ships on the ISO and is rebuilt from its
+# own repo like nexus-chat and tepris; leaving it out froze every chibi fix on
+# every installed machine.
+out=$(bash "$script" apply chibi 2>&1)
+case "$out" in
+    *"cannot be built on an installed system"*)
+        bad "chibi is still refused by the updater: $out" ;;
+    *"is not a SynapseOS component"*)
+        bad "chibi is not registered with the updater at all: $out" ;;
+    *) ok "chibi is updatable" ;;
 esac
 # Only apply takes names.
 out=$(bash "$script" check synui 2>&1)

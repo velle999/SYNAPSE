@@ -66,7 +66,7 @@ SRC_GIT=""
 # OS — the exact dead end this tool exists to remove.
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
-            nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles
+            nexus-chat tepris vibe chibi samsung-m2020 syn-arsenal synpkg synfiles
             syn-settings syn-disks syn-cal syn-vault syn-clean syn-play syn-edit syntty syn-confine
             limine-mkinitcpio-hook fetch synapse-wallpapers syn-arcade cliamp
             synstudio syn-gfn)
@@ -78,7 +78,6 @@ COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
 declare -A UNSUPPORTED=(
     [synapse-llama]="packaged from a tree that archiso/build.sh --llama-only stages; there is no staging tree on an installed system"
     [linux-wallpaperengine]="cmake fetches a ~1.3 GB CEF blob and needs ~6 GB of scratch to build; its synui-wpengine control script now lives in synui, which IS updatable"
-    [chibi]="371 MB of bundled voice models; rebuild cost is all download, no source change"
     [limine-snapper-sync]="vendored upstream at a pinned tag, so there is no local source to ship; its gradle build fetches plugins and Java dependencies from the network and produces a GraalVM native-image, which is a long build for a package that can only ever come out identical"
 )
 
@@ -1809,8 +1808,12 @@ rewritten by every apply. It is plain text and safe to edit.
 
 Components are rebuilt from source with makepkg, so this needs base-devel and
 each component's makedepends. Components with a large prebuilt payload
-(synapse-llama, linux-wallpaperengine, chibi) are not updated this way and move
-with an ISO upgrade instead; syn-update lists them rather than skipping quietly.
+(synapse-llama, linux-wallpaperengine) are not updated this way and move with an
+ISO upgrade instead; syn-update lists them rather than skipping quietly.
+
+chibi is updated here despite its payload. Its first build fetches about half a
+gigabyte of voice and speech models, kept in the component directory afterwards,
+so the cost falls once per checkout rather than once per update.
 HELP
 }
 

@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
+       vibe chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
        syn-vault syn-clean syn-play
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
@@ -290,6 +290,14 @@ build_script_pkg syn-firstboot
 # commit from each app's own git repo, so these need network at build time.
 build_script_pkg nexus-chat
 build_script_pkg tepris
+# chibi is the same shape — a pinned commit from its own repo — with one extra
+# cost: its PKGBUILD also fetches the piper voice and the faster-whisper model,
+# roughly half a gigabyte the first time. makepkg keeps them in the component
+# directory afterwards, so it is a one-off per checkout and not per build. That
+# download is why this was left out of the updater at first; it is in now
+# because the source behind it changes, and a component frozen forever is the
+# bug syn-update exists to fix.
+build_script_pkg chibi
 
 # fetch — areofyl/fetch, which is "About OS". Same shape as the two above: a
 # pinned upstream commit plus two local patches applied in prepare(), so it
