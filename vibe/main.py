@@ -354,6 +354,17 @@ def _verb_voice(argv) -> int:
         if not engine:
             print_error("nothing on this box can speak — synpkg install espeak-ng")
             return 3
+        # ⛔ THE PROCESS MUST NOT EXIT WITH THE UTTERANCE STILL QUEUED. speak()
+        # hands the text to a daemon worker thread and returns at once, which
+        # is what the chat window wants and is silence here: `vibe voice say`
+        # exited in milliseconds and the thread died before it synthesised a
+        # sample. syn-speak drives every one of its surfaces through this verb,
+        # so the Super+U selection key, the spoken "Speech is on" and the whole
+        # syn-speak.service announcer said nothing at all and exited 0.
+        #
+        # The wait belongs HERE and not in Voice.speak(): serve.py speaks from
+        # the window's own loop, where blocking on the audio would freeze it.
+        v.wait()
         return 0
     if sub == "listen":
         text, err = v.listen()

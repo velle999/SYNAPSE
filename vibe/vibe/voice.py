@@ -128,6 +128,39 @@ class Voice:
                 pass
             self._espeak_pid = None
 
+    def wait(self, timeout: float = 120.0) -> None:
+        """Block until what was queued has actually been said.
+
+        ⛔ speak() IS NON-BLOCKING AND THE WORKER IS A DAEMON THREAD. chibi's
+        VoiceOutput takes an utterance onto a queue and synthesises it on a
+        background thread — right for a window that runs for hours, fatal for a
+        one-shot CLI, because the interpreter kills a daemon thread on the way
+        out. `vibe voice say` enqueued, returned "piper" and exited in
+        milliseconds, so the utterance died mid-queue and NOTHING WAS EVER
+        HEARD: every syn-speak surface (the Super+U selection key, the "Speech
+        is on" confirmation, and the whole syn-speak.service announcer) called
+        this and reported success in silence. Exit 0, no error, no sound.
+
+        Only the piper path needs it. The espeak-ng fallback is started with
+        start_new_session=True precisely so it outlives us, and waiting on that
+        would undo the thing that makes it work.
+
+        Bounded rather than open-ended: a synthesiser that wedges must cost a
+        delay, not a `vibe` that never returns. The ceiling matches the 120s
+        voice_output already puts on its own subprocess calls.
+        """
+        out = self._out
+        if out is None:
+            return
+        deadline = time.monotonic() + timeout
+        try:
+            while out.busy and time.monotonic() < deadline:
+                time.sleep(0.05)
+        except Exception:
+            # `busy` reaches into chibi's object; a speech tool that raised on
+            # the way out would be worse than one that stops waiting.
+            pass
+
     # ── listening ───────────────────────────────────────────────────────
     def _stt(self):
         if self._in_tried:
