@@ -1313,52 +1313,47 @@ msgstr "最大值"
 
 #: src/dock.c:3418
 msgid "top"
-msgstr ""
+msgstr "上"
 
 #: src/dock.c:3418
 msgid "left"
-msgstr ""
+msgstr "左"
 
 #: src/dock.c:3419
 msgid "centre"
-msgstr ""
+msgstr "中"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "bottom"
-msgstr ""
+msgstr "下"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "right"
-msgstr ""
+msgstr "右"
 
 #: src/dock.c:3425
 #, c-format
 msgid "after %d icon"
 msgid_plural "after %d icons"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "在 %d 个图标之后"
 
 #: src/filters.c:84
-#, fuzzy
 msgid "CRT filters"
-msgstr "所有滤镜"
+msgstr "CRT 滤镜"
 
 #: src/filters.c:86
-#, fuzzy
 msgid "Screen curvature"
-msgstr "屏幕弯曲"
+msgstr "屏幕曲率"
 
 #: src/filters.c:88
-#, fuzzy
 msgid "Glitch strength"
-msgstr "警报时的画面干扰"
+msgstr "故障强度"
 
 #: src/filters.c:90
 msgid "Monochrome"
 msgstr "单色"
 
 #: src/filters.c:91
-#, fuzzy
 msgid "Phosphor bloom"
 msgstr "荧光辉光"
 
@@ -1381,18 +1376,16 @@ msgid "Fingerprint not recognised"
 msgstr "指纹无法识别"
 
 #: src/power.c:112
-#, fuzzy
 msgid "Dim screen"
-msgstr "锁屏"
+msgstr "调暗屏幕"
 
 #: src/power.c:113
 msgid "Blank displays"
 msgstr "关闭屏幕"
 
 #: src/power.c:114
-#, fuzzy
 msgid "Lock session"
-msgstr "锁屏"
+msgstr "锁定会话"
 
 #: src/power.c:115
 msgid "Suspend system"
@@ -1414,1315 +1407,1311 @@ msgstr "合盖（已插底座）"
 #, c-format
 msgid "+%d more line"
 msgid_plural "+%d more lines"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "还有 %d 行"
 
 #: src/render.c:971
 msgid "NEURAL OVERLAY"
-msgstr ""
+msgstr "神经叠加层"
 
 #: src/render.c:979 src/render.c:5164
 msgid "loaded"
-msgstr ""
+msgstr "已加载"
 
 #: src/render.c:981
 msgid "loading"
-msgstr ""
+msgstr "加载中"
 
 #: src/render.c:984
 msgid "○ no model"
-msgstr ""
+msgstr "○ 没有模型"
 
 #: src/render.c:1004
 #, c-format
 msgid "req %lu    active %lu"
-msgstr ""
+msgstr "请求 %lu    进行中 %lu"
 
 #: src/render.c:1021
 #, c-format
 msgid "ctx %u / %u tok"
-msgstr ""
+msgstr "上下文 %u / %u 词元"
 
 #: src/render.c:1046
 msgid "live activity"
-msgstr ""
+msgstr "实时活动"
 
 #: src/render.c:1057
 msgid "(idle — no recent events)"
-msgstr ""
+msgstr "(空闲 — 没有最近的事件)"
 
 #: src/render.c:1058
 msgid "(synapd unavailable)"
-msgstr ""
+msgstr "(synapd 不可用)"
 
 #: src/render.c:1080
 msgid "normal"
-msgstr ""
+msgstr "正常"
 
 #: src/render.c:1084
 msgid "flipped"
-msgstr ""
+msgstr "翻转"
 
 #: src/render.c:1174
 msgid "DISPLAY SETTINGS"
-msgstr ""
+msgstr "显示设置"
 
 #: src/render.c:1183
 msgid "DUPLICATE"
-msgstr ""
+msgstr "复制"
 
 #: src/render.c:1185
 msgid "BUILT-IN OFF"
-msgstr ""
+msgstr "内置屏关闭"
 
 #: src/render.c:1186
 msgid "EXTEND"
-msgstr ""
+msgstr "扩展"
 
 #: src/render.c:1247
 msgid "no outputs connected"
-msgstr ""
+msgstr "没有连接任何显示器"
 
 #: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
 #: src/render.c:6171
 #, c-format
 msgid "off"
-msgstr ""
+msgstr "关闭"
 
 #: src/render.c:1319
 msgid "PRIMARY"
-msgstr ""
+msgstr "主屏"
 
 #: src/render.c:1319
 msgid "primary (auto)"
-msgstr ""
+msgstr "主屏（自动）"
 
 #: src/render.c:1330
 msgid "8-bit (only)"
-msgstr ""
+msgstr "8 位（仅）"
 
 #: src/render.c:1348
 msgid "HDR10 ON"
-msgstr ""
+msgstr "HDR10 已开启"
 
 #: src/render.c:1387
 #, c-format
 msgid ""
 "%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
 "scanout%s"
-msgstr ""
+msgstr "%s 以 HDR10 驱动 · PQ · %s 基色 · SDR 白 %d cd/m²（[ ]）· %s 扫描输出%s"
 
 #: src/render.c:1396
 msgid " — gamut not converted, colours run wide"
-msgstr ""
+msgstr " — 未转换色域，颜色会偏浓"
 
 #: src/render.c:1405
 #, c-format
 msgid " · %.0f cd/m² peak"
-msgstr ""
+msgstr " · 峰值 %.0f cd/m²"
 
 #: src/render.c:1410
 msgid "HDR10 (PQ)"
-msgstr ""
+msgstr "HDR10（PQ）"
 
 #: src/render.c:1414
 msgid "Shift+D drives it in HDR10"
-msgstr ""
+msgstr "Shift+D 可切换为 HDR10 驱动"
 
 #: src/render.c:1415
 msgid "this link or mode will not carry an HDR10 signal"
-msgstr ""
+msgstr "此连接或模式无法传输 HDR10 信号"
 
 #: src/render.c:1422
 #, c-format
 msgid "%s advertises no HDR transfer function in its EDID (SDR panel)"
-msgstr ""
+msgstr "%s 的 EDID 中未声明任何 HDR 传输函数（SDR 面板）"
 
 #: src/render.c:1432
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr ""
+msgstr "上下 选择 · 左右 旋转 · −/+ 缩放此屏幕 · p 设为主屏（X11 与游戏的默认）· m 排列"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr ""
+msgstr "Shift+方向键在网格中移动（交换）· d 10 位色（深色，不是 HDR）· Shift+D HDR10 输出 · [ ] SDR 白 · Super+Ctrl+= 缩放所有屏幕 · Esc 关闭"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
-msgstr ""
+msgstr "壁纸"
 
 #: src/render.c:1657
 msgid "Preview unavailable"
-msgstr ""
+msgstr "无法预览"
 
 #: src/render.c:1657
 msgid "No preview"
-msgstr ""
+msgstr "没有预览"
 
 #: src/render.c:1688
 msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr ""
+msgstr "上下 预览 · Tab 显示器 · m 缩放 · r 重新扫描 · Enter/Esc 关闭"
 
 #: src/render.c:1748
 msgid "POWER SAVING"
-msgstr ""
+msgstr "节能"
 
 #: src/render.c:1760
 #, c-format
 msgid "no lid switch"
-msgstr ""
+msgstr "没有上盖开关"
 
 #: src/render.c:1763
 msgid "closed"
-msgstr ""
+msgstr "已合上"
 
 #: src/render.c:1763
 msgid "open"
-msgstr ""
+msgstr "已打开"
 
 #: src/render.c:1779
 msgid "idle inhibited (media playing) · timers held"
-msgstr ""
+msgstr "空闲被抑制（正在播放媒体）· 计时器已暂停"
 
 #: src/render.c:1783
 msgid "disabled · no stage will fire"
-msgstr ""
+msgstr "已停用 · 不会触发任何阶段"
 
 #: src/render.c:1830
 msgid "Up/Down select · Left/Right adjust · Space toggle"
-msgstr ""
+msgstr "上下 选择 · 左右 调整 · 空格 切换"
 
 #: src/render.c:1832 src/render.c:1955
 msgid "s save (unsaved changes) · Esc close"
-msgstr ""
+msgstr "s 保存（有未保存的更改）· Esc 关闭"
 
 #: src/render.c:1833 src/render.c:1956
 msgid "s save · Esc close"
-msgstr ""
+msgstr "s 保存 · Esc 关闭"
 
 #: src/render.c:1888
 msgid "SCREENSAVER"
-msgstr ""
+msgstr "屏幕保护"
 
 #: src/render.c:1898
 msgid "idle inhibited (media playing) · saver held"
-msgstr ""
+msgstr "空闲被抑制（正在播放媒体）· 屏保已暂停"
 
 #: src/render.c:1905
 msgid "power saving is off (Super+P) · saver disabled"
-msgstr ""
+msgstr "节能已关闭（Super+P）· 屏保已停用"
 
 #: src/render.c:1909
 msgid "no timeout set · p previews the current mode"
-msgstr ""
+msgstr "未设置等待时间 · p 可预览当前模式"
 
 #: src/render.c:1953
 msgid "Up/Down select · Left/Right adjust · p preview"
-msgstr ""
+msgstr "上下 选择 · 左右 调整 · p 预览"
 
 #: src/render.c:2074
 msgid "CURSOR THEME"
-msgstr ""
+msgstr "光标主题"
 
 #: src/render.c:2104
 msgid "No cursor themes installed."
-msgstr ""
+msgstr "没有安装任何光标主题。"
 
 #: src/render.c:2108
 msgid "synui-cursor install <archive>   then press r"
-msgstr ""
+msgstr "synui-cursor install <压缩包>   然后按 r"
 
 #: src/render.c:2166
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "上下 预览 · -/+ 大小 · r 重新扫描 · Enter 应用 · Esc 取消"
 
 #: src/render.c:2237
 msgid "UI FONT"
-msgstr ""
+msgstr "界面字体"
 
 #: src/render.c:2267
 msgid "No font families found."
-msgstr ""
+msgstr "未找到任何字体族。"
 
 #: src/render.c:2335
 msgid "Handgloves 0123"
-msgstr ""
+msgstr "永和九年岁在癸丑 0123"
 
 #: src/render.c:2383
 msgid "Not monospaced · kitty and foot may not render correctly in it"
-msgstr ""
+msgstr "不是等宽字体 · kitty 和 foot 可能无法正确显示"
 
 #: src/render.c:2390
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "上下 预览 · d 默认 · r 重新扫描 · Enter 应用 · Esc 取消"
 
 #: src/render.c:2522
 msgid "Type to search"
-msgstr ""
+msgstr "输入以搜索"
 
 #: src/render.c:2533
 msgid "No applications match"
-msgstr ""
+msgstr "没有匹配的应用"
 
 #: src/render.c:2534
 msgid "No applications found"
-msgstr ""
+msgstr "未找到任何应用"
 
 #: src/render.c:2629
 #, c-format
 msgid "%d application · type to search · Enter opens · Esc closes"
 msgid_plural "%d applications · type to search · Enter opens · Esc closes"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%d 个应用 · 输入以搜索 · Enter 打开 · Esc 关闭"
 
 #: src/render.c:2721
 msgid "EMOJI"
-msgstr ""
+msgstr "表情符号"
 
 #: src/render.c:2743
 msgid "type to search"
-msgstr ""
+msgstr "输入以搜索"
 
 #: src/render.c:2802
 msgid "No emoji match that search."
-msgstr ""
+msgstr "没有符合该搜索的表情符号。"
 
 #: src/render.c:2803
 msgid "Nothing here yet."
-msgstr ""
+msgstr "这里还什么都没有。"
 
 #: src/render.c:2865
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
-msgstr ""
+msgstr "输入以搜索 · 点击或 Tab 切换分类 · Enter 插入 · Esc 清除／关闭"
 
 #: src/render.c:3010
 msgid "CALCULATOR"
-msgstr ""
+msgstr "计算器"
 
 #: src/render.c:3050
 msgid "Anything you work out is kept here."
-msgstr ""
+msgstr "您算过的内容都会留在这里。"
 
 #: src/render.c:3092
 msgid "type an expression"
-msgstr ""
+msgstr "输入算式"
 
 #: src/render.c:3197
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
-msgstr ""
+msgstr "Enter 计算 · Ctrl+C 复制 · Ctrl+V 粘贴"
 
 #: src/render.c:3199
 msgid "Up/Down recall the tape · Esc clears, then closes"
-msgstr ""
+msgstr "上下键调出历史 · Esc 先清除，再关闭"
 
 #: src/render.c:3268
 msgid "EQUALIZER"
-msgstr ""
+msgstr "均衡器"
 
 #: src/render.c:3277
 msgid "output routed through the equalizer sink"
-msgstr ""
+msgstr "输出经过均衡器"
 
 #: src/render.c:3278
 msgid "off — audio goes straight to your device"
-msgstr ""
+msgstr "关闭 — 声音直接送到您的设备"
 
 #: src/render.c:3354
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
-msgstr ""
+msgstr "上下 选行 · 左右 调整 · r 恢复平直 · Esc 关闭"
 
 #: src/render.c:3424
 msgid "CROP — RECENT IMAGES"
-msgstr ""
+msgstr "裁剪 — 最近的图片"
 
 #: src/render.c:3425
 msgid "IMAGES — RECENT"
-msgstr ""
+msgstr "图片 — 最近"
 
 #: src/render.c:3430
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%d 张图片"
 
 #: src/render.c:3449
 msgid "No images in Pictures, Wallpapers or Downloads."
-msgstr ""
+msgstr "图片、壁纸和下载文件夹中都没有图片。"
 
 #: src/render.c:3453
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
-msgstr ""
+msgstr "按 r 重新扫描，或直接打开文件：synctl dispatch view <路径>"
 
 #: src/render.c:3510
 msgid "Enter crop · v view · r rescan · Esc close"
-msgstr ""
+msgstr "Enter 裁剪 · v 查看 · r 重新扫描 · Esc 关闭"
 
 #: src/render.c:3511
 msgid "Enter view · c crop · r rescan · Esc close"
-msgstr ""
+msgstr "Enter 查看 · c 裁剪 · r 重新扫描 · Esc 关闭"
 
 #: src/render.c:3621
 msgid "VIEW"
-msgstr ""
+msgstr "查看"
 
 #: src/render.c:3758
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
-msgstr ""
+msgstr "拖动可移动 · 方向键平移 · Shift 加速 4 倍 · n / p 下一张和上一张"
 
 #: src/render.c:3760
 msgid "← → next and previous · drag or scroll to zoom in"
-msgstr ""
+msgstr "← → 下一张和上一张 · 拖动或滚动可放大"
 
 #: src/render.c:3765
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr ""
+msgstr "滚动缩放 · + − 缩放 · 0 适应窗口 · 1 实际大小 · c 裁剪 · r 重新扫描 · Esc 或 × %s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
-msgstr ""
+msgstr "返回列表"
 
 #: src/render.c:3768
 msgid "close"
-msgstr ""
+msgstr "关闭"
 
 #: src/render.c:3918
 msgid "CROP"
-msgstr ""
+msgstr "裁剪"
 
 #: src/render.c:3951
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
-msgstr ""
+msgstr "拖动可选取 · 拖动边角可调整 · Tab 选择方向键要移动的边角"
 
 #: src/render.c:3959
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr ""
+msgstr "方向键调整大小 · Ctrl+方向键移动 · Shift 加速 25 倍 · a 全选 · Enter 另存一份 · Esc %s"
 
 #: src/render.c:3961
 msgid "cancel"
-msgstr ""
+msgstr "取消"
 
 #: src/render.c:4060
 msgid "WINDOW EFFECTS"
-msgstr ""
+msgstr "窗口特效"
 
 #: src/render.c:4060
 msgid "CRT FILTERS"
-msgstr ""
+msgstr "CRT 滤镜"
 
 #: src/render.c:4067
 msgid "Tab → CRT filters"
-msgstr ""
+msgstr "Tab → CRT 滤镜"
 
 #: src/render.c:4068
 msgid "Tab → window effects"
-msgstr ""
+msgstr "Tab → 窗口特效"
 
 #: src/render.c:4084
 msgid "no GLES renderer · filters unavailable on this display"
-msgstr ""
+msgstr "没有 GLES 渲染器 · 此显示器上无法使用滤镜"
 
 #: src/render.c:4088
 msgid "filters off · Space to turn them on"
-msgstr ""
+msgstr "滤镜已关闭 · 按空格开启"
 
 #: src/render.c:4151
 msgid "Up/Down select · Left/Right adjust · Space on/off"
-msgstr ""
+msgstr "上下 选择 · 左右 调整 · 空格 开／关"
 
 #: src/render.c:4153
 msgid "s save (unsaved changes) · Tab page · Esc close"
-msgstr ""
+msgstr "s 保存（有未保存的更改）· Tab 换页 · Esc 关闭"
 
 #: src/render.c:4154
 msgid "s save · Tab page · Esc close"
-msgstr ""
+msgstr "s 保存 · Tab 换页 · Esc 关闭"
 
 #: src/render.c:4212
 msgid "DESKTOP WIDGETS"
-msgstr ""
+msgstr "桌面小部件"
 
 #: src/render.c:4217
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
-msgstr ""
+msgstr "每个都各自独立 · 按住手柄拖动 · 空格是全开或全关"
 
 #: src/render.c:4263
 msgid "needs cava"
-msgstr ""
+msgstr "需要 cava"
 
 #: src/render.c:4277
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
-msgstr ""
+msgstr "上下 选择 · Enter 切换 · 左右 关／开"
 
 #: src/render.c:4279
 msgid "Space all on/off · R reset positions · Esc close"
-msgstr ""
+msgstr "空格 全部开／关 · R 重置位置 · Esc 关闭"
 
 #: src/render.c:4438
 msgid "done"
-msgstr ""
+msgstr "完成"
 
 #: src/render.c:4439
 msgid "failed"
-msgstr ""
+msgstr "失败"
 
 #: src/render.c:4440
 msgid "starting"
-msgstr ""
+msgstr "正在开始"
 
 #: src/render.c:4541
 msgid "Cannot read the model directory."
-msgstr ""
+msgstr "无法读取模型目录。"
 
 #: src/render.c:4542
 msgid "No models installed."
-msgstr ""
+msgstr "没有安装任何模型。"
 
 #: src/render.c:4550
 msgid "A model may still be loaded · see the message below."
-msgstr ""
+msgstr "可能仍有模型处于加载状态 · 请看下面的消息。"
 
 #: src/render.c:4551
 msgid "Pick one from AVAILABLE below and press Enter."
-msgstr ""
+msgstr "从下面的「可用」中选一个并按 Enter。"
 
 #: src/render.c:4619
 msgid "Size"
-msgstr ""
+msgstr "大小"
 
 #: src/render.c:4620 src/render.c:4776
 msgid "Params"
-msgstr ""
+msgstr "参数量"
 
 #: src/render.c:4621
 msgid "Quant"
-msgstr ""
+msgstr "量化"
 
 #: src/render.c:4622
 msgid "Context"
-msgstr ""
+msgstr "上下文"
 
 #: src/render.c:4623
 msgid "Arch"
-msgstr ""
+msgstr "架构"
 
 #: src/render.c:4646
 msgid "no chat template · synapd will guess the turn format"
-msgstr ""
+msgstr "没有对话模板 · synapd 会推测对话格式"
 
 #: src/render.c:4651
 msgid "unreadable header"
-msgstr ""
+msgstr "无法读取文件头"
 
 #: src/render.c:4674 src/render.c:4810
 msgid "ABOUT"
-msgstr ""
+msgstr "关于"
 
 #: src/render.c:4686 src/render.c:4817
 msgid "Good at"
-msgstr ""
+msgstr "擅长"
 
 #: src/render.c:4687
 msgid "Speaks"
-msgstr ""
+msgstr "语言"
 
 #: src/render.c:4688 src/render.c:4779
 msgid "License"
-msgstr ""
+msgstr "许可协议"
 
 #: src/render.c:4689 src/render.c:4818
 msgid "Based on"
-msgstr ""
+msgstr "基于"
 
 #: src/render.c:4737
 msgid "this is the model synapd is running"
-msgstr ""
+msgstr "这是 synapd 正在运行的模型"
 
 #: src/render.c:4741
 msgid "[ Enter: load this model ]"
-msgstr ""
+msgstr "[ Enter：加载此模型 ]"
 
 #: src/render.c:4777
 msgid "Download"
-msgstr ""
+msgstr "下载"
 
 #: src/render.c:4778
 msgid "Quality"
-msgstr ""
+msgstr "质量"
 
 #: src/render.c:4780
 msgid "Pulls"
-msgstr ""
+msgstr "下载次数"
 
 #: src/render.c:4861
 msgid "QUANTISATION"
-msgstr ""
+msgstr "量化"
 
 #: src/render.c:4867
 msgid "reading the repository …"
-msgstr ""
+msgstr "正在读取仓库 …"
 
 #: src/render.c:4872
 msgid "could not read the repository"
-msgstr ""
+msgstr "无法读取仓库"
 
 #: src/render.c:4877
 msgid "no single-file GGUF here"
-msgstr ""
+msgstr "这里没有单文件 GGUF"
 
 #: src/render.c:4926 src/render.c:5780
 #, c-format
 msgid "+%d more"
-msgstr ""
+msgstr "还有 %d 个"
 
 #: src/render.c:4934
 msgid "[ Enter: download ]"
-msgstr ""
+msgstr "[ Enter：下载 ]"
 
 #: src/render.c:5011
 msgid "AI MODEL"
-msgstr ""
+msgstr "AI 模型"
 
 #: src/render.c:5022
 msgid "Loaded"
-msgstr ""
+msgstr "已加载"
 
 #: src/render.c:5023
 msgid "synapd not responding"
-msgstr ""
+msgstr "synapd 没有响应"
 
 #: src/render.c:5026
 msgid "Format"
-msgstr ""
+msgstr "格式"
 
 #: src/render.c:5028
 msgid "Profile"
-msgstr ""
+msgstr "配置"
 
 #: src/render.c:5047
 msgid "legacy"
-msgstr ""
+msgstr "旧版"
 
 #: src/render.c:5051
 msgid "GGUF declares no chat template"
-msgstr ""
+msgstr "GGUF 未声明任何对话模板"
 
 #: src/render.c:5056
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
-msgstr ""
+msgstr "温度 %.2f  ·  top_p %.2f  ·  top_k %d"
 
 #: src/render.c:5064
 msgid "Sampling"
-msgstr ""
+msgstr "采样"
 
 #: src/render.c:5094
 msgid "search huggingface"
-msgstr ""
+msgstr "搜索 Hugging Face"
 
 #: src/render.c:5109
 msgid "INSTALLED"
-msgstr ""
+msgstr "已安装"
 
 #: src/render.c:5109
 msgid "INSTALLED · none"
-msgstr ""
+msgstr "已安装 · 无"
 
 #: src/render.c:5154
 msgid "delete?"
-msgstr ""
+msgstr "删除？"
 
 #: src/render.c:5160
 msgid "loading …"
-msgstr ""
+msgstr "加载中 …"
 
 #: src/render.c:5220
 msgid "type to search · Enter search · Esc cancel"
-msgstr ""
+msgstr "输入以搜索 · Enter 搜索 · Esc 取消"
 
 #: src/render.c:5222
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
-msgstr ""
+msgstr "上下 选择 · 左右 量化 · Enter 下载 · / 搜索 · Esc 关闭"
 
 #: src/render.c:5228
 msgid "Delete again to confirm · Esc cancels · any move cancels"
-msgstr ""
+msgstr "再按一次删除以确认 · Esc 取消 · 任何移动都会取消"
 
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr ""
+msgstr "上下 选择 · Enter 加载 · Del 删除 · / 搜索 · R 重新扫描 · Esc 关闭"
 
 #: src/render.c:5235
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
-msgstr ""
+msgstr "下载以系统服务运行 — 关闭此面板不会取消下载"
 
 #: src/render.c:5238
 msgid "switching reloads the model — the AI pauses while it loads"
-msgstr ""
+msgstr "切换会重新加载模型 — 加载期间 AI 会暂停"
 
 #: src/render.c:5299
 msgid "EVENT SOUNDS"
-msgstr ""
+msgstr "事件提示音"
 
 #: src/render.c:5308
 msgid "silent · Space turns event sounds on"
-msgstr ""
+msgstr "静音 · 空格可开启事件提示音"
 
 #: src/render.c:5312
 msgid "t plays the selected sound without enabling it"
-msgstr ""
+msgstr "t 播放所选提示音，但不启用它"
 
 #: src/render.c:5357
 msgid "Volume"
-msgstr ""
+msgstr "音量"
 
 #: src/render.c:5360
 msgid "Sound theme"
-msgstr ""
+msgstr "声音主题"
 
 #: src/render.c:5364
 #, c-format
 msgid "%s — not a sound theme"
-msgstr ""
+msgstr "%s — 不是声音主题"
 
 #: src/render.c:5421
 msgid "not in this theme"
-msgstr ""
+msgstr "此主题中没有"
 
 #: src/render.c:5435
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
-msgstr ""
+msgstr "上下 选择 · Enter 切换 · 左右 关／开 · [ ] 选择提示音"
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr ""
+msgstr "t 播放 · 空格 全部提示音开／关 · Esc 关闭 · 更多：synui-sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
-msgstr ""
+msgstr "日期和时间"
 
 #: src/render.c:5505
 #, c-format
 msgid "system zone · %s"
-msgstr ""
+msgstr "系统时区 · %s"
 
 #: src/render.c:5538
 msgid "WORLD CLOCK"
-msgstr ""
+msgstr "世界时钟"
 
 #: src/render.c:5563
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
-msgstr ""
+msgstr "上下 选择 · 空格 切换 · c 日历 · Esc 关闭"
 
 #: src/render.c:5631
 msgid "January"
-msgstr ""
+msgstr "一月"
 
 #: src/render.c:5631
 msgid "February"
-msgstr ""
+msgstr "二月"
 
 #: src/render.c:5631
 msgid "March"
-msgstr ""
+msgstr "三月"
 
 #: src/render.c:5631
 msgid "April"
-msgstr ""
+msgstr "四月"
 
 #: src/render.c:5632
 msgid "May"
-msgstr ""
+msgstr "五月"
 
 #: src/render.c:5632
 msgid "June"
-msgstr ""
+msgstr "六月"
 
 #: src/render.c:5632
 msgid "July"
-msgstr ""
+msgstr "七月"
 
 #: src/render.c:5632
 msgid "August"
-msgstr ""
+msgstr "八月"
 
 #: src/render.c:5633
 msgid "September"
-msgstr ""
+msgstr "九月"
 
 #: src/render.c:5633
 msgid "October"
-msgstr ""
+msgstr "十月"
 
 #: src/render.c:5633
 msgid "November"
-msgstr ""
+msgstr "十一月"
 
 #: src/render.c:5633
 msgid "December"
-msgstr ""
+msgstr "十二月"
 
 #: src/render.c:5755
 msgid "loading…"
-msgstr ""
+msgstr "加载中…"
 
 #: src/render.c:5765
 msgid "nothing on"
-msgstr ""
+msgstr "没有开启任何项"
 
 #: src/render.c:5770
 #, c-format
 msgid "all day  %s"
-msgstr ""
+msgstr "全天  %s"
 
 #: src/render.c:5792
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
-msgstr ""
+msgstr "←→ 日 · PgUp/PgDn 月 · t 今天 · Esc"
 
 #: src/render.c:5881
 msgid "CONTROL PANEL"
-msgstr ""
+msgstr "控制面板"
 
 #: src/render.c:5900
 msgid "Search"
-msgstr ""
+msgstr "搜索"
 
 #: src/render.c:5927
 msgid "CATEGORIES"
-msgstr ""
+msgstr "分类"
 
 #: src/render.c:5932 src/render.c:6418
 msgid "FIND  "
-msgstr ""
+msgstr "查找  "
 
 #: src/render.c:5939 src/render.c:6365
 msgid "KEYBOARD SHORTCUTS"
-msgstr ""
+msgstr "键盘快捷键"
 
 #: src/render.c:5940
 msgid "SETTINGS"
-msgstr ""
+msgstr "设置"
 
 #: src/render.c:6015
 msgid "Press a key…"
-msgstr ""
+msgstr "请按一个键…"
 
 #: src/render.c:6035 src/render.c:6211 src/render.c:6506
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
-msgstr ""
+msgstr "第 %d–%d 项，共 %d 项 · PgUp/PgDn"
 
 #: src/render.c:6172
 msgid "none"
-msgstr ""
+msgstr "无"
 
 #: src/render.c:6221
 msgid "No setting matches that."
-msgstr ""
+msgstr "没有符合的设置。"
 
 #: src/render.c:6256
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
-msgstr ""
+msgstr "输入以筛选 · 上下 选择 · Del 重置 · Esc 返回"
 
 #: src/render.c:6258
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
-msgstr ""
+msgstr "上下 分类 · Enter 或右方向键打开 · / 查找 · Esc 关闭"
 
 #: src/render.c:6264
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
-msgstr ""
+msgstr "轻按 Super、Ctrl、Alt 或 Shift · Del 表示不设置 · Esc 取消"
 
 #: src/render.c:6265
 msgid "Press the new key for this shortcut · Esc cancels"
-msgstr ""
+msgstr "请按此快捷键的新按键 · Esc 取消"
 
 #: src/render.c:6267
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
-msgstr ""
+msgstr "F2 重新绑定 · F3 改为轻按触发 · Ctrl+Shift+R 全部重置 · Esc 返回"
 
 #: src/render.c:6274
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
-msgstr ""
+msgstr "左右 调整 · Del 默认 · / 查找 · Tab 换列 · Esc 返回"
 
 #: src/render.c:6281
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
-msgstr ""
+msgstr "左右 切换 · Enter 详情 · Tab 换列 · Esc 返回"
 
 #: src/render.c:6283
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
-msgstr ""
+msgstr "上下 选择 · Enter 执行 · / 查找 · 左方向键或 Esc 返回"
 
 #: src/render.c:6405
 msgid "PRESS THE NEW KEY  "
-msgstr ""
+msgstr "请按新按键  "
 
 #: src/render.c:6412
 #, c-format
 msgid "for %s  ·  Esc cancels"
-msgstr ""
+msgstr "用于 %s  ·  Esc 取消"
 
 #: src/render.c:6431
 msgid "_  a key, what it does, an app, or a command"
-msgstr ""
+msgstr "_  按键、功能、应用或命令"
 
 #: src/render.c:6487
 msgid "No shortcut matches that."
-msgstr ""
+msgstr "没有符合的快捷键。"
 
 #: src/render.c:6524
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
-msgstr ""
+msgstr "轻按 Super、Ctrl、Alt 或 Shift · Del 表示不设置 · Esc 取消"
 
 #: src/render.c:6526
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
-msgstr ""
+msgstr "请按任意含 Super、Ctrl 或 Alt 的组合键 · Esc 取消"
 
 #: src/render.c:6542
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr ""
+msgstr "筛选 · Enter 运行 · F2 设置按键 · Del 解除 · F3 轻按 · Ctrl+Shift+R 重置"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
-msgstr ""
+msgstr "霓虹夜行的默认主题 · 应用为深色"
 
 #: src/render.c:6563
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
-msgstr ""
+msgstr "扁平现代深色 · 应用 + Dolphin + Firefox 均为深色"
 
 #: src/render.c:6564
 msgid "Luna blue, gradient captions · apps beige"
-msgstr ""
+msgstr "Luna 蓝，渐变标题栏 · 应用为米色"
 
 #: src/render.c:6565
 msgid "Silver 3D bevels, navy titles · apps grey"
-msgstr ""
+msgstr "银色立体边框，深蓝标题 · 应用为灰色"
 
 #: src/render.c:6566
 msgid "Mocha · mauve on soft black · glassy"
-msgstr ""
+msgstr "摩卡 · 柔黑上的淡紫 · 玻璃质感"
 
 #: src/render.c:6567
 msgid "Retro warm · orange on brown · glassy"
-msgstr ""
+msgstr "复古暖色 · 棕底橙字 · 玻璃质感"
 
 #: src/render.c:6568
 msgid "Storm · blue + purple on navy · glassy"
-msgstr ""
+msgstr "风暴 · 深蓝底上的蓝与紫 · 玻璃质感"
 
 #: src/render.c:6569
 msgid "Arctic · frost blue on slate · glassy"
-msgstr ""
+msgstr "北极 · 石板灰上的霜蓝 · 玻璃质感"
 
 #: src/render.c:6570
 msgid "Purple + pink on charcoal · glassy"
-msgstr ""
+msgstr "炭黑上的紫与粉 · 玻璃质感"
 
 #: src/render.c:6571
 msgid "Pastel pink, hot-pink titles · apps light"
-msgstr ""
+msgstr "淡粉色，亮粉标题 · 应用为浅色"
 
 #: src/render.c:6572
 msgid "Liquid glass · rounded, translucent · apps light"
-msgstr ""
+msgstr "液态玻璃 · 圆角、半透明 · 应用为浅色"
 
 #: src/render.c:6573
 msgid "Pinstripes + traffic lights · apps light grey"
-msgstr ""
+msgstr "细条纹与红绿灯按钮 · 应用为浅灰"
 
 #: src/render.c:6574
 msgid "Racing stripes, square boxes · apps grey"
-msgstr ""
+msgstr "赛车条纹，方正边框 · 应用为灰色"
 
 #: src/render.c:6580
 msgid "House glass · accent off the wallpaper · apps dark"
-msgstr ""
+msgstr "自家玻璃 · 强调色取自壁纸 · 应用为深色"
 
 #: src/render.c:6581
 msgid "The same glass in daylight · apps + Files light"
-msgstr ""
+msgstr "同样的玻璃，白昼版 · 应用与「文件」为浅色"
 
 #: src/render.c:6652
 msgid "THEME MANAGER"
-msgstr ""
+msgstr "主题管理"
 
 #: src/render.c:6757
 #, c-format
 msgid "Transparency  %d%%"
-msgstr ""
+msgstr "透明度  %d%%"
 
 #: src/render.c:6759
 #, c-format
 msgid "Transparency  off"
-msgstr ""
+msgstr "透明度  关闭"
 
 #: src/render.c:6789
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
-msgstr ""
+msgstr "上下 主题 · ←/→ 不透明度 · T 透明度 · Enter 应用 · Esc"
 
 #: src/render.c:6856
 msgid "CLIPBOARD"
-msgstr ""
+msgstr "剪贴板"
 
 #: src/render.c:6873
 msgid "Nothing copied yet"
-msgstr ""
+msgstr "还没有复制任何内容"
 
 #: src/render.c:6919
 msgid "Enter copy · Del clear all · Esc close"
-msgstr ""
+msgstr "Enter 复制 · Del 全部清除 · Esc 关闭"
 
 #: src/render.c:7260
 msgid "connected"
-msgstr ""
+msgstr "已连接"
 
 #: src/render.c:7261
 msgid "paired"
-msgstr ""
+msgstr "已配对"
 
 #: src/render.c:7321
 msgid "BLUETOOTH"
-msgstr ""
+msgstr "蓝牙"
 
 #: src/render.c:7334
 msgid "No Bluetooth adapter found"
-msgstr ""
+msgstr "未找到蓝牙适配器"
 
 #: src/render.c:7339
 msgid "Radio on"
-msgstr ""
+msgstr "无线已开启"
 
 #: src/render.c:7339
 msgid "Radio off"
-msgstr ""
+msgstr "无线已关闭"
 
 #: src/render.c:7344
 msgid "· scanning…"
-msgstr ""
+msgstr "· 正在扫描…"
 
 #: src/render.c:7354
 msgid "A device"
-msgstr ""
+msgstr "某个设备"
 
 #: src/render.c:7362
 #, c-format
 msgid "Passkey %06u · does it match the device?"
-msgstr ""
+msgstr "配对码 %06u · 与设备上显示的一致吗？"
 
 #: src/render.c:7365
 #, c-format
 msgid "wants to connect%s"
-msgstr ""
+msgstr "想要连接%s"
 
 #: src/render.c:7368
 #, c-format
 msgid "Type %06u on the device, then Enter"
-msgstr ""
+msgstr "在设备上输入 %06u，然后按 Enter"
 
 #: src/render.c:7371
 #, c-format
 msgid "Enter PIN %s on the device"
-msgstr ""
+msgstr "在设备上输入 PIN 码 %s"
 
 #: src/render.c:7379
 msgid "Any key to dismiss"
-msgstr ""
+msgstr "按任意键关闭"
 
 #: src/render.c:7380
 msgid "y accept · n reject"
-msgstr ""
+msgstr "y 接受 · n 拒绝"
 
 #: src/render.c:7393
 msgid "Radio is off · press o"
-msgstr ""
+msgstr "无线已关闭 · 请按 o"
 
 #: src/render.c:7398
 #, c-format
 msgid "%d hidden · press a to show"
-msgstr ""
+msgstr "已隐藏 %d 个 · 按 a 显示"
 
 #: src/render.c:7401
 msgid "No devices · press s to scan"
-msgstr ""
+msgstr "没有设备 · 按 s 扫描"
 
 #: src/render.c:7438
 msgid "trusted"
-msgstr ""
+msgstr "已信任"
 
 #: src/render.c:7471
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr ""
+msgstr "Enter 连接 · p 配对 · t 信任 · r 移除 · s 扫描 · o 无线 · a 精简 · Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr ""
+msgstr "Enter 连接 · p 配对 · t 信任 · r 移除 · s 扫描 · o 无线 · a 全部 · Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
-msgstr ""
+msgstr "任务管理器"
 
 #: src/render.c:7639
 #, c-format
 msgid "%d procs · sort: %s%s"
-msgstr ""
+msgstr "%d 个进程 · 排序：%s%s"
 
 #: src/render.c:7650
 #, c-format
 msgid "%.0f%%  (%ld cores)"
-msgstr ""
+msgstr "%.0f%%  (%ld 核)"
 
 #: src/render.c:7652
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: src/render.c:7663
 msgid "RAM"
-msgstr ""
+msgstr "内存"
 
 #: src/render.c:7666 src/render.c:7674
 msgid "GPU"
-msgstr ""
+msgstr "GPU"
 
 #: src/render.c:7666
 msgid "no GPU telemetry available"
-msgstr ""
+msgstr "没有可用的 GPU 遥测数据"
 
 #: src/render.c:7691 src/render.c:7710
 msgid "VRAM"
-msgstr ""
+msgstr "显存"
 
 #: src/render.c:7705
 msgid "PID"
-msgstr ""
+msgstr "PID"
 
 #: src/render.c:7707
 msgid "NAME"
-msgstr ""
+msgstr "名称"
 
 #: src/render.c:7709
 msgid "MEM"
-msgstr ""
+msgstr "内存"
 
 #: src/render.c:7818
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr ""
+msgstr "j/k 移动 · 右键点击某一行 · c/m/g/p 排序 · u 我的 · x 结束 · X 强制结束 · Esc 关闭"
 
 #: src/render.c:7984
 msgid "NEWS"
-msgstr ""
+msgstr "新闻"
 
 #: src/render.c:7992
 msgid "all sources"
-msgstr ""
+msgstr "全部来源"
 
 #: src/render.c:7993
 msgid "by time"
-msgstr ""
+msgstr "按时间"
 
 #: src/render.c:7993
 msgid "by source"
-msgstr ""
+msgstr "按来源"
 
 #: src/render.c:7996
 msgid "never fetched"
-msgstr ""
+msgstr "从未获取"
 
 #: src/render.c:8023
 #, c-format
 msgid "filter: /%s"
-msgstr ""
+msgstr "筛选：/%s"
 
 #: src/render.c:8036
 msgid "fetching feeds…"
-msgstr ""
+msgstr "正在获取订阅源…"
 
 #: src/render.c:8037
 msgid "nothing matches this filter"
-msgstr ""
+msgstr "没有符合此筛选的内容"
 
 #: src/render.c:8038
 msgid "no feeds answered — check the network, then press r"
-msgstr ""
+msgstr "没有订阅源响应 — 请检查网络，然后按 r"
 
 #: src/render.c:8039
 msgid "no items yet — press r to fetch"
-msgstr ""
+msgstr "还没有条目 — 按 r 获取"
 
 #: src/render.c:8125
 msgid "type to filter · Enter keep · Esc clear"
-msgstr ""
+msgstr "输入以筛选 · Enter 保留 · Esc 清除"
 
 #: src/render.c:8126
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr ""
+msgstr "j/k 移动 · Enter 打开 · o 后台打开 · c 评论 · y 复制 · Tab 来源 · / 搜索 · s 排序 · m 标为已读 · r 刷新 · Esc 关闭"
 
 #: src/render.c:8152
 msgid "Bottom"
-msgstr ""
+msgstr "下方"
 
 #: src/render.c:8152
 msgid "Top"
-msgstr ""
+msgstr "上方"
 
 #: src/render.c:8152
 msgid "Left"
-msgstr ""
+msgstr "左侧"
 
 #: src/render.c:8152
 msgid "Right"
-msgstr ""
+msgstr "右侧"
 
 #: src/render.c:8162
 msgid "Apps"
-msgstr ""
+msgstr "应用"
 
 #: src/render.c:8165
 #, c-format
 msgid "Dock Edge: %s"
-msgstr ""
+msgstr "程序坞位置：%s"
 
 #: src/render.c:8179
 #, c-format
 msgid "%s At: %s"
-msgstr ""
+msgstr "%s 位置：%s"
 
 #: src/render.c:8191
 msgid "Pin to Dock"
-msgstr ""
+msgstr "固定到程序坞"
 
 #: src/render.c:8193
 msgid "Unpin from Dock"
-msgstr ""
+msgstr "从程序坞移除"
 
 #: src/render.c:8194
 msgid "Open"
-msgstr ""
+msgstr "打开"
 
 #: src/render.c:8195
 msgid "New Window"
-msgstr ""
+msgstr "新建窗口"
 
 #: src/render.c:8196
 msgid "Close Window"
-msgstr ""
+msgstr "关闭窗口"
 
 #: src/render.c:8197
 msgid "Quit All Windows"
-msgstr ""
+msgstr "关闭全部窗口"
 
 #: src/render.c:8201
 msgid "Auto-hide Dock"
-msgstr ""
+msgstr "自动隐藏程序坞"
 
 #: src/render.c:8202
 msgid "Dock Above Windows"
-msgstr ""
+msgstr "程序坞置于窗口之上"
 
 #: src/render.c:8203
 msgid "Magnify Icons"
-msgstr ""
+msgstr "放大图标"
 
 #: src/render.c:8204
 msgid "Show Clock"
-msgstr ""
+msgstr "显示时钟"
 
 #: src/render.c:8205
 msgid "Analog Clock Face"
-msgstr ""
+msgstr "指针式表盘"
 
 #: src/render.c:8206
 msgid "Show All Apps Button"
-msgstr ""
+msgstr "显示「全部应用」按钮"
 
 #: src/render.c:8207
 msgid "Show Power Button"
-msgstr ""
+msgstr "显示电源按钮"
 
 #: src/render.c:8208
 msgid "Dock Settings…"
-msgstr ""
+msgstr "程序坞设置…"
 
 #: src/render.c:8212
 msgid "Lock Screen"
-msgstr ""
+msgstr "锁定屏幕"
 
 #: src/render.c:8213
 msgid "Log Out"
-msgstr ""
+msgstr "注销"
 
 #: src/render.c:8214
 msgid "Suspend"
-msgstr ""
+msgstr "睡眠"
 
 #: src/render.c:8215
 msgid "Restart"
-msgstr ""
+msgstr "重启"
 
 #: src/render.c:8216
 msgid "Shut Down"
-msgstr ""
+msgstr "关机"
 
 #: src/render.c:8839
 msgid "minimized"
-msgstr ""
+msgstr "已最小化"
 
 #: src/render.c:8839 src/render.c:9333 src/render.c:9336
 msgid "MIN"
-msgstr ""
+msgstr "最小"
 
 #: src/render.c:8944
 msgid "WINDOWS"
-msgstr ""
+msgstr "窗口"
 
 #: src/render.c:9101
 msgid "Alt+Tab next · Alt+Shift+Tab back"
-msgstr ""
+msgstr "Alt+Tab 下一个 · Alt+Shift+Tab 上一个"
 
 #: src/render.c:9218
 msgid "MISSION CONTROL"
-msgstr ""
+msgstr "窗口总览"
 
 #: src/render.c:9223
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "桌面 %d · %d 个窗口"
 
 #: src/render.c:9360
 msgid "Nothing open on this desktop."
-msgstr ""
+msgstr "此桌面上没有打开任何窗口。"
 
 #: src/render.c:9415
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr ""
+msgstr "方向键或点击可选择窗口 · Enter 打开 · Del 关闭 · 1–9 切换桌面 · Esc 关闭"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2741,28 +2730,24 @@ msgid "Slide interval"
 msgstr "切换间隔"
 
 #: src/saver.c:841
-#, fuzzy
 msgid "Lock background"
-msgstr "锁屏"
+msgstr "锁屏背景"
 
 #: src/saver.c:842
-#, fuzzy
 msgid "Lock image"
-msgstr "程序坞放大"
+msgstr "锁屏图片"
 
 #: src/saver.c:843
 msgid "Lock dim"
 msgstr "锁屏变暗"
 
 #: src/saver.c:844
-#, fuzzy
 msgid "Lock blur"
-msgstr "背景模糊"
+msgstr "锁屏模糊"
 
 #: src/saver.c:845
-#, fuzzy
 msgid "Lock colours"
-msgstr "程序坞圆角"
+msgstr "锁屏配色"
 
 #: src/saver.c:846
 msgid "Now playing"
@@ -2773,19 +2758,16 @@ msgid "Weather"
 msgstr "天气"
 
 #: src/saver.c:848
-#, fuzzy
 msgid "Temperature in"
-msgstr "色温"
+msgstr "温度单位"
 
 #: src/saver.c:849
-#, fuzzy
 msgid "Keyboard layout"
-msgstr "键盘快捷键"
+msgstr "键盘布局"
 
 #: src/widgets.c:60
-#, fuzzy
 msgid "All widgets"
-msgstr "所有滤镜"
+msgstr "全部小部件"
 
 #: src/widgets.c:61
 msgid "Audio visualiser"
@@ -2796,9 +2778,8 @@ msgid "System monitor"
 msgstr "系统监视器"
 
 #: src/widgets.c:63
-#, fuzzy
 msgid "Desktop clock"
-msgstr "桌面图标"
+msgstr "桌面时钟"
 
 #: src/widgets.c:64
 msgid "Quick launch"
@@ -2817,9 +2798,8 @@ msgid "Tuxagotchi"
 msgstr "Tuxagotchi"
 
 #: src/widgets.c:68
-#, fuzzy
 msgid "Analog clock"
-msgstr "模拟时钟表盘"
+msgstr "指针时钟"
 
 #: src/widgets.c:69
 msgid "Music player"

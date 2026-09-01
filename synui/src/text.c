@@ -60,8 +60,22 @@
  * All three were equally broken before, and worse: those strings drew as rows
  * of '?'. This makes them legible-ish rather than correct. Fixing them properly
  * means HarfBuzz for shaping plus a bidi pass, which is a different and much
- * larger change than choosing a face — and one no panel in this tree currently
- * needs, since the strings that reach it are window titles and filenames.
+ * larger change than choosing a face.
+ *
+ * ⛔ AND IT IS NEEDED NOW. The sentence that stood here said no panel in this
+ * tree needs it, "since the strings that reach it are window titles and
+ * filenames". That stopped being true at 575: po/ carries hi and ar catalogs,
+ * so every panel title, footer hint and menu row in this compositor reaches
+ * this function in Devanagari and in Arabic. The catalogs are correct; what
+ * they draw is not. An Arabic reader gets isolated letter forms in reverse
+ * order, which is worse to read than the English it replaced — Devanagari gets
+ * unreordered matras.
+ *
+ * The other eleven languages are unaffected: Latin and Cyrillic need no
+ * shaping, and CJK needs only the face fallback this file already does.
+ *
+ * Until a shaper lands, hi and ar are translated but not usable, and po/LINGUAS
+ * says so beside their lines.
  *
  * Do not read "supports Arabic" into the test's contact sheet. It supports
  * DRAWING Arabic characters.

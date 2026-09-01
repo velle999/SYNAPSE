@@ -1351,53 +1351,49 @@ msgstr "최댓값"
 
 #: src/dock.c:3418
 msgid "top"
-msgstr ""
+msgstr "위"
 
 #: src/dock.c:3418
 msgid "left"
-msgstr ""
+msgstr "왼쪽"
 
 #: src/dock.c:3419
 msgid "centre"
-msgstr ""
+msgstr "가운데"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "bottom"
-msgstr ""
+msgstr "아래"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "right"
-msgstr ""
+msgstr "오른쪽"
 
 #: src/dock.c:3425
 #, c-format
 msgid "after %d icon"
 msgid_plural "after %d icons"
-msgstr[0] ""
+msgstr[0] "아이콘 %d개 뒤"
 
 #: src/filters.c:84
-#, fuzzy
 msgid "CRT filters"
-msgstr "모든 필터"
+msgstr "CRT 필터"
 
 #: src/filters.c:86
-#, fuzzy
 msgid "Screen curvature"
 msgstr "화면 곡률"
 
 #: src/filters.c:88
-#, fuzzy
 msgid "Glitch strength"
-msgstr "경보 시 화면 깨짐"
+msgstr "잡음 세기"
 
 #: src/filters.c:90
 msgid "Monochrome"
 msgstr "흑백"
 
 #: src/filters.c:91
-#, fuzzy
 msgid "Phosphor bloom"
-msgstr "인광 광채"
+msgstr "형광체 번짐"
 
 #: src/lock.c:413 src/lock.c:846
 msgid "Wrong password"
@@ -1418,18 +1414,16 @@ msgid "Fingerprint not recognised"
 msgstr "지문을 알아보지 못했습니다"
 
 #: src/power.c:112
-#, fuzzy
 msgid "Dim screen"
-msgstr "잠금 화면"
+msgstr "화면 어둡게"
 
 #: src/power.c:113
 msgid "Blank displays"
 msgstr "화면 끄기"
 
 #: src/power.c:114
-#, fuzzy
 msgid "Lock session"
-msgstr "잠금 화면"
+msgstr "세션 잠그기"
 
 #: src/power.c:115
 msgid "Suspend system"
@@ -1451,1311 +1445,1311 @@ msgstr "덮개 닫음(도킹)"
 #, c-format
 msgid "+%d more line"
 msgid_plural "+%d more lines"
-msgstr[0] ""
+msgstr[0] "%d줄 더"
 
 #: src/render.c:971
 msgid "NEURAL OVERLAY"
-msgstr ""
+msgstr "신경망 오버레이"
 
 #: src/render.c:979 src/render.c:5164
 msgid "loaded"
-msgstr ""
+msgstr "불러옴"
 
 #: src/render.c:981
 msgid "loading"
-msgstr ""
+msgstr "불러오는 중"
 
 #: src/render.c:984
 msgid "○ no model"
-msgstr ""
+msgstr "○ 모델 없음"
 
 #: src/render.c:1004
 #, c-format
 msgid "req %lu    active %lu"
-msgstr ""
+msgstr "요청 %lu    진행 중 %lu"
 
 #: src/render.c:1021
 #, c-format
 msgid "ctx %u / %u tok"
-msgstr ""
+msgstr "문맥 %u / %u 토큰"
 
 #: src/render.c:1046
 msgid "live activity"
-msgstr ""
+msgstr "실시간 활동"
 
 #: src/render.c:1057
 msgid "(idle — no recent events)"
-msgstr ""
+msgstr "(대기 중 — 최근 이벤트 없음)"
 
 #: src/render.c:1058
 msgid "(synapd unavailable)"
-msgstr ""
+msgstr "(synapd를 사용할 수 없음)"
 
 #: src/render.c:1080
 msgid "normal"
-msgstr ""
+msgstr "보통"
 
 #: src/render.c:1084
 msgid "flipped"
-msgstr ""
+msgstr "뒤집힘"
 
 #: src/render.c:1174
 msgid "DISPLAY SETTINGS"
-msgstr ""
+msgstr "디스플레이 설정"
 
 #: src/render.c:1183
 msgid "DUPLICATE"
-msgstr ""
+msgstr "복제"
 
 #: src/render.c:1185
 msgid "BUILT-IN OFF"
-msgstr ""
+msgstr "내장 화면 끔"
 
 #: src/render.c:1186
 msgid "EXTEND"
-msgstr ""
+msgstr "확장"
 
 #: src/render.c:1247
 msgid "no outputs connected"
-msgstr ""
+msgstr "연결된 화면이 없습니다"
 
 #: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
 #: src/render.c:6171
 #, c-format
 msgid "off"
-msgstr ""
+msgstr "끔"
 
 #: src/render.c:1319
 msgid "PRIMARY"
-msgstr ""
+msgstr "주 화면"
 
 #: src/render.c:1319
 msgid "primary (auto)"
-msgstr ""
+msgstr "주 화면 (자동)"
 
 #: src/render.c:1330
 msgid "8-bit (only)"
-msgstr ""
+msgstr "8비트 (전용)"
 
 #: src/render.c:1348
 msgid "HDR10 ON"
-msgstr ""
+msgstr "HDR10 켬"
 
 #: src/render.c:1387
 #, c-format
 msgid ""
 "%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
 "scanout%s"
-msgstr ""
+msgstr "%s은(는) HDR10으로 구동 · PQ · %s 원색 · SDR 백색 %d cd/m² ([ ]) · %s 출력%s"
 
 #: src/render.c:1396
 msgid " — gamut not converted, colours run wide"
-msgstr ""
+msgstr " — 색역이 변환되지 않아 색이 넓게 나옵니다"
 
 #: src/render.c:1405
 #, c-format
 msgid " · %.0f cd/m² peak"
-msgstr ""
+msgstr " · 최대 %.0f cd/m²"
 
 #: src/render.c:1410
 msgid "HDR10 (PQ)"
-msgstr ""
+msgstr "HDR10 (PQ)"
 
 #: src/render.c:1414
 msgid "Shift+D drives it in HDR10"
-msgstr ""
+msgstr "Shift+D를 누르면 HDR10으로 구동합니다"
 
 #: src/render.c:1415
 msgid "this link or mode will not carry an HDR10 signal"
-msgstr ""
+msgstr "이 연결이나 모드로는 HDR10 신호를 전달할 수 없습니다"
 
 #: src/render.c:1422
 #, c-format
 msgid "%s advertises no HDR transfer function in its EDID (SDR panel)"
-msgstr ""
+msgstr "%s의 EDID에 HDR 전달 함수가 없습니다 (SDR 패널)"
 
 #: src/render.c:1432
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr ""
+msgstr "위/아래 선택 · 왼쪽/오른쪽 회전 · −/+ 이 화면 배율 · p 주 화면으로 지정 (X11·게임 기본) · m 배치"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr ""
+msgstr "Shift+화살표로 격자에서 이동 (자리 바꿈) · d 10비트 색 (딥 컬러, HDR 아님) · Shift+D HDR10 출력 · [ ] SDR 백색 · Super+Ctrl+= 모든 화면 배율 · Esc 닫기"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
-msgstr ""
+msgstr "배경 화면"
 
 #: src/render.c:1657
 msgid "Preview unavailable"
-msgstr ""
+msgstr "미리 보기를 사용할 수 없음"
 
 #: src/render.c:1657
 msgid "No preview"
-msgstr ""
+msgstr "미리 보기 없음"
 
 #: src/render.c:1688
 msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr ""
+msgstr "위/아래 미리 보기 · Tab 화면 · m 배율 · r 다시 검색 · Enter/Esc 닫기"
 
 #: src/render.c:1748
 msgid "POWER SAVING"
-msgstr ""
+msgstr "절전"
 
 #: src/render.c:1760
 #, c-format
 msgid "no lid switch"
-msgstr ""
+msgstr "덮개 감지 장치 없음"
 
 #: src/render.c:1763
 msgid "closed"
-msgstr ""
+msgstr "닫힘"
 
 #: src/render.c:1763
 msgid "open"
-msgstr ""
+msgstr "열림"
 
 #: src/render.c:1779
 msgid "idle inhibited (media playing) · timers held"
-msgstr ""
+msgstr "대기 억제 중 (미디어 재생 중) · 타이머 멈춤"
 
 #: src/render.c:1783
 msgid "disabled · no stage will fire"
-msgstr ""
+msgstr "사용 안 함 · 어떤 단계도 실행되지 않습니다"
 
 #: src/render.c:1830
 msgid "Up/Down select · Left/Right adjust · Space toggle"
-msgstr ""
+msgstr "위/아래 선택 · 왼쪽/오른쪽 조정 · 스페이스 전환"
 
 #: src/render.c:1832 src/render.c:1955
 msgid "s save (unsaved changes) · Esc close"
-msgstr ""
+msgstr "s 저장 (저장하지 않은 변경 사항) · Esc 닫기"
 
 #: src/render.c:1833 src/render.c:1956
 msgid "s save · Esc close"
-msgstr ""
+msgstr "s 저장 · Esc 닫기"
 
 #: src/render.c:1888
 msgid "SCREENSAVER"
-msgstr ""
+msgstr "화면 보호기"
 
 #: src/render.c:1898
 msgid "idle inhibited (media playing) · saver held"
-msgstr ""
+msgstr "대기 억제 중 (미디어 재생 중) · 보호기 멈춤"
 
 #: src/render.c:1905
 msgid "power saving is off (Super+P) · saver disabled"
-msgstr ""
+msgstr "절전이 꺼져 있습니다 (Super+P) · 화면 보호기 사용 안 함"
 
 #: src/render.c:1909
 msgid "no timeout set · p previews the current mode"
-msgstr ""
+msgstr "대기 시간이 설정되지 않음 · p로 현재 모드를 미리 봅니다"
 
 #: src/render.c:1953
 msgid "Up/Down select · Left/Right adjust · p preview"
-msgstr ""
+msgstr "위/아래 선택 · 왼쪽/오른쪽 조정 · p 미리 보기"
 
 #: src/render.c:2074
 msgid "CURSOR THEME"
-msgstr ""
+msgstr "커서 테마"
 
 #: src/render.c:2104
 msgid "No cursor themes installed."
-msgstr ""
+msgstr "설치된 커서 테마가 없습니다."
 
 #: src/render.c:2108
 msgid "synui-cursor install <archive>   then press r"
-msgstr ""
+msgstr "synui-cursor install <압축 파일>   그런 다음 r을 누르세요"
 
 #: src/render.c:2166
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "위/아래 미리 보기 · -/+ 크기 · r 다시 검색 · Enter 적용 · Esc 취소"
 
 #: src/render.c:2237
 msgid "UI FONT"
-msgstr ""
+msgstr "화면 글꼴"
 
 #: src/render.c:2267
 msgid "No font families found."
-msgstr ""
+msgstr "글꼴 계열을 찾을 수 없습니다."
 
 #: src/render.c:2335
 msgid "Handgloves 0123"
-msgstr ""
+msgstr "다람쥐 헌 쳇바퀴 0123"
 
 #: src/render.c:2383
 msgid "Not monospaced · kitty and foot may not render correctly in it"
-msgstr ""
+msgstr "고정폭이 아닙니다 · kitty와 foot이 제대로 표시되지 않을 수 있습니다"
 
 #: src/render.c:2390
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "위/아래 미리 보기 · d 기본값 · r 다시 검색 · Enter 적용 · Esc 취소"
 
 #: src/render.c:2522
 msgid "Type to search"
-msgstr ""
+msgstr "입력해서 검색"
 
 #: src/render.c:2533
 msgid "No applications match"
-msgstr ""
+msgstr "일치하는 앱이 없습니다"
 
 #: src/render.c:2534
 msgid "No applications found"
-msgstr ""
+msgstr "앱을 찾을 수 없습니다"
 
 #: src/render.c:2629
 #, c-format
 msgid "%d application · type to search · Enter opens · Esc closes"
 msgid_plural "%d applications · type to search · Enter opens · Esc closes"
-msgstr[0] ""
+msgstr[0] "앱 %d개 · 입력해서 검색 · Enter 열기 · Esc 닫기"
 
 #: src/render.c:2721
 msgid "EMOJI"
-msgstr ""
+msgstr "이모지"
 
 #: src/render.c:2743
 msgid "type to search"
-msgstr ""
+msgstr "입력해서 검색"
 
 #: src/render.c:2802
 msgid "No emoji match that search."
-msgstr ""
+msgstr "그 검색어에 맞는 이모지가 없습니다."
 
 #: src/render.c:2803
 msgid "Nothing here yet."
-msgstr ""
+msgstr "아직 아무것도 없습니다."
 
 #: src/render.c:2865
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
-msgstr ""
+msgstr "입력해서 검색 · 클릭 또는 Tab으로 분류 · Enter 삽입 · Esc 지우기/닫기"
 
 #: src/render.c:3010
 msgid "CALCULATOR"
-msgstr ""
+msgstr "계산기"
 
 #: src/render.c:3050
 msgid "Anything you work out is kept here."
-msgstr ""
+msgstr "계산한 내용은 여기에 남습니다."
 
 #: src/render.c:3092
 msgid "type an expression"
-msgstr ""
+msgstr "식을 입력하세요"
 
 #: src/render.c:3197
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
-msgstr ""
+msgstr "Enter 계산 · Ctrl+C 복사 · Ctrl+V 붙여넣기"
 
 #: src/render.c:3199
 msgid "Up/Down recall the tape · Esc clears, then closes"
-msgstr ""
+msgstr "위/아래로 기록을 불러옵니다 · Esc는 지우고, 다시 누르면 닫습니다"
 
 #: src/render.c:3268
 msgid "EQUALIZER"
-msgstr ""
+msgstr "이퀄라이저"
 
 #: src/render.c:3277
 msgid "output routed through the equalizer sink"
-msgstr ""
+msgstr "출력이 이퀄라이저를 거칩니다"
 
 #: src/render.c:3278
 msgid "off — audio goes straight to your device"
-msgstr ""
+msgstr "끔 — 소리가 장치로 바로 갑니다"
 
 #: src/render.c:3354
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
-msgstr ""
+msgstr "위/아래 줄 · 왼쪽/오른쪽 조정 · r 평탄하게 · Esc 닫기"
 
 #: src/render.c:3424
 msgid "CROP — RECENT IMAGES"
-msgstr ""
+msgstr "자르기 — 최근 이미지"
 
 #: src/render.c:3425
 msgid "IMAGES — RECENT"
-msgstr ""
+msgstr "이미지 — 최근"
 
 #: src/render.c:3430
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
-msgstr[0] ""
+msgstr[0] "이미지 %d개"
 
 #: src/render.c:3449
 msgid "No images in Pictures, Wallpapers or Downloads."
-msgstr ""
+msgstr "사진, 배경 화면, 다운로드 폴더에 이미지가 없습니다."
 
 #: src/render.c:3453
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
-msgstr ""
+msgstr "r을 눌러 다시 검색하거나 파일을 직접 여세요: synctl dispatch view <경로>"
 
 #: src/render.c:3510
 msgid "Enter crop · v view · r rescan · Esc close"
-msgstr ""
+msgstr "Enter 자르기 · v 보기 · r 다시 검색 · Esc 닫기"
 
 #: src/render.c:3511
 msgid "Enter view · c crop · r rescan · Esc close"
-msgstr ""
+msgstr "Enter 보기 · c 자르기 · r 다시 검색 · Esc 닫기"
 
 #: src/render.c:3621
 msgid "VIEW"
-msgstr ""
+msgstr "보기"
 
 #: src/render.c:3758
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
-msgstr ""
+msgstr "끌어서 이동 · 화살표로 이동 · Shift 4배 · n / p 다음과 이전"
 
 #: src/render.c:3760
 msgid "← → next and previous · drag or scroll to zoom in"
-msgstr ""
+msgstr "← → 다음과 이전 · 끌거나 스크롤해서 확대"
 
 #: src/render.c:3765
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr ""
+msgstr "스크롤로 확대·축소 · + − 배율 · 0 창에 맞춤 · 1 실제 크기 · c 자르기 · r 다시 검색 · Esc 또는 ×로 %s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
-msgstr ""
+msgstr "목록으로 돌아가기"
 
 #: src/render.c:3768
 msgid "close"
-msgstr ""
+msgstr "닫기"
 
 #: src/render.c:3918
 msgid "CROP"
-msgstr ""
+msgstr "자르기"
 
 #: src/render.c:3951
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
-msgstr ""
+msgstr "끌어서 선택 · 모서리를 끌어 조정 · Tab으로 화살표가 움직일 모서리를 고릅니다"
 
 #: src/render.c:3959
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr ""
+msgstr "화살표로 크기 조정 · Ctrl+화살표로 이동 · Shift 25배 · a 전체 · Enter 사본 저장 · Esc %s"
 
 #: src/render.c:3961
 msgid "cancel"
-msgstr ""
+msgstr "취소"
 
 #: src/render.c:4060
 msgid "WINDOW EFFECTS"
-msgstr ""
+msgstr "창 효과"
 
 #: src/render.c:4060
 msgid "CRT FILTERS"
-msgstr ""
+msgstr "CRT 필터"
 
 #: src/render.c:4067
 msgid "Tab → CRT filters"
-msgstr ""
+msgstr "Tab → CRT 필터"
 
 #: src/render.c:4068
 msgid "Tab → window effects"
-msgstr ""
+msgstr "Tab → 창 효과"
 
 #: src/render.c:4084
 msgid "no GLES renderer · filters unavailable on this display"
-msgstr ""
+msgstr "GLES 렌더러가 없습니다 · 이 화면에서는 필터를 쓸 수 없습니다"
 
 #: src/render.c:4088
 msgid "filters off · Space to turn them on"
-msgstr ""
+msgstr "필터가 꺼져 있습니다 · 스페이스로 켭니다"
 
 #: src/render.c:4151
 msgid "Up/Down select · Left/Right adjust · Space on/off"
-msgstr ""
+msgstr "위/아래 선택 · 왼쪽/오른쪽 조정 · 스페이스 켬/끔"
 
 #: src/render.c:4153
 msgid "s save (unsaved changes) · Tab page · Esc close"
-msgstr ""
+msgstr "s 저장 (저장하지 않은 변경 사항) · Tab 페이지 · Esc 닫기"
 
 #: src/render.c:4154
 msgid "s save · Tab page · Esc close"
-msgstr ""
+msgstr "s 저장 · Tab 페이지 · Esc 닫기"
 
 #: src/render.c:4212
 msgid "DESKTOP WIDGETS"
-msgstr ""
+msgstr "바탕 화면 위젯"
 
 #: src/render.c:4217
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
-msgstr ""
+msgstr "각각 따로 움직입니다 · 손잡이를 잡고 끄세요 · 스페이스는 전부 아니면 전무입니다"
 
 #: src/render.c:4263
 msgid "needs cava"
-msgstr ""
+msgstr "cava가 필요합니다"
 
 #: src/render.c:4277
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
-msgstr ""
+msgstr "위/아래 선택 · Enter 전환 · 왼쪽/오른쪽 끔/켬"
 
 #: src/render.c:4279
 msgid "Space all on/off · R reset positions · Esc close"
-msgstr ""
+msgstr "스페이스 전체 켬/끔 · R 위치 되돌리기 · Esc 닫기"
 
 #: src/render.c:4438
 msgid "done"
-msgstr ""
+msgstr "완료"
 
 #: src/render.c:4439
 msgid "failed"
-msgstr ""
+msgstr "실패"
 
 #: src/render.c:4440
 msgid "starting"
-msgstr ""
+msgstr "시작 중"
 
 #: src/render.c:4541
 msgid "Cannot read the model directory."
-msgstr ""
+msgstr "모델 폴더를 읽을 수 없습니다."
 
 #: src/render.c:4542
 msgid "No models installed."
-msgstr ""
+msgstr "설치된 모델이 없습니다."
 
 #: src/render.c:4550
 msgid "A model may still be loaded · see the message below."
-msgstr ""
+msgstr "모델이 아직 올라가 있을 수 있습니다 · 아래 메시지를 보세요."
 
 #: src/render.c:4551
 msgid "Pick one from AVAILABLE below and press Enter."
-msgstr ""
+msgstr "아래 「사용 가능」에서 하나를 고르고 Enter를 누르세요."
 
 #: src/render.c:4619
 msgid "Size"
-msgstr ""
+msgstr "크기"
 
 #: src/render.c:4620 src/render.c:4776
 msgid "Params"
-msgstr ""
+msgstr "매개변수"
 
 #: src/render.c:4621
 msgid "Quant"
-msgstr ""
+msgstr "양자화"
 
 #: src/render.c:4622
 msgid "Context"
-msgstr ""
+msgstr "문맥"
 
 #: src/render.c:4623
 msgid "Arch"
-msgstr ""
+msgstr "구조"
 
 #: src/render.c:4646
 msgid "no chat template · synapd will guess the turn format"
-msgstr ""
+msgstr "대화 서식이 없습니다 · synapd가 발화 형식을 추측합니다"
 
 #: src/render.c:4651
 msgid "unreadable header"
-msgstr ""
+msgstr "헤더를 읽을 수 없음"
 
 #: src/render.c:4674 src/render.c:4810
 msgid "ABOUT"
-msgstr ""
+msgstr "정보"
 
 #: src/render.c:4686 src/render.c:4817
 msgid "Good at"
-msgstr ""
+msgstr "잘하는 일"
 
 #: src/render.c:4687
 msgid "Speaks"
-msgstr ""
+msgstr "사용 언어"
 
 #: src/render.c:4688 src/render.c:4779
 msgid "License"
-msgstr ""
+msgstr "라이선스"
 
 #: src/render.c:4689 src/render.c:4818
 msgid "Based on"
-msgstr ""
+msgstr "기반 모델"
 
 #: src/render.c:4737
 msgid "this is the model synapd is running"
-msgstr ""
+msgstr "synapd가 실행 중인 모델입니다"
 
 #: src/render.c:4741
 msgid "[ Enter: load this model ]"
-msgstr ""
+msgstr "[ Enter: 이 모델 불러오기 ]"
 
 #: src/render.c:4777
 msgid "Download"
-msgstr ""
+msgstr "내려받기"
 
 #: src/render.c:4778
 msgid "Quality"
-msgstr ""
+msgstr "품질"
 
 #: src/render.c:4780
 msgid "Pulls"
-msgstr ""
+msgstr "내려받은 횟수"
 
 #: src/render.c:4861
 msgid "QUANTISATION"
-msgstr ""
+msgstr "양자화"
 
 #: src/render.c:4867
 msgid "reading the repository …"
-msgstr ""
+msgstr "저장소를 읽는 중 …"
 
 #: src/render.c:4872
 msgid "could not read the repository"
-msgstr ""
+msgstr "저장소를 읽을 수 없습니다"
 
 #: src/render.c:4877
 msgid "no single-file GGUF here"
-msgstr ""
+msgstr "여기에는 단일 파일 GGUF가 없습니다"
 
 #: src/render.c:4926 src/render.c:5780
 #, c-format
 msgid "+%d more"
-msgstr ""
+msgstr "%d개 더"
 
 #: src/render.c:4934
 msgid "[ Enter: download ]"
-msgstr ""
+msgstr "[ Enter: 내려받기 ]"
 
 #: src/render.c:5011
 msgid "AI MODEL"
-msgstr ""
+msgstr "AI 모델"
 
 #: src/render.c:5022
 msgid "Loaded"
-msgstr ""
+msgstr "불러옴"
 
 #: src/render.c:5023
 msgid "synapd not responding"
-msgstr ""
+msgstr "synapd가 응답하지 않습니다"
 
 #: src/render.c:5026
 msgid "Format"
-msgstr ""
+msgstr "형식"
 
 #: src/render.c:5028
 msgid "Profile"
-msgstr ""
+msgstr "프로필"
 
 #: src/render.c:5047
 msgid "legacy"
-msgstr ""
+msgstr "구형"
 
 #: src/render.c:5051
 msgid "GGUF declares no chat template"
-msgstr ""
+msgstr "GGUF에 대화 서식이 없습니다"
 
 #: src/render.c:5056
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
-msgstr ""
+msgstr "온도 %.2f  ·  top_p %.2f  ·  top_k %d"
 
 #: src/render.c:5064
 msgid "Sampling"
-msgstr ""
+msgstr "샘플링"
 
 #: src/render.c:5094
 msgid "search huggingface"
-msgstr ""
+msgstr "Hugging Face 검색"
 
 #: src/render.c:5109
 msgid "INSTALLED"
-msgstr ""
+msgstr "설치됨"
 
 #: src/render.c:5109
 msgid "INSTALLED · none"
-msgstr ""
+msgstr "설치됨 · 없음"
 
 #: src/render.c:5154
 msgid "delete?"
-msgstr ""
+msgstr "삭제할까요?"
 
 #: src/render.c:5160
 msgid "loading …"
-msgstr ""
+msgstr "불러오는 중 …"
 
 #: src/render.c:5220
 msgid "type to search · Enter search · Esc cancel"
-msgstr ""
+msgstr "입력해서 검색 · Enter 검색 · Esc 취소"
 
 #: src/render.c:5222
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
-msgstr ""
+msgstr "위/아래 선택 · 왼쪽/오른쪽 양자화 · Enter 내려받기 · / 검색 · Esc 닫기"
 
 #: src/render.c:5228
 msgid "Delete again to confirm · Esc cancels · any move cancels"
-msgstr ""
+msgstr "한 번 더 삭제하면 확정됩니다 · Esc로 취소 · 이동해도 취소됩니다"
 
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr ""
+msgstr "위/아래 선택 · Enter 불러오기 · Del 삭제 · / 검색 · R 다시 검색 · Esc 닫기"
 
 #: src/render.c:5235
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
-msgstr ""
+msgstr "내려받기는 시스템 서비스로 동작합니다 — 이 창을 닫아도 취소되지 않습니다"
 
 #: src/render.c:5238
 msgid "switching reloads the model — the AI pauses while it loads"
-msgstr ""
+msgstr "바꾸면 모델을 다시 불러옵니다 — 그동안 AI는 멈춥니다"
 
 #: src/render.c:5299
 msgid "EVENT SOUNDS"
-msgstr ""
+msgstr "이벤트 소리"
 
 #: src/render.c:5308
 msgid "silent · Space turns event sounds on"
-msgstr ""
+msgstr "무음 · 스페이스로 이벤트 소리를 켭니다"
 
 #: src/render.c:5312
 msgid "t plays the selected sound without enabling it"
-msgstr ""
+msgstr "t는 고른 소리를 켜지 않고 들려줍니다"
 
 #: src/render.c:5357
 msgid "Volume"
-msgstr ""
+msgstr "음량"
 
 #: src/render.c:5360
 msgid "Sound theme"
-msgstr ""
+msgstr "소리 테마"
 
 #: src/render.c:5364
 #, c-format
 msgid "%s — not a sound theme"
-msgstr ""
+msgstr "%s — 소리 테마가 아닙니다"
 
 #: src/render.c:5421
 msgid "not in this theme"
-msgstr ""
+msgstr "이 테마에는 없습니다"
 
 #: src/render.c:5435
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
-msgstr ""
+msgstr "위/아래 선택 · Enter 전환 · 왼쪽/오른쪽 끔/켬 · [ ] 소리 고르기"
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr ""
+msgstr "t 재생 · 스페이스 모든 소리 켬/끔 · Esc 닫기 · 자세히: synui-sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
-msgstr ""
+msgstr "날짜와 시간"
 
 #: src/render.c:5505
 #, c-format
 msgid "system zone · %s"
-msgstr ""
+msgstr "시스템 표준시 · %s"
 
 #: src/render.c:5538
 msgid "WORLD CLOCK"
-msgstr ""
+msgstr "세계 시계"
 
 #: src/render.c:5563
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
-msgstr ""
+msgstr "위/아래 선택 · 스페이스 전환 · c 달력 · Esc 닫기"
 
 #: src/render.c:5631
 msgid "January"
-msgstr ""
+msgstr "1월"
 
 #: src/render.c:5631
 msgid "February"
-msgstr ""
+msgstr "2월"
 
 #: src/render.c:5631
 msgid "March"
-msgstr ""
+msgstr "3월"
 
 #: src/render.c:5631
 msgid "April"
-msgstr ""
+msgstr "4월"
 
 #: src/render.c:5632
 msgid "May"
-msgstr ""
+msgstr "5월"
 
 #: src/render.c:5632
 msgid "June"
-msgstr ""
+msgstr "6월"
 
 #: src/render.c:5632
 msgid "July"
-msgstr ""
+msgstr "7월"
 
 #: src/render.c:5632
 msgid "August"
-msgstr ""
+msgstr "8월"
 
 #: src/render.c:5633
 msgid "September"
-msgstr ""
+msgstr "9월"
 
 #: src/render.c:5633
 msgid "October"
-msgstr ""
+msgstr "10월"
 
 #: src/render.c:5633
 msgid "November"
-msgstr ""
+msgstr "11월"
 
 #: src/render.c:5633
 msgid "December"
-msgstr ""
+msgstr "12월"
 
 #: src/render.c:5755
 msgid "loading…"
-msgstr ""
+msgstr "불러오는 중…"
 
 #: src/render.c:5765
 msgid "nothing on"
-msgstr ""
+msgstr "켜진 것이 없습니다"
 
 #: src/render.c:5770
 #, c-format
 msgid "all day  %s"
-msgstr ""
+msgstr "하루 종일  %s"
 
 #: src/render.c:5792
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
-msgstr ""
+msgstr "←→ 날짜 · PgUp/PgDn 달 · t 오늘 · Esc"
 
 #: src/render.c:5881
 msgid "CONTROL PANEL"
-msgstr ""
+msgstr "제어판"
 
 #: src/render.c:5900
 msgid "Search"
-msgstr ""
+msgstr "검색"
 
 #: src/render.c:5927
 msgid "CATEGORIES"
-msgstr ""
+msgstr "분류"
 
 #: src/render.c:5932 src/render.c:6418
 msgid "FIND  "
-msgstr ""
+msgstr "찾기  "
 
 #: src/render.c:5939 src/render.c:6365
 msgid "KEYBOARD SHORTCUTS"
-msgstr ""
+msgstr "키보드 단축키"
 
 #: src/render.c:5940
 msgid "SETTINGS"
-msgstr ""
+msgstr "설정"
 
 #: src/render.c:6015
 msgid "Press a key…"
-msgstr ""
+msgstr "키를 누르세요…"
 
 #: src/render.c:6035 src/render.c:6211 src/render.c:6506
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
-msgstr ""
+msgstr "%d–%d / %d개 · PgUp/PgDn"
 
 #: src/render.c:6172
 msgid "none"
-msgstr ""
+msgstr "없음"
 
 #: src/render.c:6221
 msgid "No setting matches that."
-msgstr ""
+msgstr "해당하는 설정이 없습니다."
 
 #: src/render.c:6256
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
-msgstr ""
+msgstr "입력해서 거르기 · 위/아래 선택 · Del 되돌리기 · Esc 뒤로"
 
 #: src/render.c:6258
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
-msgstr ""
+msgstr "위/아래 분류 · Enter 또는 오른쪽으로 열기 · / 찾기 · Esc 닫기"
 
 #: src/render.c:6264
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
-msgstr ""
+msgstr "Super, Ctrl, Alt, Shift 중 하나를 누르세요 · Del은 지정 안 함 · Esc 취소"
 
 #: src/render.c:6265
 msgid "Press the new key for this shortcut · Esc cancels"
-msgstr ""
+msgstr "이 단축키에 쓸 새 키를 누르세요 · Esc 취소"
 
 #: src/render.c:6267
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
-msgstr ""
+msgstr "F2 다시 지정 · F3 한 번 누르기로 옮기기 · Ctrl+Shift+R 전체 되돌리기 · Esc 뒤로"
 
 #: src/render.c:6274
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
-msgstr ""
+msgstr "왼쪽/오른쪽 조정 · Del 기본값 · / 찾기 · Tab 열 · Esc 뒤로"
 
 #: src/render.c:6281
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
-msgstr ""
+msgstr "왼쪽/오른쪽 전환 · Enter 자세히 · Tab 열 · Esc 뒤로"
 
 #: src/render.c:6283
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
-msgstr ""
+msgstr "위/아래 선택 · Enter 실행 · / 찾기 · 왼쪽 또는 Esc로 뒤로"
 
 #: src/render.c:6405
 msgid "PRESS THE NEW KEY  "
-msgstr ""
+msgstr "새 키를 누르세요  "
 
 #: src/render.c:6412
 #, c-format
 msgid "for %s  ·  Esc cancels"
-msgstr ""
+msgstr "%s용  ·  Esc 취소"
 
 #: src/render.c:6431
 msgid "_  a key, what it does, an app, or a command"
-msgstr ""
+msgstr "_  키, 하는 일, 앱 또는 명령"
 
 #: src/render.c:6487
 msgid "No shortcut matches that."
-msgstr ""
+msgstr "해당하는 단축키가 없습니다."
 
 #: src/render.c:6524
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
-msgstr ""
+msgstr "Super, Ctrl, Alt, Shift 중 하나를 누르세요 · Del은 지정 안 함 · Esc 취소"
 
 #: src/render.c:6526
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
-msgstr ""
+msgstr "Super, Ctrl, Alt가 들어간 조합을 누르세요 · Esc 취소"
 
 #: src/render.c:6542
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr ""
+msgstr "거르기 · Enter 실행 · F2 키 지정 · Del 해제 · F3 한 번 누르기 · Ctrl+Shift+R 되돌리기"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
-msgstr ""
+msgstr "네온 밤길, 기본 테마 · 앱은 어둡게"
 
 #: src/render.c:6563
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
-msgstr ""
+msgstr "평평하고 현대적인 어두운 테마 · 앱 + Dolphin + Firefox 모두 어둡게"
 
 #: src/render.c:6564
 msgid "Luna blue, gradient captions · apps beige"
-msgstr ""
+msgstr "Luna 파랑, 그러데이션 제목 · 앱은 베이지색"
 
 #: src/render.c:6565
 msgid "Silver 3D bevels, navy titles · apps grey"
-msgstr ""
+msgstr "은색 입체 테두리, 남색 제목 · 앱은 회색"
 
 #: src/render.c:6566
 msgid "Mocha · mauve on soft black · glassy"
-msgstr ""
+msgstr "모카 · 부드러운 검정 위 연보라 · 유리 느낌"
 
 #: src/render.c:6567
 msgid "Retro warm · orange on brown · glassy"
-msgstr ""
+msgstr "따뜻한 복고 · 갈색 위 주황 · 유리 느낌"
 
 #: src/render.c:6568
 msgid "Storm · blue + purple on navy · glassy"
-msgstr ""
+msgstr "폭풍 · 남색 위 파랑과 보라 · 유리 느낌"
 
 #: src/render.c:6569
 msgid "Arctic · frost blue on slate · glassy"
-msgstr ""
+msgstr "북극 · 슬레이트 위 서리빛 파랑 · 유리 느낌"
 
 #: src/render.c:6570
 msgid "Purple + pink on charcoal · glassy"
-msgstr ""
+msgstr "숯색 위 보라와 분홍 · 유리 느낌"
 
 #: src/render.c:6571
 msgid "Pastel pink, hot-pink titles · apps light"
-msgstr ""
+msgstr "파스텔 분홍, 진분홍 제목 · 앱은 밝게"
 
 #: src/render.c:6572
 msgid "Liquid glass · rounded, translucent · apps light"
-msgstr ""
+msgstr "액체 유리 · 둥글고 반투명 · 앱은 밝게"
 
 #: src/render.c:6573
 msgid "Pinstripes + traffic lights · apps light grey"
-msgstr ""
+msgstr "가는 줄무늬와 신호등 단추 · 앱은 밝은 회색"
 
 #: src/render.c:6574
 msgid "Racing stripes, square boxes · apps grey"
-msgstr ""
+msgstr "레이싱 줄무늬, 각진 상자 · 앱은 회색"
 
 #: src/render.c:6580
 msgid "House glass · accent off the wallpaper · apps dark"
-msgstr ""
+msgstr "집 유리 · 배경 화면에서 뽑은 강조색 · 앱은 어둡게"
 
 #: src/render.c:6581
 msgid "The same glass in daylight · apps + Files light"
-msgstr ""
+msgstr "같은 유리를 낮빛으로 · 앱과 「파일」은 밝게"
 
 #: src/render.c:6652
 msgid "THEME MANAGER"
-msgstr ""
+msgstr "테마 관리자"
 
 #: src/render.c:6757
 #, c-format
 msgid "Transparency  %d%%"
-msgstr ""
+msgstr "투명도  %d%%"
 
 #: src/render.c:6759
 #, c-format
 msgid "Transparency  off"
-msgstr ""
+msgstr "투명도  끔"
 
 #: src/render.c:6789
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
-msgstr ""
+msgstr "위/아래 테마 · ←/→ 불투명도 · T 투명도 · Enter 적용 · Esc"
 
 #: src/render.c:6856
 msgid "CLIPBOARD"
-msgstr ""
+msgstr "클립보드"
 
 #: src/render.c:6873
 msgid "Nothing copied yet"
-msgstr ""
+msgstr "아직 복사한 것이 없습니다"
 
 #: src/render.c:6919
 msgid "Enter copy · Del clear all · Esc close"
-msgstr ""
+msgstr "Enter 복사 · Del 전체 지우기 · Esc 닫기"
 
 #: src/render.c:7260
 msgid "connected"
-msgstr ""
+msgstr "연결됨"
 
 #: src/render.c:7261
 msgid "paired"
-msgstr ""
+msgstr "페어링됨"
 
 #: src/render.c:7321
 msgid "BLUETOOTH"
-msgstr ""
+msgstr "블루투스"
 
 #: src/render.c:7334
 msgid "No Bluetooth adapter found"
-msgstr ""
+msgstr "블루투스 어댑터를 찾을 수 없습니다"
 
 #: src/render.c:7339
 msgid "Radio on"
-msgstr ""
+msgstr "무선 켬"
 
 #: src/render.c:7339
 msgid "Radio off"
-msgstr ""
+msgstr "무선 끔"
 
 #: src/render.c:7344
 msgid "· scanning…"
-msgstr ""
+msgstr "· 검색 중…"
 
 #: src/render.c:7354
 msgid "A device"
-msgstr ""
+msgstr "어떤 장치"
 
 #: src/render.c:7362
 #, c-format
 msgid "Passkey %06u · does it match the device?"
-msgstr ""
+msgstr "패스키 %06u · 장치에 표시된 것과 같습니까?"
 
 #: src/render.c:7365
 #, c-format
 msgid "wants to connect%s"
-msgstr ""
+msgstr "이(가) 연결하려고 합니다%s"
 
 #: src/render.c:7368
 #, c-format
 msgid "Type %06u on the device, then Enter"
-msgstr ""
+msgstr "장치에서 %06u를 입력한 다음 Enter를 누르세요"
 
 #: src/render.c:7371
 #, c-format
 msgid "Enter PIN %s on the device"
-msgstr ""
+msgstr "장치에서 PIN %s를 입력하세요"
 
 #: src/render.c:7379
 msgid "Any key to dismiss"
-msgstr ""
+msgstr "아무 키나 누르면 닫힙니다"
 
 #: src/render.c:7380
 msgid "y accept · n reject"
-msgstr ""
+msgstr "y 수락 · n 거부"
 
 #: src/render.c:7393
 msgid "Radio is off · press o"
-msgstr ""
+msgstr "무선이 꺼져 있습니다 · o를 누르세요"
 
 #: src/render.c:7398
 #, c-format
 msgid "%d hidden · press a to show"
-msgstr ""
+msgstr "%d개 숨김 · a를 누르면 보입니다"
 
 #: src/render.c:7401
 msgid "No devices · press s to scan"
-msgstr ""
+msgstr "장치가 없습니다 · s를 누르면 검색합니다"
 
 #: src/render.c:7438
 msgid "trusted"
-msgstr ""
+msgstr "신뢰함"
 
 #: src/render.c:7471
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr ""
+msgstr "Enter 연결 · p 페어링 · t 신뢰 · r 지우기 · s 검색 · o 무선 · a 간추리기 · Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr ""
+msgstr "Enter 연결 · p 페어링 · t 신뢰 · r 지우기 · s 검색 · o 무선 · a 전체 · Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
-msgstr ""
+msgstr "작업 관리자"
 
 #: src/render.c:7639
 #, c-format
 msgid "%d procs · sort: %s%s"
-msgstr ""
+msgstr "프로세스 %d개 · 정렬: %s%s"
 
 #: src/render.c:7650
 #, c-format
 msgid "%.0f%%  (%ld cores)"
-msgstr ""
+msgstr "%.0f%%  (%ld 코어)"
 
 #: src/render.c:7652
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: src/render.c:7663
 msgid "RAM"
-msgstr ""
+msgstr "메모리"
 
 #: src/render.c:7666 src/render.c:7674
 msgid "GPU"
-msgstr ""
+msgstr "GPU"
 
 #: src/render.c:7666
 msgid "no GPU telemetry available"
-msgstr ""
+msgstr "GPU 측정값을 가져올 수 없습니다"
 
 #: src/render.c:7691 src/render.c:7710
 msgid "VRAM"
-msgstr ""
+msgstr "VRAM"
 
 #: src/render.c:7705
 msgid "PID"
-msgstr ""
+msgstr "PID"
 
 #: src/render.c:7707
 msgid "NAME"
-msgstr ""
+msgstr "이름"
 
 #: src/render.c:7709
 msgid "MEM"
-msgstr ""
+msgstr "메모리"
 
 #: src/render.c:7818
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr ""
+msgstr "j/k 이동 · 줄에서 오른쪽 클릭 · c/m/g/p 정렬 · u 내 것 · x 종료 · X 강제 종료 · Esc 닫기"
 
 #: src/render.c:7984
 msgid "NEWS"
-msgstr ""
+msgstr "뉴스"
 
 #: src/render.c:7992
 msgid "all sources"
-msgstr ""
+msgstr "모든 출처"
 
 #: src/render.c:7993
 msgid "by time"
-msgstr ""
+msgstr "시간순"
 
 #: src/render.c:7993
 msgid "by source"
-msgstr ""
+msgstr "출처순"
 
 #: src/render.c:7996
 msgid "never fetched"
-msgstr ""
+msgstr "가져온 적 없음"
 
 #: src/render.c:8023
 #, c-format
 msgid "filter: /%s"
-msgstr ""
+msgstr "거르기: /%s"
 
 #: src/render.c:8036
 msgid "fetching feeds…"
-msgstr ""
+msgstr "피드를 가져오는 중…"
 
 #: src/render.c:8037
 msgid "nothing matches this filter"
-msgstr ""
+msgstr "이 조건에 맞는 것이 없습니다"
 
 #: src/render.c:8038
 msgid "no feeds answered — check the network, then press r"
-msgstr ""
+msgstr "응답한 피드가 없습니다 — 네트워크를 확인한 뒤 r을 누르세요"
 
 #: src/render.c:8039
 msgid "no items yet — press r to fetch"
-msgstr ""
+msgstr "아직 항목이 없습니다 — r을 눌러 가져오세요"
 
 #: src/render.c:8125
 msgid "type to filter · Enter keep · Esc clear"
-msgstr ""
+msgstr "입력해서 거르기 · Enter 유지 · Esc 지우기"
 
 #: src/render.c:8126
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr ""
+msgstr "j/k 이동 · Enter 열기 · o 뒤에서 열기 · c 댓글 · y 복사 · Tab 출처 · / 검색 · s 정렬 · m 읽음 · r 새로 고침 · Esc 닫기"
 
 #: src/render.c:8152
 msgid "Bottom"
-msgstr ""
+msgstr "아래"
 
 #: src/render.c:8152
 msgid "Top"
-msgstr ""
+msgstr "위"
 
 #: src/render.c:8152
 msgid "Left"
-msgstr ""
+msgstr "왼쪽"
 
 #: src/render.c:8152
 msgid "Right"
-msgstr ""
+msgstr "오른쪽"
 
 #: src/render.c:8162
 msgid "Apps"
-msgstr ""
+msgstr "앱"
 
 #: src/render.c:8165
 #, c-format
 msgid "Dock Edge: %s"
-msgstr ""
+msgstr "독 위치: %s"
 
 #: src/render.c:8179
 #, c-format
 msgid "%s At: %s"
-msgstr ""
+msgstr "%s 위치: %s"
 
 #: src/render.c:8191
 msgid "Pin to Dock"
-msgstr ""
+msgstr "독에 고정"
 
 #: src/render.c:8193
 msgid "Unpin from Dock"
-msgstr ""
+msgstr "독에서 빼기"
 
 #: src/render.c:8194
 msgid "Open"
-msgstr ""
+msgstr "열기"
 
 #: src/render.c:8195
 msgid "New Window"
-msgstr ""
+msgstr "새 창"
 
 #: src/render.c:8196
 msgid "Close Window"
-msgstr ""
+msgstr "창 닫기"
 
 #: src/render.c:8197
 msgid "Quit All Windows"
-msgstr ""
+msgstr "모든 창 닫기"
 
 #: src/render.c:8201
 msgid "Auto-hide Dock"
-msgstr ""
+msgstr "독 자동 숨기기"
 
 #: src/render.c:8202
 msgid "Dock Above Windows"
-msgstr ""
+msgstr "독을 창 위에"
 
 #: src/render.c:8203
 msgid "Magnify Icons"
-msgstr ""
+msgstr "아이콘 확대"
 
 #: src/render.c:8204
 msgid "Show Clock"
-msgstr ""
+msgstr "시계 보이기"
 
 #: src/render.c:8205
 msgid "Analog Clock Face"
-msgstr ""
+msgstr "아날로그 시계판"
 
 #: src/render.c:8206
 msgid "Show All Apps Button"
-msgstr ""
+msgstr "「모든 앱」 단추 보이기"
 
 #: src/render.c:8207
 msgid "Show Power Button"
-msgstr ""
+msgstr "전원 단추 보이기"
 
 #: src/render.c:8208
 msgid "Dock Settings…"
-msgstr ""
+msgstr "독 설정…"
 
 #: src/render.c:8212
 msgid "Lock Screen"
-msgstr ""
+msgstr "화면 잠그기"
 
 #: src/render.c:8213
 msgid "Log Out"
-msgstr ""
+msgstr "로그아웃"
 
 #: src/render.c:8214
 msgid "Suspend"
-msgstr ""
+msgstr "절전"
 
 #: src/render.c:8215
 msgid "Restart"
-msgstr ""
+msgstr "다시 시작"
 
 #: src/render.c:8216
 msgid "Shut Down"
-msgstr ""
+msgstr "시스템 종료"
 
 #: src/render.c:8839
 msgid "minimized"
-msgstr ""
+msgstr "최소화됨"
 
 #: src/render.c:8839 src/render.c:9333 src/render.c:9336
 msgid "MIN"
-msgstr ""
+msgstr "최소"
 
 #: src/render.c:8944
 msgid "WINDOWS"
-msgstr ""
+msgstr "창"
 
 #: src/render.c:9101
 msgid "Alt+Tab next · Alt+Shift+Tab back"
-msgstr ""
+msgstr "Alt+Tab 다음 · Alt+Shift+Tab 이전"
 
 #: src/render.c:9218
 msgid "MISSION CONTROL"
-msgstr ""
+msgstr "창 한눈에 보기"
 
 #: src/render.c:9223
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
-msgstr[0] ""
+msgstr[0] "바탕 화면 %d · 창 %d개"
 
 #: src/render.c:9360
 msgid "Nothing open on this desktop."
-msgstr ""
+msgstr "이 바탕 화면에는 열린 것이 없습니다."
 
 #: src/render.c:9415
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr ""
+msgstr "화살표나 클릭으로 창을 고릅니다 · Enter로 열고 · Del로 닫습니다 · 1–9로 바탕 화면 전환 · Esc 닫기"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2774,28 +2768,24 @@ msgid "Slide interval"
 msgstr "넘김 간격"
 
 #: src/saver.c:841
-#, fuzzy
 msgid "Lock background"
-msgstr "잠금 화면"
+msgstr "잠금 화면 배경"
 
 #: src/saver.c:842
-#, fuzzy
 msgid "Lock image"
-msgstr "독 확대"
+msgstr "잠금 화면 그림"
 
 #: src/saver.c:843
 msgid "Lock dim"
 msgstr "잠금 화면 어둡게"
 
 #: src/saver.c:844
-#, fuzzy
 msgid "Lock blur"
-msgstr "배경 흐리게"
+msgstr "잠금 화면 흐림"
 
 #: src/saver.c:845
-#, fuzzy
 msgid "Lock colours"
-msgstr "독 모서리"
+msgstr "잠금 화면 색"
 
 #: src/saver.c:846
 msgid "Now playing"
@@ -2806,19 +2796,16 @@ msgid "Weather"
 msgstr "날씨"
 
 #: src/saver.c:848
-#, fuzzy
 msgid "Temperature in"
-msgstr "색온도"
+msgstr "온도 단위"
 
 #: src/saver.c:849
-#, fuzzy
 msgid "Keyboard layout"
-msgstr "키보드 단축키"
+msgstr "키보드 배열"
 
 #: src/widgets.c:60
-#, fuzzy
 msgid "All widgets"
-msgstr "모든 필터"
+msgstr "모든 위젯"
 
 #: src/widgets.c:61
 msgid "Audio visualiser"
@@ -2829,9 +2816,8 @@ msgid "System monitor"
 msgstr "시스템 모니터"
 
 #: src/widgets.c:63
-#, fuzzy
 msgid "Desktop clock"
-msgstr "데스크톱 아이콘"
+msgstr "바탕 화면 시계"
 
 #: src/widgets.c:64
 msgid "Quick launch"
@@ -2850,9 +2836,8 @@ msgid "Tuxagotchi"
 msgstr "Tuxagotchi"
 
 #: src/widgets.c:68
-#, fuzzy
 msgid "Analog clock"
-msgstr "아날로그 시계 문자판"
+msgstr "아날로그 시계"
 
 #: src/widgets.c:69
 msgid "Music player"
