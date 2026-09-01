@@ -18,6 +18,28 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ EVERY ASSERTION BELOW READS AN ERROR MESSAGE, AND ERROR MESSAGES ARE
+# TRANSLATED. `ls`, `cat`, `sh` and `sudo` all print through glibc's strerror
+# and gettext, so on a Japanese install a denied read says
+#
+#     ls: ディレクトリ '/home/velle' を開くことが出来ません: 許可がありません
+#
+# and `grep -qi 'denied'` matches nothing. Seven assertions here — the canary,
+# $HOME, the sibling directory both ways, ld.so.preload, sudo and the exec
+# chain — then fail on a sandbox that is working perfectly, and fail the whole
+# package build with it. That happened on 2026-09-01, on a Japanese VM, and
+# blocked an update queue.
+#
+# ⚠ LC_ALL, EXPORTED, AND BEFORE ANYTHING RUNS. It has to reach the CONFINED
+# child, which is two execs away — syn-confine passes its environment through —
+# and it has to outrank an LC_MESSAGES the build environment already set.
+#
+# The suite had already tripped over this once and worked around it in one
+# place without naming it: the TCP cases below run a Python snippet that prints
+# the literal "EPERM" rather than letting the interpreter phrase the error.
+# That is the same problem, solved locally. This is the general fix.
+export LC_ALL=C
+
 SC=${1:-./build/syn-confine}
 [ -x "$SC" ] || { echo "not executable: $SC" >&2; exit 1; }
 SC=$(readlink -f "$SC")
@@ -59,6 +81,25 @@ check "...and says which path" $?
 
 "$SC" --nonsense -- true >/dev/null 2>&1
 [ $? -eq 78 ] && ok "an unknown option is refused" || bad "an unknown option is refused"
+
+# ── the error text is in the language this suite can read ──────────────────
+#
+# ⛔ A CHECK THAT FAILS FOR THE WRONG REASON IS WORSE THAN NO CHECK. Everything
+# below matches on words, so if LC_ALL above has not taken effect the suite
+# reports seven denial failures on a sandbox that denied all seven. Prove the
+# language first, on a denial that needs no sandbox at all, and say so plainly.
+# ⚠ CAPTURED FIRST, MATCHED SECOND — the idiom `says` exists for, and which
+# this guard got wrong on its first draft: `cat /etc/shadow | grep` under
+# pipefail reports CAT's status, which is 1 because the read was denied, so the
+# guard fired on a working probe.
+_probe=$(says cat /etc/shadow)
+if ! printf '%s\n' "$_probe" | grep -qi 'denied\|permission'; then
+    echo "  FAIL  the suite cannot read an error message in English" >&2
+    echo "        (LC_ALL='${LC_ALL:-unset}' — every assertion below matches on words," >&2
+    echo "         so they would all fail on a sandbox that is working)" >&2
+    exit 1
+fi
+ok "error messages are readable (LC_ALL=C is in effect)"
 
 # ── the canary ─────────────────────────────────────────────────────────────
 
