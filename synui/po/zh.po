@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"POT-Creation-Date: 2026-09-01 11:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -40,7 +40,9 @@ msgstr "取壁纸的强调色"
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr "从壁纸而不是主题取强调色。自动是以它为基础的 Prism（浅色或深色），除此之外没有别的"
+msgstr ""
+"从壁纸而不是主题取强调色。自动是以它为基础的 Prism（浅色或深色），除此之外没"
+"有别的"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
@@ -107,7 +109,8 @@ msgstr "所有玻璃统一"
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr "每个界面都跟随上面的“玻璃”。单独改过的会保留自己的值，直到你把这一项重新打开"
+msgstr ""
+"每个界面都跟随上面的“玻璃”。单独改过的会保留自己的值，直到你把这一项重新打开"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
@@ -175,7 +178,7 @@ msgstr "GLES 后期处理。在没有该能力的渲染器上为关闭"
 msgid "All filters"
 msgstr "所有滤镜"
 
-#: src/ctlpanel.c:517
+#: src/ctlpanel.c:517 src/filters.c:85
 msgid "Scanlines"
 msgstr "扫描线"
 
@@ -183,7 +186,7 @@ msgstr "扫描线"
 msgid "Screen curve"
 msgstr "屏幕弯曲"
 
-#: src/ctlpanel.c:523
+#: src/ctlpanel.c:523 src/filters.c:87
 msgid "Chromatic aberration"
 msgstr "色差"
 
@@ -195,7 +198,7 @@ msgstr "警报时的画面干扰"
 msgid "Phosphor tint"
 msgstr "荧光色"
 
-#: src/ctlpanel.c:531
+#: src/ctlpanel.c:531 src/filters.c:89
 msgid "Phosphor"
 msgstr "荧光"
 
@@ -215,7 +218,7 @@ msgstr "向荧光色靠拢。只有把这一项调高，泛光才起作用"
 msgid "Phosphor glow"
 msgstr "荧光辉光"
 
-#: src/ctlpanel.c:542
+#: src/ctlpanel.c:542 src/filters.c:92
 msgid "Phosphor lift"
 msgstr "荧光底光"
 
@@ -223,7 +226,7 @@ msgstr "荧光底光"
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
 msgstr "未点亮的区域发光多少：0 保持全黑，调高会点亮栅格"
 
-#: src/ctlpanel.c:546
+#: src/ctlpanel.c:546 src/filters.c:93
 msgid "Phosphor hue"
 msgstr "荧光色相"
 
@@ -408,7 +411,9 @@ msgstr "切换桌面"
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr "淡入淡出会让两个桌面交叠；滑动会朝你切换的方向送走它们；立方体则在三维中转动桌面"
+msgstr ""
+"淡入淡出会让两个桌面交叠；滑动会朝你切换的方向送走它们；立方体则在三维中转动"
+"桌面"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
@@ -418,7 +423,8 @@ msgstr "切换时长"
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr "滑动比淡入淡出需要更久 — 眼睛得跟着它走 — 立方体又更久一些；可以试 400-600"
+msgstr ""
+"滑动比淡入淡出需要更久 — 眼睛得跟着它走 — 立方体又更久一些；可以试 400-600"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
@@ -451,7 +457,9 @@ msgstr "行为"
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr "点击：只有点击才给焦点。宽松和严格都跟随指针；在桌面上方，严格会放掉焦点，宽松则保留"
+msgstr ""
+"点击：只有点击才给焦点。宽松和严格都跟随指针；在桌面上方，严格会放掉焦点，宽"
+"松则保留"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
@@ -479,7 +487,8 @@ msgstr "吸附范围"
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr "拖动到离边缘多近才触发吸附。高分屏上可以调大，指针太快跨过这条带时也可以"
+msgstr ""
+"拖动到离边缘多近才触发吸附。高分屏上可以调大，指针太快跨过这条带时也可以"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
@@ -501,7 +510,9 @@ msgstr "Alt+Tab"
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr "开启时 Alt+Tab 打开整个桌面。关闭时是按最近使用排列的缩略图条 — 下面三行说的就是这个条"
+msgstr ""
+"开启时 Alt+Tab 打开整个桌面。关闭时是按最近使用排列的缩略图条 — 下面三行说的"
+"就是这个条"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
@@ -541,7 +552,8 @@ msgstr "计算器"
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr "窗口：拖标题栏移动，别处随意点击。点外面关闭：点到旁边就关。Esc 始终可以关闭"
+msgstr ""
+"窗口：拖标题栏移动，别处随意点击。点外面关闭：点到旁边就关。Esc 始终可以关闭"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
@@ -615,7 +627,9 @@ msgstr "程序坞置于窗口之上"
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr "关闭时，窗口会盖住固定的程序坞。自动隐藏的那种总是出现在最上面 — 它是被叫到一切之上的"
+msgstr ""
+"关闭时，窗口会盖住固定的程序坞。自动隐藏的那种总是出现在最上面 — 它是被叫到一"
+"切之上的"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
@@ -714,7 +728,8 @@ msgstr "显示电源按钮"
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr "应用按钮之后的一个电源标记。点击会打开菜单 — 锁定、注销、睡眠、重启、关机"
+msgstr ""
+"应用按钮之后的一个电源标记。点击会打开菜单 — 锁定、注销、睡眠、重启、关机"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
@@ -746,7 +761,9 @@ msgstr "程序坞时钟"
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr "时间和日期占一个独立的格 — 拖动这个格可以放到这一排的任意位置。12/24 小时制跟随“日期和时间”"
+msgstr ""
+"时间和日期占一个独立的格 — 拖动这个格可以放到这一排的任意位置。12/24 小时制跟"
+"随“日期和时间”"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
@@ -756,7 +773,9 @@ msgstr "程序坞模拟时钟"
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr "把程序坞时钟画成表盘。这是唯一能放进左右两侧程序坞的时钟 — 竖排无法为一串时间加宽"
+msgstr ""
+"把程序坞时钟画成表盘。这是唯一能放进左右两侧程序坞的时钟 — 竖排无法为一串时间"
+"加宽"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
@@ -776,7 +795,9 @@ msgstr "模拟时钟表盘"
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr "模拟时钟“小组件”画哪一种表盘 — 指的是从“小组件”放到桌面上的那个。程序坞自带的模拟时钟只有一种样式"
+msgstr ""
+"模拟时钟“小组件”画哪一种表盘 — 指的是从“小组件”放到桌面上的那个。程序坞自带的"
+"模拟时钟只有一种样式"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
@@ -786,7 +807,9 @@ msgstr "开始菜单"
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr "轻点 Super 和按 Super+Esc 会打开什么。键盘快捷键列表跟随这一行；程序坞的应用按钮不跟随"
+msgstr ""
+"轻点 Super 和按 Super+Esc 会打开什么。键盘快捷键列表跟随这一行；程序坞的应用"
+"按钮不跟随"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
@@ -800,7 +823,9 @@ msgstr "顶栏"
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr "只有顶栏 — 小组件、便签和开始菜单都保留。使用 waybar 的桌面需要 bar_stop_cmd/bar_start_cmd"
+msgstr ""
+"只有顶栏 — 小组件、便签和开始菜单都保留。使用 waybar 的桌面需要 bar_stop_cmd/"
+"bar_start_cmd"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
@@ -826,7 +851,9 @@ msgstr "自动隐藏顶栏"
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr "一次设置所有显示器的顶栏。按显示器设置在顶栏自己的右键菜单里，“混合”表示它们并不一致"
+msgstr ""
+"一次设置所有显示器的顶栏。按显示器设置在顶栏自己的右键菜单里，“混合”表示它们"
+"并不一致"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
@@ -932,7 +959,9 @@ msgstr "指针加速"
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr "自适应会随着你移动越快而走得越远；线性是 1:1。默认是 libinput 为该设备自己挑的"
+msgstr ""
+"自适应会随着你移动越快而走得越远；线性是 1:1。默认是 libinput 为该设备自己挑"
+"的"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
@@ -942,7 +971,9 @@ msgstr "指针平滑"
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr "通过对路径取平均，稳住抖动或有杂讯的指针。会带来一点延迟；0 为关闭。读取原始移动的游戏不受影响"
+msgstr ""
+"通过对路径取平均，稳住抖动或有杂讯的指针。会带来一点延迟；0 为关闭。读取原始"
+"移动的游戏不受影响"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
@@ -1087,7 +1118,7 @@ msgstr "查找打印机"
 msgid "Add every network printer that is not set up yet, driverless"
 msgstr "把每一台尚未设置的网络打印机免驱添加进来"
 
-#: src/ctlpanel.c:1204
+#: src/ctlpanel.c:1204 src/power.c:111
 msgid "Power saving"
 msgstr "省电"
 
@@ -1099,7 +1130,7 @@ msgstr "电源"
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "变暗、熄屏、锁定和睡眠的空闲等待时间"
 
-#: src/ctlpanel.c:1207
+#: src/ctlpanel.c:1207 src/saver.c:837
 msgid "Screensaver"
 msgstr "屏幕保护"
 
@@ -1278,3 +1309,212 @@ msgstr "最小值"
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
 msgstr "最大值"
+
+#: src/lock.c:413 src/lock.c:846
+msgid "Wrong password"
+msgstr "密码错误"
+
+#: src/lock.c:414 src/lock.c:853
+msgid "Checking…"
+msgstr "正在检查…"
+
+#: src/lock.c:1627
+#, c-format
+msgid "Fingerprint disabled — use your password"
+msgstr "指纹已停用 — 请使用密码"
+
+#: src/lock.c:1635
+#, c-format
+msgid "Fingerprint not recognised"
+msgstr "指纹无法识别"
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr "没有找到可用于幻灯片的壁纸"
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr "延迟显示"
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr "唤醒时锁定"
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr "切换间隔"
+
+#: src/saver.c:841
+#, fuzzy
+msgid "Lock background"
+msgstr "锁屏"
+
+#: src/saver.c:842
+#, fuzzy
+msgid "Lock image"
+msgstr "程序坞放大"
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr "锁屏变暗"
+
+#: src/saver.c:844
+#, fuzzy
+msgid "Lock blur"
+msgstr "背景模糊"
+
+#: src/saver.c:845
+#, fuzzy
+msgid "Lock colours"
+msgstr "程序坞圆角"
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr "正在播放"
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr "天气"
+
+#: src/saver.c:848
+#, fuzzy
+msgid "Temperature in"
+msgstr "色温"
+
+#: src/saver.c:849
+#, fuzzy
+msgid "Keyboard layout"
+msgstr "键盘快捷键"
+
+#: src/power.c:112
+#, fuzzy
+msgid "Dim screen"
+msgstr "锁屏"
+
+#: src/power.c:113
+msgid "Blank displays"
+msgstr "关闭屏幕"
+
+#: src/power.c:114
+#, fuzzy
+msgid "Lock session"
+msgstr "锁屏"
+
+#: src/power.c:115
+msgid "Suspend system"
+msgstr "系统睡眠"
+
+#: src/power.c:116
+msgid "Lid closed (battery)"
+msgstr "合盖（电池）"
+
+#: src/power.c:117
+msgid "Lid closed (plugged in)"
+msgstr "合盖（接电源）"
+
+#: src/power.c:118
+msgid "Lid closed (docked)"
+msgstr "合盖（已插底座）"
+
+#: src/filters.c:84
+#, fuzzy
+msgid "CRT filters"
+msgstr "所有滤镜"
+
+#: src/filters.c:86
+#, fuzzy
+msgid "Screen curvature"
+msgstr "屏幕弯曲"
+
+#: src/filters.c:88
+#, fuzzy
+msgid "Glitch strength"
+msgstr "警报时的画面干扰"
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr "单色"
+
+#: src/filters.c:91
+#, fuzzy
+msgid "Phosphor bloom"
+msgstr "荧光辉光"
+
+#: src/widgets.c:60
+#, fuzzy
+msgid "All widgets"
+msgstr "所有滤镜"
+
+#: src/widgets.c:61
+msgid "Audio visualiser"
+msgstr "音频可视化"
+
+#: src/widgets.c:62
+msgid "System monitor"
+msgstr "系统监视器"
+
+#: src/widgets.c:63
+#, fuzzy
+msgid "Desktop clock"
+msgstr "桌面图标"
+
+#: src/widgets.c:64
+msgid "Quick launch"
+msgstr "快速启动"
+
+#: src/widgets.c:65
+msgid "Post-it note"
+msgstr "便签"
+
+#: src/widgets.c:66
+msgid "Pizza"
+msgstr "披萨"
+
+#: src/widgets.c:67
+msgid "Tuxagotchi"
+msgstr "Tuxagotchi"
+
+#: src/widgets.c:68
+#, fuzzy
+msgid "Analog clock"
+msgstr "模拟时钟表盘"
+
+#: src/widgets.c:69
+msgid "Music player"
+msgstr "音乐播放器"
+
+#, fuzzy
+#~ msgid "visualizer"
+#~ msgstr "均衡器"
+
+#, fuzzy
+#~ msgid "clock"
+#~ msgstr "时钟"
+
+#, fuzzy
+#~ msgid "corner_radius"
+#~ msgstr "圆角半径"
+
+#, fuzzy
+#~ msgid "shadow"
+#~ msgstr "阴影"
+
+#, fuzzy
+#~ msgid "shadow_spread"
+#~ msgstr "阴影扩展"
+
+#, fuzzy
+#~ msgid "shadow_offset_y"
+#~ msgstr "阴影偏移 X"
+
+#, fuzzy
+#~ msgid "shadow_opacity"
+#~ msgstr "顶栏不透明度"
+
+#, fuzzy
+#~ msgid "blur_radius"
+#~ msgstr "模糊半径"
+
+#, fuzzy
+#~ msgid "blur_passes"
+#~ msgstr "模糊次数"

@@ -49,6 +49,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "i18n.h"
 #include "synui.h"
 
 /* How dark the dim stage goes. Dark enough to read as "about to blank",
@@ -107,14 +108,14 @@ static int *row_action_field(syn_server_t *s, int row)
 static const char *row_label(int row)
 {
     switch (row) {
-    case POWER_ROW_ENABLED:    return "Power saving";
-    case POWER_ROW_DIM:        return "Dim screen";
-    case POWER_ROW_BLANK:      return "Blank displays";
-    case POWER_ROW_LOCK:       return "Lock session";
-    case POWER_ROW_SUSPEND:    return "Suspend system";
-    case POWER_ROW_LID:        return "Lid closed (battery)";
-    case POWER_ROW_LID_AC:     return "Lid closed (plugged in)";
-    case POWER_ROW_LID_DOCKED: return "Lid closed (docked)";
+    case POWER_ROW_ENABLED:    return _("Power saving");
+    case POWER_ROW_DIM:        return _("Dim screen");
+    case POWER_ROW_BLANK:      return _("Blank displays");
+    case POWER_ROW_LOCK:       return _("Lock session");
+    case POWER_ROW_SUSPEND:    return _("Suspend system");
+    case POWER_ROW_LID:        return _("Lid closed (battery)");
+    case POWER_ROW_LID_AC:     return _("Lid closed (plugged in)");
+    case POWER_ROW_LID_DOCKED: return _("Lid closed (docked)");
     default:                   return "?";
     }
 }

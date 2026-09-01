@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"POT-Creation-Date: 2026-09-01 11:26-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -176,7 +176,7 @@ msgstr ""
 msgid "All filters"
 msgstr ""
 
-#: src/ctlpanel.c:517
+#: src/ctlpanel.c:517 src/filters.c:85
 msgid "Scanlines"
 msgstr ""
 
@@ -184,7 +184,7 @@ msgstr ""
 msgid "Screen curve"
 msgstr ""
 
-#: src/ctlpanel.c:523
+#: src/ctlpanel.c:523 src/filters.c:87
 msgid "Chromatic aberration"
 msgstr ""
 
@@ -196,7 +196,7 @@ msgstr ""
 msgid "Phosphor tint"
 msgstr ""
 
-#: src/ctlpanel.c:531
+#: src/ctlpanel.c:531 src/filters.c:89
 msgid "Phosphor"
 msgstr ""
 
@@ -216,7 +216,7 @@ msgstr ""
 msgid "Phosphor glow"
 msgstr ""
 
-#: src/ctlpanel.c:542
+#: src/ctlpanel.c:542 src/filters.c:92
 msgid "Phosphor lift"
 msgstr ""
 
@@ -224,7 +224,7 @@ msgstr ""
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
 msgstr ""
 
-#: src/ctlpanel.c:546
+#: src/ctlpanel.c:546 src/filters.c:93
 msgid "Phosphor hue"
 msgstr ""
 
@@ -1088,7 +1088,7 @@ msgstr ""
 msgid "Add every network printer that is not set up yet, driverless"
 msgstr ""
 
-#: src/ctlpanel.c:1204
+#: src/ctlpanel.c:1204 src/power.c:111
 msgid "Power saving"
 msgstr ""
 
@@ -1100,7 +1100,7 @@ msgstr ""
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr ""
 
-#: src/ctlpanel.c:1207
+#: src/ctlpanel.c:1207 src/saver.c:837
 msgid "Screensaver"
 msgstr ""
 
@@ -1278,4 +1278,162 @@ msgstr ""
 
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
+msgstr ""
+
+#: src/lock.c:413 src/lock.c:846
+msgid "Wrong password"
+msgstr ""
+
+#: src/lock.c:414 src/lock.c:853
+msgid "Checking…"
+msgstr ""
+
+#: src/lock.c:1627
+#, c-format
+msgid "Fingerprint disabled — use your password"
+msgstr ""
+
+#: src/lock.c:1635
+#, c-format
+msgid "Fingerprint not recognised"
+msgstr ""
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr ""
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr ""
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr ""
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr ""
+
+#: src/saver.c:841
+msgid "Lock background"
+msgstr ""
+
+#: src/saver.c:842
+msgid "Lock image"
+msgstr ""
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr ""
+
+#: src/saver.c:844
+msgid "Lock blur"
+msgstr ""
+
+#: src/saver.c:845
+msgid "Lock colours"
+msgstr ""
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr ""
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr ""
+
+#: src/saver.c:848
+msgid "Temperature in"
+msgstr ""
+
+#: src/saver.c:849
+msgid "Keyboard layout"
+msgstr ""
+
+#: src/power.c:112
+msgid "Dim screen"
+msgstr ""
+
+#: src/power.c:113
+msgid "Blank displays"
+msgstr ""
+
+#: src/power.c:114
+msgid "Lock session"
+msgstr ""
+
+#: src/power.c:115
+msgid "Suspend system"
+msgstr ""
+
+#: src/power.c:116
+msgid "Lid closed (battery)"
+msgstr ""
+
+#: src/power.c:117
+msgid "Lid closed (plugged in)"
+msgstr ""
+
+#: src/power.c:118
+msgid "Lid closed (docked)"
+msgstr ""
+
+#: src/filters.c:84
+msgid "CRT filters"
+msgstr ""
+
+#: src/filters.c:86
+msgid "Screen curvature"
+msgstr ""
+
+#: src/filters.c:88
+msgid "Glitch strength"
+msgstr ""
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr ""
+
+#: src/filters.c:91
+msgid "Phosphor bloom"
+msgstr ""
+
+#: src/widgets.c:60
+msgid "All widgets"
+msgstr ""
+
+#: src/widgets.c:61
+msgid "Audio visualiser"
+msgstr ""
+
+#: src/widgets.c:62
+msgid "System monitor"
+msgstr ""
+
+#: src/widgets.c:63
+msgid "Desktop clock"
+msgstr ""
+
+#: src/widgets.c:64
+msgid "Quick launch"
+msgstr ""
+
+#: src/widgets.c:65
+msgid "Post-it note"
+msgstr ""
+
+#: src/widgets.c:66
+msgid "Pizza"
+msgstr ""
+
+#: src/widgets.c:67
+msgid "Tuxagotchi"
+msgstr ""
+
+#: src/widgets.c:68
+msgid "Analog clock"
+msgstr ""
+
+#: src/widgets.c:69
+msgid "Music player"
 msgstr ""

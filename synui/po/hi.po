@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"POT-Creation-Date: 2026-09-01 11:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -40,7 +40,9 @@ msgstr "वॉलपेपर से उभार-रंग"
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr "उभार-रंग थीम की जगह वॉलपेपर से लेता है। स्वचालित का अर्थ Prism (हल्का या गहरा) है, जो उसी पर बना है, और कुछ नहीं"
+msgstr ""
+"उभार-रंग थीम की जगह वॉलपेपर से लेता है। स्वचालित का अर्थ Prism (हल्का या गहरा) है, जो "
+"उसी पर बना है, और कुछ नहीं"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
@@ -64,7 +66,9 @@ msgstr "पाठ"
 
 #: src/ctlpanel.c:393
 msgid "The family every synui panel draws in. Previews live; Esc puts it back"
-msgstr "वह फ़ॉन्ट परिवार जिसमें synui का हर पैनल लिखता है। झलक तुरंत दिखती है; Esc वापस कर देता है"
+msgstr ""
+"वह फ़ॉन्ट परिवार जिसमें synui का हर पैनल लिखता है। झलक तुरंत दिखती है; Esc वापस कर "
+"देता है"
 
 #: src/ctlpanel.c:406
 msgid "Font size"
@@ -97,7 +101,9 @@ msgstr "चालू खिड़की की अपारदर्शिता
 #: src/ctlpanel.c:437
 msgid ""
 "Auto follows the theme · Off is never glass · or set how much you see through"
-msgstr "स्वचालित थीम के अनुसार चलता है · बंद कभी काँच नहीं होता · या आप खुद तय करें कि कितना झलके"
+msgstr ""
+"स्वचालित थीम के अनुसार चलता है · बंद कभी काँच नहीं होता · या आप खुद तय करें कि कितना "
+"झलके"
 
 #: src/ctlpanel.c:443
 msgid "Sync all glass"
@@ -107,7 +113,9 @@ msgstr "सारा काँच एक जैसा"
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr "हर सतह ऊपर वाले काँच के अनुसार चलती है। किसी एक को बदलिए तो वह अपना मान रखती है, जब तक आप इसे दोबारा चालू न करें"
+msgstr ""
+"हर सतह ऊपर वाले काँच के अनुसार चलती है। किसी एक को बदलिए तो वह अपना मान रखती है, "
+"जब तक आप इसे दोबारा चालू न करें"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
@@ -117,7 +125,9 @@ msgstr "पढ़ने-योग्यता का सुधार"
 msgid ""
 "Surfaces go less see-through where their text would not read. Off draws "
 "exactly what you asked for"
-msgstr "जहाँ पाठ पढ़ा न जा सके, वहाँ सतहें कम पारदर्शी हो जाती हैं। बंद करने पर वही बनता है जो आपने कहा"
+msgstr ""
+"जहाँ पाठ पढ़ा न जा सके, वहाँ सतहें कम पारदर्शी हो जाती हैं। बंद करने पर वही बनता है जो "
+"आपने कहा"
 
 #: src/ctlpanel.c:467
 msgid "Live backdrop"
@@ -127,7 +137,9 @@ msgstr "जीवंत पृष्ठभूमि"
 msgid ""
 "Menus and panels ink themselves off the window behind them rather than the "
 "wallpaper it covers. Lands within a second"
-msgstr "मेन्यू और पैनल ढके हुए वॉलपेपर की जगह अपने पीछे की खिड़की से रंग लेते हैं। एक सेकंड में लागू होता है"
+msgstr ""
+"मेन्यू और पैनल ढके हुए वॉलपेपर की जगह अपने पीछे की खिड़की से रंग लेते हैं। एक सेकंड में लागू होता "
+"है"
 
 #: src/ctlpanel.c:472
 msgid "Unfocused opacity"
@@ -161,7 +173,9 @@ msgstr "सब कुछ पारदर्शी करें"
 msgid ""
 "Bar, dock and menus lose their background entirely, inked off the wallpaper. "
 "The rows above put it back"
-msgstr "पट्टी, डॉक और मेन्यू अपनी पृष्ठभूमि पूरी तरह खो देते हैं और वॉलपेपर से रंग लेते हैं। ऊपर की पंक्तियाँ वापस ले आती हैं"
+msgstr ""
+"पट्टी, डॉक और मेन्यू अपनी पृष्ठभूमि पूरी तरह खो देते हैं और वॉलपेपर से रंग लेते हैं। ऊपर की "
+"पंक्तियाँ वापस ले आती हैं"
 
 #: src/ctlpanel.c:513 src/ctlpanel.c:514
 msgid "CRT effects"
@@ -175,7 +189,7 @@ msgstr "GLES का पश्च-संस्करण चरण। जिन �
 msgid "All filters"
 msgstr "सभी फ़िल्टर"
 
-#: src/ctlpanel.c:517
+#: src/ctlpanel.c:517 src/filters.c:85
 msgid "Scanlines"
 msgstr "स्कैन-रेखाएँ"
 
@@ -183,7 +197,7 @@ msgstr "स्कैन-रेखाएँ"
 msgid "Screen curve"
 msgstr "पर्दे का उभार"
 
-#: src/ctlpanel.c:523
+#: src/ctlpanel.c:523 src/filters.c:87
 msgid "Chromatic aberration"
 msgstr "वर्ण-विपथन"
 
@@ -195,7 +209,7 @@ msgstr "चेतावनी पर झिलमिलाहट"
 msgid "Phosphor tint"
 msgstr "फ़ॉस्फ़र का रंग"
 
-#: src/ctlpanel.c:531
+#: src/ctlpanel.c:531 src/filters.c:89
 msgid "Phosphor"
 msgstr "फ़ॉस्फ़र"
 
@@ -215,15 +229,16 @@ msgstr "फ़ॉस्फ़र के रंग की ओर मिलात�
 msgid "Phosphor glow"
 msgstr "फ़ॉस्फ़र की चमक"
 
-#: src/ctlpanel.c:542
+#: src/ctlpanel.c:542 src/filters.c:92
 msgid "Phosphor lift"
 msgstr "फ़ॉस्फ़र का आधार"
 
 #: src/ctlpanel.c:545
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
-msgstr "बिना जले हिस्से की चमक कितनी हो: 0 उसे काला रखता है, ऊपर करने पर जाल रोशन होता है"
+msgstr ""
+"बिना जले हिस्से की चमक कितनी हो: 0 उसे काला रखता है, ऊपर करने पर जाल रोशन होता है"
 
-#: src/ctlpanel.c:546
+#: src/ctlpanel.c:546 src/filters.c:93
 msgid "Phosphor hue"
 msgstr "फ़ॉस्फ़र की आभा"
 
@@ -231,7 +246,8 @@ msgstr "फ़ॉस्फ़र की आभा"
 msgid ""
 "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
 "is the preset"
-msgstr "रंग को घुमाता है: नीचे अधिक लाल (अंबर से नारंगी), ऊपर अधिक पीला। 0.50 पूर्व-निर्धारित है"
+msgstr ""
+"रंग को घुमाता है: नीचे अधिक लाल (अंबर से नारंगी), ऊपर अधिक पीला। 0.50 पूर्व-निर्धारित है"
 
 #: src/ctlpanel.c:557
 msgid "Titlebars"
@@ -335,7 +351,8 @@ msgstr "धुँधलापन"
 
 #: src/ctlpanel.c:612
 msgid "Frosts what is behind a translucent window. Opaque ones cost nothing"
-msgstr "अर्धपारदर्शी खिड़की के पीछे जो है उसे धुँधला कर देता है। ठोस खिड़कियों पर कोई लागत नहीं"
+msgstr ""
+"अर्धपारदर्शी खिड़की के पीछे जो है उसे धुँधला कर देता है। ठोस खिड़कियों पर कोई लागत नहीं"
 
 #: src/ctlpanel.c:613
 msgid "Blur passes"
@@ -381,7 +398,8 @@ msgstr "सजीवन"
 msgid ""
 "How a window arrives. Closing is not animated: the client's buffer is gone "
 "the moment it unmaps"
-msgstr "खिड़की कैसे आती है। बंद होना सजीव नहीं होता: हटते ही अनुप्रयोग का बफ़र चला जाता है"
+msgstr ""
+"खिड़की कैसे आती है। बंद होना सजीव नहीं होता: हटते ही अनुप्रयोग का बफ़र चला जाता है"
 
 #: src/ctlpanel.c:647
 msgid "Window length"
@@ -408,7 +426,9 @@ msgstr "डेस्कटॉप बदलना"
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr "घुलाव दोनों डेस्कटॉप मिलाता है; सरकाव उन्हें उसी दिशा में भेजता है; घन डेस्कटॉप को त्रि-आयाम में घुमाता है"
+msgstr ""
+"घुलाव दोनों डेस्कटॉप मिलाता है; सरकाव उन्हें उसी दिशा में भेजता है; घन डेस्कटॉप को त्रि-"
+"आयाम में घुमाता है"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
@@ -418,7 +438,9 @@ msgstr "बदलने की अवधि"
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr "सरकाव को घुलाव से अधिक समय चाहिए — आँख को उसके पीछे जाना पड़ता है — और घन को उससे भी अधिक; 400-600 आज़माएँ"
+msgstr ""
+"सरकाव को घुलाव से अधिक समय चाहिए — आँख को उसके पीछे जाना पड़ता है — और घन को उससे भी "
+"अधिक; 400-600 आज़माएँ"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
@@ -437,7 +459,9 @@ msgstr "डेस्कटॉप का दायरा"
 msgid ""
 "Shared: one desktop across every monitor. Per-monitor: each screen remembers "
 "its own, and the switch moves only the focused one"
-msgstr "साझा: सभी पर्दों पर एक ही डेस्कटॉप। प्रति-पर्दा: हर पर्दा अपना याद रखता है, और बदलाव केवल चालू पर्दे को हिलाता है"
+msgstr ""
+"साझा: सभी पर्दों पर एक ही डेस्कटॉप। प्रति-पर्दा: हर पर्दा अपना याद रखता है, और बदलाव "
+"केवल चालू पर्दे को हिलाता है"
 
 #: src/ctlpanel.c:678
 msgid "Focus follows"
@@ -451,7 +475,9 @@ msgstr "व्यवहार"
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr "क्लिक: फ़ोकस केवल क्लिक से मिलता है। ढीला और सख़्त संकेतक के पीछे चलते हैं; डेस्कटॉप के ऊपर सख़्त फ़ोकस छोड़ देता है, ढीला बनाए रखता है"
+msgstr ""
+"क्लिक: फ़ोकस केवल क्लिक से मिलता है। ढीला और सख़्त संकेतक के पीछे चलते हैं; डेस्कटॉप के ऊपर "
+"सख़्त फ़ोकस छोड़ देता है, ढीला बनाए रखता है"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
@@ -461,7 +487,9 @@ msgstr "फ़ोकस का विलंब"
 msgid ""
 "How long the pointer rests before focus follows it. 0 is instant, which also "
 "focuses windows you only crossed over"
-msgstr "संकेतक कितनी देर रुके तब फ़ोकस उसके पीछे जाए। 0 तुरंत है, जिससे केवल गुज़री हुई खिड़कियों को भी फ़ोकस मिल जाता है"
+msgstr ""
+"संकेतक कितनी देर रुके तब फ़ोकस उसके पीछे जाए। 0 तुरंत है, जिससे केवल गुज़री हुई खिड़कियों को "
+"भी फ़ोकस मिल जाता है"
 
 #: src/ctlpanel.c:689
 msgid "Edge snapping"
@@ -479,7 +507,9 @@ msgstr "चिपकाव का क्षेत्र"
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr "खींचते समय किनारे के कितने पास आने पर चिपकाव सक्रिय हो। उच्च घनत्व वाले पर्दे पर, या तेज़ संकेतक पट्टी लाँघ जाए तो इसे बढ़ाइए"
+msgstr ""
+"खींचते समय किनारे के कितने पास आने पर चिपकाव सक्रिय हो। उच्च घनत्व वाले पर्दे पर, या तेज़ "
+"संकेतक पट्टी लाँघ जाए तो इसे बढ़ाइए"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
@@ -501,7 +531,9 @@ msgstr "Alt+Tab"
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr "चालू करने पर Alt+Tab पूरा डेस्कटॉप खोलता है। बंद करने पर हाल के उपयोग वाली झलक-पट्टी — और नीचे की तीन पंक्तियाँ उसी पट्टी की हैं"
+msgstr ""
+"चालू करने पर Alt+Tab पूरा डेस्कटॉप खोलता है। बंद करने पर हाल के उपयोग वाली झलक-पट्टी — "
+"और नीचे की तीन पंक्तियाँ उसी पट्टी की हैं"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
@@ -531,7 +563,9 @@ msgstr "पैनल"
 msgid ""
 "On, an open panel moves to whichever monitor the pointer is on. Off, it "
 "stays on the monitor you opened it on"
-msgstr "चालू करने पर खुला पैनल उसी पर्दे पर चला जाता है जहाँ संकेतक है। बंद करने पर वह उसी पर्दे पर रहता है जहाँ आपने खोला था"
+msgstr ""
+"चालू करने पर खुला पैनल उसी पर्दे पर चला जाता है जहाँ संकेतक है। बंद करने पर वह उसी पर्दे पर "
+"रहता है जहाँ आपने खोला था"
 
 #: src/ctlpanel.c:731
 msgid "Calculator"
@@ -541,7 +575,9 @@ msgstr "गणक"
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr "खिड़की: शीर्ष से खींचिए, बाकी जगह स्वतंत्र रूप से क्लिक कीजिए। बाहर क्लिक पर बंद: बगल में क्लिक करते ही बंद। Esc हमेशा बंद करता है"
+msgstr ""
+"खिड़की: शीर्ष से खींचिए, बाकी जगह स्वतंत्र रूप से क्लिक कीजिए। बाहर क्लिक पर बंद: बगल में "
+"क्लिक करते ही बंद। Esc हमेशा बंद करता है"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
@@ -615,7 +651,9 @@ msgstr "डॉक खिड़कियों के ऊपर"
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr "बंद होने पर खिड़कियाँ टिके हुए डॉक को ढक देती हैं। स्वयं छिपने वाला हमेशा ऊपर आता है — जो भी हो, उसके ऊपर बुलाया जाता है"
+msgstr ""
+"बंद होने पर खिड़कियाँ टिके हुए डॉक को ढक देती हैं। स्वयं छिपने वाला हमेशा ऊपर आता है — जो "
+"भी हो, उसके ऊपर बुलाया जाता है"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
@@ -653,7 +691,9 @@ msgstr "आवर्धन कितना"
 msgid ""
 "How big the icon under the pointer gets. The dock makes room for it, so a "
 "big swell is a taller dock"
-msgstr "संकेतक के नीचे का चिह्न कितना बड़ा हो जाता है। डॉक उसके लिए जगह बनाता है, इसलिए अधिक फूलना यानी ऊँचा डॉक"
+msgstr ""
+"संकेतक के नीचे का चिह्न कितना बड़ा हो जाता है। डॉक उसके लिए जगह बनाता है, इसलिए अधिक "
+"फूलना यानी ऊँचा डॉक"
 
 #: src/ctlpanel.c:822
 msgid "Dock style"
@@ -714,7 +754,9 @@ msgstr "बिजली का बटन दिखाएँ"
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr "अनुप्रयोग-बटन के आगे बिजली का चिह्न। दबाने पर मेन्यू खुलता है — ताला, लॉग आउट, निलंबन, पुनरारंभ, बंद करें"
+msgstr ""
+"अनुप्रयोग-बटन के आगे बिजली का चिह्न। दबाने पर मेन्यू खुलता है — ताला, लॉग आउट, निलंबन, "
+"पुनरारंभ, बंद करें"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
@@ -746,7 +788,9 @@ msgstr "डॉक की घड़ी"
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr "समय और दिनांक अपने अलग खाने में — खाने को खींचकर पंक्ति में कहीं भी रखिए। 12/24 घंटा दिनांक और समय के अनुसार चलता है"
+msgstr ""
+"समय और दिनांक अपने अलग खाने में — खाने को खींचकर पंक्ति में कहीं भी रखिए। 12/24 घंटा "
+"दिनांक और समय के अनुसार चलता है"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
@@ -756,7 +800,9 @@ msgstr "डॉक की एनालॉग घड़ी"
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr "डॉक की घड़ी को डायल की तरह बनाता है। बाएँ या दाएँ किनारे के डॉक में यही एक घड़ी समाती है — स्तंभ समय के लिए चौड़ा नहीं हो सकता"
+msgstr ""
+"डॉक की घड़ी को डायल की तरह बनाता है। बाएँ या दाएँ किनारे के डॉक में यही एक घड़ी समाती "
+"है — स्तंभ समय के लिए चौड़ा नहीं हो सकता"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
@@ -776,7 +822,9 @@ msgstr "एनालॉग घड़ी का डायल"
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr "एनालॉग घड़ी वाला विजेट कौन-सा डायल बनाता है — विजेट से डेस्कटॉप पर रखा हुआ। डॉक की एनालॉग घड़ी का रूप एक ही है"
+msgstr ""
+"एनालॉग घड़ी वाला विजेट कौन-सा डायल बनाता है — विजेट से डेस्कटॉप पर रखा हुआ। डॉक की "
+"एनालॉग घड़ी का रूप एक ही है"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
@@ -786,7 +834,9 @@ msgstr "आरंभ मेन्यू"
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr "Super को थपथपाने और Super+Esc से क्या खुलता है। कुंजीपटल शॉर्टकट की सूची इसी पंक्ति के अनुसार चलती है; डॉक का अनुप्रयोग-बटन नहीं"
+msgstr ""
+"Super को थपथपाने और Super+Esc से क्या खुलता है। कुंजीपटल शॉर्टकट की सूची इसी पंक्ति के "
+"अनुसार चलती है; डॉक का अनुप्रयोग-बटन नहीं"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
@@ -800,7 +850,9 @@ msgstr "पट्टी"
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr "केवल ऊपर की पट्टी — विजेट, चिप्पियाँ और आरंभ मेन्यू बने रहते हैं। waybar वाले डेस्कटॉप को bar_stop_cmd/bar_start_cmd चाहिए"
+msgstr ""
+"केवल ऊपर की पट्टी — विजेट, चिप्पियाँ और आरंभ मेन्यू बने रहते हैं। waybar वाले डेस्कटॉप को "
+"bar_stop_cmd/bar_start_cmd चाहिए"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
@@ -826,7 +878,9 @@ msgstr "पट्टी स्वयं छिपे"
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr "सभी पर्दों की पट्टी एक साथ। हर पर्दे की अलग सेटिंग पट्टी के दायाँ-क्लिक मेन्यू में है, और «मिश्रित» का अर्थ है कि वे अलग-अलग हैं"
+msgstr ""
+"सभी पर्दों की पट्टी एक साथ। हर पर्दे की अलग सेटिंग पट्टी के दायाँ-क्लिक मेन्यू में है, और "
+"«मिश्रित» का अर्थ है कि वे अलग-अलग हैं"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
@@ -834,7 +888,8 @@ msgstr "पट्टी की अपारदर्शिता"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
-msgstr "0.00 पर पट्टी पारदर्शी रहती है और वॉलपेपर से रंग लेती है; 1.00 उसे पूरी तरह ढक देता है"
+msgstr ""
+"0.00 पर पट्टी पारदर्शी रहती है और वॉलपेपर से रंग लेती है; 1.00 उसे पूरी तरह ढक देता है"
 
 #: src/ctlpanel.c:1017
 msgid "Bar shape"
@@ -932,7 +987,9 @@ msgstr "संकेतक का त्वरण"
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr "अनुकूली जितना तेज़ चलाएँ उतना आगे जाता है; सपाट 1:1 है। तयशुदा वही है जो libinput उस उपकरण के लिए चुनता है"
+msgstr ""
+"अनुकूली जितना तेज़ चलाएँ उतना आगे जाता है; सपाट 1:1 है। तयशुदा वही है जो libinput उस "
+"उपकरण के लिए चुनता है"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
@@ -942,7 +999,9 @@ msgstr "संकेतक का समतलन"
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr "काँपते या शोर भरे संकेतक को उसके पथ का औसत लेकर स्थिर करता है। थोड़ी देरी लगती है; 0 बंद कर देता है। कच्ची गति पढ़ने वाले खेलों पर असर नहीं"
+msgstr ""
+"काँपते या शोर भरे संकेतक को उसके पथ का औसत लेकर स्थिर करता है। थोड़ी देरी लगती है; 0 बंद "
+"कर देता है। कच्ची गति पढ़ने वाले खेलों पर असर नहीं"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
@@ -967,7 +1026,8 @@ msgstr "सब कुछ बड़ा करें"
 #: src/ctlpanel.c:1115
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
-msgstr "हर पर्दा, हर अनुप्रयोग, कर्सर। Super+Ctrl+= / -, Super+Ctrl+0 वापस कर देता है"
+msgstr ""
+"हर पर्दा, हर अनुप्रयोग, कर्सर। Super+Ctrl+= / -, Super+Ctrl+0 वापस कर देता है"
 
 #: src/ctlpanel.c:1124
 msgid "Monitor settings"
@@ -1001,7 +1061,9 @@ msgstr "सूचनाएँ"
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
-msgstr "कहीं से भी Super+Shift+M। झलक-सूचनाएँ छिपाता है और ध्वनि बंद करता है; गंभीर चेतावनियाँ फिर भी आती हैं"
+msgstr ""
+"कहीं से भी Super+Shift+M। झलक-सूचनाएँ छिपाता है और ध्वनि बंद करता है; गंभीर चेतावनियाँ "
+"फिर भी आती हैं"
 
 #: src/ctlpanel.c:1145
 msgid "Event sounds"
@@ -1087,7 +1149,7 @@ msgstr "प्रिंटर खोजें"
 msgid "Add every network printer that is not set up yet, driverless"
 msgstr "हर उस नेटवर्क प्रिंटर को बिना ड्राइवर जोड़ता है जो अभी सेट नहीं है"
 
-#: src/ctlpanel.c:1204
+#: src/ctlpanel.c:1204 src/power.c:111
 msgid "Power saving"
 msgstr "बिजली की बचत"
 
@@ -1099,7 +1161,7 @@ msgstr "बिजली"
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "मंद करने, बुझाने, ताला लगाने और निलंबित करने तक की निष्क्रिय अवधि"
 
-#: src/ctlpanel.c:1207
+#: src/ctlpanel.c:1207 src/saver.c:837
 msgid "Screensaver"
 msgstr "पर्दा-रक्षक"
 
@@ -1141,7 +1203,8 @@ msgstr "खेल खोलें"
 
 #: src/ctlpanel.c:1239
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
-msgstr "प्राथमिक = वह पर्दा जिसे Super+D में PRIMARY कहा गया है; पूछें खेल की बात मानता है"
+msgstr ""
+"प्राथमिक = वह पर्दा जिसे Super+D में PRIMARY कहा गया है; पूछें खेल की बात मानता है"
 
 #: src/ctlpanel.c:1240
 msgid "Stop the AI while gaming"
@@ -1278,3 +1341,212 @@ msgstr "न्यूनतम"
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
 msgstr "अधिकतम"
+
+#: src/lock.c:413 src/lock.c:846
+msgid "Wrong password"
+msgstr "कूटशब्द ग़लत है"
+
+#: src/lock.c:414 src/lock.c:853
+msgid "Checking…"
+msgstr "जाँच हो रही है…"
+
+#: src/lock.c:1627
+#, c-format
+msgid "Fingerprint disabled — use your password"
+msgstr "उँगली की छाप बंद — अपना कूटशब्द इस्तेमाल कीजिए"
+
+#: src/lock.c:1635
+#, c-format
+msgid "Fingerprint not recognised"
+msgstr "उँगली की छाप पहचानी नहीं गई"
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr "स्लाइड शो के लिए कोई वॉलपेपर नहीं मिला"
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr "इतनी देर बाद दिखाएँ"
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr "जागने पर ताला लगाएँ"
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr "स्लाइड बदलने का अंतराल"
+
+#: src/saver.c:841
+#, fuzzy
+msgid "Lock background"
+msgstr "ताला-पर्दा"
+
+#: src/saver.c:842
+#, fuzzy
+msgid "Lock image"
+msgstr "डॉक का आवर्धन"
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr "ताला-पर्दा मंद करें"
+
+#: src/saver.c:844
+#, fuzzy
+msgid "Lock blur"
+msgstr "पृष्ठभूमि का धुँधलापन"
+
+#: src/saver.c:845
+#, fuzzy
+msgid "Lock colours"
+msgstr "डॉक के कोने"
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr "अभी बज रहा है"
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr "मौसम"
+
+#: src/saver.c:848
+#, fuzzy
+msgid "Temperature in"
+msgstr "रंग तापमान"
+
+#: src/saver.c:849
+#, fuzzy
+msgid "Keyboard layout"
+msgstr "कुंजीपटल शॉर्टकट"
+
+#: src/power.c:112
+#, fuzzy
+msgid "Dim screen"
+msgstr "ताला-पर्दा"
+
+#: src/power.c:113
+msgid "Blank displays"
+msgstr "पर्दे बुझाएँ"
+
+#: src/power.c:114
+#, fuzzy
+msgid "Lock session"
+msgstr "ताला-पर्दा"
+
+#: src/power.c:115
+msgid "Suspend system"
+msgstr "तंत्र को निलंबित करें"
+
+#: src/power.c:116
+msgid "Lid closed (battery)"
+msgstr "ढक्कन बंद (बैटरी)"
+
+#: src/power.c:117
+msgid "Lid closed (plugged in)"
+msgstr "ढक्कन बंद (बिजली पर)"
+
+#: src/power.c:118
+msgid "Lid closed (docked)"
+msgstr "ढक्कन बंद (डॉक में)"
+
+#: src/filters.c:84
+#, fuzzy
+msgid "CRT filters"
+msgstr "सभी फ़िल्टर"
+
+#: src/filters.c:86
+#, fuzzy
+msgid "Screen curvature"
+msgstr "पर्दे का उभार"
+
+#: src/filters.c:88
+#, fuzzy
+msgid "Glitch strength"
+msgstr "चेतावनी पर झिलमिलाहट"
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr "एकवर्णी"
+
+#: src/filters.c:91
+#, fuzzy
+msgid "Phosphor bloom"
+msgstr "फ़ॉस्फ़र की चमक"
+
+#: src/widgets.c:60
+#, fuzzy
+msgid "All widgets"
+msgstr "सभी फ़िल्टर"
+
+#: src/widgets.c:61
+msgid "Audio visualiser"
+msgstr "ध्वनि दृश्यक"
+
+#: src/widgets.c:62
+msgid "System monitor"
+msgstr "तंत्र निगरानी"
+
+#: src/widgets.c:63
+#, fuzzy
+msgid "Desktop clock"
+msgstr "डेस्कटॉप के चिह्न"
+
+#: src/widgets.c:64
+msgid "Quick launch"
+msgstr "त्वरित शुरुआत"
+
+#: src/widgets.c:65
+msgid "Post-it note"
+msgstr "चिप्पी"
+
+#: src/widgets.c:66
+msgid "Pizza"
+msgstr "पिज़्ज़ा"
+
+#: src/widgets.c:67
+msgid "Tuxagotchi"
+msgstr "Tuxagotchi"
+
+#: src/widgets.c:68
+#, fuzzy
+msgid "Analog clock"
+msgstr "एनालॉग घड़ी का डायल"
+
+#: src/widgets.c:69
+msgid "Music player"
+msgstr "संगीत बजानेवाला"
+
+#, fuzzy
+#~ msgid "visualizer"
+#~ msgstr "तुल्यकारक"
+
+#, fuzzy
+#~ msgid "clock"
+#~ msgstr "घड़ी"
+
+#, fuzzy
+#~ msgid "corner_radius"
+#~ msgstr "कोनों की गोलाई"
+
+#, fuzzy
+#~ msgid "shadow"
+#~ msgstr "छाया"
+
+#, fuzzy
+#~ msgid "shadow_spread"
+#~ msgstr "छाया का फैलाव"
+
+#, fuzzy
+#~ msgid "shadow_offset_y"
+#~ msgstr "छाया का X खिसकाव"
+
+#, fuzzy
+#~ msgid "shadow_opacity"
+#~ msgstr "पट्टी की अपारदर्शिता"
+
+#, fuzzy
+#~ msgid "blur_radius"
+#~ msgstr "धुँधलेपन की त्रिज्या"
+
+#, fuzzy
+#~ msgid "blur_passes"
+#~ msgstr "धुँधलेपन के दौर"

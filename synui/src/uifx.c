@@ -37,6 +37,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "i18n.h"
 #include "synui.h"
 
 /* How a row reads and edits. SWITCH renders as a word and has no bar; the rest

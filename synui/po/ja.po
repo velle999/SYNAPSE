@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"POT-Creation-Date: 2026-09-01 11:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -41,7 +41,9 @@ msgstr "壁紙からアクセント色"
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr "アクセント色をテーマではなく壁紙から取ります。自動はそれを土台にした Prism (明るい／暗い) で、それ以外にはなりません"
+msgstr ""
+"アクセント色をテーマではなく壁紙から取ります。自動はそれを土台にした Prism "
+"(明るい／暗い) で、それ以外にはなりません"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
@@ -108,7 +110,9 @@ msgstr "ガラスを揃える"
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr "すべての面が上のガラスに従います。個別に変えるとその面は自分の値を保ち、これを入れ直すまで続きます"
+msgstr ""
+"すべての面が上のガラスに従います。個別に変えるとその面は自分の値を保ち、これ"
+"を入れ直すまで続きます"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
@@ -118,7 +122,8 @@ msgstr "可読性の補正"
 msgid ""
 "Surfaces go less see-through where their text would not read. Off draws "
 "exactly what you asked for"
-msgstr "文字が読みにくくなる場所では面の透けを弱めます。オフは指定どおりに描きます"
+msgstr ""
+"文字が読みにくくなる場所では面の透けを弱めます。オフは指定どおりに描きます"
 
 #: src/ctlpanel.c:467
 msgid "Live backdrop"
@@ -128,7 +133,9 @@ msgstr "背景を実際に映す"
 msgid ""
 "Menus and panels ink themselves off the window behind them rather than the "
 "wallpaper it covers. Lands within a second"
-msgstr "メニューやパネルは、覆っている壁紙ではなく背後のウィンドウから色を取ります。1 秒ほどで反映されます"
+msgstr ""
+"メニューやパネルは、覆っている壁紙ではなく背後のウィンドウから色を取ります。"
+"1 秒ほどで反映されます"
 
 #: src/ctlpanel.c:472
 msgid "Unfocused opacity"
@@ -162,7 +169,9 @@ msgstr "すべて透明にする"
 msgid ""
 "Bar, dock and menus lose their background entirely, inked off the wallpaper. "
 "The rows above put it back"
-msgstr "バー、ドック、メニューの背景を完全になくし、壁紙から色を取ります。上の各行で戻せます"
+msgstr ""
+"バー、ドック、メニューの背景を完全になくし、壁紙から色を取ります。上の各行で"
+"戻せます"
 
 #: src/ctlpanel.c:513 src/ctlpanel.c:514
 msgid "CRT effects"
@@ -176,7 +185,7 @@ msgstr "GLES の後処理。持たないレンダラーではオフになりま�
 msgid "All filters"
 msgstr "すべてのフィルター"
 
-#: src/ctlpanel.c:517
+#: src/ctlpanel.c:517 src/filters.c:85
 msgid "Scanlines"
 msgstr "走査線"
 
@@ -184,7 +193,7 @@ msgstr "走査線"
 msgid "Screen curve"
 msgstr "画面の湾曲"
 
-#: src/ctlpanel.c:523
+#: src/ctlpanel.c:523 src/filters.c:87
 msgid "Chromatic aberration"
 msgstr "色収差"
 
@@ -196,7 +205,7 @@ msgstr "警告時のグリッチ"
 msgid "Phosphor tint"
 msgstr "蛍光体の色"
 
-#: src/ctlpanel.c:531
+#: src/ctlpanel.c:531 src/filters.c:89
 msgid "Phosphor"
 msgstr "蛍光体"
 
@@ -216,15 +225,16 @@ msgstr "蛍光体の色へ寄せます。ブルームはこれを上げてから
 msgid "Phosphor glow"
 msgstr "蛍光体の輝き"
 
-#: src/ctlpanel.c:542
+#: src/ctlpanel.c:542 src/filters.c:92
 msgid "Phosphor lift"
 msgstr "蛍光体の下地"
 
 #: src/ctlpanel.c:545
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
-msgstr "光っていない面がどれだけ光るか: 0 は黒のまま、上げると走査面が明るくなります"
+msgstr ""
+"光っていない面がどれだけ光るか: 0 は黒のまま、上げると走査面が明るくなります"
 
-#: src/ctlpanel.c:546
+#: src/ctlpanel.c:546 src/filters.c:93
 msgid "Phosphor hue"
 msgstr "蛍光体の色相"
 
@@ -232,7 +242,8 @@ msgstr "蛍光体の色相"
 msgid ""
 "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
 "is the preset"
-msgstr "色味を回します: 下げると赤寄り (琥珀から橙)、上げると黄寄り。0.50 が既定です"
+msgstr ""
+"色味を回します: 下げると赤寄り (琥珀から橙)、上げると黄寄り。0.50 が既定です"
 
 #: src/ctlpanel.c:557
 msgid "Titlebars"
@@ -336,7 +347,9 @@ msgstr "ぼかし"
 
 #: src/ctlpanel.c:612
 msgid "Frosts what is behind a translucent window. Opaque ones cost nothing"
-msgstr "半透明なウィンドウの背後をすりガラスにします。不透明なものには負荷がかかりません"
+msgstr ""
+"半透明なウィンドウの背後をすりガラスにします。不透明なものには負荷がかかりま"
+"せん"
 
 #: src/ctlpanel.c:613
 msgid "Blur passes"
@@ -382,7 +395,9 @@ msgstr "アニメーション"
 msgid ""
 "How a window arrives. Closing is not animated: the client's buffer is gone "
 "the moment it unmaps"
-msgstr "ウィンドウの現れ方。閉じる方は動きません: 解除した瞬間にクライアントのバッファが消えるためです"
+msgstr ""
+"ウィンドウの現れ方。閉じる方は動きません: 解除した瞬間にクライアントのバッ"
+"ファが消えるためです"
 
 #: src/ctlpanel.c:647
 msgid "Window length"
@@ -390,7 +405,8 @@ msgstr "ウィンドウの長さ"
 
 #: src/ctlpanel.c:650
 msgid "0 jumps straight to the end state. Also times the niri strip slide"
-msgstr "0 なら最終状態へ直接飛びます。niri のストリップの滑りもこれで決まります"
+msgstr ""
+"0 なら最終状態へ直接飛びます。niri のストリップの滑りもこれで決まります"
 
 #: src/ctlpanel.c:651
 msgid "Rise distance"
@@ -409,7 +425,9 @@ msgstr "デスクトップの切り替え"
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr "フェードは二つの面を混ぜ、スライドは切り替えた方向へ送り出し、キューブは面を立体的に回します"
+msgstr ""
+"フェードは二つの面を混ぜ、スライドは切り替えた方向へ送り出し、キューブは面を"
+"立体的に回します"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
@@ -419,7 +437,9 @@ msgstr "切り替えの長さ"
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr "スライドはフェードより長め — 目が追う必要があります — キューブはさらに長めに。400〜600 を目安に"
+msgstr ""
+"スライドはフェードより長め — 目が追う必要があります — キューブはさらに長め"
+"に。400〜600 を目安に"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
@@ -428,7 +448,9 @@ msgstr "イーサリング"
 #: src/ctlpanel.c:668
 msgid ""
 "Shared by both, and by the strip slide: two easings read as two desktops"
-msgstr "両方と、ストリップの滑りに共通です: 曲線が二つあると二つのデスクトップに見えます"
+msgstr ""
+"両方と、ストリップの滑りに共通です: 曲線が二つあると二つのデスクトップに見え"
+"ます"
 
 #: src/ctlpanel.c:669
 msgid "Desktops span"
@@ -438,7 +460,9 @@ msgstr "デスクトップの範囲"
 msgid ""
 "Shared: one desktop across every monitor. Per-monitor: each screen remembers "
 "its own, and the switch moves only the focused one"
-msgstr "共通: 全画面で一つのデスクトップ。画面ごと: 各画面が自分の面を覚え、切り替えは選択中の画面だけ動かします"
+msgstr ""
+"共通: 全画面で一つのデスクトップ。画面ごと: 各画面が自分の面を覚え、切り替え"
+"は選択中の画面だけ動かします"
 
 #: src/ctlpanel.c:678
 msgid "Focus follows"
@@ -452,7 +476,9 @@ msgstr "挙動"
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr "クリック: クリックのみで移ります。ゆるいと厳密はポインターに従い、デスクトップ上では厳密が外し、ゆるいは保ちます"
+msgstr ""
+"クリック: クリックのみで移ります。ゆるいと厳密はポインターに従い、デスクトッ"
+"プ上では厳密が外し、ゆるいは保ちます"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
@@ -462,7 +488,9 @@ msgstr "フォーカスの遅延"
 msgid ""
 "How long the pointer rests before focus follows it. 0 is instant, which also "
 "focuses windows you only crossed over"
-msgstr "ポインターが止まってからフォーカスが移るまで。0 は即時で、通り過ぎただけのウィンドウにも移ります"
+msgstr ""
+"ポインターが止まってからフォーカスが移るまで。0 は即時で、通り過ぎただけの"
+"ウィンドウにも移ります"
 
 #: src/ctlpanel.c:689
 msgid "Edge snapping"
@@ -480,7 +508,9 @@ msgstr "スナップの範囲"
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr "端からどれだけ近づくとスナップが働くか。高精細な画面や、速いポインターが帯を跳び越すときは上げてください"
+msgstr ""
+"端からどれだけ近づくとスナップが働くか。高精細な画面や、速いポインターが帯を"
+"跳び越すときは上げてください"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
@@ -502,7 +532,9 @@ msgstr "Alt+Tab"
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr "オンなら Alt+Tab で面全体が開きます。オフなら使用順のサムネイル列 — 下の三行はその列の設定です"
+msgstr ""
+"オンなら Alt+Tab で面全体が開きます。オフなら使用順のサムネイル列 — 下の三行"
+"はその列の設定です"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
@@ -532,7 +564,9 @@ msgstr "パネル"
 msgid ""
 "On, an open panel moves to whichever monitor the pointer is on. Off, it "
 "stays on the monitor you opened it on"
-msgstr "オンなら開いているパネルがポインターのいる画面へ移ります。オフなら開いた画面にとどまります"
+msgstr ""
+"オンなら開いているパネルがポインターのいる画面へ移ります。オフなら開いた画面"
+"にとどまります"
 
 #: src/ctlpanel.c:731
 msgid "Calculator"
@@ -542,7 +576,9 @@ msgstr "電卓"
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr "ウィンドウ: 見出しでつかんで動かし、他は自由にクリック。外側で閉じる: 離れてクリックすると閉じます。Esc は常に閉じます"
+msgstr ""
+"ウィンドウ: 見出しでつかんで動かし、他は自由にクリック。外側で閉じる: 離れて"
+"クリックすると閉じます。Esc は常に閉じます"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
@@ -616,7 +652,9 @@ msgstr "ドックをウィンドウより前に"
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr "オフなら固定したドックはウィンドウに隠れます。自動で隠れる方は常に前面 — 何があってもその上に呼び出されます"
+msgstr ""
+"オフなら固定したドックはウィンドウに隠れます。自動で隠れる方は常に前面 — 何が"
+"あってもその上に呼び出されます"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
@@ -654,7 +692,9 @@ msgstr "拡大の大きさ"
 msgid ""
 "How big the icon under the pointer gets. The dock makes room for it, so a "
 "big swell is a taller dock"
-msgstr "ポインターの下のアイコンがどこまで大きくなるか。ドックが場所を空けるので、大きく膨らむほどドックも高くなります"
+msgstr ""
+"ポインターの下のアイコンがどこまで大きくなるか。ドックが場所を空けるので、大"
+"きく膨らむほどドックも高くなります"
 
 #: src/ctlpanel.c:822
 msgid "Dock style"
@@ -682,7 +722,8 @@ msgstr "ドックの角"
 
 #: src/ctlpanel.c:849
 msgid "Its own, not the window radius. Caps at half the dock's size"
-msgstr "ドック専用で、ウィンドウの丸みとは別です。ドックの大きさの半分が上限です"
+msgstr ""
+"ドック専用で、ウィンドウの丸みとは別です。ドックの大きさの半分が上限です"
 
 #: src/ctlpanel.c:851
 msgid "Show all apps button"
@@ -715,7 +756,9 @@ msgstr "電源ボタンを表示"
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr "アプリボタンの先の電源印。押すとメニューが開きます — ロック、ログアウト、スリープ、再起動、シャットダウン"
+msgstr ""
+"アプリボタンの先の電源印。押すとメニューが開きます — ロック、ログアウト、ス"
+"リープ、再起動、シャットダウン"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
@@ -747,7 +790,9 @@ msgstr "ドックの時計"
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr "時刻と日付を独立したセルに — セルを動かせば列の好きな場所へ。12/24 時間表記は時計の設定に従います"
+msgstr ""
+"時刻と日付を独立したセルに — セルを動かせば列の好きな場所へ。12/24 時間表記は"
+"時計の設定に従います"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
@@ -757,7 +802,9 @@ msgstr "アナログのドック時計"
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr "ドックの時計を文字盤で描きます。左右の端のドックに収まる唯一の時計です — 縦の列は時刻の文字列に合わせて広がれません"
+msgstr ""
+"ドックの時計を文字盤で描きます。左右の端のドックに収まる唯一の時計です — 縦の"
+"列は時刻の文字列に合わせて広がれません"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
@@ -777,7 +824,9 @@ msgstr "アナログ時計の文字盤"
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr "アナログ時計ウィジェットが描く文字盤 — ウィジェットから置くデスクトップの方です。ドックのアナログ時計の意匠は一つだけです"
+msgstr ""
+"アナログ時計ウィジェットが描く文字盤 — ウィジェットから置くデスクトップの方で"
+"す。ドックのアナログ時計の意匠は一つだけです"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
@@ -787,7 +836,9 @@ msgstr "スタートメニュー"
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr "Super の単押しと Super+Escape で開くもの。キーボードショートカットの一覧はこの行に従いますが、ドックのアプリボタンは従いません"
+msgstr ""
+"Super の単押しと Super+Escape で開くもの。キーボードショートカットの一覧はこ"
+"の行に従いますが、ドックのアプリボタンは従いません"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
@@ -801,7 +852,9 @@ msgstr "バー"
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr "上のバーだけ — ウィジェット、付箋、スタートメニューは残ります。waybar のデスクトップには bar_stop_cmd/bar_start_cmd が要ります"
+msgstr ""
+"上のバーだけ — ウィジェット、付箋、スタートメニューは残ります。waybar のデス"
+"クトップには bar_stop_cmd/bar_start_cmd が要ります"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
@@ -827,7 +880,9 @@ msgstr "バーを自動で隠す"
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr "すべての画面のバーを一度に。画面ごとの設定はバー自身の右クリックメニューにあり、「混在」は食い違っている状態です"
+msgstr ""
+"すべての画面のバーを一度に。画面ごとの設定はバー自身の右クリックメニューにあ"
+"り、「混在」は食い違っている状態です"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
@@ -867,7 +922,8 @@ msgstr "デスクトップの猫"
 
 #: src/ctlpanel.c:1031
 msgid "Super+Shift+C toggles it any time; this is only the login state"
-msgstr "Super+Shift+C でいつでも切り替えられます。これはログイン時の状態だけです"
+msgstr ""
+"Super+Shift+C でいつでも切り替えられます。これはログイン時の状態だけです"
 
 #: src/ctlpanel.c:1032
 msgid "Desktop cat breed"
@@ -933,7 +989,9 @@ msgstr "ポインターの加速"
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr "適応は速く動かすほど大きく動きます。フラットは 1:1。既定は libinput が機器ごとに選んだ値です"
+msgstr ""
+"適応は速く動かすほど大きく動きます。フラットは 1:1。既定は libinput が機器ご"
+"とに選んだ値です"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
@@ -943,7 +1001,9 @@ msgstr "ポインターの平滑化"
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr "震えや雑音のあるポインターを、経路をならして落ち着かせます。わずかに遅れます。0 でオフ。生の動きを読む game には影響しません"
+msgstr ""
+"震えや雑音のあるポインターを、経路をならして落ち着かせます。わずかに遅れま"
+"す。0 でオフ。生の動きを読む game には影響しません"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
@@ -959,7 +1019,8 @@ msgstr "画面"
 
 #: src/ctlpanel.c:1104
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
-msgstr "拡張、複製、内蔵をオフ (蓋を閉じたとき)。Super+D の m でも切り替わります"
+msgstr ""
+"拡張、複製、内蔵をオフ (蓋を閉じたとき)。Super+D の m でも切り替わります"
 
 #: src/ctlpanel.c:1114
 msgid "Scale everything"
@@ -968,7 +1029,9 @@ msgstr "全体を拡大する"
 #: src/ctlpanel.c:1115
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
-msgstr "すべての画面、すべてのアプリ、カーソル。Super+Ctrl+= / -、Super+Ctrl+0 で戻ります"
+msgstr ""
+"すべての画面、すべてのアプリ、カーソル。Super+Ctrl+= / -、Super+Ctrl+0 で戻り"
+"ます"
 
 #: src/ctlpanel.c:1124
 msgid "Monitor settings"
@@ -1002,7 +1065,8 @@ msgstr "通知"
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
-msgstr "どこでも Super+Shift+M。通知の表示を隠し、音を消します。重大な警告は届きます"
+msgstr ""
+"どこでも Super+Shift+M。通知の表示を隠し、音を消します。重大な警告は届きます"
 
 #: src/ctlpanel.c:1145
 msgid "Event sounds"
@@ -1018,7 +1082,8 @@ msgstr "音"
 
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
-msgstr "テレビやモニターをつないだら音をそちらへ移します。自動 = ノートパソコン"
+msgstr ""
+"テレビやモニターをつないだら音をそちらへ移します。自動 = ノートパソコン"
 
 #: src/ctlpanel.c:1157
 msgid "Equalizer"
@@ -1038,7 +1103,9 @@ msgstr "読み上げ"
 
 #: src/ctlpanel.c:1175
 msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
-msgstr "フォーカスが移るたびに、そのウィンドウを読み上げます。Super+Shift+U で切り替わります"
+msgstr ""
+"フォーカスが移るたびに、そのウィンドウを読み上げます。Super+Shift+U で切り替"
+"わります"
 
 #: src/ctlpanel.c:1176
 msgid "Answer to its name"
@@ -1086,9 +1153,10 @@ msgstr "プリンターを探す"
 
 #: src/ctlpanel.c:1201
 msgid "Add every network printer that is not set up yet, driverless"
-msgstr "まだ設定していないネットワークプリンターを、ドライバーなしですべて追加します"
+msgstr ""
+"まだ設定していないネットワークプリンターを、ドライバーなしですべて追加します"
 
-#: src/ctlpanel.c:1204
+#: src/ctlpanel.c:1204 src/power.c:111
 msgid "Power saving"
 msgstr "省電力"
 
@@ -1100,7 +1168,7 @@ msgstr "電源"
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "暗くする、消す、ロックする、スリープするまでの待ち時間"
 
-#: src/ctlpanel.c:1207
+#: src/ctlpanel.c:1207 src/saver.c:837
 msgid "Screensaver"
 msgstr "スクリーンセーバー"
 
@@ -1118,7 +1186,8 @@ msgstr "指紋で解除する"
 
 #: src/ctlpanel.c:1222
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
-msgstr "fprintd を入れて fprintd-enroll を実行してください。パスワードも常に使えます"
+msgstr ""
+"fprintd を入れて fprintd-enroll を実行してください。パスワードも常に使えます"
 
 #: src/ctlpanel.c:1230 src/ctlpanel.c:1231
 msgid "Game mode"
@@ -1126,7 +1195,8 @@ msgstr "ゲームモード"
 
 #: src/ctlpanel.c:1232
 msgid "Enter cycles auto / always on / always off — same as Super+G"
-msgstr "Enter で 自動 / 常にオン / 常にオフ を切り替えます — Super+G と同じです"
+msgstr ""
+"Enter で 自動 / 常にオン / 常にオフ を切り替えます — Super+G と同じです"
 
 #: src/ctlpanel.c:1233
 msgid "Detect games"
@@ -1142,7 +1212,9 @@ msgstr "ゲームを開く画面"
 
 #: src/ctlpanel.c:1239
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
-msgstr "プライマリ = Super+D で PRIMARY と印を付けた画面。確認する はゲームの指定に従います"
+msgstr ""
+"プライマリ = Super+D で PRIMARY と印を付けた画面。確認する はゲームの指定に従"
+"います"
 
 #: src/ctlpanel.c:1240
 msgid "Stop the AI while gaming"
@@ -1279,3 +1351,212 @@ msgstr "最小値"
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
 msgstr "最大値"
+
+#: src/lock.c:413 src/lock.c:846
+msgid "Wrong password"
+msgstr "パスワードが違います"
+
+#: src/lock.c:414 src/lock.c:853
+msgid "Checking…"
+msgstr "確認中…"
+
+#: src/lock.c:1627
+#, c-format
+msgid "Fingerprint disabled — use your password"
+msgstr "指紋認証は無効です — パスワードをお使いください"
+
+#: src/lock.c:1635
+#, c-format
+msgid "Fingerprint not recognised"
+msgstr "指紋を認識できませんでした"
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr "スライドショー用の壁紙が見つかりません"
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr "表示までの時間"
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr "復帰時にロック"
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr "切り替え間隔"
+
+#: src/saver.c:841
+#, fuzzy
+msgid "Lock background"
+msgstr "ロック画面"
+
+#: src/saver.c:842
+#, fuzzy
+msgid "Lock image"
+msgstr "ドックの拡大"
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr "ロック画面を暗く"
+
+#: src/saver.c:844
+#, fuzzy
+msgid "Lock blur"
+msgstr "背景のぼかし"
+
+#: src/saver.c:845
+#, fuzzy
+msgid "Lock colours"
+msgstr "ドックの角"
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr "再生中"
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr "天気"
+
+#: src/saver.c:848
+#, fuzzy
+msgid "Temperature in"
+msgstr "色温度"
+
+#: src/saver.c:849
+#, fuzzy
+msgid "Keyboard layout"
+msgstr "キーボードショートカット"
+
+#: src/power.c:112
+#, fuzzy
+msgid "Dim screen"
+msgstr "ロック画面"
+
+#: src/power.c:113
+msgid "Blank displays"
+msgstr "画面を消す"
+
+#: src/power.c:114
+#, fuzzy
+msgid "Lock session"
+msgstr "ロック画面"
+
+#: src/power.c:115
+msgid "Suspend system"
+msgstr "システムをスリープ"
+
+#: src/power.c:116
+msgid "Lid closed (battery)"
+msgstr "ふたを閉じたとき（バッテリー）"
+
+#: src/power.c:117
+msgid "Lid closed (plugged in)"
+msgstr "ふたを閉じたとき（電源接続）"
+
+#: src/power.c:118
+msgid "Lid closed (docked)"
+msgstr "ふたを閉じたとき（ドック接続）"
+
+#: src/filters.c:84
+#, fuzzy
+msgid "CRT filters"
+msgstr "すべてのフィルター"
+
+#: src/filters.c:86
+#, fuzzy
+msgid "Screen curvature"
+msgstr "画面の湾曲"
+
+#: src/filters.c:88
+#, fuzzy
+msgid "Glitch strength"
+msgstr "警告時のグリッチ"
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr "モノクロ"
+
+#: src/filters.c:91
+#, fuzzy
+msgid "Phosphor bloom"
+msgstr "蛍光体の輝き"
+
+#: src/widgets.c:60
+#, fuzzy
+msgid "All widgets"
+msgstr "すべてのフィルター"
+
+#: src/widgets.c:61
+msgid "Audio visualiser"
+msgstr "オーディオビジュアライザー"
+
+#: src/widgets.c:62
+msgid "System monitor"
+msgstr "システムモニター"
+
+#: src/widgets.c:63
+#, fuzzy
+msgid "Desktop clock"
+msgstr "デスクトップのアイコン"
+
+#: src/widgets.c:64
+msgid "Quick launch"
+msgstr "クイック起動"
+
+#: src/widgets.c:65
+msgid "Post-it note"
+msgstr "付箋"
+
+#: src/widgets.c:66
+msgid "Pizza"
+msgstr "ピザ"
+
+#: src/widgets.c:67
+msgid "Tuxagotchi"
+msgstr "たぬきごっち"
+
+#: src/widgets.c:68
+#, fuzzy
+msgid "Analog clock"
+msgstr "アナログ時計の文字盤"
+
+#: src/widgets.c:69
+msgid "Music player"
+msgstr "音楽プレーヤー"
+
+#, fuzzy
+#~ msgid "visualizer"
+#~ msgstr "イコライザー"
+
+#, fuzzy
+#~ msgid "clock"
+#~ msgstr "時計"
+
+#, fuzzy
+#~ msgid "corner_radius"
+#~ msgstr "角の丸み"
+
+#, fuzzy
+#~ msgid "shadow"
+#~ msgstr "影"
+
+#, fuzzy
+#~ msgid "shadow_spread"
+#~ msgstr "影の広がり"
+
+#, fuzzy
+#~ msgid "shadow_offset_y"
+#~ msgstr "影の位置 X"
+
+#, fuzzy
+#~ msgid "shadow_opacity"
+#~ msgstr "バーの不透明度"
+
+#, fuzzy
+#~ msgid "blur_radius"
+#~ msgstr "ぼかしの半径"
+
+#, fuzzy
+#~ msgid "blur_passes"
+#~ msgstr "ぼかしの回数"

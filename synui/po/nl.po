@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"POT-Creation-Date: 2026-09-01 11:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -41,7 +41,9 @@ msgstr "Accent uit de achtergrond"
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr "Neemt de accentkleur uit de achtergrond in plaats van uit het thema. Auto is Prism (licht of donker), dat daarop bouwt, en verder niets"
+msgstr ""
+"Neemt de accentkleur uit de achtergrond in plaats van uit het thema. Auto is "
+"Prism (licht of donker), dat daarop bouwt, en verder niets"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
@@ -65,7 +67,9 @@ msgstr "Tekst"
 
 #: src/ctlpanel.c:393
 msgid "The family every synui panel draws in. Previews live; Esc puts it back"
-msgstr "De familie waarin elk synui-paneel tekent. De voorvertoning is direct; Esc zet het terug"
+msgstr ""
+"De familie waarin elk synui-paneel tekent. De voorvertoning is direct; Esc "
+"zet het terug"
 
 #: src/ctlpanel.c:406
 msgid "Font size"
@@ -81,7 +85,9 @@ msgstr "Tekstschaal"
 
 #: src/ctlpanel.c:413
 msgid "The bar and the SYNAPSE apps — Files, Settings, Disks, Software"
-msgstr "De balk en de SYNAPSE-programma's — Bestanden, Instellingen, Schijven, Software"
+msgstr ""
+"De balk en de SYNAPSE-programma's — Bestanden, Instellingen, Schijven, "
+"Software"
 
 #: src/ctlpanel.c:415
 msgid "Transparency"
@@ -93,12 +99,15 @@ msgstr "Glas"
 
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
-msgstr "Dekking van het actieve venster. Links/Rechts stellen bij; Enter zet het uit"
+msgstr ""
+"Dekking van het actieve venster. Links/Rechts stellen bij; Enter zet het uit"
 
 #: src/ctlpanel.c:437
 msgid ""
 "Auto follows the theme · Off is never glass · or set how much you see through"
-msgstr "Auto volgt het thema · Uit is nooit glas · of stel in hoeveel er doorheen komt"
+msgstr ""
+"Auto volgt het thema · Uit is nooit glas · of stel in hoeveel er doorheen "
+"komt"
 
 #: src/ctlpanel.c:443
 msgid "Sync all glass"
@@ -108,7 +117,9 @@ msgstr "Alle glas gelijktrekken"
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr "Elk vlak volgt het Glas hierboven. Verander er één en die houdt zijn eigen waarde tot je dit weer aanzet"
+msgstr ""
+"Elk vlak volgt het Glas hierboven. Verander er één en die houdt zijn eigen "
+"waarde tot je dit weer aanzet"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
@@ -118,7 +129,9 @@ msgstr "Leesbaarheidscorrectie"
 msgid ""
 "Surfaces go less see-through where their text would not read. Off draws "
 "exactly what you asked for"
-msgstr "Vlakken worden minder doorzichtig waar hun tekst niet te lezen zou zijn. Uit tekent precies wat je hebt gevraagd"
+msgstr ""
+"Vlakken worden minder doorzichtig waar hun tekst niet te lezen zou zijn. Uit "
+"tekent precies wat je hebt gevraagd"
 
 #: src/ctlpanel.c:467
 msgid "Live backdrop"
@@ -128,7 +141,9 @@ msgstr "Levende achtergrond"
 msgid ""
 "Menus and panels ink themselves off the window behind them rather than the "
 "wallpaper it covers. Lands within a second"
-msgstr "Menu's en panelen nemen hun kleur van het venster erachter in plaats van van de achtergrond die het bedekt. Binnen een seconde zichtbaar"
+msgstr ""
+"Menu's en panelen nemen hun kleur van het venster erachter in plaats van van "
+"de achtergrond die het bedekt. Binnen een seconde zichtbaar"
 
 #: src/ctlpanel.c:472
 msgid "Unfocused opacity"
@@ -144,7 +159,8 @@ msgstr "Terminalglas"
 
 #: src/ctlpanel.c:479
 msgid "foot draws its own background alpha, so it needs its own level"
-msgstr "foot tekent zijn eigen achtergrondalfa en heeft dus een eigen niveau nodig"
+msgstr ""
+"foot tekent zijn eigen achtergrondalfa en heeft dus een eigen niveau nodig"
 
 #: src/ctlpanel.c:489
 msgid "Make it all solid"
@@ -152,7 +168,9 @@ msgstr "Maak alles ondoorzichtig"
 
 #: src/ctlpanel.c:490
 msgid "Glass off and windows opaque, in one press. The rows above put it back"
-msgstr "Glas uit en vensters dekkend, met één druk. De regels hierboven zetten het terug"
+msgstr ""
+"Glas uit en vensters dekkend, met één druk. De regels hierboven zetten het "
+"terug"
 
 #: src/ctlpanel.c:509
 msgid "Make it all clear"
@@ -162,7 +180,9 @@ msgstr "Maak alles doorzichtig"
 msgid ""
 "Bar, dock and menus lose their background entirely, inked off the wallpaper. "
 "The rows above put it back"
-msgstr "Balk, dock en menu's verliezen hun achtergrond volledig en kleuren naar de achtergrond. De regels hierboven zetten het terug"
+msgstr ""
+"Balk, dock en menu's verliezen hun achtergrond volledig en kleuren naar de "
+"achtergrond. De regels hierboven zetten het terug"
 
 #: src/ctlpanel.c:513 src/ctlpanel.c:514
 msgid "CRT effects"
@@ -176,7 +196,7 @@ msgstr "De GLES-nabewerking. Uit op renderers die er geen hebben"
 msgid "All filters"
 msgstr "Alle filters"
 
-#: src/ctlpanel.c:517
+#: src/ctlpanel.c:517 src/filters.c:85
 msgid "Scanlines"
 msgstr "Scanlijnen"
 
@@ -184,7 +204,7 @@ msgstr "Scanlijnen"
 msgid "Screen curve"
 msgstr "Schermkromming"
 
-#: src/ctlpanel.c:523
+#: src/ctlpanel.c:523 src/filters.c:87
 msgid "Chromatic aberration"
 msgstr "Chromatische aberratie"
 
@@ -196,7 +216,7 @@ msgstr "Storing bij een waarschuwing"
 msgid "Phosphor tint"
 msgstr "Fosforkleur"
 
-#: src/ctlpanel.c:531
+#: src/ctlpanel.c:531 src/filters.c:89
 msgid "Phosphor"
 msgstr "Fosfor"
 
@@ -216,15 +236,17 @@ msgstr "Meng naar de fosforkleur toe. De gloed bijt pas als dit omhoog gaat"
 msgid "Phosphor glow"
 msgstr "Fosforgloed"
 
-#: src/ctlpanel.c:542
+#: src/ctlpanel.c:542 src/filters.c:92
 msgid "Phosphor lift"
 msgstr "Fosforbasis"
 
 #: src/ctlpanel.c:545
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
-msgstr "Hoe sterk het onverlichte vlak gloeit: 0 houdt het zwart, hoger verlicht het raster"
+msgstr ""
+"Hoe sterk het onverlichte vlak gloeit: 0 houdt het zwart, hoger verlicht het "
+"raster"
 
-#: src/ctlpanel.c:546
+#: src/ctlpanel.c:546 src/filters.c:93
 msgid "Phosphor hue"
 msgstr "Fosfortint"
 
@@ -232,7 +254,9 @@ msgstr "Fosfortint"
 msgid ""
 "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
 "is the preset"
-msgstr "Draait de kleur van de tint: omlaag roder (amber naar oranje), omhoog geler. 0,50 is de standaard"
+msgstr ""
+"Draait de kleur van de tint: omlaag roder (amber naar oranje), omhoog geler. "
+"0,50 is de standaard"
 
 #: src/ctlpanel.c:557
 msgid "Titlebars"
@@ -264,7 +288,8 @@ msgstr "Hoekafronding"
 
 #: src/ctlpanel.c:570
 msgid "Forced square while maximized, so nothing pokes past the output"
-msgstr "Gedwongen vierkant bij maximalisatie, zodat niets buiten het scherm steekt"
+msgstr ""
+"Gedwongen vierkant bij maximalisatie, zodat niets buiten het scherm steekt"
 
 #: src/ctlpanel.c:572
 msgid "Tiling gap"
@@ -324,7 +349,9 @@ msgstr "Schaduwen van clients bijsnijden"
 
 #: src/ctlpanel.c:606
 msgid "Hides the invisible margin apps like Firefox draw their own shadow in"
-msgstr "Verbergt de onzichtbare marge waarin programma's als Firefox hun eigen schaduw tekenen"
+msgstr ""
+"Verbergt de onzichtbare marge waarin programma's als Firefox hun eigen "
+"schaduw tekenen"
 
 #: src/ctlpanel.c:608
 msgid "Backdrop blur"
@@ -336,7 +363,9 @@ msgstr "Vervaging"
 
 #: src/ctlpanel.c:612
 msgid "Frosts what is behind a translucent window. Opaque ones cost nothing"
-msgstr "Maakt matglas van wat achter een doorschijnend venster ligt. Dekkende kosten niets"
+msgstr ""
+"Maakt matglas van wat achter een doorschijnend venster ligt. Dekkende kosten "
+"niets"
 
 #: src/ctlpanel.c:613
 msgid "Blur passes"
@@ -368,7 +397,8 @@ msgstr "Vervagingshalo"
 
 #: src/ctlpanel.c:634
 msgid "How far the blur reaches past the window. 0 keeps it inside the frame"
-msgstr "Hoe ver de vervaging buiten het venster reikt. 0 houdt haar binnen het kader"
+msgstr ""
+"Hoe ver de vervaging buiten het venster reikt. 0 houdt haar binnen het kader"
 
 #: src/ctlpanel.c:641
 msgid "Window open"
@@ -382,7 +412,9 @@ msgstr "Animatie"
 msgid ""
 "How a window arrives. Closing is not animated: the client's buffer is gone "
 "the moment it unmaps"
-msgstr "Hoe een venster verschijnt. Sluiten wordt niet geanimeerd: de buffer van het programma is weg zodra het zich afmeldt"
+msgstr ""
+"Hoe een venster verschijnt. Sluiten wordt niet geanimeerd: de buffer van het "
+"programma is weg zodra het zich afmeldt"
 
 #: src/ctlpanel.c:647
 msgid "Window length"
@@ -390,7 +422,9 @@ msgstr "Duur voor het venster"
 
 #: src/ctlpanel.c:650
 msgid "0 jumps straight to the end state. Also times the niri strip slide"
-msgstr "0 springt meteen naar de eindstand. Bepaalt ook het schuiven van de niri-strook"
+msgstr ""
+"0 springt meteen naar de eindstand. Bepaalt ook het schuiven van de niri-"
+"strook"
 
 #: src/ctlpanel.c:651
 msgid "Rise distance"
@@ -399,7 +433,8 @@ msgstr "Stijgafstand"
 #: src/ctlpanel.c:654
 msgid ""
 "How far a Rise window travels up into place. Ignored by the other styles"
-msgstr "Hoe ver een opstijgend venster omhoog reist. De andere stijlen negeren dit"
+msgstr ""
+"Hoe ver een opstijgend venster omhoog reist. De andere stijlen negeren dit"
 
 #: src/ctlpanel.c:655
 msgid "Desktop switch"
@@ -409,7 +444,9 @@ msgstr "Bureaubladwissel"
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr "Vervagen mengt de twee bureaubladen; Schuiven stuurt ze de kant op waarheen je wisselde; Kubus draait het bureaublad in 3D"
+msgstr ""
+"Vervagen mengt de twee bureaubladen; Schuiven stuurt ze de kant op waarheen "
+"je wisselde; Kubus draait het bureaublad in 3D"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
@@ -419,7 +456,9 @@ msgstr "Duur voor de wissel"
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr "Schuiven wil langer dan vervagen — het oog moet het ergens heen volgen — en een kubus nog langer; probeer 400-600"
+msgstr ""
+"Schuiven wil langer dan vervagen — het oog moet het ergens heen volgen — en "
+"een kubus nog langer; probeer 400-600"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
@@ -428,7 +467,9 @@ msgstr "Animatiecurve"
 #: src/ctlpanel.c:668
 msgid ""
 "Shared by both, and by the strip slide: two easings read as two desktops"
-msgstr "Gedeeld door beide en door het schuiven van de strook: twee curves lezen als twee bureaubladen"
+msgstr ""
+"Gedeeld door beide en door het schuiven van de strook: twee curves lezen als "
+"twee bureaubladen"
 
 #: src/ctlpanel.c:669
 msgid "Desktops span"
@@ -438,7 +479,9 @@ msgstr "Bereik van bureaubladen"
 msgid ""
 "Shared: one desktop across every monitor. Per-monitor: each screen remembers "
 "its own, and the switch moves only the focused one"
-msgstr "Gedeeld: één bureaublad over alle schermen. Per scherm: elk onthoudt het zijne, en de wissel verplaatst alleen het actieve"
+msgstr ""
+"Gedeeld: één bureaublad over alle schermen. Per scherm: elk onthoudt het "
+"zijne, en de wissel verplaatst alleen het actieve"
 
 #: src/ctlpanel.c:678
 msgid "Focus follows"
@@ -452,7 +495,9 @@ msgstr "Gedrag"
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr "Klik: alleen een klik geeft focus. Los en Strikt volgen de aanwijzer; boven het bureaublad laat Strikt de focus los en houdt Los hem vast"
+msgstr ""
+"Klik: alleen een klik geeft focus. Los en Strikt volgen de aanwijzer; boven "
+"het bureaublad laat Strikt de focus los en houdt Los hem vast"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
@@ -462,7 +507,9 @@ msgstr "Focusvertraging"
 msgid ""
 "How long the pointer rests before focus follows it. 0 is instant, which also "
 "focuses windows you only crossed over"
-msgstr "Hoe lang de aanwijzer stilstaat voordat de focus volgt. 0 is direct, waardoor ook vensters focus krijgen waar je alleen overheen ging"
+msgstr ""
+"Hoe lang de aanwijzer stilstaat voordat de focus volgt. 0 is direct, "
+"waardoor ook vensters focus krijgen waar je alleen overheen ging"
 
 #: src/ctlpanel.c:689
 msgid "Edge snapping"
@@ -480,7 +527,9 @@ msgstr "Vastklikzone"
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr "Hoe dicht bij de rand een sleep het vastklikken activeert. Verhoog het op een scherm met hoge dichtheid, of als een snelle aanwijzer de band overslaat"
+msgstr ""
+"Hoe dicht bij de rand een sleep het vastklikken activeert. Verhoog het op "
+"een scherm met hoge dichtheid, of als een snelle aanwijzer de band overslaat"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
@@ -502,7 +551,9 @@ msgstr "Alt+Tab"
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr "Aan opent Alt+Tab het hele bureaublad. Uit de strook met miniaturen op volgorde van gebruik — en de drie regels hieronder beschrijven die strook"
+msgstr ""
+"Aan opent Alt+Tab het hele bureaublad. Uit de strook met miniaturen op "
+"volgorde van gebruik — en de drie regels hieronder beschrijven die strook"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
@@ -510,7 +561,9 @@ msgstr "Alt+Tab-voorvertoningen"
 
 #: src/ctlpanel.c:708
 msgid "The thumbnail grid. Off, Alt+Tab still cycles — silently"
-msgstr "Het raster met miniaturen. Uit wisselt Alt+Tab nog steeds — zonder iets te tonen"
+msgstr ""
+"Het raster met miniaturen. Uit wisselt Alt+Tab nog steeds — zonder iets te "
+"tonen"
 
 #: src/ctlpanel.c:709
 msgid "Alt+Tab across desktops"
@@ -532,7 +585,9 @@ msgstr "Panelen"
 msgid ""
 "On, an open panel moves to whichever monitor the pointer is on. Off, it "
 "stays on the monitor you opened it on"
-msgstr "Aan gaat een geopend paneel naar het scherm waar de aanwijzer is. Uit blijft het op het scherm waar je het opende"
+msgstr ""
+"Aan gaat een geopend paneel naar het scherm waar de aanwijzer is. Uit blijft "
+"het op het scherm waar je het opende"
 
 #: src/ctlpanel.c:731
 msgid "Calculator"
@@ -542,7 +597,9 @@ msgstr "Rekenmachine"
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr "Venster: sleep het aan de kop, klik verder vrij. Sluiten bij klik: sluit als je ernaast klikt. Esc sluit altijd"
+msgstr ""
+"Venster: sleep het aan de kop, klik verder vrij. Sluiten bij klik: sluit als "
+"je ernaast klikt. Esc sluit altijd"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
@@ -566,7 +623,9 @@ msgstr "Bureaublad"
 
 #: src/ctlpanel.c:749
 msgid "Of the desktop you are on — layout is per-desktop, not global"
-msgstr "Van het bureaublad waarop je bent — de indeling is per bureaublad, niet algemeen"
+msgstr ""
+"Van het bureaublad waarop je bent — de indeling is per bureaublad, niet "
+"algemeen"
 
 #: src/ctlpanel.c:750
 msgid "Mission control"
@@ -598,7 +657,9 @@ msgstr "Glas van widgets"
 
 #: src/ctlpanel.c:772
 msgid "Desktop widgets take the dock's glass instead of the HUD panel"
-msgstr "Bureaubladwidgets nemen het glas van het dock in plaats van dat van het HUD-paneel"
+msgstr ""
+"Bureaubladwidgets nemen het glas van het dock in plaats van dat van het HUD-"
+"paneel"
 
 #: src/ctlpanel.c:774 src/ctlpanel.c:775
 msgid "Dock"
@@ -616,7 +677,9 @@ msgstr "Dock boven vensters"
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr "Uit bedekken vensters een vastgezet dock. Het automatisch verbergende komt altijd bovenop — het wordt geroepen over wat er ook staat"
+msgstr ""
+"Uit bedekken vensters een vastgezet dock. Het automatisch verbergende komt "
+"altijd bovenop — het wordt geroepen over wat er ook staat"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
@@ -644,7 +707,9 @@ msgstr "Dock vergroten"
 
 #: src/ctlpanel.c:798
 msgid "The icons under the pointer swell and the row slides apart to make room"
-msgstr "De pictogrammen onder de aanwijzer zwellen op en de rij wijkt uiteen om ruimte te maken"
+msgstr ""
+"De pictogrammen onder de aanwijzer zwellen op en de rij wijkt uiteen om "
+"ruimte te maken"
 
 #: src/ctlpanel.c:806
 msgid "Dock magnify amount"
@@ -654,7 +719,9 @@ msgstr "Mate van vergroting"
 msgid ""
 "How big the icon under the pointer gets. The dock makes room for it, so a "
 "big swell is a taller dock"
-msgstr "Hoe groot het pictogram onder de aanwijzer wordt. Het dock maakt er ruimte voor, dus veel zwellen geeft een hoger dock"
+msgstr ""
+"Hoe groot het pictogram onder de aanwijzer wordt. Het dock maakt er ruimte "
+"voor, dus veel zwellen geeft een hoger dock"
 
 #: src/ctlpanel.c:822
 msgid "Dock style"
@@ -666,7 +733,8 @@ msgstr "Uiterlijk van het dock"
 
 #: src/ctlpanel.c:826
 msgid "Glass frosts the wallpaper behind the bar. Auto follows the theme"
-msgstr "Glas maakt matglas van de achtergrond achter de balk. Auto volgt het thema"
+msgstr ""
+"Glas maakt matglas van de achtergrond achter de balk. Auto volgt het thema"
 
 #: src/ctlpanel.c:827
 msgid "Dock opacity"
@@ -674,7 +742,9 @@ msgstr "Dekking van het dock"
 
 #: src/ctlpanel.c:841
 msgid "0.00 leaves the icons alone on the wallpaper; 1.00 hides it completely"
-msgstr "0,00 laat de pictogrammen alleen op de achtergrond staan; 1,00 verbergt die volledig"
+msgstr ""
+"0,00 laat de pictogrammen alleen op de achtergrond staan; 1,00 verbergt die "
+"volledig"
 
 #: src/ctlpanel.c:843
 msgid "Dock corners"
@@ -682,7 +752,8 @@ msgstr "Hoeken van het dock"
 
 #: src/ctlpanel.c:849
 msgid "Its own, not the window radius. Caps at half the dock's size"
-msgstr "Zijn eigen, niet de vensterafronding. Hoogstens de helft van de dockgrootte"
+msgstr ""
+"Zijn eigen, niet de vensterafronding. Hoogstens de helft van de dockgrootte"
 
 #: src/ctlpanel.c:851
 msgid "Show all apps button"
@@ -695,7 +766,9 @@ msgstr "Dockknoppen"
 #: src/ctlpanel.c:853
 msgid ""
 "A grid of dots at the end of the dock. Always opens the application overlay"
-msgstr "Een raster van punten aan het eind van het dock. Opent altijd het programma-overzicht"
+msgstr ""
+"Een raster van punten aan het eind van het dock. Opent altijd het programma-"
+"overzicht"
 
 #: src/ctlpanel.c:870
 msgid "Apps button position"
@@ -705,7 +778,9 @@ msgstr "Positie van de programmaknop"
 msgid ""
 "Where the all-apps button sits along the run. Dragging the button on the "
 "dock sets the same thing"
-msgstr "Waar de knop langs het dock zit. De knop op het dock slepen stelt hetzelfde in"
+msgstr ""
+"Waar de knop langs het dock zit. De knop op het dock slepen stelt hetzelfde "
+"in"
 
 #: src/ctlpanel.c:873
 msgid "Show power button"
@@ -715,7 +790,9 @@ msgstr "Aan-uitknop tonen"
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr "Een aan-uitteken na de programmaknop. Klikken opent een menu — Vergrendelen, Afmelden, Slaapstand, Herstarten, Afsluiten"
+msgstr ""
+"Een aan-uitteken na de programmaknop. Klikken opent een menu — Vergrendelen, "
+"Afmelden, Slaapstand, Herstarten, Afsluiten"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
@@ -725,7 +802,9 @@ msgstr "Positie van de aan-uitknop"
 msgid ""
 "Where the power button sits along the run. Dragging the button on the dock "
 "sets the same thing"
-msgstr "Waar de aan-uitknop langs het dock zit. De knop op het dock slepen stelt hetzelfde in"
+msgstr ""
+"Waar de aan-uitknop langs het dock zit. De knop op het dock slepen stelt "
+"hetzelfde in"
 
 #: src/ctlpanel.c:897
 msgid "Date & time"
@@ -747,7 +826,9 @@ msgstr "Dockklok"
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr "Tijd en datum in een eigen cel — sleep de cel naar elke plek in de rij. 12/24-uurs volgt Datum en tijd"
+msgstr ""
+"Tijd en datum in een eigen cel — sleep de cel naar elke plek in de rij. "
+"12/24-uurs volgt Datum en tijd"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
@@ -757,7 +838,9 @@ msgstr "Analoge dockklok"
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr "Tekent de dockklok als wijzerplaat. De enige klok die in een dock links of rechts past — een kolom kan niet breder worden voor een tijd"
+msgstr ""
+"Tekent de dockklok als wijzerplaat. De enige klok die in een dock links of "
+"rechts past — een kolom kan niet breder worden voor een tijd"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
@@ -767,7 +850,9 @@ msgstr "Positie van de klok"
 msgid ""
 "Where the dock clock sits along the run. Dragging the clock on the dock sets "
 "the same thing"
-msgstr "Waar de dockklok langs het dock zit. De klok op het dock slepen stelt hetzelfde in"
+msgstr ""
+"Waar de dockklok langs het dock zit. De klok op het dock slepen stelt "
+"hetzelfde in"
 
 #: src/ctlpanel.c:914
 msgid "Analog clock face"
@@ -777,7 +862,9 @@ msgstr "Wijzerplaat van de analoge klok"
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr "Welke wijzerplaat de analoge klok-WIDGET tekent — die op het bureaublad, uit Widgets. De analoge klok van het dock heeft één ontwerp"
+msgstr ""
+"Welke wijzerplaat de analoge klok-WIDGET tekent — die op het bureaublad, uit "
+"Widgets. De analoge klok van het dock heeft één ontwerp"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
@@ -787,7 +874,9 @@ msgstr "Startmenu"
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr "Wat een tik op Super en Super+Esc openen. De lijst met sneltoetsen volgt deze regel; de programmaknop van het dock niet"
+msgstr ""
+"Wat een tik op Super en Super+Esc openen. De lijst met sneltoetsen volgt "
+"deze regel; de programmaknop van het dock niet"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
@@ -801,7 +890,9 @@ msgstr "Balk"
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr "De bovenbalk, en alleen die — widgets, notities en startmenu blijven. Een waybar-bureaublad heeft bar_stop_cmd/bar_start_cmd nodig"
+msgstr ""
+"De bovenbalk, en alleen die — widgets, notities en startmenu blijven. Een "
+"waybar-bureaublad heeft bar_stop_cmd/bar_start_cmd nodig"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
@@ -827,7 +918,9 @@ msgstr "Balk automatisch verbergen"
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr "De balk van elk scherm tegelijk. Per scherm staat in het rechtsklikmenu van de balk, en «gemengd» betekent dat ze verschillen"
+msgstr ""
+"De balk van elk scherm tegelijk. Per scherm staat in het rechtsklikmenu van "
+"de balk, en «gemengd» betekent dat ze verschillen"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
@@ -835,7 +928,9 @@ msgstr "Dekking van de balk"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
-msgstr "0,00 is een heldere balk, gekleurd naar de achtergrond; 1,00 verbergt die volledig"
+msgstr ""
+"0,00 is een heldere balk, gekleurd naar de achtergrond; 1,00 verbergt die "
+"volledig"
 
 #: src/ctlpanel.c:1017
 msgid "Bar shape"
@@ -867,7 +962,9 @@ msgstr "Bureaubladkat"
 
 #: src/ctlpanel.c:1031
 msgid "Super+Shift+C toggles it any time; this is only the login state"
-msgstr "Super+Shift+C schakelt hem op elk moment; dit is alleen de stand bij aanmelden"
+msgstr ""
+"Super+Shift+C schakelt hem op elk moment; dit is alleen de stand bij "
+"aanmelden"
 
 #: src/ctlpanel.c:1032
 msgid "Desktop cat breed"
@@ -895,7 +992,9 @@ msgstr "Sneltoetsen"
 
 #: src/ctlpanel.c:1057
 msgid "Searchable. F2 moves a shortcut to another key, F3 onto the tap"
-msgstr "Doorzoekbaar. F2 verplaatst een sneltoets naar een andere toets, F3 naar de tik"
+msgstr ""
+"Doorzoekbaar. F2 verplaatst een sneltoets naar een andere toets, F3 naar de "
+"tik"
 
 #: src/ctlpanel.c:1058
 msgid "NumLock on at login"
@@ -903,7 +1002,9 @@ msgstr "NumLock aan bij aanmelden"
 
 #: src/ctlpanel.c:1061
 msgid "A fresh xkb state has it off, which leaves the numpad on arrows"
-msgstr "Een verse xkb-stand heeft hem uit, waardoor het numerieke blok op pijlen staat"
+msgstr ""
+"Een verse xkb-stand heeft hem uit, waardoor het numerieke blok op pijlen "
+"staat"
 
 #: src/ctlpanel.c:1063
 msgid "Tap to click"
@@ -933,7 +1034,9 @@ msgstr "Versnelling van de aanwijzer"
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr "Adaptief gaat verder naarmate je sneller beweegt; Vlak is 1:1. Standaard is de keuze van libinput voor het apparaat"
+msgstr ""
+"Adaptief gaat verder naarmate je sneller beweegt; Vlak is 1:1. Standaard is "
+"de keuze van libinput voor het apparaat"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
@@ -943,7 +1046,10 @@ msgstr "Aanwijzer gladstrijken"
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr "Kalmeert een trillende of ruisende aanwijzer door zijn baan te middelen. Kost wat vertraging; 0 is uit. Spellen die ruwe beweging lezen merken er niets van"
+msgstr ""
+"Kalmeert een trillende of ruisende aanwijzer door zijn baan te middelen. "
+"Kost wat vertraging; 0 is uit. Spellen die ruwe beweging lezen merken er "
+"niets van"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
@@ -959,7 +1065,8 @@ msgstr "Schermen"
 
 #: src/ctlpanel.c:1104
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
-msgstr "Uitbreiden, Dupliceren, of het ingebouwde uit (klep dicht). Ook m in Super+D"
+msgstr ""
+"Uitbreiden, Dupliceren, of het ingebouwde uit (klep dicht). Ook m in Super+D"
 
 #: src/ctlpanel.c:1114
 msgid "Scale everything"
@@ -968,7 +1075,9 @@ msgstr "Alles schalen"
 #: src/ctlpanel.c:1115
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
-msgstr "Elk scherm, elk programma, de cursor. Super+Ctrl+= / -, Super+Ctrl+0 zet terug"
+msgstr ""
+"Elk scherm, elk programma, de cursor. Super+Ctrl+= / -, Super+Ctrl+0 zet "
+"terug"
 
 #: src/ctlpanel.c:1124
 msgid "Monitor settings"
@@ -1002,7 +1111,9 @@ msgstr "Meldingen"
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
-msgstr "Super+Shift+M overal. Verbergt meldingen en dempt de toon; kritieke waarschuwingen komen er nog steeds door"
+msgstr ""
+"Super+Shift+M overal. Verbergt meldingen en dempt de toon; kritieke "
+"waarschuwingen komen er nog steeds door"
 
 #: src/ctlpanel.c:1145
 msgid "Event sounds"
@@ -1018,7 +1129,9 @@ msgstr "Geluid"
 
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
-msgstr "Verplaatst het geluid naar een tv of monitor zodra je die aansluit. Auto = laptops"
+msgstr ""
+"Verplaatst het geluid naar een tv of monitor zodra je die aansluit. Auto = "
+"laptops"
 
 #: src/ctlpanel.c:1157
 msgid "Equalizer"
@@ -1026,7 +1139,9 @@ msgstr "Equalizer"
 
 #: src/ctlpanel.c:1158
 msgid "10-band system equalizer. Adds an output device while it is on"
-msgstr "Systeemequalizer met 10 banden. Voegt een uitvoerapparaat toe zolang hij aan staat"
+msgstr ""
+"Systeemequalizer met 10 banden. Voegt een uitvoerapparaat toe zolang hij aan "
+"staat"
 
 #: src/ctlpanel.c:1173
 msgid "Screen reader"
@@ -1038,7 +1153,9 @@ msgstr "Spraak"
 
 #: src/ctlpanel.c:1175
 msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
-msgstr "Leest het actieve venster voor terwijl de focus verspringt. Super+Shift+U schakelt"
+msgstr ""
+"Leest het actieve venster voor terwijl de focus verspringt. Super+Shift+U "
+"schakelt"
 
 #: src/ctlpanel.c:1176
 msgid "Answer to its name"
@@ -1086,9 +1203,11 @@ msgstr "Printers zoeken"
 
 #: src/ctlpanel.c:1201
 msgid "Add every network printer that is not set up yet, driverless"
-msgstr "Voegt elke netwerkprinter toe die nog niet is ingesteld, zonder stuurprogramma"
+msgstr ""
+"Voegt elke netwerkprinter toe die nog niet is ingesteld, zonder "
+"stuurprogramma"
 
-#: src/ctlpanel.c:1204
+#: src/ctlpanel.c:1204 src/power.c:111
 msgid "Power saving"
 msgstr "Energiebesparing"
 
@@ -1100,7 +1219,7 @@ msgstr "Energie"
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "Wachttijden voor dimmen, uitzetten, vergrendelen en slaapstand"
 
-#: src/ctlpanel.c:1207
+#: src/ctlpanel.c:1207 src/saver.c:837
 msgid "Screensaver"
 msgstr "Schermbeveiliging"
 
@@ -1118,7 +1237,8 @@ msgstr "Ontgrendelen met vingerafdruk"
 
 #: src/ctlpanel.c:1222
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
-msgstr "Installeer fprintd, voer fprintd-enroll uit; je wachtwoord werkt altijd ook"
+msgstr ""
+"Installeer fprintd, voer fprintd-enroll uit; je wachtwoord werkt altijd ook"
 
 #: src/ctlpanel.c:1230 src/ctlpanel.c:1231
 msgid "Game mode"
@@ -1126,7 +1246,8 @@ msgstr "Spelmodus"
 
 #: src/ctlpanel.c:1232
 msgid "Enter cycles auto / always on / always off — same as Super+G"
-msgstr "Enter loopt door automatisch / altijd aan / altijd uit — net als Super+G"
+msgstr ""
+"Enter loopt door automatisch / altijd aan / altijd uit — net als Super+G"
 
 #: src/ctlpanel.c:1233
 msgid "Detect games"
@@ -1134,7 +1255,9 @@ msgstr "Spellen herkennen"
 
 #: src/ctlpanel.c:1235
 msgid "Treat a fullscreen game window as a game unless it is excluded"
-msgstr "Behandelt een schermvullend spelvenster als een spel, tenzij het is uitgesloten"
+msgstr ""
+"Behandelt een schermvullend spelvenster als een spel, tenzij het is "
+"uitgesloten"
 
 #: src/ctlpanel.c:1236
 msgid "Open games on"
@@ -1142,7 +1265,9 @@ msgstr "Spellen openen op"
 
 #: src/ctlpanel.c:1239
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
-msgstr "Primair = het scherm dat in Super+D als PRIMARY is gemarkeerd; Vragen volgt het spel"
+msgstr ""
+"Primair = het scherm dat in Super+D als PRIMARY is gemarkeerd; Vragen volgt "
+"het spel"
 
 #: src/ctlpanel.c:1240
 msgid "Stop the AI while gaming"
@@ -1254,7 +1379,8 @@ msgstr "Systeeminstellingen"
 
 #: src/ctlpanel.c:1296
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
-msgstr "Klok, taal, kernel, standaardprogramma's — waarop het SYSTEEM is ingesteld"
+msgstr ""
+"Klok, taal, kernel, standaardprogramma's — waarop het SYSTEEM is ingesteld"
 
 #: src/ctlpanel.c:1298
 msgid "About OS"
@@ -1279,3 +1405,212 @@ msgstr "minimum"
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
 msgstr "maximum"
+
+#: src/lock.c:413 src/lock.c:846
+msgid "Wrong password"
+msgstr "Onjuist wachtwoord"
+
+#: src/lock.c:414 src/lock.c:853
+msgid "Checking…"
+msgstr "Bezig met controleren…"
+
+#: src/lock.c:1627
+#, c-format
+msgid "Fingerprint disabled — use your password"
+msgstr "Vingerafdruk uitgeschakeld — gebruik je wachtwoord"
+
+#: src/lock.c:1635
+#, c-format
+msgid "Fingerprint not recognised"
+msgstr "Vingerafdruk niet herkend"
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr "Geen achtergronden gevonden voor de diavoorstelling"
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr "Tonen na"
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr "Vergrendelen bij ontwaken"
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr "Wisselinterval"
+
+#: src/saver.c:841
+#, fuzzy
+msgid "Lock background"
+msgstr "Vergrendelscherm"
+
+#: src/saver.c:842
+#, fuzzy
+msgid "Lock image"
+msgstr "Dock vergroten"
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr "Vergrendelscherm dimmen"
+
+#: src/saver.c:844
+#, fuzzy
+msgid "Lock blur"
+msgstr "Achtergrondvervaging"
+
+#: src/saver.c:845
+#, fuzzy
+msgid "Lock colours"
+msgstr "Hoeken van het dock"
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr "Speelt nu"
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr "Weer"
+
+#: src/saver.c:848
+#, fuzzy
+msgid "Temperature in"
+msgstr "Kleurtemperatuur"
+
+#: src/saver.c:849
+#, fuzzy
+msgid "Keyboard layout"
+msgstr "Sneltoetsen"
+
+#: src/power.c:112
+#, fuzzy
+msgid "Dim screen"
+msgstr "Vergrendelscherm"
+
+#: src/power.c:113
+msgid "Blank displays"
+msgstr "Schermen uitzetten"
+
+#: src/power.c:114
+#, fuzzy
+msgid "Lock session"
+msgstr "Vergrendelscherm"
+
+#: src/power.c:115
+msgid "Suspend system"
+msgstr "Systeem in slaapstand"
+
+#: src/power.c:116
+msgid "Lid closed (battery)"
+msgstr "Klep dicht (accu)"
+
+#: src/power.c:117
+msgid "Lid closed (plugged in)"
+msgstr "Klep dicht (aan de stroom)"
+
+#: src/power.c:118
+msgid "Lid closed (docked)"
+msgstr "Klep dicht (in dock)"
+
+#: src/filters.c:84
+#, fuzzy
+msgid "CRT filters"
+msgstr "Alle filters"
+
+#: src/filters.c:86
+#, fuzzy
+msgid "Screen curvature"
+msgstr "Schermkromming"
+
+#: src/filters.c:88
+#, fuzzy
+msgid "Glitch strength"
+msgstr "Storing bij een waarschuwing"
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr "Monochroom"
+
+#: src/filters.c:91
+#, fuzzy
+msgid "Phosphor bloom"
+msgstr "Fosforgloed"
+
+#: src/widgets.c:60
+#, fuzzy
+msgid "All widgets"
+msgstr "Alle filters"
+
+#: src/widgets.c:61
+msgid "Audio visualiser"
+msgstr "Audiovisualisatie"
+
+#: src/widgets.c:62
+msgid "System monitor"
+msgstr "Systeemmonitor"
+
+#: src/widgets.c:63
+#, fuzzy
+msgid "Desktop clock"
+msgstr "Bureaubladpictogrammen"
+
+#: src/widgets.c:64
+msgid "Quick launch"
+msgstr "Snel starten"
+
+#: src/widgets.c:65
+msgid "Post-it note"
+msgstr "Memoblaadje"
+
+#: src/widgets.c:66
+msgid "Pizza"
+msgstr "Pizza"
+
+#: src/widgets.c:67
+msgid "Tuxagotchi"
+msgstr "Tuxagotchi"
+
+#: src/widgets.c:68
+#, fuzzy
+msgid "Analog clock"
+msgstr "Wijzerplaat van de analoge klok"
+
+#: src/widgets.c:69
+msgid "Music player"
+msgstr "Muziekspeler"
+
+#, fuzzy
+#~ msgid "visualizer"
+#~ msgstr "Equalizer"
+
+#, fuzzy
+#~ msgid "clock"
+#~ msgstr "Klok"
+
+#, fuzzy
+#~ msgid "corner_radius"
+#~ msgstr "Hoekafronding"
+
+#, fuzzy
+#~ msgid "shadow"
+#~ msgstr "Schaduw"
+
+#, fuzzy
+#~ msgid "shadow_spread"
+#~ msgstr "Spreiding van de schaduw"
+
+#, fuzzy
+#~ msgid "shadow_offset_y"
+#~ msgstr "Schaduwverschuiving X"
+
+#, fuzzy
+#~ msgid "shadow_opacity"
+#~ msgstr "Dekking van de balk"
+
+#, fuzzy
+#~ msgid "blur_radius"
+#~ msgstr "Vervagingsstraal"
+
+#, fuzzy
+#~ msgid "blur_passes"
+#~ msgstr "Vervagingsdoorgangen"

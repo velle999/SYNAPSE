@@ -38,6 +38,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "i18n.h"
 #include "synui.h"
 
 /* One notch of Left/Right. Twenty steps end to end: fine enough to tune a
@@ -80,16 +81,16 @@ static const char *phosphor_name(int ph)
 const char *filters_row_label(int row)
 {
     switch (row) {
-    case FILTER_ROW_ENABLED:   return "CRT filters";
-    case FILTER_ROW_SCANLINE:  return "Scanlines";
-    case FILTER_ROW_CURVATURE: return "Screen curvature";
-    case FILTER_ROW_ABERRATION:return "Chromatic aberration";
-    case FILTER_ROW_GLITCH:    return "Glitch strength";
-    case FILTER_ROW_PHOSPHOR:  return "Phosphor";
-    case FILTER_ROW_MONO:      return "Monochrome";
-    case FILTER_ROW_BLOOM:     return "Phosphor bloom";
-    case FILTER_ROW_LIFT:      return "Phosphor lift";
-    case FILTER_ROW_HUE:       return "Phosphor hue";
+    case FILTER_ROW_ENABLED:   return _("CRT filters");
+    case FILTER_ROW_SCANLINE:  return _("Scanlines");
+    case FILTER_ROW_CURVATURE: return _("Screen curvature");
+    case FILTER_ROW_ABERRATION:return _("Chromatic aberration");
+    case FILTER_ROW_GLITCH:    return _("Glitch strength");
+    case FILTER_ROW_PHOSPHOR:  return _("Phosphor");
+    case FILTER_ROW_MONO:      return _("Monochrome");
+    case FILTER_ROW_BLOOM:     return _("Phosphor bloom");
+    case FILTER_ROW_LIFT:      return _("Phosphor lift");
+    case FILTER_ROW_HUE:       return _("Phosphor hue");
     default:                   return "?";
     }
 }

@@ -57,6 +57,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "i18n.h"
 #include "synui.h"
 
 /* Repaint interval. 33 ms is the same tick the lock's fade runs at; the
@@ -407,7 +408,7 @@ static void saver_draw_slideshow(syn_server_t *s, cairo_t *cr, int w, int h)
          * looks like the saver is broken. */
         double acc[3];
         saver_accent(s, acc);
-        const char *msg = "No wallpapers found for the slideshow";
+        const char *msg = _("No wallpapers found for the slideshow");
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
                                CAIRO_FONT_WEIGHT_NORMAL);
         cairo_set_font_size(cr, 22);
@@ -833,19 +834,19 @@ void saver_finish(syn_server_t *s)
 static const char *saver_row_label(int row)
 {
     switch (row) {
-    case SAVER_ROW_MODE:       return "Screensaver";
-    case SAVER_ROW_TIMEOUT:    return "Show after";
-    case SAVER_ROW_LOCK:       return "Lock on wake";
-    case SAVER_ROW_INTERVAL:   return "Slide interval";
-    case SAVER_ROW_LOCK_BG:    return "Lock background";
-    case SAVER_ROW_LOCK_IMAGE: return "Lock image";
-    case SAVER_ROW_LOCK_DIM:   return "Lock dim";
-    case SAVER_ROW_LOCK_BLUR:  return "Lock blur";
-    case SAVER_ROW_LOCK_THEME: return "Lock colours";
-    case SAVER_ROW_LOCK_MEDIA: return "Now playing";
-    case SAVER_ROW_WEATHER: return "Weather";
-    case SAVER_ROW_WX_UNIT: return "Temperature in";
-    case SAVER_ROW_LOCK_LAYOUT: return "Keyboard layout";
+    case SAVER_ROW_MODE:       return _("Screensaver");
+    case SAVER_ROW_TIMEOUT:    return _("Show after");
+    case SAVER_ROW_LOCK:       return _("Lock on wake");
+    case SAVER_ROW_INTERVAL:   return _("Slide interval");
+    case SAVER_ROW_LOCK_BG:    return _("Lock background");
+    case SAVER_ROW_LOCK_IMAGE: return _("Lock image");
+    case SAVER_ROW_LOCK_DIM:   return _("Lock dim");
+    case SAVER_ROW_LOCK_BLUR:  return _("Lock blur");
+    case SAVER_ROW_LOCK_THEME: return _("Lock colours");
+    case SAVER_ROW_LOCK_MEDIA: return _("Now playing");
+    case SAVER_ROW_WEATHER: return _("Weather");
+    case SAVER_ROW_WX_UNIT: return _("Temperature in");
+    case SAVER_ROW_LOCK_LAYOUT: return _("Keyboard layout");
     default:                   return "?";
     }
 }
@@ -971,7 +972,15 @@ int saver_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
                  c->weather ? "on (lock, bar, desktop)" : "off (no network use)");
         return !c->weather;
     case SAVER_ROW_WX_UNIT:
-        snprintf(value, vn, "%s", c->weather_unit_f ? "\xc2\xb0F" : "\xc2\xb0C");
+        /* ⛔ THE LITERAL MUST BREAK AFTER THE DEGREE SIGN. C and F are both hex
+         * digits, so "\xc2\xb0F" is not \xc2 \xb0 'F' — the compiler reads
+         * \xb0F as ONE escape, overflows it, and emits c2 0f: a broken UTF-8
+         * lead byte, a control character, and no letter at all. Both branches
+         * were wrong, so the weather row has been drawing a replacement box
+         * instead of °F or °C. render.c:9403 and tests/text_fallback_test.c
+         * both carry a note about this trap; this line predates them. */
+        snprintf(value, vn, "%s", c->weather_unit_f ? "\xc2\xb0" "F"
+                                                    : "\xc2\xb0" "C");
         return !c->weather;
     case SAVER_ROW_LOCK_LAYOUT: {
         int n = kbd_layout_count(s);

@@ -2754,7 +2754,7 @@ pkgver=0.1.0
 #   and without a display in the environment. Every voice candidate is stubbed —
 #   `vibe` first on PATH as well as espeak-ng, since the positive case has to
 #   stub them all or a real one speaks on the developer's session.
-pkgrel=572
+pkgrel=573
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

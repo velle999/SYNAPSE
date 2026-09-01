@@ -48,6 +48,7 @@
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "i18n.h"
 #include "synui.h"
 #include "contrast.h"   /* syn_ink_floor / CONTRAST_TARGET — see the palette below */
 
@@ -409,8 +410,8 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
      * green would otherwise print a failure in the colour of success. */
     const char *msg = NULL;
     int failed = 0;
-    if (s->nlock.failed)     { msg = "Wrong password"; failed = 1; }
-    else if (s->nlock.busy)  { msg = "Checking\xe2\x80\xa6"; }
+    if (s->nlock.failed)     { msg = _("Wrong password"); failed = 1; }
+    else if (s->nlock.busy)  { msg = _("Checking\xe2\x80\xa6"); }
     if (msg) {
         cairo_set_font_size(cr, 16);
         syn_text_extents(cr, msg, &te);
@@ -842,14 +843,14 @@ static void lock_draw_core(syn_server_t *s, cairo_t *cr)
     /* Password row: dots while typing, or the error after a rejection. The row
      * is only worth drawing once there is something to say. */
     if (s->nlock.failed) {
-        const char *msg = "Wrong password";
+        const char *msg = _("Wrong password");
         cairo_set_font_size(cr, 18);
         syn_text_extents(cr, msg, &te);
         cairo_set_source_rgba(cr, 1.0, 0.36, 0.42, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 275);
         syn_show_text(cr, msg);
     } else if (s->nlock.busy) {
-        const char *msg = "Checking\xe2\x80\xa6";
+        const char *msg = _("Checking\xe2\x80\xa6");
         cairo_set_font_size(cr, 18);
         syn_text_extents(cr, msg, &te);
         lock_set_accent(s, cr, a);
@@ -1623,7 +1624,7 @@ static int lock_fprint_line(syn_server_t *s, const char *line)
         lock_fprint_stop(s);
         if (s->nlock.fp_fails >= LOCK_FP_MAX_FAILS) {
             snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg),
-                     "Fingerprint disabled \xe2\x80\x94 use your password");
+                     _("Fingerprint disabled \xe2\x80\x94 use your password"));
             lock_fprint_disable(s, "too many failed swipes");
         } else {
             /* Keep whatever the helper last said — "Swipe was too short" beats
@@ -1631,7 +1632,7 @@ static int lock_fprint_line(syn_server_t *s, const char *line)
              * rejected finger looks like a reader that did nothing. */
             if (s->nlock.fp_msg[0] == 0)
                 snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg),
-                         "Fingerprint not recognised");
+                         _("Fingerprint not recognised"));
             s->nlock.fp_retry_ms = lock_now_ms() + LOCK_FP_RETRY_MS;
         }
         lock_render(s);

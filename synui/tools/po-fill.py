@@ -44,6 +44,14 @@ def msgid_of(block):
     return po_unescape("".join(parts))
 
 
+def msgstr_of(block):
+    """The msgstr of a .po block, joined across its continuation lines."""
+    m = re.search(r'^msgstr ((?:"(?:[^"\\]|\\.)*"\s*)+)', block, re.M)
+    if not m:
+        return ""
+    return po_unescape("".join(re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))))
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -90,8 +98,12 @@ def main():
         blocks[i] = new.rstrip('\n')
 
     po.write_text("\n\n".join(blocks).rstrip('\n') + "\n", encoding="utf-8")
-    done = sum(1 for b in blocks if msgid_of(b) and
-               not re.search(r'^msgstr ""\s*$', b, re.M))
+    # ⚠ A msgstr CAN SPAN LINES, and a long one always does — msgmerge wraps it
+    # as `msgstr ""` followed by continuation strings. Testing for a line that
+    # is exactly `msgstr ""` therefore calls every wrapped translation missing,
+    # which is how a fully translated catalog once reported 69 strings short.
+    # Join the whole run and ask whether it has any content.
+    done = sum(1 for b in blocks if msgid_of(b) and msgstr_of(b))
     total = sum(1 for b in blocks if msgid_of(b))
     print("%s: %d/%d translated (%d from this pass)" % (po.name, done, total, len(want)))
     return 0

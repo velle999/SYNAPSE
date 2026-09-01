@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "i18n.h"
 #include "synui.h"
 
 /* The name synui-widgets knows each row by. NULL for the master row, which is
@@ -56,17 +57,17 @@ const char *widget_row_name(int row)
 const char *widget_row_label(int row)
 {
     switch (row) {
-    case WIDGET_ROW_ALL:        return "All widgets";
-    case WIDGET_ROW_VISUALIZER: return "Audio visualiser";
-    case WIDGET_ROW_SYSMON:     return "System monitor";
-    case WIDGET_ROW_CLOCK:      return "Desktop clock";
-    case WIDGET_ROW_LAUNCHER:   return "Quick launch";
-    case WIDGET_ROW_POSTIT:     return "Post-it note";
-    case WIDGET_ROW_PIZZA:      return "Pizza";
-    case WIDGET_ROW_TUX:        return "Tuxagotchi";
-    case WIDGET_ROW_ANALOG:     return "Analog clock";
-    case WIDGET_ROW_MUSIC:      return "Music player";
-    case WIDGET_ROW_WEATHER:    return "Weather";
+    case WIDGET_ROW_ALL:        return _("All widgets");
+    case WIDGET_ROW_VISUALIZER: return _("Audio visualiser");
+    case WIDGET_ROW_SYSMON:     return _("System monitor");
+    case WIDGET_ROW_CLOCK:      return _("Desktop clock");
+    case WIDGET_ROW_LAUNCHER:   return _("Quick launch");
+    case WIDGET_ROW_POSTIT:     return _("Post-it note");
+    case WIDGET_ROW_PIZZA:      return _("Pizza");
+    case WIDGET_ROW_TUX:        return _("Tuxagotchi");
+    case WIDGET_ROW_ANALOG:     return _("Analog clock");
+    case WIDGET_ROW_MUSIC:      return _("Music player");
+    case WIDGET_ROW_WEATHER:    return _("Weather");
     default:                    return "?";
     }
 }

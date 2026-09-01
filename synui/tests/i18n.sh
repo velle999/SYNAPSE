@@ -72,7 +72,29 @@ check "the synuirc key beside the label is untouched" yes \
 check "no settings key reached the template" "0" \
       "$(grep -cE '^msgid "(theme|wallpaper_accent|blur_passes|dock_opacity)"$' "$root/po/synui.pot")"
 
-# ── 6. every language named has a catalog, or meson refuses ──
+# ── 6. ⛔ NOTHING INSIDE A _name() OR _key() FUNCTION IS MARKED ──
+#
+# The second batch of marking was done with a regex over
+# `case *_ROW*: return "…"`, and it swept up two functions that look exactly
+# like label tables and are not:
+#
+#   widget_row_name()  returns the name synui-widgets knows a row by — an IPC
+#                      name. A translated one addresses a widget that does not
+#                      exist, so the row silently stops working.
+#   uifx_key()         returns the synuirc key. A translated one writes
+#                      `Unschärfe = 1` into the config and loses the setting.
+#
+# The convention already distinguishes them — _label() is read by a person,
+# _name() and _key() are read by a protocol or a file — so the check is that
+# convention, enforced. This is the same rule as the ctlpanel settings key one
+# row over, and it is the second time it has been needed.
+bad=$(awk '
+    /^(static )?const char \*[a-z_]+\(/ { fn = $0 }
+    /return _\(/ && fn ~ /_(name|key)\(/ { print FILENAME ":" FNR }
+' "$root"/src/*.c)
+check "no _() inside a _name() or _key() function" "" "$bad"
+
+# ── 7. every language named has a catalog, or meson refuses ──
 absent=""
 while IFS= read -r l; do
     [ -f "$root/po/$l.po" ] || absent="$absent $l"

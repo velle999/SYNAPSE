@@ -5,3 +5,9 @@
 # never reach a .pot, so no translator is ever offered them. tools/i18n-check.sh
 # fails on a source file that uses _() and is not listed.
 src/ctlpanel.c
+src/lock.c
+src/saver.c
+src/power.c
+src/filters.c
+src/widgets.c
+src/uifx.c

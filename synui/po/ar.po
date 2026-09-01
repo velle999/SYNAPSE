@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"POT-Creation-Date: 2026-09-01 11:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -40,7 +40,9 @@ msgstr "لون التمييز من الخلفية"
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr "يأخذ لون التمييز من خلفية سطح المكتب بدل السمة. «تلقائي» يعني Prism (فاتحًا أو داكنًا)، المبني عليه، ولا شيء غيره"
+msgstr ""
+"يأخذ لون التمييز من خلفية سطح المكتب بدل السمة. «تلقائي» يعني Prism (فاتحًا "
+"أو داكنًا)، المبني عليه، ولا شيء غيره"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
@@ -97,7 +99,9 @@ msgstr "عتامة النافذة النشطة. اليسار/اليمين يضب
 #: src/ctlpanel.c:437
 msgid ""
 "Auto follows the theme · Off is never glass · or set how much you see through"
-msgstr "«تلقائي» يتبع السمة · «إيقاف» ليس زجاجًا أبدًا · أو حدّد بنفسك مقدار ما يظهر خلفها"
+msgstr ""
+"«تلقائي» يتبع السمة · «إيقاف» ليس زجاجًا أبدًا · أو حدّد بنفسك مقدار ما يظهر "
+"خلفها"
 
 #: src/ctlpanel.c:443
 msgid "Sync all glass"
@@ -107,7 +111,8 @@ msgstr "توحيد كل الزجاج"
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr "كل سطح يتبع «الزجاج» أعلاه. غيّر واحدًا فيحتفظ بقيمته إلى أن تعيد تشغيل هذا"
+msgstr ""
+"كل سطح يتبع «الزجاج» أعلاه. غيّر واحدًا فيحتفظ بقيمته إلى أن تعيد تشغيل هذا"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
@@ -127,7 +132,9 @@ msgstr "خلفية حيّة"
 msgid ""
 "Menus and panels ink themselves off the window behind them rather than the "
 "wallpaper it covers. Lands within a second"
-msgstr "تأخذ القوائم واللوحات لونها من النافذة خلفها لا من خلفية سطح المكتب التي تغطيها. يظهر خلال ثانية"
+msgstr ""
+"تأخذ القوائم واللوحات لونها من النافذة خلفها لا من خلفية سطح المكتب التي "
+"تغطيها. يظهر خلال ثانية"
 
 #: src/ctlpanel.c:472
 msgid "Unfocused opacity"
@@ -161,7 +168,9 @@ msgstr "اجعل كل شيء شفافًا"
 msgid ""
 "Bar, dock and menus lose their background entirely, inked off the wallpaper. "
 "The rows above put it back"
-msgstr "يفقد الشريط والرصيف والقوائم خلفياتها تمامًا، وتُلوَّن من خلفية سطح المكتب. الصفوف أعلاه تعيده"
+msgstr ""
+"يفقد الشريط والرصيف والقوائم خلفياتها تمامًا، وتُلوَّن من خلفية سطح المكتب. "
+"الصفوف أعلاه تعيده"
 
 #: src/ctlpanel.c:513 src/ctlpanel.c:514
 msgid "CRT effects"
@@ -175,7 +184,7 @@ msgstr "مرحلة المعالجة اللاحقة في GLES. «إيقاف» ع�
 msgid "All filters"
 msgstr "كل المرشّحات"
 
-#: src/ctlpanel.c:517
+#: src/ctlpanel.c:517 src/filters.c:85
 msgid "Scanlines"
 msgstr "خطوط المسح"
 
@@ -183,7 +192,7 @@ msgstr "خطوط المسح"
 msgid "Screen curve"
 msgstr "انحناء الشاشة"
 
-#: src/ctlpanel.c:523
+#: src/ctlpanel.c:523 src/filters.c:87
 msgid "Chromatic aberration"
 msgstr "الزيغ اللوني"
 
@@ -195,7 +204,7 @@ msgstr "تشويش عند التنبيه"
 msgid "Phosphor tint"
 msgstr "لون الفوسفور"
 
-#: src/ctlpanel.c:531
+#: src/ctlpanel.c:531 src/filters.c:89
 msgid "Phosphor"
 msgstr "الفوسفور"
 
@@ -215,7 +224,7 @@ msgstr "يمزج نحو لون الفوسفور. لا يظهر التوهّج إ
 msgid "Phosphor glow"
 msgstr "توهّج الفوسفور"
 
-#: src/ctlpanel.c:542
+#: src/ctlpanel.c:542 src/filters.c:92
 msgid "Phosphor lift"
 msgstr "أساس الفوسفور"
 
@@ -223,7 +232,7 @@ msgstr "أساس الفوسفور"
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
 msgstr "كم يتوهّج الجزء غير المضاء: 0 يبقيه أسود، والرفع يضيء الشبكة"
 
-#: src/ctlpanel.c:546
+#: src/ctlpanel.c:546 src/filters.c:93
 msgid "Phosphor hue"
 msgstr "درجة لون الفوسفور"
 
@@ -231,7 +240,9 @@ msgstr "درجة لون الفوسفور"
 msgid ""
 "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
 "is the preset"
-msgstr "يدير اللون: للأسفل أكثر حمرة (من الكهرماني إلى البرتقالي)، وللأعلى أكثر صفرة. 0.50 هي القيمة الأصلية"
+msgstr ""
+"يدير اللون: للأسفل أكثر حمرة (من الكهرماني إلى البرتقالي)، وللأعلى أكثر "
+"صفرة. 0.50 هي القيمة الأصلية"
 
 #: src/ctlpanel.c:557
 msgid "Titlebars"
@@ -408,7 +419,9 @@ msgstr "تبديل سطح المكتب"
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr "«التلاشي» يمزج السطحين، و«الانزلاق» يرسلهما في اتجاه التبديل، و«المكعّب» يدير السطح ثلاثي الأبعاد"
+msgstr ""
+"«التلاشي» يمزج السطحين، و«الانزلاق» يرسلهما في اتجاه التبديل، و«المكعّب» يدير "
+"السطح ثلاثي الأبعاد"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
@@ -418,7 +431,9 @@ msgstr "مدة التبديل"
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr "يحتاج الانزلاق وقتًا أطول من التلاشي — على العين أن تتابعه — والمكعّب أطول منهما؛ جرّب 400-600"
+msgstr ""
+"يحتاج الانزلاق وقتًا أطول من التلاشي — على العين أن تتابعه — والمكعّب أطول "
+"منهما؛ جرّب 400-600"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
@@ -437,7 +452,9 @@ msgstr "نطاق أسطح المكتب"
 msgid ""
 "Shared: one desktop across every monitor. Per-monitor: each screen remembers "
 "its own, and the switch moves only the focused one"
-msgstr "مشترك: سطح واحد لكل الشاشات. لكل شاشة: تتذكر كل شاشة سطحها، والتبديل يحرّك الشاشة النشطة وحدها"
+msgstr ""
+"مشترك: سطح واحد لكل الشاشات. لكل شاشة: تتذكر كل شاشة سطحها، والتبديل يحرّك "
+"الشاشة النشطة وحدها"
 
 #: src/ctlpanel.c:678
 msgid "Focus follows"
@@ -451,7 +468,9 @@ msgstr "السلوك"
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr "«نقر»: لا يمنح التركيز إلا النقر. «متساهل» و«صارم» يتبعان المؤشر؛ وفوق سطح المكتب يترك «الصارم» التركيز ويبقيه «المتساهل»"
+msgstr ""
+"«نقر»: لا يمنح التركيز إلا النقر. «متساهل» و«صارم» يتبعان المؤشر؛ وفوق سطح "
+"المكتب يترك «الصارم» التركيز ويبقيه «المتساهل»"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
@@ -461,7 +480,9 @@ msgstr "تأخير التركيز"
 msgid ""
 "How long the pointer rests before focus follows it. 0 is instant, which also "
 "focuses windows you only crossed over"
-msgstr "كم يمكث المؤشر قبل أن يتبعه التركيز. 0 يعني فورًا، فتنال التركيز أيضًا نوافذ مررت فوقها فقط"
+msgstr ""
+"كم يمكث المؤشر قبل أن يتبعه التركيز. 0 يعني فورًا، فتنال التركيز أيضًا نوافذ "
+"مررت فوقها فقط"
 
 #: src/ctlpanel.c:689
 msgid "Edge snapping"
@@ -479,7 +500,9 @@ msgstr "منطقة الالتصاق"
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr "كم يقترب السحب من الحافة حتى يتفعّل الالتصاق. ارفعه على شاشة عالية الكثافة، أو إذا تخطّى مؤشر سريع الشريط"
+msgstr ""
+"كم يقترب السحب من الحافة حتى يتفعّل الالتصاق. ارفعه على شاشة عالية الكثافة، "
+"أو إذا تخطّى مؤشر سريع الشريط"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
@@ -501,7 +524,9 @@ msgstr "Alt+Tab"
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr "عند التشغيل يفتح Alt+Tab سطح المكتب كله. وعند الإطفاء شريط المصغّرات بترتيب الاستعمال — والصفوف الثلاثة أدناه تصف ذلك الشريط"
+msgstr ""
+"عند التشغيل يفتح Alt+Tab سطح المكتب كله. وعند الإطفاء شريط المصغّرات بترتيب "
+"الاستعمال — والصفوف الثلاثة أدناه تصف ذلك الشريط"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
@@ -531,7 +556,9 @@ msgstr "اللوحات"
 msgid ""
 "On, an open panel moves to whichever monitor the pointer is on. Off, it "
 "stays on the monitor you opened it on"
-msgstr "عند التشغيل تنتقل اللوحة المفتوحة إلى الشاشة التي عليها المؤشر. وعند الإطفاء تبقى على الشاشة التي فتحتها فيها"
+msgstr ""
+"عند التشغيل تنتقل اللوحة المفتوحة إلى الشاشة التي عليها المؤشر. وعند الإطفاء "
+"تبقى على الشاشة التي فتحتها فيها"
 
 #: src/ctlpanel.c:731
 msgid "Calculator"
@@ -541,7 +568,9 @@ msgstr "الآلة الحاسبة"
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr "«نافذة»: اسحبها من رأسها وانقر في غيره بحرية. «إغلاق بالنقر خارجها»: تُغلق حين تنقر بجوارها. وEsc يغلق دائمًا"
+msgstr ""
+"«نافذة»: اسحبها من رأسها وانقر في غيره بحرية. «إغلاق بالنقر خارجها»: تُغلق "
+"حين تنقر بجوارها. وEsc يغلق دائمًا"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
@@ -615,7 +644,9 @@ msgstr "الرصيف فوق النوافذ"
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr "عند الإطفاء تغطي النوافذ رصيفًا مثبَّتًا. أما المخفي تلقائيًا فيأتي دائمًا في المقدمة — إذ يُستدعى فوق كل ما هو موجود"
+msgstr ""
+"عند الإطفاء تغطي النوافذ رصيفًا مثبَّتًا. أما المخفي تلقائيًا فيأتي دائمًا في "
+"المقدمة — إذ يُستدعى فوق كل ما هو موجود"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
@@ -653,7 +684,9 @@ msgstr "مقدار التكبير"
 msgid ""
 "How big the icon under the pointer gets. The dock makes room for it, so a "
 "big swell is a taller dock"
-msgstr "كم تكبر الأيقونة تحت المؤشر. يفسح لها الرصيف مكانًا، فالانتفاخ الكبير يعني رصيفًا أعلى"
+msgstr ""
+"كم تكبر الأيقونة تحت المؤشر. يفسح لها الرصيف مكانًا، فالانتفاخ الكبير يعني "
+"رصيفًا أعلى"
 
 #: src/ctlpanel.c:822
 msgid "Dock style"
@@ -714,7 +747,9 @@ msgstr "إظهار زر الطاقة"
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr "علامة طاقة بعد زر التطبيقات. النقر عليها يفتح قائمة — قفل، خروج، تعليق، إعادة تشغيل، إيقاف"
+msgstr ""
+"علامة طاقة بعد زر التطبيقات. النقر عليها يفتح قائمة — قفل، خروج، تعليق، "
+"إعادة تشغيل، إيقاف"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
@@ -724,7 +759,8 @@ msgstr "موضع زر الطاقة"
 msgid ""
 "Where the power button sits along the run. Dragging the button on the dock "
 "sets the same thing"
-msgstr "أين يجلس زر الطاقة على امتداد الرصيف. وسحب الزر على الرصيف يضبط الشيء نفسه"
+msgstr ""
+"أين يجلس زر الطاقة على امتداد الرصيف. وسحب الزر على الرصيف يضبط الشيء نفسه"
 
 #: src/ctlpanel.c:897
 msgid "Date & time"
@@ -746,7 +782,9 @@ msgstr "ساعة الرصيف"
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr "الوقت والتاريخ في خانة خاصة — اسحب الخانة إلى أي موضع في الصف. ونظام 12/24 يتبع «التاريخ والوقت»"
+msgstr ""
+"الوقت والتاريخ في خانة خاصة — اسحب الخانة إلى أي موضع في الصف. ونظام 12/24 "
+"يتبع «التاريخ والوقت»"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
@@ -756,7 +794,9 @@ msgstr "ساعة الرصيف العقربية"
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr "يرسم ساعة الرصيف كميناء. وهي الساعة الوحيدة التي تتسع لها رصيف على اليسار أو اليمين — فالعمود لا يتسع لسلسلة وقت"
+msgstr ""
+"يرسم ساعة الرصيف كميناء. وهي الساعة الوحيدة التي تتسع لها رصيف على اليسار أو "
+"اليمين — فالعمود لا يتسع لسلسلة وقت"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
@@ -766,7 +806,9 @@ msgstr "موضع الساعة"
 msgid ""
 "Where the dock clock sits along the run. Dragging the clock on the dock sets "
 "the same thing"
-msgstr "أين تجلس ساعة الرصيف على امتداد الرصيف. وسحب الساعة على الرصيف يضبط الشيء نفسه"
+msgstr ""
+"أين تجلس ساعة الرصيف على امتداد الرصيف. وسحب الساعة على الرصيف يضبط الشيء "
+"نفسه"
 
 #: src/ctlpanel.c:914
 msgid "Analog clock face"
@@ -776,7 +818,9 @@ msgstr "ميناء الساعة العقربية"
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr "أي ميناء ترسمه ودجة الساعة العقربية — تلك التي على سطح المكتب، من «الودجات». أما ساعة الرصيف العقربية فلها تصميم واحد"
+msgstr ""
+"أي ميناء ترسمه ودجة الساعة العقربية — تلك التي على سطح المكتب، من «الودجات». "
+"أما ساعة الرصيف العقربية فلها تصميم واحد"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
@@ -786,7 +830,9 @@ msgstr "قائمة ابدأ"
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr "ما تفتحه نقرة Super وSuper+Esc. قائمة اختصارات لوحة المفاتيح تتبع هذا الصف، أما زر التطبيقات في الرصيف فلا"
+msgstr ""
+"ما تفتحه نقرة Super وSuper+Esc. قائمة اختصارات لوحة المفاتيح تتبع هذا الصف، "
+"أما زر التطبيقات في الرصيف فلا"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
@@ -800,7 +846,9 @@ msgstr "الشريط"
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr "الشريط العلوي وحده — تبقى الودجات والملاحظات وقائمة ابدأ. سطح مكتب waybar يحتاج bar_stop_cmd/bar_start_cmd"
+msgstr ""
+"الشريط العلوي وحده — تبقى الودجات والملاحظات وقائمة ابدأ. سطح مكتب waybar "
+"يحتاج bar_stop_cmd/bar_start_cmd"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
@@ -826,7 +874,9 @@ msgstr "إخفاء الشريط تلقائيًا"
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr "شريط كل الشاشات دفعة واحدة. أما الضبط لكل شاشة فيوجد في قائمة الشريط بالنقر الأيمن، و«مختلط» يعني أنها غير متطابقة"
+msgstr ""
+"شريط كل الشاشات دفعة واحدة. أما الضبط لكل شاشة فيوجد في قائمة الشريط بالنقر "
+"الأيمن، و«مختلط» يعني أنها غير متطابقة"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
@@ -932,7 +982,9 @@ msgstr "تسارع المؤشر"
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr "«التكيفي» يقطع مسافة أطول كلما أسرعت، و«المسطّح» بنسبة 1:1. والافتراضي هو اختيار libinput نفسه للجهاز"
+msgstr ""
+"«التكيفي» يقطع مسافة أطول كلما أسرعت، و«المسطّح» بنسبة 1:1. والافتراضي هو "
+"اختيار libinput نفسه للجهاز"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
@@ -942,7 +994,9 @@ msgstr "تنعيم المؤشر"
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr "يهدّئ مؤشرًا مرتجفًا أو مشوَّشًا بحساب متوسط مساره. يكلّف تأخيرًا يسيرًا، و0 يوقفه. ولا يتأثر به ما يقرأ الحركة الخام من الألعاب"
+msgstr ""
+"يهدّئ مؤشرًا مرتجفًا أو مشوَّشًا بحساب متوسط مساره. يكلّف تأخيرًا يسيرًا، و0 يوقفه. "
+"ولا يتأثر به ما يقرأ الحركة الخام من الألعاب"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
@@ -958,7 +1012,9 @@ msgstr "الشاشات"
 
 #: src/ctlpanel.c:1104
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
-msgstr "توسيع، أو تكرار، أو إطفاء الشاشة الداخلية (بإغلاق الغطاء). وأيضًا m داخل Super+D"
+msgstr ""
+"توسيع، أو تكرار، أو إطفاء الشاشة الداخلية (بإغلاق الغطاء). وأيضًا m داخل "
+"Super+D"
 
 #: src/ctlpanel.c:1114
 msgid "Scale everything"
@@ -1001,7 +1057,9 @@ msgstr "الإشعارات"
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
-msgstr "‏Super+Shift+M من أي مكان. يخفي الإشعارات المنبثقة ويكتم الرنّة؛ أما التنبيهات الحرجة فتصل رغم ذلك"
+msgstr ""
+"‏Super+Shift+M من أي مكان. يخفي الإشعارات المنبثقة ويكتم الرنّة؛ أما التنبيهات "
+"الحرجة فتصل رغم ذلك"
 
 #: src/ctlpanel.c:1145
 msgid "Event sounds"
@@ -1061,7 +1119,8 @@ msgstr "التسجيل للمونتاج"
 
 #: src/ctlpanel.c:1183
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
-msgstr "ملف DNxHR بصيغة ‎.mov تقرأه برامج المونتاج مباشرة. نحو 1.1 غيغابايت في الدقيقة"
+msgstr ""
+"ملف DNxHR بصيغة ‎.mov تقرأه برامج المونتاج مباشرة. نحو 1.1 غيغابايت في الدقيقة"
 
 #: src/ctlpanel.c:1188
 msgid "Network / Wi-Fi"
@@ -1087,7 +1146,7 @@ msgstr "البحث عن طابعات"
 msgid "Add every network printer that is not set up yet, driverless"
 msgstr "يضيف كل طابعة شبكية لم تُعدّ بعد، دون تعريفات"
 
-#: src/ctlpanel.c:1204
+#: src/ctlpanel.c:1204 src/power.c:111
 msgid "Power saving"
 msgstr "توفير الطاقة"
 
@@ -1099,7 +1158,7 @@ msgstr "الطاقة"
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "مُهَل الخمول للتعتيم والإطفاء والقفل والتعليق"
 
-#: src/ctlpanel.c:1207
+#: src/ctlpanel.c:1207 src/saver.c:837
 msgid "Screensaver"
 msgstr "حافظة الشاشة"
 
@@ -1278,3 +1337,212 @@ msgstr "الأدنى"
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
 msgstr "الأقصى"
+
+#: src/lock.c:413 src/lock.c:846
+msgid "Wrong password"
+msgstr "كلمة السر غير صحيحة"
+
+#: src/lock.c:414 src/lock.c:853
+msgid "Checking…"
+msgstr "جارٍ التحقق…"
+
+#: src/lock.c:1627
+#, c-format
+msgid "Fingerprint disabled — use your password"
+msgstr "بصمة الإصبع معطَّلة — استعمل كلمة سرك"
+
+#: src/lock.c:1635
+#, c-format
+msgid "Fingerprint not recognised"
+msgstr "لم يتم التعرف على البصمة"
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr "لم يُعثر على خلفيات لعرض الشرائح"
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr "الإظهار بعد"
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr "القفل عند الاستيقاظ"
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr "الفاصل بين الشرائح"
+
+#: src/saver.c:841
+#, fuzzy
+msgid "Lock background"
+msgstr "شاشة القفل"
+
+#: src/saver.c:842
+#, fuzzy
+msgid "Lock image"
+msgstr "تكبير الرصيف"
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr "تعتيم شاشة القفل"
+
+#: src/saver.c:844
+#, fuzzy
+msgid "Lock blur"
+msgstr "ضبابية الخلفية"
+
+#: src/saver.c:845
+#, fuzzy
+msgid "Lock colours"
+msgstr "زوايا الرصيف"
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr "يُشغَّل الآن"
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr "الطقس"
+
+#: src/saver.c:848
+#, fuzzy
+msgid "Temperature in"
+msgstr "درجة حرارة اللون"
+
+#: src/saver.c:849
+#, fuzzy
+msgid "Keyboard layout"
+msgstr "اختصارات لوحة المفاتيح"
+
+#: src/power.c:112
+#, fuzzy
+msgid "Dim screen"
+msgstr "شاشة القفل"
+
+#: src/power.c:113
+msgid "Blank displays"
+msgstr "إطفاء الشاشات"
+
+#: src/power.c:114
+#, fuzzy
+msgid "Lock session"
+msgstr "شاشة القفل"
+
+#: src/power.c:115
+msgid "Suspend system"
+msgstr "تعليق النظام"
+
+#: src/power.c:116
+msgid "Lid closed (battery)"
+msgstr "الغطاء مغلق (بطارية)"
+
+#: src/power.c:117
+msgid "Lid closed (plugged in)"
+msgstr "الغطاء مغلق (موصول بالتيار)"
+
+#: src/power.c:118
+msgid "Lid closed (docked)"
+msgstr "الغطاء مغلق (في القاعدة)"
+
+#: src/filters.c:84
+#, fuzzy
+msgid "CRT filters"
+msgstr "كل المرشّحات"
+
+#: src/filters.c:86
+#, fuzzy
+msgid "Screen curvature"
+msgstr "انحناء الشاشة"
+
+#: src/filters.c:88
+#, fuzzy
+msgid "Glitch strength"
+msgstr "تشويش عند التنبيه"
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr "أحادي اللون"
+
+#: src/filters.c:91
+#, fuzzy
+msgid "Phosphor bloom"
+msgstr "توهّج الفوسفور"
+
+#: src/widgets.c:60
+#, fuzzy
+msgid "All widgets"
+msgstr "كل المرشّحات"
+
+#: src/widgets.c:61
+msgid "Audio visualiser"
+msgstr "مُصوِّر الصوت"
+
+#: src/widgets.c:62
+msgid "System monitor"
+msgstr "مراقب النظام"
+
+#: src/widgets.c:63
+#, fuzzy
+msgid "Desktop clock"
+msgstr "أيقونات سطح المكتب"
+
+#: src/widgets.c:64
+msgid "Quick launch"
+msgstr "تشغيل سريع"
+
+#: src/widgets.c:65
+msgid "Post-it note"
+msgstr "ورقة ملاحظات"
+
+#: src/widgets.c:66
+msgid "Pizza"
+msgstr "بيتزا"
+
+#: src/widgets.c:67
+msgid "Tuxagotchi"
+msgstr "Tuxagotchi"
+
+#: src/widgets.c:68
+#, fuzzy
+msgid "Analog clock"
+msgstr "ميناء الساعة العقربية"
+
+#: src/widgets.c:69
+msgid "Music player"
+msgstr "مشغّل الموسيقى"
+
+#, fuzzy
+#~ msgid "visualizer"
+#~ msgstr "المعادل"
+
+#, fuzzy
+#~ msgid "clock"
+#~ msgstr "الساعة"
+
+#, fuzzy
+#~ msgid "corner_radius"
+#~ msgstr "استدارة الزوايا"
+
+#, fuzzy
+#~ msgid "shadow"
+#~ msgstr "الظل"
+
+#, fuzzy
+#~ msgid "shadow_spread"
+#~ msgstr "انتشار الظل"
+
+#, fuzzy
+#~ msgid "shadow_offset_y"
+#~ msgstr "إزاحة الظل س"
+
+#, fuzzy
+#~ msgid "shadow_opacity"
+#~ msgstr "عتامة الشريط"
+
+#, fuzzy
+#~ msgid "blur_radius"
+#~ msgstr "نصف قطر الضبابية"
+
+#, fuzzy
+#~ msgid "blur_passes"
+#~ msgstr "مرات الضبابية"
