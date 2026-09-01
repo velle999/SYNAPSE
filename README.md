@@ -213,6 +213,24 @@ typing `yes` to confirm a disk wipe stay exactly those letters in every
 language, because the script compares against them. A translated key would be
 a question whose own answer does not work.
 
+**And the desktop speaks it too.** The control panel, the dock, the desktop
+menu, the lock screen, the screensaver, the power, filter and CRT panels — in
+the same fourteen languages. That is 820 strings, complete in all thirteen
+catalogs, following the locale with nothing to configure.
+
+Hindi and Arabic **render**, which is a different question from being
+translated. `synui` draws its own text rather than handing it to a toolkit, so
+it shapes it too: HarfBuzz for joining, mark positioning and Indic reordering,
+FriBidi for reading order. Arabic joins and runs right-to-left, Devanagari
+matras sit before the consonants they belong to. The other eleven need neither
+and take the same path they always did.
+
+Still English: the **bar** — it is a quickshell surface with a tree of its own,
+and so are the desktop widgets it draws — and a few compositor panels:
+Bluetooth, the wallpaper picker, notifications, the news reader, and the
+clock's date format. The dock is translated and the bar is not, which is worth
+saying plainly given they sit next to each other.
+
 ### Installing it
 
 When you are ready to install, `syn-install` from the live session offers a

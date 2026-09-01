@@ -23,6 +23,13 @@ session to log in to.
   it.
 - **An AI command bar** (`Super+Space`) and a neural overlay, both of which
   are off unless a backend is present.
+- **Its own words, in fourteen languages** — the control panel, dock, desktop
+  menu, lock screen, screensaver and effect panels, 820 strings, complete in
+  all thirteen catalogs and following the locale with nothing to configure.
+  Arabic and Hindi are shaped and reordered rather than merely translated:
+  synui draws its own text, so it carries HarfBuzz and FriBidi to join Arabic,
+  run it right-to-left, and put Devanagari matras where they belong. The bar
+  and the desktop widgets are quickshell surfaces and are still English.
 
 `synctl` is the command line to a running compositor — keybindings, outputs,
 the recent-application list, and the state the panels read.
